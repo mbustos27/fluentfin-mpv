@@ -1,0 +1,8 @@
+# Python venv and caches for the backend
+backend/.venv/
+.venv/
+__pycache__/
+
+# Local tool drops (mpv/libmpv copies, logs)
+tools/mpv/
+*.log
