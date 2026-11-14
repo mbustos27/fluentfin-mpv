@@ -1,0 +1,220 @@
+"""Watched and favourite — the two flags a tile can toggle.
+
+Split out of the single 1,154-line ``PlayerGateway``; see
+``gateway/__init__.py`` for why the facade is composed rather than nested.
+"""
+
+import logging
+
+from . import deps
+from .base import GatewayCore
+
+log = logging.getLogger("mpvtk_browser.gateway.userdata")
+
+
+class UserDataMixin(GatewayCore):
+    def set_watched(self, server_uuid, item_id, watched):
+        """Mark played/unplayed, queueing it when there's no server.
+
+        Returns True if the change was recorded somewhere. Offline the mark
+        goes into the sync catalog for later replay — returning silently
+        left the UI showing an optimistic tick that reverted on the next
+        reload and never reached the server."""
+        if not item_id:
+            return False
+        client = deps.clientManager.clients.get(server_uuid)
+        if client is not None:
+            try:
+                client.jellyfin.item_played(item_id, bool(watched))
+            except Exception:
+                log.error("mpvtk set_watched failed", exc_info=True)
+                return False
+            # ...and onto the copy on disk, in the same breath. The server
+            # announces this over the socket a moment later, but that path
+            # is advance-only, so an un-watch never arrived by it -- and a
+            # change made right here should not be waiting on a socket in
+            # either direction. Costs nothing when nothing is downloaded.
+            self._mirror_watched_locally(item_id, bool(watched),
+                                         server_uuid)
+            return True
+        return self._queue_offline_watched(server_uuid, item_id, watched)
+
+    @staticmethod
+    def _mirror_watched_locally(item_id, watched, server_uuid=None):
+        """Write a deliberate mark straight into the sync catalog.
+
+        ``server_uuid`` is the login the person is browsing as, which is who
+        the mark belongs to -- not whoever downloaded the copy."""
+        from ...sync.manager import syncManager
+        try:
+            syncManager.mirror_watched(item_id, watched,
+                                       server_uuid=server_uuid)
+        except Exception:
+            log.debug("could not mirror the watched mark for %s", item_id,
+                      exc_info=True)
+
+    @staticmethod
+    def _queue_offline_watched(server_uuid, item_id, watched):
+        """Queue an offline Mark played / Mark unplayed.
+
+        Both directions: a deliberate mark is the one signal authoritative
+        either way, so an unwatch is queued (``played = 0``, stamped) and
+        replayed when the server's watch is older (D1, ruled 2026-09-26).
+        This refused every unwatch until then. A series/season id fans out
+        to its downloaded episodes."""
+        from ...sync.manager import syncManager
+
+        db = getattr(syncManager, "db", None)
+        if db is None:
+            log.warning("Cannot change watched state for %s while offline: "
+                        "no catalog.", item_id)
+            return False
+        try:
+            targets = db.watched_targets(
+                item_id, server_id=syncManager.content_id_for(server_uuid))
+            for target_id, target_server in targets:
+                # One resolution per target, used for both writes: the queue
+                # says what this person owes the server, and the local copy
+                # says what they have seen. Splitting them would be two
+                # answers to one question.
+                #
+                # `server_uuid` is the login being browsed as, which is the
+                # person marking -- offline it is the pseudo-server, which
+                # names nobody, and the row's own server is then what finds
+                # the active profile's account. It is never the row's login:
+                # that is whoever downloaded the copy.
+                actor = syncManager.actor_of(acting_login=server_uuid,
+                                             server_id=target_server)
+                db.upsert_playstate(target_id, actor=actor,
+                                    played=bool(watched), deliberate=True)
+                # The browser overlay and the watched-based delete read the
+                # per-actor table, not the pending queue -- without this the
+                # mark is invisible until the server syncs.
+                db.set_watched(target_id, bool(watched), actor=actor)
+            if not targets:
+                log.warning("Nothing downloaded matches %s; watched mark "
+                            "not queued.", item_id)
+            return bool(targets)
+        except Exception:
+            log.error("Failed to queue offline watched mark for %s",
+                      item_id, exc_info=True)
+            return False
+
+    def record_reading_position(self, server_uuid, item_id, ticks):
+        """A reader's cursor, on its way to wherever it can be kept.
+
+        Distinct from :meth:`set_position`, which is the manual Progress…
+        dialog: that one is a value the user typed, it may legitimately go
+        backwards, and it is deliberately *not* queued. This one is the
+        equivalent of a playback progress report, and it needs what those
+        get -- because a downloaded book is the one thing you can go on
+        reading with the server away, and until this existed an offline
+        page turn was written nowhere at all. Reopening the book offline
+        started it again from page one, and nothing was ever sent.
+
+        Three places, in this order, and the order is the point:
+
+        1. **The local catalog**, verbatim, so re-opening offline lands
+           where the reading stopped. Only for a downloaded item -- which
+           an in-window reader always is, since the file is what it opens.
+        2. **The server**, directly, which is the whole story while online.
+        3. **The replay queue**, but *only if the server refused*. Queuing
+           unconditionally would be worse than not queuing: the queue is
+           advance-only, so an entry left behind after a successful write
+           would be replayed later and undo a subsequent page turn that
+           went backwards.
+
+        Returns True when the server took it.
+        """
+        from ...sync.manager import syncManager
+
+        db = getattr(syncManager, "db", None)
+        if db is not None:
+            try:
+                actor = syncManager.actor_of(acting_login=server_uuid,
+                                             server_id=db.owner_of(item_id))
+                db.set_reading_position(item_id, int(ticks), actor=actor)
+            except Exception:
+                log.debug("could not record the reading position locally",
+                          exc_info=True)
+        if self.set_position(server_uuid, item_id, ticks):
+            return True
+        if db is None:
+            return False
+        try:
+            # is_complete, because the queue is keyed on the catalog and an
+            # entry for something not downloaded would sit there forever.
+            if syncManager.is_complete(item_id, server_uuid):
+                actor = syncManager.actor_of(acting_login=server_uuid,
+                                             server_id=db.owner_of(item_id))
+                db.upsert_playstate(item_id, actor=actor,
+                                    position_ticks=int(ticks))
+        except Exception:
+            log.debug("could not queue the reading position", exc_info=True)
+        return False
+
+    def set_favorite(self, server_uuid, item_id, favorite):
+        """Returns True when the change was recorded. Favorites have no
+        offline queue, so offline this is a refusal, not a silent no-op —
+        the caller rolls its optimistic heart back."""
+        client = deps.clientManager.clients.get(server_uuid)
+        if client is None or not item_id:
+            return False
+        try:
+            client.jellyfin.favorite(item_id, bool(favorite))
+            return True
+        except Exception:
+            log.error("mpvtk set_favorite failed", exc_info=True)
+            return False
+
+    # -- reading position --------------------------------------------------
+    #
+    # A book's position is the one piece of user data this app can neither
+    # observe nor infer. The file is read in some other application, which
+    # reports to nobody -- so unlike every other item here, where the player
+    # is the source of truth, the *user* is. These two are the manual push
+    # and pull that stands in for a progress report.
+
+    def get_position(self, server_uuid, item_id):
+        """This item's stored `UserData`, straight from the server.
+
+        Fetched rather than read off the DTO the screen already has: the
+        whole reason to open the progress dialog is that the position may
+        have moved somewhere else -- another client, another device -- since
+        the page loaded. A stale number is exactly the failure this is
+        supposed to fix. Returns ``None`` when it could not be read, which
+        the dialog shows as such rather than as a position of zero.
+        """
+        client = deps.clientManager.clients.get(server_uuid)
+        if client is None or not item_id:
+            return None
+        try:
+            return client.jellyfin.get_userdata_for_item(item_id) or {}
+        except Exception:
+            log.error("mpvtk get_position failed", exc_info=True)
+            return None
+
+    def set_position(self, server_uuid, item_id, ticks):
+        """Write a playback position. Returns True when the server took it.
+
+        `UpdateItemUserData` merges: fields named here overwrite, everything
+        else in UserData is left alone. That matters -- posting a position
+        must not clear the played flag or the favourite heart.
+
+        Deliberately NOT queued offline, unlike ``set_watched``. That queue
+        is advance-only (it keeps the larger position), which is the right
+        rule for a progress report and the wrong one for a value the user
+        typed: correcting a book *back* to page 40 is a normal thing to
+        want, and a queue that silently kept 300 would be worse than a
+        refusal the caller can report.
+        """
+        client = deps.clientManager.clients.get(server_uuid)
+        if client is None or not item_id:
+            return False
+        try:
+            client.jellyfin.update_userdata_for_item(
+                item_id, {"PlaybackPositionTicks": int(ticks)})
+            return True
+        except Exception:
+            log.error("mpvtk set_position failed", exc_info=True)
+            return False

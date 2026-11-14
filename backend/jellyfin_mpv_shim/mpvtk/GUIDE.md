@@ -1,0 +1,1219 @@
+# mpvtk — developer guide
+
+A declarative UI toolkit that renders inside the mpv window. Python
+owns application state and layout; a Lua engine inside mpv owns all
+per-frame interaction. This document is the durable context for anyone
+(including future us) building on it. Companion doc: `README.md`
+(rationale, architecture overview, and the constraints of building on
+mpv's OSD primitives).
+
+## 1. Architecture
+
+```
+Python (app process / thread)          inside mpv
+─────────────────────────────          ─────────────────────────────
+your app state                         renderer.lua
+  └─ build(size) -> widget tree          ├─ draws ASS (osd-overlay)
+       └─ layout() -> flat scene         ├─ places bitmaps (overlay-add)
+            └─ JSON via script-message ► ├─ owns: hover, scrolling,
+                                         │  text editing, dropdowns,
+   semantic events ◄─────────────────────┤  menus, dialogs, sliders,
+   (click/change/select/scroll/...)      │  spinner animation
+       └─ mutate state, invalidate()     └─ renderer-local state
+            └─ full new scene pushed        survives scene pushes
+```
+
+Principles:
+
+- **No per-frame IPC.** Anything that must feel instant (hover,
+  wheel/drag scrolling, cursor blink, popup hovers, spinner frames)
+  happens renderer-side. Python is involved only for *semantic* events.
+- **Scenes are full replacements.** No diffing. A scene is ~100–300
+  nodes / tens of KB of JSON; a full build+layout+push measures ~1ms
+  (25ms when strips recomposite). Renderer-local state carries across.
+- **Renderer-local state wins** for stateful widgets (scroll offsets,
+  textbox text/cursor/selection, dropdown selection, slider value),
+  keyed by node id. A node with `force=true` resets from the scene.
+  Consequence: stateful widgets need explicit, unique ids (layout
+  warns on duplicates — a duplicate silently breaks hit-testing).
+- **Both backends identical.** The Lua runs inside mpv either way;
+  python-mpv-jsonipc and libmpv differ only in spawn/attach plumbing
+  (`app.py` backends) and the image transport (§5).
+
+## 2. Widget catalog (`widgets.py`)
+
+Layout: `Box` (direction, `pad` — uniform or `(pad_x, pad_y)`, gap,
+cross-axis `align`, main-axis `justify` start/center/end/between,
+bg/radius/border, on_click/on_dbl, hover, `tip=` tooltip,
+`window_drag=True` — this box IS the title bar: pressing it drags
+the window and double-clicking it toggles maximized, both handled
+renderer-side because a drag must start on the press; it also
+forces a hit rect, since the box may have no fill of its own),
+`Row`/`Column` sugar, `Spacer` (flexes unless given w/h — a
+sized Spacer is the stand-in for virtualized content), `Stack`
+(children share one rect, per-child `anchor`/`dx`/`dy`; scrolls with
+the page unlike `Float` — the way to pin arrows/badges to a row; see
+§6 for what may draw over what), `Grid` (cells on shared column
+tracks — `{"w"}`/`{"flex"}`/`{}` auto — so sibling rows can't drift;
+rows may be dicts carrying card chrome — `bg`/`radius`/`id`/
+`on_click`/`on_dbl`/`hover` draw a full-width row rect behind the
+cells, `row_pad` insets them — for management-list rows; `Form` sugar
+for label+input rows), `Table` (header + rows generated
+from one column spec — `{"label", "w"|"flex", "align"}`; rows take
+`selected`/`fg`/`bg`/`on_click`/`on_dbl`, cells may be Elements
+(album-art thumbnails, buttons); `virtual={"offset", "height"}`
+materializes only the visible rows, fed from `scroll_offsets()`).
+
+Content: `Text` (size/color/bold/align; ellipsized to fit, or
+`wrap=True` + `max_lines` to word-wrap to the laid-out width),
+`Image` (pre-rasterized BGRA; never scaled or stretched — see §5),
+`ImageMap` (one composited bitmap + interactive sub-regions; THE tile
+primitive, see §5), `Button` (Box+Text sugar; `repeat=True` refires
+on_click while held — paging arrows; `flat=True` is the
+transparent-over-video style: nothing at rest, translucent hover
+wash), `Checkbox` (Row sugar), `Progress` (determinate bar; `Busy`
+stays the indeterminate spinner), `Gradient` (vertical fade — one
+solid ASS box with a gaussian-blurred fading edge, the banding-free
+technique from the lua OSC; ASS, so ordinary content still draws on
+top — the playback HUD's bottom scrim). `Dropdown(trigger_icon=…)` swaps the
+boxed control for a bare icon button; its popup sizes to the items
+and clamps to the screen edges.
+
+Every element takes `tip="…"` — a renderer-drawn tooltip after a
+0.5s hover delay (occludes images like a popup). `MpvtkApp.node_rect
+(id)` returns a node's laid-out geometry from the last pushed scene —
+layout feedback for the next build (header offsets above virtualized
+lists, overflow decisions).
+
+**Only a drawable is in that scene, so only a drawable can be measured.**
+A bare `Row`/`Column`/`Box` emits no scene node at all, whatever `id` you
+gave it, and `node_rect` then returns `None` — which reads as "no answer
+yet" and sends the caller down its first-frame fallback *on every frame*,
+silently and forever. To measure a container, give it a background and
+`alpha=0`: it draws nothing and emits a `rect` with your id. The epub
+reader sized its page bitmap from the fallback for its whole life this
+way, which was right until anything else shared the window.
+
+Inputs: `TextBox` (editing, paste, selection, `mask=True` for
+passwords; `on_change`/`on_submit`), `Dropdown` (readonly picker,
+`on_select`), `Slider` (`on_change`, throttled while dragging;
+seek-style sliders add `on_commit` — once, when the drag/adjust
+gesture ends — and `on_cancel` — gesture abandoned via ESC or focus
+moving away, value reverted), `Busy` (indeterminate spinner).
+
+**`force=True` on all three means the same thing: the scene's value wins
+over the renderer's own, but never mid-gesture.** The renderer keeps
+editing state, slider values and dropdown selections across scene pushes,
+keyed by node id, and `force` is how the app overrules that — the Clear All
+button on the filter panel is the case it exists for. The mid-gesture
+exception is what makes it usable: a textbox being typed into, a slider
+being dragged, and a dropdown whose selection has been sent but not yet
+answered all hold their own value until the app says something *different*
+from what it was showing when the gesture began. Without it the reset runs
+from the draw, so the frame after a click shows the pre-click value —
+not a race, every time. The dropdown was the last of the three to get the
+guard; `tests/lua/test_renderer.lua` pins all of it.
+
+**A refusal is the one answer that rule cannot see.** An app that says "no"
+to a pick keeps the value the pick began on, which is exactly what a stale
+repaint carries, so the refused choice stayed drawn. A `Dropdown` therefore
+takes `ack=`: change it (a counter is enough) when answering a pick with
+"no", and the pending pick ends with the scene's value. Only needed with
+`force`, and only where a pick can be refused — the server switcher's
+reconnect is the case it exists for.
+
+Containers: `HScroll`/`VScroll` (optional scrollbar; `on_scroll` for
+windowed/infinite content — fires leading-edge-throttled every 150ms
+during scrolling).
+
+`Icon` (Material vector icon — the same generated set and SVG→ASS
+pipeline as the Tk UI and the OSC via the shared `svgpath` module;
+24×24 unit canvas with corner anchors, scaled crisp via `\fscx`;
+compose with Text in a Row for labelled buttons). `Dropdown` and
+`Menu` take per-item `icons=` name lists.
+
+**An `icons=` list indents every row in the open list, whether or not that
+row's entry is set** — the gutter is a column, not a per-item decoration. So
+a list that marks only the exceptional entries charges the width to all of
+them and gives their labels an ellipsis in return. Mark every item, or none.
+(The closed control is the other way: it indents only for the *selected*
+item's icon, and its natural width budgets for that, so a picker with icons
+does not shorten its own label to make room.)
+
+Floating: `Menu` (context menu at a point; `on_select`/`on_dismiss`),
+`Dialog` (centered modal, grabs all input, ESC/click-away →
+`on_dismiss`), `Float` (positioned toast/banner, no grab). All floating
+content draws above everything and occludes image overlays.
+
+**`disabled=True`** is a control that is on screen but cannot be used
+right now — a setting the current mode ignores. The node draws muted
+(`on_surface_faint` over the control's own surface, geometry unchanged
+so the form does not reflow) and is inert: no hover, no click, no
+spatial-nav focus. It still **absorbs** the pointer, so the press stops
+there instead of reaching whatever it sits over — `node_at` keeps
+returning it and each consumer drops it, which is not the same as making
+it invisible. `Dropdown`/`TextBox`/`Slider` are drawn by the renderer and
+mute themselves; `Button`/`Checkbox` are composites whose colours are
+baked into child nodes the renderer cannot recognise, so they mute in
+`widgets.py` and drop their handler. Always say *why* next to it: a
+disabled control with no explanation reads as a broken one.
+
+Every element takes `id=`, `w=`, `h=`, `flex=`, and size constraints
+`min_w`/`max_w`/`min_h`/`max_h` — int px, or a float in (0, 1] as a
+fraction of the available space (a Dialog child resolves fractions
+against the window: "natural, but at most 60% of the screen"). Rows
+flex-shrink on overflow: fixed/natural children squeeze proportionally
+down to their min (bitmaps/icons AND clickable Boxes — buttons — floor
+at natural; a squeezed "E…" button is garbage, so plain Text absorbs
+the shrink and re-ellipsizes); columns still overflow on purpose
+(vertical overflow is pre-scroll content, not an error).
+**The floor is by class, and the class list has been wrong once**: it is
+`isinstance`-based, so an interactive control that is not a `Box` gets
+none. An icon-trigger `Dropdown` is a `Button` in everything but its base
+class, and it sets its own `min_w` for that reason — without it the four
+playback-HUD track pickers were the only floorless children of a row that
+overflows, collapsed to zero width, and had their full-size glyphs drawn
+across each other (#721). **A new control whose content cannot degrade —
+a glyph, a bitmap — must say so; only text may absorb a shrink.** `layout.natural_size(tree)` is
+the build-time fit probe: measure a candidate (e.g. the labelled
+chrome bar) against the window and pick a layout — no hardcoded
+breakpoints.
+
+**Spatial navigation (10ft)** is renderer-local and always on while
+the UI is active: arrow keys walk the focusable nodes (anything
+clickable, plus textboxes/dropdowns/sliders — inferred from the scene,
+no protocol additions), scored by direction with an accent focus ring
+drawn outside the node; focus scrolls its containers into view. ENTER
+activates: clicks buttons/rows, focuses a textbox (whose own keys then
+own the arrows), opens a dropdown (UP/DOWN walk the popup, ENTER
+picks — same for context menus), toggles slider adjust mode
+(LEFT/RIGHT step 5%, white ring while active; the accent ring
+otherwise, and it replaces hover styling on the focused node). Any
+mouse press drops key focus. Direction picking is container-aware and
+tiered: aligned candidates inside the focused node's own scroll
+containers win first; then the container pages ~60% of a viewport
+along the axis and retries (completing on the next scene push if the
+content wasn't materialized yet); only when the containers are
+exhausted may focus escape to fixed chrome (top bar, now-playing
+bar). Vertical moves are row-focused: the nearest row beyond the
+node's edge wins, then the horizontally nearest element within it —
+no x-overlap required, so UP from a right-hand button lands in the
+row directly above it. Horizontal moves stay overlap-confined to
+their row. Vertical navigation wraps: UP with nothing above jumps to
+the bottom-most row (the now-playing bar is two presses from anywhere
+in a long list), DOWN past the end wraps to the top. Scroll-into-view uses asymmetric margins (56px leading, 12px
+trailing) so a row's heading scrolls in with its carousel. Modality is
+reported to the app as the `nav` event (`MpvtkApp.on_nav`): the
+browser hides carousel arrows while keyboard/remote navigation is
+engaged. The bindings live with the mouse sections: suspended by
+`mpvtk-active no` so playback keeps its seek keys, and the active
+state is mirrored to `user-data/mpvtk/active` so the player can route
+Jellyfin remote commands (MoveUp/Select/…) into these keys only while
+the UI owns them.
+
+**The activation key is configurable and the arrows are not.**
+`mpvtk-select-key <name>` (`MpvtkApp.push_select_key`, on ready and on
+every edit of `ui_select_key`) moves it, and it is a *replacement* —
+ENTER stops being force-bound, which is the point of the setting. Its
+own message rather than a field on the `mpvtk-hud` opts blob because
+that blob only arrives on HUD engage while the same bindings come up
+for browsing under `mpvtk-active`, which carries no opts. Two things
+move with it: `keyclaim.nav_names` is rebuilt, so the *old* key becomes
+claimable and the new one stops being claimed twice, and the pushed
+gamepad table has to be re-sent, because a pad's Confirm carries the
+key as a literal (`conf.select_key` is the one reader all three go
+through). #717.
+
+**A printable select key still types into a focused textbox**, and needs
+no guard for it: mpv resolves `any_unicode` *before* the exact key
+(`input/input.c`, `get_cmd_from_keys`), so the text bindings win for
+as long as they are installed and `mpvtk_nav_<key>` answers only once the
+field is blurred. That ordering is the reason `ENTER` may stay bound as
+the textbox's submit key while the select key lives elsewhere: the two
+are never live at the same time.
+
+**MENU opens the focused node's context menu** — the keyboard's
+right-click, and the only way a tile's actions (Play, Queue, Watched,
+Favorite, Download) are reachable from ten feet away. A remote's
+hamburger arrives as this key, like every other remote nav command. It
+is anchored *below* the node, never over it: the menu is about that
+node. A node with no `ctx` is a no-op, as right-clicking one is, and so
+is an unfocused scene — with nothing selected there is nothing for the
+menu to be about, and choosing a node on the user's behalf would be a
+different gesture from the one they made.
+
+**The mouse's back button is ESC.** `mbtn_back` sits in the mouse
+group and its handler is a synthetic `keypress ESC`, not a ladder of
+its own: ESC already steps out exactly one layer (slider scrub →
+dropdown → menu → modal → the playback HUD, with "one page off the
+nav stack" as the base case in Python, on the player's ESC binding),
+and those bindings come and go with what is on screen, so a second
+implementation would go stale on the first layer anyone adds. Being
+in the *group* is what scopes it: the group is suspended during
+playback, which leaves mpv's own weak `MBTN_BACK` (playlist-prev →
+previous queue item) in force there.
+
+Its pair has no key to ride on — nothing in mpv or the app means
+"forward" — so `mbtn_forward` is the `forward` **event** instead, and
+the app decides what history it has. Windowless like `nav`/`hud`
+rather than addressed to a node: history belongs to the app, not to
+whatever the pointer happens to be over. An app that registers no
+`on_forward` ignores it.
+
+A multimedia keyboard's browser keys (`GO_BACK`/`GO_FORWARD`) are the
+same pair in the same section, with one difference in shape: their
+action is on the plain handler, not the down half. Windows delivers
+them as `WM_APPCOMMAND`, which mpv feeds as a bare press with no
+key-down, so a down-only binding would never fire there.
+
+**The wheel is scoped the same way, and one layer finer.** The full UI
+holds it — every browse screen scrolls — but a summoned playback HUD
+holds it only while a notch would actually be *spent*: an open dropdown
+popup, a page that claimed `WHEEL_UP`/`WHEEL_DOWN`, or a `scroll`
+container the dialog on top allows and that has somewhere to go
+(`scroll_max > 0` — the same gate `scroll_at` applies, so the two must
+change together). **Not everything that looks interactive**: a gear or
+context menu draws all of its items, so it can never spend a notch, and a
+modal is not itself a claimant — the scroller inside it is. Over a bare
+control bar the section is disabled, so the user's own
+`WHEEL_UP`/`WHEEL_DOWN` (volume, in the usual `input.conf`) and mpv's
+`WHEEL_LEFT`/`WHEEL_RIGHT` keep working while the controls are up rather
+than dying with the bar's arrival (jellyfin-mpv-shim#711). It is decided
+on every render, so a HUD that grows a list gets the wheel by drawing
+one; a key claim syncs it itself, since a claim over an already-drawn bar
+invalidates nothing and no frame is coming.
+
+## 3. Scene protocol (Python → Lua)
+
+`script-message mpvtk-scene <json>`:
+`{"v":1, "w":W, "h":H, "nodes":[...]}` — flat, paint-ordered.
+Common fields: `t`, `id`, `x/y/w/h` (absolute OSD px), `sc` (owning
+scroll container id), `top` (floating layer), `mod` (modal layer).
+
+| t | extra fields |
+|---|---|
+| rect | fill, a, radius, bc/bw, click, ctx, rpt (hold-repeat), hover{fill,bc,c}, ring, nnav (clickable but outside the focus order — an ImageMap `zone`, or `Element(nav_skip=True)`), wdrag (title bar: press drags the window, dbl toggles maximized — renderer-side, no event) |
+| text | text, size, c, bold, align, click, hover (one node per wrapped line: `id`, `id.l1`, …) |
+| img | src (path or `&addr`), iw, ih, v (cache-bust) |
+| scroll | axis, cw/ch (content), bar, watch |
+| textbox | text, ph, size, mask, force |
+| dropdown | items, sel, size, force, ack |
+| slider | min, max, value, force |
+| busy | — |
+| menu | items, size, ih (floating; x/y absolute) |
+| layer | kind: modal\|float (meta: bounds for grab/occlusion) |
+| occ | Stack `occlude=True` marker: rect subtracted from images earlier in paint order |
+
+Children of a scroll are positioned in content space as if offset 0;
+the renderer subtracts live offsets and clips. `ring` marks transparent
+hit-rects over bitmaps whose hover ring draws *outside* their bounds.
+
+Other messages: `mpvtk-metrics` (measured glyph widths + font family,
+pushed once at ready), `mpvtk-focus` (below), `mpvtk-keys` (below),
+`mpvtk-debug` (test hooks, §10).
+
+`mpvtk-keys {"keys": ["LEFT", …]}` — the app CLAIMS those mpv keys for
+as long as it keeps the claim; each arrives back as a `key` event
+instead of doing what it normally does. For a page whose gesture is
+neither "move focus" nor "scroll" and so cannot be a widget: the epub
+reader, whose content is one bitmap and whose LEFT/RIGHT mean *turn
+the page*. Precedence is the renderer's and matches `key_scroll`'s — a
+focused textbox, an open dropdown or menu, and any modal all take the
+key first, so a page may claim LEFT without breaking the search box
+above it. A claim is dropped by sending an empty list, and the
+renderer drops every claim itself on `mpvtk-active no` (there those
+keys are the player's seek keys, and the player outranks the UI).
+`MpvtkApp.claim_keys()` is the Python side; the browser drives it from
+a page's `claimed_keys` attribute, so leaving the page gives them
+back.
+
+`mpvtk-focus {"id": …}` puts spatial-nav focus on a node — a textbox
+also takes the keyboard, because asking for the search box means asking
+to type in it. With **no** id it means "whatever the next scene marks
+`af`" (`autofocus=True` on any element), which is how a page opened by
+remote lands on its Play button. Either form is **parked** until the
+node appears, since a page is a spinner before it is a page; any user
+input (arrows, Tab, a click) drops the request, and an `af` request is
+dropped outright once the pointer is driving. `af` is also what a
+key-summoned playback HUD focuses (§9).
+
+## 4. Events (Lua → Python)
+
+`script-message mpvtk-event <json>`; `app.py` dispatches to the
+handlers registered during layout:
+
+| t | payload | fires |
+|---|---|---|
+| ready / resize | w, h | osd size known/changed |
+| click | id, shift?, ctrl? | press+release on same target (`rpt` nodes: on press, refiring while held) |
+| dbl | id | double-click on a node with on_dbl (after its two clicks) |
+| nav | active | keyboard/remote navigation engaged / mouse took over (`MpvtkApp.on_nav`) |
+| forward | — | the mouse's forward button or the keyboard's `GO_FORWARD`, while the UI owns the pointer (`MpvtkApp.on_forward`) |
+| key | key | a key claimed via `mpvtk-keys`, when nothing on screen outranks the claim (`MpvtkApp.on_key`) |
+| gpseek | dir | a game controller's seek gesture, "up"/"down"/"left"/"right" (`MpvtkApp.on_gamepad_seek`) |
+| gpnav | a | a game controller button whose meaning differs between the library and a playing video, as a remote-control action name (`MpvtkApp.on_gamepad_nav`) |
+| vpan / vzoom | (no id) | a wheel notch that ran off the end of a panned picture, and ctrl+wheel over one (`MpvtkApp.on_picture_gesture`, called as `(t, evt)`) |
+| context | id, x, y | right-click on a node with on_context |
+| change | id, value | textbox keystrokes; slider (throttled) |
+| submit | id, value | textbox ENTER |
+| select | id, index, value | dropdown or menu item chosen |
+| dismiss | id | menu/dialog click-away or ESC |
+| scroll | id, offset, max | watched scrolls, ≤ every 150ms |
+| clipboard | op, need | a textbox copy/paste found no clipboard at all (`MpvtkApp.on_clipboard_error`); once per renderer |
+| debug_state | … | reply to the `state` debug hook |
+
+The last four are **windowless** — no node id, delivered to the app
+rather than to the handler registry, because none of them is about
+something in the scene. History belongs to the app (`forward`), and a
+panned picture is mpv's video, not a node (`vpan`/`vzoom`; see §9). The
+pad's **UI buttons are NOT routed through the gamepad hooks** — those are
+synthetic keypresses the renderer issues locally, so a d-pad held down
+does not queue a round trip per repeat. `gpseek` and `gpnav` are the two
+a keypress cannot express: the arrows' seek is the user's own `input.conf`
+distance and has to be SyncPlay-aware, and a nav button's meaning depends
+on what is on screen. Both run on the loop thread.
+
+Click handlers opt into the modifier payload by declaring one
+**required** positional parameter (`def f(mods)` / `lambda m: …`);
+zero-arg handlers and default-arg lambdas (`lambda i=item: …`) keep
+the bare call. `mods` is `{"shift": bool, "ctrl": bool}`.
+
+`MpvtkApp.invalidate()` is thread-safe and wakes the loop — background
+workers (thumbnails, downloads, playback timers) repaint through it.
+
+Scroll offsets are also mirrored into the `user-data/mpvtk/scroll`
+property on every change; `MpvtkApp.scroll_offsets()` reads it
+synchronously, so a build() can window virtualized content against the
+renderer's LIVE offset instead of trailing the throttled scroll event.
+`{}` and `None` mean different things and callers rely on it: `{}` is an
+*answer* (the renderer is there, nothing is scrolled), `None` means it could
+not be asked at all (mpv < 0.36 has no `user-data`), so a caller keeping its
+own copy of scroll positions must fall back to that. Conflating the two makes
+the fallback outvote the renderer — see `MpvtkApp.scroll_offsets`.
+
+## 5. Images: strips, files, memory
+
+- Rasterize at display size with Pillow; `rawimage.bgra_bytes` /
+  `write_bgra` produce premultiplied BGRA.
+- **Never let a crop exceed the source pixels.** Layout refuses to
+  stretch images; the renderer clamps crops to iw/ih. Keep it that way.
+  The one bitmap the renderer does scale is the scrub preview's frame,
+  which it draws itself with overlay-add's `dw`/`dh`: `draw_image` maps
+  each clipped piece back to source pixels and clamps *there*.
+  The failure mode is version-dependent, and the clamp is required on
+  all of them: on the **`&<address>` memory path (libmpv, every mpv
+  version)** overlay-add `memcpy_pic`s from the pointer with no bounds
+  check → a hard **SIGSEGV**; on the **file path with mpv ≤ 0.41** the
+  file is `mmap`'d 0→`offset+h*stride`, so a past-EOF read is a silent
+  **SIGBUS** (and the map grows with the crop offset, a real cost for
+  far-scrolled strips); on the **file path with mpv ≥ 0.42** the source
+  is `fseek`+`fread` (no mmap), so a past-EOF read degrades to a soft
+  `overlay-add: could not open or read` failure and the offset cost
+  disappears. The memory path is the unforgiving one — the clamp is
+  load-bearing there on every build.
+- **Strips**: composite whole tile rows into ONE image (captions,
+  badges, progress baked in) and declare tile hit-regions via ImageMap.
+  This is what makes tiles scale: a screenful is 2–8 overlays (budget
+  is 63), decorations dodge the z-order constraint (§6), and scrolling
+  is pure crop math on cached files. Content-key the strips (see
+  `demo.StripStore`): decoration changes produce a new key/filename, so
+  stale renderer caches are impossible. LRU-bound the store.
+- **libmpv backend** (`app.in_process`): pass images as same-process
+  memory — `rawimage.MemoryStore` holds ctypes buffers, src is
+  `"&<address>"`, the renderer folds crop offsets into the address.
+  No files, no fs on mpv's command path. Buffers must outlive
+  referencing scenes: LRU recency covers visible strips; frees go
+  through a small graveyard for in-flight re-issues.
+- **jsonipc backend**: files in `rawimage.cache_dir()` (RAM-backed dirs
+  preferred on POSIX; `FILE_ATTRIBUTE_TEMPORARY` on Windows keeps the
+  lazy writer from flushing scratch files).
+
+## 6. Constraints that shape designs
+
+1. **overlay-add bitmaps composite ABOVE all script ASS** (verified;
+   the thumbfast hole-punch comment suggests the opposite). ASS can
+   never draw on top of an image. Therefore: bake decorations into
+   strips; hover rings draw outside image bounds; floating layers
+   (popups/menus/dialogs/toasts) *occlude* images — their rect is
+   subtracted from image overlays (≤4 sub-rects per image). A
+   translucent scrim cannot dim posters — dialogs don't dim.
+   Two escape hatches exist for in-flow content (`Stack`):
+   **bitmap-over-bitmap works** — mpv composites overlay slots in
+   ascending id order and the renderer keeps slot order consistent
+   with paint order (sticky slots; a one-time renumber when an
+   overlapping pair contradicts it), so a later Image child draws
+   above an earlier one; and an ASS child marked `occlude=True` is
+   subtracted from image siblings *below it* and draws in the hole
+   (give it an opaque bg — the hole reveals the window background).
+   `occlude` suits chrome that is *meant* to cover what is under it —
+   popups, dropdowns, dialogs. It is the **wrong tool for a control
+   that should look like it floats ON artwork**: the punched rect is
+   hard-edged and opaque by necessity, so the control reads as a notch
+   cut out of the picture, and it can be neither translucent nor
+   non-rectangular. Make that control an `Image` instead — it carries
+   `on_click`/`repeat` like a Box — and let it alpha-blend; see
+   `jellyfin_mpv_shim/mpvtk_browser/tile_renderer.py`'s
+   `_arrow_bitmap`.
+2. Overlay flush is hole-free by construction: adds/replacements are
+   issued before removes and new images take over departing slots
+   (slots are sticky per node id — don't regress this; index-shifted
+   slots and remove-before-add both showed as scroll flicker).
+3. Text metrics: measured per-char advances (ASCII) shared by layout
+   and renderer + `\fn` for the same font. **libass scales `\fs` to the
+   font's ascender+descender height, not the em** (VSFilter compat), and
+   that box is font-relative — 150 for DejaVu Sans at a 128px em, 172 for
+   Segoe UI, both measured. Two consequences, and only the first was
+   handled for a long time. Widths are a fraction of the nominal size, so
+   metrics.py folds the constant `_WIDTH_FACTOR` (≈0.853) into the table;
+   without it they run ~16% wide and click/selection lands on the wrong
+   letter, and `calibrate.py` verifies that pixel-wise (ratios ~1.00).
+   **And the rendered size is font-relative unless something cancels the
+   face out**: the renderer multiplies every `\fs` by `state.fs_mul`
+   (metrics.py `_fs_multiplier`, sent as the `fs` key), which is the face's
+   own box over DejaVu Sans'. Linux is the reference, so it is 1.0 there
+   and 1.147 on Windows — where the whole UI drew 13% small, with every box
+   around it the right size, because the width model carried the same
+   per-face factor and predicted the smaller text correctly. `calibrate.py`
+   cannot see that: it compares two models that shared the error.
+   **Pair kerning** is also measured (`getlength(ab) - a - b`, ~220 non-zero ASCII pairs for
+   DejaVu, e.g. "Ta" = -0.14em) and applied in every width/boundary
+   path — advances alone drift badly on strings like "TaTaTa".
+   Caret/selection boundaries include the kern INTO the next glyph
+   (that's where libass puts its origin). Non-ASCII falls back to a
+   heuristic table (`layout.py` + `renderer.lua`, keep in sync).
+4. Text input arrives through a single `any_unicode` complex binding
+   (`e.key_text`) — the FULL unicode range, not just ASCII. Editing is
+   UTF-8 aware: cursors are byte offsets kept on codepoint boundaries
+   (u8_prev/u8_next); BS/DEL/arrows step whole codepoints. IME status
+   by platform: **Wayland** — mpv ≥0.40 supports text-input-v3
+   (`--wayland-ime=yes` default); committed strings become key presses
+   that land in any_unicode; preedit is NOT forwarded (no inline
+   composition display; the popup sits at the window's top-left).
+   **Windows** — mpv handles WM_IME natively (enabled by default);
+   committed text arrives as unicode key events. **X11** — no
+   IME/XIM: keyboard-layout characters (accented Latin via xkb) work,
+   composition-based input (CJK) does not. Clipboard needs mpv ≥0.40.
+   Textboxes support the full editing key set — click-drag selection,
+   double-click word select, triple-click select-all (synthesized:
+   plain click ≤0.4s after a double), shift+arrows, ctrl+arrows (word
+   jump), ctrl+shift+arrows (word select), ctrl+BS/DEL (word delete),
+   ctrl+A/C/X/V, ctrl+HOME/END, replace-on-type — plus a built-in
+   right-click Cut/Copy/Paste/Select All menu (masked boxes offer
+   Paste/Select All only — no clipboard leaks). The caret is an INLINE
+   zero-width ASS drawing spliced into the text at the cursor — libass
+   positions it at the exact pen boundary, so width math is only
+   needed for click mapping. Three hard-won rules: inline drawing y
+   origin is the line's ASCENT TOP (not baseline); the drawing must
+   stay spliced during blink-off (alpha toggle) or the line bbox
+   change bobs the text ~1px; and the run split drops the kern of the
+   surrounding pair — restored via negative \\fsp on the prefix's last
+   char using the measured kern amount. Metrics: ASCII + Latin-1 are
+   bulk-measured at startup (~45ms fast machine, disk-cached to ~6KB
+   JSON so warm starts read in ~0.5ms; stack is Pillow → raqm/HarfBuzz
+   → FreeType, layout only, no rasterization); everything else is
+   measured ON DEMAND as it appears in scene text or typed input
+   (extend_metrics — the unicode pair space can't be pre-enumerated),
+   scoped to scripts the base font covers (< U+2E80). CJK keeps the
+   ~1em heuristic deliberately: libass renders it with a fallback font
+   that Pillow isn't measuring, and fallback CJK glyphs are ~1em.
+5. Wheel targeting walks the scroll chain by axis and holds a 2s
+   gesture lock on its target (raw hit-tests can drop out — cause
+   still unconfirmed; F12 HUD shows `tgt:<id>*` when the lock saves a
+   gesture).
+6. mpv options that matter: `keepaspect-window=no` (free resizing),
+   `osc=no`, `cursor-autohide=no`; `background-color` is the app
+   background (don't paint full-screen ASS rects — they'd sit under
+   images anyway).
+
+## 7. Tokens and the type scale (`jellyfin_mpv_shim/mpvtk/theme.py`)
+
+Colours and sizes are **tokens**, not literals. An embedding app calls
+`theme.set_tokens()` once at startup — or `set_accent()`, still the right
+entry point for an app whose only opinion is its brand colour — and every
+widget and renderer-drawn control follows. Replacement is wholesale, which
+is what makes a *runtime* theme swap safe: a token the new theme does not
+mention resets to stock instead of keeping the old theme's value. Tokens
+are served through the module's `__getattr__` rather than being module
+globals, so a theme can never redefine the functions in there and an
+unknown name raises instead of silently resolving.
+
+Two rules shape the token set:
+
+- **Semantic, not literal.** `ON_SURFACE_MUTED`, not `grey_aaaaaa`. There
+  are deliberately fewer tokens than there were literals; four
+  near-identical greys collapsing into one is the point, because a theme
+  author cannot reason about seventeen shades and will not try.
+- **Two surfaces.** Everything named `*_SURFACE*` is chrome drawn on the
+  app's own background and follows the theme. The `SCRIM_*` / `CHIP_*`
+  tokens are for things drawn over **video** — the playback HUD, the Skip
+  Intro chip, the cast backdrop — and stay dark whatever the theme does,
+  because a white HUD over a dark film is wrong no matter how light the
+  rest of the app is. jellyfin-web keeps its player OSD dark for the same
+  reason.
+
+`ACCENT_ON_VIDEO` (the seek bar's fill, its chapter marks) defaults to
+`ACCENT`, because one accent everywhere is what makes a theme read as a
+theme — but it is **separable**, because the two jobs differ: over app
+chrome the accent only has to beat a known background, over video it has
+to stay visible against an unknown and moving one. This is a deliberate
+divergence from jellyfin-web, which hardcodes its player slider to
+Jellyfin blue and lets no theme near it.
+
+### The type scale
+
+**Pass a tier name, not a number.** `Text("…", size="caption")` — every
+widget's `size=` goes through `theme.text_size`, which takes a tier name
+or a number. The name is the preferred spelling at a call site: an author
+can tell whether a line is a caption and cannot tell whether it is 13 or
+14. A number still works, for the genuine one-off no tier describes. An
+unknown tier is an error, not a silent default — a typo'd tier would
+otherwise render as body text and look almost right.
+
+| tier | × base | what it is |
+|---|---|---|
+| MICRO | 0.70 | guide badges ("HD"), the densest chrome |
+| CAPTION | 0.80 | help text under a settings row |
+| SMALL | 0.88 | dense body: guide, music, comic, reader |
+| NORMAL | 1.00 | body text, and every control label |
+| LARGE | 1.12 | meta and secondary lines on a detail page |
+| TITLE | 1.30 | dialog titles |
+| HEADING | 1.42 | carousel section headings |
+| PAGE | 1.53 | page titles |
+| HERO | 1.70 | onboarding: "Connect to Jellyfin" |
+
+The base is **17 logical px**, and the ratios are surveyed rather than
+invented: every explicit `size=` in the app was counted (237 call sites)
+and grouped by what the text actually is, and with a base of 17 these
+ratios reproduce 236 of those 237 to within a pixel. `HEADING` landing on
+24 — what `heading_size` has always been — is the check that the ratios
+are real rather than fitted. The tiers are named for the JOB, like the
+colour tokens, and for the same reason: 161 of the 237 sizes sat in the
+3px band 14–18 with no rule saying which.
+
+`theme.set_type_scale(base, minimum, factor)` sets all three; `None`
+restores stock, wholesale like `set_tokens` and for the same reason.
+`factor` is the user's text multiplier and applies to **every** size the
+toolkit resolves, tiers and explicit numbers alike — it is not folded into
+the base, because that would scale the tiers and leave every call site
+still passing a literal exactly where it was, recreating the mismatch the
+scale exists to fix in the other direction.
+
+**The multiplier is applied exactly once.** `theme.size()` / `text_size()`
+return a `Px` — an `int` subclass meaning "already resolved" — and
+`text_size(Px)` returns it untouched. Composite widgets resolve their own
+size and hand the number to a child (`Button` builds a `Text` and an
+`Icon`, `Checkbox` builds a `Text`, `Form` builds a `Grid` which builds a
+`Text` per cell), and without this each of those resolved again: at 150% a
+button label came out 39px against body copy at 20. Arithmetic on a `Px`
+returns a plain `int`, which is the right default — `int(size * 0.95)` is
+a NEW size derived from this one, and deriving is not resolving.
+
+**The accessibility control is a floor, not a scale.** A scale multiplies
+everything, so the smallest text stays the smallest text and a guide badge
+at 0.70× base is still the hardest thing on screen to read. A floor
+compresses the bottom of the scale instead of moving all of it, which is
+what somebody who cannot read 12px actually wants. It is capped at the
+**largest tier**, not at the base: capping at the base swallowed every
+useful value (with a base of 17, a floor of 18 came out as 17, so the
+setting appeared to do nothing at all to buttons or body text — exactly
+what it is for). So a floor set above the largest tier caps *there*, and
+flattens the whole scale into one size.
+
+Two rules for anyone writing a widget or a view:
+
+- **Sizes and colours are resolved in the constructor BODY, never as
+  default arguments.** A default is evaluated once at import, and the type
+  scale and palette are set by the app at startup and again on every theme
+  swap. Every `x = theme.Y if x is None else …` line in
+  `jellyfin_mpv_shim/mpvtk/widgets.py` is that rule, not an oversight.
+- **An explicit `size=` on a widget is GEOMETRY, not type**, and does not
+  take the text multiplier: `Icon(size=…)`, `Dropdown(trigger_icon=…)`'s
+  button box. Scaling the whole interface — controls, artwork, spacing —
+  is what `ui_scale` does, and having the text multiplier resize controls
+  too would make it a second, partial copy of that. An icon with *no*
+  size still resolves to a tier, because one with no opinion is standing
+  in for a line of text and should match it.
+
+## 8. Logical vs physical pixels (`jellyfin_mpv_shim/mpvtk/scaling.py`)
+
+**Every number in Python view code is logical.** Views author at 1×,
+`layout()` runs in logical space, and `scale_scene()` converts the
+finished scene to physical on the way out. `app` hands `build()` a
+*logical* size, which keeps derived math (the HUD's responsive sizing,
+anything computed off the surface width) logical automatically instead of
+double-scaling. The only code that thinks in physical pixels is bitmap
+rasterization — because the renderer never resamples (§5) — plus the Lua
+side itself. The factor is resolved once at startup (on `ready`) and is
+not reactive: changing it needs a restart, because rescaling live would
+mean dropping every cached bitmap.
+
+`px()` is **the** rounding rule, shared by layout and every rasterizer;
+never inline it. If the two ever rounded differently — 150×1.5 to 225 on
+one side and 224 on the other — the mismatch lands in overlay-add's stride
+and shears the image. Its companions: `dip()` back the other way (mouse
+positions, surface size), `raster(w, h)` for a producer about to rasterize
+a logical box, `logical_size()` for the surface (deliberately float —
+truncating there loses up to a pixel of usable width per axis).
+
+**Font sizes scale exactly; line boxes round.** `size` is scaled and *not*
+rounded: nothing is rasterized at it, no stride depends on it, and libass
+takes a fractional `\fs` happily. What does depend on it is that the text
+comes out the width layout wrapped and ellipsized it to. At 0.75×, an 18px
+run rounded to 14 is 18.67 logical — every line renders 3.7% wider than
+the width it was fitted to, so a full-width paragraph overruns its column
+and disappears under the scrollbar. The error is worst at fractional
+scales (0 at 1× and 2×), which is why it only ever showed up on a scaled
+display. The one thing that must round exactly like every other rasterizer
+is the LINE BOX, and that still does.
+
+Images are the leak in the abstraction — a decoded bitmap is physical — so
+they get an explicit boundary. `Image`/`ImageMap` take `iw`/`ih` (physical
+bitmap size) and `w`/`h` (the logical footprint), and check the two agree
+through `raster()`. Declaring one axis and not the other is an error.
+
+- **Only declare `w`/`h` on a canvas you sized yourself** — a composited
+  strip, the cast backdrop, a banner. Decoded artwork must NOT: the server
+  preserves aspect, so a square request comes back 56×52 and the footprint
+  is whatever the bitmap turned out to be. What has to be scaled for those
+  is the *request*, which `Image` cannot see. Getting it backwards asks
+  the server for artwork at scale-squared on any HiDPI display, and caches
+  it under a key the drawn size never matches.
+
+Two traps in `scale_scene` itself:
+
+- **`"rh"` vs `"ih"`.** A menu's row height is a logical row height and
+  must scale; an `img` node's `ih` is the physical bitmap height and must
+  not. One key meaning both is how the menu ended up drawing 1× rows under
+  2× text. The scale tables are keyed on name alone, which is only safe
+  while a key means the same thing on every node type — check before you
+  add a field. (Full version inline in `jellyfin_mpv_shim/mpvtk/layout.py`.)
+- **Hover dicts are frequently shared module constants** (layout's region
+  default, theme-ish literals in the settings pages). `scale_scene` copies
+  before scaling the pixel keys inside one; scaling in place would
+  compound on it every single frame.
+
+## 9. Playback HUD mode (`MpvtkApp.set_hud`)
+
+`set_hud(on, opts)` enters and leaves the playback-HUD lifecycle, which is
+**attached-but-idle with a blank scene**. That is the distinction that
+matters: `set_active(False)` gets the renderer entirely out of the way for
+another OSC — it unbinds its forced mouse/wheel sections, and pushing an
+empty scene is *not* enough, because the bindings are what swallow the
+clicks. HUD mode keeps the renderer attached during playback with only a
+lightweight summon surface bound (the wake key + mouse motion). Summoning
+rebinds the full input sections and fires `on_hud(True)`; the inactivity
+timer drops back to idle with `on_hud(False)`. "Full" is everything but
+the thumb buttons and, unless the scene has something that scrolls, the
+wheel — both stay with the player (§2). `set_active` in either
+direction also leaves HUD mode. A summoned HUD lands its focus on whatever
+the scene marks `af` (§3); `MpvtkApp.summon_hud()` wakes an idle one as if
+a nav key were pressed, with no pause toggle.
+
+`opts` is everything the renderer owns about the HUD, and is re-sent on
+every engage — which is what lets a settings change stick without a
+restart:
+
+| key | meaning |
+|---|---|
+| `grab` | keyboard policy: summon on all arrows/ENTER while idle |
+| `key` | otherwise only this mpv key is taken over (ENTER also pause-toggles on wake) |
+| `hide` | auto-hide delay in seconds; absent means the toolkit's own default (`PHUD_HIDE.def`), and `0` is not absent — it forces "hover" |
+| `mode` | auto-hide policy: `"hover"` / `"always"` / `"paused"` |
+| `shadow` | draw the glyphs with their own dark halo, for the app that paints no scrim behind them |
+
+`MpvtkApp.set_hud_skip(label)` tells the renderer whether a skippable
+segment is live (falsy = none). While the HUD is idle, entering one shows
+a standalone renderer-drawn skip button for a few seconds (pointer
+movement re-shows it) and ENTER / remote Select / a click fires
+`on_hud_skip`; while summoned, the scene's own button is authoritative and
+this only tracks the label.
+
+**Panned pictures.** `MpvtkApp.set_picture_pan(config)` hands the renderer
+the gesture model for a picture mpv is displaying — `{"unitx", "unity",
+"minx", "maxx", "miny", "maxy", "step"}`, or `None` to stop. While it is
+set, a drag over the empty part of the window and the wheel move mpv's
+`video-pan-x/y` **in the renderer**, with no round trip: a page turn is
+one message, but a scroll is sixty a second and the app has nothing to add
+to one. The units are the **displayed picture's** pixel size, not the
+window's, because that is what mpv's pan is measured in (the measurement
+is in `jellyfin_mpv_shim/mpvtk_browser/gateway/picture.py`). The clamp
+comes from the app, because it depends on the page's size and the reader's
+own chrome, neither of which the renderer knows; re-send it whenever
+either moves. What comes back is the `vpan` / `vzoom` events (§4).
+
+Both the key claim (§3) and the pan model are compare-and-skip caches, and
+the renderer drops both of its own accord when it goes inactive without
+saying so — `set_active` forgets them for that reason.
+
+## 10. Testing
+
+- `python3 -m jellyfin_mpv_shim.mpvtk [--backend libmpv]` — demo with
+  Browse / Widgets / Logs pages exercising every widget.
+- `--selftest DIR` (headless: `xvfb-run -a …`) — ~60 checks driving the
+  renderer's `mpvtk-debug` hooks: `hover`/`click`/`rclick` by node id
+  (`click` takes `shift`/`ctrl`), `down`/`up` (separate press/release —
+  hold-repeat), `wheel` (id/dir/steps/axis), `text`, `key` (incl.
+  CTRLA/SLEFT…), `popup`/`menu` (item index), `nav` (spatial
+  navigation: `dir=`, `action=enter`, or `id=` to focus directly),
+  `state` (renderer state dump incl. `scroll` offsets, the `ov`
+  overlay-slot map, and `nav` focus).
+  Screenshots per step (mpv can't screenshot without video — falls
+  back to X11 `import`).
+- `tests/test_mpvtk_layout.py` — layout engine unit tests (stdlib).
+- `python3 -m jellyfin_mpv_shim.mpvtk.calibrate` (under xvfb) —
+  renders text with markers at predicted widths, screenshots, and
+  prints actual/predicted ratios. Run it when changing fonts or
+  metrics; healthy output is ~1.00 per row.
+- **F12** toggles the input-diagnostics HUD (wheel count/scale/target,
+  mouse state). INFO logs time strip composition and render pushes.
+
+## 11. The real browser (`mpvtk_browser/`)
+
+The toolkit here is app-agnostic; `jellyfin_mpv_shim.mpvtk_browser` is
+the application built on it — the Jellyfin library browser, rendered in
+the player's own mpv window. How it lands against the model above:
+
+- **Data layer is UI-agnostic and owned by the app.**
+  `mpvtk_browser/repository.py` (live `JellyfinClient`) and
+  `thumbnails.py` are the single source of truth; the strip compositor
+  points at real posters decoded on a worker pool and recomposites on
+  arrival via content keys + `invalidate()`.
+- **Views are `build()` branches on a route stack** (`views.py` — home,
+  grid, detail, series/season, search; state lives in the route dict,
+  every mutation ends in `invalidate()`).
+- **Same process as the player.** It lives near `playerManager`, not in
+  the gui_mgr `multiprocessing` side — so there is no separate child and
+  the libmpv memory-image path (§5) is available. `--idle
+  --force-window` gives browse-before-play in the same window.
+- **Spatial (10ft) navigation** (§2) is the net-new capability this
+  architecture unlocks and the main reason to render in mpv for the
+  remote/keyboard case.
+
+The browser replaced an earlier Tkinter browser package (removed on
+reaching parity). The migration's own write-ups (`MIGRATION.md`,
+`PARITY.md`) were deleted in c37bfc3e and this section is what survives of
+them; the comments that cited those files were cleaned up on 2026-08-07, so
+a fresh citation of either is a dead pointer rather than a doc you have not
+found.
+
+## 12. Text: faces, metrics, bidi and colour emoji
+
+Two text paths, and only one of them has font fallback.
+
+- **ASS text** (Text/Icon nodes) goes through **libass**, which does its own
+  fontconfig fallback — CJK, Arabic and emoji all just work.
+- **Text baked into bitmaps** (tile captions in `mpvtk_browser.strips`, the
+  display mirror's title block, the epub reader) goes through **Pillow**, and
+  Pillow has **no fallback at all**: one TrueType face draws the whole string
+  and anything it lacks is tofu (□□□).
+
+`mpvtk/pilfont.py` is the whole of the second path: it splits a string into
+same-script runs, resolves a face per run, and draws them along a shared
+baseline. This section is the measured evidence behind its tables; the rules
+themselves are stated at the code. Everything below was measured on 2026-09-02
+with Pillow 12.3 / FreeType 2.14.3, on Debian and the Windows VM.
+
+### 12.1 An RTL face must carry the whole line
+
+Pillow (through Raqm) reorders bidi **within** one `draw.text` call and cannot
+across several, so a right-to-left line has to be drawn with a **single face**.
+That makes an RTL candidate list a different question from every other script's:
+the face must cover the *line*, not just the script, because there is no Latin
+run to fall back to for the full stop, the comma or the year.
+
+| face | Hebrew (of 88) | pres. forms | printable ASCII |
+|---|---|---|---|
+| `NotoSansHebrew-Regular.ttf` | 87 | 46/46 | **2/95** |
+| `DejaVuSans.ttf` | 54 | 46/46 | 95/95 |
+| `FreeSans.ttf` | 56 | 46/46 | 95/95 |
+| `LiberationSans-Regular.ttf` | **87** | 46/46 | **95/95** |
+
+**Liberation Sans is the one with no trade** — everything Noto Hebrew has (all
+but U+05EF) plus full Latin, and `hebr` in both GSUB and GPOS so the points
+still stack. That is why the Hebrew list is ordered the opposite way from every
+other list in the file: putting Noto Hebrew first drew "שלום עולם." with the
+stop as a box and every year in a title as four more.
+
+**Arabic had no such face, and the loss was knowing — until the choice stopped
+having to be global.** `NotoSansArabic` is 255/256 of the block and 751/772
+presentation forms but has no A-Z, so an Arabic line with a Latin word in it
+drew that word as boxes. DejaVu *does* have Arabic — 165/256, with `arab`
+shaping in both GSUB and GPOS — but only 249/772 presentation forms, and Arabic
+is a script of presentation forms. That was the wrong three quarters to give up
+for the occasional Latin word.
+
+**That trade was between one face and every Arabic line. It is now per line.**
+Coverage-based selection (12.6) means `font(whole=True)` can ask first for a
+face that carries *this* line and fall back to the script-only question, so:
+
+| line | face | why |
+|---|---|---|
+| `مسلسل الحلقة الأولى` | `NotoSansArabic` | nothing else in it; keeps 737/773 forms |
+| `مسلسل Netflix الأصلي` | `FreeSerif` | Noto has no A-Z, and this line needs it |
+| `مسلسل (2013)` | `FreeSerif` | Noto has the *digits* and not the brackets — measured |
+| Arabic + presentation forms + Latin | `NotoSansArabic` | no face carries both, so the script wins and the Latin degrades |
+
+`FreeSerif` is a real Arabic face rather than a Latin one with a few Arabic
+glyphs: measured 2026-09-08, it **joins** (its advance for مسلسل drops from 103
+to 70 under Raqm, which is what joining does) and has full ASCII including
+brackets, at 345/773 presentation forms. Only a line Noto cannot carry reaches
+it, so every other Arabic title is unaffected — which is the difference between
+this and reordering the list, and it is why the row above that gives up the
+Latin is still the right answer when no face can have both.
+
+**Windows never had this gap.** Measured: no Arabic face in a default Windows
+install exceeds 376/773 presentation forms (Courier New; Arial and Segoe UI are
+312) and all of them have full ASCII, so the face the shim already picks there
+carries the whole line.
+
+**Hebrew has always worked this way, by accident** — Liberation Sans covers both,
+so it satisfied the whole-line question before there was one. `whole=True` makes
+that deliberate for both scripts.
+
+**What is still lost: an RTL line mixed with CJK, Thai or Indic.** No installed
+face covers Arabic *and* CJK (unifont aside, which is not a candidate and is not
+a UI face), so the line keeps its RTL face and the other script degrades — and
+that is the right way round, per the rule above. Splitting such a line is not a
+font problem at all: it needs UAX#9 run reordering, whose paired-bracket rule
+(BD16) is the fiddliest part of the algorithm and covers one of the very cases
+this section is about, so a hand-rolled subset would be wrong exactly where it
+was needed. A test asserts this loss rather than leaving it to be rediscovered.
+
+**RTL also outranks every other script in `script_of`, wherever it appears in
+the string.** That answer becomes the whole line's face, and "first non-Latin
+wins" gave "進撃の巨人 مسلسل" to a CJK face — which draws all five Arabic
+characters as boxes, unjoined and in logical order. The trade is already
+settled by the rule above: reordered text is a *wrong* line where tofu is only
+an ugly one, so the CJK is what degrades. A line with no RTL in it is
+unaffected, and two control tests pin that.
+
+When adding or reordering an RTL candidate, check ASCII coverage and the
+OpenType script tags, not just the letters.
+
+### 12.2 Colour emoji, and why Linux needs a scaling path
+
+- **`NotoColorEmoji.ttf` loads at 109px and no other size.** It is a CBDT
+  bitmap face; `ImageFont.truetype(path, 20)` raises `OSError: invalid pixel
+  size`. Adding it to a candidate list and moving on when the load fails is a
+  fix that changes nothing.
+- **Windows `seguiemj.ttf` is COLR-outlined and loads at any size**, in colour.
+  The awkward path is Linux-only.
+- **The only route at an arbitrary size is render-at-the-strike and shrink**:
+  draw into an RGBA scratch at 109, `resize(..., LANCZOS)`, composite. **Do not
+  premultiply first** — the glyphs are already antialiased into transparent
+  black, so the naive resize has no halo to remove (checked against both a
+  white and a dark plate) and premultiplying without dividing back out darkens
+  every edge. Composite with the alpha in the *mask* and not the source, or a
+  transparent plate squares it and the run comes out thin.
+- **Colour requires `embedded_color=True` and an RGB/RGBA target**; Pillow
+  raises `ValueError: Embedded color supported only in RGB and RGBA modes`
+  otherwise. On a *monochrome* face it renders the same picture but **not the
+  same bytes**, so it is not free to pass unconditionally where byte-identity
+  is asserted.
+- **A space in a colour-emoji face is emoji-WIDE**: 135.7 of a 109px em,
+  against DejaVu's 6.4 at 20px. Any "whitespace is neutral" run-splitting rule
+  has to stop at an emoji run, or captions get four-space holes.
+- **Emoji font cmaps are the `Emoji` property, not `Emoji_Presentation`.**
+  NotoColorEmoji carries ❤ ▶ ☀; it does **not** carry U+2605 ★ or U+2713 ✓, and
+  neither does seguiemj. Routing the text-presentation symbols to an emoji face
+  trades one tofu for another — which is why the BMP half of the emoji table is
+  small ranges rather than whole blocks.
+- The Apple Color Emoji strike list (20/26/32/40/48/52/64/96/160) is a **probe
+  set, not a verified inventory** — nobody on this project has a Mac, and 26 and
+  52 in particular are unconfirmed. Being wrong either way is cheap: an unlisted
+  strike just means the face is not used.
+  `TTCollection(path).fonts[0]["sbix"].strikes` settles it on a Mac.
+
+### 12.3 Shaping does not cross a run boundary
+
+A run boundary is a separate `draw.text` call. With Raqm present, VS16 is
+consumed, and ZWJ sequences, flag pairs and keycaps all shape to one glyph of
+the same advance as one emoji — but split "👩‍💻" at the joiner and Raqm sees
+three strings instead of one, drawing two emoji where the font has a single
+glyph. ZWJ, VS15, VS16 and U+20E3 are therefore neutral in the run splitter,
+and U+20E3 rides with the digit *before* it so "1️⃣" comes out as a keycap.
+
+### 12.4 The symbol face is not a script
+
+A Latin face is not a symbol face: the one Windows lands on (Arial) has no
+U+2605, which is the whole of #713's Pillow half. **The ASS half needed no
+fix** — libass falls back through DirectWrite and drew the star already.
+
+A symbol only wins a whole string when there is nothing else in it. Segoe UI
+Symbol's Latin is not Arial's and it carries no Arabic or Hebrew at all, so one
+star choosing it would re-typeset whole paragraphs — and for an RTL line, which
+cannot be split at all, draw every word as a box.
+
+**A symbol the symbol faces lack falls to the emoji chain, and that is the
+only cross-script fallback edge in the file.** Measured 2026-09-08 on Debian:
+of the 1108 codepoints `_SYMBOL_RANGES` claims, **223 are drawn by nothing in
+the symbol chain or the Latin one behind it, and the emoji chain draws 219** —
+`Symbola` is on that list and is a symbol face in every respect except which
+bucket it sits in. The colour faces are not reachable this way and need not
+be: `_load` probes strikes only for the emoji script, so a CBDT face that opens
+at one fixed size is skipped here. #713's star still comes from the symbol
+chain's own first answer.
+
+Two edges were measured and **not** declared, which is the point of measuring:
+a `cjk` edge rescues 22 symbol codepoints and all 22 are already among the 219,
+and the 33 Latin codepoints nothing draws are the C0/C1 controls, which must not
+be rescued by anything. An entry in `_FALLBACK_SCRIPTS` that no run has needed
+pre-authorises a face for a case nobody has seen.
+
+**That last figure is a Debian figure, and 12.9 is what it looks like on
+Windows** — where the Latin face is Arial rather than DejaVu, "the Latin
+codepoints nothing draws" is 6,728 rather than 33. The rule about the controls
+survives unchanged and is now enforced in code: `NotoSansSymbols2` draws a
+*picture* for every one of them.
+
+Mixed lines cost a little vertical room: PIL's default vertical anchor is the
+*ascender* and two faces do not share one, so runs are drawn from a shared
+baseline set by the tallest ascent. A caller reserving from `script_of`'s face
+can therefore sit ~3px short — on Windows the symbol face is (22, 6) against
+Arial's (19, 5) at 20px.
+
+### 12.5 Two things that look like premature optimisation
+
+- **The flattened codepoint sets.** `script_of_char` runs per character and
+  `strips._ellipsize` re-measures a caption once per character while it trims,
+  so walking 48 emoji ranges to reject one CJK character showed up: 1.2 µs a
+  character against 0.017 µs for a set membership — 25 µs against 2 µs for one
+  Japanese caption, and milliseconds across a grid. The range tables stay as
+  ranges because that is the form a human can check against `emoji-data.txt`.
+- **Splitting at all.** A face named for a script is very often a face for
+  *only* that script: DroidSansFallback (what a Debian box without Noto CJK
+  lands on), NotoSansThai and NotoSansArabic all draw the letter A as `.notdef`,
+  so "進撃の巨人 (2013)" came out with the year as four tofu boxes.
+
+### 12.6 One CJK bucket, four languages, and no face that covers it
+
+`script_of_char` folds Han, kana and Hangul into the single script `"cjk"`,
+because there is no way to tell zh-Hans from zh-Hant from ja by codepoint —
+they share the Unified Han block, and the shim has no per-item language to ask
+the server for. One bucket is the right answer. **One face for the bucket is
+not**, and that was #736: a Simplified Chinese library drawn half in glyphs and
+half in tofu.
+
+Coverage measured 2026-09-08, per face, against the codepoints of each
+language's sample (#736's own title `莲花 电视剧 第一季` for zh-Hans):
+
+| face | host | zh-Hans | zh-Hant | ja | ko | ASCII |
+|---|---|---|---|---|---|---|
+| `NotoSansCJK-Regular.ttc` | Debian | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `DroidSansFallbackFull.ttf` | Debian | ✓ | ✓ | ✓ | ✗ | **✗** |
+| `fonts-japanese-gothic.ttf` (IPAGothic) | Debian | **✗ 4/8** | ✗ 嬛 | ✓ | ✗ | ✓ |
+| `VL-Gothic-Regular.ttf` | Debian | **✗ 4/8** | ✓ | ✓ | ✗ | ✓ |
+| `msgothic.ttc` (MS Gothic) | Windows 10 | **✗ 4/8** | ✓ | ✓ | ✗ | ✓ |
+| `YuGothM.ttc` / `YuGothR.ttc` | Windows 10 | **✗ 4/8** | ✓ | ✓ | ✗ | ✓ |
+| `msyh.ttc` (YaHei) / `msjh.ttc` (JhengHei) | Windows 10 | ✓ | ✓ | ✓ | ✗ | ✓ |
+| `simsun.ttc` | Windows 10 | ✓ | ✓ | ✓ | ✗ | ✓ |
+| `malgun.ttf` | Windows 10 | ✗ 4/8 | ✓ | ✗ 撃 | ✓ | ✓ |
+| `arial.ttf` / `segoeui.ttf` / `seguisym.ttf` | Windows 10 | ✗ | ✗ | ✗ | ✗ | ✓ |
+
+**Nothing on a stock Windows 10 covers all four.** The Chinese faces have no
+Hangul at all; the Korean face is missing most Han; the Japanese faces are
+missing a quarter of #736's own title. So no ordering of `_CANDIDATES["cjk"]`
+can be correct, and the fix cannot be a reordering — it has to be **per-run
+selection by coverage**, which is what `font(script, size, bold, text=...)`
+does. `_load` answers "the first name that opens"; that was never the same
+question as "the first name that works".
+
+**How coverage is measured, and why it is a render comparison.** Pillow exposes
+no cmap — `FreeTypeFont` has `getmask`, `getbbox`, `getlength` and `getname`,
+and nothing mapping a character to a glyph id — so `_draws` renders the
+character and compares it against what that same face renders for a codepoint
+Unicode guarantees will never be assigned. That is a real answer for **39–45 µs
+on Linux and 7.5 µs on Windows**, memoized per (face, codepoint) at ~20 ns, and
+it needs no new dependency. The verdict is **identical at 8 px and at 96 px** on
+every face tried, which is why the memo is keyed by the face's *name* and shared
+across sizes.
+
+Three results that look like the probe failing and are not:
+
+- `simsun.ttc` renders a **blank** no-glyph mark, and `NotoColorEmoji.ttf`
+  renders one **identical to its space**. Both are harmless, because the only
+  glyphs that render blank are whitespace and `_covers` skips it. Do not add an
+  assertion that the mark is non-blank or differs from a space — it is false on
+  a stock Debian box.
+- `DroidSansFallbackFull.ttf` covers three CJK languages and **has no ASCII at
+  all**, not even digits. It is a legitimate candidate anyway: a mixed title
+  splits into runs and the Latin run resolves its own face.
+- Several entries on this list cover none of it. The Latin chain is appended to
+  every script for the tofu-rather-than-crash backstop, and it correctly never
+  satisfies a CJK run.
+
+**Only the selecting script's codepoints are required.** Asking a face to cover
+the whole *string* would overturn 12.1's two measured decisions — Noto Arabic is
+kept first although it has no ASCII, and the Hebrew list is ordered backwards
+precisely for the neutrals. Requiring just the codepoints that chose the list
+leaves both exactly as they were.
+
+**What coverage still cannot decide is regional glyph form.** Han unification
+means one codepoint has different shapes in Japanese and Chinese typography, and
+`msyh.ttc` covers Japanese perfectly well — so promoting it to fix Simplified
+Chinese would give every Japanese title Chinese shapes. The Japanese entries
+therefore keep their position and the Chinese ones are *appended*: order in that
+list is now preference, and only correctness was taken away from it. On the
+Windows VM the result is zh-Hans → `msyh.ttc`, ko → `malgun.ttf`, ja and zh-Hant
+still → `msgothic.ttc`. A zh-Hant library gets Japanese shapes for the Han it
+shares, which is the one case left open and needs a language the server is never
+asked for.
+
+### 12.7 A Flatpak sees the runtime's fonts, not the user's
+
+**Pillow does not use fontconfig.** It searches a fixed list of directories,
+which is the whole reason the sandbox needs anything said about it: inside a
+Flatpak that list finds the *runtime's* `/usr/share/fonts`, and the user's fonts
+are bind-mounted somewhere Pillow has never heard of.
+
+Measured 2026-09-08 against the shipped 3.0.0 Flatpak, on a host with the full
+Noto set installed:
+
+| | files | has CJK / Thai / Indic |
+|---|---|---|
+| runtime `/usr/share/fonts` (`org.freedesktop.Platform` 25.08) | 95 | **none of them** |
+| host, at `/run/host/fonts` | 4243 | all of them |
+
+So **Chinese, Japanese, Korean, Thai and Hindi libraries drew as a screen of
+boxes**, and `NotoSansCJK-Regular.ttc` — verified in the sandbox to draw 莲 —
+was on the disk the whole time. Absolute candidates made it worse rather than
+better: `/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc` names the
+runtime's tree inside the sandbox, so the entry that looks most specific is the
+one guaranteed to miss.
+
+`_load` therefore tries each candidate's **basename** under
+`_HOST_FONT_DIRS` (`/run/host/fonts`, `/run/host/local-fonts`,
+`/run/host/user-fonts`). Basename, because it has to carry over for an absolute
+candidate as much as a bare one. It is `_resolutions`' second yield, so the walk
+is only reached once a name has failed at every size — 2656 files in 3 ms, once
+per process, and never on a host that has no such directory.
+
+**NixOS is the same problem without a sandbox (#786).** Its fonts live in
+`/nix/store` and only fontconfig's configuration lists them, so every
+candidate failed and the titles fell to Pillow's default face, at 10px unless
+it is given a size. `_resolutions` therefore has a third yield: the same
+basename in fontconfig's own file list. After every script's candidates come
+fontconfig's *matches* (`sans-serif:lang=ja` and so on), appended rather than
+preferred, since fontconfig finds files well and chooses them badly (its
+Japanese pick on Debian is a Chinese face). The query runs in a child process
+so that no libfontconfig can crash the app: `mpvtk/fontconfig.py`.
+
+Two things worth knowing before touching it:
+
+- **The index being built is not the same as a directory being walked.** On
+  Windows the first Latin candidate (`DejaVuSans.ttf`) does not exist, so the
+  lookup *is* reached and the index is built empty: three `isdir` calls. A test
+  asserting "the index is None off-Flatpak" passes on Linux for an accidental
+  reason and fails on Windows for a correct one.
+- `/run/host/os-release` is the same trick from the other direction — it is the
+  only place a Flatpak can read the *host's* identity, which is what the
+  SteamOS detection in `docs/archive/RELEASE_SHAPE_POST_3.0.0.md` §5.3 uses.
+
+### 12.8 One bucket per family of faces, not per script
+
+`script_of_char` buckets a codepoint, and the right granularity is **however
+many buckets the available faces justify** — not one per script and not one for
+everything.
+
+Seventeen scripts had no bucket at all until 2026-09-08, so every codepoint in
+them answered `"latin"`, took the Latin face and drew as boxes: Bengali,
+Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam, Sinhala, Lao,
+Tibetan, Myanmar, Georgian, Ethiopic, Cherokee, Khmer, Mongolian. Both platforms
+ship a face for every one of them. Georgian and Armenian were in exactly the
+same position and were invisible, because DejaVu happens to cover them — which
+is what made the whole set read as a platform limit instead of a bug.
+
+**The ten Indic scripts share one `"indic"` bucket, and that is only correct
+because of 12.6's coverage check.** They share no codepoints, so unlike CJK
+there is no regional-form problem: Noto ships a file per script, Windows ships
+`Nirmala.ttf` for all ten, and `font()` picks per run by what the run's
+codepoints actually draw as. Measured: from one list, Bengali resolves
+`NotoSansBengali`, Tamil `NotoSansTamil`, Telugu `NotoSansTelugu`; on Windows all
+ten resolve `Nirmala.ttf`.
+
+**Cost is one comparison**, because every added range lives inside
+U+0980..U+18AF and a single band test sits in front of `_BAND_SCRIPTS`. The
+scripts in it got *faster*: they used to traverse the whole chain to reach
+`"latin"` (147 ns measured) instead of returning at the gate. Thai and
+Devanagari sit inside that band, keep their own buckets and are answered
+*before* it — and a codepoint the table does not claim falls through rather than
+being taken, so the two orderings cannot silently swap. A test holds both ends.
+
+**Measure the font name on a host that has it.** `mangal.ttf` was Devanagari's
+only Windows entry for years and Mangal is not on Windows 10 — it became an
+optional feature — so Hindi drew in Arial. `NotoSansTibetan` does not exist
+either; Noto ships Serif only for that script. Both were caught by
+`TestTheHostsOwnInventory`, which walks the platform's font directories and
+fails when the host owns a face the shim did not find, naming the file. That
+test is the only thing here that can catch an *incomplete* list, because
+completeness cannot be checked against the file — only against a machine.
+
+### 12.9 A character the run's own face lacks
+
+`runs()` gives each run a face and 12.6 makes that face one that covers the
+run. Neither answers the character that is in **no** bucket's chain: #740 is a
+Simplified Chinese title, "机动战士Z高达Ⅱ：恋人们", whose Roman numeral drew as a
+box on Windows once the Han around it was fixed. U+2161 is neither CJK nor a
+symbol to `script_of_char` — it is below the CJK catch-all and in none of the
+symbol tables — so it lands in a *Latin* run, and the Latin face on Windows is
+Arial.
+
+Measured on the Windows VM, 2026-09-09, through `_draws` (the same test the
+selector uses):
+
+| face | Number Forms | ⅠⅡⅢ | ① | ℃ |
+|---|---|---|---|---|
+| `arial.ttf` | 7/64 | no | no | no |
+| `seguisym.ttf` | 0/64 | no | yes | yes |
+| `msgothic` / `msyh` / `simsun` / `malgun` | 22–52/64 | **yes** | yes | yes |
+| `DejaVuSans.ttf` (Linux, Flatpak) | 55/64 | yes | — | — |
+
+**The class, not the character.** Of the 9,103 assigned codepoints below U+2E80
+that `script_of_char` calls `"latin"`, Arial draws 2,375 and DejaVu 4,669; of
+the 6,728 Arial misses, a CJK face already installed draws 906 — letterlike,
+number forms, enclosed alphanumerics, maths, box drawing and the whole of
+Hangul Jamo, which has no bucket and does not need one now.
+
+**The repair is per character, not per chain.** A `latin -> cjk` entry in
+`_FALLBACK_SCRIPTS` would have fixed the reported title, because there the
+numeral is a run of its own — and re-typeset the whole of "Rocky Ⅱ" in a CJK
+face, because there it is not. So `_peel` splits the run instead: the character
+the face cannot draw moves, and everything beside it is drawn exactly as before.
+`_orphan_face` asks, in order, the faces the **rest of this string** resolved
+(a character with no script of its own belongs with the text around it — U+2161
+in a Chinese title is East Asian wide, and the face drawing the Han beside it is
+the right width and weight), then the run's own chain, then `_ORPHAN_SCRIPTS`.
+
+Three characters are never peeled, and each one has a measurement behind it:
+
+- **Category C.** `NotoSansSymbols2` draws a picture for every C0/C1 control and
+  for U+007F, so a peel that took the first face with a glyph would turn a stray
+  U+0085 in a title into a visible one, and a zero-width space into something
+  with width. This is 12.4's rule, now enforced rather than observed.
+- **Joiners and combining marks.** Shaping does not cross a run boundary (12.3),
+  and the peel *is* a boundary. Segoe UI Symbol has no U+FE0F, so the first
+  version of this drew "☂️" as two pieces — the split `_JOINERS` exists to
+  prevent, one level down. Marks also follow a base that moves, or niqqud and
+  Devanagari stack onto the wrong glyph.
+- **Anything in an RTL line.** It is one draw call and stays one (12.1).
+
+**Cost: about 3µs on a 72µs measure** (three captions, warm memo, Debian
+2026-09-09), because `_draws` is memoized per face and codepoint and the peel
+asks it once per character.
+
+What this does **not** address: a run-level face mix inside one title. The Han
+in #740's own title resolves `msyh` for 机动战士 and `msgothic` for 高达, since
+each run takes the first candidate covering *that run* — so two Han runs of one
+title can carry Chinese and Japanese letterforms. Visible on the sample sheet,
+pre-existing, and a different decision from this one.
+
+### 12.10 Where the Unicode data actually is
+
+Debian's `unicode-data` package ships
+`/usr/share/unicode/emoji/emoji-data.txt` — the authoritative
+`Emoji_Presentation` list, which a test checks the BMP table against — plus
+`UnicodeData.txt`, `Scripts.txt` and the rest under `/usr/share/unicode/`.
+Check for it before transcribing any Unicode property by hand: validating a
+transcription against a font's cmap instead is unsound in one direction, since
+a cmap is the `Emoji` property and therefore a **superset** — it can catch an
+omission but never a wrong inclusion.

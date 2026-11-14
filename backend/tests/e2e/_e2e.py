@@ -1,0 +1,1024 @@
+"""Fixtures for the end-to-end suite: a real Jellyfin server, a real mpv.
+
+Everything else in `tests/` runs against a fake. That is deliberate and it is
+why those suites are fast and deterministic — but it also means the request
+the shim actually sends is never validated by anything, and the DTOs it
+reasons about are hand-written by us. `docs/e2e-roadmap.md` has the evidence:
+`enable_images=False` to a method with no such argument, `is_movies` for
+`IsMovie` (with a unit test asserting the wrong spelling, which is why it was
+green), a SyncPlay ping sent as a float against a `long`. None of those are
+reachable without a server on the other end.
+
+The server is stdjflib's:
+
+    ./stdjflib.py serve ~/Desktop/std-jf-lib --live-tv
+    JMS_E2E_SERVER=http://127.0.0.1:8096 python3 tests/e2e/run_e2e.py
+
+With `JMS_E2E_SERVER` unset — or set and unreachable — every test here skips,
+the same discipline as the integration suite's capability gating. A bare
+machine exits clean.
+
+Not named `test_*` so unittest discovery ignores it. `tests/e2e/` has no
+`__init__.py`, so `python3 -m unittest discover tests` never recurses in.
+"""
+
+import atexit
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import traceback
+import unittest
+import urllib.error
+import urllib.parse
+import urllib.request
+
+# The integration harness already probes mpv/ffmpeg/display, primes the arg
+# parser and knows how to tell a FakeMPV-bound player module from a real one.
+# Importing it beats a second copy that drifts: these are the same questions,
+# and the answers have to stay the same.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "integration"))
+import _harness as h  # noqa: E402
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _accounts  # noqa: E402
+
+SERVER = (os.environ.get("JMS_E2E_SERVER") or "").rstrip("/")
+BACKEND = h.BACKEND
+
+# Done at import, before any test module can pull a shim module in. Two traps,
+# both of which bite whichever module imports first rather than the one at
+# fault:
+#   * the app parses sys.argv the first time anything resolves the config dir,
+#     and under a test runner argv carries tokens its argparse rejects — it
+#     exits with a usage message, which reads as a broken test file.
+#   * without an isolated config dir the suite reads and writes the
+#     developer's real one.
+_CONFIG_DIR = tempfile.mkdtemp(prefix="jms-e2e-config-")
+# One per process, and the runner starts a process per leg -- 49 of them,
+# every run. 433 had accumulated before this.
+atexit.register(shutil.rmtree, _CONFIG_DIR, ignore_errors=True)
+os.environ["XDG_CONFIG_HOME"] = _CONFIG_DIR
+# conffile.win32 reads APPDATA and knows nothing about XDG_CONFIG_HOME, so on
+# Windows the line above isolates nothing and the suite rewrites the
+# developer's real cred.json -- the exact thing this block exists to prevent.
+# Same pairing as tests/integration/test_single_instance_multiproc._spawn.
+os.environ["APPDATA"] = _CONFIG_DIR
+h.prime_args(_CONFIG_DIR)
+
+# There is deliberately no `PASSWORD` constant any more. `qa-admin`'s is
+# random per server state: an admin can install plugins, which is code
+# execution on the host, and Jellyfin answers any origin and checks no Host
+# header, so a known one made a QA server a way into this machine.
+# `_accounts.password_for` is the one place that answers, and it needs the
+# server as well as the account.
+
+
+class _Derive:
+    """Default for ``password``: work it out from the account and the server.
+
+    A sentinel rather than a value, because a default argument is evaluated
+    once at import and the answer now depends on **which** server is being
+    asked -- the filter matrix holds sessions to two at once.
+    """
+
+    def __repr__(self):
+        return "<derived from the account and the server>"
+
+
+DERIVE = _Derive()
+
+# The server uuid a LibrarySource built by `Session.library_source` answers to.
+SOURCE_UUID = "e2e"
+
+
+def public_users():
+    """`/Users/Public` — the login list a client offers without credentials.
+
+    Deliberately raw rather than through the apiclient: this endpoint is what
+    an unauthenticated client sees, so asking it with a token would be asking
+    a different question.
+    """
+    with urllib.request.urlopen(SERVER + "/Users/Public", timeout=10) as resp:
+        return [u.get("Name") for u in json.loads(resp.read())]
+
+
+def public_version(address=None):
+    """The `Version` a server reports to an unauthenticated client, or "".
+
+    Unauthenticated on purpose: its caller is a guard on *which server this
+    is*, which must be answerable before anyone decides how to log in. Empty
+    rather than raising, so an unreachable server stays the skip it already
+    is everywhere else here.
+    """
+    target = (address or SERVER).rstrip("/")
+    if not target:
+        return ""
+    try:
+        with urllib.request.urlopen(
+                target + "/System/Info/Public", timeout=10) as resp:
+            return (json.loads(resp.read()) or {}).get("Version") or ""
+    except (urllib.error.URLError, OSError, ValueError):
+        return ""
+
+
+def login_refused(account, password=DERIVE, device_id=None):
+    """True when the server refuses this login.
+
+    Returns rather than raises so a test can say what it means. `Session`
+    raises on a refusal because every other test wants that; here the refusal
+    *is* the assertion.
+    """
+    try:
+        session = Session(account, password, device_id=device_id)
+    except AssertionError:
+        return True
+    session.stop()
+    return False
+
+
+# --------------------------------------------------------------------------
+# Capability gate
+# --------------------------------------------------------------------------
+
+_reachable = None
+
+
+def server_reachable():
+    """Is there a Jellyfin on the other end? Probed once, cached.
+
+    Requires a parseable payload, not merely a socket that accepts: a server
+    still shutting down on the same port accepts and closes, and treating that
+    as "up" makes the next call fail with a connection error pointing nowhere
+    near the cause. (stdjflib's own `wait_until_up` learned this the same way.)
+    """
+    global _reachable
+    if _reachable is not None:
+        return _reachable
+    _reachable = False
+    if SERVER:
+        try:
+            with urllib.request.urlopen(
+                    SERVER + "/System/Info/Public", timeout=5) as resp:
+                _reachable = bool(json.loads(resp.read()).get("Id"))
+        except (urllib.error.URLError, OSError, ValueError, TypeError):
+            _reachable = False
+    return _reachable
+
+
+def require_server(obj):
+    return unittest.skipUnless(
+        server_reachable(),
+        "no server: set JMS_E2E_SERVER to a running Jellyfin "
+        "(see docs/e2e-roadmap.md)",
+    )(obj)
+
+
+def require_server_and_mpv(obj):
+    return require_server(h.require_real_mpv(obj))
+
+
+def sync_timers(**secs):
+    """An App ``env`` that runs the app's sync timers short:
+    ``sync_timers(settle=5, replay=5)``. Names and why: sync/manager.py
+    JMS_TEST_SYNC_TIMERS."""
+    return {"JMS_TEST_SYNC_TIMERS": ",".join(
+        "%s=%d" % kv for kv in sorted(secs.items()))}
+
+
+#: Set by run_e2e.py for --heavy and for every release-mode (--manifest) run.
+HEAVY_ENV = "JMS_E2E_HEAVY"
+
+
+#: Set by run_e2e.py for --gate and every --manifest run: the release gate.
+GATE_ENV = "JMS_E2E_GATE"
+
+
+def gate():
+    """The release gate: every test signs in and launches cold. The light
+    tier reuses a class's sign-in instead (Izzie, 2026-10-06)."""
+    return os.environ.get(GATE_ENV) == "1"
+
+
+def heavy(obj):
+    """Release-gate only: minutes of real timers for one property. A default
+    run skips it and the runner's summary names it."""
+    return unittest.skipUnless(
+        os.environ.get(HEAVY_ENV) == "1",
+        "heavy: runs with run_e2e.py --heavy or --manifest")(obj)
+
+
+# --------------------------------------------------------------------------
+# Settings + the player module
+# --------------------------------------------------------------------------
+
+_SINK_MODULE = None
+SINK_NAME = "jms-e2e-sink"
+
+#: Every device id this suite registers starts with this, and `purge_devices`
+#: will not delete one that does not. The QA server is a machine a developer
+#: also points a real client at, and a device record is a live session: a
+#: purge that matched on the account alone signed that client out mid-run.
+DEVICE_PREFIX = "jms-e2e-"
+
+
+def dummy_audio_device():
+    """An mpv `audio-device` that makes noise nowhere. Created on first use.
+
+    The playback tests decode real media, so mpv opens a real audio output —
+    which on a developer's box means the suite is audible, fights whatever
+    else is playing, and can fail on a device another process holds. (A run
+    against the real device already produced "Audio device underrun
+    detected".)
+
+    A PipeWire/PulseAudio **null sink** is better than `ao=null` here: mpv
+    genuinely opens an output and the whole audio path runs — device
+    selection, format negotiation, the AudioMixin settings — it just ends
+    nowhere. `ao=null` would skip all of that, and audio behaviour is
+    something this suite should be able to grow tests for.
+
+    The sink is created explicitly and addressed explicitly; **the default
+    sink is never changed**, so nothing about the developer's audio moves.
+    Unloaded at exit.
+
+    Returns None when there is no `pactl` or the sink cannot be made, in
+    which case the caller falls back to mpv's own null device — quiet, and
+    still no contention, just less of the path exercised.
+    """
+    global _SINK_MODULE
+    if _SINK_MODULE is not None:
+        return "pulse/" + SINK_NAME
+    # The runner makes one sink for the whole matrix and names it here, so the
+    # eleven legs (and the children they spawn) share it instead of each
+    # loading a module — eleven sinks with one requested name is eleven
+    # deduplicated names, and any leg that dies takes its unload with it.
+    from_runner = os.environ.get("JMS_E2E_AUDIO_DEVICE")
+    if from_runner:
+        return from_runner
+    if not shutil.which("pactl"):
+        return None
+    if _sink_exists():
+        # Left by a crashed run, or a sibling process. Reuse it and do not
+        # register an unload: this process did not create it and unloading
+        # someone else's sink mid-run would pull the device out from under
+        # them. A stray null sink is harmless and gets reused next time.
+        return "pulse/" + SINK_NAME
+    try:
+        out = subprocess.run(
+            ["pactl", "load-module", "module-null-sink",
+             "sink_name=" + SINK_NAME,
+             "sink_properties=device.description=" + SINK_NAME],
+            capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    module_id = (out.stdout or "").strip()
+    if out.returncode != 0 or not module_id.isdigit():
+        return None
+    _SINK_MODULE = module_id
+    atexit.register(_unload_sink)
+    return "pulse/" + SINK_NAME
+
+
+def _sink_exists():
+    try:
+        out = subprocess.run(["pactl", "list", "short", "sinks"],
+                             capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return any(line.split("\t")[1:2] == [SINK_NAME]
+               for line in (out.stdout or "").splitlines())
+
+
+def _unload_sink():
+    global _SINK_MODULE
+    if _SINK_MODULE is None:
+        return
+    module_id, _SINK_MODULE = _SINK_MODULE, None
+    try:
+        subprocess.run(["pactl", "unload-module", module_id],
+                       capture_output=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def quiet_settings():
+    """Turn off everything that is not under test, and pin the backend.
+
+    **Must run before `jellyfin_mpv_shim.player` is imported** — player.py
+    picks its mpv backend at import time and builds its singleton there.
+    """
+    from jellyfin_mpv_shim.conf import settings
+    h.prime_args()
+    # "null" rather than leaving it unset: mpv's own null device is the
+    # fallback when there is no sound server to make a sink in, and it is
+    # still better than opening whatever the box's default output is.
+    settings.audio_device = dummy_audio_device() or "null"
+    settings.thumbnail_enable = False
+    settings.shader_pack_enable = False
+    settings.menu_mouse = False
+    settings.svp_enable = False
+    settings.discord_presence = False
+    settings.check_updates = False
+    # "none" keeps the OSC lua out of in-process libmpv (its teardown at
+    # interpreter exit goes racy with a script loaded) and suppresses mpv's
+    # own OSC — same reasoning as test_realmpv_smoke.
+    settings.osc_style = "none"
+    settings.fullscreen = False
+    settings.auto_play = True
+    settings.mpv_ext = (BACKEND == "jsonipc")
+    settings.mpv_ext_start = True
+    return settings
+
+
+def isolate_config():
+    """Point the config dir at a throwaway.
+
+    The suite writes credentials and playstate; a developer running it must
+    not find their real `cred.json` rewritten. Called before any shim import.
+    """
+    path = tempfile.mkdtemp(prefix="jms-e2e-config-")
+    atexit.register(shutil.rmtree, path, ignore_errors=True)
+    os.environ["XDG_CONFIG_HOME"] = path
+    os.environ["APPDATA"] = path      # Windows: see the module-level pairing
+    return path
+
+
+_PLAYER = None
+
+
+def ensure_real_player():
+    """The process's one real player, built on first use and torn down at exit.
+
+    `playerManager` is a **module-level singleton**, so it is shared by every
+    test class in the interpreter — which makes per-class teardown wrong.
+    Terminating it in `tearDownClass` leaves the next class holding a dead
+    player, and the two backends do not fail the same way: in-process libmpv
+    quietly re-creates itself and the run looks fine, while external mpv is a
+    separate process that is simply gone, and the next `play` dies with
+    `BrokenPipeError: socket is closed`. Exactly the kind of one-backend
+    divergence the matrix exists to surface — it caught this on its first run.
+    """
+    global _PLAYER
+    if _PLAYER is None:
+        _PLAYER = import_real_player()
+        import atexit
+        atexit.register(_terminate_player)
+    return _PLAYER
+
+
+def _terminate_player():
+    """Shut the player down while the interpreter is still healthy.
+
+    `PlayerManager.terminate` tears the handle down only for **external** mpv
+    (`if is_using_ext_mpv: self._player.terminate()`); in-process libmpv is
+    left for CPython's finalization. That is fine for the app — a desktop
+    process exiting lets the OS reap it — and racy under a test runner, where
+    finalization runs with atexit handlers and daemon threads still in play.
+    It showed up as a rare SIGSEGV *after* "OK" was printed, which the runner
+    then reported as a failed leg on a run whose assertions all passed:
+    roughly one in five to eight, libmpv only.
+
+    So terminate the handle here too, explicitly, before the interpreter
+    starts pulling itself apart. Harness-only — nothing about the app's own
+    exit path changes.
+    """
+    if _PLAYER is None:
+        return
+    manager = _PLAYER.playerManager
+    handle = getattr(manager, "_player", None)
+    try:
+        manager.terminate()
+    except Exception:
+        pass
+    if not getattr(_PLAYER, "is_using_ext_mpv", False) and handle is not None:
+        # The app's own teardown, not handle.terminate(): that skipped
+        # _mark_mpv_dead and the quiesce, and an observer firing during the
+        # destroy segfaulted the run after it had printed OK.
+        try:
+            manager._terminate_mpv(handle)
+        except Exception:
+            pass
+
+
+def import_real_player():
+    """Import `jellyfin_mpv_shim.player` bound to a REAL mpv backend.
+
+    In a full-suite run the fake-mpv legs may already have imported player
+    against `FakeMPV`, and player.py caches its singleton at import time — a
+    plain import would hand that back and this suite would silently smoke-test
+    the fake. Ask the *player module* what it is bound to rather than
+    `sys.modules`, which the integration harness deliberately restores.
+    """
+    quiet_settings()
+    player_mod = sys.modules.get("jellyfin_mpv_shim.player")
+    if player_mod is not None and _is_fake(getattr(player_mod, "mpv", None)):
+        sys.modules.pop("jellyfin_mpv_shim.player")
+    for name in ("mpv", "python_mpv_jsonipc"):
+        if _is_fake(sys.modules.get(name)):
+            del sys.modules[name]
+    import jellyfin_mpv_shim.player as player_module
+    assert not _is_fake(player_module.mpv), "e2e suite is bound to FakeMPV"
+    return player_module
+
+
+def _is_fake(mod):
+    return mod is not None and h.is_fake_mpv(mod)
+
+
+# --------------------------------------------------------------------------
+# A logged-in connection
+# --------------------------------------------------------------------------
+
+class Session:
+    """One authenticated connection, built the way the app builds one.
+
+    The token half is `clients.ClientManager.login`; the "we already hold a
+    token, just bring the HTTP session up" half is `repository.ServerConn`.
+    Between them that is every way the app reaches a server.
+    """
+
+    def __init__(self, account="qa-user", password=DERIVE, device_id=None,
+                 websocket=False, address=None):
+        from jellyfin_apiclient_python import JellyfinClient
+        from jellyfin_mpv_shim.constants import (
+            CLIENT_VERSION, USER_APP_NAME, USER_AGENT,
+        )
+
+        # Deterministic, one per account, and NOT a fresh uuid per Session.
+        # A real client has one persistent device id, and the server keeps a
+        # Device record per id forever: a random one leaked a device per
+        # Session ever constructed (119 of them before this was noticed),
+        # which is junk on the server and makes `/Sessions` lookups
+        # ambiguous. Tests that genuinely need to look like a second device
+        # — qa-onesession — pass `device_id` explicitly.
+        # DEVICE_PREFIX, not a literal: `purge_devices` will not delete a
+        # device whose id does not carry it, so an id built any other way
+        # becomes litter this suite can no longer clear up after itself.
+        self.device_id = device_id or (DEVICE_PREFIX + account)
+        if not self.device_id.startswith(DEVICE_PREFIX):
+            raise AssertionError(
+                "device_id %r does not start with %r, so purge_devices "
+                "cannot clean it up and it becomes permanent litter on the "
+                "server" % (self.device_id, DEVICE_PREFIX))
+        self.account = account
+        # Defaults to the module-level SERVER, which is every existing
+        # caller. Named so a test can hold sessions to TWO servers at once
+        # -- the filter matrix runs against 12.0 and 10.11 in one process,
+        # and the differences between them (the language pickers exist on
+        # one and not the other) are the reason it is worth doing.
+        self.address = (address or SERVER).rstrip("/")
+        # After `self.address`, never before: which server is being asked is
+        # half the answer now, and the two the matrix holds at once are on
+        # different ports with different admin passwords.
+        derived = password is DERIVE
+        if derived:
+            password = _accounts.password_for(account, self.address)
+
+        client = JellyfinClient(allow_multiple_clients=True)
+        client.config.data["app.default"] = True
+        client.config.app(USER_APP_NAME, CLIENT_VERSION, "jms-e2e", self.device_id)
+        client.config.data["http.user_agent"] = USER_AGENT
+        client.config.data["auth.ssl"] = False
+
+        client.auth.connect_to_address(self.address)
+        result = client.auth.login(self.address, account, password or "")
+        if "AccessToken" not in result:
+            raise AssertionError(
+                "login failed for %s: %r (password from %s)"
+                % (account, result,
+                   _accounts.source_of(account, self.address) if derived
+                   else "the caller"))
+        self.token = result["AccessToken"]
+        self.user_id = result["User"]["Id"]
+
+        client.config.auth(self.address, self.user_id, self.token, False)
+        client.logged_in = True
+
+        #: Every (event_name, data) the websocket delivered, when there is one.
+        self.events = []
+        #: Callables fed each event. SyncPlay is the reason this exists: it is
+        #: the one feature that is *entirely* server-pushed, so a session
+        #: without a socket cannot exercise any of it.
+        self.listeners = []
+        if websocket:
+            def _event(event_name, data):
+                self.events.append((event_name, data))
+                for listener in list(self.listeners):
+                    try:
+                        listener(event_name, data)
+                    except Exception:
+                        # A listener that throws must not kill the socket
+                        # thread; the test reads `events` and fails on its
+                        # own terms.
+                        traceback.print_exc()
+
+            client.callback = _event
+            client.callback_ws = _event
+        client.start(websocket=websocket)
+
+        self.client = client
+        self.api = client.jellyfin
+        if websocket:
+            self._post_capabilities()
+
+    def _post_capabilities(self):
+        """What ClientManager does on WebSocketConnect.
+
+        Retried, because the socket is up a moment before the server will
+        answer for it -- the app's own connect path loops here for the same
+        reason. Without it this session is not a controllable one, which is
+        what SyncPlay hands commands to.
+        """
+        from jellyfin_mpv_shim.clients import CAPABILITIES
+
+        for attempt in range(10):
+            try:
+                self.api.post_capabilities(CAPABILITIES)
+                return
+            except Exception:
+                if attempt == 9:
+                    raise
+                time.sleep(0.3)
+
+    def wait_for_event(self, name, timeout=10):
+        """Block until an event of `name` has arrived, and return it."""
+        return wait_for(
+            lambda: next((d for n, d in list(self.events) if n == name), None),
+            timeout=timeout)
+
+    def stop(self):
+        """Revoke the token, then close the HTTP session.
+
+        `client.stop()` alone only closes the socket — the session stays
+        registered on the server, which is how a suite that logs in freely
+        exhausts `qa-onesession`'s cap with its own leftovers. Logging out is
+        also what keeps `/Sessions` readable for the tests that consult it.
+        """
+        try:
+            self._request("/Sessions/Logout", method="POST")
+        except Exception:
+            pass
+        try:
+            self.client.stop()
+        except Exception:
+            pass
+
+    def _request(self, path, method="GET", body=None):
+        """A raw authenticated call, for the handful of endpoints the
+        apiclient does not expose (logout, the Devices and Policy admin
+        APIs)."""
+        headers = {"Authorization": 'MediaBrowser Token="%s"' % self.token}
+        data = None
+        if body is not None:
+            data = json.dumps(body).encode()
+            headers["Content-Type"] = "application/json"
+        req = urllib.request.Request(self.address + path, method=method,
+                                     data=data, headers=headers)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            payload = resp.read()
+            return json.loads(payload) if payload else None
+
+    def policy(self):
+        return (self.api.get_user() or {}).get("Policy") or {}
+
+    def set_policy(self, policy, user_id=None):
+        """Replace a user's policy (this user's by default). Admin only.
+
+        A fallback for the Live TV timer tests. Current stdjflib grants
+        `EnableLiveTvManagement` to `qa-user`, so they need no mutation at
+        all — but an older server, or one provisioned before that fix, has it
+        on nobody, and there the tests grant it and put the original back
+        rather than skipping the whole DVR surface.
+        """
+        self._request("/Users/%s/Policy" % (user_id or self.user_id),
+                      method="POST", body=policy)
+
+    def user_by_name(self, name):
+        """A user record by name. Admin only."""
+        for user in self._request("/Users") or []:
+            if user.get("Name") == name:
+                return user
+        raise AssertionError("no user named %r" % name)
+
+    def purge_devices(self, account):
+        """Delete THIS SUITE's Device records for `account`. Admin only.
+
+        For `qa-onesession`, whose cap counts what the server still believes
+        is connected: a session left behind by a crashed run refuses the next
+        one, and the failure looks like the cap working rather than like
+        litter. Called from `setUp` so the test starts from a known state
+        however the last run ended.
+
+        **Ours only.** A Device record is a live session, and deleting one
+        signs that client out. This matched on the account alone, which meant
+        a run against the QA server signed out whatever real client a
+        developer had pointed at it under the same login -- observed exactly
+        once, with a client on `qa-nosyncplay` while `RevokedSessionTest`
+        purged that account. The litter this exists to clear is always ours,
+        and ours always carries `DEVICE_PREFIX`, so there is nothing to
+        trade off: `qa-onesession`'s own ids are `jms-e2e-1session-a/b`.
+
+        A foreign device holding the cap is a real possibility and is
+        deliberately left to fail loudly -- deleting somebody's session to
+        make a test pass is the wrong way round.
+        """
+        devices = self._request("/Devices") or {}
+        items = devices.get("Items", devices if isinstance(devices, list) else [])
+        for device in items:
+            if device.get("LastUserName") != account:
+                continue
+            if not str(device.get("Id") or "").startswith(DEVICE_PREFIX):
+                continue
+            try:
+                self._request("/Devices?id=" + urllib.parse.quote(device["Id"]),
+                              method="DELETE")
+            except Exception:
+                pass
+
+    def server_version(self):
+        """The server's reported version, for a skip or a message."""
+        info = self._request("/System/Info/Public") or {}
+        return info.get("Version") or "?"
+
+    def server_id(self):
+        """This server's Jellyfin ``ServerId``, as a client sees it.
+
+        Asked of the server rather than baked in: a container is reprovisioned
+        and the id changes with it, which is the same rule the lookup helpers
+        below follow for item ids.
+        """
+        info = self._request("/System/Info/Public") or {}
+        return info.get("Id")
+
+    def register_source_login(self, test):
+        """Make `SOURCE_UUID` a **saved login** in the user registry.
+
+        `library_source` hands the browser a credential of its own, which is
+        not the same thing: the download catalog scopes content by `ServerId`,
+        and the browser holds a login *uuid*, so every scoped read goes
+        through `userManager` to translate one into the other
+        (`SyncManager.content_id_for`). A harness that skips this has a
+        browser on a server the registry has never heard of — a state
+        production cannot be in, because the uuid the browser holds came out
+        of that registry in the first place.
+
+        Reached for by any leg whose screen asks the catalog a scoped
+        question. Left out, the catalog answers "nothing is downloaded" and
+        the screen builds its placeholder, which builds perfectly and proves
+        nothing -- exactly what two legs asserted against when
+        `book_download_state` gained its scope (CX7).
+
+        Returns the ServerId.
+        """
+        from unittest import mock
+
+        from jellyfin_mpv_shim.users import userManager
+
+        # **Loaded first, then patched.** `load()` is lazy -- several call
+        # sites reach it on first use -- and it *replaces* `users`, so a patch
+        # installed before the first load is silently thrown away by it. The
+        # symptom is precise and was measured: the first test in a class fails
+        # and every later one passes, because by then `_loaded` is set and
+        # `load()` is a no-op.
+        userManager.load()
+        server_id = self.server_id()
+        patch = mock.patch.object(userManager, "users", [{
+            "id": "local-e2e", "credentials": [
+                {"uuid": SOURCE_UUID, "Id": server_id,
+                 "UserId": self.user_id, "address": self.address}]}])
+        patch.start()
+        test.addCleanup(patch.stop)
+        active = mock.patch.object(userManager, "active_id", "local-e2e")
+        active.start()
+        test.addCleanup(active.stop)
+        return server_id
+
+    def library_source(self):
+        """A real `LibrarySource` over this session's credentials.
+
+        The browser is handed one of these and does everything through it, so
+        it is the seam the contract tests belong at — above the apiclient,
+        below the UI.
+        """
+        from jellyfin_mpv_shim.mpvtk_browser.repository import LibrarySource
+        source = LibrarySource(
+            [{"uuid": SOURCE_UUID, "name": "e2e", "address": self.address,
+              "user_id": self.user_id, "token": self.token}],
+            self.device_id, "jms-e2e", False)
+        return source
+
+    # -- lookup ------------------------------------------------------------
+    #
+    # Always by NAME, never by id. Ids are assigned by the server on scan and
+    # change on every reprovision; a baked-in GUID is a test that passes once.
+
+    def view(self, name):
+        for item in self.api.get_views()["Items"]:
+            if item["Name"] == name:
+                return item
+        raise AssertionError("no library named %r (have: %s)" % (
+            name, [i["Name"] for i in self.api.get_views()["Items"]]))
+
+    def find(self, name, library=None, item_type=None, fields=None):
+        """One item by exact `Name`, optionally within a library.
+
+        Filtered client-side on purpose. **`NameStartsWith` matches SortName,
+        not Name**, and SortName has the leading article stripped — measured
+        against this server: `NameStartsWith="The Standard Show"` returns
+        nothing at all, `"Standard"` returns it, and the item's SortName is
+        `"standard show"`. Narrowing the query with the name you can see is a
+        filter that silently matches nothing, which is the exact shape of bug
+        this suite exists to catch, so it does not get to live in the harness.
+        """
+        items = self.find_all(library=library, item_type=item_type,
+                              fields=fields)
+        exact = [i for i in items if i["Name"] == name]
+        if not exact:
+            raise AssertionError("no %s named %r in %r (saw %d items: %s)" % (
+                item_type or "item", name, library, len(items),
+                [i["Name"] for i in items[:10]]))
+        return exact[0]
+
+    def find_all(self, library=None, item_type=None, fields=None,
+                 parent_id=None, **params):
+        query = {"Recursive": True}
+        if parent_id is not None:
+            query["ParentId"] = parent_id
+        elif library is not None:
+            query["ParentId"] = self.view(library)["Id"]
+        if item_type:
+            query["IncludeItemTypes"] = item_type
+        if fields:
+            query["Fields"] = fields
+        query.update(params)
+        return self.api.user_items(params=query)["Items"]
+
+    def episodes(self, series_name, season=None, library="Shows"):
+        """A series' episodes in broadcast order."""
+        series = self.find(series_name, library=library, item_type="Series")
+        eps = self.find_all(parent_id=series["Id"], item_type="Episode",
+                            SortBy="ParentIndexNumber,IndexNumber",
+                            SortOrder="Ascending")
+        if season is not None:
+            eps = [e for e in eps if e.get("ParentIndexNumber") == season]
+        return eps
+
+    # -- state -------------------------------------------------------------
+
+    def user_data(self, item_id):
+        return self.api.get_item(item_id).get("UserData") or {}
+
+    def reset_played(self, *item_ids):
+        """Clear watched state and resume position so a run is repeatable.
+
+        Registered with `addCleanup` by the tests that dirty it. Playstate is
+        the one piece of server state these tests mutate that another test can
+        actually see.
+
+        **The effect is verified, not the call, and a failure is loud.** This
+        swallowed every exception, which is the same shape
+        `test_music_playlist` already spells out for its playlist delete: a
+        cleanup that cannot work is worse than no cleanup, because it reads as
+        one. The cost is paid somewhere else -- an item left marked watched
+        makes `test_playback_advance` assert that "the episode we advanced INTO
+        was marked watched", which is indistinguishable from the bug that
+        assertion exists to catch, and the state is invisible from the failure.
+        Diagnosing one occurrence of exactly that cost four full suite runs.
+
+        Verified by reading it back rather than by trusting the request,
+        because the request answering 200 is not the flag being clear.
+        """
+        failed = []
+        for item_id in item_ids:
+            try:
+                self.api.item_played(item_id, False)
+            except Exception as exc:
+                failed.append("%s: request raised (%s)" % (item_id, exc))
+                continue
+            if self._reads_as_cleared(item_id):
+                continue
+            # Re-sent once before giving up, because "still set" has two
+            # causes and only one of them is "the clear was lost". A report
+            # the player was still sending can land *after* the clear -- and
+            # on a clip shorter than the server's MinResumeDurationSeconds
+            # (300) a report marks the item **Played** rather than storing a
+            # position, so a 20-second music track re-marks itself on stop.
+            #
+            # A report is in flight here by construction: `addCleanup` is
+            # LIFO, so a test's own `reset_played` runs BEFORE
+            # `E2ETestCase._safe_stop`, and the stop that follows reports one
+            # last time. Stopping the player first was tried and reverted --
+            # its negative control passed without it, because the server
+            # settles either way within this bound.
+            #
+            # Measured on `test_music_playback`: the item does end up clear,
+            # a moment later, which is why this is bounded rather than loud
+            # on the first read.
+            try:
+                self.api.item_played(item_id, False)
+            except Exception as exc:
+                failed.append("%s: re-send raised (%s)" % (item_id, exc))
+                continue
+            if not self._reads_as_cleared(item_id):
+                failed.append("%s: still marked Played after two resets"
+                              % item_id)
+        if failed:
+            raise AssertionError(
+                "could not clear watched state on the server: %s. Left set, it "
+                "is read by other modules as a real playback result -- see "
+                "test_playback_advance's assertion 4 -- so this is loud rather "
+                "than silent." % "; ".join(failed))
+
+    def _reads_as_cleared(self, item_id, timeout=3.0):
+        """Does the server report this item unwatched, within `timeout`?
+
+        A read, not a request: the clear answering 200 is not the flag being
+        clear. Answers True on a read that raises -- cannot tell is not the
+        same as dirty, and inventing a failure out of a flaky read is how a
+        cleanup starts failing for reasons that are not about the state.
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                if not (self.user_data(item_id) or {}).get("Played"):
+                    return True
+            except Exception:
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.2)
+
+    def my_session(self):
+        """This device's entry in the server's session list, if it has one.
+
+        The server's own view of what we are playing — the half of the
+        reporting loop `test_realmpv_smoke` fakes.
+        """
+        try:
+            for sess in self.api.sessions():
+                if sess.get("DeviceId") == self.device_id:
+                    return sess
+        except Exception:
+            pass
+        return None
+
+
+def normalise_home_layout(session):
+    """Put this account's home layout back to the server's own defaults.
+
+    **Every module that renders the home screen owes a call to this**, not
+    just the one that writes the layout. The layout is real server state
+    shared by every run on every machine, and `test_home_layout` — the only
+    module that writes it — restores whatever it *found*, so residue left by
+    an interrupted run is faithfully preserved rather than decaying. A
+    reader that does not normalise is therefore measuring the last run that
+    died, forever.
+
+    That is not hypothetical. A stale layout holding `latestmedia` in two
+    slots made the repository build one Latest row per library per slot;
+    those rows are keyed by library, so their node ids collided and
+    `test_keyboard_nav` failed on duplicate ids. A layout that drops
+    `smalllibrarytiles` takes the library-tiles row off the screen instead,
+    and the same module fails with "no node id containing <guid>". Both read
+    as browser regressions with nothing pointing back at the layout, and
+    both survived two sessions as "pre-existing failures".
+
+    Deliberately does NOT restore on cleanup: normalised is the correct
+    resting state for the fixture account, and putting the residue back is
+    the bug this exists to stop. Only the `homesection*` keys are touched —
+    the guide settings share the document.
+    """
+    from jellyfin_mpv_shim.mpvtk_browser import home_sections
+    dto = session.api.get_user_settings(
+        client=home_sections.DISPLAY_PREFS_CLIENT) or {}
+    custom = dict(dto.get("CustomPrefs") or {})
+    # "" is "use this slot's default", which is what jellyfin-web stores for
+    # an untouched slot. Written rather than compared first: a 12.0 server
+    # does not keep the blank, it reads back as the slot's literal default,
+    # so there is no cheap way to tell "already normalised" from residue.
+    custom.update({"homesection%d" % slot: ""
+                   for slot in range(home_sections.SLOT_COUNT)})
+    dto["CustomPrefs"] = custom
+    session.api.update_user_settings(
+        dto, client=home_sections.DISPLAY_PREFS_CLIENT)
+
+
+# --------------------------------------------------------------------------
+# Driving the player
+# --------------------------------------------------------------------------
+
+def build_media(session, item_ids, seq=0):
+    """A real `Media` over real server DTOs — the app's own play path.
+
+    `event_handler.play_media` builds exactly this before handing
+    `media.video` to the player; going through `Media` rather than a stand-in
+    Video is the point of the suite, since it is what fetches PlaybackInfo and
+    resolves the stream URL against the server.
+    """
+    from jellyfin_mpv_shim.media import Media
+    return Media(session.client, list(item_ids), seq=seq,
+                 user_id=session.user_id)
+
+
+def pump_until(pm, predicate, timeout=45, interval=0.05):
+    """Drive the action queue by hand until `predicate` holds.
+
+    The real `ActionThread` pumps `playerManager.update()`; doing it here
+    instead keeps the timing under the test's control, exactly as the
+    integration suite does. Returns the predicate's final value.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        pm.update()
+        try:
+            if predicate():
+                return True
+        except Exception:
+            pass
+        time.sleep(interval)
+    pm.update()
+    try:
+        return bool(predicate())
+    except Exception:
+        return False
+
+
+def wait_for(predicate, timeout=15, interval=0.25):
+    """Poll a server-side condition. Reporting is asynchronous — a progress
+    post lands on a background thread — so an assertion made the instant after
+    playback starts is a race the test loses, not a bug."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            value = predicate()
+            if value:
+                return value
+        except Exception:
+            pass
+        time.sleep(interval)
+    try:
+        return predicate()
+    except Exception:
+        return None
+
+
+class ServerTestCase(unittest.TestCase):
+    """Base: an isolated config and one qa-user session, and no player.
+
+    For a test that asks the server and never plays. E2ETestCase builds a
+    real mpv -- a window -- in setUpClass, which is wrong in the contract
+    tier (tests/test_e2e_registry.py)."""
+
+    account = "qa-user"
+
+    @classmethod
+    def setUpClass(cls):
+        isolate_config()
+
+    def setUp(self):
+        self.session = Session(self.account)
+        self.addCleanup(self.session.stop)
+
+
+class E2ETestCase(ServerTestCase):
+    """Base: an isolated config, a real player, one qa-user session."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.player_module = ensure_real_player()
+        cls.pm = cls.player_module.playerManager
+        # Own the pump rather than starting the real ActionThread singleton.
+        import threading
+        cls.pm.action_trigger = threading.Event()
+        cls.pm.timeline_trigger = threading.Event()
+
+    # No tearDownClass: the player is process-wide and outlives this class.
+    # See ensure_real_player.
+
+    def setUp(self):
+        super().setUp()
+        # Never leave a player running into the next test: a live session keeps
+        # reporting and the next test's assertions read its progress. Kept as
+        # a cleanup as well as the tearDown below, because a setUp that raises
+        # part way runs cleanups and not tearDown.
+        self.addCleanup(self._safe_stop)
+        # Every case, nothing opting in: this suite drives a REAL mpv, so a
+        # property write it refuses is the version skew between the shim and
+        # the mpv on this box -- which is the one thing a fake cannot be asked
+        # about. See _harness.watch_refused_writes.
+        h.watch_refused_writes(self, self.pm)
+
+    def _safe_stop(self):
+        try:
+            self.pm.stop()
+        except Exception:
+            pass
+
+    def pump_until(self, predicate, timeout=45):
+        """`pump_until` against this case's player."""
+        return pump_until(self.pm, predicate, timeout=timeout)

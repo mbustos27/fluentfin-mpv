@@ -1,0 +1,126 @@
+"""Buttons and other clickable chrome shared across page families.
+
+Only genuinely cross-family controls belong here. A control used by one page
+family — the grid's sort/filter bar, the music action bar — is that page's
+own method; moving it here would trade a mixin for a components dumping
+ground, which is the same coupling with a nicer directory name.
+
+See ``docs/archive/ARCHITECTURE_TARGET.md`` §1.4 for the test: a component may take
+render resources and callbacks, never ``nav``, ``source`` or ``route``.
+"""
+
+from typing import Any, List
+
+from ...mpvtk import theme as toolkit_theme
+from ...mpvtk.widgets import Button, Icon, Row, Text
+from .. import theme
+
+
+#: The label size of a **primary action row** -- the buttons across the
+#: top of a detail, series, season, book or Live TV page.
+#:
+#: Named because it was a bare `18` at twenty-five call sites: a rule
+#: about a ROW, restated once per button in it, so adding a button and
+#: forgetting the argument gave you one button a size out. That is
+#: exactly what happened on the AudioBook page, where the appended
+#: Download button came out at the default and the row measured 42.5
+#: against 40.0. `tests/test_action_rows.py` measures the rows; this
+#: makes the rule greppable and gives it one value.
+#:
+#: **Both of these are off the type scale** (the tiers either side are
+#: SMALL 15, NORMAL 17, LARGE 19), which is deliberate only in the sense
+#: that nobody has decided otherwise: a theme changing `base_size` moves
+#: every tokenized size and leaves these two behind. Moving them onto
+#: NORMAL/LARGE would fix that and resize every action button in the app
+#: by a pixel, so it wants a smoke test rather than a quiet edit.
+PRIMARY_ROW = 18
+
+#: The default, for secondary rows -- tile menus, dialogs, the grid bar.
+ROW = 16
+
+
+def action_btn(icon, text, node_id, cb, on=False, primary=False, size=ROW,
+               autofocus=False):
+    """An icon+label action button.
+
+    ``primary`` is the accent-filled call to action (Play, Next Up); ``on``
+    is a *toggle* that happens to share the accent fill (Watched, Favorite).
+    Both use white on blue — black on blue read as disabled.
+
+    Every button in an action row must come from here, icon or not: the
+    plain Button widget defaults to a 20px label against this one's 16,
+    which made the odd trailing button ~5px taller than its neighbours.
+
+    ``autofocus`` nominates this button as the page's default for a
+    keyboard or remote arrival (the renderer only honours it on a
+    navigation it was asked to focus, and never while the pointer is
+    driving). Off by default and set deliberately: on a page with two
+    accented buttons, "the primary one" is not the same question as "the
+    one a remote should land on".
+
+    Was ``ViewsMixin._action_btn``.
+    """
+    accent = on or primary
+    fg = theme.ACCENT_FG if accent else theme.TEXT_FG
+    # Annotated: the optional Icon goes in first, so mypy would otherwise
+    # infer list[Icon] from it and reject the Text that always follows.
+    children: List[Any] = []
+    if icon:
+        # Sized to the label as it will actually RENDER, not to the
+        # authored number -- so the glyph tracks the text multiplier
+        # instead of staying frozen beside a label that grows.
+        #
+        # This is `Icon`'s own rule, not an exception to it: an explicit
+        # size is geometry and stays put, and "an icon with no opinion is
+        # standing in for a line of text and should match it". A glyph
+        # inline beside a label is the second case wearing the first
+        # case's spelling. **[iw]**: "the glyphs being unscaled is fine in
+        # most cases, it does start to look a little odd though at 150%
+        # for buttons where a glyph is right next to text, because the
+        # glyphs are used like an icon font would be used."
+        #
+        # A standalone icon button is untouched and still frozen: there is
+        # no text next to it for it to disagree with, and resizing those
+        # is `ui_scale`'s job.
+        children.append(
+            Icon(icon, toolkit_theme.text_size(size) + 2, color=fg))
+    children.append(Text(text, size=size, color=fg))
+    return Row(children,
+               id=node_id, gap=7, pad=10,
+               bg=theme.ACCENT if accent else theme.BUTTON_BG,
+               hover={"fill": theme.ACCENT_HOVER if accent
+                      else theme.BUTTON_ACTIVE},
+               radius=6, align="center", on_click=cb, autofocus=autofocus)
+
+
+def tab_btn(label, node_id, active, cb, style=None):
+    """One tab in a tab bar — music library, Live TV, Settings.
+
+    **Which tab you are on outranks which tab the pointer is over.** The
+    plain Button widget defaults to ``hover={"fill": CONTROL_HOVER}``, and a
+    hover fill paints over the background rather than blending with it — so
+    an accent-filled active tab lost its accent the moment the cursor landed
+    on it, which reads as the selection having moved away. Hovering the
+    active tab lightens the accent instead (``action_btn`` already does this
+    for its toggles; a tab bar is the same question asked of a set).
+
+    Every tab bar goes through here rather than each spelling the two
+    conditionals out, because that is how the bug survived in three places
+    at once: the fix is not the colour, it is that one function decides.
+
+    ``style`` merges a theme's chrome styling (``theme.chrome_button_style``
+    — accent border, rounder corners, hover glow) underneath. **Its ``bg``
+    and ``hover`` are overridden, never merged into**: those two keys are the
+    whole point of this function, and the accented-button themes set both.
+    A ``glow`` in the theme's hover is kept, since that is decoration on top
+    of a fill rather than a competing statement about which tab is current.
+    """
+    style = dict(style or {})
+    hover = {k: v for k, v in (style.pop("hover", None) or {}).items()
+             if k != "fill"}
+    hover["fill"] = theme.ACCENT_HOVER if active else theme.BUTTON_ACTIVE
+    style.pop("bg", None)
+    return Button(label, id=node_id,
+                  bg=theme.ACCENT if active else theme.BUTTON_BG,
+                  fg=theme.ACCENT_FG if active else theme.TEXT_FG,
+                  hover=hover, on_click=cb, **style)

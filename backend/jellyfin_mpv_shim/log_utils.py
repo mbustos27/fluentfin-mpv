@@ -1,0 +1,200 @@
+import logging
+from collections import deque
+import re
+
+bad_patterns = (
+    (re.compile("api_key=[a-f0-9]*"), "api_key=REDACTED"),
+    # ApiKey is the non-legacy spelling and is what we send now; the old one
+    # stays above because logs from an older build still reach us.
+    (re.compile("ApiKey=[a-f0-9]*"), "ApiKey=REDACTED"),
+    (
+        re.compile("'X-MediaBrowser-Token': '[a-f0-9]*'"),
+        "'X-MediaBrowser-Token': 'REDACTED'",
+    ),
+    (re.compile("'AccessToken': '[a-f0-9]*'"), "'AccessToken': 'REDACTED'"),
+    # Any `Token="..."`, which is how it appears in strings we did NOT build:
+    # mpv echoes our stream URL back through its own log, and the Authorization
+    # header spells it this way. The escaped form is the same line seen inside
+    # one of mpv's quoted log messages -- a real backslash, not a repr.
+    #
+    # Deliberately not [a-f0-9] like the four above. Those match values we
+    # generate; this one has to survive whatever a server hands us, and a
+    # token that fails the charset assumption would otherwise print in full.
+    (re.compile(r'Token=\\"[^"\\]*\\"'), r'Token=\\"REDACTED\\"'),
+    (re.compile(r'Token="[^"]*"'), 'Token="REDACTED"'),
+)
+
+# The patterns above all need the KEY next to the value, which works on a
+# repr but not on a value on its own. A single mapping argument
+# (``log.info("headers %s", headers)``) is exactly that case: the logging
+# module unwraps it -- it becomes the %-formatting mapping rather than a
+# one-tuple -- so the formatter sees the values individually and a bare
+# token matches nothing. Redact those by key instead.
+# Matched against str(key).lower(), so "ApiKey" needs its own lowercased
+# entry -- "api_key" does not cover it, and that is the spelling we send now.
+sensitive_keys = ("x-mediabrowser-token", "accesstoken", "api_key", "apikey",
+                  "password", "authorization")
+
+sanitize_logs = False
+root_logger = logging.getLogger("")
+root_logger.level = logging.INFO
+level_mapping = {
+    "CRITICAL": 50,
+    "FATAL": 50,
+    "ERROR": 40,
+    "WARN": 30,
+    "WARNING": 30,
+    "INFO": 20,
+    "DEBUG": 10,
+    "NOTSET": 0,
+    # mpv_log_level also sets the app's own level, so mpv's names need a
+    # place here too (#849). `noise` is the app's, not mpv's: see player.py.
+    "V": 15,
+    "TRACE": 5,
+    "NOISE": 10,
+}
+
+
+# Named, or a line logged at mpv's `v` level is labelled "Level 15".
+logging.addLevelName(level_mapping["V"], "VERBOSE")
+
+
+def _level(name: str) -> int:
+    # A hand-edited typo must not stop the app starting.
+    return level_mapping.get(str(name).upper(), logging.INFO)
+
+
+def _redact(text):
+    for pattern, replacement in bad_patterns:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def sanitize(message):
+    """Redact secrets from one log argument, **keeping its type**.
+
+    Type preservation is not cosmetic: the formatter maps this over
+    ``record.args`` before ``msg % args`` runs, so an argument that comes
+    back as a string makes every ``%d`` in the format string raise
+    ``TypeError: %d format: a real number is required, not str`` — and the
+    whole record is lost, replaced by a logging-internal traceback.
+
+    Two bugs did that. ``type(message) in (int, float)`` misses ``bool``,
+    which is an ``int`` subclass and the natural thing to log as ``%d``; and
+    ``message is not str`` compared the *value* against the *type* object, so
+    it was true for everything and stringified every argument.
+
+    Non-strings are still redacted, and that is deliberate rather than
+    accidental: one of the patterns matches a header dict's repr, so logging
+    a headers dict as an argument has to be caught. But the string is only
+    kept when redaction actually removed something — in which case not
+    leaking the token beats keeping a ``%d`` working.
+    """
+    if isinstance(message, (int, float)):    # bool included, by design
+        return message
+    if isinstance(message, str):
+        return _redact(message)
+    text = str(message)
+    redacted = _redact(text)
+    return redacted if redacted != text else message
+
+
+class CustomFormatter(logging.Formatter):
+    def __init__(self, force_sanitize=False):
+        self.force_sanitize = force_sanitize
+        super(CustomFormatter, self).__init__(
+            fmt="%(asctime)s [%(levelname)8s] %(name)s: %(message)s"
+        )
+
+    def format(self, record):
+        if sanitize_logs or self.force_sanitize:
+            record.msg = sanitize(record.msg)
+            if type(record.args) is dict:
+                sanitized = {}
+                for key, value in record.args.items():
+                    if str(key).lower() in sensitive_keys:
+                        sanitized[key] = "REDACTED"
+                    else:
+                        sanitized[key] = sanitize(value)
+                record.args = sanitized
+            elif type(record.args) is tuple:
+                record.args = tuple(sanitize(value) for value in record.args)
+            else:
+                return "(Log message could not be processed for sanitization.)"
+        return logging.Formatter.format(self, record)
+
+
+def enable_sanitization():
+    global sanitize_logs
+    sanitize_logs = True
+
+
+def configure_log(destination, level: str = "info"):
+    lvl = _level(level)
+    # Records below the logger's level never reach handlers, so widen the root
+    # logger if a handler asks for something more permissive.
+    if lvl < root_logger.level:
+        root_logger.level = lvl
+
+    handler = logging.StreamHandler(destination)
+    handler.setFormatter(CustomFormatter())
+    handler.setLevel(lvl)
+    root_logger.addHandler(handler)
+
+
+def configure_log_file(destination: str, level: str = "info"):
+    lvl = _level(level)
+    if lvl < root_logger.level:
+        root_logger.level = lvl
+
+    handler = logging.FileHandler(destination, mode="w")
+    # Never allow logging API keys to a file.
+    handler.setFormatter(CustomFormatter(True))
+    handler.setLevel(lvl)
+    root_logger.addHandler(handler)
+
+
+#: Loggers the in-app viewer must not see, because DRAWING the viewer is
+#: what produces them.
+#:
+#: `mpvtk.render` is the per-frame timing line. The Logs tab polls the ring
+#: and re-renders when the content changed -- so a render line lands in the
+#: ring, the next poll sees a change, re-renders, and logs another one. The
+#: "only when something changed" guard cannot help: the render IS the
+#: change. With debug logging on (i.e. exactly when someone is reading the
+#: log) that never goes idle, one render and one line per poll, forever.
+#:
+#: Excluded from the RING only. The file handler still records them, so
+#: `log.txt` is unchanged and the timings stay available to whoever asked
+#: for debug logging in the first place.
+RING_EXCLUDED = ("mpvtk.render",)
+
+
+class RingLogHandler(logging.Handler):
+    """Keeps the last N formatted log lines in memory for in-app log views.
+
+    The browser runs in *this* process and reads the ring directly, so the
+    log viewer needs no IPC and no separate copy of the buffer -- which is
+    also why it needs `RING_EXCLUDED`: a viewer reading its own output is a
+    feedback loop, and nothing else in the process has that problem."""
+
+    def __init__(self, capacity=2000):
+        super().__init__()
+        self.lines = deque([], capacity)
+
+    def emit(self, record):
+        try:
+            if record.name in RING_EXCLUDED:
+                return
+            self.lines.append(self.format(record))
+        except Exception:
+            pass
+
+
+ring_handler = RingLogHandler()
+ring_handler.setFormatter(CustomFormatter())
+root_logger.addHandler(ring_handler)
+
+
+def recent_log_lines():
+    return list(ring_handler.lines)

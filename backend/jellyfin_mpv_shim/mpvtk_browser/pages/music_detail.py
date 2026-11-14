@@ -1,0 +1,263 @@
+"""One album, one artist, one genre — the three "container of tracks" screens.
+
+All three subclass ``MusicPage`` for the action bar and header block, which
+is the whole reason that base exists.
+"""
+
+from ...i18n import _
+from ...mpvtk.widgets import Column, Row, Spacer, Text, VScroll
+from .. import pagination
+from ..components import chrome, detail as detail_components
+from ..tile_renderer import GRID_GAP
+from .music import HEADER_ART, HEADER_GAP, MusicPage
+
+
+class AlbumPage(MusicPage):
+    kind = "album"
+
+    def load(self, epoch):
+        route = self.route
+        source = self.ctx.source
+        srv = route.get("server") or self.ctx.server
+        iid = route["item_id"]
+
+        def work():
+            item = source.get_item(srv, iid)
+            return {"item": item,
+                    "tracks": source.get_album_tracks(srv, iid),
+                    "trailers": detail_components.local_trailers(
+                        source, srv, item),
+                    "extras": detail_components.special_features(
+                        source, srv, item)}
+
+        self.route_async(work, lambda d: route.__setitem__("_data", d), epoch)
+
+    def render(self, size):
+        art = self.ctx.art
+        route = self.route
+        data = route.get("_data")
+        if data is None:
+            return chrome.busy()
+        item = data.get("item") or {}
+        tracks = data.get("tracks") or []
+        server = route.get("server") or self.ctx.server
+        ids = [t.get("Id") for t in tracks]
+        header = Row([
+            art.tiles.art_cell(item, size=HEADER_ART),
+            Column(self.header_text(item, tracks, size[0],
+                                    indent=HEADER_ART + HEADER_GAP) + [
+                self.action_bar(server, ids, route["item_id"], "album",
+                                items=tracks,
+                                avail=self._beside_art(size[0]),
+                                extra=[detail_components.trailer_button(
+                                    self.ctx.actions, item,
+                                    data.get("trailers"), server,
+                                    "album-trailer", self.open_link)]),
+            ], gap=8, flex=1, align="stretch"),
+        ], gap=16, align="start")
+        body = art.tiles.track_list(
+            tracks, "trk",
+            lambda i: self.ctx.actions.play_list(ids, server, i, audio=True),
+            scroll_id="album", head_h=110, menu=True)
+        # on_scroll, like every other virtualized list. The offset lookup
+        # prefers the renderer's live property, so this looked fine — but on
+        # mpv < 0.36 that property does not exist and the throttled on_scroll
+        # copy is the ONLY source. Without it the window stayed at offset 0
+        # and everything past the first screenful drew blank.
+        extras = detail_components.special_features_row(
+            art.tiles, data.get("extras"), "album-extras")
+        # `padded_body` only with a carousel to let out of the padding, so an
+        # album without extras keeps its old tree.
+        content = (Column([header, body], pad=chrome.CONTENT_PAD, gap=12,
+                          align="stretch") if extras is None else
+                   chrome.padded_body([header, body, extras], gap=12,
+                                      align="stretch"))
+        return VScroll(content,
+                       id="album", flex=1,
+                       offset=self.parked_scroll("album"),
+                       on_scroll=lambda off, mx: art.scroll.on_scroll(
+                           "album", off, mx))
+
+
+class ArtistPage(MusicPage):
+    kind = "artist"
+
+    def load(self, epoch):
+        route = self.route
+        source = self.ctx.source
+        srv = route.get("server") or self.ctx.server
+        iid = route["item_id"]
+
+        def work():
+            songs: list = []
+            similar: list = []
+            try:
+                songs = source.get_artist_songs(srv, iid)
+            except Exception:
+                pass
+            try:
+                similar = source.get_similar(srv, iid) or []
+            except Exception:
+                pass   # offline / older server: just no row
+            item: dict = {}
+            try:
+                item = source.get_item(srv, iid) or {}
+            except Exception:
+                pass   # older server / offline: header degrades to the title
+            return {"item": item,
+                    "albums": source.get_artist_albums(srv, iid),
+                    "songs": songs, "similar": similar,
+                    "trailers": detail_components.local_trailers(
+                        source, srv, item),
+                    "extras": detail_components.special_features(
+                        source, srv, item)}
+
+        self.route_async(work, lambda d: route.__setitem__("_data", d), epoch)
+
+    def render(self, size):
+        art = self.ctx.art
+        route = self.route
+        data = route.get("_data")
+        if data is None:
+            return chrome.busy()
+        albums = data.get("albums") or []
+        songs = data.get("songs") or []
+        server = route.get("server") or self.ctx.server
+        ids = [s.get("Id") for s in songs]
+        item = data.get("item") or {}
+        # Before the header, which needs the pad to wrap its overview to the
+        # column it will actually sit in.
+        gpad, geom = art.tiles.grid_layout(size[0], art.geom_square)
+        rows: list = [Row([
+            art.tiles.art_cell(item, size=HEADER_ART) if item else Spacer(w=0),
+            Column(self.header_text(item, songs, size[0],
+                                    indent=(HEADER_ART if item else 0)
+                                    + HEADER_GAP, pad=gpad) + [
+                self.action_bar(server, ids, route["item_id"], "art",
+                                items=songs,
+                                avail=self._beside_art(
+                                    size[0], art=bool(item)),
+                                extra=[detail_components.trailer_button(
+                                    self.ctx.actions, item,
+                                    data.get("trailers"), server,
+                                    "art-trailer", self.open_link)]),
+            ], gap=8, flex=1, align="stretch"),
+        ], gap=16, align="start")]
+        # (`gpad`/`geom` above.) Justified/centred like every other tile
+        # grid: this one asked for neither, so `grid_fill` did nothing here
+        # while the music library one tab away obeyed it -- ~148px of slack
+        # stacked on one side at a 1280px window.
+        # Unconditional, because `grid_of` is: on an artist with no albums
+        # it draws "Nothing here.", and without the heading that was a bare
+        # sentence floating under the header attached to nothing. A label
+        # is what makes an empty state mean something.
+        #
+        # The same tier the "Similar Artists" carousel heading below gets
+        # from section_heading. At "large" the two section titles on this
+        # one page were visibly different sizes.
+        rows.append(Text(_("Albums"), size="heading", bold=True))
+        rows += art.tiles.grid_of(albums, "artist", size, geom=geom,
+                                  scroll_id="artist", head_h=110)
+        extras = detail_components.special_features_row(
+            art.tiles, data.get("extras"), "artist-extras")
+        if extras is not None:
+            rows.append(Spacer(h=8))
+            rows.append(extras)
+        similar = data.get("similar") or []
+        if similar:
+            rows.append(Spacer(h=8))
+            rows.append(art.tiles.tile_row(_("Similar Artists"), similar,
+                                           "artist-similar",
+                                           geom=art.geom_square))
+        return VScroll(Column(chrome.split_bleed(rows, gpad, GRID_GAP),
+                              pad=(0, chrome.CONTENT_PAD), gap=GRID_GAP,
+                              align="stretch"),
+                       id="artist", flex=1,
+                       offset=self.parked_scroll("artist"),
+                       on_scroll=lambda off, mx: art.scroll.on_scroll(
+                           "artist", off, mx))
+
+
+class MusicGenrePage(MusicPage):
+    kind = "music_genre"
+
+    def load(self, epoch):
+        route = self.route
+        source = self.ctx.source
+        srv = route.get("server") or self.ctx.server
+
+        def work():
+            songs = []
+            try:
+                songs = source.get_genre_songs(
+                    srv, route.get("parent_id"), route["item_id"])
+            except Exception:
+                pass
+            albums, total = source.get_genre_albums(
+                srv, route.get("parent_id"), route["item_id"])
+            # `total` slots from the first frame, most of them holes: the
+            # grid is its full height and the scrollbar its full length
+            # before anything past the first page exists (#617).
+            return {"albums": pagination.spread([], total, albums, 0),
+                    "songs": songs, "total": total}
+
+        self.route_async(work, lambda d: route.__setitem__("_data", d), epoch)
+
+    def render(self, size):
+        art = self.ctx.art
+        route = self.route
+        data = route.get("_data")
+        if data is None:
+            return chrome.busy()
+        albums = data.get("albums") or []
+        songs = data.get("songs") or []
+        server = route.get("server") or self.ctx.server
+        ids = [s.get("Id") for s in songs]
+        rows: list = [Text(route.get("title", ""), size="page", bold=True),
+                      Spacer(h=4),
+                      self.action_bar(server, ids, route["item_id"], "gen",
+                                      avail=art.tiles.body_w(size[0]))]
+        # Ask for the rows about to be drawn, from the SAME window the
+        # renderer composites.
+        cols = art.tiles.cols(size[0], art.geom_square)
+        first, last = art.tiles.row_window(size, art.geom_square,
+                                           "mgenre", 110)
+        self._window(first * cols, (last + 1) * cols)
+        gpad, geom = art.tiles.grid_layout(size[0], art.geom_square, cols)
+        rows += art.tiles.grid_of(albums, "mgenre", size, geom=geom,
+                                  scroll_id="mgenre", head_h=110)
+        return VScroll(Column(rows, pad=(gpad, chrome.CONTENT_PAD),
+                              gap=GRID_GAP),
+                       id="mgenre", flex=1,
+                       offset=self.parked_scroll("mgenre"),
+                       # Lets a window that FAILED be asked for again;
+                       # render cannot retry without a request per frame.
+                       on_scroll=lambda off, mx: art.scroll.on_scroll(
+                           "mgenre", off, mx,
+                           lambda o, m: art.pages.rewindow(route)))
+
+    def _window(self, first, last):
+        """Fetch the albums in ``[first, last)`` that are not loaded yet.
+
+        Called from render, like every other windowed route: which items are
+        visible is a question about geometry. The query is bound here, on
+        the loop thread, so a page is fetched with the genre it was asked
+        for rather than whatever the route says when it lands.
+        """
+        route = self.route
+        source = self.ctx.source
+        srv = route.get("server") or self.ctx.server
+        parent = route.get("parent_id")
+        gid = route["item_id"]
+
+        def put(r, items, total):
+            data = r.get("_data") or {}
+            data["albums"], data["total"] = items, total
+
+        self.ctx.art.pages.window(
+            route, first, last,
+            lambda r: ((r.get("_data") or {}).get("albums") or [],
+                       (r.get("_data") or {}).get("total") or 0),
+            put,
+            lambda start, limit: source.get_genre_albums(
+                srv, parent, gid, start_index=start, limit=limit))

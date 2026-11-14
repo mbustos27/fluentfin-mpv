@@ -1,0 +1,73 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>FluentFin.Plugins</RootNamespace>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+	<Platforms>x86;x64;arm64</Platforms>
+    <UseWinUI>true</UseWinUI>
+	<LangVersion>preview</LangVersion>
+	<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	<EnableMsixTooling>true</EnableMsixTooling>
+	<Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Jellyseer\Views\JellyseerDashboardPage.xaml" />
+    <None Remove="Jellyseer\Views\JellyseerRequest.xaml" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Microsoft.Kiota.Abstractions" Version="2.1.2" />
+    <PackageReference Include="Microsoft.Kiota.Authentication.Azure" Version="2.1.2" />
+    <PackageReference Include="Microsoft.Kiota.Http.HttpClientLibrary" Version="2.1.2" />
+    <PackageReference Include="Microsoft.Kiota.Serialization.Form" Version="2.1.2" />
+    <PackageReference Include="Microsoft.Kiota.Serialization.Json" Version="2.1.2" />
+    <PackageReference Include="Microsoft.Kiota.Serialization.Multipart" Version="2.1.2" />
+    <PackageReference Include="Microsoft.Kiota.Serialization.Text" Version="2.1.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FluentFin.UI.Core\FluentFin.UI.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Update="Jellyseer\JellyseerSpec.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>JellyseerSpec.yml</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Jellyseer\JellyseerSpec.yml">
+      <Generator>KiotaCodeGenerator</Generator>
+      <LastGenOutput>JellyseerSpec.cs</LastGenOutput>
+    </None>
+    <Page Update="Jellyseer\Views\JellyseerRequest.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Update="Jellyseer\Views\JellyseerDashboardPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Playback Reporting\Views\SessionDurationReportPage.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Playback Reporting\Views\UsageReportPage.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Playback Reporting\Views\BreakdownReportPage.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Playback Reporting\Views\PlaybackReportPage.xaml">
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Update="Playback Reporting\Views\UsersReportPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Playback Reporting\Views\PlaybackReportingDashboardPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+  
+</Project>

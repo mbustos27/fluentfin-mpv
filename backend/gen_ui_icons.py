@@ -1,0 +1,297 @@
+#!/usr/bin/env python3
+"""Regenerate the Material icon path table used by the library browser UI.
+
+The library browser used to label its buttons with unicode/emoji glyphs
+(▶ ⏸ ⚙ 🔀 …). Those render inconsistently across platforms -- emoji get
+boxed frames on Windows and some code points fall back to tofu -- so the
+UI now rasterizes Google Material Design icons instead (the same icon set
+jellyfin-web uses). See jellyfin_mpv_shim/mpvtk/vector.py for
+the rasterizer.
+
+This script downloads the SVG sources for the icons the UI needs and
+writes their raw path ``d`` strings into
+
+    jellyfin_mpv_shim/ui_icon_paths.py
+
+which is committed so the running app never touches the network. Re-run it
+only when the icon set changes.
+
+Usage: ./gen_ui_icons.py [--svg-dir DIR]
+
+By default the SVGs are fetched from marella/material-design-icons (a flat
+mirror of Google's set, so no per-icon category is needed). Pass --svg-dir
+to use a directory of pre-downloaded <name>.svg files instead.
+"""
+
+import os
+import re
+import sys
+import urllib.request
+
+# Material icon names the browser draws. Semantic UI roles map onto these
+# in icons.py's ALIASES table; keep that map and this list in sync.
+ICON_NAMES = [
+    # transport / playback
+    "play_arrow",
+    "pause",
+    "stop",
+    "skip_previous",
+    "skip_next",
+    "fast_rewind",
+    "fast_forward",
+    "replay_10",
+    "forward_30",
+    "shuffle",
+    "repeat",
+    "repeat_one",
+    "volume_up",
+    "volume_down",
+    "volume_off",
+    # playback HUD (the icon set the retired jellyfin lua OSC used)
+    "closed_caption",
+    "audiotrack",
+    "fullscreen",
+    "fullscreen_exit",
+    "bookmark",
+    "hd",
+    "undo",
+    "redo",
+    "close",
+    # actions
+    "favorite",
+    "favorite_border",
+    "playlist_add",
+    "queue_play_next",
+    "queue_music",
+    "add",
+    "home",
+    "settings",
+    "groups",
+    "search",
+    "file_download",
+    # books: the Read button, and the push/pull pair on the reading-position
+    # dialog. A book has no player to report its progress, so those two are
+    # a real gesture the user makes rather than decoration -- they earn
+    # icons that say "to the server" and "from it".
+    "menu_book",
+    "cloud_download",
+    "cloud_upload",
+    "delete",
+    "edit",
+    # the Media Info dialog, on the tile menu and the detail page --
+    # jellyfin-web's own icon for MoreMediaInfo (itemContextMenu.js).
+    "info",
+    # the detail pages' More menu (Refresh metadata, Delete from Disk).
+    "more_horiz",
+    # the metadata-provider links on the detail page. jellyfin-web draws
+    # those as bare text links, which is fine in a browser and not here:
+    # the one thing the user has to know before pressing is that it LEAVES,
+    # and on a ten-foot UI a coloured word does not say that.
+    "open_in_new",
+    "movie",
+    # Only `mpvtk/demo.py`'s widget showcase now. It used to label Quick
+    # Connect, on the reading of "radio" as broadcast -- but the glyph is a
+    # radio receiver, and the control is "type this code on your phone".
+    "radio",
+    # Quick Connect. jellyfin-web's own icon for it, so somebody arriving
+    # from that client recognises the button rather than learning it twice.
+    "phonelink_lock",
+    # A server, by where it is: on this network or out on the internet.
+    # Every server gets one, which is also what pays for the icon gutter --
+    # a dropdown indents every row as soon as ANY item has an icon, so a
+    # list where only the broken entries were marked spent the width on all
+    # of them and gave the names back an ellipsis.
+    "lan",
+    "cloud",
+    # ...and one that did not answer. Deliberately the same glyph for a LAN
+    # server as for a remote one: `cloud_off` is the conventional "no
+    # connection" mark rather than a statement about clouds, and a switcher
+    # row cannot colour its icon (per-item icons carry no colour), so shape
+    # is the only channel left for the state.
+    "cloud_off",
+    # by-name screens (genres, networks) -- the same two jellyfin-web uses
+    # for them, so a user coming from that client recognises the buttons.
+    "label",
+    "apartment",
+    # type indicators on a card -- jellyfin-web's getTypeIndicator set
+    # (indicators.js:140-149), exactly: Video, Folder, PhotoAlbum, Photo.
+    # "folder" is already above, for the settings panels.
+    "videocam",
+    "photo",
+    "photo_album",
+    # navigation / arrows
+    "arrow_back",
+    "chevron_left",
+    "chevron_right",
+    "first_page",
+    "last_page",
+    "vertical_align_top",
+    "vertical_align_bottom",
+    "keyboard_arrow_up",
+    "keyboard_arrow_down",
+    # tile badges / decoration
+    "check",
+    "music_note",
+    "star",
+    # user state
+    "lock",
+    "person",
+    "person_add",
+    # settings panels
+    "refresh",
+    "folder",
+    "content_copy",
+    # The library grid's filter panel. web's FilterAlt.
+    "filter_alt",
+    # Tile placeholders, for an item with no artwork. jellyfin-web's
+    # `getItemTypeIcon` and `getLibraryIcon` (src/utils/image.ts) --
+    # taken from there rather than chosen, so a library with no posters
+    # looks like the same library does in every other client.
+    "tv",
+    "live_tv",
+    "theaters",
+    "music_video",
+    "book",
+    "video_library",
+    "queue",
+    "album",
+    # live tv / recordings
+    "fiber_manual_record",
+    "fiber_smart_record",
+    "cancel",
+    "schedule",
+    "keyboard_double_arrow_left",
+    "keyboard_double_arrow_right",
+    # client-side window controls (window_controls); "close" is already
+    # above. crop_square is maximize and filter_none is restore -- the same
+    # two glyphs GNOME, KDE and Windows all draw for those buttons, so the
+    # buttons read as window controls rather than as more app chrome.
+    "minimize",
+    "crop_square",
+    "filter_none",
+]
+
+SVG_URL = (
+    "https://raw.githubusercontent.com/marella/material-design-icons/"
+    "main/svg/filled/{name}.svg"
+)
+
+TARGET = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "jellyfin_mpv_shim",
+    "ui_icon_paths.py",
+)
+
+
+def get_svg(name, svg_dir):
+    if svg_dir:
+        with open(os.path.join(svg_dir, name + ".svg")) as f:
+            return f.read()
+    with urllib.request.urlopen(SVG_URL.format(name=name), timeout=30) as resp:
+        return resp.read().decode("utf-8")
+
+
+def circle_to_path(cx, cy, r):
+    """A ``<circle>`` as path data: two half-arcs back to the start.
+
+    Material authors a few of its icons as primitives rather than paths —
+    ``fiber_manual_record`` (the recording dot) is a bare circle, and
+    ``fiber_smart_record`` is a circle plus a path. Those used to make this
+    script exit with "no filled paths found", which is a confusing way to
+    say "this icon is not a path". The rasterizer handles elliptical arcs,
+    so converting here is all that is needed.
+    """
+    return ("M %g %g a %g %g 0 1 0 %g 0 a %g %g 0 1 0 %g 0 Z"
+            % (cx - r, cy, r, r, 2 * r, r, r, -2 * r))
+
+
+_LEADING_M = re.compile(r"\A\s*m\s*(-?[\d.]+)[\s,]+(-?[\d.]+)\s*(.*)\Z", re.S)
+
+
+def absolutize_start(d):
+    """Rewrite a leading *relative* moveto as an absolute one.
+
+    A ``d`` beginning with lowercase ``m`` is absolute by definition — but
+    only while it is the start of its own path element. These get joined
+    into one string below, at which point a later ``m`` becomes relative to
+    wherever the previous subpath ended, and the shape lands somewhere else
+    entirely. That is exactly what happened to ``keyboard_double_arrow_*``,
+    whose second chevron is authored as ``m11 18 …``: joined, it drew at
+    (28.59, 36) — off the 24x24 canvas, so the icon rendered as one chevron
+    and some clipped debris.
+
+    Uppercasing the ``m`` alone is not enough: the coordinates that follow a
+    moveto with no command letter are implicit linetos, and they inherit the
+    moveto's case. So the rest is given an explicit relative ``l``.
+    """
+    match = _LEADING_M.match(d)
+    if match is None:
+        return d
+    x, y, rest = match.groups()
+    rest = rest.lstrip()
+    if rest[:1] and (rest[0].isdigit() or rest[0] in "-+."):
+        rest = "l" + rest
+    return "M%s %s %s" % (x, y, rest)
+
+
+def extract_paths(svg):
+    """Every filled shape in an SVG document, as path ``d`` strings."""
+    out = []
+    for m in re.finditer(r"<(path|circle)\b[^>]*>", svg):
+        tag = m.group(0)
+        if 'fill="none"' in tag:
+            continue
+        if m.group(1) == "circle":
+            def attr(name, default="0"):
+                found = re.search(r'\b%s="([^"]*)"' % name, tag)
+                return float(found.group(1) if found else default)
+            out.append(circle_to_path(attr("cx"), attr("cy"), attr("r")))
+            continue
+        d = re.search(r'\bd="([^"]*)"', tag)
+        if d:
+            out.append(absolutize_start(d.group(1).strip()))
+    return out
+
+
+def main():
+    svg_dir = None
+    args = sys.argv[1:]
+    if args and args[0] == "--svg-dir":
+        svg_dir = args[1]
+
+    entries = {}
+    for name in ICON_NAMES:
+        svg = get_svg(name, svg_dir)
+        paths = extract_paths(svg)
+        if not paths:
+            raise SystemExit("no filled paths found for %s" % name)
+        # Material icons are authored on a 24x24 viewBox; the rasterizer
+        # assumes that. Multiple subpaths are joined -- the rasterizer fills
+        # them together with the nonzero winding rule (so inner contours
+        # become holes).
+        entries[name] = " ".join(paths)
+
+    lines = [
+        '"""Material Design icon path data for the library browser UI.',
+        "",
+        "Generated by gen_ui_icons.py -- do not edit by hand.",
+        "Path data from Google Material Design icons (Apache License 2.0):",
+        "  https://github.com/google/material-design-icons",
+        "Each value is one or more SVG path `d` strings on a 24x24 canvas,",
+        "joined by spaces; icons.py rasterizes them with nonzero winding.",
+        '"""',
+        "",
+        "ICON_PATHS = {",
+    ]
+    for name in ICON_NAMES:
+        lines.append("    %r: %r," % (name, entries[name]))
+    lines.append("}")
+    block = "\n".join(lines) + "\n"
+
+    with open(TARGET, "w") as f:
+        f.write(block)
+    print("wrote %s (%d icons)" % (TARGET, len(entries)))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,749 @@
+"""Assembling the option set mpv is constructed with.
+
+A pure function of ``settings`` plus three facts the player knows (which
+backend is in use, whether the browser wants a window, whether trickplay
+started), so the answers can be checked without constructing an mpv -- which,
+on the libmpv backend, means opening a real window.
+
+Nothing here touches mpv, and nothing here imports ``player``. The
+directory-creating calls (``conffile.get_dir`` / ``conffile.get``)
+deliberately live in ``_init_mpv`` instead: ``confdir`` is a path lookup and
+safe to call, but creating the config tree is a side effect and belongs with
+the code that is actually starting a player.
+
+Before editing this file, read ``docs/mpv-backends.md``.
+"""
+
+import ctypes
+import glob
+import logging
+import os
+import platform
+import sys
+from collections import OrderedDict
+
+from . import conffile
+from .conf import settings
+from .constants import APP_NAME, DESKTOP_ID, USER_APP_NAME
+from .utils import get_resource
+
+log = logging.getLogger("mpv_options")
+
+#: Styles that must not leave mpv's built-in OSC to load itself.
+#:
+#: Since CONFIG_VERSION 5 that is every style there is, and for three
+#: different reasons: "mpvtk" replaces it with the in-window HUD, "none" with
+#: nothing, "custom" with a script of the user's that we never see, and "mpv"
+#: loads mpv's OWN OSC -- but by hand, after construction, so the version can
+#: be checked and the idle logo suppressed first
+#: (`player._load_classic_osc`).
+#:
+#: The `elif` below is therefore no longer reachable from a configured value.
+#: It stays for a hand-edited `osc_style` nobody recognises, where behaving
+#: like mpv normally would is the right answer (section 12 of
+#: docs/mpv-backends.md).
+REPLACES_OSC = ("mpv", "mpvtk", "none", "custom")
+
+
+#: Config value -> the mpv ``hwdec`` value, where it is a constant.
+#: "over-1080p" is absent because it is not one: see :func:`hwdec_for`.
+_HWDEC_STATIC = {"no": "no", "auto": "auto", "auto-copy": "auto-copy"}
+
+#: Above this source height, "over-1080p" turns hardware decoding on.
+#: Strictly greater, so a 1920x1080 file decodes in software and a 4K one
+#: does not -- which is the line the setting is named after.
+HWDEC_THRESHOLD_H = 1080
+
+
+#: hwdec values a shader pack may not impose, because they are a *policy*
+#: ("use hardware decoding if you can") rather than a requirement of the
+#: profile. Every other value survives, including ``no`` -- a profile saying
+#: its shaders need software frames. Why a pack does not get this opinion:
+#: docs/mpv-backends.md section 11.
+NAIVE_HWDEC = frozenset({
+    "yes", "auto", "auto-safe", "auto-unsafe",
+    "auto-copy", "auto-copy-safe", "auto-copy-unsafe",
+})
+
+
+def hwdec_pinned_by_config():
+    """The ``hwdec`` the user's own ``mpv.conf`` sets, or None.
+
+    **A pin, not a default: where this answers, nothing else writes hwdec at
+    all** -- not the setting, not the copy upgrade, not a shader profile
+    (docs/configuration.md under ``hwdec``).
+
+    Deliberately a plain top-level scan rather than an mpv-accurate parse:
+    profile sections (``[name]``) are conditional, so reading them as
+    unconditional would pin on a value that may never apply. A `hwdec`
+    reachable only inside a profile is therefore *not* a pin -- the safe
+    direction, since mpv's own precedence still applies it where it fires.
+    """
+    from . import conffile
+    from .constants import APP_NAME
+
+    try:
+        path = conffile.get(APP_NAME, "mpv.conf", True)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.split("#", 1)[0].strip()
+                if line.startswith("["):
+                    break            # a profile section; see the docstring
+                if not line:
+                    continue
+                key, sep, value = line.partition("=")
+                if sep and key.strip().lstrip("-") == "hwdec":
+                    return value.strip().strip("\"'") or None
+    except Exception:
+        log.debug("could not read mpv.conf for an hwdec pin", exc_info=True)
+    return None
+
+
+#: Direct mode -> the copy-back variant of the same thing. Used when
+#: something in the pipeline needs frames in system RAM; see hwdec_for.
+_COPY_OF = {"auto": "auto-copy"}
+
+
+def hwdec_for(height=None, needs_copy=False):
+    """mpv's ``hwdec`` for the configured mode and this file's height.
+
+    ``needs_copy`` says something downstream needs frames in system RAM, which
+    the direct modes cannot feed. It **upgrades, it never enables**: off stays
+    off, since turning hardware decoding off is not a preference about *which*
+    hardware decoding. That asymmetry is the whole design -- a pack knows what
+    it will do with the frames, not what the machine can do
+    (docs/mpv-backends.md section 11).
+
+    ``height`` is None when nothing is loaded, which resolves the threshold
+    mode to "no": the failure modes this setting is cautious about happen at
+    *decoder init*, so starting a file with hwdec on and turning it off is the
+    wrong way round.
+
+    ``--disable-hwdec`` overrides everything and is checked here, so there is
+    one place that can be wrong. Per-run rather than a config write, for the
+    case where hardware decoding stops the window opening at all.
+    """
+    from .args import get_args
+
+    try:
+        if getattr(get_args(), "disable_hwdec", False):
+            return "no"
+    except Exception:
+        # Argument parsing is not available in every embedding of this
+        # module (tests import it bare). A missing override is "no
+        # override", never a crash on the playback path.
+        log.debug("could not read the hwdec override", exc_info=True)
+    pinned = hwdec_pinned_by_config()
+    if pinned is not None:
+        # Not "use their value" -- *do not write the option at all*, so
+        # mpv's own config precedence stands and nothing here has to model
+        # it. Callers treat None as "leave it alone".
+        return None
+
+    def resolved(value):
+        return _COPY_OF.get(value, value) if needs_copy else value
+
+    mode = (settings.hwdec or "no").strip().lower()
+    if mode in _HWDEC_STATIC:
+        return resolved(_HWDEC_STATIC[mode])
+    if mode == "over-1080p":
+        try:
+            on = int(height or 0) > HWDEC_THRESHOLD_H
+        except (TypeError, ValueError):
+            on = False
+        return resolved("auto") if on else "no"
+    # A value hand-edited into the JSON. Software decoding is the answer
+    # that cannot make things worse, and handing an unknown string to mpv
+    # would fail the option at construction and take the player with it.
+    log.warning("Unknown hwdec setting %r; using software decoding.", mode)
+    return "no"
+
+
+def resolve_osc_style():
+    """Which in-player UI to load, after the aliases and fallbacks.
+
+    ``settings.osc_style`` is not the answer on its own: it may hold a legacy
+    alias, and `enable_gui` can force a fallback. The result is stored on the
+    player as ``_osc_style_resolved`` because the c-menu routing, enable_osc
+    and the skip-button path all key off the resolved value rather than the
+    configured one.
+
+    **Nothing resolves TO "default" any more.** It is an inbound legacy value
+    only -- a pre-CONFIG_VERSION-5 conf.json, or one hand-edited -- and the
+    alias below turns it into "mpv". It survived as an internal resolution
+    for exactly one caller, the `thumbnail_osc_builtin` opt-out, and went
+    with it; `build_mpv_options` still maps the value because it is a pure
+    style -> options function and that mapping is still what "default"
+    means.
+    """
+    # Which in-player UI to load: the in-window mpvtk playback HUD
+    # ("mpvtk"; no lua script — the browser renders it, see
+    # mpvtk_browser/hud.py), mpv's own OSC ("mpv"), a script of the
+    # user's that we leave alone ("custom"), or nothing at all
+    # ("none"). Two legacy aliases: "jellyfin" for the HUD — the
+    # jellyfin-styled lua OSC it named was retired once the HUD reached
+    # parity — and "default", which folded into "mpv" at
+    # CONFIG_VERSION 5. `thumbnail_osc_builtin` was a third way in and is
+    # gone: "use your own OSC but keep trickplay" is `custom`, and
+    # "no controls" is `none`, so it named nothing this cannot say.
+    #
+    # "none" is where the old enable_osc setting went. That was a
+    # separate switch that only ever reached mpv's OWN controls, so
+    # turning it off under the default style did nothing at all and
+    # then silently took the controls away if you later switched to
+    # the mpv OSC (#615). One question, one answer.
+    osc_style = settings.osc_style
+    if osc_style == "jellyfin":
+        osc_style = "mpvtk"
+    if osc_style == "default":
+        # Legacy alias since CONFIG_VERSION 5. "MPV built-in default" and
+        # "MPV UI with thumbnails" collapsed into one "MPV UI": they only
+        # differed in who loaded the OSC, and once the shim started loading
+        # mpv's own (`player._load_classic_osc`) the difference showed up
+        # only as a bug -- nothing suppressed the idle logo under "default",
+        # so it sat behind the library. `_migrate` rewrites the stored
+        # value; this covers a hand-edited conf.json and a config from the
+        # future that was never migrated.
+        osc_style = "mpv"
+    if osc_style == "mpvtk" and not settings.enable_gui:
+        # The playback HUD is rendered by the library browser; with the
+        # GUI disabled there is nothing to render it, so the patched
+        # stock OSC is the closest thing.
+        osc_style = "mpv"
+    return osc_style
+
+
+def osc_script_opts(osc_style):
+    """The ``osc-*`` entries appended to ``script-opts`` at construction.
+
+    Every osc.lua and every fork of it reads ``script-opts`` under the
+    ``osc`` prefix at startup, so these are read by construction rather than
+    in time. They are appended, never written over the whole property, which
+    is shared with the user's own scripts.
+
+    ``osc-idlescreen`` is unconditional: it has to cover the styles where
+    mpv loads the OSC itself as well as the one we load by hand, and it is
+    inert for a style with no OSC and for a third-party one reading another
+    prefix.
+
+    ``osc-windowcontrols`` is **not**, and the difference is who is drawing
+    window buttons over PLAYBACK. Only ``mpvtk`` does -- its HUD asks
+    ``window_chrome.window_controls`` for a set -- so only there does a
+    second set from the OSC mean two. Under every other style the OSC on
+    screen is the only thing that could offer any: the stock OSC, our
+    ``trickplay-osc.lua`` fork under ``mpv``, and whatever ``custom``
+    loaded. Their default is "auto", i.e. "whenever the window has no
+    border" -- which is precisely the ``hide_title_bar`` case, where saying
+    no left a windowed video with no title bar and no buttons anywhere and
+    nothing but an undocumented key to close it (#727 follow-up).
+
+    The library's own top bar is not the answer to that: it is not on screen
+    while a video is playing.
+    """
+    opts = ["osc-idlescreen=no"]
+    if osc_style == "mpvtk":
+        opts.append("osc-windowcontrols=no")
+    return opts
+
+
+def mpv_scripts(osc_style, trickplay):
+    """Lua scripts to load at construction, in load order.
+
+    ``trickplay`` is whether the TrickPlay worker actually started -- not
+    whether it was asked to. thumbfast is the script side of that feature, so
+    a worker that failed to come up must not advertise it to mpv.
+
+    **The classic OSC is deliberately not here.** Which one to load depends
+    on the mpv that is about to be built -- the stock OSC where it can drive
+    our previews (0.41+, the OSC Preview API), our fork where it cannot --
+    and the version is not knowable until the player exists. The libmpv
+    client API cannot stand in for it either: 0.40 and 0.41 both report 2.5.
+    So `PlayerManager._load_classic_osc` picks one and `load-script`s it
+    right after construction, while nothing is on screen yet.
+    """
+    scripts = []
+    if settings.menu_mouse:
+        scripts.append(get_resource("mouse.lua"))
+    if trickplay:
+        # Loaded regardless of OSC style: both shim OSCs consume
+        # it, and thumbfast-aware user OSCs (e.g. uosc) benefit
+        # under "default" too.
+        scripts.append(get_resource("thumbfast.lua"))
+    return scripts
+
+
+#: The file that exists only inside a Flatpak sandbox.
+FLATPAK_MARKER = "/.flatpak-info"
+
+#: Where the Flatpak manifest installs mpv's cplugins. **Not derivable from
+#: `sys.prefix`**, which is `/usr` inside the sandbox while these live under
+#: `/app` -- measured, not assumed.
+FLATPAK_CPLUGIN_DIR = "/app/etc/mpv/scripts"
+
+
+def bundled_cplugins(ext_mpv):
+    """mpv cplugins this package ships that mpv will not find by itself.
+
+    Only the Flatpak has any: ``mpv_inhibit_gnome.so``, which asks
+    ``org.gnome.SessionManager`` not to blank the screen during playback -- a
+    bus name the manifest has granted, and a plugin it has installed, since
+    3.0.0. **It has never once loaded.** Measured against the shipped Flathub
+    build with a stand-in session manager on the bus: zero ``Inhibit`` calls
+    during playback, and one with the two changes below.
+
+    Two independent reasons it does not load, and **neither fix works without
+    the other**:
+
+    * ``--config-dir`` (set below unless the user asked for
+      ``mpv_ext_no_ovr``) switches off every other config directory, the
+      global one included, so ``/app/etc/mpv/scripts`` is never scanned. mpv's
+      own man page says so and a probe confirms it: a script in ``MPV_HOME``
+      loads with ``MPV_HOME`` alone and stops the moment ``config_dir`` is
+      set. Naming the file explicitly is what gets past that.
+    * python-mpv ``dlopen``s libmpv ``RTLD_LOCAL``, so a cplugin linked
+      against it fails with ``undefined symbol: mpv_observe_property``.
+      Promoting those symbols to global scope is what gets past *that*, and
+      promoting an object that is already loaded works -- so there is **no
+      import-order rule here to get wrong** and this is strictly additive.
+
+    **The promotion does not by itself load anything.** With ``config_dir``
+    set nothing is scanned, so making libmpv's symbols global only makes a
+    cplugin *able* to load; the explicit paths below decide which ones do.
+
+    Those paths are every ``.so`` this package installs into
+    ``FLATPAK_CPLUGIN_DIR`` -- one file today (the GNOME inhibitor, see the
+    Flatpak manifest), and whatever a later release puts beside it. That is
+    the intended reach and not an accident: a cplugin we ship into our own
+    ``/app`` is one we mean to load. Said plainly because this paragraph used
+    to say "one plugin", which was a true statement about what ships and a
+    loose one about what the code does.
+
+    libmpv only: the external backend runs a real mpv binary, which scans for
+    and loads its own cplugins, and on a box with no libmpv the ``CDLL``
+    raises ``OSError``.
+    """
+    if ext_mpv or not os.path.exists(FLATPAK_MARKER):
+        return []
+    plugins = sorted(glob.glob(os.path.join(FLATPAK_CPLUGIN_DIR, "*.so")))
+    if not plugins:
+        return []
+    try:
+        ctypes.CDLL("libmpv.so.2", mode=ctypes.RTLD_GLOBAL)
+    except OSError:
+        # No libmpv to promote, so a cplugin that links against it would only
+        # fail louder. Nothing here is worth a startup failure.
+        log.debug("could not promote libmpv's symbols for a bundled cplugin",
+                  exc_info=True)
+        return []
+    return plugins
+
+
+def mpv_binary_location():
+    """Path to the mpv binary for the external-mpv backend, or None to let
+    the library find one.
+
+    Only the frozen macOS build ships its own; everywhere else an unset
+    setting means "whatever is on PATH".
+    """
+    mpv_location = settings.mpv_ext_path
+    if (
+        mpv_location is None
+        and platform.system() == "Darwin"
+        and getattr(sys, "frozen", False)
+    ):
+        mpv_location = get_resource("mpv")
+    return mpv_location
+
+
+#: The option mpv only registers when it was built with lua.
+#:
+#: A build without lua does not ignore ``--osc``, it refuses to start -- on
+#: both backends, and differently on each. That made the lua fallback itself
+#: unreachable, since `lua_works` needs a live mpv to probe and the app died
+#: constructing one. Both reports, and why none of them has to be parsed:
+#: docs/mpv-backends.md section 2.
+OSC_OPTION = "osc"
+
+
+#: The option mpv only registers when it was built with SDL2 gamepad support.
+#:
+#: `sdl2-gamepad` is `value: 'disabled'` in mpv's own `meson.options` -- not
+#: `auto` -- so having SDL2 installed is not enough and most builds simply do
+#: not have this. Debian's does; shinchiro's Windows builds pass
+#: `-Dsdl2-gamepad=enabled` explicitly, so the mpv-2.dll CI ships does too.
+#:
+#: Like `OSC_OPTION`, an mpv without it refuses to start rather than ignoring
+#: the flag, so `_construct_mpv` drops it and remembers (docs/mpv-backends.md
+#: sections 2 and 4). Only ever present when the user asked for it.
+#:
+#: It must be set at construction. mpv reads `use_gamepad` exactly once, in
+#: `mp_input_load_config` (input/input.c), but the option group carries
+#: UPDATE_INPUT -- so a runtime write *succeeds and reads back yes* while the
+#: SDL thread is never started. Measured; the setting would look applied and
+#: do nothing.
+GAMEPAD_OPTION = "input_gamepad"
+
+
+#: What each ``motion_interpolation`` value writes, as mpv property names.
+#:
+#: All three ON values set ``video-sync`` as well: ``--interpolation`` is
+#: **silently disabled** without a display-sync mode, so a setting writing
+#: only ``interpolation`` would do nothing and report success. Hence one
+#: table, and `tests/test_picture_processing.py` asserting the pair travels
+#: together. What each filter trades: docs/configuration.md under
+#: ``motion_interpolation``.
+INTERPOLATION_PRESETS = {
+    "off": {},
+    "smooth": {"video-sync": "display-resample",
+               "interpolation": True, "tscale": "oversample"},
+    "blend": {"video-sync": "display-resample",
+              "interpolation": True, "tscale": "linear"},
+    "hq": {"video-sync": "display-resample",
+           "interpolation": True, "tscale": "mitchell"},
+}
+
+
+#: Debanding, which is what the ``deband`` setting picks between.
+#:
+#: What each preset writes, why the ladder is labelled by content, and why
+#: the four knobs are not exposed individually: docs/configuration.md under
+#: ``deband``. mpv's defaults are threshold 48, range 16, grain 32, one
+#: iteration (measured on 0.41, pinned by tests/test_picture_processing.py).
+#:
+#: **``range`` falls as the others rise** -- it is the initial radius and
+#: mpv's manual says to decrease it as iterations go up. It is mpv's
+#: instruction, not a preference, so do not tidy this into a monotone ladder.
+#:
+#: **Do not copy numbers from the shader pack.** Its ``deband-grain: 0`` is
+#: only correct because ``static-grain-default`` re-adds noise through
+#: shaders; here that would remove the masking without replacing it.
+DEBAND_PRESETS = {
+    "off": {},
+    "light": {"deband": True, "deband-iterations": 1,
+              "deband-threshold": 32, "deband-range": 16,
+              "deband-grain": 16},
+    "standard": {"deband": True, "deband-iterations": 2,
+                 "deband-threshold": 48, "deband-range": 14,
+                 "deband-grain": 24},
+    "strong": {"deband": True, "deband-iterations": 4,
+               "deband-threshold": 64, "deband-range": 12,
+               "deband-grain": 32},
+}
+
+
+#: HDR-to-SDR tone mapping curve. mpv's own vocabulary rather than invented
+#: preset names, because unlike debanding these are not a strength ladder --
+#: they are different curves with different opinions about what to do with
+#: the highlights, and mpv documents each one.
+#:
+#: **Only does anything when the output is SDR.** Where the display takes HDR
+#: and ``player_window`` has hinted the colorspace through, every value here
+#: is equally inert -- which is why the setting carries a note in the UI.
+TONE_MAPPING_PRESETS = {
+    "auto": {},
+    "bt.2390": {"tone-mapping": "bt.2390"},
+    "bt.2446a": {"tone-mapping": "bt.2446a"},
+    "spline": {"tone-mapping": "spline"},
+    "hable": {"tone-mapping": "hable"},
+    "reinhard": {"tone-mapping": "reinhard"},
+    "clip": {"tone-mapping": "clip"},
+}
+
+
+#: What mpv's own ``high-quality`` profile sets, written as properties.
+#:
+#: Written out rather than applied as ``profile=high-quality``, and the
+#: reason is that a profile **cannot be taken back**: mpv has no way to read
+#: one back, which is why the shader pack lists ``profile`` in
+#: ``setting-revert-ignore`` and never reverts it. A setting that can only
+#: be turned on is not a setting. These four are ordinary properties with
+#: readable values, so the same snapshot-and-restore every other entry here
+#: uses works on them.
+#:
+#: The contents are mpv's, not ours, and they have changed across versions
+#: (``gpu-hq`` is now an alias for this). ``tests/test_picture_processing``
+#: asks the installed mpv what the profile contains and fails if this table
+#: has drifted from it, so the copy stays honest rather than quietly
+#: becoming a different preset than the one it is named after.
+RENDER_QUALITY_PRESETS = {
+    "default": {},
+    "high": {"scale": "ewa_lanczossharp", "scale-antiring": 0.6,
+             "hdr-peak-percentile": 99.995, "hdr-contrast-recovery": 0.30},
+}
+
+
+#: How much the demuxer reads ahead. For a client whose every file arrives
+#: over a network this is the option users reach for first, and mpv's
+#: default readahead is **one second** -- generous on bytes (150 MiB) and
+#: very short on time, which is the wrong shape for a remote server on a
+#: slow or jittery link.
+#:
+#: Bytes are spelled as integers rather than as "400MiB": the string form is
+#: mpv's own command-line parsing, and a property write wants the number.
+#:
+#: Unlike the picture settings, these are read when the **demuxer starts**,
+#: so a change lands on the next thing played rather than on what is already
+#: open. That is the same granularity ``_play_media`` applies everything else
+#: at, so nothing special is needed -- but it is why "restore" here is not
+#: visible until the next file either.
+BUFFER_PRESETS = {
+    "default": {},
+    "large": {"demuxer-max-bytes": 400 * 1024 * 1024,
+              "demuxer-max-back-bytes": 100 * 1024 * 1024,
+              "demuxer-readahead-secs": 20},
+    "huge": {"demuxer-max-bytes": 1024 * 1024 * 1024,
+             "demuxer-max-back-bytes": 200 * 1024 * 1024,
+             "demuxer-readahead-secs": 60},
+}
+
+
+#: setting key -> (preset table, the value meaning "leave mpv alone").
+#:
+#: One registry rather than five bespoke apply methods. The first entry was
+#: the only one for a long time and the other four are the same shape, which
+#: is precisely the argument for generalising: the second implementation of
+#: a discipline is where it gets subtly dropped, and what would have been
+#: dropped here is the snapshot -- the half that makes "off" mean "give the
+#: user their own value back" instead of "write our idea of off over it".
+#:
+#: ``PlayerManager._apply_render_presets`` walks this, so adding an option
+#: group is a table entry and a config key, not a new method.
+PRESET_SETTINGS = OrderedDict((
+    ("motion_interpolation", (INTERPOLATION_PRESETS, "off")),
+    ("deband", (DEBAND_PRESETS, "off")),
+    ("tone_mapping", (TONE_MAPPING_PRESETS, "auto")),
+    ("render_quality", (RENDER_QUALITY_PRESETS, "default")),
+    ("network_buffer", (BUFFER_PRESETS, "default")),
+))
+
+
+def preset_keys(key):
+    """Every mpv property any preset of ``key`` writes.
+
+    What "off" has to put back is this whole set, not the ones the CURRENT
+    preset happens to name -- somebody who used interpolation's `hq` and
+    then switched to off must get their `tscale` back too.
+    """
+    presets, _fallback = PRESET_SETTINGS[key]
+    return tuple(sorted({prop for props in presets.values() for prop in props}))
+
+
+def preset_props(key):
+    """``{mpv property: value}`` for ``key``'s configured preset, or ``{}``.
+
+    **``{}`` for the off value is NOT the same as writing mpv's defaults
+    back**: these are properties a user may have set in their own ``mpv.conf``,
+    and writing an idea of "not doing this" would undo their config with
+    nothing here to put it back. Turning a feature off is the player's job
+    (``PlayerManager._apply_render_preset``, docs/mpv-backends.md section 6).
+
+    An unrecognised value reads as off -- a plain string in a JSON file
+    somebody can type into, where the alternative to a default is a KeyError
+    out of the middle of starting playback.
+    """
+    presets, fallback = PRESET_SETTINGS[key]
+    return dict(presets.get(getattr(settings, key, fallback),
+                            presets[fallback]))
+
+
+#: Kept as names of their own because they are what the interpolation
+#: docstrings, the tests and docs/mpv-backends.md §6 already cite.
+INTERPOLATION_KEYS = preset_keys("motion_interpolation")
+
+
+def interpolation_props():
+    """``{mpv property: value}`` for the configured preset, or ``{}``.
+    See :func:`preset_props`."""
+    return preset_props("motion_interpolation")
+
+
+def deinterlace_value(override=None):
+    """mpv's ``deinterlace`` for the configured mode, or for ``override``.
+
+    ``override`` is the playback HUD's per-session toggle: ``True`` forces
+    it on for a file whose interlacing is not flagged, ``None`` means
+    nobody has said anything and the setting decides.
+    """
+    if override is not None:
+        return "yes" if override else "no"
+    return "auto" if settings.deinterlace_auto else "no"
+
+
+def build_mpv_options(osc_style, scripts, ext_mpv, browser_wants_window):
+    """The full option set to construct mpv with.
+
+    ``osc_style`` comes from :func:`resolve_osc_style` and ``scripts`` from
+    :func:`mpv_scripts` -- both are passed in rather than recomputed, because
+    the player has to interleave the TrickPlay worker's startup between them.
+
+    ``ext_mpv`` is the backend in use (``player.is_using_ext_mpv``).
+    ``browser_wants_window`` is whether the in-window UI should be on screen
+    as soon as mpv comes up; see the force_window comment below for why the
+    player, not this function, decides it.
+    """
+    mpv_options = OrderedDict()
+    if ext_mpv:
+        mpv_options.update(
+            {
+                "start_mpv": settings.mpv_ext_start,
+                "ipc_socket": settings.mpv_ext_ipc,
+                "mpv_location": mpv_binary_location(),
+                "player-operation-mode": "cplayer",
+                "start_retries": settings.mpv_ext_start_retries,
+                "start_retry_delay_ms": settings.mpv_ext_start_retry_delay_ms,
+                # mpv's stdout/stderr to devnull instead of inheriting ours.
+                # `--terminal=no` means it never writes to them, so this
+                # looks like it can only matter for tidiness -- but an mpv
+                # that outlives terminate() goes on HOLDING them, and
+                # anything waiting for EOF on our output then waits for
+                # ever. That is what hangs the integration matrix's
+                # whole-suite leg; on Linux the runner recovers by killing
+                # the process group, and on Windows there are none, so it
+                # hangs outright. Needs python-mpv-jsonipc >= 1.4.0.
+                "discard_output": True,
+            }
+        )
+
+    # Hardware decoding, at construction. The threshold mode resolves to
+    # "no" here (nothing is loaded, so there is no height) and is raised
+    # per file in PlayerManager._play_media -- which is also where the
+    # static modes are re-applied, so that changing this setting takes
+    # effect on the next item rather than the next launch.
+    hwdec = hwdec_for()
+    if hwdec is not None:
+        mpv_options["hwdec"] = hwdec
+
+    if osc_style in REPLACES_OSC:
+        # "mpv" loads the patched stock OSC as a script; "mpvtk" has the
+        # in-window playback HUD replace any OSC. Either way mpv's built-in
+        # one must be off.
+        mpv_options["osc"] = False
+    elif not ext_mpv:
+        # "default" means "whatever mpv would normally do", and under libmpv
+        # that is nothing: libmpv turns the OSC off where cplayer leaves it
+        # on. The external backend already asks for cplayer, so it needs no
+        # help here.
+        #
+        # A construction option, never a write onto the live player, and
+        # that distinction is the whole feature: mpv.conf OVERRIDES an
+        # option set at construction, so this is a default the user can say
+        # `osc=no` to when they run their own OSC out of <config>/scripts/.
+        # Writing the property afterwards instead loaded mpv's built-in OSC
+        # underneath theirs. Both measured; docs/mpv-backends.md section 12.
+        mpv_options["osc"] = True
+
+    # Appended rather than prepended: a cplugin is not part of the lua load
+    # order these are otherwise in, and the one we ship watches playback
+    # rather than drawing anything.
+    scripts = list(scripts) + bundled_cplugins(ext_mpv)
+
+    if scripts:
+        if settings.mpv_ext:
+            mpv_options["script"] = scripts
+        else:
+            mpv_options["scripts"] = (
+                ";" if sys.platform.startswith("win32") else ":"
+            ).join(scripts)
+
+    if not (settings.mpv_ext and settings.mpv_ext_no_ovr):
+        mpv_options["config"] = True
+        mpv_options["config_dir"] = conffile.confdir(APP_NAME)
+
+    if settings.tls_client_cert and settings.tls_client_key:
+        mpv_options["tls_cert_file"] = settings.tls_client_cert
+        mpv_options["tls_key_file"] = settings.tls_client_key
+
+        if settings.tls_server_ca:
+            mpv_options["tls_ca_file"] = settings.tls_server_ca
+
+    # Audio-only files (music) are controlled from the browser's now-playing
+    # bar, not an mpv window: don't decode embedded cover art into a video
+    # track (which would otherwise pop a window showing the album art).
+    # Only affects audio-only files — video and music videos are untouched.
+    mpv_options["audio_display"] = "no"
+
+    # The output device and exclusive mode are deliberately NOT set here, even
+    # though they are plain options. Both are applied live by
+    # apply_audio_settings, which runs from _init_mpv before anything can
+    # play, and which snapshots what mpv had first so that going back to
+    # "Default" can put it back.
+    #
+    # Setting them here as well broke exactly that. mpv would be *constructed*
+    # with the chosen device, so the snapshot taken a moment later recorded
+    # our own value as the original -- and after a restart, choosing Default
+    # restored the device it was trying to leave. One place applies them, and
+    # it is the one that can see what came before.
+
+    # Window title. mpv's default is "No file - mpv", which names the
+    # wrong application and reports "No file" for what is actually the
+    # library browser. Property expansion is mpv's, evaluated live, so
+    # the title follows playback without us pushing updates.
+    mpv_options["title"] = "${?media-title:${media-title} - }%s" % USER_APP_NAME
+
+    # No desktop title bar, so the browser's own top bar is the only one
+    # (#727). A construction option rather than a runtime write, and only
+    # when it is ON: `border` is one of the properties `window_controls`
+    # "auto" reads to decide whether to draw its own buttons, so writing
+    # `border=True` unconditionally would override a user who set
+    # `border=no` in their mpv.conf and take those buttons away from
+    # exactly the person who wants them. Off means "say nothing".
+    if settings.hide_title_bar:
+        mpv_options["border"] = False
+
+    # Window size. mpv defaults to a fixed 960x540 whatever the display
+    # size, which is cramped for a browsable UI. Restored from the last
+    # session when remember_window_size is on (see _save_window_geometry).
+    width = max(320, int(settings.window_width or 1280))
+    height = max(240, int(settings.window_height or 720))
+    mpv_options["geometry"] = "%dx%d" % (width, height)
+    if settings.window_maximized:
+        mpv_options["window_maximized"] = True
+    # geometry is documented as an INITIAL size, but X11 re-applies it on
+    # every VO reconfig (rc = geo.win whenever geometry.wh_valid), so a
+    # window the user resized snapped back to the stored size on the next
+    # file. _sync_window_geometry keeps the armed value equal to the live
+    # size so that re-apply is a no-op; it must never be *cleared* at
+    # runtime — see the comment there. auto-window-resize is the other
+    # half: without it mpv fills the gap by resizing to each video's
+    # native size, which is what geometry had been masking. Both are
+    # needed — per mpv's own docs, auto-window-resize "does not have any
+    # impact on the --geometry option".
+    mpv_options["auto_window_resize"] = False
+
+    # The in-window UI has to ask for its window on the command line.
+    #
+    # force-window is only live from mpv 0.41, so on an older build a runtime
+    # change is stored and never acted on while idle -- the app comes up
+    # invisible (docs/mpv-backends.md section 3). Hence a construction option.
+    #
+    # Whether to take the window needs live player state, which is why the
+    # caller decides it: first launch unless start_minimized, a re-open only
+    # if the browser was on screen. The play path does not need it at all.
+    #
+    # Only force_window goes here, not the browse background: background=color
+    # needs mpv 0.38 and an unknown option makes mpv exit at startup rather
+    # than raise. set_browse_window applies it a moment later.
+    if osc_style == "mpvtk" and browser_wants_window:
+        mpv_options["force_window"] = True
+
+    # Desktop-icon hints. mpv has no "set the window icon" option; on
+    # Linux the icon is resolved by matching the window's class against
+    # an installed .desktop file, so naming ourselves after ours is the
+    # whole mechanism. Only meaningful once the .desktop is installed
+    # (packaged/Flatpak, not run-from-source), and some window managers
+    # still prefer mpv's built-in _NET_WM_ICON — overriding that needs
+    # Xlib, which is not worth a dependency.
+    #
+    # Platform-gated: --x11-name only exists in builds with X11 support,
+    # so setting it on a Windows or macOS mpv fails at startup. Those
+    # platforms take their icon from the exe/bundle anyway.
+    if sys.platform not in ("win32", "darwin"):
+        mpv_options["x11_name"] = DESKTOP_ID
+        mpv_options["wayland_app_id"] = DESKTOP_ID
+
+    # Game controllers. Only added when asked for, so the default path never
+    # carries a build-gated option and can never pay for one.
+    if settings.input_gamepad:
+        mpv_options[GAMEPAD_OPTION] = True
+
+    return mpv_options

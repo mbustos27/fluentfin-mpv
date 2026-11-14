@@ -1,0 +1,1279 @@
+# Talking to mpv
+
+Reference for the seams between the shim and mpv: the two backends and where
+they diverge, the mpv versions and build variants that behave differently, and
+the mpv state that outlives a single queue item.
+
+This is the derivation behind the one-line warnings in `player.py`,
+`mpv_events.py`, `mpv_options.py`, `player_window.py` and `video_profile.py`.
+Each of those states its conclusion at the line; this file records how it was
+established, so the code does not have to.
+
+## 1. Two backends
+
+`player.py` picks one at import time and aliases both as `mpv`:
+
+- default — `import mpv`, the `python-mpv` libmpv binding;
+- `settings.mpv_ext`, or libmpv failing to load (`OSError`) — `python_mpv_jsonipc`,
+  with `is_using_ext_mpv = True`. macOS forces this; libmpv is not reliable there.
+
+### What differs
+
+| | libmpv (`python-mpv`) | external (`python-mpv-jsonipc`) |
+|---|---|---|
+| shutdown errors | `BrokenPipeError`, `mpv.ShutdownError` | `BrokenPipeError` |
+| observer registration | `observe_property` | `bind_property_observer` |
+| unknown attribute | `__getattr__` issues a **property read** | plain `AttributeError` |
+| a core in this process | yes | no — mpv is a child process |
+| property read cost | in-process call | synchronous IPC command |
+| `command("set", name, 5.0)` | works — the value is coerced to a string | **`MPVError: invalid parameter`** |
+
+**mpv's `set` command takes its value as a string**, and only one binding says
+so for you: python-mpv runs every argument through `_mpv_coax_proptype`, while
+python-mpv-jsonipc puts the raw JSON on the socket and mpv refuses a number.
+Measured both ways on mpv 0.41. So a `command("set", …)` written and tested on
+libmpv works there and silently does nothing on the external backend — silently
+because the callers that use this form wrap it, having been written for a
+*different* failure (`_apply_resume_offset` catches so that a resume which
+cannot be applied does not abort the playback start). That is how the resume
+position came to be applied on one backend only, and what caught it was the
+external-backend e2e leg, not any unit test. **Pass `str(value)`.**
+
+`_mpv_errors` is the tuple to catch. `mpv_events.wait_property` and
+`PlayerManager._observe` both discriminate on the **class**, not on a module
+flag, so they carry no global state and stay testable against a fake.
+
+### A refused property write becomes a Python attribute — on both
+
+Neither binding reports a property write mpv would not take. Both absorb it
+into `object.__setattr__`, and because `__getattr__` only runs when normal
+lookup fails, the attribute they leave behind answers every later read of that
+property **for the life of the process**. A later *successful* write does not
+clear it; only a restart does (measured, python-mpv 1.0.8).
+
+|  | swallows an absent property | swallows an unavailable one |
+|---|---|---|
+| libmpv (`python-mpv`) | yes — `AttributeError`, −8 | yes — `PropertyUnavailableError`, −10, which **subclasses** `AttributeError` |
+| external (`python-mpv-jsonipc`) | yes — the name is not in the `property-list` read at connect | no — the name *is* in that list, so the write goes out and errors |
+
+So it is not a libmpv-only defect; only the unavailable half is. A bad *value*
+raises `TypeError` on both and is not absorbed.
+
+The shipped instance is #761/#765: `_apply_resume_offset` wrote
+`playback_time`, playback ended between the duration gate and the write, and
+every later read reported the resume offset — so `_check_stalled_finish` saw a
+file parked at the end and advanced the queue on a timer, which reads as the
+server stalling. The second site is `set_osd_settings`, where a `try/except`
+written for exactly this absence cannot fire, and `get_osd_settings` then reads
+the shadow back as a border style the mpv does not have.
+
+**Which of the 84 property writes this reaches is a property of the user's mpv
+build**, not of this tree, so the live sites cannot be enumerated by reading
+them. `mpv_guard.guarded` is therefore one interception point: a subclass of
+whichever backend is live, overriding `__setattr__`, installed in
+`_construct_mpv` and armed once construction has returned — after the point,
+because both libraries assign their own bookkeeping through `__setattr__` on
+the way up and some of it genuinely is a plain Python attribute (python-mpv's
+`osd`/`raw`/`lazy`/`overlays`, jsonipc's `observer_id`, which it keeps
+assigning once per observer for the life of the object).
+
+**It never raises**, and that was ruled the other way first. 14 of the 84
+writes have further statements after them inside the same `try` — six after
+`keepaspect` at `player_window.py:522`, the picture-view/playback handoff that
+made every film play stretched — so a raise makes a test run take a path
+production never takes. What it does instead is record and log, and the
+*assertion* lives in the suite: `_harness.watch_refused_writes` is registered
+for every integration and e2e case without one opting in, so an mpv on this box
+that lacks a property the shim writes fails a test rather than quietly wearing
+a shadow.
+
+### Which option an exception blames
+
+Both backends can name the offending option and neither does it the same way:
+
+- **libmpv** raises `AttributeError('mpv option does not exist', -5, (handle,
+  b'input-gamepad', b'yes'))` — the name is in the third arg.
+- **python-mpv-jsonipc >= 1.3.0** raises `MPVProcessError` with `bad_option`
+  set, having asked mpv why it refused to start. Older versions flattened every
+  start failure into `"MPV process retry limit reached."` *after spending the
+  whole retry budget*, which is why the shim's floor is 1.3.0.
+
+The answer is returned in the **underscored** form, because that is how the
+option appears in the dict handed to `mpv.MPV`.
+
+### Bounding IPC replies during teardown
+
+Only the external backend needs this. Every command there is a request/response
+over a socket, and the reply is waited for with
+`python_mpv_jsonipc.TIMEOUT`, which is **120 s**.
+
+A closing window puts that squarely in the failure path: mpv can accept a
+command, run it, and exit before its reply is written back. Observed on the
+close path, where trickplay's overlay-clear reached mpv (it logged "Clearing
+trickplay") but the reply never came, parking the action thread for two minutes
+with the whole shutdown queued behind it. libmpv has no equivalent — a dead
+handle raises immediately, which is why the same close is instant there.
+
+That case is now the library's: since python-mpv-jsonipc 1.5.0 a closing
+connection answers every waiting command with `BrokenPipeError` at once. What
+`bound_ipc_replies` still bounds is the quit -- the shutdown sequence
+(`mpv_shim.py`), and nothing else -- where no reply is worth minutes, including
+one from an mpv that stops answering without closing.
+
+**Not the window close, and not the browser loop finding mpv gone.** With a
+tray, closing the window only hides it and the same mpv keeps serving the
+session; after mpv dies under the browser, the next play builds a new one. And
+`TIMEOUT` is a module global read at each wait that nothing restores: bounded at
+either, every later command timed out at 5 s, which `_mpv_errors` treats as a
+disconnect.
+
+### Bound methods cannot be property observers on libmpv
+
+libmpv's `property_observer` decorator writes an `unobserve_mpv_properties`
+attribute onto the callback it is handed. A bound method has no `__dict__` to
+take it, so this raises `AttributeError` — on **exactly one backend**. jsonipc
+and the `FakeMPV` harness both accept it, so nothing catches this until a real
+libmpv runs. Register through `observe_property` / `bind_property_observer`
+instead, which is what `PlayerManager._observe` exists for.
+
+### Read raw state out of `__dict__`, not by attribute
+
+Because libmpv turns an unknown attribute into a property read, `getattr` on a
+half-constructed or dying object asks a core that is in no state to answer.
+Anything inspecting an mpv object's internals — notably the orphan reaper below —
+must go through `__dict__` directly.
+
+### Extracted modules must import backend globals per call
+
+`is_using_ext_mpv`, `_mpv_errors`, `discord_presence` and `win_utils` are
+imported **inside the method**, never at module scope. Module-scope binding
+captures the backend, and the integration harness swaps a fake mpv in and out by
+evicting modules from `sys.modules`; a second module holding a bound copy would
+have to be evicted in lockstep, and it fails only on the whole-suite leg. Each
+extracted module carries a subprocess guard test pinning this.
+
+## 2. Construction failures
+
+### A failed `mpv.MPV(...)` leaves a *running* mpv behind (libmpv)
+
+python-mpv sets every option inside a `try` whose `finally` is `mpv_initialize`
+(mpv.py 1.0.8, `MPV.__init__`), so an option this build does not have raises
+*after* the core has come up. What is left is not a stale handle — it is a
+running mpv with its window, its scripts and its threads, owned by a half-built
+object nobody holds a name for. Nothing stops it until the garbage collector
+reaches the reference cycle the traceback made, and by then the retry's mpv is
+up: two cores, two VOs on one display, and the process dies in a thread that is
+not Python's.
+
+Measured with `--input-gamepad` on a libmpv without it, three runs in three. The
+crash lands *after* the retry has already logged success, which is what made it
+read as "the retry failed".
+
+So the orphan is reaped where it is made. The instance is recovered from the
+traceback because that is the only place it exists — the constructor never
+returned it — and identified by holding a live handle rather than by its class,
+since the external backend has no core in this process to reap.
+
+Both option retries below depend on this; the lua fallback creates an orphan too,
+and has since it shipped.
+
+### A build without lua refuses to start, it does not ignore `--osc`
+
+Measured against a `-Dlua=disabled` mpv 0.41, on both backends:
+
+- libmpv raises `AttributeError` from the constructor;
+- the external binary exits with `Error parsing option osc (option not found)`,
+  arriving as `MPVError("MPV process retry limit reached.")`.
+
+The two reports are entirely different and **none of it has to be parsed**,
+because `--osc` is the single lua-gated option the shim sets. Failing to
+construct *with* it and succeeding *without* it is not evidence needing
+interpretation — it is the answer. Dropping the option is the right answer
+rather than a workaround: the OSC being turned off is itself lua, so a build
+without lua has none to turn off.
+
+This made the whole lua fallback unreachable before it was handled: `lua_works`
+needs a live mpv to probe, and the app died constructing one.
+
+The answer is recorded rather than rediscovered, and **only in this direction**.
+mpv having `--osc` says lua was *compiled in*, not that it runs — lua that loads
+and then errors is exactly what the probe is for — so the ordinary path is left
+to ask.
+
+Re-learning is expensive: on the external backend a failed construction used to
+consume the whole start-retry budget, measured at ~31 s with the shipped
+defaults, paid on every re-open (idle-quit then a cast, `set_browse_window`,
+`force_window`).
+
+### Probing for lua
+
+`lua_works()` loads `lua_probe.lua` and waits for it to report back. A probe
+rather than a capability string, because `mpv-configuration` does not mention lua
+on every build (measured on this one) and `load-script` on a script that cannot
+run **raises nothing on either backend**. Only a script reporting back is proof,
+which also catches lua that loads and then errors.
+
+Costs ~10 ms when lua works (measured), and the full timeout once when it does not.
+
+Everything the shim draws depends on the answer: the library browser and the
+playback HUD are `renderer.lua`, the stock OSC is lua, `mouse.lua` is lua. An mpv
+without it leaves the app running and drawing nothing but video — and, before
+this existed, with no menu either, because `toggle_settings_menu` refuses the OSD
+menu whenever the *configured* style is mpvtk, live renderer or not.
+
+## 3. mpv versions
+
+### `force-window` is only live from 0.41
+
+Every mpv *stores* the property; only 0.41 and newer create or destroy the video
+output in response to a change made while idle. Older builds decide at startup
+and never revisit it — so the window has to be asked for on the command line, and
+releasing it later does nothing.
+
+An unreadable version is treated as **old**, because the two ways of being wrong
+are not symmetric: assuming old costs a fallback that works everywhere, assuming
+new costs a window that will not go away.
+
+This only started mattering when the browser stopped loading a background file.
+Historically the window was summoned by loading a file and released by unloading
+one, so `force_window` was a flag alongside real media; `PlayerManager.force_window`
+still works that way. The browser loads nothing deliberately — reloading a
+background file tears the video output down and reads as the window closing and
+reopening — and so inherited the newer behaviour.
+
+### A negative absolute seek is read as end-of-file
+
+Measured on mpv v0.41.0: `seek -0.005 absolute+exact` on a 30 s file lands at
+29.96 with `eof-reached` true. mpv does not clamp it.
+
+This is #614. A matroska chapter can start at a slightly negative timestamp —
+container start-time offsets put the first one at -0.005 on an ordinary episode —
+so "previous chapter" hit EOF, and the shim's own EOF observer advanced the
+queue. That is the reported "prev chapter plays the next episode". It predates
+the current branch: master's `hud._chapter_jump` passes `ch["time"]` on just as
+unclamped.
+
+Both the chapter arithmetic and `seek()` itself refuse a negative absolute seek,
+because the chapter *picker* hands over the very same value.
+
+### Chapter-jump semantics
+
+The asymmetry is mpv's `add chapter -1`, and every other player's: going back
+restarts the chapter you are in unless you are within its first couple of
+seconds, in which case you meant the one before. Going forward has no grace at
+all — it is the next boundary strictly ahead, not "ahead by half a second". A
+position is a float from mpv and is never exactly a boundary, while the half
+second before one is half a second of real playback in which the button would do
+nothing.
+
+Both directions can answer "nowhere to go", and the caller must then not seek.
+Before the first boundary there is nowhere to go, and a button that quietly
+restarts the file is worse than one that declines. That covers the first seconds
+of any file, and a file with no chapters at all, where every press used to jump
+to 0.0.
+
+## 4. SDL, gamepads and signals
+
+mpv's gamepad support is SDL2, and `SDL_Init` installs its own SIGINT/SIGTERM
+handlers unless `SDL_NO_SIGNAL_HANDLERS` says not to. It only replaces a handler
+still at `SIG_DFL`, which is why standalone mpv is unaffected — it installs its
+own first.
+
+**This process is no longer the case that needs the variable.**
+`mpv_shim._claim_sigterm` installs a real handler before anything can import the
+player, so SDL finds SIGTERM already taken and leaves it — measured with the
+variable deliberately unset. That fix is preferable because it does not depend on
+a `putenv` here being visible to a `getenv` inside SDL2, which is certain on
+glibc and unverified on Windows. The variable stays as the layer under it.
+
+**The child mpv of the external backend has no handler of its own.** jsonipc
+spawns it with `terminal=no`, and mpv installs its SIGTERM handler from
+`terminal_setup_getch`, which that path skips. So the child's SIGTERM is at
+`SIG_DFL`, SDL takes it, and `MPVProcess.stop()` — a `terminate()`, i.e. a
+SIGTERM — is swallowed, leaving an orphaned mpv window behind. The variable is
+inherited by the child, which is the only lever this side has. (Sending mpv
+`quit` over the IPC socket instead of signalling it is the better answer and
+belongs in python-mpv-jsonipc; until then, this.)
+
+**Set unconditionally, not only when the shim passes the option.**
+`input-gamepad` is an ordinary mpv option with no `M_OPT_NOCFG`, so a line in the
+user's own `mpv.conf` starts the SDL thread with the option absent from anything
+the shim built — and that config is exactly what `mpv_ext_no_ovr` users are told
+to use. There is no third place to ask and no way to ask mpv in time, since the
+thread starts inside `mpv_initialize`. The only correct gate is no gate. The
+variable does nothing at all in a process that loads no SDL.
+
+The cost is one real side effect, accepted deliberately: `os.environ` is
+process-wide and nothing spawns children with a scrubbed environment
+(`system_open`, the clipboard helpers, the shell-command hooks), so an SDL
+application launched from the shim inherits it and loses SDL's own Ctrl-C
+handling. Narrower gating buys a silently orphaned mpv back.
+
+A blank value counts as unset, which is SDL's own reading: `SDL_GetHintBoolean`
+returns the *default* for `""`, so preserving one would leave the bug in place
+for anybody whose launcher exports an empty variable. `"0"` is honoured — somebody
+who wrote that wants SDL's handlers — and logged, because on the external backend
+it is the one value that can still strand an mpv window.
+
+`GAMEPAD_OPTION` is likewise gated on a build-time capability: the SDL thread is
+never started on a build without it, and the setting would look applied and do
+nothing.
+
+## 5. Input sections and key claims
+
+The shim installs its keys as mpv input **sections** (jsonipc cannot unbind), and
+claims a key only where its own verb differs from mpv's. See `keysweep.py` for
+how the resolved bindings are read, and `input_conf.py` for the one-time
+migration of the old `seek_*` settings into the user's `input.conf`.
+
+### `SECTION_FLAGS = "allow-hide-cursor+allow-vo-dragging"`
+
+The same string mpv's own `defaults.lua` gives a script's bindings, and the same
+one python-mpv gives every key bound through it.
+
+A section's mouse area defaults to the **whole screen** (`input.c`:
+`get_bind_section` starts it at `INT_MIN..INT_MAX`), and an enabled section
+covering the pointer *without* `allow-hide-cursor` is how mpv is told "a script's
+UI is under the mouse": every call to `mp_input_get_mouse_event_counter` bumps
+the counter, which re-arms `handle_cursor_autohide`'s timer, so **the cursor
+never hides again**. The shim's sections hold keyboard keys and have no UI at
+all, so the fullscreen standing claim — installed at mpv creation and never
+released — left a pointer sitting over every film for the whole session.
+
+`allow-vo-dragging` is the same mistake in the other direction: without it
+`mp_input_test_dragging` refuses to move the window from a drag on the video,
+which is mpv's own behaviour everywhere else.
+
+`renderer.lua` withholds `allow-hide-cursor` from its **own** mouse sections on
+purpose — while the library or the HUD is up the pointer really is over a UI —
+and enables them only for as long as it is. The player's sections are enabled for
+the life of the process.
+
+### Forced does not mean first — the later section wins
+
+Two forced sections holding the same key is the normal case, not a corner one:
+`renderer.lua` forces ENTER, ESC, the arrows and `any_unicode`, and so do mpv's
+own `console.lua` and `context_menu.lua`. Which one gets the key is decided by
+**order**, not by the word "forced".
+
+Measured with `tools/probe_key_precedence.py`, which presses the key and reports
+the handler that ran rather than reading `priority` off `input-bindings`. Same
+answer for the console and the context menu, on two master builds:
+
+| when | who receives ENTER |
+|---|---|
+| nothing open | ours |
+| the overlay opens *after* our binding | the overlay's |
+| we re-bind while the overlay is up | **ours, and the overlay stays drawn** |
+
+Only the third row is an exposure, and it is not hypothetical: the HUD
+re-installs its nav keys on pointer movement and on every lifecycle event, so an
+overlay that came up first can lose its keyboard a moment later and remain on
+screen with nothing to activate. That is what the `user-data/mpv/console/open`
+handler exists for — it drops our claims for as long as the console is up.
+`any_unicode` does **not** escape the ordering rule, and it is worth being
+precise because the renderer depends on it not escaping: it outranks an exact
+key installed *before* it, and loses to one installed after. That is exactly why
+`ui_resume` binds the browse block **first** and says so at `renderer.lua:5771` —
+installed last it swallowed a printable `ui_select_key` (#717). The console
+handler still has to release it, because the console's own keys go in after
+ours.
+
+**The comment on that handler said the opposite for a release** — that our
+bindings outranked the console — and the handler was right for a reason its own
+comment did not give. The rule was in the file the whole time: `:5771` states it
+correctly, 1,200 lines away, because getting it wrong there had cost #717. One
+rule, right at one site and wrong at another, which is the shape
+`docs/archive/RISK_MAP_2026-09.md` §2 is a table of. `tools/audit_key_bindings.py:PUBLISHED` now enumerates
+every `user-data/mpv/*` property mpv's builtin scripts set, with what the
+renderer owes each; `context-menu/open` is recorded there as watched by nothing.
+
+### Which keys the shim binds, and why so few (#16)
+
+The governing rule is *stop intercepting keys whose meaning we did not change*.
+
+- `kb_menu_*` are **menu** keys and are not bound at the player at all. The OSD
+  menu installs them itself for exactly as long as it is on screen
+  (`claim_menu_keys`); the rest of the time the key is mpv's. One setting used to
+  mean two things — which key drives the menu, and which key seeks — and almost
+  everybody who touched it was reaching for the second in order to get rid of it.
+- `f` is mpv's own key with mpv's own meaning, so fullscreen is *claimed* rather
+  than bound; the claim follows a remapped key where a fixed binding never did.
+- Seeking is mpv's too, unless the shim's own seek does something mpv's cannot —
+  then it is claimed. `_MPV_EQUIVALENT_SEEK` is what decides, and only
+  `use_web_seek` is left in it: the six seek settings that used to be there are
+  gone from the config entirely, because a distance now lives in the user's
+  `input.conf`. While they existed they were actively misleading — a changed
+  distance made the check return True, and the resulting claim then seeked by the
+  amount in *mpv's* binding rather than by the setting.
+- `skip_intro_on_seek` deliberately has no key. `_on_seeking` observes the
+  `seeking` property and applies it to *any* forward seek, mpv's own bindings
+  included. Claiming a key would double-handle, since the claim's own `seek()`
+  raises that same observer.
+- **The library is the exception, and it is a different rule (#730).** Everything
+  above is about *playback*, where mpv's meaning is the right meaning and taking a
+  key is only justified by having changed it. In the library there is no video, so
+  the commands are not differently-interpreted but inapplicable: `1`-`8` move a
+  picture that is not there, the change survives into the next thing played, and
+  the OSD reporting it is ASS and therefore draws *under* the overlay bitmaps the
+  UI is made of. `browse_block_keys` (default on) swallows them with **one forced
+  `any_unicode` binding**, which outranks every exact-key default across the
+  printable range — measured, and pinned by
+  `tests/integration/test_mpvtk_browser.py:BrowseKeyBlockTest`. It covers nothing
+  else and does not need to: the arrows, PGUP/PGDWN, HOME/END and the wheel are
+  the renderer's own, and modified keys are left alone. `keyclaim.block_*` in
+  `renderer.lua`; browse only, never a summoned playback HUD.
+  - A focused text box binds its **own** `any_unicode`, and between two forced
+    bindings of one key the last bound wins — so typing is unaffected. The block's
+    handler routes to the text box anyway, which is what makes the order stop
+    mattering when the setting is changed live.
+  - `9`/`0`/`m` are claimed back by the browser while music plays, so they still
+    work and now move the now-playing bar's slider with them. Turning the setting
+    off gives those back to mpv along with everything else.
+- ENTER confirms the OSD menu and does nothing else. It is swallowed rather than
+  left to mpv, which binds it to `playlist-next`; the shim's mpv playlist holds
+  one file, so what that does depends on `keep-open` and is not a behaviour to
+  inherit by accident. It must not *open* the menu either — `menu_action("ok")`
+  on a hidden menu is `show_menu()`, and under mpvtk the OSD menu draws as mpv
+  OSD text, landing under the overlay bitmaps and taking the arrow keys with it.
+
+## 6. mpv state that outlives a queue item
+
+mpv is **not** re-created between queue items, so any global, persistent option
+written for one item is still set for the next — including a next item the shim
+deliberately *refuses* to set it for. Three cases, all of which have bitten:
+
+### `http-header-fields`
+
+Everything mpv fetches for a file goes through it — the stream, any external
+subtitle sidecar — so one option covers them all and none of those URLs needs a
+token in its query string.
+
+`Authorization: MediaBrowser Token="…"` is the one header scheme the server does
+not gate behind `EnableLegacyAuthorization` (`AuthorizationContext`);
+`X-Emby-Token` and friends are all legacy. The apiclient already builds exactly
+this line for its own requests, so it is borrowed rather than re-spelled.
+
+**Clearing it up front is load-bearing.** Without the clear the refusal defeated
+itself: auto-advance from a normal item to one whose subtitle lives on a
+third-party host, and mpv sent the previous item's `Authorization` to that host
+while the log said it had not. Clearing once at the top rather than on each
+`return False` is the point — every exit path past that line leaves mpv holding
+nothing, including the ones nobody has written yet.
+
+Failure returns False rather than raising, and the caller falls back to putting
+the token in the URL. mpv has had `http-header-fields` for over a decade so this
+should not happen, but the cost of being wrong is that nothing plays at all.
+
+### The preset-driven settings
+
+Motion interpolation, debanding, tone mapping, rendering quality and network
+buffering. Five settings, one table shape (`mpv_options.PRESET_SETTINGS`) and
+one apply path (`PlayerManager._apply_render_preset`), because they all have
+the same problem and the second implementation of a discipline is where it
+gets dropped.
+
+**"Off" writes nothing until we have written something.** Every one of these
+is a property somebody may have set in their own `mpv.conf`, and all five
+settings default to off — so an off that wrote its idea of "not doing this"
+would reach out on the very first item and undo the user's own config, for
+everyone, with no setting here that puts it back. That is the mistake
+`hwdec_pinned_by_config` exists to avoid. It is also what makes **"leave the
+setting off and write your own values"** a supported way to use these rather
+than an accident, which is why none of them exposes its raw parameters.
+
+`hwdec` needs a config-file pin and these do not, and the reason is worth
+stating: hwdec's off is a real value (`no`) that has to be written, so
+silence was never available to it.
+
+It is not enough to avoid it for `video-sync` alone: writing `interpolation=no`
+while carefully preserving `video-sync=display-resample` leaves the **worst
+pair**, paying that mode's cost with the feature it exists for switched off.
+(mpv's manual: `--interpolation` "requires setting the --video-sync option to one
+of the display- modes, or it will be silently disabled".)
+
+So the undo is symmetric with the do, and both halves are state:
+
+- `_render_pristine` is every property any preset can write, read from the
+  **fresh mpv** in `_init_mpv`. Not lazily at first write: `apply_for_item`
+  runs earlier in `_play_media` than the settings do, and every shader profile
+  pulls in the pack's `deband-default` group — so a lazy snapshot would record
+  the pack's debanding as the user's value and never be able to hand the real
+  one back. A property this mpv does not have is simply absent, and both the
+  write and the restore skip it (`hdr-peak-percentile` and
+  `hdr-contrast-recovery` are 0.37+, so this is a real build difference).
+- `_render_written` is which settings we have actually written. It carries the
+  **second** meaning of off, and the one a lazier design gets wrong: with a
+  shader profile loaded, off is "I have no opinion, leave the pack's value
+  alone", not "undo the pack". A restore keyed on the setting being off rather
+  than on our having written would switch the pack's debanding off on the next
+  item played, under a profile the user had deliberately picked.
+
+The other direction is `reapply_render_presets`, called after every profile
+load and unload (`video_profile._reassert_user_settings`). A setting that is
+**not** off outranks the pack's bundled default, and without the reassert the
+pack's write is the last one until the next item — so picking an upscaler
+mid-film and dropping it again took the user's debanding with it for the rest
+of the film.
+
+It is `@synchronous("_lock")`, and so is `reapply_deinterlace` beside it.
+Both arrive from a thread that is not the one applying settings for the next
+item — the shader menu's `put_task` on the action thread, `kb_kill_shader`
+straight out of mpv's key handler, the HUD gateway's `_act` whose deferred
+path holds no lock at all — and every property they write `_play_media`
+writes too, so unlocked the two loops interleave and the item wears half of
+each. Blocking a key handler on this lock is what `toggle_pause` and
+`toggle_fullscreen` already do; `wait_property`'s poll thread and hard
+timeout (§9) are what stop a playback start holding it indefinitely, and
+`_lock` being an **RLock** is what lets `_play_media` reach the reassert
+through `apply_for_item` while already holding it.
+
+**And "off" restores to the PACK's value where a profile is loaded**, not to
+pristine (`_pack_applied`, fed by `VideoProfileManager.applied_settings`). Off
+means "I have no opinion"; with a profile on, the value the property would have
+had without us is the pack's. Nothing else would put it back, because
+`apply_for_item` returns early for an unchanged profile ("Already wearing it")
+so the pack does not rewrite between items — so restoring pristine left the
+upscaler selected, its shaders loaded, and its debanding gone for the session.
+
+Pinned by `tests/test_picture_processing.py` (the tables, against mpv's own
+`--list-options` and `--show-profile`), `tests/integration/test_picture_options.py`
+(what mpv ends up holding, over several items) and
+`tests/test_shader_scopes.py` (the reassert on both profile paths).
+
+### `keepaspect`
+
+Owned by `set_browse_window` (off, so the library window resizes freely instead
+of snapping to the last video's shape) and `browse_yield` (on). The comic reader
+only *borrows* it. See `docs/artwork-pipeline.md` and `player_window.py` for the
+handoff ordering, which is the expensive half.
+
+## 7. Frames in system RAM
+
+The direct hardware-decoding modes hand mpv frames that live on the GPU, which a
+video filter cannot read — so where there is a filter, hardware decoding has to
+be the copy-back kind or it silently does not apply. Three sources, none a guess:
+
+- the active shader profile said so (`wants_copy_hwdec` — the pack names a
+  `-copy` mode because it knows what it will do with the frames);
+- SVP is enabled, which means a VapourSynth filter in the user's own `mpv.conf`;
+- mpv reports a filter chain. This is the general case and catches the other two
+  once playback is running, but it is asked separately because it is the only one
+  that sees a filter the app knows nothing about.
+
+Never raises: an unanswerable question means "no filter", and the cost of being
+wrong is a filter that does not apply, not a player that fails to start.
+
+## 8. mpv going away and coming back
+
+mpv is torn down and re-created across idle-quit and crash recovery. Anything
+holding the raw handle has to follow it: the OSD menu does this via
+`menu.update_player()`; the in-window UI attaches a whole renderer, so it gets
+explicit hooks.
+
+**Two phases, and the distinction is load-bearing:**
+
+- `on_mpv_gone` — the handle is no longer ours. Stop pushing to it. mpv itself
+  may still be running: terminate happens on its own thread, so this fires while
+  the process is on its way out.
+- `on_mpv_terminated` — mpv is actually dead. Only now is it safe to free
+  anything mpv reads **by address**, i.e. the in-process BGRA tile buffers.
+  Freeing them at `on_mpv_gone` time released memory a live mpv was still
+  compositing from every frame, which is a segfault on quit.
+
+`on_mpv_recreated` fires once a fresh handle is ready.
+
+### Re-opening: one build, and everyone waits for it
+
+**A re-open goes through `_reopen_mpv`, never straight to `_init_mpv`.** The new
+handle's own event thread delivers its first observed values while the build is
+still running, and through `push_playstate` the browser asks for the window
+again -- a second caller that sees `_mpv_alive` still False and, unguarded,
+builds a second mpv that nobody owns (#828).
+
+- **The build holds `_lock`, and every caller that finds mpv dead waits on
+  `_lock`**, then continues on the mpv that was built. None is dropped: a
+  dropped caller carried on as if it had a window, and the OSD menu then
+  claimed its keys on the outgoing handle -- a command after terminate, which
+  libmpv answers with a segfault.
+- **Wait *on* `_lock`; never wait for a build *while holding* it.** The first
+  version of the #828 fix had a play, which holds `_lock` across
+  `_ensure_mpv`, wait for another thread's build -- whose
+  `_bind_mpv_handlers` takes `_lock`. Deadlock.
+- **The builder must never wait on a thread that can be a caller**: the new
+  handle's event thread, the tray, the browser's render loop. That caller is
+  parked on `_lock` until the build is done. Inside `_init_mpv` nothing
+  waits on them -- after `_construct_mpv` every step is a synchronous
+  command, answered by jsonipc's reader thread (not its event thread) or by
+  the libmpv C API, and the shim registers no mpv hooks, the one way
+  libmpv's core waits on Python -- and there is no line to put that warning
+  on. A `wait_property` or a `command_async` future added to the build would
+  break it. Measured 2026-10-18 on a tray re-open: the event thread's
+  `push_playstate` reaches `set_browse_window` mid-build and waits on
+  `_lock` until the publish, then continues on the built mpv. jsonipc does
+  this unprompted; on libmpv the first callback lands after the publish,
+  so it was forced with a 1 s sleep after `_bind_mpv_handlers`. **One exception, after it:** on the play path the caller already
+  holds `_lock`, so `on_mpv_recreated` runs under it, and the browser's
+  re-attach joins the old render loop for up to 2 s (`ui.py`
+  `_join_render_loop`). A render loop parked on `_lock` makes that join time
+  out, the re-attach is skipped, and the library stays dead until the next
+  one. Measured clean and left as is: do-not-fix F55.
+- **A caller re-checks its intent after the wait.** A cast starting into a
+  closed window can hold `_lock` for the whole start, and the video wins:
+  `set_browse_window(True)` declines when `_library_showing()` is false,
+  `force_window(True)` leaves a playing video alone (the menu opens over
+  it), and the browser's `enter_browse` stops if a yield landed while its
+  controller call waited. It also reads the gateway's decline as a value
+  (`on_browse_enter` returns False): a yield that landed while the app was
+  still minimized was a no-op, so only the value says the film won. Both
+  are needed -- the value is decided when the gateway gets `_lock`, the
+  yield check sees a playstate that lands after the gateway accepted.
+- **A failed build terminates the mpv it made and re-raises** -- to the
+  builder and to every caller that was waiting on it; none builds another.
+  On a re-open a build fails when mpv cannot be built or driven: what is
+  left unguarded is construction, the pristine snapshot read,
+  `_load_classic_osc`, `_bind_mpv_handlers` and `_publish_mpv`. The shim's
+  optional setup is guarded and a failure there is tolerated (`OSDMenu` and
+  `SyncPlayManager` are built on first launch only, unguarded; first launch
+  is below). `_reopen_mpv` records the failure, not the step that failed.
+- **A failed re-open shuts the application down** -- orderly and logged,
+  through `on_reopen_failed`, which `main` wires to the same `halt` SIGTERM
+  sets, in every UI mode. Every UI goes through mpv, so without one the app
+  is a cast slot and a tray icon that cannot show anything ([iw]: "If MPV
+  fails to relaunch it should probably terminate the application"). No retry
+  is added: jsonipc's launch already retries inside construction. Nothing
+  builds another: a request after the failure is refused. First launch is
+  not a re-open and does not go through `on_reopen_failed`: any build
+  failure raises out of `PlayerManager()` at import, a mid-build shutdown
+  included (a failed build, below), as a construct failure always has. This is
+  about mpv failing to *create*, not a playback failure.
+- **A window closed during a re-open is a close, not a failed build.** Once
+  the handlers are bound it arrives as `CLOSE_WIN`, which is queued and runs
+  after the build; mpv does not shut down.
+- **A handle that shuts down mid-build is a failed build**, and its
+  terminate is the builder's: the shutdown handler only marks it, the
+  publish (`_publish_mpv`) finds the mark and raises, and `_abandon_build`
+  terminates it once nothing is writing to it any more. The handler is bound
+  to its own handle, so a replaced mpv's late shutdown cannot mark its
+  successor. The mark, the "still being built" handle and `_mpv_alive` sit
+  under `_LIFECYCLE_LOCK`, a leaf lock held only around reading and writing
+  them -- never across a terminate, a join, a property read or a thread
+  start, and never taking `_lock`. `_mpv_alive` is written only by
+  `_publish_mpv` and `_mark_mpv_dead`
+  (`tests/test_source_invariants.py:TestMpvAliveHasOneWriter`). This holds
+  for every re-open, the tray's and the menu's as well as a play's. One gap:
+  the instant before the handler is bound (do-not-fix F54).
+- **The previous mpv's terminate is joined before `_lock` is taken** on the
+  tray and menu paths. A play reaches `_reopen_mpv` already holding `_lock`
+  (`_play_media` is `@synchronous`), so its join happens under it, as it
+  always has.
+
+`_lock` is an RLock, so the builder's own thread is the one caller that would
+get past it; `_reopen_mpv` refuses that call rather than build recursively.
+
+### Discovered capabilities must outlive the mpv they were discovered on
+
+`_init_mpv` runs again on every re-creation — an idle-quit then a cast,
+`set_browse_window`, `force_window`. Re-resolving the OSC style from settings
+there put it back to `mpvtk` with no renderer behind it and `on_hud_menu` still
+None, so `toggle_settings_menu` went back to refusing: no HUD, no OSD menu, no
+way to reach either. One idle timeout undid the whole lua fallback. Hence
+`_osc_style_override`, which is applied on top of `resolve_osc_style()` and kept.
+
+Its answer feeds `mpv_scripts` and `build_mpv_options` as well, because there is
+no point handing lua scripts to an mpv already known not to run them.
+
+## 9. Waiting for a property
+
+`mpv_events.wait_property` blocks until a property satisfies a condition, on
+either backend. Four things about it are not obvious:
+
+**`skip_initial` guards against a value from the *previous* file.** Both backends
+deliver one initial property-change notification carrying the property's current
+value the instant the observer registers. When a prior file is still loaded
+(cast-while-playing, or auto-advance with `keep_open` holding the finished file),
+that value belongs to the old file. So the property is sampled at registration:
+if it already satisfies the condition it is a stale ready value and the first
+notification is dropped (mpv re-delivers the same value); if it does not, there
+is nothing stale to skip and the first qualifying notification is accepted, which
+keeps the normal first-play path working even if the file loads before the
+observer is processed.
+
+*Residual race:* if the new file finishes loading before the sample is taken, the
+sample is already fresh. The first notification is only dropped when it
+re-delivers the exact sampled value, so a fresh value that *differs* is accepted;
+only a new value equal to the stale one (same-duration reload) is
+indistinguishable, and the caller's `timeout` bounds that case.
+
+**The wait is poll-assisted, on its own daemon thread.** Besides the observer the
+property is re-read every `POLL_INTERVAL_SECS`. Observer events are the fast path;
+the poll rescues the wait when property-change delivery is lost — the external
+backend's IPC pipeline (socket reader → event queue → handler) has been seen in
+the field to drop notifications, which turned an otherwise fine playback start
+into a hard "no duration" timeout that killed the session. **Do not simplify this
+away.**
+
+It runs on its own thread because on the external backend a property read is a
+synchronous IPC command with a long internal timeout (120 s in
+python-mpv-jsonipc), so polling on the waiting thread would let a wedged mpv
+stretch the caller's deadline by minutes. This way `timeout` stays a hard bound;
+a poller blocked on a wedged read just exits late, alone.
+
+**`abort`** lets the caller give up early — used when mpv reports the file failed
+to load, where waiting out the full timeout for a duration that can never arrive
+just freezes the UI. Observed by the poll thread, so it lands within one poll
+interval rather than instantly; that turns a 30 s hang into a sub-second one. An
+aborted wait returns False, exactly like a timed-out one.
+
+**`satisfied_by`** is the mirror: an Event that ends the wait *successfully*, for
+when something other than the property proves what the caller was really waiting
+for. The playback start uses it to accept mpv's file-loaded event, because
+`duration` never arrives for a live or otherwise unbounded stream and waiting it
+out would kill a stream that is in fact playing.
+
+### When mpv says nothing at all
+
+A remote origin that stops delivering **without closing the connection** produces
+no statement of any kind: the demuxer blocks in read, so there is no end-file
+event, `eof-reached` stays False and `playback-abort` stays False. With
+`keep_open` holding the last frame mid-queue that is indistinguishable from a
+normal hold — the queue just stops forever. Reported against `.strm` items, whose
+origins are arbitrary third-party servers, but nothing about it is `.strm`-specific.
+
+The rescue deliberately requires the position to be at the **end** of the media,
+not merely frozen. A bare stall is far more likely to be rebuffering on a slow
+origin, and advancing through that would silently skip the rest of an episode — a
+worse outcome than the freeze it fixes. Items with no known duration therefore
+get no rescue, and live streams none either: a stall there is an outage, and
+"finishing" one would advance past a channel the user is still watching.
+
+## 10. Why the video settings default the way they do
+
+`conf.py` states each default at its declaration. This is the evidence behind the
+ones that are off, all of which look conservative and are not.
+
+### `hwdec` — off, following mpv rather than the other clients
+
+mpv's manual on turning it on: "acknowledge that this may cause problems", and its
+maintainers decline to default it on (**mpv#12948**) because particular vendor/GPU
+combinations are badly broken — AMD vaapi on Linux causing GPU resets, vp9 on Intel
+Macs hanging mpv before the window even opens.
+
+Jellyfin Media Player did default it on and it worked for most people. This is
+about the tail it did not work for, who are disproportionately the people on
+hardware that needed it.
+
+`over-1080p` is the option that exists because **we can do what mpv cannot**: the
+source resolution is in the DTO before playback starts, so decoding can be software
+where software is fine and hardware only where it is not. Most hardware of the last
+decade decodes 1080p without help, and often looks better doing it.
+
+### `deinterlace_auto` — off, which is also mpv's default
+
+The interlaced flag is not reliable in either direction. Plenty of interlaced DVD
+and broadcast rips are not marked, and plenty of progressive files carry the flag
+from whatever produced them. So `auto` is right much more often than it is wrong,
+but the case where it is wrong — deinterlacing progressive video — softens a picture
+that was fine.
+
+The per-session toggle in the playback HUD's gear menu is the answer for the other
+half: the file that *is* interlaced and does not say so. It lasts until the library
+comes back or the window is closed.
+
+`auto` is **mpv 0.38+**. An older build rejects the value and the setting behaves as
+off. `PlayerManager._apply_deinterlace` will **not** substitute `yes`: forcing
+deinterlacing on everything is not a degraded version of this, it is a different and
+worse setting.
+
+### `motion_interpolation` — off, and not because it is expensive
+
+This is frame **blending**, not motion compensation: it resamples along the time
+axis so a 24fps film on a 60Hz screen stops repeating frames unevenly. It does not
+synthesise motion the way SVP does. SVP was looked at and rejected — it is paid on
+Linux now, and its dependencies are heavy enough that shipping them is not on the
+table.
+
+The reason for the default is a **clock-reading problem, not a cost**. Measured on a
+9950X3D + RTX 4090, it dropped frames badly — on a *multi-monitor X11 desktop whose
+screens run at different refresh rates* (144Hz beside two at 60). That is not a
+hardware limit. From mpv's manual on `--display-fps-override`: "on multi-monitor
+systems, there is a chance that the detected value is from the wrong monitor", and
+"setting an incorrect value (even if slightly incorrect) can ruin video playback".
+All three modes follow that clock, so all three inherit the problem, and a
+mixed-refresh desktop is common enough that the default has to assume it.
+
+The first thing to try is mpv's own
+`display-fps-override=<the refresh of the screen you watch on>` in the user's
+`mpv.conf` — but that did **not** fix the machine above, so the mismatched-desktop
+case is not fully understood and this is not a workaround to promise anyone.
+Deliberately not a setting of ours either way: we would be guessing at which
+monitor, which is the thing that is already wrong.
+
+It also costs GPU on every frame, mpv reverts to audio timing on its own for
+low-framerate or VFR content, and `display-resample` adjusts audio speed to track
+the display — which is exactly what somebody bitstreaming to a receiver does not
+want.
+
+### `deband` — off, and the interesting half is *why it is a setting at all*
+
+mpv's own default is off, and this follows it. Two reasons, and neither is that
+debanding is risky:
+
+- It is **not free on content it does nothing for.** Each iteration is a GPU
+  pass. The filter only acts where neighbouring samples fall within
+  `deband-threshold`, so on detailed or grainy live action it mostly no-ops —
+  but it is *paid for* whether it acts or not, which matters on integrated
+  graphics and single-board machines at 4K. Animation is where flat gradients
+  make the pass worth having, which is why the presets are labelled by content
+  rather than by strength.
+- At a high threshold it can smear genuinely fine, low-contrast texture. That
+  is the `strong` end of the ladder, not the feature.
+
+**The shader pack already enabled debanding, and that is the gap this closes.**
+`pack.json` lists `deband-default` under `default-setting-groups`, which
+`video_profile.load_profile` applies — so debanding arrived bundled with picking
+an upscaler and left again on unload. Profiles are mutually exclusive and are
+*upscalers*, so "I want debanding and nothing else" was not reachable from the
+UI at all. See section 6 for how the two now compose.
+
+The pack's parameters are deliberately not copied: its `deband-grain: 0` is only
+correct because `static-grain-default` re-adds noise through shaders, and a
+standalone preset with grain 0 removes the masking without replacing it.
+
+**`deband-range` falls as the ladder rises**, against the grain of the other
+three. That is mpv's instruction, not a preference: the radius "increases
+linearly for each iteration", so the manual says to decrease it when raising
+`--deband-iterations`. The first version of the table raised all four together
+because a monotone ladder looked tidier, and the test asserted exactly that —
+pinning a number that contradicted the documentation it implemented.
+
+### `render_quality` — a copy of mpv's profile, not the profile
+
+`high` writes what `--profile=high-quality` sets, as individual properties. The
+reason it is a copy is that **a profile cannot be taken back**: mpv offers no way
+to read one back, which is why the shader pack lists `profile` in
+`setting-revert-ignore` and never reverts it. Applied as a profile this would be
+a setting that only turns on.
+
+The copy is checked against the installed mpv's own `--show-profile=high-quality`
+by `tests/test_picture_processing.py`, on the intersection rather than for
+equality — the suite runs against several mpv builds here and the profile has
+gained options across versions, so a shared option with a different value is
+drift and a missing one is a version.
+
+### `network_buffer` — default, and mpv's default is one second
+
+`--demuxer-readahead-secs` defaults to 1. For a client whose every file arrives
+from a remote server that is short, and it is the first thing to raise when
+playback stalls to buffer. Left at mpv's default because the cost is memory and a
+slower start, which is the wrong trade to impose on a LAN.
+
+These are read when the **demuxer starts**, so both raising and lowering land on
+the next file rather than the current one.
+
+## 11. Shader packs, the GPU API and colorspace
+
+A shader pack is not only shaders — a profile carries a list of mpv *settings*,
+and those are written straight into the live player. Three of them ask for things
+the pack is not entitled to decide, and `video_profile.py` refuses each for a
+different reason.
+
+### `gpu_api: opengl` and `fbo_format: rgba16f` are a 2020 pair
+
+default-shader-pack **84fc5df** ("Fix Windows and external MPV compatibility
+issues") added both in one commit, and the pairing is the whole explanation:
+`rgba16f` is an *OpenGL-backend* format name. The Direct3D 11 backend spells the
+same format `rgba16hf` (mpv `video/out/d3d11/ra_d3d11.c`), so on d3d11 the pack's
+value fails to initialise, mpv falls back to **dumb mode**, and dumb mode disables
+every user shader — silently, with a working picture. Pinning `opengl` made the
+format name true again, which is a workaround for the format, not a requirement of
+the shaders.
+
+Both are dropped now:
+
+- **`fbo_format`** — mpv's `auto` already tries 16-bit float first (`rgba16f`,
+  `rgba16hf`) on whichever backend is live. That is exactly what the pack was
+  asking for, spelled portably.
+- **`gpu_api: opengl`** — the shaders do not need OpenGL. mpv cross-compiles user
+  GLSL to SPIR-V, and the pack's profiles run unmodified on Vulkan and compile
+  clean through the d3d11 chain. Forcing OpenGL **costs HDR on Windows**, because
+  the autoprobe order there is d3d11, then Vulkan, then OpenGL last
+  (mpv `video/out/gpu/context.c`) — so the pin does not merely fail to help, it
+  demotes the backend past the two that can do HDR.
+
+Only that one legacy value is refused. A profile naming some *other* API means it
+— a Direct3D 11 video filter such as RTX Video Super Resolution genuinely cannot
+run on another backend — so those pass through, and the user's own
+`shader_pack_gpu_api` outranks everything.
+
+A pack may still name an API this build has no context for (a d3d11 profile read
+on Linux). mpv rejects the value outright; `load_profile` swallows that rather
+than losing the rest of the profile, because running the shaders on the API we
+already have beats raising into the menu.
+
+### `hwdec` — a naive value is a policy, a named decoder is a requirement
+
+Every profile pulls in a `hwdec-default` group setting `hwdec` to `auto-copy`.
+That is a policy — "use hardware decoding if you can" — and it is not the pack's
+to have. Author's own account: *"this was just me being risk-averse in the past."*
+
+`hwdec` is a user-facing setting that defaults **off** for the reasons in §10, up
+to and including mpv hanging before the window opens (**mpv#12948**). A shader
+profile switching it back on gets the resulting breakage attributed to the
+profile, which is the last place anyone would look. So a naive value is dropped.
+
+A *specific* decoder is different in kind. The shipped `rtx-vsr` names `d3d11va`
+because its `d3d11vpp` filter operates on Direct3D surfaces: the profile does not
+work without it, and choosing that profile **is** the opt-in. Applied, and
+remembered on the manager, so the per-item write in `_play_media` does not undo it
+on the next file.
+
+Two things outrank a pack as well as the setting, and both are checked here rather
+than left to `_play_media` — a profile writes its settings directly and would
+otherwise slip past the pin between one file and the next:
+
+- the user's own `mpv.conf`, where a pin means nothing writes the option at all;
+- `--disable-hwdec`, the recovery path for hardware decoding stopping the window
+  from opening.
+
+### The idle window keeps a stale colorspace hint (#605)
+
+**mpv only revisits the swapchain's colorspace while a video frame exists.**
+`vo_gpu_next.c`:
+
+```c
+if (target_hint && frame->current) {
+    ... set_colorspace_hint(p, &hint);
+} else if (!target_hint) {
+    ... set_colorspace_hint(p, NULL);
+}
+```
+
+`target_hint` is `--target-colorspace-hint`, and its default of `auto` resolves to
+**true** on d3d11 (that context implements `target_csp()`). So on Windows the
+first branch is the live one, and with no file loaded `frame->current` is NULL and
+*neither* branch runs. The last hint set during playback is never withdrawn — and
+it is real swapchain state, not a note: libplacebo's d3d11 backend acts on it with
+`SetColorSpace1` plus a backbuffer format change.
+
+The reproduction: play something, turn Windows HDR **on** mid-playback (mpv
+re-hints to PQ, correctly), stop, then turn HDR back **off**. Nothing re-hints, so
+mpv keeps encoding the library UI as PQ while the display reads it as sRGB —
+raised blacks and clipped highlights. Cycling HDR without ever opening the player
+is fine, which is what the report says, because the hint is never set at all.
+
+This bites us specifically because **we are one of the few things that keeps an
+mpv window on screen with no file loaded**: the library UI *is* the idle window.
+
+`player_window.suspend_colorspace_hint` parks the option at `no`, which takes the
+second branch instead, and `pl_swapchain_colorspace_hint`'s NULL maps to sRGB. The
+swapchain returns to 8-bit sRGB and stays there, letting Windows do the
+SDR-in-HDR conversion it does for every other desktop app. That is the honest
+answer regardless: the library UI is sRGB content, and hinting a swapchain toward
+a video's colorspace while no video exists is meaningless.
+
+Two scope limits, both load-bearing:
+
+- **Only while nothing is playing.** The browser stays up over music, and the
+  library can be opened over a playing video; parking the hint there would cost
+  that video its HDR passthrough, which is worse than the bug being worked around.
+- **Only the browse window.** The OSD menu's `force_window` window is torn down
+  when the menu closes, and that destroys the swapchain along with the stale hint.
+
+The suspend does nothing at all on an mpv without the option (built without
+gpu-next, or too old) — reading it is how we find that out.
+
+## 11a. The clipboard property is outdated until you ask for it
+
+**`clipboard/text` is not a live value on Linux**, and reading it as if it were
+is the whole of #739 — paste inserted nothing, for a reason that had nothing to
+do with which backends were enabled.
+
+Three facts from mpv's own source at our pin (`182fa6ca49`):
+
+- **Only `x11` and `wayland` implement `update_data`** — the two Linux backends.
+  `win32` and `mac` do not need it.
+- **`--clipboard-monitor` defaults to `no`** (`player/clipboard/clipboard.c`
+  sets no default in `clipboard_conf.defaults`), so nothing polls for changes.
+- mpv's commit adding the command (`f7f7cf18f3`, an ancestor of our pin) states
+  the contract outright: *"The client now needs to run this command to update
+  the clipboard content, otherwise the property value is outdated."*
+
+Measured on an X11 session with `JMS-CLIP-TEST-42` on the clipboard:
+
+| | `clipboard/text` |
+|---|---|
+| plain read | `[]` |
+| after `update-clipboard` | `[JMS-CLIP-TEST-42]` |
+
+So every Linux paste fell through to the `wl-paste`/`xclip`/`xsel` helpers,
+and **which helper it finds is the rest of the bug**:
+
+- **X11 session, any packaging** — `xclip` reads the same clipboard the user
+  copied into. Paste worked, which is why plenty of users saw nothing wrong.
+- **Wayland session, host install** — `wl-paste` is normally present, so it
+  worked there too.
+- **Wayland session, Flatpak** — the manifest ships `xclip` (module at
+  `flatpak/…json:90`) and **not** `wl-clipboard`, so `clip_tools` falls to
+  `xclip`, which talks to **XWayland — a different clipboard from the one the
+  user copied into**. Paste silently inserted the wrong thing or nothing.
+
+That last row is the reported case, and the shape of it — works for some
+users, not others, no error either way — is why it looked unexplained. An
+earlier version of this section said the Flatpak "ships none of them", which
+is wrong: it ships `xclip`, and shipping the *wrong* helper for the session is
+worse than shipping none, because the fallback then appears to succeed.
+
+### The wait is bounded, and the bound is the only thing protecting the UI
+
+`update-clipboard` is `{type, timeout_ms}`, `.spawn_thread = true`, and
+`cmd_update_clipboard` calls `mp_core_unlock` before waiting — so **playback is
+never affected**; only the caller waits. Measured wall-clock (`mp.get_time()`,
+not `os.clock()`, which is CPU time and reports 0.1ms for any wait):
+
+| clipboard state | timeout | actual block |
+|---|---|---|
+| healthy owner | 1–200 ms | **0.18–0.28 ms** |
+| nothing owns the selection | 10 / 50 ms | 0.27 / 0.28 ms |
+| **owner alive and not answering** | 10 / 50 / 200 ms | **10.1 / 50.1 / 200.1 ms** |
+| any | 0 ms | returns immediately, and **does not fetch** |
+
+The wait ends when the notification arrives, so the timeout is a *ceiling on a
+wedged owner* and not a budget for a working one. The unresponsive case was
+simulated with a `SIGSTOP`ped `xclip` still holding the X selection — that is
+the hang mpv designed the worker thread and `mp_cancel` around, and it is real.
+
+`renderer.lua`'s `clip_get` therefore issues it **synchronously with a 20 ms
+ceiling**: about one frame in the worst case, nothing measurable in the normal
+one. Async was the obvious alternative and is the wrong trade here — `tb_insert`
+writes to whichever textbox has focus, so a callback can land after focus moved
+or the scene was rebuilt, which is the stale-capture class `docs/browser-shell.md`
+exists to warn about. A 20 ms ceiling is the cheaper correctness.
+
+### The Flatpak does not need `wl-clipboard` — measured
+
+The obvious conclusion from the above is to ship `wl-clipboard` so the Wayland
+fallback is the *right* clipboard. **Measured, and it is not needed**, because
+with mpv from master there is no Wayland gap left for a helper to fill:
+
+| compositor | mpv backend | how the data arrives | refresh needed? |
+|---|---|---|---|
+| has `ext-data-control-v1` | `wayland` | it has `update_data` | yes — and `clip_get` sends it |
+| lacks it | `vo` | compositor pushes the selection offer | **no** |
+
+The second row is the one worth measuring, and it was: under a **headless**
+sway 1.10.1 (which advertises only `zwlr_data_control_manager_v1`, so mpv falls
+to `vo`), `clipboard/text` read `WL-CLIP-VALUE` immediately, with no
+`update-clipboard` and with mpv's own `focused` property reporting `no`. The
+`vo` backend has no `update_data` hook precisely because it does not need one.
+
+**A nested sway on X11 cannot test this and will tell you the opposite.** The
+first attempt ran sway with `WLR_BACKENDS=x11`; its host window never had
+keyboard focus from a non-interactive shell, so the seat had *no* focus at all
+(`swaymsg -t get_tree` reported zero focused nodes before mpv even started) and
+the property read `nil` forever. Use `WLR_BACKENDS=headless WLR_RENDERER=pixman`
+with `--vo=wlshm`, which owns its own seat.
+
+So the helpers stay a fallback for **mpv <= 0.41 only** — no `update-clipboard`,
+and `clipboard-x11.c` declines under Wayland unless `--clipboard-xwayland=yes`.
+The Flatpak pins master, so that case cannot arise there, and adding a
+dependency to cover it would be paying for a configuration the package cannot
+be in.
+
+### Every branch of the fork, measured
+
+The `wayland` backend needed a compositor with `ext-data-control-v1`, which
+nothing wlroots-0.18 has. **Hyprland has it** — measured by grepping the
+binaries, and it is the only such compositor packaged for Debian trixie
+(`ext_data_control_manager_v1` present in `/usr/bin/Hyprland`; absent from
+mutter 48.7, KWin 6.3.6, and everything on Debian's wlroots 0.18). Run it
+nested inside a headless sway, because aquamarine needs a seat and there is
+no logind session in a test shell.
+
+| session | mpv backend | before refresh | after refresh |
+|---|---|---|---|
+| X11 | `x11` | `[]` | correct |
+| Wayland, **no** `ext-data-control` (sway 1.10.1, KWin 6.3.6) | `vo` | **already correct** | n/a — `vo` has no `update_data` |
+| Wayland, **with** `ext-data-control` (Hyprland 0.55.2) | `wayland` | `[]` for 4.9 s straight | correct, refresh took 0.62 ms |
+
+The third row is #739's reported case. KWin gained `ext-data-control` after
+6.3.6, so a Plasma new enough to have it puts mpv on the `wayland` backend and
+the property is stale — while an older KWin lands on `vo` and works, which is
+why the same build pasted fine when smoke-tested on Debian's KWin 6.3.6 and
+failed for a reporter on Fedora KDE 44.
+
+## 12. The on-screen controls, and the user's own OSC
+
+`osc_style` is `mpvtk` (the in-window HUD), `mpv` (mpv's own OSC, or our
+fork of it before 0.41), `custom` or `none`. **`custom` is the supported way
+to run a third-party OSC** (uosc, ModernZ, ModernX): the shim loads no OSC of
+its own and keeps mpv's off, and `mpv_scripts` loads `thumbfast.lua` whenever
+the TrickPlay worker started, regardless of style, so a thumbfast-aware OSC
+gets Jellyfin's trickplay previews for free.
+
+A user OSC in `<config>/scripts/` under `mpv` is a misconfiguration, not a
+case to handle: there are then two OSCs, and since mpv names script clients
+first come first served, theirs is `osc` and ours `osc2` -- so DEL's
+`script-binding osc/visibility` cycles theirs while ours keeps drawing
+(measured for #844; the answer is `custom`).
+
+`default` is no longer a style. It is an inbound legacy value that
+`resolve_osc_style` folds into `mpv` (CONFIG_VERSION 5), and survives only as
+the meaning `build_mpv_options` still gives it. The first subsection below
+describes that mapping; the rest applies to `custom`.
+
+### libmpv turns the OSC off, and the user's mpv.conf outranks us
+
+The `osc` option defaults to **yes** — and libmpv overrides it to **no**,
+where the external backend's `player-operation-mode=cplayer` leaves it alone.
+Measured on 0.41: a bare libmpv reports `osc=False` against an
+`option-info/osc/default-value` of `True`. So under `default` the shim has to
+ask for it, or a libmpv user gets no controls from a setting that promised
+mpv's own.
+
+It asks *at construction*, in `build_mpv_options`, and the reason is
+precedence (measured; see the test named below):
+
+| set at construction | in the shim's `mpv.conf` | mpv ends up with |
+|---|---|---|
+| `osc=True` | *(nothing)* | `True` |
+| `osc=True` | `osc=no` | **`False`** |
+| *(nothing)* | *(nothing)* | `False` (libmpv default) |
+
+**`mpv.conf` wins over an option passed to the constructor** — the opposite of
+the precedence a command-line argument would get. That
+inversion is the whole mechanism: it makes `osc: True` a *default the user can
+decline*, which is what someone running their own OSC out of
+`<config>/scripts/` needs. It is a property of how the binding applies
+options, not something mpv documents, so
+`tests/test_osc_third_party.py::PrecedenceAgainstRealLibmpvTest` measures it
+against a real libmpv rather than trusting it.
+
+Writing the property onto the live player instead — which is what
+`enable_osc` used to do for every style — cannot be declined, and so it loaded
+mpv's built-in OSC underneath the user's. `enable_osc` therefore never writes
+`osc` under `default`. It still writes it for every style that answers
+the OSC question itself (`REPLACES_OSC`, which is all four now), and there the un-decline-ability is the point:
+it is how `osc=yes` in an mpv.conf is held off.
+
+### `osc` reaches mpv's own OSC and nothing else
+
+Setting the property loads and unloads mpv's built-in `osc.lua` at runtime
+(measured: `script-binding osc/visibility` appears and disappears with it). It
+says nothing to a script in `<config>/scripts/`. The lever that reaches those
+is the script-message pair every `osc.lua` fork inherits:
+
+    script-message  osc-visibility   never|auto
+    script-message  osc-idlescreen   no|yes
+
+Broadcast, not `script-message-to`: one send reaches whichever OSC is loaded,
+and a message nobody listens for costs nothing. `enable_osc` sends them for
+every style, which is what makes **"No player controls" silence a third-party
+OSC** and what gets one off the screen when the library browser opens.
+
+A send at construction is not racing the script's registration — a client
+message goes on the target client's queue and lua processes it after its main
+chunk has run (measured 8/8 with the message sent as early as the IPC socket
+existed).
+
+`osc-idlescreen` is the second half because the browse window is
+`force_window` with nothing loaded, so `idle-active` is true and a fork that
+draws the mpv logo draws it over the library. Suppressing visibility alone is
+enough for a fork that wipes every overlay it owns on hide; not every fork
+does (ModernZ keeps a second overlay for the logo and wipes only the first).
+
+**The restore is latched** (`_osc_suppressed`). Sending `auto` whenever the
+controls are wanted would fire at construction too, and overwrite a user who
+put `visibility=never` in their own OSC's config. We un-hide only what we hid,
+and the latch resets on an mpv re-create because the new mpv brings a new OSC
+at its own default.
+
+### The idle screen needs a backdrop, not a message
+
+Suppressing `osc-idlescreen` only works if it lands before the OSC's first
+draw. After that there may be no way back: ModernZ parks the logo on a
+*second* overlay (`state.logo_osd`, z=-1000, where its bar is z=+1000) and
+`render_wipe` on it lives only in `tick()`'s non-idle branches — which
+`osc-visibility never` makes unreachable, because tick returns at the top
+once `state.enabled` is false. So under "No player controls" a logo drawn
+before we spoke survives into playback; under the old `default` it survived only
+until playback started, when tick reaches a branch that wipes it. Both were
+reported, and the difference between them is what identified the overlay.
+
+Hence `osc_style: custom`, which is two things, and it took both.
+
+**A backdrop, because mpv's window colour is the wrong layer.**
+`background-color` is a **VO** colour and the idle screen is OSD drawn over
+it, so no colour we hand mpv can cover one. Something of *ours* has to paint
+the window. That is why the one theme shipping a `window_gradient` (jf-wmc)
+hid the logo when nothing else did, and `MpvtkApp._wants_opaque_backdrop`
+generalises it: under `custom` the window gets a flat `WINDOW_BG` fill at the
+bottom of the Stack even when the theme asks for no gradient.
+
+**And a z order, because the backdrop is ASS and so is the OSC.** The
+gradient is not a bitmap — `renderer.lua:draw_gradient` writes ASS events,
+and so does a `Box` — so it does not get the automatic win over OSD that
+`overlay-add` would. It beats ModernZ only because ModernZ parks its logo at
+z=-1000, below our 0. **uosc draws its whole self at z=2000**, and there an
+opaque full-window fill of ours changed nothing: measured against real uosc,
+2.2% of the window stayed inked at z=0 and 0.0% at z=3000. `mpvtk-z` raises
+the renderer's overlay for this one style. Not for the others: 2000 is also
+mpv's console showing a selectable list, and covering that is too much to
+charge everyone for a problem only a foreign OSC has.
+
+Raising it is safe in the directions that would matter. Per mpv's own
+`osd-overlay` docs the builtin OSD — subtitles included — is always *below*
+every script overlay whatever the number, and `overlay-add` bitmaps are
+always *above* every one of them. So the z reorders us against other scripts
+and against nothing else.
+
+The `osc-idlescreen` message is still sent as well: it is cheaper, and on a
+fork that honours it the logo is never drawn at all.
+
+### What a third-party OSC does not get, deliberately
+
+Trickplay works. Tracks and the queue do not, under `custom`, and neither is
+going to.
+
+**Tracks.** A foreign OSC's subtitle and audio pickers read mpv's track list,
+and two of Jellyfin's three subtitle flavours are not in it: an external
+track is `sub_add`ed only once chosen (`_ensure_external_sub`), and a
+burn-in one (`video.subtitle_enc`) exists only as a restarted transcode.
+Picking from the OSC's own list therefore cannot see them, bypasses
+`set_streams`, and so is neither reported to Jellyfin nor carried to the next
+episode by `_capture_track_memory`. `osc_bridge` is what has the whole
+picture, and the OSD menu and the HUD are what read it.
+
+**The queue.** `Media` owns the queue in Python; mpv's playlist holds the one
+item that is playing. So `playlist-next`, `${playlist}` and `playlist-pos-1`
+all read a one-entry playlist and every playlist affordance in a foreign OSC
+is inert. Pushing the queue into mpv would mean two copies of the playback
+state kept in step — across transcode restarts, queue edits and SyncPlay
+seeks — which is a large amount of new state for buttons the library and the
+HUD already provide. **[iw]**: "wontfix due to the state hell that would be
+putting our queue into MPV's."
+
+### The `thumbfast-info` payload is deliberately short
+
+Upstream thumbfast publishes `{width, height, scale_factor, disabled,
+available, socket, thumbnail, overlay_id}`. `socket` and `thumbnail` are
+artifacts of its second-mpv-instance design — an IPC socket and an output file
+— and the shim has neither, so it does not fake them. `scale_factor` is the factor
+the frame is drawn at (`thumbnail_scale`, or the display's) with
+`width`/`height` already multiplied by it, which is what upstream's means too:
+its `scale_factor` is the `dw`/`dh` enlargement. It is sent even at `1`, since
+an OSC that divides by it gets an arithmetic error on `nil` rather than a
+thumbnail.
+
+### `thumbfast-render` is not implemented; `shim-thumbfast-render` is
+
+Upstream lets an OSC draw the frame itself: it asks with empty `x`/`y` and its
+script name, and is sent a `thumbfast-render` naming a file that holds **one**
+frame. The shim's file holds a window of them (`docs/artwork-pipeline.md` §11),
+so an OSC following that contract would draw the window's first frame for every
+position — and honouring it faithfully would mean writing a single-frame file
+per frame change. So the same request is answered with
+`shim-thumbfast-render {available, file, offset, frame_width, frame_height,
+width, height, scale_factor, overlay_id}`, once per frame, with
+`available: false` when the position is outside the loaded window. An OSC
+written for upstream never registers that message and simply gets nothing.

@@ -1,0 +1,660 @@
+"""The option set mpv is constructed with.
+
+These assertions used to be untestable: the code lived in the first 170 lines
+of ``PlayerManager._init_mpv``, so reaching it meant constructing a player,
+and on the libmpv backend that opens a real window. ``mpv_options`` imports
+nothing from ``player``, so this module is cheap and side-effect free --
+which the first test pins down, because it is the property that makes the
+rest of the file possible.
+"""
+
+# Run as a script, this is what puts the repo root on sys.path -- without
+# it `jellyfin_mpv_shim` resolves to whatever is pip-installed. A no-op
+# under `discover`; tests/test_module_paths.py is the guard.
+if __name__ == "__main__":
+    import os
+    import sys
+
+    sys.path.insert(0, os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
+
+import os
+import sys
+import unittest
+
+from tests import _tmpdirs
+from unittest import mock
+
+sys.argv = [sys.argv[0]]      # importing the shim reaches args.get_args()
+
+from jellyfin_mpv_shim import mpv_options            # noqa: E402
+from jellyfin_mpv_shim.conf import settings          # noqa: E402
+from jellyfin_mpv_shim.constants import DESKTOP_ID   # noqa: E402
+
+
+class ImportIsFreeTest(unittest.TestCase):
+    def test_it_does_not_drag_in_the_player_or_a_backend(self):
+        # player.py builds its singleton at import and _init_mpv opens a
+        # window. If option assembly ever reaches back into it, this file
+        # stops being runnable without an X server and the extraction has
+        # been undone.
+        import subprocess
+
+        code = ("import sys; sys.argv=[sys.argv[0]];"
+                "import jellyfin_mpv_shim.mpv_options;"
+                "bad=[m for m in ('jellyfin_mpv_shim.player','mpv',"
+                "'python_mpv_jsonipc') if m in sys.modules];"
+                "print(','.join(bad))")
+        out = subprocess.run([sys.executable, "-c", code],
+                             capture_output=True, text=True, timeout=120)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout.strip(), "",
+                         "mpv_options pulled in a module it must not need")
+
+
+class SettingsCase(unittest.TestCase):
+    """Base that restores every settings key a test touches."""
+
+    def setUp(self):
+        self._saved = {}
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            setattr(settings, k, v)
+
+    def set(self, **kw):
+        for k, v in kw.items():
+            self._saved.setdefault(k, getattr(settings, k))
+            setattr(settings, k, v)
+
+    def build(self, style=None, scripts=(), ext_mpv=False, window=False):
+        if style is None:
+            style = mpv_options.resolve_osc_style()
+        return mpv_options.build_mpv_options(style, list(scripts), ext_mpv,
+                                             window)
+
+
+class ResolveOscStyleTest(SettingsCase):
+    def test_jellyfin_is_a_legacy_alias_for_the_hud(self):
+        self.set(osc_style="jellyfin", enable_gui=True)
+        self.assertEqual(mpv_options.resolve_osc_style(), "mpvtk")
+
+    def test_without_a_gui_there_is_nothing_to_draw_the_hud(self):
+        # The HUD is rendered by the library browser.
+        self.set(osc_style="mpvtk", enable_gui=False)
+        self.assertEqual(mpv_options.resolve_osc_style(), "mpv")
+
+    def test_no_resolution_can_leave_a_user_with_no_osc_by_accident(self):
+        """Every style that turns mpv's own OSC off must be one where either
+        we load one (`mpvtk`, `mpv`), the user asked for none (`none`), or
+        the user said they have their own (`custom`). A FALLBACK must never
+        land on the last two -- nobody chose them.
+
+        Kept as a property after `thumbnail_osc_builtin` (the fallback this
+        was written against) was deleted, because the rule outlives the
+        branch: it is what the next fallback added here has to satisfy."""
+        chosen_none = {"none", "custom"}
+        for gui in (True, False):
+            for style in ("mpvtk", "jellyfin", "default"):
+                with self.subTest(enable_gui=gui, osc_style=style):
+                    self.set(osc_style=style, enable_gui=gui)
+                    got = mpv_options.resolve_osc_style()
+                    self.assertNotIn(got, chosen_none,
+                                     "a fallback from %r landed on a "
+                                     "style that draws no controls" % style)
+
+    def test_explicit_styles_pass_through(self):
+        for style in ("mpv", "custom", "none"):
+            with self.subTest(style=style):
+                self.set(osc_style=style, enable_gui=True)
+                self.assertEqual(mpv_options.resolve_osc_style(), style)
+
+    def test_default_is_a_legacy_alias_for_mpv(self):
+        """"MPV built-in default" and "MPV UI with thumbnails" only differed
+        in who loaded the OSC, and once the shim started loading mpv's own
+        for both the difference showed up only as a bug -- nothing
+        suppressed the idle logo under "default". `_migrate` rewrites the
+        stored value at CONFIG_VERSION 5; this is what covers a hand-edited
+        conf.json, or one restored from a backup taken before it."""
+        self.set(osc_style="default", enable_gui=True)
+        self.assertEqual(mpv_options.resolve_osc_style(), "mpv")
+
+    def test_nothing_resolves_to_default_any_more(self):
+        """"default" is an inbound legacy value only.
+
+        It survived as an internal resolution for exactly one caller -- the
+        `thumbnail_osc_builtin` opt-out -- and went when that did. This is
+        the half of the deletion that is invisible from the settings screen:
+        `build_mpv_options` still maps "default" (it is a pure style ->
+        options function), so a branch quietly re-appearing here would turn
+        mpv's own OSC back on for somebody and nothing else would say so.
+
+        Every value `osc_style` can hold and both sides of the one
+        surviving fallback, rather than a sample -- the claim is about the
+        whole function, not about the branch that was removed."""
+        for style in ("mpvtk", "jellyfin", "default", "mpv", "custom",
+                      "none"):
+            for gui in (True, False):
+                with self.subTest(osc_style=style, enable_gui=gui):
+                    self.set(osc_style=style, enable_gui=gui)
+                    self.assertNotEqual(mpv_options.resolve_osc_style(),
+                                        "default")
+
+    def test_no_controls_is_not_talked_out_of_it(self):
+        """The fallback exists to find something to draw the HUD with.
+        Someone who asked for nothing has not got a problem to solve."""
+        self.set(osc_style="none", enable_gui=False)
+        self.assertEqual(mpv_options.resolve_osc_style(), "none")
+
+
+class ScriptListTest(SettingsCase):
+    def names(self, *a, **kw):
+        import os
+        return [os.path.basename(p) for p in mpv_options.mpv_scripts(*a, **kw)]
+
+    def test_load_order_is_mouse_then_thumbfast(self):
+        self.set(menu_mouse=True)
+        self.assertEqual(self.names("mpv", True),
+                         ["mouse.lua", "thumbfast.lua"])
+
+    def test_no_osc_script_is_chosen_here_any_more(self):
+        """Which classic OSC to load depends on the mpv about to be built --
+        the stock one on 0.41+, where its Preview API can drive our seek
+        previews, and the bundled fork below that. The version is not
+        knowable until the player exists (and the libmpv client API cannot
+        stand in: 0.40 and 0.41 both report 2.5), so the choice moved to
+        `PlayerManager._load_classic_osc`, right after construction.
+
+        Asserted for every style, including "mpv": a construction-time entry
+        would load the fork on top of whatever that method then chooses,
+        which is two OSCs at once."""
+        self.set(menu_mouse=False)
+        for style in ("mpv", "mpvtk", "default", "none"):
+            with self.subTest(style=style):
+                self.assertNotIn("trickplay-osc.lua", self.names(style, True))
+
+    def test_thumbfast_follows_the_worker_not_the_setting(self):
+        # A TrickPlay worker that failed to start must not advertise
+        # thumbfast to mpv; the caller passes what actually happened.
+        self.set(menu_mouse=False)
+        self.assertEqual(self.names("default", False), [])
+        self.assertEqual(self.names("default", True), ["thumbfast.lua"])
+
+    def test_mouse_script_is_opt_in(self):
+        self.set(menu_mouse=False)
+        self.assertEqual(self.names("default", False), [])
+
+
+class OscOptionTest(SettingsCase):
+    def test_the_builtin_osc_is_held_off_for_both_shim_styles(self):
+        for style in ("mpv", "mpvtk"):
+            self.assertIs(self.build(style)["osc"], False)
+
+    def test_custom_holds_it_off_too(self):
+        """"Custom OSC" says the controls are a script of the user's, so
+        mpv's own would be a second set drawn underneath -- and unlike
+        `default`, here the answer is not the user's mpv.conf to give."""
+        self.assertIs(self.build("custom")["osc"], False)
+
+    def test_no_controls_means_mpv_s_own_are_off_too(self):
+        """"none" is the only style that replaces the OSC with nothing, so
+        it is also the only one where forgetting this would leave mpv's own
+        controls as the answer to "no controls please" (#615)."""
+        self.assertIs(self.build("none")["osc"], False)
+
+    def test_default_asks_libmpv_for_the_one_it_turns_off(self):
+        """libmpv defaults `osc` off where cplayer leaves it on, so
+        "whatever your mpv would normally do" has to be asked for.
+
+        As a CONSTRUCTION option, which is the whole point: mpv.conf
+        overrides one of those, so a user running their own OSC out of
+        <config>/scripts/ can still say `osc=no`. Writing the property onto
+        the live player instead loaded mpv's built-in OSC underneath theirs.
+        docs/mpv-backends.md section 12."""
+        self.assertIs(self.build("default")["osc"], True)
+
+    def test_external_mpv_needs_no_help(self):
+        # It already asks for player-operation-mode=cplayer, where the
+        # option defaults on -- and there these become command-line
+        # arguments, which OUTRANK the user's mpv.conf rather than
+        # deferring to it.
+        self.set(mpv_ext=True)
+        self.assertNotIn("osc", self.build("default", ext_mpv=True))
+
+
+class ScriptPassingTest(SettingsCase):
+    def test_external_mpv_takes_a_list(self):
+        self.set(mpv_ext=True)
+        opts = self.build("default", ["a.lua", "b.lua"])
+        self.assertEqual(opts["script"], ["a.lua", "b.lua"])
+        self.assertNotIn("scripts", opts)
+
+    def test_libmpv_takes_a_joined_string(self):
+        # The platform is mocked for the same reason its Windows twin below
+        # mocks it: build_mpv_options picks the separator from sys.platform,
+        # so an unmocked assertion here is only true on the half of the
+        # world that is not Windows -- where it read as a product failure.
+        self.set(mpv_ext=False)
+        with mock.patch.object(sys, "platform", "linux"):
+            opts = self.build("default", ["a.lua", "b.lua"])
+        self.assertEqual(opts["scripts"], "a.lua:b.lua")
+        self.assertNotIn("script", opts)
+
+    def test_windows_joins_on_semicolons(self):
+        self.set(mpv_ext=False)
+        with mock.patch.object(sys, "platform", "win32"):
+            self.assertEqual(self.build("default", ["a.lua", "b.lua"])["scripts"],
+                             "a.lua;b.lua")
+
+    def test_no_scripts_means_neither_key(self):
+        opts = self.build("default", [])
+        self.assertNotIn("script", opts)
+        self.assertNotIn("scripts", opts)
+
+
+class BundledCpluginTest(SettingsCase):
+    """#772: the Flatpak ships `mpv_inhibit_gnome.so`, the manifest grants it
+    `org.gnome.SessionManager`, and it has never loaded -- measured as zero
+    `Inhibit` calls during playback on the shipped 3.0.0 build.
+
+    Both halves are asserted because neither works alone: the explicit path
+    (because `config_dir` stops mpv scanning for it) and the `RTLD_GLOBAL`
+    promote (because python-mpv loads libmpv `RTLD_LOCAL`, so the plugin fails
+    with `undefined symbol: mpv_observe_property`).
+    """
+
+    def _sandbox(self, *names):
+        """A Flatpak with these files in its cplugin directory."""
+        root = _tmpdirs.tmpdir("jms-flatpak-")
+        for name in names:
+            # Binary: these are empty marker files, not text
+            # (tests/test_no_platform_text_reads.py).
+            open(os.path.join(root, name), "wb").close()
+        marker = os.path.join(root, ".flatpak-info")
+        open(marker, "wb").close()
+        return (mock.patch.object(mpv_options, "FLATPAK_MARKER", marker),
+                mock.patch.object(mpv_options, "FLATPAK_CPLUGIN_DIR", root),
+                root)
+
+    def test_inside_the_flatpak_the_plugin_is_named_and_libmpv_promoted(self):
+        marker, plugin_dir, root = self._sandbox("mpv_inhibit_gnome.so")
+        self.set(mpv_ext=False)
+        with marker, plugin_dir, \
+                mock.patch.object(mpv_options.ctypes, "CDLL") as cdll, \
+                mock.patch.object(sys, "platform", "linux"):
+            opts = self.build("default", ["a.lua"])
+
+        self.assertEqual(
+            "a.lua:" + os.path.join(root, "mpv_inhibit_gnome.so"),
+            opts["scripts"],
+            "the bundled cplugin was not named, so config_dir keeps mpv from "
+            "ever scanning for it")
+        cdll.assert_called_once_with("libmpv.so.2",
+                                     mode=mpv_options.ctypes.RTLD_GLOBAL)
+
+    def test_outside_a_flatpak_nothing_happens(self):
+        """The control, and the reason this is a constant rather than a check
+        of `/.flatpak-info` inline: every other install must be untouched."""
+        self.set(mpv_ext=False)
+        with mock.patch.object(mpv_options, "FLATPAK_MARKER",
+                               "/nonexistent/.flatpak-info"), \
+                mock.patch.object(mpv_options.ctypes, "CDLL") as cdll, \
+                mock.patch.object(sys, "platform", "linux"):
+            opts = self.build("default", ["a.lua"])
+
+        self.assertEqual("a.lua", opts["scripts"])
+        self.assertFalse(cdll.called, "libmpv was promoted outside a Flatpak")
+
+    def test_the_external_backend_loads_its_own(self):
+        """A real mpv binary scans for and loads its own cplugins, and there
+        is no in-process libmpv whose symbols could need promoting."""
+        marker, plugin_dir, root = self._sandbox("mpv_inhibit_gnome.so")
+        self.set(mpv_ext=True)
+        with marker, plugin_dir, \
+                mock.patch.object(mpv_options.ctypes, "CDLL") as cdll:
+            opts = self.build("default", ["a.lua"], ext_mpv=True)
+
+        self.assertEqual(["a.lua"], opts["script"])
+        self.assertFalse(cdll.called)
+
+    def test_no_libmpv_to_promote_means_no_plugin(self):
+        """Naming a cplugin that cannot resolve its symbols only makes mpv
+        fail louder, so the two go together or not at all."""
+        marker, plugin_dir, _root = self._sandbox("mpv_inhibit_gnome.so")
+        self.set(mpv_ext=False)
+        with marker, plugin_dir, \
+                mock.patch.object(mpv_options.ctypes, "CDLL",
+                                  side_effect=OSError("no libmpv")), \
+                mock.patch.object(sys, "platform", "linux"):
+            opts = self.build("default", ["a.lua"])
+
+        self.assertEqual("a.lua", opts["scripts"])
+
+    def test_an_empty_plugin_directory_adds_nothing(self):
+        marker, plugin_dir, _root = self._sandbox()
+        self.set(mpv_ext=False)
+        with marker, plugin_dir, \
+                mock.patch.object(mpv_options.ctypes, "CDLL") as cdll, \
+                mock.patch.object(sys, "platform", "linux"):
+            opts = self.build("default", ["a.lua"])
+
+        self.assertEqual("a.lua", opts["scripts"])
+        self.assertFalse(cdll.called)
+
+
+class ConfigDirTest(SettingsCase):
+    def test_the_shim_config_is_used_by_default(self):
+        self.set(mpv_ext=False, mpv_ext_no_ovr=True)
+        self.assertIs(self.build("default")["config"], True)
+
+    def test_external_mpv_can_keep_its_own_config(self):
+        # Both halves are required: no_ovr only applies to external mpv.
+        self.set(mpv_ext=True, mpv_ext_no_ovr=True)
+        opts = self.build("default")
+        self.assertNotIn("config", opts)
+        self.assertNotIn("config_dir", opts)
+
+
+class TlsTest(SettingsCase):
+    def test_a_cert_needs_its_key_to_take_effect(self):
+        self.set(tls_client_cert="c.pem", tls_client_key=None,
+                 tls_server_ca=None)
+        self.assertNotIn("tls_cert_file", self.build("default"))
+
+    def test_a_pair_is_passed_through(self):
+        self.set(tls_client_cert="c.pem", tls_client_key="k.pem",
+                 tls_server_ca=None)
+        opts = self.build("default")
+        self.assertEqual(opts["tls_cert_file"], "c.pem")
+        self.assertEqual(opts["tls_key_file"], "k.pem")
+        self.assertNotIn("tls_ca_file", opts)
+
+    def test_a_ca_is_only_read_alongside_a_pair(self):
+        self.set(tls_client_cert=None, tls_client_key=None,
+                 tls_server_ca="ca.pem")
+        self.assertNotIn("tls_ca_file", self.build("default"))
+
+
+class AudioDeviceTest(SettingsCase):
+    """The device is applied LIVE, never at construction — and this is the
+    test that says so, because doing both looks harmless and is not.
+
+    apply_audio_settings snapshots mpv's device before overwriting it, so
+    that choosing Default later can put it back. Constructing mpv with the
+    device too means that snapshot records our own value as the original: on
+    the next run, Default restored the device it was trying to leave, and the
+    setting could only be undone by editing the config by hand.
+    """
+
+    def test_the_device_is_not_a_construction_option(self):
+        self.set(audio_device="alsa/iec958:CARD=X,DEV=0", audio_exclusive=True)
+        opts = self.build("default")
+        self.assertNotIn("audio_device", opts)
+        self.assertNotIn("audio_exclusive", opts)
+
+    def test_nothing_appears_when_unset_either(self):
+        self.set(audio_device=None, audio_exclusive=False)
+        opts = self.build("default")
+        self.assertNotIn("audio_device", opts)
+        self.assertNotIn("audio_exclusive", opts)
+
+
+class WindowGeometryTest(SettingsCase):
+    def test_unset_sizes_fall_back_to_a_browsable_default(self):
+        self.set(window_width=None, window_height=None, window_maximized=False)
+        self.assertEqual(self.build("default")["geometry"], "1280x720")
+
+    def test_absurdly_small_sizes_are_clamped(self):
+        # A stored geometry small enough to make the browser unusable is
+        # more likely corruption than intent.
+        self.set(window_width=1, window_height=1, window_maximized=False)
+        self.assertEqual(self.build("default")["geometry"], "320x240")
+
+    def test_mpv_is_stopped_from_resizing_the_shared_window(self):
+        self.assertIs(self.build("default")["auto_window_resize"], False)
+
+    def test_maximized_is_opt_in(self):
+        self.set(window_width=None, window_height=None, window_maximized=True)
+        self.assertIs(self.build("default")["window_maximized"], True)
+        self.set(window_maximized=False)
+        self.assertNotIn("window_maximized", self.build("default"))
+
+
+class ForceWindowTest(SettingsCase):
+    def test_the_hud_style_asks_for_a_window_when_the_browser_wants_one(self):
+        self.assertIs(self.build("mpvtk", window=True)["force_window"], True)
+
+    def test_it_is_withheld_when_the_browser_does_not(self):
+        self.assertNotIn("force_window", self.build("mpvtk", window=False))
+
+    def test_other_styles_never_ask(self):
+        # Without the in-window UI there is nothing to show in an empty
+        # window; loading a file raises the VO by itself.
+        for style in ("mpv", "default"):
+            self.assertNotIn("force_window", self.build(style, window=True))
+
+
+class DesktopHintsTest(SettingsCase):
+    def test_x11_hints_are_set_where_they_exist(self):
+        with mock.patch.object(sys, "platform", "linux"):
+            opts = self.build("default")
+        self.assertEqual(opts["x11_name"], DESKTOP_ID)
+        self.assertEqual(opts["wayland_app_id"], DESKTOP_ID)
+
+    def test_they_are_withheld_where_mpv_would_reject_them(self):
+        # --x11-name only exists in X11-enabled builds; passing it makes mpv
+        # exit at startup rather than raise something recoverable.
+        for plat in ("win32", "darwin"):
+            with mock.patch.object(sys, "platform", plat):
+                opts = self.build("default")
+            self.assertNotIn("x11_name", opts)
+            self.assertNotIn("wayland_app_id", opts)
+
+
+class ExternalMpvTest(SettingsCase):
+    def test_the_ipc_block_is_backend_gated(self):
+        self.set(mpv_ext_start=True, mpv_ext_ipc="/tmp/sock",
+                 mpv_ext_start_retries=3, mpv_ext_start_retry_delay_ms=100,
+                 mpv_ext_path="/usr/bin/mpv")
+        opts = self.build("default", ext_mpv=True)
+        self.assertEqual(opts["ipc_socket"], "/tmp/sock")
+        self.assertEqual(opts["mpv_location"], "/usr/bin/mpv")
+        self.assertEqual(opts["player-operation-mode"], "cplayer")
+        self.assertEqual(opts["start_retries"], 3)
+        self.assertNotIn("ipc_socket", self.build("default", ext_mpv=False))
+
+    def test_mpv_does_not_inherit_our_stdout(self):
+        """A terminated mpv can outlive `MPV.terminate()`, and while it does
+        it holds every handle it inherited. Anything reading our output then
+        never sees EOF: the integration matrix's whole-suite leg hung on
+        exactly that, indefinitely on Windows, where there is no process
+        group for the runner to kill instead.
+
+        `--terminal=no` is why this looks unnecessary -- mpv never writes to
+        those handles. Holding them open is the whole problem."""
+        opts = self.build("default", ext_mpv=True)
+        self.assertIs(opts["discard_output"], True)
+        # libmpv is in-process: there is no child, and the option is not
+        # one mpv itself knows.
+        self.assertNotIn("discard_output", self.build("default", ext_mpv=False))
+
+    def test_an_unset_path_lets_the_library_find_mpv(self):
+        self.set(mpv_ext_path=None)
+        with mock.patch("platform.system", return_value="Linux"):
+            self.assertIsNone(mpv_options.mpv_binary_location())
+
+    def test_the_frozen_mac_build_ships_its_own(self):
+        self.set(mpv_ext_path=None)
+        with mock.patch("platform.system", return_value="Darwin"), \
+                mock.patch.object(sys, "frozen", True, create=True):
+            self.assertIsNotNone(mpv_options.mpv_binary_location())
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class HwdecTest(SettingsCase):
+    """Hardware decoding — the setting, and the policy behind "over-1080p".
+
+    Off by default, following mpv rather than the other Jellyfin clients:
+    mpv's manual says to "acknowledge that this may cause problems" and its
+    maintainers decline to enable it by default (mpv#12948), because
+    particular vendor/GPU combinations are badly broken. "over-1080p" is
+    the option only *this* client can offer — the source resolution is in
+    the DTO before playback starts, so decoding can be software where
+    software is fine.
+    """
+
+    def test_the_default_is_software_decoding(self):
+        self.assertEqual(settings.hwdec, "no")
+        self.assertEqual(mpv_options.hwdec_for(2160), "no")
+
+    def test_the_static_modes_ignore_the_height(self):
+        for mode, expected in (("no", "no"), ("auto", "auto"),
+                               ("auto-copy", "auto-copy")):
+            self.set(hwdec=mode)
+            for height in (None, 480, 1080, 2160):
+                self.assertEqual(mpv_options.hwdec_for(height), expected,
+                                 "%s at %r" % (mode, height))
+
+    def test_the_threshold_is_strictly_above_1080(self):
+        # 1920x1080 decodes in software and 4K does not, which is the line
+        # the setting is named after.
+        self.set(hwdec="over-1080p")
+        self.assertEqual(mpv_options.hwdec_for(1080), "no")
+        self.assertEqual(mpv_options.hwdec_for(1081), "auto")
+        self.assertEqual(mpv_options.hwdec_for(2160), "auto")
+
+    def test_an_unknown_height_stays_on_software(self):
+        """Audio, a photo, or anything the server did not probe. Starting a
+        file with hardware decoding already on and turning it off is the
+        wrong way round — decoder init is where the bad paths hang."""
+        self.set(hwdec="over-1080p")
+        for height in (None, 0, "", "not a number"):
+            self.assertEqual(mpv_options.hwdec_for(height), "no",
+                             "height=%r" % (height,))
+
+    def test_a_hand_edited_value_falls_back_to_software(self):
+        # Handing an unknown string to mpv fails the option at
+        # construction, which takes the whole player with it.
+        self.set(hwdec="turbo-mode")
+        with self.assertLogs("mpv_options", level="WARNING"):
+            self.assertEqual(mpv_options.hwdec_for(2160), "no")
+
+    def test_the_construction_default_is_software_for_the_threshold_mode(self):
+        # Nothing is loaded at construction, so there is no height to judge;
+        # _play_media raises it per file.
+        self.set(hwdec="over-1080p")
+        self.assertEqual(self.build()["hwdec"], "no")
+
+    def test_a_static_mode_reaches_the_option_dict(self):
+        self.set(hwdec="auto-copy")
+        self.assertEqual(self.build()["hwdec"], "auto-copy")
+
+    def test_the_cli_override_beats_every_mode(self):
+        """`--disable-hwdec` is the recovery path for hardware decoding
+        stopping the window opening at all, so nothing may outrank it."""
+        for mode in ("auto", "auto-copy", "over-1080p"):
+            self.set(hwdec=mode)
+            with mock.patch.object(mpv_options, "hwdec_for",
+                                   mpv_options.hwdec_for):
+                with mock.patch("jellyfin_mpv_shim.args.get_args") as ga:
+                    ga.return_value = mock.Mock(disable_hwdec=True)
+                    self.assertEqual(mpv_options.hwdec_for(2160), "no", mode)
+
+    def test_it_survives_argument_parsing_being_unavailable(self):
+        # Imported bare in tests and tools; a missing override is "no
+        # override", never a crash on the playback path.
+        self.set(hwdec="auto")
+        with mock.patch("jellyfin_mpv_shim.args.get_args",
+                        side_effect=RuntimeError("no argv")):
+            self.assertEqual(mpv_options.hwdec_for(2160), "auto")
+
+
+class SourceHeightTest(unittest.TestCase):
+    """What `over-1080p` judges. Read off the MediaSource, not the item: an
+    item with several versions has one height per version, and the one
+    playing is the one whose decoding is at stake."""
+
+    def _height(self, source):
+        from jellyfin_mpv_shim.player import _source_height
+        return _source_height(mock.Mock(media_source=source))
+
+    def test_it_reads_the_video_stream(self):
+        self.assertEqual(self._height({"MediaStreams": [
+            {"Type": "Audio", "Height": 999},
+            {"Type": "Video", "Height": 2160}]}), 2160)
+
+    def test_an_audio_only_source_has_no_height(self):
+        self.assertIsNone(self._height({"MediaStreams": [
+            {"Type": "Audio", "Channels": 2}]}))
+
+    def test_degenerate_sources(self):
+        for source in ({}, None, {"MediaStreams": []},
+                       {"MediaStreams": [{"Type": "Video"}]}):
+            self.assertIsNone(self._height(source), repr(source))
+
+
+class HwdecConfigPinTest(SettingsCase):
+    """The user's own mpv.conf outranks everything here.
+
+    Silently overriding an option somebody wrote into mpv.conf is the
+    failure this whole feature is downstream of, so where the file speaks
+    the app writes nothing at all — `hwdec_for` answers None and both
+    callers treat that as "leave it alone", which keeps mpv's own config
+    precedence intact instead of modelling it here.
+    """
+
+    def _with_conf(self, text):
+        import tempfile
+        import os
+        d = _tmpdirs.tmpdir("jms-mpvopts-")
+        path = os.path.join(d, "mpv.conf")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return mock.patch("jellyfin_mpv_shim.conffile.get",
+                          return_value=path)
+
+    def test_no_pin_when_the_file_says_nothing(self):
+        with self._with_conf("# nothing here\nvolume=80\n"):
+            self.assertIsNone(mpv_options.hwdec_pinned_by_config())
+
+    def test_a_plain_setting_pins(self):
+        with self._with_conf("hwdec=vaapi\n"):
+            self.assertEqual(mpv_options.hwdec_pinned_by_config(), "vaapi")
+
+    def test_spacing_dashes_and_quotes(self):
+        for line in ('hwdec = vaapi', '--hwdec=vaapi', 'hwdec="vaapi"',
+                     "hwdec='vaapi'", 'hwdec=vaapi   # why not'):
+            with self._with_conf(line + "\n"):
+                self.assertEqual(mpv_options.hwdec_pinned_by_config(),
+                                 "vaapi", line)
+
+    def test_a_commented_out_line_is_not_a_pin(self):
+        with self._with_conf("#hwdec=vaapi\n"):
+            self.assertIsNone(mpv_options.hwdec_pinned_by_config())
+
+    def test_a_profile_section_is_not_a_pin(self):
+        """mpv profile sections are conditional. Reading one as
+        unconditional would pin on a value that may never apply, and the
+        safe direction is to leave the setting working — mpv's own
+        precedence still applies the profile where it fires."""
+        with self._with_conf("volume=80\n\n[hq]\nhwdec=vaapi\n"):
+            self.assertIsNone(mpv_options.hwdec_pinned_by_config())
+
+    def test_a_pin_stops_us_writing_the_option_at_all(self):
+        self.set(hwdec="auto")
+        with self._with_conf("hwdec=vaapi\n"):
+            self.assertIsNone(mpv_options.hwdec_for(2160))
+            self.assertNotIn("hwdec", self.build())
+
+    def test_a_pin_outranks_the_copy_upgrade_too(self):
+        self.set(hwdec="auto")
+        with self._with_conf("hwdec=nvdec\n"):
+            self.assertIsNone(mpv_options.hwdec_for(2160, needs_copy=True))
+
+    def test_an_unreadable_config_is_not_a_pin(self):
+        with mock.patch("jellyfin_mpv_shim.conffile.get",
+                        side_effect=OSError("gone")):
+            self.assertIsNone(mpv_options.hwdec_pinned_by_config())

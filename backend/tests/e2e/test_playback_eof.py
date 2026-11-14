@@ -1,0 +1,224 @@
+"""End-of-file edges, against a real server.
+
+The three historically worst of them, each with an issue behind it and each
+reproducible only with a server on the other end:
+
+* the **last** item in a queue, which ends via `playback-abort` rather than
+  `eof-reached` because there is no next file for `keep_open` to hold on —
+  the path that decides whether finishing a series marks the finale watched;
+* a **seek to the very end** (#541), where the historic complaint is that the
+  end-of-file notification never arrives at all when you skip into it rather
+  than play into it;
+* **replaying something already finished** (#157, closed #323), which used to
+  start at EOF, mark itself watched again and skip straight past.
+
+Each class owns its own series, so nothing here depends on execution order —
+and each resets that series' playstate in `setUp` as well as on cleanup, so a
+previous run that died halfway cannot change the outcome either.
+"""
+
+import os
+import sys
+import time
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _e2e  # noqa: E402
+
+
+class _ShowCase(_e2e.E2ETestCase):
+    """A case that owns one series. Subclasses set `SHOW` (and `SEASON`)."""
+
+    SHOW = None
+    SEASON = 1
+    NEEDED = 2
+
+    def setUp(self):
+        super().setUp()
+        self.eps = self.session.episodes(self.SHOW, season=self.SEASON)
+        self.assertGreaterEqual(
+            len(self.eps), self.NEEDED,
+            "%s needs %d episodes" % (self.SHOW, self.NEEDED))
+        self.ep_ids = [e["Id"] for e in self.eps]
+        # Reset in setUp, not only on cleanup: a run that died halfway would
+        # otherwise leave this series watched and change what the next run
+        # measures. This is what makes the suite order-independent.
+        self.session.reset_played(*self.ep_ids)
+        self.addCleanup(self.session.reset_played, *self.ep_ids)
+
+    def play_queue(self, ids, seq=0):
+        media = _e2e.build_media(self.session, ids, seq=seq)
+        video = media.video
+        self.assertIsNotNone(video, "Media built no video")
+        self.pm.play(video, is_initial_play=True)
+        self.assertTrue(self.pm._player.duration,
+                        "real mpv never reported a duration")
+        return video
+
+    def assert_played(self, item_id, msg, timeout=20):
+        got = _e2e.wait_for(
+            lambda: self.session.user_data(item_id).get("Played"),
+            timeout=timeout)
+        self.assertTrue(got, msg)
+
+
+@_e2e.require_server_and_mpv
+class WindowTitleTest(_ShowCase):
+    """The window stops naming what you just watched (#647).
+
+    `force-media-title` is an option, not a per-file property, so it outlives
+    the file: stopping unloads the file and `media-title` still answers with
+    it. The window went on saying "Some Episode - Jellyfin MPV Shim" over the
+    library screen for the rest of the session.
+
+    Needs a real mpv, and this is why: the whole question is what mpv's own
+    `media-title` says *after* the file is gone, which no fake can answer.
+    It is also why the clear happens after the `stop` command rather than
+    before — with a file still loaded, clearing the forced title does not
+    empty `media-title`, it falls back to the file's own metadata title or
+    its path, which for us is a stream URL. Ordering asserted below by
+    checking the title never mentions the URL either.
+    """
+
+    SHOW = "Absolute Numbering Show"
+    NEEDED = 1
+
+    def media_title(self):
+        title = self.pm._player.media_title
+        return "" if title is None else str(title)
+
+    def test_playback_names_the_item(self):
+        """The premise. Without this the tests below pass on a title that
+        was never set in the first place."""
+        video = self.play_queue([self.eps[0]["Id"]])
+        self.assertEqual(self.media_title(), video.get_proper_title(),
+                         "playback did not put the item in the window title")
+
+    def test_stopping_puts_the_title_back(self):
+        """...and it must STAY back, not merely arrive there.
+
+        `stop` unloads asynchronously, so `media-title` can still report the
+        outgoing item for a few tens of milliseconds after the command
+        returns. Measured on real mpv: 'Pilot' at t=0, None by t=50ms, still
+        None at 1.6s. Asserting immediately made this an intermittent failure
+        on BOTH backends -- it was filed as a jsonipc bug on the strength of
+        one sample -- for a flash the user cannot see.
+
+        So: wait for it, then assert it stays. The waiting half keeps the test
+        off the race; the second read is what still fails if the title is
+        genuinely stuck, which is the thing worth knowing.
+        """
+        self.play_queue([self.eps[0]["Id"]])
+        self.pm.stop()
+        cleared = _e2e.wait_for(lambda: not self.media_title())
+        self.assertTrue(
+            cleared,
+            "the window still names the stopped item, so the title reads "
+            "as though it were still playing while the library is up")
+        time.sleep(0.25)
+        self.assertEqual(
+            self.media_title(), "",
+            "the title cleared and then came back, which is the shim "
+            "re-setting it rather than mpv settling")
+
+    def test_the_end_of_a_queue_puts_the_title_back(self):
+        """The other end-of-playback path, and the one nothing else follows:
+        the queue runs out on its own, so no stop() is ever called."""
+        self.play_queue([self.eps[0]["Id"]])
+        finished = self.pump_until(lambda: self.pm._video is None, timeout=45)
+        self.assertTrue(finished, "the item never finished")
+        self.assertEqual(self.media_title(), "",
+                         "the window still names the finished item")
+
+    def test_the_stream_url_never_becomes_the_title(self):
+        """Clearing the forced title too early falls back to the path. A
+        stream URL in the window title is worse than a stale name: it is
+        long, it is ugly, and depending on the auth path it can carry a
+        token."""
+        self.play_queue([self.eps[0]["Id"]])
+        self.pm.stop()
+        title = self.media_title()
+        self.assertNotIn("http", title.lower())
+        self.assertNotIn("/videos/", title.lower())
+
+
+@_e2e.require_server_and_mpv
+class SeekToEndTest(_ShowCase):
+    """#541 — skipping to the end must fire EOF, not park there.
+
+    The reported symptom is a queue that stops instead of advancing. The
+    integration suite covers this against a local clip; the point of doing it
+    again here is that the bytes now arrive over HTTP from the server, which
+    is where the reporters were.
+    """
+
+    SHOW = "Flat Show No Season Folders"
+
+    def test_seeking_to_the_end_advances_the_queue(self):
+        self.play_queue(self.ep_ids[:2])
+        duration = self.pm._player.duration
+        self.assertTrue(duration and duration > 1)
+
+        self.pm.seek(max(duration - 0.3, 0), absolute=True, exact=True)
+
+        advanced = self.pump_until(
+            lambda: self.pm._video is not None
+            and self.pm._video.item_id == self.ep_ids[1],
+            timeout=45)
+        self.assertTrue(
+            advanced, "a seek to the end did not fire EOF / advance the queue")
+        self.assert_played(
+            self.ep_ids[0],
+            "the episode we seeked to the end of was not marked watched")
+
+
+@_e2e.require_server_and_mpv
+class ReplayFinishedTest(_ShowCase):
+    """#157 / #323 — replaying a finished episode starts at the start.
+
+    The failure was that it resumed at EOF, remarked itself watched and
+    skipped straight to the next one, so choosing to rewatch something played
+    the episode after it. Reported external-mpv-only, which is why this runs
+    on both legs.
+    """
+
+    SHOW = "Show With Missing Episodes"
+
+    def test_replaying_a_watched_episode_does_not_skip_it(self):
+        # 1) Finish it for real, so the replay starts from the state the
+        #    reporters were in rather than from a flag we set by hand.
+        self.play_queue([self.ep_ids[0]])
+        self.pump_until(lambda: self.pm._video is None
+                        or (self.pm._player.playback_time or 0) >= 9.0,
+                        timeout=45)
+        self.pm.send_timeline()
+        self.pm.stop()
+        self.assert_played(self.ep_ids[0],
+                           "the episode never became watched, so the replay "
+                           "below would not be testing anything")
+
+        # 2) Play it again, with a next episode queued behind it — the bug
+        #    needs somewhere to skip *to* in order to be visible.
+        video = self.play_queue(self.ep_ids[:2])
+        self.assertEqual(video.item_id, self.ep_ids[0])
+
+        started_near_zero = _e2e.wait_for(
+            lambda: (self.pm._player.playback_time or 0) < 3.0, timeout=10)
+        self.assertTrue(started_near_zero,
+                        "the replay did not start near the beginning")
+
+        # 3) It must still be on the same episode a few seconds later. A skip
+        #    was instant, so this does not need the full runtime to catch it.
+        self.pump_until(lambda: False, timeout=4)
+        self.assertIsNotNone(self.pm._video, "playback stopped during a replay")
+        self.assertEqual(
+            self.pm._video.item_id, self.ep_ids[0],
+            "replaying a watched episode skipped to the next one")
+        self.assertLess(
+            self.pm._player.playback_time or 0, 9.0,
+            "the replay is sitting at the end of the file rather than "
+            "playing it")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="FluentFin.Views.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:cc="using:CommunityToolkit.WinUI.Converters"
+    xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
+    xmlns:ctkl="using:CommunityToolkit.Labs.WinUI"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dwui="using:DevWinUI"
+    xmlns:generic="using:System.Collections.Generic"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:local="using:FluentFin.Views"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:services="using:FluentFin.Core.Contracts.Services"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Page"
+    Margin="{StaticResource MediumLeftRightMargin}"
+    KeyboardAcceleratorPlacementMode="Hidden"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <cc:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <cc:StringFormatConverter x:Key="StringFormatConverter" />
+    </Page.Resources>
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator Key="N" Invoked="NextUpInvoked" />
+        <KeyboardAccelerator Key="C" Invoked="ContinueInvoked" />
+    </Page.KeyboardAccelerators>
+
+    <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
+        <ctk:Case Value="False">
+            <ScrollViewer Margin="0,36" VerticalScrollBarVisibility="Hidden">
+                <StackPanel Spacing="20">
+                    <StackPanel Padding="12,0,0,0" Visibility="{x:Bind ViewModel.HasContinueItems, Converter={StaticResource BoolToVisibilityConverter}, Mode=OneWay}">
+
+                        <TextBlock
+                            Margin="{StaticResource SmallTopBottomMargin}"
+                            Style="{StaticResource TitleTextBlockStyle}"
+                            Text="Continue Watching" />
+
+                        <ScrollViewer
+                            HorizontalScrollBarVisibility="Hidden"
+                            HorizontalScrollMode="Enabled"
+                            VerticalScrollBarVisibility="Disabled"
+                            VerticalScrollMode="Disabled">
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.ContinueItems, Mode=OneWay}">
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BaseItemViewModel">
+                                        <lc:BaseItemDtoCard
+                                            Width="390"
+                                            Height="240"
+                                            BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Thumb, 192)}"
+                                            ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Thumb, 192)}"
+                                            JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
+                                            Model="{x:Bind}" />
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                                <ItemsRepeater.Layout>
+                                    <StackLayout Orientation="Horizontal" Spacing="0" />
+                                </ItemsRepeater.Layout>
+                            </ItemsRepeater>
+                        </ScrollViewer>
+                    </StackPanel>
+
+                    <StackPanel Padding="12,0,0,0" Visibility="{x:Bind ViewModel.HasNextUpItems, Converter={StaticResource BoolToVisibilityConverter}, Mode=OneWay}">
+                        <TextBlock
+                            Margin="{StaticResource SmallTopBottomMargin}"
+                            Style="{StaticResource TitleTextBlockStyle}"
+                            Text="Next Up" />
+
+                        <ScrollViewer
+                            HorizontalScrollBarVisibility="Hidden"
+                            HorizontalScrollMode="Enabled"
+                            VerticalScrollBarVisibility="Disabled"
+                            VerticalScrollMode="Disabled">
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.NextUpItems, Mode=OneWay}">
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BaseItemViewModel">
+                                        <lc:BaseItemDtoCard
+                                            Width="390"
+                                            Height="240"
+                                            BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Thumb, 192)}"
+                                            ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Thumb, 192)}"
+                                            JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
+                                            Model="{x:Bind}" />
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                                <ItemsRepeater.Layout>
+                                    <StackLayout Orientation="Horizontal" />
+                                </ItemsRepeater.Layout>
+                            </ItemsRepeater>
+                        </ScrollViewer>
+                    </StackPanel>
+
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.RecentItems, Mode=OneWay}">
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NamedQueryResult">
+                                <lc:PagedScrollView
+                                    Margin="{StaticResource SmallLeftRightMargin}"
+                                    Header="{x:Bind Library.Name, Converter={StaticResource StringFormatConverter}, ConverterParameter='{}Recently Added In {0}'}"
+                                    Items="{x:Bind Items}"
+                                    JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
+                                    Tag="{x:Bind Library}" />
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                        <ItemsRepeater.Layout>
+                            <StackLayout Orientation="Vertical" Spacing="20" />
+                        </ItemsRepeater.Layout>
+                    </ItemsRepeater>
+
+                </StackPanel>
+            </ScrollViewer>
+        </ctk:Case>
+        <ctk:Case Value="True">
+            <ScrollViewer Margin="0,36">
+                <StackPanel Spacing="36">
+                    <StackPanel Spacing="24">
+                        <ctkl:Shimmer
+                            Width="500"
+                            Height="40"
+                            HorizontalAlignment="Left" />
+                        <StackPanel Orientation="Horizontal" Spacing="16">
+                            <ctkl:Shimmer Width="390" Height="240" />
+                            <ctkl:Shimmer Width="390" Height="240" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Spacing="24">
+                        <ctkl:Shimmer
+                            Width="500"
+                            Height="40"
+                            HorizontalAlignment="Left" />
+                        <StackPanel Orientation="Horizontal" Spacing="16">
+                            <ctkl:Shimmer Width="390" Height="240" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Spacing="24">
+                        <ctkl:Shimmer
+                            Width="500"
+                            Height="40"
+                            HorizontalAlignment="Left" />
+                        <StackPanel Orientation="Horizontal" Spacing="16">
+                            <ctkl:Shimmer Width="225" Height="385" />
+                            <ctkl:Shimmer Width="225" Height="385" />
+                            <ctkl:Shimmer Width="225" Height="385" />
+                            <ctkl:Shimmer Width="225" Height="385" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </ctk:Case>
+    </ctk:SwitchPresenter>
+</Page>

@@ -1,0 +1,583 @@
+# Run as a script, this is what puts the repo root on sys.path -- without
+# it `jellyfin_mpv_shim` resolves to whatever is pip-installed. A no-op
+# under `discover`; tests/test_module_paths.py is the guard.
+if __name__ == "__main__":
+    import os
+    import sys
+
+    sys.path.insert(0, os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
+
+import unittest
+
+from jellyfin_mpv_shim.mpvtk.layout import ellipsize, layout, text_width
+from jellyfin_mpv_shim.mpvtk.widgets import (
+    Box,
+    Column,
+    Dropdown,
+    HScroll,
+    Image,
+    Row,
+    Spacer,
+    Text,
+    TextBox,
+    VScroll,
+)
+
+
+def by_id(nodes, id):
+    return next(n for n in nodes if n["id"] == id)
+
+
+class TestLayout(unittest.TestCase):
+    def test_row_flex_distribution(self):
+        tree = Row(
+            [
+                Box(w=100, h=20, bg="111111", id="a"),
+                Spacer(),
+                Box(w=50, h=20, bg="111111", id="b"),
+            ],
+            pad=10,
+            gap=10,
+            w=400,
+            h=40,
+        )
+        nodes, _ = layout(tree, 400, 40)
+        a = by_id(nodes, "a")
+        b = by_id(nodes, "b")
+        self.assertEqual(a["x"], 10)
+        self.assertEqual(a["w"], 100)
+        # spacer absorbs 400 - 20(pad) - 20(gaps) - 150 = 210
+        self.assertEqual(b["x"], 10 + 100 + 10 + 210 + 10)
+        self.assertEqual(b["x"] + b["w"], 400 - 10)
+
+    def test_column_stretch(self):
+        tree = Column(
+            [Box(h=30, bg="111111", id="bar")],
+            align="stretch",
+            w=500,
+            h=200,
+        )
+        nodes, _ = layout(tree, 500, 200)
+        bar = by_id(nodes, "bar")
+        self.assertEqual(bar["w"], 500)
+
+    def test_scroll_content_and_chaining(self):
+        tiles = Row(
+            [Image("/x.bgra", 140, 200) for _ in range(10)], gap=10
+        )
+        page = Column(
+            [HScroll(tiles, id="row", h=210)], pad=0
+        )
+        tree = Column(
+            [VScroll(page, id="page", flex=1)],
+            w=800,
+            h=400,
+            align="stretch",
+        )
+        nodes, _ = layout(tree, 800, 400)
+        page_n = by_id(nodes, "page")
+        row_n = by_id(nodes, "row")
+        self.assertEqual(page_n["axis"], "y")
+        # 210px of content in a 400px viewport: nothing to scroll -- and the
+        # gutter is reserved anyway. It has to be: a full-bleed header sizes
+        # itself during build, before any of this is measured, so it can only
+        # assume the gutter is there and the layout has to agree whichever
+        # way the content falls. What used to argue against reserving it (an
+        # unpainted 10px strip) is handled at the other end now -- renderer
+        # .lua paints the track whenever the gutter exists.
+        self.assertTrue(page_n["bar"])
+        self.assertEqual(page_n["cw"], 790)
+        self.assertEqual(row_n["sc"], "page")
+        self.assertEqual(row_n["axis"], "x")
+        # 10 tiles * 140 + 9 gaps * 10 = 1490
+        self.assertEqual(row_n["cw"], 1490)
+        # ...and content that DOES overflow gets exactly the same width, so
+        # nothing re-wraps as a page grows past its viewport.
+        tall = Column(
+            [VScroll(Column([Image("/x.bgra", 140, 200) for _ in range(6)],
+                            gap=10), id="tall", flex=1)],
+            w=800, h=400, align="stretch")
+        tall_n = by_id(layout(tall, 800, 400)[0], "tall")
+        self.assertTrue(tall_n["bar"])
+        self.assertEqual(tall_n["cw"], 790)
+
+        # children of the row reference it
+        imgs = [n for n in nodes if n["t"] == "img"]
+        self.assertEqual(len(imgs), 10)
+        self.assertTrue(all(n["sc"] == "row" for n in imgs))
+        # laid out in content space (offset 0), so last tile x > viewport
+        self.assertEqual(imgs[-1]["x"], 9 * 150)
+
+    def test_snap_emitted_and_scaled(self):
+        from jellyfin_mpv_shim.mpvtk import scaling
+
+        tree = Column(
+            [VScroll(Column([Image("/x.bgra", 140, 200)]),
+                     id="grid", flex=1, snap=271, snap_off=150)],
+            w=800, h=400, align="stretch",
+        )
+        nodes, _ = layout(tree, 800, 400)
+        grid = by_id(nodes, "grid")
+        self.assertEqual(grid["snap"], 271)
+        self.assertEqual(grid["snap_off"], 150)
+        # scale_scene converts snap/snap_off to physical like cw/ch.
+        prev = scaling.scale()
+        try:
+            scaling.set_scale(2.0)
+            scaling.scale_scene(nodes)
+            self.assertEqual(grid["snap"], 542)
+            self.assertEqual(grid["snap_off"], 300)
+        finally:
+            scaling.set_scale(prev)
+
+    def test_header_offset_formula_matches_layout(self):
+        # The snap offset (_header_offset) must equal the laid-out y of the
+        # first row after the header, or a snap stop lands short and the
+        # previous row's caption peeks. Guards that exact arithmetic.
+        from jellyfin_mpv_shim.mpvtk.layout import measure
+
+        PAD, GAP = 16, 12
+        header = [Text("Title", size=26, bold=True),
+                  Row([Text("a"), Text("b")], gap=10, align="center"),
+                  Text("12 of 40", size=14)]
+        tree = Column([*header, Image("/x.bgra", 140, 200, id="row0")],
+                      pad=PAD, gap=GAP, w=800, h=2000, align="stretch")
+        nodes, _ = layout(tree, 800, 2000)
+        row_y = by_id(nodes, "row0")["y"]
+        formula = PAD + len(header) * GAP + sum(measure(h)[1] for h in header)
+        # Sub-pixel only: layout rounds each emitted position.
+        self.assertLessEqual(abs(row_y - formula), 1)
+
+    def test_snaps_emitted_and_scaled(self):
+        from jellyfin_mpv_shim.mpvtk import scaling
+
+        tree = Column(
+            [VScroll(Column([Image("/x.bgra", 140, 200)]),
+                     id="home", flex=1, snaps=[0, 100, 250])],
+            w=800, h=400, align="stretch",
+        )
+        nodes, _ = layout(tree, 800, 400)
+        home = by_id(nodes, "home")
+        self.assertEqual(home["snaps"], [0, 100, 250])
+        self.assertNotIn("snap", home)  # snaps takes precedence over uniform
+        prev = scaling.scale()
+        try:
+            scaling.set_scale(2.0)
+            scaling.scale_scene(nodes)
+            self.assertEqual(home["snaps"], [0, 200, 500])
+        finally:
+            scaling.set_scale(prev)
+
+    def test_section_offsets_formula_matches_layout(self):
+        # _section_offsets must equal the laid-out top of each section, or a
+        # snap stop lands the heading a few px off.
+        from jellyfin_mpv_shim.mpvtk.layout import measure
+
+        GAP = 20
+
+        def section(i):
+            return Column([Text("H%d" % i, size=24, bold=True, id="h%d" % i),
+                           Image("/x.bgra", 140, 200)], gap=10)
+
+        secs = [section(0), section(1), section(2)]
+        tree = Column(secs, gap=GAP, w=800, h=3000, align="stretch")
+        nodes, _ = layout(tree, 800, 3000)
+        y, offs = 0.0, []
+        for s in secs:
+            offs.append(y)
+            y += measure(s)[1] + GAP
+        for i in range(len(secs)):
+            head_y = by_id(nodes, "h%d" % i)["y"]  # heading = section top
+            self.assertLessEqual(abs(head_y - offs[i]), 1)
+
+    def test_no_snap_absent_by_default(self):
+        tree = Column([VScroll(Column([Image("/x.bgra", 140, 200)]),
+                               id="plain", flex=1)],
+                      w=800, h=400, align="stretch")
+        nodes, _ = layout(tree, 800, 400)
+        grid = by_id(nodes, "plain")
+        self.assertNotIn("snap", grid)
+        self.assertNotIn("snap_off", grid)
+
+    def test_handlers_registry(self):
+        clicked = []
+        tree = Row(
+            [
+                Box(
+                    w=50,
+                    h=50,
+                    bg="222222",
+                    id="btn",
+                    on_click=lambda: clicked.append(1),
+                ),
+                TextBox("search", on_change=lambda v: None),
+                Dropdown("sort", ["A", "B"], on_select=lambda i, v: None),
+            ],
+            w=400,
+            h=60,
+        )
+        nodes, handlers = layout(tree, 400, 60)
+        self.assertIn("click", handlers["btn"])
+        self.assertIn("change", handlers["search"])
+        self.assertIn("select", handlers["sort"])
+        self.assertTrue(by_id(nodes, "btn")["click"])
+        handlers["btn"]["click"]()
+        self.assertEqual(clicked, [1])
+
+    def test_ellipsize(self):
+        s = "A fairly long title that will not fit"
+        out = ellipsize(s, 20, False, 100)
+        self.assertTrue(out.endswith("…"))
+        self.assertLess(text_width(out, 20), 105)
+        self.assertEqual(ellipsize("Short", 20, False, 500), "Short")
+
+    def test_duplicate_id_warning(self):
+        tree = Row(
+            [
+                Box(w=10, h=10, bg="111111", id="dup"),
+                Box(w=10, h=10, bg="111111", id="dup"),
+            ],
+            w=100,
+            h=20,
+        )
+        with self.assertLogs("mpvtk", level="WARNING") as cm:
+            layout(tree, 100, 20)
+        self.assertTrue(any("duplicate node id" in m for m in cm.output))
+
+    def test_stable_path_ids(self):
+        def build():
+            return Column(
+                [Row([Text("x"), Text("y")]), Text("z")], w=100, h=100
+            )
+
+        nodes_a, _ = layout(build(), 100, 100)
+        nodes_b, _ = layout(build(), 100, 100)
+        self.assertEqual(
+            [n["id"] for n in nodes_a], [n["id"] for n in nodes_b]
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class TestWrapMargin(unittest.TestCase):
+    """Wrapping is decided from estimated advances but drawn by libass with
+    the real font. A line that fits by a fraction of a pixel renders one
+    word too long, so the wrap limit keeps a margin."""
+
+    TXT = ("An overview paragraph long enough to wrap several times so that "
+           "we can see exactly where each line ends relative to the container "
+           "that it is supposed to fit inside of, which is the whole question "
+           "here and it needs enough words to sample many widths properly.")
+
+    def test_no_line_lands_on_the_edge(self):
+        from jellyfin_mpv_shim.mpvtk.layout import (WRAP_SLOP, text_width,
+                                                    wrap_text)
+
+        tightest = min(
+            max_w - text_width(line, 18, False)
+            for max_w in range(300, 1400)
+            for line in wrap_text(self.TXT, 18, False, max_w))
+        self.assertGreaterEqual(
+            tightest, WRAP_SLOP - 0.01,
+            "a wrapped line sits within the slop of the edge")
+
+    def test_wrapping_still_fills_the_line(self):
+        """The margin must not cost a whole word — the line count has to
+        match what a no-margin wrap would produce, or close to it."""
+        from jellyfin_mpv_shim.mpvtk.layout import wrap_text
+
+        for max_w in (400, 700, 1000):
+            n = len(wrap_text(self.TXT, 18, False, max_w))
+            wide = len(wrap_text(self.TXT, 18, False, max_w + 40))
+            self.assertGreaterEqual(n, wide)
+            self.assertLessEqual(n - wide, 2, "margin cost too many lines")
+
+    def test_degenerate_widths_terminate(self):
+        from jellyfin_mpv_shim.mpvtk.layout import wrap_text
+
+        for w in (0, 0.5, 1, 2):
+            self.assertTrue(wrap_text("hello world", 18, False, w))
+
+
+class TestWrappedContentIsScrollable(unittest.TestCase):
+    """A scroll viewport clamps to the content height it is told, and it
+    used to be told an *intrinsic* measure -- one line per wrapped Text,
+    whatever the text actually did at the width it got. Every explanatory
+    note in the settings form cost real rows off the bottom of the scroll:
+    the "Show advanced settings" checkbox was drawn but could not be
+    reached.
+    """
+
+    NOTE = ("An explanatory note under a setting, long enough that it wraps "
+            "to several lines in any settings column narrow enough to be a "
+            "settings column, which is the whole point of this test.")
+
+    def _page(self, n=6, w=None):
+        rows = []
+        for i in range(n):
+            rows.append(Box(h=25, bg="222222", id="row-%d" % i))
+            rows.append(Text(self.NOTE, size=14, wrap=True, **(
+                {"w": w} if w else {})))
+        rows.append(Box(h=25, bg="222222", id="last"))
+        return VScroll(Column(rows, pad=16, gap=8, align="stretch"),
+                       id="sc", flex=1)
+
+    def _extent(self, tree, w=600, h=400):
+        nodes, _h = layout(tree, w, h)
+        sc = by_id(nodes, "sc")
+        bottom = max(n["y"] + n.get("h", 0) for n in nodes
+                     if n.get("sc") == "sc")
+        return sc["ch"], bottom - sc["y"]
+
+    def test_content_height_covers_the_wrapped_text(self):
+        ch, content = self._extent(self._page())
+        self.assertGreaterEqual(
+            ch, content,
+            "scroll extent stops %.0fpx short of its own content" %
+            (content - ch))
+
+    def test_it_is_not_just_padded_out(self):
+        """Guarding the above with a fudge factor would pass too. The extent
+        has to actually track the wrapping: more notes, more height."""
+        few, _c = self._extent(self._page(2))
+        many, _c = self._extent(self._page(8))
+        self.assertGreater(many - few, 6 * 14 * 1.2)
+
+    def test_a_narrower_window_scrolls_further(self):
+        wide, _c = self._extent(self._page(), w=1000)
+        narrow, _c = self._extent(self._page(), w=420)
+        self.assertGreater(narrow, wide)
+
+    def test_explicit_width_still_measured(self):
+        """wrap=True with an explicit w already measured correctly; the
+        width-aware path must not regress it."""
+        ch, content = self._extent(self._page(w=300))
+        self.assertGreaterEqual(ch, content)
+
+    def test_viewport_is_the_floor(self):
+        """Content shorter than the viewport must not make it scrollable."""
+        tree = VScroll(Column([Text("short", size=14, wrap=True)], pad=16),
+                       id="sc", flex=1)
+        nodes, _h = layout(tree, 600, 400)
+        self.assertEqual(by_id(nodes, "sc")["ch"], 400.0)
+
+
+class TestNestedWrappedTextTakesItsRoom(unittest.TestCase):
+    """A Column sized its children by their INTRINSIC height, which for
+    anything containing wrapped text is one line short per wrap. A wrapped
+    Text as a direct child was special-cased; one a Column deeper was not,
+    so whatever followed its container was laid out over the top of it.
+
+    That is the View Settings dialog: a Column of settings (each with its
+    explanatory note) followed by the button row, and Done sat on the note
+    above it.
+    """
+
+    NOTE = ("Show one page of tiles at a time instead of scrolling. "
+            "Applies to every library on this device, and wraps.")
+
+    def _dialog(self, w=440):
+        """The View Settings dialog's own shape: a modal panel whose height
+        comes from a width-aware measure, holding a Column of settings that
+        was laid out with an intrinsic one."""
+        from jellyfin_mpv_shim.mpvtk.widgets import Dialog
+
+        inner = Column([Box(h=20, bg="222222", id="setting"),
+                        Text(self.NOTE, size=13, wrap=True)],
+                       gap=12, align="stretch")
+        panel = Column([Text("View settings", size=22),
+                        inner,
+                        # bg because a Box with nothing to draw emits no
+                        # node at all -- there would be no "done" to find.
+                        Box([Text("Done")], h=30, bg="333333", id="done")],
+                       pad=24, gap=16, w=w, align="stretch")
+        return Dialog("viewcfg", panel)
+
+    def test_a_container_of_wrapped_text_gets_the_room_it_needs(self):
+        """What the dialog case comes down to. The overlap itself is pinned
+        against the real View Settings dialog (tests/test_list_page.py),
+        because reproducing it needs that panel's exact shape; this is the
+        property underneath -- narrower means more lines means everything
+        after it sits further down."""
+        def done_y(w):
+            nodes, _h = layout(self._dialog(w), 1280, 720)
+            return by_id(nodes, "done")["y"]
+        self.assertGreater(done_y(300), done_y(700))
+
+
+class TestAssWrapStyle(unittest.TestCase):
+    """The layout engine breaks text into lines; libass must not then
+    apply its own smart wrapping on top. Two wrappers disagreeing by a
+    fraction of a pixel made long text jump to an extra line at random,
+    because our break was never authoritative. Every ASS event that
+    carries text has to set \\q2 (wrap only on explicit \\N).
+
+    Checked statically: the renderer runs inside mpv, so there is no way
+    to assert on the emitted ASS from a unit test — but a new text
+    emitter added without \\q2 is exactly the regression to catch.
+    """
+
+    def _renderer(self):
+        import os
+
+        import jellyfin_mpv_shim
+
+        path = os.path.join(os.path.dirname(jellyfin_mpv_shim.__file__),
+                            "mpvtk", "renderer.lua")
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_every_text_event_disables_libass_wrapping(self):
+        src = self._renderer()
+        # A text-bearing ASS event is one that sets a font size (\fs).
+        # Drawings (\p1) and rects carry no text and are exempt.
+        missing = []
+        for chunk in src.split("ass:append("):
+            head = chunk[:400]
+            if "\\\\fs%d" not in head:
+                continue
+            if "\\\\q2" not in head:
+                missing.append(head.split("\n")[0].strip()[:70])
+        self.assertEqual(missing, [],
+                         "ASS text events without \\q2: %r" % (missing,))
+
+    def test_the_tag_is_present_at_all(self):
+        """Guards the guard: if the pattern above stops matching, the
+        first test would pass vacuously."""
+        self.assertGreaterEqual(self._renderer().count("\\\\q2"), 2)
+
+
+class TestVirtualTableWidth(unittest.TestCase):
+    """A virtualized table pins min_w so its width can't jitter as rows
+    materialize. Sizing FLEX columns to their widest content made one long
+    song title pin the table far wider than the window — min_w is a floor,
+    so it could never shrink back and the table ran off the edge instead
+    of ellipsizing, which is what a flex column is for."""
+
+    LONG = ("An Extremely Long Song Title That Goes On And On Forever "
+            "And Ever Without Any Sign Of Stopping Whatsoever Truly")
+
+    def _table(self, title):
+        from jellyfin_mpv_shim.mpvtk.widgets import Table
+
+        cols = [{"label": "#", "w": 46, "align": "right"},
+                {"label": "Title", "flex": 3},
+                {"label": "Artist", "flex": 2},
+                {"label": "Time", "w": 70, "align": "right"}]
+        rows = [{"id": "r0", "cells": ["1", title, title, "3:20"]}]
+        return Table(cols, rows, virtual={"offset": 0, "height": 720})
+
+    def test_min_w_ignores_flex_content_length(self):
+        short = self._table("A")
+        long = self._table(self.LONG)
+        self.assertEqual(short.min_w, long.min_w,
+                         "content length leaked into the table's floor")
+
+    def test_min_w_still_covers_the_fixed_columns(self):
+        t = self._table("A")
+        self.assertGreaterEqual(t.min_w, 46 + 70)
+
+    def test_a_long_row_fits_the_window(self):
+        from jellyfin_mpv_shim.mpvtk.layout import layout
+        from jellyfin_mpv_shim.mpvtk.widgets import Column, VScroll
+
+        for w in (1200, 1000, 700, 500):
+            tree = VScroll(Column([self._table(self.LONG)], pad=16,
+                                  align="stretch"), flex=1)
+            nodes, _h = layout(tree, w, 720)
+            edge = max(n["x"] + n["w"] for n in nodes if n["t"] == "text")
+            self.assertLessEqual(edge, w,
+                                 "table overflows the window at w=%d" % w)
+
+    def test_long_cells_are_ellipsized(self):
+        from jellyfin_mpv_shim.mpvtk.layout import layout
+        from jellyfin_mpv_shim.mpvtk.widgets import Column, VScroll
+
+        tree = VScroll(Column([self._table(self.LONG)], pad=16,
+                              align="stretch"), flex=1)
+        nodes, _h = layout(tree, 800, 720)
+        cells = [n["text"] for n in nodes
+                 if n["t"] == "text" and n["text"].startswith("An Extremely")]
+        self.assertTrue(cells, "no long cell rendered")
+        for c in cells:
+            self.assertTrue(c.endswith("…"), "cell not ellipsized: %r" % c)
+
+
+class TestNoneChildren(unittest.TestCase):
+    """A conditional child that evaluates to None must not take down the
+    render loop — one did, on a right-click that produced an empty menu."""
+
+    def test_a_none_child_is_dropped(self):
+        from jellyfin_mpv_shim.mpvtk.widgets import Column, Row, Text
+
+        for cls in (Column, Row):
+            box = cls([Text("a"), None, Text("b")])
+            self.assertEqual(len(box.children), 2)
+
+    def test_a_tree_with_none_children_lays_out(self):
+        from jellyfin_mpv_shim.mpvtk.layout import layout
+        from jellyfin_mpv_shim.mpvtk.widgets import Column, Row, Text
+
+        tree = Column([Text("top"), None, Row([None, Text("in")]), None])
+        nodes, _h = layout(tree, 800, 600)
+        texts = sorted(n["text"] for n in nodes if n["t"] == "text")
+        self.assertEqual(texts, ["in", "top"])
+
+    def test_a_stack_drops_none_too(self):
+        from jellyfin_mpv_shim.mpvtk.widgets import Stack, Text
+
+        self.assertEqual(len(Stack([Text("a"), None]).children), 1)
+
+    def test_all_none_is_an_empty_box(self):
+        from jellyfin_mpv_shim.mpvtk.layout import layout
+        from jellyfin_mpv_shim.mpvtk.widgets import Column
+
+        nodes, _h = layout(Column([None, None]), 400, 300)
+        self.assertEqual([n for n in nodes if n["t"] == "text"], [])
+
+
+class TestADropdownWithIconsAsksForTheIconsRoom(unittest.TestCase):
+    """A closed select draws the selected item's icon before its label and
+    shortens the label to fit. Its natural width did not know that, so a
+    picker with icons asked for exactly enough room for its longest name and
+    then spent part of that room on a glyph -- which is an ellipsis nothing
+    gained anything from.
+    """
+
+    def _width(self, **kw):
+        nodes, _h = layout(
+            Row([Dropdown("d", ["Living Room Media Server"],
+                          on_select=lambda i, v: None, **kw)]),
+            1600, 900)
+        return by_id(nodes, "d")["w"]
+
+    def test_an_icon_widens_the_closed_control(self):
+        self.assertGreater(self._width(icons=["lan"]), self._width())
+
+    def test_and_the_label_still_fits(self):
+        """The assertion that says the extra is the *right* extra rather
+        than merely some. 40 for the arrow and padding, plus the indent the
+        renderer applies, is what the label has to survive."""
+        d = Dropdown("d", ["Living Room Media Server"], icons=["lan"],
+                     on_select=lambda i, v: None)
+        nodes, _h = layout(Row([d]), 1600, 900)
+        node = by_id(nodes, "d")
+        indent = int(node["size"] * 1.1) + 6
+        self.assertGreaterEqual(node["w"] - 40 - indent,
+                                text_width(d.items[0], d.size))
+
+    def test_a_picker_with_no_icons_is_unchanged(self):
+        nodes, _h = layout(
+            Row([Dropdown("d", ["A", "B"], on_select=lambda i, v: None)]),
+            1600, 900)
+        node = by_id(nodes, "d")
+        self.assertAlmostEqual(node["w"],
+                               text_width("A", node["size"]) + 44, places=1)
+
+    def test_an_all_empty_icon_list_is_not_an_icon_column(self):
+        """`icons=[None, None]` is a list that reserves nothing, and paying
+        for it is the defect this pair exists either side of."""
+        self.assertEqual(self._width(icons=[None]), self._width())

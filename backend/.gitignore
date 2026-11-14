@@ -1,0 +1,38 @@
+__pycache__
+dist
+build
+jellyfin_mpv_shim.egg-info
+webclient
+cefpython3
+*.dll
+*.spec
+*.pyc
+mpv32
+.eggs
+jellyfin_mpv_shim/default_shader_pack/*
+*.mo
+.last_sp_version
+.last_wc_version
+debug.log
+publish
+pyinstaller
+.flatpak-builder
+flatpak/shared-modules
+repo
+
+.vscode/
+
+# Built by tools/build_win_fribidi.py for the Windows installer; a build
+# input like mpv-2.dll, not a source file.
+fribidi-0.dll
+build/fribidi/
+
+# MacOS
+mpv.app
+mpv.zip
+mpv.tar.gz
+libfribidi.0.dylib
+.DS_Store
+
+# Local symlink to STARTHERE.md for tools that look for this name.
+CLAUDE.md

@@ -1,0 +1,1737 @@
+"""Shared harness for the jellyfin-mpv-shim integration / concurrency suite.
+
+This module holds the reusable test doubles and probes the heavy tests build
+on. Nothing here launches mpv, Tk, or a server at import time — everything is
+opt-in behind a function call or a capability gate, so importing the harness is
+cheap and side-effect free (the fast suite never touches it).
+
+Contents:
+
+* ``Journal`` — one ordered record of what every stand-in was asked to do.
+  The fakes could already say *whether*; this is what says **in which order**,
+  across collaborators, which is the question the ordering bugs turn on.
+  Assertions are subsequences, so a new event cannot fail an old assertion.
+* Capability probes (``HAVE_*``) + ``require_*`` skip helpers.
+* ``FakeMPV`` — a scriptable stand-in for an mpv backend that records the
+  observer/event/key callbacks ``PlayerManager`` registers and lets a test fire
+  them on an arbitrary thread. This is what makes the player state-machine
+  races reproducible without a real libmpv. ``FakeMPVLibmpv`` and
+  ``FakeMPVJsonIPC`` add the registration surface each real backend has, which
+  is what the shim dispatches on; ``fake_mpv_class()`` picks by ``BACKEND``.
+* ``import_player_with_fake_mpv`` — installs ``FakeMPV`` as the ``mpv`` module
+  and imports ``jellyfin_mpv_shim.player`` against it, so the module-level
+  ``PlayerManager()`` singleton constructs without a real player/window.
+* Concurrency-forcing helpers (``run_concurrently``, ``spin_barrier``).
+* ``make_test_clip`` — ffmpeg-generated deterministic sample media (Tier 2).
+"""
+
+import contextlib
+import functools
+import atexit
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import unittest
+
+
+# --------------------------------------------------------------------------
+# Capability probes
+# --------------------------------------------------------------------------
+
+def _probe_import(modname):
+    try:
+        __import__(modname)
+        return True
+    except Exception:
+        return False
+
+
+HAVE_MPV_LIB = _probe_import("mpv")               # libmpv binding
+HAVE_MPV_JSONIPC = _probe_import("python_mpv_jsonipc")
+
+# Which mpv backend this process is exercising. Set by run_integration.py per
+# matrix leg (a fresh subprocess per backend, so player.py's import-time backend
+# selection and the interdependent singletons start clean each time). Defaults
+# to libmpv for a bare ``python -m unittest`` run.
+BACKEND = os.environ.get("JMS_TEST_BACKEND", "libmpv")
+assert BACKEND in ("libmpv", "jsonipc"), "unknown JMS_TEST_BACKEND %r" % BACKEND
+HAVE_FFMPEG = shutil.which("ffmpeg") is not None
+HAVE_MPV_BIN = shutil.which("mpv") is not None
+HAVE_XVFB = shutil.which("Xvfb") is not None or shutil.which("xvfb-run") is not None
+# Windows has no DISPLAY variable and no Xvfb -- the session's desktop is
+# simply there -- so the X-shaped probe answers "headless" on a machine that
+# can open a window fine. That answer is worse than useless here: every
+# @require_real_mpv class self-skips, and run_integration counts a skip as a
+# pass, so a Windows CI leg reports green having started no real player at
+# all. (--strict is the other half of that guard.)
+HAVE_DISPLAY = bool(
+    os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+) or os.name == "nt"
+# A real mpv smoke test needs a working X display: either an inherited one, or
+# xvfb to conjure one. The runner (run_integration.py) re-execs itself under
+# xvfb-run when no display is present, so by the time a test runs we only need
+# "a display exists".
+HAVE_MPV_DISPLAY = (HAVE_MPV_LIB or HAVE_MPV_JSONIPC) and HAVE_MPV_BIN and (
+    HAVE_DISPLAY or HAVE_XVFB
+)
+
+
+def require_ffmpeg(obj):
+    return unittest.skipUnless(HAVE_FFMPEG, "ffmpeg not available")(obj)
+
+
+def require_real_mpv(obj):
+    return unittest.skipUnless(
+        HAVE_MPV_DISPLAY and HAVE_FFMPEG,
+        "real mpv smoke needs mpv + a display (xvfb) + ffmpeg",
+    )(obj)
+
+
+# --------------------------------------------------------------------------
+# Journal — an ordered record of what the fakes were asked to do
+# --------------------------------------------------------------------------
+
+#: The journal a fake with no journal of its own joins. Set by
+#: ``build_player`` for the life of that player, because ``_init_mpv``
+#: constructs its mpv through the *module* -- so a re-created player would
+#: otherwise start a private journal and everything after an mpv
+#: re-creation would vanish from the record. Re-creation is exactly when
+#: order matters most: the menu and the SyncPlay session survive it, and
+#: whether the new handle is configured before or after they are re-pointed
+#: at it is the shape of several bugs already in this file.
+_ACTIVE_JOURNAL = None
+
+
+def use_journal(journal):
+    """Make ``journal`` the one new fakes join. Returns the previous."""
+    global _ACTIVE_JOURNAL
+    previous = _ACTIVE_JOURNAL
+    _ACTIVE_JOURNAL = journal
+    return previous
+
+
+class _Unset:
+    """Distinguishes "no value" from a recorded ``None``, which is a real
+    mpv property value."""
+
+    def __repr__(self):
+        return "<unset>"
+
+
+_UNSET = _Unset()
+
+
+class Journal:
+    """What happened, in the order it happened, across every stand-in.
+
+    The fakes already record *whether* something was asked for -- a list of
+    commands, a list of played urls, an attribute holding the last value
+    written. What none of that can answer is **in which order**, and that is
+    the question this codebase's worst bugs turn on: a reset landing after
+    the yield it was meant to precede, a volume applied after the file
+    started, a stop commanded after the handle was freed. Two recorders on
+    two objects cannot be compared at all.
+
+    So every fake writes into one journal, and a test asserts on the
+    sequence.
+
+    **Assertions are subsequence assertions, never equality**, and that is
+    the whole design. A log compared as a whole is a test that fails the day
+    somebody adds an event -- which would make the journal a tax on every
+    change instead of a tool, and would be paid by deleting assertions. Ask
+    only for the events you mean, in the order you mean them; anything else
+    may appear between, before or after.
+
+    Events render as ``source.kind:name=value`` and a pattern matches at any
+    component boundary, so ``"mpv"``, ``"mpv.set"``, ``"mpv.set:keepaspect"``
+    and ``"mpv.set:keepaspect=True"`` are four sieves over the same event,
+    from coarse to exact. Pick the coarsest one that still says what you
+    mean: a pattern that pins a value it does not care about is the other
+    way to make the journal brittle.
+
+    Two things are deliberately kept apart. ``set:`` is the **shim writing**
+    a property; ``prop:`` is **mpv reporting** one (``fire_property``). They
+    are opposite directions through the same name, and a test about one must
+    not match the other.
+
+    ``mark()`` puts the test's own events in the stream, which is what lets
+    an ordering claim be made about a moment nothing else names -- "the
+    browse background went back *after* I started playback", where the only
+    thing that identifies "when I started playback" is the test.
+    """
+
+    #: Boundaries a pattern may stop at. A pattern is a prefix of the
+    #: rendered event, cut at one of these -- so "mpv.set:sub" does NOT
+    #: match "mpv.set:sub_scale=1.0", which a bare startswith would.
+    _BOUNDARIES = (".", ":", "=")
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._entries = []
+
+    # -- writing -----------------------------------------------------------
+
+    def record(self, source, kind, name=None, value=_UNSET):
+        """Append one event. Called by the fakes; tests use ``mark``."""
+        text = "%s.%s" % (source, kind) if kind else source
+        if name is not None:
+            text += ":" + str(name)
+        if value is not _UNSET:
+            text += "=" + repr(value)
+        with self._lock:
+            self._entries.append(text)
+        return text
+
+    def mark(self, label):
+        """The test's own event, so an ordering claim can name a moment that
+        only the test knows about."""
+        return self.record("test", "", label)
+
+    def reset(self):
+        with self._lock:
+            del self._entries[:]
+
+    # -- reading -----------------------------------------------------------
+
+    def entries(self, pattern=None):
+        with self._lock:
+            entries = list(self._entries)
+        if pattern is None:
+            return entries
+        return [e for e in entries if self._matches(e, pattern)]
+
+    def count(self, pattern):
+        return len(self.entries(pattern))
+
+    def since(self, pattern):
+        """Everything after the first event matching ``pattern``, as a
+        journal of its own.
+
+        What makes "and then it never happened again" sayable. `never` over
+        the whole log cannot say it -- the event usually *did* happen, which
+        is why there is something to be after.
+
+        **Raises if the marker never happened**, rather than answering an
+        empty journal: every assertion on a view of nothing passes, so the
+        vacuous version is a test that cannot fail and reads exactly like
+        one that does.
+        """
+        entries = self.entries()
+        for index, entry in enumerate(entries):
+            if self._matches(entry, pattern):
+                view = Journal()
+                view._entries = entries[index + 1:]
+                return view
+        raise AssertionError(
+            "nothing matched %r, so there is no point to be after it. The "
+            "journal was:\n%s" % (pattern, self.render()))
+
+    def render(self):
+        return "\n".join("  %3d  %s" % (i, e)
+                          for i, e in enumerate(self.entries())) or "  (empty)"
+
+    @classmethod
+    def _matches(cls, entry, pattern):
+        if entry == pattern:
+            return True
+        if not entry.startswith(pattern):
+            return False
+        return entry[len(pattern)] in cls._BOUNDARIES
+
+    # -- assertions --------------------------------------------------------
+    #
+    # On the journal rather than in a TestCase mixin, so any test that can
+    # reach a fake can reach these without inheriting from anything.
+
+    def happened(self, pattern, msg=""):
+        if not self.entries(pattern):
+            raise AssertionError(
+                "%snothing matched %r. The journal was:\n%s"
+                % (msg and msg + "\n", pattern, self.render()))
+
+    def never(self, pattern, msg=""):
+        found = self.entries(pattern)
+        if found:
+            raise AssertionError(
+                "%s%r happened %d time(s): %r. The journal was:\n%s"
+                % (msg and msg + "\n", pattern, len(found), found,
+                   self.render()))
+
+    def order(self, *patterns, **kw):
+        """Assert the patterns occur in this relative order.
+
+        A **subsequence**: other events may sit between them, before the
+        first and after the last. That is what keeps an assertion written
+        today from failing when an unrelated event is added tomorrow.
+
+        Matched greedily left to right, so a repeated pattern means "and
+        then another one of these", which is what it reads as.
+        """
+        msg = kw.pop("msg", "")
+        assert not kw, kw
+        if len(patterns) < 2:
+            # An "ordering" of one is satisfied by anything that happened at
+            # all, which is a test that cannot fail. `happened` says that.
+            raise AssertionError(
+                "order() needs at least two patterns; one of them is not an "
+                "ordering. Use happened() for existence.")
+        entries = self.entries()
+        index = 0
+        for pattern in patterns:
+            while index < len(entries) and not self._matches(entries[index],
+                                                             pattern):
+                index += 1
+            if index == len(entries):
+                raise AssertionError(
+                    "%s%r never happened after the events before it in %r.\n"
+                    "The journal was:\n%s"
+                    % (msg and msg + "\n", pattern, list(patterns),
+                       self.render()))
+            index += 1
+
+
+# --------------------------------------------------------------------------
+# FakeMPV — scriptable player backend
+# --------------------------------------------------------------------------
+
+class ShutdownError(Exception):
+    """Mirror of libmpv's ShutdownError so player.py's _mpv_errors tuple picks
+    up the libmpv branch (BrokenPipeError, ShutdownError) when FakeMPV stands in
+    as the ``mpv`` module."""
+
+
+#: What mpv itself binds, in the shape ``input-bindings`` reports it —
+#: enough of it for a key sweep to have something to find. Weak, because
+#: that is what mpv marks its own builtins with and what tells them from a
+#: line the user wrote; the seek distances and the fullscreen toggle are
+#: mpv's real defaults, character for character, because ``_seek_is_ours``
+#: compares against exactly those.
+#: mpv's builtin bindings, as `input-bindings` actually reports them.
+#:
+#: `priority: 0`, measured on a real mpv (and again on the shim's own): of 206
+#: builtins, 194 are priority 0 and the only 12 at -1 are the INACTIVE
+#: `encode` and `discnav` sections. This fixture said -1 throughout, i.e. it
+#: modelled every builtin as coming from a disabled section -- the one state a
+#: sweep must ignore. FOUR test fixtures carried that wrong model, which is
+#: why nothing noticed `winning()` ranking disabled bindings as live.
+DEFAULT_BINDINGS = [
+    {"key": "SPACE", "cmd": "cycle pause", "is_weak": True, "priority": 0},
+    {"key": "p", "cmd": "cycle pause", "is_weak": True, "priority": 0},
+    {"key": "f", "cmd": "cycle fullscreen", "is_weak": True, "priority": 0},
+    {"key": "LEFT", "cmd": "seek -5", "is_weak": True, "priority": 0},
+    {"key": "RIGHT", "cmd": "seek 5", "is_weak": True, "priority": 0},
+    {"key": "UP", "cmd": "seek 60", "is_weak": True, "priority": 0},
+    {"key": "DOWN", "cmd": "seek -60", "is_weak": True, "priority": 0},
+    {"key": "m", "cmd": "cycle mute", "is_weak": True, "priority": 0},
+    {"key": "WHEEL_LEFT", "cmd": "seek -10", "is_weak": True,
+     "priority": 0},
+    {"key": "WHEEL_RIGHT", "cmd": "seek 10", "is_weak": True,
+     "priority": 0},
+]
+
+
+class FakeMPV:
+    """A stand-in for an mpv backend object.
+
+    It supports the two surfaces ``PlayerManager`` uses:
+
+    * *registration* — the ``on_key_press`` / ``property_observer`` /
+      ``event_callback`` decorators used in ``_init_mpv``. Registered callbacks
+      are stored so a test can fire them later (``fire_property`` / ``fire_event``),
+      optionally from another thread, to reproduce observer-ordering races.
+    * *input sections* — ``define-section`` / ``enable-section`` /
+      ``disable-section`` are kept as state, and ``press_key`` consults them
+      before the script bindings, so a #16 key *claim* can be exercised
+      rather than merely recorded.
+    * *control / property* access — ``command``, ``play``, ``show_text`` etc. are
+      recorded; the many scalar properties (``pause``, ``playback_abort``,
+      ``playback_time`` …) are plain attributes tests can set to script state.
+
+    What it deliberately does **not** have is either backend's property-observer
+    API: the shim picks between them by asking the class, so both surfaces on
+    one object means one branch is dead on every leg. Use ``fake_mpv_class()``
+    (or the subclasses) rather than instantiating this directly, unless what is
+    under test genuinely only needs the shared half.
+
+    Property reads/writes can be made to raise a "disconnect" error to exercise
+    the ``_mpv_errors`` handling paths (``fail_with``).
+    """
+
+    # Class attr so ``hasattr(mpv, "ShutdownError")`` is true on the module.
+    ShutdownError = ShutdownError
+
+    def __init__(self, journal=None, **options):
+        # Armed at the END of __init__, so the constructor's own defaults
+        # are not two dozen events every test has to read past. `_journal`
+        # being None is also what makes __setattr__ safe here: it runs for
+        # every assignment below, including the ones that build the dicts it
+        # would otherwise want to write to.
+        self._journal = None
+        self._pending_journal = journal
+        # What _init_mpv asked mpv to start with. Most option plumbing is not
+        # worth re-testing here, but options that must be set *at startup*
+        # are: mpv before 0.41 ignores a runtime force-window while idle, so
+        # a startup-only option is the difference between a window and none.
+        self.init_options = dict(options)
+
+        # Scalar player properties with defaults matching an idle player.
+        self.playback_abort = True
+        self.playback_time = None
+        self.duration = None
+        self.pause = False
+        self.volume = 100
+        self.mute = False
+        self.speed = 1.0
+        self.cache_buffering_state = 0
+        self.sub = "no"
+        self.audio = "auto"
+        self.osc = False
+        self.keep_open = False
+        self.force_window = False
+        self.resume_playback = True
+        self.image_display_duration = 1
+        self.screenshot_directory = None
+        self.input_ipc_server = None
+        self.force_media_title = None
+        self.sub_pos = 100
+        self.sub_scale = 1.0
+        self.sub_color = "#FFFFFFFF"
+        self.osd_back_color = "#C8000000"
+        self.osd_font_size = 55
+        self.osd_border_style = "outline-and-shadow"
+
+        # Properties the shim READS. Absent, each of these raised
+        # AttributeError -- and every read site is inside a broad
+        # ``except Exception``, so nothing failed: the path quietly took
+        # its "mpv would not answer" branch and the suite stayed green.
+        # That is not a fake with a gap, it is a fake asserting that mpv
+        # has no such property about properties mpv has always had. EOF
+        # was never detected, the trickplay arm never armed, the window
+        # geometry was never re-armed, and no chapter or track list was
+        # ever non-empty. Idle defaults: a test that wants one of these
+        # states sets it.
+        self.core_idle = True
+        self.eof_reached = False
+        self.chapter_list = []
+        self.track_list = []
+        self.demuxer_cache_state = None
+        self.mpv_version = "mpv 0.40.0"
+        self.vf = []
+        self.fullscreen = False
+        self.window_maximized = False
+        self.window_minimized = False
+        self.osd_width = 1280
+        self.osd_height = 720
+        self.video_aspect_override = -1.0
+
+        # ...and the ones it only WRITES. Modelled for their *starting*
+        # value rather than to stop an AttributeError: an assignment
+        # would have conjured the attribute either way, but then the
+        # only thing assertable is that the shim wrote what the shim
+        # wrote. ``keepaspect`` is the one that matters -- mpv starts it
+        # on, the browse window turns it off, and the bug worth catching
+        # is a picture-view reset putting it back mid-playback.
+        self.keepaspect = True
+        self.video_zoom = 0.0
+        self.video_pan_x = 0.0
+        self.video_pan_y = 0.0
+        self.geometry = None
+        # Literals, not player_window's constants: importing the shim at
+        # module scope is what this harness is careful not to do. They are
+        # the same two values, and player_window's own name for them says
+        # so ("mpv's own defaults").
+        self.background = "tiles"
+        self.background_color = "#000000"
+        self.hwdec = "no"
+        # Picture processing, at mpv's own starting values -- which is the
+        # whole point of listing them (see the note above): `video_sync` in
+        # particular is READ before it is first written, so a fake without
+        # it does not merely fail to record the write, it makes
+        # `_apply_interpolation` raise into a broad except and take the
+        # "mpv would not answer" branch with the test still green.
+        self.deinterlace = "no"
+        # Read-only in mpv and DERIVED from the file (it is what `auto`
+        # resolves to for this stream), which a fake cannot know -- so it
+        # is a plain attribute here that a test sets to say "mpv is
+        # deinterlacing". The gear row reads this rather than the mode.
+        self.deinterlace_active = False
+        self.interpolation = False
+        self.video_sync = "audio"
+        self.tscale = "oversample"
+        # The rest of the preset-driven settings (mpv_options.PRESET_SETTINGS),
+        # at the values mpv itself starts them at -- measured from
+        # `mpv --list-options` on 0.41 and pinned by
+        # tests/test_picture_processing.py, so a fake that drifts from mpv
+        # is caught in one place rather than here.
+        #
+        # These are read before they are written, exactly like `video_sync`
+        # above, and the consequence of omitting one is worse than a missing
+        # write: `_apply_render_preset` skips any property absent from the
+        # pristine snapshot (that is how it tolerates an older mpv build), so
+        # a fake missing `deband` would make every deband test assert against
+        # a setting that was never applied, and pass.
+        self.deband = False
+        self.deband_iterations = 1
+        self.deband_threshold = 48.0
+        self.deband_range = 16.0
+        self.deband_grain = 32.0
+        self.tone_mapping = "auto"
+        self.scale = "lanczos"
+        self.scale_antiring = 0.0
+        self.hdr_peak_percentile = 0.0
+        self.hdr_contrast_recovery = 0.0
+        self.demuxer_max_bytes = 150 * 1024 * 1024
+        self.demuxer_max_back_bytes = 50 * 1024 * 1024
+        self.demuxer_readahead_secs = 1.0
+        self.loop_file = "no"
+        self.secondary_sid = "no"
+        self.http_header_fields = []
+        self.audio_device = "auto"
+        self.audio_channels = "auto-safe"
+        self.audio_exclusive = False
+        self.audio_spdif = ""
+        self.audio_normalize_downmix = False
+
+        # Properties whose name is a path, which attribute access cannot
+        # reach ("user-data/mpvtk/active"). Read through _get_property on
+        # libmpv and `command("get_property", ...)` on jsonipc; absent
+        # here, both answer the way an unset property does.
+        self.raw_properties = {}
+
+        # Registered callbacks.
+        self._property_observers = {}   # name -> [callbacks]
+        self._event_callbacks = {}      # name -> [callbacks]
+        self._key_bindings = {}         # key -> callback
+
+        # What `input-bindings` answers, which is what a key sweep reads
+        # (#16). A fake without it is not a player with no bindings -- the
+        # sweep's read raises, player.py logs it and carries on with an
+        # EMPTY sweep, so every claim installs nothing and every claimed
+        # key silently does nothing. That is what it was, and it is why
+        # five keyboard tests failed pointing at innocent code.
+        self.input_bindings = [dict(b) for b in DEFAULT_BINDINGS]
+
+        # Input sections: `name -> {key: command}`, plus the enable order.
+        # A claim is a SECTION rather than per-key bindings (the one
+        # mechanism both backends have), so a fake that models only
+        # on_key_press cannot see a claimed key at all.
+        self._sections = {}
+        self._enabled = []
+
+        # Records for assertions.
+        self.commands = []
+        self.played = []
+        self.texts = []
+        self.terminated = False
+        self._sub_counter = 0
+
+        # If set to an exception instance/class, property access raises it (to
+        # simulate an mpv that died under us).
+        self.fail_with = None
+
+        # Properties this mpv does not have, so a write of one is refused --
+        # the field this fake did not model, and the one mpv_guard is about.
+        # Empty by default, and injected per test through
+        # `property_is_absent`: the point is to be able to say "this mpv is
+        # older than osd-border-style" without owning fourteen mpv builds.
+        #
+        # Deliberately NOT the other way round -- a list of every property
+        # mpv does have would assert agreement between this fake and a list
+        # in the same repository, which is the self-agreeing shape, and would
+        # fail on the first legitimate name somebody adds.
+        self._absent_properties = set()
+
+        # Recording starts here. Shared with the other stand-ins when
+        # build_player hands one in, so the ordering ACROSS collaborators is
+        # readable -- which is the half no per-object recorder can show.
+        self._journal = self._pending_journal or _ACTIVE_JOURNAL or Journal()
+        # One event for the handle coming into being. The constructor's own
+        # writes are deliberately not events, which leaves "after the new
+        # mpv exists" -- the ordering half of every re-creation claim --
+        # with no moment to name. This is that moment.
+        self._journal.record("mpv", "create")
+
+    # -- the journal --------------------------------------------------------
+
+    @property
+    def journal(self):
+        return self._journal
+
+    def __setattr__(self, name, value):
+        """Every property write the shim makes, in order.
+
+        Private names are skipped: they are this fake's own bookkeeping, not
+        anything mpv has. ``_suppress_set`` is for ``fire_property``, which
+        writes the attribute on mpv's behalf -- that is a `prop:` event, the
+        opposite direction, and recording it as a `set:` would let a test
+        about "the shim wrote this" match mpv reporting it.
+
+        A name in ``_absent_properties`` raises ``AttributeError``, which is
+        what the *inner* write does on both real backends -- libmpv from
+        ``_set_property``, jsonipc by the name being outside the property list
+        it read at connect. What each library's ``__setattr__`` then does with
+        that is the defect ``mpv_guard`` replaces, so the layer modelled here
+        is the one below it. ``__dict__.get`` because ``__init__`` writes
+        attributes before the set exists.
+        """
+        if not name.startswith("_") and name in self.__dict__.get(
+                "_absent_properties", ()):
+            raise AttributeError(name)
+        object.__setattr__(self, name, value)
+        if name.startswith("_") or name in self._ALIASES:
+            # An alias is not a second property. `fs` writes `fullscreen`
+            # through its own setter, which records under that name; letting
+            # the alias record as well puts two events on the stream for one
+            # thing mpv did, and invites a test to assert on the spelling
+            # rather than on the write.
+            return
+        journal = self.__dict__.get("_journal")
+        if journal is not None and not self.__dict__.get("_suppress_set"):
+            journal.record("mpv", "set", name, value)
+
+    # -- properties ---------------------------------------------------------
+
+    #: Property names that are another property under a second spelling.
+    _ALIASES = {"fs": "fullscreen"}
+
+    @property
+    def fs(self):
+        """mpv's documented alias for ``fullscreen`` -- one property under
+        two names.
+
+        Two independent attributes is the kind of infidelity that makes a
+        *wrong* test pass: the shim toggles fullscreen by writing ``fs``
+        (``set_fullscreen``) and asks about it by reading ``fullscreen``
+        (``_sync_window_geometry``, the HUD gateway), so split storage
+        would have the window agreeing it is not fullscreen immediately
+        after being made fullscreen.
+        """
+        return self.fullscreen
+
+    @fs.setter
+    def fs(self, value):
+        self.fullscreen = value
+
+    def _jms_write(self, name, value):
+        """The write itself, called by ``mpv_guard``'s subclass instead of
+        letting the backend swallow a refusal.
+
+        Pure delegation -- the refusal lives in ``__setattr__`` above, so an
+        unguarded fake behaves the same way. Its *existence* is what tells
+        ``mpv_guard._writer_for`` this class models its own write rather than
+        needing one of the two real ones, which is the only way a stand-in
+        that stores its properties as ordinary attributes can be guarded at
+        all.
+        """
+        FakeMPV.__setattr__(self, name, value)
+
+    def property_is_absent(self, *names):
+        """Make this an mpv that does not have these properties.
+
+        Spelled either way: `osd-border-style` and `osd_border_style` are the
+        same property, and the shim writes the second.
+        """
+        self._absent_properties.update(
+            name.replace("-", "_") for name in names)
+
+    def _read_raw(self, name):
+        """One property read by its full path name, for both backends'
+        spelling of it. Unset raises, which is what a real mpv does for a
+        property it has no value for and what every caller here catches."""
+        if name in self.raw_properties:
+            return self.raw_properties[name]
+        if "/" not in name:
+            return getattr(self, name.replace("-", "_"))
+        raise AttributeError(name)
+
+    # -- registration decorators (used by PlayerManager._init_mpv) ----------
+
+    def on_key_press(self, key):
+        def deco(func):
+            self._key_bindings[key] = func
+            return func
+
+        return deco
+
+    def property_observer(self, name):
+        def deco(func):
+            self._property_observers.setdefault(name, []).append(func)
+            return func
+
+        return deco
+
+    def event_callback(self, name):
+        def deco(func):
+            self._event_callbacks.setdefault(name, []).append(func)
+            return func
+
+        return deco
+
+    # -- test drivers -------------------------------------------------------
+
+    def fire_property(self, name, value):
+        """Invoke every observer registered for ``name`` with (name, value),
+        mirroring an mpv property-change notification. Run this from a spawned
+        thread to reproduce an observer firing off the player thread."""
+        self._suppress_set = True
+        try:
+            setattr(self, name.replace("-", "_"), value)
+        finally:
+            self._suppress_set = False
+        self._journal.record("mpv", "prop", name, value)
+        for cb in list(self._property_observers.get(name, [])):
+            cb(name, value)
+
+    def fire_event(self, name, event=None):
+        self._journal.record("mpv", "event", name)
+        for cb in list(self._event_callbacks.get(name, [])):
+            cb(event)
+
+    def press_key(self, key):
+        """Deliver a key the way mpv would: enabled sections first, then the
+        script bindings ``on_key_press`` registered.
+
+        Both sections the shim installs are defined ``force``, which in mpv
+        outranks everything else, and the later-enabled section wins -- so
+        the menu's arrows beat a standing seek claim while the menu is up,
+        which is the ordering the two claimants were designed around.
+
+        Key names match **exactly**, where mpv compares named keys without
+        case. So press the spelling the thing under test used: a claim
+        carries whatever ``input-bindings`` reported (``SPACE``, ``LEFT``),
+        a Python binding whatever the setting holds (``space``, ``left``).
+        Not worth emulating -- the alternative is a fake that quietly
+        answers a question about mpv's parser that no test here is asking.
+        """
+        self._journal.record("mpv", "key", key)
+        for name in reversed(self._enabled):
+            cmd = self._sections.get(name, {}).get(key)
+            if cmd is None:
+                continue
+            self._run_section_command(cmd)
+            return
+        cb = self._key_bindings.get(key)
+        if cb is not None:
+            cb()
+
+    def _run_section_command(self, cmd):
+        """What a section line does when its key is pressed. shlex, because
+        ``keysweep.section_lines`` quotes the key it passes along."""
+        parts = shlex.split(cmd)
+        if not parts or parts[0] == "ignore":
+            # `ignore` is mpv dropping the key. Recorded nowhere on
+            # purpose: the point of a suppression is that nothing sees it.
+            return
+        if parts[0] == "script-message":
+            # Which is how a claimed key reaches Python: as a client
+            # message carrying the semantic and the key it came from.
+            self.fire_event("client-message", {"args": parts[1:]})
+            return
+        self.commands.append(tuple(parts))
+
+    # -- control surface ----------------------------------------------------
+
+    def command(self, *args):
+        if self.fail_with is not None:
+            raise self.fail_with
+        self.commands.append(args)
+        self._journal.record("mpv", "cmd", args[0] if args else "",
+                             " ".join(str(a) for a in args[1:]) or _UNSET)
+        self._section_command(args)
+        if len(args) == 2 and args[0] == "get_property":
+            # jsonipc's spelling of _get_property, and it has to answer
+            # the same thing: a read the two backends disagree about is a
+            # test that passes on one matrix leg.
+            return self._read_raw(args[1])
+        return None
+
+    def _section_command(self, args):
+        """define/enable/disable-section, kept as state rather than only as
+        a recorded call -- otherwise a test can assert that a claim was
+        INSTALLED and never that it does anything."""
+        if not args:
+            return
+        verb = args[0]
+        if verb == "define-section" and len(args) >= 3:
+            lines = {}
+            for line in (args[2] or "").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                key, _sp, cmd = line.partition(" ")
+                lines[key] = cmd.strip()
+            self._sections[args[1]] = lines
+        elif verb == "enable-section" and len(args) >= 2:
+            # Re-enabling moves a section to the top, as mpv does.
+            self._disable_section(args[1])
+            self._enabled.append(args[1])
+        elif verb == "disable-section" and len(args) >= 2:
+            self._disable_section(args[1])
+
+    def _disable_section(self, name):
+        self._enabled = [n for n in self._enabled if n != name]
+
+    def play(self, url):
+        self._journal.record("mpv", "play", url)
+        self.played.append(url)
+        # A real play() clears the aborted/idle state; duration becomes known
+        # shortly after. Tests that use wait_property drive that separately.
+        #
+        # Recorded as mpv's doing, not ours: `playback-abort` is a READ-ONLY
+        # mpv property, so a `set:` event here would say the shim wrote
+        # something it cannot write -- and would break the one assertion
+        # that is worth making about a read-only property, which is that
+        # nothing ever writes it.
+        self._suppress_set = True
+        try:
+            self.playback_abort = False
+        finally:
+            self._suppress_set = False
+        self._journal.record("mpv", "prop", "playback-abort", False)
+
+    def show_text(self, text, duration=None, level=None):
+        self._journal.record("mpv", "text", text)
+        self.texts.append((text, duration, level))
+
+    def sub_add(self, url):
+        self._sub_counter += 1
+        self.sub = self._sub_counter
+        return self._sub_counter
+
+    def command_async(self, name, *args, callback=None):
+        """Only `sub-add` is modelled: the track appears in `track_list` the
+        way mpv lists an external one, unselected (the shim passes "auto"),
+        and the reply comes at once -- on the calling thread, where real mpv
+        uses its own; the shim only queues a task from it either way."""
+        self.commands.append((name,) + args)
+        if name != "sub-add":
+            raise NotImplementedError("FakeMPV.command_async: " + name)
+        self._sub_counter += 1
+        self.track_list = list(self.track_list) + [{
+            "type": "sub", "id": self._sub_counter, "external": True,
+            "external-filename": args[0]}]
+        if callback is not None:
+            callback(None, None)
+
+    def screenshot(self):
+        self.commands.append(("screenshot",))
+
+    def terminate(self):
+        self._journal.record("mpv", "terminate")
+        # This fake's own bookkeeping -- mpv has no `terminated` property --
+        # so it is not an event.
+        self._suppress_set = True
+        try:
+            self.terminated = True
+        finally:
+            self._suppress_set = False
+
+    # Property access hook for the fail_with paths. We can't intercept normal
+    # attribute reads cheaply without __getattribute__ gymnastics, so tests that
+    # need a raising read use ``raise_on`` below instead.
+    def raise_on_next_property(self, exc):
+        self.fail_with = exc
+
+
+class FakeMPVLibmpv(FakeMPV):
+    """python-mpv's surface: observers registered by *name and handler*.
+
+    Split from the jsonipc one because the shim chooses between the two by
+    capability -- ``hasattr(type(instance), "bind_property_observer")``, in
+    both ``mpv_events.observe`` and ``mpv_events.wait_property``. One fake
+    carrying both surfaces answers that question identically on both matrix
+    legs, so the libmpv branch was never taken by anything: the leg named
+    "libmpv" was exercising jsonipc's dispatch.
+    """
+
+    def observe_property(self, name, handler):
+        self._journal.record("mpv", "observe", name)
+        self._property_observers.setdefault(name, []).append(handler)
+
+    def unobserve_property(self, name, handler):
+        self._journal.record("mpv", "unobserve", name)
+        obs = self._property_observers.get(name, [])
+        if handler in obs:
+            obs.remove(handler)
+
+    def property_observer(self, name):
+        """The decorator, stamp and all.
+
+        python-mpv writes ``unobserve_mpv_properties`` onto the function it
+        is handed, and **a bound method has no __dict__ to take it**, so
+        this raises AttributeError for exactly the callbacks the shim
+        registers, on exactly one backend, at runtime and nowhere else.
+        That hazard is the reason ``mpv_events.observe`` exists; a fake
+        that accepts a bound method here cannot see anyone walk back into
+        it.
+        """
+        def deco(func):
+            self.observe_property(name, func)
+            func.unobserve_mpv_properties = \
+                lambda: self.unobserve_property(name, func)
+            return func
+
+        return deco
+
+    def _get_property(self, name):
+        return self._read_raw(name)
+
+    # python-mpv's shutdown surface, which player._quiesce_libmpv drives:
+    # without it the quiesce failed on an AttributeError here and every
+    # libmpv leg skipped the order it exists for.
+    core_shutdown = False
+
+    def quit(self, code=None):
+        self._journal.record("mpv", "quit")
+        self.core_shutdown = True
+
+    # python-mpv's signature: a fake that rejected a keyword the shim passes
+    # would raise inside the quiesce's own except, and skip it silently.
+    # "shutdown" resolves the wait normally, which is python-mpv's usual
+    # exit; tests/test_libmpv_quiesce.py covers its ShutdownError one.
+    @contextlib.contextmanager
+    def prepare_and_wait_for_event(self, *event_types, cond=lambda evt: True,
+                                   timeout=None, catch_errors=True):
+        yield
+        if "shutdown" in event_types and self.core_shutdown:
+            return
+        raise TimeoutError()
+
+
+class FakeMPVJsonIPC(FakeMPV):
+    """python-mpv-jsonipc's surface: observers registered by id.
+
+    The id is unique across the whole player rather than per property, and
+    it is modelled rather than counted for a reason: it is the only thing
+    ``unbind_property_observer`` is given, so an id unique only within one
+    property unbinds the wrong observer the moment two are watched. A fake
+    is supposed to expose that shape of bug, not reproduce it.
+    """
+
+    def __init__(self, **options):
+        super().__init__(**options)
+        self._observer_ids = {}          # id -> (name, handler)
+        self._next_observer_id = 1
+        # python-mpv-jsonipc calls this when the IPC socket closes -- for our
+        # own terminate() too, with nothing on the handle to tell the two
+        # apart. The shim routes it to the shutdown handlers (B7,
+        # player._on_ipc_closed), because mpv's "shutdown" event is not
+        # guaranteed to reach an IPC client first.
+        self.quit_callback = None
+
+    @property
+    def event_bindings(self):
+        """The real library's name for the registered event handlers."""
+        return self._event_callbacks
+
+    def close_socket(self):
+        """mpv went away and the socket closed, with no "shutdown" event
+        delivered first -- what a window close after a download or a
+        playback produced, measured on Linux and Windows (B7)."""
+        if self.quit_callback:
+            self.quit_callback()
+
+    def terminate(self):
+        # As the real library does: it stops mpv first, and the reader's EOF
+        # reaches quit_callback.
+        super().terminate()
+        if self.quit_callback:
+            self.quit_callback()
+
+    def bind_property_observer(self, name, func):
+        self._journal.record("mpv", "observe", name)
+        observer_id = self._next_observer_id
+        self._next_observer_id += 1
+        self._observer_ids[observer_id] = (name, func)
+        self._property_observers.setdefault(name, []).append(func)
+        return observer_id
+
+    def unbind_property_observer(self, observer_id):
+        name, func = self._observer_ids.pop(observer_id, (None, None))
+        self._journal.record("mpv", "unobserve", name)
+        obs = self._property_observers.get(name, [])
+        if func in obs:
+            obs.remove(func)
+
+    def bind_event(self, name, func):
+        self._event_callbacks.setdefault(name, []).append(func)
+
+    def on_event(self, name):
+        def deco(func):
+            self.bind_event(name, func)
+            return func
+
+        return deco
+
+
+def fake_mpv_class(backend=None):
+    """The fake whose surface matches the backend this leg is exercising."""
+    return FakeMPVLibmpv if (backend or BACKEND) == "libmpv" else FakeMPVJsonIPC
+
+
+def is_fake_mpv(mod):
+    """Whether an imported ``mpv`` / ``python_mpv_jsonipc`` module is ours.
+
+    ``is FakeMPV`` no longer answers this -- what a module carries is one of
+    the two flavours -- and an identity check that has silently stopped
+    matching reports every fake as real, which is how a "this must not be
+    the fake" assertion dies.
+    """
+    cls = getattr(mod, "MPV", None)
+    return isinstance(cls, type) and issubclass(cls, FakeMPV)
+
+
+def make_fake_mpv_module(backend="libmpv"):
+    """Return an object usable as a stand-in for the imported mpv backend.
+
+    Both backends expose an ``MPV`` factory; only libmpv (python-mpv) exposes
+    ``ShutdownError``. player.py keys its ``_mpv_errors`` tuple off exactly that
+    (``hasattr(mpv, "ShutdownError")``), so the presence/absence here is what
+    makes the two matrix legs diverge — libmpv -> (BrokenPipeError,
+    ShutdownError), jsonipc -> (BrokenPipeError, TimeoutError)."""
+    import types
+
+    name = "mpv" if backend == "libmpv" else "python_mpv_jsonipc"
+    mod = types.ModuleType(name)
+    mod.MPV = fake_mpv_class(backend)
+    if backend == "libmpv":
+        mod.ShutdownError = ShutdownError
+    return mod
+
+
+def backend_disconnect_error(player_module):
+    """The backend-specific 'mpv is gone' exception type — the second member of
+    ``_mpv_errors`` (ShutdownError on libmpv, TimeoutError on jsonipc). Used by
+    the matrix tests to prove the disconnect guards catch the *divergent*
+    member, not just the shared BrokenPipeError."""
+    return player_module._mpv_errors[1]
+
+
+def prime_args(config_dir=None):
+    """Prime ``args.get_args()``'s module-level cache with a clean parse.
+
+    The app parses ``sys.argv`` the first time any module resolves the config
+    dir; under a test runner ``sys.argv`` carries pytest/unittest tokens the
+    app's argparse rejects. Parsing once here against a clean argv, pinned to
+    a config dir, caches a valid Namespace for the rest of the process --
+    matching how the fast suite's single_instance test sidesteps the same trap
+    by mocking ``conffile.get``.
+
+    ``config_dir`` defaults to a throwaway rather than to the real one; see
+    below for what that cost.
+    """
+    import jellyfin_mpv_shim.args as args_mod
+    if args_mod._args is not None:
+        return args_mod._args
+    if config_dir is None:
+        # Never the developer's real config. Four of the five callers pass
+        # nothing, and that used to mean "whatever confdir resolves to" --
+        # which on Windows is %APPDATA%, because conffile.win32 knows nothing
+        # about XDG_CONFIG_HOME. The real-mpv legs then launched mpv with
+        # --config-dir pointing at the user's own jellyfin-mpv-shim
+        # directory, reading their mpv.conf and writing their state.
+        config_dir = tempfile.mkdtemp(prefix="jms-itest-conf-")
+        atexit.register(shutil.rmtree, config_dir, ignore_errors=True)
+    # Both, because the two platforms read different ones and --config only
+    # covers what goes through conffile. Same pairing as
+    # test_single_instance_multiproc._spawn.
+    os.environ["XDG_CONFIG_HOME"] = config_dir
+    os.environ["APPDATA"] = config_dir
+    argv = ["jellyfin-mpv-shim", "--config", config_dir]
+    saved = sys.argv
+    sys.argv = argv
+    try:
+        return args_mod.get_args()
+    finally:
+        sys.argv = saved
+
+
+# Primed HERE, at import, and not left to whichever module happens to call it
+# first. Every integration module imports this one before it touches the app,
+# so this is the earliest point that covers all of them -- and it is what makes
+# a module runnable ON ITS OWN. Without it, `python -m unittest -v
+# tests.integration.test_mpvtk_hud` dies on the app's own usage line the moment
+# a test resolves the config dir (argparse rejects the runner's `-v` and the
+# module path), which reads as a broken test module and is not; the modules
+# passed only because a sibling earlier in the leg had primed the cache. The
+# same trap the tree-wide `-k, never a module name` rule is about, one layer
+# down. See prime_args.
+prime_args()
+
+_PLAYER_MODULE = None
+
+
+def import_player_with_fake_mpv():
+    """Import ``jellyfin_mpv_shim.player`` bound to :class:`FakeMPV`.
+
+    player.py does a bare ``import mpv`` and constructs a module-level
+    ``PlayerManager()`` singleton at import time (which would otherwise launch a
+    real player + window). We install a fake ``mpv`` module and quiet the
+    settings that would pull in trickplay / shader packs / the OSC, then import
+    once and cache the module.
+
+    Returns the imported ``player`` module. ``player.PlayerManager`` is the class
+    under test; use :func:`build_player` to get a controllable instance.
+    """
+    global _PLAYER_MODULE
+    if _PLAYER_MODULE is not None:
+        return _PLAYER_MODULE
+
+    if "jellyfin_mpv_shim.player" in sys.modules:
+        # Something already imported the real thing; refuse rather than pretend.
+        raise RuntimeError(
+            "jellyfin_mpv_shim.player already imported without the fake mpv; "
+            "import_player_with_fake_mpv must run first."
+        )
+
+    # Config writes go to the throwaway the import-time prime above pinned:
+    # `confdir` returns `get_args().config` whenever it is set, so the FIRST
+    # parse decides the config dir for the whole process and a second dir made
+    # here could never become it. (It used to make one anyway, which is why
+    # this says so rather than saying nothing.)
+    prime_args()
+
+    from jellyfin_mpv_shim.conf import settings
+    # Disable the heavyweight optional features so _init_mpv / OSDMenu build
+    # against the fake without touching disk shaders or spawning threads.
+    settings.thumbnail_enable = False
+    settings.shader_pack_enable = False
+    settings.menu_mouse = False
+    settings.svp_enable = False
+    settings.discord_presence = False
+    # "none": no shim OSC lua loaded AND mpv's own OSC suppressed. This
+    # was `osc_style = "default"` plus `enable_osc = False` until #615
+    # retired the second half, which left the write dead and these legs
+    # quietly running with mpv's OSC up.
+    settings.osc_style = "none"
+    settings.check_updates = False
+
+    # Flip the import-time backend selector: player.py imports libmpv when
+    # mpv_ext is false, else python_mpv_jsonipc. Install the matching fake
+    # module so the real backend never loads.
+    # NOTE: overwrite, don't setdefault — the capability probes at harness
+    # import already loaded the *real* backend module into sys.modules, and a
+    # setdefault would leave that in place (silently constructing a real mpv).
+    if BACKEND == "jsonipc":
+        settings.mpv_ext = True
+        settings.mpv_ext_start = False       # don't try to spawn a real mpv
+        name = "python_mpv_jsonipc"
+    else:
+        settings.mpv_ext = False
+        name = "mpv"
+    real = sys.modules.get(name)
+    sys.modules[name] = make_fake_mpv_module(BACKEND)
+
+    try:
+        import jellyfin_mpv_shim.player as player_module
+    finally:
+        # Put the real backend back. player.py did `import mpv` while the fake
+        # was installed, so its module global still points at the fake and the
+        # FakeMPV-driven tests are unaffected — but sys.modules is process-wide
+        # and permanent, so leaving the fake there handed it to every *later*
+        # importer too. That is what made the whole integration suite look
+        # flaky: tests/integration/test_mpvtk_browser.py does `import mpv as
+        # libmpv` to spawn a real handle, got the fake once any player test had
+        # run first, and every real-mpv test after it failed with "renderer
+        # never became ready" — 15s of timeout each. In isolation they passed,
+        # which is exactly what a resource-contention problem looks like.
+        if real is not None:
+            sys.modules[name] = real
+        else:
+            sys.modules.pop(name, None)
+
+    _PLAYER_MODULE = player_module
+    return player_module
+
+
+#: A refused property write that is a **decision**, not a defect, with the
+#: reason -- the executable form of the "deliberately absent" list, in the
+#: shape `tests/integration/test_mpv_state_restored.py`'s ALLOWED already
+#: uses. An entry here is somebody's decision, and adding one is how you say
+#: an absence is intended rather than accidental.
+ALLOWED_REFUSED_WRITES = {
+    "osd_border_style": (
+        "set_osd_settings writes it inside a try/except for an mpv that "
+        "predates the property; the site is correct and stays. What changed "
+        "is that the refusal is now visible, so on a box with such an mpv "
+        "every OSD settings write would otherwise fail this assertion"),
+}
+
+
+def watch_refused_writes(test, pm):
+    """Fail ``test`` if mpv refuses a property write during it.
+
+    Registered by ``build_player`` for every integration case and by
+    ``E2ETestCase.setUp`` for every e2e one, so **nothing opts in** -- which
+    is the whole requirement: a check each test has to remember to call is
+    absent exactly where it is needed.
+
+    Worth different amounts in the two suites, and saying which is the point.
+    Against a **real mpv** (e2e, and the three integration files that run the
+    real ``_init_mpv``) this is a version-skew detector: it fails on the box
+    whose mpv lacks a property the shim writes, and different boxes and CI
+    images carry different builds, so the population gets covered over runs
+    rather than per run. Against ``FakeMPV`` it can only fire for a property
+    a test declared absent -- said plainly, because a hook that cannot fail
+    is the "tests that cannot fail" shape.
+
+    The mark is taken here rather than counting from zero: the guard records
+    on the *class*, so that a re-created mpv mid-test still reports, and the
+    e2e player is process-wide and outlives the case.
+
+    **The mark is one number per guarded class, not one number.** The window
+    is a question about every class the case touched, and a case can touch a
+    class the manager is not holding at either end of it -- mpv re-created
+    from a re-imported module gets a *different* guarded class, whose counter
+    starts at zero. Observing only the class at mark time and the class at
+    cleanup gets this wrong in both directions: `A -> B -> A` never asks B at
+    all, and a case that ends on B asks B from zero, which reports the
+    refusals of every earlier case in the process. The registry in
+    `mpv_guard` is the complete list, so a snapshot over it diffed at cleanup
+    answers both.
+
+    ``pm`` is **not read**. It stays in the signature because every caller has
+    one and passing it is what says which player the case is about, but the
+    window is per guarded class now and the registry already holds every
+    class -- including ones no manager is pointing at.
+    """
+    from jellyfin_mpv_shim import mpv_guard
+
+    # Classes, not the player: `guarded` caches one class per base and the
+    # counter lives there, so the instance was never the thing being asked --
+    # and a class that has no live instance by cleanup is exactly the one the
+    # old two-instant window dropped.
+    mark = {cls: mpv_guard.refused_count(cls)
+            for cls in mpv_guard.guarded_classes()}
+    test.addCleanup(_assert_no_refused_writes, test, mark)
+
+
+def _assert_no_refused_writes(test, mark):
+    from jellyfin_mpv_shim import mpv_guard
+
+    # SINCE the mark, not the whole record: it is shared by every instance of
+    # the guarded class and so by every case in the process, and reading all
+    # of it fails this case for the refusal of the one before it.
+    #
+    # One window per guarded class, over every class that exists NOW. A class
+    # absent from the snapshot was built during this case, so its whole record
+    # is inside the window and it is asked from zero -- correctly, where
+    # asking a pre-existing class from zero would over-report.
+    windows = [(cls, mark.get(cls, 0))
+               for cls in mpv_guard.guarded_classes()]
+    #
+    # Names only. The record carries the value, and libmpv puts it in the
+    # exception's own args -- `http_header_fields` is this server's
+    # Authorization header, so neither belongs in a failure message.
+    names = sorted({r.name
+                    for window, since in windows
+                    for r in mpv_guard.refusals_since(window, since)}
+                   - set(ALLOWED_REFUSED_WRITES))
+    if not names:
+        return
+    test.fail(
+        "mpv refused these property writes, so each one was a write this "
+        "code believed it had made: %s. Either the property is wrong for "
+        "this mpv, or the absence is deliberate and belongs in "
+        "_harness.ALLOWED_REFUSED_WRITES with its reason." % ", ".join(names))
+
+
+def build_player(player_module, video=None, test=None):
+    """Construct a ``PlayerManager`` bypassing ``__init__`` and wire the minimal
+    state the state-machine methods touch, backed by a fresh :class:`FakeMPV`.
+
+    We deliberately avoid the real ``__init__`` here: the goal is to drive the
+    epoch / lock / queue logic in isolation, not to re-test mpv option plumbing.
+    Collaborators the tested methods call out to (``play``, timeline sends) are
+    left as real methods; tests stub the ones they want to observe.
+    """
+    from queue import Queue
+    from threading import RLock, Lock, Event
+    from jellyfin_mpv_shim.utils import Timer
+    from jellyfin_mpv_shim.session_reporter import SessionReporter
+
+    PlayerManager = player_module.PlayerManager
+    pm = PlayerManager.__new__(PlayerManager)
+
+    # ONE journal across every stand-in, so the order of what the player
+    # did to mpv, to the menu and to SyncPlay is readable as a single
+    # sequence. That is the half a per-object recorder cannot show, and the
+    # half this codebase's ordering bugs live in.
+    pm.journal = Journal()
+    # ...and every mpv built AFTER this one joins it too. _init_mpv goes
+    # through the fake module, which cannot be handed a journal, so without
+    # this the record stops at the first re-creation.
+    use_journal(pm.journal)
+    # Through the same subclass `_construct_mpv` uses, so the object every
+    # integration test drives has production's shape. This function
+    # deliberately skips the option plumbing; it must not also skip the one
+    # interception point every property write goes through.
+    # `passthrough=()` because FakeMPV stores its properties as ordinary
+    # attributes, so the snapshot arm() takes by default would exempt exactly
+    # the properties a test injects an absence into.
+    from jellyfin_mpv_shim import mpv_guard
+
+    pm._player = mpv_guard.guarded(fake_mpv_class())(journal=pm.journal)
+    mpv_guard.arm(pm._player, passthrough=())
+    pm._video = video
+    pm.evt_queue = Queue()
+    pm._lock = RLock()
+    pm._tl_lock = RLock()
+    # Audio state. _init_mpv calls apply_audio_settings, which is wrapped in a
+    # try/except so a half-built mpv can't abort the init -- meaning a missing
+    # attribute here shows up as a logged traceback rather than a failure.
+    pm._audio_lock = RLock()
+    pm._audio_configured = False
+    pm._audio_snapshot = None
+    # Separate slot from _audio_snapshot: the chosen output device is not part
+    # of the audio *mode*, so it must survive a return to "auto".
+    pm._device_snapshot = None
+    # Whether this mpv honours a runtime force-window change; _init_mpv reads
+    # it off the real version. FakeMPV has none, so assume the modern
+    # behaviour and let the tests that care set it explicitly.
+    pm._runtime_force_window = True
+    pm._finished_lock = Lock()
+    pm.timeline_trigger = None
+    pm.action_trigger = None
+    pm._track_memory = None
+    pm.external_subtitles = {}
+    pm._pending_subs = {}
+    pm.should_send_timeline = False
+    pm.start_time = 0.0
+    pm.url = None
+    pm.last_update = Timer()
+    pm._jf_settings = None
+    pm.pause_ignore = None
+    pm.do_not_handle_pause = False
+    pm._last_offline_record = float("-inf")
+    pm.last_seek = None
+    pm.warned_about_transcode = False
+    pm.fullscreen_disable = False
+    pm.is_in_intro = False
+    pm.playback_time_before_seek = None
+    pm.trickplay = None
+    pm._mpv_alive = True
+    pm._terminate_thread = None
+    pm._last_offline_record = float("-inf")
+    pm._play_epoch = 0
+    pm._reached_eof = False
+    pm._last_playback_position = 0
+    pm._stall_position = None
+    pm._stall_since = 0.0
+    pm._last_intro_msg_time = 0.0
+
+    # #16 key claims. `_swept`/`_swept_ptr` are None -- the *uncached*
+    # state -- so a claim really does sweep FakeMPV.input_bindings rather
+    # than being handed a prepared answer: that sweep is the half of the
+    # feature a fake can get wrong without anything noticing.
+    pm._key_claims = {}
+    pm._key_actions = {}
+    pm._swept = None
+    pm._swept_ptr = None
+    # The lua probe, unanswered. None means "not asked yet" for both, which
+    # is what the constructor sets; _effective_osc_style reads the override
+    # on every _init_mpv, so a missing one aborts mpv creation outright.
+    pm._lua_works = None
+    pm._lua_probe = None
+    pm._osc_style_override = None
+    # ...and its sibling, the gamepad build gate. Read by _construct_mpv on
+    # the same path and for the same reason, so a missing one is not a
+    # skipped branch -- it is an AttributeError out of every mpv creation.
+    pm._gamepad_works = None
+
+    # Picture processing. All of these are read BEFORE they are written --
+    # the deinterlace override on every load, the pristine snapshot the
+    # first time any preset is turned off -- so a build_player without them
+    # does not skip a write, it raises into `_play_media`'s broad except
+    # and leaves the whole feature untested and green.
+    pm._deinterlace_override = None
+    pm._aspect_override = None
+    # `_aspect_pristine` and `_hud_generation` are deliberately NOT seeded
+    # here: PlayerManager carries them as class attributes precisely so the
+    # two dozen stand-ins that skip `__init__` do not each have to learn
+    # about them. See the note beside them in player.py.
+    pm._no_deinterlace_auto = False
+    pm._render_written = set()
+    # The real player snapshots this in `_init_mpv`, which build_player
+    # deliberately does not run. Taking it here, from a FakeMPV nothing has
+    # written to yet, is the same claim: "the values before any setting or
+    # shader profile touched them". Leaving it empty would NOT be a neutral
+    # stand-in -- `_apply_render_preset` reads an empty snapshot as "this
+    # mpv was never probed" and writes every property regardless, so a test
+    # for the restore would silently exercise the wrong branch.
+    pm._render_pristine = {}
+    pm._snapshot_render_pristine()
+
+    pm.repeat_mode = "none"
+    pm._osc_script_loaded = False
+    # enable_osc's latch: read directly, not via getattr, so a built player
+    # without it raises rather than silently taking the un-suppressed path.
+    pm._osc_suppressed = False
+    pm.mpvtk_active = False
+    pm._hud_skip = None
+    pm._trickplay_pending = False
+
+    # Load/start bookkeeping. update() and the stop/advance paths read these,
+    # so they have to exist even for tests that never load anything.
+    pm._loading = False
+    # A real one: it is lazy (no thread until something is submitted) and the
+    # stop/advance paths genuinely queue reports through it, so a stub would
+    # hide ordering bugs rather than expose them.
+    pm._reporter = SessionReporter()
+    pm._load_failed = Event()
+    pm._load_completed = Event()
+    pm._load_cancelled = False
+    pm._load_error_detail = None
+    pm._load_generation = 0
+    pm._start_in_progress = False
+    pm._failed_playback = None
+    pm._session_ready = Event()
+    pm._last_ui_seek_time = 0.0
+    pm._browse_bg_deferred = False
+
+    # Optional UI hooks. This harness builds a PlayerManager without running
+    # __init__, so anything the real constructor defines has to be set here or
+    # the code that reads it raises instead of taking its "no handler" path.
+    pm.on_window_closed = None
+    pm.on_mpv_gone = None
+    pm.on_mpv_recreated = None
+    pm.on_reopen_failed = None
+    pm.on_nav_back = None
+    pm.on_nav_command = None
+    pm.on_hud_menu = None
+    pm.on_playstate = None
+    pm.on_stopped_at = None
+    pm.on_syncplay_change = None
+    pm.notify_update = None
+    pm.notify_syncplay = None
+    pm.syncplay_menu_reachable = None
+    pm.on_load_start = None
+    pm.on_load_error = None
+    pm.on_mpv_terminated = None
+    pm.on_decorations_changed = None
+    pm._showing_browse_bg = False
+    # Window bookkeeping the force-window paths read before they write:
+    # _rearm_window_geometry compares against _geometry_armed, and
+    # clear_stats()/toggle_stats() read _stats_shown. Both are plain
+    # constructor state, so the fake mirrors the constructor's initial value.
+    pm._geometry_armed = None
+    pm._stats_shown = False
+
+    pm.menu = _FakeMenu(journal=pm.journal)
+    pm.syncplay = _FakeSyncplay(journal=pm.journal)
+    pm.update_check = _FakeUpdateCheck()
+    from jellyfin_mpv_shim.osc_bridge import OscBridge
+    pm.osc_bridge = OscBridge(pm)
+
+    # Registered HERE rather than in a base class, and that is what makes it
+    # automatic: the integration suite has no shared base -- its cases
+    # inherit unittest.TestCase directly -- so a base added now would cover
+    # only the files somebody remembered to re-parent. This function is the
+    # one thing they all call. `test` is optional in the signature and
+    # mandatory in practice: tools/audit_build_player_calls.py fails a call
+    # site that does not pass it, so the opt-in is enforced rather than
+    # remembered.
+    if test is not None:
+        watch_refused_writes(test, pm)
+    return pm
+
+
+class _FakeMenu:
+    is_menu_shown = False
+
+    def __init__(self, journal=None):
+        # Shared with the player's fake when build_player made it, so "the
+        # menu was hidden before the file was handed to mpv" is one
+        # assertion rather than two recorders nobody can line up.
+        self.journal = journal or Journal()
+        self.actions = []
+        # The drawing surface OSDMenu carries. The player reads these back
+        # (mouse_select resolves a click against menu_list, and the shader
+        # profile menu is reached through profile_manager), so a stand-in
+        # without them turns those paths into AttributeError rather than a
+        # test. tools/audit_fake_contracts.py keeps the set honest.
+        self.menu_list = []
+        self.menu_selection = 0
+        self.profile_manager = None
+
+    def menu_action(self, action):
+        self.journal.record("menu", "action", action)
+        self.actions.append(action)
+
+    def put_menu(self, title, entries=None, selected=0):
+        self.journal.record("menu", "put", title)
+        self.menu_list = entries if entries is not None else []
+        self.menu_selection = selected
+
+    def mouse_select(self, *_a, **_kw):
+        pass
+
+    def show_menu(self):
+        self.journal.record("menu", "show")
+        self.is_menu_shown = True
+
+    def hide_menu(self):
+        self.journal.record("menu", "hide")
+        self.is_menu_shown = False
+
+    def update_player(self, player):
+        # Mirrors OSDMenu.update_player: the menu survives mpv re-creation and
+        # is pointed at the new player handle.
+        self.journal.record("menu", "update_player")
+        self.player = player
+
+
+class _FakeSyncplay:
+    """Membership and following are separate, as they are in the real one.
+
+    A halted member (in a group, not playing its content) is the state that
+    reaches mpv re-creation — stop() halts rather than leaves, and idle_quit
+    is gated on is_enabled, which a halted session passes. Collapsing both
+    onto one flag could not express it, so nothing could test what a re-create
+    does to a group.
+
+    Like _FakeMenu, this survives mpv re-creation: PlayerManager builds the
+    real manager once and keeps it, because group membership is not a
+    property of the mpv handle.
+    """
+
+    def __init__(self, journal=None):
+        # Shared with the player's fake when build_player made it -- the
+        # bugs here are orderings between the two ("halted before the
+        # re-create", "stop reported before we left").
+        self.journal = journal or Journal()
+        self._enabled = False
+        self._following = True
+        self.client = None
+        self.current_group = None
+        #: Everything the player asked this object to do, in order. The
+        #: player↔SyncPlay wiring is a sequence, and a stand-in that only
+        #: answers questions cannot show a command being sent twice, in the
+        #: wrong order, or to a session that has been left.
+        self.calls = []
+
+    def _note(self, name, args=()):
+        self.journal.record("syncplay", name)
+        self.calls.append((name, args))
+
+    def is_enabled(self):
+        return self._enabled and self._following
+
+    def in_group(self):
+        return self._enabled
+
+    def is_halted(self):
+        return self._enabled and not self._following
+
+    def halt_group_playback(self, *_a, **_kw):
+        self._following = False
+        self._note("halt_group_playback")
+
+    def resume_group_playback(self, *_a, **_kw):
+        self._following = True
+        self._note("resume_group_playback")
+
+    def join_group(self, *a, **_kw):
+        self._enabled = True
+        self._following = True
+        self._note("join_group", a)
+
+    def disable_sync_play(self, *_a):
+        self._enabled = False
+        self._following = True
+        self._note("disable_sync_play")
+
+    def sync_playback_time(self):
+        pass
+
+    # The rest of the surface the player reaches for. Recorded rather than
+    # ignored: a no-op that swallows the call still leaves "did we forward
+    # this?" unanswerable, and these are the paths where the wiring bugs are
+    # (a pause broadcast to a group we had left, a buffer never reported).
+    # tools/audit_fake_contracts.py is what keeps this list complete.
+    def _record(name):
+        def call(self, *a, **_kw):
+            self._note(name, a)
+        call.__name__ = name
+        return call
+
+    on_buffer = _record("on_buffer")
+    on_buffer_done = _record("on_buffer_done")
+    pause_request = _record("pause_request")
+    play_request = _record("play_request")
+    play_done = _record("play_done")
+    seek_request = _record("seek_request")
+    request_next = _record("request_next")
+    request_prev = _record("request_prev")
+    request_skip = _record("request_skip")
+    process_command = _record("process_command")
+    process_group_update = _record("process_group_update")
+    # Membership arrives later, as the server's GroupJoined.
+    create_group = _record("create_group")
+    del _record
+
+
+class _FakeUpdateCheck:
+    def check(self):
+        pass
+
+
+# --------------------------------------------------------------------------
+# Concurrency-forcing helpers
+# --------------------------------------------------------------------------
+
+def run_concurrently(target, count, *, args_for=None, join_timeout=10):
+    """Start ``count`` threads all running ``target`` and join them.
+
+    ``args_for(i)`` (optional) supplies per-thread positional args. Exceptions
+    raised in any worker are captured and re-raised in the caller so a race that
+    corrupts state surfaces as a test failure, not a silent thread death.
+
+    Returns the list of per-thread return values in thread-index order.
+    """
+    results = [None] * count
+    errors = [None] * count
+
+    def wrap(i):
+        try:
+            a = args_for(i) if args_for is not None else ()
+            results[i] = target(*a)
+        except Exception as exc:  # noqa: BLE001 - surfaced below
+            errors[i] = exc
+
+    threads = [threading.Thread(target=wrap, args=(i,)) for i in range(count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(join_timeout)
+    alive = [t for t in threads if t.is_alive()]
+    if alive:
+        raise AssertionError("%d worker thread(s) did not finish (deadlock?)" %
+                             len(alive))
+    for exc in errors:
+        if exc is not None:
+            raise exc
+    return results
+
+
+def spin_barrier(n):
+    """A Barrier that all N racing threads wait on to line up their critical
+    section, plus the main thread — so the interleaving is forced, not hoped
+    for via sleeps."""
+    return threading.Barrier(n)
+
+
+# --------------------------------------------------------------------------
+# ffmpeg sample media (Tier 2)
+# --------------------------------------------------------------------------
+
+_WINDOWS_FONTS = (r"C:\Windows\Fonts", ("arial.ttf", "segoeui.ttf"))
+
+
+def _drawtext(label):
+    """``(filter, cwd)`` drawing ``label``, or ``(None, None)`` if this machine
+    cannot draw one.
+
+    drawtext resolves its default font through fontconfig, which Windows does
+    not have: ffmpeg exits ENOENT there rather than falling back to a font,
+    which took out every test whose clip carried a label while the identical
+    unlabelled clips built fine. The label is a debugging affordance -- it is
+    what tells two clips apart when you watch the window go by -- so name a
+    font explicitly where one is findable, and go without where it is not.
+
+    The font is named *relatively*, from ffmpeg's working directory, because a
+    Windows path cannot be spelled inside a filter graph without guessing how
+    many times its drive colon will be unescaped on the way in. It is a
+    separator there, and one backslash is consumed by the graph parser before
+    the option parser ever sees it -- so ``fontfile=C\\:/...`` arrives as the
+    option ``fontfile=C`` followed by the junk option ``/Windows/...``. A bare
+    filename has no colon to argue about."""
+    spec = "drawtext=text='%s':fontcolor=white:x=10:y=10" % label
+    if os.name != "nt":
+        return spec, None
+    fontdir, names = _WINDOWS_FONTS
+    for name in names:
+        if os.path.isfile(os.path.join(fontdir, name)):
+            return spec + ":fontfile=" + name, fontdir
+    return None, None
+
+
+def make_test_clip(path, duration=2, size="160x120", label=None):
+    """Generate a tiny, deterministic H.264 clip with ffmpeg. Cheap enough to
+    regenerate per test; no network, no external assets."""
+    src = "testsrc=duration=%d:size=%s:rate=10" % (duration, size)
+    cwd = None
+    if label:
+        drawtext, cwd = _drawtext(label)
+        if drawtext:
+            src += "," + drawtext
+    cmd = [
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", src,
+        "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast",
+        # Absolute, so the working directory above cannot move the output.
+        os.path.abspath(path),
+    ]
+    # Not check=True: CalledProcessError prints the command and swallows the
+    # captured stderr, so a filter ffmpeg refused and a filter it could not
+    # find a font for are the same opaque exit status.
+    proc = subprocess.run(cmd, cwd=cwd, stdout=subprocess.DEVNULL,
+                          stderr=subprocess.PIPE, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError("ffmpeg exited %d building %s: %s" % (
+            proc.returncode, path, (proc.stderr or "").strip()))
+    return path
+
+
+def start_live_stream(path, size="160x120"):
+    """Start an endless, duration-less stream on a FIFO at ``path``.
+
+    Models what a client actually gets for live TV, and for a .strm whose
+    origin is an open-ended feed: mpv can play it, but the duration property
+    never arrives. That distinction matters because the playback-start gate
+    used to wait on ``duration``, which for these sources meant waiting out
+    the whole timeout and killing a stream that was playing fine.
+
+    Raw Annex-B H.264 rather than MPEG-TS on purpose: a TS over a pipe still
+    lets ffmpeg estimate a (steadily growing) duration from the timestamps it
+    has seen, which would make the test assert nothing. An elementary stream
+    carries no container timestamps, so the duration stays genuinely absent.
+
+    No ``-re``: the writer is throttled by the FIFO buffer filling anyway, and
+    pacing it in realtime instead made mpv wait seconds for enough data to
+    probe. Unthrottled, file-loaded fires immediately and the stream is still
+    endless.
+
+    Returns the ffmpeg Popen; the caller must terminate it (the writer blocks
+    on the FIFO until a reader opens it, so it exits on its own only once mpv
+    has gone away).
+    """
+    if not hasattr(os, "mkfifo"):
+        # Windows. A named pipe there is a \\.\pipe\ object created through
+        # the Win32 API, not a filesystem node os.mkfifo can make, so this
+        # leg needs a different writer rather than a different path. Skipped
+        # rather than quietly swapped for a regular file: a file has a
+        # duration, which is the one thing this test is about not having.
+        raise unittest.SkipTest("no os.mkfifo on this platform")
+    os.mkfifo(path)
+    proc = subprocess.Popen(
+        ["ffmpeg", "-y", "-loglevel", "error",
+         "-f", "lavfi", "-i", "testsrc=size=%s:rate=10" % size,
+         "-pix_fmt", "yuv420p", "-c:v", "libx264", "-preset", "ultrafast",
+         "-bsf:v", "h264_mp4toannexb", "-f", "h264", path],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    return proc
+
+
+class TmpDirTest(unittest.TestCase):
+    """Base test that provides a self-cleaning temp dir (matches the fast
+    suite's TmpTest pattern in tests/test_sync_manager.py)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="jms-itest-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)

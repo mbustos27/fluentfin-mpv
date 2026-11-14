@@ -1,0 +1,565 @@
+#!/usr/bin/env python3
+"""Runner for the end-to-end suite (real Jellyfin server + real mpv).
+
+Separate from both `python3 -m unittest discover tests` and the integration
+runner: `tests/e2e/` has no `__init__.py`, so the fast suite never recurses
+into it and never needs a server.
+
+    ./stdjflib.py serve ~/Desktop/std-jf-lib --live-tv     # in another shell
+
+    JMS_E2E_SERVER=http://127.0.0.1:8096 python3 tests/e2e/run_e2e.py
+    JMS_E2E_SERVER=... python3 tests/e2e/run_e2e.py --backend libmpv
+    python3 tests/e2e/run_e2e.py --list
+
+`JMS_E2E_SERVER_ALT` names a **second** server, and only
+`test_filter_matrix` reads it: that module's whole point is the API
+differences between major versions, so it runs its sweep against both.
+A 10.11 container alongside a 12.0 source build is two commands —
+
+    ./stdjflib.py serve ~/Desktop/std-jf-lib --live-tv            # 12.0
+    ./stdjflib.py container ~/Desktop/std-jf-lib --port 8097 \
+        --image docker.io/jellyfin/jellyfin:10.11.11 \
+        --keep-running --server-name "stdjflib QA 10.11"          # 10.11
+
+**`--image` is load-bearing, not decoration.** `jellyfin/jellyfin:latest` is
+12.0 now, so without it the container is 12.0 *calling itself* "stdjflib QA
+10.11" — and the ALT leg spent some unknown time comparing 12.0 with itself
+and passing. `test_filter_matrix` refuses two servers reporting the same
+major.minor for that reason; the server name proves nothing.
+
+The differences the leg exists for are not hypothetical:
+`Filters=IsUnplayed,IsPlayed` is **HTTP 400 on 12.0 and an empty result on
+10.11**, and the audio language picker has options on 12.0 and none on 10.11.
+Unset, that leg skips and everything else is unchanged.
+
+Servers bind to 127.0.0.1 only. Add `--listen 192.168.122.1` to `serve` or
+`container` for a run from the Windows VM, which also needs
+`JMS_E2E_ADMIN_PASSWORD` — see `tests/e2e/README.md`.
+
+Every module runs once per mpv backend, in a fresh interpreter with
+`JMS_TEST_BACKEND` set — player.py picks its backend at import time and wires
+interdependent module-level singletons, so a subprocess is the only clean way
+to get a pristine import per backend. External mpv is the least-tested path in
+the app and one of the two largest open-bug clusters, which is exactly why it
+is not optional here.
+
+Legs run under `xvfb-run` when it is available, not merely when headless: a
+bare run throws real video windows onto the developer's desktop and steals
+their clicks. `--no-xvfb` to watch them.
+
+With `JMS_E2E_SERVER` unset the tests skip themselves and this exits 0 — the
+suite is not a reason for a machine without a server to fail.
+"""
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.request
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+from tests import _manifest  # noqa: E402
+
+# Contract tier: never imports player.py, so the mpv backend is irrelevant and
+# these run ONCE and without a display. Seconds, not minutes.
+CONTRACT = [
+    "tests.e2e.test_account_policy",
+    "tests.e2e.test_source_conformance",
+    "tests.e2e.test_strm_source",
+    "tests.e2e.test_live_tv",
+    # The home screen's layout, which lives in jellyfin-web's own
+    # DisplayPreferences document. Pure interop, so the fast suite cannot
+    # help: it is written from the same reading of the API the code is, and
+    # the two are wrong together. Plus LatestItemsExcludes, whose two halves
+    # (the server applies it for Continue Watching, we apply it for the
+    # per-library Latest rows) are only distinguishable on the wire.
+    "tests.e2e.test_home_layout",
+    "tests.e2e.test_route_walk",
+    "tests.e2e.test_paging",
+    "tests.e2e.test_keyboard_nav",
+    "tests.e2e.test_large_queue",
+    "tests.e2e.test_connection_loss",
+    # Landed after the runner's list was last touched and never added to it,
+    # so it ran only when somebody named it by hand. The README has always
+    # listed it as part of the suite.
+    "tests.e2e.test_auto_download",
+    # Collections: the one container whose DTO the server fills in wrongly
+    # (ChildCount is 0 for a collection read off disk while the listing has
+    # every member), plus the three edit endpoints nothing else calls.
+    "tests.e2e.test_collections",
+    # A music playlist reports MediaType "Audio" and a video one reports
+    # "Video" -- the one fact the launch rule rests on, and one the fast
+    # suite can only assume, because it builds the DTO it then reads.
+    "tests.e2e.test_music_playlist",
+    "tests.e2e.test_items_endpoint",
+    # Special Features and trailers (#759): the counts, the list, the
+    # `ExtraType` the download door reads, and season-owned extras. Set
+    # JMS_E2E_SERVER_ALT for the 10.11 leg.
+    "tests.e2e.test_special_features",
+    # The server dates a watched mark (LastPlayedDate), which the
+    # deliberate-unwatch replay rule (D1) depends on. Both majors.
+    "tests.e2e.test_userdata_contract",
+    # Signing back in, and the uuid that must survive it -- the identity the
+    # download catalog and the auto-download allow-list are written in, so a
+    # fresh one orphans every download from that server. Also the refusal of
+    # a wrong address BEFORE the password goes out, which needs two real
+    # servers with two ServerIds and cannot be asked of a fake at all.
+    "tests.e2e.test_login_lifecycle",
+    # Gaps in a season, against the four virtual episodes injected into the
+    # QA library's BaseItems. The listing must SHOW them (web's behaviour)
+    # and the play queue must not -- and a filter Jellyfin does not recognise
+    # answers exactly as sending nothing does, so a dropped IsMissing is
+    # invisible from this side until an unplayable episode is queued.
+    "tests.e2e.test_missing_episodes_live",
+    # The sort is a CROSS-CLIENT write: it lands in the DisplayPreferences
+    # CustomPrefs document under jellyfin-web's own key names, and a wrong
+    # key is not a crash -- the shim reads back what it wrote and web reads
+    # back what it wrote, diverging silently. The fake stores whatever key it
+    # is handed, so only a server can say.
+    "tests.e2e.test_sort_persistence_live",
+    # The refresh request, replayed against both majors from the method that
+    # builds it. Everything this feature rested on was read rather than
+    # measured and one reading was wrong (`Recursive` is not a parameter);
+    # the unit test asserts our own outgoing dict and structurally cannot
+    # see that. Also pins the non-admin refusal that §7's fail-open relies on.
+    "tests.e2e.test_refresh_metadata",
+    # Discovery against a server that really answers the UDP broadcast. The
+    # unit suite draws the login screen from dicts this repo wrote, so the
+    # exchange it is named after -- broadcast, reply, parse -- was assumed by
+    # both sides. Skips unless the QA server was started `--autodiscovery`,
+    # and unless the installed apiclient has the module (1.19.0+).
+    "tests.e2e.test_server_discovery_live",
+    # The server-truth backing for batch 4 -- CanDelete absent unless
+    # asked, TranscodeReasons in the TranscodingUrl, StartItemId
+    # inclusive, the shader library-scope lookup. It was added to
+    # tests/e2e/README.md's table and never here, so it LOOKED registered
+    # and had never run. `tests/test_e2e_registry.py` now makes that
+    # impossible rather than relying on the next person noticing.
+    "tests.e2e.test_batch4_contracts",
+    # Every filter the panel can offer, swept against a real server: 17
+    # checkboxes, all 134 reachable pairs, and every picker value the
+    # server itself returns. The two failures it exists for are both
+    # invisible to a fake source -- a combination the server REFUSES
+    # (Played+Unplayed is HTTP 400 on 12.0), and one it silently IGNORES
+    # (an unparseable VideoTypes value answers with the whole library).
+    # Set JMS_E2E_SERVER_ALT to a second server and the whole matrix runs
+    # against both versions; the differences are real (see its docstring).
+    "tests.e2e.test_filter_matrix",
+    # Two real clients on one real group. No mpv: SyncPlay drives a player
+    # through a handful of calls and the harness implements those, so this is
+    # a contract question about the server and the protocol.
+    "tests.e2e.test_syncplay_group",
+    # Books: the DTO with the widest gap between what it looks like and what
+    # it is (no media source, no container, no size), and a progress unit
+    # the server's own comments call a placeholder. Both are things a fake
+    # cannot disagree with, because a fake is written from the same reading
+    # of the API the code is.
+    "tests.e2e.test_books",
+    # A downloaded *video* -- the case the whole feature is about, and the
+    # one no other module covered. The bytes off the real endpoint, the
+    # local copy standing in for a stream while the server is still
+    # reachable (which needs a live client, so the unit tests structurally
+    # cannot ask it), two real accounts not leaking watched state into each
+    # other, and a delete that takes the files with the row.
+    "tests.e2e.test_download_lifecycle",
+    # The audiobook resume rule, which is a different rule from the video
+    # one and is stated in MINUTES -- so a book under ten minutes can hold
+    # no position at all. Pinned because reading it wrong looks exactly
+    # like a client bug.
+    "tests.e2e.test_audiobooks",
+    # Offline watched state, both directions, plus the websocket message
+    # the whole design now rests on. The fast suite answers the server from
+    # a mock and the offline integration test fakes the HTTP client by its
+    # own admission, so every belief about *when* the server announces a
+    # change was untested until this -- and the obvious guess about the one
+    # that matters (does finishing something elsewhere announce itself?) is
+    # the wrong one.
+    "tests.e2e.test_offline_sync",
+]
+
+# Playback tier: a real mpv, so once per backend under xvfb.
+PER_BACKEND = [
+    "tests.e2e.test_playback_advance",
+    "tests.e2e.test_playback_eof",
+    "tests.e2e.test_playback_failure",
+    "tests.e2e.test_strm_playback",
+    "tests.e2e.test_track_selection",
+    "tests.e2e.test_stream_parity_live",
+    # Chapter navigation, which the fast suite covers only as a pure
+    # function. The list comes out of MPV and the answer goes back through
+    # seek(), and both ends are where the two chapter bugs lived -- the
+    # half-second dead zone before every boundary, and a negative first
+    # timestamp that made "previous" an absolute seek to the END of the
+    # file. Only a real container has a boundary mpv chose.
+    "tests.e2e.test_chapters",
+    # Trickplay against a real server's tiles, read off the relay: each tile
+    # once per window while the pointer scrubs. Needs stdjflib's
+    # `--trickplay "Test Media"`; skips without it.
+    "tests.e2e.test_trickplay_live",
+    "tests.e2e.test_photos",
+    "tests.e2e.test_mpv_reopen",
+    # Music, played for real. The one content type the suite never played:
+    # video, audiobooks, books, photos, comics and Live TV all had a leg and
+    # audio had none. Per backend because it is a real player, and because
+    # the seam it pins -- audio keeps `_video` set and keeps the library up
+    # -- is asked of the PLAYER, whose backend selection happens at import.
+    "tests.e2e.test_music_playback",
+    # The seam matrix: what one content type leaves set for the next. mpv
+    # is not re-created between queue items, so this is the axis every
+    # other playback module is the wrong shape to see -- they are each
+    # vertical, one type per class, by design.
+    "tests.e2e.test_type_seams",
+    "tests.e2e.test_input_routing",
+    # The mouse half of the same question. `test_input_routing` presses real
+    # keys because declaring a binding and enabling its section are different
+    # calls; every other mouse test in the tree drives `app.debug(cmd=...)`,
+    # which calls the renderer's gesture handlers directly and so answers yes
+    # however the SECTIONS were left. Per backend for the same reason as the
+    # keyboard: which binding wins is mpv's section stack, and the two
+    # backends reach it by different paths.
+    "tests.e2e.test_mouse_routing",
+    # Composite shots: the renderer's bitmaps drawn OVER mpv's video output,
+    # which no other test can see -- the scene tests see one layer and the
+    # state harness sees the other. Skips unless JMS_E2E_SHOTS names a
+    # directory, so it costs a normal run nothing; registered here so the
+    # registry test can see it and so `--shots` has somewhere to live.
+    "tests.e2e.test_composite_shots",
+    "tests.e2e.test_scroll_recovery",
+    # Client-side decorations: the controls have to reach the real
+    # composited scene when MPV says the window has no title bar. Per
+    # backend because the property read and the repaint that follows
+    # it are both places the two diverge.
+    "tests.e2e.test_window_controls",
+    # Leaving/rejoining a SyncPlay group with the REAL player in the loop.
+    # The protocol suites all drive a stand-in; the liability here is the
+    # wiring between PlayerManager and SyncPlayManager, which a fake player
+    # is written to agree with and so cannot fail.
+    "tests.e2e.test_syncplay_playback",
+    # A real audiobook, a real stream, a real seek: the half of the resume
+    # loop the contract tier cannot see, because it drives the server
+    # directly rather than through the player.
+    "tests.e2e.test_audiobooks_playback",
+    # An extra and the local trailers through the real play path.
+    "tests.e2e.test_special_features_playback",
+    # The comic reader, which is the one browser screen the contract-tier
+    # route walk cannot open: a comic page is PLAYED, so showing one imports
+    # player.py and opens a window. Per backend because what it asserts on
+    # is mpv's own properties (`path`, `keepaspect`), and the two backends
+    # disagree about property types often enough to be worth both legs.
+    "tests.e2e.test_comic_reader",
+    # The shipped app as a subprocess, driven only by keys over IPC, with
+    # the network through a relay the test owns (tests/e2e/_app.py). The
+    # base every rebuilt e2e test moves onto; see the release-gate plan.
+    "tests.e2e.test_app_smoke",
+    # Slice S1: offline sync at the keyboard of the real app, with the
+    # network cut by a relay. Asserts the offline-sync rulings on screen,
+    # in the catalog and at the server.
+    "tests.e2e.test_offline_ui",
+    # G5 over the download folder: a delete keeps the person's files, a move
+    # carries them byte-identical, a kill mid-copy loses none.
+    "tests.e2e.test_store_safety",
+    # Row 63: browsing and playing the downloads with the network cut.
+    "tests.e2e.test_offline_library",
+    # Slice S2: the playback lifecycle at the keyboard of the real app.
+    "tests.e2e.test_playback_lifecycle",
+    "tests.e2e.test_input_live",
+    "tests.e2e.test_type_seams_live",
+    "tests.e2e.test_reconnect_remote",
+    "tests.e2e.test_downloads_store",
+    "tests.e2e.test_app_lifecycle",
+    "tests.e2e.test_settings_live",
+    "tests.e2e.test_window_live",
+    "tests.e2e.test_profiles_live",
+    "tests.e2e.test_browse_routes",
+]
+
+MODULES = CONTRACT + PER_BACKEND
+
+# Light run: these run on LIGHT_BACKEND only; --gate runs them on both. The
+# rule is the module's SUBJECT -- the store, the catalog, a screen's own
+# state -- not whether it happens to start an mpv: every shipped-app test
+# does. A module that plays, routes input, or quits by a backend's own path
+# stays in the matrix. Izzie, 2026-10-06.
+ONE_BACKEND = [
+    # The download folder's files, by content hash.
+    "tests.e2e.test_store_safety",
+    # Resume by Range, catalog/users.json restore, the store move.
+    "tests.e2e.test_downloads_store",
+    # The offline-sync rulings across screen, catalog and server. Its
+    # PlayOfflineTest plays the local copy; one backend still, since the
+    # playback modules cover the player (Izzie, 2026-10-06).
+    "tests.e2e.test_offline_ui",
+    # PINs and profile switching.
+    "tests.e2e.test_profiles_live",
+    # conf.json, ticks, search, the Logs tab.
+    "tests.e2e.test_settings_live",
+    # Sort persistence across a relaunch.
+    "tests.e2e.test_browse_routes",
+]
+LIGHT_BACKEND = "libmpv"
+
+BACKENDS = ("libmpv", "jsonipc")
+
+SINK_NAME = "jms-e2e-sink"
+
+
+def make_dummy_sink():
+    """One null audio sink for the whole matrix. Returns (device, unload).
+
+    The playback legs decode real media, so mpv opens a real output — audible
+    on a developer's box, contending with whatever else is playing, and able
+    to fail on a device another process holds. A null sink keeps the entire
+    audio path live (device selection, format negotiation, the AudioMixin
+    settings) while ending nowhere.
+
+    Made here rather than per-leg so eleven processes share one sink instead
+    of loading eleven modules under one requested name, and so a leg that dies
+    does not leak its own. The **default sink is never changed** — this one is
+    addressed explicitly and nothing about the developer's audio moves.
+    """
+    if not shutil.which("pactl"):
+        return None, None
+    try:
+        out = subprocess.run(
+            ["pactl", "load-module", "module-null-sink",
+             "sink_name=" + SINK_NAME,
+             "sink_properties=device.description=" + SINK_NAME],
+            capture_output=True, text=True, timeout=20,
+            encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError):
+        return None, None
+    module_id = (out.stdout or "").strip()
+    if out.returncode != 0 or not module_id.isdigit():
+        return None, None
+
+    def unload():
+        try:
+            subprocess.run(["pactl", "unload-module", module_id],
+                           capture_output=True, timeout=20)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    return "pulse/" + SINK_NAME, unload
+
+
+def run_leg(module, backend, use_xvfb, verbosity):
+    env = dict(os.environ)
+    # A leg's own stdout is cp1252 on Windows, so a test whose docstring
+    # holds a character outside it dies in print() rather than in anything
+    # it was testing. Children cannot reconfigure themselves here (they are
+    # plain `python -m unittest`), so it goes in the environment.
+    env["PYTHONIOENCODING"] = "utf-8:backslashreplace"
+    # See tests/integration/run_integration.py: a scene naming a freed bitmap
+    # raises in the app instead of handing mpv a dead address.
+    env["JMS_CHECK_SCENES"] = "1"
+    if backend:
+        env["JMS_TEST_BACKEND"] = backend
+    else:
+        # The contract tier is displayless by convention only: a screen whose
+        # render reaches `_act` imports player.py and opens an mpv window.
+        # With the developer's DISPLAY inherited that window landed on their
+        # desktop (2026-10-22); without one, the leg fails and names itself.
+        # X11/Wayland only: Windows and macOS have no such variable to take
+        # away, and there test_e2e_registry's no-player guard is all there is.
+        env.pop("DISPLAY", None)
+        env.pop("WAYLAND_DISPLAY", None)
+    # tests._outcomes is `-m unittest` plus a per-test record, which is what
+    # the skip counts and the manifest check read (tests/_manifest.py).
+    fd, outcomes = tempfile.mkstemp(prefix="jms-e2e-outcomes-",
+                                    suffix=".jsonl")
+    os.close(fd)
+    env["JMS_TEST_OUTCOMES"] = outcomes
+    cmd = [sys.executable, "-m", "tests._outcomes", module]
+    if verbosity > 1:
+        cmd.append("-v")
+    if use_xvfb:
+        cmd = ["xvfb-run", "-a"] + cmd
+    print("\n=== %s [%s] ===" % (module, backend or "contract"), flush=True)
+    proc = subprocess.run(cmd, cwd=REPO_ROOT, env=env)
+    records = _manifest.read_outcomes(outcomes)
+    try:
+        os.unlink(outcomes)
+    except OSError:
+        pass
+    return proc.returncode == 0, records
+
+
+def keep_durations(path, module, backend, records):
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8") as fh:
+        for rec in records:
+            fh.write(json.dumps(dict(rec, module=module, backend=backend))
+                     + "\n")
+
+
+def server_answers(address, timeout=10):
+    """Whether a Jellyfin server answers its public info endpoint.
+
+    A server that is configured and down used to skip every leg, and the
+    summary then read "N/N legs passed". Asked once, before any leg runs."""
+    url = address.rstrip("/") + "/System/Info/Public"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--backend", choices=BACKENDS,
+                        help="run one backend instead of the matrix")
+    parser.add_argument("--module", action="append",
+                        help="run only this module (repeatable)")
+    parser.add_argument("--no-xvfb", action="store_true",
+                        help="show the real mpv windows")
+    parser.add_argument("--watch", nargs="?", const=1.0, type=float,
+                        metavar="SECONDS",
+                        help="watch mode: the real window (no Xvfb), every "
+                             "input action narrated and paced by SECONDS "
+                             "(default 1); narration also in "
+                             "$TMPDIR/e2e-watch.txt for `tail -f`")
+    parser.add_argument("--step", action="store_true",
+                        help="watch mode, advancing one action per Enter")
+    parser.add_argument("--list", action="store_true")
+    parser.add_argument("--gate", action="store_true",
+                        help="release gate: heavy tests, every module on "
+                             "both backends, and a fresh sign-in and launch "
+                             "per test (no reuse); --manifest implies it")
+    parser.add_argument("--heavy", action="store_true",
+                        help="also run the release-gate-only tests "
+                             "(_e2e.heavy); --manifest implies it")
+    parser.add_argument("--durations", metavar="FILE",
+                        help="append every test's record, with its leg and "
+                             "timings, to FILE (JSON lines) for "
+                             "tools/e2e_durations.py")
+    parser.add_argument("-v", "--verbose", action="count", default=1)
+    parser.add_argument("--manifest", action="store_true",
+                        help="release mode: fail unless every leg ran exactly "
+                             "what tests/manifests/e2e-<platform>.tsv expects; "
+                             "also requires JMS_E2E_SERVER")
+    parser.add_argument("--update-manifest", action="store_true",
+                        help="rewrite that manifest from this run (refused if "
+                             "any leg failed); review the diff, and replace "
+                             "each UNAPPROVED skip reason by hand")
+    args = parser.parse_args()
+
+    if args.list:
+        for module in MODULES:
+            print(module)
+        return 0
+
+    server = os.environ.get("JMS_E2E_SERVER")
+    if not server:
+        print("JMS_E2E_SERVER is not set — every test will skip.\n"
+              "Start one with:  ./stdjflib.py serve ~/Desktop/std-jf-lib "
+              "--live-tv\nthen re-run with "
+              "JMS_E2E_SERVER=http://127.0.0.1:8096", file=sys.stderr)
+        if args.manifest or args.update_manifest:
+            print("--manifest needs a server: without one every test skips.",
+                  file=sys.stderr)
+            return 2
+    else:
+        print("server: %s" % server)
+        for name in ("JMS_E2E_SERVER", "JMS_E2E_SERVER_ALT"):
+            address = os.environ.get(name)
+            if address and not server_answers(address):
+                print("%s=%s does not answer. Every test against it would "
+                      "skip and the run would read as passed; start the "
+                      "server, or unset the variable." % (name, address),
+                      file=sys.stderr)
+                return 2
+
+    device, unload_sink = make_dummy_sink()
+    if device:
+        os.environ["JMS_E2E_AUDIO_DEVICE"] = device
+        print("audio:  %s (null sink; your default output is untouched)"
+              % device)
+    else:
+        print("audio:  no null sink available; mpv's own null device",
+              file=sys.stderr)
+
+    if args.watch or args.step:
+        args.no_xvfb = True
+        os.environ["JMS_E2E_WATCH"] = str(args.watch or 1.0)
+        if args.step:
+            os.environ["JMS_E2E_STEP"] = "1"
+    gate = args.gate or args.manifest or args.update_manifest
+    if gate:
+        os.environ["JMS_E2E_GATE"] = "1"
+    else:
+        os.environ.pop("JMS_E2E_GATE", None)
+    if args.heavy or gate:
+        os.environ["JMS_E2E_HEAVY"] = "1"
+    print("tier:   %s" % ("gate" if gate else
+                          "light (--gate for the release gate)"))
+    use_xvfb = not args.no_xvfb and shutil.which("xvfb-run") is not None
+    backends = [args.backend] if args.backend else list(BACKENDS)
+    modules = args.module or MODULES
+
+    results = []
+    # Contract modules once, with no display: they never import player.py.
+    for module in [m for m in modules if m in CONTRACT]:
+        ok, records = run_leg(module, None, False, args.verbose)
+        results.append((module, "contract", ok, records))
+        keep_durations(args.durations, module, "contract", records)
+
+    light_skips = []
+    for backend in backends:
+        for module in [m for m in modules if m not in CONTRACT]:
+            if (not gate and not args.backend and module in ONE_BACKEND
+                    and backend != LIGHT_BACKEND):
+                light_skips.append("%s [%s]" % (module, backend))
+                continue
+            ok, records = run_leg(module, backend, use_xvfb, args.verbose)
+            results.append((module, backend, ok, records))
+            keep_durations(args.durations, module, backend, records)
+
+    print("\n" + "=" * 60)
+    for module, backend, ok, records in results:
+        skipped = sum(1 for r in records if r["outcome"] == "skip")
+        print("%-8s %-45s %s%s" % (
+            backend, module, "PASS" if ok else "FAIL",
+            "  [%d run, %d skipped]" % (len(records) - skipped, skipped)))
+    if unload_sink:
+        unload_sink()
+    failed = [r for r in results if not r[2]]
+    legs = {"%s [%s]" % (module, backend): records
+            for module, backend, _ok, records in results}
+    for line in _manifest.skip_lines(legs):
+        print(line)
+    if light_skips:
+        print("light tier: %d leg(s) not run (ONE_BACKEND; --gate runs "
+              "them):" % len(light_skips))
+        for leg in light_skips:
+            print("  " + leg)
+    print("=" * 60)
+    print("%d/%d legs passed" % (len(results) - len(failed), len(results)))
+    path = _manifest.manifest_path("e2e")
+    if args.update_manifest:
+        if failed:
+            print("not updating the manifest from a red run")
+            return 1
+        _manifest.write(path, _manifest.update(_manifest.load(path), legs))
+        print("Wrote %s -- review the diff; replace every UNAPPROVED reason."
+              % path)
+    if args.manifest:
+        problems = _manifest.check(_manifest.load(path), legs)
+        for p in problems:
+            print("  MANIFEST: %s" % p)
+        if problems:
+            print("%d manifest problem(s) against %s." % (len(problems), path))
+            return 1
+        print("Manifest: every leg ran what %s expects." % path)
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

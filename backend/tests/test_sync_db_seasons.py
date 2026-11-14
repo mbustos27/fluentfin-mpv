@@ -1,0 +1,93 @@
+"""Season-level download state in the sync catalog.
+
+A Season is never itself a downloads row — SyncManager.download expands it
+into its episodes — so the catalog needs a query that rolls episodes back up
+to their season. Without one, ``_is_downloaded`` had no branch that could
+ever return True for a Season, and a fully downloaded season showed
+"Download" forever, never got the tile badge, and could not be removed.
+"""
+
+# Run as a script, this is what puts the repo root on sys.path -- without
+# it `jellyfin_mpv_shim` resolves to whatever is pip-installed. A no-op
+# under `discover`; tests/test_module_paths.py is the guard.
+if __name__ == "__main__":
+    import os
+    import sys
+
+    sys.path.insert(0, os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
+
+import os
+import sys
+import shutil
+import tempfile
+import unittest
+
+sys.argv = ["test"]
+
+from jellyfin_mpv_shim.sync.db import (  # noqa: E402
+    ANY_SERVER,
+    SyncDB, STATUS_COMPLETE, STATUS_PENDING)
+
+
+#: The Jellyfin ServerId these fixtures' rows belong to. Set deliberately:
+#: a downloads row with no content server is an ORPHAN, and the orphan path
+#: is a distinct contract (docs/offline-sync.md section 1).
+#: A fixture that omits this silently tests the orphan path under another
+#: name -- which is what every row in this file used to do.
+CONTENT_SERVER = "srv-content"
+
+
+def episode(item_id, season_id, series_id="sh1", status=STATUS_COMPLETE):
+    return {
+        "item_id": item_id, "server_uuid": "srv1",
+        "content_server_id": CONTENT_SERVER,
+        "name": item_id, "type": "Episode", "status": status,
+        "series_id": series_id, "series_name": "Show",
+        "season_id": season_id, "parent_index": 1, "index_number": 1,
+    }
+
+
+class TestDownloadedSeasonIds(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="jms-seasondb-")
+        self.db = SyncDB(os.path.join(self.tmp, "sync.db"))
+        self.addCleanup(self.db.close)
+        # After db.close (cleanups run last-registered-first), or the file
+        # is still open when the directory goes.
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_a_completed_episode_makes_its_season_downloaded(self):
+        self.db.upsert(episode("e1", "sea1"))
+        self.assertEqual(self.db.downloaded_season_ids(server_id=ANY_SERVER), {"sea1"})
+
+    def test_a_pending_episode_does_not(self):
+        self.db.upsert(episode("e1", "sea1", status=STATUS_PENDING))
+        self.assertEqual(self.db.downloaded_season_ids(server_id=ANY_SERVER), set())
+
+    def test_seasons_are_reported_once_each(self):
+        self.db.upsert(episode("e1", "sea1"))
+        self.db.upsert(episode("e2", "sea1"))
+        self.db.upsert(episode("e3", "sea2"))
+        self.assertEqual(self.db.downloaded_season_ids(server_id=ANY_SERVER), {"sea1", "sea2"})
+
+    def test_a_row_with_no_season_is_ignored_rather_than_yielding_none(self):
+        """A movie has no season_id. NULL must not come back as a member of
+        the set, or `item["Id"] in seasons` could match on nothing."""
+        row = episode("m1", None)
+        row["type"] = "Movie"
+        row["series_id"] = None
+        self.db.upsert(row)
+        self.assertEqual(self.db.downloaded_season_ids(server_id=ANY_SERVER), set())
+
+    def test_it_agrees_with_the_series_level_query(self):
+        self.db.upsert(episode("e1", "sea1", series_id="sh1"))
+        self.assertEqual(self.db.downloaded_series_ids(server_id=ANY_SERVER), {"sh1"})
+        self.assertEqual(self.db.downloaded_season_ids(server_id=ANY_SERVER), {"sea1"})
+
+    def test_an_empty_catalog_is_an_empty_set(self):
+        self.assertEqual(self.db.downloaded_season_ids(server_id=ANY_SERVER), set())
+
+
+if __name__ == "__main__":
+    unittest.main()

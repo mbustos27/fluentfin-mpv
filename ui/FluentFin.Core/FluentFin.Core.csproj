@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<RootNamespace>FluentFin.Core</RootNamespace>
+		<Platforms>x86;x64;arm64;AnyCPU</Platforms>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<LangVersion>preview</LangVersion>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="DeviceId.Windows" Version="6.11.0" />
+		<PackageReference Include="Flurl.Http" Version="4.0.2" />
+		<PackageReference Include="Humanizer" Version="3.0.10" />
+		<PackageReference Include="Jellyfin.Sdk" Version="2026.10.12" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+		<PackageReference Include="ReactiveUI" Version="23.2.28" />
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+		<PackageReference Include="Riok.Mapperly" Version="4.3.1" />
+		<PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
+		<PackageReference Include="TMDbLib" Version="3.0.0" />
+	</ItemGroup>
+</Project>

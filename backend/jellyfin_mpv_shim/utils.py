@@ -1,0 +1,695 @@
+import socket
+import ipaddress
+import requests
+import urllib.parse
+from threading import Lock
+import logging
+import sys
+import os.path
+import platform
+
+from .conf import settings
+from datetime import datetime
+from functools import wraps
+from .constants import USER_APP_NAME
+from .i18n import _
+
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from jellyfin_apiclient_python import JellyfinClient as JellyfinClient_type
+
+log = logging.getLogger("utils")
+
+seq_num = 0
+seq_num_lock = Lock()
+
+
+class Timer(object):
+    def __init__(self):
+        self.started = datetime.now()
+
+    def restart(self):
+        self.started = datetime.now()
+
+    def elapsed_ms(self):
+        return self.elapsed() * 1e3
+
+    def elapsed(self):
+        return (datetime.now() - self.started).total_seconds()
+
+
+
+#: Containers that hold audio but carry no MediaType of their own.
+#: A music PLAYLIST is deliberately absent: it *does* carry one, computed by
+#: the server from its contents (PlaylistManager.cs sets MediaType.Audio or
+#: .Video), so `item_is_audio` already answers for it -- and a hardcoded list
+#: is what got this wrong.
+_AUDIO_CONTAINERS = ("MusicAlbum", "MusicArtist", "MusicGenre")
+
+
+def launches_as_audio(item, collection_type=None, first=None):
+    """Whether starting ``item`` should keep the library on screen with the
+    now-playing bar, instead of handing the window to a video.
+
+    The browser picks browse mode or HUD mode from this, and HUD mode's
+    auto-hide calls ``ui_suspend`` -- so a wrong answer does not misplace a
+    bar, it **blanks the library** the moment the pointer leaves.
+
+    ``first`` is the entry that will actually start, and **it wins outright**
+    when the caller has it. A container's own label is a summary and can be
+    wrong: a playlist can arrive looking like video while holding music [iw],
+    because the server derives `Playlist.MediaType` from the contents and the
+    two can disagree by the time the DTO reaches us. It is also the only
+    answer that is right for a MIXED playlist, where what is queued first is
+    what ends up on screen.
+
+    Without it: the item's own MediaType, then the containers that carry
+    none, then the library it came from. All three are guesses, and the
+    playstate that follows corrects them -- this only decides whether the
+    user sees a flash first.
+    """
+    item = item or {}
+    if first is not None:
+        return item_is_audio(first)
+    if item_is_audio(item):
+        return True
+    if item.get("Type") in _AUDIO_CONTAINERS:
+        return True
+    return (collection_type or item.get("CollectionType")) == "music"
+
+
+def item_is_audio(item):
+    """Whether a Jellyfin item is audio, from its metadata alone.
+
+    **The server is not consistent about which field carries it**, so both
+    are checked -- and a site testing only `Type` gets an *audiobook* wrong
+    (`Type="AudioBook"`, `MediaType="Audio"`), which is how one of these
+    launched down the video branch and handed the window away.
+
+    Here rather than in `player`: the browser asks it at launch time and
+    importing `player` builds an mpv.
+    """
+    item = item or {}
+    return item.get("MediaType") == "Audio" or item.get("Type") == "Audio"
+
+
+def synchronous(tlockname: str):
+    """
+    A decorator to place an instance based lock around a method.
+    From: http://code.activestate.com/recipes/577105-synchronization-decorator-for-class-methods/
+    """
+
+    def _synched(func):
+        @wraps(func)
+        def _synchronizer(self, *args, **kwargs):
+            tlock = self.__getattribute__(tlockname)
+            tlock.acquire()
+            try:
+                return func(self, *args, **kwargs)
+            finally:
+                tlock.release()
+
+        return _synchronizer
+
+    return _synched
+
+
+def is_local_domain(client: "JellyfinClient_type"):
+    # With Jellyfin, it is significantly more likely the user will be using
+    # an address that is a hairpin NAT. We want to detect this and avoid
+    # imposing limits in this case.
+    url = client.config.data.get("auth.server", "")
+    domain = urllib.parse.urlparse(url).hostname
+
+    addr_info = socket.getaddrinfo(domain, 8096)[0]
+    ip = addr_info[4][0]
+    if ipaddress.ip_address(ip).is_private:
+        return True
+
+    if addr_info[0] == socket.AddressFamily.AF_INET:
+        # IPv4 hairpin NAT: compare against our own WAN IP. We don't trust the
+        # server's view of the client because reverse proxies routinely lie
+        # (every connection looks like 127.0.0.1 / the proxy's IP).
+        try:
+            wan_ip = requests.get(
+                "https://checkip.amazonaws.com/", timeout=(3, 10)
+            ).text.strip("\r\n")
+            return ip == wan_ip
+        except Exception:
+            log.warning(
+                "checkip.amazonaws.com is unavailable. Assuming potential WAN ip is remote.",
+                exc_info=True,
+            )
+            return False
+
+    # IPv6: home networks typically use globally-routable prefixes, so the
+    # is_private check above misses real LAN connections. Fall back to the
+    # server's /System/Endpoint, which compares against the admin-configured
+    # local network subnets. Less robust than the IPv4 path (a misconfigured
+    # reverse proxy could lie) but the only signal available without enumerating
+    # local interface addresses.
+    try:
+        endpoint = client.jellyfin.get_endpoint_info()
+        return bool(endpoint.get("IsInNetwork"))
+    except Exception:
+        log.warning(
+            "Could not query /System/Endpoint for IPv6 locality. Assuming remote.",
+            exc_info=True,
+        )
+        return False
+
+
+def resolved_host_is_private(address):
+    """Does ``address`` resolve to an address on this machine's own network?
+
+    ``True``/``False``, or ``None`` when the name could not be resolved at
+    all -- three answers, because "we asked and it is remote" and "we could
+    not ask" want different fallbacks.
+
+    **This is the half of `is_local_domain` that a name lookup can settle**,
+    and it is the half that matters for split-horizon DNS: a self-hoster's
+    own domain resolves to a LAN address at home and a public one away, so
+    nothing about the spelling of the URL can answer it. `is_local_domain`
+    goes further -- hairpin NAT, and an IPv6 fallback that asks the server
+    -- because it is deciding a *bitrate*, where being wrong costs a
+    transcode. Callers who only want to describe the connection should stop
+    here rather than make an outbound request to a third party.
+
+    **Blocking, and there is no bounding it** -- ``getaddrinfo`` takes no
+    timeout, and ``socket.setdefaulttimeout`` does not reach it on glibc. It
+    would also be the wrong tool: that setting is process-global, so bracketing
+    this call with it hands an unasked-for timeout to every socket any other
+    thread opens in the window, and connects run several at a time here. So
+    call this from somewhere already waiting on the network -- never from the
+    render path.
+    """
+    try:
+        host = urllib.parse.urlsplit(str(address or "")).hostname
+    except ValueError:
+        return None
+    if not host:
+        return None
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        log.debug("Could not resolve %s", host, exc_info=True)
+        return None
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        # Any private answer is enough. A dual-stack name can hand back a
+        # public IPv6 address and a LAN IPv4 one, and the connection we are
+        # describing may have used either.
+        if ip.is_private:
+            return True
+    return False
+
+
+#: Ports a URL need not spell out. `https://h` and `https://h:443` are one
+#: origin to a browser and to Jellyfin, and comparing raw ports made them two
+#: -- so a sidecar on our own server, written with its port, was classified as
+#: somebody else's and then got neither the header nor a token in its url.
+_DEFAULT_PORTS = {"http": 80, "https": 443, "ws": 80, "wss": 443}
+
+
+def _origin(url):
+    """``(scheme, host, port)`` with the default port filled in, or None."""
+    parts = urllib.parse.urlparse(url)
+    if not parts.hostname:
+        return None
+    return (parts.scheme, parts.hostname,
+            parts.port or _DEFAULT_PORTS.get(parts.scheme))
+
+
+def same_origin(url, server):
+    """Whether ``url`` is on the same host as ``server``.
+
+    Scheme and port count: an http URL is not the same origin as the https
+    server we authenticated to, and sending a bearer token over the first
+    would hand it to anyone on the path.
+
+    One implementation, used by both the sync downloader and the player's
+    mpv header. It lived in sync/manager.py, where its own comment predicted
+    the player's defect: "'true by construction today' is exactly what stops
+    being true when someone threads a server-supplied path through one of
+    these."
+    """
+    try:
+        mine, theirs = _origin(server), _origin(url)
+    except Exception:
+        # Includes the malformed port: `urlparse` is lazy, so `.port` raises
+        # here and not at the parse. Answering False is failing closed --
+        # every caller treats "not ours" as "send it no credential".
+        return False
+    return mine is not None and theirs == mine
+
+
+def mpv_color_to_plex(color: str):
+    return "#" + color.lower()[3:]
+
+
+def plex_color_to_mpv(color: str):
+    return "#FF" + color.upper()[1:]
+
+
+#: Codecs the server can hand over as an image subtitle sidecar.
+IMAGE_SUBTITLE_CODECS = ("pgssub", "dvdsub")
+
+
+def answering_server(client) -> dict:
+    """The server dict the last connect filled in, or ``{}``.
+
+    The apiclient rewrites ``Id``, ``Name`` and ``Version`` from
+    ``/System/Info/Public`` on every connect, before any login.
+    """
+    try:
+        return (client.auth.credentials.get_credentials()
+                .get("Servers") or [{}])[0]
+    except Exception:
+        log.debug("could not read the server that answered", exc_info=True)
+        return {}
+
+
+def _server_major(version: Optional[str]) -> int:
+    """The server's major version, or 0 when it cannot be told."""
+    try:
+        return int(str(version).split(".")[0])
+    except ValueError:
+        return 0
+
+
+def get_profile(
+    is_remote: bool = False,
+    video_bitrate: Optional[int] = None,
+    force_transcode: bool = False,
+    server_version: Optional[str] = None,
+    image_sidecars: bool = True,
+):
+    if video_bitrate is None:
+        if is_remote:
+            video_bitrate = settings.remote_kbps
+        else:
+            video_bitrate = settings.local_kbps
+
+    if settings.force_video_codec:
+        transcode_codecs = settings.force_video_codec
+    elif (
+        settings.allow_transcode_to_h265
+        and not settings.prefer_transcode_to_h265
+        and not settings.transcode_hevc
+    ):
+        transcode_codecs = "h264,h265,hevc,mpeg4,mpeg2video"
+    elif (
+        settings.allow_transcode_to_h265
+        and settings.prefer_transcode_to_h265
+        and not settings.transcode_hevc
+    ):
+        transcode_codecs = "h265,hevc,h264,mpeg4,mpeg2video"
+    else:
+        transcode_codecs = "h264,mpeg4,mpeg2video"
+
+    if settings.force_audio_codec:
+        audio_transcode_codecs = settings.force_audio_codec
+    else:
+        audio_transcode_codecs = "aac,mp3,ac3,opus,flac,vorbis"
+
+    profile = {
+        "Name": USER_APP_NAME,
+        "MaxStreamingBitrate": video_bitrate * 1000,
+        "MaxStaticBitrate": video_bitrate * 1000,
+        "MusicStreamingTranscodingBitrate": 1280000,
+        "TimelineOffsetSeconds": 5,
+        "TranscodingProfiles": [
+            {"Type": "Audio"},
+            {
+                "Container": "ts",
+                "Type": "Video",
+                "Protocol": "hls",
+                "AudioCodec": audio_transcode_codecs,
+                "VideoCodec": transcode_codecs,
+                # 8, not 6. This cannot force a transcode, but it caps the
+                # audio of one that is already happening, so 6 (inherited
+                # from Kodi's profile) quietly cost 7.1 audio on every video
+                # transcode -- docs/jellyfin-api-notes.md section 11.
+                # Downmixing is mpv's job here, not the server's; see
+                # audio_mode in conf.py.
+                "MaxAudioChannels": "8",
+            },
+            {"Container": "jpeg", "Type": "Photo"},
+        ],
+        # No Container / AudioCodec on these entries ON PURPOSE: an empty
+        # container in a DirectPlayProfile means "any" to the server, so this
+        # declares that mpv direct-plays everything, which being
+        # ffmpeg-backed it effectively does. Do NOT "tighten" this into an
+        # explicit list -- anything left off (DSD, APE, WavPack, TAK, tracker
+        # modules, whatever this build supports) silently transcodes to mp3
+        # instead. See docs/jellyfin-api-notes.md section 11, which also has
+        # the /Audio/universal comparison and what the round trip costs.
+        "DirectPlayProfiles": [{"Type": "Video"}, {"Type": "Audio"}, {"Type": "Photo"}],
+        "ResponseProfiles": [],
+        "ContainerProfiles": [],
+        "CodecProfiles": [],
+        "SubtitleProfiles": [
+            {"Format": "srt", "Method": "External"},
+            {"Format": "srt", "Method": "Embed"},
+            {"Format": "ass", "Method": "External"},
+            {"Format": "ass", "Method": "Embed"},
+            {"Format": "sub", "Method": "Embed"},
+            {"Format": "sub", "Method": "External"},
+            {"Format": "ssa", "Method": "Embed"},
+            {"Format": "ssa", "Method": "External"},
+            {"Format": "smi", "Method": "Embed"},
+            {"Format": "smi", "Method": "External"},
+            # An external .sup is served raw from 10.10 on; without this the
+            # server burns it in (#811). Embed never applies to a sidecar.
+            {"Format": "pgssub", "Method": "External"},
+            {"Format": "pgssub", "Method": "Embed"},
+            {"Format": "dvdsub", "Method": "Embed"},
+            {"Format": "dvbsub", "Method": "Embed"},
+            {"Format": "pgs", "Method": "Embed"},
+        ],
+    }
+
+    # VobSub as an .mks sidecar is a 12.0 route. 10.x ignores Container, so
+    # this entry would turn VobSub .mks and .idx/.sub -- both working burn-ins
+    # there -- into sidecar urls that answer 404 and 400 (measured, 10.11.11).
+    # Unknown counts as old: a wrong "old" costs a transcode, a wrong "new"
+    # costs the subtitles.
+    if _server_major(server_version) >= 12:
+        profile["SubtitleProfiles"].append(
+            {"Format": "dvdsub", "Method": "External", "Container": "mks"})
+
+    # The same entries also let a transcode extract an EMBEDDED image track;
+    # a profile cannot tell the two apart (Video._declines_extraction).
+    if not image_sidecars:
+        profile["SubtitleProfiles"] = [
+            p for p in profile["SubtitleProfiles"]
+            if not (p["Method"] == "External"
+                    and p["Format"] in IMAGE_SUBTITLE_CODECS)]
+
+    if settings.transcode_hi10p:
+        profile["CodecProfiles"].append(
+            {
+                "Type": "Video",
+                "Conditions": [
+                    {
+                        "Condition": "LessThanEqual",
+                        "Property": "VideoBitDepth",
+                        "Value": "8",
+                    }
+                ],
+            }
+        )
+
+    if settings.transcode_dolby_vision:
+        profile["CodecProfiles"].append(
+            {
+                "Type": "Video",
+                "Conditions": [
+                    {
+                        "Condition": "NotEquals",
+                        "Property": "VideoRangeType",
+                        "Value": "DOVI",
+                    }
+                ],
+            }
+        )
+
+    if settings.transcode_hdr:
+        profile["CodecProfiles"].append(
+            {
+                "Type": "Video",
+                "Conditions": [
+                    {
+                        "Condition": "Equals",
+                        "Property": "VideoRangeType",
+                        "Value": "SDR",
+                    }
+                ],
+            }
+        )
+
+    if settings.transcode_hevc:
+        profile["CodecProfiles"].append(
+            {
+                "Type": "Video",
+                "Codec": "hevc",
+                "Conditions": [
+                    {
+                        "Condition": "Equals",
+                        "Property": "Width",
+                        "Value": "0",
+                    }
+                ],
+            }
+        )
+        profile["CodecProfiles"].append(
+            {
+                "Type": "Video",
+                "Codec": "h265",
+                "Conditions": [
+                    {
+                        "Condition": "Equals",
+                        "Property": "Width",
+                        "Value": "0",
+                    }
+                ],
+            }
+        )
+
+    if settings.transcode_av1:
+        profile["CodecProfiles"].append(
+            {
+                "Type": "Video",
+                "Codec": "av1",
+                "Conditions": [
+                    {
+                        "Condition": "Equals",
+                        "Property": "Width",
+                        "Value": "0",
+                    }
+                ],
+            }
+        )
+
+    if settings.transcode_4k:
+        profile["CodecProfiles"].append(
+            {
+                "Type": "Video",
+                "Conditions": [
+                    {
+                        "Condition": "LessThanEqual",
+                        "Property": "Width",
+                        "Value": "1920",
+                    },
+                    {
+                        "Condition": "LessThanEqual",
+                        "Property": "Height",
+                        "Value": "1080",
+                    },
+                ],
+            }
+        )
+
+    if settings.always_transcode or force_transcode:
+        profile["DirectPlayProfiles"] = []
+
+    return profile
+
+
+def get_sub_display_title(stream: dict):
+    """What to call a subtitle track in a picker.
+
+    **The server's own ``DisplayTitle`` first.** That is the string
+    jellyfin-web shows, and it is the only one carrying the *author's* label
+    for the track -- which is the whole distinction between "Signs & Songs"
+    and "Full" on a release that ships both. Built from Language / Forced /
+    Codec instead, those two tracks come out as the same text and the picker
+    offers a choice it cannot express (**[iw]**).
+
+    The constructed form stays as the fallback, for a stream that has no
+    DisplayTitle: an offline item rebuilt from the local catalog, or an
+    older server. It also keeps ``Forced`` out of the composed label when
+    DisplayTitle is used, since the server has already put it there.
+    """
+    display = (stream.get("DisplayTitle") or "").strip()
+    if display:
+        return display
+    return "{0}{1} ({2})".format(
+        (stream.get("Language") or _("Unkn")).capitalize(),
+        _(" Forced") if stream.get("IsForced") else "",
+        stream.get("Codec"),
+    )
+
+
+def get_seq():
+    global seq_num
+    seq_num_lock.acquire()
+    current = seq_num
+    seq_num += 1
+    seq_num_lock.release()
+    return current
+
+
+def none_fallback(value, fallback):
+    if value is None:
+        return fallback
+    return value
+
+
+def get_resource(*path):
+    # Detect if bundled via pyinstaller.
+    # From: https://stackoverflow.com/questions/404744/
+    if getattr(sys, "_MEIPASS", False):
+        application_path = os.path.join(getattr(sys, "_MEIPASS"), "jellyfin_mpv_shim")
+    else:
+        application_path = os.path.dirname(os.path.abspath(__file__))
+
+    # ! Test code for Mac
+    if getattr(sys, "frozen", False) and platform.system() == "Darwin":
+        application_path = os.path.join(os.path.dirname(sys.executable), "../Resources")
+
+    return os.path.join(application_path, *path)
+
+
+def get_text(*path):
+    with open(get_resource(*path)) as fh:
+        return fh.read()
+
+
+# -- system memory ---------------------------------------------------------
+#
+# Read rather than depended on: psutil would answer all of this in one line,
+# and it is a compiled dependency to ask "how much RAM is there".
+
+#: A machine with less RAM than this is small, whatever it is doing.
+#:
+#: Deliberately above a round 8 GiB, because the two sources disagree about
+#: what an 8 GB machine has. Linux reports MemTotal, which is installed RAM
+#: LESS the kernel and firmware reservation -- a nominal 8 GB box says about
+#: 7.7 GiB -- while sysconf (the macOS path) reports exactly 8589934592. A
+#: threshold at 8 GiB would therefore call the same hardware small on one
+#: platform and roomy on the other, which is the worst of both. 8 GB machines
+#: are the ones this is for, so the line goes above all of their spellings.
+SMALL_MEMORY_BYTES = 9 * 1024 * 1024 * 1024
+#: ...and any machine with less than this actually free right now is under
+#: pressure, however much it started with.
+TIGHT_MEMORY_BYTES = 2 * 1024 * 1024 * 1024
+
+#: No machine running a video player has less RAM than this, so an answer
+#: below it is not a small machine, it is a broken measurement.
+_ABSURDLY_SMALL = 64 * 1024 * 1024
+
+_total_memory = None            # never changes; read once
+
+
+def _meminfo():
+    """Linux: (MemTotal, MemAvailable) in bytes, or (None, None).
+
+    MemAvailable rather than MemFree, and it is not a detail: MemFree
+    excludes reclaimable page cache, so a healthy Linux box that has simply
+    read some files looks nearly out of memory. MemAvailable is the kernel's
+    own estimate of what a new allocation could actually get.
+    """
+    total = avail = None
+    try:
+        with open("/proc/meminfo", "r") as fh:
+            for line in fh:
+                name, _sep, rest = line.partition(":")
+                if name == "MemTotal":
+                    total = int(rest.split()[0]) * 1024
+                elif name == "MemAvailable":
+                    avail = int(rest.split()[0]) * 1024
+                if total is not None and avail is not None:
+                    break
+    except (OSError, ValueError, IndexError):
+        return None, None
+    return total, avail
+
+
+def _win_memory():
+    """Windows: (total, available) in bytes via GlobalMemoryStatusEx."""
+    import ctypes
+
+    class _Status(ctypes.Structure):
+        _fields_ = [("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+    status = _Status()
+    status.dwLength = ctypes.sizeof(_Status)
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+        return None, None
+    return status.ullTotalPhys, status.ullAvailPhys
+
+
+def system_memory():
+    """``(total_bytes, available_bytes)``, either of which may be None.
+
+    None means "could not tell", and every caller must read it as "assume
+    there is room": a probe that cannot answer has no business degrading the
+    app on a machine that may be perfectly comfortable.
+
+    Total is answerable almost everywhere (POSIX ``sysconf`` covers macOS and
+    the BSDs); *available* is the one that needs a per-platform source, and
+    there is no portable one. macOS would need ``vm_stat``'s page breakdown,
+    which is a subprocess per call, so it answers None and falls back to the
+    total alone.
+    """
+    global _total_memory
+
+    total = avail = None
+    if sys.platform.startswith("linux"):
+        total, avail = _meminfo()
+    elif sys.platform.startswith("win"):
+        try:
+            total, avail = _win_memory()
+        except Exception:
+            log.debug("GlobalMemoryStatusEx failed", exc_info=True)
+    if total is None:
+        if _total_memory is None:
+            try:
+                _total_memory = (os.sysconf("SC_PHYS_PAGES")
+                                 * os.sysconf("SC_PAGE_SIZE"))
+            except (ValueError, OSError, AttributeError):
+                _total_memory = False       # asked and answered: no
+            if not _total_memory or _total_memory < _ABSURDLY_SMALL:
+                # sysconf returns -1 for "indeterminate" WITHOUT raising
+                # (CPython only raises when errno was set). -1 * the page
+                # size is a negative "total" that is truthy, survives the
+                # `or None` below, and compares less than every threshold --
+                # pinning memory_is_tight() True for the life of the process
+                # on a machine that may have 64 GiB. A floor rather than a
+                # sign test, because both values can come back -1 and their
+                # product is then a perfectly positive 1.
+                _total_memory = False
+        total = _total_memory or None
+    return total, avail
+
+
+def memory_is_tight(total=None, available=None):
+    """Whether this machine is one to trade speed for memory on.
+
+    True when the machine is small (under SMALL_MEMORY_BYTES of RAM at all)
+    or busy (under TIGHT_MEMORY_BYTES free right now). Unknown is False --
+    see system_memory.
+
+    The two are separate questions on purpose. A 4 GiB box with 3 GiB free
+    is not under pressure this second, but it has no headroom to be wrong
+    about; a 64 GiB workstation with 1 GiB free is not small, but something
+    else needs the room now.
+    """
+    if total is None and available is None:
+        total, available = system_memory()
+    if total is not None and total < SMALL_MEMORY_BYTES:
+        return True
+    return available is not None and available < TIGHT_MEMORY_BYTES

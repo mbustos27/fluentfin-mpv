@@ -1,0 +1,688 @@
+"""mpvtk browser as a ``user_interface`` — the in-process launcher.
+
+Exposes the same small surface ``mpv_shim.main`` expects (``start``,
+``login_servers``, ``stop``, ``open_player_menu``, ``stop_callback``) as
+``cli_mgr``, but instead of a separate window in a child process it
+attaches the mpvtk UI to the player's own mpv window (main process, next
+to ``playerManager``).
+
+Lifecycle: open the window immediately on a spinner (``enter_browse`` →
+``force_window`` + OSC off), connect to servers in the background, then
+swap in the live data source. A tile click on a playable item yields the
+window to playback + the OSC; when playback stops (``on_playstate``) the
+browser takes the window back.
+"""
+
+import logging
+import os
+import threading
+import time
+from typing import TYPE_CHECKING, Optional, cast
+
+from ..clients import clientManager
+from ..conf import settings
+from ..i18n import _
+from .gateway import (PlayerGateway, _collect_servers,
+                             _saved_servers_exist)
+
+if TYPE_CHECKING:
+    # Annotation-only: both are built inside _attach, which imports them
+    # lazily so this module stays importable without player.py.
+    from ..mpvtk.app import MpvtkApp
+    from .app import MpvtkBrowser
+
+log = logging.getLogger("mpvtk_browser.ui")
+
+
+
+class UserInterface:
+    def __init__(self):
+        self.open_player_menu = lambda: None
+        self.stop_callback = None
+        self.gui_ready = None
+        self._app: Optional["MpvtkApp"] = None
+        self._browser: Optional["MpvtkBrowser"] = None
+        self._thread: Optional[threading.Thread] = None
+        self._tray = None
+        # True while we are deliberately tearing the render loop down (mpv
+        # idle-quit / reconnect), so _run doesn't mistake it for a window
+        # close and stop the whole app.
+        self._detaching = False
+
+    def start(self):
+        # The tray is the only way to reach the app while the mpv window is
+        # showing video (or is minimized), so it runs regardless of the
+        # browser's state. It lives in its own process — pystray needs its
+        # process's main thread, and pystray + libmpv in one process segfaults
+        # with GNOME AppIndicator. See tray.py.
+        from ..tray import TrayManager
+
+        self._tray = TrayManager({
+            "show": self.activate,
+            "show_preferences": lambda: self._open_settings("servers"),
+            "show_console": lambda: self._open_settings("logs"),
+            "open_config": self._open_config_folder,
+            "quit": self._quit,
+        })
+        self._tray.start()
+        # The browser itself is created in login_servers, once the mpv handle
+        # and saved credentials are available.
+
+    # -- tray actions -----------------------------------------------------
+
+    def activate(self):
+        """Surface the UI: leave playback, show the browser, raise the window.
+
+        Also what SingleInstance calls when the app is launched a second time
+        (mpv_shim wires ``single.on_activate`` to this)."""
+        from ..player import playerManager
+
+        if self._browser is not None:
+            # Re-gate behind the startup PIN before anything is revealed: the
+            # unlock at launch covers that launch, not every later reopen.
+            self._browser.maybe_relock()
+            self._browser.enter_browse()
+        try:
+            playerManager.raise_window()
+        except Exception:
+            log.debug("could not raise the player window", exc_info=True)
+
+    def on_second_launch(self):
+        """The app was launched again (SingleInstance). Over a playing
+        video that means "show me the app", and the video IS the app then:
+        raise the window and leave the film alone [iw, 2026-09-27] --
+        entering browse brought the library up for a moment and the film's
+        next playstate took the window straight back. Otherwise, activate.
+        """
+        from ..player import playerManager
+
+        try:
+            watching = (playerManager.get_video() is not None
+                        and not playerManager._library_showing())
+        except Exception:
+            watching = False
+        if not watching:
+            return self.activate()
+        try:
+            playerManager.raise_window()
+        except Exception:
+            log.debug("could not raise the player window", exc_info=True)
+
+    def _open_settings(self, tab):
+        if self._browser is None:
+            return
+        self.activate()
+        self._browser.open_settings(tab)
+
+    @staticmethod
+    def _server_uuid(client):
+        """Which connected server a websocket event came from, or None.
+
+        Identity, not equality: `clientManager.clients` is keyed by uuid and
+        the values are the `JellyfinClient` objects the events are raised
+        on.
+        """
+        if client is None:
+            return None
+        return next((u for u, c in clientManager.clients.items()
+                     if c is client), None)
+
+    def _display_content(self, client, item_id):
+        """Route a remote's DisplayContent to the browser, resolving which
+        connected server it came from."""
+        if self._browser is None:
+            return
+        # display_item decides whether to take the window — it must not
+        # interrupt playback, so waking the client is its call, not ours.
+        self._browser.display_item(self._server_uuid(client), item_id)
+
+    def _live_tv_changed(self, _client=None):
+        """Forward a timer websocket event to the browser.
+
+        Not filtered by server here: the browser refreshes whatever Live TV
+        route is on screen, and a timer event only ever comes from a server
+        this client is logged into. Guarding on identity would mean the
+        common single-server case paid for a lookup to reach the same
+        answer.
+        """
+        if self._browser is None:
+            return
+        self._browser.refresh_live_tv()
+
+    def _user_data_changed(self, client=None):
+        """Forward a UserDataChanged websocket event to the browser.
+
+        **Filtered by server, unlike the timer events above**, and the
+        difference is which screens answer. A timer event only ever affects
+        Live TV, which is one screen. This one now re-reads a series or a
+        season as well as Home (#722), and those belong to ONE server -- so
+        in a two-server session, activity on A would otherwise re-fetch a
+        Series page on B: a wasted round trip at best, and at worst an
+        unrelated event driving the screen into the offline fallback when B
+        is unreachable. Home is exempt inside `_refresh_current`, because it
+        is assembled from every logged-in server.
+
+        A client we cannot resolve gives None, which refreshes as before --
+        no worse than the unfiltered behaviour this replaces.
+        """
+        if self._browser is None:
+            return
+        self._browser.refresh_userdata(self._server_uuid(client))
+
+    def _open_config_folder(self):
+        PlayerGateway().open_config_folder()
+
+    def _quit(self):
+        self.quit_app()
+
+    def stop_tray(self):
+        """Terminate the tray child. Idempotent, and safe to call twice.
+
+        Public because the shutdown is not the only caller any more: the
+        tray lives in its own process and is stopped in the sixth of seven
+        shutdown steps, so a step that wedges before then leaves it running
+        -- and since a restart now spawns a replacement from the forced
+        exit, the user would get a second tray icon beside a dead one whose
+        menu goes to a queue nobody reads. `mpv_shim`'s final action calls
+        this first for that reason.
+        """
+        tray, self._tray = self._tray, None
+        if tray is None:
+            return
+        try:
+            tray.stop()
+        except Exception:
+            log.debug("could not stop the tray", exc_info=True)
+
+    def quit_app(self):
+        """Shut the application down, from outside the tray.
+
+        The public name for ``_quit``. The settings screen's Restart needs
+        exactly this shutdown -- the relaunch is armed first and happens at
+        the end of it (restart.py) -- and reaching in for a private method
+        from another module is how that stops working the day this class is
+        rearranged.
+
+        **Returns whether a shutdown was actually started.** The caller that
+        armed a restart has to know: a quit that silently did nothing would
+        leave the flag set, and the user's next ordinary quit would then
+        relaunch the app out of nowhere. It is not a theoretical state --
+        `stop_callback` is wired by `mpv_shim.main` a few lines after the UI
+        is started, and anything driving this class outside that (a test, an
+        embedding) may never wire it at all.
+        """
+        if self.stop_callback is None:
+            log.error("Asked to quit with no shutdown callback wired; "
+                      "nothing to do.")
+            return False
+        self.stop_callback()
+        return True
+
+    def _can_run_windowless(self):
+        """True if the app may keep running with no window on screen.
+
+        Either the tray can bring it back, or the user set allow_background
+        and accepted that `jellyfin-mpv-shim stop` is the way out. Anything
+        else would leave a process nobody can see or reach.
+
+        Cast-target mode is the exception: there is no library to come back
+        to, and staying reachable *over the network* is the entire job. On
+        those machines exiting on window close is the failure, not the
+        safeguard — close_to_tray=False is how you ask for the app to quit.
+        """
+        if settings.headless:
+            return True
+        if self._tray is not None and self._tray.available:
+            return True
+        return bool(settings.allow_background)
+
+    def _may_start_minimized(self):
+        """True if we may come up with no window on screen.
+
+        `--minimized` on the command line counts on its own: it is a decision
+        made for this launch, in a terminal, by someone who can see the log
+        line telling them how to get the window back. The config key is not
+        self-authorizing in the same way — it may have been set on a machine
+        that had a tray at the time — so that path still wants a tray or
+        allow_background.
+
+        Either way there is a way back: launching the app again asks the
+        running copy to surface its window (see single_instance.py).
+        """
+        if self._can_run_windowless():
+            return True
+        from ..args import get_args
+
+        if get_args().start_minimized:
+            log.info("Started minimized with no system tray. Run "
+                     "jellyfin-mpv-shim again to show the window, or "
+                     "jellyfin-mpv-shim stop to exit.")
+            return True
+        return False
+
+    def on_window_closed(self):
+        """The user closed the mpv window.
+
+        With one shared window, closing it means "minimize to tray" — the app
+        stays alive as a cast target. But that is only safe if there *is* a
+        tray: without one the app would keep running with no way to reach or
+        quit it, so we exit instead — unless allow_background says the user
+        asked for exactly that and knows how to stop it."""
+        if not settings.close_to_tray:
+            self._quit()
+            return
+        if not self._can_run_windowless():
+            from ..tray import tray_unavailable_advice
+
+            log.info("Window closed and no system tray is available; "
+                     "exiting rather than becoming unreachable. %s",
+                     tray_unavailable_advice())
+            self._quit()
+            return
+        if self._browser is not None:
+            # Gate now, while the window is going away, so the locked screen
+            # is what's already there when it comes back.
+            self._browser.maybe_relock()
+            self._browser.minimize()
+        # Closing the window means "stop playing" — for music especially,
+        # which kept going with no window to control it from. Order matters:
+        # minimize() cannot release force_window while something is playing
+        # (set_browse_window's `not self._video` guard), so the window used to
+        # stay on screen. Stopping *after* it re-enters minimize() through the
+        # stopped playstate, which is where force_window finally drops.
+        PlayerGateway().stop_for_close()
+
+    def login_servers(self):
+        from ..player import playerManager, is_using_ext_mpv
+        from ..mpvtk.app import MpvtkApp
+        from ..mpvtk.rawimage import MemoryStore, cache_dir
+        from .app import MpvtkBrowser
+        from .repository import LibrarySource
+        from .strips import StripStore
+        from .thumbnails import ThumbnailStore, disk_cache
+
+        clientManager.load_credentials()
+
+        app = MpvtkApp.attach(playerManager.get_mpv(), ext=is_using_ext_mpv)
+        self._app = app
+        strips = (StripStore(mem_store=MemoryStore()) if app.in_process
+                  else StripStore(cache_dir=cache_dir("mpvtk-browser-")))
+        app.scene_check = strips.dead_srcs
+        # Artwork outlives the session: every entry is keyed by the server's
+        # own image tag, so last week's poster is still this week's poster,
+        # and a scratch directory meant re-fetching a whole library on every
+        # launch. Strips do not -- they are composited for this window, this
+        # theme and this cover size -- so they stay scratch.
+        thumb_dir, thumb_mb = disk_cache()
+        thumbs = ThumbnailStore(
+            thumb_dir,
+            verify_ssl=not settings.ignore_ssl_cert,
+            max_mem_mb=settings.library_image_cache_mb,
+            max_disk_mb=thumb_mb,
+        )
+        # Open immediately on an empty source (spinner); populate on connect.
+        source = LibrarySource([], clientManager.device_id,
+                               settings.player_name,
+                               not settings.ignore_ssl_cert)
+        browser = MpvtkBrowser(app, source, strips=strips, thumbs=thumbs,
+                               controller=PlayerGateway())
+        self._browser = browser
+        playerManager.mpvtk_active = True
+        playerManager.on_playstate = browser.on_playstate
+        playerManager.on_stopped_at = browser.on_stopped_at
+        # Loading screen + failure/retry UI. Without these a failed start was
+        # a blank window for the whole playback_timeout and then nothing.
+        playerManager.on_load_start = browser.load.on_load_start
+        playerManager.on_load_error = browser.load.on_load_error
+        # Update notices surface in the browser banner (not the MPV OSD).
+        playerManager.notify_update = browser.notify_update
+        # SyncPlay chatter surfaces on the status line, same reason.
+        playerManager.notify_syncplay = browser.notify_syncplay
+        # Re-send the HUD token when a group is joined or left: it carries
+        # whether the renderer's own pause paths hand over to Python.
+        playerManager.on_syncplay_change = browser.resend_hud_config
+        # ...and stopping playback halts the group rather than leaving it,
+        # because this UI has a SyncPlay menu to leave it from later.
+        playerManager.syncplay_menu_reachable = browser.syncplay_menu_reachable
+
+        playerManager.on_window_closed = self.on_window_closed
+        # Client-side decorations. Pushed, not polled: on Wayland whether the
+        # window has a title bar is settled by a compositor configure event
+        # that can land after the first frames are already drawn, so the
+        # startup read below is a starting point and this hook is the truth.
+        playerManager.on_decorations_changed = browser.refresh_window_controls
+        browser.refresh_window_controls()
+        # A server that was down at startup must appear once it answers,
+        # rather than staying invisible until a manual retry or restart.
+        clientManager.on_server_connected = self._on_server_connected
+        # And one that drops: the switcher reads connection state as it
+        # draws, so a redraw is all it takes. Unsubscribed, the entry kept
+        # reading as connected until something else repainted.
+        clientManager.on_servers_changed = browser.invalidate
+        # Refresh download badges the moment the catalog changes, rather
+        # than only when Settings -> Downloads is opened. The push hook has
+        # always existed; the browser just never subscribed.
+        PlayerGateway().on_downloads_changed(browser.on_downloads_changed)
+        # mpv is torn down and rebuilt across idle-quit and crash recovery;
+        # the renderer is bound to a specific handle, so follow it.
+        playerManager.on_mpv_gone = self.on_mpv_gone
+        playerManager.on_mpv_terminated = self.on_mpv_terminated
+        playerManager.on_mpv_recreated = self.on_mpv_recreated
+        playerManager.on_hud_menu = self._browser.open_hud_menu
+        # start_minimized: come up in the windowless state — running, castable,
+        # reachable from the tray — instead of opening the library.
+        # Settle whether there is a tray *before* deciding: the tray comes up
+        # in another process a moment after we do, and asking too early both
+        # picks the fallback path and logs advice that is about to be wrong.
+        if settings.start_minimized and self._tray is not None \
+                and not settings.allow_background:
+            self._tray.ready.wait(5)
+        if settings.start_minimized and self._may_start_minimized():
+            browser.minimize()
+        else:
+            if settings.start_minimized:
+                from ..tray import tray_unavailable_advice
+
+                log.info("start_minimized ignored: no system tray to restore "
+                         "the window from. %s", tray_unavailable_advice())
+            browser.enter_browse()  # take the window + hide the OSC
+        if browser.headless:
+            # Cast-target UX: the backdrop wants the whole screen, and the
+            # browse window deliberately is not fullscreen (browser_
+            # fullscreen), so ask explicitly — as the old mirror did.
+            browser.show_cast()
+            try:
+                playerManager.set_fullscreen(True)
+            except Exception:
+                log.debug("headless fullscreen failed", exc_info=True)
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="mpvtk-browser")
+        self._thread.start()
+        browser.start_background_work()
+        # BACK/ESC — from the keyboard or a Jellyfin remote (menu_action maps
+        # "back" to ESC when the in-window UI owns input).
+        playerManager.on_nav_back = browser.on_back
+        playerManager.on_nav_command = browser.on_nav_command
+        # "Show me this" from a phone/web client. Always ours now — the
+        # browser either opens the item's page or, in headless mode, paints
+        # it on the cast screen.
+        from ..event_handler import eventHandler
+
+        eventHandler.display_content = self._display_content
+        # A recording rule changed, possibly from another client. The browser
+        # refreshes only if a Live TV screen is up — see refresh_live_tv.
+        eventHandler.live_tv_changed = self._live_tv_changed
+        # ...and the same for watched/resume state, which moves the home
+        # screen's Continue Watching and Next Up rows (see refresh_home).
+        eventHandler.user_data_changed = self._user_data_changed
+        # A startup PIN gates connection: show the lock screen and let the
+        # unlock drive the connect. Otherwise connect in the background.
+        from ..users import userManager
+        try:
+            locked = userManager.startup_needs_unlock()
+        except Exception:
+            locked = False
+        if locked:
+            browser.show_locked()
+        else:
+            # On the connecting screen, not an empty home route: a home
+            # route with no source renders as a bare spinner with nothing
+            # explaining it and no way past a server that never answers.
+            browser.show_connecting()
+            threading.Thread(target=self._connect, daemon=True,
+                             name="mpvtk-connect").start()
+
+    # -- following mpv across teardown / re-create -------------------------
+
+    def on_mpv_gone(self):
+        """The mpv handle is no longer ours (idle-quit or a lost connection).
+
+        Stop the render loop and detach. Deliberately does NOT free the
+        composited tile bitmaps: on libmpv those are in-process buffers mpv
+        reads BY ADDRESS every frame it composites, and mpv is still being
+        terminated on another thread at this point. Freeing here released
+        memory out from under a live compositor — a segfault on quit. That
+        happens in on_mpv_terminated instead."""
+        self._detaching = True
+        app, self._app = self._app, None
+        if app is not None:
+            app.quit()
+        # Wait for the render loop to actually stop before anything else
+        # touches the caches it reads. quit() only enqueues.
+        # Deliberately NOT cleared when the join times out: on_mpv_recreated
+        # joins it again rather than starting a second loop alongside it.
+        # build() is not reentrant (it writes _size, _live_offsets, the
+        # poster caches, and starts pollers), so two of them is corruption.
+        self._join_render_loop()
+        if self._browser is not None:
+            self._browser.app = None
+
+    def on_mpv_terminated(self):
+        """mpv is really dead — now every picture in RAM can go.
+
+        This is the one moment the app can drop the lot. Everything else is
+        a partial: the strip cache can only shed what the live scene is not
+        using, because on libmpv those buffers are read BY ADDRESS by a
+        compositor that is still running, and the decoded-image cache sheds
+        a screen at a time as you navigate. With no mpv there is no scene,
+        no compositor and nothing on screen, so both go to zero.
+
+        Holding them past this point would both leak and defeat the memory
+        saving that quitting mpv while minimized is FOR -- the app is now a
+        cast target with no window, and a cast target does not need a
+        library's artwork. Freeing any earlier crashes. See
+        playerManager.on_mpv_terminated."""
+        if self._browser is None:
+            return
+        try:
+            # NB not strips.shutdown() here: mpv may be re-created
+            # afterward (on_mpv_recreated) and the browser reuses this
+            # store, so the pool must survive. clear() is lock-safe against
+            # a concurrent worker insert, and mpv is dead by contract, so a
+            # strip still composing can't fault. The pool is only really
+            # torn down in browser.shutdown().
+            self._browser.strips.clear()
+        except Exception:
+            log.debug("clearing the tile cache failed", exc_info=True)
+        try:
+            # The cast screen parks a full-window bitmap on itself rather
+            # than re-requesting it, so clear() alone leaves it pointing at
+            # a buffer that is now freed -- and mpv may be re-created under
+            # it (on_mpv_recreated) and handed that address.
+            self._browser.forget_cast_bitmap()
+        except Exception:
+            log.debug("could not reset the cast bitmap", exc_info=True)
+        try:
+            # Decoded posters, which nothing outside this process ever
+            # referenced -- so unlike the strips they need no permission
+            # from mpv, only somewhere sensible to be dropped. This is it:
+            # the window is gone and nothing will ask for a picture until
+            # one is opened again, by which time the artwork cache on disk
+            # answers without the server.
+            if self._browser.thumbs is not None:
+                self._browser.thumbs.trim_memory(0)
+        except Exception:
+            log.debug("clearing the decoded image cache failed", exc_info=True)
+
+    def on_mpv_recreated(self):
+        """A fresh mpv handle exists — attach a new renderer to it.
+
+        mpvtk binds its event callbacks and loads renderer.lua at attach time,
+        so the app object is per-handle; the browser keeps all of its state
+        (routes, data, caches) and simply gets pointed at the new one."""
+        from ..player import playerManager, is_using_ext_mpv
+        from ..mpvtk.app import MpvtkApp
+
+        if self._browser is None:
+            return
+        try:
+            app = MpvtkApp.attach(playerManager.get_mpv(), ext=is_using_ext_mpv)
+        except Exception:
+            log.error("could not re-attach the mpvtk UI to the new mpv",
+                      exc_info=True)
+            return
+        # Belt and braces: on_mpv_gone joins the old loop, but its join is
+        # bounded. Starting a second one alongside a survivor would have two
+        # threads calling the non-reentrant build().
+        if not self._join_render_loop():
+            # The old loop is wedged. A second one would race it inside
+            # build(), which is worse than not re-attaching.
+            return
+        self._app = app
+        # set_app (not a bare assignment): the fresh app needs the
+        # browser's nav/HUD callbacks re-wired or its events go nowhere.
+        self._browser.set_app(app)
+        self._detaching = False
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="mpvtk-browser")
+        self._thread.start()
+        # A fresh renderer starts active; re-assert the real state
+        # (browse / HUD-idle for a video in flight / fully out of the way).
+        self._browser.reassert_window_state()
+        self._browser.invalidate()
+
+    RENDER_LOOP_JOIN = 2.0
+
+    def _join_render_loop(self):
+        """Stop tracking the render loop once it has actually exited.
+
+        Returns True if it is gone. A survivor is kept in ``_thread`` so the
+        next attach joins it again instead of racing it."""
+        thread = self._thread
+        if thread is None or not thread.is_alive():
+            self._thread = None
+            return True
+        if thread is threading.current_thread():
+            # We ARE the render loop. This is reachable: a now-playing bar
+            # button runs on this thread, run_action's fast path executes the
+            # player method inline, and a dead handle takes it through
+            # _handle_mpv_disconnect -> _notify_mpv_gone -> on_mpv_gone.
+            # join() would raise "cannot join current thread", which
+            # _notify_mpv_gone swallows -- so the detach silently stopped
+            # half-done, leaving _browser.app pointing at the dead handle and
+            # _thread holding a reference to us forever.
+            #
+            # The loop is already unwinding by the time it gets here (quit()
+            # was enqueued above), and it cannot race itself, so treating this
+            # as "gone" is both safe and what the caller means.
+            #
+            # "Above" means the two callers that quit first -- detach() and
+            # stop(). _attach's survivor check has no quit behind it and would
+            # not be safe here, but it cannot reach this branch: every path
+            # that kills mpv (idle_quit, _handle_mpv_disconnect) calls
+            # _notify_mpv_gone -> on_mpv_gone -> detach first, so _thread is
+            # already None and the check above returns. Stated because the
+            # premise is about the callers, not about this function, and
+            # nothing here says which.
+            log.debug("detaching from inside the render loop; not joining self")
+            self._thread = None
+            return True
+        thread.join(timeout=self.RENDER_LOOP_JOIN)
+        if thread.is_alive():
+            log.warning("mpvtk render loop did not stop within %.0fs; "
+                        "not starting another alongside it",
+                        self.RENDER_LOOP_JOIN)
+            return False
+        self._thread = None
+        return True
+
+    def _run(self):
+        from ..player import _mpv_errors
+        # _attach sets both before it starts the thread this runs on, so
+        # state the invariant rather than add a guard that would turn a
+        # wiring bug into a loop that silently never starts.
+        app = cast("MpvtkApp", self._app)
+        browser = cast("MpvtkBrowser", self._browser)
+        try:
+            app.run(browser.build)
+        except _mpv_errors:
+            # Not a crash: the window went away under us. No reply bound
+            # here: the app may build a new mpv, and the bound is a global
+            # nothing restores. The quit path sets it (docs/mpv-backends.md
+            # section 1).
+            log.info("mpvtk browser loop ended: mpv is gone")
+        except Exception:
+            log.error("mpvtk browser loop crashed", exc_info=True)
+        finally:
+            # A loop that ended because *we* detached (idle-quit, reconnect)
+            # is expected — only a real window close should stop the app.
+            if not self._detaching and self.stop_callback is not None:
+                self.stop_callback()
+
+    def _on_server_connected(self, *_a):
+        """A server came up after startup — rebuild so it appears.
+
+        keep_place: this fires from the websocket redial loop, the
+        cast-recovery path and the periodic health check, so it lands at
+        arbitrary moments mid-session. Resetting to Home threw the user out
+        of whatever they were reading every time a flaky server bounced."""
+        if self._browser is None:
+            return
+        if getattr(self._browser, "offline_chosen", False):
+            # The person dropped to offline; a server bouncing back is not
+            # them asking to leave it. Picking the server is.
+            self._browser.invalidate()
+            return
+        try:
+            source = PlayerGateway().rebuild_source()
+        except Exception:
+            log.debug("rebuild after connect failed", exc_info=True)
+            return
+        if source is not None:
+            self._browser.set_source(source, server_uuid=self._browser.server,
+                                     keep_place=True)
+
+    def _connect(self):
+        from .repository import LibrarySource
+        if not settings.work_offline:
+            try:
+                clientManager.connect_all()
+            except Exception:
+                log.error("mpvtk browser connect failed", exc_info=True)
+        servers = _collect_servers()
+        if self._browser is None:
+            return
+        if not servers:
+            # No live server — browse the downloads instead of dead-ending on
+            # the login screen. work_offline always arrives here (the connect
+            # above was skipped), which is what makes the setting mean
+            # something in this UI.
+            offline = PlayerGateway().offline_source()
+            if offline is not None:
+                self._browser.set_source(offline)
+                return
+            # Nothing downloaded either. If saved servers exist this is a
+            # failed connect, so say so on the connecting screen and leave
+            # the retry there; a first run with no accounts wants the login
+            # form.
+            if _saved_servers_exist():
+                log.warning("mpvtk browser: no servers connected")
+                self._browser.connect_failed()
+                return
+            log.warning("mpvtk browser: no servers configured; showing login")
+            self._browser.show_login()
+            return
+        source = LibrarySource(servers, clientManager.device_id,
+                               settings.player_name,
+                               not settings.ignore_ssl_cert)
+        self._browser.set_source(source)
+
+    def stop(self):
+        from ..player import playerManager
+        self.stop_tray()
+        playerManager.mpvtk_active = False
+        app, self._app = self._app, None
+        if app is not None:
+            app.quit()
+            # quit() only enqueues; wait for the loop to stop pushing scenes
+            # before anything frees what those scenes reference.
+            self._join_render_loop()
+        if self._browser is not None:
+            # free_bitmaps=False: mpv may still be alive here (the caller is
+            # on its way to terminating it), and on libmpv it composites the
+            # tile buffers by address. They are released by
+            # on_mpv_terminated, or reclaimed with the process.
+            self._browser.shutdown(free_bitmaps=False)
+
+
+user_interface = UserInterface()

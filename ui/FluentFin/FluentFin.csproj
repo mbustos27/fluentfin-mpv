@@ -1,0 +1,396 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+		<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+		<RootNamespace>FluentFin</RootNamespace>
+		<ApplicationIcon>Assets/jellyfin.ico</ApplicationIcon>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<Platforms>x86;x64;arm64</Platforms>
+		<RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<UseWinUI>true</UseWinUI>
+		<EnableMsixTooling>true</EnableMsixTooling>
+		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+		<LangVersion>preview</LangVersion>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<Version Condition=" '$(BuildVersion)' == '' ">1.0.0.0</Version>
+		<Version Condition=" '$(BuildVersion)' != '' ">$(BuildVersion)</Version>
+		<AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
+		<GenerateAppInstallerFile>True</GenerateAppInstallerFile>
+		<AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+		<AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
+		<AppxSymbolPackageEnabled>True</AppxSymbolPackageEnabled>
+		<GenerateTestArtifacts>True</GenerateTestArtifacts>
+		<AppxBundle>Auto</AppxBundle>
+		<AppxBundlePlatforms>x64</AppxBundlePlatforms>
+		<GenerateTemporaryStoreCertificate>True</GenerateTemporaryStoreCertificate>
+		<AppInstallerUri>D:\Test\</AppInstallerUri>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-arm64'">
+		<FFmpegDir>FFMpeg-arm64</FFmpegDir>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(FFmpegDir)' == ''">
+		<FFmpegDir>FFMpeg</FFmpegDir>
+	</PropertyGroup>
+	<ItemGroup>
+	  <Content Remove="Assets\Square44x44Logo.altform-lightunplated_targetsize-24.png" />
+	  <Content Remove="Assets\Square44x44Logo.altform-lightunplated_targetsize-32.png" />
+	  <Content Remove="Assets\Square44x44Logo.altform-unplated_targetsize-24.png" />
+	  <Content Remove="Assets\Square44x44Logo.altform-unplated_targetsize-32.png" />
+	  <Content Remove="Assets\Square44x44Logo.scale-125.png" />
+	  <Content Remove="Assets\Square44x44Logo.scale-150.png" />
+	  <Content Remove="Assets\Square44x44Logo.targetsize-24.png" />
+	  <Content Remove="Assets\Square44x44Logo.targetsize-32.png" />
+	  <Content Remove="Assets\StoreLogo.scale-125.png" />
+	  <Content Remove="Assets\StoreLogo.scale-150.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Manifest Include="$(ApplicationManifest)" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+		<ProjectCapability Include="Msix" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Blurhash.Core" Version="4.2.1" />
+		<PackageReference Include="DeftSharp.Windows.Input" Version="0.11.0" />
+		<PackageReference Include="FlyleafLib.Controls.WinUI" Version="1.4.13" />
+		<PackageReference Include="LibVLCSharp.WinUI" Version="3.10.2" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+		<PackageReference Include="Scrutor" Version="7.0.0" />
+		<PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+		<!-- copies libvlc\win-x64 / win-x86 / win-arm64 depending on $(Platform) -->
+		<PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
+		<PackageReference Include="WinUIEx" Version="2.9.3" />
+		<PackageReference Include="DevWinUI" Version="10.8.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="FluentFin.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\FluentFin.Core\FluentFin.Core.csproj" />
+		<ProjectReference Include="..\FluentFin.Plugins\FluentFin.Plugins.csproj" />
+		<ProjectReference Include="..\FluentFin.UI.Core\FluentFin.UI.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Update="Assets\fresh.svg">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	  <Content Update="Assets\GitHub.dark.svg">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	  <Content Update="Assets\GitHub.light.svg">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	  <Content Update="Assets\icons8-jellyfin-color-hand-drawn-70.png">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	  <Content Update="Assets\jellyfin.ico">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	  <Content Update="Assets\rotten.svg">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <!-- native FFmpeg for the target architecture; arm64 binaries are fetched at build time into FFMpeg-arm64 -->
+	  <Content Include="$(FFmpegDir)\*.dll" Link="FFMpeg\%(Filename)%(Extension)">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Remove="LoadingViews\**" />
+	  <EmbeddedResource Remove="LoadingViews\**" />
+	  <None Remove="LoadingViews\**" />
+	  <Page Remove="LoadingViews\**" />
+	</ItemGroup>
+
+
+	<ItemGroup>
+	  <Page Update="Controls\TomatoMeter.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Controls\BaseItemDtoCard.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Controls\PagedScrollView.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	  <Page Update="Dialogs\Views\SyncPlayGroupPickerDialog.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Dialogs\Views\SessionPickerDialog.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\PlaybackTranscodingPage.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\ScheduledTasksPage.xaml">
+	    <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+	    <SubType>Designer</SubType>
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\LibrariesLandingPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Controls\ServerFolderPicker.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	  <Page Update="Dialogs\Views\QuickConnectDialog.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Dialogs\Views\StringPickerDialog.xaml">
+	    <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+	    <SubType>Designer</SubType>
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	  <Page Update="Dialogs\Views\ManageLibraryDialog.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\MediaSegmentsEditorPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\JellyfinSettings\ActivitiesPage.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\EpisodePage.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\SelectServerPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\SettingsPage.xaml">
+	    <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+	    <SubType>Designer</SubType>
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	  <Page Update="Views\TrickplayTestPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Dialogs\Views\AccessSchedulePickerDialog.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Dialogs\Views\UserEditorPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Dialogs\Views\AddUserDialog.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\JellyfinSettingsPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Controls\TransportControls.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	  <Page Update="Dialogs\Views\EditImagesDialog.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Dialogs\Views\EditSubtitlesDialog.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Dialogs\Views\RefreshMetadataDialog.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Dialogs\Views\MediaInfoDialog.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Dialogs\Views\EditMetadataDialog.xaml">
+	    <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+	    <SubType>Designer</SubType>
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Styles\ImageEx.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\LibrariesDisplayPage.xaml">
+	    <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+	    <SubType>Designer</SubType>
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\PlaybackTrickplayPage.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\PlaybackResumePage.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\LibrariesNfoSettingsPage.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\LibrariesMetadataPage.xaml">
+	    <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+	    <SubType>Designer</SubType>
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\UserPasswordEditorPage.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\UserParentalControlEditorPage.xaml">
+	    <SubType>Designer</SubType>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\UserAccessEditorPage.xaml">
+	    <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\LibrariesSettingsPage.xaml">
+	    <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+	    <SubType>Designer</SubType>
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	  <Page Update="Views\JellyfinSettings\UsersPage.xaml">
+	    <XamlRuntime>$(DefaultXamlRuntime)</XamlRuntime>
+	    <SubType>Designer</SubType>
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\SeasonPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\SeriesPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\MoviePage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Styles\MenuFlyoutButton.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Styles\PlayableMediaItem.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\VideoPlayerPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\LibraryPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Styles\Button.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\HomePage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\TitleBarControl.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\LoginPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Dialogs\Views\IdentifyDialog.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\JellyfinSettings\DashboardPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+		<HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <PRIResource Remove="LoadingViews\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Remove="Controls\LazyLoadedImage.xaml" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Controls\LazyLoadedImage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Controls\MediaPlayerHost.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Update="Views\JellyfinSettings\ServerConfigurationPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </Page>
+	</ItemGroup>
+</Project>

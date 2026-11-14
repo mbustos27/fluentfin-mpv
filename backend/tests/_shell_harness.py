@@ -1,0 +1,1566 @@
+"""Shared fixtures for the mpvtk browser shell tests.
+
+Split out of ``test_mpvtk_browser_shell.py`` when that file reached 8,560
+lines and 661 tests in one module. Everything here is fixture, not
+assertion: a fake data source (no network), pool doubles that make async
+work synchronous or deliberately stuck, a fake player controller, and the
+handful of seam helpers that reach a ``Page`` the way the shell would.
+
+The ``*_page`` helpers exist because step 6c moved screen logic off
+``MpvtkBrowser`` and onto ``Page`` objects. Tests go through
+``b._page_for(route)`` rather than poking the shell, which is the same path
+production takes.
+
+Not named ``test_*`` so unittest discovery ignores it; imported as
+``tests._shell_harness`` (see ``tests/_scene_snapshot.py`` for the same
+pattern).
+"""
+
+import copy
+import threading
+import time
+import unittest
+from jellyfin_mpv_shim.mpvtk.layout import layout
+from jellyfin_mpv_shim.mpvtk_browser import components, home_sections, live_tv
+from jellyfin_mpv_shim.mpvtk_browser import themes
+from jellyfin_mpv_shim.mpvtk_browser import tile_renderer
+from jellyfin_mpv_shim.mpvtk_browser.app import MpvtkBrowser
+
+# Ignore the developer's own theme directory. The Settings screen lists the
+# themes it can actually find, so without this a scene built here depends on
+# what is in ~/.config/jellyfin-mpv-shim/themes -- the settings snapshot bakes
+# the list into a dropdown's items, and anyone who had written a theme would
+# get a failure that reproduced nowhere else. Shipped themes only.
+_real_theme_dirs = themes.theme_dirs
+themes.theme_dirs = lambda: (_real_theme_dirs()[0], None)
+themes.load(force=True)
+
+
+def editor_page(b, route):
+    """The QueuePage / PlaylistEditPage for a route — the seam the queue and
+    playlist-editor helpers moved to in 6c. Selection and item state still
+    live in the route dict, so the page can be rebuilt at will."""
+    return b._page_for(route)
+
+def music_page(b, route=None):
+    """The MusicLibraryPage (or album/artist/genre page) for a route — the
+    seam the music screens' helpers moved to in 6c."""
+    return b._page_for(route if route is not None else b.route)
+
+def music_scroll(b, route, offset, maximum, scroll_id="music-grid"):
+    """Scroll a windowed music route and let it ask for what that brings in.
+
+    The tile tabs and the genre page are windowed since #617: there is no
+    page-on-approach callback, so scrolling means moving the offset and
+    rendering. Same shape as grid_scroll.
+    """
+    from jellyfin_mpv_shim.mpvtk_browser.pagination import Paginator
+    Paginator.rewindow(route)     # what the view's on_scroll callback does
+    b._scroll.on_scroll(scroll_id, offset, maximum)
+    build_scene(b)
+
+
+def music_songs_scroll(b, route, offset, maximum):
+    """The SONGS tab's infinite scroll, which still appends on approach."""
+    b._page_for(route)._on_scroll_end(offset, maximum)
+
+def grid_scroll(b, route, offset, maximum):
+    """Scroll a grid/person route and let it ask for what that brings in.
+
+    The grid is *windowed* since #617: there is no page-on-approach callback
+    any more, so scrolling it means moving the offset and rendering — the
+    render is what asks ``Paginator.window`` for the newly visible range,
+    from the same geometry the renderer composites.
+    """
+    from jellyfin_mpv_shim.mpvtk_browser.pagination import Paginator
+    Paginator.rewindow(route)     # what the view's on_scroll callback does
+    b._scroll.on_scroll("grid", offset, maximum)
+    build_scene(b)
+
+def detail_page(b, route):
+    """A DetailPage bound to ``route`` — the seam the detail screen's private
+    helpers (track pickers, media-info line, scenes row) moved to in 6c.
+
+    Mutates ``route`` to carry its kind and returns the page cached on it, so
+    per-route caching (``_def_tracks``) behaves as it does in production."""
+    route.setdefault("kind", "detail")
+    return b._page_for(route)
+
+def series_page(b, route=None):
+    """A SeriesPage, likewise, for ``_series_actions``."""
+    return b._page_for(route if route is not None else {"kind": "series"})
+
+def home_page(b):
+    """The HomePage serving a home route, built the way the shell builds it.
+
+    _row_shape moved onto the page in step 6c; this is the seam its tests
+    now go through."""
+    return b._page_for({"kind": "home"})
+
+class FakeSource:
+    """Minimal LibrarySource stand-in for the shell tests."""
+
+    def __init__(self):
+        self.libraries = [
+            {"Id": "lib1", "Name": "Movies", "Type": "CollectionFolder",
+             "CollectionType": "movies"},
+        ]
+        #: `slot` is the row's position in the user's home layout. The
+        #: repository stamps one on every row it returns, and `HomePage`
+        #: builds the scroll-container id out of it -- so a row without one
+        #: here lands on the same id as its neighbour and exercises the
+        #: collision backstop instead of the ids production actually draws.
+        self.home_rows = [
+            {"title": "Continue Watching", "slot": 0, "items": [
+                {"Id": "m1", "Name": "Alpha", "Type": "Movie",
+                 "ProductionYear": 2001}],
+             "collection_type": None},
+        ]
+        #: Rows the "latest" batch adds. Kept apart from home_rows because
+        #: HomePage.load fetches the two in stages and publishes between
+        #: them; a fake that answered the same list for both made the whole
+        #: staging invisible to the tests.
+        self.home_latest_rows = [
+            {"title": "Latest Movies", "slot": 1, "items": [
+                {"Id": "m2", "Name": "Beta", "Type": "Movie",
+                 "ProductionYear": 2002}],
+             "collection_type": "movies"},
+        ]
+        # PrimaryImageAspectRatio because a real Jellyfin sets it from the
+        # Primary image, and the library grid is shaped by the median of it
+        # (GridPage._grid_shape). A fixture without one exercises only the
+        # no-artwork fallback, which is not what a movies library is.
+        self.grid_items = [
+            {"Id": "g%d" % i, "Name": "Item %d" % i, "Type": "Movie",
+             "PrimaryImageAspectRatio": 2 / 3}
+            for i in range(30)
+        ]
+        # What the view actually asked the source for. See
+        # get_library_items — a fake that swallows its arguments turns every
+        # test above it into a proxy assertion.
+        self.queries = []
+        #: EnableContentDownloading, as can_download answers it.
+        self.download_allowed = True
+        #: item id -> DTO, consulted by get_item before its default. The
+        #: book screens are the first to care what get_item returns for
+        #: something that is not a movie.
+        self.items = {}
+        #: season id -> fields merged into that season's `get_seasons` DTO.
+        #: The season page reads its extras and trailer counts there, so a
+        #: test of that gate seeds them here, not on `items`.
+        self.season_fields = {}
+        #: Whether an item is treated as HAVING backdrop artwork. This
+        #: answered None unconditionally, which did not leave the
+        #: has-artwork header untested -- it made it *unreachable* while
+        #: every header test reported a pass, because a header that will
+        #: get a banner lays out differently from one that never will
+        #: (the heading is baked into the bitmap, so it must not also be
+        #: drawn below it). `tools/audit_fake_contracts.py` cannot see
+        #: this: `backdrop_spec` is provided, just never honestly.
+        self.has_backdrop = False
+        #: Whether items resolve to a Primary image. See image_spec: off by
+        #: default so tiles stay placeholders, on for the tests that need
+        #: the header's inset poster to exist at all.
+        self.has_poster = False
+
+    def servers(self):
+        # `address`, because the real LibrarySource reports it and the top
+        # bar reads it -- the switcher marks each entry by where the server
+        # is. A fake that left it out would not leave that path uncovered,
+        # it would make it unreachable while every assertion still passed.
+        return [{"uuid": "srv1", "name": "Home Server",
+                 "address": self.server_address("srv1")}]
+
+    def server_address(self, server_uuid):
+        """A real address per server, not one constant: the jellyfin-web link
+        names the server the item came from, and a fake with one address
+        cannot tell a right answer from a wrong one on a two-server setup."""
+        return {"srv1": "https://home.example",
+                "srv2": "https://remote.example"}.get(server_uuid)
+
+    def get_libraries(self, server_uuid):
+        return list(self.libraries)
+
+    def get_home_prefs(self, server_uuid, refresh=False):
+        return list(home_sections.DEFAULT_LAYOUT), frozenset()
+
+    def get_home_rows(self, server_uuid, libraries=None, sections=None,
+                      layout=None, latest_excludes=None):
+        # sections is ("primary",) or ("latest",) -- see HomePage.load. None
+        # means "everything", which is what the non-staged callers ask for.
+        if sections is None:
+            return list(self.home_rows) + list(self.home_latest_rows)
+        if "latest" in sections:
+            return list(self.home_latest_rows)
+        return list(self.home_rows)
+
+    def get_library_items(self, server_uuid, parent_id, start_index=0,
+                          sort_by="SortName", sort_order="Ascending",
+                          limit=100, filters=None, image_type=None,
+                          collection_type=None):
+        # Recorded, not swallowed. This took **kw and discarded sort/filters
+        # entirely, so every filter, sort, unplayed-toggle and letter-jump
+        # test asserted only on the browser's own scratch dict — if the view
+        # stopped passing filters= to the source, all of them stayed green
+        # and every filter in the app silently did nothing. image_type is
+        # recorded for the same reason: it is what makes a Banner view show
+        # banners, and a fake that dropped it would hide the whole feature.
+        self.queries.append({
+            "parent_id": parent_id, "start_index": start_index,
+            "sort_by": sort_by, "sort_order": sort_order,
+            "filters": dict(filters or {}), "image_type": image_type,
+            "collection_type": collection_type,
+        })
+        page = self.grid_items[start_index:start_index + 20]
+        return page, len(self.grid_items)
+
+    def get_view_settings(self, server_uuid, parent_id, collection_type):
+        return dict(getattr(self, "view_settings", {}))
+
+    def save_view_setting(self, server_uuid, parent_id, collection_type,
+                          setting, value, key=None):
+        self.saved_view_settings = getattr(self, "saved_view_settings", [])
+        if getattr(self, "save_view_fails", False):
+            raise RuntimeError("server refused")
+        self.saved_view_settings.append((parent_id, setting, value, key))
+
+    def get_by_name_sections(self, server_uuid, spec, limit=20):
+        self.byname_specs = getattr(self, "byname_specs", [])
+        self.byname_specs.append(dict(spec or {}))
+        return getattr(self, "byname_rows", [
+            {"key": "movies", "title": "Movies", "types": "Movie",
+             "total": 40,
+             "items": [{"Id": "bm1", "Name": "Film", "Type": "Movie"}]},
+        ])
+
+    def get_genre_sections(self, server_uuid, parent_id, collection_type,
+                           limit=10, max_genres=40):
+        return getattr(self, "genre_rows", [
+            {"key": "g1", "title": "Action", "types": "Movie",
+             "items": [{"Id": "gm1", "Name": "Film", "Type": "Movie",
+                        "PrimaryImageAspectRatio": 2 / 3}]},
+        ])
+
+    def get_favorite_sections(self, server_uuid, limit=24):
+        return getattr(self, "favorite_rows", [
+            {"key": "movies", "title": "Movies", "types": "Movie",
+             "items": [{"Id": "fm1", "Name": "Fav", "Type": "Movie"}]},
+        ])
+
+    def get_list(self, server_uuid, spec, sort_by="SortName",
+                 sort_order="Ascending", start_index=0, limit=100,
+                 filters=None):
+        self.list_specs = getattr(self, "list_specs", [])
+        self.list_specs.append(dict(spec or {}))
+        items = getattr(self, "list_items", None)
+        if items is None:
+            items = self.grid_items
+        page = items[start_index:start_index + 20]
+        return page, len(items)
+
+    def get_filter_values(self, server_uuid, parent_id=None,
+                          collection_type=None):
+        self.filter_value_calls = getattr(self, "filter_value_calls", [])
+        self.filter_value_calls.append((parent_id, collection_type))
+        return {"genres": ["Action", "Comedy"], "years": [2020, 2021]}
+
+    def get_shuffle_ids(self, server_uuid, parent_id, limit=200):
+        return ["g0", "g5", "g9"]
+
+    def get_play_all_ids(self, server_uuid, parent_id, sort_by="SortName",
+                         sort_order="Ascending", filters=None, limit=200,
+                         collection_type=None):
+        # Echoes what it was asked with, so a caller that drops the sort or
+        # the filters is visible rather than merely untested.
+        self.play_all_args = (parent_id, sort_by, sort_order, filters)
+        self.play_all_ctype = collection_type
+        return ["g0", "g1", "g2"]
+
+    def image_spec(self, item, image_type="Primary", width=280,
+                   inherit=True):
+        """Which image an item resolves to, or None.
+
+        Off by default so tiles stay placeholders and nothing reaches the
+        network -- but *switchable*, because answering None unconditionally
+        is how a path goes untested while every test still passes. That is
+        what `has_backdrop` was added for next door, after no shell test had
+        ever rendered a header with artwork; the header's inset poster (#7)
+        reads this one and would have had the same hole.
+        """
+        if not self.has_poster:
+            return None
+        return (item.get("Id") or "x", image_type, "ptag0")
+
+    def image_url(self, *a, **k):
+        # A url only when there is artwork to fetch, for the same reason
+        # backdrop_url below has that rule: _request_image bails on a falsy
+        # url before recording anything, so always answering None leaves
+        # the request path unreachable.
+        return "http://fake/img.jpg" if self.has_poster else None
+
+    def backdrop_spec(self, item):
+        if not self.has_backdrop:
+            return None
+        return (item.get("Id") or "x", "Backdrop", "tag0")
+
+    def backdrop_url(self, *a, **k):
+        # A URL only when there is artwork to fetch: `_request_image` bails
+        # on a falsy url before it records anything, so a fake that always
+        # answered None left the request path unreachable too.
+        return "http://s/backdrop" if self.has_backdrop else None
+
+    def get_item(self, server_uuid, item_id):
+        self.item_calls = getattr(self, "item_calls", [])
+        self.item_calls.append(item_id)
+        if item_id in self.items:
+            return dict(self.items[item_id])
+        return {"Id": item_id, "Name": "Detail %s" % item_id, "Type": "Movie",
+                "Overview": "A short overview. " * 8, "ProductionYear": 2010,
+                # Every DTO a real server sends carries one, and the
+                # jellyfin-web link puts it in the query string -- a fixture
+                # without it can only exercise the omitted-serverId branch.
+                "ServerId": "SRVID",
+                # The server fills ExternalUrls in unconditionally on the
+                # single-item routes, so the real detail screen essentially
+                # always has some. Modelled here rather than on one fixture
+                # item because a stand-in that omits a field does not leave
+                # a path uncovered -- it makes the path unreachable while
+                # reporting a pass (see STARTHERE.md).
+                "ExternalUrls": [
+                    {"Name": "IMDb", "Url": "https://www.imdb.com/title/tt1/"},
+                    {"Name": "TheMovieDb",
+                     "Url": "https://www.themoviedb.org/movie/1"},
+                    {"Name": "Trakt", "Url": "https://trakt.tv/movies/one"}],
+                "RunTimeTicks": 90 * 600000000,
+                "UserData": {"PlaybackPositionTicks": 30 * 10000000},
+                "People": [{"Id": "pp1", "Name": "Actor One", "Type": "Actor"}],
+                "MediaSources": [{
+                    "Id": "src1", "Container": "mkv",
+                    "MediaStreams": [
+                        {"Type": "Video", "Height": 1080,
+                         "DisplayTitle": "1080p HEVC", "VideoRange": "HDR"},
+                        {"Type": "Audio", "Index": 1,
+                         "DisplayTitle": "English 5.1"},
+                        {"Type": "Subtitle", "Index": 2,
+                         "DisplayTitle": "English"}]}]}
+
+    def can_download(self, server_uuid):
+        """`EnableContentDownloading`. Real, not a stub returning True: for a
+        book this is the difference between a Read button and an explanation,
+        and a fake that could only say yes would leave the refusal path with
+        nowhere to be observed."""
+        return self.download_allowed
+
+    def get_similar(self, server_uuid, item_id, limit=12):
+        return [{"Id": "s1", "Name": "Similar", "Type": "Movie"}]
+
+    def get_trailers(self, server_uuid, item_id):
+        """Answers from ``self.trailers`` (item id -> list) and records the
+        ask: the pages gate this on ``LocalTrailerCount``, and whether the
+        request was made at all is half of what the gate tests assert."""
+        self.trailer_calls = getattr(self, "trailer_calls", [])
+        self.trailer_calls.append(item_id)
+        return list(getattr(self, "trailers", {}).get(item_id, []))
+
+    def get_special_features(self, server_uuid, item_id):
+        """``self.special_features`` (item id -> list), recorded like
+        ``get_trailers``. A fake extra should carry what the real one does --
+        ``ExtraType``, ``UserData``, ``RunTimeTicks`` -- since those are what
+        the row's tests are about."""
+        self.extras_calls = getattr(self, "extras_calls", [])
+        self.extras_calls.append(item_id)
+        return list(getattr(self, "special_features", {}).get(item_id, []))
+
+    def get_person_items(self, server_uuid, person_id, start_index=0, **kw):
+        # Record the sort the caller asked for: the repository has always
+        # accepted sort_by/sort_order and _load_person never passed them.
+        self.person_sorts = getattr(self, "person_sorts", [])
+        self.person_sorts.append((kw.get("sort_by"), kw.get("sort_order")))
+        items = [{"Id": "pf%d" % i, "Name": "Film %d" % i, "Type": "Movie"}
+                 for i in range(4)]
+        return items[start_index:start_index + 20], len(items)
+
+    def get_next_up(self, server_uuid, series_id):
+        return {"Id": "nu1", "Name": "Next Ep", "Type": "Episode",
+                "SeriesId": series_id}
+
+    def get_series_queue(self, server_uuid, series_id, start_item_id=None,
+                         limit=100):
+        return [{"Id": "e%d" % i} for i in range(3)]
+
+    def get_seasons(self, server_uuid, series_id):
+        # SeriesName, because the season screen puts it in the title bar
+        # and every Season stand-in omitting it left that path untestable
+        # -- the field the feature is named after had nowhere to live.
+        # ExternalUrls, because the season screen draws provider links off
+        # these DTOs -- and because they are the reason `get_seasons` asks
+        # for a field the stock apiclient query does not (the list routes
+        # omit ExternalUrls unless asked; the single-item routes do not).
+        # A stand-in without them makes that row unreachable while the
+        # tests around it still pass.
+        # ServerId for the same reason as on get_item: every DTO a real
+        # server sends carries one and the jellyfin-web link puts it in the
+        # query string, so a season fixture without it can only ever
+        # exercise the omitted-serverId branch -- and would stay green if
+        # this screen started composing its link from something other than
+        # the season's own DTO.
+        # `Overview` on the first and NOT on the second, deliberately: the
+        # page has to draw one and must not draw an empty paragraph, and a
+        # library really is like this -- seasons are described unevenly. It
+        # is also the field this fixture did not model, which is what left
+        # the season page's missing synopsis unobservable.
+        seasons = [{"Id": "se1", "Name": "Season 1", "Type": "Season",
+                    "SeriesId": series_id, "SeriesName": "A Show",
+                    "ServerId": "SRVID",
+                    "Overview": "Where the show finds its feet.",
+                    "ExternalUrls": [
+                        {"Name": "TheTVDB",
+                         "Url": "https://thetvdb.example/series/1/seasons/1"}]},
+                   {"Id": "se2", "Name": "Season 2", "Type": "Season",
+                    "SeriesId": series_id, "SeriesName": "A Show",
+                    "ServerId": "SRVID",
+                    "ExternalUrls": [
+                        {"Name": "TheTVDB",
+                         "Url": "https://thetvdb.example/series/1/seasons/2"}]}]
+        return [dict(s, **self.season_fields.get(s["Id"], {}))
+                for s in seasons]
+
+    def get_episodes(self, server_uuid, series_id, season_id):
+        return [{"Id": "e%d" % i, "Name": "Ep %d" % i, "Type": "Episode",
+                 "ParentIndexNumber": 1, "IndexNumber": i} for i in range(5)]
+
+    #: How many of `get_season_queue`'s episodes come back watched. A test
+    #: moves it to put the first unplayed episode somewhere specific.
+    season_watched = 2
+
+    def get_season_queue(self, server_uuid, series_id, season_id):
+        """A season, as a play queue.
+
+        **UserData.Played is on every row on purpose.** The season play
+        chip's whole behaviour is "start at the first unplayed episode"
+        (#720), so a stand-in without that field would make the rule
+        unreachable while a test named after it still passed -- and
+        `get_series_queue` above, which this one is NOT, is exactly that
+        shape. `SeasonId` for the same reason: it is what distinguishes
+        this query from the series-wide one.
+        """
+        return [{"Id": "e%d" % i, "Name": "Ep %d" % i, "Type": "Episode",
+                 "SeriesId": series_id, "SeasonId": season_id,
+                 "ParentIndexNumber": 1, "IndexNumber": i,
+                 "UserData": {"Played": i < self.season_watched,
+                              "PlaybackPositionTicks": 0}}
+                for i in range(5)]
+
+    def search(self, server_uuid, term, limit=60):
+        return [{"Id": "r1", "Name": "Movie " + term, "Type": "Movie"},
+                {"Id": "r2", "Name": "Ep", "Type": "Episode"},
+                {"Id": "r3", "Name": "Album", "Type": "MusicAlbum"},
+                {"Id": "r4", "Name": "Song", "Type": "Audio"}]
+
+    def search_people(self, server_uuid, term, limit=60):
+        return [{"Id": "p1", "Name": "Person", "Type": "Person"}]
+
+    def search_artists(self, server_uuid, term, limit=100):
+        # Its own request in the real source too: /Items does not answer
+        # with artists reliably, so the search page asks /Artists.
+        return [{"Id": "ar1", "Name": "Artist", "Type": "MusicArtist"}]
+
+    def get_music_albums(self, server_uuid, parent_id, **kw):
+        return ([{"Id": "al%d" % i, "Name": "Album %d" % i,
+                  "Type": "MusicAlbum"} for i in range(4)], 4)
+
+    def get_album_artists(self, server_uuid, parent_id, **kw):
+        return ([{"Id": "ar1", "Name": "Artist", "Type": "MusicArtist"}], 1)
+
+    def get_artists(self, server_uuid, parent_id, **kw):
+        return ([{"Id": "ar2", "Name": "Artist 2", "Type": "MusicArtist"}], 1)
+
+    def get_songs(self, server_uuid, parent_id, start_index=0, limit=100,
+                  **kw):
+        # start_index honoured, because the songs tab is windowed and its
+        # play action asks the server from the clicked row (see
+        # MusicLibraryPage._play_songs_from). A fake that ignored it would
+        # make that indistinguishable from playing the first page.
+        total = 5
+        return ([{"Id": "so%d" % i, "Name": "Song %d" % i, "Type": "Audio",
+                  "IndexNumber": i + 1}
+                 for i in range(start_index,
+                                min(total, start_index + limit))], total)
+
+    def get_artist_songs(self, server_uuid, artist_id, limit=500):
+        return [{"Id": "as%d" % i, "Name": "AS %d" % i, "Type": "Audio"}
+                for i in range(4)]
+
+    def get_genre_songs(self, server_uuid, parent_id, genre_id, limit=500):
+        return [{"Id": "gs%d" % i, "Name": "GS %d" % i, "Type": "Audio"}
+                for i in range(4)]
+
+    def get_instant_mix(self, server_uuid, item_id, limit=200):
+        return [{"Id": "mix%d" % i, "Type": "Audio"} for i in range(3)]
+
+    def get_music_genres(self, server_uuid, parent_id):
+        return [{"Id": "gn1", "Name": "Jazz", "Type": "MusicGenre"}]
+
+    def get_album_tracks(self, server_uuid, album_id):
+        return [{"Id": "tk%d" % i, "Name": "Track %d" % i, "Type": "Audio",
+                 "IndexNumber": i + 1, "RunTimeTicks": 200 * 10000000}
+                for i in range(6)]
+
+    def get_artist_albums(self, server_uuid, artist_id):
+        return [{"Id": "al1", "Name": "Album", "Type": "MusicAlbum"}]
+
+    def get_genre_albums(self, server_uuid, parent_id, genre_id, **kw):
+        return ([{"Id": "al2", "Name": "GenreAlbum", "Type": "MusicAlbum"}], 1)
+
+    def get_playlist_items(self, server_uuid, playlist_id):
+        # ServerId, as every server DTO carries: a downloaded playlist's
+        # scope is taken from its members' ServerId, so without it the
+        # playlist page's Remove Download path had nothing to be scoped by.
+        return [{"Id": "pi%d" % i, "Name": "Song %d" % i, "Type": "Audio",
+                 "PlaylistItemId": "e%d" % i, "ServerId": "SRVID"}
+                for i in range(3)]
+
+    def get_playlists(self, server_uuid, limit=300):
+        return [{"Id": "PL1", "Name": "Faves", "Type": "Playlist"},
+                {"Id": "PL2", "Name": "Road Trip", "Type": "Playlist"}]
+
+    def get_items_by_ids(self, server_uuid, ids):
+        return [{"Id": i, "Name": "Queued " + i, "Type": "Audio"} for i in ids]
+
+    # -- Live TV -----------------------------------------------------------
+    #
+    # Enough for the Live TV screens to render. Times are built relative to
+    # the clock so "is this airing" is true of the first programme, which is
+    # what the guide's accent wash and the program page's Watch button key
+    # off — pinning them to fixed dates would make those paths untested.
+
+    live_tv = True
+
+    @staticmethod
+    def _program(index, offset_minutes=0, channel="c1"):
+        import datetime
+
+        start = (datetime.datetime.now().astimezone().replace(
+            second=0, microsecond=0)
+            + datetime.timedelta(minutes=offset_minutes))
+        return {"Id": "pr%d" % index, "Name": "Program %d" % index,
+                "Type": "Program", "ChannelId": channel,
+                "ChannelName": "Channel One",
+                "StartDate": start.astimezone(
+                    datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.0000000Z"),
+                "EndDate": (start + datetime.timedelta(minutes=30)).astimezone(
+                    datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.0000000Z"),
+                "IsSeries": True}
+
+    def has_live_tv(self, server_uuid):
+        return self.live_tv
+
+    def get_live_tv_prefs(self, server_uuid, refresh=False):
+        return live_tv.resolve_prefs({})
+
+    def cache_live_tv_prefs(self, server_uuid, prefs):
+        self.cached_live_tv_prefs = dict(prefs)
+
+    def save_live_tv_prefs(self, server_uuid, prefs):
+        self.saved_live_tv_prefs = dict(prefs)
+
+    def get_program_sections(self, server_uuid, limit=12):
+        return [{"key": "onnow", "title": "On Now",
+                 "items": [self._program(0, -5)]},
+                {"key": "movies", "title": "Upcoming Movies",
+                 "items": [self._program(1, 60)]}]
+
+    def get_channels(self, server_uuid, start_index=0, limit=100, prefs=None,
+                     categories=(), add_current_program=True,
+                     favorites_only=False):
+        items = [{"Id": "c%d" % i, "Name": "Channel %d" % i,
+                  "Type": "TvChannel", "Number": str(i)} for i in range(1, 4)]
+        return items[start_index:start_index + limit], len(items)
+
+    def get_guide_info(self, server_uuid):
+        return {}
+
+    def search_live_tv(self, server_uuid, term, limit=24):
+        return {"channels": [{"Id": "c1", "Name": "Channel " + term,
+                              "Type": "TvChannel"}],
+                "programs": [self._program(7, 15)]}
+
+    def get_guide(self, server_uuid, channel_ids, start, end, want_hd=False):
+        return [self._program(0, -5), self._program(2, 30)]
+
+    def get_live_program(self, server_uuid, program_id):
+        return dict(self._program(0, -5), Id=program_id,
+                    Overview="What it is about.")
+
+    def get_channel_listing(self, server_uuid, channel_id, limit=200):
+        return {"channel": {"Id": channel_id, "Name": "Channel 1",
+                            "Type": "TvChannel", "Number": "1",
+                            "UserData": {"IsFavorite": False}},
+                "programs": [self._program(0, -5), self._program(2, 30)],
+                "capped": False}
+
+    def get_recordings(self, server_uuid, limit=60, is_in_progress=None,
+                       series_timer_id=None):
+        return [{"Id": "rec1", "Name": "A Recording", "Type": "Recording"}]
+
+    def get_recording_folders(self, server_uuid):
+        return [{"Id": "rf1", "Name": "Recordings", "Type": "Folder"}]
+
+    def get_timers(self, server_uuid, is_active=None, is_scheduled=None,
+                   series_timer_id=None):
+        return [dict(self._program(3, 120), Id="tm1", Type="Timer",
+                     Name="Scheduled Thing")]
+
+    def get_timer(self, server_uuid, timer_id):
+        return {"Id": timer_id, "Name": "Scheduled Thing",
+                "ChannelName": "Channel One", "PrePaddingSeconds": 60,
+                "PostPaddingSeconds": 120}
+
+    def get_series_timers(self, server_uuid):
+        return [{"Id": "st1", "Name": "A Series", "Type": "SeriesTimer",
+                 "ChannelName": "Channel One"}]
+
+    def get_series_timer(self, server_uuid, timer_id):
+        return {"Id": timer_id, "Name": "A Series",
+                "ChannelName": "Channel One", "RecordNewOnly": True,
+                "KeepUpTo": 0, "PrePaddingSeconds": 60,
+                "PostPaddingSeconds": 120}
+
+class _SyncPool:
+    """Runs submitted work inline so route loaders complete deterministically
+    within the test (no threads, no shutdown races)."""
+
+    def submit(self, fn, *a, **k):
+        fn(*a, **k)
+
+    def shutdown(self, *a, **k):
+        pass
+
+class _RecordingPool(_SyncPool):
+    """Runs work inline like _SyncPool, but counts it — for asserting that a
+    long job did *not* go to the shared pool."""
+
+    def __init__(self):
+        self.submitted = 0
+
+    def submit(self, fn, *a, **k):
+        self.submitted += 1
+        return super().submit(fn, *a, **k)
+
+class _DeferredPool:
+    """Holds submitted work until drain(), so a test can move the epoch
+    (navigate) while a call is "in flight" — the window _SyncPool closes by
+    running everything inline.
+
+    ``release`` completes *one* job by position, which is what makes an
+    interleaving expressible rather than just a delay: two jobs in flight and
+    the second answering first is the ordinary case for a small query racing a
+    large one, and it is the order that breaks a list. With _SyncPool (submit
+    == run) no browser suite had ever had two jobs in flight at once.
+    """
+
+    def __init__(self):
+        self.queued = []
+
+    def submit(self, fn, *a, **k):
+        self.queued.append((fn, a, k))
+
+    def release(self, index=0):
+        """Run one queued job. Returns False if there was nothing there, so a
+        test that expected work to be in flight can say so."""
+        if not self.queued or index >= len(self.queued):
+            return False
+        fn, a, k = self.queued.pop(index)
+        fn(*a, **k)
+        return True
+
+    def release_last(self):
+        return self.release(len(self.queued) - 1)
+
+    def drain(self):
+        while self.queued:
+            fn, a, k = self.queued.pop(0)
+            fn(*a, **k)
+
+    def shutdown(self, *a, **k):
+        pass
+
+class _NeverPool:
+    """Swallows submitted work, so async results never land — for testing
+    the "still loading" state of a view."""
+
+    def submit(self, fn, *a, **k):
+        pass
+
+    def shutdown(self, *a, **k):
+        pass
+
+def build_scene(browser, size=(1280, 720)):
+    nodes, handlers = layout(browser.build(size), *size)
+    return nodes, handlers
+
+def menu_pick(browser, action):
+    """Invoke the tile-menu entry whose action is ``action``.
+
+    By action, not index: the menu is now built per item type, so a
+    hardcoded index silently selects a different entry (or none).
+    """
+    entries = browser._tile_menu_entries(browser._menu["item"])
+    for i, (_label, _icon, key) in enumerate(entries):
+        if key == action:
+            browser._menu_action(i, None)
+            return
+    raise AssertionError("no %r entry for this item: %r"
+                         % (action, [e[2] for e in entries]))
+
+def more_rows(browser, prefix):
+    """Open a page's More menu (``<prefix>-more``) and return its rows;
+    ``[]`` when the page draws no More button at all."""
+    _n, handlers = build_scene(browser)
+    if prefix + "-more" not in handlers:
+        return []
+    handlers[prefix + "-more"]["click"]()
+    nodes, _h = build_scene(browser)
+    menu = next(n for n in nodes if n.get("id") == prefix + "-more-menu")
+    return menu["items"]
+
+def pick_more(browser, prefix, label):
+    """Choose ``label`` from a page's More menu. By label, like
+    ``menu_pick``: which rows are present depends on the item."""
+    rows = more_rows(browser, prefix)
+    if label not in rows:
+        raise AssertionError("no %r in the More menu: %r" % (label, rows))
+    _n, handlers = build_scene(browser)
+    handlers[prefix + "-more-menu"]["select"](rows.index(label), label)
+
+def ids(nodes):
+    return {n.get("id") for n in nodes}
+
+def types(nodes):
+    return [n["t"] for n in nodes]
+
+class FakeController:
+    def __init__(self):
+        self.entered = 0
+        self.left = 0
+        self.minimized = 0
+        self.raised = 0
+        self.played = []
+        self.transport = []
+        #: Volume state the browser's own volume keys move (#730).
+        self.volume_level = 100.0
+        self.muted = False
+        self.paused = False
+        #: item_id -> (status, absolute path or None), as the real gateway
+        #: answers. Tests set entries to put a book on disk.
+        self.book_downloads = {}
+        #: (item_id, server_uuid) pairs `book_download_state` was asked, and
+        #: the servers `open_downloaded_file` was given. See those methods.
+        self.book_state_asked = []
+        self.opened = []
+        self.opened_on = []
+        self.open_result = (True, "fake")
+        #: Urls handed to the desktop browser, in order, and what
+        #: ``open_url`` answers -- settable so a test can drive the
+        #: "nothing on this box would open that" message as well.
+        self.opened_urls = []
+        self.open_url_result = (True, "fake")
+        self.deleted_downloads = []
+        self.enqueued = []
+        #: item_id -> UserData dict, the server's side of the progress
+        #: push/pull. Writable, so a push really does change what a pull
+        #: reads back -- a fake that recorded the write without applying it
+        #: could not show the dialog re-reading after a save.
+        self.positions = {}
+        self.positions_written = []
+        self.set_position_ok = True
+        #: What a reader asked to have recorded, whether or not the server
+        #: took it. Separate from positions_written because the two answer
+        #: different questions: that one is "did the server get it", this
+        #: one is "did the reader report at all", and an offline reader
+        #: still has to do the second.
+        self.reading_positions = []
+        #: Everything handed to the clipboard, in order. Recorded rather
+        #: than dropped: what the reader copied is the only observable the
+        #: copy menu has, and a fake that returned success without keeping
+        #: the text would pass a test that copied the wrong paragraph.
+        self.copied = []
+        #: What ``copy_text`` answers: ``(ok, method, path)``. Settable, so
+        #: a test can drive the "no clipboard on this box, saved to a file"
+        #: message as well as the happy one.
+        self.copy_result = (True, "fake", None)
+        #: The comic reader's side of the window: what was handed to mpv to
+        #: display, and every view change asked for. Recorded rather than
+        #: dropped -- "which page is on screen" and "where is it" have no
+        #: other observable, because the picture is mpv's and not a node in
+        #: any scene this suite can read.
+        self.pictures = []
+        self.picture_views = []
+        self.pictures_cleared = 0
+        self.picture_views_reset = 0
+        #: The restart seam. Both halves are modelled and both are
+        #: settable, because the two answers the UI has to get right are
+        #: "this machine cannot restart itself" (offer a notice, not a
+        #: button) and "the restart would not start" (say so rather than
+        #: leave the user looking at an app that did not quit). A fake
+        #: hardcoding success could show neither.
+        self.restarts = 0
+        self.restart_ok = True
+        self.restart_possible = True
+        #: The pending-settings set handed to each restart_app call.
+        self.restart_pending = []
+        #: Unattended downloading, as the Servers rows see it:
+        #: {login uuid: bool}. Declared rather than left to __getattr__,
+        #: which answers None -- every row would then draw unticked and the
+        #: toggle would record a call that changed nothing, so a test for
+        #: the checkbox could not fail.
+        #:
+        #: **Keyed on the uuid, which the real gateway is not**: it stores
+        #: the account behind the login, so two addresses for one server
+        #: move together. That property belongs to `users.set_auto_download`
+        #: and is pinned there (tests/test_auto_download_accounts.py); do
+        #: not write it against this fake, which cannot express it.
+        self.auto_download = {}
+
+    def can_restart(self):
+        return self.restart_possible
+
+    def restart_app(self, pending=()):
+        # `pending` is modelled, not swallowed: the relaunch drops a
+        # command-line override naming one of these, so a stand-in that
+        # ignored the argument would let the browser stop sending it
+        # without any test noticing.
+        self.restarts += 1
+        self.restart_pending.append(set(pending))
+        return self.restart_ok
+
+    def show_picture(self, path):
+        self.pictures.append(path)
+        return True
+
+    def clear_picture(self):
+        self.pictures_cleared += 1
+
+    def reset_picture_view(self):
+        self.picture_views_reset += 1
+
+    def set_picture_view(self, zoom=None, pan_x=None, pan_y=None):
+        self.picture_views.append({"zoom": zoom, "pan_x": pan_x,
+                                   "pan_y": pan_y})
+
+    def copy_text(self, text):
+        self.copied.append(text)
+        return self.copy_result
+
+    def on_browse_enter(self):
+        self.entered += 1
+
+    def on_browse_leave(self):
+        self.left += 1
+
+    def on_minimize(self):
+        self.minimized += 1
+
+    def adjust_volume(self, delta):
+        """Record it AND apply it, like toggle_deinterlace above.
+
+        The volume is the thing the keys are named after, so a fake that
+        recorded the call without moving the number could not tell a step
+        that lands from one that is clamped away -- or two presses from
+        one.
+        """
+        self.volume_level = max(0.0, min(100.0, self.volume_level + delta))
+        self.transport.append(("adjust_volume", (delta,)))
+
+    def toggle_mute(self):
+        self.muted = not self.muted
+        self.transport.append(("toggle_mute", ()))
+
+    def toggle_pause(self):
+        self.paused = not self.paused
+        self.transport.append(("toggle_pause", ()))
+
+    def raise_window(self):
+        # Modelled, not omitted: `_safe` swallows an AttributeError, so a
+        # fake without this method makes every "did we take the foreground"
+        # question answer "no" whatever the app did -- which is how #728
+        # went untested through the summon test that sits right beside it.
+        self.raised += 1
+
+    def play(self, item, server_uuid, offset_ticks=None, srcid=None,
+             aid=None, sid=None):
+        self.played.append((item.get("Id"), server_uuid, offset_ticks))
+        self.__dict__.setdefault("tracks", []).append(
+            {"srcid": srcid, "aid": aid, "sid": sid})
+
+    def play_list(self, item_ids, server_uuid, start_index, offset_ticks=None,
+                  srcid=None, aid=None, sid=None, pause_stills=True):
+        self.played.append((list(item_ids), server_uuid, start_index))
+        # In a parallel list, not appended to the tuple above: a lot of
+        # tests assert on `played` by equality. Recorded at all because it
+        # is load-bearing on its own -- resuming an audiobook is an index
+        # AND an offset, and a fake that dropped the second would let a
+        # resume that restarts the chapter pass a test named for it.
+        self.__dict__.setdefault("play_offsets", []).append(offset_ticks)
+        self.__dict__.setdefault("pause_stills", []).append(pause_stills)
+        self.__dict__.setdefault("tracks", []).append(
+            {"srcid": srcid, "aid": aid, "sid": sid})
+
+    def get_queue(self):
+        # queue_rev is what the queue page re-reads on (Media.publish_queue);
+        # a fake without it could not tell a changed queue from a steady one.
+        return {"items": [{"id": "q%d" % i, "playlist_item_id": "p%d" % i}
+                          for i in range(3)], "current_id": "q1",
+                "queue_rev": 1}
+
+    def get_sync_groups(self, server_uuid=None):
+        return [{"id": "g1", "name": "Group 1", "server_uuid": "srv1",
+                 "server_name": "Home"}]
+
+    def sync_state(self):
+        return None
+
+    def download_estimate(self, server, item_id, item_type):
+        return {"count": 3, "total_bytes": 5 * 1024 * 1024,
+                "audio_only": False}
+
+    def add_server(self, server, username, password, owner_id=None):
+        self.__dict__.setdefault("transport", []).append(
+            ("add_server", (server, username, password)))
+        self.__dict__.setdefault("add_owners", []).append(owner_id)
+        return server == "good"
+
+    def rebuild_source(self):
+        return FakeSource()
+
+    def unlock(self, pin):
+        return pin == "1234"
+
+    def edit_apis(self):
+        return True
+
+    def connect_and_rebuild(self):
+        return FakeSource()
+
+    # -- books -------------------------------------------------------------
+    #
+    # Declared rather than left to __getattr__, which returns None for
+    # everything. These four are *read*, not just called: the book page
+    # unpacks a (status, path) pair and the progress dialog reads a UserData
+    # blob out of one. A recorder returning None makes both raise inside a
+    # try/except and leaves the screen looking exactly as it does when
+    # nothing is downloaded -- so a test named "the button says Remove
+    # Download" could never fail. That is the stand-in failure mode
+    # tools/audit_fake_contracts.py exists for.
+
+    def download_enqueue(self, server_uuid, item_id, item_type,
+                         include_watched=False):
+        """Queue a download AND write the row.
+
+        Recording the call without writing a row is the `FakeManager.enqueue`
+        failure this project has already had once: every later read sees a
+        virgin catalog, so nothing that depends on the enqueue having
+        happened -- a button changing, a pending open surviving -- can be
+        observed at all.
+        """
+        self.enqueued.append((server_uuid, item_id, item_type,
+                              include_watched))
+        status, path = self.book_downloads.get(item_id, (None, None))
+        if status is None and path is None:
+            # No row yet -- which is what an entry of (None, None) means,
+            # not merely a missing key. Seeding one is the whole point:
+            # `is_complete` short-circuits a real enqueue, everything else
+            # gets a PENDING row.
+            self.book_downloads[item_id] = ("pending", None)
+
+    def downloaded_ids(self):
+        """(items, series, seasons, playlists), as the real gateway answers.
+
+        Real rather than left to __getattr__, which returns None: the
+        browser unpacks this into four arguments, so a recorder makes the
+        refresh raise -- and everything else driven by the same
+        notification (pending book opens, a page re-reading its own state)
+        silently stopped happening behind it.
+        """
+        return (set(self.book_downloads), set(), set(), set())
+
+    def book_download_state(self, item_id, server_uuid):
+        #: Every (item, server) this was asked about, in order. Recorded
+        #: because the *scope* is the property CX7 is about: item ids collide
+        #: across servers, so a caller that forgot the server would hand the
+        #: reader another server's file -- and a fake that let the argument be
+        #: omitted could not fail that test. Keyed answers stay by item alone;
+        #: the server is what tests assert on.
+        self.book_state_asked.append((item_id, server_uuid))
+        return self.book_downloads.get(item_id, (None, None))
+
+    def open_downloaded_file(self, item_id, server_uuid):
+        self.opened.append(item_id)
+        self.opened_on.append(server_uuid)
+        return self.open_result
+
+    def open_url(self, url):
+        """Every url handed to the desktop, in order, and what we answered.
+
+        Recorded rather than dropped for the same reason ``copied`` is: the
+        url is the *only* observable a link button has, and a fake that
+        returned success without keeping it would pass a test that opened
+        the wrong provider -- which is exactly the late-binding bug a row
+        of buttons built in a loop is prone to.
+        """
+        self.opened_urls.append(url)
+        return self.open_url_result
+
+    def delete_downloads(self, item_ids):
+        self.deleted_downloads.append(list(item_ids))
+
+    def get_position(self, server_uuid, item_id):
+        return self.positions.get(item_id)
+
+    def record_reading_position(self, server_uuid, item_id, ticks):
+        """A reader's cursor. Declared rather than left to __getattr__:
+        that would record the call and return a Mock-ish None, so nothing
+        below could tell a page turn that reported from one that did not.
+        The real one also writes the catalog and queues on refusal, which
+        is tested against a real catalog in test_reading_position.py."""
+        self.reading_positions.append((item_id, int(ticks)))
+        return self.set_position(server_uuid, item_id, ticks)
+
+    def set_position(self, server_uuid, item_id, ticks):
+        if self.set_position_ok:
+            self.positions.setdefault(item_id, {})["PlaybackPositionTicks"] \
+                = int(ticks)
+        self.positions_written.append((item_id, int(ticks)))
+        return self.set_position_ok
+
+    def auto_download_on(self, server_uuid):
+        return bool(self.auto_download.get(server_uuid))
+
+    def auto_download_any(self):
+        return any(self.auto_download.values())
+
+    def set_auto_download(self, server_uuid, enabled):
+        # Applied rather than recorded: the Checkbox is drawn from the read
+        # above, so a stand-in that only logged the write would pass a test
+        # that ticked the wrong row.
+        before = bool(self.auto_download.get(server_uuid))
+        self.auto_download[server_uuid] = bool(enabled)
+        return before != bool(enabled)
+
+    def __getattr__(self, name):
+        # Record transport calls (toggle_pause/stop/next/prev/…) without
+        # declaring each one.
+        # playing_item_id is a question, not a transport call: absent, the
+        # browser trusts every playstate (MpvtkBrowser._still_playing). A
+        # test about stale playstates sets it.
+        if name.startswith(("_", "on_")) or name in ("play", "play_list",
+                                                     "playing_item_id"):
+            raise AttributeError(name)
+        calls = self.__dict__.setdefault("transport", [])
+        # Keywords go in a parallel list: `transport` holds (name, args)
+        # two-tuples that a lot of tests assert on by equality, and widening
+        # it would break every one of them.
+        kw_calls = self.__dict__.setdefault("transport_kw", [])
+
+        def record(*a, **k):
+            calls.append((name, a))
+            kw_calls.append((name, a, k))
+
+        return record
+
+
+#: What the playback-info panel reads, and the mpv counters beside it.
+#:
+#: Module constants rather than literals in ``HudController.__init__``
+#: because the integration HUD suite needs the same two blobs against a
+#: real mpv (tests/integration/test_mpvtk_hud.py), and a second copy of a
+#: fixture is a second thing to keep true. Deep-copied per instance: tests
+#: mutate these to put the panel in its other states.
+#:
+#: A *transcode* with real streams on it, for the reason
+#: :meth:`HudController.playback_info` gives -- and long enough that the
+#: panel's body overflows at 1280x720 (measured: 754px of content in a
+#: 420px viewport), which is what gives the integration wheel test
+#: something to scroll.
+HUD_PLAYER_STATS = {
+    "hwdec": "no", "vo": "gpu-next", "fps": 23.974,
+    "drops_vo": 0, "drops_dec": 3, "avsync": -0.012,
+    "buffered": 42.5, "cache_speed": 1_500_000,
+}
+
+HUD_PLAYBACK_INFO = {
+    "title": "Movie", "item_type": "Movie", "media_type": "Video",
+    "play_method": "Transcode",
+    "transcode_reasons": ["VideoCodecNotSupported"],
+    "direct_path": False, "offline": False,
+    "aid": 1, "sid": None,
+    "source": {
+        "Container": "mkv", "Size": 8400000000,
+        "Path": "/media/Films/Film (2017)/film.mkv",
+        "MediaStreams": [
+            {"Type": "Video", "Index": 0, "Codec": "hevc",
+             "Width": 3840, "Height": 2160, "BitDepth": 10},
+            {"Type": "Audio", "Index": 1, "Codec": "truehd",
+             "Channels": 8, "ChannelLayout": "7.1",
+             "IsDefault": True},
+            {"Type": "Subtitle", "Index": 2, "Codec": "subrip",
+             "Language": "eng", "IsExternal": True},
+        ],
+    },
+}
+
+
+class HudController(FakeController):
+    """FakeController with real HUD data (the catch-all recorder would
+    return None for the data getters)."""
+
+    def __init__(self):
+        super().__init__()
+        self.menu_state = {
+            "has_media": True,
+            "audio": [
+                {"id": 1, "label": "English", "selected": True},
+                {"id": 2, "label": "Commentary", "selected": False},
+            ],
+            "subtitles": [
+                {"id": -1, "label": "None", "selected": True},
+                {"id": 3, "label": "English", "selected": False},
+            ],
+            "quality": {"current": "No Transcode", "options": [
+                {"id": "none", "label": "No Transcode", "selected": True},
+                {"id": 20, "label": "20 Mbps", "selected": False},
+            ]},
+            "profiles": {"current": "None (Disabled)", "options": [
+                {"id": "none", "label": "None (Disabled)",
+                 "selected": True},
+                {"id": "anime4k", "label": "Anime4K", "selected": False},
+            ]},
+            "sub_style": {
+                key: {"current": "Default", "options": [
+                    {"id": 0, "label": "Default", "selected": True},
+                ]} for key in ("size", "position", "color")
+            },
+            "syncplay": {"enabled": False, "current": "None (Disabled)",
+                         "groups": []},
+            "allow_screenshot": True,
+        }
+        #: ``(is_on, is_auto)``, as PlayerManager.deinterlace_state answers
+        #: it. Declared rather than left to __getattr__ for the reason the
+        #: class docstring gives -- a recorder answers None, `_ctl_get`
+        #: substitutes its default, and the gear row is then permanently
+        #: unticked whatever the player is doing. Mutable, so a test can
+        #: put the row in each of its three states (off, forced on, auto).
+        self.deinterlace_answer = (False, False)
+        self.chapter_list = [
+            {"title": "Opening", "time": 0.0},
+            {"title": "Middle", "time": 40.0},
+            {"title": "End", "time": 80.0},
+        ]
+        self.player_stats_blob = copy.deepcopy(HUD_PLAYER_STATS)
+        self.playback_info_blob = copy.deepcopy(HUD_PLAYBACK_INFO)
+
+    def use_hud(self):
+        return True
+
+    def deinterlace(self):
+        return self.deinterlace_answer
+
+    def toggle_deinterlace(self):
+        """Record it AND flip the state, like the real one does.
+
+        Recording alone would leave the answer above frozen, so nothing
+        could show the row's tick following the toggle -- and "the menu
+        agreed that it worked" is most of what this control has to get
+        right.
+        """
+        on, auto = self.deinterlace_answer
+        self.deinterlace_answer = (not on, auto)
+        self.transport.append(("toggle_deinterlace", ()))
+
+    def hud_menu_state(self):
+        return self.menu_state
+
+    def chapters(self):
+        return list(self.chapter_list)
+
+    def player_stats(self):
+        """Live mpv counters, as the real gateway answers them.
+
+        Populated rather than empty, and with a *software* decoder and real
+        drop counts, because the rows this feeds only exist when mpv has
+        something to say -- a fake answering {} leaves every one of them
+        with nowhere to live while the tests of them still pass.
+        """
+        return dict(self.player_stats_blob)
+
+    def playback_info(self):
+        """What the playback-info panel reads.
+
+        A *transcode* by default, and with real streams on it, because the
+        rows that only exist in that state (the reasons, the play method's
+        qualifier) are the ones the panel was added for -- a fake answering
+        DirectPlay with no streams leaves them with nowhere to live and
+        every test of them passing against an empty panel.
+        """
+        return dict(self.playback_info_blob)
+
+class StubHudApp:
+    """Records the renderer-facing calls the HUD lifecycle makes."""
+
+    def __init__(self):
+        self.calls = []
+        self.on_nav = None
+        self.on_hud = None
+        self.on_hud_skip = None
+        self.on_clipboard_error = None
+        self.on_forward = None
+
+    def invalidate(self):
+        pass
+
+    def set_active(self, active):
+        self.calls.append(("active", active))
+
+    def set_hud(self, on, opts=None):
+        self.calls.append(("hud", on))
+        self.hud_opts = opts
+
+    def set_hud_skip(self, label):
+        self.calls.append(("skip", label))
+
+    def focus(self, node_id=None):
+        # None is "the node this scene nominates" (a page's Play button);
+        # an id is a specific node (the chrome's search box).
+        self.calls.append(("focus", node_id))
+
+class FakeConfig:
+    # Mirrors the real mpvtk_browser.config surface the Settings view uses:
+    # a schema, curated sections, enum tables and friendly labels.
+    ENUMS = {"osc_mode": ["auto", "never"]}
+    LABELED_ENUMS = {"lang": [("Unset", "unset"), ("Dubbed", "dub")]}
+
+    def __init__(self):
+        self.values = {"autoplay": True, "player_name": "Bud",
+                       "seek_up": 60, "osc_mode": "auto", "lang": "unset"}
+        self.schema = {"autoplay": "bool", "player_name": "str",
+                       "seek_up": "int", "osc_mode": "str", "lang": "str"}
+
+    #: Which groups sit behind "Show advanced settings". Modelled because
+    #: the renderer reads it: it used to key off a group being *called*
+    #: "Advanced", and a stand-in without this makes every group look
+    #: ordinary -- the disclosure then never renders and the test named
+    #: after it passes against a form that has no disclosure at all.
+    ADVANCED_GROUPS = frozenset({"Advanced"})
+
+    #: Settings that only apply at the next launch. Modelled because the
+    #: write path reads it to decide whether to raise the restart banner:
+    #: a stand-in without it makes every write look live, and every test of
+    #: the banner would then be asserting against a screen that can never
+    #: show one. `player_name` is in the real set for the real reason (the
+    #: servers are told the device name at client construction).
+    RESTART_REQUIRED = frozenset({"player_name"})
+
+    #: Which tabs carry the config form, and therefore which ones offer the
+    #: search box. Modelled because the renderer reads it to decide whether
+    #: to draw the box at all -- a stand-in without it makes the box absent
+    #: on every tab, and every search test would then pass by asserting
+    #: against a screen that has no search on it.
+    FORM_TABS = ("general", "browse", "playback")
+
+    def search(self, query, tabs=None):
+        """The same haystack the real one uses: label, key, group title and
+        the note.
+
+        The note is in here because it is the half that makes the feature
+        worth having -- it is what lets "banding" find `deband` -- so a
+        stand-in matching labels only would report the search working while
+        the interesting part went untested. It is read with getattr, since
+        this class deliberately has no NOTES (see
+        test_settings_without_notes_still_render); SearchConfig below adds
+        them.
+        """
+        words = [w for w in (query or "").lower().split() if w]
+        if not words:
+            return []
+        notes = getattr(self, "NOTES", None) or {}
+        out = []
+        for tab in (tabs or self.FORM_TABS):
+            for title, keys in self.sections(tab):
+                hits = [k for k in keys
+                        if all(w in " ".join(
+                            (self.label_for(k), k, title,
+                             notes.get(k, ""))).lower()
+                            for w in words)]
+                if hits:
+                    out.append((tab, title, hits))
+        return out
+
+    def sections(self, tab=None):
+        # The real one splits its groups across the General/Browse/Playback
+        # tabs and takes which one to draw. This stand-in keeps one group on
+        # General and returns nothing for the other two, which is enough for
+        # a form test and keeps "an empty tab renders" exercised.
+        if tab in ("browse", "playback"):
+            return []
+        return [("Interface", ["player_name", "osc_mode", "lang"]),
+                ("Advanced", ["autoplay", "seek_up"])]
+
+    @staticmethod
+    def label_for(key):
+        return key.replace("_", " ").title()
+
+    def settings_schema(self):
+        return dict(self.schema)
+
+    def get_settings(self):
+        return dict(self.values)
+
+    def set_setting(self, key, value):
+        kind = self.schema.get(key)
+        if kind is None:
+            return False
+        try:
+            self.values[key] = {"bool": bool, "int": int,
+                                "str": str}[kind](value)
+        except (ValueError, TypeError):
+            return False
+        return True
+
+class SearchConfig(FakeConfig):
+    """A config with notes and settings spread over more than one tab.
+
+    Both differences are what the search tests need and what the base
+    stand-in deliberately does not have: FakeConfig has no NOTES (a guard
+    test asserts that, so the renderer's tolerance of a config without them
+    stays covered) and keeps everything on General, which would make a
+    cross-tab search indistinguishable from a single-tab filter.
+    """
+
+    NOTES = {"osc_mode": "Controls drawn over the video while it plays.",
+             "seek_up": "How far the arrow keys jump."}
+
+    def __init__(self):
+        super().__init__()
+        self.values["deband"] = "off"
+        self.schema["deband"] = "str"
+        self.NOTES = dict(self.NOTES)
+        self.NOTES["deband"] = "Smooths the blocky steps in gradients."
+
+    def sections(self, tab=None):
+        if tab == "playback":
+            return [("Video Enhancement", ["deband"])]
+        if tab == "browse":
+            return []
+        return [("Interface", ["player_name", "osc_mode", "lang"]),
+                ("Advanced", ["autoplay", "seek_up"])]
+
+
+class MultiServerSource(FakeSource):
+    def servers(self):
+        return [{"uuid": "srv1", "name": "Home",
+                 "address": self.server_address("srv1")},
+                {"uuid": "srv2", "name": "Remote",
+                 "address": self.server_address("srv2")}]
+
+class DownloadsController(FakeController):
+    """Controller whose downloads catalog has real hierarchy."""
+
+    # Mirrors what downloads.group_downloads actually produces, including
+    # watched/watched_count — the panel gates "Remove Watched" on the count,
+    # so a fixture without it silently loses the button.
+    TREE = [
+        {"kind": "playlist", "id": "PL9", "title": "Road Trip", "size": 9000,
+         "count": 120, "watched_count": 0, "children": []},
+        {"kind": "series", "id": "sh1", "title": "The Show", "size": 3000,
+         "count": 2, "watched_count": 1,
+         "children": [
+             {"kind": "season", "id": "se1", "series_id": "sh1",
+              "title": "Season 1", "size": 3000, "count": 2,
+              "watched_count": 1, "children": [
+                  {"kind": "item", "id": "e1", "title": "Pilot",
+                   "status": "complete", "size": 2000, "index": 1,
+                   "done": 2000, "total": 2000, "watched": True},
+                  {"kind": "item", "id": "e2", "title": "Second",
+                   "status": "pending", "size": 1000, "index": 2,
+                   "done": 0, "total": 1000, "watched": False}]}]},
+        {"kind": "movies", "id": None, "title": "Movies & Videos", "size": 500,
+         "count": 1, "watched_count": 0,
+         "children": [{"kind": "item", "id": "m1", "title": "A Movie",
+                       "status": "complete", "size": 500, "index": None,
+                       "done": 500, "total": 500, "watched": False}]},
+    ]
+
+    def __init__(self):
+        super().__init__()
+        self.deleted = []
+        self.deleted_playlist_server = []
+        self.deleted_watched_only = []
+
+    def list_downloads(self):
+        import copy
+        return copy.deepcopy(self.TREE)
+
+    def delete_download(self, item_id=None, series_id=None, season_id=None,
+                        playlist_id=None, watched_only=False,
+                        playlist_server_id=None):
+        self.deleted.append((item_id, series_id, season_id, playlist_id))
+        #: Which server's playlist each delete named. Kept apart from
+        #: `deleted` so the tuples every existing test asserts by equality
+        #: keep their shape -- and kept at all because "delete the playlist"
+        #: is ambiguous without it: two servers can hold one with the same
+        #: id, and an unscoped delete took both.
+        self.deleted_playlist_server.append(playlist_server_id)
+        self.deleted_watched_only.append(bool(watched_only))
+
+    def download_activity(self):
+        return (0, 3)
+
+    def list_users(self):
+        return [{"id": "u1", "name": "Izzie", "locked": False, "active": True},
+                {"id": "u2", "name": "Guest", "locked": True, "active": False}]
+
+    def list_servers(self):
+        return [{"uuid": "srv1", "name": "Home", "address": "http://h",
+                 "username": "izzie", "connected": True},
+                {"uuid": "srv2", "name": "Away", "address": "http://a",
+                 "username": "izzie", "connected": False}]
+
+class LoginController(FakeController):
+    def __init__(self):
+        super().__init__()
+        self.qc_calls = []
+        self.cancelled_at = None
+
+    def known_servers(self):
+        return [{"address": "http://old.example", "name": "Old Server"}]
+
+    approved = False
+
+    def quick_connect(self, server, code_callback, should_cancel,
+                      owner_id=None):
+        self.qc_calls.append(server)
+        self.__dict__.setdefault("qc_owners", []).append(owner_id)
+        self.codes_shown = []
+        code_callback("ABC123")
+        # Capture what the screen looked like while the code was live — the
+        # call is blocking, so by the time it returns the route has moved on.
+        self.codes_shown.append(dict(self.route_ref.get("_qc") or {}))
+        self.cancelled_at = should_cancel()
+        return self.approved
+
+class FakeThumbs:
+    """Stands in for ThumbnailStore: records requests and lets the test
+    decide how each one resolves."""
+
+    def __init__(self):
+        self.requests = []          # (key, url)
+        self.gone = set()           # keys the "server" says don't exist
+        self._cbs = {}              # key -> callback
+        self._notify = None
+        #: Decoded images the store is holding. The real one keeps these in a
+        #: byte-bounded LRU and the renderer reads *through* it, so a
+        #: stand-in whose get_cached is a bare `return None` cannot show a
+        #: cached image being drawn — or an evicted one being re-fetched,
+        #: which is the failure mode that goes with it.
+        self.cached = {}
+        #: key -> the (w, h) box the caller asked the image to be decoded
+        #: into -- what decides how much of the artwork survives, and a
+        #: stand-in that dropped it (which this did) makes every "is the
+        #: picture big enough" question unaskable while every test still
+        #: passes. See BannerResolutionTest.
+        self.boxes = {}
+        #: key -> whether the box is to be FILLED rather than fitted. The
+        #: same box means two different pictures depending on this (see
+        #: thumbnails._fit_into), so recording only the box would answer
+        #: "big enough" and never "the right shape".
+        self.covers = {}
+
+    def set_notify(self, notify):
+        self._notify = notify
+
+    def get_cached(self, key):
+        return self.cached.get(key)
+
+    def is_gone(self, key):
+        return key in self.gone
+
+    def on_scene_pushed(self):
+        """Counted only: `cached` is a dict, not the LRU whose eviction
+        this protects against. tests/test_home_window.py drives the real
+        MemoryCache for that."""
+        self.pushes = getattr(self, "pushes", 0) + 1
+
+    def request(self, key, url, box, callback, cover=False):
+        self.requests.append((key, url))
+        self.boxes[key] = tuple(box)
+        self.covers[key] = bool(cover)
+        self._cbs[key] = callback
+
+    def resolve(self, key, image):
+        """Deliver a result the way pump() does — including failures.
+
+        pump() files the image before calling back, and the order matters:
+        the callback releases the dedup marker, so an image that was not in
+        the cache by then would be requested again on the next frame.
+        """
+        if image is not None:
+            self.cached[key] = image
+        self._cbs.pop(key)(image)
+
+    def evict(self, key):
+        """Drop a decoded image the way the LRU's byte budget does, without
+        touching what the renderer knows about it."""
+        self.cached.pop(key, None)
+
+    def trim_memory(self, max_bytes=None):
+        """What a screen change does. Modelled rather than counted: a
+        stand-in that increments `self.trims += 1` proves the call happened
+        and nothing about whether anything was released — which is exactly
+        how an unbounded second owner of every decoded image went unnoticed.
+        """
+        self.trims = getattr(self, "trims", 0) + 1
+        if not max_bytes:
+            self.cached.clear()
+
+    def set_auth(self, *_a, **_kw):
+        pass
+
+    def pump(self):
+        return False
+
+def _sub_item(default_sid=None, default_aid=None, subs=(3, 4), audios=(1,)):
+    streams = [{"Type": "Audio", "Index": i, "DisplayTitle": "Audio %d" % i}
+               for i in audios]
+    streams += [{"Type": "Subtitle", "Index": i, "DisplayTitle": "Sub %d" % i}
+                for i in subs]
+    src = {"Id": "src1", "MediaStreams": streams}
+    if default_sid is not None:
+        src["DefaultSubtitleStreamIndex"] = default_sid
+    if default_aid is not None:
+        src["DefaultAudioStreamIndex"] = default_aid
+    return {"Id": "m1", "Name": "Movie", "Type": "Movie",
+            "MediaSources": [src]}
+
+class _FailingSource(FakeSource):
+    """A source whose browse calls raise.
+
+    By default with an error the app does NOT read as an unreachable server
+    (`app._is_unreachable`): a failed load, full stop. Pass ``exc`` for the
+    kinds that are -- the shell treats the two differently (the banner, the
+    offline fallback), so a test about either has to say which it means.
+    """
+
+    def __init__(self, fail=True, exc=None):
+        super().__init__()
+        self.fail = fail
+        self.calls = 0
+        self.exc = exc
+
+    def _boom(self, *a, **k):
+        self.calls += 1
+        if self.fail:
+            raise self.exc or OSError("the load failed")
+        return []
+
+    get_libraries = _boom
+    get_home_rows = _boom

@@ -1,0 +1,494 @@
+"""Item- and server-derived strings, and small layout maths.
+
+Moved verbatim from ``TilesMixin`` — these never used ``self``, so being
+methods only made them look coupled. Each carries the comment explaining the
+bug it encodes; those are the reason to keep the logic rather than "simplify"
+it later.
+"""
+
+import datetime
+import ipaddress
+import urllib.parse
+
+from ...extras import is_extra
+from ...i18n import _, _p
+
+
+#: Types whose caption is a LISTING -- "which channel, and when" rather
+#: than a year or an episode number. The set ``air_time_line`` splits and
+#: ``episode_subtitle`` composes.
+LISTING_TYPES = ("Program", "Timer", "Recording", "SeriesTimer")
+
+
+def air_time_line(item):
+    """When a listing is on, as its own caption line — or "" for anything
+    that is not a listing, or has no air time to report.
+
+    Split out of :func:`episode_subtitle` because "BBC Two   ·   20:00 -
+    20:30" is about 200px of text and a poster tile is 150 wide, so the
+    channel survived and the time -- the half a listing exists to tell you
+    -- was ellipsized away. Two lines fit; one never did.
+
+    ``episode_subtitle(air_time=False)`` is the other half. Keeping them as
+    a pair rather than having the caller slice a joined string means the
+    separator, the SeriesTimer "any time" case and the recording-with-no-
+    start case are decided once.
+    """
+    kind = item.get("Type")
+    if kind not in LISTING_TYPES or item.get("_subtitle") is not None:
+        return ""
+    from .. import live_tv
+
+    if kind == "SeriesTimer":
+        # A series rule pinned to a slot says the slot; one that records at
+        # any time has no air time to give, and says nothing.
+        return "" if item.get("RecordAnyTime") else _a_time(item, live_tv)
+    return live_tv.air_time_label(item)
+
+
+def episode_subtitle(item, show_year=True, air_time=True):
+    """The line under a tile's title.
+
+    ``air_time=False`` leaves the air time out of a listing's line, for a
+    caller that is drawing it as a third line instead — see
+    :func:`air_time_line`. It changes nothing for any other item type.
+
+    Was ``TilesMixin._subtitle``.
+    """
+    if item.get("_subtitle") is not None:
+        return item["_subtitle"]      # pseudo-items (chapters)
+    if is_extra(item):
+        # The kind of extra and nothing else, as web's card does
+        # (cardBuilder.js:456): its year, where it has one, is the film's.
+        return extra_type_label(item)
+    if item.get("Type") == "Episode":
+        # Lead with the series. A bare "S1E1" on a Continue Watching or
+        # Next Up tile does not say which show it belongs to, which is
+        # the one thing you need there.
+        series = item.get("SeriesName") or ""
+        s, e = item.get("ParentIndexNumber"), item.get("IndexNumber")
+        if s is not None and e is not None:
+            se = "S%dE%d" % (s, e)
+            return "%s · %s" % (series, se) if series else se
+        return series
+    kind = item.get("Type")
+    if kind in ("Program", "Timer", "Recording"):
+        # The channel and when it is on, not the year: these are listings,
+        # so "which channel, and when" is the whole useful content of the
+        # line. Guide data frequently has no ProductionYear at all.
+        from .. import live_tv
+
+        when = live_tv.air_time_label(item) if air_time else ""
+        return "   ·   ".join(p for p in (item.get("ChannelName") or "",
+                                          when) if p)
+    if kind == "SeriesTimer":
+        # A series rule has no single air time; what identifies it is the
+        # channel it watches and whether it is pinned to one time slot.
+        from .. import live_tv
+
+        when = ("" if not air_time or item.get("RecordAnyTime")
+                else _a_time(item, live_tv))
+        channel = ("" if item.get("RecordAnyChannel")
+                   else (item.get("ChannelName") or ""))
+        return "   ·   ".join(p for p in (channel, when) if p)
+    if kind == "TvChannel":
+        # The channel number and what is on it right now — which is why the
+        # channel list asks for AddCurrentProgram.
+        current = (item.get("CurrentProgram") or {}).get("Name") or ""
+        number = str(item.get("Number") or "").strip()
+        return "   ·   ".join(p for p in (number, current) if p)
+    # The year is the ONLY thing show_year governs. Every branch above is a
+    # channel, an air time or an episode number -- a Live TV listing with
+    # "showYear off" must still say which channel and when, because that is
+    # not a year and switching it off was not a request to blank the line.
+    return str(item.get("ProductionYear") or "") if show_year else ""
+
+
+def extra_type_label(item):
+    """An extra's translated ``ExtraType``, or "" -- for ``Unknown`` (an
+    ``extras/`` folder says nothing about what is in it), and for the types
+    a Special Features list never holds. Wording is jellyfin-web's
+    (en-us.json:1858-1869)."""
+    # The context is spelled out at every call: xgettext extracts only a
+    # literal, and a variable here drops the string from the template.
+    return {
+        "Featurette": _p("kind of special feature", "Featurette"),
+        "BehindTheScenes": _p("kind of special feature", "Behind the Scenes"),
+        "DeletedScene": _p("kind of special feature", "Deleted Scene"),
+        "Interview": _p("kind of special feature", "Interview"),
+        "Scene": _p("kind of special feature", "Scene"),
+        "Sample": _p("kind of special feature", "Sample"),
+        "Clip": _p("kind of special feature", "Clip"),
+        "Short": _p("kind of special feature", "Short"),
+    }.get((item or {}).get("ExtraType") or "", "")
+
+
+#: Item types whose tile caption is structurally one line: they are not
+#: media, so they have no ProductionYear for :func:`episode_subtitle` to
+#: return and no branch above claims them. Kept as TYPES rather than as
+#: "this batch produced no subtitles", because the geometry decided here
+#: fixes a grid's row pitch and its virtualization window -- and an
+#: observation about the items loaded so far flips the moment page two
+#: brings one that does have a year, re-pitching every row under the
+#: user's scroll position.
+NO_SUBTITLE_TYPES = frozenset({
+    "UserView", "CollectionFolder", "Genre", "MusicGenre", "Person", "Studio",
+})
+
+
+def has_no_subtitles(items):
+    """Whether a row of ``items`` can be drawn with a one-line caption.
+
+    Conservative on both sides: empty is False (nothing to shrink for, and a
+    row that fills in later must not have been pitched for one line), and one
+    item of any other type is enough to keep the second line for the row --
+    a strip is composited at one caption height, so this cannot be per-tile.
+    """
+    items = [i for i in items or () if i]
+    if not items:
+        return False
+    return all(i.get("_subtitle") is None
+               and i.get("Type") in NO_SUBTITLE_TYPES for i in items)
+
+
+def _a_time(item, live_tv):
+    start = live_tv.parse_time(item.get("StartDate"))
+    return live_tv.fmt_time(start) if start else ""
+
+
+def tile_lines(item, parent_item=False, show_year=True, air_time=True):
+    """``(title, subtitle)`` for a tile.
+
+    ``air_time`` is passed through to :func:`episode_subtitle`: False when
+    the caller is going to draw a listing's air time on its own line.
+
+    ``parent_item`` flips an episode around: the series becomes the title
+    and the episode name the subtitle. That is what a "Latest TV" row wants
+    — the server hands back a Series when a show got several new episodes
+    and a bare Episode when it got one, so without this the same row reads
+    as a list of shows with an episode title dropped in the middle of it.
+    Anything that is not an Episode is unaffected, series rows included.
+    """
+    if parent_item and item.get("Type") == "Episode":
+        series = item.get("SeriesName")
+        if series:
+            return series, item.get("Name", "")
+    return item.get("Name", ""), episode_subtitle(item, show_year, air_time)
+
+
+def is_watched(item):
+    """Whether a tile shows the watched check.
+
+    Was ``TilesMixin._is_watched``.
+    """
+    ud = item.get("UserData") or {}
+    if ud.get("Played"):
+        return True
+    # Folder is here for audiobooks: a book read from a folder of chapter
+    # files is finished when its chapters are, and nothing sets Played on
+    # the folder itself when you simply listen through it -- only marking it
+    # by hand does. Without this a book you had actually finished showed no
+    # tick, which is the one thing a shelf of them needs to say. It is right
+    # for a Home Videos folder for the same reason.
+    if item.get("Type") in ("Series", "Season", "Folder"):
+        # `or 0` would read a MISSING count as zero-unplayed, i.e.
+        # fully watched — so a Series DTO without UserData (search
+        # results, the synthesized season fallback) showed a watched
+        # check, and the toggle computed `not watched` and marked an
+        # unwatched show unwatched: a no-op that reads as a dead button.
+        return ud.get("UnplayedItemCount") == 0
+    return False
+
+
+def placeholder_glyph(item):
+    """What to draw on a tile with no artwork.
+
+    A **Material icon name** where one fits, else the title's first
+    initial. The compositor tells them apart by looking the name up
+    (`strips._paint_poster`), so a one-character answer can never be
+    mistaken for an icon and vice versa.
+
+    Library tiles are asked by collection type first: a UserView's `Type`
+    is "CollectionFolder" for every library there is, so answering from
+    the type map alone drew a folder on all of them.
+    """
+    ctype = (item.get("CollectionType") or "").lower()
+    glyph = _LIBRARY_GLYPHS.get(ctype) if ctype else None
+    if glyph is None:
+        glyph = _TYPE_GLYPHS.get(item.get("Type"))
+    if glyph:
+        return glyph
+    name = (item.get("Name") or "").strip()
+    return name[0].upper() if name else "?"
+
+
+#: Types that get a marker in the corner of their tile, and the Material
+#: icon for each. jellyfin-web's ``getTypeIndicator``
+#: (``components/indicators/indicators.js:140-149``) verbatim -- these four
+#: types and no others.
+#:
+#: The point is a Home Videos library, which holds folders, photo albums,
+#: photos and clips side by side: with artwork on all four there is nothing
+#: in the tile that says which will open and which will start playing.
+#: Nothing else in a library has this problem, which is why the map is
+#: short rather than why the *drawing* is conditional -- see below.
+#:
+#: **Per item, not per row.** This was briefly decided per row ("only chip a
+#: row holding more than one kind"), reasoning that a uniform row needs no
+#: telling apart. It reads as icons flickering in and out as you scroll: the
+#: rows are a grid of one folder, and whether the four videos and one album
+#: you are looking at happen to share a row is not something a user can see
+#: or should have to. Web draws it for every card of these types, in every
+#: view, and that is both simpler and what a user coming from it expects.
+TYPE_INDICATOR_ICONS = {
+    "Video": "videocam",
+    "Folder": "folder",
+    "PhotoAlbum": "photo_album",
+    "Photo": "photo",
+}
+
+
+def virtual_episode_label(item):
+    """"Missing", "Unaired", or None for an episode that has a file.
+
+    **jellyfin-web's rule, in one place.** `indicators.js` marks an `Episode`
+    whose `LocationType` is `Virtual` -- one the server listed out of the
+    series metadata with nothing behind it -- and which of the two words it
+    gets depends only on whether the air date is still in the future.
+
+    Neither is hidden, because seeing the gaps is the point: the server has
+    already applied the user's own `DisplayMissingEpisodes`
+    (`TvShowsController.cs`, both supported majors), so an item only reaches
+    here because somebody asked to see it. What web's card does NOT give one
+    is a play button, and that is the other half of this predicate's job --
+    `tiles._tile_playable` and the detail page's own buttons ask it too, and
+    a rule applied at one of its sites is the recurring defect shape here.
+
+    An undated virtual episode is "Missing": a future date is the only
+    evidence that it is coming rather than absent.
+    """
+    if item.get("Type") != "Episode":
+        return None
+    if item.get("LocationType") != "Virtual":
+        return None
+    from .. import live_tv
+
+    # Through live_tv.parse_time, not `fromisoformat`: these are UTC with
+    # seven fractional digits, and every shorter way of parsing one yields a
+    # plausible datetime out by the UTC offset rather than an error
+    # (docs/jellyfin-api-notes.md section 9.1). It returns a local aware
+    # datetime, so the comparison has to be aware as well.
+    premiere = live_tv.parse_time(item.get("PremiereDate"))
+    if premiere is not None and premiere > datetime.datetime.now(
+            datetime.timezone.utc):
+        return _("Unaired")
+    return _("Missing")
+
+
+def type_indicator_icon(item):
+    """The corner type marker for a tile, or "" for types that get none."""
+    return TYPE_INDICATOR_ICONS.get(item.get("Type"), "")
+
+
+#: Types whose placeholder says *what it is* rather than what it is called.
+#:
+#: A first initial is a decent label when the name distinguishes things --
+#: films, shows, people. It is useless where the name does not: a Home Videos
+#: library is folders named "2019", "2020", "Holiday", and a wall of digits
+#: says nothing about which tiles you can open and which will start playing.
+#:
+#: **Material icon names**, rasterized by the strip compositor through
+#: `vector.icon_image`. Taken from jellyfin-web rather than chosen, so a
+#: library with no artwork looks like the same library does in every other
+#: client: `getItemTypeIcon` for an item, `getLibraryIcon` for a library
+#: tile (both `src/utils/image.ts`).
+_TYPE_GLYPHS = {
+    "MusicAlbum": "album",
+    "MusicArtist": "person",
+    "Person": "person",
+    "Audio": "audiotrack",
+    "Movie": "movie",
+    "Series": "tv",
+    "Episode": "tv",
+    "Season": "tv",
+    "Program": "live_tv",
+    "TvChannel": "live_tv",
+    "Book": "book",
+    "Folder": "folder",
+    "CollectionFolder": "folder",
+    "BoxSet": "video_library",
+    "Playlist": "queue",
+    "Photo": "photo",
+    "PhotoAlbum": "photo_album",
+    # Beyond web's list, and consistent with it: a Trailer is a video and
+    # a MusicVideo has its own icon in the library map.
+    "Trailer": "theaters",
+    "MusicVideo": "music_video",
+    # web has no AudioBook arm, but one IS an Audio item, and this is the
+    # case the table was originally written for: an author folder of three
+    # books called "The ..." drew three tiles all reading "T".
+    "AudioBook": "audiotrack",
+}
+
+
+#: A library tile, by its collection type -- web's `getLibraryIcon`. A
+#: UserView carries no useful `Type`, so it is answered from here first.
+_LIBRARY_GLYPHS = {
+    "movies": "movie",
+    "music": "music_note",
+    "homevideos": "photo",
+    "photos": "photo",
+    "livetv": "live_tv",
+    "tvshows": "tv",
+    "trailers": "theaters",
+    "musicvideos": "music_video",
+    "books": "book",
+    "boxsets": "video_library",
+    "playlists": "queue",
+    "channels": "videocam",
+}
+
+
+
+def heading_for(item):
+    """``(title, context)`` for a detail heading.
+
+    An episode's series and SxEy go on their own line above the episode
+    title rather than being joined into one string — joined, a name of
+    any length ran off the end of the banner and was cut mid-word
+    ("Clannad · S1E1 · On the Hillside Pa").
+
+    Was ``TilesMixin._heading_for``.
+    """
+    title = item.get("Name", "")
+    if item.get("Type") != "Episode":
+        return title, ""
+    s, e = item.get("ParentIndexNumber"), item.get("IndexNumber")
+    se = "S%sE%s" % (s, e) if s is not None and e is not None else ""
+    context = "   ·   ".join(
+        p for p in (item.get("SeriesName"), se) if p)
+    return title, context
+
+
+def section_offsets(elements, gap, pad=0):
+    """Content-y of each element's top in a ``Column(pad=pad, gap=gap)`` —
+    the snap breakpoints for a variable-height list (home sections, which
+    are heading + carousel of differing heights). Uses the layout engine's
+    own measurement so a stop lands the section heading flush, not a few px
+    off. None entries are skipped to match Column.
+
+    Was ``TilesMixin._section_offsets``.
+    """
+    from ...mpvtk.layout import measure
+
+    offs, y = [], float(pad)
+    for el in elements:
+        if el is None:
+            continue
+        offs.append(y)
+        y += measure(el)[1] + gap
+    return offs
+
+
+def track_duration(item):
+    """``m:ss`` for a track, or "" when the server gave no runtime.
+
+    Was ``MusicMixin._duration``; moved so the track table can be rendered
+    without a MusicMixin (see tile_renderer.TileRenderer.track_list).
+    """
+    secs = (item.get("RunTimeTicks") or 0) // 10000000
+    return "%d:%02d" % (secs // 60, secs % 60) if secs else ""
+
+
+def track_artists(item):
+    """Comma-joined artist names, falling back to album artists.
+
+    Was ``MusicMixin._artists``.
+    """
+    return ", ".join(item.get("Artists") or item.get("AlbumArtists") or [])
+
+
+def human_size(n):
+    """Byte count as a short human string.
+
+    Was ``DialogsMixin._human_size``; the detail page's media-info line
+    wants it too, and a second copy is how the two drift.
+    """
+    n = float(n or 0)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return ("%d %s" % (n, unit) if unit == "B"
+                    else "%.1f %s" % (n, unit))
+        n /= 1024
+
+
+#: Hostname suffixes that only ever name something on this network. `.local`
+#: is mDNS/Bonjour, which is how a Jellyfin box on a home LAN most often
+#: announces itself; the rest are the conventional private zones a router or
+#: a homelab hands out. `.internal` is also Google Cloud's private zone,
+#: which is the right answer there too -- it is unreachable from outside.
+_LOCAL_SUFFIXES = (".local", ".lan", ".home", ".internal", ".localdomain")
+
+
+def is_local_server(address):
+    """Is this address on the user's own network rather than out on the
+    internet -- **going only by how it is spelled**?
+
+    The fallback, not the answer. `clients.server_is_local` resolves the
+    name when it connects and that verdict reaches here as the entry's
+    `local` key; this runs when nothing has connected, so there is nothing
+    to resolve from and no connection to describe.
+
+    Syntactic because it runs on the render path, where a name lookup is a
+    blocking call to decide an icon. It cannot see split-horizon DNS at all
+    -- a self-hoster's own domain resolves to a LAN address at home and a
+    public one away, and the spelling is identical -- which is exactly why
+    the resolved verdict outranks it.
+
+    A bare hostname with no dot counts as local: `http://mediaserver:8096`
+    is a name only a LAN resolver (mDNS, NetBIOS, the router's own DNS) can
+    answer, which is what makes it one.
+    """
+    if not address:
+        return False
+    try:
+        host = urllib.parse.urlsplit(str(address)).hostname
+    except ValueError:
+        return False
+    if not host:
+        return False
+    host = host.rstrip(".").lower()
+    try:
+        # Covers loopback, RFC1918, link-local and IPv6 ULA in one rule --
+        # and correctly says *remote* for 100.64/10, which is carrier-grade
+        # NAT as often as it is a private overlay.
+        return ipaddress.ip_address(host).is_private
+    except ValueError:
+        pass
+    return (host == "localhost" or "." not in host
+            or host.endswith(_LOCAL_SUFFIXES))
+
+
+def server_icon(server):
+    """The glyph for one server entry: where it is, or that it is not there.
+
+    Every server gets one, which is the point as much as the meaning is. A
+    dropdown indents every row as soon as any item carries an icon, so a
+    list that marked only the broken entries paid that width on all of them
+    and gave the names back an ellipsis in exchange for nothing.
+
+    ``connected`` absent means connected -- the login screen's list of
+    previously added servers is addresses, with no connection state to
+    report.
+
+    ``local`` is the resolved verdict from the connection itself, and it
+    wins whenever there is one: reading the URL cannot tell a domain that
+    points at a LAN address from one that does not, and for anybody running
+    their own domain at home that is every server they have.
+    """
+    if not server.get("connected", True):
+        return "cloud_off"
+    on_lan = server.get("local")
+    if on_lan is None:
+        on_lan = is_local_server(server.get("address"))
+    return "lan" if on_lan else "cloud"

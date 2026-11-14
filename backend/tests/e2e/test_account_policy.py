@@ -1,0 +1,414 @@
+"""What each kind of user account does to login and to the library.
+
+stdjflib ships twelve accounts, each one reaching "a client path that is
+otherwise tedious to set up by hand" — and the shim has never been run
+against any of them by anything automatic. These are contract tests: no mpv,
+no window, just the seam the browser is handed (`LibrarySource`) and the login
+path above it.
+
+**Two of the gaps these tests turned up are now closed** (`user_policy.py`)
+and asserted below: SyncPlay is not offered to a user the server refuses it
+to, and the Record affordances are not offered without
+`EnableLiveTvManagement`. `EnableContentDownloading` is now read too -- a photo falls
+back to the image endpoint rather than failing to open -- and Live TV
+*browsing* was already gated by whether the server put a Live TV view in
+`/Views` (`repository.get_libraries`). See `docs/PERMISSION_GAPS.md`.
+
+Two things that are *not* tested here, because measurement said they are not
+true (both in `docs/e2e-roadmap.md`):
+
+* `qa-noplayback` can play, and no client can change that. Jellyfin's video
+  endpoints are `AllowAnonymous`, so the item id is effectively the
+  credential; `EnableMediaPlayback: False` does not stop the server serving a
+  `static=true` URL, and there is no refusal for the client to handle.
+* `qa-onesession` does not evict. The server refuses the *second* login with
+  403 and leaves the first working, which is the opposite way round from the
+  account's description.
+"""
+
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _e2e  # noqa: E402
+
+
+@_e2e.require_server
+class RestrictedLibrariesTest(unittest.TestCase):
+    """`qa-restricted` — "the rest must be *absent*, not merely unplayable".
+
+    Absence is the whole point: a client that lists a library it cannot open
+    has failed this account even though nothing errored.
+    """
+
+    ALLOWED = {"Movies", "Shows"}
+
+    #: Views the **server materialises per user**, which are not libraries an
+    #: admin configured and are not granted through `EnabledFolders`. Neither
+    #: appears in `/Library/VirtualFolders`, so neither is the subject of a
+    #: test about which libraries this account may see. Measured on the 12.0
+    #: QA server, 2026-09-18: `qa-restricted`'s `EnabledFolders` is exactly
+    #: the Movies and Shows ids, while `/Users/<id>/Views` also answers
+    #: `livetv` and `playlists` -- and every playlist it can see resolves to
+    #: **zero** members, because the members are Music the account cannot
+    #: reach. The view is present and correctly empty, which is the
+    #: distinction this test is about.
+    #:
+    #: Keyed on `CollectionType`, not on the display name: the names are
+    #: localised and "Live TV" was already being discarded by one.
+    AUTO_VIEWS = {"livetv", "playlists"}
+
+    def setUp(self):
+        self.session = _e2e.Session("qa-restricted")
+        self.addCleanup(self.session.stop)
+        self.source = self.session.library_source()
+        self.addCleanup(self.source.stop)
+
+    def test_only_the_permitted_libraries_are_visible(self):
+        names = {lib["Name"] for lib
+                 in self.source.get_libraries(_e2e.SOURCE_UUID)
+                 if lib.get("CollectionType") not in self.AUTO_VIEWS}
+        self.assertEqual(
+            names, self.ALLOWED,
+            "a restricted user sees libraries they have no access to")
+
+    def test_the_home_screen_offers_nothing_from_a_forbidden_library(self):
+        """The rows are built from the libraries, so this is the same rule one
+        layer up — and the layer a user actually looks at."""
+        allowed_ids = {lib["Id"] for lib
+                       in self.source.get_libraries(_e2e.SOURCE_UUID)}
+        rows = self.source.get_home_rows(_e2e.SOURCE_UUID)
+        self.assertTrue(rows, "a restricted user got no home rows at all")
+        for row in rows:
+            parent = row.get("parent_id")
+            if parent is not None:
+                self.assertIn(
+                    parent, allowed_ids,
+                    "home row %r is built from a library this user cannot "
+                    "see" % row.get("title"))
+
+    def test_a_full_user_sees_more(self):
+        """Guards the test above from passing because everything is empty."""
+        other = _e2e.Session("qa-user")
+        self.addCleanup(other.stop)
+        source = other.library_source()
+        self.addCleanup(source.stop)
+        self.assertGreater(
+            len(source.get_libraries(_e2e.SOURCE_UUID)),
+            len(self.source.get_libraries(_e2e.SOURCE_UUID)),
+            "qa-restricted sees as much as qa-user, so the restriction is "
+            "not in force and the assertions above prove nothing")
+
+
+@_e2e.require_server
+class LiveTvAccessTest(unittest.TestCase):
+    """`qa-kid` has Live TV revoked, which is the gate `has_live_tv` reads.
+
+    `repository.get_libraries` derives it from the presence of the Live TV
+    view rather than fetching the policy, on the reasoning that the server
+    adds that view only when the user may use Live TV *and* a tuner exists.
+    This is that reasoning, checked against a server where exactly one of two
+    users has the right.
+    """
+
+    def _source(self, account):
+        session = _e2e.Session(account)
+        self.addCleanup(session.stop)
+        source = session.library_source()
+        self.addCleanup(source.stop)
+        source.get_libraries(_e2e.SOURCE_UUID)      # what populates the flag
+        return source
+
+    def test_a_user_with_live_tv_is_offered_it(self):
+        self.assertTrue(
+            self._source("qa-user").has_live_tv(_e2e.SOURCE_UUID),
+            "Live TV is configured on this server but qa-user was not "
+            "offered it")
+
+    def test_a_user_without_live_tv_is_not_offered_it(self):
+        source = self._source("qa-kid")
+        self.assertFalse(
+            source.has_live_tv(_e2e.SOURCE_UUID),
+            "qa-kid has EnableLiveTvAccess False but was offered Live TV")
+        self.assertNotIn(
+            "Live TV",
+            {lib["Name"] for lib in source.get_libraries(_e2e.SOURCE_UUID)})
+
+
+@_e2e.require_server
+class LoginTest(unittest.TestCase):
+    """The login paths that are awkward to reach by hand."""
+
+    def test_an_account_with_no_password_can_sign_in(self):
+        """`qa-nopassword` — "a login flow that assumes a password field is
+        filled breaks here". Common in home setups."""
+        session = _e2e.Session("qa-nopassword", password="")
+        self.addCleanup(session.stop)
+        self.assertTrue(session.token)
+        self.assertTrue(session.api.get_views()["Items"],
+                        "signed in with no password but cannot browse")
+
+    def test_a_disabled_account_is_refused(self):
+        """`qa-disabled` — must fail cleanly rather than hang or land the
+        client half signed in. The server answers 403."""
+        self.assertTrue(_e2e.login_refused("qa-disabled"))
+
+    def test_a_wrong_password_is_refused(self):
+        self.assertTrue(_e2e.login_refused("qa-user", "not-the-password"))
+
+    def test_a_hidden_account_is_absent_from_the_list_but_can_sign_in(self):
+        """`qa-hidden` — "a client that only offers the public user list
+        cannot reach this account at all", which is why the shim asks for a
+        username rather than only offering the list."""
+        public = _e2e.public_users()
+        self.assertTrue(public, "no public users at all")
+        self.assertIn("qa-user", public,
+                      "the public list is empty of accounts that should be in "
+                      "it, so its absence proves nothing below")
+        self.assertNotIn("qa-hidden", public)
+
+        session = _e2e.Session("qa-hidden")
+        self.addCleanup(session.stop)
+        self.assertTrue(session.token,
+                        "a hidden account could not sign in by name")
+
+    def test_a_second_session_is_refused_and_the_first_survives(self):
+        """`qa-onesession` caps concurrent sessions at one.
+
+        The account's description says the second login must evict the first.
+        Measured, the server does the opposite: it refuses the newcomer with
+        403 and leaves the incumbent working. Either way the client must not
+        end up half signed in, which is what this pins.
+
+        The cap counts what the server still believes is connected, so this
+        starts by deleting the account's Device records as admin. Without
+        that, a session left behind by a crashed run refuses the *first*
+        login here and the failure looks like the cap working rather than
+        like litter — which is exactly how it first failed.
+        """
+        admin = _e2e.Session("qa-admin")
+        self.addCleanup(admin.stop)
+        admin.purge_devices("qa-onesession")
+        self.addCleanup(admin.purge_devices, "qa-onesession")
+
+        first = _e2e.Session("qa-onesession", device_id="jms-e2e-1session-a")
+        self.addCleanup(first.stop)
+        self.assertTrue(first.api.get_views()["Items"])
+
+        # A genuinely different device, which is the scenario the cap is about.
+        self.assertTrue(
+            _e2e.login_refused("qa-onesession",
+                               device_id="jms-e2e-1session-b"),
+            "a second concurrent session was allowed, so this server does "
+            "not cap them and the assertion below proves nothing")
+        self.assertTrue(
+            first.api.get_views()["Items"],
+            "the incumbent session stopped working when a second login was "
+            "refused")
+
+
+@_e2e.require_server
+class SyncPlayPermissionTest(unittest.TestCase):
+    """`qa-nosyncplay` — "SyncPlay refused, so the client's SyncPlay entry
+    points must go".
+
+    The policy is read from the server here, not fabricated: the point of
+    doing this end to end is that `SyncPlayAccess` really does come back on
+    `/Users/Me` for a real account, spelled the way the code expects. A unit
+    test with a hand-written policy dict proves the branch, not the field
+    name.
+    """
+
+    def _client(self, account):
+        session = _e2e.Session(account)
+        self.addCleanup(session.stop)
+        source = session.library_source()
+        self.addCleanup(source.stop)
+        return source
+
+    def test_the_refused_account_is_refused(self):
+        from jellyfin_mpv_shim import user_policy
+
+        source = self._client("qa-nosyncplay")
+        access = source.syncplay_access(_e2e.SOURCE_UUID)
+        self.assertEqual(
+            access, user_policy.NO_SYNCPLAY,
+            "qa-nosyncplay came back as %r — either the account no longer "
+            "has SyncPlay revoked, or the field is not where the client "
+            "looks for it" % access)
+
+    def test_an_ordinary_account_still_has_it(self):
+        """The control. Without this the test above passes just as well if
+        the client answers "no" to everybody."""
+        from jellyfin_mpv_shim import user_policy
+
+        source = self._client("qa-user")
+        self.assertEqual(source.syncplay_access(_e2e.SOURCE_UUID),
+                         user_policy.CREATE_AND_JOIN)
+
+
+@_e2e.require_server
+class LiveTvManagementPermissionTest(unittest.TestCase):
+    """`EnableLiveTvManagement` is a *third* Live TV permission, separate
+    from the access one — and the one that made this suite unable to
+    schedule a timer as any account on the server until stdjflib was fixed.
+
+    A user can therefore browse the guide perfectly well and have every
+    Record button answer 403.
+    """
+
+    def _source(self, account):
+        session = _e2e.Session(account)
+        self.addCleanup(session.stop)
+        source = session.library_source()
+        self.addCleanup(source.stop)
+        return source
+
+    def test_the_account_that_may_record_may(self):
+        self.assertTrue(
+            self._source("qa-user").can_manage_live_tv(_e2e.SOURCE_UUID),
+            "qa-user was granted EnableLiveTvManagement by stdjflib and the "
+            "client does not see it")
+
+    def test_an_account_without_it_is_refused(self):
+        """`qa-restricted` is an ordinary account that was never granted it.
+
+        Which is the default for every account created on a modern server:
+        `AddDefaultPermissions` leaves it False, and only an install
+        migrated from an older one has it on by default.
+        """
+        source = self._source("qa-restricted")
+        self.assertFalse(
+            source.can_manage_live_tv(_e2e.SOURCE_UUID),
+            "qa-restricted can manage Live TV recordings, so this server no "
+            "longer has an account without the permission and the gate is "
+            "untested")
+
+    def test_it_may_still_READ_what_is_scheduled(self):
+        """The premise of showing Schedule and Series to everyone.
+
+        The permission gates writes. If the server ever starts refusing
+        these reads as well, hiding those two tabs becomes right again and
+        this is the test that says so — no unit test can, because the answer
+        is the server's and not ours.
+        """
+        source = self._source("qa-restricted")
+        for name in ("get_timers", "get_series_timers"):
+            with self.subTest(name):
+                # Not "returns rows": the QA server schedules nothing, so an
+                # empty list is the honest answer. What is being asserted is
+                # that asking is allowed at all -- a 403 raises.
+                self.assertIsNotNone(
+                    getattr(source, name)(_e2e.SOURCE_UUID),
+                    "%s was refused for an account without "
+                    "EnableLiveTvManagement" % name)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+@_e2e.require_server
+class ContentDownloadingPermissionTest(unittest.TestCase):
+    """`qa-nodownload` — a photo must still open.
+
+    `/Items/{id}/Download` is the shim's ordinary path to a photo's bytes and
+    it is permission-gated, so without `EnableContentDownloading` every
+    picture in the library failed to open. The fallback is the image
+    endpoint, which needs no permission.
+
+    End to end because a unit test cannot check the *spelling*: the branch is
+    provable with a hand-written dict, but that the server really returns
+    `EnableContentDownloading` on `/Users/Me`, and really refuses the
+    download for this account, are answers only the server has.
+    """
+
+    def _session(self, account):
+        session = _e2e.Session(account)
+        self.addCleanup(session.stop)
+        return session
+
+    def test_the_policy_field_is_spelled_the_way_the_client_reads_it(self):
+        from jellyfin_mpv_shim import user_policy
+
+        session = self._session("qa-nodownload")
+        self.assertFalse(
+            user_policy.may_download(session.client),
+            "qa-nodownload came back as permitted — either the account no "
+            "longer has downloading revoked, or the field is not where the "
+            "client looks for it")
+
+    def test_an_ordinary_account_still_may(self):
+        """The control. Without it the test above passes just as well if the
+        client answers "no" to everybody, which would send every photo
+        through the resizer."""
+        from jellyfin_mpv_shim import user_policy
+
+        self.assertTrue(user_policy.may_download(
+            self._session("qa-user").client))
+
+    def test_the_server_really_does_refuse_the_download(self):
+        """The premise. If this ever starts answering 200 the fallback is
+        unnecessary, and this test is what will say so."""
+        session = self._session("qa-nodownload")
+        item_id = _photo_id(session)
+        response = _raw_get(
+            session, "/Items/%s/Download" % item_id)
+        self.assertIn(response, (401, 403),
+                      "expected the download to be refused, got %s"
+                      % response)
+
+    def test_and_really_does_serve_the_same_photo_as_an_image(self):
+        """The fallback has to actually work for this account, not merely be
+        a different url."""
+        session = self._session("qa-nodownload")
+        item_id = _photo_id(session)
+        response = _raw_get(
+            session, "/Items/%s/Images/Primary" % item_id,
+            params={"MaxWidth": 3840, "format": "jpg"})
+        self.assertEqual(response, 200)
+
+    def test_the_url_the_client_builds_is_the_image_one(self):
+        """The whole path, not just the accessor: what `get_playback_url`
+        actually hands mpv for this account."""
+        from jellyfin_mpv_shim.media import Video
+
+        session = self._session("qa-nodownload")
+        item_id = _photo_id(session)
+
+        class _Parent:
+            is_local = True
+            client = session.client
+
+        url = Video(item_id, _Parent()).get_playback_url()
+        self.assertIn("/Images/Primary", url)
+        self.assertNotIn("/Download", url)
+
+
+def _photo_id(session):
+    """Any Photo on the server. stdjflib's Photos library is the source."""
+    result = session.client.jellyfin.user_items(params={
+        "IncludeItemTypes": "Photo",
+        "Recursive": True,
+        "Limit": 1,
+    }) or {}
+    items = result.get("Items") or []
+    if not items:
+        raise unittest.SkipTest(
+            "no Photo on the server — build stdjflib's Photos library")
+    return items[0]["Id"]
+
+
+def _raw_get(session, path, params=None):
+    """Status code only, with this session's token. The apiclient raises or
+    swallows depending on the failure, and the status is the whole point."""
+    import requests
+
+    return requests.get(
+        _e2e.SERVER + path,
+        params=params or {},
+        headers={"Authorization": 'MediaBrowser Token="%s"' % session.token},
+        timeout=30,
+        allow_redirects=False,
+    ).status_code

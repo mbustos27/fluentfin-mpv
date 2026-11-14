@@ -1,0 +1,255 @@
+"""Starting playback, and the window handoff around it.
+
+Split out of the single 1,154-line ``PlayerGateway``; see
+``gateway/__init__.py`` for why the facade is composed rather than nested.
+"""
+
+import logging
+
+from . import deps
+from .base import GatewayCore
+
+log = logging.getLogger("mpvtk_browser.gateway.playback")
+
+
+class PlaybackMixin(GatewayCore):
+    def on_browse_enter(self):
+        from ...player import playerManager
+        # mpvtk_active tells the player the in-window UI is on screen — it
+        # gates the idle-quit and makes `q` return to the library.
+        # Everything the HUD queued belongs to the session that just ended,
+        # and the drain runs AFTER the clears below -- so say so first. It
+        # covers every gear-menu state at once (aspect, deinterlace, the
+        # stats overlay), which is why it is here rather than beside any one
+        # of them. See PlayerManager.end_hud_session.
+        playerManager.end_hud_session()
+        playerManager.mpvtk_active = True
+        # Logo-free, free-resizing browse window (not force_window()'s menu
+        # splash) — removes the Jellyfin icon and stops aspect-ratio snapping.
+        if playerManager.set_browse_window(True) is False:
+            # A video started while it waited for mpv, and keeps the window.
+            # The browser's enter_browse reads this as the decline.
+            return False
+        playerManager.enable_osc(False)
+        # Put away the Playback Data overlay if playback left it up: it is ASS
+        # OSD and would linger behind the library otherwise.
+        playerManager.clear_stats()
+        # ...and drop the gear menu's per-session deinterlace force, for the
+        # same reason and at the same moment: it was turned on for the thing
+        # that just finished. It deliberately survives a queue advance --
+        # a season whose interlacing is not flagged is one answer, not one
+        # per episode -- so returning to the library is one of the two
+        # places it ends. The other is on_minimize; see there.
+        playerManager.clear_deinterlace_override()
+        playerManager.clear_aspect_override()
+
+    def apply_browser_fullscreen(self):
+        """Push a just-written ``browser_fullscreen`` at the window (#729).
+
+        Through ``_act`` like every other player call from this thread: the
+        settings page runs on the browser's loop, and the player's lock can
+        be held by a playback start.
+        """
+        self._act(lambda pm: pm.apply_browser_fullscreen())
+
+    def on_minimize(self):
+        """Drop to the windowless state. set_browse_window(False) releases
+        force_window when nothing is playing; if a cast is in flight it
+        leaves the picture alone, which is exactly the behaviour we want."""
+        from ...player import playerManager
+        # Clearing mpvtk_active un-gates the idle quit, so a minimized app
+        # eventually drops mpv entirely and gives back its memory and GPU
+        # context. It comes back on the next play or when the tray reopens
+        # the library (see UserInterface.on_mpv_recreated).
+        # The other end of the same statement; see on_browse_enter. Closing
+        # the window comes through HERE and not through there.
+        playerManager.end_hud_session()
+        playerManager.mpvtk_active = False
+        # The other end of the per-session deinterlace force, and it is not
+        # redundant with on_browse_enter: closing the window comes through
+        # HERE, not through there [iw], so an override set mid-episode and
+        # never returned from outlived the session that set it. mpv itself
+        # only goes away when the window is closed -- it renders the
+        # library -- which makes this the last moment anything is watching.
+        playerManager.clear_deinterlace_override()
+        playerManager.clear_aspect_override()
+        playerManager.enable_osc(playerManager.osc_enabled)
+        playerManager.set_browse_window(False)
+
+    #: Cached ``audio-device-list``: (monotonic stamp, value). See
+    #: audio_devices for why this exists at all.
+    _DEVICE_TTL = 5.0
+    _device_cache: tuple = (0.0, None)
+
+    def audio_devices(self):
+        """``[(label, value), ...]`` for the audio-device picker.
+
+        Asked of the live mpv (``audio-device-list``) rather than assembled
+        here: which devices exist depends on the platform, the audio server
+        and what is plugged in *now*, and mpv is the thing that will have to
+        open whichever one is chosen. Its own names are the only ones that
+        are guaranteed to work.
+
+        The leading entry is None, not ``"auto"`` — see ``conf.audio_device``:
+        unset means the setting does not touch mpv at all, so a user's
+        mpv.conf keeps whatever it says.
+        """
+        import time
+
+        from ...i18n import _
+        from ...player import playerManager
+
+        # Briefly cached, because the settings SEARCH rebuilds the form on
+        # every keystroke and `audio_device` matches nearly every one- and
+        # two-letter query -- so an uncached read meant an mpv round trip
+        # per character typed, on the render loop, and a socket round trip
+        # at that on the jsonipc backend. Device enumeration itself is not
+        # cheap on ALSA either.
+        #
+        # Five seconds: long enough that typing is free, short enough that
+        # plugging a headset in and looking at the list still shows it.
+        stamp, cached = PlaybackMixin._device_cache
+        now = time.monotonic()
+        if cached is not None and now - stamp < self._DEVICE_TTL:
+            return list(cached)
+
+        out = [(_("Default (mpv decides)"), None)]
+        try:
+            devices = playerManager._mpv_property("audio-device-list") or []
+        except Exception:
+            log.debug("could not read audio-device-list", exc_info=True)
+            return out
+        for dev in devices:
+            if not isinstance(dev, dict):
+                continue
+            name = dev.get("name")
+            if not name or name == "auto":
+                # mpv's own "auto" entry duplicates the default above.
+                continue
+            # The description is what mpv shows and the only human-readable
+            # part; fall back to the name so an unlabelled device is still
+            # selectable rather than a blank row.
+            out.append((dev.get("description") or name, name))
+        # Only a real answer is cached. A failed read returns early above,
+        # so a transient IPC hiccup does not pin an empty list for five
+        # seconds -- which would look exactly like a machine with no audio.
+        PlaybackMixin._device_cache = (now, list(out))
+        return out
+
+    def apply_audio_settings(self):
+        """Push the saved audio settings to mpv. Live: a mode change takes
+        effect without a restart, and mid-playback without a reload."""
+        from ...player import playerManager
+        try:
+            playerManager.apply_audio_settings()
+            return True
+        except Exception:
+            log.error("Could not apply audio settings.", exc_info=True)
+            return False
+
+    def any_client(self):
+        """One connected client, or None. For the cast screen's random
+        backdrop, which needs *a* server rather than a particular one."""
+        import random
+        try:
+            clients = list(deps.clientManager.clients.values())
+        except Exception:
+            return None
+        return random.choice(clients) if clients else None
+
+    def client_for(self, server_uuid):
+        """The live client for a server, or None."""
+        try:
+            return deps.clientManager.clients.get(server_uuid)
+        except Exception:
+            log.debug("no client for %r", server_uuid, exc_info=True)
+            return None
+
+    def cancel_load(self):
+        """Abandon a playback start still in flight. Takes no player lock, so
+        it is safe from the loop thread while the load holds one."""
+        from ...player import playerManager
+        try:
+            return playerManager.cancel_load()
+        except Exception:
+            log.error("could not cancel the load", exc_info=True)
+            return False
+
+    def retry_playback(self, force_transcode=False):
+        """Re-attempt the start that just failed, optionally forcing the
+        server to transcode. Returns immediately — the player queues the
+        replay onto the action thread rather than loading here."""
+        from ...player import playerManager
+        return playerManager.retry_failed_playback(force_transcode)
+
+    def get_last_server(self):
+        """uuid of the server the active user last browsed, or None.
+
+        Only a hint — the server may have been removed or failed to connect
+        since, so the browser falls back when it isn't in the live list.
+        """
+        from ...users import userManager
+        try:
+            return userManager.get_last_server()
+        except Exception:
+            log.debug("could not read last server", exc_info=True)
+            return None
+
+    def set_last_server(self, server_uuid):
+        """Remember the browsed server for the active user. Best-effort:
+        failing to persist a preference must never break navigation."""
+        from ...users import userManager
+        try:
+            userManager.set_last_server(server_uuid)
+        except Exception:
+            log.debug("could not persist last server", exc_info=True)
+
+    def on_browse_leave(self):
+        from ...player import playerManager
+        # Restore video aspect handling / playback fullscreen, then hand the
+        # OSC back -- to whatever the player controls style says, which is
+        # where the retired enable_osc setting went (#615).
+        playerManager.browse_yield()
+        playerManager.enable_osc(playerManager.osc_enabled)
+
+    def play(self, item, server_uuid, offset_ticks=None,
+             srcid=None, aid=None, sid=None):
+        self.play_list([item.get("Id")], server_uuid, 0,
+                       offset_ticks=offset_ticks, srcid=srcid, aid=aid, sid=sid)
+
+    def play_list(self, item_ids, server_uuid, start_index, offset_ticks=None,
+                  srcid=None, aid=None, sid=None, pause_stills=True):
+        from ...event_handler import start_playback
+        from ...sync.manager import syncManager
+        client = deps.clientManager.clients.get(server_uuid)
+        if client is None:
+            # Offline (server_uuid is the catalog's pseudo-server "offline",
+            # or the real server is simply unreachable): play the local file.
+            # start_playback tolerates client=None — offline_video_factory
+            # resolves each item against the catalog instead. Mirrors
+            # the play path.
+            item_ids = list(item_ids)
+            # Check the item that will actually start, not item_ids[0]:
+            # starting a playlist partway through is the common case.
+            first = (item_ids[start_index]
+                     if 0 <= start_index < len(item_ids) else None)
+            # Unscoped deliberately, and now said so: there is no connected
+            # client, so there is no second server whose id could collide
+            # with this one, and the catalog is the only source of items
+            # there is. One of the two structurally-unscoped callers the
+            # amendment-1 classification found; the other is
+            # `servers.has_downloads`.
+            from ...sync.db import ANY_SERVER
+            if not (first and syncManager.db
+                    and syncManager.is_complete(first, ANY_SERVER)):
+                log.warning("mpvtk play: no connected client for %s and no "
+                            "local copy of %s", server_uuid, first)
+                return
+        try:
+            start_playback(
+                client, list(item_ids), start_index=start_index,
+                offset_ticks=offset_ticks, aid=aid, sid=sid, srcid=srcid,
+                explicit_tracks=(aid is not None or sid is not None),
+                pause_stills=pause_stills)
+        except Exception:
+            log.error("mpvtk browser failed to start playback", exc_info=True)

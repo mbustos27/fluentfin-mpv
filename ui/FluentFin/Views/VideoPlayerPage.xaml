@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="FluentFin.Views.VideoPlayerPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:flyleaf="using:FlyleafLib.Controls.WinUI"
+    xmlns:local="using:FluentFin.Views"
+    xmlns:lvs="using:LibVLCSharp.Platforms.Windows"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <controls:MediaPlayerHost
+        x:Name="MediaPlayerHost"
+        IsSkipButtonVisible="{x:Bind ViewModel.IsSkipButtonVisible, Mode=OneWay}"
+        JellyfinClient="{x:Bind ViewModel.JellyfinClient}"
+        MediaPlayerType="{x:Bind ViewModel.MediaPlayerType, Mode=OneWay}"
+        Player="{x:Bind ViewModel.MediaPlayer, Mode=TwoWay}"
+        Playlist="{x:Bind ViewModel.Playlist, Mode=OneWay}"
+        SkipCommand="{x:Bind ViewModel.SkipCommand, Mode=OneWay}"
+        Trickplay="{x:Bind ViewModel.TrickplayViewModel}" />
+
+</Page>

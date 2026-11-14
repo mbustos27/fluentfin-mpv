@@ -1,0 +1,353 @@
+import logging
+
+from .media import Media
+from .player import playerManager
+from .timeline import timelineManager
+
+log = logging.getLogger("event_handler")
+bindings = {}
+
+#: Remote navigation commands -> the action names playerManager.menu_action
+#: takes. Its keys are also the dispatch list below: the two used to be
+#: separate, so a command could be translated here and still never routed.
+NAVIGATION_DICT = {
+    "Back": "back",
+    "Select": "ok",
+    "MoveUp": "up",
+    "MoveDown": "down",
+    "MoveRight": "right",
+    "MoveLeft": "left",
+    "GoHome": "home",
+    "GoToSettings": "settings",
+    # jellyfin-web's hamburger. It means "the menu for what I am looking
+    # at", which is a tile's context menu while browsing and the HUD's
+    # settings menu during playback — see PlayerManager.menu_action.
+    "ToggleContextMenu": "menu",
+    "GoToSearch": "search",
+}
+
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from jellyfin_apiclient_python import JellyfinClient as JellyfinClient_type
+
+
+def bind(event_name: str):
+    def decorator(func):
+        bindings[event_name] = func
+        return func
+
+    return decorator
+
+
+def start_playback(
+    client: "JellyfinClient_type",
+    item_ids: list,
+    start_index: int = 0,
+    offset_ticks=None,
+    user_id=None,
+    aid=None,
+    sid=None,
+    srcid=None,
+    sync_play_group=None,
+    explicit_tracks=False,
+    pause_stills=True,
+):
+    """Begin playback of one or more items from the beginning of `item_ids`.
+
+    Shared by the websocket "Play" event and the local library browser so both
+    funnel through identical setup (pre/post hooks, timeline, SyncPlay). Returns
+    True if a playable video was found and handed to the player.
+
+    `explicit_tracks` marks aid/sid as a deliberate user choice (the library
+    browser's track pickers) that should be used as-is, bypassing the
+    language_config and server-default selection in Media.map_streams.
+
+    `pause_stills` is whether a photo at the head of the queue opens paused.
+    True is "show me this picture" (a click on one); False is "run the
+    slideshow" (Play All / Shuffle), where pausing on frame one would be a
+    queue that never starts.
+    """
+    # In a group? Then "play this" means "play this for the group" --
+    # jellyfin-web's SyncPlay.Controller.play sends SetNewQueue and never
+    # starts anything itself. The server broadcasts the new queue back to
+    # everyone including us, and playback starts through upd_queue like any
+    # other group content.
+    #
+    # Playing locally instead does not merely leave the others behind, it
+    # fails outright: a locally built Media invents its own PlaylistItemIds
+    # ("playlistItem0"), every SyncPlay report carries one, and the server
+    # declares that field a Guid -- so the Ready that _play_media sends on
+    # load is rejected with a 400 before the group ever hears about it.
+    #
+    # **in_group, not is_enabled**, and that is not the intuitive answer. It
+    # is tempting to let a member who has stopped watching along put
+    # something on just for themselves -- but web does not, and the shape of
+    # its code says so rather than its docs: `isFollowingGroupPlayback` is
+    # read in exactly three places, all inside QueueCore, and none of them is
+    # the play path. Backing out of what the group is watching and then
+    # choosing something else is how you change what the group watches; the
+    # NewPlaylist that comes back re-attaches you (see upd_queue). Watching
+    # something alone is what leaving is for.
+    if sync_play_group is None and playerManager.syncplay.in_group():
+        log.info("Handing playback to the SyncPlay group instead of "
+                 "starting it locally.")
+        client.jellyfin.reset_queue_sync_play(
+            list(item_ids), start_index, offset_ticks or 0)
+        return True
+
+    media = Media(
+        client,
+        item_ids,
+        seq=start_index,
+        user_id=user_id,
+        aid=aid,
+        sid=sid,
+        srcid=srcid,
+        explicit_tracks=explicit_tracks,
+    )
+
+    offset = offset_ticks
+    if offset is not None:
+        offset /= 10000000
+
+    video = media.video
+    if not video:
+        return False
+
+    playerManager.playback_starting()
+    playerManager.play(video, offset, is_initial_play=True,
+                       pause_stills=pause_stills)
+    timelineManager.send_timeline()
+    if sync_play_group is not None:
+        playerManager.syncplay.join_group(sync_play_group)
+    playerManager.playback_started()
+    return True
+
+
+class EventHandler(object):
+    mirror = None
+    # Set by the in-window browser: (client, item_id) -> open that item.
+    display_content: Optional[Callable[..., Any]] = None
+    # Set by the in-window browser: (client) -> a recording rule changed
+    # somewhere, refresh the Live TV screen if that is what is showing.
+    live_tv_changed: Optional[Callable[..., Any]] = None
+    # Set by the in-window browser: (client) -> watched/resume state moved
+    # for this user, refresh the home screen if that is what is showing.
+    user_data_changed: Optional[Callable[..., Any]] = None
+
+    def handle_event(
+        self,
+        client: "JellyfinClient_type",
+        event_name: str,
+        arguments: dict,
+    ):
+        if event_name in bindings:
+            log.debug("Handled Event {0}: {1}".format(event_name, arguments))
+            bindings[event_name](self, client, event_name, arguments)
+        else:
+            log.debug("Unhandled Event {0}: {1}".format(event_name, arguments))
+
+    @bind("Play")
+    def play_media(self, client: "JellyfinClient_type", _event_name, arguments: dict):
+        play_command = arguments.get("PlayCommand")
+        if not playerManager.has_video():
+            play_command = "PlayNow"
+
+        if play_command == "PlayNow":
+            ids = arguments.get("ItemIds") or []
+            seq = arguments.get("StartIndex")
+            if seq is None:
+                seq = 0
+            log.debug("EventHandler::playMedia %s" % ids)
+            if not 0 <= seq < len(ids):
+                # Indexed straight into the queue, this raised IndexError
+                # inside the websocket callback (hand test, 2026-10-04: an
+                # album and a photo album cast from jellyfin-web). An empty
+                # list is what the server sends when the session's own user
+                # may see none of a folder's children.
+                log.warning("Declined a remote Play: %d item(s), StartIndex "
+                            "%s, from user %s (%s)", len(ids),
+                            arguments.get("StartIndex"),
+                            arguments.get("ControllingUserId"), arguments)
+                return
+            start_playback(
+                client,
+                ids,
+                start_index=seq,
+                offset_ticks=arguments.get("StartPositionTicks"),
+                user_id=arguments.get("ControllingUserId"),
+                aid=arguments.get("AudioStreamIndex"),
+                sid=arguments.get("SubtitleStreamIndex"),
+                srcid=arguments.get("MediaSourceId"),
+                sync_play_group=arguments.get("SyncPlayGroup"),
+                # The server sends a cast folder as its children, so several
+                # ids are a Play All -- which in the browser runs a photo
+                # queue as a slideshow -- and one is "show me this" [iw].
+                pause_stills=len(ids) == 1,
+            )
+        elif play_command in ("PlayLast", "PlayNext"):
+            # Snapshot the video once: another thread can null it between a
+            # has_video() guard and get_video(), so re-reading would race.
+            video = playerManager.get_video()
+            if video is not None:
+                video.parent.insert_items(
+                    arguments.get("ItemIds"), append=play_command == "PlayLast"
+                )
+                playerManager.upd_player_hide()
+
+    @bind("GeneralCommand")
+    def general_command(
+        self, client: "JellyfinClient_type", _event_name, arguments: dict
+    ):
+        command = arguments.get("Name")
+        if command == "SetVolume":
+            # There is currently a bug that causes this to be spammed, so we
+            # only update it if the value actually changed.
+            if playerManager.get_volume(True) != int(arguments["Arguments"]["Volume"]):
+                playerManager.set_volume(int(arguments["Arguments"]["Volume"]))
+        elif command == "SetAudioStreamIndex":
+            playerManager.set_streams(int(arguments["Arguments"]["Index"]), None)
+        elif command == "SetSubtitleStreamIndex":
+            playerManager.set_streams(None, int(arguments["Arguments"]["Index"]))
+        elif command == "DisplayContent":
+            # "Show me this" from a phone or web client. If you have an idle
+            # command set, this will delay it.
+            timelineManager.delay_idle()
+            if self.display_content:
+                # One path now. The browser either opens the item's page
+                # (you can then drive it with the remote's arrows) or, in
+                # headless mode, renders it on the cast screen — it decides,
+                # because it is the only thing that owns the window.
+                try:
+                    self.display_content(
+                        client, arguments["Arguments"]["ItemId"])
+                except Exception:
+                    log.warning("Could not display remote content.",
+                                exc_info=True)
+        elif command in NAVIGATION_DICT:
+            playerManager.menu_action(NAVIGATION_DICT[command])
+        elif command in ("Mute", "Unmute"):
+            playerManager.set_mute(command == "Mute")
+        elif command == "TakeScreenshot":
+            playerManager.screenshot()
+        elif command == "ToggleFullscreen" or command is None:
+            # Currently when you hit the fullscreen button, no command is specified...
+            playerManager.toggle_fullscreen()
+
+    @bind("Playstate")
+    def play_state(self, _client: "JellyfinClient_type", _event_name, arguments: dict):
+        command = arguments.get("Command")
+        if command == "PlayPause":
+            playerManager.toggle_pause()
+            timelineManager.send_timeline()
+        elif command == "Pause":
+            playerManager.pause_if_playing()
+            timelineManager.send_timeline()
+        elif command == "Unpause":
+            playerManager.play_if_paused()
+            timelineManager.send_timeline()
+        elif command == "PreviousTrack":
+            playerManager.play_prev()
+        elif command == "NextTrack":
+            playerManager.play_next()
+        elif command == "Stop":
+            playerManager.stop()
+        elif command == "Seek":
+            playerManager.seek(
+                arguments.get("SeekPositionTicks") / 10000000, absolute=True
+            )
+
+    @bind("PlayPause")
+    def pause_play(self, _client: "JellyfinClient_type", _event_name, _arguments: dict):
+        playerManager.toggle_pause()
+        timelineManager.send_timeline()
+
+    #: Timer events the server pushes when a recording rule changes. There
+    #: is deliberately no "recording started" among them — the server has no
+    #: such message — which is why the Live TV screen also polls. These are
+    #: the four jellyfin-web subscribes to (see its emby-itemscontainer).
+    LIVE_TV_EVENTS = ("TimerCreated", "TimerCancelled",
+                      "SeriesTimerCreated", "SeriesTimerCancelled")
+
+    @bind("TimerCreated")
+    @bind("TimerCancelled")
+    @bind("SeriesTimerCreated")
+    @bind("SeriesTimerCancelled")
+    def live_tv_timers_changed(
+        self, client: "JellyfinClient_type", _event_name, _arguments: dict
+    ):
+        """A recording rule changed — possibly from another client entirely.
+
+        Only a nudge: the browser decides whether the screen it is showing
+        cares. Recording state is the one thing in the library that a *third
+        party* changes while you are looking at it, so a stale Schedule tab
+        is not a cosmetic problem — it is the screen telling you something
+        will be taped when it will not.
+        """
+        if self.live_tv_changed:
+            try:
+                self.live_tv_changed(client)
+            except Exception:
+                log.warning("live tv refresh hook failed", exc_info=True)
+
+    @bind("UserDataChanged")
+    def user_data_change(
+        self, client: "JellyfinClient_type", _event_name, arguments: dict
+    ):
+        """Watched / resume state moved for this user, somewhere.
+
+        Usually another client entirely -- finishing an episode on a phone, or
+        removing a film from Continue Watching in a browser (#560). The row is
+        not cosmetically stale afterwards; it offers to resume something
+        already watched.
+
+        Two consumers wanting opposite things: the **browser** takes only the
+        nudge and debounces, the **download catalog** takes the payload, since
+        ``arguments`` carries the new values and applying them costs no
+        request. Hence `arguments`, not `_arguments`.
+
+        **This does not fire for progress reports** -- not even the one that
+        finishes an item -- so a device killed mid-playback announces nothing,
+        which is the gap `_refresh_userdata` is left in the design to cover.
+        See docs/offline-sync.md section 2; `tests/e2e/test_offline_sync.py`
+        pins both halves against a real server.
+        """
+        try:
+            from .sync.manager import syncManager
+
+            # Which socket it arrived on, which makes the payload's own
+            # ServerId a cross-check rather than the only answer. A client
+            # does not carry its uuid; the registry is uuid -> client and
+            # `uuid_for_client` is the documented read back.
+            from .clients import clientManager
+
+            syncManager.apply_userdata_event(
+                arguments, clientManager.uuid_for_client(client))
+        except Exception:
+            # Never let the catalog take the browser's nudge down with it:
+            # a stale row is a cosmetic problem, a dropped event is the
+            # screen not updating at all.
+            log.debug("could not apply pushed userdata", exc_info=True)
+        if self.user_data_changed:
+            try:
+                self.user_data_changed(client)
+            except Exception:
+                log.warning("user data refresh hook failed", exc_info=True)
+
+    @bind("SyncPlayGroupUpdate")
+    def sync_play_group_update(
+        self, client: "JellyfinClient_type", _event_name, arguments: dict
+    ):
+        playerManager.syncplay.client = client
+        playerManager.syncplay.process_group_update(arguments)
+
+    @bind("SyncPlayCommand")
+    def sync_play_command(
+        self, client: "JellyfinClient_type", _event_name, arguments: dict
+    ):
+        playerManager.syncplay.client = client
+        playerManager.syncplay.process_command(arguments)
+
+
+eventHandler = EventHandler()

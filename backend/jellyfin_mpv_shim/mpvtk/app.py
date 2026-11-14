@@ -1,0 +1,1199 @@
+"""MpvtkApp: owns the mpv instance (or attaches to one), pushes scenes,
+and dispatches renderer events to Python callbacks.
+
+Backends mirror player.py: python-mpv-jsonipc (external mpv process) or
+python-mpv (libmpv in-process). The renderer script and the protocol are
+identical for both; only spawn/attach and event plumbing differ.
+"""
+
+import inspect
+import json
+import logging
+import os
+import queue
+import threading
+import time
+
+from . import theme
+from . import scaling
+from .layout import layout, set_metrics
+from .metrics import extend_metrics, measure_font
+
+log = logging.getLogger("mpvtk")
+#: Per-frame render timing. Its OWN logger so the in-app log viewer can
+#: exclude it by name (log_utils.RING_EXCLUDED): drawing the Logs tab emits
+#: one of these, which the tab would then see as new content and redraw for.
+render_log = logging.getLogger("mpvtk.render")
+
+_RENDERER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "renderer.lua")
+
+
+class _Unknown:
+    """"We do not know what the renderer holds" -- distinct from every value
+    a caller can push, which is why it is not None: `set_picture_pan(None)`
+    is a real request ("stop panning") and has to be sendable."""
+
+    def __repr__(self):
+        return "UNKNOWN"
+
+
+UNKNOWN = _Unknown()
+
+_SPAWN_OPTS = {
+    "idle": "yes",
+    "force_window": "yes",
+    "osc": "no",
+    "config": "no",
+    "load_scripts": "no",
+    "input_default_bindings": "no",
+    "cursor_autohide": "no",
+    "background_color": "#141414",
+    # A UI window resizes freely; without this mpv snaps the window back
+    # to the video aspect ratio (and browse mode has no video at all).
+    "keepaspect_window": "no",
+    "title": "mpvtk demo",
+}
+
+
+class JsonIpcBackend:
+    def __init__(self, geometry="1280x720"):
+        import python_mpv_jsonipc
+
+        self._cb = None
+        self._quit_cb = None
+        opts = dict(_SPAWN_OPTS)
+        opts["geometry"] = geometry
+        self.mpv = python_mpv_jsonipc.MPV(
+            start_mpv=True, quit_callback=self._on_quit, **opts
+        )
+
+        @self.mpv.on_event("client-message")
+        def _client_message(evt):
+            args = evt.get("args") or []
+            if self._cb:
+                self._cb(args)
+
+    def _on_quit(self):
+        if self._quit_cb:
+            self._quit_cb()
+
+    def command(self, *args):
+        self.mpv.command(*args)
+
+    def get_property(self, name):
+        # jsonipc: get_property is a raw IPC command with a return value
+        try:
+            return self.mpv.command("get_property", name)
+        except Exception:
+            return None
+
+    def on_client_message(self, cb):
+        self._cb = cb
+
+    def on_quit(self, cb):
+        self._quit_cb = cb
+
+    def stop(self):
+        try:
+            self.mpv.terminate()
+        except Exception:
+            pass
+
+
+class LibmpvBackend:
+    def __init__(self, geometry="1280x720"):
+        import mpv as libmpv
+
+        self._cb = None
+        self._quit_cb = None
+        opts = {k.replace("_", "-"): v for k, v in _SPAWN_OPTS.items()}
+        opts["geometry"] = geometry
+        self.mpv = libmpv.MPV(**opts)
+
+        @self.mpv.event_callback("client-message")
+        def _client_message(event):
+            if hasattr(event, "as_dict"):
+                event = event.as_dict()
+                if "args" in event:
+                    event["args"] = [d.decode("utf-8") for d in event["args"]]
+            if "event_id" in event:
+                args = event["event"]["args"]
+            else:
+                args = event.get("args") or []
+            if self._cb:
+                self._cb(args)
+
+        @self.mpv.event_callback("shutdown")
+        def _shutdown(event):
+            if self._quit_cb:
+                self._quit_cb()
+
+    def command(self, *args):
+        self.mpv.command(*args)
+
+    def get_property(self, name):
+        # slash paths ('user-data/...') can't use attribute access
+        try:
+            return self.mpv._get_property(name)
+        except Exception:
+            return None
+
+    def on_client_message(self, cb):
+        self._cb = cb
+
+    def on_quit(self, cb):
+        self._quit_cb = cb
+
+    def stop(self):
+        try:
+            self.mpv.terminate()
+        except Exception:
+            pass
+
+
+class AdoptBackend:
+    """Attach to an *existing* mpv handle instead of spawning a new one.
+
+    The production path: the browser shares the player's own mpv window.
+    The spawn backends above are for the standalone demo/selftest. Two
+    things differ from them:
+
+    - **The window is shared**, so ``stop()`` must NOT terminate the
+      handle -- it only stops pushing scenes.
+    - **A second client-message listener is added.** Both bindings keep
+      handlers in a collection, so ours coexists with the player's own
+      ``shim-*`` handler on the same stream.
+
+    ``ext`` mirrors ``player.is_using_ext_mpv`` and picks the image
+    transport (GUIDE.md section 5).
+    """
+
+    def __init__(self, mpv_handle, ext):
+        self.mpv = mpv_handle
+        self._ext = ext
+        self._cb = None
+        self._quit_cb = None
+
+        @self.mpv.event_callback("client-message")
+        def _client_message(event):
+            args = self._decode(event)
+            if args and self._cb:
+                self._cb(args)
+
+        @self.mpv.event_callback("shutdown")
+        def _shutdown(event=None):
+            # The player owns teardown; we just let our loop thread exit.
+            if self._quit_cb:
+                self._quit_cb()
+
+    def _decode(self, event):
+        # Mirror the two proven decode paths from the spawn backends /
+        # player.py: jsonipc hands us a plain dict; libmpv hands a struct
+        # that needs .as_dict() + a utf-8 decode of the byte args.
+        if self._ext:
+            if hasattr(event, "as_dict"):
+                event = event.as_dict()
+            return (event.get("args") if isinstance(event, dict) else None) or []
+        if hasattr(event, "as_dict"):
+            event = event.as_dict()
+            if "args" in event:
+                event["args"] = [d.decode("utf-8") for d in event["args"]]
+        if isinstance(event, dict):
+            if "event_id" in event and isinstance(event.get("event"), dict):
+                return event["event"].get("args") or []
+            return event.get("args") or []
+        return []
+
+    def command(self, *args):
+        self.mpv.command(*args)
+
+    def get_property(self, name):
+        try:
+            if self._ext:
+                return self.mpv.command("get_property", name)
+            return self.mpv._get_property(name)
+        except Exception:
+            return None
+
+    def on_client_message(self, cb):
+        self._cb = cb
+
+    def on_quit(self, cb):
+        self._quit_cb = cb
+
+    def stop(self):
+        # Shared handle: never terminate the player's mpv.
+        pass
+
+
+class MpvtkApp:
+    """Event loop: build(size) -> element tree, pushed to the renderer.
+
+    ``build`` is called on ready/resize and after any callback batch that
+    called invalidate(). Callbacks run on the loop thread.
+
+    Spawn its own mpv (``backend=``, demo/selftest) or attach to the
+    player's existing handle (``mpv_handle=`` + ``ext=``, production —
+    see :meth:`attach`).
+    """
+
+    #: Builds that raised and were swallowed to keep the previous frame.
+    #: Non-zero means a screen is frozen — see _render.
+    build_errors = 0
+    last_build_error = None
+
+    #: Re-raise a failed build instead of swallowing it. Off in production:
+    #: one bad view must not kill the UI loop. On whenever JMS_STRICT_BUILDS
+    #: is set, which tests/integration/run_integration.py does for every leg.
+    #:
+    #: Env-driven rather than set per test, so an integration test added
+    #: later is strict without anyone remembering to opt in — the failure
+    #: this guards is precisely one nobody thinks to check for.
+    #:
+    #: Class-level so instances built with __new__ (tests that skip the mpv
+    #: attach) still have them.
+    strict_builds = False
+
+    #: ``scene_check(nodes) -> [problem, ...]``, run before every push while
+    #: JMS_CHECK_SCENES is set (both test runners set it). The browser points
+    #: it at StripStore.dead_srcs: on libmpv an image src is a raw address
+    #: mpv copies from the moment the scene lands, so a freed one is a crash
+    #: on Windows and garbage on Linux -- never a missing picture a test
+    #: could see. Class-level for the reason given above.
+    scene_check = None
+    check_scenes = False
+
+    #: The artwork-repaint throttle's state, class-level for the same reason:
+    #: the run loop reads both on its very first pass, so an instance that
+    #: skipped __init__ would raise before it ever drew anything.
+    _dirty_soon = False
+    _last_render = 0.0
+
+    def __init__(self, backend="jsonipc", geometry="1280x720",
+                 mpv_handle=None, ext=None):
+        if mpv_handle is not None:
+            if ext is None:
+                raise ValueError(
+                    "attaching requires ext=<player.is_using_ext_mpv>"
+                )
+            self.backend = AdoptBackend(mpv_handle, ext=ext)
+            # In-process (libmpv) can take images via memory addresses;
+            # an external jsonipc mpv needs BGRA scratch files.
+            self.in_process = not ext
+        elif backend == "libmpv":
+            self.backend = LibmpvBackend(geometry)
+            self.in_process = True
+        else:
+            self.backend = JsonIpcBackend(geometry)
+            self.in_process = False
+        self.size = None
+        self._queue = queue.Queue()
+        self._handlers = {}
+        self._nodes = None  # last pushed scene, for node_rect()
+        # called with True/False when keyboard/remote navigation
+        # engages / a mouse press takes over (hide carousel arrows,
+        # switch affordances). Runs on the loop thread.
+        self.on_nav = None
+        # called with True/False when the playback HUD is summoned /
+        # auto-hides (see set_hud). Runs on the loop thread; the True
+        # call should flip the build to the HUD scene + invalidate.
+        self.on_hud = None
+        # called when the user activates the renderer-drawn standalone
+        # Skip Intro/Credits button while the HUD is idle (ENTER /
+        # remote Select / click). Should perform the skip.
+        self.on_hud_skip = None
+        #: The renderer paused/unpaused and wants Python to do it, because
+        #: a SyncPlay group is on -- see renderer.lua's state.pause_now.
+        self.on_pause = None
+        # called as ("vpan", evt) when a wheel notch ran off the end of a
+        # panned picture, and as ("vzoom", evt) on ctrl+wheel over one.
+        # Node-less for the same reason the picture is: it is mpv's video,
+        # not something in the scene. See set_picture_pan.
+        self.on_picture_gesture = None
+        #: Last pan model pushed, so an unchanged one costs no message.
+        self._picture_pan = None
+        #: Guards BOTH compare-and-skip pushes below (the pan model and the
+        #: key claim). One lock rather than two: they are the same mechanism
+        #: with the same two callers -- a build() on the loop thread, and a
+        #: yield or minimize reached from the player's thread -- and neither
+        #: is ever taken while the other is held.
+        self._pan_lock = threading.Lock()
+        # The mouse's forward button, windowless because history belongs to
+        # the app (GUIDE.md section 4). Its counterpart the back button
+        # needs no hook: it presses ESC.
+        self.on_forward = None
+        # called with an mpv key name when a key this app CLAIMED (see
+        # claim_keys) is pressed and nothing on screen has a better claim
+        # to it. Runs on the loop thread.
+        self.on_key = None
+        self._claimed_keys = ()
+        # Game controller, both on the loop thread. The pad's UI buttons are
+        # NOT routed here -- only the two things a synthetic keypress cannot
+        # express, a seek direction and a context-dependent nav action. See
+        # GUIDE.md section 4 and gamepad.py.
+        self.on_gamepad_seek = None
+        self.on_gamepad_nav = None
+        # called with no arguments immediately after a scene has been PUSHED
+        # to the renderer. Runs on the loop thread.
+        #
+        # "A scene was pushed" is NOT "build() ran", and anything freeing
+        # bitmaps the renderer may still have bound must key off this one: a
+        # build can run twice for one push (the metrics re-layout below) and
+        # can raise without pushing at all. See StripStore.
+        self.on_scene_pushed = None
+        # called (op, need) when a textbox copy/paste found no clipboard at
+        # all. ``need`` names the package to install, or None. At most once
+        # per renderer, so a handler can show a modal without nagging.
+        self.on_clipboard_error = None
+        # Only the env-driven one is re-read here; see the class body.
+        self.strict_builds = bool(os.environ.get("JMS_STRICT_BUILDS"))
+        self.check_scenes = bool(os.environ.get("JMS_CHECK_SCENES"))
+        self._metrics = None
+        self._dirty = False
+        # A repaint asked for by artwork arriving, which is worth drawing but
+        # not worth dropping everything for. See invalidate(soon=True).
+        self._dirty_soon = False
+        self._last_render = 0.0
+        self._build = None
+        self._debug_state = None
+        self._debug_evt = threading.Event()
+        self.ready = threading.Event()
+        self.backend.on_client_message(self._on_message)
+        self.backend.on_quit(lambda: self._queue.put(("__quit", None)))
+        self.backend.command("load-script", _RENDERER)
+
+    @classmethod
+    def attach(cls, mpv_handle, ext, **kw):
+        """Attach the UI to the player's existing mpv handle.
+
+        ``mpv_handle`` is ``playerManager.get_mpv()``; ``ext`` is
+        ``player.is_using_ext_mpv``. The renderer script is loaded into
+        that live mpv and scenes are pushed over the same connection —
+        no second window is opened."""
+        return cls(mpv_handle=mpv_handle, ext=ext, **kw)
+
+    # ------------------------------------------------------------ events
+
+    def _on_message(self, args):
+        if not args or args[0] != "mpvtk-event":
+            return
+        try:
+            evt = json.loads(args[1])
+        except (ValueError, IndexError):
+            log.warning("bad mpvtk-event: %r", args[1:])
+            return
+        self._queue.put(("evt", evt))
+
+    #: Minimum gap between renders driven by ``invalidate(soon=True)``.
+    #: A library grid asks for a hundred thumbnails at once and six decode
+    #: workers deliver them one at a time, each one waking the loop -- 43
+    #: full builds for one screenful, every one of them laying out the same
+    #: hundred tiles to change the picture on a few. At this interval the
+    #: same batch costs a handful, and no poster waits longer than a frame
+    #: or two beyond its decode.
+    ART_RENDER_INTERVAL = 0.15
+
+    def invalidate(self, soon=False):
+        """Request a re-render. Thread-safe: callable from background
+        workers (thumbnail pool, download progress, playback timers) —
+        wakes the loop instead of waiting for the next renderer event.
+
+        ``soon`` marks a repaint that only makes a picture appear -- artwork
+        landing from the decode pool. Those are throttled to
+        ``ART_RENDER_INTERVAL`` and coalesced, because they arrive in
+        hundreds and each one costs a full build of the whole screen. Any
+        ordinary invalidate still renders on the next pass, and takes the
+        pending artwork with it.
+        """
+        if soon:
+            self._dirty_soon = True
+        else:
+            self._dirty = True
+        self._queue.put(("wake", None))
+
+    @property
+    def logical_size(self):
+        """Surface size in LOGICAL pixels -- what views build against.
+
+        Handing views this rather than the physical size is what keeps
+        everything derived from it logical too, so e.g. hud.py's
+        responsive sz() composes with the user scale instead of applying
+        on top of it."""
+        if self.size is None:
+            return None
+        return scaling.logical_size(self.size)
+
+    def _push_metrics(self):
+        """Measured glyph advances -> layout engine + renderer, so both
+        sides agree on real text widths (falls back to the heuristic
+        table when no font is measurable)."""
+        m = measure_font()
+        if not m:
+            return
+        self._metrics = m
+        set_metrics(m["widths"], m.get("kern"))
+        self.backend.command(
+            "script-message", "mpvtk-metrics", json.dumps(m)
+        )
+
+    def push_theme(self):
+        """Forward the accent palette to the renderer.
+
+        Python-side widgets read theme.ACCENT when they're built, but the
+        renderer draws the focused textbox border, the open dropdown border
+        and the slider fill itself, so it needs its own copy. Sent on ready
+        and again by set_accent()."""
+        self.backend.command(
+            "script-message", "mpvtk-theme", json.dumps(theme.palette())
+        )
+
+    def push_scale(self):
+        """Forward the UI scale to the renderer.
+
+        Nodes arrive already-physical, but the renderer has pixel
+        constants of its own (wheel step, slider padding, the idle Skip
+        button, tooltip offsets) that no scene node covers."""
+        # `t` and `m` as well as `s`: text the renderer composes itself
+        # (tooltip, TextBox menu, scrub bubble, idle Skip button) passes
+        # through no widget, so it gets neither the text multiplier nor the
+        # readability floor from theme. The Skip button is the sharp case --
+        # its Python and Lua copies must stay identical or the label changes
+        # size when the HUD hides.
+        from . import theme
+
+        self.backend.command(
+            "script-message", "mpvtk-scale",
+            json.dumps({"s": scaling.scale(),
+                        "t": theme.text_factor(),
+                        "m": theme.min_size()})
+        )
+
+    def push_overlay_z(self):
+        """Whether our ASS should outrank other scripts'.
+
+        Only "Custom OSC" wants it: there the player UI is a script we never
+        see, and uosc draws its whole self -- idle screen included -- at
+        z=2000 while we sit at 0, so an opaque full-window fill of ours
+        still left its "Drop files or URLs to play here" on screen. Every
+        other style leaves the order alone, because 2000 is also mpv's
+        console with a selectable list up. The z landscape and the
+        measurement are in renderer.lua next to OSD_Z_HOSTILE.
+
+        Resolved rather than read raw -- `osc_style` can hold a legacy alias.
+        Pushed on ready; the setting needs a restart to take effect anyway,
+        since it also decides options mpv is constructed with.
+        """
+        from ..mpv_options import resolve_osc_style
+
+        try:
+            hostile = resolve_osc_style() == "custom"
+        except Exception:
+            hostile = False
+        self.backend.command(
+            "script-message", "mpvtk-z", "yes" if hostile else "no"
+        )
+
+    def push_gamepad(self):
+        """Forward the game controller binding table to the renderer.
+
+        Sent on ready and whenever the button layout setting changes, which
+        is what lets a swap apply without a restart -- unlike
+        ``input_gamepad`` itself, which mpv reads once at startup.
+
+        Pushed unconditionally rather than gated on ``input_gamepad``: the
+        bindings are inert without it, and a user turning the setting on has
+        to restart anyway, so a gate could make nothing correct.
+        """
+        from ..conf import select_key, settings
+        from ..gamepad import bindings
+
+        self.backend.command(
+            "script-message", "mpvtk-gamepad",
+            json.dumps(bindings(
+                bool(getattr(settings, "gamepad_swap_confirm", False)),
+                select_key()))
+        )
+
+    def push_select_key(self):
+        """Forward the key that activates whatever the UI has focused.
+
+        The third producer of ``conf.select_key`` -- the keyboard. The
+        gamepad's Confirm and a Jellyfin remote's Select synthesize a
+        keypress of the same name, so this has to be pushed *with*
+        :meth:`push_gamepad`, never instead of it: the pad's binding
+        table carries the key as a literal.
+
+        Its own message rather than a field on the ``mpvtk-hud`` opts
+        blob, which is where the HUD's own keyboard policy travels: that
+        blob only arrives on HUD engage, while the same bindings are
+        installed for browsing by ``mpvtk-active``, which carries no opts
+        at all. See docs/archive/ISSUES_2026-09.md (#717).
+        """
+        from ..conf import select_key
+
+        self.backend.command(
+            "script-message", "mpvtk-select-key", select_key()
+        )
+
+    def push_browse_keys(self):
+        """Tell the renderer whether to swallow mpv's own keyboard
+        shortcuts while the library is on screen (``browse_block_keys``,
+        #730).
+
+        Its own message rather than a field on the ``mpvtk-hud`` opts blob,
+        for the reason :meth:`push_select_key` gives: that blob only arrives
+        on HUD engage, and this governs BROWSE, whose input is installed by
+        ``mpvtk-active``, which carries no opts at all.
+
+        Safe to re-push live in either direction -- the renderer binds or
+        removes one key binding and holds no derived state.
+        """
+        from ..conf import settings
+
+        self.backend.command(
+            "script-message", "mpvtk-browse-keys",
+            "yes" if settings.browse_block_keys else "no"
+        )
+
+    def push_scroll_config(self):
+        """Forward the wheel step (px per notch) and what ``scroll_mode``
+        means to the renderer. All are safe to re-push live: the renderer
+        just re-derives its step and thumb-tracking, no cached state to drop.
+        Sent on ready and again whenever the Library Browser settings change.
+
+        The mode is one setting here and two flags there, because the
+        renderer's two mechanisms really are separate: ``snapped`` changes
+        what a NOTCH moves, ``force_snap`` changes what is DRAWN between
+        notches. Only three of their four combinations mean anything -- a
+        notch that lands on a row boundary is already drawn on one -- so the
+        setting offers three and this maps them back.
+
+        **``force_snap`` is the user's setting and nothing else.** It is
+        deliberately not OR'd with "this is an external mpv": the renderer
+        measures its own frames now, and forcing it there is what would stop
+        that measurement being tested where the cost is highest. If external
+        scrolling stutters, fix the measurement, not this clause.
+        """
+        from ..conf import SCROLL_MODES, settings
+
+        mode = getattr(settings, "scroll_mode", SCROLL_MODES[0])
+        if mode not in SCROLL_MODES:
+            # A hand-edited typo falls back to the default rather than to a
+            # mitigation. Worth stating because the obvious spelling of this
+            # test -- `force_snap = mode != "continuous"` -- fails the other
+            # way: "Continuous" with the capital the dropdown DISPLAYS would
+            # quantize permanently while Settings went on showing the mode
+            # the user thought they had.
+            mode = SCROLL_MODES[0]
+        self.backend.command(
+            "script-message", "mpvtk-wheel", json.dumps({
+                "px": int(getattr(settings, "scroll_wheel_pixels", 80) or 80),
+                "snapped": mode == "row",
+                "force_snap": mode != "continuous",
+            })
+        )
+
+    def _resolve_scale(self):
+        """settings.ui_scale, or the display's own factor when unset.
+
+        Read once, on ready: rescaling live would mean dropping every
+        cached bitmap, and StripStore.clear() is only safe on the libmpv
+        path once mpv is dead."""
+        from ..conf import settings
+
+        want = getattr(settings, "ui_scale", None)
+        if want is None:
+            try:
+                want = self.backend.get_property("display-hidpi-scale")
+            except Exception:
+                # Not every VO/backend exposes it; 1.0 is the honest
+                # default rather than a guess.
+                want = None
+        s = scaling.set_scale(want if want else 1.0)
+        if s != 1.0:
+            log.info("UI scale: %gx", s)
+
+    @staticmethod
+    def _scene_texts(nodes):
+        texts = []
+        for n in nodes:
+            for key in ("text", "ph"):
+                v = n.get(key)
+                if v:
+                    texts.append(v)
+            items = n.get("items")
+            if items:
+                texts.extend(items)
+        return texts
+
+    def _extend_metrics(self, texts):
+        """On-demand glyph/pair measurement for novel text (full
+        unicode can't be pre-enumerated). Returns True if the tables
+        grew — callers then re-push/re-layout."""
+        if not self._metrics or not texts:
+            return False
+        if not extend_metrics(self._metrics, texts):
+            return False
+        m = self._metrics
+        set_metrics(m["widths"], m.get("kern"))
+        self.backend.command(
+            "script-message", "mpvtk-metrics", json.dumps(m)
+        )
+        return True
+
+    def _render(self):
+        if self.size is None or self._build is None:
+            return
+        # Cleared BEFORE the build, never after, so an invalidate() landing
+        # from a foreign thread mid-render leaves the flag set and earns its
+        # own frame. The cost is at worst one redundant render. This is the
+        # primitive mpvtk_browser's write-then-invalidate() contract rests
+        # on: tests/test_mpvtk_framework.py:TestInvalidateIsNotLost.
+        self._dirty = False
+        self._dirty_soon = False
+        t0 = time.perf_counter()
+        self._last_render = t0
+        try:
+            tree = self._build(self.logical_size)
+        except Exception as exc:
+            # One exception in any view would otherwise kill the whole UI
+            # loop, and views index into route state populated
+            # asynchronously. Keep the last good scene up and let the next
+            # invalidate retry.
+            #
+            # RECORDED, not just logged. Keeping the previous frame is right
+            # in production and disastrous under test -- a build that raises
+            # every frame is indistinguishable from a UI that never changed,
+            # so a frozen screen passes. `strict_builds` makes it a failure
+            # for anything driving a real loop; the counter is for callers
+            # that would rather assert after the fact.
+            self.build_errors += 1
+            self.last_build_error = exc
+            log.error("scene build failed; keeping the previous frame",
+                      exc_info=True)
+            if self.strict_builds:
+                raise
+            return
+        t1 = time.perf_counter()
+        lsize = self.logical_size
+        nodes, handlers = layout(tree, *lsize)
+        if self._extend_metrics(self._scene_texts(nodes)):
+            # novel glyphs got measured: lay out once more with the
+            # accurate widths (builds cost ~0.3ms; this is rare)
+            nodes, handlers = layout(self._build(lsize), *lsize)
+        # Logical -> physical. The scene's own w/h stay physical: the
+        # renderer pins the ASS PlayRes to them, and overlay bitmaps
+        # composite in real pixels regardless.
+        scaling.scale_scene(nodes)
+        if self.check_scenes and self.scene_check is not None:
+            dead = self.scene_check(nodes)
+            if dead:
+                raise AssertionError(
+                    "scene names freed or mis-sized bitmaps: %s" % dead[:5])
+        self._handlers = handlers
+        self._nodes = nodes
+        scene = {"v": 1, "w": self.size[0], "h": self.size[1], "nodes": nodes}
+        t2 = time.perf_counter()
+        self.backend.command(
+            "script-message", "mpvtk-scene", json.dumps(scene)
+        )
+        if self.on_scene_pushed is not None:
+            try:
+                self.on_scene_pushed()
+            except Exception:
+                log.debug("on_scene_pushed handler failed", exc_info=True)
+        t3 = time.perf_counter()
+        # Per-frame timing: useful while the renderer was being built, pure
+        # noise in a normal log now. Debug-level so it can still be turned
+        # on when something is actually slow -- and on `render_log`, which
+        # the in-app viewer excludes, because drawing the Logs tab is what
+        # emits this line.
+        render_log.debug(
+            "render: build %.1fms, layout %.1fms, push %.1fms (%d nodes)",
+            (t1 - t0) * 1000,
+            (t2 - t1) * 1000,
+            (t3 - t2) * 1000,
+            len(nodes),
+        )
+
+    @staticmethod
+    def _wants_mods(fn):
+        """A click handler opts into the modifier payload by declaring a
+        required positional parameter (``def f(mods)``, ``lambda m: …``).
+        Zero-arg handlers and default-arg lambdas (``lambda i=item: …``)
+        keep the bare call — a default first parameter is almost always
+        a captured loop variable, not a mods slot."""
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return False
+        for p in sig.parameters.values():
+            if p.kind == p.VAR_POSITIONAL:
+                return True
+            if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD):
+                return p.default is p.empty
+            return False
+        return False
+
+    def _dispatch(self, evt):
+        t = evt.get("t")
+        if t in ("ready", "resize"):
+            self.size = (evt["w"], evt["h"])
+            self._dirty = True
+            if t == "ready":
+                self._resolve_scale()
+                self._push_metrics()
+                self.push_theme()
+                self.push_scale()
+                self.push_scroll_config()
+                self.push_gamepad()
+                self.push_select_key()
+                self.push_browse_keys()
+                self.push_overlay_z()
+                self.ready.set()
+            return
+        if t == "debug_state":
+            self._debug_state = evt
+            self._debug_evt.set()
+            return
+        if t == "nav":
+            if self.on_nav is not None:
+                try:
+                    self.on_nav(bool(evt.get("active")))
+                except Exception:
+                    log.exception("on_nav handler failed")
+            return
+        if t == "hud":
+            if self.on_hud is not None:
+                try:
+                    self.on_hud(bool(evt.get("active")))
+                except Exception:
+                    log.exception("on_hud handler failed")
+            self._dirty = True
+            return
+        if t == "pause":
+            if self.on_pause is not None:
+                try:
+                    self.on_pause()
+                except Exception:
+                    log.exception("on_pause handler failed")
+            return
+        if t == "hudskip":
+            if self.on_hud_skip is not None:
+                try:
+                    self.on_hud_skip()
+                except Exception:
+                    log.exception("on_hud_skip handler failed")
+            return
+        if t == "gpseek":
+            if self.on_gamepad_seek is not None:
+                try:
+                    self.on_gamepad_seek(evt.get("dir") or "")
+                except Exception:
+                    log.exception("on_gamepad_seek handler failed")
+            return
+        if t == "gpnav":
+            if self.on_gamepad_nav is not None:
+                try:
+                    self.on_gamepad_nav(evt.get("a") or "")
+                except Exception:
+                    log.exception("on_gamepad_nav handler failed")
+            return
+        if t == "key":
+            if self.on_key is not None:
+                try:
+                    self.on_key(evt.get("key") or "")
+                except Exception:
+                    log.exception("on_key handler failed")
+            return
+        if t == "forward":
+            if self.on_forward is not None:
+                try:
+                    self.on_forward()
+                except Exception:
+                    log.exception("on_forward handler failed")
+            return
+        if t == "clipboard":
+            if self.on_clipboard_error is not None:
+                try:
+                    self.on_clipboard_error(evt.get("op", ""),
+                                            evt.get("need"))
+                except Exception:
+                    log.exception("on_clipboard_error handler failed")
+            return
+        if t in ("change", "submit", "commit"):
+            # typed text may contain glyphs we've never measured; the
+            # metrics push makes the renderer re-render with real widths
+            v = evt.get("value")
+            if isinstance(v, str):
+                self._extend_metrics([v])
+        if t in ("vpan", "vzoom"):
+            # Picture gestures carry no node: the picture is mpv's, not a
+            # node in any scene, so there is nothing for the handler
+            # registry to key on. Delivered to the app the way `key` and
+            # `forward` are.
+            hook = self.on_picture_gesture
+            if hook is not None:
+                try:
+                    hook(t, evt)
+                except Exception:
+                    log.exception("mpvtk picture gesture failed")
+            return
+        h = self._handlers.get(evt.get("id"), {})
+        fn = h.get(t)
+        if fn is None:
+            return
+        try:
+            if t == "click":
+                if self._wants_mods(fn):
+                    fn({
+                        "shift": bool(evt.get("shift")),
+                        "ctrl": bool(evt.get("ctrl")),
+                    })
+                else:
+                    fn()
+            elif t in ("change", "submit", "commit", "hover"):
+                fn(evt.get("value", ""))
+            elif t in ("dbl", "cancel", "hover_end"):
+                fn()
+            elif t == "select":
+                fn(evt.get("index", 0), evt.get("value"))
+            elif t == "scroll":
+                # The renderer scrolls in physical pixels; views window
+                # their content against logical row heights.
+                fn(scaling.dip(evt.get("offset", 0)),
+                   scaling.dip(evt.get("max", 0)))
+            elif t == "context":
+                # Mouse position, likewise physical on the wire.
+                fn(scaling.dip(evt.get("x", 0)),
+                   scaling.dip(evt.get("y", 0)))
+            elif t == "dismiss":
+                fn()
+        except Exception:
+            log.exception("mpvtk handler for %s failed", evt)
+
+    def _art_due_in(self):
+        """Seconds until a pending artwork repaint may run, or None when
+        there is none waiting."""
+        if not self._dirty_soon:
+            return None
+        return max(0.0, self.ART_RENDER_INTERVAL
+                   - (time.perf_counter() - self._last_render))
+
+    def _wait_for(self):
+        """How long the loop may block on its queue."""
+        due = self._art_due_in()
+        return 0.5 if due is None else min(0.5, due)
+
+    def _render_if_due(self):
+        """Render if anything asked for one and it is allowed to run now."""
+        if self._dirty:
+            self._render()
+            return
+        due = self._art_due_in()
+        if due is not None and due <= 0:
+            self._render()
+
+    def run(self, build):
+        """Blocks until mpv quits (window closed / quit())."""
+        self._build = build
+        # try/finally, not a stop() after the loop: the coalescing drain
+        # below used to `return` on __quit, skipping backend.stop() entirely
+        # and leaking the backend's observers/socket. Which of the two reads
+        # the __quit is a pure race, so the leak was intermittent.
+        try:
+            while True:
+                try:
+                    # Wake early enough to serve a throttled artwork repaint
+                    # when it comes due: the pool goes quiet between batches,
+                    # and a poster that has already decoded should not wait
+                    # on the next unrelated event to be drawn.
+                    kind, evt = self._queue.get(timeout=self._wait_for())
+                except queue.Empty:
+                    self._render_if_due()
+                    continue
+                except KeyboardInterrupt:
+                    break
+                if kind == "__quit":
+                    break
+                if kind == "evt":
+                    self._dispatch(evt)
+                # coalesce whatever else is queued before re-rendering
+                quitting = False
+                while True:
+                    try:
+                        kind, evt = self._queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    if kind == "__quit":
+                        quitting = True
+                        break
+                    if kind == "evt":
+                        self._dispatch(evt)
+                if quitting:
+                    break
+                self._render_if_due()
+        finally:
+            self.backend.stop()
+
+    def quit(self):
+        self._queue.put(("__quit", None))
+
+    # -------------------------------------------------- test/debug hooks
+
+    def debug(self, **cmd):
+        self.backend.command(
+            "script-message", "mpvtk-debug", json.dumps(cmd)
+        )
+
+    def debug_state(self, timeout=2.0):
+        self._debug_evt.clear()
+        self.debug(cmd="state")
+        self._debug_evt.wait(timeout)
+        return self._debug_state
+
+    def screenshot(self, path):
+        self.backend.command("screenshot-to-file", path, "window")
+
+    def set_accent(self, accent, **kw):
+        """Set the toolkit accent and push it to the renderer. Equivalent to
+        ``mpvtk.theme.set_accent`` plus :meth:`push_theme`."""
+        theme.set_accent(accent, **kw)
+        self.push_theme()
+        self.invalidate()
+
+    def set_active(self, active):
+        """Suspend/resume the in-mpv renderer.
+
+        Only meaningful for an attached app: it gets the renderer entirely
+        out of another OSC's way, which pushing an empty scene does not do
+        (GUIDE.md section 9).
+
+        **Forgetting the caches is part of it.** The renderer drops its key
+        claim and its pan model on its own when it goes inactive, and never
+        says so; both of ours are compare-and-skip caches, so after a window
+        close and a tray reopen they would answer "already pushed" about a
+        claim that no longer exists — and a reader would come back with
+        LEFT/RIGHT walking the focus ring and SPACE toggling mpv's pause.
+
+        **`UNKNOWN`, not empty, and only that is the difference between the
+        two directions.** The renderer drops those things when it goes
+        INACTIVE. On the way back IN it drops nothing -- `mpvtk-active yes`
+        never calls `keyclaim.set({})` -- so recording "we have pushed the
+        empty set" is a claim about the renderer that is false. The next
+        genuine release then compares equal and is skipped, and the keys
+        stay force-bound with nothing driving them.
+
+        Reported: play music (which claims 9/0/m/SPACE so the key block
+        cannot swallow them), STOP it, then start a video -- SPACE and m are
+        dead for the video while `p`, which is never claimed, still works.
+        Stopping is what routes through `enter_browse` -> `set_active(True)`;
+        going straight from music to a video releases correctly, because the
+        cache still held the real value.
+
+        A sentinel rather than leaving the cache alone: after a renderer
+        restart it is stale either way, and "unknown" costs one extra push.
+        """
+        # Under the same lock the two pushes use, so a claim or a pan model
+        # already in flight cannot store itself over the forgetting.
+        with self._pan_lock:
+            self._claimed_keys = UNKNOWN
+            self._picture_pan = UNKNOWN
+        self.backend.command(
+            "script-message", "mpvtk-active", "yes" if active else "no"
+        )
+
+    def set_hud(self, on, opts=None):
+        """Enter/leave the playback-HUD lifecycle (attached-but-idle).
+
+        ``opts`` (``grab``/``key``/``hide``/``mode``/``shadow``) is
+        everything the renderer owns about the HUD and is re-sent on every
+        engage, which is what lets a settings change stick without a
+        restart. The lifecycle and the full opts contract are in
+        `mpvtk/GUIDE.md` section 9."""
+        args = ["script-message", "mpvtk-hud", "yes" if on else "no"]
+        if on and opts is not None:
+            args.append(json.dumps(opts))
+        self.backend.command(*args)
+
+    def focus(self, node_id=None):
+        """Put spatial-nav focus somewhere, for a gesture that named a
+        destination rather than a direction.
+
+        With ``node_id``: that node. Without one: whatever the next scene
+        marks ``autofocus``. Either form is parked until the node appears
+        and dropped as soon as the user steers -- GUIDE.md section 3.
+        """
+        self.backend.command(
+            "script-message", "mpvtk-focus",
+            json.dumps({"id": node_id} if node_id else {}),
+        )
+
+    def claim_keys(self, keys=()):
+        """Take over a set of mpv keys for as long as this page needs them.
+
+        For a page whose gesture is neither "move focus" nor "scroll" and so
+        cannot be a widget. Claimed keys arrive as ``on_key(name)``.
+
+        **A claim is scoped by whoever set it and must be dropped** -- call
+        it with no arguments when that page goes away. Precedence, and what
+        the renderer drops on its own, are in GUIDE.md section 3.
+        """
+        keys = tuple(keys or ())
+        # Under the lock, and stored only once the push has actually gone.
+        #
+        # The STORE ORDER is about failure: a compare-and-skip cache that
+        # records a send which RAISED answers "already pushed" for every retry
+        # after it -- and the browser retries this every frame, catching and
+        # logging the failure (mpvtk_browser/app.py `_claim_page_keys`), so
+        # the page stays up with its keys silently dropped for as long as it
+        # is on screen. Same shape as the caches `set_active` has to forget.
+        #
+        # The LOCK is about the two threads: `_claim_page_keys` pushes from
+        # build() on the loop thread while `_release_page_grabs` drops the
+        # claim from a yield or a minimize, which arrive on the player's
+        # thread (docs/browser-shell.md section 2). Unlocked, the compare, the
+        # send and the store interleave: both callers can pass the compare
+        # against the same old value, and then whichever stores last owns the
+        # cache while the other owned the wire -- so the cache says "already
+        # pushed" about a claim the renderer does not have, which is the same
+        # silently-dead-keys failure by a different route. `set_picture_pan`
+        # has always been locked for exactly this.
+        with self._pan_lock:
+            if keys == self._claimed_keys:
+                return
+            self.backend.command(
+                "script-message", "mpvtk-keys",
+                json.dumps({"keys": list(keys)}),
+            )
+            self._claimed_keys = keys
+
+    def set_picture_pan(self, config=None):
+        """Hand the renderer the gesture model for a displayed picture.
+
+        ``config`` is ``{"unitx", "unity", "minx", "maxx", "miny", "maxy",
+        "step"}`` or None to stop; while it is set the drag and the wheel
+        move mpv's ``video-pan-x/y`` in the renderer, with no round trip.
+        The units are the *displayed picture's* pixel size, not the
+        window's, and the clamp has to be re-sent whenever the page size or
+        the reader's chrome moves. GUIDE.md section 9; the measurement is in
+        ``mpvtk_browser/gateway/picture.py``.
+        """
+        payload = dict(config or {})
+        payload["on"] = bool(config)
+        # Under the lock: the compare, the store and the send are one
+        # decision, and this is reached from the loop thread (a render) and
+        # from a pool worker (a page landing). Interleaved, two callers can
+        # both see "unchanged" against a value neither of them sent, and
+        # the renderer keeps panning against a stale clamp.
+        with self._pan_lock:
+            if payload == self._picture_pan:
+                return
+            # Sent before it is stored, for the reason `claim_keys` gives:
+            # a cache that remembers a failed send stops retrying it.
+            self.backend.command(
+                "script-message", "mpvtk-vpan", json.dumps(payload),
+            )
+            self._picture_pan = payload
+
+    def summon_hud(self):
+        """Wake an idle HUD as if a nav key were pressed (no pause
+        toggle). No-op unless the renderer is in HUD mode and hidden."""
+        self.backend.command(
+            "script-message", "mpvtk-hud-summon", "nav"
+        )
+
+    def set_hud_skip(self, label):
+        """Tell the renderer whether a skippable segment is live
+        (falsy = none). While the HUD is idle, entering a segment shows
+        a standalone renderer-drawn skip button for a few seconds
+        (pointer movement re-shows it); ENTER / remote Select / a click
+        on it fires ``on_hud_skip``. While summoned, the scene's own
+        button is authoritative and this only tracks the label."""
+        self.backend.command(
+            "script-message", "mpvtk-hud-skip", label or ""
+        )
+
+    def scroll(self, node_id, direction):
+        """Page a scroll container (by id) by ~a viewport along its axis.
+
+        The blunt form, for content with no item grid to align to. A
+        carousel of fixed-pitch tiles wants :meth:`scroll_to` instead, so
+        a page lands on a tile boundary rather than mid-poster."""
+        self.backend.command(
+            "script-message", "mpvtk-scroll",
+            json.dumps({"id": node_id, "dir": direction}),
+        )
+
+    def scroll_to(self, node_id, offset, ms=0):
+        """Scroll a container to an absolute ``offset`` (logical px).
+
+        ``ms`` eases into the target over that many milliseconds instead of
+        jumping. The easing runs in the renderer, not here: it has to step at
+        the render cadence, and a Python round-trip per frame would make it
+        both slower and jerkier than the jump it replaces.
+
+        The renderer clamps, so a caller may aim past either end and let it
+        settle — but it will not report back that it did, which is why the
+        page buttons decide their own disabled state rather than asking."""
+        self.backend.command(
+            "script-message", "mpvtk-scroll",
+            json.dumps({"id": node_id, "to": scaling.px(offset), "ms": ms}),
+        )
+
+    def node_rect(self, node_id):
+        """Laid-out geometry of a node from the LAST pushed scene —
+        layout feedback for the next build (one frame stale by
+        construction, which is fine for stable geometry like header
+        heights above a virtualized list). Returns the scene node dict
+        (x/y/w/h; content-space coords inside a scroll, plus cw/ch on
+        scroll nodes) or None."""
+        for n in self._nodes or []:
+            if n["id"] == node_id:
+                return self._logical_rect(n)
+        return None
+
+    @staticmethod
+    def _logical_rect(node):
+        """Scene nodes are physical (scale_scene ran before the push), but
+        callers use these to position widgets, which is logical work."""
+        if scaling.scale() == 1.0:
+            return node
+        out = dict(node)
+        for key in ("x", "y", "w", "h", "cw", "ch"):
+            if out.get(key) is not None:
+                out[key] = scaling.dip(out[key])
+        return out
+
+    def scroll_offsets(self):
+        """Synchronous snapshot of the renderer's live scroll offsets
+        ``{id: px}`` — read it at build() time to window virtualized
+        content tightly instead of trailing the throttled ``on_scroll``
+        event.
+
+        ``{}`` and ``None`` mean different things and callers rely on the
+        distinction. ``{}`` is an *answer*: the renderer is there and
+        nothing is scrolled. ``None`` means it could not be asked at all
+        (mpv < 0.36 has no ``user-data``), so a caller keeping its own copy
+        of scroll positions has to fall back to that. Conflating the two
+        made the fallback outvote the renderer, which is how a container
+        that leaves the scene and comes back got windowed at the offset it
+        had before it left — see ``ScrollState.offset``.
+        """
+        v = self.backend.get_property("user-data/mpvtk/scroll")
+        if not isinstance(v, dict):
+            return None
+        # libmpv hands node-map values back as strings and jsonipc as
+        # numbers, so coerce rather than trusting either. A value that will
+        # not convert is dropped, not defaulted to 0 — pretending a
+        # container is at the top is worse than saying nothing about it.
+        out = {}
+        for k, px in v.items():
+            try:
+                out[k] = float(px)
+            except (TypeError, ValueError):
+                continue
+        if scaling.scale() == 1.0:
+            return out
+        # Physical on the renderer side; logical for everyone here.
+        return {k: scaling.dip(px) for k, px in out.items()}
