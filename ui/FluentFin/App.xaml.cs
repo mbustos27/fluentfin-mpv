@@ -133,6 +133,8 @@ public partial class App : Application
 			services.AddSingleton<GlobalCommands>();
 			services.AddSingleton<DialogCommands>();
 
+			services.AddSingleton<HomeCache>(); // fluentfin-mpv: the last home page, shown at once (HomeViewModel)
+
 			// Views and ViewModels
 			services.AddTransient<ShellViewModel>();
 			services.AddSingleton<IMainWindowViewModel, MainViewModel>();

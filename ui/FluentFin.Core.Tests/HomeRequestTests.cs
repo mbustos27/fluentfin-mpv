@@ -13,9 +13,9 @@ using Moq;
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// fluentfin-mpv: what sign-in and the home page ask a server (a fake one on localhost, a fake token): every home row goes
-/// out together, not one round trip after another; the user's views are read once and shared, and read again when they
-/// may have changed.
+/// fluentfin-mpv: what sign-in and the home page ask a server (a fake one on localhost, a fake token): the sign-in requests
+/// and every home row go out together, not one round trip after another; the user's views are read once and shared, and
+/// read again when they may have changed.
 /// </summary>
 [Collection(SessionInfoCollection.Name)]
 public sealed class HomeRequestTests : IAsyncLifetime
@@ -29,6 +29,7 @@ public sealed class HomeRequestTests : IAsyncLifetime
 
 	private readonly ConcurrentFakeJellyfin _server = new();
 	private readonly ManualClock _clock = new();
+	private readonly string _folder = Path.Combine(Path.GetTempPath(), "fluentfin-home-test-" + Guid.NewGuid().ToString("N"));
 	private JellyfinClient _client = null!;
 
 	static HomeRequestTests() => ReactiveUI.Builder.RxAppBuilder.CreateReactiveUIBuilder().BuildApp();
@@ -57,11 +58,15 @@ public sealed class HomeRequestTests : IAsyncLifetime
 	public Task DisposeAsync()
 	{
 		_server.Dispose();
+		if (Directory.Exists(_folder))
+		{
+			Directory.Delete(_folder, recursive: true);
+		}
 		return Task.CompletedTask;
 	}
 
-	private HomeViewModel NewHome() =>
-		new(_client, Mock.Of<IObservable<IOutboundWebSocketMessage>>(), new GlobalCommands(Mock.Of<INavigationServiceCore>(), _client, Mock.Of<INavigationViewServiceCore>(), Mock.Of<ISettings>()));
+	private HomeViewModel NewHome(HomeCache cache) =>
+		new(_client, Mock.Of<IObservable<IOutboundWebSocketMessage>>(), new GlobalCommands(Mock.Of<INavigationServiceCore>(), _client, Mock.Of<INavigationViewServiceCore>(), Mock.Of<ISettings>()), cache);
 
 	private async Task SignIn()
 	{
@@ -84,7 +89,8 @@ public sealed class HomeRequestTests : IAsyncLifetime
 		var gate = _server.Hold(5, x => x.Path is "/UserItems/Resume" or "/Shows/NextUp" or "/Items/Latest", TimeSpan.FromSeconds(2));
 
 		using var ui = new UiThread();
-		var home = await ui.Invoke(() => NewHome());
+		using var cache = new HomeCache(_folder, new System.Reactive.Subjects.Subject<IOutboundWebSocketMessage>(), new CoreListLogger<HomeCache>(), _clock);
+		var home = await ui.Invoke(() => NewHome(cache));
 		await ui.Run(() => home.OnNavigatedTo(null!));
 
 		// Continue Watching, Next Up and a Latest per library but Music, all in flight together
@@ -95,6 +101,13 @@ public sealed class HomeRequestTests : IAsyncLifetime
 		Assert.Equal(["Movies", "Shows"], await ui.Invoke(() => home.RecentItems.Select(x => x.Library.Name!).ToList()));
 		Assert.Equal(["Movie 1", "Movie 2"], await ui.Invoke(() => home.RecentItems[0].Items.Select(x => x.Dto.Name!).ToList()));
 		Assert.False(await ui.Invoke(() => home.IsLoading));
+
+		// Back to Home a moment later: the same page, and the server is asked nothing
+		var asked = _server.ApiRequests.Count;
+		var home2 = await ui.Invoke(() => NewHome(cache));
+		await ui.Run(() => home2.OnNavigatedTo(null!));
+		Assert.Equal(["Movies", "Shows"], await ui.Invoke(() => home2.RecentItems.Select(x => x.Library.Name!).ToList()));
+		Assert.Equal(asked, _server.ApiRequests.Count);
 	}
 
 	[Fact]
@@ -193,7 +206,7 @@ public sealed class HomeRequestTests : IAsyncLifetime
 		"[" + string.Join(",", names.Select(n => $$"""{"Id":"{{Guid.NewGuid():N}}","Name":"{{n}}","Type":"Movie"}""")) + "]";
 }
 
-/// <summary>A clock the test moves by hand (JellyfinClient.Time).</summary>
+/// <summary>A clock the test moves by hand (JellyfinClient.Time, HomeCache).</summary>
 internal sealed class ManualClock : TimeProvider
 {
 	public static readonly DateTimeOffset Start = new(2026, 11, 14, 12, 0, 0, TimeSpan.Zero);
