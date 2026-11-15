@@ -4,21 +4,39 @@ namespace FluentFin.Services;
 
 internal class TaskBarProgress : ITaskBarProgress
 {
-	private readonly ITaskbarList3 _taskbarInstance;
-	public TaskBarProgress()
+	// fluentfin-mpv: null when there is no taskbar to show progress on
+	private readonly ITaskbarList3? _taskbarInstance;
+	public TaskBarProgress() : this(() => (ITaskbarList3)new TaskbarInstance())
 	{
-		_taskbarInstance = (ITaskbarList3)new TaskbarInstance();
-		_taskbarInstance.HrInit();
+	}
+
+	/// <summary>
+	/// fluentfin-mpv: with no taskbar -- a desktop without Explorer's, such as the private desktop the dev harness runs on,
+	/// or Explorer not running -- HrInit fails (E_NOTIMPL) and there is simply no progress. Throwing here made the player
+	/// page, whose view model needs this service, impossible to open there.
+	/// </summary>
+	internal TaskBarProgress(Func<ITaskbarList3> create)
+	{
+		try
+		{
+			var taskbar = create();
+			taskbar.HrInit();
+			_taskbarInstance = taskbar;
+		}
+		catch (Exception ex) when (ex is COMException or NotImplementedException or InvalidCastException)
+		{
+			_taskbarInstance = null;
+		}
 	}
 
 	public void SetProgressPercent(int percent)
 	{
-		_taskbarInstance.SetProgressValue(App.MainWindow.GetWindowHandle(), (ulong)percent, 100);
+		_taskbarInstance?.SetProgressValue(App.MainWindow.GetWindowHandle(), (ulong)percent, 100);
 	}
 
 	public void Clear()
 	{
-		_taskbarInstance.SetProgressState(App.MainWindow.GetWindowHandle(), TaskbarProgressBarStatus.NoProgress);
+		_taskbarInstance?.SetProgressState(App.MainWindow.GetWindowHandle(), TaskbarProgressBarStatus.NoProgress);
 	}
 }
 
