@@ -12,7 +12,9 @@ namespace FluentFin.Core.Tests;
 /// <summary>
 /// The movie and episode pages preselect their stream pickers. With the mpv player only a pick the user made goes to the
 /// backend (else its remembered tracks and language defaults apply); the other players get the pickers as upstream.
+/// Sets SessionInfo (static), as ItemPagePlayTests does: one at a time.
 /// </summary>
+[Collection(SessionInfoCollection.Name)]
 public sealed class ItemPageTrackPickTests
 {
 	private const int DefaultAudio = 1;

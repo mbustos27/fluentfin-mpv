@@ -111,6 +111,7 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 			if (Playlist.Items.FirstOrDefault(x => x.Dto.Id == requestedId) is { } requestedItem)
 			{
 				requestedItem.Selection = request.Selection;
+				requestedItem.StartFromBeginning = request.FromBeginning; // fluentfin-mpv
 			}
 		}
 		else if (parameter is PlayQueueUpdate pqu)
@@ -273,9 +274,10 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 
 		PlayMethod = mediaResponse.PlayMethod;
 
-		if (selectedItem.Dto.UserData?.PlaybackPositionTicks is { } ticks)
+		// fluentfin-mpv: the resume point, unless the item page asked for "Play from beginning"
+		if (selectedItem.TakeStartPosition() is { } start)
 		{
-			MediaPlayer.SeekTo(TimeSpan.FromTicks(ticks));
+			MediaPlayer.SeekTo(start);
 		}
 
 		if (mediaResponse.MediaSourceInfo.MediaStreams?.FirstOrDefault(x => x.Type == MediaStream_Type.Subtitle && x.Index == subtitleIndex) is { } subtitleStream)
