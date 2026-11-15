@@ -24,132 +24,155 @@
     <Page.Resources>
         <cc:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         <cc:StringFormatConverter x:Key="StringFormatConverter" />
+        <!--  fluentfin-mpv: placeholders for a 390x240 wide card and a 225x385 poster card, each drawn at 90 % of its slot  -->
+        <Style x:Key="WideCardPlaceholder" TargetType="ctkl:Shimmer">
+            <Setter Property="Width" Value="351" />
+            <Setter Property="Height" Value="216" />
+            <Setter Property="Margin" Value="19.5,12" />
+            <Setter Property="CornerRadius" Value="10" />
+        </Style>
+        <Style x:Key="PosterCardPlaceholder" TargetType="ctkl:Shimmer">
+            <Setter Property="Width" Value="202.5" />
+            <Setter Property="Height" Value="346.5" />
+            <Setter Property="Margin" Value="11.25,19.25" />
+            <Setter Property="CornerRadius" Value="10" />
+        </Style>
     </Page.Resources>
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator Key="N" Invoked="NextUpInvoked" />
         <KeyboardAccelerator Key="C" Invoked="ContinueInvoked" />
     </Page.KeyboardAccelerators>
 
-    <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
-        <ctk:Case Value="False">
-            <ScrollViewer Margin="0,36" VerticalScrollBarVisibility="Hidden">
-                <StackPanel Spacing="20">
-                    <StackPanel Padding="12,0,0,0" Visibility="{x:Bind ViewModel.HasContinueItems, Converter={StaticResource BoolToVisibilityConverter}, Mode=OneWay}">
+    <!--
+        fluentfin-mpv: progressive home. The page is laid out at once; Continue Watching, Next Up and each "Recently
+        Added" row (named from the views sign-in already read) show placeholder cards, sized and spaced like the cards
+        they stand in for (the cards draw at 90 % of their slot), until their own request answers. A section that
+        turns out empty goes away. Upstream showed one shimmer page until every request had answered.
+    -->
+    <ScrollViewer Margin="0,36" VerticalScrollBarVisibility="Hidden">
+        <StackPanel Spacing="20">
+            <StackPanel Padding="12,0,0,0" Visibility="{x:Bind local:HomePage.SectionVisibility(ViewModel.IsContinueLoading, ViewModel.HasContinueItems), Mode=OneWay}">
 
-                        <TextBlock
-                            Margin="{StaticResource SmallTopBottomMargin}"
-                            Style="{StaticResource TitleTextBlockStyle}"
-                            Text="Continue Watching" />
+                <TextBlock
+                    Margin="{StaticResource SmallTopBottomMargin}"
+                    Style="{StaticResource TitleTextBlockStyle}"
+                    Text="Continue Watching" />
 
-                        <ScrollViewer
-                            HorizontalScrollBarVisibility="Hidden"
-                            HorizontalScrollMode="Enabled"
-                            VerticalScrollBarVisibility="Disabled"
-                            VerticalScrollMode="Disabled">
-                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.ContinueItems, Mode=OneWay}">
-                                <ItemsRepeater.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:BaseItemViewModel">
-                                        <lc:BaseItemDtoCard
-                                            Width="390"
-                                            Height="240"
-                                            BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Thumb, 192)}"
-                                            ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Thumb, 192)}"
-                                            JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
-                                            Model="{x:Bind}" />
-                                    </DataTemplate>
-                                </ItemsRepeater.ItemTemplate>
-                                <ItemsRepeater.Layout>
-                                    <StackLayout Orientation="Horizontal" Spacing="0" />
-                                </ItemsRepeater.Layout>
-                            </ItemsRepeater>
-                        </ScrollViewer>
-                    </StackPanel>
-
-                    <StackPanel Padding="12,0,0,0" Visibility="{x:Bind ViewModel.HasNextUpItems, Converter={StaticResource BoolToVisibilityConverter}, Mode=OneWay}">
-                        <TextBlock
-                            Margin="{StaticResource SmallTopBottomMargin}"
-                            Style="{StaticResource TitleTextBlockStyle}"
-                            Text="Next Up" />
-
-                        <ScrollViewer
-                            HorizontalScrollBarVisibility="Hidden"
-                            HorizontalScrollMode="Enabled"
-                            VerticalScrollBarVisibility="Disabled"
-                            VerticalScrollMode="Disabled">
-                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.NextUpItems, Mode=OneWay}">
-                                <ItemsRepeater.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:BaseItemViewModel">
-                                        <lc:BaseItemDtoCard
-                                            Width="390"
-                                            Height="240"
-                                            BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Thumb, 192)}"
-                                            ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Thumb, 192)}"
-                                            JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
-                                            Model="{x:Bind}" />
-                                    </DataTemplate>
-                                </ItemsRepeater.ItemTemplate>
-                                <ItemsRepeater.Layout>
-                                    <StackLayout Orientation="Horizontal" />
-                                </ItemsRepeater.Layout>
-                            </ItemsRepeater>
-                        </ScrollViewer>
-                    </StackPanel>
-
-                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.RecentItems, Mode=OneWay}">
+                <ScrollViewer
+                    HorizontalScrollBarVisibility="Hidden"
+                    HorizontalScrollMode="Enabled"
+                    VerticalScrollBarVisibility="Disabled"
+                    VerticalScrollMode="Disabled"
+                    Visibility="{x:Bind local:HomePage.LoadedVisibility(ViewModel.IsContinueLoading), Mode=OneWay}">
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.ContinueItems, Mode=OneWay}">
                         <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="vm:NamedQueryResult">
-                                <lc:PagedScrollView
-                                    Margin="{StaticResource SmallLeftRightMargin}"
-                                    Header="{x:Bind Library.Name, Converter={StaticResource StringFormatConverter}, ConverterParameter='{}Recently Added In {0}'}"
-                                    Items="{x:Bind Items}"
+                            <DataTemplate x:DataType="vm:BaseItemViewModel">
+                                <lc:BaseItemDtoCard
+                                    Width="390"
+                                    Height="240"
+                                    BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Thumb, 192)}"
+                                    ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Thumb, 192)}"
                                     JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
-                                    Tag="{x:Bind Library}" />
+                                    Model="{x:Bind}" />
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                         <ItemsRepeater.Layout>
-                            <StackLayout Orientation="Vertical" Spacing="20" />
+                            <StackLayout Orientation="Horizontal" Spacing="0" />
                         </ItemsRepeater.Layout>
                     </ItemsRepeater>
+                </ScrollViewer>
 
+                <StackPanel Orientation="Horizontal" Visibility="{x:Bind ViewModel.IsContinueLoading, Mode=OneWay}">
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
                 </StackPanel>
-            </ScrollViewer>
-        </ctk:Case>
-        <ctk:Case Value="True">
-            <ScrollViewer Margin="0,36">
-                <StackPanel Spacing="36">
-                    <StackPanel Spacing="24">
-                        <ctkl:Shimmer
-                            Width="500"
-                            Height="40"
-                            HorizontalAlignment="Left" />
-                        <StackPanel Orientation="Horizontal" Spacing="16">
-                            <ctkl:Shimmer Width="390" Height="240" />
-                            <ctkl:Shimmer Width="390" Height="240" />
-                        </StackPanel>
-                    </StackPanel>
-                    <StackPanel Spacing="24">
-                        <ctkl:Shimmer
-                            Width="500"
-                            Height="40"
-                            HorizontalAlignment="Left" />
-                        <StackPanel Orientation="Horizontal" Spacing="16">
-                            <ctkl:Shimmer Width="390" Height="240" />
-                        </StackPanel>
-                    </StackPanel>
-                    <StackPanel Spacing="24">
-                        <ctkl:Shimmer
-                            Width="500"
-                            Height="40"
-                            HorizontalAlignment="Left" />
-                        <StackPanel Orientation="Horizontal" Spacing="16">
-                            <ctkl:Shimmer Width="225" Height="385" />
-                            <ctkl:Shimmer Width="225" Height="385" />
-                            <ctkl:Shimmer Width="225" Height="385" />
-                            <ctkl:Shimmer Width="225" Height="385" />
-                        </StackPanel>
-                    </StackPanel>
+            </StackPanel>
+
+            <StackPanel Padding="12,0,0,0" Visibility="{x:Bind local:HomePage.SectionVisibility(ViewModel.IsNextUpLoading, ViewModel.HasNextUpItems), Mode=OneWay}">
+                <TextBlock
+                    Margin="{StaticResource SmallTopBottomMargin}"
+                    Style="{StaticResource TitleTextBlockStyle}"
+                    Text="Next Up" />
+
+                <ScrollViewer
+                    HorizontalScrollBarVisibility="Hidden"
+                    HorizontalScrollMode="Enabled"
+                    VerticalScrollBarVisibility="Disabled"
+                    VerticalScrollMode="Disabled"
+                    Visibility="{x:Bind local:HomePage.LoadedVisibility(ViewModel.IsNextUpLoading), Mode=OneWay}">
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.NextUpItems, Mode=OneWay}">
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BaseItemViewModel">
+                                <lc:BaseItemDtoCard
+                                    Width="390"
+                                    Height="240"
+                                    BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Thumb, 192)}"
+                                    ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Thumb, 192)}"
+                                    JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
+                                    Model="{x:Bind}" />
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                        <ItemsRepeater.Layout>
+                            <StackLayout Orientation="Horizontal" />
+                        </ItemsRepeater.Layout>
+                    </ItemsRepeater>
+                </ScrollViewer>
+
+                <StackPanel Orientation="Horizontal" Visibility="{x:Bind ViewModel.IsNextUpLoading, Mode=OneWay}">
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
+                    <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
                 </StackPanel>
-            </ScrollViewer>
-        </ctk:Case>
-    </ctk:SwitchPresenter>
+            </StackPanel>
+
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.RecentItems, Mode=OneWay}">
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="vm:NamedQueryResult">
+                        <Grid>
+                            <lc:PagedScrollView
+                                Margin="{StaticResource SmallLeftRightMargin}"
+                                Header="{x:Bind Library.Name, Converter={StaticResource StringFormatConverter}, ConverterParameter='{}Recently Added In {0}'}"
+                                Items="{x:Bind Items, Mode=OneWay}"
+                                JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
+                                Tag="{x:Bind Library}"
+                                Visibility="{x:Bind local:HomePage.LoadedVisibility(IsLoading), Mode=OneWay}" />
+
+                            <!--  the same header and card slots as PagedScrollView, so nothing moves when the row fills in  -->
+                            <StackPanel
+                                Margin="{StaticResource SmallLeftRightMargin}"
+                                Spacing="16"
+                                Visibility="{x:Bind IsLoading, Mode=OneWay}">
+                                <Grid Height="40">
+                                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="{x:Bind Library.Name, Converter={StaticResource StringFormatConverter}, ConverterParameter='{}Recently Added In {0}'}" />
+                                </Grid>
+                                <StackPanel Orientation="Horizontal">
+                                    <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
+                                    <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
+                                    <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
+                                    <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
+                                    <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
+                                    <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
+                                    <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
+                                    <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
+                                    <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
+                                    <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+                <ItemsRepeater.Layout>
+                    <StackLayout Orientation="Vertical" Spacing="20" />
+                </ItemsRepeater.Layout>
+            </ItemsRepeater>
+
+        </StackPanel>
+    </ScrollViewer>
 </Page>

@@ -48,6 +48,7 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		_settings.Initialize(SessionInfo.ClientName, SessionInfo.ClientVersion, SessionInfo.DeviceName, SessionInfo.DeviceId);
 		_settings.SetAccessToken(_token);
 		_settings.SetServerUrl(baseUrl);
+		ForgetUserViews(); // fluentfin-mpv: another server or user (GetUserViews)
 		_jellyfinApiClient = new Jellyfin.Sdk.JellyfinApiClient(new Jellyfin.Sdk.JellyfinRequestAdapter(new Jellyfin.Sdk.JellyfinAuthenticationProvider(_settings), _settings));
 
 		await _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto

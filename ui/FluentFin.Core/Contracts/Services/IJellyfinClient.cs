@@ -54,7 +54,15 @@ namespace FluentFin.Core.Contracts.Services
 		/// </summary>
 		Task<BaseItemDtoQueryResult?> GetSeriesEpisodes(Guid seriesId);
 
-		IAsyncEnumerable<RecentItemDtoQueryResult> GetRecentItemsFromUserLibraries();
+		/// <summary>
+		/// fluentfin-mpv: the user's views (libraries) in the server's order, read once and shared by sign-in, Home and the
+		/// Libraries page; read again after a new sign-in, a library change made here or reported by the server, a failed
+		/// read, or a few minutes. Empty when they could not be read (logged).
+		/// </summary>
+		Task<IReadOnlyList<BaseItemDto>> GetUserViews();
+
+		/// <summary>fluentfin-mpv: one library's "Recently added" row (Home asks for every row at once). Null when the request failed (logged).</summary>
+		Task<List<BaseItemDto>?> GetLatestItems(BaseItemDto library);
 
 		IAsyncEnumerable<BaseItemDto> GetUserLibraries();
 
@@ -217,8 +225,6 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task SendMessage(string sessionId, MessageCommand command);
 	}
-
-	public record RecentItemDtoQueryResult(BaseItemDto Library, ObservableCollection<BaseItemDto> Items);
 
 	public record RefreshMetadataInfo(MetadataRefreshMode ImageRefreshMode, MetadataRefreshMode MetadataRefreshMode, bool ReplaceAllImages, bool RegenerateTrickplay, bool ReplaceAllMetadata);
 
