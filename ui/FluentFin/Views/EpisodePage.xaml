@@ -410,5 +410,12 @@
             </StackPanel>
         </ScrollViewer>
 
+        <!--  fluentfin-mpv: the item could not be loaded: said with Retry instead of a blank page (docs/research/ux-review.md §3.11)  -->
+        <controls:LoadStateView
+            Grid.RowSpan="10"
+            Grid.ColumnSpan="10"
+            State="{x:Bind ViewModel.State}"
+            VerticalContentAlignment="Center" />
+
     </Grid>
 </Page>

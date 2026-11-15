@@ -185,6 +185,12 @@
                     NumberOfPages="{x:Bind ViewModel.NumberOfPages, Mode=OneWay}"
                     SelectedPageIndex="{x:Bind ViewModel.SelectedPage, Mode=TwoWay}" />
 
+                <!--  fluentfin-mpv: the library failed to load or is empty (docs/research/ux-review.md §3.11)  -->
+                <lc:LoadStateView
+                    Grid.Row="1"
+                    State="{x:Bind ViewModel.State}"
+                    VerticalContentAlignment="Center" />
+
             </Grid>
         </ctk:Case>
         <ctk:Case IsDefault="True" Value="True">

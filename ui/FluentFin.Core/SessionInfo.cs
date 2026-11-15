@@ -7,6 +7,8 @@ namespace FluentFin.Core
 	public static class SessionInfo
 	{
 		public static string ServerId { get; set; }
+		// fluentfin-mpv: the signed-in server's saved name, for messages ("Couldn't load Home from <name>"); null = not known
+		public static string ServerName { get; set; }
 		public static string BaseUrl { get; set; }
 		public static UserDto CurrentUser { get; set; }
 		public static SavedUser CurrentUserCrendentials { get; set; }

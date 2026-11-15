@@ -56,6 +56,9 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	[ObservableProperty]
 	public partial SavedServer? CurrentServer { get; set; }
 
+	// fluentfin-mpv: the name messages use for the server (LoadMessages.ServerName)
+	partial void OnCurrentServerChanged(SavedServer? value) => Core.SessionInfo.ServerName = value?.DisplayName;
+
 	public void TogglePane()
 	{
 		_navigationViewService.TogglePane();
