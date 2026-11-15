@@ -111,6 +111,24 @@ public sealed class HomeRequestTests : IAsyncLifetime
 	}
 
 	[Fact]
+	public async Task NextUp_AsksForShowsWatchedInTheLastYear_AsJellyfinWebDoes()
+	{
+		// the server lists a show in Next Up only if it was last watched after the cutoff; this one 30 days ago
+		var lastWatched = ManualClock.Start.AddDays(-30);
+		_server.RespondWith("/Shows/NextUp", request =>
+			DateTimeOffset.Parse(request.Query["nextUpDateCutoff"]!, System.Globalization.CultureInfo.InvariantCulture) <= lastWatched
+				? (200, Query("Episode 5"))
+				: (200, Query()));
+		await SignIn();
+
+		var nextUp = await _client.GetNextUp();
+
+		Assert.Equal(["Episode 5"], nextUp!.Items!.Select(x => x.Name));
+		var cutoff = DateTimeOffset.Parse(_server.ApiRequests.Single(x => x.Path == "/Shows/NextUp").Query["nextUpDateCutoff"]!, System.Globalization.CultureInfo.InvariantCulture);
+		Assert.Equal(ManualClock.Start.AddDays(-365), cutoff);
+	}
+
+	[Fact]
 	public async Task Views_AreReadOnce_AndAgainOnlyAfterTheirLifetime()
 	{
 		await SignIn();

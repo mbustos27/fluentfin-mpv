@@ -28,6 +28,8 @@ public partial class JellyfinClient
 		}
 	}
 
+	internal const int NextUpDays = 365;
+
 	public async Task<BaseItemDtoQueryResult?> GetNextUp()
 	{
 		try
@@ -41,7 +43,9 @@ public partial class JellyfinClient
 				query.ImageTypeLimit = 1;
 				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb];
 				query.EnableTotalRecordCount = false;
-				query.NextUpDateCutoff = TimeProvider.System.GetUtcNow();
+				// fluentfin-mpv: the oldest last-watched date of the shows to list, as Jellyfin web sends it (now minus its
+				// maxDaysForNextUp, 365 by default); "now" left out every show watched before now, so Next Up stayed empty
+				query.NextUpDateCutoff = Time.GetUtcNow().AddDays(-NextUpDays);
 				query.EnableResumable = false;
 				query.EnableRewatching = false;
 			});
