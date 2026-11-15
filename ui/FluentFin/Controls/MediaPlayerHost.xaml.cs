@@ -192,10 +192,7 @@ public sealed partial class MediaPlayerHost : UserControl
 			vm.IsVisible ^= true;
 		}
 
-		if (this.FindAscendant<NavigationView>() is { } navView)
-		{
-			navView.IsPaneVisible ^= true;
-		}
+		// fluentfin-mpv: no pane toggle here: the pane is hidden for as long as the player page is open (PlayerChrome)
 
 		App.MainWindow.AppWindow.SetPresenter(presenterKind);
 	}

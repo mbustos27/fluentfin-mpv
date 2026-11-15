@@ -49,7 +49,7 @@
                 Margin="{StaticResource XSmallTopBottomMargin}"
                 PlaceholderText="Search movies, series, actors and more"
                 QueryIcon="Find"
-                Visibility="{x:Bind ViewModel.User, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}">
+                Visibility="{x:Bind SearchVisibility(ViewModel.User, Chrome.IsPlayerOpen), Mode=OneWay}">
                 <AutoSuggestBox.KeyboardAccelerators>
                     <KeyboardAccelerator
                         Key="F"

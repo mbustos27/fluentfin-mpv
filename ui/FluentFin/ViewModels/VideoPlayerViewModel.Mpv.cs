@@ -3,6 +3,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using FluentFin.Converters;
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.Mpv;
 using Jellyfin.Sdk.Generated.Models;
@@ -50,7 +51,31 @@ public partial class VideoPlayerViewModel
 	[ObservableProperty]
 	public partial string MpvStatusText { get; set; } = "";
 
-	/// <summary>Set by the page: full screen on/off the way the other players do it (presenter, title bar, navigation pane).</summary>
+	/// <summary>
+	/// fluentfin-mpv: the start is under way (queue, backend, connect, play): the page shows its loading screen with
+	/// <see cref="MpvStatusText"/> as the step and a Cancel (docs/research/ux-review.md V10). False once the backend took the
+	/// play (mpv's window covers the area from then on), when the start fails, and when the page is left.
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(MpvLeaveText))]
+	public partial bool IsMpvStarting { get; set; }
+
+	/// <summary>What is being started, as the loading screen names it (empty when not known, e.g. a remote play).</summary>
+	[ObservableProperty]
+	public partial string MpvStartingTitle { get; set; } = "";
+
+	/// <summary>Under the title: "S1:E4 - Episode" for an episode, the year for a movie.</summary>
+	[ObservableProperty]
+	public partial string MpvStartingSubtitle { get; set; } = "";
+
+	/// <summary>The item the loading screen takes its backdrop from (null: none).</summary>
+	[ObservableProperty]
+	public partial BaseItemDto? MpvStartingItem { get; set; }
+
+	/// <summary>The loading screen's button: Cancel while starting, Go back once it has stopped (an error, a crash).</summary>
+	public string MpvLeaveText => IsMpvStarting ? "Cancel" : "Go back";
+
+	/// <summary>Set by the page: full screen on/off the way the other players do it (presenter, title bar; the pane is PlayerChrome's).</summary>
 	public Action<bool>? SetFullScreen { get; set; }
 
 	/// <summary>Set by the page: whether the window is full screen now (its presenter).</summary>
@@ -77,6 +102,7 @@ public partial class VideoPlayerViewModel
 
 		MediaPlayerType = MediaPlayerType.Mpv;
 		IsMpv = true;
+		ShowStarting(parameter);
 		// until this page's play is known, every active state belongs to the page before (null = any: the self-test only)
 		_mpvItems = parameter is MpvSelfTestRequest ? null : new HashSet<string>(StringComparer.Ordinal);
 		var generation = _mpvGeneration = mpvPlayback.Begin("a player page opened");
@@ -87,7 +113,10 @@ public partial class VideoPlayerViewModel
 		void OnStep(MpvStartStep next)
 		{
 			step = next;
-			MpvStatusText = StepText(next);
+			if (!_mpvLeaving)
+			{
+				MpvStatusText = StepText(next);
+			}
 		}
 
 		try
@@ -162,14 +191,55 @@ public partial class VideoPlayerViewModel
 		return request;
 	}
 
-	/// <summary>Shown in the video area while the page waits.</summary>
+	/// <summary>Shown in the video area while the page waits (plain words: docs/research/ux-review.md V10).</summary>
 	internal static string StepText(MpvStartStep step) => step switch
 	{
 		MpvStartStep.LoadingQueue => "Loading the queue…",
-		MpvStartStep.StartingBackend => "Starting mpv…",
-		MpvStartStep.Connecting => "Connecting…",
+		MpvStartStep.StartingBackend => "Starting the player…",
+		MpvStartStep.Connecting => "Connecting to the server…",
 		_ => "Starting playback…",
 	};
+
+	/// <summary>fluentfin-mpv: the loading screen names what the page was opened for, from what it already has (no request).</summary>
+	private void ShowStarting(object? parameter)
+	{
+		var item = parameter switch
+		{
+			PlaybackRequest picked => picked.Dto,
+			BaseItemDto dto => dto,
+			_ => null,
+		};
+
+		MpvStartingItem = item;
+		(MpvStartingTitle, MpvStartingSubtitle) = parameter switch
+		{
+			MpvSelfTestRequest selfTest => (selfTest.Title ?? "", ""),
+			_ when item is null => ("", ""),
+			_ when item.Type is BaseItemDto_Type.Season => (item.SeriesName ?? "", item.Name ?? ""),
+			_ when item.Type is BaseItemDto_Type.Series => (item.Name ?? "", ""),
+			_ => (item.GetCardTitle(), item.GetCardSubtitle()),
+		};
+		IsMpvStarting = true;
+	}
+
+	/// <summary>
+	/// fluentfin-mpv: the loading screen's Cancel (Go back once the start has stopped): leaves the page the way Back does, so
+	/// the page's leave stops whatever the start got to (a start whose page is gone goes no further: MpvPlaybackService).
+	/// With nothing to go back to, the start is stopped here and the page says so.
+	/// </summary>
+	[CommunityToolkit.Mvvm.Input.RelayCommand]
+	private async Task LeaveMpv()
+	{
+		logger.LogInformation("Player page (generation {Generation}): {Button} pressed", _mpvGeneration, IsMpvStarting ? "Cancel" : "Go back");
+		if (GoBack?.Invoke() ?? navigationService.GoBack())
+		{
+			return;
+		}
+
+		await OnNavigatedFromMpv("the start was cancelled with nothing to go back to");
+		IsMpvStarting = false;
+		MpvStatusText = "Playback cancelled";
+	}
 
 	/// <summary>What the page shows when a start fails: which step, then why (never a token: redacted).</summary>
 	private static string StartFailureMessage(MpvStartStep? step, Exception ex)
@@ -222,6 +292,7 @@ public partial class VideoPlayerViewModel
 	{
 		// shown before mpv creates its window, so mpv's window gets the final size from the start
 		IsMpvVideoVisible = true;
+		IsMpvStarting = false;
 		MpvStatusText = "";
 	}
 
@@ -275,6 +346,7 @@ public partial class VideoPlayerViewModel
 
 			_mpvSawPlayback = true;
 			IsMpvVideoVisible = true;
+			IsMpvStarting = false;
 			MpvStatusText = "";
 
 			// once the item has started: a pause queued while opening goes from opening straight to paused
@@ -415,6 +487,7 @@ public partial class VideoPlayerViewModel
 		_mpvLeaving = true;
 		_mpvDisposables.Dispose();
 		IsMpvVideoVisible = false;
+		IsMpvStarting = false;
 		await mpvPlayback.StopAsync(_mpvGeneration, reason);
 		return true;
 	}
@@ -443,6 +516,7 @@ public partial class VideoPlayerViewModel
 
 	private void ShowMpvMessage(string message, bool isError)
 	{
+		IsMpvStarting = false;
 		MpvStatusText = "";
 		MpvMessageIsError = isError;
 		MpvMessage = message;
