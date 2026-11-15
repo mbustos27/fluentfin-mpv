@@ -187,7 +187,8 @@ public sealed partial class DiaryViewModel(JournalService journal, JournalSync s
 
 	partial void OnSelectedYearChanged(DiaryFilterOption value)
 	{
-		if (!_loading)
+		// null comes from a combo box clearing its selection, never from the user: "All" then
+		if (!_loading && value is not null)
 		{
 			Rebuild();
 		}
@@ -195,7 +196,7 @@ public sealed partial class DiaryViewModel(JournalService journal, JournalSync s
 
 	partial void OnSelectedShowChanged(DiaryFilterOption value)
 	{
-		if (!_loading)
+		if (!_loading && value is not null)
 		{
 			Rebuild();
 		}
@@ -227,19 +228,40 @@ public sealed partial class DiaryViewModel(JournalService journal, JournalSync s
 	{
 		var views = _entries.Select(x => new DiaryEntryViewModel(x, _ratings.TryGetValue(x.ItemId, out var r) ? r.Value : 0, journal.CurrentProfile?.ServerUrl, TimeZone, Culture)).ToList();
 
+		// the selection is taken first: a combo box whose list is replaced may hand back null for its selected item
+		var year = SelectedYear ?? AllYears;
+		var show = SelectedShow ?? AllShows;
 		_loading = true;
 		try
 		{
-			var years = views.Where(x => x.Local is not null).Select(x => x.Local!.Value.Year).Distinct().OrderDescending()
-				.Select(y => new DiaryFilterOption(y.ToString(CultureInfo.InvariantCulture), Year: y)).ToList();
-			Years = [AllYears, .. years];
-			SelectedYear = Years.FirstOrDefault(x => x == SelectedYear) ?? AllYears;
+			List<DiaryFilterOption> years =
+			[
+				AllYears,
+				.. views.Where(x => x.Local is not null).Select(x => x.Local!.Value.Year).Distinct().OrderDescending()
+					.Select(y => new DiaryFilterOption(y.ToString(CultureInfo.InvariantCulture), Year: y)),
+			];
+			if (!years.SequenceEqual(Years))
+			{
+				Years = years;
+			}
 
-			var shows = views.GroupBy(x => JournalText.ShowKey(x.Entry))
-				.Select(g => new DiaryFilterOption(g.First().SeriesName, ShowKey: g.Key))
-				.OrderBy(x => x.Label, StringComparer.CurrentCultureIgnoreCase).ToList();
-			Shows = [AllShows, .. shows];
-			SelectedShow = Shows.FirstOrDefault(x => x == SelectedShow) ?? AllShows;
+			year = Years.FirstOrDefault(x => x == year) ?? AllYears;
+			SelectedYear = year;
+
+			List<DiaryFilterOption> shows =
+			[
+				AllShows,
+				.. views.GroupBy(x => JournalText.ShowKey(x.Entry))
+					.Select(g => new DiaryFilterOption(g.First().SeriesName, ShowKey: g.Key))
+					.OrderBy(x => x.Label, StringComparer.CurrentCultureIgnoreCase),
+			];
+			if (!shows.SequenceEqual(Shows))
+			{
+				Shows = shows;
+			}
+
+			show = Shows.FirstOrDefault(x => x == show) ?? AllShows;
+			SelectedShow = show;
 		}
 		finally
 		{
@@ -247,8 +269,8 @@ public sealed partial class DiaryViewModel(JournalService journal, JournalSync s
 		}
 
 		var shown = views
-			.Where(x => SelectedYear.Year is not { } year || x.Local?.Year == year)
-			.Where(x => SelectedShow.ShowKey is not { } show || JournalText.ShowKey(x.Entry) == show)
+			.Where(x => year.Year is not { } y || x.Local?.Year == y)
+			.Where(x => show.ShowKey is not { } key || JournalText.ShowKey(x.Entry) == key)
 			.ToList();
 
 		var groups = shown.Where(x => x.Local is not null)

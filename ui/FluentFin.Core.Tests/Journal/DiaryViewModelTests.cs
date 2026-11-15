@@ -98,6 +98,35 @@ public sealed class DiaryViewModelTests : IDisposable
 	}
 
 	[Fact]
+	public async Task AComboBoxClearingItsSelection_WhenItsListIsReplaced_KeepsTheFilter()
+	{
+		Add("Severance", 2, 5, Utc(2026, 11, 14, 20));
+		Add("Andor", 1, 1, Utc(2025, 6, 1, 20));
+		await _vm.OnNavigatedTo(null!);
+		_vm.SelectedYear = _vm.Years[2];
+		_vm.SelectedShow = _vm.Shows[1];
+
+		// what a WinUI ComboBox bound TwoWay does when its ItemsSource changes under it
+		_vm.PropertyChanged += (_, e) =>
+		{
+			if (e.PropertyName == nameof(DiaryViewModel.Years))
+			{
+				_vm.SelectedYear = null!;
+			}
+			else if (e.PropertyName == nameof(DiaryViewModel.Shows))
+			{
+				_vm.SelectedShow = null!;
+			}
+		};
+		Add("Andor", 1, 2, Utc(2024, 6, 1, 20));
+		Add("Mrs Davis", 1, 1, Utc(2025, 7, 1, 20));
+		await _vm.LoadAsync();
+
+		Assert.Equal(("2025", "Andor"), (_vm.SelectedYear.Label, _vm.SelectedShow.Label));
+		Assert.Equal("Andor 1x1", Assert.Single(Assert.Single(_vm.Groups)).Title);
+	}
+
+	[Fact]
 	public async Task AnEmptyDiary_SaysWhatFillsIt()
 	{
 		await _vm.OnNavigatedTo(null!);

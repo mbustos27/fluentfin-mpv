@@ -9,6 +9,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dw="using:DevWinUI"
     xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:journal="using:FluentFin.Plugins.Journal.Controls"
     xmlns:local="using:FluentFin.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:media="using:CommunityToolkit.WinUI.Media"
@@ -134,6 +135,8 @@
                         Glyph="&#xE735;" />
                     <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.Dto.CommunityRating, Mode=OneWay}" />
                 </StackPanel>
+                <!--  fluentfin-mpv: the TV journal's rating (docs/JOURNAL.md)  -->
+                <journal:JournalRatingPanel Item="{x:Bind ViewModel.Dto, Mode=OneWay}" />
             </StackPanel>
             <StackPanel
                 Grid.RowSpan="2"
