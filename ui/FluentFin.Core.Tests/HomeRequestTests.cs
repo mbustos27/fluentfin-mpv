@@ -82,6 +82,18 @@ public sealed class HomeRequestTests : IAsyncLifetime
 	private int ViewReads => _server.ApiRequests.Count(x => x.Path.Equals("/UserViews", StringComparison.OrdinalIgnoreCase));
 
 	[Fact]
+	public async Task SignIn_AsksForCapabilitiesPluginsAndViewsTogether()
+	{
+		var gate = _server.Hold(3, x => x.Path is "/Sessions/Capabilities/Full" or "/Plugins" or "/UserViews", TimeSpan.FromSeconds(2));
+
+		await SignIn();
+
+		// one after another, each would have waited alone until the hold ran out
+		Assert.Equal(3, gate.MaxTogether);
+		Assert.Equal(1, ViewReads);
+	}
+
+	[Fact]
 	public async Task Home_AsksForEveryRowAtOnce_WithTheViewsSignInRead()
 	{
 		await SignIn();
