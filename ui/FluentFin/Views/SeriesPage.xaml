@@ -108,12 +108,23 @@
             Grid.RowSpan="2"
             Grid.Column="1"
             Height="{StaticResource ButtonStripHeight}"
-            VerticalAlignment="Bottom">
+            VerticalAlignment="Bottom"
+            ColumnSpacing="16">
             <Grid.RowDefinitions>
                 <RowDefinition />
                 <RowDefinition />
             </Grid.RowDefinitions>
-            <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="{x:Bind ViewModel.Dto.Name, Mode=OneWay}" />
+            <!--  fluentfin-mpv: the buttons have a column of their own, so a long title is trimmed rather than drawn under them  -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                AutomationProperties.HeadingLevel="Level1"
+                Style="{ThemeResource TitleTextBlockStyle}"
+                Text="{x:Bind ViewModel.Dto.Name, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
             <StackPanel
                 Grid.Row="1"
                 HorizontalAlignment="Left"
@@ -129,59 +140,72 @@
                     Spacing="8"
                     Visibility="{x:Bind ViewModel.Dto.CommunityRating, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}">
                     <FontIcon
+                        AutomationProperties.Name="Community rating"
                         FontSize="16"
-                        Foreground="Yellow"
+                        Foreground="{ThemeResource RatingStarBrush}"
                         Glyph="&#xE735;" />
                     <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.Dto.CommunityRating, Mode=OneWay}" />
                 </StackPanel>
             </StackPanel>
+            <!--  fluentfin-mpv: a named Play, names and tooltips on every icon button (ux-review I2, I3)  -->
             <StackPanel
                 Grid.RowSpan="2"
+                Grid.Column="1"
                 Margin="{StaticResource SmallRightMargin}"
                 HorizontalAlignment="Right"
                 Orientation="Horizontal"
                 Spacing="4">
                 <Button
-                    Width="50"
                     Height="50"
-                    Background="Transparent"
+                    Padding="20,0"
+                    AutomationProperties.Name="Play"
                     Command="{x:Bind root:App.Commands.PlayDtoCommand}"
                     CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"
-                    Content="{ui:SymbolIcon Symbol=Play}"
                     CornerRadius="25"
-                    Style="{StaticResource IconButtonStyle}" />
+                    Style="{StaticResource AccentButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <SymbolIcon Symbol="Play" />
+                        <TextBlock Text="Play" />
+                    </StackPanel>
+                </Button>
                 <ToggleButton
                     Width="50"
                     Height="50"
+                    AutomationProperties.Name="Watched"
                     Background="Transparent"
                     Command="{x:Bind root:App.Commands.ToggleWatchedCommand}"
                     CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"
                     Content="{ui:FontIcon Glyph=&#xE73E;}"
                     CornerRadius="25"
                     IsChecked="{x:Bind ViewModel.Dto.UserData.Played, Mode=OneWay}"
-                    Style="{StaticResource IconToggleButtonStyle}" />
+                    Style="{StaticResource IconToggleButtonStyle}"
+                    ToolTipService.ToolTip="Mark watched" />
                 <ToggleButton
                     Width="50"
                     Height="50"
+                    AutomationProperties.Name="Favorite"
                     Background="Transparent"
                     Command="{x:Bind root:App.Commands.ToggleFavoriteCommand}"
                     CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"
                     Content="{ui:FontIcon Glyph=&#xEB52;}"
                     CornerRadius="25"
                     IsChecked="{x:Bind ViewModel.Dto.UserData.IsFavorite, Mode=OneWay}"
-                    Style="{StaticResource IconToggleButtonStyle}">
+                    Style="{StaticResource IconToggleButtonStyle}"
+                    ToolTipService.ToolTip="Add to favorites">
                     <ToggleButton.Resources>
-                        <SolidColorBrush x:Key="SystemAccentColor" Color="Red" />
+                        <StaticResource x:Key="SystemAccentColor" ResourceKey="FavoriteCheckedBrush" />
                     </ToggleButton.Resources>
                 </ToggleButton>
                 <Button
                     Width="50"
                     Height="50"
+                    AutomationProperties.Name="More options"
                     Background="Transparent"
                     Content="{ui:SymbolIcon Symbol=More}"
                     CornerRadius="25"
                     Flyout="{x:Bind ViewModel.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}"
-                    Style="{StaticResource IconButtonStyle}" />
+                    Style="{StaticResource IconButtonStyle}"
+                    ToolTipService.ToolTip="More options" />
             </StackPanel>
         </Grid>
 
@@ -204,40 +228,35 @@
             <StackPanel Spacing="45">
 
                 <!--  Overview  -->
-                <TextBlock Text="{x:Bind ViewModel.Dto.Overview, Mode=OneWay}" TextWrapping="WrapWholeWords" />
+                <!--  fluentfin-mpv: "Show more" for a long overview; tags and details wrap instead of running off the page (ux-review I1, I4)  -->
+                <controls:ExpandableText Text="{x:Bind ViewModel.Dto.Overview, Mode=OneWay}" />
 
 
                 <!--  Tags  -->
                 <StackPanel Spacing="10">
                     <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Tags" />
-                    <ScrollViewer
-                        HorizontalScrollBarVisibility="Hidden"
-                        HorizontalScrollMode="Enabled"
-                        VerticalScrollBarVisibility="Hidden"
-                        VerticalScrollMode="Disabled">
-                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Dto.Tags, Mode=OneWay}">
-                            <ItemsRepeater.ItemTemplate>
-                                <DataTemplate>
-                                    <HyperlinkButton Content="{Binding}" Style="{StaticResource TextBlockButtonStyle}" />
-                                </DataTemplate>
-                            </ItemsRepeater.ItemTemplate>
-                            <ItemsRepeater.Layout>
-                                <StackLayout Orientation="Horizontal" Spacing="10" />
-                            </ItemsRepeater.Layout>
-                        </ItemsRepeater>
-                    </ScrollViewer>
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.Dto.Tags, Mode=OneWay}">
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate>
+                                <HyperlinkButton Content="{Binding}" Style="{StaticResource TextBlockButtonStyle}" />
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                        <ItemsRepeater.Layout>
+                            <ctk:WrapLayout HorizontalSpacing="10" VerticalSpacing="4" />
+                        </ItemsRepeater.Layout>
+                    </ItemsRepeater>
                 </StackPanel>
 
                 <!--  Details  -->
-                <Grid HorizontalAlignment="Left">
+                <Grid RowSpacing="4">
                     <Grid.RowDefinitions>
                         <RowDefinition />
                         <RowDefinition />
                         <RowDefinition />
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition />
-                        <ColumnDefinition />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
                     <TextBlock
@@ -255,7 +274,7 @@
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                         <ItemsRepeater.Layout>
-                            <StackLayout Orientation="Horizontal" Spacing="10" />
+                            <ctk:WrapLayout HorizontalSpacing="10" VerticalSpacing="4" />
                         </ItemsRepeater.Layout>
                     </ItemsRepeater>
 
@@ -274,7 +293,7 @@
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                         <ItemsRepeater.Layout>
-                            <StackLayout Orientation="Horizontal" Spacing="10" />
+                            <ctk:WrapLayout HorizontalSpacing="10" VerticalSpacing="4" />
                         </ItemsRepeater.Layout>
                     </ItemsRepeater>
 
@@ -293,7 +312,7 @@
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                         <ItemsRepeater.Layout>
-                            <StackLayout Orientation="Horizontal" Spacing="10" />
+                            <ctk:WrapLayout HorizontalSpacing="10" VerticalSpacing="4" />
                         </ItemsRepeater.Layout>
                     </ItemsRepeater>
                 </Grid>
