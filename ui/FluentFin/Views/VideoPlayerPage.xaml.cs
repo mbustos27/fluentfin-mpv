@@ -72,21 +72,14 @@ public sealed partial class VideoPlayerPage : Page
 		// fluentfin-mpv: a navigation of the window's root frame (Log out, Switch user) removes the shell with this page on it
 		// and tells only the shell: no OnNavigatedFrom here, nor for the view model. Looked at again once layout has settled
 		// (a move within the window unloads and loads again); still out of the window then, it was left (docs/BRIDGE.md §6)
-		if (!_navigatedFrom && ViewModel.IsMpv)
-		{
-			DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () =>
-			{
-				try
-				{
-					await Task.Delay(250);
-					await ViewModel.OnPageRemoved(_navigatedFrom, IsLoaded);
-				}
-				catch (Exception ex)
-				{
-					App.GetService<ILogger<VideoPlayerPage>>().LogError(ex, "Leaving the removed player page failed");
-				}
-			});
-		}
+		new PlayerPageRemoval(
+			navigatedFrom: () => _navigatedFrom,
+			isLoaded: () => IsLoaded,
+			isMpv: () => ViewModel.IsMpv,
+			leave: ViewModel.OnPageRemoved,
+			enqueueLowPriority: work => DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () => await work()),
+			onError: ex => App.GetService<ILogger<VideoPlayerPage>>().LogError(ex, "Leaving the removed player page failed"))
+			.OnUnloaded();
 	}
 
 	private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -176,6 +169,9 @@ public sealed partial class VideoPlayerPage : Page
 		var setup = App.GetKeyedService<INavigationService>(NavigationRegions.InitialSetup);
 		return (Frame is { } frame && setup.Frame == frame ? setup : App.GetService<INavigationService>()).GoBack();
 	}
+
+	// fluentfin-mpv: closed by its button: gone in the view model too, so the next notice shows even with the same text
+	private void OnMpvNoticeCloseButtonClick(InfoBar sender, object args) => ViewModel.DismissMpvNotice();
 
 	public Visibility VisibleIf(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
 

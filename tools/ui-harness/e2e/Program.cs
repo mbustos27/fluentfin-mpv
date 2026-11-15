@@ -227,6 +227,30 @@ static class P
 							await Task.Delay(1500);
 							break;
 						}
+					case "signout_cast":
+						{
+							// signout-ux item 2: a cast arrives while the sign-out waits for X's Stopped (the driver answers it after
+							// ~1 s): the websocket handler opens a player page (a new generation) that asks to play Y. Y must not
+							// play: before, its play went out, Y played past the sign-out (the wait ran to its bound) and its Stopped
+							// went out with the revoked token. Then what the root frame's navigation does to the cast's page: its
+							// leave (VideoPlayerViewModel.OnPageRemoved, 250 ms after its Unloaded)
+							var signOut = service.GetType().GetMethod("StopForSignOutAsync");
+							if (signOut is null) { result = "this FluentFin.Core has no StopForSignOutAsync (before round 6)"; throw new Exception(result); }
+							var t0 = Clock.Elapsed.TotalSeconds;
+							var signingOut = (Task)signOut.Invoke(service, [TimeSpan.FromSeconds(2)])!;
+							var stopped = await WaitUntil(() => Events.Any(x => x.T >= t0 && x.E.Name == "state" && S(x.E, "state") == "idle"), 5);
+							var cast = service.Begin("a remote play (cast) during the sign-out");
+							var castPlayed = await service.PlayAsync(cast, identity, new BridgePlayRequest([Y]));
+							Out($"CAST X idle before the cast: {stopped}; play of Y during the sign-out sent: {castPlayed} ({Clock.Elapsed.TotalSeconds - t0:0.000} s into the sign-out)");
+							await signingOut;
+							Out($"SIGNOUT stop and report took {Clock.Elapsed.TotalSeconds - t0:0.000} s; reported X before the token was revoked: {All("reported").Any(e => S(e, "playSessionId") == psX)}");
+							await jf.Logout();
+							Out("SIGNOUT token revoked");
+							await Task.Delay(250);
+							await service.StopAsync(cast, "the cast's player page was removed with the shell");
+							await Task.Delay(1500);
+							break;
+						}
 					case "reported_then_kill":
 						await host.SendAsync(Bridge.Commands.Stop);
 						Out($"reported X: {await WaitReported(psX)}");

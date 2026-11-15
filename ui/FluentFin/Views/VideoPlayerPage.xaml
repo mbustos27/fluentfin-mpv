@@ -33,13 +33,23 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <InfoBar
-                x:Name="MpvMessageBar"
-                Grid.Row="0"
-                IsClosable="True"
-                IsOpen="{x:Bind HasText(ViewModel.MpvMessage), Mode=OneWay}"
-                Message="{x:Bind ViewModel.MpvMessage, Mode=OneWay}"
-                Severity="{x:Bind SeverityOf(ViewModel.MpvMessageIsError), Mode=OneWay}" />
+            <StackPanel Grid.Row="0">
+                <InfoBar
+                    x:Name="MpvMessageBar"
+                    IsClosable="True"
+                    IsOpen="{x:Bind HasText(ViewModel.MpvMessage), Mode=OneWay}"
+                    Message="{x:Bind ViewModel.MpvMessage, Mode=OneWay}"
+                    Severity="{x:Bind SeverityOf(ViewModel.MpvMessageIsError), Mode=OneWay}" />
+
+                <!--  fluentfin-mpv: brief, the video plays on (e.g. a track or quality change that could not be applied); hides itself  -->
+                <InfoBar
+                    x:Name="MpvNoticeBar"
+                    CloseButtonClick="OnMpvNoticeCloseButtonClick"
+                    IsClosable="True"
+                    IsOpen="{x:Bind HasText(ViewModel.MpvNotice), Mode=OneWay}"
+                    Message="{x:Bind ViewModel.MpvNotice, Mode=OneWay}"
+                    Severity="Warning" />
+            </StackPanel>
 
             <Grid
                 x:Name="MpvVideoArea"

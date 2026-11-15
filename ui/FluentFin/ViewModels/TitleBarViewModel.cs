@@ -66,24 +66,51 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 		_navigationService.GoBack();
 	}
 
-	[RelayCommand]
-	public async Task Logout()
-	{
-		// fluentfin-mpv: the mpv playback stops and is reported before the page goes and the token is revoked (bounded)
-		await _mpvPlayback.StopForSignOutAsync();
-		User = null;
-		_setupNavigationService.NavigateTo<SelectServerViewModel>();
-		await _jellyfinClient.Logout();
-	}
+	// fluentfin-mpv: a sign-out in progress (Log out or Switch user), shown in the title bar; both commands wait for it
+	[ObservableProperty]
+	[NotifyCanExecuteChangedFor(nameof(LogoutCommand))]
+	[NotifyCanExecuteChangedFor(nameof(SwitchUserCommand))]
+	public partial bool IsSigningOut { get; set; }
 
-	[RelayCommand]
-	public async Task SwitchUser()
+	/// <summary>fluentfin-mpv: what the sign-out in progress waits for, next to its progress ring.</summary>
+	[ObservableProperty]
+	public partial string SignOutStatus { get; set; } = "";
+
+	private bool CanSignOut() => !IsSigningOut;
+
+	[RelayCommand(CanExecute = nameof(CanSignOut))]
+	public Task Logout() => SignOut(() => _setupNavigationService.NavigateTo<SelectServerViewModel>());
+
+	[RelayCommand(CanExecute = nameof(CanSignOut))]
+	public Task SwitchUser() => SignOut(() => _setupNavigationService.NavigateTo<LoginViewModel>(CurrentServer));
+
+	/// <summary>
+	/// fluentfin-mpv: Log out and Switch user. The mpv playback stops and is reported before the page goes and the token is
+	/// revoked (bounded, <see cref="MpvPlaybackService.StopForSignOutAsync"/>), which is shown meanwhile. One at a time: both
+	/// commands are disabled until it is done, and one invoked anyway (back to back, before the first got that far) does nothing.
+	/// </summary>
+	private async Task SignOut(Action navigate)
 	{
-		// fluentfin-mpv: as for Logout
-		await _mpvPlayback.StopForSignOutAsync();
-		User = null;
-		_setupNavigationService.NavigateTo<LoginViewModel>(CurrentServer);
-		await _jellyfinClient.Logout();
+		if (IsSigningOut)
+		{
+			return;
+		}
+
+		IsSigningOut = true;
+		try
+		{
+			SignOutStatus = _mpvPlayback.HasPlayback ? "Stopping playback…" : "Signing out…";
+			await _mpvPlayback.StopForSignOutAsync();
+			SignOutStatus = "Signing out…";
+			User = null;
+			navigate();
+			await _jellyfinClient.Logout();
+		}
+		finally
+		{
+			SignOutStatus = "";
+			IsSigningOut = false;
+		}
 	}
 
 
