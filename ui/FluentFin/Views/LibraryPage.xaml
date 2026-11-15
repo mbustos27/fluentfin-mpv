@@ -152,7 +152,12 @@
                     <ItemsRepeater ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="vm:BaseItemViewModel">
-                                <ItemContainer CornerRadius="{StaticResource ControlCornerRadius}" Style="{StaticResource BareItemContainerStyle}">
+                                <!--  fluentfin-mpv: the card inside is the keyboard stop and the element Narrator reads; the container is neither (ux-review A1)  -->
+                                <ItemContainer
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    CornerRadius="{StaticResource ControlCornerRadius}"
+                                    IsTabStop="False"
+                                    Style="{StaticResource BareItemContainerStyle}">
                                     <lc:BaseItemDtoCard
                                         BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 352)}"
                                         ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 352)}"
