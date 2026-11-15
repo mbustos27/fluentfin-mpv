@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    Benchmarks an upstream FluentFin.Core (the perf scout's baseline): Program.cs uses upstream's constructors, which this
-    fork's Core has extended (JellyfinClient and GlobalCommands take ISettings), so it does not build against ui\ here.
-    dotnet build tools\ui-bench -p:CoreProject=<upstream checkout>\FluentFin.Core\FluentFin.Core.csproj
+    Runs FluentFin.Core against fake servers (Program.cs). Default: this repository's ui\FluentFin.Core. For another Core
+    (an upstream FluentFin checkout, a copy of an older commit for before/after numbers) pass
+    -p:CoreProject=<copy>\FluentFin.Core\FluentFin.Core.csproj and give each Core its own artifacts-path option
+    (a scratch folder). Core types are made by CoreFactory, so their constructors may differ between Cores.
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -11,14 +12,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
     <NoWarn>$(NoWarn);CS1998;CS8602;CS8604</NoWarn>
+    <CoreProject Condition="'$(CoreProject)' == ''">$(MSBuildThisFileDirectory)..\..\ui\FluentFin.Core\FluentFin.Core.csproj</CoreProject>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <ProjectReference Include="$(CoreProject)" Condition="'$(CoreProject)' != ''" />
+    <ProjectReference Include="$(CoreProject)" />
     <PackageReference Include="Moq" Version="4.21.0" />
     <PackageReference Include="Blurhash.Core" Version="4.2.1" />
   </ItemGroup>
-  <Target Name="RequireCoreProject" BeforeTargets="PrepareForBuild" Condition="'$(CoreProject)' == ''">
-    <Error Text="Pass the upstream FluentFin.Core to benchmark: dotnet build -p:CoreProject=&lt;upstream checkout&gt;\FluentFin.Core\FluentFin.Core.csproj" />
-  </Target>
 </Project>
