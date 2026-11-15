@@ -167,6 +167,21 @@ public sealed partial class MediaPlayerHost : UserControl
 		ShowTransportControls();
 	}
 
+	/// <summary>fluentfin-mpv: the wheel over the video changes the volume, by Settings > Playback's step, unless turned off there.</summary>
+	private void OnPlayerWheel(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+	{
+		var settings = App.GetService<Core.Settings.ISettings>();
+		var notch = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
+		if (Player is not { } player || !settings.MouseWheelVolume || notch == 0)
+		{
+			return;
+		}
+
+		player.Volume = Core.Settings.PlaybackPreferences.StepVolume(player.Volume, notch, settings.VolumeStep);
+		e.Handled = true;
+		ShowTransportControls();
+	}
+
 	private void ShowTransportControls()
 	{
 		TransportControls.Bar.DispatcherQueue.TryEnqueue(() =>

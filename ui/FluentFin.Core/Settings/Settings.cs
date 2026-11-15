@@ -12,6 +12,15 @@ public interface ISettings
 	/// <summary>Command that starts the mpv backend, see <see cref="SettingKeys.MpvBackendCommand"/>. Empty = automatic.</summary>
 	string MpvBackendCommand { get; set; }
 
+	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.ShowSkipPrompt"/>.</summary>
+	bool ShowSkipPrompt { get; set; }
+
+	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.MouseWheelVolume"/>.</summary>
+	bool MouseWheelVolume { get; set; }
+
+	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.VolumeStep"/> (1 to 20).</summary>
+	int VolumeStep { get; set; }
+
 	void ListenToChanges();
 
 	void SaveServerDetails();
@@ -33,6 +42,24 @@ public partial class Settings(ILocalSettingsService localSettingsService) : Obse
 	{
 		get => localSettingsService.ReadSetting(SettingKeys.MpvBackendCommand) ?? "";
 		set => localSettingsService.SaveSetting(SettingKeys.MpvBackendCommand, value ?? "");
+	}
+
+	public bool ShowSkipPrompt
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.ShowSkipPrompt);
+		set => localSettingsService.SaveSetting(SettingKeys.ShowSkipPrompt, value);
+	}
+
+	public bool MouseWheelVolume
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.MouseWheelVolume);
+		set => localSettingsService.SaveSetting(SettingKeys.MouseWheelVolume, value);
+	}
+
+	public int VolumeStep
+	{
+		get => Math.Clamp(localSettingsService.ReadSetting(SettingKeys.VolumeStep), 1, 20);
+		set => localSettingsService.SaveSetting(SettingKeys.VolumeStep, Math.Clamp(value, 1, 20));
 	}
 
 	public void SaveServerDetails() => localSettingsService.SaveSetting(SettingKeys.Servers, Servers);
