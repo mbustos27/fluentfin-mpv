@@ -434,6 +434,10 @@ class ShimRuntime:
             for key, value in self.EMBEDDED_OVERRIDES:
                 self._override(key, value)
         window_embed.configure(window["hwnd"] if embedded else None)
+        # The OSC's look and the fork that carries it (fluentfin_osc).
+        from . import fluentfin_osc
+
+        fluentfin_osc.configure(True)
         try:
             from . import player as player_module
         except BaseException:

@@ -243,6 +243,11 @@ def osc_script_opts(osc_style):
     opts = ["osc-idlescreen=no"]
     if osc_style == "mpvtk":
         opts.append("osc-windowcontrols=no")
+    if osc_style == "mpv":
+        # FluentFin MPV: the bridge's OSC look; nothing outside bridge mode.
+        from . import fluentfin_osc
+
+        opts.extend(fluentfin_osc.script_opts())
     return opts
 
 
@@ -753,5 +758,9 @@ def build_mpv_options(osc_style, scripts, ext_mpv, browser_wants_window):
     from . import window_embed
 
     window_embed.apply_to_options(mpv_options)
+    # FluentFin MPV: the bridge's OSD font (fluentfin_osc); a no-op otherwise.
+    from . import fluentfin_osc
+
+    fluentfin_osc.apply_to_options(mpv_options)
 
     return mpv_options
