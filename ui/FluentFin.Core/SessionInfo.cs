@@ -16,6 +16,12 @@ namespace FluentFin.Core
 		public static string RemoteSessionId { get; set; }
 		public static Guid? GroupId { get; set; }
 
+		// the identity FluentFin authenticates with; the mpv backend reuses it so the server sees one session
+		public static string DeviceId { get; set; }
+		public static string DeviceName { get; set; }
+		public static string ClientName { get; set; }
+		public static string ClientVersion { get; set; }
+
 		public static bool CanEditMediaSegments() => CurrentUser?.Policy?.IsAdministrator == true &&
 													 Plugins.FirstOrDefault(x => x.Name == "MediaSegments API") is { } &&
 													 Plugins.FirstOrDefault(x => x.Name == "Intro Skipper") is { };

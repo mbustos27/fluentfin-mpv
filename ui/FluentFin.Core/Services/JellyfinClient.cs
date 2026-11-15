@@ -11,7 +11,8 @@ namespace FluentFin.Core.Services;
 public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 									IObserver<IOutboundWebSocketMessage> socketMessageSender,
 									IJumpListService jumpListService,
-									IDeviceProfileFactory deviceProfileFactory) : IJellyfinClient
+									IDeviceProfileFactory deviceProfileFactory,
+									Settings.ISettings settings) : IJellyfinClient
 {
 	private Jellyfin.Sdk.JellyfinApiClient _jellyfinApiClient = null!;
 	private string _token = "";
@@ -40,7 +41,11 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		_token = authResult.AccessToken;
 		_deviceId = new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
 		_settings = new Jellyfin.Sdk.JellyfinSdkSettings();
-		_settings.Initialize("FluentFin", Assembly.GetEntryAssembly()!.GetName().Version!.ToString()!, Environment.MachineName, _deviceId);
+		SessionInfo.ClientName = "FluentFin";
+		SessionInfo.ClientVersion = Assembly.GetEntryAssembly()!.GetName().Version!.ToString()!;
+		SessionInfo.DeviceName = Environment.MachineName;
+		SessionInfo.DeviceId = _deviceId;
+		_settings.Initialize(SessionInfo.ClientName, SessionInfo.ClientVersion, SessionInfo.DeviceName, SessionInfo.DeviceId);
 		_settings.SetAccessToken(_token);
 		_settings.SetServerUrl(baseUrl);
 		_jellyfinApiClient = new Jellyfin.Sdk.JellyfinApiClient(new Jellyfin.Sdk.JellyfinRequestAdapter(new Jellyfin.Sdk.JellyfinAuthenticationProvider(_settings), _settings));
@@ -51,9 +56,7 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 			PlayableMediaTypes = [MediaType.Video],
 			DeviceProfile = deviceProfileFactory.GetDeviceProfile(),
 			IconUrl = "https://github.com/insomniachi/FluentFin/raw/master/Installer/base-icon-transparent.png",
-			SupportedCommands = [
-				GeneralCommandType.DisplayMessage,
-			]
+			SupportedCommands = SupportedCommands(settings.MediaPlayer),
 		});
 
 		await GetPlugins();
@@ -66,6 +69,25 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		}
 		await jumpListService.Initialize(libaries);
 	}
+
+	/// <summary>
+	/// The remote-control commands the server may send to this session. With the mpv player FluentFin forwards volume and
+	/// track commands to the backend (docs/BRIDGE.md), the other players do not handle them. Read at login, so a change of
+	/// player takes effect on the next login.
+	/// </summary>
+	internal static List<GeneralCommandType?> SupportedCommands(Contracts.Services.MediaPlayerType player) => player == Contracts.Services.MediaPlayerType.Mpv
+		? [
+			GeneralCommandType.DisplayMessage,
+			GeneralCommandType.SetVolume,
+			GeneralCommandType.VolumeUp,
+			GeneralCommandType.VolumeDown,
+			GeneralCommandType.Mute,
+			GeneralCommandType.Unmute,
+			GeneralCommandType.ToggleMute,
+			GeneralCommandType.SetAudioStreamIndex,
+			GeneralCommandType.SetSubtitleStreamIndex,
+		]
+		: [GeneralCommandType.DisplayMessage];
 
 	public async Task<BaseItemDtoQueryResult?> Search(string searchTerm)
 	{

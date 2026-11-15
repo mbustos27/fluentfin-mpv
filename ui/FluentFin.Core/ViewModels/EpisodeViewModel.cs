@@ -37,8 +37,17 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 
+	// fluentfin-mpv: whether the user changed a picker after the page chose its defaults. The mpv player sends a track pick
+	// only then; otherwise the backend's remembered tracks and language defaults apply. The other players are unchanged.
+	private bool _streamsPreselected;
+	private bool _streamsPicked;
+
+	partial void OnSelectedAudioChanged(MediaStream? value) => _streamsPicked |= _streamsPreselected && value is not null;
+
+	partial void OnSelectedSubtitleChanged(MediaStream? value) => _streamsPicked |= _streamsPreselected && value is not null;
+
 	[RelayCommand]
-	private Task Play() => commands.Play(Dto, PlaybackSelection.From(SelectedAudio, SelectedSubtitle));
+	private Task Play() => commands.Play(Dto, PlaybackSelection.From(SelectedAudio, SelectedSubtitle), _streamsPicked);
 
 	public async Task OnNavigatedTo(object parameter)
 	{
@@ -57,6 +66,7 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 
 	private async Task UpdateEpisode(Guid id)
 	{
+		_streamsPreselected = _streamsPicked = false;
 		var episode = await jellyfinClient.GetItem(id);
 		if (episode is null)
 		{
@@ -95,5 +105,7 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 				SelectedSubtitle = SubtitleStreams.FirstOrDefault();
 			}
 		}
+
+		_streamsPreselected = true;
 	}
 }

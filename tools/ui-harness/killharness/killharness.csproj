@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Compiles the repo's own launcher sources, linked (not copied): ui\FluentFin\Mpv\JobObject.cs, JobProcess.cs and
+    WindowsMpvBackendLauncher.cs (its BackendProcess.Kill is what the watchdog calls), with ui\FluentFin.Core for the
+    interfaces. dotnet build -p:UiDir=<a ui folder> builds against another copy of them.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <UiDir Condition="'$(UiDir)' == ''">$(MSBuildThisFileDirectory)..\..\..\ui</UiDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- process safety: the interpreter and the grandchild are acted on only through a handle proved this run's -->
+    <Compile Include="..\OwnedProcess.cs" Link="OwnedProcess.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\JobObject.cs" Link="Mpv\JobObject.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\JobProcess.cs" Link="Mpv\JobProcess.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\WindowsMpvBackendLauncher.cs" Link="Mpv\WindowsMpvBackendLauncher.cs" />
+    <ProjectReference Include="$(UiDir)\FluentFin.Core\FluentFin.Core.csproj" />
+  </ItemGroup>
+</Project>

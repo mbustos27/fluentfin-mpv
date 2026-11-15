@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using FluentFin.Contracts.Services;
 using FluentFin.Core;
 using FluentFin.Core.Contracts.Services;
+using FluentFin.Core.Mpv;
 using FluentFin.Core.Services;
 using FluentFin.Core.Settings;
 using FluentFin.Core.ViewModels;
@@ -20,16 +21,19 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	private readonly INavigationService _setupNavigationService;
 	private readonly INavigationViewService _navigationViewService;
 	private readonly IJellyfinClient _jellyfinClient;
+	private readonly MpvPlaybackService _mpvPlayback;
 
 	public TitleBarViewModel(INavigationService navigationService,
 							 [FromKeyedServices(NavigationRegions.InitialSetup)] INavigationService setupNavigationService,
 							 INavigationViewService navigationViewService,
-							 IJellyfinClient jellyfinClient)
+							 IJellyfinClient jellyfinClient,
+							 MpvPlaybackService mpvPlayback)
 	{
 		_navigationService = navigationService;
 		_setupNavigationService = setupNavigationService;
 		_navigationViewService = navigationViewService;
 		_jellyfinClient = jellyfinClient;
+		_mpvPlayback = mpvPlayback;
 
 		navigationService.Navigated += NavigationService_Navigated;
 	}
@@ -65,6 +69,8 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	[RelayCommand]
 	public async Task Logout()
 	{
+		// fluentfin-mpv: the mpv playback stops and is reported before the page goes and the token is revoked (bounded)
+		await _mpvPlayback.StopForSignOutAsync();
 		User = null;
 		_setupNavigationService.NavigateTo<SelectServerViewModel>();
 		await _jellyfinClient.Logout();
@@ -73,6 +79,8 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	[RelayCommand]
 	public async Task SwitchUser()
 	{
+		// fluentfin-mpv: as for Logout
+		await _mpvPlayback.StopForSignOutAsync();
 		User = null;
 		_setupNavigationService.NavigateTo<LoginViewModel>(CurrentServer);
 		await _jellyfinClient.Logout();

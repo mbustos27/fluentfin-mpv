@@ -71,7 +71,8 @@ public sealed class VideoPlayerViewModelSubtitleTests
 		Observable.Empty<IOutboundWebSocketMessage>(),
 		Mock.Of<INavigationService>(),
 		Mock.Of<ISettings>(),
-		Mock.Of<ITaskBarProgress>());
+		Mock.Of<ITaskBarProgress>(),
+		new Core.Mpv.MpvPlaybackService(new Mock<Core.Mpv.IMpvBackend> { DefaultValue = DefaultValue.Mock }.Object, _client.Object, NullLogger<Core.Mpv.MpvPlaybackService>.Instance));
 
 	private static PlaylistItem ItemPlaying(MediaResponse response) => new()
 	{

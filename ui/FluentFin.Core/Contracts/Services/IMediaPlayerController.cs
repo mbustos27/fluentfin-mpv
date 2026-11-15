@@ -57,7 +57,13 @@ public enum MediaPlayerType
 {
 	Vlc,
 	Flyleaf,
-	WindowsMediaPlayer
+	WindowsMediaPlayer,
+
+	/// <summary>
+	/// Playback by the jellyfin-mpv-shim backend over the bridge protocol (docs/BRIDGE.md), drawn inside the main window.
+	/// Appended last: the setting is stored by name, and the numeric values of the other players stay the same too.
+	/// </summary>
+	Mpv
 }
 
 public record struct AudioTrack(int Id, string? Language, string? Name);

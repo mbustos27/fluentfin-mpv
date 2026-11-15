@@ -61,7 +61,28 @@
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>
             <ctk:SettingsCard Header="Media Player" HeaderIcon="{ui:FontIcon Glyph=&#xEA69;}">
-                <ComboBox ItemsSource="{ui:EnumValues Type=s:MediaPlayerType}" SelectedItem="{x:Bind ViewModel.MediaPlayerType, Mode=TwoWay}" />
+                <ComboBox
+                    DisplayMemberPath="Name"
+                    ItemsSource="{x:Bind vm:SettingsViewModel.MediaPlayers}"
+                    SelectedItem="{x:Bind ViewModel.SelectedMediaPlayer, Mode=TwoWay}" />
+            </ctk:SettingsCard>
+            <ctk:SettingsCard
+                Description="Leave empty to find it automatically. Otherwise the command up to --config-dir, for example C:\jellyfin-mpv-shim\.venv\Scripts\python.exe -I -m jellyfin_mpv_shim.bridge. Used the next time the backend starts."
+                Header="MPV backend command"
+                HeaderIcon="{ui:FontIcon Glyph=&#xE756;}"
+                Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                <TextBox
+                    MinWidth="420"
+                    PlaceholderText="Automatic"
+                    Text="{x:Bind ViewModel.MpvBackendCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            </ctk:SettingsCard>
+            <ctk:SettingsCard
+                Header="MPV backend"
+                HeaderIcon="{ui:FontIcon Glyph=&#xE9D9;}"
+                Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                <ctk:SettingsCard.Description>
+                    <TextBlock IsTextSelectionEnabled="True" Text="{x:Bind ViewModel.MpvBackendStatus, Mode=OneWay}" TextWrapping="Wrap" />
+                </ctk:SettingsCard.Description>
             </ctk:SettingsCard>
         </StackPanel>
 

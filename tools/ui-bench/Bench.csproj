@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Benchmarks an upstream FluentFin.Core (the perf scout's baseline): Program.cs uses upstream's constructors, which this
+    fork's Core has extended (JellyfinClient and GlobalCommands take ISettings), so it does not build against ui\ here.
+    dotnet build tools\ui-bench -p:CoreProject=<upstream checkout>\FluentFin.Core\FluentFin.Core.csproj
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>preview</LangVersion>
+    <NoWarn>$(NoWarn);CS1998;CS8602;CS8604</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="$(CoreProject)" Condition="'$(CoreProject)' != ''" />
+    <PackageReference Include="Moq" Version="4.21.0" />
+    <PackageReference Include="Blurhash.Core" Version="4.2.1" />
+  </ItemGroup>
+  <Target Name="RequireCoreProject" BeforeTargets="PrepareForBuild" Condition="'$(CoreProject)' == ''">
+    <Error Text="Pass the upstream FluentFin.Core to benchmark: dotnet build -p:CoreProject=&lt;upstream checkout&gt;\FluentFin.Core\FluentFin.Core.csproj" />
+  </Target>
+</Project>

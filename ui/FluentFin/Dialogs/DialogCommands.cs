@@ -141,6 +141,12 @@ public partial class DialogCommands(IContentDialogService dialogService,
 	[RelayCommand]
 	private async Task SelectSyncPlayGroup()
 	{
+		if (App.GetService<Core.Settings.ISettings>().MediaPlayer == MediaPlayerType.Mpv)
+		{
+			dialogService.Growl("SyncPlay", "SyncPlay is not available with the MPV player. Choose another player in Settings to use it.", TimeSpan.FromSeconds(6));
+			return;
+		}
+
 		var vm = App.GetService<SyncPlayGroupPickerViewModel>();
 		await vm.Initialize();
 		await dialogService.ShowDialog(vm, dialog => CloseOnAllButtonClick(dialog, vm));

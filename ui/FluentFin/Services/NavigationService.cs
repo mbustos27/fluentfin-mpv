@@ -122,6 +122,9 @@ public class NavigationService : INavigationService
 				frame.BackStack.Clear();
 			}
 
+			// fluentfin-mpv: a player page replacing a player page (a remote Play while playing) takes over its history entry
+			DropReplacedPlayerPage(frame.BackStack, x => x.SourcePageType, e.SourcePageType, e.NavigationMode);
+
 			if (frame.GetPageViewModel() is INavigationAware navigationAware)
 			{
 				await navigationAware.OnNavigatedTo(e.Parameter);
@@ -129,5 +132,20 @@ public class NavigationService : INavigationService
 
 			Navigated?.Invoke(sender, e);
 		}
+	}
+
+	/// <summary>
+	/// fluentfin-mpv: when a player page was replaced by a new one, the old one leaves the back stack, so Back from the new
+	/// page goes to where the user was before the first player page instead of playing the old item again.
+	/// </summary>
+	internal static bool DropReplacedPlayerPage<T>(IList<T> backStack, Func<T, Type> pageType, Type incoming, NavigationMode mode)
+	{
+		if (mode != NavigationMode.New || incoming != typeof(Views.VideoPlayerPage) || backStack.Count == 0 || pageType(backStack[^1]) != incoming)
+		{
+			return false;
+		}
+
+		backStack.RemoveAt(backStack.Count - 1);
+		return true;
 	}
 }

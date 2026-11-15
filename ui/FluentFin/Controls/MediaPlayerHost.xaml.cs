@@ -65,6 +65,8 @@ public sealed partial class MediaPlayerHost : UserControl
 
 		this.WhenAnyValue(x => x.MediaPlayerType)
 			.WhereNotNull()
+			// the mpv player draws in the backend's window, VideoPlayerPage shows that instead of this control
+			.Where(type => type != Core.Contracts.Services.MediaPlayerType.Mpv)
 			.ObserveOn(RxSchedulers.MainThreadScheduler)
 			.Subscribe(type =>
 			{

@@ -6,7 +6,10 @@ public class KnownFolders
 	public string Updates { get; }
 	public string Logs { get; }
 
-	public KnownFolders() : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"FluentFin")) { }
+	// fluentfin-mpv: its own folder, so this build never shares settings, saved logins or logs with an upstream FluentFin install
+	public const string FolderName = "FluentFinMpv";
+
+	public KnownFolders() : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), FolderName)) { }
 
 	public KnownFolders(string root)
 	{

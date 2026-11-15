@@ -29,7 +29,8 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 							IObservable<IOutboundWebSocketMessage> webSocketMessages,
 							INavigationService navigationService,
 							ISettings settings,
-							ITaskBarProgress taskBarProgress) : ObservableObject, INavigationAware
+							ITaskBarProgress taskBarProgress,
+							Core.Mpv.MpvPlaybackService mpvPlayback) : ObservableObject, INavigationAware
 {
 	private readonly CompositeDisposable _disposables = [];
 	private readonly PlaybackProgressInfo _playbackProgressInfo = new();
@@ -66,6 +67,12 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 
 	public async Task OnNavigatedFrom()
 	{
+		// the mpv backend reports the stop itself, FluentFin's own reporting must not run as well
+		if (await OnNavigatedFromMpv())
+		{
+			return;
+		}
+
 		_disposables.Dispose();
 		_keyboardController?.UnsubscribeEvents();
 
@@ -86,6 +93,12 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 	public async Task OnNavigatedTo(object parameter)
 	{
 		MediaPlayerType = settings.MediaPlayer;
+
+		// with the mpv player the backend does PlaybackInfo, the stream and every report (docs/BRIDGE.md §6)
+		if (await OnNavigatedToMpv(parameter))
+		{
+			return;
+		}
 
 		if (parameter is BaseItemDto { Id: { } id })
 		{

@@ -10,14 +10,17 @@ namespace FluentFin.Core;
 
 public partial class GlobalCommands(INavigationServiceCore navigationService,
 									IJellyfinClient jellyfinClient,
-									INavigationViewServiceCore navigationViewService)
+									INavigationViewServiceCore navigationViewService,
+									ISettings settings)
 {
 	[RelayCommand]
 	public Task PlayDto(BaseItemDto dto) => Play(dto, null);
 
-	public async Task Play(BaseItemDto dto, PlaybackSelection? selection)
+	/// <param name="streamsPicked">fluentfin-mpv: the user changed a stream picker on the item page (only the mpv player uses it).</param>
+	public async Task Play(BaseItemDto dto, PlaybackSelection? selection, bool streamsPicked = true)
 	{
-		if (SessionInfo.GroupId is not null)
+		// SyncPlay is not supported with the mpv player (docs/BRIDGE.md §6): play here even if a group was joined before
+		if (SessionInfo.GroupId is not null && settings.MediaPlayer != MediaPlayerType.Mpv)
 		{
 			var ids = await GetItemIds(dto);
 			var info = await jellyfinClient.GetItem(ids[0]!.Value);
@@ -36,6 +39,12 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 		}
 		else
 		{
+			// fluentfin-mpv: with the mpv player only a pick the user made is sent (docs/BRIDGE.md §4)
+			if (settings.MediaPlayer == MediaPlayerType.Mpv)
+			{
+				selection = Mpv.MpvTrackPick.ForPlay(dto, selection, streamsPicked);
+			}
+
 			navigationService.NavigateTo("FluentFin.ViewModels.VideoPlayerViewModel", selection is null ? dto : new PlaybackRequest(dto, selection));
 		}
 	}

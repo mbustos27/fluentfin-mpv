@@ -6,3 +6,9 @@ __pycache__/
 # Local tool drops (mpv/libmpv copies, logs)
 tools/mpv/
 *.log
+
+# Build output of the tool/harness projects
+tools/**/bin/
+tools/**/obj/
+tools/**/out/
+

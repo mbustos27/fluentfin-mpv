@@ -1222,7 +1222,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
             is_using_ext_mpv,
             browser_wants_window,
         )
-        self._geometry_armed = mpv_options["geometry"]
+        # .get: an embedded window (window_embed) has no geometry option --
+        # its size is its owner's -- and nothing re-arms one there.
+        self._geometry_armed = mpv_options.get("geometry")
 
         player = self._construct_mpv(
             mpv_options,
@@ -1701,6 +1703,22 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         # ways to get half of it.
         self._observe("window-maximized", self._on_border_change)
         self._observe("fullscreen", self._on_border_change)
+        from . import window_embed
+
+        if window_embed.active():
+            # Embedded (the bridge): fullscreen belongs to the window's
+            # owner, so mpv's own ways of toggling it -- the double-click
+            # binding, the OSC button, ESC -- become a request instead. The
+            # property is synced to the owner's state BEFORE observing, so
+            # the initial notification is not mistaken for a toggle (a
+            # `fs=yes` in mpv.conf outranks the construction option on
+            # libmpv). See window_embed.
+            try:
+                p.fs = window_embed.ui_fullscreen
+            except Exception:
+                log.debug("could not sync the embedded fullscreen state",
+                          exc_info=True)
+            self._observe("fullscreen", self._on_embedded_fullscreen)
         self._observe("eof-reached", self._on_eof_reached)
         self._observe("playback-abort", self._on_playback_abort)
         self._observe("seeking", self._on_seeking)
@@ -3275,7 +3293,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
             try:
                 self._player.image_display_duration = max(
                     1, int(settings.photo_display_secs))
-            except (_mpv_errors, ValueError, TypeError):
+            # FluentFin MPV: unpacked; a nested tuple here is a TypeError
+            # (see _maybe_save_volume).
+            except (*_mpv_errors, ValueError, TypeError):
                 log.debug("could not set the photo display duration",
                           exc_info=True)
         # Repeat-one loops the current file, and only audio may do that.
@@ -3419,8 +3439,14 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         # Music has no picture — going fullscreen for it just blanks the
         # screen (and, with the in-window browser, hides the library the
         # now-playing bar belongs to).
+        #
+        # Never into an embedded window: fullscreen is its owner's call
+        # (window_embed), and the owner has its own auto-fullscreen.
+        from . import window_embed
+
         if (settings.fullscreen and not self.fullscreen_disable
-                and not self._current_is_audio()):
+                and not self._current_is_audio()
+                and not window_embed.active()):
             self._player.fs = True
         self._player.force_media_title = video.get_proper_title()
         # A new file is actually playing now; any prior end-of-file is stale,
@@ -3450,7 +3476,8 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         self._capture_track_memory(video)
         self.update_subtitle_visuals()
 
-        if win_utils and settings.raise_mpv and is_initial_play:
+        if (win_utils and settings.raise_mpv and is_initial_play
+                and not window_embed.active()):
             win_utils.raise_mpv()
 
         if offset is not None and offset > 0:
@@ -5111,7 +5138,12 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         else:
             self.configure_streams()
         # Remember the user's manual choice for subsequent episodes.
-        self._capture_track_memory(self._video)
+        # FluentFin MPV: unless a restart whose load failed has ended the
+        # video -- an AttributeError on None here was reported over that
+        # load's own error.
+        current = self._video
+        if current is not None:
+            self._capture_track_memory(current)
         # (The HUD re-reads osc_bridge.build_state on its next repaint,
         # so track changes show up there without a push.)
         self.timeline_handle()
@@ -5188,7 +5220,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
             return
         try:
             vol = int(self._player.volume)
-        except (_mpv_errors, TypeError):
+        # FluentFin MPV: unpacked. `(_mpv_errors, TypeError)` nests a tuple,
+        # and matching anything raised here against it is a TypeError.
+        except (*_mpv_errors, TypeError):
             return
         key = "music_volume" if self._current_is_audio() else "video_volume"
         if getattr(settings, key) != vol:

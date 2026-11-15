@@ -47,6 +47,13 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<BaseItemDto?> GetItem(Guid id);
 
+		/// <summary>
+		/// fluentfin-mpv: every episode of a series in play order (seasons in order, specials where the server places them),
+		/// in one request with the user data (played, resume point) and nothing else: no images, no extra fields. The mpv
+		/// player's queue (Mpv.MpvQueue). Null when the request failed (logged).
+		/// </summary>
+		Task<BaseItemDtoQueryResult?> GetSeriesEpisodes(Guid seriesId);
+
 		IAsyncEnumerable<RecentItemDtoQueryResult> GetRecentItemsFromUserLibraries();
 
 		IAsyncEnumerable<BaseItemDto> GetUserLibraries();

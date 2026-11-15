@@ -746,4 +746,12 @@ def build_mpv_options(osc_style, scripts, ext_mpv, browser_wants_window):
     if settings.input_gamepad:
         mpv_options[GAMEPAD_OPTION] = True
 
+    # Last, so it sees every window option above: rendering into a window
+    # another process owns (the bridge's embedded mode) drops the ones that
+    # size, place or title a top-level window and adds `wid`. A no-op
+    # otherwise. See window_embed.
+    from . import window_embed
+
+    window_embed.apply_to_options(mpv_options)
+
     return mpv_options

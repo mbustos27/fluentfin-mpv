@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- End-to-end check of the crash rule (docs/BRIDGE.md §3, §6) against the REAL backend: this repo's (or -p:UiDir=<copy>'s)
+       FluentFin.Core (MpvBackendHost, MpvPlaybackService, CloseSequence) and job launcher (JobObject.cs, JobProcess.cs,
+       WindowsMpvBackendLauncher.cs). Built and run by run.ps1, which copies this folder next to its output first, and a copy
+       of FluentFin.Core too (-p:CoreDir=<copy>), so the build never writes bin\ or obj\ into the ui\ it tests. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>UiHarnessE2e</RootNamespace>
+    <UiDir Condition="'$(UiDir)' == ''">$(MSBuildThisFileDirectory)..\..\..\ui</UiDir>
+    <CoreDir Condition="'$(CoreDir)' == ''">$(UiDir)\FluentFin.Core</CoreDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(UiDir)\FluentFin\Mpv\JobObject.cs" Link="Mpv\JobObject.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\JobProcess.cs" Link="Mpv\JobProcess.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\WindowsMpvBackendLauncher.cs" Link="Mpv\WindowsMpvBackendLauncher.cs" />
+    <ProjectReference Include="$(CoreDir)\FluentFin.Core.csproj" />
+  </ItemGroup>
+</Project>

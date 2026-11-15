@@ -73,6 +73,16 @@ def set_browse_bg(hexstr):
     if hexstr:
         BROWSE_BG_HEX = hexstr
     return BROWSE_BG_HEX
+
+
+def _embedded():
+    """Whether mpv is drawing into a window another process owns. Read
+    per call: the module holds the state (window_embed)."""
+    from . import window_embed
+
+    return window_embed.active()
+
+
 # mpv's own defaults, restored by browse_yield() when video takes the window
 # back. Kept here so the browse background can't leak into playback.
 MPV_DEFAULT_BACKGROUND = "tiles"
@@ -121,6 +131,11 @@ class WindowMixin:
 
         # ReportingMixin.
         def upd_player_hide(self) -> None: ...
+
+        # Grown deliberately, for the embedded window's fullscreen mirror
+        # (`_on_embedded_fullscreen`): it runs on mpv's event thread, where
+        # a property write is what put_task exists to keep out.
+        def put_task(self, func, *args) -> None: ...
 
     #: mpv's ``--target-colorspace-hint``, spelled once. Both backends expose
     #: options as attributes with the dashes turned into underscores.
@@ -245,6 +260,13 @@ class WindowMixin:
             wlog.info("force_window=False SUPPRESSED (in-window UI owns it) "
                       "<- %s", _caller())
             return
+        if not value and _embedded():
+            # The owner's panel keeps its surface for the life of the mpv;
+            # dropping it would tear the video output out of a window that
+            # is not ours to minimize (window_embed).
+            wlog.info("force_window=False SUPPRESSED (embedded) <- %s",
+                      _caller())
+            return
         wlog.info("force_window=%s <- %s", value, _caller())
         if not value:
             # Releasing force_window IS the minimize — mpv destroys the
@@ -302,7 +324,12 @@ class WindowMixin:
         without ever commanding a resize. While maximized or fullscreen there
         is no floating size to record, and the write itself would un-maximize,
         so leave the last armed value alone.
+
+        Never for an embedded window (window_embed): its size is its
+        owner's, and the write is a resize command.
         """
+        if _embedded():
+            return
         try:
             if self._player.fullscreen or self._player.window_maximized:
                 return
@@ -323,6 +350,8 @@ class WindowMixin:
         Skipping the redundant write matters: see _sync_window_geometry for
         what a write does to a live window.
         """
+        if _embedded():
+            return
         want = "%dx%d" % size
         if want == self._geometry_armed:
             return
@@ -334,7 +363,88 @@ class WindowMixin:
 
     @synchronous("_lock")
     def toggle_fullscreen(self):
+        from . import window_embed
+
+        if window_embed.active():
+            # The owner's state, not mpv's: they are kept equal, but the
+            # owner's is the one that decides (window_embed).
+            self.set_fullscreen(not window_embed.ui_fullscreen, persist=True)
+            return
         self.set_fullscreen(not self._player.fs, persist=True)
+
+    def _on_embedded_fullscreen(self, _name, value):
+        """mpv's ``fullscreen`` moved in an embedded window: a request.
+
+        mpv's own bindings toggle the property directly -- the
+        ``MBTN_LEFT_DBL`` default, the OSC button, ESC -- and none of them
+        passes through the shim, so this observer is the one place all of
+        them arrive. The owner is asked, and the property is put back to the
+        owner's state until it answers with ``set_embedded_fullscreen``; left
+        alone it would disagree with the window, the OSC would draw the wrong
+        button, and the next toggle would ask for what the window already is.
+
+        Runs on mpv's event thread: it only notifies, and the write back is
+        queued. A value equal to the owner's state is our own write (the
+        sync, or the put-back) echoing, and is not a request.
+        """
+        from . import window_embed
+
+        if not window_embed.active():
+            return
+        want = bool(value)
+        if want == window_embed.ui_fullscreen:
+            return
+        wlog.info("embedded: fullscreen=%s requested from mpv", want)
+        window_embed.request_fullscreen(want)
+        self.put_task(self._restore_embedded_fullscreen)
+
+    def _restore_embedded_fullscreen(self):
+        """Put mpv's ``fullscreen`` back to the owner's state, read NOW --
+        the owner may have answered while this was queued."""
+        from . import window_embed
+        from .player import _mpv_errors
+
+        if not (window_embed.active() and self._mpv_alive):
+            return
+        gone = False
+        # One lock with set_embedded_fullscreen (window_embed.fullscreen_lock)
+        with window_embed.fullscreen_lock:
+            try:
+                if bool(self._player.fs) != window_embed.ui_fullscreen:
+                    self._player.fs = window_embed.ui_fullscreen
+            except _mpv_errors:
+                gone = True
+            except Exception:
+                log.debug("could not restore the embedded fullscreen state",
+                          exc_info=True)
+        if gone:
+            self._handle_mpv_disconnect()
+
+    def set_embedded_fullscreen(self, enabled: bool):
+        """The embedded window's owner says it is (or is not) fullscreen.
+
+        Recorded first and mirrored into mpv's property second, so the
+        observer above sees its own value and asks nothing. The window
+        itself is not touched -- with ``--wid`` mpv only stores the value.
+        """
+        from . import window_embed
+        from .player import _mpv_errors
+
+        gone = False
+        # One lock with the put-back above (window_embed.fullscreen_lock)
+        with window_embed.fullscreen_lock:
+            window_embed.ui_fullscreen = bool(enabled)
+            if not self._mpv_alive:
+                return
+            try:
+                self._player.fs = bool(enabled)
+            except _mpv_errors:
+                gone = True
+            except Exception:
+                log.debug("could not mirror the embedded fullscreen state",
+                          exc_info=True)
+        if gone:
+            self._handle_mpv_disconnect()
 
     def _apply_browse_fullscreen(self):
         """Put the browse window at the size ``browser_fullscreen`` asks for.
@@ -360,6 +470,8 @@ class WindowMixin:
         setting itself is written — one decision in one place, because two
         copies of it would disagree the first time either moved.
         """
+        if _embedded():
+            return      # the owner's call, never ours (window_embed)
         if settings.browser_fullscreen or settings.headless:
             self._player.fs = True
         elif self._library_showing():
@@ -410,7 +522,17 @@ class WindowMixin:
         Which key it lands in depends on what's on screen: browsing writes
         browser_fullscreen, playback writes fullscreen. They're separate
         settings precisely because people want different answers for the
-        two."""
+        two.
+
+        In an embedded window (window_embed) this asks the window's owner
+        instead, and writes neither mpv nor a setting: whatever toggled it
+        -- a claimed key, a remote command -- the owner decides, and its
+        answer comes back through `set_embedded_fullscreen`."""
+        from . import window_embed
+
+        if window_embed.active():
+            window_embed.request_fullscreen(enabled)
+            return
         self._player.fs = enabled
         if not persist:
             return
@@ -448,8 +570,12 @@ class WindowMixin:
         Never raises: this runs on the shutdown path, where mpv may already
         be gone, and failing to remember a window size must not stop the
         app exiting.
+
+        Never for an embedded window (window_embed): that size is the
+        owner's, and saving it would hand the next standalone launch the
+        size of a panel inside somebody else's window.
         """
-        if not settings.remember_window_size:
+        if not settings.remember_window_size or _embedded():
             return
         try:
             maximized = bool(self._player.window_maximized)
@@ -953,10 +1079,12 @@ class WindowMixin:
         Normally issued from the renderer, which is holding the mouse button
         down at the time; this is the fallback path for callers that are not.
         """
+        if _embedded():
+            return False    # the window is not ours to move
         return self._window_command("begin-vo-dragging")
 
     def toggle_window_maximized(self):
-        if not self._mpv_alive:
+        if not self._mpv_alive or _embedded():
             return False
         try:
             self._player.window_maximized = not self._player.window_maximized
@@ -970,7 +1098,7 @@ class WindowMixin:
         which tears the window down and lives on in the tray. This is the
         title bar's button and it has to mean what that button means
         everywhere else."""
-        if not self._mpv_alive:
+        if not self._mpv_alive or _embedded():
             return False
         try:
             self._player.window_minimized = True
@@ -1001,10 +1129,13 @@ class WindowMixin:
         action and a second app launch both need it. Windows has a real API
         for this via pywin32; elsewhere the most we can portably do is
         un-minimize, since raising is the window manager's call."""
+        if not self._mpv_alive or _embedded():
+            # Embedded: there is nothing of ours to raise, and EnumWindows
+            # would find whichever top-level mpv window exists -- somebody
+            # else's.
+            return
         from .player import win_utils
 
-        if not self._mpv_alive:
-            return
         if win_utils is not None:
             try:
                 win_utils.raise_mpv()
@@ -1030,7 +1161,8 @@ class WindowMixin:
         self._showing_browse_bg = False
         try:
             self._player.keepaspect = True
-            if settings.fullscreen and not self.fullscreen_disable:
+            if (settings.fullscreen and not self.fullscreen_disable
+                    and not _embedded()):
                 self._player.fs = True
             try:
                 # set_browse_window() paints the window in the UI's dark grey,
@@ -1072,7 +1204,7 @@ class WindowMixin:
                 self._player.keep_open = True
                 self._player.image_display_duration = "inf"
                 self._player.play(get_resource("logo.png"))
-                if settings.fullscreen:
+                if settings.fullscreen and not _embedded():
                     self._player.fs = True
             else:
                 self._player.image_display_duration = 1

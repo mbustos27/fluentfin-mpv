@@ -3,7 +3,11 @@ using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
 using FluentFin.Contracts.Services;
 using FluentFin.Core;
+using FluentFin.Core.Contracts.Services;
+using FluentFin.Core.Mpv;
 using FluentFin.Core.Services;
+using FluentFin.Core.Settings;
+using Microsoft.Extensions.Logging;
 using FluentFin.ViewModels;
 using Jellyfin.Sdk.Generated.Models;
 using Jellyfin.Sdk.WebSockets;
@@ -14,7 +18,9 @@ namespace FluentFin.Services;
 
 public class WebSocketMessageHandler(IObservable<IOutboundWebSocketMessage> webSocketMessages,
 									 IContentDialogService contentDialogService,
-									 INavigationService navigationService) : IHostedService
+									 INavigationService navigationService,
+									 ISettings settings,
+									 ILogger<WebSocketMessageHandler> logger) : IHostedService
 {
 	private readonly CompositeDisposable _disposables = [];
 
@@ -34,11 +40,28 @@ public class WebSocketMessageHandler(IObservable<IOutboundWebSocketMessage> webS
 				 case SyncPlayGroupUpdateMessage { Data: { } update }:
 					 HandleGroupUpdate(update);
 					 break;
+				 // casting to FluentFin: with the mpv player the backend plays the queue the controller sent
+				 case PlayMessage { Data: { } play } when settings.MediaPlayer == MediaPlayerType.Mpv:
+					 HandleRemotePlay(play);
+					 break;
 			 }
 		 })
 		 .DisposeWith(_disposables);
 
 		return Task.CompletedTask;
+	}
+
+	private void HandleRemotePlay(PlayRequest play)
+	{
+		if (MpvRemoteControl.ToPlayRequest(play) is not { } request)
+		{
+			logger.LogInformation("Remote {Command} with {Count} item(s) not taken: the MPV player can only replace what plays", play.PlayCommand, play.ItemIds?.Count ?? 0);
+			contentDialogService.Growl("", "Adding to the queue is not available with the MPV player.", TimeSpan.FromSeconds(5));
+			return;
+		}
+
+		logger.LogInformation("Remote {Command}: {Count} item(s) from index {Index}", play.PlayCommand, request.ItemIds.Count, request.StartIndex);
+		navigationService.NavigateTo<VideoPlayerViewModel>(request);
 	}
 
 	private void HandleGroupUpdate(GroupUpdate update)

@@ -488,6 +488,13 @@ public partial class JellyfinClient
 		{
 			SessionInfo.Plugins = await _jellyfinApiClient.Plugins.GetAsync() ?? [];
 		}
+		// fluentfin-mpv: the server lists its plugins to administrators only; anyone else is refused (401/403), which means
+		// no plugin features (they are for administrators too), not an error
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode is 401 or 403)
+		{
+			SessionInfo.Plugins = [];
+			logger.LogDebug("The server does not list its plugins to this user (HTTP {Status}): no plugin features", ex.ResponseStatusCode);
+		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");

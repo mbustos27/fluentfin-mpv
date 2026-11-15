@@ -313,10 +313,14 @@ class StartupTest(unittest.TestCase):
 
     def test_the_armed_value_is_tracked_from_startup(self):
         """_geometry_armed must be seeded from the option actually passed;
-        starting it out wrong would let a redundant resize through."""
+        starting it out wrong would let a redundant resize through.
+
+        ``.get``, because an embedded window (the bridge, window_embed) is
+        built with no geometry option at all -- its size is its owner's --
+        and `_rearm_window_geometry` never writes one there."""
         import inspect
 
-        self.assertIn('self._geometry_armed = mpv_options["geometry"]',
+        self.assertIn('self._geometry_armed = mpv_options.get("geometry")',
                       inspect.getsource(PlayerManager))
 
 

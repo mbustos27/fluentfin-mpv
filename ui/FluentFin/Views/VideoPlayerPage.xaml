@@ -11,14 +11,48 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <controls:MediaPlayerHost
-        x:Name="MediaPlayerHost"
-        IsSkipButtonVisible="{x:Bind ViewModel.IsSkipButtonVisible, Mode=OneWay}"
-        JellyfinClient="{x:Bind ViewModel.JellyfinClient}"
-        MediaPlayerType="{x:Bind ViewModel.MediaPlayerType, Mode=OneWay}"
-        Player="{x:Bind ViewModel.MediaPlayer, Mode=TwoWay}"
-        Playlist="{x:Bind ViewModel.Playlist, Mode=OneWay}"
-        SkipCommand="{x:Bind ViewModel.SkipCommand, Mode=OneWay}"
-        Trickplay="{x:Bind ViewModel.TrickplayViewModel}" />
+    <Grid>
+        <controls:MediaPlayerHost
+            x:Name="MediaPlayerHost"
+            IsSkipButtonVisible="{x:Bind ViewModel.IsSkipButtonVisible, Mode=OneWay}"
+            JellyfinClient="{x:Bind ViewModel.JellyfinClient}"
+            MediaPlayerType="{x:Bind ViewModel.MediaPlayerType, Mode=OneWay}"
+            Player="{x:Bind ViewModel.MediaPlayer, Mode=TwoWay}"
+            Playlist="{x:Bind ViewModel.Playlist, Mode=OneWay}"
+            SkipCommand="{x:Bind ViewModel.SkipCommand, Mode=OneWay}"
+            Trickplay="{x:Bind ViewModel.TrickplayViewModel}"
+            Visibility="{x:Bind CollapsedIf(ViewModel.IsMpv), Mode=OneWay}" />
+
+        <!--
+            MPV player: the backend's mpv draws into a Win32 child window that FluentFin keeps exactly over MpvVideoArea.
+            XAML cannot draw over that window, so the message bar has its own row above it; transport controls are mpv's OSC.
+        -->
+        <Grid x:Name="MpvRoot" Visibility="{x:Bind VisibleIf(ViewModel.IsMpv), Mode=OneWay}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <InfoBar
+                x:Name="MpvMessageBar"
+                Grid.Row="0"
+                IsClosable="True"
+                IsOpen="{x:Bind HasText(ViewModel.MpvMessage), Mode=OneWay}"
+                Message="{x:Bind ViewModel.MpvMessage, Mode=OneWay}"
+                Severity="{x:Bind SeverityOf(ViewModel.MpvMessageIsError), Mode=OneWay}" />
+
+            <Grid
+                x:Name="MpvVideoArea"
+                Grid.Row="1"
+                Background="Black">
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{ThemeResource BodyTextBlockStyle}"
+                    Text="{x:Bind ViewModel.MpvStatusText, Mode=OneWay}" />
+            </Grid>
+        </Grid>
+    </Grid>
 
 </Page>

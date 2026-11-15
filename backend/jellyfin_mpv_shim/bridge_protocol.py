@@ -1,0 +1,751 @@
+"""The bridge's wire protocol, with nothing of the player in it.
+
+Framing, argument validation, secret redaction and the Jellyfin <-> mpv
+translations the bridge reports in. The contract is ``BRIDGE.md`` at the
+repository root (``../docs/BRIDGE.md`` from ``backend/``), protocol
+version 1; how the shim is wired behind it is docs/bridge.md.
+
+**Imports nothing from the shim**, deliberately: importing almost anything
+under ``jellyfin_mpv_shim`` reaches ``args.get_args()``, and importing
+``player`` builds a real mpv (docs/testing.md sections 1 and 2). The bridge
+has to do several of these things -- take over stdout above all -- before it
+is safe to import any of that, and the unit tests have to be able to check
+them without it.
+"""
+
+import json
+import logging
+import math
+import os
+import re
+import sys
+import threading
+import urllib.parse
+
+#: The protocol this backend speaks (`connect` must ask for it).
+PROTOCOL_VERSION = 1
+#: This bridge's own version, reported in `hello` beside the shim's.
+BRIDGE_VERSION = "1.0.0"
+
+#: Jellyfin ticks are 100 ns.
+TICKS_PER_SECOND = 10_000_000
+
+# Error codes, BRIDGE.md section 2.
+NOT_CONNECTED = "not_connected"
+BAD_ARGS = "bad_args"
+UNKNOWN_CMD = "unknown_cmd"
+AUTH_FAILED = "auth_failed"
+SERVER_UNREACHABLE = "server_unreachable"
+MPV_FAILED = "mpv_failed"
+NO_PLAYBACK = "no_playback"
+WINDOW_LOCKED = "window_locked"
+INTERNAL = "internal"
+
+ERROR_CODES = frozenset({
+    NOT_CONNECTED, BAD_ARGS, UNKNOWN_CMD, AUTH_FAILED, SERVER_UNREACHABLE,
+    MPV_FAILED, NO_PLAYBACK, WINDOW_LOCKED, INTERNAL,
+})
+
+
+class BridgeError(Exception):
+    """A command that fails with one of the protocol's error codes."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+class FramingError(Exception):
+    """A line that is not a request at all: no usable ``id``, so there is
+    nobody to answer. Reported as an ``error`` event instead."""
+
+
+class Request:
+    __slots__ = ("id", "cmd", "args")
+
+    def __init__(self, req_id, cmd, args):
+        self.id = req_id
+        self.cmd = cmd
+        self.args = args
+
+    def __repr__(self):
+        # Never the args: `connect` carries the access token.
+        return "Request(id=%r, cmd=%r)" % (self.id, self.cmd)
+
+
+# ---------------------------------------------------------------------------
+# Framing
+
+
+def encode_message(obj):
+    """One protocol message: compact UTF-8 JSON and a single ``\\n``.
+
+    ``json.dumps`` escapes every control character inside strings, so the
+    newline that ends the line is the only one in it. No BOM, ever.
+
+    **A lone UTF-16 surrogate is replaced, not sent.** The server's JSON
+    can carry one (``"\\ud83d"`` in a badly decoded file name), ``json``
+    decodes it into the str as-is, and UTF-8 cannot encode it -- the
+    ``UnicodeEncodeError`` used to kill whichever thread was writing.
+    Escaping it instead (``ensure_ascii``) is no better: System.Text.Json
+    refuses an unpaired surrogate escape when the UI reads the string. So a
+    pair split across two code points is rejoined and a lone one becomes
+    U+FFFD; everything else is untouched.
+    """
+    text = json.dumps(obj, ensure_ascii=False, separators=(",", ":"),
+                      allow_nan=False)
+    try:
+        data = text.encode("utf-8")
+    except UnicodeEncodeError:
+        data = text.encode("utf-16", "surrogatepass").decode(
+            "utf-16", "replace").encode("utf-8")
+    return data + b"\n"
+
+
+def decode_line(raw):
+    """Parse one line from the UI into a `Request`.
+
+    Returns None for a blank line. Raises `FramingError` when there is no
+    request id to answer (unparseable JSON, not an object, no positive
+    integer ``id``), and `BridgeError` (``bad_args``) with ``.request_id``
+    set when there is one but the rest is malformed.
+
+    A leading BOM and a trailing ``\\r`` are tolerated rather than refused:
+    neither side should send them, but a line is not worth losing over one.
+    """
+    if isinstance(raw, bytes):
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise FramingError("line is not valid UTF-8")
+    else:
+        text = raw
+    text = text.lstrip("﻿").strip()
+    if not text:
+        return None
+    try:
+        obj = json.loads(text)
+    except ValueError:
+        raise FramingError("line is not valid JSON")
+    if not isinstance(obj, dict):
+        raise FramingError("message is not a JSON object")
+    req_id = obj.get("id")
+    if not _is_int(req_id) or req_id <= 0:
+        raise FramingError("request has no positive integer id")
+    cmd = obj.get("cmd")
+    if not isinstance(cmd, str) or not cmd:
+        error = BridgeError(BAD_ARGS, "cmd must be a non-empty string")
+        error.request_id = req_id
+        raise error
+    args = obj.get("args")
+    if args is None:
+        args = {}
+    if not isinstance(args, dict):
+        error = BridgeError(BAD_ARGS, "args must be an object")
+        error.request_id = req_id
+        raise error
+    return Request(req_id, cmd, args)
+
+
+class ProtocolWriter:
+    """The backend -> UI half: thread-safe, one whole line per write.
+
+    Every thread that has something to say goes through one lock, so lines
+    never interleave. A write that fails (the UI went away) marks the writer
+    closed and calls ``on_broken`` once -- that is a shutdown, the same as
+    stdin reaching EOF.
+    """
+
+    def __init__(self, stream, on_broken=None):
+        self._stream = stream
+        self._lock = threading.Lock()
+        self.closed = False
+        self.on_broken = on_broken
+
+    def send(self, obj):
+        data = encode_message(obj)
+        broken = False
+        with self._lock:
+            if self.closed:
+                return False
+            try:
+                view = memoryview(data)
+                while view:
+                    written = self._stream.write(view)
+                    if written is None:     # a buffered stream wrote it all
+                        break
+                    view = view[written:]
+                flush = getattr(self._stream, "flush", None)
+                if flush is not None:
+                    flush()
+            except (OSError, ValueError):
+                self.closed = True
+                broken = True
+        if broken and self.on_broken is not None:
+            try:
+                self.on_broken()
+            except Exception:
+                logging.getLogger("bridge").debug(
+                    "on_broken failed", exc_info=True)
+        return not broken
+
+    def respond(self, req_id, result=None):
+        return self.send({"id": req_id, "ok": True,
+                          "result": {} if result is None else result})
+
+    def fail(self, req_id, code, message):
+        return self.send({"id": req_id, "ok": False,
+                          "error": {"code": code,
+                                    "message": redact(str(message))}})
+
+    def event(self, name, data=None):
+        return self.send({"event": name, "data": {} if data is None else data})
+
+    def close(self):
+        with self._lock:
+            self.closed = True
+        try:
+            self._stream.close()
+        except Exception:
+            pass
+
+
+def isolate_stdout():
+    """Take fd 1 for the protocol and send everything else to stderr.
+
+    Returns an unbuffered binary stream on a duplicate of the original
+    stdout. After this, fd 1, ``sys.stdout`` and -- on Windows -- the
+    process's ``STD_OUTPUT_HANDLE`` all point at stderr, so a stray
+    ``print``, a C library writing to fd 1, a ``WriteFile`` on the standard
+    handle, or a child process that inherits the standard handles can none
+    of them put a byte into the protocol stream.
+
+    The handle matters on Windows: it is what native code and child
+    processes use. The C runtime's ``_dup2`` re-points it for fds 0-2 in a
+    *console* process (measured: the isolation test passes without the
+    ``SetStdHandle`` below), but not in a GUI-subsystem one, which a frozen
+    backend built windowless would be -- so it is done explicitly. The duplicate is
+    non-inheritable (PEP 446), so no child ever holds the protocol pipe
+    open -- which would keep the UI from seeing EOF after we exit.
+    """
+    for stream in (sys.stdout, sys.__stdout__):
+        try:
+            if stream is not None:
+                stream.flush()
+        except Exception:
+            pass
+    proto_fd = os.dup(1)
+    try:
+        os.dup2(2, 1)
+    except OSError:
+        # No usable stderr: point fd 1 at nothing rather than the protocol.
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, 1)
+        os.close(devnull)
+    if os.name == "nt":
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+
+        msvcrt.setmode(proto_fd, os.O_BINARY)
+        try:
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.SetStdHandle.argtypes = [wintypes.DWORD, wintypes.HANDLE]
+            kernel32.SetStdHandle.restype = wintypes.BOOL
+            std_output_handle = wintypes.DWORD(-11 & 0xFFFFFFFF)
+            kernel32.SetStdHandle(std_output_handle, msvcrt.get_osfhandle(1))
+        except Exception:
+            pass
+    sys.stdout = sys.stderr
+    return os.fdopen(proto_fd, "wb", buffering=0)
+
+
+# ---------------------------------------------------------------------------
+# Item ids
+
+
+_ITEM_ID = re.compile(r"^[0-9a-f]{32}$")
+
+
+def normalize_item_id(value):
+    """A Jellyfin item id in N format -- 32 lowercase hex digits, no dashes
+    -- or None if ``value`` is not one. Accepts the dashed (D) form too."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip().replace("-", "").lower()
+    return text if _ITEM_ID.match(text) else None
+
+
+def item_id_out(value):
+    """An id about to be emitted, in N format (BRIDGE.md: every item id the
+    backend emits is). Anything that is not an id passes through unchanged
+    rather than vanishing: None stays None."""
+    normalized = normalize_item_id(value)
+    return normalized if normalized is not None else value
+
+
+# ---------------------------------------------------------------------------
+# Argument validation
+
+
+_MISSING = object()
+
+
+def _is_int(value):
+    """An int that is not a bool -- JSON true is not 1 here."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _bad(message):
+    return BridgeError(BAD_ARGS, message)
+
+
+def get_int(args, key, default=_MISSING, minimum=None, maximum=None,
+            nullable=False, label=None):
+    """An integer argument. ``null`` is "not given" when there is a
+    default, and a value of its own only when ``nullable``."""
+    name = label or key
+    value = args.get(key, _MISSING)
+    if value is _MISSING:
+        if default is _MISSING:
+            raise _bad("%s is required" % name)
+        return default
+    if value is None:
+        if nullable:
+            return None
+        if default is not _MISSING:
+            return default
+        raise _bad("%s must be an integer" % name)
+    if not _is_int(value):
+        raise _bad("%s must be an integer" % name)
+    if minimum is not None and value < minimum:
+        raise _bad("%s must be >= %d" % (name, minimum))
+    if maximum is not None and value > maximum:
+        raise _bad("%s must be <= %d" % (name, maximum))
+    return value
+
+
+def get_number(args, key):
+    value = args.get(key, _MISSING)
+    if value is _MISSING:
+        raise _bad("%s is required" % key)
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value)):
+        raise _bad("%s must be a number" % key)
+    return value
+
+
+def get_bool(args, key):
+    value = args.get(key, _MISSING)
+    if value is _MISSING:
+        raise _bad("%s is required" % key)
+    if not isinstance(value, bool):
+        raise _bad("%s must be true or false" % key)
+    return value
+
+
+def get_str(args, key, required=True, nullable=False, allow_empty=False,
+            label=None):
+    name = label or key
+    value = args.get(key, _MISSING)
+    if value is _MISSING or (value is None and nullable):
+        if required:
+            raise _bad("%s is required" % name)
+        return None
+    if not isinstance(value, str):
+        raise _bad("%s must be a string" % name)
+    if not allow_empty and not value.strip():
+        raise _bad("%s must not be empty" % name)
+    return value
+
+
+def get_object(args, key, required=True):
+    value = args.get(key, _MISSING)
+    if value is _MISSING or value is None:
+        if required:
+            raise _bad("%s is required" % key)
+        return None
+    if not isinstance(value, dict):
+        raise _bad("%s must be an object" % key)
+    return value
+
+
+def validate_play(args):
+    """``play`` args, normalised. Mirrors the server's PlayNow command."""
+    item_ids = args.get("itemIds", _MISSING)
+    if item_ids is _MISSING:
+        raise _bad("itemIds is required")
+    if not isinstance(item_ids, list) or not item_ids:
+        raise _bad("itemIds must be a non-empty list of item ids")
+    normalized = [normalize_item_id(i) for i in item_ids]
+    if None in normalized:
+        raise _bad("itemIds must be Jellyfin item ids (32 hex digits, "
+                   "with or without dashes)")
+    item_ids = normalized
+    start_index = get_int(args, "startIndex", default=0, minimum=0)
+    if start_index >= len(item_ids):
+        raise _bad("startIndex %d is outside itemIds (%d)"
+                   % (start_index, len(item_ids)))
+    return {
+        "itemIds": list(item_ids),
+        "startIndex": start_index,
+        "startPositionTicks": get_int(args, "startPositionTicks", default=0,
+                                      minimum=0),
+        "mediaSourceId": get_str(args, "mediaSourceId", required=False,
+                                 nullable=True),
+        "audioStreamIndex": get_int(args, "audioStreamIndex", default=None,
+                                    minimum=0, nullable=True),
+        "subtitleStreamIndex": get_int(args, "subtitleStreamIndex",
+                                       default=None, minimum=-1,
+                                       nullable=True),
+    }
+
+
+def validate_window(window):
+    """A ``connect`` window, normalised to ``{"mode", "hwnd"}``."""
+    if not isinstance(window, dict):
+        raise _bad("window must be an object")
+    mode = window.get("mode")
+    if mode == "standalone":
+        return {"mode": "standalone", "hwnd": None}
+    if mode != "embedded":
+        raise _bad('window.mode must be "embedded" or "standalone"')
+    hwnd = normalize_hwnd(window.get("hwnd"))
+    if hwnd is None:
+        raise _bad("window.hwnd must be an integer with 0 < hwnd <= "
+                   "4294967295 for embedded mode")
+    return {"mode": "embedded", "hwnd": hwnd}
+
+
+def normalize_hwnd(value):
+    """A window handle mpv's ``--wid`` can take, or None.
+
+    BRIDGE.md: ``0 < hwnd <= 4294967295``. Win32 handles are 32 bits wide
+    on 64-bit Windows too, and mpv reads a negative or out-of-range ``wid``
+    as "no window" and opens its own top-level one -- so a value outside
+    that range (a sign-extended ``IntPtr`` included) is refused rather than
+    guessed at.
+    """
+    if not _is_int(value) or not 0 < value <= 0xFFFFFFFF:
+        return None
+    return value
+
+
+def is_window_handle(hwnd):
+    """Whether ``hwnd`` names a live window. Windows only; elsewhere the
+    value is an X11 window id we cannot cheaply check, so it is believed."""
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.WinDLL("user32")
+        user32.IsWindow.argtypes = [wintypes.HWND]
+        user32.IsWindow.restype = wintypes.BOOL
+        return bool(user32.IsWindow(hwnd))
+    except Exception:
+        return True
+
+
+_SERVER_KEYS = ("server", "user", "accessToken", "device", "client")
+
+
+def validate_connect(args, dev=False):
+    """``connect`` args, normalised.
+
+    Returns ``{"window": {...} | None, "server": {...} | None}``. ``server``
+    carries everything the Jellyfin client is built from. Without ``--dev``
+    the server part is required; with it, ``protocol`` and ``window`` alone
+    are a valid connect (enough for ``play_file``).
+    """
+    protocol = args.get("protocol", _MISSING)
+    if protocol is _MISSING:
+        raise _bad("protocol is required")
+    if not _is_int(protocol):
+        raise _bad("protocol must be an integer")
+    if protocol != PROTOCOL_VERSION:
+        raise _bad("protocol %d is not supported; this backend speaks %d"
+                   % (protocol, PROTOCOL_VERSION))
+
+    window = args.get("window", _MISSING)
+    window = None if window is _MISSING or window is None \
+        else validate_window(window)
+
+    present = [k for k in _SERVER_KEYS if args.get(k) is not None]
+    if not present:
+        if not dev:
+            raise _bad("server, user, accessToken, device and client are "
+                       "required")
+        return {"window": window, "server": None}
+    missing = [k for k in _SERVER_KEYS if args.get(k) is None]
+    if missing:
+        raise _bad("%s required alongside %s" % (", ".join(missing),
+                                                  ", ".join(present)))
+
+    server = get_object(args, "server")
+    user = get_object(args, "user")
+    device = get_object(args, "device")
+    client = get_object(args, "client")
+    url = get_str(server, "url", label="server.url")
+    parsed = urllib.parse.urlsplit(url.strip())
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise _bad("server.url must be an http(s) URL")
+    token = get_str(args, "accessToken")
+    user_id = get_str(user, "id", label="user.id")
+    device_id = get_str(device, "id", label="device.id")
+    device_name = get_str(device, "name", label="device.name")
+    client_name = get_str(client, "name", label="client.name")
+    client_version = get_str(client, "version", required=False,
+                             nullable=True, label="client.version")
+    server_id = get_str(server, "id", required=False, nullable=True,
+                        allow_empty=True, label="server.id")
+    server_name = get_str(server, "name", required=False, nullable=True,
+                          allow_empty=True, label="server.name")
+    user_name = get_str(user, "name", required=False, nullable=True,
+                        allow_empty=True, label="user.name")
+    return {
+        "window": window,
+        "server": {
+            "url": url.strip().rstrip("/"),
+            "serverId": server_id,
+            "serverName": server_name,
+            "userId": user_id,
+            "userName": user_name,
+            "token": token,
+            "deviceId": device_id,
+            "deviceName": device_name,
+            "clientName": client_name,
+            "clientVersion": client_version or "0.0.0",
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Redaction
+
+
+_secrets = set()
+_secrets_lock = threading.Lock()
+
+#: Shortest value worth redacting literally; anything shorter would start
+#: blanking ordinary words out of log lines.
+_MIN_SECRET = 6
+
+_REDACTED = "REDACTED"
+
+_PATTERNS = (
+    # Quoted key/value pairs: JSON ("accessToken": "x"), a dict repr
+    # ('X-Emby-Token': 'x'), with escaped quotes inside the value allowed.
+    (re.compile(r'(?i)(["\']?(?:access_?token|x-emby-token|'
+                r'x-mediabrowser-token|api_?key|(?:x-emby-)?authorization)'
+                r'["\']?\s*[:=]\s*)(["\'])((?:\\.|(?!\2).)*)\2'),
+     lambda m: "%s%s%s%s" % (m.group(1), m.group(2), _REDACTED,
+                             m.group(2))),
+    # Header lines: `Authorization: MediaBrowser ...`, `X-Emby-Token: x`.
+    (re.compile(r'(?im)\b((?:x-emby-)?authorization\s*:\s*)[^\r\n]+'),
+     lambda m: m.group(1) + _REDACTED),
+    (re.compile(r'(?i)\b((?:x-emby-token|x-mediabrowser-token)\s*:\s*)'
+                r'[^\s,;"\']+'),
+     lambda m: m.group(1) + _REDACTED),
+    # Query strings and bare key=value: api_key=, ApiKey=, X-Emby-Token=.
+    (re.compile(r'(?i)\b(api_?key|x-emby-token|x-mediabrowser-token|'
+                r'access_?token)=([^&\s"\'<>,;]+)'),
+     lambda m: "%s=%s" % (m.group(1), _REDACTED)),
+    # The MediaBrowser scheme's own spelling, plain and escaped.
+    (re.compile(r'Token=\\"[^"\\]*\\"'), lambda m: 'Token=\\"%s\\"' % _REDACTED),
+    (re.compile(r'Token="[^"]*"'), lambda m: 'Token="%s"' % _REDACTED),
+)
+
+
+def add_secret(value):
+    """Redact this exact value wherever it appears from now on (the access
+    token, as soon as `connect` hands it over -- before anything can log
+    it). Its URL-encoded spelling too."""
+    if not isinstance(value, str) or len(value) < _MIN_SECRET:
+        return
+    with _secrets_lock:
+        _secrets.add(value)
+        quoted = urllib.parse.quote(value, safe="")
+        if quoted != value:
+            _secrets.add(quoted)
+
+
+def redact(text):
+    """``text`` with every access token in it replaced. Never raises."""
+    try:
+        text = str(text)
+        with _secrets_lock:
+            secrets = sorted(_secrets, key=len, reverse=True)
+        for secret in secrets:
+            text = text.replace(secret, _REDACTED)
+        for pattern, replace in _PATTERNS:
+            text = pattern.sub(replace, text)
+        return text
+    except Exception:
+        return "<unloggable>"
+
+
+class RedactingFormatter(logging.Formatter):
+    """Formats the whole record -- message, arguments, traceback -- and only
+    then redacts, so no field can carry a token past it."""
+
+    def format(self, record):
+        return redact(super().format(record))
+
+
+# ---------------------------------------------------------------------------
+# Ticks and track translation
+
+
+def seconds_to_ticks(seconds):
+    if seconds is None:
+        return None
+    try:
+        value = float(seconds)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value):
+        return None
+    return int(round(value * TICKS_PER_SECOND))
+
+
+def ticks_to_seconds(ticks):
+    return ticks / TICKS_PER_SECOND
+
+
+#: The shim's play-method vocabulary -> the protocol's. `Remux` is
+#: jellyfin-web's name for a container remux, which the server calls a
+#: direct stream.
+_PLAY_METHODS = {
+    "DirectPlay": "DirectPlay",
+    "DirectStream": "DirectStream",
+    "Remux": "DirectStream",
+    "Transcode": "Transcode",
+}
+
+
+def play_method_name(video):
+    if video is None:
+        return None
+    method = _PLAY_METHODS.get(getattr(video, "play_method", None))
+    if method is not None:
+        return method
+    if getattr(video, "is_transcode", False):
+        return "Transcode"
+    if getattr(video, "playback_info", None) is not None:
+        return "DirectPlay"
+    return None
+
+
+def _track_id(value):
+    """mpv's ``aid``/``sid`` as an int, or None for off/auto/unknown. mpv
+    reports "no" as False (jsonipc) or the string "no" (libmpv)."""
+    if value is None or isinstance(value, bool):
+        return None
+    if _is_int(value):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def audio_index_from_mpv(video, mpv_aid):
+    """The Jellyfin MediaStream index of the audio mpv is playing.
+
+    On a transcode mpv's track numbering is the transcode's, not the
+    source's, and the audio was chosen when the stream was negotiated, so the
+    video's own ``aid`` is the answer. Otherwise mpv's id is mapped back
+    through the shim's own table (``Video.audio_uid``, built by
+    ``map_streams``), which also catches a track switched with mpv's own key.
+    """
+    if video is None:
+        return None
+    selected = getattr(video, "aid", None)
+    if getattr(video, "is_transcode", False):
+        return selected
+    track = _track_id(mpv_aid)
+    if track is None:
+        return selected
+    return (getattr(video, "audio_uid", None) or {}).get(track, selected)
+
+
+def subtitle_index_from_mpv(video, mpv_sid, external_subtitles=None):
+    """The Jellyfin index of the subtitle on screen, ``-1`` for none.
+
+    Three cases mpv cannot see: a burned-in subtitle (``subtitle_enc``,
+    painted into the video by the server), and a sidecar still loading
+    (``subtitle_url`` with no mpv track yet -- the shim shows nothing
+    meanwhile, docs/track-selection.md section 7). Both report the
+    selection. Otherwise mpv's track id is mapped back through the embedded
+    table (``subtitle_uid``) or the sidecars the shim has added
+    (``PlayerManager.external_subtitles``, index -> mpv id).
+    """
+    if video is None:
+        return None
+    selected = getattr(video, "sid", None)
+    external = external_subtitles or {}
+    if selected is not None and selected in (
+            getattr(video, "subtitle_enc", None) or ()):
+        return selected
+    track = _track_id(mpv_sid)
+    if track is None:
+        if (selected is not None and selected >= 0
+                and selected in (getattr(video, "subtitle_url", None) or {})
+                and selected not in external):
+            return selected     # loading
+        return -1
+    for index, mpv_id in external.items():
+        if mpv_id == track:
+            return index
+    return (getattr(video, "subtitle_uid", None) or {}).get(track, selected)
+
+
+def _track(stream, audio):
+    out = {
+        "index": stream.get("Index"),
+        "isDefault": bool(stream.get("IsDefault")),
+        "isExternal": bool(stream.get("IsExternal")),
+    }
+    if stream.get("Language"):
+        out["language"] = stream["Language"]
+    title = stream.get("DisplayTitle") or stream.get("Title")
+    if title:
+        out["title"] = title
+    if stream.get("Codec"):
+        out["codec"] = stream["Codec"]
+    if audio and stream.get("Channels") is not None:
+        out["channels"] = stream["Channels"]
+    if not audio and "IsForced" in stream:
+        out["isForced"] = bool(stream.get("IsForced"))
+    return out
+
+
+def tracks_payload(media_source):
+    """The ``tracks`` event for a media source: Jellyfin's own indices."""
+    streams = (media_source or {}).get("MediaStreams") or []
+    return {
+        "audio": [_track(s, True) for s in streams
+                  if s.get("Type") == "Audio" and _is_int(s.get("Index"))],
+        "subtitle": [_track(s, False) for s in streams
+                     if s.get("Type") == "Subtitle"
+                     and _is_int(s.get("Index"))],
+    }
+
+
+def item_payload(item_id, item):
+    """The ``item`` event for a queue item's DTO."""
+    item = item or {}
+    out = {"itemId": item_id_out(item_id), "name": item.get("Name") or "",
+           "type": item.get("Type")}
+    if item.get("Type") == "Episode":
+        if item.get("SeriesName"):
+            out["seriesName"] = item["SeriesName"]
+        if _is_int(item.get("ParentIndexNumber")):
+            out["seasonNumber"] = item["ParentIndexNumber"]
+        if _is_int(item.get("IndexNumber")):
+            out["episodeNumber"] = item["IndexNumber"]
+    if _is_int(item.get("RunTimeTicks")):
+        out["runTimeTicks"] = item["RunTimeTicks"]
+    return out

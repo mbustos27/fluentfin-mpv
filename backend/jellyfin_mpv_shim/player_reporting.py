@@ -373,7 +373,12 @@ class ReportingMixin:
             "PlayMethod": "Transcode" if video.is_transcode else "DirectPlay",
             "PlaySessionId": video.playback_info["PlaySessionId"],
             "PlaylistItemId": video.get_playlist_id(),
-            "MediaSourceId": video.media_source["Id"],
+            # FluentFin MPV: `or {}`. A video can be left with a session and
+            # no media source (a PlaybackInfo answering `MediaSources: []`
+            # over a playing one), and the TypeError here made stop() raise
+            # before it dropped the video: a stop that did nothing. The
+            # server takes a Stopped without it.
+            "MediaSourceId": (video.media_source or {}).get("Id"),
             "CanSeek": True,
             "ItemId": video.item_id,
             "NowPlayingQueue": video.parent.queue,

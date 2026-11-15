@@ -13,6 +13,8 @@ using FluentFin.Dialogs.UserInput;
 using FluentFin.Dialogs.ViewModels;
 using FluentFin.Dialogs.Views;
 using FluentFin.Helpers;
+using FluentFin.Core.Mpv;
+using FluentFin.Mpv;
 using FluentFin.Plugins.Playback_Reporting;
 using FluentFin.Services;
 using FluentFin.UI.Core;
@@ -88,6 +90,14 @@ public partial class App : Application
 			services.AddTransient<ActivationHandler<LaunchActivatedEventArgs>, DefaultActivationHandler>();
 
 			// Other Activation Handlers
+			services.AddTransient<IActivationHandler, MpvSelfTestActivationHandler>();
+
+			// mpv player: the jellyfin-mpv-shim backend as a child process, drawing into a window of ours (docs/BRIDGE.md)
+			services.AddSingleton<MpvVideoHost>();
+			services.AddSingleton<IMpvVideoSurface>(sp => sp.GetRequiredService<MpvVideoHost>());
+			services.AddSingleton<IMpvBackendLauncher, WindowsMpvBackendLauncher>();
+			services.AddSingleton<IMpvBackend, MpvBackendHost>();
+			services.AddSingleton<MpvPlaybackService>();
 
 			// Services
 			services.AddSingleton<IActivationService, ActivationService>();
@@ -199,10 +209,8 @@ public partial class App : Application
 			}
 
 			// Configuration
-			if (!IsPackaged())
-			{
-				services.AddHostedService<WindowsUpdateService>();
-			}
+			// fluentfin-mpv: no WindowsUpdateService. It downloads upstream FluentFin's latest installer from GitHub on start
+			// and offers to run it, which would replace this build (and its mpv player) with upstream's.
 			services.AddHostedService<WebSocketMessageHandler>();
 		}).
 		Build();
@@ -234,6 +242,9 @@ public partial class App : Application
 			base.OnLaunched(args);
 
 			MainWindow.AppWindow.Closing += AppWindow_Closing;
+
+			// a hung mpv window would freeze our input too (the queues of the two processes are attached)
+			GetService<MpvVideoHost>().Unresponsive += reason => GetService<IMpvBackend>().Kill(reason);
 
 			StartFlyleaf();
 
@@ -273,7 +284,19 @@ public partial class App : Application
 		_isClosing = true;
 		try
 		{
-			await GetService<IJellyfinClient>().Stop();
+			// fluentfin-mpv: gone for the user at once; the mpv backend may need ~10 s for its final report (docs/BRIDGE.md §3)
+			sender.Hide();
+		}
+		catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+		{
+		}
+
+		try
+		{
+			// fluentfin-mpv: upstream's stop report (bounded: a hung server must not keep a hidden FluentFin alive) and, side by
+			// side, the mpv backend's shutdown and any crash report FluentFin is sending for it. Before the window goes, so the
+			// backend's mpv window is gone before ours is destroyed.
+			await CloseSequence.RunAsync(GetService<IJellyfinClient>(), GetService<MpvPlaybackService>(), GetService<ILogger<App>>());
 			await Host.StopAsync();
 		}
 		finally
