@@ -35,8 +35,21 @@ public sealed unsafe partial class MpvVideoHost(ILogger<MpvVideoHost> logger) : 
 	private Timer? _watchdog;
 	private int _unansweredChecks;
 
+	// fluentfin-mpv player controls: where the window is on the screen, for the controls window kept over it
+	private Windows.Graphics.RectInt32? _screenRect;
+
 	/// <summary>mpv's window did not answer for several seconds (from a thread-pool thread). The argument says what happened.</summary>
 	public event Action<string>? Unresponsive;
+
+	/// <summary>
+	/// fluentfin-mpv: the window was shown at a new place on the screen (physical pixels), or hidden (null). UI thread. The
+	/// player controls window (<see cref="MpvControlsOverlay"/>) follows it: it moves with the main window too, which a child
+	/// window does not have to.
+	/// </summary>
+	public event Action<Windows.Graphics.RectInt32?>? ScreenRectChanged;
+
+	/// <summary>fluentfin-mpv: where the window is on the screen (physical pixels), null while hidden.</summary>
+	public Windows.Graphics.RectInt32? ScreenRect => _screenRect;
 
 	public nint Handle => _hwnd;
 
@@ -236,6 +249,11 @@ public sealed unsafe partial class MpvVideoHost(ILogger<MpvVideoHost> logger) : 
 		{
 			Update(force: true);
 		}
+		else if (args.DidPositionChange)
+		{
+			// fluentfin-mpv: a child window moves with its parent by itself, the controls window on the screen does not
+			Update();
+		}
 	}
 
 	private void OnResync(DispatcherQueueTimer sender, object args) => Update();
@@ -297,6 +315,7 @@ public sealed unsafe partial class MpvVideoHost(ILogger<MpvVideoHost> logger) : 
 
 		if (!force && _shown && rect.Equals(_shownAt))
 		{
+			PublishScreenRect(parent, rect);
 			return;
 		}
 
@@ -322,6 +341,7 @@ public sealed unsafe partial class MpvVideoHost(ILogger<MpvVideoHost> logger) : 
 		_shownAt = rect;
 		_shown = true;
 		StartWatchdog();
+		PublishScreenRect(parent, rect);
 	}
 
 	private void Hide()
@@ -333,6 +353,37 @@ public sealed unsafe partial class MpvVideoHost(ILogger<MpvVideoHost> logger) : 
 
 		_shown = false;
 		StopWatchdog();
+		SetScreenRect(null);
+	}
+
+	/// <summary>fluentfin-mpv: <paramref name="clientRect"/> (in the main window's client area) on the screen, published when it changed.</summary>
+	private void PublishScreenRect(nint parent, RECT clientRect)
+	{
+		var origin = new POINT();
+		if (!ClientToScreen(parent, &origin))
+		{
+			return;
+		}
+
+		SetScreenRect(new Windows.Graphics.RectInt32(clientRect.Left + origin.X, clientRect.Top + origin.Y, clientRect.Right - clientRect.Left, clientRect.Bottom - clientRect.Top));
+	}
+
+	private void SetScreenRect(Windows.Graphics.RectInt32? rect)
+	{
+		if (Nullable.Equals(rect, _screenRect))
+		{
+			return;
+		}
+
+		_screenRect = rect;
+		try
+		{
+			ScreenRectChanged?.Invoke(rect);
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "Moving the player controls with the video window failed");
+		}
 	}
 
 	/// <summary>Flyouts, menus, dialogs and growls are popups; tooltips are left alone (they are small and short-lived).</summary>
@@ -478,6 +529,13 @@ public sealed unsafe partial class MpvVideoHost(ILogger<MpvVideoHost> logger) : 
 	}
 
 	[StructLayout(LayoutKind.Sequential)]
+	private struct POINT
+	{
+		public int X;
+		public int Y;
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
 	private struct WNDCLASSEXW
 	{
 		public uint cbSize;
@@ -557,6 +615,10 @@ public sealed unsafe partial class MpvVideoHost(ILogger<MpvVideoHost> logger) : 
 
 	[LibraryImport("user32.dll")]
 	private static partial int MapWindowPoints(nint from, nint to, RECT* points, uint count);
+
+	[LibraryImport("user32.dll")]
+	[return: MarshalAs(UnmanagedType.Bool)]
+	private static partial bool ClientToScreen(nint hwnd, POINT* point);
 
 	[LibraryImport("user32.dll")]
 	private static partial nint LoadCursorW(nint instance, nint cursorName);
