@@ -425,7 +425,7 @@ public static class MpvIdentity
 			SessionInfo.AccessToken,
 			SessionInfo.DeviceId ?? "",
 			SessionInfo.DeviceName ?? Environment.MachineName,
-			SessionInfo.ClientName ?? "FluentFin",
+			SessionInfo.ClientName ?? "FluentFin MPV",
 			SessionInfo.ClientVersion ?? "");
 	}
 }

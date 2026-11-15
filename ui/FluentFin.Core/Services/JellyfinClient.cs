@@ -41,7 +41,7 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		_token = authResult.AccessToken;
 		_deviceId = new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
 		_settings = new Jellyfin.Sdk.JellyfinSdkSettings();
-		SessionInfo.ClientName = "FluentFin";
+		SessionInfo.ClientName = "FluentFin MPV";
 		SessionInfo.ClientVersion = Assembly.GetEntryAssembly()!.GetName().Version!.ToString()!;
 		SessionInfo.DeviceName = Environment.MachineName;
 		SessionInfo.DeviceId = _deviceId;

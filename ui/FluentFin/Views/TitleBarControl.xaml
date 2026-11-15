@@ -32,7 +32,7 @@
 
     <TitleBar
         x:Name="TitleBar"
-        Title="FluentFin"
+        Title="FluentFin MPV"
         BackRequested="TitleBar_BackRequested"
         IsBackButtonEnabled="{x:Bind ViewModel.CanGoBack, Mode=OneWay}"
         IsBackButtonVisible="{x:Bind ViewModel.User, Converter={StaticResource ObjectToBoolConverter}, Mode=OneWay}"
