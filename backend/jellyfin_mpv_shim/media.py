@@ -544,26 +544,12 @@ class Video(object):
 
     def get_proper_title(self):
         if not hasattr(self, "_title"):
-            title = self.item.get("Name")
-            if (
-                self.is_tv
-                and self.item.get("IndexNumber") is not None
-                and self.item.get("ParentIndexNumber") is not None
-            ):
-                episode_number = int(self.item.get("IndexNumber"))
-                season_number = int(self.item.get("ParentIndexNumber"))
-                series_name = self.item.get("SeriesName")
-                title = "%s - s%de%.2d - %s" % (
-                    series_name,
-                    season_number,
-                    episode_number,
-                    title,
-                )
-            elif self.item.get("Type") == "Movie":
-                year = self.item.get("ProductionYear")
-                if year is not None:
-                    title = "%s (%s)" % (title, year)
-            setattr(self, "_title", title)
+            # FluentFin MPV: "Series — S6E4 · Episode", the episode's name
+            # left out when it only repeats the series (upstream's
+            # "Series - s6e04 - Name" showed the show twice for those).
+            from .fluentfin_osc import media_title
+
+            setattr(self, "_title", media_title(self.item, self.is_tv))
         return getattr(self, "_title") + (
             _(" (Transcode)") if self.is_transcode else ""
         )
