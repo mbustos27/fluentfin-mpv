@@ -74,15 +74,17 @@ public partial class App : Application
 		RxAppBuilder.CreateReactiveUIBuilder().WithWinUI().BuildApp();
 		InitializeComponent();
 
+		// fluentfin-mpv: --data-dir <folder> / FLUENTFIN_MPV_DATA_DIR put everything this run writes there (dev and test runs)
+		var knownFolders = StartupFolders();
+
 		Host = Microsoft.Extensions.Hosting.Host
 		.CreateDefaultBuilder()
 		.UseContentRoot(AppContext.BaseDirectory)
 		.ConfigureServices((context, services) =>
 		{
-			var knownFolders = new Core.KnownFolders();
 			Log.Logger = new LoggerConfiguration()
 				.Enrich.FromLogContext()
-				.WriteTo.File(Path.Combine(knownFolders.Logs, "log.txt"), Serilog.Events.LogEventLevel.Debug, rollingInterval: RollingInterval.Day)
+				.WriteTo.File(knownFolders.LogFile, Serilog.Events.LogEventLevel.Debug, rollingInterval: RollingInterval.Day)
 				.CreateLogger();
 			services.AddLogging(builder => builder.AddSerilog());
 
@@ -109,7 +111,15 @@ public partial class App : Application
 			services.AddTransient<IContentDialogService, ContentDialogService>();
 			services.AddTransient<IContentDialogServiceCore>(sp => sp.GetRequiredService<IContentDialogService>());
 			services.AddSingleton<IDeviceProfileFactory, DeviceProfileFactory>();
-			services.AddSingleton<IJumpListService, JumpListService>();
+			// fluentfin-mpv: a run with its own data folder leaves the taskbar's jump list (shell state outside it) alone
+			if (knownFolders.IsCustom)
+			{
+				services.AddSingleton<IJumpListService, NoJumpListService>();
+			}
+			else
+			{
+				services.AddSingleton<IJumpListService, JumpListService>();
+			}
 
 			services.AddNavigationViewNavigation(NavigationRegions.Settings);
 			services.AddFrameNavigation(NavigationRegions.UserEditor);
@@ -217,6 +227,21 @@ public partial class App : Application
 
 		UnhandledException += App_UnhandledException;
 		AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+	}
+
+	// fluentfin-mpv: a --data-dir with no folder stops the start; the default folder would take a test run's data
+	private static Core.KnownFolders StartupFolders()
+	{
+		try
+		{
+			return Core.KnownFolders.ForStartup([.. Environment.GetCommandLineArgs().Skip(1)], Environment.GetEnvironmentVariable);
+		}
+		catch (ArgumentException ex)
+		{
+			NativeMethods.ShowError("FluentFin could not start", ex.Message);
+			Environment.Exit(2);
+			throw;
+		}
 	}
 
 	private void CurrentDomain_UnhandledException(object sender, System.UnhandledExceptionEventArgs e)
