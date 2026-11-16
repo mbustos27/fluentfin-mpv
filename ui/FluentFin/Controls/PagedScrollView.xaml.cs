@@ -30,6 +30,38 @@ public sealed partial class PagedScrollView : UserControl
 		HeaderButton.IsTabStop = Tag is not null;
 	}
 
+	private bool _pointerIn;
+	private bool _focusIn;
+
+	/// <summary>Seaglass: the scroll pills show while the pointer or the focus is in the row (and stay reachable by Tab).</summary>
+	private void UpdatePills()
+	{
+		var opacity = _pointerIn || _focusIn ? 1.0 : 0.0;
+		ScrollLeftBtn.Opacity = opacity;
+		ScrollRightBtn.Opacity = opacity;
+	}
+
+	private void RowRoot_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e) { _pointerIn = true; UpdatePills(); }
+
+	private void RowRoot_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e) { _pointerIn = false; UpdatePills(); }
+
+	private void RowRoot_GotFocus(object sender, RoutedEventArgs e) { _focusIn = true; UpdatePills(); }
+
+	private void RowRoot_LostFocus(object sender, RoutedEventArgs e)
+	{
+		var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+		_focusIn = false;
+		for (var node = focused; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, RowRoot))
+			{
+				_focusIn = true;
+				break;
+			}
+		}
+		UpdatePills();
+	}
+
 	private void HeaderButton_Click(object sender, RoutedEventArgs e)
 	{
 		if (Tag is null)

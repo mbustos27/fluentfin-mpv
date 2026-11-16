@@ -15,7 +15,7 @@
     -->
     <Grid
         x:Name="Root"
-        Height="440"
+        Height="400"
         AutomationProperties.LandmarkType="Custom"
         AutomationProperties.LocalizedLandmarkType="Featured"
         AutomationProperties.Name="Featured"

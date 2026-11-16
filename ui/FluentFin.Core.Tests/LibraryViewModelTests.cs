@@ -34,6 +34,18 @@ public sealed class LibraryViewModelTests
 		Assert.Equal(3, vm.NumberOfPages);
 	}
 
+	[Fact]
+	public async Task TheTitleIsTheLibrarysName()
+	{
+		var client = new Mock<IJellyfinClient>();
+		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [new BaseItemDto { Id = Guid.NewGuid(), Name = "A" }] });
+		var vm = new LibraryViewModel(client.Object);
+
+		await vm.OnNavigatedTo(new BaseItemDto { Name = "Documentaries" });
+
+		Assert.Equal("Documentaries", vm.Title);
+	}
+
 	private static void AssertPage(LibraryViewModel vm, List<BaseItemDto> dtos, int page, bool descending = false)
 	{
 		var sorted = descending

@@ -17,7 +17,7 @@
         <!--  fluentfin-mpv: the row's title, drawn as plain text, but a button so the keyboard and Narrator can open the library  -->
         <Style x:Key="RowHeaderButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="UseSystemFocusVisuals" Value="True" />
@@ -36,7 +36,13 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid RowSpacing="16">
+    <Grid
+        x:Name="RowRoot"
+        GotFocus="RowRoot_GotFocus"
+        LostFocus="RowRoot_LostFocus"
+        PointerEntered="RowRoot_PointerEntered"
+        PointerExited="RowRoot_PointerExited"
+        RowSpacing="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition />
@@ -58,38 +64,9 @@
                 <TextBlock
                     PointerEntered="TextBlock_PointerEntered"
                     PointerExited="TextBlock_PointerExited"
-                    Style="{StaticResource TitleTextBlockStyle}"
+                    Style="{StaticResource GlassSectionTitleTextBlockStyle}"
                     Text="{x:Bind Header, Mode=OneWay}" />
             </Button>
-
-            <!--  fluentfin-mpv: names and tooltips (ux-review I3)  -->
-            <StackPanel
-                Grid.Column="1"
-                HorizontalAlignment="Right"
-                Orientation="Horizontal"
-                Spacing="10">
-                <Button
-                    x:Name="ScrollLeftBtn"
-                    Width="40"
-                    Height="40"
-                    AutomationProperties.Name="Scroll left"
-                    Click="ScrollLeftBtn_Click"
-                    CornerRadius="25"
-                    ToolTipService.ToolTip="Scroll left"
-                    Visibility="Collapsed">
-                    <FontIcon FontSize="12" Glyph="&#xedd9;" />
-                </Button>
-                <Button
-                    x:Name="ScrollRightBtn"
-                    Width="40"
-                    Height="40"
-                    AutomationProperties.Name="Scroll right"
-                    Click="ScrollRightBtn_Click"
-                    CornerRadius="25"
-                    ToolTipService.ToolTip="Scroll right">
-                    <FontIcon FontSize="12" Glyph="&#xEDDA;" />
-                </Button>
-            </StackPanel>
         </Grid>
 
 
@@ -121,5 +98,37 @@
                 </ItemsRepeater>
             </Grid>
         </ScrollViewer>
+
+        <!--
+            Seaglass: the scroll buttons are glass icon pills at the row's edges, shown while the pointer is over the row or the
+            focus is in it (fluentfin-mpv: names and tooltips, ux-review I3)
+        -->
+        <Button
+            x:Name="ScrollLeftBtn"
+            Grid.Row="1"
+            Margin="8,0,0,0"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="Scroll left"
+            Click="ScrollLeftBtn_Click"
+            Opacity="0"
+            Style="{StaticResource GlassIconButtonStyle}"
+            ToolTipService.ToolTip="Scroll left"
+            Visibility="Collapsed">
+            <FontIcon FontSize="14" Glyph="&#xedd9;" />
+        </Button>
+        <Button
+            x:Name="ScrollRightBtn"
+            Grid.Row="1"
+            Margin="0,0,8,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="Scroll right"
+            Click="ScrollRightBtn_Click"
+            Opacity="0"
+            Style="{StaticResource GlassIconButtonStyle}"
+            ToolTipService.ToolTip="Scroll right">
+            <FontIcon FontSize="14" Glyph="&#xEDDA;" />
+        </Button>
     </Grid>
 </UserControl>

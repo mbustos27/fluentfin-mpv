@@ -14,8 +14,17 @@
     x:Name="Page"
     mc:Ignorable="d">
 
+    <Grid RowSpacing="20" Margin="36,40,36,40">
+    <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+    <TextBlock
+        AutomationProperties.HeadingLevel="Level1"
+        Style="{StaticResource GlassPageTitleTextBlockStyle}"
+        Text="Libraries" />
     <ItemsView
-        Margin="36,40,36,40"
+        Grid.Row="1"
         IsItemInvokedEnabled="True"
         ItemInvoked="ItemsView_ItemInvoked"
         ItemsSource="{x:Bind ViewModel.Libraries, Mode=OneWay}"
@@ -24,7 +33,7 @@
             <DataTemplate x:DataType="jm:BaseItemDto">
                 <!--  fluentfin-mpv: Narrator reads the library's name for the tile (ux-review A1)  -->
                 <ItemContainer AutomationProperties.Name="{x:Bind Name}">
-                    <Grid CornerRadius="{StaticResource ControlCornerRadius}">
+                    <Grid CornerRadius="{StaticResource GlassCardCornerRadius}">
                         <Grid.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem
@@ -47,9 +56,10 @@
                         <Grid
                             Grid.Row="1"
                             Padding="8"
-                            Background="{ThemeResource LayerOnMicaBaseAltFillColorDefault}">
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                             <TextBlock
                                 HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                 Style="{ThemeResource BodyStrongTextBlockStyle}"
                                 Text="{x:Bind Name}" />
                         </Grid>
@@ -66,4 +76,5 @@
                 MinRowSpacing="16" />
         </ItemsView.Layout>
     </ItemsView>
+    </Grid>
 </Page>

@@ -103,6 +103,10 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	[ObservableProperty]
 	public partial bool IsLoading { get; set; }
 
+	/// <summary>Seaglass: the library's name, the page's title.</summary>
+	[ObservableProperty]
+	public partial string Title { get; set; } = "";
+
 	/// <summary>fluentfin-mpv: the library failed to load or is empty: said on the page, with Retry.</summary>
 	public LoadState State { get; } = new("this library");
 
@@ -156,6 +160,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	private async Task<LoadOutcome> Initialize(BaseItemDto dto)
 	{
 		IsLoading = true;
+		Title = dto.Name ?? "";
 
 		try
 		{

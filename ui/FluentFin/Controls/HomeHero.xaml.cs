@@ -34,10 +34,10 @@ public sealed partial class HomeHero : UserControl
 		InitializeComponent();
 		Visibility = Visibility.Collapsed;
 		_timer.Tick += (_, _) => Advance();
-		Loaded += (_, _) => { GlassMode.Changed += OnGlassModeChanged; UpdateTimer(); };
+		Loaded += (_, _) => { SafeMotion.Subscribe(OnGlassModeChanged); UpdateTimer(); };
 		Unloaded += (_, _) =>
 		{
-			GlassMode.Changed -= OnGlassModeChanged;
+			SafeMotion.Unsubscribe(OnGlassModeChanged);
 			_timer.Stop();
 			if (AmbientBackdrop.Current is { } current && current == _shown)
 			{
@@ -70,7 +70,7 @@ public sealed partial class HomeHero : UserControl
 	/// <summary>Auto-advance runs only with several slides, motion allowed, and no pointer or focus in the hero.</summary>
 	private void UpdateTimer()
 	{
-		if (_slides.Count > 1 && GlassMode.MotionAllowed && !_pointerIn && !_focusIn && IsLoaded)
+		if (_slides.Count > 1 && SafeMotion.Allowed && !_pointerIn && !_focusIn && IsLoaded)
 		{
 			_timer.Stop();
 			_timer.Start();

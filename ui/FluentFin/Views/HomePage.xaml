@@ -59,7 +59,7 @@
 
                 <TextBlock
                     Margin="{StaticResource SmallTopBottomMargin}"
-                    Style="{StaticResource TitleTextBlockStyle}"
+                    Style="{StaticResource GlassSectionTitleTextBlockStyle}"
                     Text="Continue Watching" />
 
                 <ScrollViewer
@@ -99,7 +99,7 @@
             <StackPanel Padding="12,0,0,0" Visibility="{x:Bind local:HomePage.SectionVisibility(ViewModel.IsNextUpLoading, ViewModel.HasNextUpItems), Mode=OneWay}">
                 <TextBlock
                     Margin="{StaticResource SmallTopBottomMargin}"
-                    Style="{StaticResource TitleTextBlockStyle}"
+                    Style="{StaticResource GlassSectionTitleTextBlockStyle}"
                     Text="Next Up" />
 
                 <ScrollViewer
@@ -154,7 +154,7 @@
                                 Spacing="16"
                                 Visibility="{x:Bind IsLoading, Mode=OneWay}">
                                 <Grid Height="40">
-                                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="{x:Bind Library.Name, Converter={StaticResource StringFormatConverter}, ConverterParameter='{}Recently Added In {0}'}" />
+                                    <TextBlock Style="{StaticResource GlassSectionTitleTextBlockStyle}" Text="{x:Bind Library.Name, Converter={StaticResource StringFormatConverter}, ConverterParameter='{}Recently Added In {0}'}" />
                                 </Grid>
                                 <StackPanel Orientation="Horizontal">
                                     <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />

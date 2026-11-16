@@ -122,8 +122,8 @@ public sealed partial class BaseItemDtoCard : UserControl
 	private void Lift(bool lifted)
 	{
 		var visual = ElementCompositionPreview.GetElementVisual(RootGrid);
-		var scale = lifted && GlassMode.MotionAllowed ? RestScale * LiftScale : RestScale;
-		if (GlassMode.MotionAllowed)
+		var scale = lifted && SafeMotion.Allowed ? RestScale * LiftScale : RestScale;
+		if (SafeMotion.Allowed)
 		{
 			var spring = visual.Compositor.CreateSpringVector3Animation();
 			spring.DampingRatio = 0.7f;
