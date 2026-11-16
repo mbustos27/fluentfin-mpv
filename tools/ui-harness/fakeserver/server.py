@@ -5,8 +5,11 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
     python server.py --out <dir> [--media <dir> | --mpv <mpv.exe> --media <dir>] [--port 0]
                      [--latency MS] [--latency-rule REGEX=MS|hang ...] [--jitter MS] [--ready-file <file>]
 
-- Login: the generated test credentials in credentials.json (this folder), never real ones. Each run issues a fresh
-  random access token; it is never printed or logged.
+- Login: the generated test credentials in credentials.json (this folder), never real ones, or Quick Connect with no
+  password at all: the client asks for a code (POST /QuickConnect/Initiate), the harness approves the code the client
+  shows (POST /__harness/quickconnect/approve {"code": ...}, as a user would on another device), and the client's
+  next GET /QuickConnect/Connect sees it and signs in (POST /Users/AuthenticateWithQuickConnect). Either way each
+  sign-in gets a fresh random access token; tokens and Quick Connect secrets are never printed or logged.
 - Library: library.py (several views, hundreds of movies and shows with seasons and episodes, continue watching, next
   up, latest), artwork from imagegen.py at real sizes (posters 1000x1500, backdrops 1920x1080, ...), resized to the
   fillHeight/fillWidth/maxHeight/maxWidth asked for, as Jellyfin does.
@@ -17,7 +20,8 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   status, bytes, total ms, injected delay, client); <out>/summary.json on shutdown and on GET /__harness/summary.
   Unknown endpoints answer 404 and are listed there as unhandled.
 - Control (127.0.0.1 only, no auth): GET /__harness/fixture (the showcase items the UI harness navigates to),
-  GET /__harness/summary, POST /__harness/latency, POST /__harness/shutdown.
+  GET /__harness/summary, POST /__harness/latency, POST /__harness/shutdown, GET /__harness/quickconnect (the codes
+  waiting, never their secrets), POST /__harness/quickconnect/approve.
 """
 
 import argparse
@@ -49,7 +53,7 @@ import media as media_mod  # noqa: E402
 TICKS = library.TICKS
 TOKEN_RE = re.compile(r'Token="([^"]*)"')
 CLIENT_RE = re.compile(r'Client="([^"]*)"')
-SECRET_KEYS = {"api_key", "apikey", "token", "x-emby-token", "pw", "password"}
+SECRET_KEYS = {"api_key", "apikey", "token", "x-emby-token", "pw", "password", "secret"}
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 VERSION = "10.10.7"
 
@@ -79,6 +83,7 @@ class Server:
         runtime = int(media_meta["duration_ms"]) * 10_000
         self.lib = library.Library(self.server_id, self.user_id, runtime, seed=seed)
         self.tokens = {}            # token -> user id (never logged)
+        self.quick = {}             # Quick Connect secret -> {code, user (once approved), client...} (never logged)
         self.lock = threading.Lock()
         self.latency = latency
         self.rules = [(re.compile(r, re.I), ms) for r, ms in rules]
@@ -466,7 +471,23 @@ class Server:
                     return self._json(200, [])
                 if low == "/quickconnect/enabled":
                     self.route = "quickconnect"
-                    return self._json(200, False)
+                    return self._json(200, True)
+                if low == "/quickconnect/initiate" and method in ("POST", "GET"):
+                    self.route = "quickconnect"
+                    return self._quick_initiate()
+                if low == "/quickconnect/connect":
+                    self.route = "quickconnect"
+                    entry = outer.quick.get(self._one("secret") or "")
+                    return self._json(200, self._quick_dto(entry)) if entry else self._json(404, None)
+                if low == "/users/authenticatewithquickconnect" and method == "POST":
+                    self.route = "authenticate"
+                    with outer.lock:
+                        entry = outer.quick.get(str(self._body().get("Secret") or ""))
+                        if entry and entry["user"]:
+                            del outer.quick[entry["secret"]]   # one sign-in per approved code
+                    if not entry or not entry["user"]:
+                        return self._send(401, b"Error processing request.", "text/plain")
+                    return self._signed_in(entry["user"])
                 if low.startswith("/quickconnect/"):
                     self.route = "quickconnect"
                     return self._json(401, None)
@@ -687,6 +708,24 @@ class Server:
                         return self._json(404, None)
                     outer.push_user_data(self.uid, [item])
                     return self._json(200, lib.user_data(item))
+                mm = match(r"(?:/useritems|/users/" + ID + r"/items)/" + ID + r"/userdata")
+                if mm:
+                    self.route = "user-data"
+                    item = lib.get(mm.group(mm.lastindex))
+                    if not item:
+                        return self._json(404, None)
+                    if method == "POST":
+                        body = self._body()
+                        if "Played" in body and body["Played"] is not None:
+                            item = lib.set_played(item["Id"], bool(body["Played"])) or item
+                        if "IsFavorite" in body and body["IsFavorite"] is not None:
+                            item = lib.set_favorite(item["Id"], bool(body["IsFavorite"])) or item
+                        outer.push_user_data(self.uid, [item])
+                    return self._json(200, lib.user_data(item))
+                if low.startswith("/user_usage_stats/"):
+                    # the Playback Reporting plugin's API: a server without the plugin answers 404, as this one does
+                    self.route = "plugin-absent"
+                    return self._json(404, None)
                 if low.startswith("/sessions/playing"):
                     return self._report(low)
                 if low in ("/sessions/capabilities/full", "/sessions/capabilities"):
@@ -753,7 +792,47 @@ class Server:
                     self._json(200, {"ok": True})
                     outer.stop()
                     return
+                if low == "/__harness/quickconnect":
+                    with outer.lock:
+                        waiting = [{"code": e["code"], "client": e["client"], "approved": bool(e["user"])}
+                                   for e in outer.quick.values()]
+                    return self._json(200, waiting)
+                if low == "/__harness/quickconnect/approve" and method == "POST":
+                    # as the user would on another device: approve the code the client shows, for the test user
+                    # (or {"user": "<the second test user's name>"})
+                    body = self._body()
+                    code, name = str(body.get("code") or ""), (body.get("user") or outer.creds["username"]).lower()
+                    uid = next((u for u, v in outer.users.items() if v["name"].lower() == name), None)
+                    with outer.lock:
+                        entry = next((e for e in outer.quick.values() if e["code"] == code), None)
+                        if entry and uid:
+                            entry["user"] = uid
+                    if not entry or not uid:
+                        return self._json(404, {"error": "no such code waiting" if not entry else "no such user"})
+                    return self._json(200, {"code": code, "user": outer.users[uid]["name"]})
                 return self._json(404, None)
+
+            def _quick_dto(self, entry):
+                return {"Authenticated": bool(entry["user"]), "Secret": entry["secret"], "Code": entry["code"],
+                        "DeviceId": entry["device_id"], "DeviceName": entry["device"], "AppName": entry["client"],
+                        "AppVersion": entry["version"], "DateAdded": entry["added"]}
+
+            def _quick_initiate(self):
+                auth = self.headers.get("Authorization") or self.headers.get("X-Emby-Authorization") or ""
+
+                def field(name):
+                    m = re.search(name + r'="([^"]*)"', auth)
+                    return m.group(1) if m else ""
+                with outer.lock:
+                    codes = {e["code"] for e in outer.quick.values()}
+                    code = "%06d" % secrets.randbelow(1_000_000)
+                    while code in codes:
+                        code = "%06d" % secrets.randbelow(1_000_000)
+                    entry = {"secret": secrets.token_hex(32), "code": code, "user": None, "client": self.client,
+                             "device": field("Device"), "device_id": field("DeviceId"), "version": field("Version"),
+                             "added": library.iso(datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None))}
+                    outer.quick[entry["secret"]] = entry
+                return self._json(200, self._quick_dto(entry))
 
             def _authenticate(self):
                 body = self._body()
@@ -761,6 +840,9 @@ class Server:
                 uid = next((u for u, v in outer.users.items() if v["name"].lower() == name.lower()), None)
                 if uid is None or not secrets.compare_digest(outer.users[uid]["password"], pw):
                     return self._send(401, b"Error processing request.", "text/plain")
+                return self._signed_in(uid)
+
+            def _signed_in(self, uid):
                 token = secrets.token_hex(16)
                 with outer.lock:
                     outer.tokens[token] = uid

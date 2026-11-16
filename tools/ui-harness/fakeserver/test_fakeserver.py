@@ -240,6 +240,50 @@ class ServerTests(unittest.TestCase):
         # put the showcase movie back the way the fixture has it
         self.request("/UserPlayedItems/" + movie, "DELETE", token=self.token)
 
+    def test_quick_connect_signs_in_without_a_password_once_the_harness_approves(self):
+        self.assertIs(True, self.request("/QuickConnect/Enabled")[1])
+        status, qc, _ = self.request("/QuickConnect/Initiate", "POST")
+        self.assertEqual(200, status)
+        self.assertRegex(qc["Code"], r"^\d{6}$")
+        self.assertFalse(qc["Authenticated"])
+        secret = qc["Secret"]
+        # not approved yet: polling says so, signing in fails
+        self.assertFalse(self.request("/QuickConnect/Connect?secret=" + secret)[1]["Authenticated"])
+        self.assertEqual(401, self.request("/Users/AuthenticateWithQuickConnect", "POST", {"Secret": secret})[0])
+        self.assertEqual(404, self.request("/QuickConnect/Connect?secret=" + "0" * 64)[0])
+        # the harness sees the code (never the secret) and approves it
+        waiting = self.get("/__harness/quickconnect")
+        self.assertIn(qc["Code"], [w["code"] for w in waiting])
+        self.assertNotIn(secret, json.dumps(waiting))
+        self.assertEqual(404, self.request("/__harness/quickconnect/approve", "POST", {"code": "x"})[0])
+        self.assertEqual(200, self.request("/__harness/quickconnect/approve", "POST", {"code": qc["Code"]})[0])
+        self.assertTrue(self.request("/QuickConnect/Connect?secret=" + secret)[1]["Authenticated"])
+        status, auth, _ = self.request("/Users/AuthenticateWithQuickConnect", "POST", {"Secret": secret})
+        self.assertEqual(200, status)
+        self.assertEqual(CREDS["username"], auth["User"]["Name"])
+        token = auth["AccessToken"]
+        self.assertEqual(200, self.request("/Users/Me", token=token)[0])
+        # one sign-in per approved code
+        self.assertEqual(401, self.request("/Users/AuthenticateWithQuickConnect", "POST", {"Secret": secret})[0])
+        with open(os.path.join(self.srv.out, "requests.jsonl"), encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn("/QuickConnect/Connect", text)
+        self.assertNotIn(secret, text)
+        self.assertNotIn(token, text)
+
+    def test_user_data_endpoint_and_absent_plugin(self):
+        movie = self.get("/__harness/fixture")["movie"]["id"]
+        data = self.get("/UserItems/%s/UserData" % movie)
+        self.assertIn("Played", data)
+        was = data["IsFavorite"]
+        status, after, _ = self.request("/UserItems/%s/UserData" % movie, "POST", {"IsFavorite": not was}, token=self.token)
+        self.assertEqual((200, not was), (status, after["IsFavorite"]))
+        self.request("/UserItems/%s/UserData" % movie, "POST", {"IsFavorite": was}, token=self.token)
+        # the Playback Reporting plugin is not installed: 404, and not a gap of the fake server
+        self.assertEqual(404, self.request("/user_usage_stats/submit_custom_query", "POST", {}, token=self.token)[0])
+        unhandled = self.get("/__harness/summary")["unhandled"]
+        self.assertFalse([k for k in unhandled if "user_usage_stats" in k or "UserData" in k], unhandled)
+
     def test_unknown_endpoint_is_404_and_listed(self):
         self.assertEqual(404, self.request("/No/Such/Thing", token=self.token)[0])
         self.assertIn("GET /No/Such/Thing", self.get("/__harness/summary")["unhandled"])
