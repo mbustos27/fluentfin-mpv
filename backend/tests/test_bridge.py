@@ -131,6 +131,20 @@ class FakeHandle:
         self.played = []
         #: `http_header_fields` as it was at each `play(url)`.
         self.headers_at_play = []
+        #: mpv's ``force-window``: what it was built with (`FakeRuntime`
+        #: sets it as `window_embed.apply_to_options` would), and every
+        #: write after that.
+        self._force_window = False
+        self.force_window_writes = []
+
+    @property
+    def force_window(self):
+        return self._force_window
+
+    @force_window.setter
+    def force_window(self, value):
+        self.force_window_writes.append(value)
+        self._force_window = value
 
     def command(self, *args):
         self.commands.append(args)
@@ -746,6 +760,8 @@ class FakeRuntime:
         self.journal = []
         self.pm = None
         self.started = []
+        #: ``defer_surface`` of each `start_player` (connect.prewarm).
+        self.deferred = []
         self.fail_start = None
         self.verify_error = None
         self.clients = []
@@ -773,7 +789,7 @@ class FakeRuntime:
     _run_steps = staticmethod(bridge_mod.ShimRuntime._run_steps)
     _bound_replies = staticmethod(bridge_mod.ShimRuntime._bound_replies)
 
-    def start_player(self, window):
+    def start_player(self, window, defer_surface=False):
         self.journal.append(("start_player", window["mode"]))
         if self.start_gate is not None:
             entered, release = self.start_gate
@@ -782,7 +798,19 @@ class FakeRuntime:
         if self.fail_start is not None:
             raise self.fail_start
         self.started.append(window)
+        self.deferred.append(defer_surface)
+        # As `ShimRuntime.start_player`: the embedded window (or the UI's own
+        # attached mpv), and whether its video output waits for the first
+        # item (connect.prewarm).
+        embedded = window["mode"] == "embedded"
+        window_embed.configure(window["hwnd"] if embedded else None,
+                               attach=window["mode"] == "attached",
+                               defer_surface=defer_surface and embedded)
         self.pm = FakePM(self.journal)
+        # The construction option `window_embed.apply_to_options` gives an
+        # embedded mpv (a standalone one: the shim's own, off here).
+        self.pm._player._force_window = (embedded and
+                                         not window_embed.surface_deferred)
         return {"mpv": "mpv v0.41.0-test", "mpvBackend": "external"}
 
     def mpv_errors(self):
@@ -1345,6 +1373,182 @@ class DevConnectTest(BridgeCase):
     def test_play_file_before_any_window(self):
         self.assertEqual(self.code("play_file", {"url": "x"}),
                          "not_connected")
+
+    def test_play_file_claims_a_deferred_surface(self):
+        """The self-test's play is a first play too."""
+        self.assertTrue(self.connect(PrewarmTest.EMBEDDED,
+                                     prewarm=True)["ok"])
+        self.assertEqual(self.runtime.deferred, [True])
+        self.assertTrue(self.send("play_file", {"url": "av://x"})["ok"])
+        self.bridge._surface_thread.join(5)
+        self.assertEqual(self.runtime.pm._player.force_window_writes, [True])
+        self.run_plays()
+        self.assertEqual(self.runtime.pm._player.played, ["av://x"])
+
+
+class PrewarmTest(BridgeCase):
+    """``connect.prewarm`` (BRIDGE.md section 4): connected after sign-in,
+    long before the first ``play``. mpv runs, but with an embedded window it
+    has no video output -- no window of its own inside the owner's, no input
+    queues attached across the processes, no GPU surface -- until the first
+    play is accepted, which turns ``force-window`` on once, on a thread of
+    its own, while the start's server requests run. The rest of ``connect``
+    is the ordinary one."""
+
+    EMBEDDED = {"mode": "embedded", "hwnd": 4242}
+
+    def prewarm(self, window=None):
+        return self.connect(window or self.EMBEDDED, prewarm=True, **SERVER)
+
+    def writes(self):
+        thread = self.bridge._surface_thread
+        if thread is not None:
+            thread.join(5)
+            self.assertFalse(thread.is_alive())
+        return self.runtime.pm._player.force_window_writes
+
+    def test_mpv_starts_without_its_video_output(self):
+        answer = self.prewarm()
+        self.assertEqual(answer["result"], {"mpv": "mpv v0.41.0-test",
+                                            "mpvBackend": "external"})
+        self.assertEqual(self.runtime.deferred, [True])
+        self.assertIs(window_embed.surface_deferred, True)
+        self.assertIs(self.runtime.pm._player.force_window, False)
+        # the ordinary connect otherwise: the client and its user check
+        self.assertTrue(self.bridge.connected)
+        self.assertEqual(self.runtime.journal[:3], [
+            ("start_player", "embedded"),
+            ("make_client", "https://jf.example"), ("verify_client",)])
+        self.assertIsNone(self.bridge._surface_thread)
+        self.assertEqual(self.writes(), [])
+
+    def test_the_first_play_turns_it_on_once_alongside_its_start(self):
+        """When the play is accepted, not after its start: the output is
+        built while the start's server requests run (measured: 224 ms from
+        PlayAsync to ``playing`` at 40 ms per request, against 283 ms when
+        it was built as the file opened)."""
+        self.prewarm()
+        during = []
+        original = self.runtime.start_playback
+
+        def start_playback(client, user_id, request):
+            during.append(list(self.runtime.pm._player.force_window_writes))
+            return original(client, user_id, request)
+
+        self.runtime.start_playback = start_playback
+        for item in (A, B, C):
+            self.assertTrue(self.send("play", {"itemIds": [item]})["ok"])
+            self.assertEqual(self.writes(), [True],
+                             "written for the first play only")
+            self.run_plays()
+        self.assertEqual(during, [[True], [True], [True]])
+        self.assertIs(self.runtime.pm._player.force_window, True)
+        self.assertIs(window_embed.surface_deferred, False)
+        self.assertEqual([p[2]["itemIds"] for p in self.runtime.playbacks],
+                         [[A], [B], [C]])
+
+    def test_a_play_that_then_fails_or_is_dropped_still_has_it(self):
+        """An idle, black output: what a backend not pre-warmed shows."""
+        self.prewarm()
+        self.runtime.fail_fetch = ConnectionError("item fetch")
+        self.send("play", {"itemIds": [A]})
+        self.send("stop")               # drops the queued start
+        self.run_plays()
+        self.assertEqual(self.runtime.playbacks, [])
+        self.assertEqual(self.writes(), [True])
+
+    def test_a_refused_play_claims_nothing(self):
+        self.prewarm()
+        self.assertEqual(self.code("play", {"itemIds": []}), "bad_args")
+        self.assertIsNone(self.bridge._surface_thread)
+        self.assertIs(window_embed.surface_deferred, True)
+        self.assertEqual(self.writes(), [])
+
+    def test_nothing_during_the_shutdown(self):
+        self.prewarm()
+        self.bridge._shutdown.set()
+        self.assertIs(self.bridge._claim_surface(), False)
+        self.assertIs(window_embed.surface_deferred, True)
+        self.assertEqual(self.writes(), [])
+
+    def test_without_prewarm_the_surface_is_there_from_connect(self):
+        self.connect_server(self.EMBEDDED)
+        self.assertEqual(self.runtime.deferred, [False])
+        self.assertIs(self.runtime.pm._player.force_window, True)
+        self.send("play", {"itemIds": [A]})
+        self.run_plays()
+        self.assertIsNone(self.bridge._surface_thread)
+        self.assertEqual(self.writes(), [])
+
+    def test_only_the_connect_that_starts_mpv_reads_it(self):
+        self.connect_server(self.EMBEDDED)
+        self.assertTrue(self.prewarm()["ok"])
+        self.assertTrue(self.send("connect", dict(
+            SERVER, protocol=1, prewarm=True))["ok"])
+        self.assertEqual(self.runtime.deferred, [False])
+        self.assertIs(window_embed.surface_deferred, False)
+
+    def test_standalone_ignores_it(self):
+        self.prewarm({"mode": "standalone"})
+        self.assertEqual(self.runtime.deferred, [False])
+        self.assertIs(window_embed.surface_deferred, False)
+        self.send("play", {"itemIds": [A]})
+        self.run_plays()
+        self.assertIsNone(self.bridge._surface_thread)
+        self.assertEqual(self.writes(), [])
+
+    def test_attached_ignores_it(self):
+        """fluentfin-mpv player controls: the surface is the UI's own mpv,
+        which this backend never builds or defers; FluentFin sends the
+        attached ``connect`` at the first play anyway."""
+        self.addCleanup(window_embed.configure, None)
+        self.assertTrue(self.prewarm(
+            {"mode": "attached", "ipc": "fluentfin-mpv-1-0011223344556677"})
+            ["ok"])
+        self.assertEqual(self.runtime.deferred, [False])
+        self.assertIs(window_embed.surface_deferred, False)
+        self.assertIs(window_embed.attached, True)
+        self.send("play", {"itemIds": [A]})
+        self.run_plays()
+        self.assertIsNone(self.bridge._surface_thread)
+        self.assertEqual(self.writes(), [])
+
+    def test_not_a_bool_is_refused_before_mpv_starts(self):
+        self.assertEqual(self.code("connect", dict(
+            SERVER, protocol=1, window=self.EMBEDDED, prewarm="yes")),
+            "bad_args")
+        self.assertEqual(self.runtime.started, [])
+        self.assertIsNone(self.bridge.window)
+
+    def test_a_dead_mpv_gets_no_write_and_the_claim_stands(self):
+        """A re-created mpv is built from options that now have the
+        surface (`apply_to_options`)."""
+        self.prewarm()
+        self.runtime.pm._mpv_alive = False
+        self.send("play", {"itemIds": [A]})
+        self.assertEqual(self.writes(), [])
+        self.assertIs(window_embed.surface_deferred, False)
+        self.assertIs(window_embed.apply_to_options({})["force_window"], True)
+
+    def test_a_write_that_raises_is_contained(self):
+        self.prewarm()
+
+        class Boom(Exception):
+            pass
+
+        def boom(value):
+            raise Boom()
+
+        player = self.runtime.pm._player
+        with mock.patch.object(type(player), "force_window",
+                               property(lambda p: False,
+                                        lambda p, v: boom(v))):
+            with self.assertLogs(bridge_mod.log, "ERROR"):
+                self.send("play", {"itemIds": [A]})
+                self.bridge._surface_thread.join(5)
+        self.run_plays()
+        self.assertTrue(self.send("ping")["ok"])
+        self.assertEqual(len(self.runtime.playbacks), 1)
 
 
 class PlayTest(BridgeCase):

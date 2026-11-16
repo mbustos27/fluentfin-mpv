@@ -95,6 +95,12 @@
                     </media:PipelineVisualFactory>
                 </media:UIElementExtensions.VisualFactory>
 
+                <!--
+                    fluentfin-mpv: the effects are reached through x:Bind (their generated fields), not {Binding ElementName=...}:
+                    an effect of a PipelineVisualFactory is not found by name at run time, so the animations had no Target and
+                    every start of BlurAnimation/UnBlurAnimation (each time the buttons show or hide) threw "The target effect
+                    is null" into the app's log.
+                -->
                 <animations:Explicit.Animations>
                     <animations:AnimationSet x:Name="BlurAnimation" IsSequential="False">
                         <animations:ScaleAnimation
@@ -105,14 +111,14 @@
                         <animations:BlurEffectAnimation
                             EasingMode="EaseOut"
                             EasingType="Cubic"
-                            Target="{Binding ElementName=ImageBlurEffect}"
+                            Target="{x:Bind ImageBlurEffect}"
                             From="0"
                             To="3"
                             Duration="0:0:0.2" />
                         <animations:ColorEffectAnimation
                             EasingMode="EaseOut"
                             EasingType="Cubic"
-                            Target="{Binding ElementName=ImageColorEffect}"
+                            Target="{x:Bind ImageColorEffect}"
                             From="Transparent"
                             To="Gray"
                             Duration="0:0:0.2" />
@@ -127,14 +133,14 @@
                         <animations:BlurEffectAnimation
                             EasingMode="EaseOut"
                             EasingType="Cubic"
-                            Target="{Binding ElementName=ImageBlurEffect}"
+                            Target="{x:Bind ImageBlurEffect}"
                             From="3"
                             To="0"
                             Duration="0:0:0.2" />
                         <animations:ColorEffectAnimation
                             EasingMode="EaseOut"
                             EasingType="Cubic"
-                            Target="{Binding ElementName=ImageColorEffect}"
+                            Target="{x:Bind ImageColorEffect}"
                             From="Gray"
                             To="Transparent"
                             Duration="0:0:0.2" />

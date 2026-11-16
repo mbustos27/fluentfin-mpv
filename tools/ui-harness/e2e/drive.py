@@ -53,7 +53,17 @@ SCENARIOS = {
     "signout_playing": "Log out / Switch user while playing (round 6 item 1): the playback stops and the backend's Stopped reaches the server, accepted, before the token is revoked; X's `reported` before the logout; within ~2 s; nothing answered 401",
     "signout_hung_stopped": "the same with the server's Stopped hung: the sign-out goes on after ~2 s, the backend's Stopped request arrived before the logout, none from FluentFin",
     "signout_cast": "a cast (play Y) arrives while the sign-out waits for X's Stopped (answered after ~1 s) (signout-ux item 2): Y is never sent or asked for at the server, the sign-out ends at X's report (not at its 2 s bound), nothing answered 401",
+    # fluentfin-mpv (startup-perf): connect.prewarm (docs/BRIDGE.md §3, §4)
+    "prewarm_idle": "pre-warmed after sign-in, idle: one GET /Users/Me and nothing else from the backend (nothing reported), no window of mpv's inside ours, the close shuts it down",
+    "prewarm_play": "pre-warmed, then a play: it connects nothing more (one /Users/Me), mpv's window appears, the backend's Stopped only; PLAYTIME against cold_play",
+    "prewarm_kill_idle": "pre-warmed, killed while idle: nothing reported by anyone, no interrupted playback; the next play starts it again and plays",
+    "prewarm_signout": "pre-warmed, then a sign-out: the backend is shut down, one /Users/Me and nothing else",
+    "cold_play": "a play with nothing pre-warmed (the backend started and connected by the play): PLAYTIME for comparison",
+    "prewarm_play_wan": "prewarm_play with 40 ms on each API request and on the stream's first byte (a remote server)",
+    "cold_play_wan": "cold_play with 40 ms on each API request and on the stream's first byte (a remote server)",
 }
+
+PREWARM = ("prewarm_idle", "prewarm_play", "prewarm_kill_idle", "prewarm_signout", "prewarm_play_wan")
 
 
 class RevokingFakeJF(FakeJF):
@@ -154,6 +164,23 @@ def stops(srv):
                 rows.append({"who": who, "item": (b.get("ItemId") or "")[:4], "ps": b.get("PlaySessionId"),
                              "pos": b.get("PositionTicks"), "failed": b.get("Failed"), "t": round(r["t"] - T0, 2)})
     return rows
+
+
+def backend_requests(srv):
+    """(method, path) of every request the backend made (not FluentFin's own, User-Agent UA), in order."""
+    with srv.lock:
+        return [(r["method"], r["path"].split("?")[0]) for r in srv.records
+                if r.get("method") != "DONE" and (r.get("ua") or "") != UA]
+
+
+def playtime(text):
+    """The PLAYTIME line's three numbers (ms after PlayAsync): play sent, playing, first position."""
+    for line in text.splitlines():
+        if "PLAYTIME" in line:
+            nums = [int(w) for w in line.replace(",", " ").split() if w.isdigit()]
+            if len(nums) >= 3:
+                return {"sent": nums[-3], "playing": nums[-2], "position": nums[-1]}
+    return None
 
 
 def parse(text):
@@ -286,6 +313,32 @@ def judge(sc, c):
                 p.append("X's `reported` had not come when the token was revoked")
             if [code for _, code in so["stopped_answers"] if not 200 <= code < 300]:
                 p.append("Stopped answers %s, want 2xx" % [code for _, code in so["stopped_answers"]])
+    elif sc in PREWARM or sc.startswith("cold_play"):
+        reqs = c["backendRequests"]
+        me = [r for r in reqs if r == ("GET", "/Users/Me")]
+        if sc in ("prewarm_idle", "prewarm_signout"):
+            if reqs != [("GET", "/Users/Me")]:
+                p.append("backend requests %s, want only one GET /Users/Me" % reqs)
+            if st:
+                p.append("Stopped requests: %s" % st)
+        else:
+            backend_only(x1)
+            if sc.startswith("prewarm_play") and len(me) != 1:
+                p.append("%d GET /Users/Me, want 1 (the play connected again)" % len(me))
+            if sc == "prewarm_kill_idle":
+                if len(me) != 2:
+                    p.append("%d GET /Users/Me, want 2 (the pre-warm, the play after the crash)" % len(me))
+                if close and close["interrupts"]:
+                    p.append("%d interrupted playbacks, want 0 (it crashed while idle)" % close["interrupts"])
+            if c["playtime"] is None:
+                p.append("no PLAYTIME")
+        if sc in PREWARM:
+            before = reqs[:reqs.index(("POST", "/Sessions/Playing"))] if ("POST", "/Sessions/Playing") in reqs else reqs
+            reported = [r for r in before if r[1].startswith("/Sessions")]
+            if reported:
+                p.append("reported while idle: %s" % reported)
+            if "IDLE mpv window inside ours: none" not in c["text"] and os.environ.get("E2E_ALLOW_IDLE_WINDOW") != "1":
+                p.append("no proof that mpv had no window inside ours while idle")
     if sc not in ("close_suspended", "close_hung_stopped") and close and close["secs"] > 10.6:
         p.append("close took %.3f s" % close["secs"])
     return p
@@ -305,6 +358,10 @@ def run(a, sc, rep, token, token2):
     srvB = None
     if sc == "kill_opening":
         srv.stream_delay[X] = 8.0
+    if sc.endswith("_wan"):
+        # a remote server: every API request and the stream's first byte 40 ms later
+        srv.me_delay = srv.item_delay = srv.playbackinfo_delay = 0.04
+        srv.stream_delay[X] = 0.04
     if sc == "replay_opening_kill":
         class LaterDelay(dict):
             # the stream is slow only once a Stopped came in: the replay opens slowly, the first play does not
@@ -350,7 +407,7 @@ def run(a, sc, rep, token, token2):
         for line in text.splitlines():
             if any(k in line for k in ("RESULT", "CLOSE returned", "INTERRUPTED", "UI Stopped", "event reported", "harness error",
                                        "reported events", "Error:", "Warning:", "Stopping the mpv", "exited with code", "connect to B",
-                                       "ENVCHECK", "SIGNOUT", "CAST", "UI Logout")):
+                                       "ENVCHECK", "SIGNOUT", "CAST", "UI Logout", "PREWARM", "IDLE", "PLAYTIME", "PLAYING", "KILLED", "SIGNEDOUT")):
                 log("   ", line.strip()[:300])
         time.sleep(1.0)
         close, result = parse(text)
@@ -381,6 +438,7 @@ def run(a, sc, rep, token, token2):
             y_requests = ["%s %s" % (r["method"], r["path"].split("?")[0]) for r in srv.records
                           if Y in r["path"] or (isinstance(r["body"], dict) and r["body"].get("ItemId") == Y)]
         c = {"stops": stops(srv), "stopsB": stops(srvB) if srvB else [], "issued": list(srv.issued), "close": close,
+             "backendRequests": backend_requests(srv), "playtime": playtime(text),
              "result": result, "text": text, "svclog": svclog, "leaks": leaks, "signout": signout, "y_requests": y_requests,
              "left": left_behind(os.path.join(a.out, label + "-config"))}
         problems = judge(sc, c)
@@ -399,7 +457,10 @@ def run(a, sc, rep, token, token2):
                 "-" if signout["revoked_at"] is None else round(signout["revoked_at"] - T0, 2)))
         log("  close: %s" % close)
         log("  VERDICT %s: %s" % (label, "PASS" if not problems else "FAIL " + "; ".join(problems)))
+        if sc in PREWARM or sc.startswith("cold_play"):
+            log("  backend requests: %s | playtime: %s" % (c["backendRequests"], c["playtime"]))
         return {"run": label, "scenario": sc, "pass": not problems, "problems": problems, "perSession": per,
+                "playtime": c["playtime"], "backendRequests": c["backendRequests"] if (sc in PREWARM or sc.startswith("cold_play")) else None,
                 "serverB": c["stopsB"], "stoppedByUser": {"%s/%s" % k: v for k, v in (by_user or {}).items()},
                 "issued": c["issued"], "close": close,
                 "signout": {k: v for k, v in signout.items() if k != "revoked_at"} if sc.startswith("signout") else None}

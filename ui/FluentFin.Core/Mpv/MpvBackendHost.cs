@@ -338,7 +338,13 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 		}
 	}
 
-	public async Task StartAsync(bool dev = false, CancellationToken cancellationToken = default)
+	public Task StartAsync(bool dev = false, CancellationToken cancellationToken = default)
+	{
+		Interlocked.Increment(ref _asked);
+		return StartCoreAsync(dev, cancellationToken);
+	}
+
+	private async Task StartCoreAsync(bool dev, CancellationToken cancellationToken)
 	{
 		await _lifecycle.WaitAsync(cancellationToken);
 		try
@@ -371,6 +377,7 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 
 		SetStatus(new MpvBackendStatus(MpvBackendState.Starting, Command: command.ToString()));
 		logger.LogInformation("Starting the mpv backend ({Source}): {Command}", command.Source, command);
+		var launched = System.Diagnostics.Stopwatch.StartNew();
 
 		IMpvBackendProcess process;
 		try
@@ -423,6 +430,15 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 			};
 			var last = session.LastStderr();
 			await StopSessionAsync(session, "start failed", graceful: false);
+			if (ex is OperationCanceledException && cancellationToken.IsCancellationRequested)
+			{
+				// fluentfin-mpv (startup-perf review): its caller gave the start up (a sign-out during the pre-warm): not a
+				// failure, so no error in the log and no "Could not start" in Settings
+				logger.LogInformation("{Reason}", reason);
+				SetStatus(new MpvBackendStatus(MpvBackendState.Stopped));
+				throw new BridgeException(reason, ex);
+			}
+
 			throw Fail(string.IsNullOrEmpty(last) ? reason : $"{reason}: {last}", ex);
 		}
 
@@ -434,12 +450,82 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 		}
 
 		session.Started = true;
-		logger.LogInformation("The mpv backend is running: pid {Pid}, {Backend} {Version}, bridge {Bridge}",
-			process.Id, session.Hello.Backend, session.Hello.Version, session.Hello.Bridge);
+		logger.LogInformation("The mpv backend is running: pid {Pid}, {Backend} {Version}, bridge {Bridge}; [perf] hello {Ms} ms after the launch",
+			process.Id, session.Hello.Backend, session.Hello.Version, session.Hello.Bridge, launched.ElapsedMilliseconds);
 		SetStatus(StatusOf(session));
 	}
 
-	public async Task<string?> ConnectAsync(BridgeIdentity? identity, CancellationToken cancellationToken = default)
+	public Task<string?> ConnectAsync(BridgeIdentity? identity, CancellationToken cancellationToken = default)
+	{
+		Interlocked.Increment(ref _asked);
+		return ConnectCoreAsync(identity, prewarm: false, cancellationToken);
+	}
+
+	/// <summary>
+	/// fluentfin-mpv (startup-perf): <see cref="StartAsync"/> and <see cref="ConnectAsync"/> calls so far (a play's; not a
+	/// pre-warm's), counted as they are asked, before the lifecycle lock: a pre-warm whose connect failed stops the backend
+	/// only when no play asked for it meanwhile (<see cref="StopUnusedAfterPrewarmAsync"/>).
+	/// </summary>
+	private long _asked;
+
+	/// <inheritdoc/>
+	public async Task PrewarmAsync(BridgeIdentity identity, CancellationToken cancellationToken = default)
+	{
+		var asked = Interlocked.Read(ref _asked);
+		await StartCoreAsync(dev: false, cancellationToken);
+		if (!surface.CanConnectAhead)
+		{
+			// attached (FluentFin's player controls): the connect's window is FluentFin's own mpv, which asking for it makes
+			logger.LogInformation("Pre-warm: the mpv backend is started; it connects at the first play, which makes FluentFin's own mpv");
+			return;
+		}
+
+		try
+		{
+			await ConnectCoreAsync(identity, prewarm: true, cancellationToken);
+		}
+		catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+		{
+			await StopUnusedAfterPrewarmAsync(asked, ex);
+			throw;
+		}
+	}
+
+	/// <summary>
+	/// fluentfin-mpv (startup-perf review): a pre-warm's connect failed (server down, login refused, mpv would not start):
+	/// the backend, and the mpv its connect may have started, would idle unused until sign-out or close. Stopped, under the
+	/// lifecycle lock, unless a play asked for the backend since the pre-warm began (its own start and connect then decide;
+	/// a play that asks after this finds none and starts one). A cancelled pre-warm is the sign-out's or the close's to stop.
+	/// Never throws.
+	/// </summary>
+	private async Task StopUnusedAfterPrewarmAsync(long asked, Exception failure)
+	{
+		try
+		{
+			await _lifecycle.WaitAsync();
+			try
+			{
+				if (Interlocked.Read(ref _asked) != asked || _session is not { Connected: false } session)
+				{
+					return;
+				}
+
+				var why = BridgeRedaction.Redact(failure.Message);
+				await StopSessionAsync(session, $"its pre-warm could not connect ({why}); the next play starts it again");
+				SetStatus(new MpvBackendStatus(MpvBackendState.Stopped, LastError: why));
+			}
+			finally
+			{
+				_lifecycle.Release();
+			}
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning(ex, "Stopping the mpv backend after its failed pre-warm failed");
+		}
+	}
+
+	private async Task<string?> ConnectCoreAsync(BridgeIdentity? identity, bool prewarm, CancellationToken cancellationToken)
 	{
 		// fluentfin-mpv player controls: embedded, or attached to FluentFin's own mpv (the surface decides)
 		var window = await surface.GetWindowAsync();
@@ -463,7 +549,8 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 				return session.MpvVersion;
 			}
 
-			logger.LogInformation("Connecting the mpv backend: {Identity}, window {Mode} {Hwnd}", identity?.ToString() ?? "(dev, no server)", window.Mode, window.Hwnd?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? window.Ipc);
+			logger.LogInformation("Connecting the mpv backend: {Identity}, window {Mode} {Hwnd}{Prewarm}", identity?.ToString() ?? "(dev, no server)", window.Mode, window.Hwnd?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? window.Ipc,
+				prewarm ? ", pre-warmed (no video window until the first play)" : "");
 
 			// fluentfin-mpv player controls: an mpv FluentFin runs for this window ends with this backend (EndWindows)
 			if (!session.OfferWindow(window))
@@ -472,9 +559,10 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 			}
 
 			JsonNode? result;
+			var watch = System.Diagnostics.Stopwatch.StartNew();
 			try
 			{
-				result = await session.Client.SendAsync(Bridge.Commands.Connect, BridgeCommands.Connect(identity, window), ConnectTimeout, cancellationToken);
+				result = await session.Client.SendAsync(Bridge.Commands.Connect, BridgeCommands.Connect(identity, window, prewarm), ConnectTimeout, cancellationToken);
 			}
 			catch (BridgeException ex)
 			{
@@ -488,6 +576,7 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 			session.Window = window;
 			session.MpvVersion = StringOf(result?["mpv"]);
 			session.MpvKind = StringOf(result?["mpvBackend"]);
+			logger.LogInformation("[perf] the mpv backend answered connect in {Ms} ms", watch.ElapsedMilliseconds);
 			SetStatus(StatusOf(session));
 			return session.MpvVersion;
 		}

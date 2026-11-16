@@ -202,6 +202,48 @@ class ServerTests(unittest.TestCase):
         self.get("/System/Endpoint")
         self.assertLess(time.perf_counter() - t, 0.25)
 
+    def test_fault_rules_fail_or_empty_only_where_they_match(self):
+        views = self.get("/UserViews")["Items"]
+        rules = [["/Shows/NextUp", "status:503"], ["/Items/Latest", "empty"], ["/UserItems/Resume", "Empty"],
+                 ["/Items/Filters", 300]]
+        self.assertEqual(200, self.request("/__harness/latency", "POST", {"rules": rules})[0])
+        try:
+            self.assertEqual(503, self.request("/Shows/NextUp?limit=24", token=self.token)[0])
+            self.assertEqual([], self.get("/Items/Latest?limit=16&parentId=" + views[0]["Id"]))
+            self.assertEqual({"Items": [], "TotalRecordCount": 0, "StartIndex": 0}, self.get("/UserItems/Resume?limit=12"))
+            self.assertEqual(len(views), len(self.get("/UserViews")["Items"]), "a path no rule matches answers as before")
+        finally:
+            self.request("/__harness/latency", "POST", {"rules": [["/Items/Filters", 300]]})
+        self.assertGreater(len(self.get("/Shows/NextUp?limit=24")["Items"]), 4)
+        self.assertEqual(16, len(self.get("/Items/Latest?limit=16&parentId=" + views[0]["Id"])))
+        self.assertEqual("status:500", server.rule_value(" Status:500 "))
+        self.assertEqual(250.0, server.rule_value("250"))
+        self.assertEqual("status:400", server.rule_value("status:400"))
+        self.assertEqual("status:599", server.rule_value("status:599"))
+        # the injected answer has a JSON body: never a 1xx, 204 or 304, nor a success
+        for bad in ("status:abc", "status:42", "status:", "sometimes", "status:200", "status:204", "status:304",
+                    "status:399", "status:600"):
+            with self.assertRaises(ValueError, msg=bad):
+                server.rule_value(bad)
+
+    def test_encode_subtitle_is_burnt_in_only_while_asked(self):
+        item = self.get("/__harness/fixture")["episode"]["id"]
+
+        def methods():
+            info = self.get("/Items/%s/PlaybackInfo" % item, method="POST", body={})
+            return [s.get("DeliveryMethod") for s in info["MediaSources"][0]["MediaStreams"] if s["Type"] == "Subtitle"]
+
+        self.assertEqual(["Embed", "Embed", "External"], methods())
+        status, answer, _ = self.request("/__harness/streams", "POST", {"encode_subtitle": True})
+        self.assertEqual((200, {"encode_subtitle": True}), (status, answer))
+        try:
+            self.assertEqual(["Embed", "Encode", "External"], methods())
+            detail = self.get("/Items/%s?userId=%s" % (item, self.srv.user_id))["MediaSources"][0]["MediaStreams"]
+            self.assertEqual("Encode", detail[4]["DeliveryMethod"], "the item page's streams say so too")
+        finally:
+            self.request("/__harness/streams", "POST", {"encode_subtitle": False})
+        self.assertEqual(["Embed", "Embed", "External"], methods())
+
     def test_reports_update_user_data_and_reach_the_websocket(self):
         fx = self.get("/__harness/fixture")
         movie = fx["movie"]["id"]

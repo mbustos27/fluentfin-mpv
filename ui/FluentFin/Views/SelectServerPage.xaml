@@ -42,10 +42,13 @@
                     SelectionMode="None">
                     <ItemsView.ItemTemplate>
                         <DataTemplate x:DataType="settings:SavedServer">
+                            <!--  fluentfin-mpv: named after the server (Narrator read "ItemContainer"); a long name is trimmed, whole in the tooltip  -->
                             <ItemContainer
                                 Width="100"
                                 Height="100"
-                                Background="{ThemeResource LayerOnMicaBaseAltFillColorDefault}">
+                                AutomationProperties.Name="{x:Bind DisplayName}"
+                                Background="{ThemeResource LayerOnMicaBaseAltFillColorDefault}"
+                                ToolTipService.ToolTip="{x:Bind DisplayName}">
                                 <Grid Padding="8">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*" />
@@ -59,7 +62,8 @@
                                     <TextBlock
                                         Grid.Row="1"
                                         HorizontalAlignment="Center"
-                                        Text="{x:Bind DisplayName}" />
+                                        Text="{x:Bind DisplayName}"
+                                        TextTrimming="CharacterEllipsis" />
                                 </Grid>
                             </ItemContainer>
                         </DataTemplate>
@@ -85,7 +89,8 @@
                 HorizontalAlignment="Center"
                 Orientation="Horizontal"
                 Spacing="10">
-                <Button Command="{x:Bind ViewModel.DetectServersCommand}">
+                <!--  fluentfin-mpv: named (a text in a panel does not name its button for Narrator)  -->
+                <Button AutomationProperties.Name="Detect" Command="{x:Bind ViewModel.DetectServersCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsDetecting, Mode=OneWay}">
                             <ctk:Case IsDefault="true" Value="False">
@@ -102,6 +107,7 @@
                     </StackPanel>
                 </Button>
                 <Button
+                    AutomationProperties.Name="Next"
                     Command="{x:Bind ViewModel.CheckConnectivityAndGoToLoginCommand}"
                     CommandParameter="{x:Bind TxtUrl.Text, Mode=OneWay}"
                     Style="{ThemeResource AccentButtonStyle}">

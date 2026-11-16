@@ -396,6 +396,8 @@ public sealed partial class DiaryViewModel(JournalService journal, JournalSync s
 	private Task ExportCsv() => ExportAsync(".csv", (_, entries, ratings) =>
 		JournalExport.ToCsv(entries, ratings, TimeZone), bom: true);
 
+	private const string SaveDialogFailed = "The save dialog could not open, so nothing was exported. Try again.";
+
 	private async Task ExportAsync(string extension, Func<JournalProfile, IReadOnlyList<DiaryEntry>, IReadOnlyList<ItemRating>, string> write, bool bom)
 	{
 		if (Dialogs is null || journal.CurrentProfile is not { } profile)
@@ -404,7 +406,27 @@ public sealed partial class DiaryViewModel(JournalService journal, JournalSync s
 		}
 
 		var name = $"diary-{TimeZoneInfo.ConvertTime(journal.Clock.GetUtcNow(), TimeZone):yyyy-MM-dd}";
-		if (await Dialogs.PickExportFileAsync(name, extension) is not { Length: > 0 } path)
+		string? picked;
+		try
+		{
+			picked = await Dialogs.PickExportFileAsync(name, extension);
+		}
+		catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+		{
+			// visual-check: a save dialog that could not open (0x80070578, no usable owner window) escaped as an unhandled
+			// exception, and Export did nothing the user could see
+			logger.LogWarning("Journal export: the save dialog could not open ({Error} 0x{HResult:X8})", ex.GetType().Name, ex.HResult);
+			ShowError(SaveDialogFailed);
+			return;
+		}
+
+		// the dialog opened this time (picked or cancelled): its earlier failure is no longer true; any other message stays
+		if (ErrorText == SaveDialogFailed)
+		{
+			ShowError(null);
+		}
+
+		if (picked is not { Length: > 0 } path)
 		{
 			return;
 		}

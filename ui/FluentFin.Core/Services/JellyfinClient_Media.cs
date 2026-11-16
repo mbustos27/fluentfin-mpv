@@ -32,6 +32,8 @@ public partial class JellyfinClient
 		var bitRate = endPointInfo?.IsInNetwork == true ? 0 : await BitrateTest();
 
 		var startTime = TimeProvider.System.GetTimestamp();
+		// fluentfin-mpv (startup-perf, O13): the Windows player's profile is probed the first time it is needed
+		await PrepareDeviceProfile();
 		var playbackInfoDto = new PlaybackInfoDto
 		{
 			UserId = UserId,

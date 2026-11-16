@@ -33,6 +33,15 @@ public interface IMpvBackend
 	/// </summary>
 	Task<string?> ConnectAsync(BridgeIdentity? identity, CancellationToken cancellationToken = default);
 
+	/// <summary>
+	/// fluentfin-mpv (startup-perf): starts the backend unless it is running and connects it as this identity with
+	/// <c>prewarm</c> (docs/BRIDGE.md §4: mpv without its video window until the first play), unless it is already connected
+	/// as exactly this identity. A later <see cref="ConnectAsync"/> as the same identity then sends nothing. With a surface
+	/// that cannot connect ahead (<see cref="IMpvVideoSurface.CanConnectAhead"/>: FluentFin's own player controls) it only
+	/// starts the backend: the first play makes FluentFin's mpv and connects.
+	/// </summary>
+	Task PrewarmAsync(BridgeIdentity identity, CancellationToken cancellationToken = default);
+
 	Task<JsonNode?> SendAsync(string command, JsonObject? args = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
 
 	/// <summary>
@@ -84,12 +93,12 @@ public sealed record MpvBackendStatus(MpvBackendState State,
 	{
 		var text = State switch
 		{
-			MpvBackendState.NotStarted => "Not running, starts with the first MPV playback",
+			MpvBackendState.NotStarted => "Not running, starts after sign-in (or with the first MPV playback)",
 			MpvBackendState.Starting => "Starting",
 			MpvBackendState.Running => "Running" +
 				(BackendVersion is null ? "" : $", jellyfin-mpv-shim {BackendVersion}") +
 				(MpvVersion is null ? ", not connected yet" : $", mpv {MpvVersion}{(MpvKind is null ? "" : $" ({MpvKind})")}"),
-			MpvBackendState.Stopped => "Stopped, starts with the next MPV playback",
+			MpvBackendState.Stopped => "Stopped, starts at the next sign-in or MPV playback",
 			MpvBackendState.Crashed => "Stopped unexpectedly, restarts with the next MPV playback",
 			MpvBackendState.Failed => "Could not start",
 			_ => State.ToString(),
@@ -130,6 +139,14 @@ public interface IMpvVideoSurface
 	/// running backend's restarts it (it is fixed for a backend's life).
 	/// </summary>
 	async Task<BridgeWindow> GetWindowAsync() => BridgeWindow.Embedded(await GetHandleAsync());
+
+	/// <summary>
+	/// fluentfin-mpv (startup-perf): <see cref="GetWindowAsync"/> may be asked ahead of playback without making a player:
+	/// true for an embedded window (FluentFin's child window), false for attached (asking makes FluentFin's in-process
+	/// mpv). The pre-warm connects only when it is true; otherwise it only starts the backend, and the first play makes
+	/// the player and connects (docs/BRIDGE.md §3, §4).
+	/// </summary>
+	bool CanConnectAhead => true;
 
 	/// <summary>
 	/// fluentfin-mpv player controls: the backend that was offered <paramref name="window"/> in a <c>connect</c> has ended

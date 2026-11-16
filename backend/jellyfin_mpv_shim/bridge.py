@@ -440,9 +440,11 @@ class ShimRuntime:
 
     # -- the player --------------------------------------------------------
 
-    def start_player(self, window):
+    def start_player(self, window, defer_surface=False):
         """Build mpv for ``window`` and start the shim's worker threads.
-        Returns ``connect``'s result."""
+        Returns ``connect``'s result. ``defer_surface`` (a pre-warmed
+        ``connect``, embedded only): mpv starts without its video output,
+        which the first play turns on (`Bridge._claim_surface_soon`)."""
         from . import window_embed
 
         embedded = window["mode"] == "embedded"
@@ -456,7 +458,8 @@ class ShimRuntime:
             for key, value in self.attached_overrides(window["ipc"]):
                 self._override(key, value)
         window_embed.configure(window["hwnd"] if embedded else None,
-                               attach=attached)
+                               attach=attached,
+                               defer_surface=defer_surface and embedded)
         # The OSC's look and the fork that carries it (fluentfin_osc).
         from . import fluentfin_osc
 
@@ -841,6 +844,9 @@ class Bridge:
         #: Fixed by the first connect for the life of the process.
         self.window = None
         self.player_info = None
+        #: The thread turning a pre-warmed mpv's video output on, started by
+        #: its first play (`_claim_surface_soon`); None before.
+        self._surface_thread = None
         self.client = None
         self.server = None
         self.connected = False
@@ -2135,12 +2141,20 @@ class Bridge:
             if (window["mode"] == "embedded"
                     and not proto.is_window_handle(window["hwnd"])):
                 raise BridgeError(BAD_ARGS, "window.hwnd is not a window")
+            # Pre-warmed (BRIDGE.md section 4): no video output inside the
+            # owner's window until the first play claims it.
+            defer = cfg["prewarm"] and window["mode"] == "embedded"
+            started = time.monotonic()
             try:
-                info = self.runtime.start_player(window)
+                info = self.runtime.start_player(window, defer_surface=defer)
             except Exception as error:
                 log.exception("mpv could not be started")
                 raise BridgeError(MPV_FAILED, "mpv could not be started: "
                                   + describe_exception(error))
+            log.info("connect: mpv started in %d ms (%s window%s)",
+                     (time.monotonic() - started) * 1000, window["mode"],
+                     ", video output deferred to the first play" if defer
+                     else "")
             self.window = window
             self.player_info = info
             self._install_hooks()
@@ -2180,6 +2194,7 @@ class Bridge:
             closing = self._shutdown.is_set()
         if closing:
             self.runtime.retire_client(client, 0)
+        checked = time.monotonic()
         try:
             self.runtime.verify_client(client, server)
         except BaseException:
@@ -2193,9 +2208,10 @@ class Bridge:
             self.server = server
             self.connected = True
         self.tracker.clear_error()
-        log.info("Connected to %s as user %s (device %s, client %s)",
-                 server["url"], server["userId"], server["deviceName"],
-                 server["clientName"])
+        log.info("Connected to %s as user %s (device %s, client %s); the "
+                 "server check took %d ms", server["url"], server["userId"],
+                 server["deviceName"], server["clientName"],
+                 (time.monotonic() - checked) * 1000)
 
     def cmd_play(self, args):
         self._require_server()
@@ -2224,9 +2240,13 @@ class Bridge:
             # also records there which video this play started, for the
             # transport queued behind it (`_transport`).
             self._local.replacing = pending
+            began = time.monotonic()
             try:
                 started = self.runtime.start_playback(client, user_id,
                                                       request)
+                log.info("play %s: the start returned after %d ms (%s)",
+                         item_id, (time.monotonic() - began) * 1000,
+                         "started" if started else "not started")
                 # Neither failure is reported once the job is superseded:
                 # the stop, play or switch that superseded it cleared the
                 # error, and a switch's retirement of this client is what
@@ -2255,7 +2275,49 @@ class Bridge:
                 self._finish_deferred()
 
         self._queue_play("play", run)
+        self._claim_surface_soon()
         return {}
+
+    def _claim_surface_soon(self):
+        """The first ``play``/``play_file`` of a pre-warmed backend (BRIDGE.md
+        section 4, ``connect.prewarm``) was accepted: `_claim_surface` on a
+        thread of its own, so mpv builds its video output while the start's
+        server requests run (item, PlaybackInfo, segments) rather than after
+        them, when it opens the stream. Measured (e2e, PlayAsync to
+        ``playing``, 40 ms per request): 224 ms, against 283 ms building it as
+        the file opens and 198 ms with the output built at ``connect``. The
+        control worker does not wait for it. Returns the thread, None when
+        nothing was deferred."""
+        from . import window_embed
+
+        if not window_embed.surface_deferred:
+            return None
+        thread = self._surface_thread = threading.Thread(
+            target=self._claim_surface, name="surface", daemon=True)
+        thread.start()
+        return thread
+
+    def _claim_surface(self):
+        """``force-window`` on, once (`window_embed.claim_surface`): mpv makes
+        its video output now and keeps it for the process, between items and
+        after ``stop``, as an mpv started with it. A start that then never
+        reaches mpv leaves an idle, black output -- what a backend not
+        pre-warmed shows there. Not during the shutdown. True when this call
+        turned it on."""
+        from . import window_embed
+
+        if self._shutdown.is_set() or not window_embed.claim_surface():
+            return False
+        started = time.monotonic()
+        try:
+            self._mpv_write(lambda p: setattr(p, "force_window", True))
+        except Exception:
+            log.exception("could not keep mpv's video output")
+            return False
+        log.info("mpv's video output is on (force-window, %d ms): the first "
+                 "play of a pre-warmed backend",
+                 (time.monotonic() - started) * 1000)
+        return True
 
     def cmd_play_file(self, args):
         pm = self.runtime.pm
@@ -2294,6 +2356,7 @@ class Bridge:
             item.loaded = True
 
         self._queue_play("play_file", run)
+        self._claim_surface_soon()
         return {}
 
     def cmd_stop(self, args):

@@ -74,7 +74,11 @@ Error codes: `not_connected`, `bad_args`, `unknown_cmd`, `auth_failed`,
 1. Backend starts, emits `{"event":"hello","data":{"protocol":1,"backend":"jellyfin-mpv-shim","version":"<CLIENT_VERSION>","bridge":"<bridge version>"}}`
    once it is reading stdin.
 2. UI sends `connect` (§4). Until it succeeds, every other command except `ping`,
-   `get_state` and `shutdown` fails with `not_connected`.
+   `get_state` and `shutdown` fails with `not_connected`. The UI may start the backend and
+   send it right after sign-in, with `prewarm` (§4), and only `play` when the user does (with an
+   `attached` window it starts the backend then and connects at the first play); it
+   shuts such a backend down when the user signs out. A backend that dies while idle
+   leaves nothing to report (§6) and is started again by the next `play`.
 3. UI sends `play`, transport commands, etc. Backend emits events.
 4. UI sends `shutdown` (or closes stdin). Backend stops playback, sends the final
    progress report, replies, exits 0 (1 if the shutdown deadline below ran out).
@@ -158,7 +162,8 @@ Command details:
   "accessToken": "<token>",
   "device": {"id": "<DeviceId FluentFin uses>", "name": "<device name>"},
   "client": {"name": "FluentFin", "version": "1.0.0"},
-  "window": {"mode": "embedded", "hwnd": 1311242}   // or {"mode": "attached", "ipc": "fluentfin-mpv-4242-0011223344556677"}, or {"mode": "standalone"}
+  "window": {"mode": "embedded", "hwnd": 1311242},  // or {"mode": "attached", "ipc": "fluentfin-mpv-4242-0011223344556677"}, or {"mode": "standalone"}
+  "prewarm": true                                    // optional, default false
 }
 ```
 
@@ -195,6 +200,22 @@ Command details:
   An mpv that ended by itself is replaced on a new pipe as well, so the next `connect` has a different
   `window` and the UI restarts the backend (`window_locked`). A pipe that does not answer fails the
   first `connect` with `mpv_failed`. The UI sends `set_controls` `"ui"` for its controls.
+- `prewarm` (true or false; absent or null = false; anything else is `bad_args`): the UI connects **ahead of
+  playback** (after sign-in, so the first `play` skips the backend start and `connect`). With
+  an `embedded` window, mpv is started **without its video output**: no window of mpv's
+  exists inside `hwnd` (no input queues attached across the processes, no GPU surface) until
+  the first `play` or `play_file` is accepted, which has mpv build it alongside that start
+  (a start that then never reaches mpv leaves an idle, black one); from then on the surface
+  stays for the process, exactly as without `prewarm`. Everything else
+  is the ordinary `connect`: the same result, the same `Users/Me` check (the only request a
+  pre-warmed backend makes while idle: it reports nothing), the window fixed for the
+  process. Only the `connect` that starts mpv (the first one with a `window`) reads it; later
+  ones, `standalone` and `attached` ignore it (an attached mpv is the UI's, and lives only as long as
+  the backend it was offered to: whether one exists before the first play is the UI's choice.
+  FluentFin then only starts the backend ahead, and sends `connect` at the first play, which
+  makes a new mpv for that backend). A UI that never sends it
+  gets today's behaviour, and a backend that does not know it ignores it (unknown fields, §2):
+  the surface then exists from `connect` on.
 - The backend must not bind any network port, start the tray, the in-player library
   browser, update checks, Discord presence, gamepad-to-browser navigation, or the
   single-instance listener of a standalone install.
