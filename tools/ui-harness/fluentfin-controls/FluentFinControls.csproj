@@ -2,7 +2,7 @@
   <!-- Phase 2b harness (docs/research/player-controls.md): FluentFin's own player controls (ui\FluentFin\Controls\
        MpvPlayerControls.xaml, MpvControlsViewModel) over the in-process mpv (ui\FluentFin\Mpv\MpvCompositionVideo.cs),
        with the REAL backend attached to it (connect.window "attached"). A WinUI window of its own, never FluentFin.exe.
-       Compiles this repo's (or -p:UiDir=<copy>'s) sources, references FluentFin.Core, copies libmpv-2.dll. Built and run
+       Compiles this repo's (or -p:UiDir=<copy>'s) sources, references FluentFin.Core, copies libmpv-2.dll and its DLLs into libmpv\ (where Libmpv.cs loads them). Built and run
        by run.ps1 from a copy under its -Out, never inside ui\. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -26,7 +26,7 @@
     <UiDir Condition="'$(UiDir)' == ''">$(RepoDir)\ui</UiDir>
     <CoreDir Condition="'$(CoreDir)' == ''">$(UiDir)\FluentFin.Core</CoreDir>
     <ControlsHostDir Condition="'$(ControlsHostDir)' == ''">$(RepoDir)\tools\ui-harness\controls-host</ControlsHostDir>
-    <LibmpvDir Condition="'$(LibmpvDir)' == ''">$(RepoDir)\vendor\libmpv\20261111-git-bcde6b93cc</LibmpvDir>
+    <LibmpvDir Condition="'$(LibmpvDir)' == ''">$(RepoDir)\vendor\libmpv\msys2-20261116-mpv-0.42.0-2</LibmpvDir>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
@@ -46,7 +46,7 @@
     <ProjectReference Include="$(CoreDir)\FluentFin.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="$(LibmpvDir)\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(LibmpvDir)\*.dll" Link="libmpv\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="fakeserver.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CheckLibmpv" BeforeTargets="Build">

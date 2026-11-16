@@ -30,7 +30,7 @@ $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 if (-not $UiDir) { $UiDir = Join-Path $repo 'ui' }
 if (-not $Python) { $Python = Join-Path $repo 'backend\.venv\Scripts\python.exe' }
-if (-not $LibmpvDir) { $LibmpvDir = Join-Path $repo 'vendor\libmpv\20261111-git-bcde6b93cc' }
+if (-not $LibmpvDir) { $LibmpvDir = Join-Path $repo 'vendor\libmpv\msys2-20261116-mpv-0.42.0-2' }
 $Out = [IO.Path]::GetFullPath($Out)
 if ($Out.StartsWith($repo + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "-Out must be outside the repository" }
 $UiDir = [IO.Path]::GetFullPath($UiDir)

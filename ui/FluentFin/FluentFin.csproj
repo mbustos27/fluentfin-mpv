@@ -103,13 +103,15 @@
 	  </Content>
 	</ItemGroup>
 
-	<!-- fluentfin-mpv player controls: libmpv for "Player controls: FluentFin" (mpv inside FluentFin), x64 only. Downloaded, not
-	     in git (vendor\libmpv\VENDORED.md); without it FluentFin uses mpv's controls and says why. -->
+	<!-- fluentfin-mpv player controls: libmpv for "Player controls: FluentFin" (mpv inside FluentFin), x64 only. Built, not in
+	     git (vendor\libmpv\VENDORED.md): libmpv-2.dll and every DLL it loads, copied into a libmpv folder next to
+	     FluentFin.exe, where Libmpv.cs loads them from (and from nowhere else); without it FluentFin uses mpv's controls and
+	     says why. -->
 	<PropertyGroup>
-		<LibmpvDir Condition="'$(LibmpvDir)' == ''">$(MSBuildThisFileDirectory)..\..\vendor\libmpv\20261111-git-bcde6b93cc</LibmpvDir>
+		<LibmpvDir Condition="'$(LibmpvDir)' == ''">$(MSBuildThisFileDirectory)..\..\vendor\libmpv\msys2-20261116-mpv-0.42.0-2</LibmpvDir>
 	</PropertyGroup>
 	<ItemGroup Condition="'$(Platform)' == 'x64' and Exists('$(LibmpvDir)\libmpv-2.dll')">
-		<None Include="$(LibmpvDir)\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
+		<None Include="$(LibmpvDir)\*.dll" Link="libmpv\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
 	<!-- fluentfin-mpv: a release package (tools\release\build-release.ps1 sets FluentFinMpvRelease=true) says so; it then never

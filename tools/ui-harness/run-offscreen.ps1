@@ -36,7 +36,7 @@
   'all' (default) = login..close. -Then <script.ps1> runs after the steps on the private desktop with the driver's
   helpers (see offscreen\drive.ps1). -Setting Name=Value (repeatable) is written into the run's LocalSettings.json
   first (a JSON value, else a string), e.g. -Setting MpvPlayerControls=Mpv for mpv's own controls (FluentFin's are the
-  default, with libmpv-2.dll next to the exe); MpvBackendCommand, Servers and MediaPlayerType are the harness's and
+  default, with libmpv\libmpv-2.dll next to the exe); MpvBackendCommand, Servers and MediaPlayerType are the harness's and
   refused (the run plays with the mpv player only).
 
 .EXAMPLE
@@ -132,7 +132,7 @@ if ($needMedia) {
 # silent with no log file (offscreen\prepare.ps1)
 $pycache = Join-Path $Cache 'pycache'
 $backendCommand = '"{0}" -I -X "pycache_prefix={1}" "{2}" "{3}"' -f $Python, $pycache, (Join-Path $PSScriptRoot 'offscreen\run_backend.py'), $Backend
-$prepared = Initialize-HarnessSettings $DataDir $backendCommand $Setting -LibmpvThere (Test-Path (Join-Path (Split-Path $Exe) 'libmpv-2.dll'))
+$prepared = Initialize-HarnessSettings $DataDir $backendCommand $Setting -LibmpvThere (Test-Path (Join-Path (Split-Path $Exe) 'libmpv\libmpv-2.dll'))
 if ($prepared.RemovedServers) { Write-Host "removed $($prepared.RemovedServers) saved server(s) that are not on this machine from $DataDir\LocalSettings.json" }
 $controls = $prepared.PlayerControls
 [void](Initialize-HarnessMpvConf $DataDir)

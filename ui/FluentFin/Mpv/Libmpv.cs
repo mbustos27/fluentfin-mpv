@@ -1,16 +1,72 @@
-using System.Reflection;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 namespace FluentFin.Mpv;
 
 /// <summary>
-/// fluentfin-mpv player controls: the few libmpv calls (client.h, API 2.x) the in-process core needs, against shinchiro's
-/// <c>libmpv-2.dll</c> next to FluentFin.exe (vendor\libmpv\VENDORED.md). Only loaded when "Player controls: FluentFin" is
-/// chosen; <see cref="IsAvailable"/> says whether it can be (and does composition output), without throwing.
+/// fluentfin-mpv player controls: the few libmpv calls (client.h, API 2.x) the in-process core needs, against the
+/// <c>libmpv-2.dll</c> in the <see cref="Folder"/> folder next to FluentFin.exe, with the DLLs it loads beside it
+/// (vendor\libmpv\VENDORED.md). Only loaded when "Player controls: FluentFin" is chosen; <see cref="IsAvailable"/> says
+/// whether it can be (and does composition output), without throwing.
 /// </summary>
 internal static unsafe partial class Libmpv
 {
 	public const string Dll = "libmpv-2.dll";
+
+	/// <summary>The folder next to FluentFin.exe that holds <see cref="Dll"/> and every non-Windows DLL it loads.</summary>
+	public const string Folder = "libmpv";
+
+	/// <summary>Where FluentFin's libmpv is: <see cref="Dll"/> in <see cref="Folder"/> next to FluentFin.</summary>
+	public static string InstalledPath => Path.Combine(AppContext.BaseDirectory, Folder, Dll);
+
+	/// <summary>
+	/// <c>LoadLibraryEx</c> flags for libmpv: its dependencies are looked for in its own folder, then in System32, and
+	/// nowhere else (not FluentFin's folder, the working directory or PATH, where another build's DLLs of the same names
+	/// could be). <c>LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32</c>.
+	/// </summary>
+	internal const uint LoadFlags = 0x00000100 | 0x00000800;
+
+	private static readonly Lazy<(nint Handle, string? Error)> s_installed = new(() => Load(InstalledPath));
+
+	/// <summary>Why the imports could not be bound to the installed library (another resolver was set first), else null.</summary>
+	private static readonly string? s_resolverError;
+
+	static Libmpv()
+	{
+		// the imports below bind to the library the probe loaded from FluentFin's libmpv folder, never to one found by name
+		try
+		{
+			NativeLibrary.SetDllImportResolver(typeof(Libmpv).Assembly, (name, _, _) => name == Dll ? Installed() : 0);
+		}
+		catch (InvalidOperationException ex)
+		{
+			s_resolverError = ex.Message;
+		}
+	}
+
+	/// <summary>The installed libmpv's handle for the imports; throws when it cannot be loaded (no other is looked for).</summary>
+	private static nint Installed()
+	{
+		var (handle, error) = s_installed.Value;
+		return handle != 0 ? handle : throw new DllNotFoundException($"{Dll} could not be loaded from {Path.Combine(AppContext.BaseDirectory, Folder)}: {error}");
+	}
+
+	/// <summary>
+	/// Loads the DLL at <paramref name="path"/> (a full path) with <see cref="LoadFlags"/>: (handle, null), or (0, why not).
+	/// </summary>
+	internal static (nint Handle, string? Error) Load(string path)
+	{
+		if (!File.Exists(path))
+		{
+			return (0, "the file is not there");
+		}
+
+		var handle = LoadLibraryExW(Path.GetFullPath(path), 0, LoadFlags);
+		return handle != 0 ? (handle, null) : (0, new Win32Exception(Marshal.GetLastPInvokeError()).Message);
+	}
+
+	[LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+	private static partial nint LoadLibraryExW(string fileName, nint file, uint flags);
 
 	public const int FormatNone = 0, FormatString = 1, FormatFlag = 3, FormatInt64 = 4, FormatDouble = 5;
 	public const int EventIdNone = 0, EventIdShutdown = 1, EventIdLogMessage = 2, EventIdPropertyChange = 22;
@@ -61,7 +117,7 @@ internal static unsafe partial class Libmpv
 		return s_unavailable.Value is null;
 	}
 
-	/// <summary>Why the libmpv next to FluentFin cannot be used, null when it can (<see cref="IsAvailable"/>).</summary>
+	/// <summary>Why FluentFin's libmpv cannot be used, null when it can (<see cref="IsAvailable"/>).</summary>
 	public static string? Unavailable() => s_unavailable.Value;
 
 	/// <summary>The calls the probe makes, so its decision can be checked without a libmpv of every age.</summary>
@@ -104,13 +160,17 @@ internal static unsafe partial class Libmpv
 		}
 	}
 
-	/// <summary>The probe of the DLL at <paramref name="path"/> (tests: a file that is not, or not a usable, libmpv). Never throws.</summary>
+	/// <summary>
+	/// The probe of the DLL at <paramref name="path"/>, loaded as the installed one is (<see cref="Load"/>; tests: a file that
+	/// is not, or not a usable, libmpv). Never throws.
+	/// </summary>
 	internal static string? ProbeFile(string path)
 	{
 		var name = Path.GetFileName(path);
 		try
 		{
-			return NativeLibrary.TryLoad(path, out var library) ? ProbeLibrary(library, name) : $"{name} could not be loaded";
+			var (library, error) = Load(path);
+			return library != 0 ? ProbeLibrary(library, name) : $"{name} could not be loaded: {error}";
 		}
 		catch (Exception ex)
 		{
@@ -118,14 +178,22 @@ internal static unsafe partial class Libmpv
 		}
 	}
 
-	/// <summary>The probe of the DLL the core will use: <see cref="Dll"/> next to FluentFin, as the imports below find it.</summary>
+	/// <summary>The probe of the DLL the core will use: <see cref="InstalledPath"/>, the library the imports below bind to.</summary>
 	private static string? ProbeInstalled()
 	{
 		try
 		{
-			if (!NativeLibrary.TryLoad(Dll, Assembly.GetExecutingAssembly(), DllImportSearchPath.ApplicationDirectory | DllImportSearchPath.System32, out var library))
+			if (s_resolverError is not null)
 			{
-				return $"{Dll} was not found next to FluentFin";
+				return $"{Dll} cannot be bound to FluentFin's {Folder} folder: {s_resolverError}";
+			}
+
+			var (library, error) = s_installed.Value;
+			if (library == 0)
+			{
+				return File.Exists(InstalledPath)
+					? $"{Dll} could not be loaded from FluentFin's {Folder} folder: {error}"
+					: $"{Dll} was not found in FluentFin's {Folder} folder";
 			}
 
 			return ProbeLibrary(library, Dll);

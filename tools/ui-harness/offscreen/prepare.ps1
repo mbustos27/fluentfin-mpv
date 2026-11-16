@@ -43,7 +43,7 @@ function Test-LoopbackServer($Server) {
 # Writes the run's LocalSettings.json: the backend command, the mpv player, the -Setting values (Name=Value, a JSON value
 # else a string), and of the saved servers only loopback ones (a reused folder must not keep a real server to sign in
 # to). Returns how many servers it removed and who draws the player controls (Mpv or FluentFin): FluentFin's are the
-# default (SettingKeys.MpvPlayerControls) unless the setting says mpv, and need $LibmpvThere (libmpv-2.dll next to the
+# default (SettingKeys.MpvPlayerControls) unless the setting says mpv, and need $LibmpvThere (libmpv\libmpv-2.dll next to the
 # exe; without it FluentFin falls back to mpv's and says so).
 function Initialize-HarnessSettings([string]$DataDir, [string]$BackendCommand, [string[]]$Setting = @(), [bool]$LibmpvThere = $true) {
     $parsedSettings = [ordered]@{}
