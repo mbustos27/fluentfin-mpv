@@ -150,7 +150,7 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 				if (ListenToKeyboard)
 				{
 					_keyboardController?.UnsubscribeEvents();
-					_keyboardController = new KeyboardMediaPlayerController(mp, JellyfinClient, Skip, ToggleFullScreen);
+					_keyboardController = new KeyboardMediaPlayerController(mp, JellyfinClient, Skip, ToggleFullScreen, () => settings.VolumeStep);
 				}
 
 				if (_playQueueUpdate is null && _requestedItem is { } requested)
@@ -486,7 +486,8 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 	private void SubscribeEvents(IMediaPlayerController mp)
 	{
 		mp.Playing.Where(_ => _disposables.IsDisposed).Subscribe(_ => mp.Stop());
-		mp.Ended.Where(_ => Playlist.CanSelectNext).Subscribe(_ =>
+		// fluentfin-mpv: and only when the user's "auto-play next episode" is on (Settings > Playback)
+		mp.Ended.Where(_ => Playlist.CanSelectNext && PlaybackPreferences.PlaysNextItem()).Subscribe(_ =>
 		{
 			taskBarProgress.Clear();
 			Playlist.SelectNext();
@@ -504,7 +505,8 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 			.Select(ticks => Segments.Any(segment => ticks > segment.StartTicks && ticks < segment.EndTicks))
 			.DistinctUntilChanged()
 			.ObserveOn(RxSchedulers.MainThreadScheduler)
-			.Subscribe(isVisible => IsSkipButtonVisible = isVisible);
+			// fluentfin-mpv: unless Settings > Playback turned the skip button off
+			.Subscribe(isVisible => IsSkipButtonVisible = isVisible && settings.ShowSkipPrompt);
 		mp.DurationChanged.Subscribe(d => _duration = d);
 
 		mp.MediaLoaded

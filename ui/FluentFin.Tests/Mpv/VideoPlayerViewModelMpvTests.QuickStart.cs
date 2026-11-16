@@ -153,7 +153,7 @@ public sealed partial class VideoPlayerViewModelMpvTests
 
 		var navigating = vm.OnNavigatedTo(movie);
 		await BridgeClientTests.WaitUntil(() => _backend.Starts == 1);
-		Assert.Equal("Starting mpv…", vm.MpvStatusText);
+		Assert.Equal("Starting the player…", vm.MpvStatusText);
 		await vm.OnNavigatedFrom();
 		started.SetResult();
 		await navigating.WaitAsync(TimeSpan.FromSeconds(5));
@@ -203,7 +203,7 @@ public sealed partial class VideoPlayerViewModelMpvTests
 
 		await vm.OnNavigatedTo(movie);
 
-		Assert.Equal(["Loading the queue…", "Starting mpv…", "Connecting…", "Starting playback…", ""], shown);
+		Assert.Equal(["Loading the queue…", "Starting the player…", "Connecting to the server…", "Starting playback…", ""], shown);
 		Assert.True(vm.IsMpvVideoVisible);
 		Assert.Null(vm.MpvMessage);
 	}
@@ -225,7 +225,7 @@ public sealed partial class VideoPlayerViewModelMpvTests
 
 		await vm.OnNavigatedTo(movie);
 
-		Assert.Equal(["Loading the queue…", "Connecting…", "Starting playback…", ""], shown);
+		Assert.Equal(["Loading the queue…", "Connecting to the server…", "Starting playback…", ""], shown);
 	}
 
 	[Fact]

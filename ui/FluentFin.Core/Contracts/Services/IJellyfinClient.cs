@@ -144,6 +144,16 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<UserDto?> GetUser(Guid id);
 
+		/// <summary>fluentfin-mpv: the signed-in user, fresh from the server (<c>GET /Users/Me</c>); null when it did not answer.</summary>
+		Task<UserDto?> GetCurrentUser();
+
+		/// <summary>
+		/// fluentfin-mpv: saves <paramref name="userId"/>'s configuration on the server (<c>POST /Users/Configuration</c>), as
+		/// jellyfin-web's Playback settings do; the whole configuration, as the server replaces it. The user is the caller's,
+		/// not whoever is signed in when the request goes out. False when it failed.
+		/// </summary>
+		Task<bool> SaveUserConfiguration(Guid userId, UserConfiguration configuration);
+
 		Task<UserDto?> CreateUser(string username, string password);
 
 		Task DeleteUser(UserDto user);

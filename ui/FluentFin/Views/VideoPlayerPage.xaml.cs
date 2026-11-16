@@ -1,13 +1,14 @@
 using System.ComponentModel;
-using CommunityToolkit.WinUI;
 using FluentFin.Contracts.Services;
 using FluentFin.Core;
 using FluentFin.Core.ViewModels;
 using FluentFin.Mpv;
+using FluentFin.Services;
 using FluentFin.ViewModels;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
@@ -18,8 +19,14 @@ namespace FluentFin.Views;
 public sealed partial class VideoPlayerPage : Page
 {
 	private readonly MpvVideoHost _videoHost = App.GetService<MpvVideoHost>();
+
+	// fluentfin-mpv: no navigation pane and no search while this page is open (docs/research/ux-review.md V9)
+	private readonly PlayerChromeHold _chrome = new(App.GetService<PlayerChrome>());
 	private bool _videoAttached;
 	private bool _mpvFullScreen;
+
+	// fluentfin-mpv: the loading screen's button has the keyboard (GotFocus/LostFocus come after the change that causes them)
+	private bool _leaveButtonFocused;
 
 	/// <summary>This page's frame navigated away from it (the only way the page hears it was left).</summary>
 	private bool _navigatedFrom;
@@ -41,6 +48,7 @@ public sealed partial class VideoPlayerPage : Page
 
 	protected override void OnNavigatedTo(NavigationEventArgs e)
 	{
+		_chrome.NavigatedTo();
 		ViewModel.ToggleFullScreen = () => MediaPlayerHost.OnPlayerDoubleTapped(MediaPlayerHost, new Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs());
 		ViewModel.SetFullScreen = SetMpvFullScreen;
 		ViewModel.IsFullScreen = () => App.MainWindow.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
@@ -51,6 +59,7 @@ public sealed partial class VideoPlayerPage : Page
 	protected override void OnNavigatedFrom(NavigationEventArgs e)
 	{
 		_navigatedFrom = true;
+		_chrome.NavigatedFrom();
 		DetachVideo();
 
 		// restores the window and tells the backend, before the view model stops (the next page starts from the real state)
@@ -59,14 +68,23 @@ public sealed partial class VideoPlayerPage : Page
 
 	private void OnLoaded(object sender, RoutedEventArgs e)
 	{
+		_chrome.Loaded();
 		if (ViewModel.IsMpv)
 		{
 			AttachVideo();
+		}
+
+		// the loading screen's only control: Escape or Enter leaves before the start goes on
+		if (ViewModel.IsMpvStarting)
+		{
+			MpvLeaveButton.Focus(FocusState.Programmatic);
 		}
 	}
 
 	private void OnUnloaded(object sender, RoutedEventArgs e)
 	{
+		// a sign-out takes the shell away with this page on it: the next shell must start with its pane
+		_chrome.Unloaded();
 		DetachVideo();
 
 		// fluentfin-mpv: a navigation of the window's root frame (Log out, Switch user) removes the shell with this page on it
@@ -91,9 +109,36 @@ public sealed partial class VideoPlayerPage : Page
 				break;
 			case nameof(VideoPlayerViewModel.IsMpvVideoVisible) when _videoAttached:
 				_videoHost.SetVideoVisible(ViewModel.IsMpvVideoVisible);
+				MoveFocusWithTheStartScreen();
+				break;
+			case nameof(VideoPlayerViewModel.MpvStatusText) when IsLoaded && !string.IsNullOrEmpty(ViewModel.MpvStatusText):
+				// fluentfin-mpv: Narrator hears each step without focus moving (WCAG 4.1.3, docs/research/ux-review.md A4)
+				FrameworkElementAutomationPeer.FromElement(MpvStepText)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
 				break;
 		}
 	}
+
+	/// <summary>
+	/// fluentfin-mpv: the loading screen goes when the video is shown; if its button had the keyboard, the video gets it, as
+	/// once the item plays (FocusVideo), instead of nothing. When the screen comes back (an error, a crash) its button gets it.
+	/// </summary>
+	private void MoveFocusWithTheStartScreen()
+	{
+		if (ViewModel.IsMpvVideoVisible)
+		{
+			if (_leaveButtonFocused)
+			{
+				_leaveButtonFocused = false;
+				_videoHost.Focus();
+			}
+		}
+		else if (IsLoaded && !_navigatedFrom)
+		{
+			MpvLeaveButton.Focus(FocusState.Programmatic);
+		}
+	}
+
+	private void OnLeaveButtonFocus(object sender, RoutedEventArgs e) => _leaveButtonFocused = MpvLeaveButton.FocusState != FocusState.Unfocused;
 
 	private void AttachVideo()
 	{
@@ -135,10 +180,7 @@ public sealed partial class VideoPlayerPage : Page
 			titleBar.IsVisible = !fullScreen;
 		}
 
-		if (this.FindAscendant<NavigationView>() is { } navigationView)
-		{
-			navigationView.IsPaneVisible = !fullScreen;
-		}
+		// fluentfin-mpv: the navigation pane stays hidden in a window too while this page is open (PlayerChrome)
 	}
 
 	private async void OnEscape(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
@@ -178,6 +220,8 @@ public sealed partial class VideoPlayerPage : Page
 	public Visibility CollapsedIf(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
 
 	public bool HasText(string? value) => !string.IsNullOrEmpty(value);
+
+	public Visibility VisibleIfText(string? value) => string.IsNullOrEmpty(value) ? Visibility.Collapsed : Visibility.Visible;
 
 	public InfoBarSeverity SeverityOf(bool isError) => isError ? InfoBarSeverity.Error : InfoBarSeverity.Informational;
 }

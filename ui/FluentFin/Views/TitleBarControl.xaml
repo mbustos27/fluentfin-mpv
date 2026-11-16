@@ -8,6 +8,7 @@
     xmlns:c="using:FluentFin.Converters"
     xmlns:cc="using:CommunityToolkit.WinUI.Converters"
     xmlns:core="using:FluentFin.Core"
+    xmlns:cvm="using:FluentFin.Core.ViewModels"
     xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:devwinui="using:DevWinUI"
@@ -50,7 +51,7 @@
                 Margin="{StaticResource XSmallTopBottomMargin}"
                 PlaceholderText="Search movies, series, actors and more"
                 QueryIcon="Find"
-                Visibility="{x:Bind ViewModel.User, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}">
+                Visibility="{x:Bind SearchVisibility(ViewModel.User, Chrome.IsPlayerOpen), Mode=OneWay}">
                 <AutoSuggestBox.KeyboardAccelerators>
                     <KeyboardAccelerator
                         Key="F"
@@ -60,28 +61,45 @@
                 <i:Interaction.Behaviors>
                     <b:GlobalSearchBoxBehavior />
                 </i:Interaction.Behaviors>
-                <AutoSuggestBox.ItemTemplate>
-                    <DataTemplate x:DataType="jm:BaseItemDto">
-                        <Grid Padding="3" ColumnSpacing="20">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid CornerRadius="{StaticResource ControlCornerRadius}">
-                                <lc:LazyLoadedImage
-                                    Height="90"
-                                    BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash((jm:BaseItemDto), jm:ImageType.Primary, 100)}"
-                                    ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage((jm:BaseItemDto), jm:ImageType.Primary, 100)}"
-                                    Stretch="UniformToFill" />
-                            </Grid>
-                            <StackPanel Grid.Column="1">
-                                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind Name}" />
-                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind c:BaseItemDtoConverters.GetCardSubtitle((jm:BaseItemDto))}" />
-                                <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="{x:Bind Type}" />
-                            </StackPanel>
-                        </Grid>
-                    </DataTemplate>
-                </AutoSuggestBox.ItemTemplate>
+                <!--  fluentfin-mpv: an item, or a message row (no results, a failed search to try again: SearchSuggestions)  -->
+                <AutoSuggestBox.ItemTemplateSelector>
+                    <lc:SearchSuggestionTemplateSelector>
+                        <lc:SearchSuggestionTemplateSelector.ItemTemplate>
+                            <DataTemplate x:DataType="jm:BaseItemDto">
+                                <Grid Padding="3" ColumnSpacing="20">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid CornerRadius="{StaticResource ControlCornerRadius}">
+                                        <lc:LazyLoadedImage
+                                            Height="90"
+                                            BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash((jm:BaseItemDto), jm:ImageType.Primary, 100)}"
+                                            ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage((jm:BaseItemDto), jm:ImageType.Primary, 100)}"
+                                            Stretch="UniformToFill" />
+                                    </Grid>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind Name}" />
+                                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind c:BaseItemDtoConverters.GetCardSubtitle((jm:BaseItemDto))}" />
+                                        <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="{x:Bind Type}" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </lc:SearchSuggestionTemplateSelector.ItemTemplate>
+                        <lc:SearchSuggestionTemplateSelector.MessageTemplate>
+                            <DataTemplate x:DataType="cvm:SearchMessage">
+                                <StackPanel Padding="3,6" Spacing="2">
+                                    <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind Title}" TextWrapping="WrapWholeWords" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{ThemeResource CaptionTextBlockStyle}"
+                                        Text="{x:Bind Message}"
+                                        TextWrapping="WrapWholeWords" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </lc:SearchSuggestionTemplateSelector.MessageTemplate>
+                    </lc:SearchSuggestionTemplateSelector>
+                </AutoSuggestBox.ItemTemplateSelector>
                 <AutoSuggestBox.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Spacing="10" />

@@ -42,6 +42,9 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 	[ObservableProperty]
 	public partial bool HasSubtitles { get; set; }
 
+	/// <summary>fluentfin-mpv: this episode could not be loaded: said on the page, with Retry (docs/research/ux-review.md §3.11).</summary>
+	public LoadState State { get; } = new("this episode");
+
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 
 	// fluentfin-mpv: whether the user changed a picker after the page chose its defaults. The mpv player sends a track pick
@@ -72,7 +75,11 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 			return;
 		}
 
-		await UpdateEpisode(id);
+		await State.RunAsync(async () =>
+		{
+			await UpdateEpisode(id);
+			return Dto?.Id == id ? LoadOutcome.Loaded : LoadMessages.CouldNotLoad("this episode");
+		});
 	}
 
 	private async Task UpdateEpisode(Guid id)

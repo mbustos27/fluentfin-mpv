@@ -206,6 +206,33 @@ public partial class JellyfinClient
 		}
 	}
 
+	public async Task<UserDto?> GetCurrentUser()
+	{
+		try
+		{
+			return await _jellyfinApiClient.Users.Me.GetAsync();
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, @"Unhandled exception");
+			return null;
+		}
+	}
+
+	public async Task<bool> SaveUserConfiguration(Guid userId, UserConfiguration configuration)
+	{
+		try
+		{
+			await _jellyfinApiClient.Users.Configuration.PostAsync(configuration, x => x.QueryParameters.UserId = userId);
+			return true;
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, @"Unhandled exception");
+			return false;
+		}
+	}
+
 	public async Task DeleteUser(UserDto user)
 	{
 		if (user.Id is not { } id)

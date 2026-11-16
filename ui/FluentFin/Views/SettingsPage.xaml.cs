@@ -16,6 +16,10 @@ public sealed partial class SettingsPage : Page
 		InitializeComponent();
 	}
 
+	// fluentfin-mpv: where the next four settings live, so changing them here is no surprise elsewhere
+	public string ServerPreferencesCaption() =>
+		$"Saved to your account on {LoadMessages.ServerName()}, so other Jellyfin apps use them too. They choose each item's default audio and subtitles in every player.";
+
 	private void RemoveUser(object sender, RoutedEventArgs e)
 	{
 		if (sender is not FrameworkElement button)

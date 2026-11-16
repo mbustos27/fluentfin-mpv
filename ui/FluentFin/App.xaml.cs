@@ -98,6 +98,8 @@ public partial class App : Application
 			services.AddSingleton<IMpvBackendLauncher, WindowsMpvBackendLauncher>();
 			services.AddSingleton<IMpvBackend, MpvBackendHost>();
 			services.AddSingleton<MpvPlaybackService>();
+			// fluentfin-mpv: the nav pane and search hide while a player page is open (docs/research/ux-review.md V9)
+			services.AddSingleton(_ => new PlayerChrome(action => MainWindow.DispatcherQueue.TryEnqueue(() => action())));
 
 			// Services
 			services.AddSingleton<IActivationService, ActivationService>();

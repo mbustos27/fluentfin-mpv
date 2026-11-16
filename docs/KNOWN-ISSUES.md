@@ -57,6 +57,18 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 - **A kill that never takes but whose job close does end the backend**: the crash's own
   Stopped from FluentFin can come after the close has returned and be cut off (trade-off of
   not waiting twice for the same exit).
+- **Settings > Playback with the MPV player** (2026-11-15): languages and subtitle mode reach
+  it through the server (the per-item default tracks the backend falls back to), but four
+  settings do not: *Show Skip intro and Skip credits*, *Change the volume with the mouse
+  wheel* and *Volume step* are kept on this PC and used by the built-in players only (the
+  bridge has no field for them: v1), and *Play the next episode automatically* is the
+  server's per-user setting, which the backend does not read (it uses its own `auto_play`,
+  on). The cards say so. Needs a bridge field or command, or the backend reading the user's
+  configuration at `connect`.
+- **The mpv loading screen ends when the backend takes `play`**: from then on mpv's window
+  covers the page while the item opens (PlaybackInfo, stream start), black until the first
+  frame. Keeping the window hidden but sized until `playing` would need an `MpvVideoHost`
+  change and a harness check.
 - **Test gaps**: nothing automated drives a real root-frame sign-out, and the player page's
   `Unloaded` hook is covered only through its rule (`FluentFin\Mpv\PlayerPageRemoval.cs`,
   tests in `VideoPlayerViewModelMpvTests.PageRemoval.cs`; signout-ux), not through WinUI

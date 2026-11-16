@@ -36,6 +36,9 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 	public ObservableCollection<NamedQueryResult> RecentItems { get; } = [];
 
+	/// <summary>fluentfin-mpv: Home failed, is empty, or only partly loaded: said on the page, with Retry.</summary>
+	public LoadState State { get; } = new("Home");
+
 	public IJellyfinClient JellyfinClient { get; } = jellyfinClient;
 
 	public Task OnNavigatedFrom()
@@ -46,14 +49,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 	public async Task OnNavigatedTo(object parameter)
 	{
-		IsLoading = true;
-
-		await Task.WhenAll(UpdateContinueItems(), UpdateNextUpItems(), UpdateRecentItems());
-
-		HasContinueItems = ContinueItems.Count > 0;
-		HasNextUpItems = NextUpItems.Count > 0;
-		ContinueItems.CollectionChanged += (_, _) => HasContinueItems = ContinueItems.Count > 0;
-		NextUpItems.CollectionChanged += (_, _) => HasNextUpItems = NextUpItems.Count > 0;
+		await State.RunAsync(LoadSections);
 
 		webSocketMessages
 			.Select(x => x as UserDataChangedMessage)
@@ -74,32 +70,91 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 				}
 			})
 			.DisposeWith(_disposable);
-
-		IsLoading = false;
 	}
 
-	private async Task UpdateContinueItems()
+	/// <summary>
+	/// fluentfin-mpv: loads every section (again, for Retry) and says how it went: nothing could be loaded, the server has
+	/// nothing to show, or some sections failed (docs/research/ux-review.md H6). The client answers a failed request with
+	/// null; "Recently added" cannot tell a failure from no libraries, so it only counts as content.
+	/// </summary>
+	private async Task<LoadOutcome> LoadSections()
+	{
+		IsLoading = true;
+		try
+		{
+			RecentItems.Clear();
+			var continueLoaded = UpdateContinueItems();
+			var nextUpLoaded = UpdateNextUpItems();
+			await Task.WhenAll(continueLoaded, nextUpLoaded, UpdateRecentItems());
+
+			var failed = !continueLoaded.Result || !nextUpLoaded.Result;
+			var nothing = ContinueItems.Count == 0 && NextUpItems.Count == 0 && RecentItems.Count == 0;
+			return (failed, nothing) switch
+			{
+				(true, true) => LoadMessages.CouldNotLoad("Home"),
+				(true, false) => LoadOutcome.Partly("Some of Home couldn't be loaded", LoadMessages.CheckServer()),
+				(false, true) => LoadOutcome.Empty("Nothing to watch yet",
+					$"Movies and shows on {LoadMessages.ServerName()} appear here once its libraries have some. Libraries shows what is there now."),
+				_ => LoadOutcome.Loaded,
+			};
+		}
+		finally
+		{
+			IsLoading = false;
+		}
+	}
+
+	// fluentfin-mpv: a section's flag follows its list, also when a Retry replaces the list
+	partial void OnContinueItemsChanged(ObservableCollection<BaseItemViewModel> oldValue, ObservableCollection<BaseItemViewModel> newValue)
+	{
+		if (oldValue is not null)
+		{
+			oldValue.CollectionChanged -= OnContinueItemsCollectionChanged;
+		}
+		newValue.CollectionChanged += OnContinueItemsCollectionChanged;
+		HasContinueItems = newValue.Count > 0;
+	}
+
+	partial void OnNextUpItemsChanged(ObservableCollection<BaseItemViewModel> oldValue, ObservableCollection<BaseItemViewModel> newValue)
+	{
+		if (oldValue is not null)
+		{
+			oldValue.CollectionChanged -= OnNextUpItemsCollectionChanged;
+		}
+		newValue.CollectionChanged += OnNextUpItemsCollectionChanged;
+		HasNextUpItems = newValue.Count > 0;
+	}
+
+	private void OnContinueItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => HasContinueItems = ContinueItems.Count > 0;
+
+	private void OnNextUpItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => HasNextUpItems = NextUpItems.Count > 0;
+
+	/// <summary>False when the server did not answer (fluentfin-mpv: so the page can say so).</summary>
+	private async Task<bool> UpdateContinueItems()
 	{
 		var response = await JellyfinClient.GetContinueWatching();
 
-		if (response is null or { Items: null } or { Items.Count: 0 })
+		if (response is null)
 		{
-			return;
+			return false;
 		}
 
-		ContinueItems = [.. response.Items.Select(BaseItemViewModel.FromDto)];
+		ContinueItems = [.. response.Items?.Select(BaseItemViewModel.FromDto) ?? []];
+		return true;
 	}
 
-	private async Task UpdateNextUpItems()
+	/// <summary>False when the server did not answer (fluentfin-mpv: so the page can say so).</summary>
+	private async Task<bool> UpdateNextUpItems()
 	{
 		var response = await JellyfinClient.GetNextUp();
 
-		if (response is null or { Items: null } or { Items.Count: 0 })
+		if (response is null)
 		{
-			return;
+			return false;
 		}
 
-		NextUpItems = [.. response.Items.Select(BaseItemViewModel.FromDto)];
+		NextUpItems = [.. response.Items?.Select(BaseItemViewModel.FromDto) ?? []];
+		return true;
 	}
 
 	private async Task UpdateRecentItems()

@@ -42,6 +42,9 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 
 	public IJellyfinClient JellyfinClient { get; } = jellyfinClient;
 
+	/// <summary>fluentfin-mpv: this movie could not be loaded: said on the page, with Retry (docs/research/ux-review.md §3.11).</summary>
+	public LoadState State { get; } = new("this movie");
+
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 
 	// fluentfin-mpv: whether the user changed a picker after the page chose its defaults. The mpv player sends a track pick
@@ -72,8 +75,17 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 			return;
 		}
 
-		await UpdateMovie(id);
-		await UpdateSimilar(dto);
+		await State.RunAsync(async () =>
+		{
+			await UpdateMovie(id);
+			if (Dto?.Id != id)
+			{
+				return LoadMessages.CouldNotLoad("this movie");
+			}
+
+			await UpdateSimilar(dto);
+			return LoadOutcome.Loaded;
+		});
 	}
 
 	private async Task UpdateMovie(Guid id)
