@@ -51,7 +51,9 @@ static class HomeBench
 		var socket = new Subject<IOutboundWebSocketMessage>();
 		var profiles = new Mock<IDeviceProfileFactory>();
 		profiles.Setup(x => x.GetDeviceProfile()).Returns(new DeviceProfile());
-		var client = CoreFactory.Make<JellyfinClient>(socket, profiles.Object);
+		// a Core whose client is told of sign-ins (HomeCache) gets a data folder of the bench's own for it (never the user's);
+		// that cache is never written to, the page's is the per-run one below
+		var client = CoreFactory.Make<JellyfinClient>(socket, profiles.Object, new KnownFolders(Path.Combine(dataRoot, "client")));
 		var commands = CoreFactory.Make<GlobalCommands>(client);
 
 		Console.WriteLine($"# {label}: {server.Views.Count} views, server-scale {scale}, downlink {(mbps > 0 ? $"{mbps} Mbit/s" : "unlimited")}, {reps} runs per row (+1 warm-up), medians" +

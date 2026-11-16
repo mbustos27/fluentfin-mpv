@@ -57,6 +57,12 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	// fluentfin-mpv: loads run so far; the first may show the cached page and skip a fresh one, a Retry always asks
 	private int _loads;
 
+	// fluentfin-mpv: watch-state changes the server reported and this page applied to Continue Watching and Next Up (each
+	// "Recently added" row counts its own): an answer asked for before the latest of them is older than what the section
+	// shows, and is dropped instead of undoing the change
+	private int _continueChanges;
+	private int _nextUpChanges;
+
 	public IJellyfinClient JellyfinClient { get; } = jellyfinClient;
 
 	public Task OnNavigatedFrom()
@@ -84,10 +90,14 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	private async Task<LoadOutcome> LoadSections()
 	{
 		var retry = _loads++ > 0;
+		// fluentfin-mpv: the session this load is for, read once: the page is saved under it, and only if it is still the
+		// signed-in one when the answers are in (a load that ends after a sign-out and someone else's sign-in is nobody's)
+		var serverUrl = JellyfinClient.BaseUrl;
+		var userId = JellyfinClient.UserId;
 		IsLoading = true;
 		try
 		{
-			var cached = await homeCache.Get(JellyfinClient.BaseUrl, JellyfinClient.UserId);
+			var cached = await homeCache.Get(serverUrl, userId);
 			if (!retry && cached.Snapshot is { } snapshot)
 			{
 				Show(snapshot);
@@ -96,18 +106,22 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			var failed = false;
 			if (retry || !cached.IsFresh)
 			{
-				// a section with nothing in it shows its placeholders again while it is asked for again
-				IsContinueLoading |= ContinueItems.Count == 0;
-				IsNextUpLoading |= NextUpItems.Count == 0;
+				// a Retry shows an empty section's placeholders again while it asks for it again; a saved page's empty
+				// section stays hidden while the page refreshes (placeholders that then go would move every row below)
+				if (retry)
+				{
+					IsContinueLoading |= ContinueItems.Count == 0;
+					IsNextUpLoading |= NextUpItems.Count == 0;
+				}
 
 				var continueLoaded = UpdateContinueItems();
 				var nextUpLoaded = UpdateNextUpItems();
 				await Task.WhenAll(continueLoaded, nextUpLoaded, UpdateRecentItems());
 				failed = !continueLoaded.Result || !nextUpLoaded.Result;
 
-				if (Snapshot() is { } shown)
+				if (Snapshot() is { } shown && JellyfinClient.BaseUrl == serverUrl && JellyfinClient.UserId == userId)
 				{
-					await homeCache.Save(JellyfinClient.BaseUrl, JellyfinClient.UserId, shown, cached.ChangesSeen);
+					await homeCache.Save(serverUrl, userId, shown, cached.ChangesSeen);
 				}
 			}
 
@@ -150,7 +164,23 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	}
 
 	// fluentfin-mpv: an answer that matches what the page shows (a cached page that has not changed) keeps its cards,
-	// so a refresh does not redraw anything; otherwise the section is replaced
+	// so a refresh does not redraw anything; they take the answer's item records all the same, so what changed without
+	// changing the card (new artwork: a new image tag) reaches the saved page and the cards made from it. Otherwise the
+	// section is replaced (false).
+	private static bool KeepCards(IReadOnlyList<BaseItemViewModel> shown, IReadOnlyList<BaseItemDto> items)
+	{
+		if (!Same(shown, items))
+		{
+			return false;
+		}
+
+		for (var i = 0; i < items.Count; i++)
+		{
+			shown[i].Dto = items[i];
+		}
+		return true;
+	}
+
 	private static bool Same(IReadOnlyList<BaseItemViewModel> shown, IReadOnlyList<BaseItemDto> items) =>
 		shown.Count == items.Count && shown.Zip(items).All(x => x.First.Dto.Id == x.Second.Id && x.First.Dto.Name == x.Second.Name && SameUserData(x.First.Dto.UserData, x.Second.UserData));
 
@@ -161,7 +191,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	// the section's flag follows its list through OnContinueItemsChanged / OnNextUpItemsChanged
 	private void SetContinueItems(IReadOnlyList<BaseItemDto> items)
 	{
-		if (!Same(ContinueItems, items))
+		if (!KeepCards(ContinueItems, items))
 		{
 			ContinueItems = [.. items.Select(BaseItemViewModel.FromDto)];
 		}
@@ -170,7 +200,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 	private void SetNextUpItems(IReadOnlyList<BaseItemDto> items)
 	{
-		if (!Same(NextUpItems, items))
+		if (!KeepCards(NextUpItems, items))
 		{
 			NextUpItems = [.. items.Select(BaseItemViewModel.FromDto)];
 		}
@@ -226,9 +256,11 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	}
 
 	// fluentfin-mpv: a failed request leaves the section as it is (a placeholder goes, cached cards stay); false when the
-	// server did not answer, so the page can say so
+	// server did not answer, so the page can say so. An answer asked for before a watch-state change this page applied
+	// to the section is dropped: the section is newer.
 	private async Task<bool> UpdateContinueItems()
 	{
+		var changes = _continueChanges;
 		try
 		{
 			if (await JellyfinClient.GetContinueWatching() is not { } response)
@@ -236,7 +268,10 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 				return false;
 			}
 
-			SetContinueItems(response.Items ?? []);
+			if (changes == _continueChanges)
+			{
+				SetContinueItems(response.Items ?? []);
+			}
 			return true;
 		}
 		finally
@@ -247,6 +282,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 	private async Task<bool> UpdateNextUpItems()
 	{
+		var changes = _nextUpChanges;
 		try
 		{
 			if (await JellyfinClient.GetNextUp() is not { } response)
@@ -254,7 +290,10 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 				return false;
 			}
 
-			SetNextUpItems(response.Items ?? []);
+			if (changes == _nextUpChanges)
+			{
+				SetNextUpItems(response.Items ?? []);
+			}
 			return true;
 		}
 		finally
@@ -303,6 +342,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 	private async Task UpdateRecentRow(NamedQueryResult row)
 	{
+		var changes = row.Changes;
 		try
 		{
 			var items = await JellyfinClient.GetLatestItems(row.Library);
@@ -310,6 +350,11 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			if (items is null && !row.IsLoading)
 			{
 				return; // failed: a cached row stays
+			}
+
+			if (changes != row.Changes)
+			{
+				return; // asked for before a watch-state change the row shows: older than the row
 			}
 
 			if (items is null or { Count: 0 })
@@ -322,7 +367,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 				return;
 			}
 
-			if (!Same(row.Items, items))
+			if (!KeepCards(row.Items, items))
 			{
 				row.Items = [.. items.Select(BaseItemViewModel.FromDto)];
 			}
@@ -346,6 +391,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			dto.UserData.Played = userData.Played;
 			dto.UserData.PlayedPercentage = userData.PlayedPercentage;
 			dto.UserData.UnplayedItemCount = userData.UnplayedItemCount;
+			library.Changes++; // fluentfin-mpv: an answer asked for before this is older than the row
 		}
 		;
 	}
@@ -357,6 +403,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			return;
 		}
 
+		_continueChanges++; // fluentfin-mpv: an answer asked for before this is older than the section
 		if (userData.PlaybackPositionTicks is null or 0 ||
 			userData.Played == true)
 		{
@@ -377,6 +424,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 		if (userData.Played == true)
 		{
+			_nextUpChanges++; // fluentfin-mpv: this request's answer replaces any asked for before it
 			await UpdateNextUpItems();
 		}
 	}
@@ -408,4 +456,7 @@ public partial class NamedQueryResult(BaseItemDto library) : ObservableObject
 
 	[ObservableProperty]
 	public partial bool IsLoading { get; set; } = true;
+
+	/// <summary>Watch-state changes Home applied to this row's cards (an answer asked for before the latest is dropped).</summary>
+	internal int Changes { get; set; }
 }

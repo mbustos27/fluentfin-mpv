@@ -23,8 +23,10 @@
 		<PackageReference Include="TMDbLib" Version="3.0.0" />
 	</ItemGroup>
 
-	<!-- fluentfin-mpv: the tests set JellyfinClient's clock and hand it server messages -->
+	<!-- fluentfin-mpv: the tests set JellyfinClient's clock and hand it server messages; the app's tests give the player page
+	     a HomeCache in a folder of their own -->
 	<ItemGroup>
 		<InternalsVisibleTo Include="FluentFin.Core.Tests" />
+		<InternalsVisibleTo Include="FluentFin.Tests" />
 	</ItemGroup>
 </Project>
