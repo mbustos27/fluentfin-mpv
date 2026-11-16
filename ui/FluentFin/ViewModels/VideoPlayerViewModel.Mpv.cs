@@ -72,6 +72,23 @@ public partial class VideoPlayerViewModel
 	/// <summary>Counts notices shown and dismissed: a notice hides itself only if it is still the one it showed.</summary>
 	private int _mpvNotices;
 
+	/// <summary>
+	/// fluentfin-mpv player controls: FluentFin draws the controls over an mpv inside FluentFin (Settings, Player controls:
+	/// FluentFin, and libmpv is there), decided when the page opens. Otherwise mpv's own controls in its own window.
+	/// </summary>
+	[ObservableProperty]
+	public partial bool UsesFluentFinControls { get; set; }
+
+	/// <summary>fluentfin-mpv player controls: the controls' state and actions while <see cref="UsesFluentFinControls"/>.</summary>
+	[ObservableProperty]
+	public partial MpvControlsViewModel? MpvControls { get; set; }
+
+	/// <summary>Whether FluentFin's controls are chosen and can be had (tests replace it). Null whyNot: not chosen, or fine.</summary>
+	internal Func<(bool Use, string? WhyNot)> FluentFinControlsChoice { get; set; } = () => (FluentFin.Mpv.MpvVideoSurfaceChoice.UsesFluentFinControls(settings, out var whyNot), whyNot);
+
+	/// <summary>This page's play was taken by the backend: item, track and position events are its own from here.</summary>
+	private bool _mpvPlayAccepted;
+
 	/// <summary>Shown in the video area while the video window is hidden.</summary>
 	[ObservableProperty]
 	public partial string MpvStatusText { get; set; } = "";
@@ -131,6 +148,14 @@ public partial class VideoPlayerViewModel
 		// until this page's play is known, every active state belongs to the page before (null = any: the self-test only)
 		_mpvItems = parameter is MpvSelfTestRequest ? null : new HashSet<string>(StringComparer.Ordinal);
 		var generation = _mpvGeneration = mpvPlayback.Begin("a player page opened");
+		// fluentfin-mpv player controls: the same answer the video surface gives the backend at connect
+		var (useFluentFinControls, whyNot) = FluentFinControlsChoice();
+		UsesFluentFinControls = useFluentFinControls;
+		MpvControls = useFluentFinControls ? CreateMpvControls(generation) : null;
+		if (whyNot is not null)
+		{
+			ShowMpvNotice($"FluentFin's player controls are not available ({whyNot}); mpv's controls are used.");
+		}
 		logger.LogInformation("Player page opened with the mpv player (generation {Generation}): {Request}", generation, DescribeMpvParameter(parameter));
 		SubscribeMpv(generation);
 		var opened = Stopwatch.StartNew();
@@ -149,7 +174,7 @@ public partial class VideoPlayerViewModel
 			switch (parameter)
 			{
 				case MpvSelfTestRequest selfTest:
-					if (await mpvPlayback.PlayFileAsync(generation, selfTest, IsFullScreen?.Invoke() ?? false, onStep: OnStep))
+					if (await mpvPlayback.PlayFileAsync(generation, selfTest, IsFullScreen?.Invoke() ?? false, onStep: OnStep, controls: ControlsCommand()))
 					{
 						OnMpvPlayAccepted();
 					}
@@ -186,7 +211,7 @@ public partial class VideoPlayerViewModel
 			}
 
 			_mpvItems = new HashSet<string>(request.ItemIds.Select(NormalizeId), StringComparer.Ordinal);
-			if (await mpvPlayback.PlayAsync(generation, identity, request, IsFullScreen?.Invoke() ?? false, onStep: OnStep))
+			if (await mpvPlayback.PlayAsync(generation, identity, request, IsFullScreen?.Invoke() ?? false, onStep: OnStep, controls: ControlsCommand()))
 			{
 				logger.LogInformation("Sent play to the mpv backend {Ms} ms after the player page opened (generation {Generation})", opened.ElapsedMilliseconds, generation);
 				OnMpvPlayAccepted();
@@ -315,6 +340,12 @@ public partial class VideoPlayerViewModel
 
 	private void OnMpvPlayAccepted()
 	{
+		_mpvPlayAccepted = true;
+
+		// fluentfin-mpv player controls: from here the controls tell the backend where their bar is (set_controls went
+		// before the play already, so mpv's own controls never showed)
+		_ = MpvControls?.SendControls();
+
 		// shown before mpv creates its window, so mpv's window gets the final size from the start
 		IsMpvVideoVisible = true;
 		IsMpvStarting = false;
@@ -330,6 +361,12 @@ public partial class VideoPlayerViewModel
 
 		try
 		{
+			// fluentfin-mpv player controls: what they show (the state is passed on by OnMpvState, for this page's playback only)
+			if (MpvControls is { } controls && _mpvPlayAccepted && e.Name is Bridge.Events.Position or Bridge.Events.Item or Bridge.Events.Tracks)
+			{
+				controls.OnEvent(e);
+			}
+
 			switch (e.Name)
 			{
 				case Bridge.Events.State when e.DataAs<BridgeState>() is { } state:
@@ -377,6 +414,7 @@ public partial class VideoPlayerViewModel
 			_mpvSawPlayback = true;
 			IsMpvVideoVisible = true;
 			IsMpvStarting = false;
+			MpvControls?.OnState(state);
 			MpvStatusText = "";
 
 			// once the item has started: a pause queued while opening goes from opening straight to paused
@@ -434,9 +472,20 @@ public partial class VideoPlayerViewModel
 	}
 
 	/// <summary>The page left or entered full screen on its own (Escape): tell the backend for its OSC button.</summary>
-	public Task OnFullScreenChanged(bool fullScreen) => IsMpv
-		? SendMpv(_mpvGeneration, Bridge.Commands.SetFullscreen, BridgeCommands.Fullscreen(fullScreen))
-		: Task.CompletedTask;
+	public Task OnFullScreenChanged(bool fullScreen)
+	{
+		if (!IsMpv)
+		{
+			return Task.CompletedTask;
+		}
+
+		if (MpvControls is { } controls)
+		{
+			controls.IsFullScreen = fullScreen;
+		}
+
+		return SendMpv(_mpvGeneration, Bridge.Commands.SetFullscreen, BridgeCommands.Fullscreen(fullScreen));
+	}
 
 	/// <summary>
 	/// The page is being left (called before <see cref="OnNavigatedFrom"/>, while this page is still the current one): a
@@ -452,6 +501,11 @@ public partial class VideoPlayerViewModel
 		// tools\ui-harness\selftest-gate.ps1 reads this line
 		logger.LogInformation("Leaving the player page in full screen: restoring the window, sending set_fullscreen false to the mpv backend");
 		SetFullScreen?.Invoke(false);
+		if (MpvControls is { } controls)
+		{
+			controls.IsFullScreen = false;
+		}
+
 		return SendMpv(_mpvGeneration, Bridge.Commands.SetFullscreen, BridgeCommands.Fullscreen(false));
 	}
 
@@ -541,6 +595,46 @@ public partial class VideoPlayerViewModel
 		await LeaveFullScreen();
 		await OnNavigatedFromMpv("the player page was removed from the window without a navigation");
 		return true;
+	}
+
+	/// <summary>
+	/// fluentfin-mpv player controls: the controls for this page's playback. They send through the page's generation (a
+	/// newer page's backend is never driven by an old page's controls); full screen, Escape and back are the page's.
+	/// </summary>
+	private MpvControlsViewModel CreateMpvControls(long generation) => new((command, args) => SendMpv(generation, command, args))
+	{
+		// Settings > Playback: the same wheel and step as FluentFin's own players
+		WheelChangesVolume = settings.MouseWheelVolume,
+		Step = settings.VolumeStep,
+		IsFullScreen = IsFullScreen?.Invoke() ?? false,
+		SetFullScreen = fullScreen =>
+		{
+			SetFullScreen?.Invoke(fullScreen);
+			_ = OnFullScreenChanged(fullScreen);
+		},
+		GoBack = () =>
+		{
+			if (!(GoBack?.Invoke() ?? navigationService.GoBack()))
+			{
+				logger.LogInformation("Back from the player controls: nothing to go back to");
+			}
+		},
+	};
+
+	/// <summary><c>set_controls</c> for the start (before <c>play</c>): FluentFin's controls, nothing under them yet. Null: mpv's.</summary>
+	private System.Text.Json.Nodes.JsonObject? ControlsCommand() => MpvControls is null ? null : BridgeCommands.Controls(ui: true, 0);
+
+	/// <summary>fluentfin-mpv player controls: the in-process mpv ended by itself (the page heard it from the video).</summary>
+	public void OnMpvCoreLost()
+	{
+		if (_mpvLeaving)
+		{
+			return;
+		}
+
+		_mpvSawPlayback = false;
+		IsMpvVideoVisible = false;
+		ShowMpvMessage("mpv ended. It starts again with the next playback.", isError: true);
 	}
 
 	private static string NormalizeId(string id) => id.Replace("-", "", StringComparison.Ordinal).ToLowerInvariant();

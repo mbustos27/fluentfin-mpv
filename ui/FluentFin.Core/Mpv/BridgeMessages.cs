@@ -27,6 +27,7 @@ public static class Bridge
 		public const string SetVolume = "set_volume";
 		public const string SetMute = "set_mute";
 		public const string SetFullscreen = "set_fullscreen";
+		public const string SetControls = "set_controls";
 		public const string GetState = "get_state";
 		public const string Shutdown = "shutdown";
 		public const string PlayFile = "play_file";
@@ -96,6 +97,22 @@ public sealed class BridgeQueue
 }
 
 public sealed record BridgeHello(int Protocol, string? Backend, string? Version, string? Bridge);
+
+/// <summary>fluentfin-mpv: the <c>item</c> event, when a queue item starts (docs/BRIDGE.md §5).</summary>
+public sealed record BridgeItem(string? ItemId, string? Name, string? Type, string? SeriesName = null, int? SeasonNumber = null, int? EpisodeNumber = null, long? RunTimeTicks = null);
+
+/// <summary>fluentfin-mpv: the <c>tracks</c> event, Jellyfin's own stream indices (docs/BRIDGE.md §5).</summary>
+public sealed record BridgeTracks(IReadOnlyList<BridgeTrack>? Audio, IReadOnlyList<BridgeTrack>? Subtitle);
+
+/// <summary>
+/// One audio or subtitle stream. <see cref="Title"/> is the server's DisplayTitle; <see cref="StreamTitle"/> the stream's
+/// own title tag only (absent from older backends).
+/// </summary>
+public sealed record BridgeTrack(int Index, string? Language = null, string? Title = null, string? StreamTitle = null, string? Codec = null, int? Channels = null,
+	bool IsDefault = false, bool? IsForced = null, bool? IsHearingImpaired = null, bool IsExternal = false);
+
+/// <summary>The <c>position</c> event.</summary>
+public sealed record BridgePosition(long PositionTicks, long? DurationTicks);
 
 public sealed record BridgeEnded(string? ItemId, string? Reason);
 

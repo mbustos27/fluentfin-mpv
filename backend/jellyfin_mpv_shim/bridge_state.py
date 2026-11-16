@@ -74,7 +74,7 @@ class Observation:
                  mpv_sid=None, external_subtitles=None, dev_idle=None,
                  held=False, restart_session=None, now=None):
         self.connected = connected
-        #: "embedded" | "standalone" | None (no window yet).
+        #: "embedded" | "attached" | "standalone" | None (no window yet).
         self.window = window
         #: The player's current video (``PlayerManager._video``).
         self.video = video

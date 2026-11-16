@@ -80,6 +80,19 @@
                         ItemsSource="{x:Bind vm:SettingsViewModel.MediaPlayers}"
                         SelectedItem="{x:Bind ViewModel.SelectedMediaPlayer, Mode=TwoWay}" />
                 </ctk:SettingsCard>
+                <!--  fluentfin-mpv player controls: who draws the controls over the MPV player's video (docs/research/player-controls.md)  -->
+                <ctk:SettingsCard
+                    Description="FluentFin: FluentFin's own controls over the video, with mpv running inside FluentFin. mpv: mpv's on-screen controls. Used from the next playback."
+                    Header="Player controls"
+                    HeaderIcon="{ui:FontIcon Glyph=&#xE768;}"
+                    Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                    <ComboBox
+                        x:Name="PlayerControlsBox"
+                        AutomationProperties.Name="Player controls"
+                        DisplayMemberPath="Name"
+                        ItemsSource="{x:Bind vm:SettingsViewModel.PlayerControlsChoices}"
+                        SelectedItem="{x:Bind ViewModel.SelectedPlayerControls, Mode=TwoWay}" />
+                </ctk:SettingsCard>
 
                 <!--  kept by the server for this user, as jellyfin-web's Playback settings: they reach every player  -->
                 <TextBlock
@@ -135,7 +148,8 @@
                     </ctk:SettingsCard>
                 </StackPanel>
 
-                <!--  kept on this PC; the bridge has no field for them yet (docs/BRIDGE.md v1), so the MPV player ignores them  -->
+                <!--  kept on this PC; the bridge has no field for them yet (docs/BRIDGE.md v1), so mpv's own controls ignore them;
+                      FluentFin's player controls over the MPV player use the wheel and the step (MpvControlsViewModel)  -->
                 <ctk:SettingsCard
                     Margin="0,16,0,0"
                     Description="Built-in players only for now: the MPV player doesn't use this setting yet."
@@ -144,13 +158,13 @@
                     <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />
                 </ctk:SettingsCard>
                 <ctk:SettingsCard
-                    Description="Built-in players only for now: the MPV player doesn't use this setting yet."
+                    Description="Built-in players, and the MPV player with FluentFin's player controls. mpv's own controls always change the volume with the wheel."
                     Header="Change the volume with the mouse wheel"
                     HeaderIcon="{ui:FontIcon Glyph=&#xE962;}">
                     <ToggleSwitch AutomationProperties.Name="Change the volume with the mouse wheel" IsOn="{x:Bind ViewModel.MouseWheelVolume, Mode=TwoWay}" />
                 </ctk:SettingsCard>
                 <ctk:SettingsCard
-                    Description="How much one wheel notch or arrow key changes the volume, in percent. Built-in players only for now."
+                    Description="How much one wheel notch or arrow key changes the volume, in percent. Built-in players, and the MPV player with FluentFin's player controls."
                     Header="Volume step"
                     HeaderIcon="{ui:FontIcon Glyph=&#xE767;}">
                     <NumberBox

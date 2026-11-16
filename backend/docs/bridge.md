@@ -324,6 +324,27 @@ Measured on mpv 0.41/Windows: with `--wid`, writing `fullscreen`,
 **Standalone**: today's behaviour -- mpv's own top-level window, the shim's
 fullscreen and geometry handling, and `set_fullscreen` toggles mpv.
 
+**Attached** (`{"mode": "attached", "ipc": "<pipe>"}`, FluentFin MPV's
+player controls, docs/research/player-controls.md in the repository root):
+mpv runs inside FluentFin (libmpv, composition mode, no window) and answers
+JSON IPC on that pipe. `ShimRuntime.attached_overrides` makes the run the
+shim's external backend with `mpv_ext_start=False` on that pipe (and
+`mpv_ext_no_ovr` off), for the run only, plus the embedded overrides; it
+connects and never starts or quits mpv (`terminate()` only closes the pipe,
+idle quit is off, `end_mpv_process` finds no process of its own).
+`window_embed.configure(None, attach=True)` makes the window the UI's in
+every runtime path (`active()`), and `apply_to_options` adds nothing: no
+construction option reaches an mpv the shim did not start (python-mpv-jsonipc
+drops them when it only connects). So FluentFin creates its mpv with what
+matters (`vo`, `gpu-context`, `d3d11-output-mode=composition`, `idle`,
+`force-window`, `osc=no`, no input bindings, `input-ipc-server`, this config
+dir for `mpv.conf`); runtime writes (title, hwdec per file, tracks, the OSC
+script it loads) work as on any external mpv. Not there in attached mode:
+the scripts the shim passes on the command line (thumbfast, mouse; FluentFin
+draws its own controls) and `tls_*` client certificates. Measured with
+`tools\ui-harness\composition-spike` (scenario `bridge`) and
+`tools\ui-harness\fluentfin-controls`.
+
 ## 4a. The on-screen controller
 
 `fluentfin_osc` (FluentFin MPV's own module), switched on by
