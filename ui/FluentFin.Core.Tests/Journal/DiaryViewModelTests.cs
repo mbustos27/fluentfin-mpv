@@ -224,6 +224,30 @@ public sealed class DiaryViewModelTests : IDisposable
 	}
 
 	[Fact]
+	public async Task Export_WhenTheSaveDialogCannotOpen_SaysSo_AndWritesNothing()
+	{
+		// visual-check: the picker threw COMException 0x80070578 (invalid window handle) and Export did nothing visible
+		Add("Severance", 2, 5, Utc(2026, 11, 14, 20));
+		await _vm.OnNavigatedTo(null!);
+		var status = _vm.StatusText;
+		_dialogs.PickError = new System.Runtime.InteropServices.COMException("Invalid window handle.", unchecked((int)0x80070578));
+
+		await _vm.ExportCsvCommand.ExecuteAsync(null);
+
+		Assert.True(_vm.HasError);
+		Assert.Equal("The save dialog could not open, so nothing was exported. Try again.", _vm.ErrorText);
+		Assert.Equal(status, _vm.StatusText);
+
+		// the next export that gets a file goes through and clears the message
+		_dialogs.PickError = null;
+		Directory.CreateDirectory(_journal.Folder);
+		_dialogs.ExportPath = Path.Combine(_journal.Folder, "after.csv");
+		await _vm.ExportCsvCommand.ExecuteAsync(null);
+		Assert.False(_vm.HasError);
+		Assert.True(File.Exists(_dialogs.ExportPath));
+	}
+
+	[Fact]
 	public async Task TheSettingsSwitches_ShowAndSaveTheJournalsSettings()
 	{
 		_journal.Store.SaveSettings(new JournalSettings { AutoLog = false });
@@ -320,10 +344,12 @@ public sealed class DiaryViewModelTests : IDisposable
 
 		public Task<bool> ConfirmDeleteAsync(DiaryEntryViewModel entry) => Task.FromResult(ConfirmDelete);
 
+		public Exception? PickError { get; set; }
+
 		public Task<string?> PickExportFileAsync(string suggestedName, string extension)
 		{
 			Picked.Add((suggestedName, extension));
-			return Task.FromResult(ExportPath);
+			return PickError is { } error ? Task.FromException<string?>(error) : Task.FromResult(ExportPath);
 		}
 	}
 }
