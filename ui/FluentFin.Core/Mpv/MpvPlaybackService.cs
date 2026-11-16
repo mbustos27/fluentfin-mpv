@@ -46,6 +46,9 @@ public sealed class MpvPlaybackService
 	private readonly List<Task> _reports = [];
 	private long _generation;
 
+	/// <summary>fluentfin-mpv (startup-perf): the [perf] timeline of the latest player page's play.</summary>
+	private MpvPlayTimeline? _timeline;
+
 	/// <summary>The generation a stop left behind (no page holds it); equal to <see cref="_generation"/> while no page plays.</summary>
 	private long _leftGeneration;
 
@@ -75,6 +78,8 @@ public sealed class MpvPlaybackService
 
 		// lives as long as the app (a singleton), like the backend it watches
 		backend.PlaybackInterrupted.Subscribe(playback => Track(ReportInterruptedAsync(playback)));
+		// fluentfin-mpv (startup-perf): the first opening/playing/position of a play, timed (MpvPlayTimeline)
+		backend.Events.Subscribe(e => Volatile.Read(ref _timeline)?.OnEvent(e));
 	}
 
 	/// <summary>
@@ -139,6 +144,7 @@ public sealed class MpvPlaybackService
 
 		_logger.LogInformation("mpv playback generation {Old} -> {New}: {Reason}{SigningOut}", generation - 1, generation, reason,
 			signingOut ? " (during a sign-out: it plays nothing)" : "");
+		Volatile.Write(ref _timeline, MpvPlayTimeline.Begin(_logger, generation));
 		return generation;
 	}
 
@@ -178,8 +184,19 @@ public sealed class MpvPlaybackService
 		await SendControlsAsync(generation, controls, cancellationToken);
 		_logger.LogInformation("Playing {Count} item(s) with mpv from index {Index} ({ItemId}) at {Position}, mediaSource={MediaSource}, audio={Audio}, subtitle={Subtitle}",
 			request.ItemIds.Count, request.StartIndex, request.StartItemId, TimeSpan.FromTicks(request.StartPositionTicks), request.MediaSourceId, request.AudioStreamIndex, request.SubtitleStreamIndex);
-		return await SendCoreAsync(generation, Bridge.Commands.Play, BridgeCommands.Play(request), startsPlayback: true, cancellationToken: cancellationToken);
+		var timeline = TimelineOf(generation);
+		timeline?.Sending(request.StartItemId);
+		var sent = await SendCoreAsync(generation, Bridge.Commands.Play, BridgeCommands.Play(request), startsPlayback: true, cancellationToken: cancellationToken);
+		if (sent)
+		{
+			timeline?.Step("play sent and accepted");
+		}
+
+		return sent;
 	}
+
+	/// <summary>The timeline of this generation's page, null when a newer page took over.</summary>
+	private MpvPlayTimeline? TimelineOf(long generation) => IsCurrent(generation) ? Volatile.Read(ref _timeline) : null;
 
 	/// <summary>Dev only: a backend started with <c>--dev</c>, connected with only the window, plays a file or mpv url.</summary>
 	public async Task<bool> PlayFileAsync(long generation, MpvSelfTestRequest request, bool fullScreen = false, CancellationToken cancellationToken = default, Action<MpvStartStep>? onStep = null, JsonObject? controls = null)
@@ -192,7 +209,15 @@ public sealed class MpvPlaybackService
 		await SyncFullScreenAsync(generation, fullScreen, cancellationToken);
 		await SendControlsAsync(generation, controls, cancellationToken);
 		_logger.LogInformation("Self-test: playing {Url} with mpv", request.Url);
-		return await SendCoreAsync(generation, Bridge.Commands.PlayFile, BridgeCommands.PlayFile(request.Url, request.Title), startsPlayback: true, cancellationToken: cancellationToken);
+		var timeline = TimelineOf(generation);
+		timeline?.Sending(null);
+		var sent = await SendCoreAsync(generation, Bridge.Commands.PlayFile, BridgeCommands.PlayFile(request.Url, request.Title), startsPlayback: true, cancellationToken: cancellationToken);
+		if (sent)
+		{
+			timeline?.Step("play sent and accepted");
+		}
+
+		return sent;
 	}
 
 	/// <summary>
@@ -206,12 +231,14 @@ public sealed class MpvPlaybackService
 			return false;
 		}
 
-		if (!_backend.Status.IsRunning)
+		var wasRunning = _backend.Status.IsRunning;
+		if (!wasRunning)
 		{
 			onStep?.Invoke(MpvStartStep.StartingBackend);
 		}
 
 		await _backend.StartAsync(dev, cancellationToken);
+		TimelineOf(generation)?.Step(wasRunning ? "backend already running (pre-warmed or played before)" : "backend started");
 		if (!StillCurrent(generation, "connecting the mpv backend"))
 		{
 			return false;
@@ -219,6 +246,7 @@ public sealed class MpvPlaybackService
 
 		onStep?.Invoke(MpvStartStep.Connecting);
 		await _backend.ConnectAsync(identity, cancellationToken);
+		TimelineOf(generation)?.Step("connected");
 		onStep?.Invoke(MpvStartStep.Playing);
 		return true;
 	}

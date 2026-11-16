@@ -55,6 +55,13 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		ForgetUserViews(); // fluentfin-mpv: another server or user (GetUserViews)
 		_jellyfinApiClient = new Jellyfin.Sdk.JellyfinApiClient(new Jellyfin.Sdk.JellyfinRequestAdapter(new Jellyfin.Sdk.JellyfinAuthenticationProvider(_settings), _settings));
 
+		// fluentfin-mpv: capabilities, plugins and views do not depend on each other: asked together they cost one round
+		// trip instead of three before the window and Home show. The views stay in GetUserViews, so Home does not ask again.
+		// (startup-perf, O13) The capabilities carry the device profile, made ready first (the Windows player's probe; it
+		// was null for that player): the plugins and views are asked meanwhile, and with any other player nothing waits.
+		var plugins = GetPlugins();
+		var views = GetUserViews();
+		await PrepareDeviceProfile();
 		var capabilities = _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto
 		{
 			SupportsMediaControl = true,
@@ -64,14 +71,26 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 			SupportedCommands = SupportedCommands(settings.MediaPlayer),
 		});
 
-		// fluentfin-mpv: capabilities, plugins and views do not depend on each other: asked together they cost one round
-		// trip instead of three before the window and Home show. The views stay in GetUserViews, so Home does not ask again.
-		var plugins = GetPlugins();
-		var views = GetUserViews();
 		await Task.WhenAll(capabilities, plugins, views);
 		StartWebSocketConnection();
 
 		await jumpListService.Initialize(await views);
+	}
+
+	/// <summary>
+	/// fluentfin-mpv (startup-perf, O13): the device profile ready for the selected player. A probe that fails (the Windows
+	/// player's codec and audio queries) does not fail the sign-in or the play: it is logged, and tried again next time.
+	/// </summary>
+	private async Task PrepareDeviceProfile()
+	{
+		try
+		{
+			await deviceProfileFactory.PrepareAsync();
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning(ex, "The device profile could not be prepared for the selected player; it is tried again next time");
+		}
 	}
 
 	/// <summary>

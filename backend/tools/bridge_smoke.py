@@ -27,11 +27,21 @@ Four sessions, each a fresh process with a fresh config directory:
   screen copy, so nothing on top of it is captured) is saved and checked for the test pattern; a double-click on the video and
   the ``f`` key each produce ``fullscreen_request`` and leave the window
   where it was; ``set_fullscreen`` lands in ``state``; ``shutdown``.
+* **prewarm** (``--dev``, Windows) -- the same kind of window, with
+  ``connect.prewarm`` (BRIDGE.md section 4): mpv runs but makes no window
+  inside ours until the first ``play_file``, which makes it and draws there
+  (screenshot checked); it stays after ``stop``.
 
 Every session also asserts that nothing but JSON objects ever appeared on
-stdout.
+stdout. Each session's config dir gets an ``mpv.conf`` with ``ao=null``: no
+sound from a test run (the test pattern has no audio anyway).
 
-    backend\\.venv\\Scripts\\python.exe backend\\tools\\bridge_smoke.py [--out DIR]
+    backend\\.venv\\Scripts\\python.exe backend\\tools\\bridge_smoke.py [--out DIR] [--this-checkout]
+
+``--this-checkout`` runs the bridge from the checkout this file is in
+(``python -E -s``, cwd = its backend folder) instead of ``-I``, which
+imports the installed package -- with an editable install, the checkout it
+was made from (a git worktree shares the main checkout's venv).
 
 Exit status 0 when every check passed. The screenshot path is printed; look
 at it -- the pixel check is a backstop, not a substitute.
@@ -49,6 +59,8 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTSRC = "av://lavfi:testsrc=size=1280x720:rate=30"
 TOKEN = "smoke-token-5f3c2a9e8d7b6a01"
+#: Set by --this-checkout: run the bridge from the checkout this file is in.
+THIS_CHECKOUT = False
 #: The host window's background: brown, which testsrc never draws.
 HOST_RGB = (0x80, 0x60, 0x40)
 HOST_COLOUR_REF = HOST_RGB[0] | (HOST_RGB[1] << 8) | (HOST_RGB[2] << 16)
@@ -77,6 +89,11 @@ class BridgeProcess:
         self.name = name
         self.config_dir = os.path.join(out_dir, name + "-config")
         os.makedirs(self.config_dir, exist_ok=True)
+        # No sound from a test run: mpv reads mpv.conf from the shim's
+        # config dir (mpv_options: config_dir), this run's own.
+        with open(os.path.join(self.config_dir, "mpv.conf"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("ao=null" + chr(10))
         if conf is not None:
             with open(os.path.join(self.config_dir, "conf.json"), "w",
                       encoding="utf-8") as fh:
@@ -84,7 +101,12 @@ class BridgeProcess:
         self.log_file = os.path.join(out_dir, name + "-bridge.log")
         self.stderr_path = os.path.join(out_dir, name + "-stderr.txt")
         self._stderr = open(self.stderr_path, "wb")
-        argv = [python, "-I", "-m", "jellyfin_mpv_shim.bridge",
+        # -I as FluentFin starts it, which imports whatever the interpreter
+        # has installed (an editable install points at one checkout); with
+        # --this-checkout, the code next to this file (-E -s: still no
+        # PYTHON* variables and no user site; ROOT, the cwd, comes first).
+        isolation = ["-E", "-s"] if THIS_CHECKOUT else ["-I"]
+        argv = [python] + isolation + ["-m", "jellyfin_mpv_shim.bridge",
                 "--config-dir", self.config_dir, "--log-file", self.log_file]
         if dev:
             argv.append("--dev")
@@ -289,11 +311,15 @@ def session_eof(results, python, out_dir):
 
 def _play_testsrc(results, s, b):
     mark = b.mark()
+    started = time.monotonic()
     response = b.request("play_file", {"url": TESTSRC, "title": "testsrc"})
     results.check(s, "play_file accepted", ok(response), repr(response))
     playing = b.wait_event("state", lambda d: d.get("state") == "playing",
                            timeout=20, since=mark)
     results.check(s, "state reaches playing", playing is not None)
+    if playing is not None:
+        print("    play_file -> state playing: %.0f ms"
+              % ((time.monotonic() - started) * 1000), flush=True)
     start = b.mark()
     time.sleep(3.2)
     positions = [p["positionTicks"] for p in b.events("position", start)]
@@ -607,6 +633,7 @@ def session_embedded(results, python, out_dir):
     b = BridgeProcess(python, out_dir, s, dev=True)
     try:
         b.wait_event("hello", timeout=20)
+        started = time.monotonic()
         response = b.request("connect", {
             "protocol": 1, "window": {"mode": "embedded", "hwnd": host.hwnd}},
             timeout=60)
@@ -614,6 +641,8 @@ def session_embedded(results, python, out_dir):
                       ok(response), repr(response))
         if not ok(response):
             return
+        print("    connect answered in %.0f ms"
+              % ((time.monotonic() - started) * 1000), flush=True)
         time.sleep(1.0)
         mpv_children = [h for h, cls in host.children() if cls == "mpv"]
         results.check(s, "mpv made a child window inside ours",
@@ -670,7 +699,83 @@ def session_embedded(results, python, out_dir):
         host.close()
 
 
+def session_prewarm(results, python, out_dir):
+    """``connect.prewarm`` (BRIDGE.md section 4) with the real mpv: after
+    the connect mpv runs (its version is in the answer) but has made no
+    window inside ours; the first ``play_file`` makes it and draws there;
+    after ``stop`` it is still there (the surface stays for the process)."""
+    s = "prewarm"
+    print("\n== %s" % s, flush=True)
+    host = HostWindow()
+    if not host.hwnd:
+        results.check(s, "host window created", False)
+        return
+    b = BridgeProcess(python, out_dir, s, dev=True)
+    try:
+        b.wait_event("hello", timeout=20)
+        started = time.monotonic()
+        response = b.request("connect", {
+            "protocol": 1, "prewarm": True,
+            "window": {"mode": "embedded", "hwnd": host.hwnd}}, timeout=60)
+        connect_ms = (time.monotonic() - started) * 1000
+        results.check(s, "pre-warmed connect (hwnd %d)" % host.hwnd,
+                      ok(response), repr(response))
+        if not ok(response):
+            return
+        print("    connect answered in %.0f ms: %s"
+              % (connect_ms, response.get("result")), flush=True)
+        results.check(s, "mpv is running (its version is in the answer)",
+                      bool((response.get("result") or {}).get("mpv")),
+                      repr(response))
+        time.sleep(1.5)
+        results.check(s, "no window of mpv's inside ours while idle",
+                      not host.children(), repr(host.children()))
+        results.check(s, "volume works while idle", ok(b.request(
+            "set_volume", {"volume": 60})))
+        mark = b.mark()
+        started = time.monotonic()
+        response = b.request("play_file", {"url": TESTSRC, "title": "t"})
+        results.check(s, "play_file accepted", ok(response), repr(response))
+        playing = b.wait_event("state", lambda d: d.get("state") == "playing",
+                               timeout=20, since=mark)
+        results.check(s, "state reaches playing", playing is not None)
+        if playing is not None:
+            print("    play_file -> state playing: %.0f ms (the video output "
+                  "made by this item)" % ((time.monotonic() - started) * 1000),
+                  flush=True)
+            time.sleep(2.0)
+            mpv_children = [h for h, cls in host.children() if cls == "mpv"]
+            results.check(s, "the first item made mpv's window inside ours",
+                          bool(mpv_children), repr(host.children()))
+            _x, _y, w, h = host.client_on_screen()
+            path = screenshot(os.path.join(out_dir, "prewarm-window.png"),
+                              host.hwnd, w, h)
+            print("    screenshot: %s" % path, flush=True)
+            verdict = analyse(path)
+            if verdict is not None:
+                colours, host_share = verdict
+                results.check(s, "screenshot shows video, not the host "
+                              "background (%d colours, %.1f%% host colour)"
+                              % (colours, host_share * 100),
+                              colours >= 12 and host_share < 0.02)
+            results.check(s, "stop", ok(b.request("stop")))
+            b.wait_event("state", lambda d: d.get("state") == "idle", 10)
+            time.sleep(1.0)
+            results.check(s, "mpv's window stays after stop",
+                          [h for h, cls in host.children() if cls == "mpv"]
+                          == mpv_children, repr(host.children()))
+        results.check(s, "shutdown", ok(b.request("shutdown", timeout=40)))
+        code = b.finish()
+        results.check(s, "exit status 0", code == 0, repr(code))
+        check_stdout(results, s, b)
+        check_no_reported(results, s, b)
+    finally:
+        b.kill()
+        host.close()
+
+
 def main():
+    global THIS_CHECKOUT
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     default_python = os.path.join(ROOT, ".venv", "Scripts" if os.name == "nt"
                                   else "bin", "python")
@@ -682,17 +787,27 @@ def main():
     parser.add_argument("--out", help="folder for logs and the screenshot "
                         "(default: a new temporary folder)")
     parser.add_argument("--only", choices=("basic", "eof", "standalone",
-                                           "embedded"), action="append",
-                        help="run only these sessions")
+                                           "embedded", "prewarm"),
+                        action="append", help="run only these sessions")
+    parser.add_argument("--this-checkout", action="store_true",
+                        help="run the bridge from the checkout this script "
+                        "is in (python -E -s, cwd = that backend folder) "
+                        "rather than with -I, which imports whatever the "
+                        "interpreter has installed -- for an editable "
+                        "install, the checkout it was made from")
     options = parser.parse_args()
+    THIS_CHECKOUT = options.this_checkout
     out_dir = options.out or tempfile.mkdtemp(prefix="bridge-smoke-")
     os.makedirs(out_dir, exist_ok=True)
-    print("python: %s\noutput: %s" % (options.python, out_dir), flush=True)
-    sessions = options.only or ["basic", "eof", "standalone", "embedded"]
+    print("python: %s\noutput: %s\nbackend: %s" % (
+        options.python, out_dir,
+        ROOT if THIS_CHECKOUT else "as installed (-I)"), flush=True)
+    sessions = options.only or ["basic", "eof", "standalone", "embedded",
+                                "prewarm"]
     results = Results()
     for name in sessions:
-        if name == "embedded" and os.name != "nt":
-            print("\n== embedded: skipped (Windows only)")
+        if name in ("embedded", "prewarm") and os.name != "nt":
+            print("\n== %s: skipped (Windows only)" % name)
             continue
         globals()["session_" + name](results, options.python, out_dir)
     print("\n%d checks, %d failed" % (len(results.rows),

@@ -385,6 +385,55 @@ class OptionsTest(unittest.TestCase):
         self.assertNotIn("wid", got)
         self.assertIn("geometry", got)
 
+    def test_a_deferred_surface_starts_mpv_without_its_video_output(self):
+        """``connect.prewarm`` (BRIDGE.md section 4): mpv idles with no
+        window of its own inside the owner's until the first item claims
+        the surface -- once -- and every mpv built after the claim (the
+        player re-creating a dead one) has it from the start."""
+        window_embed.configure(1311242, defer_surface=True)
+        got = window_embed.apply_to_options(self.options())
+        self.assertIs(got["force_window"], False)
+        self.assertEqual(got["wid"], "1311242", "still embedded")
+        self.assertIs(got["idle"], True)
+        self.assertIs(mpv_options.build_mpv_options(
+            "mpv", [], True, False)["force_window"], False)
+        self.assertIs(window_embed.claim_surface(), True)
+        for _ in range(3):
+            self.assertIs(window_embed.claim_surface(), False,
+                          "claimed once, for the process")
+            self.assertIs(window_embed.apply_to_options(
+                self.options())["force_window"], True)
+
+    def test_only_an_embedded_window_defers_and_configure_resets_it(self):
+        window_embed.configure(None, defer_surface=True)
+        self.assertIs(window_embed.surface_deferred, False)
+        self.assertIs(window_embed.claim_surface(), False)
+        # attached (player controls): the surface is the UI's own mpv
+        window_embed.configure(None, attach=True, defer_surface=True)
+        self.assertIs(window_embed.attached, True)
+        self.assertIs(window_embed.surface_deferred, False)
+        self.assertIs(window_embed.claim_surface(), False)
+        window_embed.configure(5, defer_surface=True)
+        window_embed.configure(5)
+        self.assertIs(window_embed.surface_deferred, False)
+        self.assertIs(window_embed.apply_to_options({})["force_window"], True)
+
+    def test_one_claim_wins_a_race(self):
+        window_embed.configure(5, defer_surface=True)
+        start = threading.Barrier(8)
+        won = []
+
+        def claim():
+            start.wait(5)
+            won.append(window_embed.claim_surface())
+
+        threads = [threading.Thread(target=claim) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(5)
+        self.assertEqual(sorted(won), [False] * 7 + [True])
+
     def test_a_request_handler_that_raises_is_contained(self):
         window_embed.on_fullscreen_request = mock.Mock(
             side_effect=RuntimeError("ui gone"))

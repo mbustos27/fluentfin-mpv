@@ -129,6 +129,94 @@ static class P
 		_ => "",
 	};
 
+	/// <summary>fluentfin-mpv (startup-perf): the scenarios of the pre-warmed backend, and the cold play it is timed against.</summary>
+	static readonly string[] PrewarmScenarios = ["prewarm_idle", "prewarm_play", "prewarm_kill_idle", "prewarm_signout", "cold_play", "prewarm_play_wan", "cold_play_wan"];
+
+	/// <summary>
+	/// The backend pre-warmed as FluentFin does after sign-in (MpvPrewarm, found by reflection: a FluentFin.Core given with
+	/// -UiDir may be older), idle 5 s with no window of mpv's inside ours, then: nothing (idle), a sign-out, a kill while idle
+	/// then a play, or a play (timed: PLAYTIME). cold_play: the same play with nothing pre-warmed.
+	/// </summary>
+	static async Task<string> PrewarmRun(string scenario, MpvBackendHost host, MpvPlaybackService service, BridgeIdentity identity, nint hwnd,
+										 string outDir, string label, string[] secrets, FileLogger<MpvBackendHost> hostLog)
+	{
+		object? prewarm = null;
+		IDisposable? prewarmLog = null;
+		try
+		{
+			if (!scenario.StartsWith("cold_play"))
+			{
+				var type = typeof(MpvBackendHost).Assembly.GetType("FluentFin.Core.Mpv.MpvPrewarm");
+				if (type is null) return "this FluentFin.Core has no MpvPrewarm (before startup-perf)";
+				var logType = typeof(FileLogger<>).MakeGenericType(type);
+				prewarmLog = (IDisposable)Activator.CreateInstance(logType, Path.Combine(outDir, label + "-prewarm.log"))!;
+				prewarm = Activator.CreateInstance(type, host, DispatchProxy.Create<FluentFin.Core.Settings.ISettings, SettingsProxy>(), prewarmLog)!;
+				type.GetProperty("Delay")!.SetValue(prewarm, TimeSpan.Zero);
+				type.GetProperty("Identity")!.SetValue(prewarm, new Func<BridgeIdentity?>(() => identity));
+				var t0 = Clock.Elapsed.TotalSeconds;
+				type.GetMethod("SignedIn")!.Invoke(prewarm, null);
+				await (Task)type.GetProperty("Current")!.GetValue(prewarm)!;
+				Out($"PREWARM done after {Clock.Elapsed.TotalSeconds - t0:0.000} s: status={host.Status.State} mpv={host.Status.MpvVersion}");
+				if (host.Status.State != MpvBackendState.Running || host.Status.MpvVersion is null) return "the pre-warm did not connect";
+				EnvCheck(hostLog.BackendPid, secrets);
+				await Task.Delay(5000);
+				var idle = Win.MpvChild(hwnd);
+				Out($"IDLE mpv window inside ours: {(idle == 0 ? "none" : $"0x{idle:x}")}; backend job: {string.Join(",", BackendJob().Select(k => k.Name))}");
+				// E2E_ALLOW_IDLE_WINDOW=1: timing a backend from before connect.prewarm (it ignores it and makes its window at connect)
+				if (idle != 0 && Environment.GetEnvironmentVariable("E2E_ALLOW_IDLE_WINDOW") != "1") return "mpv made a window inside ours while idle";
+			}
+
+			switch (scenario)
+			{
+				case "prewarm_idle":
+					return "ok";
+				case "prewarm_signout":
+					{
+						var type = prewarm!.GetType();
+						type.GetMethod("SignedOut")!.Invoke(prewarm, null);
+						await (Task)type.GetProperty("Current")!.GetValue(prewarm)!;
+						Out($"SIGNEDOUT status={host.Status.State}");
+						return host.Status.State == MpvBackendState.Stopped ? "ok" : $"the backend is {host.Status.State} after the sign-out";
+					}
+				case "prewarm_kill_idle":
+					host.Kill("e2e kill while idle (pre-warmed)");
+					await WaitUntil(() => host.Status.State == MpvBackendState.Crashed, 10);
+					Out($"KILLED while idle: status={host.Status.State} interrupts={Volatile.Read(ref Interrupts)}");
+					if (Volatile.Read(ref Interrupts) != 0) return "a crash while idle raised an interrupted playback";
+					goto case "cold_play";
+				case "prewarm_play":
+				case "prewarm_play_wan":
+				case "cold_play_wan":
+				case "cold_play":
+					{
+						var gen = service.Begin();
+						var t0 = Clock.Elapsed.TotalSeconds;
+						await service.PlayAsync(gen, identity, new BridgePlayRequest([X]));
+						var sent = Clock.Elapsed.TotalSeconds;
+						if (scenario.StartsWith("cold_play")) EnvCheck(hostLog.BackendPid, secrets);
+						if (!await WaitState("playing", X)) return "X never played";
+						var playing = Clock.Elapsed.TotalSeconds;
+						await WaitUntil(() => All("position").Any(e => (e.Data as JsonObject)?["positionTicks"] is JsonValue v && v.TryGetValue(out long ticks) && ticks > 0), 20);
+						var position = Clock.Elapsed.TotalSeconds;
+						Out($"PLAYTIME {scenario}: play sent {(sent - t0) * 1000:0} ms, playing {(playing - t0) * 1000:0} ms, first position {(position - t0) * 1000:0} ms after PlayAsync");
+						await WaitUntil(() => Win.MpvChild(hwnd) != 0, 5);
+						var child = Win.MpvChild(hwnd);
+						Out($"PLAYING mpv window inside ours: {(child == 0 ? "none" : $"0x{child:x}")}");
+						if (child == 0) return "no window of mpv's inside ours while playing";
+						await WaitPositions(3);
+						return "ok";
+					}
+				default:
+					return "unknown scenario " + scenario;
+			}
+		}
+		finally
+		{
+			prewarm?.GetType().GetMethod("Cancel")!.Invoke(prewarm, ["e2e run done"]);
+			prewarmLog?.Dispose();
+		}
+	}
+
 	static async Task<int> Main(string[] a)
 	{
 		if (a.Length < 6)
@@ -156,6 +244,8 @@ static class P
 		Directory.CreateDirectory(outDir);
 		var configDir = Path.Combine(outDir, label + "-config");
 		Directory.CreateDirectory(configDir);
+		// no sound from a test run: mpv reads mpv.conf from the backend's config dir (this run's own)
+		File.WriteAllText(Path.Combine(configDir, "mpv.conf"), "ao=null" + Environment.NewLine);
 		var logFile = Path.Combine(outDir, label + "-backend.log");
 		var hostLog = new FileLogger<MpvBackendHost>(Path.Combine(outDir, label + "-host.log"));
 		if (scenario.StartsWith("held_kill")) hostLog.Gate = "Killing the mpv backend";
@@ -179,6 +269,14 @@ static class P
 		var result = "ok";
 		try
 		{
+			if (PrewarmScenarios.Contains(scenario))
+			{
+				// fluentfin-mpv (startup-perf): connect.prewarm (docs/BRIDGE.md §3, §4), then the close below
+				result = await PrewarmRun(scenario, host, service, identity, hwnd, outDir, label, secrets, hostLog);
+				if (result != "ok") throw new Exception(result);
+			}
+			else
+			{
 			var gen = service.Begin();
 			var items = scenario.StartsWith("next") ? new[] { X, Y } : new[] { X };
 			await service.PlayAsync(gen, identity, new BridgePlayRequest(items));
@@ -381,6 +479,8 @@ static class P
 				}
 			}
 
+			}
+
 			// what closing FluentFin does (App.AppWindow_Closing)
 			var closeStart = Clock.Elapsed.TotalSeconds;
 			await CloseSequence.RunAsync(jf, service, svcLog);
@@ -410,10 +510,18 @@ static class P
 
 sealed class Launcher(string python, string configDir, string logFile) : IMpvBackendLauncher
 {
+	/// <summary>
+	/// E2E_BACKEND_DIR (run.ps1 -BackendDir): the backend folder to run, with python -E -s and that folder as the working
+	/// directory, instead of -I, which imports the installed package (an editable install: the checkout it was made from; a
+	/// git worktree shares the main checkout's venv).
+	/// </summary>
+	static readonly string? BackendDir = Environment.GetEnvironmentVariable("E2E_BACKEND_DIR") is { Length: > 0 } dir ? dir : null;
+
 	public MpvBackendCommand? Resolve(bool dev, out string searched)
 	{
 		searched = python;
-		var args = new List<string> { "-I", "-m", MpvBackendCommand.BridgeModule, "--config-dir", configDir, "--log-file", logFile };
+		var args = new List<string> { "-m", MpvBackendCommand.BridgeModule, "--config-dir", configDir, "--log-file", logFile };
+		args.InsertRange(0, BackendDir is null ? ["-I"] : ["-E", "-s"]);
 		if (dev) args.Add("--dev");
 		return new MpvBackendCommand(python, args, "ui-harness-e2e");
 	}
@@ -421,7 +529,7 @@ sealed class Launcher(string python, string configDir, string logFile) : IMpvBac
 	/// <summary>The backend this started last (ENVCHECK reads its job's processes).</summary>
 	public static IMpvBackendProcess? Last;
 
-	public IMpvBackendProcess Start(MpvBackendCommand command) => Last = WindowsMpvBackendLauncher.StartInJob(command.FileName, command.Arguments, configDir);
+	public IMpvBackendProcess Start(MpvBackendCommand command) => Last = WindowsMpvBackendLauncher.StartInJob(command.FileName, command.Arguments, BackendDir ?? configDir);
 }
 
 sealed class Surface(nint hwnd) : IMpvVideoSurface
@@ -472,6 +580,18 @@ sealed class FileLogger<T> : ILogger<T>, IDisposable
 /// FluentFin's IJellyfinClient as far as the crash report uses it: <c>BaseUrl</c> and <c>UserId</c> (where and as whom it
 /// is logged in) and <c>Stop(info)</c>, sent there with that user's token.
 /// </summary>
+/// <summary>fluentfin-mpv (startup-perf): FluentFin's settings as the pre-warm reads them: the mpv player selected.</summary>
+public class SettingsProxy : DispatchProxy
+{
+	protected override object? Invoke(MethodInfo? method, object?[]? args) => method!.Name switch
+	{
+		"get_MediaPlayer" => MediaPlayerType.Mpv,
+		"get_Servers" => new System.Collections.ObjectModel.ObservableCollection<FluentFin.Core.Settings.SavedServer>(),
+		"get_MpvBackendCommand" => "",
+		_ => method.ReturnType.IsValueType && method.ReturnType != typeof(void) ? Activator.CreateInstance(method.ReturnType) : null,
+	};
+}
+
 public class JfProxy : DispatchProxy
 {
 	public static volatile string Url = "";
@@ -539,6 +659,11 @@ static unsafe class Win
 	[DllImport("user32.dll")] static extern bool TranslateMessage(ref MSG m);
 	[DllImport("user32.dll")] static extern nint DispatchMessageW(ref MSG m);
 	const uint WS_OVERLAPPEDWINDOW = 0x00CF0000, WS_VISIBLE = 0x10000000, WS_CLIPCHILDREN = 0x02000000;
+
+	[DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern nint FindWindowExW(nint parent, nint after, string? cls, string? title);
+
+	/// <summary>fluentfin-mpv (startup-perf): mpv's own window inside ours (class "mpv"), 0 when there is none.</summary>
+	public static nint MpvChild(nint host) => FindWindowExW(host, 0, "mpv", null);
 
 	/// <summary>The window mpv draws into (on run.ps1's private desktop: nobody sees it). Its thread ends with the process.</summary>
 	public static nint MakeWindow()

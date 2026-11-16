@@ -24,6 +24,11 @@ This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv
   - Long text wraps, with Show more.
   - Colours follow high-contrast themes.
 - **Sign-out feedback.** Signing out shows progress, playback stops cleanly first, and nothing can start playing during a sign-out.
+- **Faster start and first play.**
+  - The window appears before the automatic sign-in finishes and says "Signing in to …" (about 0.9 s after launch instead of 1.5 s in an off-screen test).
+  - After sign-in, the mpv backend is started and connected in the background, so Play doesn't wait for it: playback starts about 0.17 s after Play instead of 0.64 s, against a local test server.
+  - The Flyleaf engine and the Windows player's codec check run only when those players are used.
+  - Start-up and play timings are written to the log as `[perf]` lines.
 
 ## Requirements
 

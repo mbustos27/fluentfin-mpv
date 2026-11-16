@@ -491,10 +491,12 @@ _SERVER_KEYS = ("server", "user", "accessToken", "device", "client")
 def validate_connect(args, dev=False):
     """``connect`` args, normalised.
 
-    Returns ``{"window": {...} | None, "server": {...} | None}``. ``server``
-    carries everything the Jellyfin client is built from. Without ``--dev``
-    the server part is required; with it, ``protocol`` and ``window`` alone
-    are a valid connect (enough for ``play_file``).
+    Returns ``{"window": {...} | None, "server": {...} | None, "prewarm":
+    bool}``. ``server`` carries everything the Jellyfin client is built
+    from. Without ``--dev`` the server part is required; with it,
+    ``protocol`` and ``window`` alone are a valid connect (enough for
+    ``play_file``). ``prewarm`` (BRIDGE.md section 4): absent or null is
+    False, anything but a bool is ``bad_args``.
     """
     protocol = args.get("protocol", _MISSING)
     if protocol is _MISSING:
@@ -508,13 +510,20 @@ def validate_connect(args, dev=False):
     window = args.get("window", _MISSING)
     window = None if window is _MISSING or window is None \
         else validate_window(window)
+    # Connected ahead of playback: mpv without its video output until the
+    # first play (BRIDGE.md section 4).
+    prewarm = args.get("prewarm")
+    if prewarm is None:
+        prewarm = False
+    elif not isinstance(prewarm, bool):
+        raise _bad("prewarm must be true or false")
 
     present = [k for k in _SERVER_KEYS if args.get(k) is not None]
     if not present:
         if not dev:
             raise _bad("server, user, accessToken, device and client are "
                        "required")
-        return {"window": window, "server": None}
+        return {"window": window, "server": None, "prewarm": prewarm}
     missing = [k for k in _SERVER_KEYS if args.get(k) is None]
     if missing:
         raise _bad("%s required alongside %s" % (", ".join(missing),
@@ -543,6 +552,7 @@ def validate_connect(args, dev=False):
                         allow_empty=True, label="user.name")
     return {
         "window": window,
+        "prewarm": prewarm,
         "server": {
             "url": url.strip().rstrip("/"),
             "serverId": server_id,

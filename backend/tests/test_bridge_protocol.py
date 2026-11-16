@@ -356,7 +356,27 @@ class ConnectValidationTest(_BadArgs, unittest.TestCase):
         self.bad(proto.validate_connect, args)
         got = proto.validate_connect(args, dev=True)
         self.assertEqual(got, {"window": {"mode": "standalone", "hwnd": None},
-                               "server": None})
+                               "server": None, "prewarm": False})
+
+    def test_prewarm_is_an_optional_bool(self):
+        """BRIDGE.md section 4: absent or null is false; anything but a
+        bool is refused, so a UI's typo never silently means "build the
+        video output now" (or "do not")."""
+        self.assertIs(proto.validate_connect(self.full())["prewarm"], False)
+        self.assertIs(proto.validate_connect(
+            self.full(prewarm=None))["prewarm"], False)
+        for value in (True, False):
+            with self.subTest(value=value):
+                self.assertIs(proto.validate_connect(
+                    self.full(prewarm=value))["prewarm"], value)
+        self.assertIs(proto.validate_connect(
+            {"protocol": 1, "window": {"mode": "standalone"},
+             "prewarm": True}, dev=True)["prewarm"], True)
+        for value in ("yes", "true", 1, 0, [], {}):
+            with self.subTest(value=value):
+                message = self.bad(proto.validate_connect,
+                                   self.full(prewarm=value))
+                self.assertIn("prewarm", message)
 
     def test_window_shapes(self):
         self.assertIsNone(proto.validate_connect(
