@@ -99,9 +99,28 @@ public static class OffscreenUi {
     PostMessage(target, 0x0200, IntPtr.Zero, Lp(p.X, p.Y));
   }
 
-  // a key press posted to FluentFin's input window (WM_KEYDOWN/WM_KEYUP; shift adds Shift around it)
+  // the window WinUI reads posted keys from: the XAML island's InputSiteWindowClass child. WinUI keeps it hidden and still
+  // takes the keys posted to it; keys posted to the bridge (DesktopChildSiteBridge) never reach the app. Else the
+  // bridge, else the main window.
+  public static IntPtr KeyWindow(IntPtr main, int pid) {
+    if (ProcessOf(main) != (uint)pid) throw new InvalidOperationException("not FluentFin's window");
+    var kids = Children(main);
+    int i = PickKeyWindow(kids.Select(ClassOf).ToArray(), kids.Select(ProcessOf).ToArray(), (uint)pid);
+    return i < 0 ? main : kids[i];
+  }
+
+  // which of a window's children (their classes and processes, in EnumChildWindows order) takes posted keys: the first
+  // InputSiteWindowClass of process pid, visible or not (never one of another process: mpv's video window is a child
+  // too), else its first DesktopChildSiteBridge; -1 for neither
+  public static int PickKeyWindow(string[] classes, uint[] pids, uint pid) {
+    for (int i = 0; i < classes.Length; i++) if (pids[i] == pid && classes[i] == "InputSiteWindowClass") return i;
+    for (int i = 0; i < classes.Length; i++) if (pids[i] == pid && classes[i] == "Microsoft.UI.Content.DesktopChildSiteBridge") return i;
+    return -1;
+  }
+
+  // a key press posted to the window FluentFin reads keys from (KeyWindow; WM_KEYDOWN/WM_KEYUP; shift adds Shift around it)
   public static void Key(IntPtr main, int pid, int vk, bool shift) {
-    var target = InputWindow(main, pid);
+    var target = KeyWindow(main, pid);
     uint scan = MapVirtualKey((uint)vk, 0);
     if (shift) PostMessage(target, 0x0100, (IntPtr)0x10, (IntPtr)(1 | (MapVirtualKey(0x10, 0) << 16)));
     PostMessage(target, 0x0100, (IntPtr)vk, (IntPtr)(1 | (scan << 16)));

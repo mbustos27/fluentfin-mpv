@@ -189,7 +189,7 @@ function Find-Ui([string]$Name, [string]$Id, [string]$Type, [switch]$Contains, [
 function Wait-Ui([string]$Name, [string]$Id, [string]$Type, [switch]$Contains, [switch]$OffscreenToo, [double]$Seconds = 20, [int]$PollMs = 150) {
     Wait-Until { Find-Ui -Name $Name -Id $Id -Type $Type -Contains:$Contains -OffscreenToo:$OffscreenToo } -Seconds $Seconds -PollMs $PollMs
 }
-# a key posted to FluentFin's own input window (virtual-key code)
+# a key posted to the window FluentFin reads keys from (its XAML island's input site; virtual-key code)
 function Key([int]$Vk, [switch]$Shift) { [OffscreenUi]::Key($script:hwnd, $script:ui.Id, $Vk, [bool]$Shift) }
 
 # opens a media card: the card is one UIA button named after its item (a11y-items) that opens the item on Invoke; an
@@ -552,6 +552,9 @@ try {
     $script:hwnd = [IntPtr]$found
     $timings.window_ms = Ms $script:launchedAt (Get-Epoch)
     Say "window after $($timings.window_ms) ms"
+    # posted keys reach FluentFin only through its XAML island's (hidden) input site window, not through the bridge
+    $keyClass = Wait-Until { $c = [OffscreenUi]::ClassOf([OffscreenUi]::KeyWindow($script:hwnd, $script:ui.Id)); if ($c -eq 'InputSiteWindowClass') { $c } } -Seconds 10 -PollMs 100
+    Check 'keys: posted to the window WinUI reads them from (InputSiteWindowClass)' ([bool]$keyClass) $(if ($keyClass) { $keyClass } else { [OffscreenUi]::ClassOf([OffscreenUi]::KeyWindow($script:hwnd, $script:ui.Id)) })
 
     # 3. sign in, then the steps in order
     Step-SignIn ($wanted -contains 'login')

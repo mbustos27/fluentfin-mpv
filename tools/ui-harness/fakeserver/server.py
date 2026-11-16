@@ -15,13 +15,16 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   fillHeight/fillWidth/maxHeight/maxWidth asked for, as Jellyfin does.
 - Media: media.py's test video (built with --mpv into --media when missing).
 - Latency: --latency for every request, --latency-rule REGEX=MS for the paths matching REGEX (first match wins,
-  'hang' = never answer); also POST /__harness/latency {"default": ms, "rules": [["regex", ms], ...]} while running.
+  'hang' = never answer, 'status:NNN' = answer that status at once, 'empty' = 200 with no items); also
+  POST /__harness/latency {"default": ms, "rules": [["regex", ms], ...]} while running.
+- Streams: POST /__harness/streams {"encode_subtitle": true} serves the last embedded subtitle as burnt in
+  ("Encode"), so picking it renegotiates the stream (a track change that can fail, with a PlaybackInfo rule).
 - Request log: <out>/requests.jsonl, one line per request (time, method, path, query with keys/tokens redacted,
   status, bytes, total ms, injected delay, client); <out>/summary.json on shutdown and on GET /__harness/summary.
   Unknown endpoints answer 404 and are listed there as unhandled.
 - Control (127.0.0.1 only, no auth): GET /__harness/fixture (the showcase items the UI harness navigates to),
-  GET /__harness/summary, POST /__harness/latency, POST /__harness/shutdown, GET /__harness/quickconnect (the codes
-  waiting, never their secrets), POST /__harness/quickconnect/approve.
+  GET /__harness/summary, POST /__harness/latency, POST /__harness/streams, POST /__harness/shutdown,
+  GET /__harness/quickconnect (the codes waiting, never their secrets), POST /__harness/quickconnect/approve.
 """
 
 import argparse
@@ -66,6 +69,20 @@ BASE_SIZES = {  # (kind, image type) -> (width, height); None kind = any
 }
 
 
+def rule_value(value):
+    """A rule's value: ms (a number) of delay, 'hang' (never answer), 'status:NNN' (answer NNN at once: a failing
+    server) or 'empty' (200 with no items: an empty library). Anything else is a ValueError."""
+    s = str(value).strip().lower()
+    if s in ("hang", "empty"):
+        return s
+    if s.startswith("status:"):
+        code = s.split(":", 1)[1]
+        if not code.isdigit() or not 100 <= int(code) <= 599:
+            raise ValueError("status:%s is not an HTTP status" % code)
+        return "status:%d" % int(code)
+    return float(value)
+
+
 class Server:
     def __init__(self, out, media_meta, credentials, latency=0.0, rules=(), jitter=0.0, port=0, seed=20261115,
                  admin=True):
@@ -86,8 +103,9 @@ class Server:
         self.quick = {}             # Quick Connect secret -> {code, user (once approved), client...} (never logged)
         self.lock = threading.Lock()
         self.latency = latency
-        self.rules = [(re.compile(r, re.I), ms) for r, ms in rules]
+        self.rules = [(re.compile(r, re.I), rule_value(ms)) for r, ms in rules]
         self.jitter = jitter
+        self.encode_subtitle = False    # POST /__harness/streams: the last embedded subtitle burnt in (a restart to pick)
         self.seq = 0
         self.counts = collections.Counter()
         self.unhandled = collections.Counter()
@@ -188,11 +206,13 @@ class Server:
                             "SupportsExternalStream": False, "Level": 0})
         base = 1 + len(m["audio"])
         for k, s in enumerate(m["subtitles"]):
+            # the server burns a subtitle in ("Encode") when the client cannot show it: picking it restarts the stream
+            encode = self.encode_subtitle and k == len(m["subtitles"]) - 1
             streams.append({"Codec": s["codec"], "Language": s["language"], "Title": s["title"],
                             "DisplayTitle": "%s - %s" % (s["title"], s["codec"].upper()), "IsDefault": False,
                             "IsForced": False, "IsHearingImpaired": False, "Type": "Subtitle", "Index": base + k,
                             "IsExternal": False, "IsTextSubtitleStream": True, "SupportsExternalStream": True,
-                            "DeliveryMethod": "Embed", "LocalizedUndefined": "Undefined",
+                            "DeliveryMethod": "Encode" if encode else "Embed", "LocalizedUndefined": "Undefined",
                             "LocalizedDefault": "Default", "LocalizedForced": "Forced", "Level": 0})
         ext = m["external_subtitle"]
         index = base + len(m["subtitles"])
@@ -368,10 +388,13 @@ class Server:
                 cm = CLIENT_RE.search(auth)
                 self.client = cm.group(1) if cm else ""
                 delay = 0.0
+                fault = None
                 if not path.lower().startswith("/__harness/"):
                     rule = outer.delay_for(path)
                     if rule == "hang":
                         delay = -1.0
+                    elif isinstance(rule, str):
+                        fault = rule        # status:NNN or empty (rule_value)
                     else:
                         delay = max(0.0, float(rule) + (random.uniform(-outer.jitter, outer.jitter) if outer.jitter else 0))
                 try:
@@ -381,6 +404,9 @@ class Server:
                         return
                     if delay:
                         time.sleep(delay / 1000.0)
+                    if fault:
+                        self._fault(fault, path)
+                        return
                     self._route(method, path)
                 except (ConnectionError, OSError):
                     self.close_connection = True
@@ -422,6 +448,16 @@ class Server:
                 if obj is None:
                     return self._send(code)
                 return self._send(code, json.dumps(obj).encode("utf-8"), "application/json; charset=utf-8")
+
+            def _fault(self, fault, path):
+                """A rule's injected answer: status:NNN (that status, at once) or empty (200, no items: an empty
+                library; /Items/Latest answers a list, everything else an item page)."""
+                self.route = "fault:" + fault
+                if fault == "empty":
+                    empty = [] if path.lower().rstrip("/").endswith("/latest") else \
+                        {"Items": [], "TotalRecordCount": 0, "StartIndex": 0}
+                    return self._json(200, empty)
+                return self._json(int(fault.split(":", 1)[1]), {"error": "injected by the harness"})
 
             def _body(self):
                 try:
@@ -784,10 +820,17 @@ class Server:
                     if "default" in body:
                         outer.latency = float(body["default"])
                     if "rules" in body:
-                        outer.rules = [(re.compile(r, re.I), ms if ms == "hang" else float(ms)) for r, ms in body["rules"]]
+                        outer.rules = [(re.compile(r, re.I), rule_value(ms)) for r, ms in body["rules"]]
                     if "jitter" in body:
                         outer.jitter = float(body["jitter"])
                     return self._json(200, outer.summary()["latency"])
+                if low == "/__harness/streams" and method == "POST":
+                    # {"encode_subtitle": true}: the last embedded subtitle is burnt in by the server ("Encode"), so a
+                    # client that picks it renegotiates the stream (with a PlaybackInfo rule: a track change that fails)
+                    body = self._body()
+                    if "encode_subtitle" in body:
+                        outer.encode_subtitle = bool(body["encode_subtitle"])
+                    return self._json(200, {"encode_subtitle": outer.encode_subtitle})
                 if low == "/__harness/shutdown" and method == "POST":
                     self._json(200, {"ok": True})
                     outer.stop()
@@ -1042,7 +1085,7 @@ def main(argv=None):
     ap.add_argument("--port", type=int, default=0)
     ap.add_argument("--latency", type=float, default=0.0, help="ms added to every request")
     ap.add_argument("--latency-rule", action="append", default=[], metavar="REGEX=MS",
-                    help="ms (or 'hang') for paths matching REGEX; first match wins")
+                    help="ms (or 'hang', 'status:NNN', 'empty') for paths matching REGEX; first match wins")
     ap.add_argument("--jitter", type=float, default=0.0, help="+/- ms of random jitter")
     ap.add_argument("--credentials", default=os.path.join(HERE, "credentials.json"))
     ap.add_argument("--ready-file", help="written with {url, port, pid} once listening")
@@ -1059,7 +1102,10 @@ def main(argv=None):
     rules = []
     for r in a.latency_rule:
         rx, _, ms = r.rpartition("=")
-        rules.append((rx, "hang" if ms == "hang" else float(ms)))
+        try:
+            rules.append((rx, rule_value(ms)))
+        except ValueError as ex:
+            ap.error("--latency-rule %s: %s" % (r, ex))
     srv = Server(os.path.abspath(a.out), meta, load_credentials(a.credentials), a.latency, rules, a.jitter, a.port,
                  a.seed, admin=not a.not_admin)
     if a.ready_file:
