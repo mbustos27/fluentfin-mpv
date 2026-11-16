@@ -193,11 +193,64 @@ def _negotiated_stream(video):
             and getattr(video, "play_method", None) is not None)
 
 
-def _item_label(video):
-    """``"Name" (<id>)``, for a message that has to name an item."""
-    item_id = proto.item_id_out(getattr(video, "item_id", None))
-    name = (getattr(video, "item", None) or {}).get("Name")
-    return '"%s" (%s)' % (name, item_id) if name else str(item_id)
+# -- fluentfin-mpv: a change that could not be applied, said for the user ----
+# The non-fatal ``error`` of a track or quality change that found no stream
+# (BRIDGE.md section 5) is shown to the user as it is (FluentFin's notice
+# over the video): it names the item by its title and says what could not be
+# changed and why in plain words. Ids, urls and exception text go to the log.
+
+#: What could not be changed (`Bridge._change_asked`) -> the sentence.
+CHANGE_TEXT = {
+    "audio": "The audio track of %s could not be changed",
+    "subtitles": "The subtitles of %s could not be changed",
+    "quality": "The quality of %s could not be changed",
+    None: "The track or quality change for %s could not be applied",
+}
+
+
+def item_title(video):
+    """The item as the user knows it, quoted: the title the backend's bar
+    shows (`fluentfin_osc.media_title`: "Series — S6E4 · Episode", a film's
+    "Name (Year)"); "this item" when the server gave it no name. Never its
+    id."""
+    item = getattr(video, "item", None) or {}
+    try:
+        from . import fluentfin_osc
+
+        title = fluentfin_osc.media_title(item, item.get("Type") == "Episode")
+    except Exception:
+        title = item.get("Name")
+    title = (title or "").strip() if isinstance(title, str) else ""
+    return '"%s"' % title if title else "this item"
+
+
+def failure_cause(code, error=None, no_source=False):
+    """Why a negotiation found nothing, in words for the user: what the
+    server answered (``error`` None: it answered, with no media source or
+    nothing this player can play), or what became of the request."""
+    if error is None:
+        return ("the server has no version of it to play" if no_source
+                else "the server offered no stream this player can play")
+    if code == AUTH_FAILED:
+        return "the server refused the request"
+    if code == SERVER_UNREACHABLE:
+        response = getattr(error, "response", None)
+        if (getattr(error, "bridge_http_status", None) is not None
+                or isinstance(getattr(error, "status", None), int)
+                or getattr(response, "status_code", None)):
+            return "the server answered with an error"
+        if getattr(error, "bridge_answered", False):
+            # `bridge_http.check_play_info`: an empty, non-JSON or
+            # source-less PlaybackInfo.
+            return "the server's answer could not be used"
+        return "the server could not be reached"
+    return "something went wrong in the player"
+
+
+def change_failed_message(video, change, cause):
+    """The ``error`` message of a change that could not be applied."""
+    return "%s: %s. It goes on playing as before." % (
+        CHANGE_TEXT.get(change, CHANGE_TEXT[None]) % item_title(video), cause)
 
 
 class _SessionLedger:
@@ -1976,18 +2029,22 @@ class Bridge:
             return
         if raised is None and interrupted and _negotiated_stream(video):
             return
+        no_source = getattr(video, "media_source", None) is None
         if raised is not None:
             code, reason = (classify_exception(raised),
                             describe_exception(raised))
-        elif getattr(video, "media_source", None) is None:
+        elif no_source:
             code, reason = MPV_FAILED, "the server offered no media source"
         else:
             code, reason = MPV_FAILED, ("the server offered no stream this "
                                         "player can play")
+        # fluentfin-mpv: what was asked, before `_put_back` restores it.
+        change = self._change_asked(video)
         abandoned = _play_session(video)
-        log.info("The restart of %s found no stream (%s); it keeps the play "
-                 "session it had.", getattr(video, "item_id", "an item"),
-                 reason)
+        log.warning("The %s change of %s could not be applied (%s: %s); it "
+                    "keeps the play session it had.",
+                    change or "track or quality",
+                    getattr(video, "item_id", "an item"), code, reason)
         self._put_back(pm, video, restart)
         session = _play_session(video)
         item = getattr(video, "item_id", None)
@@ -2005,10 +2062,34 @@ class Bridge:
                 raised._bridge_reported = True
             except Exception:
                 pass
+        # fluentfin-mpv: shown to the user as it is; the raw cause is in
+        # the log line above.
         self.tracker.report_error(
-            code, "%s: the track or quality change could not be applied "
-            "(%s); it plays on as before" % (_item_label(video), reason),
+            code, change_failed_message(
+                video, change, failure_cause(code, raised, no_source)),
             item_id=item, sticky=False)
+
+    def _change_asked(self, video):
+        """fluentfin-mpv: what the restart of ``video`` that did not take
+        was asked to change -- "audio", "subtitles" or "quality" -- or None
+        (more than one, or not known). Read before `_put_back`: the tracks
+        a `set_streams` on this thread wrote (``tracks_before``), and a
+        quality override that differs from the one the stream playing was
+        negotiated with (`_quality`)."""
+        changes = []
+        tracks = getattr(self._local, "tracks_before", None)
+        if tracks is not None and tracks[0] is video:
+            if getattr(video, "aid", None) != tracks[1]:
+                changes.append("audio")
+            if getattr(video, "sid", None) != tracks[2]:
+                changes.append("subtitles")
+        try:
+            if (video in self._quality and getattr(video, "trs_ovr", None)
+                    != self._quality[video]):
+                changes.append("quality")
+        except TypeError:
+            pass
+        return changes[0] if len(changes) == 1 else None
 
     def _put_back(self, pm, video, restart):
         """`_restart_not_taken`: ``video`` as it was before its restart --

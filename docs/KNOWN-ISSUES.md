@@ -67,9 +67,12 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   keeps both disabled until it returns (upstream's own command already did that for itself).
 - **A track or quality change that cannot be applied** (fixed 2026-11-15, signout-ux): a
   non-fatal `error` once the item plays is shown above the video for 8 s as a dismissable
-  warning with the backend's own text (it names the item and says the change could not be
-  applied; the UI cannot say which change, since most come from mpv's OSC), and playback is
-  not touched. Showing it pushes the video area down while it is up (airspace: XAML cannot
+  warning with the backend's own text, and playback is not touched. That text is the user's
+  since osc-polish (the visual check showed the item id and "ServerUnreachable ... HTTP 500"):
+  `MPV: The audio track of "Series — S6E4 · Episode" could not be changed: the server
+  answered with an error. It goes on playing as before.` The backend says which change it was
+  (audio, subtitles, quality; "track or quality change" when it cannot tell) and keeps ids,
+  URLs and status codes in its log. The "MPV: " prefix is the UI's. Showing it pushes the video area down while it is up (airspace: XAML cannot
   draw over mpv's window). The same notice is all a failed `next` / auto-advance gets (its
   item never opened, `state: error`): once it hides, the page stays on a stopped video
   until the user leaves.

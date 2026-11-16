@@ -229,10 +229,15 @@ def _restart_fail(name, server_cls, flag):
         if not progress:
             EXTRA.append("no progress report for %s after the failed change"
                          % old)
+        # fluentfin-mpv: the message is for the user -- X by its title
+        # (fakejf2 names it "Fake <first 4>"), never its id.
         if [e.get("code") for e in errors] != ["mpv_failed"] or not any(
-                X in (e.get("message") or "") for e in errors):
-            EXTRA.append("error events %s: want one mpv_failed naming X" % (
-                [(e.get("code"), e.get("message")) for e in errors]))
+                ("Fake %s" % X[:4]) in (e.get("message") or "")
+                and X not in (e.get("message") or "") for e in errors):
+            EXTRA.append("error events %s: want one mpv_failed naming X by "
+                         "its title" % (
+                             [(e.get("code"), e.get("message"))
+                              for e in errors]))
         shown = sorted({(msg.get("data") or {}).get("playSessionId")
                         for msg in b.messages[m:] if msg.get("event") == "state"}
                        - {old, None})

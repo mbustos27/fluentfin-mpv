@@ -238,14 +238,20 @@ def check_play_info(client):
                                                  list):
             return info
         status = guard_.last_status() if guard_ is not None else None
-        if status is not None and not 200 <= status < 300:
+        failed = status is not None and not 200 <= status < 300
+        if failed:
             why = "the server answered PlaybackInfo with HTTP %d" % status
         elif info is None:
             why = "the server's PlaybackInfo answer was empty or not JSON"
         else:
             why = "the server's PlaybackInfo answer lists no media sources"
         log.warning("%s", why)
-        raise _unreachable(why)
+        error = _unreachable(why)
+        # fluentfin-mpv: the server did answer -- for the words the user
+        # is shown (`bridge.failure_cause`); ``why`` is for the log.
+        error.bridge_answered = True
+        error.bridge_http_status = status if failed else None
+        raise error
 
     api.get_play_info = get_play_info
     return get_play_info

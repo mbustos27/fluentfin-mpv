@@ -646,7 +646,14 @@ the video still current):
   ``none``; and an ``error`` event naming the item -- not the state, it
   plays on -- with the code a new item gets for the same failure
   (``mpv_failed`` for no stream, the request's own, e.g.
-  ``server_unreachable``, for a failed one; not when interrupted). Not
+  ``server_unreachable``, for a failed one; not when interrupted). Its
+  message is the user's, shown as it is by FluentFin's notice
+  (fluentfin-mpv): what was asked (`_change_asked`: audio, subtitles or
+  quality, read before `_put_back` restores them), the item by its bar
+  title (`item_title`) and the cause in words (`failure_cause`;
+  `check_play_info` marks an answer that came, with its HTTP status, so a
+  500 reads "the server answered with an error", not "could not be
+  reached"). The raw cause, with the item id, is a warning in the log. Not
   undone: the old transcode, which `get_playback_url` ends before it asks,
   so a transcoded item's stream runs out soon after, as with a
   replacement's. `get_timeline_options` also builds a report with no media

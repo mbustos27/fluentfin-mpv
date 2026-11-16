@@ -4255,7 +4255,10 @@ class RestartNotTakenTest(BridgeCase):
                 self.assertEqual(self.reported(), [(A, new, "none")])
                 errors = self.errors()
                 self.assertEqual([e["code"] for e in errors], ["mpv_failed"])
-                self.assertIn(A, errors[0]["message"])
+                # fluentfin-mpv: for the user -- the item by its title,
+                # never its id.
+                self.assertIn('"Item"', errors[0]["message"])
+                self.assertNotIn(A, errors[0]["message"])
                 state = self.bridge.tracker.snapshot(self.bridge._observe())
                 self.assertEqual((state["state"], state["playSessionId"],
                                   state["mediaSourceId"]),
@@ -4332,6 +4335,85 @@ class RestartNotTakenTest(BridgeCase):
         self.assertEqual(asked[-1], (800000, True))
         self.assertEqual(self.a.trs_ovr, (None, True))
 
+    # -- fluentfin-mpv: the message is the user's --------------------------
+
+    def change_fails(self, command, args, outcome):
+        """``command`` restarts the item (a transcode's track change), and
+        the restart finds nothing: ``outcome`` is play()'s (``"fail"``: no
+        url) or what it raises. The one ``error`` event and the log."""
+        self.pm.restart_on_tracks = True
+        self.pm.on_negotiate = lambda: setattr(self.a, "play_method", None)
+        self.pm.next_play = outcome
+        with self.assertLogs("bridge", "WARNING") as logs:
+            self.assertTrue(self.send(command, args)["ok"])
+            self.run_plays()
+        errors = self.errors()
+        self.assertEqual(len(errors), 1, errors)
+        return errors[0], "\n".join(logs.output)
+
+    def test_a_failed_change_is_said_for_the_user(self):
+        """The visual check: FluentFin's notice showed the item id and
+        "ServerUnreachable ... HTTP 500". It shows this message as it is."""
+        from jellyfin_apiclient_python.exceptions import HTTPException
+
+        self.a.item = {"Name": "Mac's Big Break", "Type": "Episode",
+                       "SeriesName": "It's Always Sunny in Philadelphia",
+                       "ParentIndexNumber": 6, "IndexNumber": 4}
+        title = ('"It\'s Always Sunny in Philadelphia — S6E4 · '
+                 'Mac\'s Big Break"')
+        for command, args, outcome, want, raw in (
+                ("set_subtitle", {"index": 3}, "fail",
+                 "The subtitles of %s could not be changed: the server "
+                 "offered no stream this player can play." % title,
+                 "no stream this player can play"),
+                ("set_audio", {"index": 2}, HTTPException(500, None),
+                 "The audio track of %s could not be changed: the server "
+                 "answered with an error." % title, "500"),
+                ("set_subtitle", {"index": 4},
+                 HTTPException("ServerUnreachable", None),
+                 "The subtitles of %s could not be changed: the server "
+                 "could not be reached." % title, "ServerUnreachable"),
+                ("set_audio", {"index": 5},
+                 HTTPException("Unauthorized", None),
+                 "The audio track of %s could not be changed: the server "
+                 "refused the request." % title, "Unauthorized")):
+            with self.subTest(command=command, outcome=outcome):
+                error, log_text = self.change_fails(command, args, outcome)
+                self.assertEqual(error["message"],
+                                 want + " It goes on playing as before.")
+                self.assertFalse(error["fatal"])
+                for raw_part in (A, "HTTP", "Exception", "ps-"):
+                    self.assertNotIn(raw_part, error["message"])
+                # The raw cause is in the log, with the item.
+                self.assertIn(raw, log_text)
+                self.assertIn(A, log_text)
+
+    def test_a_failed_quality_change_says_quality(self):
+        def no_stream():
+            self.a.playback_info = {"PlaySessionId": "ps-q"}
+            self.a.play_method = None
+
+        menu = threading.Thread(target=self.a.set_trs_override,
+                                args=(1500000, True), daemon=True)
+        menu.start()
+        menu.join(5)
+        self.pm.on_negotiate = no_stream
+        self.pm.next_play = "fail"
+        self.pm.put_task(self.pm.restart_playback)
+        self.pm.run_deferred()
+        error, = self.errors()
+        self.assertEqual(error["message"],
+                         'The quality of "Item" could not be changed: the '
+                         "server offered no stream this player can play. "
+                         "It goes on playing as before.")
+
+    def test_without_a_name_it_is_this_item(self):
+        self.a.item = {"Type": "Movie"}
+        error, _log = self.change_fails("set_subtitle", {"index": 3}, "fail")
+        self.assertTrue(error["message"].startswith(
+            "The subtitles of this item could not be changed"),
+            error["message"])
+
     def test_mpvs_auth_header_is_put_back(self):
         """``http-header-fields`` is global (docs/auth-headers.md): play()'s
         no-URL return revokes it, and a subtitle the old stream loads later
@@ -4363,15 +4445,26 @@ class RestartNotTakenTest(BridgeCase):
         from jellyfin_apiclient_python.exceptions import HTTPException
 
         self.pm.restart_on_tracks = True
-        self.pm.next_play = HTTPException(
+        error = HTTPException(
             "ServerUnreachable", "the server answered PlaybackInfo with "
             "HTTP 500")
-        self.assertTrue(self.send("set_audio", {"index": 1})["ok"])
-        self.run_plays()
+        # As `check_play_info` marks it (PlaybackInfoAnswerTest).
+        error.bridge_answered, error.bridge_http_status = True, 500
+        self.pm.next_play = error
+        with self.assertLogs("bridge", "WARNING") as logs:
+            self.assertTrue(self.send("set_audio", {"index": 1})["ok"])
+            self.run_plays()
         errors = self.errors()
         self.assertEqual([e["code"] for e in errors], ["server_unreachable"])
-        self.assertIn(A, errors[0]["message"])
-        self.assertIn("HTTP 500", errors[0]["message"])
+        # fluentfin-mpv: the visual check's case. The user reads words;
+        # the id and "ServerUnreachable ... HTTP 500" are in the log only.
+        self.assertEqual(errors[0]["message"],
+                         'The audio track of "Item" could not be changed: '
+                         "the server answered with an error. It goes on "
+                         "playing as before.")
+        log_text = "\n".join(logs.output)
+        self.assertIn(A, log_text)
+        self.assertIn("HTTP 500", log_text)
         self.assertIs(self.pm._video, self.a)
         self.assertIs(self.pm.should_send_timeline, True)
 
@@ -6907,12 +7000,15 @@ class PlaybackInfoAnswerTest(_RealClientCase):
     def test_an_answer_that_is_not_one_is_server_unreachable(self):
         from jellyfin_apiclient_python.exceptions import HTTPException
 
-        for name, status, body, raw, says in (
-                ("500", 500, None, None, "HTTP 500"),
-                ("empty", 200, None, b"", "empty or not JSON"),
-                ("not json", 200, None, b"<html>", "empty or not JSON"),
+        answered = "the server answered with an error"
+        unusable = "the server's answer could not be used"
+        for name, status, body, raw, says, user in (
+                ("500", 500, None, None, "HTTP 500", answered),
+                ("empty", 200, None, b"", "empty or not JSON", unusable),
+                ("not json", 200, None, b"<html>", "empty or not JSON",
+                 unusable),
                 ("no sources", 200, {"PlaySessionId": "p"}, None,
-                 "no media sources")):
+                 "no media sources", unusable)):
             with self.subTest(name):
                 with self.assertRaises(HTTPException) as caught:
                     self.info(status, body, raw)
@@ -6923,6 +7019,10 @@ class PlaybackInfoAnswerTest(_RealClientCase):
                 self.assertIn("PlaybackInfo", message)
                 self.assertIn(says, message)
                 self.assertNotIn("NoneType", message)
+                # fluentfin-mpv: what the user is told (the log has the
+                # above): the server did answer.
+                self.assertEqual(bridge_mod.failure_cause(
+                    "server_unreachable", error), user)
 
     def test_only_the_bridges_own_sentence_is_shown(self):
         """`describe_exception`: the apiclient's HTTPException carries the

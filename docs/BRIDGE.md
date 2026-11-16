@@ -219,7 +219,12 @@ superseded by `stop`, `play` or `connect` reports no `error`, even if its reques
 later (so an old server's late failure never lands after a switch).
 A track or quality change that cannot be applied (no usable stream for it) gets only an
 `error` event (`mpv_failed`, or `server_unreachable` when the request itself failed) whose
-message names the item; the item plays on with the tracks it had and `state` keeps showing
+message names the item. That message is written to be shown as it is (fluentfin-mpv, the event's
+shape unchanged): what could not be changed (the audio track, the subtitles, the quality), the
+item by the title the backend's bar shows, and the cause in plain words, e.g. `The audio track
+of "Series — S6E4 · Episode" could not be changed: the server answered with an error. It goes
+on playing as before.` No ids, URLs, status codes or exception text: those go to the backend's
+log. The item plays on with the tracks it had and `state` keeps showing
 the tracks actually playing. Known limit: for a **transcoded** item the server's old
 transcode was already ended before the new one was negotiated (upstream behaviour), so it
 plays on only as long as mpv's buffer lasts. A server answer that is not a usable PlaybackInfo (a 5xx, an empty
