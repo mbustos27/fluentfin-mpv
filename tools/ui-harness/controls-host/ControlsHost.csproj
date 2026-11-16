@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The player controls' test host: a WinUI window of its own (never FluentFin.exe) with the REAL backend and mpv embedded
+       through the bridge and FluentFin's controls window over the video. It compiles this repo's (or -p:UiDir=<copy>'s)
+       sources: the video window, the controls window and XAML, the job launcher; and references FluentFin.Core (the
+       backend host, the controls' view model). Built and run by run.ps1 from a copy under its -Out, never inside ui\. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>FluentFin</RootNamespace>
+    <AssemblyName>ControlsHost</AssemblyName>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>preview</LangVersion>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <UiDir Condition="'$(UiDir)' == ''">$(MSBuildThisFileDirectory)..\..\..\ui</UiDir>
+    <CoreDir Condition="'$(CoreDir)' == ''">$(UiDir)\FluentFin.Core</CoreDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="WinUIEx" Version="2.9.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="$(UiDir)\FluentFin\Mpv\MpvVideoHost.cs" Link="Linked\MpvVideoHost.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\MpvControlsOverlay.cs" Link="Linked\MpvControlsOverlay.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\JobObject.cs" Link="Linked\JobObject.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\JobProcess.cs" Link="Linked\JobProcess.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\WindowsMpvBackendLauncher.cs" Link="Linked\WindowsMpvBackendLauncher.cs" />
+    <ProjectReference Include="$(CoreDir)\FluentFin.Core.csproj" />
+  </ItemGroup>
+</Project>

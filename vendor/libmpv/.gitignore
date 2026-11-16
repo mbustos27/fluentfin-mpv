@@ -1,0 +1,4 @@
+# libmpv is downloaded, never committed: VENDORED.md says from where and with which hashes
+*
+!.gitignore
+!VENDORED.md

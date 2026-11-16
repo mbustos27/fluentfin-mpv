@@ -36,7 +36,9 @@ public interface IMpvBackend
 	/// <summary>
 	/// fluentfin-mpv (startup-perf): starts the backend unless it is running and connects it as this identity with
 	/// <c>prewarm</c> (docs/BRIDGE.md §4: mpv without its video window until the first play), unless it is already connected
-	/// as exactly this identity. A later <see cref="ConnectAsync"/> as the same identity then sends nothing.
+	/// as exactly this identity. A later <see cref="ConnectAsync"/> as the same identity then sends nothing. With a surface
+	/// that cannot connect ahead (<see cref="IMpvVideoSurface.CanConnectAhead"/>: FluentFin's own player controls) it only
+	/// starts the backend: the first play makes FluentFin's mpv and connects.
 	/// </summary>
 	Task PrewarmAsync(BridgeIdentity identity, CancellationToken cancellationToken = default);
 
@@ -130,6 +132,21 @@ public sealed record MpvInterruptedPlayback(string ItemId, string? MediaSourceId
 public interface IMpvVideoSurface
 {
 	Task<nint> GetHandleAsync();
+
+	/// <summary>
+	/// fluentfin-mpv player controls: the <c>connect.window</c> for the next connect (docs/BRIDGE.md §4): embedded into
+	/// <see cref="GetHandleAsync"/>'s window, or attached to an mpv FluentFin runs itself. A different window than the
+	/// running backend's restarts it (it is fixed for a backend's life).
+	/// </summary>
+	async Task<BridgeWindow> GetWindowAsync() => BridgeWindow.Embedded(await GetHandleAsync());
+
+	/// <summary>
+	/// fluentfin-mpv (startup-perf): <see cref="GetWindowAsync"/> may be asked ahead of playback without making a player:
+	/// true for an embedded window (FluentFin's child window), false for attached (asking makes FluentFin's in-process
+	/// mpv). The pre-warm connects only when it is true; otherwise it only starts the backend, and the first play makes
+	/// the player and connects (docs/BRIDGE.md §3, §4).
+	/// </summary>
+	bool CanConnectAhead => true;
 }
 
 /// <summary>Finds and starts the backend process; the Windows implementation puts it in a kill-on-close job object.</summary>

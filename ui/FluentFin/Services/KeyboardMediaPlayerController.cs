@@ -12,6 +12,9 @@ namespace FluentFin.Services
 		private readonly IJellyfinClient _jellyfinClient;
 		private readonly Func<Task> _skipSegment;
 		private readonly Action? _toggleFullscreen;
+
+		// fluentfin-mpv: Settings > Playback's volume step (it was 1)
+		private readonly Func<int> _volumeStep;
 		private readonly KeyboardListener _listener = new();
 		private readonly List<Guid> _keySubscriptions = [];
 		private readonly TimeSpan _smallSeek = TimeSpan.FromSeconds(5);
@@ -20,12 +23,14 @@ namespace FluentFin.Services
 		public KeyboardMediaPlayerController(IMediaPlayerController controller,
 											 IJellyfinClient jellyfinClient,
 											 Func<Task> skipSegment,
-											 Action? toggleFullscreen)
+											 Action? toggleFullscreen,
+											 Func<int>? volumeStep = null)
 		{
 			_controller = controller;
 			_jellyfinClient = jellyfinClient;
 			_skipSegment = skipSegment;
 			_toggleFullscreen = toggleFullscreen;
+			_volumeStep = volumeStep ?? (() => 1);
 
 			SubscribeEvents();
 		}
@@ -112,7 +117,7 @@ namespace FluentFin.Services
 					return;
 				}
 
-				_controller.Volume += 1;
+				_controller.Volume = Core.Settings.PlaybackPreferences.StepVolume(_controller.Volume, 1, _volumeStep(), MediaPlayers.MediaPlayerVolume.FullVolume(_controller));
 			}).Id);
 
 			_keySubscriptions.Add(_listener.Subscribe(Key.Down, () =>
@@ -122,7 +127,7 @@ namespace FluentFin.Services
 					return;
 				}
 
-				_controller.Volume -= 1;
+				_controller.Volume = Core.Settings.PlaybackPreferences.StepVolume(_controller.Volume, -1, _volumeStep(), MediaPlayers.MediaPlayerVolume.FullVolume(_controller));
 			}).Id);
 		}
 

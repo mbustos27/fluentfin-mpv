@@ -17,7 +17,8 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 	public Task PlayDto(BaseItemDto dto) => Play(dto, null);
 
 	/// <param name="streamsPicked">fluentfin-mpv: the user changed a stream picker on the item page (only the mpv player uses it).</param>
-	public async Task Play(BaseItemDto dto, PlaybackSelection? selection, bool streamsPicked = true)
+	/// <param name="fromBeginning">fluentfin-mpv: "Play from beginning": start at 0 rather than at the item's resume point.</param>
+	public async Task Play(BaseItemDto dto, PlaybackSelection? selection, bool streamsPicked = true, bool fromBeginning = false)
 	{
 		// fluentfin-mpv (startup-perf): the play timeline in the log counts from here (MpvPlayTimeline)
 		PerfLog.PlayPressed();
@@ -31,7 +32,7 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 			{
 				PlayingItemPosition = 0,
 				PlayingQueue = ids,
-				StartPositionTicks = info?.UserData?.PlaybackPositionTicks ?? 0,
+				StartPositionTicks = fromBeginning ? 0 : info?.UserData?.PlaybackPositionTicks ?? 0,
 			};
 			await jellyfinClient.SignalNewPlaylist(request);
 		}
@@ -47,7 +48,7 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 				selection = Mpv.MpvTrackPick.ForPlay(dto, selection, streamsPicked);
 			}
 
-			navigationService.NavigateTo("FluentFin.ViewModels.VideoPlayerViewModel", selection is null ? dto : new PlaybackRequest(dto, selection));
+			navigationService.NavigateTo("FluentFin.ViewModels.VideoPlayerViewModel", selection is null && !fromBeginning ? dto : new PlaybackRequest(dto, selection, fromBeginning));
 		}
 	}
 

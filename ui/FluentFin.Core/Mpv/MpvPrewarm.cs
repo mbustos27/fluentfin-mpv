@@ -7,7 +7,8 @@ namespace FluentFin.Core.Mpv;
 /// <summary>
 /// fluentfin-mpv (startup-perf): after sign-in, with the mpv player selected, the backend is started and connected in the
 /// background with <c>prewarm</c> (docs/BRIDGE.md §3, §4), so pressing Play skips both (measured on a real server: backend
-/// start ~0.24 s + connect ~0.5 s). Idle, the backend holds no video window of mpv's (no input queues attached to FluentFin's,
+/// start ~0.24 s + connect ~0.5 s). With FluentFin's own player controls it is only started: their in-process mpv is made at
+/// the first play, which connects (<see cref="IMpvVideoSurface.CanConnectAhead"/>). Idle, the backend holds no video window of mpv's (no input queues attached to FluentFin's,
 /// no GPU surface) and has made no request but the connect's user check; it reports nothing. A crash while idle is harmless:
 /// there is no play session to report (§6), and the next play starts it again. Signing out cancels a pre-warm in flight and
 /// shuts the backend down, so no process keeps the login the sign-out revokes; the next sign-in pre-warms again, as whoever
@@ -125,7 +126,8 @@ public sealed class MpvPrewarm(IMpvBackend backend, ISettings settings, ILogger<
 			var watch = System.Diagnostics.Stopwatch.StartNew();
 			logger.LogInformation("Pre-warming the mpv backend for {Identity} (backend {Status})", identity, backend.Status.State);
 			await backend.PrewarmAsync(identity, cancellationToken);
-			logger.LogInformation("[perf] the mpv backend is pre-warmed ({Ms} ms): Play skips its start and connect", watch.ElapsedMilliseconds);
+			logger.LogInformation("[perf] the mpv backend is pre-warmed ({Ms} ms): Play skips its start{Connect}", watch.ElapsedMilliseconds,
+				backend.Status.MpvVersion is null ? "" : " and connect");
 		}
 		catch (Exception ex) when (cancellationToken.IsCancellationRequested)
 		{

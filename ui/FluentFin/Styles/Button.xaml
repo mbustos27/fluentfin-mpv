@@ -1,6 +1,22 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!--
+        fluentfin-mpv: colours that used to be written into the pages (red favourite, yellow star), as theme resources so the
+        Windows contrast themes replace them with the system's colours (docs/research/ux-review.md A5/I5).
+        FavoriteCheckedBrush is the checked favourite toggle's icon: the toggles alias SystemAccentColor to it.
+    -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="FavoriteCheckedBrush" Color="Red" />
+            <SolidColorBrush x:Key="RatingStarBrush" Color="Yellow" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="FavoriteCheckedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="RatingStarBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
     <SolidColorBrush
         x:Key="Black40O"
         Opacity="0.40"

@@ -9,40 +9,144 @@ using FluentFin.Core.Settings;
 using FluentFin.Helpers;
 using FluentFin.Services;
 using FluentFin.ViewModels;
+using Jellyfin.Sdk.Generated.Models;
 using Microsoft.Extensions.DependencyInjection;
 using ReactiveUI;
 
 namespace FluentFin.Core.ViewModels;
 
 public partial class SelectServerViewModel(ISettings settings,
-										   [FromKeyedServices(NavigationRegions.InitialSetup)] INavigationService navigationService,
-										   IContentDialogService contentDialogService) : ObservableObject
+										   [FromKeyedServices(NavigationRegions.InitialSetup)] INavigationService navigationService) : ObservableObject
 {
+	private int _found;
 
 	[ObservableProperty]
 	public partial bool HasServers { get; set; } = settings.Servers.Count > 0;
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsBusy))]
 	public partial bool IsDetecting { get; set; }
+
+	/// <summary>fluentfin-mpv: an address is being checked (docs/research/ux-review.md F2): Next shows progress, inputs wait.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsBusy), nameof(IsIdle))]
+	public partial bool IsConnecting { get; set; }
+
+	/// <summary>fluentfin-mpv: what is going on, under the buttons ("Connecting to …", "Looking for servers on this network…").</summary>
+	[ObservableProperty]
+	public partial string StatusText { get; set; } = "";
+
+	/// <summary>fluentfin-mpv: why the last attempt did not work and what to do, shown on the page instead of in a dialog.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasError))]
+	public partial string ErrorMessage { get; set; } = "";
+
+	public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
+
+	public bool IsBusy => IsConnecting || IsDetecting;
+
+	public bool IsIdle => !IsConnecting;
 
 	public ObservableCollection<SavedServer> Servers => settings.Servers;
 
+	/// <summary>fluentfin-mpv: how long an address may take to answer before the page gives up on it and says why.</summary>
+	internal TimeSpan ConnectTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+	/// <summary>fluentfin-mpv: the server's public info (a seam for tests).</summary>
+	internal Func<string, CancellationToken, Task<(PublicSystemInfo? Info, string? Error)>> PublicInfo { get; set; } = JellyfinAuthenticationService.GetPublicInfo;
+
+	/// <summary>fluentfin-mpv: the LAN discovery broadcast (a seam for tests).</summary>
+	internal Func<Action<DiscoveryInfo>, Action, Task> Discover { get; set; } = ServerDiscovery.DiscoverServersAsync;
+
+	/// <summary>fluentfin-mpv: the networks this PC is on, remembered with a local address (a seam for tests).</summary>
+	internal Func<IReadOnlyList<string>> NetworkNames { get; set; } = () => [.. NetworkHelper.Instance.ConnectionInformation.NetworkNames];
+
+	/// <summary>fluentfin-mpv: the first time (no saved server) the page looks for servers on this network by itself.</summary>
+	public Task OnShown() => HasServers || IsDetecting ? Task.CompletedTask : DetectServers();
 
 	[RelayCommand]
 	private async Task DetectServers()
 	{
+		if (IsDetecting)
+		{
+			return;
+		}
+
+		ErrorMessage = "";
 		IsDetecting = true;
-		await ServerDiscovery.DiscoverServersAsync(ServerDiscovered, () => RxSchedulers.MainThreadScheduler.Schedule(() => IsDetecting = false));
+		if (!IsConnecting)
+		{
+			StatusText = "Looking for servers on this network…";
+		}
+
+		Interlocked.Exchange(ref _found, 0);
+		var done = new TaskCompletionSource();
+		void Finish(string? error)
+		{
+			IsDetecting = false;
+			if (!IsConnecting)
+			{
+				StatusText = "";
+			}
+
+			// fluentfin-mpv: a search that found nothing says so, and what to do instead
+			if (!IsConnecting && (error is not null || Volatile.Read(ref _found) == 0))
+			{
+				ErrorMessage = error ?? "No Jellyfin server answered on this network. Enter its address above, for example https://jellyfin.example.com:8920.";
+			}
+
+			done.TrySetResult();
+		}
+
+		try
+		{
+			await Discover(ServerDiscovered, () => RxSchedulers.MainThreadScheduler.Schedule(() => Finish(null)));
+		}
+		catch (Exception ex)
+		{
+			// no network, or broadcasts refused: the button must not spin for ever
+			Finish($"Couldn't look for servers on this network ({ex.Message}). Enter the server's address above instead.");
+		}
+
+		await done.Task;
 	}
 
 	[RelayCommand]
 	private async Task CheckConnectivityAndGoToLogin(string url)
 	{
-		var (info, error) = await JellyfinAuthenticationService.GetPublicInfo(url);
+		if (IsConnecting)
+		{
+			return;
+		}
+
+		url = url?.Trim() ?? "";
+		if (!Uri.TryCreate(url, UriKind.Absolute, out var address) || address.Scheme is not ("http" or "https"))
+		{
+			ErrorMessage = string.IsNullOrEmpty(url)
+				? "Enter the server's address, for example https://jellyfin.example.com:8920."
+				: $"“{url}” is not a full address. Start it with http:// or https://, for example https://jellyfin.example.com:8920.";
+			return;
+		}
+
+		ErrorMessage = "";
+		IsConnecting = true;
+		StatusText = $"Connecting to {address.Authority}…";
+		PublicSystemInfo? info;
+		string? error;
+		try
+		{
+			using var timeout = new CancellationTokenSource(ConnectTimeout);
+			(info, error) = await PublicInfo(url, timeout.Token);
+		}
+		finally
+		{
+			IsConnecting = false;
+			StatusText = "";
+		}
 
 		if (info is null)
 		{
-			await contentDialogService.ShowMessage("Server not found", error ?? $"Unable to find a jellyfin server at {url}");
+			ErrorMessage = error ?? $"Unable to find a jellyfin server at {url}";
 			return;
 		}
 
@@ -53,7 +157,7 @@ public partial class SelectServerViewModel(ISettings settings,
 			LocalUrl = info.LocalAddress ?? ""
 		};
 
-		var networkNames = NetworkHelper.Instance.ConnectionInformation.NetworkNames;
+		var networkNames = NetworkNames();
 		var isLocalAddress = url.IsLocalUrl() || server.LocalNetworkNames.SequenceEqual(networkNames);
 
 		if (isLocalAddress)
@@ -84,12 +188,13 @@ public partial class SelectServerViewModel(ISettings settings,
 
 	private void ServerDiscovered(DiscoveryInfo info)
 	{
+		Interlocked.Increment(ref _found);
 		var server = Servers.FirstOrDefault(x => x.Id == info.Id) ?? new SavedServer
 		{
 			Id = info.Id,
 			DisplayName = info.Name,
 			LocalUrl = info.Address,
-			LocalNetworkNames = [.. NetworkHelper.Instance.ConnectionInformation.NetworkNames]
+			LocalNetworkNames = [.. NetworkNames()]
 		};
 
 		if (!Servers.Any(x => x.Id == info.Id))

@@ -46,7 +46,7 @@ public partial class ShellViewModel : ObservableObject, INavigationAware
 		PerfLog.Startup(_logger, "shell ready");
 		NavigationService.NavigateTo<HomeViewModel>(parameter);
 		PerfLog.Startup(_logger, "home requested");
-		// fluentfin-mpv (startup-perf): the mpv backend started and connected in the background, so Play skips both
+		// fluentfin-mpv (startup-perf): the mpv backend started (and connected, with mpv's controls) in the background, so Play skips that
 		_mpvPrewarm.SignedIn();
 		return Task.CompletedTask;
 	}

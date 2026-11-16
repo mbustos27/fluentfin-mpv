@@ -3,6 +3,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Disposables.Fluent;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using FluentFin.Converters;
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.Mpv;
 using Jellyfin.Sdk.Generated.Models;
@@ -37,7 +38,15 @@ public partial class VideoPlayerViewModel
 
 	/// <summary>The video window is shown over the video area (hidden while nothing plays, so messages there can be read).</summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsMpvStartScreenVisible))]
+	[NotifyCanExecuteChangedFor(nameof(LeaveMpvCommand))]
 	public partial bool IsMpvVideoVisible { get; set; }
+
+	/// <summary>
+	/// fluentfin-mpv: the loading screen (and its Cancel / Go back) is there only while the video is not: under mpv's window
+	/// it would still hold the keyboard, take Space or Enter as a click and be read out by Narrator.
+	/// </summary>
+	public bool IsMpvStartScreenVisible => !IsMpvVideoVisible;
 
 	/// <summary>Shown in the bar above the video area.</summary>
 	[ObservableProperty]
@@ -46,11 +55,69 @@ public partial class VideoPlayerViewModel
 	[ObservableProperty]
 	public partial bool MpvMessageIsError { get; set; }
 
+	/// <summary>
+	/// A brief message while the video plays on (a non-fatal error once playback runs, such as a track or quality change the
+	/// backend could not apply, docs/BRIDGE.md §5): shown above the video area, gone after <see cref="MpvNoticeDuration"/>
+	/// or when dismissed (<see cref="DismissMpvNotice"/>). Playback is not touched.
+	/// </summary>
+	[ObservableProperty]
+	public partial string? MpvNotice { get; set; }
+
+	/// <summary>How long <see cref="MpvNotice"/> stays up (a newer notice starts the time again).</summary>
+	public TimeSpan MpvNoticeDuration { get; set; } = TimeSpan.FromSeconds(8);
+
+	/// <summary>Waits <see cref="MpvNoticeDuration"/> (tests replace it).</summary>
+	internal Func<TimeSpan, Task> MpvNoticeDelay { get; set; } = wait => Task.Delay(wait);
+
+	/// <summary>Counts notices shown and dismissed: a notice hides itself only if it is still the one it showed.</summary>
+	private int _mpvNotices;
+
+	/// <summary>
+	/// fluentfin-mpv player controls: FluentFin draws the controls over an mpv inside FluentFin (Settings, Player controls:
+	/// FluentFin, and libmpv is there), decided when the page opens. Otherwise mpv's own controls in its own window.
+	/// </summary>
+	[ObservableProperty]
+	public partial bool UsesFluentFinControls { get; set; }
+
+	/// <summary>fluentfin-mpv player controls: the controls' state and actions while <see cref="UsesFluentFinControls"/>.</summary>
+	[ObservableProperty]
+	public partial MpvControlsViewModel? MpvControls { get; set; }
+
+	/// <summary>Whether FluentFin's controls are chosen and can be had (tests replace it). Null whyNot: not chosen, or fine.</summary>
+	internal Func<(bool Use, string? WhyNot)> FluentFinControlsChoice { get; set; } = () => (FluentFin.Mpv.MpvVideoSurfaceChoice.UsesFluentFinControls(settings, out var whyNot), whyNot);
+
+	/// <summary>This page's play was taken by the backend: item, track and position events are its own from here.</summary>
+	private bool _mpvPlayAccepted;
+
 	/// <summary>Shown in the video area while the video window is hidden.</summary>
 	[ObservableProperty]
 	public partial string MpvStatusText { get; set; } = "";
 
-	/// <summary>Set by the page: full screen on/off the way the other players do it (presenter, title bar, navigation pane).</summary>
+	/// <summary>
+	/// fluentfin-mpv: the start is under way (queue, backend, connect, play): the page shows its loading screen with
+	/// <see cref="MpvStatusText"/> as the step and a Cancel (docs/research/ux-review.md V10). False once the backend took the
+	/// play (mpv's window covers the area from then on), when the start fails, and when the page is left.
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(MpvLeaveText))]
+	public partial bool IsMpvStarting { get; set; }
+
+	/// <summary>What is being started, as the loading screen names it (empty when not known, e.g. a remote play).</summary>
+	[ObservableProperty]
+	public partial string MpvStartingTitle { get; set; } = "";
+
+	/// <summary>Under the title: "S1:E4 - Episode" for an episode, the year for a movie.</summary>
+	[ObservableProperty]
+	public partial string MpvStartingSubtitle { get; set; } = "";
+
+	/// <summary>The item the loading screen takes its backdrop from (null: none).</summary>
+	[ObservableProperty]
+	public partial BaseItemDto? MpvStartingItem { get; set; }
+
+	/// <summary>The loading screen's button: Cancel while starting, Go back once it has stopped (an error, a crash).</summary>
+	public string MpvLeaveText => IsMpvStarting ? "Cancel" : "Go back";
+
+	/// <summary>Set by the page: full screen on/off the way the other players do it (presenter, title bar; the pane is PlayerChrome's).</summary>
 	public Action<bool>? SetFullScreen { get; set; }
 
 	/// <summary>Set by the page: whether the window is full screen now (its presenter).</summary>
@@ -77,9 +144,18 @@ public partial class VideoPlayerViewModel
 
 		MediaPlayerType = MediaPlayerType.Mpv;
 		IsMpv = true;
+		ShowStarting(parameter);
 		// until this page's play is known, every active state belongs to the page before (null = any: the self-test only)
 		_mpvItems = parameter is MpvSelfTestRequest ? null : new HashSet<string>(StringComparer.Ordinal);
 		var generation = _mpvGeneration = mpvPlayback.Begin("a player page opened");
+		// fluentfin-mpv player controls: the same answer the video surface gives the backend at connect
+		var (useFluentFinControls, whyNot) = FluentFinControlsChoice();
+		UsesFluentFinControls = useFluentFinControls;
+		MpvControls = useFluentFinControls ? CreateMpvControls(generation) : null;
+		if (whyNot is not null)
+		{
+			ShowMpvNotice($"FluentFin's player controls are not available ({whyNot}); mpv's controls are used.");
+		}
 		logger.LogInformation("Player page opened with the mpv player (generation {Generation}): {Request}", generation, DescribeMpvParameter(parameter));
 		SubscribeMpv(generation);
 		var opened = Stopwatch.StartNew();
@@ -87,7 +163,10 @@ public partial class VideoPlayerViewModel
 		void OnStep(MpvStartStep next)
 		{
 			step = next;
-			MpvStatusText = StepText(next);
+			if (!_mpvLeaving)
+			{
+				MpvStatusText = StepText(next);
+			}
 		}
 
 		try
@@ -95,7 +174,7 @@ public partial class VideoPlayerViewModel
 			switch (parameter)
 			{
 				case MpvSelfTestRequest selfTest:
-					if (await mpvPlayback.PlayFileAsync(generation, selfTest, IsFullScreen?.Invoke() ?? false, onStep: OnStep))
+					if (await mpvPlayback.PlayFileAsync(generation, selfTest, IsFullScreen?.Invoke() ?? false, onStep: OnStep, controls: ControlsCommand()))
 					{
 						OnMpvPlayAccepted();
 					}
@@ -115,7 +194,7 @@ public partial class VideoPlayerViewModel
 			{
 				OnStep(MpvStartStep.LoadingQueue);
 				request = parameter is PlaybackRequest picked
-					? await LoadMpvQueue(generation, picked.Dto, picked.Selection)
+					? await LoadMpvQueue(generation, picked.Dto, picked.Selection, picked.FromBeginning)
 					: await LoadMpvQueue(generation, (BaseItemDto)parameter, null);
 			}
 
@@ -132,7 +211,7 @@ public partial class VideoPlayerViewModel
 			}
 
 			_mpvItems = new HashSet<string>(request.ItemIds.Select(NormalizeId), StringComparer.Ordinal);
-			if (await mpvPlayback.PlayAsync(generation, identity, request, IsFullScreen?.Invoke() ?? false, onStep: OnStep))
+			if (await mpvPlayback.PlayAsync(generation, identity, request, IsFullScreen?.Invoke() ?? false, onStep: OnStep, controls: ControlsCommand()))
 			{
 				logger.LogInformation("Sent play to the mpv backend {Ms} ms after the player page opened (generation {Generation})", opened.ElapsedMilliseconds, generation);
 				OnMpvPlayAccepted();
@@ -153,23 +232,64 @@ public partial class VideoPlayerViewModel
 	/// FluentFin's playlist, which asks for each season in turn. Playlist stays empty: the mpv page shows none of it (mpv's
 	/// OSC is the player UI).
 	/// </summary>
-	private async Task<BridgePlayRequest?> LoadMpvQueue(long generation, BaseItemDto item, PlaybackSelection? selection)
+	private async Task<BridgePlayRequest?> LoadMpvQueue(long generation, BaseItemDto item, PlaybackSelection? selection, bool fromBeginning = false)
 	{
 		var watch = Stopwatch.StartNew();
-		var request = await MpvQueue.BuildAsync(JellyfinClient, item, selection);
+		var request = await MpvQueue.BuildAsync(JellyfinClient, item, selection, fromBeginning);
 		logger.LogInformation("Queue for {Type} {ItemId} (generation {Generation}): {Count} item(s) from index {Index}, loaded in {Ms} ms",
 			item.Type, item.Id, generation, request?.ItemIds.Count ?? 0, request?.StartIndex, watch.ElapsedMilliseconds);
 		return request;
 	}
 
-	/// <summary>Shown in the video area while the page waits.</summary>
+	/// <summary>Shown in the video area while the page waits (plain words: docs/research/ux-review.md V10).</summary>
 	internal static string StepText(MpvStartStep step) => step switch
 	{
 		MpvStartStep.LoadingQueue => "Loading the queue…",
-		MpvStartStep.StartingBackend => "Starting mpv…",
-		MpvStartStep.Connecting => "Connecting…",
+		MpvStartStep.StartingBackend => "Starting the player…",
+		MpvStartStep.Connecting => "Connecting to the server…",
 		_ => "Starting playback…",
 	};
+
+	/// <summary>fluentfin-mpv: the loading screen names what the page was opened for, from what it already has (no request).</summary>
+	private void ShowStarting(object? parameter)
+	{
+		var item = parameter switch
+		{
+			PlaybackRequest picked => picked.Dto,
+			BaseItemDto dto => dto,
+			_ => null,
+		};
+
+		MpvStartingItem = item;
+		(MpvStartingTitle, MpvStartingSubtitle) = parameter switch
+		{
+			MpvSelfTestRequest selfTest => (selfTest.Title ?? "", ""),
+			_ when item is null => ("", ""),
+			_ when item.Type is BaseItemDto_Type.Season => (item.SeriesName ?? "", item.Name ?? ""),
+			_ when item.Type is BaseItemDto_Type.Series => (item.Name ?? "", ""),
+			_ => (item.GetCardTitle(), item.GetCardSubtitle()),
+		};
+		IsMpvStarting = true;
+	}
+
+	/// <summary>
+	/// fluentfin-mpv: the loading screen's Cancel (Go back once the start has stopped): leaves the page the way Back does, so
+	/// the page's leave stops whatever the start got to (a start whose page is gone goes no further: MpvPlaybackService).
+	/// With nothing to go back to, the start is stopped here and the page says so.
+	/// </summary>
+	[CommunityToolkit.Mvvm.Input.RelayCommand(CanExecute = nameof(IsMpvStartScreenVisible))]
+	private async Task LeaveMpv()
+	{
+		logger.LogInformation("Player page (generation {Generation}): {Button} pressed", _mpvGeneration, IsMpvStarting ? "Cancel" : "Go back");
+		if (GoBack?.Invoke() ?? navigationService.GoBack())
+		{
+			return;
+		}
+
+		await OnNavigatedFromMpv("the start was cancelled with nothing to go back to");
+		IsMpvStarting = false;
+		MpvStatusText = "Playback cancelled";
+	}
 
 	/// <summary>What the page shows when a start fails: which step, then why (never a token: redacted).</summary>
 	private static string StartFailureMessage(MpvStartStep? step, Exception ex)
@@ -190,7 +310,7 @@ public partial class VideoPlayerViewModel
 		MpvSelfTestRequest => "the self-test",
 		PlayQueueUpdate => "a SyncPlay queue (not played with mpv)",
 		BridgePlayRequest remote => $"a remote play of {remote.ItemIds.Count} item(s) from index {remote.StartIndex}",
-		PlaybackRequest picked => $"{picked.Dto.Type} {picked.Dto.Id:N} with streams picked on its page",
+		PlaybackRequest picked => $"{picked.Dto.Type} {picked.Dto.Id:N}{(picked.Selection is null ? "" : " with streams picked on its page")}{(picked.FromBeginning ? " from the beginning" : "")}",
 		BaseItemDto item => $"{item.Type} {item.Id:N}",
 		null => "nothing",
 		_ => parameter.GetType().Name,
@@ -220,8 +340,15 @@ public partial class VideoPlayerViewModel
 
 	private void OnMpvPlayAccepted()
 	{
+		_mpvPlayAccepted = true;
+
+		// fluentfin-mpv player controls: from here the controls tell the backend where their bar is (set_controls went
+		// before the play already, so mpv's own controls never showed)
+		_ = MpvControls?.SendControls();
+
 		// shown before mpv creates its window, so mpv's window gets the final size from the start
 		IsMpvVideoVisible = true;
+		IsMpvStarting = false;
 		MpvStatusText = "";
 	}
 
@@ -234,6 +361,12 @@ public partial class VideoPlayerViewModel
 
 		try
 		{
+			// fluentfin-mpv player controls: what they show (the state is passed on by OnMpvState, for this page's playback only)
+			if (MpvControls is { } controls && _mpvPlayAccepted && e.Name is Bridge.Events.Position or Bridge.Events.Item or Bridge.Events.Tracks)
+			{
+				controls.OnEvent(e);
+			}
+
 			switch (e.Name)
 			{
 				case Bridge.Events.State when e.DataAs<BridgeState>() is { } state:
@@ -249,6 +382,11 @@ public partial class VideoPlayerViewModel
 					if (error.Fatal || !_mpvSawPlayback)
 					{
 						ShowMpvMessage($"MPV: {_mpvLastError}", isError: true);
+					}
+					else
+					{
+						// the item plays on (a track or quality change that could not be applied): said briefly, nothing stops
+						ShowMpvNotice(string.IsNullOrEmpty(_mpvLastError) ? "MPV: something could not be done; playback goes on." : $"MPV: {_mpvLastError}");
 					}
 					break;
 
@@ -275,6 +413,8 @@ public partial class VideoPlayerViewModel
 
 			_mpvSawPlayback = true;
 			IsMpvVideoVisible = true;
+			IsMpvStarting = false;
+			MpvControls?.OnState(state);
 			MpvStatusText = "";
 
 			// once the item has started: a pause queued while opening goes from opening straight to paused
@@ -332,9 +472,20 @@ public partial class VideoPlayerViewModel
 	}
 
 	/// <summary>The page left or entered full screen on its own (Escape): tell the backend for its OSC button.</summary>
-	public Task OnFullScreenChanged(bool fullScreen) => IsMpv
-		? SendMpv(_mpvGeneration, Bridge.Commands.SetFullscreen, BridgeCommands.Fullscreen(fullScreen))
-		: Task.CompletedTask;
+	public Task OnFullScreenChanged(bool fullScreen)
+	{
+		if (!IsMpv)
+		{
+			return Task.CompletedTask;
+		}
+
+		if (MpvControls is { } controls)
+		{
+			controls.IsFullScreen = fullScreen;
+		}
+
+		return SendMpv(_mpvGeneration, Bridge.Commands.SetFullscreen, BridgeCommands.Fullscreen(fullScreen));
+	}
 
 	/// <summary>
 	/// The page is being left (called before <see cref="OnNavigatedFrom"/>, while this page is still the current one): a
@@ -350,6 +501,11 @@ public partial class VideoPlayerViewModel
 		// tools\ui-harness\selftest-gate.ps1 reads this line
 		logger.LogInformation("Leaving the player page in full screen: restoring the window, sending set_fullscreen false to the mpv backend");
 		SetFullScreen?.Invoke(false);
+		if (MpvControls is { } controls)
+		{
+			controls.IsFullScreen = false;
+		}
+
 		return SendMpv(_mpvGeneration, Bridge.Commands.SetFullscreen, BridgeCommands.Fullscreen(false));
 	}
 
@@ -415,6 +571,7 @@ public partial class VideoPlayerViewModel
 		_mpvLeaving = true;
 		_mpvDisposables.Dispose();
 		IsMpvVideoVisible = false;
+		IsMpvStarting = false;
 		await mpvPlayback.StopAsync(_mpvGeneration, reason);
 		return true;
 	}
@@ -434,17 +591,87 @@ public partial class VideoPlayerViewModel
 		}
 
 		logger.LogInformation("The player page (generation {Generation}) was removed from the window without being navigated from; leaving it (its mpv playback stops)", _mpvGeneration);
+		homeCache.MarkStale(); // fluentfin-mpv: as any leave (OnNavigatedFrom)
 		await LeaveFullScreen();
 		await OnNavigatedFromMpv("the player page was removed from the window without a navigation");
 		return true;
+	}
+
+	/// <summary>
+	/// fluentfin-mpv player controls: the controls for this page's playback. They send through the page's generation (a
+	/// newer page's backend is never driven by an old page's controls); full screen, Escape and back are the page's.
+	/// </summary>
+	private MpvControlsViewModel CreateMpvControls(long generation) => new((command, args) => SendMpv(generation, command, args))
+	{
+		// Settings > Playback: the same wheel and step as FluentFin's own players
+		WheelChangesVolume = settings.MouseWheelVolume,
+		Step = settings.VolumeStep,
+		IsFullScreen = IsFullScreen?.Invoke() ?? false,
+		SetFullScreen = fullScreen =>
+		{
+			SetFullScreen?.Invoke(fullScreen);
+			_ = OnFullScreenChanged(fullScreen);
+		},
+		GoBack = () =>
+		{
+			if (!(GoBack?.Invoke() ?? navigationService.GoBack()))
+			{
+				logger.LogInformation("Back from the player controls: nothing to go back to");
+			}
+		},
+	};
+
+	/// <summary><c>set_controls</c> for the start (before <c>play</c>): FluentFin's controls, nothing under them yet. Null: mpv's.</summary>
+	private System.Text.Json.Nodes.JsonObject? ControlsCommand() => MpvControls is null ? null : BridgeCommands.Controls(ui: true, 0);
+
+	/// <summary>fluentfin-mpv player controls: the in-process mpv ended by itself (the page heard it from the video).</summary>
+	public void OnMpvCoreLost()
+	{
+		if (_mpvLeaving)
+		{
+			return;
+		}
+
+		_mpvSawPlayback = false;
+		IsMpvVideoVisible = false;
+		ShowMpvMessage("mpv ended. It starts again with the next playback.", isError: true);
 	}
 
 	private static string NormalizeId(string id) => id.Replace("-", "", StringComparison.Ordinal).ToLowerInvariant();
 
 	private void ShowMpvMessage(string message, bool isError)
 	{
+		IsMpvStarting = false;
 		MpvStatusText = "";
 		MpvMessageIsError = isError;
 		MpvMessage = message;
+
+		// the message says what happened since: a notice about the playback before it is stale
+		DismissMpvNotice();
+	}
+
+	/// <summary>Shows <see cref="MpvNotice"/> and hides it again after <see cref="MpvNoticeDuration"/> unless a newer one took its place.</summary>
+	private void ShowMpvNotice(string notice)
+	{
+		var shown = Interlocked.Increment(ref _mpvNotices);
+		MpvNotice = notice;
+		_ = HideMpvNoticeLater(shown);
+	}
+
+	private async Task HideMpvNoticeLater(int shown)
+	{
+		// back on the page's thread (the events arrive on the UI thread)
+		await MpvNoticeDelay(MpvNoticeDuration);
+		if (Volatile.Read(ref _mpvNotices) == shown)
+		{
+			MpvNotice = null;
+		}
+	}
+
+	/// <summary>The notice's close button (or a message that replaces it): gone now, and the next notice shows even with the same text.</summary>
+	public void DismissMpvNotice()
+	{
+		Interlocked.Increment(ref _mpvNotices);
+		MpvNotice = null;
 	}
 }

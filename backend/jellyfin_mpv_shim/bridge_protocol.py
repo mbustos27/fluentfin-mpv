@@ -371,6 +371,27 @@ def get_object(args, key, required=True):
     return value
 
 
+#: ``set_controls``: who draws the player controls (BRIDGE.md section 4).
+CONTROLS = ("ui", "mpv")
+#: The most of the video's height the UI's bottom controls may claim.
+MAX_SUBTITLE_INSET = 0.5
+
+
+def validate_controls(args):
+    """``set_controls`` args -> ``(controls, subtitle_inset)``. The inset is
+    0 for ``"mpv"``, whatever was sent (the UI draws nothing then)."""
+    controls = get_str(args, "controls")
+    if controls not in CONTROLS:
+        raise _bad("controls must be one of %s" % ", ".join(CONTROLS))
+    inset = 0.0
+    if args.get("subtitleInset") is not None:
+        inset = float(get_number(args, "subtitleInset"))
+        if not 0.0 <= inset <= MAX_SUBTITLE_INSET:
+            raise _bad("subtitleInset must be between 0 and %g"
+                       % MAX_SUBTITLE_INSET)
+    return controls, (inset if controls == "ui" else 0.0)
+
+
 def validate_play(args):
     """``play`` args, normalised. Mirrors the server's PlayNow command."""
     item_ids = args.get("itemIds", _MISSING)
@@ -402,15 +423,30 @@ def validate_play(args):
     }
 
 
+#: fluentfin-mpv player controls: an ``attached`` window's pipe name, without
+#: ``\\.\pipe\`` (BRIDGE.md section 4).
+_PIPE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
+
+
 def validate_window(window):
-    """A ``connect`` window, normalised to ``{"mode", "hwnd"}``."""
+    """A ``connect`` window, normalised to ``{"mode", "hwnd"}`` (plus
+    ``"ipc"`` for ``attached``)."""
     if not isinstance(window, dict):
         raise _bad("window must be an object")
     mode = window.get("mode")
     if mode == "standalone":
         return {"mode": "standalone", "hwnd": None}
+    if mode == "attached":
+        # fluentfin-mpv player controls: the UI's own mpv, on this pipe.
+        ipc = window.get("ipc")
+        if not isinstance(ipc, str) or not _PIPE_NAME.fullmatch(ipc):
+            raise _bad("window.ipc must be a pipe name (1 to 100 of A-Z a-z "
+                       "0-9 . _ -, the first a letter or digit) for "
+                       "attached mode")
+        return {"mode": "attached", "hwnd": None, "ipc": ipc}
     if mode != "embedded":
-        raise _bad('window.mode must be "embedded" or "standalone"')
+        raise _bad('window.mode must be "embedded", "attached" or '
+                   '"standalone"')
     hwnd = normalize_hwnd(window.get("hwnd"))
     if hwnd is None:
         raise _bad("window.hwnd must be an integer with 0 < hwnd <= "
@@ -723,12 +759,19 @@ def _track(stream, audio):
     title = stream.get("DisplayTitle") or stream.get("Title")
     if title:
         out["title"] = title
+    # fluentfin-mpv (player controls): the stream's own title tag alone, and
+    # the hearing-impaired flag, for labels the UI builds itself (BRIDGE.md
+    # section 5, Track).
+    if isinstance(stream.get("Title"), str) and stream["Title"].strip():
+        out["streamTitle"] = stream["Title"]
     if stream.get("Codec"):
         out["codec"] = stream["Codec"]
     if audio and stream.get("Channels") is not None:
         out["channels"] = stream["Channels"]
     if not audio and "IsForced" in stream:
         out["isForced"] = bool(stream.get("IsForced"))
+    if "IsHearingImpaired" in stream:
+        out["isHearingImpaired"] = bool(stream.get("IsHearingImpaired"))
     return out
 
 

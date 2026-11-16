@@ -127,7 +127,7 @@ Set for the run with `settings.apply_cli_override`, so none of it reaches
 
 | Off | How |
 |---|---|
-| library browser, tray, playback HUD | `enable_gui=False`; `mpvtk_browser` is never imported. The OSC is mpv's own (`osc_style` resolves `mpvtk` -> `mpv`) |
+| library browser, tray, playback HUD | `enable_gui=False`; `mpvtk_browser` is never imported. `osc_style` resolves `mpvtk` -> `mpv`, and the bridge loads the shim's OSC fork with FluentFin's look (section 4a) |
 | update check | `check_updates=False` (it also runs inside a playback start, under the player lock) |
 | idle quit | `mpv_idle_quit=False`: mpv stays up between plays. A re-created mpv costs ~240 ms to the first frame against ~42 ms, and an embedded one would take the owner's video surface with it |
 | Discord presence, MPRIS | `discord_presence=False`, `mpris=False` |
@@ -350,6 +350,70 @@ Measured on mpv 0.41/Windows: with `--wid`, writing `fullscreen`,
 
 **Standalone**: today's behaviour -- mpv's own top-level window, the shim's
 fullscreen and geometry handling, and `set_fullscreen` toggles mpv.
+
+**Attached** (`{"mode": "attached", "ipc": "<pipe>"}`, FluentFin MPV's
+player controls, docs/research/player-controls.md in the repository root):
+mpv runs inside FluentFin (libmpv, composition mode, no window) and answers
+JSON IPC on that pipe. `ShimRuntime.attached_overrides` makes the run the
+shim's external backend with `mpv_ext_start=False` on that pipe (and
+`mpv_ext_no_ovr` off), for the run only, plus the embedded overrides; it
+connects and never starts or quits mpv (`terminate()` only closes the pipe,
+idle quit is off, `end_mpv_process` finds no process of its own).
+`window_embed.configure(None, attach=True)` makes the window the UI's in
+every runtime path (`active()`), and `apply_to_options` adds nothing: no
+construction option reaches an mpv the shim did not start (python-mpv-jsonipc
+drops them when it only connects). So FluentFin creates its mpv with what
+matters (`vo`, `gpu-context`, `d3d11-output-mode=composition`, `idle`,
+`force-window`, `osc=no`, no input bindings, `input-ipc-server`, this config
+dir for `mpv.conf`); runtime writes (title, hwdec per file, tracks, the OSC
+script it loads) work as on any external mpv. Not there in attached mode:
+the scripts the shim passes on the command line (thumbfast, mouse; FluentFin
+draws its own controls) and `tls_*` client certificates. Measured with
+`tools\ui-harness\composition-spike` (scenario `bridge`) and
+`tools\ui-harness\fluentfin-controls`. `connect.prewarm` changes nothing
+here (`defer_surface` is for an embedded window only): the surface is the
+UI's own mpv, and FluentFin sends the attached `connect` at the first play
+anyway (it only starts the backend ahead).
+
+## 4a. The on-screen controller
+
+`fluentfin_osc` (FluentFin MPV's own module), switched on by
+`start_player` before the player is imported, like `window_embed`:
+
+- **The OSC is always the fork**, `trickplay-osc.lua`, whatever the mpv
+  version (`_load_classic_osc`). The winget mpv-CI build on the development
+  machine reports `v0.41.0-dev`, which `osc_preview_api_works` reads as
+  0.41, and its stock OSC has no `user-data/osc/draw-preview` (none in the
+  binary): the stock OSC drew no trickplay preview at all. The fork asks
+  `thumbfast.lua` itself, on any mpv.
+- **FluentFin's patches live in the fork**, each between `-- BEGIN patch
+  FluentFin MPV` and `-- END patch`, each behind an option whose default is
+  upstream's look, so a standalone shim is unchanged. `script_opts` turns
+  them on through `script-opts` (appended after `osc-idlescreen`, by
+  `mpv_options.osc_script_opts`): no cache readout, no inert playlist
+  buttons (mpv's playlist holds one item; the queue is the shim's), track
+  names on the track buttons instead of "1/2" (language, or a title that
+  names it; never a sidecar's file name, which can carry `ApiKey=`),
+  subtitles moved above the bar while it is shown (`sub-pos`, put back on
+  hide, and a value the shim writes meanwhile is the one put back), the
+  bar in FluentFin's `PlayerControlsScrimBrush`, a thin seek rail with the
+  Windows accent (`AccentPalette`, Light2, as WinUI fills a slider), the
+  OSC scaled by Windows' text size, and the wheel as volume +-5 held to
+  0..100 that never seeks (non-forced bindings: the user's `input.conf`
+  wins). A user `script-opts/osc.conf` in the config folder turns all of it
+  off, since `script-opts` would override every line of it.
+- `apply_to_options` sets `osd-font` to Segoe UI Variable Text unless the
+  user's `mpv.conf` sets one (for the external backend a construction
+  option is a command-line argument, which `mpv.conf` cannot override).
+- The title (`force-media-title`, all modes) is `media_title`:
+  "Series — S6E4 · Episode", without the episode's name when it only
+  repeats the series (a library that prefers embedded titles stores the
+  show there), and a film's "Name (Year)". A sidecar is `sub-add`ed with
+  its stream's title and language (`sidecar_labels`), which mpv cannot know.
+
+Tests: `test_fluentfin_osc` (pure), `test_fluentfin_osc_player` (imports
+the player: off-screen), `test_fluentfin_osc_lua` (the raise, the wheel and
+the labels against a real mpv, `--vo=null`, no window).
 
 ## 5. Commands and events
 

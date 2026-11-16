@@ -16,7 +16,16 @@
     xmlns:media="using:CommunityToolkit.WinUI.Media"
     xmlns:root="using:FluentFin"
     xmlns:ui="using:CommunityToolkit.WinUI"
+    CornerRadius="10"
+    IsTabStop="True"
+    UseSystemFocusVisuals="True"
     mc:Ignorable="d">
+    <!--
+        fluentfin-mpv: the card is a keyboard stop of its own (Enter/Space open it, arrows move along its row), shows its buttons
+        while it or one of them has focus as it does on hover, and Narrator reads it as one button named after the item
+        (BaseItemDtoCardAutomationPeer; docs/research/ux-review.md A1). Hover and focus are handled in code, not by the
+        PointerEntered/PointerExited behaviours it had, so a pointer leaving cannot hide a button that has keyboard focus.
+    -->
     <UserControl.Resources>
         <SolidColorBrush
             x:Key="Black65O"
@@ -69,33 +78,9 @@
             x:Name="ImageCanvas"
             Background="Transparent"
             CornerRadius="10 10 0 0"
+            PointerEntered="ImageCanvas_PointerEntered"
+            PointerExited="ImageCanvas_PointerExited"
             Tapped="ImageCanvas_Tapped">
-            <i:Interaction.Behaviors>
-                <i:EventTriggerBehavior EventName="PointerEntered">
-                    <i:ChangePropertyAction
-                        PropertyName="Visibility"
-                        TargetObject="{Binding ElementName=PlayButton}"
-                        Value="Visible" />
-                    <i:ChangePropertyAction
-                        PropertyName="Visibility"
-                        TargetObject="{Binding ElementName=ActionButtons}"
-                        Value="Visible" />
-                    <cb:StartAnimationAction Animation="{Binding ElementName=Select}" />
-                    <cb:StartAnimationAction Animation="{Binding ElementName=BlurAnimation}" />
-                </i:EventTriggerBehavior>
-                <i:EventTriggerBehavior EventName="PointerExited">
-                    <i:ChangePropertyAction
-                        PropertyName="Visibility"
-                        TargetObject="{Binding ElementName=PlayButton}"
-                        Value="Collapsed" />
-                    <i:ChangePropertyAction
-                        PropertyName="Visibility"
-                        TargetObject="{Binding ElementName=ActionButtons}"
-                        Value="Collapsed" />
-                    <cb:StartAnimationAction Animation="{Binding ElementName=UnSelect}" />
-                    <cb:StartAnimationAction Animation="{Binding ElementName=UnBlurAnimation}" />
-                </i:EventTriggerBehavior>
-            </i:Interaction.Behaviors>
 
             <Grid ui:VisualExtensions.NormalizedCenterPoint="0.5, 0.5">
                 <controls:LazyLoadedImage
@@ -166,12 +151,14 @@
                     VerticalAlignment="Center"
                     ui:VisualExtensions.NormalizedCenterPoint="0.5,0.5"
                     ui:VisualExtensions.Scale="0.8"
+                    AutomationProperties.Name="Play"
                     Background="{StaticResource Black65O}"
                     BorderThickness="0"
                     Command="{x:Bind root:App.Commands.PlayDtoCommand}"
                     CommandParameter="{x:Bind Model.Dto, Mode=OneWay}"
                     CornerRadius="25"
                     Style="{ThemeResource BareButtonStyle}"
+                    ToolTipService.ToolTip="Play"
                     Visibility="Collapsed">
 
                     <animations:Implicit.ShowAnimations>
@@ -260,6 +247,7 @@
                         x:Name="MarkWatchedButton"
                         Width="40"
                         Height="40"
+                        AutomationProperties.Name="Watched"
                         Click="MarkWatchedButton_Clicked"
                         Content="{ui:FontIcon Glyph=&#xE73E;,
                                               FontSize=15}"
@@ -273,6 +261,7 @@
                         x:Name="AddToFavoriteButton"
                         Width="40"
                         Height="40"
+                        AutomationProperties.Name="Favorite"
                         Click="AddToFavoriteButton_Clicked"
                         Content="{ui:FontIcon Glyph=&#xEB52;,
                                               FontSize=15}"
@@ -282,20 +271,22 @@
                         Style="{ThemeResource IconToggleButtonStyle}"
                         ToolTipService.ToolTip="Add to favorites">
                         <ToggleButton.Resources>
-                            <SolidColorBrush x:Key="SystemAccentColor" Color="Red" />
+                            <StaticResource x:Key="SystemAccentColor" ResourceKey="FavoriteCheckedBrush" />
                         </ToggleButton.Resources>
                     </ToggleButton>
 
                     <Button
+                        x:Name="MoreButton"
                         Width="40"
                         Height="40"
+                        AutomationProperties.Name="More options"
                         Content="{ui:FontIcon Glyph=&#xE712;,
                                               FontSize=15}"
                         Background="{StaticResource Black65O}"
                         CornerRadius="20"
                         Flyout="{x:Bind Model.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}"
                         Style="{ThemeResource IconButtonStyle}"
-                        ToolTipService.ToolTip="More" />
+                        ToolTipService.ToolTip="More options" />
 
                 </StackPanel>
 

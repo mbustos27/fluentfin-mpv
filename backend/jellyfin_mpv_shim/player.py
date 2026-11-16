@@ -1595,7 +1595,13 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         rather than a documented one, so the failure it could produce -- an
         OSC style with no OSC at all -- is caught rather than shipped.
         """
-        if osc_preview_api_works(getattr(self._player, "mpv_version", "")):
+        # FluentFin MPV: the bridge always takes the fork, which carries its
+        # patches and draws previews on any mpv (a 0.41.0-dev reads as 0.41
+        # and has no Preview API). See fluentfin_osc.
+        from . import fluentfin_osc
+
+        if (not fluentfin_osc.active() and osc_preview_api_works(
+                getattr(self._player, "mpv_version", ""))):
             try:
                 self._player.command("load-script", BUILTIN_OSC)
                 log.info("Using mpv's own OSC; previews go through its "
@@ -1604,6 +1610,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
             except Exception:
                 log.warning("mpv refused %s; falling back to the bundled OSC.",
                             BUILTIN_OSC, exc_info=True)
+        elif fluentfin_osc.active():
+            log.info("Bridge mode: using the bundled OSC with FluentFin's "
+                     "look.")
         else:
             log.info("This mpv has no OSC Preview API (needs 0.41+); using "
                      "the bundled OSC so seek previews still work.")
@@ -5067,8 +5076,13 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
 
         if settings.log_decisions:
             log.info("Load External Subtitle: {0}".format(url))
+        # FluentFin MPV: with the stream's title and language, which mpv
+        # cannot know (fluentfin_osc.sidecar_labels); the OSC shows them.
+        from .fluentfin_osc import sidecar_labels
+
+        title, lang = sidecar_labels(video, sub_id)
         try:
-            self._player.command_async("sub-add", url, "auto",
+            self._player.command_async("sub-add", url, "auto", title, lang,
                                        callback=landed)
         except Exception:
             self._pending_subs.pop(sub_id, None)

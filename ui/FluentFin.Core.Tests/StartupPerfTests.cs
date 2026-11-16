@@ -44,7 +44,7 @@ public sealed class StartupPerfTests : IAsyncLifetime
 		});
 		var settings = new Mock<ISettings>();
 		settings.SetupGet(x => x.MediaPlayer).Returns(MediaPlayerType.WindowsMediaPlayer);
-		var client = new JellyfinClient(new CoreListLogger<JellyfinClient>(), Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(), profiles.Object, settings.Object);
+		var client = new JellyfinClient(new CoreListLogger<JellyfinClient>(), Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(), profiles.Object, settings.Object, TestHomeCache.Unused());
 
 		var signIn = client.Initialize(_server.BaseUrl, new AuthenticationResult
 		{
@@ -56,6 +56,9 @@ public sealed class StartupPerfTests : IAsyncLifetime
 
 		Assert.DoesNotContain(_server.ApiRequests, x => x.Path.Equals("/Sessions/Capabilities/Full", StringComparison.OrdinalIgnoreCase));
 		Assert.False(signIn.IsCompleted);
+		// the plugins and views do not wait for the probe (sign-in asks them together with the capabilities, home-perf)
+		Assert.Contains(_server.ApiRequests, x => x.Path.Equals("/Plugins", StringComparison.OrdinalIgnoreCase));
+		Assert.Contains(_server.ApiRequests, x => x.Path.Equals("/UserViews", StringComparison.OrdinalIgnoreCase));
 
 		prepared.SetResult();
 		await signIn.WaitAsync(TimeSpan.FromSeconds(10));
@@ -74,7 +77,7 @@ public sealed class StartupPerfTests : IAsyncLifetime
 		var settings = new Mock<ISettings>();
 		settings.SetupGet(x => x.MediaPlayer).Returns(MediaPlayerType.WindowsMediaPlayer);
 		var log = new CoreListLogger<JellyfinClient>();
-		var client = new JellyfinClient(log, Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(), profiles.Object, settings.Object);
+		var client = new JellyfinClient(log, Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(), profiles.Object, settings.Object, TestHomeCache.Unused());
 
 		await client.Initialize(_server.BaseUrl, new AuthenticationResult
 		{

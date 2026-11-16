@@ -396,12 +396,20 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 	public async Task PrewarmAsync(BridgeIdentity identity, CancellationToken cancellationToken = default)
 	{
 		await StartAsync(dev: false, cancellationToken);
+		if (!surface.CanConnectAhead)
+		{
+			// attached (FluentFin's player controls): the connect's window is FluentFin's own mpv, which asking for it makes
+			logger.LogInformation("Pre-warm: the mpv backend is started; it connects at the first play, which makes FluentFin's own mpv");
+			return;
+		}
+
 		await ConnectCoreAsync(identity, prewarm: true, cancellationToken);
 	}
 
 	private async Task<string?> ConnectCoreAsync(BridgeIdentity? identity, bool prewarm, CancellationToken cancellationToken)
 	{
-		var window = BridgeWindow.Embedded(await surface.GetHandleAsync());
+		// fluentfin-mpv player controls: embedded, or attached to FluentFin's own mpv (the surface decides)
+		var window = await surface.GetWindowAsync();
 
 		await _lifecycle.WaitAsync(cancellationToken);
 		try
@@ -422,7 +430,7 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 				return session.MpvVersion;
 			}
 
-			logger.LogInformation("Connecting the mpv backend: {Identity}, window {Mode} {Hwnd}{Prewarm}", identity?.ToString() ?? "(dev, no server)", window.Mode, window.Hwnd,
+			logger.LogInformation("Connecting the mpv backend: {Identity}, window {Mode} {Hwnd}{Prewarm}", identity?.ToString() ?? "(dev, no server)", window.Mode, window.Hwnd?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? window.Ipc,
 				prewarm ? ", pre-warmed (no video window until the first play)" : "");
 
 			JsonNode? result;

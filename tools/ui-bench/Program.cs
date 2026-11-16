@@ -1,6 +1,10 @@
-﻿// Perf scout harness for FluentFin (pristine upstream copy). Runs the REAL FluentFin.Core code (JellyfinClient + view models)
-// against a fake, local, credential-free Jellyfin-shaped HTTP server and counts/timestamps the requests each page makes.
-// No real Jellyfin server is contacted. Nothing in the repo is touched.
+﻿// Perf harness for FluentFin. Runs the REAL FluentFin.Core code (JellyfinClient + view models) against a fake, local,
+// credential-free Jellyfin-shaped HTTP server and counts/timestamps the requests each page makes. Builds against any Core
+// (upstream FluentFin, this fork, a copy of an older commit): Core types are made by CoreFactory, whatever their
+// constructors take. No real Jellyfin server is contacted.
+//   (no argument)  every page once at 0 and 50 ms per request (the perf scout's table)
+//   home ...       the home page from sign-in to its last row through a latency proxy (HomeBench.cs)
+//   unreachable    how long a sign-in to a dead server blocks
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reactive.Linq;
@@ -21,6 +25,12 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Kiota.Serialization.Json;
 using Moq;
+
+if (args.Length > 0 && args[0] == "home")
+{
+	await HomeBench.RunAsync(args[1..]);
+	return;
+}
 
 ReactiveUI.Builder.RxAppBuilder.CreateReactiveUIBuilder().BuildApp();
 
@@ -47,8 +57,14 @@ Console.WriteLine($"fake server at {baseUrl}");
 var socket = new Subject<IOutboundWebSocketMessage>();
 var deviceProfiles = new Mock<IDeviceProfileFactory>();
 deviceProfiles.Setup(x => x.GetDeviceProfile()).Returns(new DeviceProfile());
-var client = new JellyfinClient(NullLogger<JellyfinClient>.Instance, socket, Mock.Of<IJumpListService>(), deviceProfiles.Object);
-var commands = new GlobalCommands(Mock.Of<INavigationServiceCore>(), client, Mock.Of<INavigationViewServiceCore>());
+// a data folder of the bench's own for a Core whose home page keeps its last state there (HomeCache): a new one each time,
+// so every home measurement is a first start; never the user's folder (KnownFolders' default). A Core whose client is
+// told of sign-ins (HomeCache) gets one too; other Cores ignore it.
+var scratchData = Path.Combine(Path.GetTempPath(), $"bench-pages-{Environment.ProcessId}");
+KnownFolders ScratchData() => new(Path.Combine(scratchData, Guid.NewGuid().ToString("N")));
+
+var client = CoreFactory.Make<JellyfinClient>(socket, deviceProfiles.Object, ScratchData());
+var commands = CoreFactory.Make<GlobalCommands>(client);
 
 async Task<(double ms, List<string> reqs)> Measure(string label, int delayMs, Func<Task> action)
 {
@@ -81,12 +97,34 @@ foreach (var d in new[] { 0, 50 })
 	if (d == 50) PrintRequests(r);
 }
 
+// `library [--home-first] [--gc]`: the library grid alone, 7 times at 0 ms, optionally after one home visit, optionally
+// after a full GC each time (to tell an effect of what ran before it from a change in the library path itself)
+if (args.Length > 0 && args[0] == "library")
+{
+	if (args.Contains("--home-first"))
+	{
+		await CoreFactory.Make<HomeViewModel>(client, Observable.Never<IOutboundWebSocketMessage>(), commands, ScratchData()).OnNavigatedTo(null!);
+	}
+	for (var i = 0; i < 7; i++)
+	{
+		if (args.Contains("--gc"))
+		{
+			GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+			GC.WaitForPendingFinalizers();
+		}
+		await Measure($"LibraryViewModel.OnNavigatedTo #{i + 1}", 0, () => CoreFactory.Make<LibraryViewModel>(client).OnNavigatedTo(fake.MovieLibrary));
+	}
+	await fake.StopAsync();
+	if (Directory.Exists(scratchData)) Directory.Delete(scratchData, recursive: true);
+	return;
+}
+
 // --- home page
 foreach (var d in new[] { 0, 50 })
 {
 	var (_, r) = await Measure("HomeViewModel.OnNavigatedTo (6 libraries)", d, async () =>
 	{
-		var vm = new HomeViewModel(client, Observable.Never<IOutboundWebSocketMessage>(), commands);
+		var vm = CoreFactory.Make<HomeViewModel>(client, Observable.Never<IOutboundWebSocketMessage>(), commands, ScratchData());
 		await vm.OnNavigatedTo(null!);
 	});
 	if (d == 50) PrintRequests(r);
@@ -103,7 +141,7 @@ foreach (var d in new[] { 0, 50 })
 {
 	var (_, r) = await Measure("LibraryViewModel.OnNavigatedTo (5000 movies)", d, async () =>
 	{
-		var vm = new LibraryViewModel(client);
+		var vm = CoreFactory.Make<LibraryViewModel>(client);
 		await vm.OnNavigatedTo(fake.MovieLibrary);
 		if (vm.Items.Count != 100) throw new Exception($"page size {vm.Items.Count}");
 	});
@@ -113,10 +151,10 @@ foreach (var d in new[] { 0, 50 })
 // --- series / season / episode / movie pages
 foreach (var d in new[] { 0, 50 })
 {
-	var (_, r1) = await Measure("SeriesViewModel.OnNavigatedTo", d, () => new SeriesViewModel(client).OnNavigatedTo(fake.Series));
-	var (_, r2) = await Measure("SeasonViewModel.OnNavigatedTo", d, () => new SeasonViewModel(client).OnNavigatedTo(fake.Season1));
-	var (_, r3) = await Measure("EpisodeViewModel.OnNavigatedTo", d, () => new EpisodeViewModel(client, commands).OnNavigatedTo(fake.Episode1));
-	var (_, r4) = await Measure("MovieViewModel.OnNavigatedTo", d, () => new MovieViewModel(client, commands).OnNavigatedTo(fake.Movie1));
+	var (_, r1) = await Measure("SeriesViewModel.OnNavigatedTo", d, () => CoreFactory.Make<SeriesViewModel>(client).OnNavigatedTo(fake.Series));
+	var (_, r2) = await Measure("SeasonViewModel.OnNavigatedTo", d, () => CoreFactory.Make<SeasonViewModel>(client).OnNavigatedTo(fake.Season1));
+	var (_, r3) = await Measure("EpisodeViewModel.OnNavigatedTo", d, () => CoreFactory.Make<EpisodeViewModel>(client, commands).OnNavigatedTo(fake.Episode1));
+	var (_, r4) = await Measure("MovieViewModel.OnNavigatedTo", d, () => CoreFactory.Make<MovieViewModel>(client, commands).OnNavigatedTo(fake.Movie1));
 	if (d == 50) { Console.WriteLine("   series:"); PrintRequests(r1); Console.WriteLine("   movie:"); PrintRequests(r4); }
 }
 
@@ -146,7 +184,7 @@ foreach (var d in new[] { 0, 50 })
 {
 	var (_, r) = await Measure("DashboardViewModel.OnNavigatedTo", d, async () =>
 	{
-		var vm = new DashboardViewModel(client, Mock.Of<ITitleBarViewModel>(), Mock.Of<IUserInput<string>>(), Mock.Of<IContentDialogServiceCore>());
+		var vm = CoreFactory.Make<DashboardViewModel>(client);
 		await vm.OnNavigatedTo(null!);
 		await vm.OnNavigatedFrom();
 	});
@@ -185,12 +223,12 @@ foreach (var withOverview in new[] { true, false })
 	var vmMs = Median(() =>
 	{
 		var sw = Stopwatch.StartNew();
-		var vm = new LibraryViewModel(mock.Object);
+		var vm = CoreFactory.Make<LibraryViewModel>(mock.Object);
 		vm.OnNavigatedTo(new BaseItemDto()).GetAwaiter().GetResult();
 		return sw.Elapsed.TotalMilliseconds;
 	});
 	Console.WriteLine($"  LibraryViewModel load of 5000 parsed items (FromDto+cache+sort+page, UI thread today): {vmMs,7:N1} ms");
-	var vm2 = new LibraryViewModel(mock.Object);
+	var vm2 = CoreFactory.Make<LibraryViewModel>(mock.Object);
 	await vm2.OnNavigatedTo(new BaseItemDto());
 	var sortMs = Median(() => { var sw = Stopwatch.StartNew(); vm2.UpdateSortBy(vm2.SortBy == ItemSortBy.Name ? ItemSortBy.CommunityRating : ItemSortBy.Name); return sw.Elapsed.TotalMilliseconds; });
 	Console.WriteLine($"  LibraryViewModel re-sort of 5000 items (UI thread): {sortMs,7:N1} ms");
@@ -209,6 +247,7 @@ foreach (var withOverview in new[] { true, false })
 }
 
 await fake.StopAsync();
+if (Directory.Exists(scratchData)) Directory.Delete(scratchData, recursive: true);
 return;
 
 sealed class FakeServer(int libraries, int libraryItems, int seasons, int episodesPerSeason)
@@ -318,8 +357,18 @@ sealed class FakeServer(int libraries, int libraryItems, int seasons, int episod
 		builder.Logging.ClearProviders();
 		builder.WebHost.UseUrls("http://127.0.0.1:0");
 		_app = builder.Build();
+		// the session websocket is accepted and left open: answered 404 it reconnects now and then, landing in other rows
+		_app.UseWebSockets();
+		_app.Map("/socket", async (HttpContext c) =>
+		{
+			if (!c.WebSockets.IsWebSocketRequest) { c.Response.StatusCode = 400; return; }
+			using var ws = await c.WebSockets.AcceptWebSocketAsync();
+			var buffer = new byte[4096];
+			try { while (ws.State == System.Net.WebSockets.WebSocketState.Open) await ws.ReceiveAsync(buffer, c.RequestAborted); } catch { }
+		});
 		_app.Use(async (ctx, next) =>
 		{
+			if (ctx.Request.Path == "/socket") { await next(); return; }
 			var q = ctx.Request.Query;
 			var shape = $"{ctx.Request.Method} {Normalize(ctx.Request.Path)}" + (q.ContainsKey("fields") ? $" fields={q["fields"]}" : "") + (q.ContainsKey("limit") ? $" limit={q["limit"]}" : "");
 			_log.Enqueue(shape);

@@ -12,7 +12,8 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 									IObserver<IOutboundWebSocketMessage> socketMessageSender,
 									IJumpListService jumpListService,
 									IDeviceProfileFactory deviceProfileFactory,
-									Settings.ISettings settings) : IJellyfinClient
+									Settings.ISettings settings,
+									HomeCache homeCache) : IJellyfinClient // fluentfin-mpv: homeCache
 {
 	private Jellyfin.Sdk.JellyfinApiClient _jellyfinApiClient = null!;
 	private string _token = "";
@@ -38,21 +39,30 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		UserId = authResult.User.Id.Value;
 		BaseUrl = baseUrl;
 
+		// fluentfin-mpv: a sign-in makes the home page in memory stale, and tells it which saved login this user's page is for
+		homeCache.SignedIn(baseUrl, UserId, authResult.ServerId, authResult.User.Name);
+
 		_token = authResult.AccessToken;
 		_deviceId = new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
 		_settings = new Jellyfin.Sdk.JellyfinSdkSettings();
-		SessionInfo.ClientName = "FluentFin";
+		SessionInfo.ClientName = "FluentFin MPV";
 		SessionInfo.ClientVersion = Assembly.GetEntryAssembly()!.GetName().Version!.ToString()!;
 		SessionInfo.DeviceName = Environment.MachineName;
 		SessionInfo.DeviceId = _deviceId;
 		_settings.Initialize(SessionInfo.ClientName, SessionInfo.ClientVersion, SessionInfo.DeviceName, SessionInfo.DeviceId);
 		_settings.SetAccessToken(_token);
 		_settings.SetServerUrl(baseUrl);
+		ForgetUserViews(); // fluentfin-mpv: another server or user (GetUserViews)
 		_jellyfinApiClient = new Jellyfin.Sdk.JellyfinApiClient(new Jellyfin.Sdk.JellyfinRequestAdapter(new Jellyfin.Sdk.JellyfinAuthenticationProvider(_settings), _settings));
 
-		// fluentfin-mpv (startup-perf, O13): the profile the capabilities carry is ready first (was null for the Windows player)
+		// fluentfin-mpv: capabilities, plugins and views do not depend on each other: asked together they cost one round
+		// trip instead of three before the window and Home show. The views stay in GetUserViews, so Home does not ask again.
+		// (startup-perf, O13) The capabilities carry the device profile, made ready first (the Windows player's probe; it
+		// was null for that player): the plugins and views are asked meanwhile, and with any other player nothing waits.
+		var plugins = GetPlugins();
+		var views = GetUserViews();
 		await PrepareDeviceProfile();
-		await _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto
+		var capabilities = _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto
 		{
 			SupportsMediaControl = true,
 			PlayableMediaTypes = [MediaType.Video],
@@ -61,15 +71,10 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 			SupportedCommands = SupportedCommands(settings.MediaPlayer),
 		});
 
-		await GetPlugins();
+		await Task.WhenAll(capabilities, plugins, views);
 		StartWebSocketConnection();
 
-		var libaries = new List<BaseItemDto>();
-		await foreach (var item in GetUserLibraries())
-		{
-			libaries.Add(item);
-		}
-		await jumpListService.Initialize(libaries);
+		await jumpListService.Initialize(await views);
 	}
 
 	/// <summary>
@@ -129,6 +134,9 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 
 	public async Task Logout()
 	{
+		// fluentfin-mpv: the user's saved home page (their watch history) does not outlive the session; first, as it needs no server
+		await homeCache.Forget(BaseUrl, UserId);
+
 		try
 		{
 			await _jellyfinApiClient.Sessions.Logout.PostAsync();

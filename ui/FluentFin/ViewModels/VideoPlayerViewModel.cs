@@ -30,7 +30,8 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 							INavigationService navigationService,
 							ISettings settings,
 							ITaskBarProgress taskBarProgress,
-							Core.Mpv.MpvPlaybackService mpvPlayback) : ObservableObject, INavigationAware
+							Core.Mpv.MpvPlaybackService mpvPlayback,
+							HomeCache homeCache) : ObservableObject, INavigationAware // fluentfin-mpv: homeCache
 {
 	private readonly CompositeDisposable _disposables = [];
 	private readonly PlaybackProgressInfo _playbackProgressInfo = new();
@@ -38,6 +39,15 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 	private PlayQueueUpdate? _playQueueUpdate;
 	private TimeSpan _duration;
 	private SendCommand? _previousCommand;
+
+	// fluentfin-mpv: the item an item page's play asked for, started first (see OnNavigatedTo)
+	private PlaylistItem? _requestedItem;
+
+	/// <summary>
+	/// fluentfin-mpv: whether the player listens to the keyboard (a system-wide hook through DeftSharp). Off in tests, which
+	/// must not hook the keyboard of the PC they run on.
+	/// </summary>
+	internal bool ListenToKeyboard { get; init; } = true;
 
 
 	public TrickplayViewModel TrickplayViewModel { get; } = trickplayViewModel;
@@ -67,6 +77,10 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 
 	public async Task OnNavigatedFrom()
 	{
+		// fluentfin-mpv: what was watched changes Continue Watching and Next Up; the page Back goes to has already read the
+		// saved home page by now (a refresh it started is saved stale), the visit after it asks the server again
+		homeCache.MarkStale();
+
 		// the mpv backend reports the stop itself, FluentFin's own reporting must not run as well
 		if (await OnNavigatedFromMpv())
 		{
@@ -92,6 +106,10 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 
 	public async Task OnNavigatedTo(object parameter)
 	{
+		// fluentfin-mpv: Back to Home after this asks the server (Continue Watching, Next Up), websocket or not: Back reads
+		// the saved home page before this page hears it was left
+		homeCache.MarkStale();
+
 		MediaPlayerType = settings.MediaPlayer;
 
 		// with the mpv player the backend does PlaybackInfo, the stream and every report (docs/BRIDGE.md §6)
@@ -111,6 +129,8 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 			if (Playlist.Items.FirstOrDefault(x => x.Dto.Id == requestedId) is { } requestedItem)
 			{
 				requestedItem.Selection = request.Selection;
+				requestedItem.StartFromBeginning = request.FromBeginning; // fluentfin-mpv
+				_requestedItem = requestedItem; // fluentfin-mpv
 			}
 		}
 		else if (parameter is PlayQueueUpdate pqu)
@@ -136,10 +156,20 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 			.WhereNotNull()
 			.Subscribe(mp =>
 			{
-				_keyboardController?.UnsubscribeEvents();
-				_keyboardController = new KeyboardMediaPlayerController(mp, JellyfinClient, Skip, ToggleFullScreen);
+				if (ListenToKeyboard)
+				{
+					_keyboardController?.UnsubscribeEvents();
+					_keyboardController = new KeyboardMediaPlayerController(mp, JellyfinClient, Skip, ToggleFullScreen, () => settings.VolumeStep);
+				}
 
-				if (_playQueueUpdate is null)
+				if (_playQueueUpdate is null && _requestedItem is { } requested)
+				{
+					// fluentfin-mpv: the movie or episode the page asked for starts, with its streams and "Play from beginning";
+					// AutoSelect would start the series' first unwatched episode instead
+					_requestedItem = null;
+					Playlist.SelectedItem = requested;
+				}
+				else if (_playQueueUpdate is null)
 				{
 					Playlist.AutoSelect();
 				}
@@ -273,9 +303,10 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 
 		PlayMethod = mediaResponse.PlayMethod;
 
-		if (selectedItem.Dto.UserData?.PlaybackPositionTicks is { } ticks)
+		// fluentfin-mpv: the resume point, unless the item page asked for "Play from beginning"
+		if (selectedItem.TakeStartPosition() is { } start)
 		{
-			MediaPlayer.SeekTo(TimeSpan.FromTicks(ticks));
+			MediaPlayer.SeekTo(start);
 		}
 
 		if (mediaResponse.MediaSourceInfo.MediaStreams?.FirstOrDefault(x => x.Type == MediaStream_Type.Subtitle && x.Index == subtitleIndex) is { } subtitleStream)
@@ -464,7 +495,8 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 	private void SubscribeEvents(IMediaPlayerController mp)
 	{
 		mp.Playing.Where(_ => _disposables.IsDisposed).Subscribe(_ => mp.Stop());
-		mp.Ended.Where(_ => Playlist.CanSelectNext).Subscribe(_ =>
+		// fluentfin-mpv: and only when the user's "auto-play next episode" is on (Settings > Playback)
+		mp.Ended.Where(_ => Playlist.CanSelectNext && PlaybackPreferences.PlaysNextItem()).Subscribe(_ =>
 		{
 			taskBarProgress.Clear();
 			Playlist.SelectNext();
@@ -482,7 +514,8 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 			.Select(ticks => Segments.Any(segment => ticks > segment.StartTicks && ticks < segment.EndTicks))
 			.DistinctUntilChanged()
 			.ObserveOn(RxSchedulers.MainThreadScheduler)
-			.Subscribe(isVisible => IsSkipButtonVisible = isVisible);
+			// fluentfin-mpv: unless Settings > Playback turned the skip button off
+			.Subscribe(isVisible => IsSkipButtonVisible = isVisible && settings.ShowSkipPrompt);
 		mp.DurationChanged.Subscribe(d => _duration = d);
 
 		mp.MediaLoaded

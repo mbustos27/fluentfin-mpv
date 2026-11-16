@@ -12,7 +12,8 @@
         x:Name="RootGrid"
         DoubleTapped="OnPlayerDoubleTapped"
         IsDoubleTapEnabled="True"
-        PointerMoved="FSC_PointerMoved">
+        PointerMoved="FSC_PointerMoved"
+        PointerWheelChanged="OnPlayerWheel">
         <local:TransportControls
             x:Name="TransportControls"
             HorizontalAlignment="Stretch"

@@ -12,6 +12,9 @@ public sealed partial class SelectServerPage : Page
 	public SelectServerPage()
 	{
 		InitializeComponent();
+
+		// fluentfin-mpv: with no saved server, look for one on this network straight away (docs/research/ux-review.md F2)
+		Loaded += async (_, _) => await ViewModel.OnShown();
 	}
 
 	private void InputFieldKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)

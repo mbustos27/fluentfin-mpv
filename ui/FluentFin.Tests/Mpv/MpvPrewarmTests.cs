@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.Mpv;
 using FluentFin.Core.Settings;
+using FluentFin.Mpv;
 using Moq;
 
 namespace FluentFin.Tests.Mpv;
@@ -235,5 +236,79 @@ public sealed class MpvBackendHostPrewarmTests : IDisposable
 		await _host.ConnectAsync(Alice);
 
 		Assert.Null(Assert.Single(Connects())["args"]!["prewarm"]);
+	}
+
+	/// <summary>FluentFin's own player controls: the connect's window is FluentFin's in-process mpv, made when it is asked for.</summary>
+	private sealed class AttachedSurface : IMpvVideoSurface
+	{
+		public int WindowRequests;
+
+		public Task<nint> GetHandleAsync() => throw new InvalidOperationException("attached: no window handle is asked for");
+
+		public Task<BridgeWindow> GetWindowAsync()
+		{
+			Interlocked.Increment(ref WindowRequests);
+			return Task.FromResult(BridgeWindow.Attached("fluentfin-mpv-1-0011223344556677"));
+		}
+
+		public bool CanConnectAhead => false;
+	}
+
+	[Fact]
+	public async Task WithFluentFinsControls_ThePrewarmOnlyStartsTheBackend_AndTheFirstPlayMakesTheirMpvAndConnects()
+	{
+		var surface = new AttachedSurface();
+		using var host = new MpvBackendHost(_launcher, surface, _log) { HelloTimeout = TimeSpan.FromSeconds(5), ShutdownTimeout = TimeSpan.FromSeconds(2) };
+
+		await host.PrewarmAsync(Alice);
+
+		Assert.Single(_launcher.Started);
+		Assert.Equal(MpvBackendState.Running, host.Status.State);
+		Assert.Empty(Connects());
+		Assert.Equal(0, surface.WindowRequests);
+
+		// MpvPlaybackService.PlayAsync: start (running already), then connect
+		await host.StartAsync();
+		await host.ConnectAsync(Alice);
+
+		Assert.Single(_launcher.Started);
+		var connect = Assert.Single(Connects());
+		Assert.Equal("attached", (string?)connect["args"]!["window"]!["mode"]);
+		Assert.Null(connect["args"]!["prewarm"]);
+		Assert.Equal(1, surface.WindowRequests);
+	}
+}
+
+/// <summary>fluentfin-mpv (startup-perf): whether the pre-warm may ask for the connect's window (player controls choice).</summary>
+public sealed class MpvVideoSurfaceChoicePrewarmTests
+{
+	private static MpvVideoSurfaceChoice Choice(MpvPlayerControls controls, out MpvCompositionVideo composition)
+	{
+		var settings = new Mock<ISettings>();
+		settings.SetupGet(x => x.MpvPlayerControls).Returns(controls);
+		composition = new MpvCompositionVideo(new ListLogger<MpvCompositionVideo>(), null);
+		return new MpvVideoSurfaceChoice(new MpvVideoHost(new ListLogger<MpvVideoHost>()), composition, settings.Object,
+			new ListLogger<MpvVideoSurfaceChoice>());
+	}
+
+	[Fact]
+	public void MpvsControls_ConnectAhead()
+	{
+		var choice = Choice(MpvPlayerControls.Mpv, out var composition);
+		using (composition)
+		{
+			Assert.True(((IMpvVideoSurface)choice).CanConnectAhead);
+		}
+	}
+
+	[Fact]
+	public void FluentFinsControls_ConnectAheadOnlyWhenTheyCannotBeHad()
+	{
+		// attached exactly when the connect would be (GetWindowAsync): libmpv found here; else mpv's controls, embedded
+		var choice = Choice(MpvPlayerControls.FluentFin, out var composition);
+		using (composition)
+		{
+			Assert.Equal(!MpvCompositionVideo.IsAvailable(out _), ((IMpvVideoSurface)choice).CanConnectAhead);
+		}
 	}
 }

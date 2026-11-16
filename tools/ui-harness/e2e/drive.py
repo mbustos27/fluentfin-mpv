@@ -52,6 +52,7 @@ SCENARIOS = {
     "stop_then_kill": "stop, then a kill at once: at least one Stopped, at most one from FluentFin (a second is the accepted cost)",
     "signout_playing": "Log out / Switch user while playing (round 6 item 1): the playback stops and the backend's Stopped reaches the server, accepted, before the token is revoked; X's `reported` before the logout; within ~2 s; nothing answered 401",
     "signout_hung_stopped": "the same with the server's Stopped hung: the sign-out goes on after ~2 s, the backend's Stopped request arrived before the logout, none from FluentFin",
+    "signout_cast": "a cast (play Y) arrives while the sign-out waits for X's Stopped (answered after ~1 s) (signout-ux item 2): Y is never sent or asked for at the server, the sign-out ends at X's report (not at its 2 s bound), nothing answered 401",
     # fluentfin-mpv (startup-perf): connect.prewarm (docs/BRIDGE.md §3, §4)
     "prewarm_idle": "pre-warmed after sign-in, idle: one GET /Users/Me and nothing else from the backend (nothing reported), no window of mpv's inside ours, the close shuts it down",
     "prewarm_play": "pre-warmed, then a play: it connects nothing more (one /Users/Me), mpv's window appears, the backend's Stopped only; PLAYTIME against cold_play",
@@ -282,9 +283,19 @@ def judge(sc, c):
             p.append("no Stopped for %s" % x1)
         if len(rows(x1, "UI")) > 1:
             p.append("%d Stopped from FluentFin" % len(rows(x1, "UI")))
-    elif sc in ("signout_playing", "signout_hung_stopped"):
+    elif sc in ("signout_playing", "signout_hung_stopped", "signout_cast"):
         backend_only(x1)
         so = c["signout"]
+        if sc == "signout_cast":
+            if so["cast_sent"] is not False:
+                p.append("the cast's play of Y was %s" % ("sent during the sign-out" if so["cast_sent"] else "not reported (no CAST line)"))
+            if c["y_requests"]:
+                p.append("the server was asked about Y: %s" % c["y_requests"][:6])
+            others = [r for r in st if r["ps"] != x1]
+            if others:
+                p.append("Stopped for other sessions than X's: %s" % others)
+            if so["secs"] is not None and so["secs"] > 1.9:
+                p.append("the sign-out took %.3f s: it ran to its bound instead of ending at X's report (~1 s)" % so["secs"])
         if so["revoked_at"] is None:
             p.append("the token was never revoked")
         late = [r for r in rows(x1) if so["revoked_at"] is not None and r["t"] > round(so["revoked_at"] - T0, 2)]
@@ -297,7 +308,7 @@ def judge(sc, c):
             p.append("no SIGNOUT timing")
         elif so["secs"] > 2.3:
             p.append("the sign-out waited %.3f s, want at most ~2 s" % so["secs"])
-        if sc == "signout_playing":
+        if sc in ("signout_playing", "signout_cast"):
             if not so["reported_first"]:
                 p.append("X's `reported` had not come when the token was revoked")
             if [code for _, code in so["stopped_answers"] if not 200 <= code < 300]:
@@ -378,6 +389,9 @@ def run(a, sc, rep, token, token2):
         srv = RevokingFakeJF("A", token, a.mkv, UID)
         if sc == "signout_hung_stopped":
             srv.stopped_delay = 6.0
+        if sc == "signout_cast":
+            # long enough for the cast to land inside the wait, short enough to end well before its 2 s bound
+            srv.stopped_delay = 1.0
     label = "%s-%d" % (sc, rep)
     try:
         log("==== %s (server A %s%s)" % (label, srv.url, "" if srvB is None else ", B " + srvB.url))
@@ -393,7 +407,7 @@ def run(a, sc, rep, token, token2):
         for line in text.splitlines():
             if any(k in line for k in ("RESULT", "CLOSE returned", "INTERRUPTED", "UI Stopped", "event reported", "harness error",
                                        "reported events", "Error:", "Warning:", "Stopping the mpv", "exited with code", "connect to B",
-                                       "ENVCHECK", "SIGNOUT", "UI Logout", "PREWARM", "IDLE", "PLAYTIME", "PLAYING", "KILLED", "SIGNEDOUT")):
+                                       "ENVCHECK", "SIGNOUT", "CAST", "UI Logout", "PREWARM", "IDLE", "PLAYTIME", "PLAYING", "KILLED", "SIGNEDOUT")):
                 log("   ", line.strip()[:300])
         time.sleep(1.0)
         close, result = parse(text)
@@ -411,15 +425,21 @@ def run(a, sc, rep, token, token2):
             except OSError:
                 pass
         signout = {"secs": None, "reported_first": False, "revoked_at": getattr(srv, "revoked_at", None),
-                   "stopped_answers": list(getattr(srv, "stopped_answers", []))}
+                   "stopped_answers": list(getattr(srv, "stopped_answers", [])), "cast_sent": None}
         for line in text.splitlines():
             if "SIGNOUT stop and report took" in line:
                 seg = line.split("took", 1)[1]
                 signout["secs"] = float(seg.split("s;", 1)[0])
                 signout["reported_first"] = seg.rstrip().endswith("True")
+            if "play of Y during the sign-out sent:" in line:
+                signout["cast_sent"] = line.split("sent:", 1)[1].split()[0] == "True"
+        with srv.lock:
+            # anything the server was asked about Y: its item, PlaybackInfo, stream, Playing/Progress/Stopped
+            y_requests = ["%s %s" % (r["method"], r["path"].split("?")[0]) for r in srv.records
+                          if Y in r["path"] or (isinstance(r["body"], dict) and r["body"].get("ItemId") == Y)]
         c = {"stops": stops(srv), "stopsB": stops(srvB) if srvB else [], "issued": list(srv.issued), "close": close,
              "backendRequests": backend_requests(srv), "playtime": playtime(text),
-             "result": result, "text": text, "svclog": svclog, "leaks": leaks, "signout": signout,
+             "result": result, "text": text, "svclog": svclog, "leaks": leaks, "signout": signout, "y_requests": y_requests,
              "left": left_behind(os.path.join(a.out, label + "-config"))}
         problems = judge(sc, c)
         per = {}
