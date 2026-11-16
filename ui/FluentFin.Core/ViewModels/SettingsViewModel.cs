@@ -35,7 +35,7 @@ public sealed record SubtitleModeChoice(UserConfiguration_SubtitleMode Mode, str
 	public override string ToString() => Name;
 }
 
-public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient) : ObservableObject, INavigationAware
+public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache) : ObservableObject, INavigationAware
 {
 	private IDisposable? _statusSubscription;
 
@@ -417,6 +417,21 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		}
 	}
 
+	// fluentfin-mpv: a saved login that goes takes its saved home page (watch history) with it (HomeCache.ForgetLogin)
 	[RelayCommand]
-	private void DeleteServer(SavedServer server) => Servers.Remove(server);
+	private async Task DeleteServer(SavedServer server)
+	{
+		Servers.Remove(server);
+		foreach (var user in server.Users.ToList())
+		{
+			await homeCache.ForgetLogin(server.Id, user.Username);
+		}
+	}
+
+	/// <summary>fluentfin-mpv: Delete User on a saved server: the saved login goes, and the home page saved for it.</summary>
+	public async Task RemoveSavedUser(SavedServer server, SavedUser user)
+	{
+		server.Users.Remove(user);
+		await homeCache.ForgetLogin(server.Id, user.Username);
+	}
 }

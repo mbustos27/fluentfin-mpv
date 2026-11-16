@@ -42,7 +42,7 @@ public sealed class JellyfinClientMpvRequestTests : IAsyncLifetime
 	{
 		var settings = new Mock<ISettings>();
 		settings.SetupGet(x => x.MediaPlayer).Returns(MediaPlayerType.Mpv);
-		_client = new JellyfinClient(_log, Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(), Mock.Of<IDeviceProfileFactory>(), settings.Object);
+		_client = new JellyfinClient(_log, Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(), Mock.Of<IDeviceProfileFactory>(), settings.Object, TestHomeCache.Unused());
 		await _client.Initialize(_server.BaseUrl, new AuthenticationResult
 		{
 			AccessToken = FakeToken,

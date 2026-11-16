@@ -17,8 +17,10 @@ namespace FluentFin.Tests;
 /// fluentfin-mpv: an item page's play with FluentFin's own players (not mpv): the item asked for starts, at its resume point or,
 /// with "Play from beginning", at 0 (docs/research/ux-review.md I2). The keyboard hook is off (ListenToKeyboard).
 /// </summary>
-public sealed class VideoPlayerViewModelOwnPlayerTests
+public sealed class VideoPlayerViewModelOwnPlayerTests : IDisposable
 {
+	private readonly string _homeCacheFolder = TestHomeCache.NewFolder();
+	private readonly Core.Services.HomeCache _homeCache;
 	private readonly Mock<IJellyfinClient> _client = new();
 	private readonly Mock<IMediaPlayerController> _player = new();
 	private readonly Mock<ISettings> _settings = new();
@@ -28,6 +30,7 @@ public sealed class VideoPlayerViewModelOwnPlayerTests
 
 	public VideoPlayerViewModelOwnPlayerTests()
 	{
+		_homeCache = TestHomeCache.In(_homeCacheFolder);
 		_settings.SetupGet(x => x.MediaPlayer).Returns(MediaPlayerType.Vlc);
 		_client.SetupGet(x => x.BaseUrl).Returns("http://jf:8096");
 		_client.Setup(x => x.GetMediaUrl(It.IsAny<BaseItemDto>(), It.IsAny<PlaybackSelection?>()))
@@ -104,22 +107,63 @@ public sealed class VideoPlayerViewModelOwnPlayerTests
 		Assert.Equal(show.Episodes[1].Id, started.Id);
 	}
 
+	[Fact]
+	public async Task OpeningAndLeavingThePlayerPage_MakeTheSavedHomePageStale()
+	{
+		// Continue Watching and Next Up change with what is watched, and a server whose websocket is not connected says
+		// nothing: Back to Home must not show the page saved before. Back reads it before this page hears it was left, so
+		// opening the page already makes it stale; leaving it again keeps a refresh that raced the stop report stale.
+		var movie = new FakeLibrary(_client).AddMovie(resumeTicks: 5_000_000);
+		var vm = CreateViewModel();
+		await SaveFreshHomePage();
+
+		await vm.OnNavigatedTo(new PlaybackRequest(movie, new PlaybackSelection(1, 2)));
+		Assert.False((await _homeCache.Get(HomeUrl, HomeUser)).IsFresh, "opening the player page left the saved home page fresh");
+
+		await _playing.Task.WaitAsync(TimeSpan.FromSeconds(10));
+		await SaveFreshHomePage(); // a home page saved while the item plays (from another window, say)
+		await vm.OnNavigatedFrom();
+		Assert.False((await _homeCache.Get(HomeUrl, HomeUser)).IsFresh, "leaving the player page left the saved home page fresh");
+	}
+
+	private const string HomeUrl = "http://jf:8096";
+	private static readonly Guid HomeUser = Guid.Parse("cccccccc-0000-0000-0000-00000000000c");
+
+	private async Task SaveFreshHomePage()
+	{
+		var page = new Core.Services.HomeSnapshot([new BaseItemDto { Id = Guid.NewGuid(), Name = "Half watched", Type = BaseItemDto_Type.Movie }], [], [], []);
+		await _homeCache.Save(HomeUrl, HomeUser, page, (await _homeCache.Get(HomeUrl, HomeUser)).ChangesSeen);
+		Assert.True((await _homeCache.Get(HomeUrl, HomeUser)).IsFresh);
+	}
+
+	public void Dispose()
+	{
+		_homeCache.Dispose();
+		if (Directory.Exists(_homeCacheFolder))
+		{
+			Directory.Delete(_homeCacheFolder, recursive: true);
+		}
+	}
+
+	private VideoPlayerViewModel CreateViewModel() => new(
+		_client.Object,
+		new TrickplayViewModel(_client.Object),
+		NullLogger<VideoPlayerViewModel>.Instance,
+		Observable.Never<IOutboundWebSocketMessage>(),
+		Mock.Of<INavigationService>(),
+		_settings.Object,
+		Mock.Of<ITaskBarProgress>(),
+		new Core.Mpv.MpvPlaybackService(new Mock<Core.Mpv.IMpvBackend> { DefaultValue = DefaultValue.Mock }.Object, _client.Object, NullLogger<Core.Mpv.MpvPlaybackService>.Instance),
+		_homeCache)
+	{
+		ListenToKeyboard = false,
+		MediaPlayer = _player.Object,
+	};
+
 	/// <summary>Opens the player page with a player already there (as the page's host gives it) and waits for the item to start.</summary>
 	private async Task<BaseItemDto> Play(object parameter)
 	{
-		var vm = new VideoPlayerViewModel(
-			_client.Object,
-			new TrickplayViewModel(_client.Object),
-			NullLogger<VideoPlayerViewModel>.Instance,
-			Observable.Never<IOutboundWebSocketMessage>(),
-			Mock.Of<INavigationService>(),
-			_settings.Object,
-			Mock.Of<ITaskBarProgress>(),
-			new Core.Mpv.MpvPlaybackService(new Mock<Core.Mpv.IMpvBackend> { DefaultValue = DefaultValue.Mock }.Object, _client.Object, NullLogger<Core.Mpv.MpvPlaybackService>.Instance))
-		{
-			ListenToKeyboard = false,
-			MediaPlayer = _player.Object,
-		};
+		var vm = CreateViewModel();
 
 		try
 		{

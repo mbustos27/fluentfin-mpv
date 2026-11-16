@@ -32,7 +32,12 @@ public sealed class HomeRequestTests : IAsyncLifetime
 	private readonly string _folder = Path.Combine(Path.GetTempPath(), "fluentfin-home-test-" + Guid.NewGuid().ToString("N"));
 	private JellyfinClient _client = null!;
 
+	// the client's: told of each sign-in and sign-out
+	private readonly HomeCache _homeCache;
+
 	static HomeRequestTests() => ReactiveUI.Builder.RxAppBuilder.CreateReactiveUIBuilder().BuildApp();
+
+	public HomeRequestTests() => _homeCache = new HomeCache(_folder, new System.Reactive.Subjects.Subject<IOutboundWebSocketMessage>(), new CoreListLogger<HomeCache>(), _clock);
 
 	public Task InitializeAsync()
 	{
@@ -58,6 +63,7 @@ public sealed class HomeRequestTests : IAsyncLifetime
 	public Task DisposeAsync()
 	{
 		_server.Dispose();
+		_homeCache.Dispose();
 		if (Directory.Exists(_folder))
 		{
 			Directory.Delete(_folder, recursive: true);
@@ -70,7 +76,7 @@ public sealed class HomeRequestTests : IAsyncLifetime
 
 	private async Task SignIn()
 	{
-		_client ??= new JellyfinClient(new CoreListLogger<JellyfinClient>(), Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(), Mock.Of<IDeviceProfileFactory>(), Mock.Of<ISettings>()) { Time = _clock };
+		_client ??= new JellyfinClient(new CoreListLogger<JellyfinClient>(), Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(), Mock.Of<IDeviceProfileFactory>(), Mock.Of<ISettings>(), _homeCache) { Time = _clock };
 		await _client.Initialize(_server.BaseUrl, new AuthenticationResult
 		{
 			AccessToken = FakeToken,
@@ -203,6 +209,50 @@ public sealed class HomeRequestTests : IAsyncLifetime
 	}
 
 	[Fact]
+	public async Task Views_AreReadAgain_WhenTheServerSaysALibraryChanged()
+	{
+		await SignIn();
+		await _client.GetUserViews();
+		Assert.Equal(1, ViewReads);
+
+		_client.OnLibraryChanged(new LibraryChangedMessage());
+		await _client.GetUserViews();
+		await _client.GetUserViews();
+		Assert.Equal(2, ViewReads);
+	}
+
+	[Fact]
+	public async Task ASignIn_MakesTheSavedHomePageStale()
+	{
+		await SignIn();
+		await _homeCache.Save(_server.BaseUrl, UserId, SavedPage(), (await _homeCache.Get(_server.BaseUrl, UserId)).ChangesSeen);
+		Assert.True((await _homeCache.Get(_server.BaseUrl, UserId)).IsFresh);
+
+		// the same user, a new session: whatever they watched elsewhere meanwhile, the page in memory has not heard of
+		await SignIn();
+
+		var cached = await _homeCache.Get(_server.BaseUrl, UserId);
+		Assert.False(cached.IsFresh);
+		Assert.NotNull(cached.Snapshot);
+	}
+
+	[Fact]
+	public async Task SigningOut_DeletesTheSavedHomePage_AndSignInTellsItTheLogin()
+	{
+		await SignIn();
+		await _homeCache.Save(_server.BaseUrl, UserId, SavedPage(), (await _homeCache.Get(_server.BaseUrl, UserId)).ChangesSeen);
+		var file = Assert.Single(Directory.GetFiles(_folder));
+		Assert.Contains("\"Login\":\"", File.ReadAllText(file), StringComparison.Ordinal); // the sign-in's server id and user name, hashed
+
+		await _client.Logout();
+
+		Assert.Empty(Directory.GetFiles(_folder));
+		Assert.Null((await _homeCache.Get(_server.BaseUrl, UserId)).Snapshot);
+	}
+
+	private static HomeSnapshot SavedPage() => new([new BaseItemDto { Id = Guid.NewGuid(), Name = "Half watched", Type = BaseItemDto_Type.Movie }], [], [], []);
+
+	[Fact]
 	public async Task AFailedViewsRead_IsNotKept()
 	{
 		_server.Respond("/UserViews", 500, "");
@@ -234,6 +284,13 @@ public sealed class HomeRequestTests : IAsyncLifetime
 
 	private static string Array(params string[] names) =>
 		"[" + string.Join(",", names.Select(n => $$"""{"Id":"{{Guid.NewGuid():N}}","Name":"{{n}}","Type":"Movie"}""")) + "]";
+}
+
+/// <summary>A HomeCache for tests that do not look at it: its folder is not created unless a page is saved.</summary>
+internal static class TestHomeCache
+{
+	public static HomeCache Unused() => new(Path.Combine(Path.GetTempPath(), "fluentfin-homecache-unused-" + Guid.NewGuid().ToString("N")),
+		System.Reactive.Linq.Observable.Never<IOutboundWebSocketMessage>(), new CoreListLogger<HomeCache>(), TimeProvider.System);
 }
 
 /// <summary>A clock the test moves by hand (JellyfinClient.Time, HomeCache).</summary>

@@ -591,6 +591,7 @@ public partial class VideoPlayerViewModel
 		}
 
 		logger.LogInformation("The player page (generation {Generation}) was removed from the window without being navigated from; leaving it (its mpv playback stops)", _mpvGeneration);
+		homeCache.MarkStale(); // fluentfin-mpv: as any leave (OnNavigatedFrom)
 		await LeaveFullScreen();
 		await OnNavigatedFromMpv("the player page was removed from the window without a navigation");
 		return true;

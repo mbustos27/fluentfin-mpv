@@ -57,7 +57,13 @@ Console.WriteLine($"fake server at {baseUrl}");
 var socket = new Subject<IOutboundWebSocketMessage>();
 var deviceProfiles = new Mock<IDeviceProfileFactory>();
 deviceProfiles.Setup(x => x.GetDeviceProfile()).Returns(new DeviceProfile());
-var client = CoreFactory.Make<JellyfinClient>(socket, deviceProfiles.Object);
+// a data folder of the bench's own for a Core whose home page keeps its last state there (HomeCache): a new one each time,
+// so every home measurement is a first start; never the user's folder (KnownFolders' default). A Core whose client is
+// told of sign-ins (HomeCache) gets one too; other Cores ignore it.
+var scratchData = Path.Combine(Path.GetTempPath(), $"bench-pages-{Environment.ProcessId}");
+KnownFolders ScratchData() => new(Path.Combine(scratchData, Guid.NewGuid().ToString("N")));
+
+var client = CoreFactory.Make<JellyfinClient>(socket, deviceProfiles.Object, ScratchData());
 var commands = CoreFactory.Make<GlobalCommands>(client);
 
 async Task<(double ms, List<string> reqs)> Measure(string label, int delayMs, Func<Task> action)
@@ -71,11 +77,6 @@ async Task<(double ms, List<string> reqs)> Measure(string label, int delayMs, Fu
 	Console.WriteLine($"{label,-58} delay={delayMs,3}ms  requests={reqs.Count,3}  elapsed={sw.Elapsed.TotalMilliseconds,8:N0} ms  bytes={fake.BytesSent,10:N0}");
 	return (sw.Elapsed.TotalMilliseconds, reqs);
 }
-
-// a data folder of the bench's own for a Core whose home page keeps its last state there (HomeCache): a new one each time,
-// so every home measurement is a first start; never the user's folder (KnownFolders' default)
-var scratchData = Path.Combine(Path.GetTempPath(), $"bench-pages-{Environment.ProcessId}");
-KnownFolders ScratchData() => new(Path.Combine(scratchData, Guid.NewGuid().ToString("N")));
 
 void PrintRequests(List<string> reqs)
 {

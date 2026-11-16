@@ -82,9 +82,10 @@ public partial class JellyfinClient
 	}
 
 	// fluentfin-mpv: the views are one request that sign-in (jump list), every Home visit and the Libraries page each made
-	// again. Kept for UserViewsLifetime (a library added from another client shows up within minutes), dropped on a new
-	// sign-in, a library added, removed or renamed here, or a UserUpdated message for this user (library access, view
-	// order); a failed read is not kept. Concurrent callers share one request.
+	// again. Kept for UserViewsLifetime (a library added from another client shows up within minutes, or at once when the
+	// server's LibraryChanged message comes through the websocket), dropped on a new sign-in, a library added, removed or
+	// renamed here, a UserUpdated message for this user (library access, view order) or a LibraryChanged message; a failed
+	// read is not kept. Concurrent callers share one request.
 	internal static readonly TimeSpan UserViewsLifetime = TimeSpan.FromMinutes(5);
 	internal TimeProvider Time { get; set; } = TimeProvider.System;
 	private readonly Lock _userViewsLock = new();
