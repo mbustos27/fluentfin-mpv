@@ -3,6 +3,9 @@ using Jellyfin.Sdk.Generated.Models;
 
 namespace FluentFin.Core;
 
+/// <summary>One line of an item page's quiet metadata: "Genres" and "Drama · Crime".</summary>
+public sealed record ItemMetaRow(string Label, string Text);
+
 /// <summary>
 /// Seaglass: the words of an item page's top and its quiet metadata (genres, studios, directors, writers, tags): what the
 /// title line says for a movie, a series, a season and an episode, and the lists the metadata rows show.
@@ -35,6 +38,30 @@ public static class ItemMeta
 
 	/// <summary>"3. The Fight" for an episode row.</summary>
 	public static string EpisodeTitle(BaseItemDto? episode) => episode is null ? "" : episode.IndexNumber is { } n ? $"{Number(n)}. {episode.Name}" : episode.Name ?? "";
+
+	/// <summary>Under a cast photo: the role ("Tony Stark") or, for the crew, what they did ("Director"); "" when neither is known.</summary>
+	public static string PersonRole(BaseItemPerson? person) =>
+		!string.IsNullOrWhiteSpace(person?.Role) ? person.Role.Trim()
+		: person?.Type is { } type && type != BaseItemPerson_Type.Actor && type != BaseItemPerson_Type.Unknown && type != BaseItemPerson_Type.GuestStar ? type.ToString()!
+		: "";
+
+	/// <summary>The lines under the overview, in order; a line is left out when the item has none of it.</summary>
+	public static IReadOnlyList<ItemMetaRow> Rows(BaseItemDto? dto)
+	{
+		var rows = new List<ItemMetaRow>();
+		foreach (var (label, values) in new (string, IReadOnlyList<string>)[]
+		{
+			("Genres", Genres(dto)), ("Director", Directors(dto)), ("Writers", Writers(dto)), ("Studios", Studios(dto)), ("Tags", Tags(dto)),
+		})
+		{
+			if (values.Count > 0)
+			{
+				rows.Add(new ItemMetaRow(label, string.Join(" · ", values)));
+			}
+		}
+
+		return rows;
+	}
 
 	public static IReadOnlyList<string> Genres(BaseItemDto? dto) =>
 		dto?.GenreItems is { Count: > 0 } items ? Names(items.Select(g => g.Name)) : Names(dto?.Genres);

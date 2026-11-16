@@ -66,7 +66,7 @@ public class AccessibilityXamlTests
 		var play = Assert.Single(buttons, b => (string?)b.Attribute("Command") == "{x:Bind ViewModel.PlayCommand}");
 		Assert.Equal("{x:Bind ViewModel.PlayLabel, Mode=OneWay}", (string?)play.Attribute("AutomationProperties.Name"));
 		Assert.Contains(play.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.PlayLabel, Mode=OneWay}");
-		Assert.Equal("{StaticResource AccentButtonStyle}", (string?)play.Attribute("Style"));
+		Assert.Equal("{StaticResource GlassAccentPillButtonStyle}", (string?)play.Attribute("Style"));
 
 		var fromBeginning = Assert.Single(buttons, b => (string?)b.Attribute("Command") == "{x:Bind ViewModel.PlayFromBeginningCommand}");
 		Assert.Equal("Play from beginning", (string?)fromBeginning.Attribute("AutomationProperties.Name"));
@@ -78,10 +78,11 @@ public class AccessibilityXamlTests
 	[InlineData("FluentFin/Views/SeasonPage.xaml")]
 	public void SeriesAndSeasonPages_HaveATextPlayButton(string page)
 	{
-		var strip = FindByName(Load(page), "ButtonStrip");
-		var play = Assert.Single(strip.Descendants(Presentation + "Button"), b => (string?)b.Attribute("Command") == "{x:Bind root:App.Commands.PlayDtoCommand}");
+		var hero = Assert.Single(Load(page).Descendants(), e => e.Name.LocalName == "ItemHero");
+		var play = Assert.Single(hero.Descendants(Presentation + "Button"), b => (string?)b.Attribute("Command") == "{x:Bind root:App.Commands.PlayDtoCommand}");
 
 		Assert.Contains(play.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "Play");
+		Assert.Equal("{StaticResource GlassAccentPillButtonStyle}", (string?)play.Attribute("Style"));
 	}
 
 	[Theory]
@@ -90,7 +91,10 @@ public class AccessibilityXamlTests
 	{
 		var doc = Load(page);
 
-		Assert.Contains(doc.Descendants(), e => e.Name.LocalName == "ExpandableText" && (string?)e.Attribute("Text") == "{x:Bind ViewModel.Dto.Overview, Mode=OneWay}");
+		// the hero hands the overview to an ExpandableText ("Show more")
+		var hero = Assert.Single(doc.Descendants(), e => e.Name.LocalName == "ItemHero");
+		Assert.Equal("{x:Bind ViewModel.Dto.Overview, Mode=OneWay}", (string?)hero.Attribute("Overview"));
+		Assert.Contains(Load("FluentFin/Controls/ItemHero.xaml").Descendants(), e => e.Name.LocalName == "ExpandableText");
 		Assert.DoesNotContain(doc.Descendants(Presentation + "TextBlock"), t => ((string?)t.Attribute("Text"))?.Contains("ViewModel.Dto.Overview") == true);
 	}
 
@@ -104,32 +108,41 @@ public class AccessibilityXamlTests
 
 	[Theory]
 	[MemberData(nameof(ItemPageData))]
-	public void ItemPages_TagsAndDetails_WrapInsteadOfRunningOffThePage(string page)
+	public void ItemPages_ShowTheirMetadataAsQuietText_NotAsLinksThatGoNowhere(string page)
 	{
-		string[] wrapped = ["Dto.Tags", "Dto.GenreItems", "GetDirectors", "GetWriters", "Dto.Studios"];
-		var repeaters = Load(page).Descendants(Presentation + "ItemsRepeater")
-			.Where(r => wrapped.Any(w => ((string?)r.Attribute("ItemsSource"))?.Contains(w) == true))
-			.ToList();
+		var doc = Load(page);
 
-		Assert.NotEmpty(repeaters);
-		Assert.All(repeaters, r =>
-		{
-			var source = (string?)r.Attribute("ItemsSource");
-			Assert.True(r.Descendants().Any(e => e.Name.LocalName == "WrapLayout"), $"{source} does not wrap");
-			Assert.False(r.Ancestors(Presentation + "ScrollViewer").Any(s => (string?)s.Attribute("HorizontalScrollMode") == "Enabled"), $"{source} sits in a sideways scroller");
-		});
+		Assert.Contains(doc.Descendants(), e => e.Name.LocalName == "ItemMetaRows" && (string?)e.Attribute("Dto") == "{x:Bind ViewModel.Dto, Mode=OneWay}");
+		Assert.DoesNotContain(doc.Descendants(Presentation + "HyperlinkButton"), _ => true);
 	}
 
 	[Theory]
 	[MemberData(nameof(ItemPageData))]
-	public void ItemPages_TitleHasAColumnOfItsOwn_AndIsTrimmed(string page)
+	public void ItemPages_StartWithTheHero_ThatHasTheTitleAsAHeading(string page)
 	{
-		var strip = FindByName(Load(page), "ButtonStrip");
+		var doc = Load(page);
 
-		Assert.Equal(2, strip.Element(Presentation + "Grid.ColumnDefinitions")?.Elements().Count());
-		var buttons = strip.Elements(Presentation + "StackPanel").Single(s => (string?)s.Attribute("Orientation") == "Horizontal" && s.Descendants(Presentation + "ToggleButton").Any());
-		Assert.Equal("1", (string?)buttons.Attribute("Grid.Column"));
-		Assert.Contains(strip.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("AutomationProperties.HeadingLevel") == "Level1" && (string?)t.Attribute("TextTrimming") == "CharacterEllipsis");
+		Assert.Single(doc.Descendants(), e => e.Name.LocalName == "ItemHero" && (string?)e.Attribute("Dto") == "{x:Bind ViewModel.Dto, Mode=OneWay}");
+		var hero = Load("FluentFin/Controls/ItemHero.xaml");
+		var title = FindByName(hero, "TitleText");
+		Assert.Equal("Level1", (string?)title.Attribute("AutomationProperties.HeadingLevel"));
+		Assert.Equal("{StaticResource GlassHeroTitleTextBlockStyle}", (string?)title.Attribute("Style"));
+		// a logo stands in for the title: it is named for Narrator in code (see ItemHero.Apply)
+		Assert.Contains("AutomationProperties.SetName(LogoImage", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/ItemHero.xaml.cs")));
+	}
+
+	[Fact]
+	public void ItemHero_KeepsItsGlassButtonsNamed_AndOnlyTheTopLevelPlayIsAccent()
+	{
+		var hero = Load("FluentFin/Controls/ItemHero.xaml");
+
+		Assert.Equal(["Watch trailer", "Watched", "Favorite", "More options"],
+			new[] { "TrailerButton", "WatchedButton", "FavoriteButton", "MoreButton" }.Select(n => (string?)FindByName(hero, n).Attribute("AutomationProperties.Name")));
+		Assert.DoesNotContain(hero.Descendants(), e => (string?)e.Attribute("Style") == "{StaticResource GlassAccentPillButtonStyle}");
+		var scrims = hero.Descendants(Presentation + "Border").Select(b => (string?)b.Attribute("Background")).ToList();
+		Assert.Contains("{ThemeResource GlassImageScrimBrush}", scrims);
+		Assert.Contains("{ThemeResource ItemHeroSideScrimBrush}", scrims);
+		Assert.Equal("Dark", (string?)hero.Root!.Elements().Single().Attribute("RequestedTheme"));
 	}
 
 	[Fact]
@@ -293,12 +306,16 @@ public class AccessibilityXamlTests
 	[Fact]
 	public void SeasonEpisodeRows_NameTheirButtonsForTheEpisode()
 	{
-		var rows = Load("FluentFin/Views/SeasonPage.xaml").Descendants(Presentation + "ItemsRepeater")
+		var season = Load("FluentFin/Views/SeasonPage.xaml").Descendants(Presentation + "ItemsRepeater")
 			.Single(r => (string?)r.Attribute("ItemsSource") == "{x:Bind ViewModel.Episodes, Mode=OneWay}");
-		var buttons = rows.Descendants().Where(e => e.Name.LocalName is "Button" or "ToggleButton").ToList();
+		Assert.Contains(season.Descendants(), e => e.Name.LocalName == "EpisodeRow");
 
+		var row = Load("FluentFin/Controls/EpisodeRow.xaml");
+		var buttons = row.Descendants().Where(e => e.Name.LocalName is "Button" or "ToggleButton").ToList();
 		Assert.Equal(5, buttons.Count);
-		Assert.All(buttons, b => Assert.StartsWith("{x:Bind core:ItemLabels.EpisodeAction(", (string?)b.Attribute("AutomationProperties.Name")));
+		Assert.All(buttons, b => Assert.False(string.IsNullOrWhiteSpace((string?)b.Attribute("AutomationProperties.Name"))));
+		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/EpisodeRow.xaml.cs"));
+		Assert.Equal(5, System.Text.RegularExpressions.Regex.Matches(code, @"ItemLabels\.EpisodeAction\(""").Count);
 	}
 
 	/// <summary>Shows an icon and no text: no Label, no text content, no TextBlock outside its property elements (a flyout's text is not the button's).</summary>

@@ -37,7 +37,14 @@ public sealed partial class JournalRatingPanel : UserControl
 		var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
 		panel.Children.Add(new TextBlock { Text = "Your rating", VerticalAlignment = VerticalAlignment.Center, Opacity = 0.8 });
 		panel.Children.Add(_stars);
-		Content = panel;
+		// Seaglass: the rating sits in one glass card
+		Content = new Border
+		{
+			Child = panel,
+			Padding = new Thickness(18, 10, 18, 10),
+			HorizontalAlignment = HorizontalAlignment.Left,
+			Style = Application.Current.Resources.TryGetValue("GlassPanelStyle", out var style) ? style as Style : null,
+		};
 
 		_viewModel.PropertyChanged += OnViewModelChanged;
 		_stars.ValueChanged += (_, value) => _viewModel.Value = value;

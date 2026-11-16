@@ -13,6 +13,7 @@
                 <ResourceDictionary Source="/Styles/ImageEx.xaml" />
                 <ResourceDictionary Source="/Styles/NavigationView.xaml" />
                 <ResourceDictionary Source="/Styles/Glass.xaml" />
+                <ResourceDictionary Source="/Styles/ItemPage.xaml" />
                 <ResourceDictionary Source="ms-appx:///DevWinUI/Themes/Generic.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>

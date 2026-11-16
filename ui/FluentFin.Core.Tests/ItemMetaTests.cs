@@ -72,4 +72,27 @@ public sealed class ItemMetaTests
 		Assert.Null(ItemMeta.TrailerUrl(new BaseItemDto { RemoteTrailers = [] }));
 		Assert.Null(ItemMeta.TrailerUrl(null));
 	}
+
+	[Fact]
+	public void UnderACastPhoto_TheRoleOrElseWhatTheCrewMemberDid()
+	{
+		Assert.Equal("Tony Stark", ItemMeta.PersonRole(new BaseItemPerson { Type = BaseItemPerson_Type.Actor, Role = " Tony Stark " }));
+		Assert.Equal("Director", ItemMeta.PersonRole(new BaseItemPerson { Type = BaseItemPerson_Type.Director }));
+		Assert.Equal("", ItemMeta.PersonRole(new BaseItemPerson { Type = BaseItemPerson_Type.Actor }));
+		Assert.Equal("", ItemMeta.PersonRole(null));
+	}
+
+	[Fact]
+	public void TheMetadataRows_JoinEachListAndSkipTheEmptyOnes()
+	{
+		var dto = new BaseItemDto
+		{
+			Genres = ["Drama", "Crime"],
+			Studios = [new NameGuidPair { Name = "Warner" }],
+			People = [new BaseItemPerson { Type = BaseItemPerson_Type.Director, Name = "Michael Mann" }],
+		};
+
+		Assert.Equal([new ItemMetaRow("Genres", "Drama · Crime"), new ItemMetaRow("Director", "Michael Mann"), new ItemMetaRow("Studios", "Warner")], ItemMeta.Rows(dto));
+		Assert.Empty(ItemMeta.Rows(null));
+	}
 }

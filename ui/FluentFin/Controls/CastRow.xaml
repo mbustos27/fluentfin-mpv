@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--  Seaglass: round photos with the name and the role, in a row that scrolls sideways. Opaque: content, not chrome.  -->
+<UserControl
+    x:Class="FluentFin.Controls.CastRow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:core="using:FluentFin.Core"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <StackPanel x:Name="Root" Spacing="12">
+        <TextBlock
+            x:Name="HeadingText"
+            AutomationProperties.HeadingLevel="Level2"
+            Style="{StaticResource GlassSectionTitleTextBlockStyle}" />
+        <ScrollViewer
+            HorizontalScrollBarVisibility="Auto"
+            HorizontalScrollMode="Enabled"
+            VerticalScrollBarVisibility="Disabled"
+            VerticalScrollMode="Disabled">
+            <ItemsRepeater x:Name="Repeater" Margin="0,0,0,12">
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="jm:BaseItemPerson">
+                        <StackPanel Width="120" Spacing="6">
+                            <PersonPicture
+                                Width="104"
+                                Height="104"
+                                DisplayName="{x:Bind Name}"
+                                ProfilePicture="{x:Bind c:ItemArtworkConverters.Person((jm:BaseItemPerson), 208)}" />
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                MaxLines="2"
+                                Text="{x:Bind Name}"
+                                TextAlignment="Center"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                MaxLines="2"
+                                Text="{x:Bind core:ItemMeta.PersonRole((jm:BaseItemPerson))}"
+                                TextAlignment="Center"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+                <ItemsRepeater.Layout>
+                    <StackLayout Orientation="Horizontal" Spacing="12" />
+                </ItemsRepeater.Layout>
+            </ItemsRepeater>
+        </ScrollViewer>
+    </StackPanel>
+</UserControl>

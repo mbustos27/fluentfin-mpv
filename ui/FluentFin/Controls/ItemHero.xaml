@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Seaglass: the top of the movie, series, season and episode pages. The backdrop fills the width (decoded at the width it is
+    drawn at) with a scrim at the bottom and one behind the text on the left; the logo (the title as text when there is none),
+    the chip row, the actions and the overview sit on it. Always dark, so the text reads on any backdrop in both themes.
+-->
+<UserControl
+    x:Class="FluentFin.Controls.ItemHero"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls"
+    xmlns:core="using:FluentFin.Core"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:root="using:FluentFin"
+    HorizontalContentAlignment="Stretch"
+    mc:Ignorable="d">
+
+    <Grid MinHeight="{StaticResource ItemHeroMinHeight}" RequestedTheme="Dark">
+        <Image
+            x:Name="BackdropImage"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            AutomationProperties.AccessibilityView="Raw"
+            Stretch="UniformToFill" />
+        <Border Background="{ThemeResource SeaglassDeepBrush}" Opacity="0.35" />
+        <Border Background="{ThemeResource ItemHeroSideScrimBrush}" />
+        <Border
+            Height="260"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource GlassImageScrimBrush}" />
+
+        <StackPanel
+            Margin="48,96,48,40"
+            MaxWidth="{StaticResource ItemHeroTextMaxWidth}"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Spacing="14">
+            <TextBlock
+                x:Name="Eyebrow"
+                Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                Foreground="{ThemeResource SeaglassAccentBrush}"
+                Visibility="Collapsed" />
+            <Image
+                x:Name="LogoImage"
+                MaxWidth="480"
+                MaxHeight="160"
+                HorizontalAlignment="Left"
+                AutomationProperties.AccessibilityView="Raw"
+                Stretch="Uniform"
+                Visibility="Collapsed" />
+            <TextBlock
+                x:Name="TitleText"
+                AutomationProperties.HeadingLevel="Level1"
+                Style="{StaticResource GlassHeroTitleTextBlockStyle}" />
+            <TextBlock
+                x:Name="SubtitleText"
+                AutomationProperties.HeadingLevel="Level2"
+                Style="{StaticResource GlassPageTitleTextBlockStyle}"
+                Visibility="Collapsed" />
+
+            <ItemsRepeater x:Name="ChipRow">
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="core:ItemChip">
+                        <Border
+                            Padding="12,4"
+                            AutomationProperties.Name="{x:Bind Name}"
+                            Background="{ThemeResource GlassPanelBrush}"
+                            BorderBrush="{ThemeResource GlassStrokeBrush}"
+                            BorderThickness="{StaticResource GlassStrokeThickness}"
+                            CornerRadius="{StaticResource GlassPillCornerRadius}">
+                            <TextBlock Style="{StaticResource ItemChipTextBlockStyle}" Text="{x:Bind Text}" />
+                        </Border>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+                <ItemsRepeater.Layout>
+                    <ctk:WrapLayout HorizontalSpacing="8" VerticalSpacing="8" />
+                </ItemsRepeater.Layout>
+            </ItemsRepeater>
+
+            <!--  the page's own play buttons, then trailer, watched, favourite, more  -->
+            <ctk:WrapPanel
+                x:Name="ButtonStrip"
+                HorizontalSpacing="10"
+                VerticalSpacing="10">
+                <ContentPresenter x:Name="PrimaryPresenter" />
+                <Button
+                    x:Name="TrailerButton"
+                    AutomationProperties.Name="Watch trailer"
+                    Click="TrailerButton_Click"
+                    Style="{StaticResource GlassPillButtonStyle}"
+                    ToolTipService.ToolTip="Watch trailer"
+                    Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE714;" />
+                        <TextBlock Text="Trailer" />
+                    </StackPanel>
+                </Button>
+                <ToggleButton
+                    x:Name="WatchedButton"
+                    AutomationProperties.Name="Watched"
+                    Command="{x:Bind root:App.Commands.ToggleWatchedCommand}"
+                    Content="{ui:FontIcon Glyph=&#xE73E;}"
+                    Style="{StaticResource ItemGlassToggleButtonStyle}"
+                    ToolTipService.ToolTip="Mark watched" />
+                <ToggleButton
+                    x:Name="FavoriteButton"
+                    AutomationProperties.Name="Favorite"
+                    Command="{x:Bind root:App.Commands.ToggleFavoriteCommand}"
+                    Content="{ui:FontIcon Glyph=&#xEB52;}"
+                    Style="{StaticResource ItemGlassToggleButtonStyle}"
+                    ToolTipService.ToolTip="Add to favorites">
+                    <ToggleButton.Resources>
+                        <StaticResource x:Key="SystemAccentColor" ResourceKey="FavoriteCheckedBrush" />
+                    </ToggleButton.Resources>
+                </ToggleButton>
+                <Button
+                    x:Name="MoreButton"
+                    AutomationProperties.Name="More options"
+                    Content="{ui:SymbolIcon Symbol=More}"
+                    Style="{StaticResource GlassIconButtonStyle}"
+                    ToolTipService.ToolTip="More options" />
+            </ctk:WrapPanel>
+
+            <controls:ExpandableText x:Name="OverviewText" CollapsedLines="4" />
+        </StackPanel>
+    </Grid>
+</UserControl>
