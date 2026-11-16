@@ -33,7 +33,7 @@ in composition mode), and the shim no longer builds mpv, so FluentFin sets mpv's
 
 ## Phase 2a: the spike (`tools\ui-harness\composition-spike`)
 
-`run.ps1 -Out <scratch> -Scenario local|hdr|bridge|quit -Mode composition|wid|both`: a WinUI window of
+`run.ps1 -Out <scratch> -Scenario local|hdr|bridge|quit|repeat -Mode composition|wid|both`: a WinUI window of
 its own (never FluentFin.exe) with shinchiro's `libmpv-2.dll` (`vendor\libmpv\VENDORED.md`) loaded
 in-process, off-screen (private desktop, kill-on-close job), every core with `ao=null`. Scenarios:
 `local` plays a 1080p60 H.264 clip, resizes, goes full screen and back, resizes six times quickly;
