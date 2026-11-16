@@ -83,7 +83,7 @@ $launcherExe = Join-Path $pkg 'Seaglass.exe'
 $app = Join-Path $pkg 'app'
 $exe = Join-Path $app 'Seaglass.exe'
 $top = @(Get-ChildItem $pkg -Force | ForEach-Object { $_.Name } | Sort-Object)
-Check 'the folder''s top holds only Seaglass.exe (the launcher), README.txt, LICENSE, THIRD-PARTY-NOTICES.txt and app\' (($top -join ',') -eq 'app,Seaglass.exe,LICENSE,README.txt,THIRD-PARTY-NOTICES.txt') ($top -join ', ')
+Check 'the folder''s top holds only Seaglass.exe (the launcher), README.txt, LICENSE, THIRD-PARTY-NOTICES.txt and app\' (($top -join ',') -eq 'app,LICENSE,README.txt,Seaglass.exe,THIRD-PARTY-NOTICES.txt') ($top -join ', ')
 Check 'unzipped: one folder with the launcher, and app\ with Seaglass.exe, the bundled backend and libmpv' ((Test-Path $launcherExe) -and (Test-Path $exe) -and (Test-Path (Join-Path $app 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $app 'libmpv\libmpv-2.dll'))) $pkg
 $languageDirs = @(Get-ChildItem $app -Directory | Where-Object { $_.Name -match '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' -and $_.Name -notmatch '^en(-|$)' })
 Check 'English only: app\ has no language folders but English' ($languageDirs.Count -eq 0) $(if ($languageDirs) { $languageDirs.Name -join ', ' } else { (@(Get-ChildItem $app -Directory | Where-Object Name -match '^en(-|$)') | ForEach-Object Name) -join ', ' })
