@@ -171,6 +171,11 @@ internal sealed unsafe class MpvInProcessCore : IDisposable
 					case Libmpv.EventIdLogMessage:
 						// redacted: a stream or subtitle URL mpv complains about can carry an api_key (docs/BRIDGE.md §1)
 						var m = (Libmpv.EventLogMessage*)e->Data;
+						if (IsExpected(Libmpv.Utf8(m->Text)))
+						{
+							continue;
+						}
+
 						_logger.LogWarning("mpv [{Prefix}] {Level}: {Text}", Libmpv.Utf8(m->Prefix), Libmpv.Utf8(m->Level), BridgeRedaction.Redact(Libmpv.Utf8(m->Text)?.TrimEnd() ?? ""));
 						continue;
 
@@ -192,6 +197,12 @@ internal sealed unsafe class MpvInProcessCore : IDisposable
 			}
 		}
 	}
+
+	/// <summary>
+	/// What mpv always says in composition mode, not a fault: it has no output to ask about the display (mpv PR #16795; the
+	/// display's HDR and rate come from <see cref="MpvCompositionVideo.ApplyDisplay"/>).
+	/// </summary>
+	internal static bool IsExpected(string? text) => text?.Contains("Failed to query swap chain's output information", StringComparison.Ordinal) == true;
 
 	/// <summary>
 	/// Ends the core: the event thread stops, then <c>mpv_terminate_destroy</c> runs on a thread of its own and is waited

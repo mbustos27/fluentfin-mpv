@@ -173,6 +173,10 @@ internal static partial class Host
 
 			Check(controls.Title == "Spike Show" && controls.Subtitle == "S1E1 · Pilot", $"title from the item event: '{controls.Title}' / '{controls.Subtitle}'");
 			Check(Text(view, "TitleText") == "Spike Show" && Text(view, "SubtitleText") == "S1E1 · Pilot", "and the top bar shows it");
+			// the display FluentFin read for mpv, which cannot see it in composition mode (HDR off on every display here)
+			// target-colorspace-hint is a flag on some builds and a choice (auto/yes/no) on others
+			Check(mpv.Number("display-fps-override") is > 1 && Str(mpv.Get("target-colorspace-hint")) is "no" or "false",
+				$"mpv was told the display's rate and SDR ({mpv.Number("display-fps-override")} Hz, hint {Str(mpv.Get("target-colorspace-hint"))})");
 			Check(Str(mpv.Get("user-data/osc-visibility")) == "never", $"mpv's OSC is off (set_controls ui): {Str(mpv.Get("user-data/osc-visibility"))}");
 
 			controls.NotifyActivity();

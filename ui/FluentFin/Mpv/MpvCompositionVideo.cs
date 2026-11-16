@@ -152,7 +152,7 @@ public sealed partial class MpvCompositionVideo(ILogger<MpvCompositionVideo> log
 
 		if (refreshHz > 1)
 		{
-			options.Add(("override-display-fps", refreshHz.ToString("0.###", CultureInfo.InvariantCulture)));
+			options.Add(("display-fps-override", refreshHz.ToString("0.###", CultureInfo.InvariantCulture)));
 		}
 
 		return options;
