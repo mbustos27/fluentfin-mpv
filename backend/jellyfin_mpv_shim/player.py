@@ -3374,6 +3374,10 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
                     except _mpv_errors:
                         log.debug("could not hold the load paused",
                                   exc_info=True)
+                # FluentFin MPV: the title before the file. Without it mpv's
+                # media-title is the url while the file opens (the bar shows
+                # it), and a transcode's url carries ApiKey. Set again below.
+                self._player.force_media_title = video.get_proper_title()
                 self._player.play(self.url)
                 loaded = wait_property(
                     self._player,

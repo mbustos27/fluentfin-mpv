@@ -801,15 +801,29 @@ def item_payload(item_id, item):
 #: are neither fetched nor sent.
 SEGMENT_ACTIONS = ("ask", "always")
 
+#: The most ticks a receiver can hold: a signed 64-bit integer (C#'s
+#: ``long``, which `BridgeSegment` parses into and would throw past).
+MAX_TICKS = 2 ** 63 - 1
+
+
+def _clamp_ticks(ticks):
+    return min(MAX_TICKS, max(0, ticks))
+
 
 def segment_list(segments):
     """The ``segments`` list from ``(type, start, end, action)`` tuples
     (seconds), in the order given, without the ones set to off or with no
-    usable times."""
+    usable times. Times are held to 0 .. `MAX_TICKS` (a server's segment
+    data is not checked by anyone before it gets here); one left empty by
+    that is dropped."""
     out = []
     for kind, start, end, action in segments or ():
         start_ticks = seconds_to_ticks(start)
         end_ticks = seconds_to_ticks(end)
+        if start_ticks is not None:
+            start_ticks = _clamp_ticks(start_ticks)
+        if end_ticks is not None:
+            end_ticks = _clamp_ticks(end_ticks)
         if (action not in SEGMENT_ACTIONS or not isinstance(kind, str)
                 or start_ticks is None or end_ticks is None
                 or end_ticks <= start_ticks):

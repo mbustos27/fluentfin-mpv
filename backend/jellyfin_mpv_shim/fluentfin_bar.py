@@ -27,6 +27,8 @@ Imports nothing from the player or a backend, like `fluentfin_osc`.
 
 import logging
 import os
+import threading
+import time
 
 log = logging.getLogger("fluentfin_bar")
 
@@ -38,11 +40,16 @@ FORK = "fork"
 ASSETS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
     __file__))), "fluentfin", "mpv")
 
-#: What uosc needs to run: its entry point and its two fonts (icons, and the
-#: textures its bar backgrounds are drawn with).
-UOSC_FILES = (("scripts", "uosc", "main.lua"),
-              ("fonts", "uosc_icons.otf"),
-              ("fonts", "uosc_textures.ttf"))
+#: Every file of the vendored uosc (its scripts, licence and two fonts),
+#: relative to `ASSETS`, one per line: the list kept beside VENDORED.md.
+#: `missing` checks each; one gone and the bar is the fork.
+MANIFEST = os.path.join(os.path.dirname(ASSETS), "uosc-files.txt")
+
+#: How long uosc gets to start before `load` checks it is running. Its start
+#: takes about 0.15 s here; one that errors (a missing or broken file) ends
+#: the script at once -- mpv destroys its client -- while ``load-script``
+#: has already answered success.
+START_CHECK = 2.0
 
 #: The volume step of a wheel notch and of Up/Down: FluentFin's own
 #: controls step the same 5 (`fluentfin_osc.WHEEL_STEP`).
@@ -92,11 +99,26 @@ def lua_script(base=None):
     return os.path.join(assets(base), "scripts", "fluentfin.lua")
 
 
-def missing(base=None):
-    """The uosc files that are not there, as relative paths (empty: none)."""
+def uosc_files(manifest=None):
+    """The vendored uosc's files from `MANIFEST` (``/``-separated, relative
+    to `ASSETS`), or None when the list cannot be read."""
+    try:
+        with open(manifest or MANIFEST, encoding="utf-8") as fh:
+            return [line.strip() for line in fh
+                    if line.strip() and not line.startswith("#")]
+    except OSError:
+        return None
+
+
+def missing(base=None, manifest=None):
+    """The uosc files that are not there, as ``/``-separated relative
+    paths (empty: none). With no list to check against, the list itself."""
+    files = uosc_files(manifest)
+    if not files:
+        return [os.path.basename(manifest or MANIFEST)]
     root = assets(base)
-    return [os.path.join(*parts) for parts in UOSC_FILES
-            if not os.path.isfile(os.path.join(root, *parts))]
+    return [f for f in files
+            if not os.path.isfile(os.path.join(root, *f.split("/")))]
 
 
 def choose(osc_style, window_mode, user_fonts_dir=False, base=None):
@@ -189,13 +211,43 @@ def construction_options(mpv_options, bar, user_sets, base=None):
     return mpv_options
 
 
-def load(player, bar, base=None):
+def uosc_running(player):
+    """Whether ``player``'s mpv has a script called uosc: mpv refuses a
+    message to a script it does not have."""
+    try:
+        player.command("script-message-to", "uosc", "fluentfin-probe")
+        return True
+    except Exception:
+        return False
+
+
+def _check_start(player, fallback, delay):
+    """`load`'s check, on a thread of its own: uosc still running once its
+    start is over, else ``fallback`` (the fork)."""
+    time.sleep(delay)
+    if uosc_running(player):
+        return
+    log.error("uosc did not start (mpv's log has its Lua error); the bar is "
+              "mpv's.")
+    try:
+        fallback()
+    except Exception:
+        log.error("Could not load the fallback bar.", exc_info=True)
+
+
+def load(player, bar, base=None, fallback=None, check_after=None):
     """Load ``bar``'s scripts into ``player`` (after its ``script-opts``
     were appended, so they read them at their start). True when this
     loaded the bar itself (uosc); False when the caller loads the fork.
-    ``fluentfin.lua`` goes with either. Errors are logged, never raised:
-    a uosc that will not load leaves the fork to the caller (whose
-    options were appended with uosc's for that, `fluentfin_osc`)."""
+    ``fluentfin.lua`` goes with either. Errors are logged, never raised.
+
+    **mpv answers ``load-script`` before the script has run**: a uosc
+    whose start errors is reported loaded, then ends -- having already
+    turned mpv's own OSC off -- and leaves no bar at all. So once its start
+    is over (``check_after``) a thread asks whether it is still there, and
+    runs ``fallback`` (loads the fork, whose options were appended with
+    uosc's for this, `fluentfin_osc.script_opts`) when it is not. A
+    ``load-script`` that raises (mpv gone) leaves the fork to the caller."""
     loaded = False
     if bar == UOSC:
         try:
@@ -209,4 +261,9 @@ def load(player, bar, base=None):
         log.error("Could not load fluentfin.lua.", exc_info=True)
     if loaded:
         log.info("Bridge mode: the bar is uosc, with FluentFin's look.")
+        if fallback is not None:
+            delay = START_CHECK if check_after is None else check_after
+            threading.Thread(target=_check_start,
+                             args=(player, fallback, delay),
+                             name="fluentfin-uosc-start", daemon=True).start()
     return loaded

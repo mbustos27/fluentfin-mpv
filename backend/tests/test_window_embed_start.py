@@ -67,9 +67,16 @@ class _Video:
     def __init__(self):
         self.item = {"Id": "a" * 32, "Type": "Movie", "MediaType": "Video"}
         self.media_source = {"Path": "/media/film.mkv", "MediaStreams": []}
+        self.titles = 0
 
     def get_proper_title(self):
-        raise _Reached()
+        # The first read is the one before the file is handed over
+        # (FluentFin MPV: the title is set before the url); the second,
+        # after the fullscreen decision, ends the start.
+        self.titles += 1
+        if self.titles > 1:
+            raise _Reached()
+        return "Film"
 
 
 def _player():

@@ -130,5 +130,96 @@ class SidecarIsLabelledTest(unittest.TestCase):
         self.assertEqual(args, ("sub-add", self.URL, "auto", "", ""))
 
 
+class _Reached(Exception):
+    """The start reached its load wait: mpv has the url, which is what the
+    test is about."""
+
+
+class _TitleMpv:
+    """mpv as far as its title goes: ``media-title`` is
+    ``force-media-title`` when that is set, else the file's url (a stream
+    has no title tag). ``seen``: every ``media-title`` from the moment mpv
+    has the file -- what uosc's top bar and the OSC show."""
+
+    def __init__(self):
+        for name, value in (("seen", []), ("url", None),
+                            ("force_media_title", "")):
+            object.__setattr__(self, name, value)
+
+    def media_title(self):
+        return self.force_media_title or self.url
+
+    def __setattr__(self, name, value):
+        object.__setattr__(self, name, value)
+        if self.url is not None:
+            self.seen.append(self.media_title())
+
+    def command(self, *args):
+        pass
+
+    def play(self, url):
+        object.__setattr__(self, "url", url)
+        self.seen.append(self.media_title())
+
+
+class _TranscodedEpisode:
+    is_photo = False
+    client = None
+    TITLE = "Show — S1E2 · Name (Transcode)"
+
+    def __init__(self):
+        self.item = {"Id": "a" * 32, "Type": "Episode", "MediaType": "Video"}
+        self.media_source = {"Path": "/media/ep.mkv", "MediaStreams": []}
+    def get_proper_title(self):
+        return self.TITLE
+
+
+class TitleNeverTheUrlTest(unittest.TestCase):
+    """The reviewer's case: a transcode's url carries ``ApiKey`` (the
+    token), and mpv's ``media-title`` is the url until ``force-media-title``
+    is set -- which the start did only after the load wait, so uosc's top
+    bar could show the url while the file opened."""
+
+    URL = ("http://jf.example/videos/%s/master.m3u8?MediaSourceId=s"
+           "&ApiKey=tok-abcdef-0123456789&api_key=tok-abcdef-0123456789"
+           % ("a" * 32))
+
+    def test_the_title_is_set_before_mpv_has_the_url(self):
+        from unittest import mock
+
+        from jellyfin_mpv_shim import player as player_module
+
+        pm = PlayerManager.__new__(PlayerManager)
+        pm._player = _TitleMpv()
+        pm._lock = threading.RLock()
+        pm._video = None
+        pm.menu = mock.Mock()
+        pm.trickplay = None
+        pm.repeat_mode = "off"
+        pm.fullscreen_disable = True
+        pm._aspect_override = None
+        pm._deinterlace_override = None
+        pm._load_generation = 0
+        pm._load_failed = threading.Event()
+        pm._load_completed = threading.Event()
+        pm._load_cancelled = False
+        pm._failed_playback = None
+        for name in ("_ensure_mpv", "resume_colorspace_hint",
+                     "_apply_render_presets", "_notify_load_start",
+                     "_sync_window_geometry"):
+            setattr(pm, name, lambda *args: None)
+        # The load wait is where the file opens: the start ends there.
+        with mock.patch.object(player_module, "wait_property",
+                               side_effect=_Reached()), \
+                self.assertRaises(_Reached):
+            pm._play_media(_TranscodedEpisode(), self.URL, 0)
+        seen = pm._player.seen
+        self.assertTrue(seen, "mpv never had the file")
+        self.assertEqual(seen[0], _TranscodedEpisode.TITLE)
+        for title in seen:
+            self.assertNotIn("apikey", title.lower())
+            self.assertNotIn("api_key", title.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

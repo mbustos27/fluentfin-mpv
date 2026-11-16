@@ -672,6 +672,21 @@ class SegmentsAndNextTest(unittest.TestCase):
              "endTicks": 13_800_000_000, "action": "always"}])
         self.assertEqual(proto.segment_list(None), [])
 
+    def test_times_are_held_to_what_a_long_can_hold(self):
+        """Reviewer: a server's segment past 2^63-1 ticks (or before 0)
+        went out as it was, and the UI's ``long`` parse would throw."""
+        big = 2 ** 63 - 1
+        self.assertEqual(proto.segment_list([
+            ("Intro", -5, 30, "ask"),
+            ("Outro", 100, 1e30, "always"),
+            ("Recap", 1e30, 2e30, "ask"),       # empty once held: dropped
+            ("Preview", -20, -10, "ask"),       # likewise
+        ]), [
+            {"type": "Intro", "startTicks": 0, "endTicks": 300_000_000,
+             "action": "ask"},
+            {"type": "Outro", "startTicks": 1_000_000_000, "endTicks": big,
+             "action": "always"}])
+
     def test_the_offer_is_an_ask_segment_from_its_start_to_before_its_end(self):
         segments = proto.segment_list([("Recap", 0, 20, "always"),
                                        ("Intro", 10, 70, "ask"),

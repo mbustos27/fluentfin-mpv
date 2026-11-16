@@ -20,6 +20,7 @@ import pathlib
 import re
 import sys
 import tempfile
+import threading
 import unittest
 
 sys.argv = [sys.argv[0]]      # importing the shim reaches args.get_args()
@@ -77,14 +78,44 @@ class ChooseTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as empty:
             self.assertEqual(fluentfin_bar.choose("mpvtk", "embedded",
                                                   base=empty), FORK)
-            os.makedirs(os.path.join(empty, "scripts", "uosc"))
-            pathlib.Path(empty, "scripts", "uosc", "main.lua").write_text(
-                "", encoding="utf-8")
-            self.assertEqual(fluentfin_bar.missing(empty), [
-                os.path.join("fonts", "uosc_icons.otf"),
-                os.path.join("fonts", "uosc_textures.ttf")])
+
+    def test_every_vendored_file_is_checked(self):
+        """The reviewer's case: a uosc with its main.lua and fonts but a
+        lib file gone started, errored and left no bar. Each listed file is
+        needed, and the list is the folder's."""
+        files = fluentfin_bar.uosc_files()
+        self.assertIn("scripts/uosc/lib/std.lua", files)
+        with tempfile.TemporaryDirectory() as copy:
+            for rel in files:
+                dest = pathlib.Path(copy, *rel.split("/"))
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(b"")
+            self.assertEqual(fluentfin_bar.missing(copy), [])
             self.assertEqual(fluentfin_bar.choose("mpvtk", "embedded",
-                                                  base=empty), FORK)
+                                                  base=copy), UOSC)
+            for gone in ("scripts/uosc/lib/std.lua",
+                         "scripts/uosc/elements/Timeline.lua",
+                         "fonts/uosc_icons.otf"):
+                with self.subTest(gone=gone):
+                    path = pathlib.Path(copy, *gone.split("/"))
+                    path.unlink()
+                    self.assertEqual(fluentfin_bar.missing(copy), [gone])
+                    self.assertEqual(fluentfin_bar.choose(
+                        "mpvtk", "embedded", base=copy), FORK)
+                    path.write_bytes(b"")
+        # No list to check against: the fork.
+        with tempfile.TemporaryDirectory() as nowhere:
+            listless = os.path.join(nowhere, "uosc-files.txt")
+            self.assertEqual(fluentfin_bar.missing(manifest=listless),
+                             ["uosc-files.txt"])
+
+    def test_the_list_is_the_vendored_folder(self):
+        root = pathlib.Path(fluentfin_bar.ASSETS)
+        on_disk = sorted(
+            p.relative_to(root).as_posix()
+            for sub in ("scripts/uosc", "fonts")
+            for p in (root / sub).rglob("*") if p.is_file())
+        self.assertEqual(sorted(fluentfin_bar.uosc_files()), on_disk)
 
     def test_the_vendored_copy_is_whole(self):
         self.assertEqual(fluentfin_bar.missing(), [])
@@ -153,6 +184,49 @@ class UoscOptionsTest(unittest.TestCase):
                     self.assertEqual(len(config.split(":")), 3)
 
 
+class NoSelfUpdateTest(unittest.TestCase):
+    """uosc's self-updater ran PowerShell to fetch and run an installer
+    (``irm .../installers/windows.ps1 | iex``). FluentFin MPV pins uosc and
+    re-vendors it by hand: no updater, no way to reach one."""
+
+    def test_uosc_cannot_update_itself(self):
+        uosc = pathlib.Path(fluentfin_bar.uosc_dir())
+        self.assertFalse((uosc / "elements" / "Updater.lua").exists())
+        for path in uosc.rglob("*.lua"):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                self.assertNotIn("require('elements/Updater')", text)
+                self.assertNotIn("installers/", text)
+                self.assertNotIn("'script-binding uosc/update'", text)
+        main = (uosc / "main.lua").read_text(encoding="utf-8")
+        update = main[main.index("bind_command('update'"):]
+        update = update[:update.index("end)")]
+        self.assertNotIn("require", update)
+
+
+class LicencesTest(unittest.TestCase):
+    """What ships with the bar carries its licences: uosc's LGPL-2.1 and
+    Material Symbols' Apache-2.0 (uosc's icon font); the release archive
+    has no licence for either font."""
+
+    def test_the_notices_and_texts_ship_with_it(self):
+        here = pathlib.Path(fluentfin_bar.ASSETS).parent
+        notice = (here / "THIRD-PARTY.md").read_text(encoding="utf-8")
+        for needed in ("LGPL-2.1", "Apache-2.0", "uosc_icons.otf",
+                       "uosc_textures.ttf", "Material Symbols",
+                       "LICENSE.Apache-2.0", "LICENSE.LGPL"):
+            with self.subTest(needed=needed):
+                self.assertIn(needed, notice)
+        apache = (here / "LICENSE.Apache-2.0").read_text(encoding="utf-8")
+        self.assertIn("Apache License", apache)
+        self.assertIn("Version 2.0, January 2004", apache)
+        self.assertIn("TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND "
+                      "DISTRIBUTION", apache)
+        lgpl = pathlib.Path(fluentfin_bar.uosc_dir(), "LICENSE.LGPL")
+        self.assertIn("GNU LESSER GENERAL PUBLIC LICENSE",
+                      lgpl.read_text(encoding="utf-8"))
+
+
 class ScriptOptsTest(unittest.TestCase):
 
     def opts(self, conf, bar):
@@ -210,39 +284,82 @@ class ConstructionOptionsTest(unittest.TestCase):
 
 
 class FakePlayer:
-    def __init__(self, refuse=()):
+    """mpv as ``load-script`` meets it: the command answers success as soon
+    as the script is queued, whether or not its start then errors. A script
+    that started and errored is gone, and a message to it is refused, as mpv
+    refuses one to a script it does not have (``uosc_dies``). ``gone``: mpv
+    itself is (every command raises, as on a closed pipe)."""
+
+    def __init__(self, uosc_dies=False, gone=False):
         self.commands = []
-        self.refuse = refuse
+        self.uosc_dies = uosc_dies
+        self.gone = gone
+        self.scripts = set()
 
     def command(self, *args):
-        if any(r in args[-1] for r in self.refuse):
-            raise OSError("refused")
+        if self.gone:
+            raise BrokenPipeError("mpv went away")
         self.commands.append(args)
+        if args[0] == "load-script":
+            name = os.path.splitext(os.path.basename(args[1]))[0]
+            if not (name == "uosc" and self.uosc_dies):
+                self.scripts.add(name)
+        elif args[0] == "script-message-to" and args[1] not in self.scripts:
+            raise RuntimeError("Can't find script '%s'" % args[1])
 
 
 class LoadTest(unittest.TestCase):
+
+    def setUp(self):
+        was = fluentfin_bar.START_CHECK
+        fluentfin_bar.START_CHECK = 0.05
+        self.addCleanup(setattr, fluentfin_bar, "START_CHECK", was)
+
+    def settle(self):
+        for thread in threading.enumerate():
+            if thread.name == "fluentfin-uosc-start":
+                thread.join(5)
 
     def test_uosc_then_fluentfin_lua(self):
         player = FakePlayer()
         with Bar(UOSC):
             self.assertTrue(fluentfin_osc.load_bar(player))
-        self.assertEqual(player.commands, [
+        self.settle()
+        self.assertEqual(player.commands[:2], [
             ("load-script", fluentfin_bar.uosc_dir()),
             ("load-script", fluentfin_bar.lua_script())])
+        self.assertNotIn(fluentfin_osc.OSC_SCRIPT,
+                         [os.path.basename(c[1]) for c in player.commands],
+                         "uosc runs: no fork on top of it")
 
     def test_the_fork_is_the_callers_and_fluentfin_lua_goes_with_it(self):
         player = FakePlayer()
         with Bar(FORK):
             self.assertFalse(fluentfin_osc.load_bar(player))
+        self.settle()
         self.assertEqual(player.commands,
                          [("load-script", fluentfin_bar.lua_script())])
 
-    def test_a_uosc_that_will_not_load_leaves_the_fork(self):
-        player = FakePlayer(refuse=("uosc",))
+    def test_a_uosc_whose_start_errors_leaves_the_fork(self):
+        """The reviewer's case: a broken file of uosc's. mpv answered
+        ``load-script`` with success, uosc then died (having turned mpv's
+        own OSC off), and the bridge loaded no other bar: none at all."""
+        player = FakePlayer(uosc_dies=True)
+        with Bar(UOSC):
+            self.assertTrue(fluentfin_osc.load_bar(player),
+                            "load-script answered success")
+        self.settle()
+        loaded = [os.path.basename(c[1]) for c in player.commands
+                  if c[0] == "load-script"]
+        self.assertEqual(loaded, ["uosc", "fluentfin.lua",
+                                  fluentfin_osc.OSC_SCRIPT])
+
+    def test_an_mpv_that_is_gone_loads_nothing(self):
+        player = FakePlayer(gone=True)
         with Bar(UOSC):
             self.assertFalse(fluentfin_osc.load_bar(player))
-        self.assertEqual(player.commands,
-                         [("load-script", fluentfin_bar.lua_script())])
+        self.settle()
+        self.assertEqual(player.commands, [])
 
     def test_nothing_outside_bridge_mode(self):
         player = FakePlayer()
@@ -275,6 +392,11 @@ class MessagesTest(unittest.TestCase):
 
         def play_prev(self):
             pass
+
+    def setUp(self):
+        self.addCleanup(setattr, fluentfin_osc, "skip_handler",
+                        fluentfin_osc.skip_handler)
+        fluentfin_osc.skip_handler = None
 
     def test_each_message_queues_the_shims_own_action(self):
         pm = self.Pm()

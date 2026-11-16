@@ -349,7 +349,14 @@ def load_bar(player):
     loads the fork, as it would without the bridge."""
     if not _active or _bar is None:
         return False
-    return fluentfin_bar.load(player, _bar)
+
+    def fork():
+        # uosc did not start: the fork, as `_load_classic_osc` loads it.
+        from .utils import get_resource
+
+        player.command("load-script", get_resource(OSC_SCRIPT))
+
+    return fluentfin_bar.load(player, _bar, fallback=fork)
 
 
 #: ``fluentfin.lua``'s messages (``script-message <name>``) -> the shim's
@@ -361,6 +368,12 @@ MESSAGES = {
 }
 
 
+#: The bridge's skip of the segment it offered (`Bridge._skip_offer`):
+#: ``fluentfin-skip`` goes there when it is set, so the S key and the bar's
+#: button skip the segment shown, not the first one the position is in.
+skip_handler = None
+
+
 def on_message(pm, args):
     """A ``fluentfin-*`` client message (``PlayerManager._on_client_message``,
     on mpv's event thread): queued on the action thread, as the shim's own
@@ -368,5 +381,8 @@ def on_message(pm, args):
     action = MESSAGES.get(args[0]) if args else None
     if action is None or not _active:
         return False
+    if action == "skip_intro" and skip_handler is not None:
+        skip_handler()          # only queues (Bridge._skip_offer)
+        return True
     pm.put_task(getattr(pm, action))
     return True

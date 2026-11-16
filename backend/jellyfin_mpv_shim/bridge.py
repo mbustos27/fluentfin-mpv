@@ -1351,9 +1351,12 @@ class Bridge:
         and restarts), the queue's finished callback, load errors, mpv
         failing to come back, and the embedded window's fullscreen
         requests."""
-        from . import window_embed
+        from . import fluentfin_osc, window_embed
 
         pm = self.runtime.pm
+        # fluentfin-mpv: the S key and the bar's Skip button skip the
+        # segment on offer, as ``skip_segment`` does.
+        fluentfin_osc.skip_handler = self._skip_offer
         original_play = pm.play
         original_finished = pm.finished_callback
         original_stopped = pm.send_timeline_stopped
@@ -2705,18 +2708,56 @@ class Bridge:
 
     def cmd_skip_segment(self, args):
         """fluentfin-mpv: skip the segment on offer (BRIDGE.md section 4,
-        ``segments.current``), the way the shim's own Skip button does:
-        `PlayerManager.skip_intro` on the action thread, which seeks to the
-        end of the segment the position is in. The offer is the one last
-        sent, the one the UI saw."""
+        ``segments.current``): `_skip_offer`."""
         pm = self._require_player()
         if self._playing(pm) is None:
             raise BridgeError(NO_PLAYBACK, "nothing is playing")
-        if self.tracker.offer() is None:
-            return {"skipped": False}
-        pm.put_task(pm.skip_intro)
+        return {"skipped": self._skip_offer()}
+
+    def _skip_offer(self):
+        """fluentfin-mpv: a seek to the end of the segment on offer -- the
+        one last sent, which the UI and mpv's bar showed -- and nothing
+        else. The shim's own `skip_intro` seeks to the end of the first
+        segment the position is in, which can be another one (an always-
+        skipped recap that overlaps an intro, or one ending where it
+        starts). False, and nothing done, when none is on offer or the last
+        sample of the position is outside it. The seek runs on the action
+        thread, and only if the item is the same and its live position is
+        still in the segment. Never raises."""
+        pm = self.runtime.pm
+        offer = self.tracker.offer()
+        sample = (self.tracker.last_state or {}).get("positionTicks")
+        if pm is None or offer is None or not isinstance(sample, int):
+            return False
+        if not offer["startTicks"] <= sample < offer["endTicks"]:
+            return False
+        video = self._playing(pm)
+        if video is None:
+            return False
+        start = proto.ticks_to_seconds(offer["startTicks"])
+        end = proto.ticks_to_seconds(offer["endTicks"])
+
+        def seek():
+            if pm._video is not video:
+                return
+            position = pm._player.playback_time
+            if position is None or not start <= position < end:
+                log.info("Not skipping: the position has left the segment")
+                return
+            pm._player.command("seek", end, "absolute")
+            # What `skip_intro` records for the segment it skips.
+            for segment in getattr(video, "intros", None) or ():
+                if (getattr(segment, "type", None) == offer["type"]
+                        and proto.seconds_to_ticks(segment.start)
+                        == offer["startTicks"]):
+                    segment.has_triggered = True
+            pm.is_in_intro = False
+            pm._last_intro_msg_time = time.time()
+            pm.timeline_handle()
+
+        pm.put_task(seek)
         self.poke()
-        return {"skipped": True}
+        return True
 
     def _subtitle_base(self):
         """The shim's own ``sub-pos`` (its subtitle position setting), what

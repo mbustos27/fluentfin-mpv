@@ -414,6 +414,58 @@ class WithUoscTest(_Case):
             self.doCleanups()
 
 
+class UoscStartCheckTest(_Case):
+    """`fluentfin_bar.load` against a real mpv, which answers ``load-script``
+    with success before the script has run: a uosc whose start errors (the
+    reviewer broke its ``lib/std.lua``) must leave the fork, not no bar."""
+
+    class Player:
+        """The shim's handle as `load` uses it: a command mpv refuses
+        raises (python-mpv-jsonipc raises MPVError)."""
+
+        def __init__(self, ipc):
+            self.ipc = ipc
+
+        def command(self, *args):
+            answer = self.ipc.cmd(*args)
+            if answer.get("error") != "success":
+                raise RuntimeError(answer.get("error"))
+            return answer.get("data")
+
+    def assets(self, broken):
+        """A copy of FluentFin's mpv assets; ``broken``: uosc's lib/std.lua
+        errors as it loads."""
+        copy = tempfile.mkdtemp(prefix="ffbar-assets-")
+        self.addCleanup(shutil.rmtree, copy, True)
+        shutil.copytree(fluentfin_bar.ASSETS, os.path.join(copy, "mpv"))
+        base = os.path.join(copy, "mpv")
+        if broken:
+            pathlib.Path(fluentfin_bar.uosc_dir(base), "lib",
+                         "std.lua").write_text(
+                'error("boom: a lib that will not load")\n',
+                encoding="utf-8")
+        return base
+
+    def load(self, broken):
+        import threading
+
+        self.start(uosc=None)
+        fell_back = threading.Event()
+        loaded = fluentfin_bar.load(self.Player(self.ipc), fluentfin_bar.UOSC,
+                                    base=self.assets(broken),
+                                    fallback=fell_back.set, check_after=1.0)
+        self.assertTrue(loaded, "mpv answers load-script with success")
+        return fell_back
+
+    def test_a_uosc_whose_start_errors_leaves_the_fork(self):
+        fell_back = self.load(broken=True)
+        self.assertTrue(fell_back.wait(10), "no bar at all")
+
+    def test_a_uosc_that_starts_is_left_alone(self):
+        fell_back = self.load(broken=False)
+        self.assertFalse(fell_back.wait(3), "a second bar over uosc")
+
+
 class WithoutUoscTest(_Case):
     """The fork's run: fluentfin.lua keeps to the key map and the prompt."""
 

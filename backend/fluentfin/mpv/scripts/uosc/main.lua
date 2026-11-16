@@ -348,7 +348,7 @@ function create_default_menu_items()
 				{title = t('Key bindings'), value = 'script-binding uosc/keybinds'},
 				{title = t('Show in directory'), value = 'script-binding uosc/show-in-directory'},
 				{title = t('Open config folder'), value = 'script-binding uosc/open-config-directory'},
-				{title = t('Update uosc'), value = 'script-binding uosc/update'},
+				-- FluentFin MPV: no "Update uosc": uosc is pinned (VENDORED.md).
 			},
 		},
 		{title = t('Quit'), value = 'quit'},
@@ -1092,9 +1092,12 @@ bind_command('open-config-directory', function()
 		msg.error('Couldn\'t serialize config path "' .. config_path .. '".')
 	end
 end)
+-- FluentFin MPV: no self-update. Updater.lua ran PowerShell to fetch and run
+-- an installer; it is not vendored, and uosc is re-vendored by hand (VENDORED.md).
 bind_command('update', function()
-	if not Elements:has('updater') then require('elements/Updater'):new() end
+	msg.warn('uosc is pinned by FluentFin MPV and does not update itself.')
 end)
+-- END FluentFin MPV
 
 --[[ MESSAGE HANDLERS ]]
 

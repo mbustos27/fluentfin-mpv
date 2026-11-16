@@ -355,16 +355,24 @@ switched on by `start_player` before the player is imported, like
   bridge mode resolves the shim's default "mpvtk" to "mpv", since the HUD
   needs the library browser): **uosc** (vendored under `fluentfin/mpv`,
   `fluentfin/VENDORED.md`) for "mpvtk"/"jellyfin", the default; **the fork**
-  for "mpv"/"default", and as the fallback wherever uosc cannot run: its
-  files missing, an `attached` window (FluentFin's own mpv gets no
-  construction option, so no `osd-fonts-dir` for uosc's icon font), a user
-  `mpv.conf` that sets `osd-fonts-dir`, or a uosc that will not load.
-  "none" and "custom" are the shim's, as without the bridge. Either way the
-  shim builds mpv with style "mpv", and `_load_classic_osc` asks
-  `fluentfin_osc.load_bar` first: it `load-script`s uosc's folder and
-  `fluentfin.lua` (after the `script-opts` appends, so both read their
-  options at their start), or only `fluentfin.lua`, and the fork then loads
-  as before. With a bar of ours, a `kb_kill_shader` still at its default `k`
+  for "mpv"/"default", and as the fallback wherever uosc cannot run: any
+  of its files missing (every one is listed in `fluentfin/uosc-files.txt`,
+  which a test keeps equal to the folder), an `attached` window
+  (FluentFin's own mpv gets no construction option, so no `osd-fonts-dir`
+  for uosc's icon font), a user `mpv.conf` that sets `osd-fonts-dir`, or a
+  uosc whose start fails. **mpv answers `load-script` with success before
+  the script has run**: a uosc that errors at its start (a broken file)
+  was "loaded", turned mpv's own OSC off and ended, leaving no bar at all.
+  So `fluentfin_bar.load` checks after the start (`START_CHECK`, 2 s:
+  uosc's start takes about 0.15 s here) that mpv still has a script called
+  uosc -- a `script-message-to uosc` is refused when it has not -- and
+  loads the fork when it is gone. "none" and "custom" are the shim's, as
+  without the bridge. Either way the shim builds mpv with style "mpv", and
+  `_load_classic_osc` asks `fluentfin_osc.load_bar` first: it
+  `load-script`s uosc's folder and `fluentfin.lua` (after the `script-opts`
+  appends, so both read their options at their start), or only
+  `fluentfin.lua`, and the fork then loads as before. uosc's self-updater
+  is not vendored (`VENDORED.md`). With a bar of ours, a `kb_kill_shader` still at its default `k`
   moves to `K` for the run (the shim's binding is forced, and `k` is pause
   in FluentFin's key map).
 - **uosc's look** is `fluentfin_bar.uosc_script_opts`: FluentFin's controls
@@ -790,9 +798,16 @@ is `state.queue`'s neighbours plus `settings.auto_play`. Both follow
 rule in `bridge_protocol.offered_segment` (an `ask` segment, end exclusive,
 so the skip's seek to the end closes it), and only while the item plays:
 during a start or a restart mpv's position can still be the outgoing
-item's. `skip_segment` checks the offer last sent (`Tracker.offer`, the one
-the UI saw) and then does what the shim's own Skip button does,
-`put_task(skip_intro)`. The monitor also writes the offer's button text to
+item's. `skip_segment` (and the S key and the bar's Skip button, through
+`fluentfin_osc.skip_handler`) is `Bridge._skip_offer`: the offer last sent
+(`Tracker.offer`, the one the UI saw), and, on the action thread, a seek to
+that segment's end if the item is the same and the live position is still
+in it, then what `skip_intro` records (``has_triggered``, the early
+progress report). Not `skip_intro` itself, which goes to the end of the
+FIRST segment the position is in, end included: an always-skipped recap
+overlapping the intro, or one ending where it starts, took the seek. Segment
+times are held to 0 .. 2^63-1 ticks (`bridge_protocol.MAX_TICKS`), a C#
+``long``. The monitor also writes the offer's button text to
 `user-data/fluentfin/skip` after each tick (`Bridge._push_offer`, "" with
 none or with `set_controls` `"ui"`), for the Skip button and prompt of the
 bar mpv draws (section 4a); written on change and again for a new mpv.

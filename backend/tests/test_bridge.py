@@ -140,6 +140,8 @@ class FakeHandle:
         if args[:2] == ("set", "sub-pos"):
             # mpv's `set` takes a string (docs/mpv-backends.md section 1)
             self.sub_pos = float(args[2])
+        if args[0] == "seek" and args[2:] == ("absolute",):
+            self.playback_time = float(args[1])
 
     def play(self, url):
         self.played.append(url)
@@ -530,9 +532,14 @@ class FakePM:
                 video, self.queue_next = self.queue_next, None
                 self._move_to(video)
 
+    def timeline_handle(self):
+        # The real one wakes the progress reporter for an early report.
+        self._note("timeline_handle")
+
     def skip_intro(self):
         # fluentfin-mpv: the shim's Skip (`PlayerManager.skip_intro`): a
-        # seek to the end of the segment the position is in, if any.
+        # seek to the end of the FIRST segment the position is in (end
+        # included), if any.
         self._note("skip_intro")
         video, position = self._video, self._player.playback_time
         for intro in (getattr(video, "intros", None) or ()):
@@ -887,6 +894,10 @@ class BridgeCase(unittest.TestCase):
         self.addCleanup(window_embed.configure, None)
         self.addCleanup(setattr, window_embed, "on_fullscreen_request", None)
         self.addCleanup(proto._secrets.clear)
+        # fluentfin-mpv: a connect points the S key at this bridge.
+        from jellyfin_mpv_shim import fluentfin_osc
+
+        self.addCleanup(setattr, fluentfin_osc, "skip_handler", None)
         patcher = mock.patch.object(proto, "is_window_handle",
                                     return_value=True)
         self.is_window = patcher.start()
@@ -1402,16 +1413,73 @@ class SegmentsTest(BridgeCase):
         self.tick()
         answer = self.send("skip_segment")
         self.assertEqual(answer["result"], {"skipped": True})
-        # The shim's own Skip, on the action thread.
+        # On the action thread: a seek to the offered segment's end.
         self.assertIn(("put_task",), self.runtime.journal)
         pm.run_deferred()
-        self.assertIn(("skip_intro",), self.runtime.journal)
+        self.assertIn(("seek", 70.0, "absolute"), pm._player.commands)
         self.assertEqual(pm._player.playback_time, 70.0)
+        self.assertTrue(video.intros[0].has_triggered)
+        self.assertIn(("timeline_handle",), self.runtime.journal)
         events = self.tick()
         data, = [d for n, d in events if n == "segments"]
         self.assertIsNone(data["current"], "the skip ended the offer")
         self.assertEqual(self.send("skip_segment")["result"],
                          {"skipped": False})
+
+    def test_the_segment_skipped_is_the_one_offered(self):
+        """Reviewer: `skip_intro` goes to the end of the FIRST segment the
+        position is in, end included. A recap ending where the intro
+        begins (0-90, 90-120) at 90, or an always-skipped recap overlapping
+        it (0-100, 90-120) at 95: the offer is the intro, and the seek went
+        to the recap's end."""
+        from jellyfin_mpv_shim.conf import settings
+
+        for recap_end, position in ((90.0, 90.0), (100.0, 95.0)):
+            with self.subTest(recap_end=recap_end), mock.patch.multiple(
+                    settings, segment_recap="always", segment_intro="ask"):
+                self.setUp()
+                pm, video = self.playing(position)
+                video.intros = [self.Intro("Recap", 0.0, recap_end),
+                                self.Intro("Intro", 90.0, 120.0)]
+                self.tick()
+                self.assertEqual(self.bridge.tracker.offer()["type"],
+                                 "Intro")
+                self.assertEqual(self.send("skip_segment")["result"],
+                                 {"skipped": True})
+                pm.run_deferred()
+                seeks = [c for c in pm._player.commands if c[0] == "seek"]
+                self.assertEqual(seeks, [("seek", 120.0, "absolute")])
+                self.assertEqual([s.has_triggered for s in video.intros],
+                                 [False, True])
+
+    def test_a_position_that_left_the_segment_skips_nothing(self):
+        pm, video = self.playing(15.0)
+        self.tick()
+        # Seen in the segment; mpv has moved past it before the action
+        # thread gets there: no seek back.
+        self.assertEqual(self.send("skip_segment")["result"],
+                         {"skipped": True})
+        pm._player.playback_time = 75.0
+        pm.run_deferred()
+        self.assertEqual([c for c in pm._player.commands if c[0] == "seek"],
+                         [])
+        # Sampled outside it: nothing on offer, nothing accepted.
+        self.tick()
+        self.assertEqual(self.send("skip_segment")["result"],
+                         {"skipped": False})
+
+    def test_the_s_key_skips_the_offered_segment_too(self):
+        from jellyfin_mpv_shim import fluentfin_osc
+
+        self.addCleanup(setattr, fluentfin_osc, "skip_handler", None)
+        self.addCleanup(fluentfin_osc.configure, False)
+        pm, video = self.playing(15.0)
+        fluentfin_osc.configure(True)
+        self.tick()
+        self.assertTrue(fluentfin_osc.on_message(pm, ["fluentfin-skip"]))
+        pm.run_deferred()
+        self.assertIn(("seek", 70.0, "absolute"), pm._player.commands)
+        self.assertNotIn(("skip_intro",), self.runtime.journal)
 
     def test_the_bar_shows_the_offer_only_with_mpvs_controls(self):
         pm, video = self.playing(5.0)
@@ -2227,7 +2295,7 @@ class PlayerNamesTest(unittest.TestCase):
                      "_apply_auth_headers", "get_timeline_options",
                      "update", "_queue_finished", "restart_playback",
                      "_handle_mpv_disconnect", "_report_stopped_offline",
-                     "skip_intro"):
+                     "skip_intro", "timeline_handle"):
             with self.subTest(name=name):
                 self.assertIn(name, names)
 
