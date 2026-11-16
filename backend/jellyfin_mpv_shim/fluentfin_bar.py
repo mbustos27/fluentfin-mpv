@@ -144,9 +144,11 @@ def uosc_script_opts(accent, scale, bar_colour, bar_alpha):
         "uosc-top_bar_controls=no",
         # Netflix-like: nothing on the picture while the bar is hidden.
         "uosc-progress=never",
-        # The seek bar: a line in the accent, no cache ranges and no
-        # buffered-time readout, and the wheel over it is not a seek.
-        "uosc-timeline_style=line",
+        # The seek bar: the elapsed part filled with the accent (as a WinUI
+        # slider; "line" draws only a cursor), no cache ranges and no
+        # buffered-time readout, and the wheel over it is not a seek. uosc
+        # has one foreground colour, so its icons take the accent too.
+        "uosc-timeline_style=bar",
         "uosc-timeline_cache=no",
         "uosc-buffered_time_threshold=0",
         "uosc-timeline_step=0",

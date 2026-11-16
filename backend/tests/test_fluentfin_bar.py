@@ -114,6 +114,7 @@ class UoscOptionsTest(unittest.TestCase):
         # The wheel over the seek bar is no seek, a volume notch is 5, no
         # cache readout, no window buttons (the window is FluentFin's).
         for key, value in (("timeline_step", "0"), ("volume_step", "5"),
+                           ("timeline_style", "bar"),
                            ("buffered_time_threshold", "0"),
                            ("timeline_cache", "no"),
                            ("top_bar_controls", "no"),
