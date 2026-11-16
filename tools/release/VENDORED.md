@@ -50,6 +50,12 @@ verification (`docs\RELEASE.md`).
 DLL hashes there (DLL `88504ee5560942a955405e99dfb5971368e4cf851321f36565bf2a667271db1b`, pinned in the build script).
 It imports `vulkan-1.dll`, which is not shipped (GPU drivers install it; README.txt says so).
 
+## The mpv bar (uosc, inside `backend\_internal\fluentfin`)
+
+`backend\fluentfin\` as it is in the repository (uosc 5.13.0 and its fonts, `fluentfin.lua`, their licences):
+`backend\fluentfin\VENDORED.md` and `THIRD-PARTY.md` there. The build checks every file `uosc-files.txt` lists is in the
+frozen backend, and THIRD-PARTY-NOTICES.txt carries THIRD-PARTY.md and the licence texts.
+
 ## Not shipped
 
 - **mpv.exe.** Only mpv's own controls need it (FluentFin's controls use libmpv inside FluentFin); the user installs mpv

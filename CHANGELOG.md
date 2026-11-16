@@ -13,7 +13,8 @@ engine, running headless as a child process and talking to FluentFin over a stdi
 server sees one session, FluentFin's, and only the backend reports playback.
 
 - **Two kinds of player controls** (Settings > Playback > Player controls): FluentFin's own, drawn over an mpv that runs
-  inside FluentFin (libmpv); or mpv's own controller (the shim's, with FluentFin's look) in a window inside FluentFin's.
+  inside FluentFin (libmpv); or mpv's own bar, [uosc](https://github.com/tomasklaen/uosc) in FluentFin's look (the
+  shim's bar as the fallback), in a window inside FluentFin's.
 - **The shim's playback**: PlaybackInfo and the direct play / transcode decision, track selection and remembered
   tracks, next episode, skip intro/credits and trickplay with mpv's controls, progress reporting.
 - **A TV journal**: what you watched, per server and user, with ratings, reviews, rewatches, filters and CSV/JSON

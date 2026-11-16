@@ -154,6 +154,17 @@ if ($strayMpv) { throw "the frozen backend picked up mpv files it must not ship:
 $knownFolders = 'certifi', 'charset_normalizer', 'jellyfin_mpv_shim', 'PIL', 'pywin32_system32', 'win32', 'fluentfin'
 $unknown = @(Get-ChildItem (Join-Path $backendOut '_internal') -Directory | Where-Object { $_.Name -notin $knownFolders })
 if ($unknown) { throw "the frozen backend ships folders the notices do not cover: $($unknown.Name -join ', ') (tools\release\requirements-backend.txt, notices.py)" }
+# the mpv bar (uosc): every file its manifest lists, where fluentfin_bar looks for it frozen (_MEIPASS\fluentfin\mpv);
+# one missing and the backend quietly falls back to the older bar
+$uoscManifest = Join-Path $repo 'backend\fluentfin\uosc-files.txt'
+if (Test-Path $uoscManifest) {
+    $frozenAssets = Join-Path $backendOut '_internal\fluentfin'
+    $listed = @(Get-Content $uoscManifest | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+    $absent = @($listed | Where-Object { -not (Test-Path (Join-Path $frozenAssets ('mpv\' + $_.Replace('/', '\')))) })
+    if (-not (Test-Path (Join-Path $frozenAssets 'uosc-files.txt'))) { $absent += 'uosc-files.txt' }
+    if ($absent) { throw "the frozen backend lacks uosc files: $($absent -join ', ')" }
+    Write-Host "uosc: all $($listed.Count) files of backend\fluentfin\uosc-files.txt are in the frozen backend"
+}
 
 # --- 4. FluentFin ---------------------------------------------------------------------------------------------------
 Step 'FluentFin (dotnet publish, self-contained, unpackaged)'

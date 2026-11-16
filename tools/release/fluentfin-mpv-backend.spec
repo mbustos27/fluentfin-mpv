@@ -22,7 +22,7 @@ def package_data(root, prefix, skip_ext=(".py", ".pyc", ".po")):
         rel = os.path.relpath(folder, root)
         dest = prefix if rel == "." else os.path.join(prefix, rel)
         for name in files:
-            if os.path.splitext(name)[1].lower() not in skip_ext:
+            if not name.startswith(".") and os.path.splitext(name)[1].lower() not in skip_ext:
                 out.append((os.path.join(folder, name), dest))
     return out
 

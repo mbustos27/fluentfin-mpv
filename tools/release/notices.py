@@ -202,9 +202,12 @@ def main():
         f"  Source:  {pyinstaller['source']}",
         "",
     ]
-    if args.fluentfin_assets and os.path.isdir(args.fluentfin_assets):
-        lines += ["uosc and its fonts (backend\\_internal\\fluentfin\\mpv): see backend\\_internal\\fluentfin\\VENDORED.md for",
-                  "  the version, source and licences (uosc: LGPL-2.1, LICENSE.LGPL beside it)", ""]
+    third_party = os.path.join(args.fluentfin_assets or "", "THIRD-PARTY.md")
+    if args.fluentfin_assets and os.path.isfile(third_party):
+        # backend/fluentfin/THIRD-PARTY.md, verbatim: the mpv bar's components (uosc, its fonts, the code inside it)
+        lines += ["FluentFin MPV's mpv bar: backend\\_internal\\fluentfin (backend/fluentfin in the source). Its",
+                  "THIRD-PARTY.md, with paths relative to that folder; VENDORED.md there has versions and hashes:", "",
+                  read_text(third_party), ""]
     lines += ["3. Python packages in the backend (backend\\_internal)", THIN]
     for item in py_packages:
         entry(lines, item)
@@ -221,11 +224,18 @@ def main():
     for item in [pyinstaller] + py_packages + nuget:
         texts += [(f"{item['name']} {item['version']}: {name}", text) for name, text in item["texts"]]
     if args.fluentfin_assets:
-        for root, _dirs, files in os.walk(args.fluentfin_assets):
+        for root, dirs, files in os.walk(args.fluentfin_assets):
+            dirs.sort()
             for f in sorted(files):
-                if LICENCE_FILE.match(f):
-                    rel = os.path.relpath(os.path.join(root, f), args.fluentfin_assets)
-                    texts.append((f"FluentFin MPV mpv assets: {rel}", read_text(os.path.join(root, f))))
+                if LICENCE_FILE.match(f) and f != "THIRD-PARTY.md":
+                    rel = os.path.relpath(os.path.join(root, f), args.fluentfin_assets).replace(os.sep, "/")
+                    texts.append((f"FluentFin MPV's mpv bar: {rel}", read_text(os.path.join(root, f))))
+        # a licence that lives in a file's own header (THIRD-PARTY.md: "in the file")
+        fzy = os.path.join(args.fluentfin_assets, "mpv", "scripts", "uosc", "lib", "fzy.lua")
+        if os.path.isfile(fzy):
+            m = re.match(r"--\[\[(.*?)\]\]", read_text(fzy), re.S)
+            if m:
+                texts.append(("fzy (Lua port), in uosc: the header of mpv/scripts/uosc/lib/fzy.lua", m.group(1).strip()))
     unique = {}   # the text with its whitespace normalised -> (owners, text)
     for owner, text in texts:
         owners, _ = unique.setdefault(" ".join(text.split()), ([], text))

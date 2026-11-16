@@ -194,7 +194,14 @@ foreach ($run in $Runs) {
         'FluentFin' { [void](Invoke-ServerRun 'FluentFin' 'FluentFin' $false 'season,play,leave,close') }
         'Mpv' {
             if (-not $mpvDir) { Write-Host "`n== Mpv: skipped (no mpv.exe on the Machine/User PATH)"; continue }
-            [void](Invoke-ServerRun 'Mpv' 'Mpv' $true 'season,play,leave,close')
+            $data = Invoke-ServerRun 'Mpv' 'Mpv' $true 'season,play,leave,close'
+            # mpv's controls are the uosc bar when the package carries it (backend\_internal\fluentfin); the backend says so
+            $bundledUosc = Test-Path (Join-Path $pkg 'backend\_internal\fluentfin\uosc-files.txt')
+            if ($bundledUosc) {
+                $log = Join-Path $data 'Logs\mpv-backend.log'
+                $uosc = (Test-Path $log) -and (Select-String -Path $log -Pattern 'the bar is uosc' -Quiet) -and -not (Select-String -Path $log -Pattern 'uosc is not complete|the bar is mpv' -Quiet)
+                Check "Mpv: the bar is the bundled uosc" $uosc $log
+            }
         }
         'NoMpv' {
             $data = Invoke-ServerRun 'NoMpv' 'Mpv' $false 'season,play,close' $false
