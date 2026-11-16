@@ -13,6 +13,13 @@ public interface IMainWindowViewModel : INotifyPropertyChanged
 	/// sign-in at start-up ("Signing in to Home…"); null or empty = nothing.
 	/// </summary>
 	string? StartupStatus { get; set; }
+
+	/// <summary>
+	/// fluentfin-mpv: <see cref="StartupStatus"/> has text, raised with it. The window's startup panel (its ring, over every
+	/// page) shows from this bool: x:Bind does not call a function whose argument is null, so a panel shown through a
+	/// function of the text stayed up, ring spinning, once the sign-in cleared it, and over the video of FluentFin's own mpv.
+	/// </summary>
+	bool HasStartupStatus { get; }
 }
 
 public interface ITitleBarViewModel : INotifyPropertyChanged

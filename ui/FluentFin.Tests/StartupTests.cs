@@ -116,6 +116,32 @@ public sealed class StartupTests
 		await Assert.ThrowsAsync<HttpRequestException>(() => running);
 		Assert.Null(window.Object.StartupStatus);
 	}
+
+	/// <summary>
+	/// The window's startup panel and its ring show from <see cref="IMainWindowViewModel.HasStartupStatus"/>, which goes
+	/// false, and says so, when the sign-in clears the text to null (through a function of the text the ring stayed up over
+	/// the video for good: FluentFin.Core.Tests' BindingXamlTests).
+	/// </summary>
+	[Fact]
+	public void TheStartupPanelsBool_FollowsTheText_DownToNull()
+	{
+		var window = new MainViewModel(Mock.Of<ITitleBarViewModel>());
+		var changed = new List<string?>();
+		window.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+		Assert.False(window.HasStartupStatus);
+
+		window.StartupStatus = "Signing in to Home…";
+		Assert.True(window.HasStartupStatus);
+		Assert.Contains(nameof(IMainWindowViewModel.HasStartupStatus), changed);
+
+		changed.Clear();
+		window.StartupStatus = null;
+		Assert.False(window.HasStartupStatus);
+		Assert.Contains(nameof(IMainWindowViewModel.HasStartupStatus), changed);
+
+		window.StartupStatus = "  ";
+		Assert.False(window.HasStartupStatus);
+	}
 }
 
 /// <summary>fluentfin-mpv (startup-perf, O5): Flyleaf's engine starts with the first Flyleaf player, once.</summary>

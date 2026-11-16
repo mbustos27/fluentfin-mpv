@@ -33,7 +33,9 @@
 
   -Script (steps, comma-separated, in order; sign-in always comes first): login, home, library, movie, series, season,
   play, fullscreen, windowed, leave, close, nav:<navigation item> (e.g. nav:Settings), shot:<label>, wait:<seconds>;
-  'all' (default) = login..close. -Then <script.ps1> runs after the steps on the private desktop with the driver's
+  'all' (default) = login..close. Not in 'all': relaunch (close, start again: the automatic sign-in with the saved
+  server) and steady (after play: playback running, nothing may move over the middle of the video; with relaunch first
+  it catches the 1.0 test build's stuck startup ring: -Script relaunch,play,steady,close). -Then <script.ps1> runs after the steps on the private desktop with the driver's
   helpers (see offscreen\drive.ps1). -Setting Name=Value (repeatable) is written into the run's LocalSettings.json
   first (a JSON value, else a string), e.g. -Setting MpvPlayerControls=Mpv for mpv's own controls (FluentFin's are the
   default, with libmpv-2.dll next to the exe); MpvBackendCommand, Servers and MediaPlayerType are the harness's and

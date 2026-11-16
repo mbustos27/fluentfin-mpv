@@ -28,15 +28,19 @@
 
         <Frame x:Name="RootFrame" Grid.Row="1" />
 
-        <!--  fluentfin-mpv (startup-perf): the window is shown before the automatic sign-in, which says so here  -->
+        <!--
+            fluentfin-mpv (startup-perf): the window is shown before the automatic sign-in, which says so here. Shown from a
+            bool: through a function of StartupStatus it never went once the text was null (x:Bind skips a function of null).
+        -->
         <StackPanel
+            x:Name="StartupPanel"
             Grid.Row="1"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             Orientation="Vertical"
             Spacing="12"
-            Visibility="{x:Bind local:MainWindow.VisibleWhenSet(ViewModel.StartupStatus), Mode=OneWay}">
-            <ProgressRing IsActive="{x:Bind local:MainWindow.IsSet(ViewModel.StartupStatus), Mode=OneWay}" />
+            Visibility="{x:Bind ViewModel.HasStartupStatus, Mode=OneWay}">
+            <ProgressRing IsActive="{x:Bind ViewModel.HasStartupStatus, Mode=OneWay}" />
             <TextBlock
                 HorizontalAlignment="Center"
                 AutomationProperties.LiveSetting="Polite"
