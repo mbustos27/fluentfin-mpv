@@ -48,19 +48,21 @@ public sealed partial class VideoPlayerViewModelMpvTests
 	}
 
 	[Fact]
-	public async Task MpvsControls_AreTheDefault_AndSendNoSetControls()
+	public async Task MpvsControls_WhenChosen_SendNoSetControls()
 	{
 		var movie = Movie();
 		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
+		_settings.SetupGet(x => x.MpvPlayerControls).Returns(MpvPlayerControls.Mpv);
 
-		// the real choice: the setting (a mock's default, mpv), so libmpv is not even looked for
+		// the real choice: the setting says mpv, so libmpv is not even looked for
 		var vm = CreateViewModel();
+		vm.LibmpvUnavailable = () => throw new InvalidOperationException("libmpv is not looked for when mpv's controls are chosen");
 		await vm.OnNavigatedTo(movie);
 
 		Assert.False(vm.UsesFluentFinControls);
 		Assert.Null(vm.MpvControls);
+		Assert.Null(vm.MpvNotice);
 		Assert.DoesNotContain("set_controls", _backend.Commands);
-		Assert.Equal(MpvPlayerControls.Mpv, default(MpvPlayerControls));
 	}
 
 	[Fact]
@@ -75,6 +77,26 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		Assert.False(vm.UsesFluentFinControls);
 		Assert.Null(vm.MpvControls);
 		Assert.Contains("libmpv-2.dll was not found", vm.MpvNotice);
+		Assert.Contains("mpv's controls are used", vm.MpvNotice);
+		Assert.DoesNotContain("set_controls", _backend.Commands);
+		Assert.Contains("play", _backend.Commands);
+	}
+
+	/// <summary>The same fallback through the real choice and the real libmpv probe (not a stubbed answer), of a DLL that is not libmpv.</summary>
+	[Fact]
+	public async Task FluentFinControls_ChosenButLibmpvIsNotUsable_TheRealCheckFallsBackToMpvsAndSaysSo()
+	{
+		var movie = Movie();
+		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
+		_settings.SetupGet(x => x.MpvPlayerControls).Returns(MpvPlayerControls.FluentFin);
+		var vm = CreateViewModel();
+		vm.LibmpvUnavailable = () => FluentFin.Mpv.Libmpv.ProbeFile(Path.Combine(Environment.SystemDirectory, "version.dll"));
+
+		await vm.OnNavigatedTo(movie);
+
+		Assert.False(vm.UsesFluentFinControls);
+		Assert.Null(vm.MpvControls);
+		Assert.Contains("version.dll is not libmpv", vm.MpvNotice);
 		Assert.Contains("mpv's controls are used", vm.MpvNotice);
 		Assert.DoesNotContain("set_controls", _backend.Commands);
 		Assert.Contains("play", _backend.Commands);

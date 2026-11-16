@@ -20,7 +20,6 @@ public enum MpvControlsAction
 	ToggleMute,
 	ToggleFullScreen,
 	Escape,
-	SkipSegment,
 	Next,
 	Previous,
 }
@@ -76,6 +75,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	private double? _sentInset;
 	private bool _announced;
 	private int? _pendingVolume;
+	private bool _pendingUnmute;
 	private bool _volumeInFlight;
 	private DateTimeOffset _audioChangedAt;
 
@@ -146,6 +146,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	[ObservableProperty]
 	public partial bool PointerOverControls { get; set; }
 
+	/// <summary>
+	/// The keyboard is on one of the controls (Tab reached a button or the seek bar): they do not hide under it, or the
+	/// focused control would vanish and take the keyboard with it. Set by the view.
+	/// </summary>
+	[ObservableProperty]
+	public partial bool KeyboardInControls { get; set; }
+
 	/// <summary>The mouse pointer is hidden over the video (the controls hid).</summary>
 	[ObservableProperty]
 	public partial bool CursorHidden { get; set; }
@@ -178,7 +185,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	}
 
 	/// <summary>Why the controls stay up now, whatever the time since the last input; null when nothing holds them.</summary>
-	public string? HeldBy => IsPaused ? "paused" : _menusOpen > 0 ? "a menu is open" : PointerOverControls ? "the pointer is on them" : _scrubbing ? "seeking" : null;
+	public string? HeldBy => IsPaused ? "paused" : _menusOpen > 0 ? "a menu is open" : PointerOverControls ? "the pointer is on them"
+		: KeyboardInControls ? "the keyboard is on them" : _scrubbing ? "seeking" : null;
 
 	/// <summary>The page's heartbeat: auto-hide, and the position moving between the backend's position events.</summary>
 	public void Tick()
@@ -402,14 +410,17 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		NotifyActivity();
 		IsMuted = !IsMuted;
 		_audioChangedAt = _now();
+		// a slider move's unmute still waiting would undo this mute
+		_pendingUnmute = false;
 		return _send(Bridge.Commands.SetMute, BridgeCommands.Mute(IsMuted));
 	}
 
 	/// <summary>
-	/// The volume slider moved (0-100). Unmutes, like every player. The slider fires on every pixel: one <c>set_volume</c>
-	/// at a time, the latest value sent when the one before has been answered.
+	/// The volume slider moved (0-100). Unmutes, like every player. The slider and the wheel fire fast: one command at a
+	/// time, the unmute first and then the latest volume, each sent when the one before has been answered, so the last
+	/// value sent is always the newest (a notch made while the unmute was on its way never lands before an older one).
 	/// </summary>
-	public async Task SetVolume(int volume, bool wakeControls = true)
+	public Task SetVolume(int volume, bool wakeControls = true)
 	{
 		if (wakeControls)
 		{
@@ -419,13 +430,28 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		volume = Math.Clamp(volume, 0, 100);
 		Volume = volume;
 		_audioChangedAt = _now();
+		_pendingVolume = volume;
 		if (IsMuted && volume > 0)
 		{
 			IsMuted = false;
-			await _send(Bridge.Commands.SetMute, BridgeCommands.Mute(false));
+			_pendingUnmute = true;
 		}
 
-		_pendingVolume = volume;
+		return SendAudio();
+	}
+
+	/// <summary>Unmutes without touching the volume (a step up from a volume FluentFin cannot raise any further).</summary>
+	private Task Unmute()
+	{
+		IsMuted = false;
+		_audioChangedAt = _now();
+		_pendingUnmute = true;
+		return SendAudio();
+	}
+
+	/// <summary>Sends what is pending, one command at a time, unless a call before this one is already sending (it sends it too).</summary>
+	private async Task SendAudio()
+	{
 		if (_volumeInFlight)
 		{
 			return;
@@ -434,16 +460,48 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_volumeInFlight = true;
 		try
 		{
-			while (_pendingVolume is { } next)
+			while (true)
 			{
-				_pendingVolume = null;
-				await _send(Bridge.Commands.SetVolume, BridgeCommands.Volume(next));
+				if (_pendingUnmute)
+				{
+					_pendingUnmute = false;
+					await _send(Bridge.Commands.SetMute, BridgeCommands.Mute(false));
+				}
+				else if (_pendingVolume is { } next)
+				{
+					_pendingVolume = null;
+					await _send(Bridge.Commands.SetVolume, BridgeCommands.Volume(next));
+				}
+				else
+				{
+					break;
+				}
 			}
 		}
 		finally
 		{
 			_volumeInFlight = false;
 		}
+	}
+
+	/// <summary>
+	/// The volume <paramref name="steps"/> times <see cref="Step"/> up (or down), 0 to 100 (the protocol's range). A step up
+	/// never lowers it: a volume above 100 (an mpv.conf's) stays, and only a mute is undone.
+	/// </summary>
+	private Task StepVolume(int steps, bool wakeControls)
+	{
+		if (steps > 0 && Volume >= 100)
+		{
+			if (wakeControls)
+			{
+				NotifyActivity();
+			}
+
+			return IsMuted ? Unmute() : Task.CompletedTask;
+		}
+
+		var volume = Math.Clamp(Volume + steps * Step, 0, 100);
+		return volume == Volume && !IsMuted ? Task.CompletedTask : SetVolume(volume, wakeControls);
 	}
 
 	public void ToggleFullScreen()
@@ -616,9 +674,9 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 	/// <summary>
 	/// The mouse wheel turned over the video or the controls (<paramref name="delta"/> in Windows' units, 120 a notch, up
-	/// positive): the volume goes up or down <see cref="Step"/> a notch, 0 to 100, and the indicator shows. It never
-	/// seeks and never scrolls anything; fine-grained wheels add up until they make a notch. It does not wake the bars:
-	/// the indicator is enough, and the picture stays clear.
+	/// positive): the volume goes up or down <see cref="Step"/> a notch, 0 to 100 (up never lowers one above 100), and the
+	/// indicator shows. It never seeks and never scrolls anything; fine-grained wheels add up until they make a notch. It
+	/// does not wake the bars: the indicator is enough, and the picture stays clear.
 	/// </summary>
 	public Task Wheel(int delta)
 	{
@@ -638,8 +696,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			return Task.CompletedTask;
 		}
 
-		var volume = Math.Clamp(Volume + notches * Step, 0, 100);
-		return volume == Volume && !IsMuted ? Task.CompletedTask : SetVolume(volume, wakeControls: false);
+		return StepVolume(notches, wakeControls: false);
 	}
 
 	// -- subtitles keep clear of the bottom bar ------------------------------------------------------------------------
@@ -686,7 +743,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>
 	/// A key pressed over the player (the page or the controls window). True when it is one of the player's keys and was
 	/// handled. Space/K play-pause, Left/Right 5 s (Ctrl: 10 s), J/L 10 s, Up/Down volume, M mute, F full screen,
-	/// S skip a segment, Shift+N/Shift+P next/previous, Esc (docs/research/player-controls.md).
+	/// Shift+N/Shift+P next/previous, Esc (docs/research/player-controls.md). Not S: no segments to skip yet.
 	/// </summary>
 	public bool HandleKey(int virtualKey, bool control = false, bool shift = false, bool alt = false)
 	{
@@ -709,8 +766,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			case MpvControlsAction.SeekForward: return SeekBy(SmallSeekSeconds);
 			case MpvControlsAction.SeekBackLong: return SeekBy(-LargeSeekSeconds);
 			case MpvControlsAction.SeekForwardLong: return SeekBy(LargeSeekSeconds);
-			case MpvControlsAction.VolumeUp: return SetVolume(Volume + Step);
-			case MpvControlsAction.VolumeDown: return SetVolume(Volume - Step);
+			case MpvControlsAction.VolumeUp: return StepVolume(1, wakeControls: true);
+			case MpvControlsAction.VolumeDown: return StepVolume(-1, wakeControls: true);
 			case MpvControlsAction.ToggleMute: return ToggleMute();
 			case MpvControlsAction.ToggleFullScreen: ToggleFullScreen(); return Task.CompletedTask;
 			case MpvControlsAction.Escape: Escape?.Invoke(); return Task.CompletedTask;
@@ -724,7 +781,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public static class Keys
 	{
 		public const int Escape = 0x1B, Space = 0x20, Left = 0x25, Up = 0x26, Right = 0x27, Down = 0x28;
-		public const int F = 0x46, J = 0x4A, K = 0x4B, L = 0x4C, M = 0x4D, N = 0x4E, P = 0x50, S = 0x53;
+		public const int F = 0x46, J = 0x4A, K = 0x4B, L = 0x4C, M = 0x4D, N = 0x4E, P = 0x50;
 		public const int MediaNext = 0xB0, MediaPrevious = 0xB1, MediaPlayPause = 0xB3;
 	}
 
@@ -747,7 +804,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			Keys.Down when !control && !shift => MpvControlsAction.VolumeDown,
 			Keys.M when !control && !shift => MpvControlsAction.ToggleMute,
 			Keys.F when !control && !shift => MpvControlsAction.ToggleFullScreen,
-			Keys.S when !control && !shift => MpvControlsAction.SkipSegment,
+			// no S (skip a segment) yet: the bridge carries no segments, and a key that is taken must do something
 			Keys.N when shift && !control => MpvControlsAction.Next,
 			Keys.P when shift && !control => MpvControlsAction.Previous,
 			Keys.MediaNext => MpvControlsAction.Next,

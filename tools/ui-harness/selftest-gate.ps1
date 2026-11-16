@@ -1,5 +1,7 @@
 <#
-  Gate for the mpv self-test (FluentFin.exe --mpv-selftest: no server, mpv's test pattern in the player page).
+  Gate for the mpv self-test (FluentFin.exe --mpv-selftest: no server, mpv's test pattern in the player page), with
+  mpv's own controls (Settings > Playback > Player controls: mpv; FluentFin's are the default since 2026-11-15, and
+  their keys and window are checked by tools\ui-harness\fluentfin-controls and run-offscreen.ps1 instead).
    1. the video plays (screenshot);
    2. mpv's fullscreen key (f) makes the window full screen, Escape restores it (screenshots);
    3. leaving the page while full screen: f, then mpv's stop key (q). Playback stops, the page goes back (to the server

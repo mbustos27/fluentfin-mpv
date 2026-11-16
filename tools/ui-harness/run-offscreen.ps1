@@ -35,14 +35,15 @@
   play, fullscreen, windowed, leave, close, nav:<navigation item> (e.g. nav:Settings), shot:<label>, wait:<seconds>;
   'all' (default) = login..close. -Then <script.ps1> runs after the steps on the private desktop with the driver's
   helpers (see offscreen\drive.ps1). -Setting Name=Value (repeatable) is written into the run's LocalSettings.json
-  first (a JSON value, else a string), e.g. -Setting MpvPlayerControls=FluentFin; MpvBackendCommand, Servers and
-  MediaPlayerType are the harness's and refused (the run plays with the mpv player only).
+  first (a JSON value, else a string), e.g. -Setting MpvPlayerControls=Mpv for mpv's own controls (FluentFin's are the
+  default, with libmpv-2.dll next to the exe); MpvBackendCommand, Servers and MediaPlayerType are the harness's and
+  refused (the run plays with the mpv player only).
 
 .EXAMPLE
   .\run-offscreen.ps1 -DataDir C:\scratch\ffdata -Out C:\scratch\run1 -Build
   .\run-offscreen.ps1 -DataDir C:\scratch\ffdata -Out C:\scratch\run2 -Script home,nav:Settings,close -NoA11y
   .\run-offscreen.ps1 -DataDir C:\scratch\ffdata -Out C:\scratch\run3 -Latency 150 -LatencyRule '/Items/Latest=900'
-  .\run-offscreen.ps1 -DataDir C:\scratch\ffdata -Out C:\scratch\run4 -Script season,play,leave -Setting MpvPlayerControls=FluentFin
+  .\run-offscreen.ps1 -DataDir C:\scratch\ffdata -Out C:\scratch\run4 -Script season,play,leave -Setting MpvPlayerControls=Mpv
 #>
 [CmdletBinding(PositionalBinding = $false)]
 param(
@@ -131,7 +132,7 @@ if ($needMedia) {
 # silent with no log file (offscreen\prepare.ps1)
 $pycache = Join-Path $Cache 'pycache'
 $backendCommand = '"{0}" -I -X "pycache_prefix={1}" "{2}" "{3}"' -f $Python, $pycache, (Join-Path $PSScriptRoot 'offscreen\run_backend.py'), $Backend
-$prepared = Initialize-HarnessSettings $DataDir $backendCommand $Setting
+$prepared = Initialize-HarnessSettings $DataDir $backendCommand $Setting -LibmpvThere (Test-Path (Join-Path (Split-Path $Exe) 'libmpv-2.dll'))
 if ($prepared.RemovedServers) { Write-Host "removed $($prepared.RemovedServers) saved server(s) that are not on this machine from $DataDir\LocalSettings.json" }
 $controls = $prepared.PlayerControls
 [void](Initialize-HarnessMpvConf $DataDir)

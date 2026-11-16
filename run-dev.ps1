@@ -9,8 +9,9 @@
   Data goes to %LOCALAPPDATA%\FluentFinMpv (settings, logs, logs\mpv-backend.log, mpv-backend\ config).
 
   -SelfTest starts FluentFin.exe --mpv-selftest: no login, the player page opens at once, the mpv backend starts with
-  --dev, connects with only the video window and plays av://lavfi:testsrc. It checks the embedded video without a
-  Jellyfin server. It needs the backend's dev checkout (backend\.venv\Scripts\python.exe and
+  --dev, connects with only the video window and plays av://lavfi:testsrc. It checks the video without a Jellyfin
+  server: with FluentFin's player controls (the default) in FluentFin's own mpv, with mpv's (Settings > Playback) in
+  mpv's embedded window. It needs the backend's dev checkout (backend\.venv\Scripts\python.exe and
   backend\jellyfin_mpv_shim\bridge.py), or a backend command set in FluentFin's Settings.
 
   A running copy of this build is closed first and given -CloseWaitSeconds (16) to exit before it is killed: closing

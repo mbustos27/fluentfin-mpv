@@ -18,12 +18,13 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `signout_*`), not by driving FluentFin itself: its data folder can't be redirected, so a
   fake login would land in the real FluentFin settings.
 - **The libmpv path.** Only external mpv (mpv-CI 0.41 via winget) is installed and tested.
-- **"Player controls: FluentFin"** (opt-in, default mpv; docs\research\player-controls.md). Built
+- **"Player controls: FluentFin"** (the default; mpv's are the other choice; docs\research\player-controls.md). Built
   and measured off-screen only (`tools\ui-harness\composition-spike`, `tools\ui-harness\fluentfin-controls`).
   Not seen on the real desktop: the real mouse (hover, wheel event, clicks, hidden pointer), Tab order
   and Narrator, menus over the video, light/high-contrast themes; a DPI change, independent flip and
   HDR on an HDR display (Windows HDR is off on every display here). Its libmpv (`vendor\libmpv`) is
-  downloaded per checkout, not in git: without it FluentFin falls back to mpv's controls and says so.
+  downloaded per checkout, not in git: without it (or with one too old for composition output) FluentFin falls back to
+  mpv's controls and says so.
 
 ## Player controls: FluentFin's (`ui\FluentFin\Mpv\MpvCompositionVideo.cs` and around)
 - **One crash domain**: mpv runs inside FluentFin, so an mpv or GPU-driver crash ends the app (a
@@ -42,6 +43,19 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 - **A pause or volume change can be undone for a moment by a state echo**: volume and mute are held
   for 1.5 s after a change (the wheel's case, measured); pause is not, a stale `state` can flip the
   button back until the next one.
+- **A volume above 100** (an mpv.conf's `volume=130`) stays until it is lowered: `set_volume` is 0-100,
+  so a step up (wheel, Up) leaves it, only unmuting; a step down sets it within 0-100.
+- **Full screen and back**: mpv renders at a new size 2 to 5 frames after the panel took it; until it has
+  presented a frame of that size, the panel holds its old frame scaled to where the new picture goes (the user saw
+  the picture jump by the title bar's height and then snap). Left: mpv presents on its own thread, so its first new
+  frame can meet the hold, or the hold's end come just before it, for up to one frame; and WinAppSDK passes a
+  maximized window through its normal size (here 1920x1023) for about 5 ms on the way in and out, seen in one
+  picture of the way out. With mpv's own controls the video is mpv's window in the backend's process: that one
+  flash, and about 60 ms of mpv's old picture stretched in its resized window, remain there.
+  `FLUENTFIN_MPV_VIDEO_TRACE=1` logs, per frame for 2 s after a change, the panel, the swap chain and the hold.
+- **Keys off-screen**: a key message posted to FluentFin reaches WinUI only through the window's
+  `InputSiteWindowClass` child (the thread's focus window), not its `DesktopChildSiteBridge`; the
+  fluentfin-controls harness posts there (Space, F, Escape through the page's key path).
 
 ## UI (`ui\FluentFin.Core\Mpv`, `ui\FluentFin`)
 - **Play on a season starts at the series' first unplayed episode**, not the season's

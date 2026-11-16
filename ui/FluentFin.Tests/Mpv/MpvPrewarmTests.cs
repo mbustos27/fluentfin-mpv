@@ -341,6 +341,11 @@ public sealed class MpvBackendHostPrewarmTests : IDisposable
 		}
 
 		public bool CanConnectAhead => false;
+
+		/// <summary>The windows whose mpv ended with their backend (pc-fixes: FluentFin's mpv lives as long as its backend).</summary>
+		public System.Collections.Concurrent.ConcurrentQueue<BridgeWindow> Ended { get; } = new();
+
+		public void OnBackendExited(BridgeWindow window) => Ended.Enqueue(window);
 	}
 
 	[Fact]
@@ -365,6 +370,24 @@ public sealed class MpvBackendHostPrewarmTests : IDisposable
 		Assert.Equal("attached", (string?)connect["args"]!["window"]!["mode"]);
 		Assert.Null(connect["args"]!["prewarm"]);
 		Assert.Equal(1, surface.WindowRequests);
+
+		// the mpv the play made ends with this backend (a sign-out's shutdown); the next login's play gets a new one
+		await host.ShutdownAsync();
+		Assert.Equal([BridgeWindow.Attached("fluentfin-mpv-1-0011223344556677")], surface.Ended);
+	}
+
+	[Fact]
+	public async Task WithFluentFinsControls_ASignOutAfterThePrewarm_EndsNoMpv_NoneWasMade()
+	{
+		var surface = new AttachedSurface();
+		using var host = new MpvBackendHost(_launcher, surface, _log) { HelloTimeout = TimeSpan.FromSeconds(5), ShutdownTimeout = TimeSpan.FromSeconds(2) };
+
+		await host.PrewarmAsync(Alice);
+		await host.ShutdownAsync();
+
+		Assert.Equal(0, surface.WindowRequests);
+		Assert.Empty(surface.Ended);
+		Assert.Equal(MpvBackendState.Stopped, host.Status.State);
 	}
 }
 
@@ -390,14 +413,17 @@ public sealed class MpvVideoSurfaceChoicePrewarmTests
 		}
 	}
 
-	[Fact]
-	public void FluentFinsControls_ConnectAheadOnlyWhenTheyCannotBeHad()
+	[Theory]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	public void ThePrewarmConnectsAhead_ExactlyWhenTheConnectWouldBeEmbedded(bool fluentFinControls, bool connectsAhead)
 	{
-		// attached exactly when the connect would be (GetWindowAsync): libmpv found here; else mpv's controls, embedded
+		// the same choice GetWindowAsync makes (FluentFin's controls when chosen and libmpv can be had: attached)
 		var choice = Choice(MpvPlayerControls.FluentFin, out var composition);
 		using (composition)
 		{
-			Assert.Equal(!MpvCompositionVideo.IsAvailable(out _), ((IMpvVideoSurface)choice).CanConnectAhead);
+			choice.Choice = () => (fluentFinControls, fluentFinControls ? null : "libmpv-2.dll was not found next to FluentFin");
+			Assert.Equal(connectsAhead, ((IMpvVideoSurface)choice).CanConnectAhead);
 		}
 	}
 }

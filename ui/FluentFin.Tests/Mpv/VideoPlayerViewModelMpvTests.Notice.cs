@@ -58,6 +58,37 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		Assert.Equal(["set_fullscreen", "play"], _backend.Commands);
 	}
 
+	/// <summary>
+	/// visual check: the bars above the video open and close from bools that say so whenever the text changes (bound to
+	/// a function of the text, the notice's bar stayed open and empty once it went: x:Bind skips a function of null).
+	/// </summary>
+	[Fact]
+	public async Task TheBarsOpenAndClose_WithTheirText()
+	{
+		var vm = await PagePlayingWithNoticeTimers();
+		var changed = new List<string?>();
+		vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+		Error(vm, NotApplied);
+		Assert.True(vm.HasMpvNotice);
+		_noticeTimers.Single().SetResult();
+
+		Assert.Null(vm.MpvNotice);
+		Assert.False(vm.HasMpvNotice);
+		Assert.Equal(2, changed.Count(x => x == nameof(VideoPlayerViewModel.HasMpvNotice)));
+
+		Error(vm, "fatal", fatal: true);
+		Assert.True(vm.HasMpvMessage);
+		vm.DismissMpvMessage();
+		Assert.False(vm.HasMpvMessage);
+		Assert.Null(vm.MpvMessage);
+		Assert.Equal(2, changed.Count(x => x == nameof(VideoPlayerViewModel.HasMpvMessage)));
+
+		// the same message again opens the bar again
+		Error(vm, "fatal", fatal: true);
+		Assert.True(vm.HasMpvMessage);
+	}
+
 	[Fact]
 	public async Task TheNotice_IsRedacted()
 	{

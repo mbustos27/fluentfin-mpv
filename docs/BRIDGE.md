@@ -196,9 +196,13 @@ Command details:
   `force-window`, `osc=no`, no input bindings, `input-ipc-server`, the backend's config dir for
   `mpv.conf`); everything the shim sets at runtime (title, hwdec per file, tracks, OSC scripts) it
   still sets. Full screen is the UI's, as embedded. The UI's mpv listens before `connect` and lives as
-  long as the backend process; one that ended is replaced on a new pipe, so the next `connect` has a
-  different `window` and the UI restarts the backend (`window_locked`). A pipe that does not answer
-  fails the first `connect` with `mpv_failed`. The UI sends `set_controls` `"ui"` for its controls.
+  long as the backend process: when that process ends for any reason (its `shutdown`, stdin EOF, a
+  crash, a kill) the UI ends that mpv too, off its UI thread, so nothing plays on after the backend that
+  played and reported it (on a `shutdown` whose final report ran out of time the backend only closed
+  its pipe; the UI's end of the mpv is what stops it). The next `connect` gets a new mpv on a new pipe.
+  An mpv that ended by itself is replaced on a new pipe as well, so the next `connect` has a different
+  `window` and the UI restarts the backend (`window_locked`). A pipe that does not answer fails the
+  first `connect` with `mpv_failed`. The UI sends `set_controls` `"ui"` for its controls.
 - `prewarm` (true or false; absent or null = false; anything else is `bad_args`): the UI connects **ahead of
   playback** (after sign-in, so the first `play` skips the backend start and `connect`). With
   an `embedded` window, mpv is started **without its video output**: no window of mpv's
@@ -209,9 +213,10 @@ Command details:
   is the ordinary `connect`: the same result, the same `Users/Me` check (the only request a
   pre-warmed backend makes while idle: it reports nothing), the window fixed for the
   process. Only the `connect` that starts mpv (the first one with a `window`) reads it; later
-  ones, `standalone` and `attached` ignore it (an attached mpv is the UI's, and whether it exists
-  before the first play is the UI's choice: FluentFin then only starts the backend ahead, and
-  sends `connect` at the first play, since connecting needs that mpv). A UI that never sends it
+  ones, `standalone` and `attached` ignore it (an attached mpv is the UI's, and lives only as long as
+  the backend it was offered to: whether one exists before the first play is the UI's choice.
+  FluentFin then only starts the backend ahead, and sends `connect` at the first play, which
+  makes a new mpv for that backend). A UI that never sends it
   gets today's behaviour, and a backend that does not know it ignores it (unknown fields, §2):
   the surface then exists from `connect` on.
 - The backend must not bind any network port, start the tray, the in-player library

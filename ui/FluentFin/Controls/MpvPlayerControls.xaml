@@ -50,6 +50,8 @@
             Padding="12,8,24,40"
             VerticalAlignment="Top"
             Background="{StaticResource TopScrim}"
+            GotFocus="OnBarFocusChanged"
+            LostFocus="OnBarFocusChanged"
             PointerEntered="OnBarPointerEntered"
             PointerExited="OnBarPointerExited"
             Visibility="{x:Bind VisibleIf(Controls.ControlsVisible), Mode=OneWay}">
@@ -109,6 +111,8 @@
             Padding="20,40,20,12"
             VerticalAlignment="Bottom"
             Background="{StaticResource BottomScrim}"
+            GotFocus="OnBarFocusChanged"
+            LostFocus="OnBarFocusChanged"
             PointerEntered="OnBarPointerEntered"
             PointerExited="OnBarPointerExited"
             SizeChanged="OnBottomBarSizeChanged"

@@ -11,6 +11,7 @@ using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 
@@ -43,7 +44,7 @@ internal static partial class Host
 		}
 	}
 
-	public static void Check(bool ok, string what)
+	public static bool Check(bool ok, string what)
 	{
 		if (!ok)
 		{
@@ -51,6 +52,7 @@ internal static partial class Host
 		}
 
 		Log($"CHECK {(ok ? "ok" : "FAIL")}: {what}");
+		return ok;
 	}
 
 	private static string Arg(string name)
@@ -113,16 +115,56 @@ internal static partial class Host
 			}
 		});
 		var presenterChanges = 0;
+		Button? chrome = null;
 		controls.SetFullScreen = fullScreen =>
 		{
 			presenterChanges++;
 			main.AppWindow.SetPresenter(fullScreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped);
+			// as the player page does with FluentFin's title bar: hidden in full screen, right after the presenter
+			chrome?.Visibility = fullScreen ? Visibility.Collapsed : Visibility.Visible;
 			controls.IsFullScreen = fullScreen;
 			_ = backend.SendAsync(Bridge.Commands.SetFullscreen, BridgeCommands.Fullscreen(fullScreen));
 		};
 
-		var view = new MpvPlayerControls { Controls = controls };
-		main.Content = new Grid { Background = new SolidColorBrush(Colors.Black), Children = { view } };
+		var backs = 0;
+		controls.GoBack = () => backs++;
+
+		// the player page's key path (VideoPlayerPage: its root previews every key through MpvPlayerKeys, Escape is its
+		// accelerator), with a button above the video like the page's notice (its close button)
+		var view = new MpvPlayerControls { Controls = controls, IsTabStop = true };
+		var noticeClicks = 0;
+		var notice = new Button { Content = "Close notice" };
+		notice.Click += (_, _) => noticeClicks++;
+		var page = new Grid { Background = new SolidColorBrush(Colors.Black), RowDefinitions = { new RowDefinition { Height = GridLength.Auto }, new RowDefinition() } };
+		Grid.SetRow(view, 1);
+		page.Children.Add(notice);
+		page.Children.Add(view);
+		var keysSeen = 0;
+		page.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler((_, _) => keysSeen++), handledEventsToo: true);
+		page.PreviewKeyDown += (_, e) => MpvPlayerKeys.OnPreviewKeyDown(view, videoShown: true, e);
+		var escape = new KeyboardAccelerator { Key = Windows.System.VirtualKey.Escape };
+		escape.Invoked += (_, e) =>
+		{
+			e.Handled = true;
+			if (controls.IsFullScreen)
+			{
+				controls.SetFullScreen(false);
+			}
+			else
+			{
+				backs++;
+			}
+		};
+		page.KeyboardAccelerators.Add(escape);
+		// the window's title bar: outside the page, before it in the tab order (where WinUI hands the focus of a collapsed bar)
+		var titleBar = new Button { Content = "Title bar" };
+		chrome = titleBar;
+		var window = new Grid { Background = new SolidColorBrush(Colors.Black), RowDefinitions = { new RowDefinition { Height = GridLength.Auto }, new RowDefinition() } };
+		Grid.SetRow(page, 1);
+		window.Children.Add(titleBar);
+		window.Children.Add(page);
+		view.KeyboardHome = page;
+		main.Content = window;
 		main.AppWindow.MoveAndResize(new RectInt32(60, 60, 1280, 760));
 		main.Activate();
 		await WhenLoaded(view);
@@ -151,14 +193,16 @@ internal static partial class Host
 		}));
 		BridgeState? Last() => states.LastOrDefault();
 
+		var identity = new BridgeIdentity(server.Url, "srv", "Fake", server.UserId, "u", server.Token, "controls-host-device", "Controls host", "FluentFin", "0.0.1");
+		string? lastPipe = null;
 		try
 		{
 			await backend.StartAsync();
-			var version = await backend.ConnectAsync(new BridgeIdentity(server.Url, "srv", "Fake", server.UserId, "u", server.Token, "controls-host-device", "Controls host", "FluentFin", "0.0.1"));
-			var window = await composition.GetWindowAsync();
-			Log($"connected: mpv {version} ({backend.Status.MpvKind}), window {window.Mode} {window.Ipc}");
-			Check(window.Mode == "attached" && backend.Status.MpvKind == "external", "the backend attached to FluentFin's in-process mpv over its pipe (the shim's external backend)");
-			using var mpv = MpvIpc.Connect(window.Ipc!);
+			var version = await backend.ConnectAsync(identity);
+			var pipe = lastPipe = composition.CorePipe;
+			Log($"connected: mpv {version} ({backend.Status.MpvKind}), window attached {pipe}");
+			Check(pipe is not null && backend.Status.MpvKind == "external", "the backend attached to FluentFin's in-process mpv over its pipe (the shim's external backend)");
+			var mpv = MpvIpc.Connect(pipe!);
 			Check(Str(mpv.Get("mpv-version")) == version, "and the mpv it talks to is the in-process one");
 
 			await controls.SendControls();
@@ -260,6 +304,42 @@ internal static partial class Host
 			await backend.SendAsync(Bridge.Commands.Stop);
 			Check(await Until(() => Last()?.State == Bridge.States.Idle, 10), "stop: idle");
 			Check(await Until(() => server.Stopped() >= 2, 10), $"the server got one Stopped per episode ({server.Stopped()}), from the backend only");
+
+			// -- keys through the player page's key path: real key messages posted to this window (never SendInput) -----
+			await backend.SendAsync(Bridge.Commands.Play, BridgeCommands.Play(new BridgePlayRequest([Episode1])));
+			Check(await Until(() => Last() is { State: Bridge.States.Playing, ItemId: Episode1 } && mpv.Flag("pause") == false, 30), "playing again, for the keys");
+			await KeysScenario(main, view, notice, titleBar, controls, mpv, () => noticeClicks, () => backs, () => keysSeen);
+
+			// -- full screen and back: the picture changes once, it does not jump ----------------------------------------
+			await JumpScenario(main, composition, controls);
+
+			// -- the backend dies mid-playback (the reviewer's kill repro): FluentFin's mpv ends with it ----------------
+			if (mpv.Flag("pause") == true)
+			{
+				await controls.TogglePause();
+			}
+
+			Check(await Until(() => Last()?.State == Bridge.States.Playing && mpv.Flag("pause") == false, 5), "playing before the kill");
+			Log($"before the kill: time-pos {mpv.Number("time-pos"):0.00}, pipe {pipe}, backend pid {Launcher.Last?.Id}");
+			Launcher.Last!.Kill();
+			Check(await Until(() => backend.Status.State == MpvBackendState.Crashed, 15), $"the backend was killed mid-playback: {backend.Status.State}");
+			Check(await Until(() => composition.CorePipe is null && !PipeAnswers(pipe!), 8),
+				$"FluentFin's in-process mpv ended with the backend (its pipe {pipe} is gone): nothing plays on behind the error or after Back");
+			Check(await Until(() => !composition.IsShowingVideo, 3), "and the panel let go of its video");
+			mpv.Dispose();
+
+			// the next playback: a new backend, a new mpv on a new pipe
+			await backend.StartAsync();
+			await backend.ConnectAsync(identity);
+			var pipe2 = lastPipe = composition.CorePipe;
+			Check(pipe2 is not null && pipe2 != pipe, $"the next connect made a new mpv on a new pipe ({pipe2})");
+			mpv = MpvIpc.Connect(pipe2!);
+			await controls.SendControls();
+			await backend.SendAsync(Bridge.Commands.Play, BridgeCommands.Play(new BridgePlayRequest([Episode1])));
+			Check(await Until(() => Last() is { State: Bridge.States.Playing, ItemId: Episode1, Window: "attached" }, 30), "it plays in the new mpv");
+			Check(await Until(() => composition.IsShowingVideo, 5) && await Until(() => (mpv.Number("time-pos") ?? 0) > 1, 15), "shown in the panel, and the video runs");
+			await Picture(main, "after-the-kill");
+			mpv.Dispose();
 		}
 		finally
 		{
@@ -267,10 +347,284 @@ internal static partial class Host
 			backend.Dispose();
 		}
 
-		var stillThere = composition.GetWindowAsync().Result;
-		Check(stillThere.Ipc is not null, "the in-process mpv outlives the backend's shutdown (the shim only closes its pipe)");
+		// docs/BRIDGE.md §4: FluentFin's mpv lives as long as the backend process, its shutdown included
+		Check(await Until(() => composition.CorePipe is null && (lastPipe is null || !PipeAnswers(lastPipe)), 8),
+			$"the backend's shutdown ended FluentFin's in-process mpv too (pipe {lastPipe})");
 		composition.Detach(view.VideoSurface);
 		return 0;
+	}
+
+	/// <summary>
+	/// The player page's key path with real keys (posted WM_KEYDOWN/WM_KEYUP to this window's input site, as a keyboard
+	/// sends them; Ctrl and Shift are not held): Space on the video pauses and plays, Space on a button the keyboard
+	/// focused presses that button and leaves playback alone (the notice's close, the bar's Back), F goes full screen and
+	/// Escape comes back, the bars stay while the keyboard is on them, and hide with the keyboard handed back to the video.
+	/// </summary>
+	private static async Task KeysScenario(Window main, MpvPlayerControls view, Button notice, Button titleBar, MpvControlsViewModel controls, MpvIpc mpv,
+		Func<int> noticeClicks, Func<int> backs, Func<int> keysSeen)
+	{
+		bool Paused() => mpv.Flag("pause") == true;
+		bool Playing() => mpv.Flag("pause") == false;
+		var root = main.Content.XamlRoot;
+
+		// which window takes a posted key here: the thread's focus window, the island's input site, its bridge, the window
+		view.Focus(FocusState.Programmatic);
+		await Task.Delay(200);
+		(nint Hwnd, string Class) input = default;
+		foreach (var candidate in InputWindows(WinRT.Interop.WindowNative.GetWindowHandle(main)))
+		{
+			var seen = keysSeen();
+			PostKey(candidate.Hwnd, 0x41);
+			var reached = await Until(() => keysSeen() > seen, 1.5);
+			Log($"a key posted to {candidate.Class} 0x{candidate.Hwnd:x}: {(reached ? "reaches the page" : "does not reach the page")}");
+			if (reached)
+			{
+				input = candidate;
+				break;
+			}
+		}
+
+		if (!Check(input.Hwnd != 0, "a key posted to one of this window's windows reaches the page (keys can be checked off-screen)"))
+		{
+			return;
+		}
+
+		// Space with the video focused: the player's
+		PostKey(input.Hwnd, VkSpace);
+		Check(await Until(Paused, 3), "Space on the video pauses (the player's key)");
+		PostKey(input.Hwnd, VkSpace);
+		Check(await Until(Playing, 3), "Space again plays");
+
+		// Space on a button the keyboard is on: the button's
+		notice.Focus(FocusState.Keyboard);
+		var clicks = noticeClicks();
+		PostKey(input.Hwnd, VkSpace);
+		var pressed = await Until(() => noticeClicks() > clicks, 3);
+		await Task.Delay(800);
+		Check(pressed && Playing(), $"Space on a focused button (a notice's close) presses it and leaves playback alone (pressed {pressed}, pause {mpv.Flag("pause")})");
+
+		controls.NotifyActivity();
+		var back = (Button)view.FindName("BackButton");
+		back.Focus(FocusState.Keyboard);
+		var backsBefore = backs();
+		PostKey(input.Hwnd, VkSpace);
+		pressed = await Until(() => backs() > backsBefore, 3);
+		await Task.Delay(800);
+		Check(pressed && Playing(), $"Space on the bar's Back (keyboard focus) is Back, not pause (pressed {pressed}, pause {mpv.Flag("pause")})");
+
+		// F from that button too, and Escape back (the page's accelerator)
+		PostKey(input.Hwnd, VkF);
+		Check(await Until(() => main.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen, 3), "F goes full screen through the page's key path (from a focused button too)");
+		await Task.Delay(500);
+		PostKey(input.Hwnd, VkEscape);
+		Check(await Until(() => main.AppWindow.Presenter.Kind == AppWindowPresenterKind.Overlapped, 3), "Escape leaves full screen (the page's accelerator)");
+
+		// the bars stay while the keyboard is on them
+		back.Focus(FocusState.Keyboard);
+		controls.NotifyActivity();
+		await Task.Delay(4500);
+		Check(controls.ControlsVisible && Visible(view, "BottomBar") && controls.HeldBy == "the keyboard is on them",
+			$"the bars stay up while the keyboard is on Back ({controls.HeldBy ?? "nothing holds them"})");
+
+		// the mouse's focus in the bar (a click on the seek bar): they hide, and the keyboard goes back to the video
+		((Control)view.FindName("SeekBar")).Focus(FocusState.Pointer);
+		controls.NotifyActivity();
+		var hid = await Until(() => !controls.ControlsVisible, 6);
+		await Task.Delay(300);
+		var focused = FocusManager.GetFocusedElement(root);
+		Check(hid && ReferenceEquals(focused, view), $"the bars hid with the mouse's focus in them, and the keyboard went back to the video ({focused?.GetType().Name ?? "nothing"})");
+		PostKey(input.Hwnd, VkSpace);
+		Check(await Until(Paused, 3), "so Space still pauses");
+		PostKey(input.Hwnd, VkSpace);
+		Check(await Until(Playing, 3), "and plays");
+
+		// the focus on a bar button that the keyboard does not hold (the mouse's; a programmatic focus counts as the keyboard's
+		// after keyboard input, as here): the bars hide and the player has the keyboard, not the title bar before the page
+		// that WinUI would hand it to (visual check: Space then did nothing)
+		async Task<(bool Hid, object? Focused)> HideWith(Control focus, FocusState how)
+		{
+			controls.NotifyActivity();
+			focus.Focus(how);
+			var gone = await Until(() => !controls.ControlsVisible, 6);
+			await Task.Delay(300);
+			return (gone, FocusManager.GetFocusedElement(root));
+		}
+
+		var (hidBack, onBack) = await HideWith(back, FocusState.Pointer);
+		Check(hidBack && ReferenceEquals(onBack, view), $"the bars hid with the mouse's focus on Back: the keyboard went to the video, not the title bar ({Describe(onBack)})");
+		PostKey(input.Hwnd, VkSpace);
+		Check(await Until(Paused, 3), "so Space pauses");
+		PostKey(input.Hwnd, VkSpace);
+		Check(await Until(Playing, 3), "and plays");
+
+		var (hidTitle, onTitle) = await HideWith(titleBar, FocusState.Keyboard);
+		Check(hidTitle && ReferenceEquals(onTitle, view), $"the bars hid with the keyboard on the title bar (outside the page): the player took it back ({Describe(onTitle)})");
+
+		var (hidNotice, onNotice) = await HideWith(notice, FocusState.Keyboard);
+		Check(hidNotice && ReferenceEquals(onNotice, notice), $"the bars hid with the keyboard on the notice's close (on the page): it stays there ({Describe(onNotice)})");
+
+		// a button the mouse clicked keeps no claim on Space: it plays and pauses, as in every player
+		controls.NotifyActivity();
+		notice.Focus(FocusState.Pointer);
+		clicks = noticeClicks();
+		PostKey(input.Hwnd, VkSpace);
+		Check(await Until(Paused, 3) && noticeClicks() == clicks, "Space after a click on a button (pointer focus) pauses, the button is not pressed again");
+		PostKey(input.Hwnd, VkSpace);
+		Check(await Until(Playing, 3), "and plays");
+		view.Focus(FocusState.Programmatic);
+	}
+
+	private const int VkSpace = 0x20, VkEscape = 0x1B, VkF = 0x46;
+
+	/// <summary>
+	/// Full screen and back with real keys (F, Escape, through the page's key path), the title bar row collapsing with it
+	/// as the page's does. The user saw the picture "jump": the panel took its new place and size at once, mpv rendered at
+	/// the new size a few frames later, and meanwhile its old frame sat at the panel's corner (moved by the title bar's
+	/// height, then snapped to its size). Sampled on every frame FluentFin renders: where it shows the picture
+	/// (MpvCompositionVideo.PictureRect: the panel with its hold, the frame mpv last presented, mpv's letterbox). Checked:
+	/// that changes once each way, from where it was to where it ends. Pictures of the window before and after.
+	/// </summary>
+	private static async Task JumpScenario(Window main, MpvCompositionVideo composition, MpvControlsViewModel controls)
+	{
+		var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(main);
+		var input = InputWindows(hwnd).First(x => x.Class.Contains("InputSiteWindowClass", StringComparison.Ordinal)).Hwnd;
+
+		async Task<List<(double Ms, Windows.Foundation.Rect Rect)>> Across(int vk)
+		{
+			var frames = new List<(double, Windows.Foundation.Rect)>();
+			var clock = Stopwatch.StartNew();
+			void OnFrame(object? sender, object e)
+			{
+				if (composition.PictureRect() is { } rect)
+				{
+					frames.Add((clock.Elapsed.TotalMilliseconds, rect));
+				}
+			}
+
+			Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFrame;
+			try
+			{
+				await Task.Delay(200);
+				PostKey(input, vk);
+				await Task.Delay(1500);
+			}
+			finally
+			{
+				Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFrame;
+			}
+
+			return frames;
+		}
+
+		static int Changes(List<(double Ms, Windows.Foundation.Rect Rect)> frames, out string seen)
+		{
+			var changes = 0;
+			var runs = new List<string>();
+			Windows.Foundation.Rect? last = null;
+			foreach (var (ms, r) in frames)
+			{
+				if (last is { } l && Math.Abs(r.X - l.X) <= 3 && Math.Abs(r.Y - l.Y) <= 3 && Math.Abs(r.Width - l.Width) <= 3 && Math.Abs(r.Height - l.Height) <= 3)
+				{
+					continue;
+				}
+
+				if (last is not null)
+				{
+					changes++;
+				}
+
+				last = r;
+				runs.Add(string.Create(CultureInfo.InvariantCulture, $"{ms:0} ms: {r.X:0},{r.Y:0} {r.Width:0}x{r.Height:0}"));
+			}
+
+			seen = string.Join(" | ", runs);
+			return changes;
+		}
+
+		var on = await Across(VkF);
+		Check(main.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen, "F went full screen");
+		var onChanges = Changes(on, out var onSeen);
+		Log($"full screen, the picture each frame: {on.Count} frames; {onSeen}");
+		Check(onChanges == 1, $"going full screen the picture changes once, it does not jump ({onChanges} changes in {on.Count} frames)");
+		await Picture(main, "jump-fullscreen");
+		var off = await Across(VkEscape);
+		Check(main.AppWindow.Presenter.Kind == AppWindowPresenterKind.Overlapped, "Escape came back to the window");
+		var offChanges = Changes(off, out var offSeen);
+		Log($"windowed, the picture each frame: {off.Count} frames; {offSeen}");
+		Check(offChanges == 1, $"back to the window the picture changes once, it does not jump ({offChanges} changes in {off.Count} frames)");
+		await Picture(main, "jump-windowed");
+		controls.NotifyActivity();
+	}
+
+	private static string Describe(object? element) => element switch
+	{
+		null => "nothing",
+		Button { Content: string text } => $"Button '{text}'",
+		_ => element.GetType().Name,
+	};
+
+	/// <summary>Where a keyboard's messages could go: the thread's focus window, then every window under the main one, then it.</summary>
+	private static List<(nint Hwnd, string Class)> InputWindows(nint main)
+	{
+		static string ClassOf(nint hwnd)
+		{
+			var name = new StringBuilder(256);
+			GetClassNameW(hwnd, name, name.Capacity);
+			return name.ToString();
+		}
+
+		var found = new List<(nint, string)>();
+		if (GetFocus() is var focus && focus != 0)
+		{
+			found.Add((focus, "the focus window " + ClassOf(focus)));
+		}
+
+		EnumChildWindows(main, (child, _) =>
+		{
+			found.Add((child, ClassOf(child)));
+			return true;
+		}, 0);
+		found.Add((main, "the main window " + ClassOf(main)));
+		return found;
+	}
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern nint GetFocus();
+
+	private static void PostKey(nint hwnd, int vk)
+	{
+		var scan = (nint)(MapVirtualKeyW((uint)vk, 0) << 16);
+		PostMessageW(hwnd, 0x0100, vk, 1 | scan);                                  // WM_KEYDOWN
+		PostMessageW(hwnd, 0x0101, vk, 1 | scan | (1 << 30) | unchecked((int)0x80000000)); // WM_KEYUP
+	}
+
+	private delegate bool EnumWindowsProc(nint hwnd, nint lParam);
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern bool EnumChildWindows(nint parent, EnumWindowsProc callback, nint lParam);
+
+	[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+	private static extern int GetClassNameW(nint hwnd, StringBuilder name, int capacity);
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern bool PostMessageW(nint hwnd, uint message, nint wParam, nint lParam);
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern uint MapVirtualKeyW(uint code, uint mapType);
+
+	/// <summary>Something answers on the pipe (an mpv's JSON IPC server).</summary>
+	private static bool PipeAnswers(string name)
+	{
+		try
+		{
+			using var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut);
+			pipe.Connect(300);
+			return true;
+		}
+		catch (Exception)
+		{
+			return false;
+		}
 	}
 
 	// -- helpers ------------------------------------------------------------------------------------------------------------
@@ -324,12 +678,17 @@ internal static partial class Host
 	}
 }
 
-/// <summary>The backend attaches to the composition video's in-process mpv (what MpvVideoSurfaceChoice does for FluentFin's controls).</summary>
+/// <summary>
+/// The backend attaches to the composition video's in-process mpv, as MpvVideoSurfaceChoice does for FluentFin's controls:
+/// the core is made on the thread pool, and it ends when the backend that was given it ends.
+/// </summary>
 internal sealed class AttachedSurface(MpvCompositionVideo composition) : IMpvVideoSurface
 {
 	public Task<nint> GetHandleAsync() => throw new NotSupportedException("attached: there is no window");
 
-	public Task<BridgeWindow> GetWindowAsync() => composition.GetWindowAsync();
+	public Task<BridgeWindow> GetWindowAsync() => Task.Run(composition.GetWindowAsync);
+
+	public void OnBackendExited(BridgeWindow window) => composition.OnBackendExited(window);
 }
 
 /// <summary>A JSON IPC client of the in-process mpv (the harness's own reads: what mpv really does).</summary>
@@ -400,7 +759,10 @@ internal sealed class Launcher(string python, string backendDir, string configDi
 		return new MpvBackendCommand(python, ["-I", "-c", boot], "ui-harness-fluentfin-controls");
 	}
 
-	public IMpvBackendProcess Start(MpvBackendCommand command) => WindowsMpvBackendLauncher.StartInJob(command.FileName, command.Arguments, configDir);
+	/// <summary>The backend this host started last (its own job: the kill scenario ends it through its handle).</summary>
+	public static IMpvBackendProcess? Last { get; private set; }
+
+	public IMpvBackendProcess Start(MpvBackendCommand command) => Last = WindowsMpvBackendLauncher.StartInJob(command.FileName, command.Arguments, configDir);
 }
 
 internal sealed class FileLogger<T>(string path) : ILogger<T>

@@ -255,6 +255,21 @@ public sealed class PlaybackSettingsTests : IDisposable
 		Assert.True(_posted[0].EnableNextEpisodeAutoPlay);
 	}
 
+	/// <summary>The user's choice (2026-11-15): FluentFin's own controls unless mpv's are chosen; a choice is kept on this PC.</summary>
+	[Fact]
+	public async Task FluentFinsPlayerControls_AreTheDefault_AndAChoiceIsKept()
+	{
+		Assert.Equal(MpvPlayerControls.FluentFin, SettingKeys.MpvPlayerControls.Default.Value);
+		var vm = Create();
+		await vm.OnNavigatedTo(null!);
+		Assert.Equal(MpvPlayerControls.FluentFin, _settings.MpvPlayerControls);
+		Assert.Equal(MpvPlayerControls.FluentFin, vm.PlayerControls);
+		Assert.Equal("FluentFin", vm.SelectedPlayerControls?.Name);
+
+		vm.SelectedPlayerControls = SettingsViewModel.PlayerControlsChoices.Single(x => x.Controls == MpvPlayerControls.Mpv);
+		Assert.Equal(MpvPlayerControls.Mpv, new Settings.Settings(new LocalSettingsService(new KnownFolders(_root))).MpvPlayerControls);
+	}
+
 	[Fact]
 	public void TheLocalSettings_AreKeptOnThisPC_AndTheStepStaysBetween1And20()
 	{

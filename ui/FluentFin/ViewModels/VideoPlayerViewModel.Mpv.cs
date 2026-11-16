@@ -50,7 +50,14 @@ public partial class VideoPlayerViewModel
 
 	/// <summary>Shown in the bar above the video area.</summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasMpvMessage))]
 	public partial string? MpvMessage { get; set; }
+
+	/// <summary>
+	/// fluentfin-mpv: the message bar is open. A bool for its binding: x:Bind does not call a function whose argument is null,
+	/// so a bar opened by a function of the text stayed open, and empty, once the text was gone.
+	/// </summary>
+	public bool HasMpvMessage => !string.IsNullOrEmpty(MpvMessage);
 
 	[ObservableProperty]
 	public partial bool MpvMessageIsError { get; set; }
@@ -61,7 +68,11 @@ public partial class VideoPlayerViewModel
 	/// or when dismissed (<see cref="DismissMpvNotice"/>). Playback is not touched.
 	/// </summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasMpvNotice))]
 	public partial string? MpvNotice { get; set; }
+
+	/// <summary>fluentfin-mpv: the notice bar is open (as <see cref="HasMpvMessage"/>: it closes when the notice goes).</summary>
+	public bool HasMpvNotice => !string.IsNullOrEmpty(MpvNotice);
 
 	/// <summary>How long <see cref="MpvNotice"/> stays up (a newer notice starts the time again).</summary>
 	public TimeSpan MpvNoticeDuration { get; set; } = TimeSpan.FromSeconds(8);
@@ -83,8 +94,23 @@ public partial class VideoPlayerViewModel
 	[ObservableProperty]
 	public partial MpvControlsViewModel? MpvControls { get; set; }
 
-	/// <summary>Whether FluentFin's controls are chosen and can be had (tests replace it). Null whyNot: not chosen, or fine.</summary>
-	internal Func<(bool Use, string? WhyNot)> FluentFinControlsChoice { get; set; } = () => (FluentFin.Mpv.MpvVideoSurfaceChoice.UsesFluentFinControls(settings, out var whyNot), whyNot);
+	/// <summary>Whether FluentFin's controls are chosen and can be had (tests replace it). Null whyNot: not chosen, or fine. Null: the real choice.</summary>
+	internal Func<(bool Use, string? WhyNot)>? FluentFinControlsChoice { get; set; }
+
+	/// <summary>Why libmpv cannot be used, null when it can: the real probe of the libmpv next to FluentFin (tests probe another file).</summary>
+	internal Func<string?> LibmpvUnavailable { get; set; } = FluentFin.Mpv.Libmpv.Unavailable;
+
+	/// <summary>The same answer the video surface gives the backend at connect (<see cref="FluentFin.Mpv.MpvVideoSurfaceChoice"/>).</summary>
+	private (bool Use, string? WhyNot) ChooseControls()
+	{
+		if (FluentFinControlsChoice is { } choice)
+		{
+			return choice();
+		}
+
+		var use = FluentFin.Mpv.MpvVideoSurfaceChoice.UsesFluentFinControls(settings, LibmpvUnavailable, out var whyNot);
+		return (use, whyNot);
+	}
 
 	/// <summary>This page's play was taken by the backend: item, track and position events are its own from here.</summary>
 	private bool _mpvPlayAccepted;
@@ -149,7 +175,7 @@ public partial class VideoPlayerViewModel
 		_mpvItems = parameter is MpvSelfTestRequest ? null : new HashSet<string>(StringComparer.Ordinal);
 		var generation = _mpvGeneration = mpvPlayback.Begin("a player page opened");
 		// fluentfin-mpv player controls: the same answer the video surface gives the backend at connect
-		var (useFluentFinControls, whyNot) = FluentFinControlsChoice();
+		var (useFluentFinControls, whyNot) = ChooseControls();
 		UsesFluentFinControls = useFluentFinControls;
 		MpvControls = useFluentFinControls ? CreateMpvControls(generation) : null;
 		if (whyNot is not null)
@@ -667,6 +693,9 @@ public partial class VideoPlayerViewModel
 			MpvNotice = null;
 		}
 	}
+
+	/// <summary>The message bar's close button: gone now, and the next message opens the bar again, even with the same text.</summary>
+	public void DismissMpvMessage() => MpvMessage = null;
 
 	/// <summary>The notice's close button (or a message that replaces it): gone now, and the next notice shows even with the same text.</summary>
 	public void DismissMpvNotice()

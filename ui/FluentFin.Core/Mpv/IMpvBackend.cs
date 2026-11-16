@@ -147,6 +147,17 @@ public interface IMpvVideoSurface
 	/// the player and connects (docs/BRIDGE.md §3, §4).
 	/// </summary>
 	bool CanConnectAhead => true;
+
+	/// <summary>
+	/// fluentfin-mpv player controls: the backend that was offered <paramref name="window"/> in a <c>connect</c> has ended
+	/// (its shutdown, a crash, a kill). An mpv the UI runs for that window lives only as long as that backend (docs/BRIDGE.md
+	/// §4, attached): it is ended now, and the next <see cref="GetWindowAsync"/> makes a new one. Called once per backend and
+	/// window, from any thread (a thread-pool thread, or the caller of a stop); must not block or throw. Embedded windows
+	/// outlive their backend: nothing to do.
+	/// </summary>
+	void OnBackendExited(BridgeWindow window)
+	{
+	}
 }
 
 /// <summary>Finds and starts the backend process; the Windows implementation puts it in a kill-on-close job object.</summary>

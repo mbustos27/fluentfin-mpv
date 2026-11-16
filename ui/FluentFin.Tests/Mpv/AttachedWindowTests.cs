@@ -21,7 +21,8 @@ public sealed class AttachedWindowTests : IDisposable
 
 	public AttachedWindowTests()
 	{
-		_host = new MpvBackendHost(_launcher, _surface, _log) { HelloTimeout = TimeSpan.FromSeconds(5), ShutdownTimeout = TimeSpan.FromSeconds(2) };
+		// the fake backend says hello at once: the long bound only keeps a loaded test machine's stall from failing the start
+		_host = new MpvBackendHost(_launcher, _surface, _log) { HelloTimeout = TimeSpan.FromSeconds(30), ShutdownTimeout = TimeSpan.FromSeconds(2) };
 	}
 
 	public void Dispose() => _host.Dispose();

@@ -29,10 +29,11 @@ public static class SettingKeys
 	public static Key<int> VolumeStep { get; } = new Key<int>("VolumeStep", 5);
 
 	/// <summary>
-	/// fluentfin-mpv: who draws the player controls with the mpv player (docs/research/player-controls.md). mpv by default:
-	/// FluentFin's own controls are the default only once every row of the phase 2a go/no-go table passed on this PC.
+	/// fluentfin-mpv: who draws the player controls with the mpv player (docs/research/player-controls.md). FluentFin's own
+	/// by default (the user's choice, 2026-11-15); without a libmpv that does composition output next to FluentFin, the
+	/// player falls back to mpv's controls and says so (MpvVideoSurfaceChoice).
 	/// </summary>
-	public static Key<MpvPlayerControls> MpvPlayerControls { get; } = new Key<MpvPlayerControls>("MpvPlayerControls", global::FluentFin.Core.Settings.MpvPlayerControls.Mpv);
+	public static Key<MpvPlayerControls> MpvPlayerControls { get; } = new Key<MpvPlayerControls>("MpvPlayerControls", global::FluentFin.Core.Settings.MpvPlayerControls.FluentFin);
 }
 
 /// <summary>fluentfin-mpv: who draws the controls over the mpv player's video.</summary>
