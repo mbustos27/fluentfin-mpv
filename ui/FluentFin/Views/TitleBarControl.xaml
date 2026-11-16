@@ -32,7 +32,7 @@
 
     <TitleBar
         x:Name="TitleBar"
-        Title="FluentFin"
+        Title="FluentFin MPV"
         BackRequested="TitleBar_BackRequested"
         IsBackButtonEnabled="{x:Bind ViewModel.CanGoBack, Mode=OneWay}"
         IsBackButtonVisible="{x:Bind ViewModel.User, Converter={StaticResource ObjectToBoolConverter}, Mode=OneWay}"
@@ -93,6 +93,22 @@
                 HorizontalAlignment="Right"
                 Orientation="Horizontal"
                 Spacing="10">
+                <!--  fluentfin-mpv: a sign-out in progress (the mpv playback's stop and report, up to ~2 s, then the logout)  -->
+                <StackPanel
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsSigningOut), Mode=OneWay}">
+                    <ProgressRing
+                        Width="16"
+                        Height="16"
+                        IsActive="{x:Bind ViewModel.IsSigningOut, Mode=OneWay}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        AutomationProperties.LiveSetting="Polite"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="{x:Bind ViewModel.SignOutStatus, Mode=OneWay}" />
+                </StackPanel>
                 <Button
                     Width="32"
                     Height="32"

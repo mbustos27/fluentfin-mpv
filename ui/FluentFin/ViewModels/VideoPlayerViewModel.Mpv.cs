@@ -46,6 +46,23 @@ public partial class VideoPlayerViewModel
 	[ObservableProperty]
 	public partial bool MpvMessageIsError { get; set; }
 
+	/// <summary>
+	/// A brief message while the video plays on (a non-fatal error once playback runs, such as a track or quality change the
+	/// backend could not apply, docs/BRIDGE.md §5): shown above the video area, gone after <see cref="MpvNoticeDuration"/>
+	/// or when dismissed (<see cref="DismissMpvNotice"/>). Playback is not touched.
+	/// </summary>
+	[ObservableProperty]
+	public partial string? MpvNotice { get; set; }
+
+	/// <summary>How long <see cref="MpvNotice"/> stays up (a newer notice starts the time again).</summary>
+	public TimeSpan MpvNoticeDuration { get; set; } = TimeSpan.FromSeconds(8);
+
+	/// <summary>Waits <see cref="MpvNoticeDuration"/> (tests replace it).</summary>
+	internal Func<TimeSpan, Task> MpvNoticeDelay { get; set; } = wait => Task.Delay(wait);
+
+	/// <summary>Counts notices shown and dismissed: a notice hides itself only if it is still the one it showed.</summary>
+	private int _mpvNotices;
+
 	/// <summary>Shown in the video area while the video window is hidden.</summary>
 	[ObservableProperty]
 	public partial string MpvStatusText { get; set; } = "";
@@ -250,6 +267,11 @@ public partial class VideoPlayerViewModel
 					{
 						ShowMpvMessage($"MPV: {_mpvLastError}", isError: true);
 					}
+					else
+					{
+						// the item plays on (a track or quality change that could not be applied): said briefly, nothing stops
+						ShowMpvNotice(string.IsNullOrEmpty(_mpvLastError) ? "MPV: something could not be done; playback goes on." : $"MPV: {_mpvLastError}");
+					}
 					break;
 
 				case Bridge.Events.FullscreenRequest when e.DataAs<BridgeFullscreenRequest>() is { } request:
@@ -446,5 +468,33 @@ public partial class VideoPlayerViewModel
 		MpvStatusText = "";
 		MpvMessageIsError = isError;
 		MpvMessage = message;
+
+		// the message says what happened since: a notice about the playback before it is stale
+		DismissMpvNotice();
+	}
+
+	/// <summary>Shows <see cref="MpvNotice"/> and hides it again after <see cref="MpvNoticeDuration"/> unless a newer one took its place.</summary>
+	private void ShowMpvNotice(string notice)
+	{
+		var shown = Interlocked.Increment(ref _mpvNotices);
+		MpvNotice = notice;
+		_ = HideMpvNoticeLater(shown);
+	}
+
+	private async Task HideMpvNoticeLater(int shown)
+	{
+		// back on the page's thread (the events arrive on the UI thread)
+		await MpvNoticeDelay(MpvNoticeDuration);
+		if (Volatile.Read(ref _mpvNotices) == shown)
+		{
+			MpvNotice = null;
+		}
+	}
+
+	/// <summary>The notice's close button (or a message that replaces it): gone now, and the next notice shows even with the same text.</summary>
+	public void DismissMpvNotice()
+	{
+		Interlocked.Increment(ref _mpvNotices);
+		MpvNotice = null;
 	}
 }
