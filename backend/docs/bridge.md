@@ -700,7 +700,7 @@ playing sets both of the shim's per-kind volumes (`video_volume`,
 `music_volume`), since the shim applies one of those at every start.
 `no_playback` is returned by `pause`/`unpause`/`toggle_pause`/`seek`/
 `seek_relative` (unless something is opening), and by `next`/`previous`/
-`set_audio`/`set_subtitle` when nothing is playing; `stop`, volume, mute and
+`set_audio`/`set_subtitle`/`skip_segment` when nothing is playing; `stop`, volume, mute and
 fullscreen always succeed once connected.
 
 Events come from `bridge_state.Tracker`, fed by the monitor's samples and
@@ -720,6 +720,23 @@ in `position` (at most every 0.45 s). The monitor *polls* mpv
 (`playback-time`, `duration`, `pause`, volume, mute, track ids) once per
 sample and observes nothing: an observer on `playback-time` would be about
 30 messages a second over JSON IPC.
+
+**Segments and the queue's neighbours** (fluentfin-mpv, BRIDGE.md sections
+4 and 5). `segments` is the shim's own list, `media.Video.intros` (fetched
+inside the start, for the types not set to off), with each type's action
+read from the settings at every sample (`ShimRuntime.segments_of`); `next`
+is `state.queue`'s neighbours plus `settings.auto_play`. Both follow
+`tracks`, for a new item always and later only when they change. The offer
+(`current`) is worked out from the monitor's own position sample with the
+rule in `bridge_protocol.offered_segment` (an `ask` segment, end exclusive,
+so the skip's seek to the end closes it), and only while the item plays:
+during a start or a restart mpv's position can still be the outgoing
+item's. `skip_segment` checks the offer last sent (`Tracker.offer`, the one
+the UI saw) and then does what the shim's own Skip button does,
+`put_task(skip_intro)`. The monitor also writes the offer's button text to
+`user-data/fluentfin/skip` after each tick (`Bridge._push_offer`, "" with
+none or with `set_controls` `"ui"`), for the Skip button and prompt of the
+bar mpv draws (section 4a); written on change and again for a new mpv.
 
 ## 6. Testing
 

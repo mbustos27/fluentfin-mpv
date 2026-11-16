@@ -3,7 +3,8 @@
 The bridge's monitor thread samples the player twice a second (and when
 poked) into an `Observation`; `Tracker.update` turns the difference from the
 last one into protocol events -- ``ended``, ``error``, ``item``, ``tracks``,
-``state``, ``position`` -- in that order. The player's hooks only *record*
+``segments``, ``next`` (fluentfin-mpv), ``state``, ``position`` -- in that
+order. The player's hooks only *record*
 facts (``mark_ended``, ``report_error``); every event is emitted from
 `update`, so an ``item`` can never overtake the ``ended`` before it or the
 ``state`` after it.
@@ -72,7 +73,8 @@ class Observation:
                  dev=None, position=None, duration=None, paused=None,
                  volume=None, muted=None, fullscreen=False, mpv_aid=None,
                  mpv_sid=None, external_subtitles=None, dev_idle=None,
-                 held=False, restart_session=None, now=None):
+                 held=False, restart_session=None, segments=None,
+                 auto_play=False, now=None):
         self.connected = connected
         #: "embedded" | "attached" | "standalone" | None (no window yet).
         self.window = window
@@ -104,6 +106,11 @@ class Observation:
         #: or quality change) negotiates, before mpv has its load: the
         #: session mpv is still playing, which ``state`` shows until then.
         self.restart_session = restart_session
+        #: fluentfin-mpv: ``video``'s media segments as ``(type, start, end,
+        #: action)`` (seconds; the action its type is set to), and whether
+        #: the backend plays the next queue item by itself at the end.
+        self.segments = segments
+        self.auto_play = auto_play
         self.now = time.monotonic() if now is None else now
 
 
@@ -214,6 +221,11 @@ class Tracker:
         self.last_state = None
         self._last_key = None
         self._last_tracks = None
+        #: fluentfin-mpv: the last ``segments`` and ``next`` sent for the
+        #: announced item, and the segment on offer (`offer`).
+        self._last_segments = None
+        self._last_next = None
+        self._offer = None
         self._last_position = None
         self._last_position_at = float("-inf")
         self._volume = 100
@@ -401,6 +413,37 @@ class Tracker:
             return obs.dev
         return None
 
+    def offer(self):
+        """fluentfin-mpv: the segment on offer as last sent (a ``segments``
+        entry), or None."""
+        with self._lock:
+            return self._offer
+
+    def _segments_and_next(self, obs, video):
+        """``segments`` and ``next`` for the announced ``video``, each when
+        it differs from the last one sent (always, after a new item).
+
+        The offer follows the position only while the item plays: during a
+        start or restart mpv's position can still be the outgoing item's,
+        and an offer made from it would name a segment of the wrong file."""
+        events = []
+        item_id = _item_id(video)
+        segments = proto.segment_list(obs.segments)
+        settled = (obs.pending is None and obs.opening is None
+                   and not obs.start_in_progress)
+        current = (proto.offered_segment(segments, obs.position)
+                   if settled else None)
+        payload = proto.segments_payload(item_id, segments, current)
+        if payload != self._last_segments:
+            events.append(("segments", payload))
+            self._last_segments = payload
+            self._offer = segments[current] if current is not None else None
+        following = proto.next_payload(item_id, _queue(video), obs.auto_play)
+        if following != self._last_next:
+            events.append(("next", following))
+            self._last_next = following
+        return events
+
     def update(self, obs):
         """Events since the last update, in the order the UI must see
         them. Returns ``[(event, data), ...]``."""
@@ -417,6 +460,7 @@ class Tracker:
                                          "reason": reason}))
                 self.announced = None
                 self._last_tracks = None
+                self._last_segments = self._last_next = self._offer = None
             for error in self._errors:
                 events.append(("error", error))
             self._errors = []
@@ -431,6 +475,7 @@ class Tracker:
                         getattr(current, "media_source", None))
                     events.append(("tracks", tracks))
                     self._last_tracks = tracks
+                    events.extend(self._segments_and_next(obs, current))
                 else:
                     self.error = None
             elif (current is not None and not isinstance(current, DevItem)
@@ -442,6 +487,7 @@ class Tracker:
                 if tracks != self._last_tracks:
                     events.append(("tracks", tracks))
                     self._last_tracks = tracks
+                events.extend(self._segments_and_next(obs, current))
 
             if (self.error is not None and current is not None
                     and obs.pending is None and obs.opening is None

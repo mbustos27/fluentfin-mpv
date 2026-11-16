@@ -513,6 +513,39 @@ class ShimRuntime:
             return (BrokenPipeError,)
         return self.player_module._mpv_errors
 
+    # -- fluentfin-mpv: segments and the queue (BRIDGE.md section 5) --------
+
+    @staticmethod
+    def segments_of(video):
+        """``video``'s media segments as ``(type, start, end, action)``:
+        the shim's own list (`media.Video.intros`, fetched at the start for
+        the types not set to off) with what each type is set to do."""
+        from . import conf
+
+        out = []
+        for segment in list(getattr(video, "intros", None) or ()):
+            try:
+                out.append((segment.type, segment.start, segment.end,
+                            conf.segment_action(segment.type)))
+            except Exception:
+                log.debug("unreadable segment", exc_info=True)
+        return out
+
+    @staticmethod
+    def auto_play():
+        """Whether the shim plays the next queue item at an item's end."""
+        from .conf import settings
+
+        return bool(settings.auto_play)
+
+    @staticmethod
+    def segment_label(segment_type):
+        """The Skip button's text for a segment type, in the shim's
+        language ("Skip Intro")."""
+        from .media import segment_labels
+
+        return segment_labels(segment_type)[0]
+
     # -- the server --------------------------------------------------------
 
     def make_client(self, server):
@@ -837,6 +870,10 @@ class Bridge:
         self.tracker = bridge_state.Tracker()
         #: fluentfin-mpv: who draws the player controls (``set_controls``).
         self.controls = bridge_controls.UiControls()
+        #: fluentfin-mpv: ``(mpv handle, text)`` last written to
+        #: ``user-data/fluentfin/skip`` for the bar's Skip button and prompt
+        #: (`_push_offer`).
+        self._offer_pushed = None
 
         #: Fixed by the first connect for the life of the process.
         self.window = None
@@ -2578,6 +2615,21 @@ class Bridge:
         pm.run_action(self._apply_controls)
         return {}
 
+    def cmd_skip_segment(self, args):
+        """fluentfin-mpv: skip the segment on offer (BRIDGE.md section 4,
+        ``segments.current``), the way the shim's own Skip button does:
+        `PlayerManager.skip_intro` on the action thread, which seeks to the
+        end of the segment the position is in. The offer is the one last
+        sent, the one the UI saw."""
+        pm = self._require_player()
+        if self._playing(pm) is None:
+            raise BridgeError(NO_PLAYBACK, "nothing is playing")
+        if self.tracker.offer() is None:
+            return {"skipped": False}
+        pm.put_task(pm.skip_intro)
+        self.poke()
+        return {"skipped": True}
+
     def _subtitle_base(self):
         """The shim's own ``sub-pos`` (its subtitle position setting), what
         `PlayerManager.update_subtitle_visuals` writes at every item start."""
@@ -2622,6 +2674,7 @@ class Bridge:
         "set_mute": cmd_set_mute,
         "set_fullscreen": cmd_set_fullscreen,
         "set_controls": cmd_set_controls,
+        "skip_segment": cmd_skip_segment,
     }
 
     # -- the monitor -------------------------------------------------------
@@ -2657,6 +2710,7 @@ class Bridge:
                 log.exception("monitor tick failed")
                 obs = None
             self._emit_tick(obs)
+            self._push_offer()
             with self._tick_cond:
                 self._ticks += 1
                 self._tick_cond.notify_all()
@@ -2687,6 +2741,31 @@ class Bridge:
                     log.exception("could not send a %s event", name)
             self._send_reported()
 
+    def _push_offer(self):
+        """fluentfin-mpv: the segment on offer, for the bar mpv draws
+        (``fluentfin.lua``: its Skip button and prompt): the button's text
+        in ``user-data/fluentfin/skip``, empty when there is none or when
+        FluentFin draws the controls (``set_controls`` ``"ui"``: the UI
+        offers it from the ``segments`` event). Written when it changes,
+        and again for a new mpv. Never raises: a lost mpv is the shim's to
+        notice."""
+        pm = self.runtime.pm
+        if pm is None or not pm._mpv_alive:
+            return
+        offer = self.tracker.offer()
+        text = ""
+        if offer is not None and not self.controls.ui:
+            text = self.runtime.segment_label(offer["type"])
+        player = pm._player
+        pushed = self._offer_pushed
+        if pushed is not None and pushed[0] is player and pushed[1] == text:
+            return
+        try:
+            player.command("set", "user-data/fluentfin/skip", text)
+            self._offer_pushed = (player, text)
+        except Exception:
+            log.debug("could not show the skip offer", exc_info=True)
+
     def _observe(self, cheap=False):
         """One sample. ``cheap`` reads nothing from mpv."""
         from_window = self.window["mode"] if self.window else None
@@ -2701,6 +2780,10 @@ class Bridge:
             return obs
         obs.video = pm._video
         obs.start_in_progress = bool(pm._start_in_progress)
+        if obs.video is not None:
+            # fluentfin-mpv: the ``segments`` and ``next`` events.
+            obs.segments = self.runtime.segments_of(obs.video)
+            obs.auto_play = self.runtime.auto_play()
         # fluentfin-mpv player controls: attached is the UI's window too
         embedded = from_window in ("embedded", "attached")
         if embedded:

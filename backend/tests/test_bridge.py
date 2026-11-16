@@ -100,6 +100,9 @@ class FakeVideo:
         #: The quality override the next negotiation asks for
         #: (`set_trs_override`; None: the default bitrate).
         self.trs_ovr = None
+        #: fluentfin-mpv: `media.Video.intros`, the media segments fetched
+        #: at the start (`media.Intro`: type, start, end, has_triggered).
+        self.intros = []
 
     def reauthorize_sidecars(self):
         self.sidecars_reauthorized += 1
@@ -527,6 +530,17 @@ class FakePM:
                 video, self.queue_next = self.queue_next, None
                 self._move_to(video)
 
+    def skip_intro(self):
+        # fluentfin-mpv: the shim's Skip (`PlayerManager.skip_intro`): a
+        # seek to the end of the segment the position is in, if any.
+        self._note("skip_intro")
+        video, position = self._video, self._player.playback_time
+        for intro in (getattr(video, "intros", None) or ()):
+            if position is not None and intro.start <= position <= intro.end:
+                self._player.playback_time = intro.end
+                intro.has_triggered = True
+                return
+
     def play_prev(self):
         self._note("play_prev")
         if self.queue_prev is not None:
@@ -772,6 +786,10 @@ class FakeRuntime:
 
     _run_steps = staticmethod(bridge_mod.ShimRuntime._run_steps)
     _bound_replies = staticmethod(bridge_mod.ShimRuntime._bound_replies)
+    # fluentfin-mpv: the real ones (the shim's settings and labels).
+    segments_of = staticmethod(bridge_mod.ShimRuntime.segments_of)
+    auto_play = staticmethod(bridge_mod.ShimRuntime.auto_play)
+    segment_label = staticmethod(bridge_mod.ShimRuntime.segment_label)
 
     def start_player(self, window):
         self.journal.append(("start_player", window["mode"]))
@@ -1323,6 +1341,118 @@ class SetControlsTest(BridgeCase):
         self.assertEqual(self.osc_calls(), [False])
 
 
+class SegmentsTest(BridgeCase):
+    """fluentfin-mpv: media segments over the bridge (BRIDGE.md sections 4
+    and 5): sampled from the shim's own list, the ``skip_segment``
+    command, and the offer handed to mpv's bar."""
+
+    def setUp(self):
+        super().setUp()
+        from jellyfin_mpv_shim.media import Intro
+
+        self.Intro = Intro
+
+    def playing(self, position=None):
+        self.connect_server()
+        pm = self.runtime.pm
+        video = FakeVideo(A, parent=FakeQueue([A, B]))
+        video.intros = [self.Intro("Intro", 10.0, 70.0),
+                        self.Intro("Outro", 100.0, 120.0),
+                        self.Intro("Commercial", 30.0, 40.0)]
+        pm.play(video)
+        pm._player.playback_time = position
+        return pm, video
+
+    def tick(self):
+        obs = self.bridge._observe()
+        events = self.bridge.tracker.update(obs)
+        self.bridge._push_offer()
+        return events
+
+    def skip_texts(self, pm):
+        return [c[2] for c in pm._player.commands
+                if c[:2] == ("set", "user-data/fluentfin/skip")]
+
+    def test_sampled_with_what_each_type_is_set_to(self):
+        from jellyfin_mpv_shim.conf import settings
+
+        pm, video = self.playing(20.0)
+        with mock.patch.multiple(settings, segment_intro="ask",
+                                 segment_outro="always",
+                                 segment_commercial="off", auto_play=True):
+            events = self.tick()
+        data, = [d for n, d in events if n == "segments"]
+        self.assertEqual([(s["type"], s["action"]) for s in data["segments"]],
+                         [("Intro", "ask"), ("Outro", "always")])
+        self.assertEqual(data["current"], 0)
+        following, = [d for n, d in events if n == "next"]
+        self.assertEqual(following, {"itemId": A, "nextItemId": B,
+                                     "autoPlay": True})
+
+    def test_skip_segment(self):
+        self.assertEqual(self.code("skip_segment"), "not_connected")
+        self.connect_server()
+        self.assertEqual(self.code("skip_segment"), "no_playback")
+        pm, video = self.playing(5.0)
+        self.tick()
+        self.assertEqual(self.send("skip_segment")["result"],
+                         {"skipped": False}, "nothing on offer yet")
+        self.assertNotIn(("skip_intro",), self.runtime.journal)
+        pm._player.playback_time = 12.0
+        self.tick()
+        answer = self.send("skip_segment")
+        self.assertEqual(answer["result"], {"skipped": True})
+        # The shim's own Skip, on the action thread.
+        self.assertIn(("put_task",), self.runtime.journal)
+        pm.run_deferred()
+        self.assertIn(("skip_intro",), self.runtime.journal)
+        self.assertEqual(pm._player.playback_time, 70.0)
+        events = self.tick()
+        data, = [d for n, d in events if n == "segments"]
+        self.assertIsNone(data["current"], "the skip ended the offer")
+        self.assertEqual(self.send("skip_segment")["result"],
+                         {"skipped": False})
+
+    def test_the_bar_shows_the_offer_only_with_mpvs_controls(self):
+        pm, video = self.playing(5.0)
+        for _ in range(3):
+            self.tick()
+        self.assertEqual(self.skip_texts(pm), [""], "written once")
+        pm._player.playback_time = 15.0
+        for _ in range(3):
+            self.tick()
+        self.assertEqual(self.skip_texts(pm), ["", "Skip Intro"])
+        # FluentFin's controls: they offer it, mpv's bar does not.
+        self.send("set_controls", {"controls": "ui"})
+        self.tick()
+        self.assertEqual(self.skip_texts(pm)[-1], "")
+        self.send("set_controls", {"controls": "mpv"})
+        self.tick()
+        self.assertEqual(self.skip_texts(pm)[-1], "Skip Intro")
+        # A new mpv is told again.
+        pm._player = FakeHandle()
+        pm._player.playback_time = 15.0
+        self.tick()
+        self.assertEqual(self.skip_texts(pm), ["Skip Intro"])
+        pm._player.playback_time = 71.0
+        self.tick()
+        self.assertEqual(self.skip_texts(pm), ["Skip Intro", ""])
+
+    def test_a_failing_write_is_tried_again(self):
+        pm, video = self.playing(15.0)
+        self.tick()
+
+        def refuse(*args):
+            raise BrokenPipeError("mpv went away")
+
+        with mock.patch.object(pm._player, "command", refuse):
+            self.bridge._push_offer()           # never raises
+        pm._player.commands.clear()
+        self.bridge._offer_pushed = None
+        self.bridge._push_offer()
+        self.assertEqual(self.skip_texts(pm), ["Skip Intro"])
+
+
 class DevConnectTest(BridgeCase):
     dev = True
 
@@ -1670,8 +1800,9 @@ class TrackerTest(unittest.TestCase):
         events = self.step(video=a, position=0.0, duration=60.0,
                            paused=False)
         self.assertEqual(self.names(events),
-                         ["item", "tracks", "state", "position"])
-        snap = events[2][1]
+                         ["item", "tracks", "segments", "next", "state",
+                          "position"])
+        snap = events[4][1]
         self.assertEqual((snap["state"], snap["itemId"], snap["mediaSourceId"],
                           snap["playSessionId"], snap["playMethod"],
                           snap["queue"]),
@@ -1693,7 +1824,8 @@ class TrackerTest(unittest.TestCase):
         self.assertEqual(events[0][1]["itemId"], B)
         events = self.step(video=b, position=0.0, duration=30.0)
         self.assertEqual(self.names(events),
-                         ["ended", "item", "tracks", "state", "position"])
+                         ["ended", "item", "tracks", "segments", "next",
+                          "state", "position"])
         self.assertEqual(events[0][1], {"itemId": A, "reason": "eof"})
         events = self.step(video=None)
         self.assertEqual(self.names(events), ["ended", "state"])
@@ -1792,6 +1924,107 @@ class TrackerTest(unittest.TestCase):
         for reason in ("replaced", "eof", "stopped"):
             self.tracker.mark_ended(a, reason)
         self.assertEqual(self.step(video=None)[0][1]["reason"], "eof")
+
+    # -- fluentfin-mpv: segments and next (BRIDGE.md section 5) -------------
+
+    SEGMENTS = [("Intro", 10.0, 70.0, "ask"), ("Outro", 100.0, 120.0,
+                                                 "always")]
+
+    def of(self, events, name):
+        return [d for n, d in events if n == name]
+
+    def test_segments_follow_the_position_and_say_each_change_once(self):
+        queue = FakeQueue([A, B])
+        a = FakeVideo(A, parent=queue)
+        events = self.step(video=a, opening=a, start_in_progress=True,
+                           position=40.0, segments=self.SEGMENTS)
+        self.assertEqual(self.names(events)[:4],
+                         ["item", "tracks", "segments", "next"])
+        first, = self.of(events, "segments")
+        self.assertEqual(first["itemId"], A)
+        self.assertEqual([s["type"] for s in first["segments"]],
+                         ["Intro", "Outro"])
+        self.assertIsNone(first["current"],
+                          "no offer from a position read while opening")
+        self.assertIsNone(self.tracker.offer())
+        currents = []
+        for position in (0.0, 5.0, 10.0, 30.0, 60.0, 69.9, 70.0, 80.0,
+                         101.0, 110.0, 130.0):
+            events = self.step(video=a, position=position,
+                               segments=self.SEGMENTS)
+            for data in self.of(events, "segments"):
+                currents.append((position, data["current"]))
+        # Sent when it changed and only then; never for the always one.
+        self.assertEqual(currents, [(10.0, 0), (70.0, None)])
+        for _ in range(3):
+            self.assertEqual(self.of(self.step(video=a, position=130.0,
+                                               segments=self.SEGMENTS),
+                                     "segments"), [], "nothing walks")
+
+    def test_the_offer_is_the_last_one_sent(self):
+        a = FakeVideo(A)
+        self.step(video=a, position=20.0, segments=self.SEGMENTS)
+        self.assertEqual(self.tracker.offer()["type"], "Intro")
+        self.step(video=a, position=70.0, segments=self.SEGMENTS)
+        self.assertIsNone(self.tracker.offer())
+        self.step(video=a, position=20.0, segments=self.SEGMENTS)
+        self.step(video=None)
+        self.assertIsNone(self.tracker.offer(), "an ended item offers none")
+
+    def test_a_restart_withholds_the_offer_until_it_plays(self):
+        a = FakeVideo(A)
+        self.step(video=a, position=20.0, segments=self.SEGMENTS)
+        events = self.step(video=a, opening=a, start_in_progress=True,
+                           position=20.0, segments=self.SEGMENTS)
+        self.assertEqual(self.of(events, "segments"), [],
+                         "a restart sends nothing of the item's again")
+        events = self.step(video=a, position=20.0, segments=self.SEGMENTS)
+        self.assertEqual(self.of(events, "segments"), [])
+        self.assertEqual(self.tracker.offer()["type"], "Intro")
+
+    def test_next_follows_the_queue_and_each_item_gets_its_own(self):
+        queue = FakeQueue([A, B, C], seq=1)
+        b = FakeVideo(B, parent=queue)
+        events = self.step(video=b, position=1.0, auto_play=True)
+        self.assertEqual(self.of(events, "next"), [
+            {"itemId": B, "nextItemId": C, "previousItemId": A,
+             "autoPlay": True}])
+        for _ in range(3):
+            self.assertEqual(self.of(self.step(video=b, position=2.0,
+                                               auto_play=True), "next"), [])
+        # The queue changes around it (widened backwards: previous now
+        # prepends the season's start) -- said once.
+        queue.queue.insert(0, {"Id": DASHED_N, "PlaylistItemId": "p9"})
+        queue.seq = 2
+        events = self.step(video=b, position=3.0, auto_play=True)
+        self.assertEqual(self.of(events, "next"), [],
+                         "the same neighbours: nothing new")
+        queue.queue.pop(1)                  # A gone from before B
+        queue.seq = 1
+        events = self.step(video=b, position=4.0, auto_play=True)
+        self.assertEqual(self.of(events, "next"), [
+            {"itemId": B, "nextItemId": C, "previousItemId": DASHED_N,
+             "autoPlay": True}])
+        # Auto play turned off.
+        events = self.step(video=b, position=5.0, auto_play=False)
+        self.assertEqual(self.of(events, "next")[0]["autoPlay"], False)
+        # The next item, with the same segments as this one: its own
+        # events all the same.
+        c = FakeVideo(C, parent=queue)
+        queue.seq = 2
+        events = self.step(video=c, position=0.0, auto_play=False)
+        self.assertEqual(self.names(events)[:5],
+                         ["ended", "item", "tracks", "segments", "next"])
+        self.assertEqual(self.of(events, "next"), [
+            {"itemId": C, "previousItemId": B, "autoPlay": False}])
+
+    def test_a_file_gets_no_segments_or_next(self):
+        item = bridge_state.DevItem("av://lavfi:testsrc")
+        item.phase = "active"
+        for _ in range(3):
+            events = self.step(dev=item, position=20.0,
+                               segments=self.SEGMENTS)
+            self.assertFalse({"segments", "next"} & set(self.names(events)))
 
     def test_volume_mute_fullscreen_are_state(self):
         events = self.step(volume=40.4, muted=True, fullscreen=True)
@@ -1952,7 +2185,8 @@ class PlayerNamesTest(unittest.TestCase):
                      "send_timeline_initial", "_notify_load_start",
                      "_apply_auth_headers", "get_timeline_options",
                      "update", "_queue_finished", "restart_playback",
-                     "_handle_mpv_disconnect", "_report_stopped_offline"):
+                     "_handle_mpv_disconnect", "_report_stopped_offline",
+                     "skip_intro"):
             with self.subTest(name=name):
                 self.assertIn(name, names)
 

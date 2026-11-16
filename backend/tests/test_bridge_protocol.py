@@ -649,5 +649,68 @@ class TicksAndTracksTest(unittest.TestCase):
             {"itemId": "m1", "name": "Song", "type": "MusicVideo"})
 
 
+class SegmentsAndNextTest(unittest.TestCase):
+    """fluentfin-mpv: the ``segments`` and ``next`` payloads (BRIDGE.md
+    section 5)."""
+
+    def test_segment_list(self):
+        segments = proto.segment_list([
+            ("Intro", 10.0, 70.5, "ask"),
+            ("Outro", 1300, 1380, "always"),
+            ("Recap", 0, 20, "off"),             # off: never listed
+            ("Preview", 5, 5, "ask"),            # empty
+            ("Commercial", 40, 30, "ask"),       # backwards
+            ("Intro", None, 30, "ask"),          # no start
+            ("Intro", 1, float("nan"), "ask"),   # no end
+            (None, 1, 2, "ask"),                 # no type
+            ("Intro", 1, 2, "Ask"),              # not an action
+        ])
+        self.assertEqual(segments, [
+            {"type": "Intro", "startTicks": 100_000_000,
+             "endTicks": 705_000_000, "action": "ask"},
+            {"type": "Outro", "startTicks": 13_000_000_000,
+             "endTicks": 13_800_000_000, "action": "always"}])
+        self.assertEqual(proto.segment_list(None), [])
+
+    def test_the_offer_is_an_ask_segment_from_its_start_to_before_its_end(self):
+        segments = proto.segment_list([("Recap", 0, 20, "always"),
+                                       ("Intro", 10, 70, "ask"),
+                                       ("Outro", 100, 130, "ask")])
+        # Overlapping an always segment: the ask one is the offer.
+        for position, offered in ((0, None), (9.99, None), (10, 1),
+                                  (69.99, 1), (70, None), (99, None),
+                                  (100, 2), (129.5, 2), (130, None),
+                                  (None, None)):
+            with self.subTest(position=position):
+                self.assertEqual(proto.offered_segment(segments, position),
+                                 offered)
+        self.assertIsNone(proto.offered_segment([], 5))
+
+    def test_segments_payload(self):
+        self.assertEqual(proto.segments_payload(
+            "A" * 32, [], None),
+            {"itemId": "a" * 32, "segments": [], "current": None})
+
+    def test_next_payload(self):
+        ids = ["a" * 32, "b" * 32, "c" * 32]
+        self.assertEqual(proto.next_payload(
+            ids[1], {"itemIds": ids, "index": 1}, True),
+            {"itemId": ids[1], "nextItemId": ids[2],
+             "previousItemId": ids[0], "autoPlay": True})
+        self.assertEqual(proto.next_payload(
+            ids[0], {"itemIds": ids, "index": 0}, False),
+            {"itemId": ids[0], "nextItemId": ids[1], "autoPlay": False})
+        # The last item: nothing to play by itself, whatever the setting.
+        self.assertEqual(proto.next_payload(
+            ids[2], {"itemIds": ids, "index": 2}, True),
+            {"itemId": ids[2], "previousItemId": ids[1], "autoPlay": False})
+        for queue in (None, {}, {"itemIds": [], "index": 0},
+                      {"itemIds": ids, "index": 3},
+                      {"itemIds": ids, "index": "1"}):
+            with self.subTest(queue=queue):
+                self.assertEqual(proto.next_payload(ids[0], queue, True),
+                                 {"itemId": ids[0], "autoPlay": False})
+
+
 if __name__ == "__main__":
     unittest.main()
