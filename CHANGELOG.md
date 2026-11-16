@@ -1,11 +1,17 @@
 # Changelog
 
-## Unreleased
+## 1.0.1
 
-- **The program is easy to find in the release folder.** Its top now holds only `FluentFin.exe`, `README.txt`, `LICENSE`
+- **An installer.** `FluentFinMPV-1.0.1-win-x64.msi` installs FluentFin MPV for your Windows user (no administrator
+  rights needed) into `%LOCALAPPDATA%\Programs\FluentFin MPV`, with a Start menu shortcut. Uninstall it in Settings >
+  Apps; your settings and data stay. A later installer replaces an earlier version. The zip stays, for a portable copy.
+- **The program is easy to find in the zip.** The folder's top now holds only `FluentFin.exe`, `README.txt`, `LICENSE`
   and `THIRD-PARTY-NOTICES.txt`, plus an `app\` folder with everything else (in 1.0.0, `FluentFin.exe` was one of 675
   files and folders). The top `FluentFin.exe` is a small launcher that starts `app\FluentFin.exe` with the same
   arguments; shortcuts go to it. Settings and data are where they were.
+- **English only.** FluentFin's own text is English, so the release no longer carries 134 folders of translations for
+  Windows' built-in controls (21 MB). On a Windows set to another language, those controls' text (a text box's
+  right-click menu, for example) is now English too.
 
 ## 1.0.0 (first public release)
 

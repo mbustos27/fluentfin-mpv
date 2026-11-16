@@ -6,7 +6,12 @@ This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv
 
 ## Download
 
-**Windows 10 or 11 (x64).** Get the zip from the [Releases](https://github.com/mbustos27/fluentfin-mpv/releases) page, unzip it anywhere and run `FluentFin.exe` at the top of the folder (the app's own files are in `app\`). Nothing else needs installing: .NET, the playback backend and libmpv are inside. The app isn't code-signed, so Windows SmartScreen warns on the first start (**More info → Run anyway**). Changes: [CHANGELOG.md](CHANGELOG.md).
+**Windows 10 or 11 (x64).** From the [Releases](https://github.com/mbustos27/fluentfin-mpv/releases) page:
+
+- **Installer** (`.msi`): installs for your Windows user, with no administrator rights, and adds FluentFin MPV to the Start menu. Uninstall it in Settings → Apps.
+- **Portable** (`.zip`): unzip it anywhere and run `FluentFin.exe` at the top of the folder (the app's own files are in `app\`).
+
+Nothing else needs installing: .NET, the playback backend and libmpv are inside. Either way your settings and data go to `%LOCALAPPDATA%\FluentFinMpv`. The app isn't code-signed, so Windows SmartScreen warns the first time (**More info → Run anyway**). Changes: [CHANGELOG.md](CHANGELOG.md).
 
 Everything below the feature list is for building from source.
 

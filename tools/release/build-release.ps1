@@ -26,6 +26,9 @@
   5. The folder: at the top only FluentFin.exe (the launcher: it starts app\FluentFin.exe), README.txt, LICENSE and
      THIRD-PARTY-NOTICES.txt (tools\release\notices.py), so the program to run is easy to find; in app\ the publish
      output with libmpv\ and backend\. Then the zip (one top folder, entries sorted) and its SHA-256 in sha256sum format.
+     English only: no language folders but English (FluentFin's own text is English).
+  7. The installer: a per-user MSI of the same folder (tools\release\installer\FluentFinMPV.wxs, WiX 5 from
+     dotnet-tools.json) and its SHA-256; taken back out of the MSI, the folder must match the package file by file.
   6. dist\sources\: the corresponding source of the GPL, LGPL and MPL code shipped, with SOURCES.txt
      (tools\release\sources.py, sources.json; official hosts only).
 
@@ -37,7 +40,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '1.0.0',
+    [string]$Version = '1.0.1',
     [string]$SourceUrl,
     [switch]$Reuse,
     [switch]$SkipTests,  # only to try the packaging itself; a release runs them
@@ -281,7 +284,7 @@ $artifacts = Join-Path $work 'dotnet'
 Invoke-Checked 'dotnet publish' {
     & $dotnet publish (Join-Path $repo 'ui\FluentFin\FluentFin.csproj') -c Release -r win-x64 -p:Platform=x64 `
         --self-contained true -p:WindowsPackageType=None -p:VlcWindowsX64Enabled=false -p:FluentFinMpvRelease=true `
-        -p:DebugType=none -p:DebugSymbols=false `
+        -p:DebugType=none -p:DebugSymbols=false -p:SatelliteResourceLanguages=en `
         "-p:LibmpvDir=$LibmpvDir" --artifacts-path $artifacts -o $publish `
         -nodeReuse:false -p:UseSharedCompilation=false --disable-build-servers -nologo -v:minimal
 }
@@ -311,6 +314,17 @@ if (-not (Select-String -Path (Join-Path $publish 'FluentFin.dll') -SimpleMatch 
 $flyleafFFmpeg = Join-Path $publish 'FFMpeg'
 if (Test-Path $flyleafFFmpeg) { Remove-Item -Recurse -Force $flyleafFFmpeg }
 foreach ($gone in 'libvlc', 'FFMpeg') { if (Test-Path (Join-Path $publish $gone)) { throw "the publish still has $gone\" } }
+# English only: FluentFin's own text is English (ui\FluentFin\Strings\en-us), so the release keeps only the English
+# resources of what it ships: SatelliteResourceLanguages=en above for .NET's satellite assemblies, and here the Windows
+# App SDK's language folders (.mui files), 130-odd folders that made the program hard to find. A folder goes only if it
+# is named like a language, isn't English and holds nothing but language resources.
+$languageDirs = @(Get-ChildItem $publish -Directory | Where-Object { $_.Name -match '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' -and $_.Name -notmatch '^en(-|$)' })
+foreach ($dir in $languageDirs) {
+    $other = @(Get-ChildItem $dir.FullName -Recurse -File | Where-Object { $_.Name -notmatch '\.(mui|resources\.dll)$' })
+    if ($other) { throw "$($dir.Name)\ holds more than language resources: $($other.Name -join ', ')" }
+    Remove-Item -Recurse -Force $dir.FullName
+}
+Write-Host "English only: removed $($languageDirs.Count) language folders; kept $((@(Get-ChildItem $publish -Directory | Where-Object Name -match '^en(-|$)') | ForEach-Object Name) -join ', ')"
 
 # the launcher: the FluentFin.exe at the top of the release folder, which starts app\FluentFin.exe (the app's own folder
 # holds hundreds of files, and people looked for the program among them). Windows' own C# compiler (.NET Framework 4,
@@ -422,6 +436,42 @@ $libmpvFiles = @(Get-ChildItem (Join-Path $package 'app\libmpv') -File)
 Write-Host ("`n{0}`n  {1} files, {2:N1} MB unpacked (libmpv\: {3} files, {4:N1} MB)`n{5}`n  {6:N1} MB, SHA-256 {7}" -f $package, $files.Count,
     (($files | Measure-Object Length -Sum).Sum / 1MB), $libmpvFiles.Count, (($libmpvFiles | Measure-Object Length -Sum).Sum / 1MB), $zip, $zipMB, $hash)
 if ($zipMB -gt $MaxZipMB) { throw ("the zip is {0:N1} MB, more than -MaxZipMB {1}" -f $zipMB, $MaxZipMB) }
+
+# --- 7. the installer: a per-user MSI of the same folder (tools\release\installer\FluentFinMPV.wxs, WiX 5 from
+# dotnet-tools.json, nuget.org), then the same folder taken back out of it (an administrative install, which installs
+# nothing) and compared file by file with the package: the MSI must hold exactly what the zip holds -------------------
+$msi = Join-Path $dist "$name.msi"
+Step "installer $msi"
+foreach ($f in $msi, "$msi.sha256") { if (Test-Path $f) { Remove-Item -Force $f } }
+Push-Location $repo
+try {
+    Invoke-Checked 'dotnet tool restore' { & $dotnet tool restore }
+    $env:DOTNET_ROLL_FORWARD = 'Major'   # WiX 5 targets an older .NET than the SDK this machine has
+    Invoke-Checked 'wix build' { & $dotnet tool run wix build (Join-Path $PSScriptRoot 'installer\FluentFinMPV.wxs') -arch x64 `
+            -d "Version=$Version" -d "PackageDir=$package" -d "IconFile=$(Join-Path $repo 'ui\FluentFin\Assets\jellyfin.ico')" `
+            -intermediatefolder (Join-Path $work 'wix') -pdbtype none -o $msi }
+}
+finally { Remove-Item Env:DOTNET_ROLL_FORWARD -ErrorAction SilentlyContinue; Pop-Location }
+$msiCheck = Join-Path $work 'msi-check'
+if (Test-Path $msiCheck) { Remove-Item -Recurse -Force $msiCheck }
+$admin = Start-Process msiexec.exe -ArgumentList @('/a', "`"$msi`"", '/qn', "TARGETDIR=`"$msiCheck`"") -Wait -PassThru
+if ($admin.ExitCode -ne 0) { throw "taking the files back out of the MSI failed (msiexec /a, exit $($admin.ExitCode))" }
+$fromMsi = Join-Path $msiCheck 'LocalApp\Programs\FluentFin MPV'
+function Get-Hashes([string]$dir) {
+    Get-ChildItem $dir -Recurse -File | ForEach-Object { '{0}|{1}' -f $_.FullName.Substring($dir.Length), (Get-FileHash -Algorithm SHA256 $_.FullName).Hash } | Sort-Object
+}
+$msiDiff = @(Compare-Object @(Get-Hashes $package) @(Get-Hashes $fromMsi))
+if ($msiDiff) { throw "the MSI's files are not the package's: $(($msiDiff | Select-Object -First 5 | ForEach-Object { $_.SideIndicator + ' ' + $_.InputObject }) -join '; ')" }
+Remove-Item -Recurse -Force $msiCheck
+# the MSI's own tables name no folder of this machine (its files passed the path gate as the package)
+$msiBytes = [IO.File]::ReadAllBytes($msi)
+foreach ($enc in [Text.Encoding]::ASCII, [Text.Encoding]::Unicode) {
+    $text = $enc.GetString($msiBytes)
+    foreach ($local in $env:USERNAME, $repo, $work) { if ($text.IndexOf($local, [StringComparison]::OrdinalIgnoreCase) -ge 0) { throw "the MSI names $local" } }
+}
+$msiHash = (Get-FileHash -Algorithm SHA256 $msi).Hash.ToLowerInvariant()
+[IO.File]::WriteAllText("$msi.sha256", "$msiHash *$name.msi`n", [Text.UTF8Encoding]::new($false))
+Write-Host ("{0}`n  {1:N1} MB, SHA-256 {2}; the same {3} files as the zip" -f $msi, ((Get-Item $msi).Length / 1MB), $msiHash, @(Get-ChildItem $package -Recurse -File).Count)
 # the sources as the release attaches them: one archive under GitHub's 2 GiB file limit, or numbered parts
 Step 'sources archive'
 Invoke-Checked 'sources archive' { & $venvPython -I (Join-Path $PSScriptRoot 'bundle_sources.py') --dir $sources --out $dist --name "FluentFinMPV-$Version-sources" }

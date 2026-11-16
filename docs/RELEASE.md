@@ -83,7 +83,8 @@ the first sign-in, a playback.
 
 1. Tag the commit the zip was built from: `git tag -a v<version> -m "FluentFin MPV <version>"`, push the tag.
 2. Create the GitHub release on that tag: title `FluentFin MPV <version>`, the notes from `CHANGELOG.md`'s section
-   (what it is, what is verified, the known limits), the `.zip` and the `.sha256` as assets, and every file of
+   (what it is, what is verified, the known limits), the installer (`.msi`) and the `.zip`, each with its `.sha256`, as
+   assets (every release has an installer; the zip is the portable copy of the same files), and every file of
    `dist\FluentFinMPV-<version>-sources.zip` (or its numbered parts, each under GitHub's 2 GiB limit) with
    `dist\FluentFinMPV-<version>-sources.txt` (SOURCES.txt with the parts and their SHA-256): the source of what the
    zip ships.

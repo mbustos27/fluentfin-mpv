@@ -18,6 +18,8 @@ Requirements
 
 First run
 ---------
+Installed with the .msi: start FluentFin MPV from the Start menu, then go to step 3. To uninstall it, use
+Settings > Apps. From the zip:
 1. Unzip the whole folder to a place you can write to, and keep its files together.
 2. Run FluentFin.exe, the one next to this README. (The app\ folder holds the app itself; there is
    nothing in it to open.) The app is not code-signed, so Windows SmartScreen may warn the first time:
@@ -31,8 +33,9 @@ Where your data is
 - %LOCALAPPDATA%\FluentFinMpv: settings and saved servers, the TV journal, logs (Logs\) and the mpv
   backend's configuration (mpv-backend\: mpv.conf, input.conf, conf.json).
 - FluentFin.exe --data-dir <folder> keeps all of it in that folder instead.
-- Nothing is written to this folder, and nothing is installed. To remove FluentFin MPV, delete this
-  folder and %LOCALAPPDATA%\FluentFinMpv.
+- Nothing is written to this folder. From the zip nothing is installed: to remove FluentFin MPV, delete
+  this folder and %LOCALAPPDATA%\FluentFinMpv. Installed with the .msi: uninstall it in Settings > Apps,
+  and delete %LOCALAPPDATA%\FluentFinMpv too to remove your data.
 
 Reporting a problem
 -------------------
