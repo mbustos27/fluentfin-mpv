@@ -1,0 +1,177 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Seaglass's glass look (docs/design/GLASS.md): the materials, shapes and type that every page uses, so that the
+        pages look like one app. Glass (in-app acrylic) is for panels, bars, pills and menus, never for each card in a
+        row: every acrylic surface costs GPU time. High contrast: solid system colours, no glass.
+    -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="SeaglassAccentColor">#5CCFC1</Color>
+            <Color x:Key="SeaglassDeepColor">#0A1418</Color>
+            <SolidColorBrush x:Key="SeaglassAccentBrush" Color="#5CCFC1" />
+            <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#0A1418" />
+            <AcrylicBrush
+                x:Key="GlassPanelBrush"
+                FallbackColor="#E6162226"
+                TintColor="#16262B"
+                TintLuminosityOpacity="0.55"
+                TintOpacity="0.4" />
+            <AcrylicBrush
+                x:Key="GlassPanelStrongBrush"
+                FallbackColor="#F2101C20"
+                TintColor="#101C20"
+                TintLuminosityOpacity="0.8"
+                TintOpacity="0.65" />
+            <LinearGradientBrush x:Key="GlassStrokeBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#47FFFFFF" />
+                <GradientStop Offset="0.4" Color="#17FFFFFF" />
+                <GradientStop Offset="1" Color="#0DFFFFFF" />
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="GlassPressedOverlayBrush" Color="#0DFFFFFF" />
+            <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="GlassTextSecondaryBrush" Color="#BFFFFFFF" />
+            <!--  under text laid over artwork: transparent at the top, dark at the bottom  -->
+            <LinearGradientBrush x:Key="GlassImageScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#000A1418" />
+                <GradientStop Offset="0.55" Color="#660A1418" />
+                <GradientStop Offset="1" Color="#F20A1418" />
+            </LinearGradientBrush>
+            <!--  the soft artwork behind the window (AmbientBackdrop) is dimmed by this  -->
+            <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="#B30A1418" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="SeaglassAccentColor">#13877B</Color>
+            <Color x:Key="SeaglassDeepColor">#EAF4F3</Color>
+            <SolidColorBrush x:Key="SeaglassAccentBrush" Color="#13877B" />
+            <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#EAF4F3" />
+            <AcrylicBrush
+                x:Key="GlassPanelBrush"
+                FallbackColor="#E6F4FAF9"
+                TintColor="#F4FAF9"
+                TintLuminosityOpacity="0.7"
+                TintOpacity="0.5" />
+            <AcrylicBrush
+                x:Key="GlassPanelStrongBrush"
+                FallbackColor="#F2F7FBFA"
+                TintColor="#F7FBFA"
+                TintLuminosityOpacity="0.85"
+                TintOpacity="0.75" />
+            <LinearGradientBrush x:Key="GlassStrokeBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#CCFFFFFF" />
+                <GradientStop Offset="0.4" Color="#26000000" />
+                <GradientStop Offset="1" Color="#1A000000" />
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="#0F000000" />
+            <SolidColorBrush x:Key="GlassPressedOverlayBrush" Color="#08000000" />
+            <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="#E6000000" />
+            <SolidColorBrush x:Key="GlassTextSecondaryBrush" Color="#99000000" />
+            <LinearGradientBrush x:Key="GlassImageScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#00EAF4F3" />
+                <GradientStop Offset="0.55" Color="#80EAF4F3" />
+                <GradientStop Offset="1" Color="#F2EAF4F3" />
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="#B3EAF4F3" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <Color x:Key="SeaglassAccentColor">#FFFFFF00</Color>
+            <Color x:Key="SeaglassDeepColor">#FF000000</Color>
+            <SolidColorBrush x:Key="SeaglassAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="SeaglassDeepBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="GlassPanelBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="GlassPanelStrongBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="GlassStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="GlassPressedOverlayBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="GlassTextSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="GlassImageScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!--  shapes  -->
+    <CornerRadius x:Key="GlassPanelCornerRadius">20</CornerRadius>
+    <CornerRadius x:Key="GlassCardCornerRadius">12</CornerRadius>
+    <CornerRadius x:Key="GlassPillCornerRadius">999</CornerRadius>
+    <Thickness x:Key="GlassStrokeThickness">1</Thickness>
+    <x:Double x:Key="GlassPillHeight">44</x:Double>
+
+    <!--  type: Segoe UI Variable (Windows' own; Segoe UI on Windows 10)  -->
+    <FontFamily x:Key="GlassDisplayFontFamily">Segoe UI Variable Display, Segoe UI</FontFamily>
+    <FontFamily x:Key="GlassTextFontFamily">Segoe UI Variable Text, Segoe UI</FontFamily>
+
+    <Style x:Key="GlassHeroTitleTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource GlassDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="48" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+        <Setter Property="TextWrapping" Value="WrapWholeWords" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="MaxLines" Value="2" />
+    </Style>
+    <Style x:Key="GlassPageTitleTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource GlassDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="34" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+        <Setter Property="TextWrapping" Value="WrapWholeWords" />
+    </Style>
+    <Style x:Key="GlassSectionTitleTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource GlassDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="22" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+    </Style>
+    <Style x:Key="GlassMetaTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource GlassTextFontFamily}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextSecondaryBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!--  a glass panel: a Border with the frosted brush, the light edge and the panel corners  -->
+    <Style x:Key="GlassPanelStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassPanelCornerRadius}" />
+    </Style>
+
+    <!--
+        Buttons. The foundation's versions: the shell stream replaces their templates so pointer-over and pressed stay
+        glass (a lighter or darker overlay) instead of the default solid fill. Keep the keys.
+    -->
+    <Style
+        x:Key="GlassPillButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassPillCornerRadius}" />
+        <Setter Property="MinHeight" Value="{StaticResource GlassPillHeight}" />
+        <Setter Property="Padding" Value="20,10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style
+        x:Key="GlassAccentPillButtonStyle"
+        BasedOn="{StaticResource AccentButtonStyle}"
+        TargetType="Button">
+        <Setter Property="CornerRadius" Value="{StaticResource GlassPillCornerRadius}" />
+        <Setter Property="MinHeight" Value="{StaticResource GlassPillHeight}" />
+        <Setter Property="Padding" Value="22,10" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style
+        x:Key="GlassIconButtonStyle"
+        BasedOn="{StaticResource GlassPillButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Width" Value="{StaticResource GlassPillHeight}" />
+        <Setter Property="Height" Value="{StaticResource GlassPillHeight}" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+</ResourceDictionary>
