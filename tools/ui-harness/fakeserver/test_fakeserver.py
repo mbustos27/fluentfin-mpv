@@ -299,6 +299,57 @@ class MuxTests(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class SilentMediaTests(unittest.TestCase):
+    """No test run may make a sound: the test video's audio tracks are digital silence, and a cached build from before
+    that rule (no "silent" in media.json) is rebuilt instead of reused. mpv is not run: _run records the commands."""
+
+    def test_audio_is_silence_and_old_builds_are_rebuilt(self):
+        tmp = tempfile.mkdtemp(prefix="ffh-media-")
+        calls = []
+
+        def fake_run(cmd, log):
+            calls.append(cmd)
+            out = next((a[4:] for a in cmd if a.startswith("--o=")), None)
+            if out:
+                with open(out, "wb") as f:
+                    f.write(b"\0" * 20000)
+            return 0
+
+        real = media._run
+        media._run = fake_run
+        try:
+            old = make_media(tmp)          # an earlier build: same length, no "silent"
+            with open(os.path.join(tmp, "media.json"), "w", encoding="utf-8") as f:
+                json.dump(old, f)
+            try:
+                media.build("mpv.exe", tmp, seconds=600)
+            except Exception:
+                pass                       # the muxer cannot read the fake parts; the commands are what matters
+            sources = [a for cmd in calls for a in cmd if a.startswith("av://lavfi:")]
+            audio = [s for s in sources if not s.startswith("av://lavfi:testsrc")]
+            self.assertTrue(calls, "a media.json without \"silent\" was reused")
+            self.assertEqual(2, len(audio), sources)
+            for s in audio:
+                self.assertIn("anullsrc", s)
+                self.assertNotIn("sine", s)
+        finally:
+            media._run = real
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_a_silent_build_is_reused(self):
+        tmp = tempfile.mkdtemp(prefix="ffh-media-")
+        real = media._run
+        media._run = lambda cmd, log: self.fail("a complete silent build was rebuilt")
+        try:
+            meta = dict(make_media(tmp), silent=True)
+            with open(os.path.join(tmp, "media.json"), "w", encoding="utf-8") as f:
+                json.dump(meta, f)
+            self.assertEqual(meta["path"], media.build("mpv.exe", tmp, seconds=600)["path"])
+        finally:
+            media._run = real
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class ImageTests(unittest.TestCase):
     def test_blurhash_is_valid_length(self):
         h = imagegen.blurhash("x")

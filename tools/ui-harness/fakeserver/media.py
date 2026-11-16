@@ -1,10 +1,10 @@
 """The fake server's test video, made with mpv's encoder, and its trickplay tiles.
 
 mpv's encoder writes one video and one audio stream per file, so each stream is encoded on its own (a test pattern with
-a running counter; two tones as two audio tracks) and a small Matroska muxer here combines them with two subtitle
-tracks (S_TEXT/UTF8) into one .mkv: video, audio "English" (AAC), audio "Japanese" (AC-3), subtitles "English" and
-"Spanish". A third subtitle track, French, is the server's external .srt. Trickplay: mpv tiles one frame every 10 s
-into 10x10 sheets of 320x180 JPEGs, Jellyfin's layout.
+a running counter; two audio tracks of digital silence, since no test run may make a sound) and a small Matroska muxer
+here combines them with two subtitle tracks (S_TEXT/UTF8) into one .mkv: video, audio "English" (AAC), audio
+"Japanese" (AC-3), subtitles "English" and "Spanish". A third subtitle track, French, is the server's external .srt.
+Trickplay: mpv tiles one frame every 10 s into 10x10 sheets of 320x180 JPEGs, Jellyfin's layout.
 
     python media.py --mpv <mpv.exe> --out <dir> [--seconds 600]
 
@@ -259,7 +259,7 @@ def build(mpv, out, seconds=600):
     if os.path.exists(meta_path):
         with open(meta_path, encoding="utf-8") as f:
             meta = json.load(f)
-        if meta.get("seconds") == seconds and os.path.exists(meta["path"]):
+        if meta.get("seconds") == seconds and meta.get("silent") and os.path.exists(meta["path"]):
             return meta
     log = os.path.join(out, "media-build.log")
     work = os.path.join(out, "parts")
@@ -279,11 +279,11 @@ def build(mpv, out, seconds=600):
     if not codec:
         raise RuntimeError("mpv could not encode the test video (see %s)" % log)
     audio = []
-    for name, freq, oac, rate in (("aac", 440, "aac", "128000"), ("ac3", 660, "ac3", "192000")):
+    for name, oac, rate in (("aac", "aac", "128000"), ("ac3", "ac3", "192000")):
         path = os.path.join(work, "audio-%s.mka" % name)
-        rc = _run(base + ["av://lavfi:sine=frequency=%d:sample_rate=48000:duration=%d,aformat=channel_layouts=stereo"
-                          % (freq, seconds), "--o=" + path, "--of=matroska", "--oac=" + oac,
-                          "--oacopts=b=" + rate], log)
+        # digital silence: no test run makes a sound (the harness's mpv also runs with ao=null)
+        rc = _run(base + ["av://lavfi:anullsrc=channel_layout=stereo:sample_rate=48000:duration=%d" % seconds,
+                          "--o=" + path, "--of=matroska", "--oac=" + oac, "--oacopts=b=" + rate], log)
         if rc != 0 or not os.path.exists(path):
             raise RuntimeError("mpv could not encode the %s track (see %s)" % (name, log))
         audio.append(path)
@@ -310,7 +310,7 @@ def build(mpv, out, seconds=600):
     sheets = sorted(glob.glob(os.path.join(trick, "sheet-*.jpg")), key=lambda p: int(p.rsplit("-", 1)[1][:-4]))
     for i, path in enumerate(sheets):
         os.replace(path, os.path.join(trick, "%d.jpg" % i))
-    meta = {"seconds": seconds, "path": final, "size": os.path.getsize(final), "duration_ms": duration_ms,
+    meta = {"seconds": seconds, "silent": True, "path": final, "size": os.path.getsize(final), "duration_ms": duration_ms,
             "video": {"codec": codec, "width": VIDEO_W, "height": VIDEO_H, "fps": FPS, "bitrate": 1500000},
             "audio": [{"codec": "aac", "language": "eng", "title": "English", "channels": 2, "bitrate": 128000},
                       {"codec": "ac3", "language": "jpn", "title": "Japanese", "channels": 2, "bitrate": 192000}],
