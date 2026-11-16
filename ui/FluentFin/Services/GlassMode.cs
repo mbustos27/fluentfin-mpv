@@ -25,15 +25,22 @@ public static class GlassMode
 
 	static GlassMode()
 	{
-		// held in static fields: a collected UISettings stops raising its events. Without a window thread (a test host) the
-		// subscriptions are refused: the mode then only changes through Override.
-		try
+		// held in static fields: a collected UISettings stops raising its events. Subscribing can fail where Windows has
+		// no such setting to watch (on a private desktop, AccessibilitySettings throws 0x80070490): then the mode is
+		// read as it is at each call, and only the live update is lost. A static constructor that throws would take the
+		// whole app down.
+		try { _ui.AdvancedEffectsEnabledChanged += (_, _) => Changed?.Invoke(null, EventArgs.Empty); }
+		catch (Exception) { }
+		try { _accessibility.HighContrastChanged += (_, _) => Changed?.Invoke(null, EventArgs.Empty); }
+		catch (Exception) { }
+	}
+
+	private static bool HighContrast
+	{
+		get
 		{
-			_ui.AdvancedEffectsEnabledChanged += (_, _) => Changed?.Invoke(null, EventArgs.Empty);
-			_accessibility.HighContrastChanged += (_, _) => Changed?.Invoke(null, EventArgs.Empty);
-		}
-		catch (System.Runtime.InteropServices.COMException)
-		{
+			try { return _accessibility.HighContrast; }
+			catch (Exception) { return false; }
 		}
 	}
 
@@ -56,12 +63,12 @@ public static class GlassMode
 	}
 
 	public static GlassModeKind Automatic =>
-		_accessibility.HighContrast || !_ui.AdvancedEffectsEnabled ? GlassModeKind.Solid
+		HighContrast || !_ui.AdvancedEffectsEnabled ? GlassModeKind.Solid
 		: !_ui.AnimationsEnabled ? GlassModeKind.Reduced
 		: GlassModeKind.Full;
 
 	/// <summary>High contrast always wins over <see cref="Override"/>: it needs the system colours.</summary>
-	public static GlassModeKind Current => _accessibility.HighContrast ? GlassModeKind.Solid : _override ?? Automatic;
+	public static GlassModeKind Current => HighContrast ? GlassModeKind.Solid : _override ?? Automatic;
 
 	/// <summary>Motion beyond simple fades (lift, tilt, auto-advance): only in Full, never with Windows' animations off.</summary>
 	public static bool MotionAllowed => Current == GlassModeKind.Full && _ui.AnimationsEnabled;
