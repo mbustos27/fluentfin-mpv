@@ -115,10 +115,13 @@ internal static partial class Host
 			}
 		});
 		var presenterChanges = 0;
+		Button? chrome = null;
 		controls.SetFullScreen = fullScreen =>
 		{
 			presenterChanges++;
 			main.AppWindow.SetPresenter(fullScreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped);
+			// as the player page does with FluentFin's title bar: hidden in full screen, right after the presenter
+			chrome?.Visibility = fullScreen ? Visibility.Collapsed : Visibility.Visible;
 			controls.IsFullScreen = fullScreen;
 			_ = backend.SendAsync(Bridge.Commands.SetFullscreen, BridgeCommands.Fullscreen(fullScreen));
 		};
@@ -155,6 +158,7 @@ internal static partial class Host
 		page.KeyboardAccelerators.Add(escape);
 		// the window's title bar: outside the page, before it in the tab order (where WinUI hands the focus of a collapsed bar)
 		var titleBar = new Button { Content = "Title bar" };
+		chrome = titleBar;
 		var window = new Grid { Background = new SolidColorBrush(Colors.Black), RowDefinitions = { new RowDefinition { Height = GridLength.Auto }, new RowDefinition() } };
 		Grid.SetRow(page, 1);
 		window.Children.Add(titleBar);
@@ -305,6 +309,9 @@ internal static partial class Host
 			await backend.SendAsync(Bridge.Commands.Play, BridgeCommands.Play(new BridgePlayRequest([Episode1])));
 			Check(await Until(() => Last() is { State: Bridge.States.Playing, ItemId: Episode1 } && mpv.Flag("pause") == false, 30), "playing again, for the keys");
 			await KeysScenario(main, view, notice, titleBar, controls, mpv, () => noticeClicks, () => backs, () => keysSeen);
+
+			// -- full screen and back: the picture changes once, it does not jump ----------------------------------------
+			await JumpScenario(main, composition, controls);
 
 			// -- the backend dies mid-playback (the reviewer's kill repro): FluentFin's mpv ends with it ----------------
 			if (mpv.Flag("pause") == true)
@@ -468,6 +475,86 @@ internal static partial class Host
 	}
 
 	private const int VkSpace = 0x20, VkEscape = 0x1B, VkF = 0x46;
+
+	/// <summary>
+	/// Full screen and back with real keys (F, Escape, through the page's key path), the title bar row collapsing with it
+	/// as the page's does. The user saw the picture "jump": the panel took its new place and size at once, mpv rendered at
+	/// the new size a few frames later, and meanwhile its old frame sat at the panel's corner (moved by the title bar's
+	/// height, then snapped to its size). Sampled on every frame FluentFin renders: where it shows the picture
+	/// (MpvCompositionVideo.PictureRect: the panel with its hold, the frame mpv last presented, mpv's letterbox). Checked:
+	/// that changes once each way, from where it was to where it ends. Pictures of the window before and after.
+	/// </summary>
+	private static async Task JumpScenario(Window main, MpvCompositionVideo composition, MpvControlsViewModel controls)
+	{
+		var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(main);
+		var input = InputWindows(hwnd).First(x => x.Class.Contains("InputSiteWindowClass", StringComparison.Ordinal)).Hwnd;
+
+		async Task<List<(double Ms, Windows.Foundation.Rect Rect)>> Across(int vk)
+		{
+			var frames = new List<(double, Windows.Foundation.Rect)>();
+			var clock = Stopwatch.StartNew();
+			void OnFrame(object? sender, object e)
+			{
+				if (composition.PictureRect() is { } rect)
+				{
+					frames.Add((clock.Elapsed.TotalMilliseconds, rect));
+				}
+			}
+
+			Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFrame;
+			try
+			{
+				await Task.Delay(200);
+				PostKey(input, vk);
+				await Task.Delay(1500);
+			}
+			finally
+			{
+				Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFrame;
+			}
+
+			return frames;
+		}
+
+		static int Changes(List<(double Ms, Windows.Foundation.Rect Rect)> frames, out string seen)
+		{
+			var changes = 0;
+			var runs = new List<string>();
+			Windows.Foundation.Rect? last = null;
+			foreach (var (ms, r) in frames)
+			{
+				if (last is { } l && Math.Abs(r.X - l.X) <= 3 && Math.Abs(r.Y - l.Y) <= 3 && Math.Abs(r.Width - l.Width) <= 3 && Math.Abs(r.Height - l.Height) <= 3)
+				{
+					continue;
+				}
+
+				if (last is not null)
+				{
+					changes++;
+				}
+
+				last = r;
+				runs.Add(string.Create(CultureInfo.InvariantCulture, $"{ms:0} ms: {r.X:0},{r.Y:0} {r.Width:0}x{r.Height:0}"));
+			}
+
+			seen = string.Join(" | ", runs);
+			return changes;
+		}
+
+		var on = await Across(VkF);
+		Check(main.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen, "F went full screen");
+		var onChanges = Changes(on, out var onSeen);
+		Log($"full screen, the picture each frame: {on.Count} frames; {onSeen}");
+		Check(onChanges == 1, $"going full screen the picture changes once, it does not jump ({onChanges} changes in {on.Count} frames)");
+		await Picture(main, "jump-fullscreen");
+		var off = await Across(VkEscape);
+		Check(main.AppWindow.Presenter.Kind == AppWindowPresenterKind.Overlapped, "Escape came back to the window");
+		var offChanges = Changes(off, out var offSeen);
+		Log($"windowed, the picture each frame: {off.Count} frames; {offSeen}");
+		Check(offChanges == 1, $"back to the window the picture changes once, it does not jump ({offChanges} changes in {off.Count} frames)");
+		await Picture(main, "jump-windowed");
+		controls.NotifyActivity();
+	}
 
 	private static string Describe(object? element) => element switch
 	{

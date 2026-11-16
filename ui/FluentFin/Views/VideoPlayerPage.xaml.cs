@@ -209,14 +209,17 @@ public sealed partial class VideoPlayerPage : Page
 	{
 		_mpvFullScreen = fullScreen;
 
+		var log = App.GetService<ILogger<VideoPlayerPage>>();
 		var kind = fullScreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped;
 		if (App.MainWindow.AppWindow.Presenter.Kind != kind)
 		{
+			log.LogInformation("Full screen {On}: setting the presenter", fullScreen);
 			App.MainWindow.AppWindow.SetPresenter(kind);
 		}
 
 		if (App.GetService<ITitleBarViewModel>() is { } titleBar)
 		{
+			log.LogInformation("Full screen {On}: the title bar {Shown}", fullScreen, fullScreen ? "hides" : "shows");
 			titleBar.IsVisible = !fullScreen;
 		}
 

@@ -43,6 +43,14 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   button back until the next one.
 - **A volume above 100** (an mpv.conf's `volume=130`) stays until it is lowered: `set_volume` is 0-100,
   so a step up (wheel, Up) leaves it, only unmuting; a step down sets it within 0-100.
+- **Full screen and back**: mpv renders at a new size 2 to 5 frames after the panel took it; until it has
+  presented a frame of that size, the panel holds its old frame scaled to where the new picture goes (the user saw
+  the picture jump by the title bar's height and then snap). Left: mpv presents on its own thread, so its first new
+  frame can meet the hold, or the hold's end come just before it, for up to one frame; and WinAppSDK passes a
+  maximized window through its normal size (here 1920x1023) for about 5 ms on the way in and out, seen in one
+  picture of the way out. With mpv's own controls the video is mpv's window in the backend's process: that one
+  flash, and about 60 ms of mpv's old picture stretched in its resized window, remain there.
+  `FLUENTFIN_MPV_VIDEO_TRACE=1` logs, per frame for 2 s after a change, the panel, the swap chain and the hold.
 - **Keys off-screen**: a key message posted to FluentFin reaches WinUI only through the window's
   `InputSiteWindowClass` child (the thread's focus window), not its `DesktopChildSiteBridge`; the
   fluentfin-controls harness posts there (Space, F, Escape through the page's key path).

@@ -36,6 +36,9 @@ internal sealed unsafe class MpvInProcessCore : IDisposable
 	/// <summary>The core ended by itself (event thread).</summary>
 	public event Action<MpvInProcessCore>? ShutDown;
 
+	/// <summary>The picture's display aspect (width / height) changed (event thread); 0 when there is no video.</summary>
+	public event Action<MpvInProcessCore, double>? VideoAspectChanged;
+
 	private MpvInProcessCore(ILogger logger, nint ctx, string pipe)
 	{
 		_logger = logger;
@@ -136,6 +139,7 @@ internal sealed unsafe class MpvInProcessCore : IDisposable
 
 		var core = new MpvInProcessCore(logger, ctx, pipe);
 		Libmpv.mpv_observe_property(ctx, 1, "display-swapchain", Libmpv.FormatInt64);
+		Libmpv.mpv_observe_property(ctx, 2, "video-out-params/aspect", Libmpv.FormatDouble);
 		core._events.Start();
 		logger.LogInformation("Started the in-process mpv core (composition mode), IPC pipe {Pipe}", pipe);
 		return core;
@@ -201,6 +205,10 @@ internal sealed unsafe class MpvInProcessCore : IDisposable
 						{
 							var value = p->Format == Libmpv.FormatInt64 && p->Data != 0 ? *(long*)p->Data : 0;
 							SwapChainChanged?.Invoke(this, value);
+						}
+						else if (Libmpv.Utf8(p->Name) == "video-out-params/aspect")
+						{
+							VideoAspectChanged?.Invoke(this, p->Format == Libmpv.FormatDouble && p->Data != 0 ? *(double*)p->Data : 0);
 						}
 
 						continue;

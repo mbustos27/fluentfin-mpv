@@ -89,6 +89,12 @@ the bar and Narrator checks (phase 3).
   attaches through the shim's external backend and never starts, quits, sizes or fullscreens it.
   `set_controls` (`"ui"`, `subtitleInset`) hides the shim's OSC and keeps the subtitles above the bar.
   Tracks carry `streamTitle` and `isHearingImpaired` for the pickers' labels.
+- **Full screen and back**: the panel changes size and place at once, mpv's swap chain a few frames later; a swap
+  chain that does not match its panel sits at the panel's corner. So until mpv has presented a frame of the new size
+  (watched from a thread of its own: the present count when the buffers left their size), the panel holds the old
+  frame scaled about its centre to where the new picture goes (`MpvCompositionVideo.Settle`). Measured
+  (`tools\ui-harness\fluentfin-controls`, the picture's place on every frame FluentFin renders): one change each way;
+  without the hold, two (the old picture at the corner first, moved by the title bar's height).
 - **Input**: mpv has no window, so all input is FluentFin's: keys on the page
   (`MpvControlsViewModel.ActionFor`), click to pause, double-click full screen, pointer moves show the
   controls, the wheel is volume (±5 a notch, 0–100, with a brief indicator; it never seeks).

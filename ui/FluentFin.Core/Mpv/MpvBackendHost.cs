@@ -55,6 +55,12 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 	/// </summary>
 	public TimeSpan ExitHandlingTimeout { get; init; } = TimeSpan.FromSeconds(2);
 
+	/// <summary>
+	/// fluentfin-mpv player controls: how long a stop waits for the surface to have been told that the backend's windows
+	/// ended, when the exit's handling is the one telling it (the surface never blocks: this only bridges that race).
+	/// </summary>
+	public TimeSpan WindowEndTimeout { get; init; } = TimeSpan.FromSeconds(1);
+
 	public MpvBackendStatus Status => _status.Value;
 	public IObservable<MpvBackendStatus> StatusChanged => _status.AsObservable();
 	public IObservable<BridgeEvent> Events => _events.AsObservable();
@@ -821,13 +827,13 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 		return session.WindowsEnded;
 	}
 
-	/// <summary><see cref="EndWindowsOf"/>, waited for at most a second (the surface never blocks; this only bridges the race).</summary>
+	/// <summary><see cref="EndWindowsOf"/>, waited for at most <see cref="WindowEndTimeout"/>.</summary>
 	private async Task EndWindowsOfAsync(Session session)
 	{
 		var ended = EndWindowsOf(session);
-		if (await Task.WhenAny(ended, Task.Delay(TimeSpan.FromSeconds(1))) != ended)
+		if (await Task.WhenAny(ended, Task.Delay(WindowEndTimeout)) != ended)
 		{
-			logger.LogWarning("The video window of the mpv backend (pid {Pid}) was not ended within 1 s", SafeId(session));
+			logger.LogWarning("The video window of the mpv backend (pid {Pid}) was not ended within {Seconds} s", SafeId(session), WindowEndTimeout.TotalSeconds);
 		}
 	}
 
@@ -1097,7 +1103,7 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 		{
 			session.MarkShuttingDown();
 			KillProcess(session);
-			EndWindowsOf(session).Wait(TimeSpan.FromSeconds(1));
+			EndWindowsOf(session).Wait(WindowEndTimeout);
 			ReleaseSession(session);
 		}
 	}

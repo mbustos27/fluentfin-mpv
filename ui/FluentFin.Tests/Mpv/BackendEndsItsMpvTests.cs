@@ -33,11 +33,15 @@ public sealed class BackendEndsItsMpvTests : IDisposable
 			_started.Enqueue(process);
 			return process;
 		});
-		_host = new MpvBackendHost(_launcher, _surface, _log) { HelloTimeout = TimeSpan.FromSeconds(5), ShutdownTimeout = TimeSpan.FromSeconds(2) };
+		// no wait here is on the clock: a loaded machine may take long to schedule the exit's handling (WindowEndTimeout)
+		_host = NewHost();
 		_surface.Started = _started;
 	}
 
 	public void Dispose() => _host.Dispose();
+
+	private MpvBackendHost NewHost() =>
+		new(_launcher, _surface, _log) { HelloTimeout = TimeSpan.FromSeconds(30), ShutdownTimeout = TimeSpan.FromSeconds(2), WindowEndTimeout = TimeSpan.FromSeconds(60) };
 
 	private sealed class RecordingSurface : IMpvVideoSurface
 	{
@@ -55,17 +59,17 @@ public sealed class BackendEndsItsMpvTests : IDisposable
 
 		public Task<BridgeWindow> GetWindowAsync() => Task.FromResult(BridgeWindow.Attached(Pipe));
 
-		/// <summary>How long the surface takes to end a window (a slow one widens the race between the stop and the exit's handling).</summary>
-		public TimeSpan Delay { get; set; }
+		/// <summary>Set: the surface's next window end waits until it is set again (so the test sees who waits for it).</summary>
+		public ManualResetEventSlim? Gate { get; set; }
+
+		/// <summary>Set when a window end reached the surface (and is held at <see cref="Gate"/>).</summary>
+		public ManualResetEventSlim Entered { get; } = new();
 
 		public void OnBackendExited(BridgeWindow window)
 		{
 			var gone = Started.TryPeek(out var first) && first.HasExited;
-			if (Delay > TimeSpan.Zero)
-			{
-				Thread.Sleep(Delay);
-			}
-
+			Entered.Set();
+			Gate?.Wait();
 			Ended.Enqueue((window, gone));
 		}
 
@@ -158,21 +162,31 @@ public sealed class BackendEndsItsMpvTests : IDisposable
 	/// <summary>
 	/// The backend's exit wakes both the shutdown that waits for it and the exit's own handling; either may be the one that
 	/// tells the surface. The shutdown returns only once the surface heard, whichever it was (else a restart could be given
-	/// the old mpv, about to be ended under it). Several rounds: which thread wins is up to the thread pool.
+	/// the old mpv, about to be ended under it). The surface holds the window end at a gate, so nothing here is timed: the
+	/// shutdown must still be running while the gate is shut, and end once it opens. Several rounds: which thread tells the
+	/// surface is up to the thread pool, and the shutdown must wait either way.
 	/// </summary>
 	[Fact]
 	public async Task TheShutdown_ReturnsOnlyOnceTheSurfaceHeard_WhicheverThreadToldIt()
 	{
-		_surface.Delay = TimeSpan.FromMilliseconds(300);
 		for (var round = 0; round < 5; round++)
 		{
-			using var host = new MpvBackendHost(_launcher, _surface, _log) { HelloTimeout = TimeSpan.FromSeconds(5), ShutdownTimeout = TimeSpan.FromSeconds(2) };
+			using var host = NewHost();
+			using var gate = new ManualResetEventSlim();
 			_surface.Pipe = $"fluentfin-mpv-1-{round:x16}";
 			await host.StartAsync();
 			await host.ConnectAsync(Alice);
+			_surface.Entered.Reset();
+			_surface.Gate = gate;
 
-			await host.ShutdownAsync();
+			var shutdown = host.ShutdownAsync();
+			Assert.True(await Task.Run(() => _surface.Entered.Wait(TimeSpan.FromSeconds(60))), "the window end reached the surface");
+			var returned = await Task.WhenAny(shutdown, Task.Delay(200)) == shutdown;
+			gate.Set();
+			await shutdown;
+			_surface.Gate = null;
 
+			Assert.False(returned, $"round {round}: the shutdown returned before the surface had ended the window");
 			Assert.Contains(_surface.Pipe, _surface.EndedPipes);
 		}
 	}

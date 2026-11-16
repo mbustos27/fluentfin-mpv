@@ -48,6 +48,32 @@ internal static unsafe partial class MpvSwapChainInterop
 		public float M11, M12, M21, M22, DX, DY;
 	}
 
+	/// <summary>IDXGISwapChain1::GetDesc1: the swap chain's buffer size in pixels; (0, 0) when it cannot be read.</summary>
+	public static (int Width, int Height) SizeOf(nint swapChain)
+	{
+		if (swapChain == 0)
+		{
+			return (0, 0);
+		}
+
+		// DXGI_SWAP_CHAIN_DESC1: Width, Height first, 12 UINTs in all
+		var desc = stackalloc uint[12];
+		var hr = ((delegate* unmanaged[Stdcall]<nint, uint*, int>)Slot(swapChain, 18))(swapChain, desc);
+		return hr < 0 ? (0, 0) : ((int)desc[0], (int)desc[1]);
+	}
+
+	/// <summary>IDXGISwapChain::GetLastPresentCount: how many frames mpv has presented to it (0 when it cannot be read).</summary>
+	public static uint PresentCount(nint swapChain)
+	{
+		if (swapChain == 0)
+		{
+			return 0;
+		}
+
+		uint count;
+		return ((delegate* unmanaged[Stdcall]<nint, uint*, int>)Slot(swapChain, 17))(swapChain, &count) < 0 ? 0 : count;
+	}
+
 	/// <summary>
 	/// IDXGISwapChain2::SetMatrixTransform: a composition swap chain rendered at the panel's physical size shows 1:1 only
 	/// with the inverse of the panel's composition scale (identity at 100 %).
