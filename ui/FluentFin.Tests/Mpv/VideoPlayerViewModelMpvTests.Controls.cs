@@ -48,19 +48,21 @@ public sealed partial class VideoPlayerViewModelMpvTests
 	}
 
 	[Fact]
-	public async Task MpvsControls_AreTheDefault_AndSendNoSetControls()
+	public async Task MpvsControls_WhenChosen_SendNoSetControls()
 	{
 		var movie = Movie();
 		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
+		_settings.SetupGet(x => x.MpvPlayerControls).Returns(MpvPlayerControls.Mpv);
 
-		// the real choice: the setting (a mock's default, mpv), so libmpv is not even looked for
+		// the real choice: the setting says mpv, so libmpv is not even looked for
 		var vm = CreateViewModel();
+		vm.LibmpvUnavailable = () => throw new InvalidOperationException("libmpv is not looked for when mpv's controls are chosen");
 		await vm.OnNavigatedTo(movie);
 
 		Assert.False(vm.UsesFluentFinControls);
 		Assert.Null(vm.MpvControls);
+		Assert.Null(vm.MpvNotice);
 		Assert.DoesNotContain("set_controls", _backend.Commands);
-		Assert.Equal(MpvPlayerControls.Mpv, default(MpvPlayerControls));
 	}
 
 	[Fact]
@@ -98,26 +100,6 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		Assert.Contains("mpv's controls are used", vm.MpvNotice);
 		Assert.DoesNotContain("set_controls", _backend.Commands);
 		Assert.Contains("play", _backend.Commands);
-	}
-
-	/// <summary>Nothing replaced at all: the setting and the probe of the libmpv next to FluentFin (the tests' folder) decide.</summary>
-	[Fact]
-	public async Task FluentFinControls_Chosen_TheRealCheckOfTheLibmpvNextToFluentFinDecides()
-	{
-		var movie = Movie();
-		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
-		_settings.SetupGet(x => x.MpvPlayerControls).Returns(MpvPlayerControls.FluentFin);
-		var vm = CreateViewModel();
-
-		await vm.OnNavigatedTo(movie);
-
-		var there = File.Exists(Path.Combine(AppContext.BaseDirectory, FluentFin.Mpv.Libmpv.Dll));
-		Assert.Equal(there, vm.UsesFluentFinControls);
-		Assert.Equal(there, _backend.Commands.Contains("set_controls"));
-		if (!there)
-		{
-			Assert.Contains("libmpv-2.dll was not found next to FluentFin", vm.MpvNotice);
-		}
 	}
 
 	[Fact]

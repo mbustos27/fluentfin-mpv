@@ -58,8 +58,9 @@ Off-screen (a private desktop: one virtual monitor at 100 %, DWM composes it, Pr
 | The shim attached | the real backend from this checkout, `connect.window` `attached` (`mpv_ext_start=False` on the core's pipe), no shim patch: connect, `set_controls` (sub-pos 85), play, pause, seek, stop with one Stopped at the server, `state.window` `attached`; its shutdown leaves the core playing | **pass** |
 
 **Go.** No row failed, so phase 2b goes ahead (below). Three rows could not be verified here (DPI change,
-flip mode, HDR on an HDR display), so "every row passes on this PC" does not hold: the setting's default stays
-**mpv**, and FluentFin's controls are opt-in until those three are seen on the real desktop.
+flip mode, HDR on an HDR display), so "every row passes on this PC" does not hold. The setting's default was **mpv**
+at first; since 2026-11-15 it is **FluentFin** (the user's choice, after the review fixes), the three rows still to be
+seen on the real desktop.
 
 ## Phase 2b: FluentFin's controls over the composition video
 
@@ -79,9 +80,9 @@ or tiles yet; the shim still auto-skips what its settings say), the Tab order th
 the bar and Narrator checks (phase 3).
 
 - **Setting**: Settings → Playback, "Player controls: FluentFin / mpv". `mpv` is today's path,
-  unchanged (`--wid`, the shim's OSC). `FluentFin` is B1. The default is FluentFin only if every row
-  of the go/no-go table passed on this PC: it is **mpv** (three rows not verified). Without
-  `libmpv-2.dll` next to FluentFin.exe the choice falls back to mpv's controls with a notice.
+  unchanged (`--wid`, the shim's OSC). `FluentFin` is B1 and the default (`SettingKeys.MpvPlayerControls`).
+  Without a usable libmpv next to FluentFin.exe (`libmpv-2.dll` that loads, has client API 2.x and takes
+  `d3d11-output-mode=composition`: the probe in `Libmpv.cs`) it falls back to mpv's controls with a notice.
 - **Protocol** (docs\BRIDGE.md): `connect.window` gains `{"mode": "attached", "ipc": "<pipe>"}`: the
   UI's own mpv listens on that pipe before `connect` and lives as long as the backend process (its shutdown, a
   crash or a kill ends it too, so nothing plays on that nobody reports); the backend

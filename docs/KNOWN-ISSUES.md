@@ -19,12 +19,13 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `signout_*`), not by driving FluentFin itself: its data folder can't be redirected, so a
   fake login would land in the real FluentFin settings.
 - **The libmpv path.** Only external mpv (mpv-CI 0.41 via winget) is installed and tested.
-- **"Player controls: FluentFin"** (opt-in, default mpv; docs\research\player-controls.md). Built
+- **"Player controls: FluentFin"** (the default; mpv's are the other choice; docs\research\player-controls.md). Built
   and measured off-screen only (`tools\ui-harness\composition-spike`, `tools\ui-harness\fluentfin-controls`).
   Not seen on the real desktop: the real mouse (hover, wheel event, clicks, hidden pointer), Tab order
   and Narrator, menus over the video, light/high-contrast themes; a DPI change, independent flip and
   HDR on an HDR display (Windows HDR is off on every display here). Its libmpv (`vendor\libmpv`) is
-  downloaded per checkout, not in git: without it FluentFin falls back to mpv's controls and says so.
+  downloaded per checkout, not in git: without it (or with one too old for composition output) FluentFin falls back to
+  mpv's controls and says so.
 
 ## Player controls: FluentFin's (`ui\FluentFin\Mpv\MpvCompositionVideo.cs` and around)
 - **One crash domain**: mpv runs inside FluentFin, so an mpv or GPU-driver crash ends the app (a

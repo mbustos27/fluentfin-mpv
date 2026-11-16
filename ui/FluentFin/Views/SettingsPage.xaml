@@ -82,7 +82,7 @@
                 </ctk:SettingsCard>
                 <!--  fluentfin-mpv player controls: who draws the controls over the MPV player's video (docs/research/player-controls.md)  -->
                 <ctk:SettingsCard
-                    Description="FluentFin: FluentFin's own controls over the video, with mpv running inside FluentFin. mpv: mpv's on-screen controls. Used from the next playback."
+                    Description="FluentFin (the default): FluentFin's own controls over the video, with mpv running inside FluentFin; without its libmpv, mpv's controls are used and the player says so. mpv: mpv's on-screen controls. Used from the next playback."
                     Header="Player controls"
                     HeaderIcon="{ui:FontIcon Glyph=&#xE768;}"
                     Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">

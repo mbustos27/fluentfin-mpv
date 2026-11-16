@@ -74,7 +74,9 @@ foreach ($refused in 'MediaPlayerType=Flyleaf', 'MediaPlayerType=Mpv', 'MpvBacke
 Check '-Setting without a value is refused' (Throws { Initialize-HarnessSettings (New-Case 'novalue') 'cmd' @('Volume') } '*Name=Value*')
 $fresh = New-Case 'fresh'
 $r = Initialize-HarnessSettings $fresh 'cmd'
-Check 'a new folder gets the mpv player and mpv''s controls' ((Get-Content (Join-Path $fresh 'LocalSettings.json') -Raw | ConvertFrom-Json).MediaPlayerType -eq 'Mpv' -and $r.PlayerControls -eq 'Mpv')
+Check 'a new folder gets the mpv player and FluentFin''s controls (the default)' ((Get-Content (Join-Path $fresh 'LocalSettings.json') -Raw | ConvertFrom-Json).MediaPlayerType -eq 'Mpv' -and $r.PlayerControls -eq 'FluentFin')
+Check 'without libmpv next to the exe, FluentFin falls back to mpv''s controls' ((Initialize-HarnessSettings (New-Case 'nolibmpv') 'cmd' -LibmpvThere $false).PlayerControls -eq 'Mpv')
+Check 'mpv''s controls when the setting says so' ((Initialize-HarnessSettings (New-Case 'mpvchosen') 'cmd' @('MpvPlayerControls=Mpv')).PlayerControls -eq 'Mpv')
 
 # --- Initialize-HarnessMpvConf -----------------------------------------------------------------------------------------
 $case = New-Case 'mpvconf'

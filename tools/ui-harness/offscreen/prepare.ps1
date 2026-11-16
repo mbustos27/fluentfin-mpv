@@ -42,8 +42,10 @@ function Test-LoopbackServer($Server) {
 
 # Writes the run's LocalSettings.json: the backend command, the mpv player, the -Setting values (Name=Value, a JSON value
 # else a string), and of the saved servers only loopback ones (a reused folder must not keep a real server to sign in
-# to). Returns how many servers it removed and who draws the player controls (Mpv or FluentFin).
-function Initialize-HarnessSettings([string]$DataDir, [string]$BackendCommand, [string[]]$Setting = @()) {
+# to). Returns how many servers it removed and who draws the player controls (Mpv or FluentFin): FluentFin's are the
+# default (SettingKeys.MpvPlayerControls) unless the setting says mpv, and need $LibmpvThere (libmpv-2.dll next to the
+# exe; without it FluentFin falls back to mpv's and says so).
+function Initialize-HarnessSettings([string]$DataDir, [string]$BackendCommand, [string[]]$Setting = @(), [bool]$LibmpvThere = $true) {
     $parsedSettings = [ordered]@{}
     foreach ($pair in $Setting) {
         $name, $value = $pair -split '=', 2
@@ -67,7 +69,8 @@ function Initialize-HarnessSettings([string]$DataDir, [string]$BackendCommand, [
     $settings | Add-Member -NotePropertyName MediaPlayerType -NotePropertyValue 'Mpv' -Force
     foreach ($name in $parsedSettings.Keys) { $settings | Add-Member -NotePropertyName $name -NotePropertyValue $parsedSettings[$name] -Force }
     [IO.File]::WriteAllText($file, ($settings | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
-    $controls = if ($settings.PSObject.Properties['MpvPlayerControls'] -and "$($settings.MpvPlayerControls)" -in @('FluentFin', '1')) { 'FluentFin' } else { 'Mpv' }
+    $chosen = if ($settings.PSObject.Properties['MpvPlayerControls'] -and "$($settings.MpvPlayerControls)" -in @('Mpv', '0')) { 'Mpv' } else { 'FluentFin' }
+    $controls = if ($chosen -eq 'FluentFin' -and $LibmpvThere) { 'FluentFin' } else { 'Mpv' }
     [pscustomobject]@{ RemovedServers = $removed; PlayerControls = $controls }
 }
 
