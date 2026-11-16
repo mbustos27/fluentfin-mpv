@@ -9,7 +9,10 @@
   - Runs, each with its own scratch data folder (--data-dir), APPDATA/LOCALAPPDATA pointed into -Out, and a PATH of
     Windows' own folders only (no Python, no mpv), through tools\ui-harness\offscreen\drive.ps1 on a private desktop
     inside a kill-on-close job (tools\backend-bench\hidden_run.py), with no backend command set (FluentFin finds its
-    bundled backend by itself):
+    bundled backend by itself). The runs start app\FluentFin.exe, except the first, which checks the launcher in front:
+      Launcher   the self-test (below) started through the top FluentFin.exe, the one people run, with a data folder
+                 whose name has a space: the launcher must end by itself and start app\FluentFin.exe with its
+                 arguments unchanged, and the self-test then passes on that app
       SavedVlc   a data folder whose saved player is VLC (as a dev build may leave): the release has no VLC, so it
                  must play with MPV, without a crash, and keep the saved choice, Settings opened included
       Default    a clean data folder with no player-controls setting (what a new user gets: FluentFin's controls on the
@@ -36,7 +39,7 @@ param(
     [Parameter(Mandatory)][string]$Out,
     [string]$HarnessPython,
     [string]$Cache = (Join-Path $env:TEMP 'fluentfin-mpv-harness'),
-    [ValidateSet('Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill')][string[]]$Runs = @('Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill'),
+    [ValidateSet('Launcher', 'Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill')][string[]]$Runs = @('Launcher', 'Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill'),
     [int]$TimeoutSeconds = 600
 )
 
@@ -75,12 +78,17 @@ New-Item -ItemType Directory $pkgRoot | Out-Null
 & tar.exe -x -f $Zip -C $pkgRoot
 if ($LASTEXITCODE -ne 0) { throw "unzipping $Zip failed" }
 $pkg = @(Get-ChildItem $pkgRoot -Directory)[0].FullName
-$exe = Join-Path $pkg 'FluentFin.exe'
-Check 'unzipped: one folder with FluentFin.exe, the bundled backend and libmpv' ((Test-Path $exe) -and (Test-Path (Join-Path $pkg 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $pkg 'libmpv\libmpv-2.dll'))) $pkg
-Check 'the release has no VLC or Flyleaf libraries (libvlc\, FFMpeg\)' (-not (Test-Path (Join-Path $pkg 'libvlc')) -and -not (Test-Path (Join-Path $pkg 'FFMpeg'))) $pkg
+# the top holds the launcher (the FluentFin.exe people run), the three texts and app\; the app itself is in app\
+$launcherExe = Join-Path $pkg 'FluentFin.exe'
+$app = Join-Path $pkg 'app'
+$exe = Join-Path $app 'FluentFin.exe'
+$top = @(Get-ChildItem $pkg -Force | ForEach-Object { $_.Name } | Sort-Object)
+Check 'the folder''s top holds only FluentFin.exe (the launcher), README.txt, LICENSE, THIRD-PARTY-NOTICES.txt and app\' (($top -join ',') -eq 'app,FluentFin.exe,LICENSE,README.txt,THIRD-PARTY-NOTICES.txt') ($top -join ', ')
+Check 'unzipped: one folder with the launcher, and app\ with FluentFin.exe, the bundled backend and libmpv' ((Test-Path $launcherExe) -and (Test-Path $exe) -and (Test-Path (Join-Path $app 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $app 'libmpv\libmpv-2.dll'))) $pkg
+Check 'the release has no VLC or Flyleaf libraries (libvlc\, FFMpeg\)' (-not (Test-Path (Join-Path $app 'libvlc')) -and -not (Test-Path (Join-Path $app 'FFMpeg'))) $app
 # libmpv\ as its BUILD-MANIFEST.txt lists it, and no libdvdcss (DVD decryption): at most the stub of it, which the manifest
 # marks (its owner says "stub" and is no MSYS2 package; tools\release\libmpv_check.py is_stub)
-$libmpvPkg = Join-Path $pkg 'libmpv'
+$libmpvPkg = Join-Path $app 'libmpv'
 $manifestRows = @{}
 foreach ($line in @(Get-Content (Join-Path $libmpvPkg 'BUILD-MANIFEST.txt') -ErrorAction SilentlyContinue)) {
     if ($line -match '^(\S+\.dll)\s+(\d+)\s+([0-9a-fA-F]{64})\s+(.+?)\s*$') {
@@ -167,12 +175,12 @@ function Complete-Audit($Audit, [string]$Name, [bool]$MpvAllowed) {
     $backend = @($procs | Where-Object { $_.image -like '*\backend\fluentfin-mpv-backend.exe' })
     Check "$($Name): the backend is the bundled one" ($backend.Count -ge 1) $(if ($backend) { $backend[0].commandLine } else { 'no fluentfin-mpv-backend.exe started' })
     if ($Name -eq 'Mpv') { Check "$($Name): mpv.exe from PATH was used (mpv's controls)" $mpvSeen $mpvDir }
-    if ($Name -in 'Default', 'SelfTest', 'Kill') {
-        $own = Join-Path $pkg 'libmpv\libmpv-2.dll'
+    if ($Name -in 'Default', 'Launcher', 'SelfTest', 'Kill') {
+        $own = Join-Path $app 'libmpv\libmpv-2.dll'
         $loaded = @($procs | Where-Object { $_.image -like '*\FluentFin.exe' } | ForEach-Object { @($_.modules) } | Where-Object { ($_ -replace '^\\\\\?\\', '') -ieq $own })
         Check "$($Name): FluentFin loaded the package's libmpv-2.dll" ($loaded.Count -gt 0) $own
         # every DLL of the libmpv folder that FluentFin loaded came from that folder (Libmpv.cs loads them from nowhere else)
-        $folder = Join-Path $pkg 'libmpv'
+        $folder = Join-Path $app 'libmpv'
         $names = @(Get-ChildItem $folder -Filter '*.dll' | ForEach-Object { $_.Name.ToLowerInvariant() })
         $elsewhere = @($procs | Where-Object { $_.image -like '*\FluentFin.exe' } | ForEach-Object { @($_.modules) } |
             ForEach-Object { $_ -replace '^\\\\\?\\', '' } | Where-Object { $names -contains [IO.Path]::GetFileName($_).ToLowerInvariant() -and -not (Test-Under $_ $folder) })
@@ -259,7 +267,7 @@ foreach ($run in $Runs) {
             if (-not $mpvDir) { Write-Host "`n== Mpv: skipped (no mpv.exe on the Machine/User PATH)"; continue }
             $data = Invoke-ServerRun 'Mpv' 'Mpv' $true 'season,play,leave,close'
             # mpv's controls are the uosc bar when the package carries it (backend\_internal\fluentfin); the backend says so
-            $bundledUosc = Test-Path (Join-Path $pkg 'backend\_internal\fluentfin\uosc-files.txt')
+            $bundledUosc = Test-Path (Join-Path $app 'backend\_internal\fluentfin\uosc-files.txt')
             if ($bundledUosc) {
                 $log = Join-Path $data 'Logs\mpv-backend.log'
                 $uosc = (Test-Path $log) -and (Select-String -Path $log -Pattern 'the bar is uosc' -Quiet) -and -not (Select-String -Path $log -Pattern 'uosc is not complete|the bar is mpv' -Quiet)
@@ -277,10 +285,11 @@ foreach ($run in $Runs) {
             $shown = if (Test-Path $dump) { Select-String -Path $dump -Pattern "mpv isn't installed on this PC.*winget install mpv-player\.mpv-CI\.MSVC" | Select-Object -First 1 }
             Check "NoMpv: the player page says to switch to FluentFin's controls or install mpv (winget)" ([bool]$shown) $(if ($shown) { $shown.Line.Trim() } else { "no such text in $dump" })
         }
-        { $_ -in 'SelfTest', 'Kill' } {
+        { $_ -in 'Launcher', 'SelfTest', 'Kill' } {
             # Kill: the self-test again, but FluentFin is ended abruptly (a crash): its job must end the bundled backend
+            # Launcher: the self-test started through the top FluentFin.exe, with a data folder whose name has a space
             $runOut = Join-Path $Out $run
-            $data = Join-Path $Out "data-$run"
+            $data = Join-Path $Out $(if ($run -eq 'Launcher') { 'data-Launcher x' } else { "data-$run" })
             foreach ($d in $runOut, $data) { if (Test-Path $d) { Remove-Item -Recurse -Force $d } }
             New-Item -ItemType Directory -Force $runOut, $data | Out-Null
             [void](Initialize-HarnessSettings $data '' @('MpvPlayerControls=FluentFin'))
@@ -288,9 +297,10 @@ foreach ($run in $Runs) {
             $envA = Join-Path $runOut 'env\appdata'; $envL = Join-Path $runOut 'env\localappdata'
             New-Item -ItemType Directory -Force $envA, $envL | Out-Null
             $audit = Start-Audit $run
-            Write-Host "`n== $run (FluentFin.exe --mpv-selftest, FluentFin's controls, no mpv on PATH$(if ($run -eq 'Kill') { ', then FluentFin killed' }); $runOut)"
+            Write-Host "`n== $run (FluentFin.exe --mpv-selftest, FluentFin's controls, no mpv on PATH$(if ($run -eq 'Kill') { ', then FluentFin killed' })$(if ($run -eq 'Launcher') { ', started through the launcher' }); $runOut)"
             $selftestArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'selftest-offscreen.ps1'), '-Exe', $exe, '-DataDir', $data, '-Out', $runOut)
             if ($run -eq 'Kill') { $selftestArgs += '-Kill' }
+            if ($run -eq 'Launcher') { $selftestArgs += @('-Launcher', $launcherExe) }
             & $HarnessPython -B -I $hidden --log (Join-Path $runOut 'hidden_run.log') --timeout 180 --desktop "ffv-$run-$PID" `
                 --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" --env "PATH=$windowsPath" -- $ps @selftestArgs | Out-Host
             Complete-Audit $audit $run $false

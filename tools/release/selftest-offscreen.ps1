@@ -12,7 +12,8 @@ param(
     [Parameter(Mandatory)][string]$Out,
     [int]$Seconds = 60,
     [int]$CloseSeconds = 20,
-    [switch]$Kill   # end FluentFin abruptly instead of closing it: its job must take the backend with it
+    [switch]$Kill,  # end FluentFin abruptly instead of closing it: its job must take the backend with it
+    [string]$Launcher  # start it through the release folder's launcher (its top FluentFin.exe), which must start $Exe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,7 +48,30 @@ function Get-Colours([string]$Png) {
 
 $ui = $null
 try {
-    $ui = Start-FluentFin $Exe @('--mpv-selftest', '--data-dir', ('"' + $DataDir + '"'))
+    $arguments = @('--mpv-selftest', '--data-dir', ('"' + $DataDir + '"'))
+    if ($Launcher) {
+        # the launcher must end by itself and start $Exe with its own arguments, unchanged; the rest of the self-test
+        # then runs on that $Exe. Taken as ours only if it is $Exe, the launcher's child, and not older than the launcher.
+        $l = Start-FluentFin $Launcher $arguments
+        $ended = $l.WaitForExit(15000)
+        Check 'launcher: ends by itself, exit code 0' ($ended -and $l.ExitCode -eq 0) $(if ($ended) { "exit code $($l.ExitCode)" } else { 'still running after 15 s' })
+        $since = $script:Tracked[$l.Id].Created
+        $child = $null
+        $wait = [Diagnostics.Stopwatch]::StartNew()
+        while (-not $child -and $wait.Elapsed.TotalSeconds -lt 15) {
+            $child = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $($l.Id)" | Where-Object {
+                    $_.ExecutablePath -ieq $Exe -and $_.CreationDate -and $_.CreationDate.ToFileTime() -ge $since })[0]
+            if (-not $child) { Start-Sleep -Milliseconds 100 }
+        }
+        Check 'launcher: starts app\FluentFin.exe' ([bool]$child) $(if ($child) { "FluentFin#$($child.ProcessId)" } else { "no $Exe started by the launcher (pid $($l.Id))" })
+        if (-not $child) { return }
+        $line = ([string]$child.CommandLine).TrimEnd()
+        Check 'launcher: passes its arguments on unchanged' ($line.EndsWith(' ' + ($arguments -join ' '))) $line
+        Add-Tracked -Id ([int]$child.ProcessId) -Created $child.CreationDate.ToFileTime()
+        $ui = Get-TrackedProcess ([int]$child.ProcessId)
+        if (-not $ui) { Check 'launcher: the app it started is running' $false "FluentFin#$($child.ProcessId)"; return }
+    }
+    else { $ui = Start-FluentFin $Exe $arguments }
     $hwnd = Wait-Until { $h = [OffscreenUi]::MainWindow($ui.Id); if ($h -ne [IntPtr]::Zero) { $h } } -Seconds 60 -PollMs 50
     Check 'window shown' ([bool]$hwnd) "FluentFin#$($ui.Id)"
     if (-not $hwnd) { return }

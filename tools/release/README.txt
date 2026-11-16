@@ -19,8 +19,10 @@ Requirements
 First run
 ---------
 1. Unzip the whole folder to a place you can write to, and keep its files together.
-2. Run FluentFin.exe. The app is not code-signed, so Windows SmartScreen may warn the first time:
-   choose "More info", then "Run anyway".
+2. Run FluentFin.exe, the one next to this README. (The app\ folder holds the app itself; there is
+   nothing in it to open.) The app is not code-signed, so Windows SmartScreen may warn the first time:
+   choose "More info", then "Run anyway". For a desktop or Start menu shortcut, make one to this
+   FluentFin.exe.
 3. Add your Jellyfin server and sign in. Videos play with the player "MPV (jellyfin-mpv-shim)"
    (Settings > Playback).
 

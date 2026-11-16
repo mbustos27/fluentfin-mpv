@@ -22,8 +22,10 @@
      its BUILD-MANIFEST.txt by tools\release\libmpv_check.py) copied into libmpv\ beside FluentFin.exe, and
      without upstream's VLC and Flyleaf libraries (libvlc\, FFMpeg\): the release offers MPV and Windows Media Player.
      No MSBuild node reuse, no shared compiler, no build server; bin and obj under dist\.work\dotnet.
-  5. The folder: the publish output, backend\, LICENSE, README.txt and THIRD-PARTY-NOTICES.txt (tools\release\notices.py),
-     then the zip (one top folder, entries sorted) and its SHA-256 in sha256sum format.
+     Then the launcher (tools\release\launcher\Launcher.cs, compiled with Windows' own C# compiler, .NET Framework 4).
+  5. The folder: at the top only FluentFin.exe (the launcher: it starts app\FluentFin.exe), README.txt, LICENSE and
+     THIRD-PARTY-NOTICES.txt (tools\release\notices.py), so the program to run is easy to find; in app\ the publish
+     output with libmpv\ and backend\. Then the zip (one top folder, entries sorted) and its SHA-256 in sha256sum format.
   6. dist\sources\: the corresponding source of the GPL, LGPL and MPL code shipped, with SOURCES.txt
      (tools\release\sources.py, sources.json; official hosts only).
 
@@ -310,6 +312,27 @@ $flyleafFFmpeg = Join-Path $publish 'FFMpeg'
 if (Test-Path $flyleafFFmpeg) { Remove-Item -Recurse -Force $flyleafFFmpeg }
 foreach ($gone in 'libvlc', 'FFMpeg') { if (Test-Path (Join-Path $publish $gone)) { throw "the publish still has $gone\" } }
 
+# the launcher: the FluentFin.exe at the top of the release folder, which starts app\FluentFin.exe (the app's own folder
+# holds hundreds of files, and people looked for the program among them). Windows' own C# compiler (.NET Framework 4,
+# part of Windows 10 and 11): no toolchain to install, no third-party code in it, the app's icon and version.
+Step 'launcher (tools\release\launcher\Launcher.cs)'
+$csc = Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+if (-not (Test-Path $csc)) { throw "no $csc (.NET Framework 4's C# compiler, part of Windows)" }
+$launcherWork = Join-Path $work 'launcher'
+if (Test-Path $launcherWork) { Remove-Item -Recurse -Force $launcherWork }
+New-Item -ItemType Directory $launcherWork | Out-Null
+$launcherVersion = Join-Path $launcherWork 'Version.cs'
+[IO.File]::WriteAllText($launcherVersion, (@(
+    '[assembly: System.Reflection.AssemblyTitle("FluentFin MPV")]',
+    '[assembly: System.Reflection.AssemblyProduct("FluentFin MPV")]',
+    "[assembly: System.Reflection.AssemblyVersion(""$Version.0"")]",
+    "[assembly: System.Reflection.AssemblyFileVersion(""$Version.0"")]",
+    "[assembly: System.Reflection.AssemblyInformationalVersion(""$Version"")]") -join "`r`n"), [Text.UTF8Encoding]::new($false))
+$launcher = Join-Path $launcherWork 'FluentFin.exe'
+Invoke-Checked 'the launcher' { & $csc /nologo /target:winexe /platform:x64 /optimize+ /debug- `
+        "/win32icon:$(Join-Path $repo 'ui\FluentFin\Assets\jellyfin.ico')" "/out:$launcher" (Join-Path $PSScriptRoot 'launcher\Launcher.cs') $launcherVersion }
+if ((Get-Item $launcher).VersionInfo.ProductVersion -ne $Version) { throw "the launcher says product version $((Get-Item $launcher).VersionInfo.ProductVersion), not $Version" }
+
 # --- 5. the corresponding source, for the GitHub release (dist\sources, SOURCES.txt); the notices read it ------------
 Step 'sources (dist\sources)'
 $sources = Join-Path $dist 'sources'
@@ -321,10 +344,13 @@ Invoke-Checked 'sources' { & $venvPython -I (Join-Path $PSScriptRoot 'sources.py
 # --- 6. the folder, the notices, the zip ----------------------------------------------------------------------------
 Step "package folder $package"
 if (Test-Path $package) { Remove-Item -Recurse -Force $package }
-Copy-Item -Recurse $publish $package
-Copy-Item -Recurse $backendOut (Join-Path $package 'backend')
+New-Item -ItemType Directory $package | Out-Null
+$appDir = Join-Path $package 'app'
+Copy-Item -Recurse $publish $appDir
+Copy-Item -Recurse $backendOut (Join-Path $appDir 'backend')
+Copy-Item (Join-Path $LibmpvDir 'BUILD-MANIFEST.txt') (Join-Path $appDir 'libmpv\BUILD-MANIFEST.txt')
+Copy-Item $launcher (Join-Path $package 'FluentFin.exe')
 Copy-Item (Join-Path $repo 'LICENSE') (Join-Path $package 'LICENSE')
-Copy-Item (Join-Path $LibmpvDir 'BUILD-MANIFEST.txt') (Join-Path $package 'libmpv\BUILD-MANIFEST.txt')
 $driverNote = if (@($libmpvInfo.drivers).Count) { "- FluentFin's own player controls (the default) load libmpv, which needs $(@($libmpvInfo.drivers) -join ', '): your
   graphics driver installs it. Without it FluentFin uses mpv's controls instead and says why.
 " } else { '' }
@@ -334,7 +360,7 @@ $readme = (Get-Content -Raw (Join-Path $PSScriptRoot 'README.txt')).Replace('{{V
 $assets = Join-Path $artifacts 'obj\FluentFin\project.assets.json'
 if (-not (Test-Path $assets)) { throw "no $assets (the restore of FluentFin)" }
 $components = @(
-    "Microsoft Visual C++ runtime (backend\_internal\VCRUNTIME140.dll, VCRUNTIME140_1.dll)|as shipped with python.org's CPython $PythonVersion|Microsoft Distributable Code, under the conditions in Python's LICENSE.txt (in the licence texts: 'Additional Conditions for this Windows binary build')|https://www.python.org/downloads/release/python-$($PythonVersion.Replace('.', ''))/",
+    "Microsoft Visual C++ runtime (app\backend\_internal\VCRUNTIME140.dll, VCRUNTIME140_1.dll)|as shipped with python.org's CPython $PythonVersion|Microsoft Distributable Code, under the conditions in Python's LICENSE.txt (in the licence texts: 'Additional Conditions for this Windows binary build')|https://www.python.org/downloads/release/python-$($PythonVersion.Replace('.', ''))/",
     "Microsoft Visual C++ runtime for .NET (vcruntime140_cor3.dll)|as shipped in the .NET runtime pack Microsoft.NETCore.App.Runtime.win-x64|the .NET runtime pack's licence (section 4; its LICENSE.TXT in the licence texts)|https://github.com/dotnet/runtime"
 )
 # libmpv: its own section, each DLL with its package, licence and source (notices.py --libmpv-status)
@@ -364,9 +390,12 @@ if (@($libmpvInfo.stubs).Count -and -not $noticeText.Contains('A stub, not the l
 if (@($libmpvInfo.stubs | Where-Object { $_.name -like 'libdvdcss*' }).Count -and -not $noticeText.Contains("Encrypted DVDs aren't supported")) { $noticeGaps += "Encrypted DVDs aren't supported" }
 if ($noticeGaps) { throw "THIRD-PARTY-NOTICES.txt lacks: $($noticeGaps -join '; ')" }
 
-foreach ($needed in 'FluentFin.exe', 'libmpv\libmpv-2.dll', 'libmpv\BUILD-MANIFEST.txt', 'backend\fluentfin-mpv-backend.exe', 'LICENSE', 'README.txt', 'THIRD-PARTY-NOTICES.txt') {
+foreach ($needed in 'FluentFin.exe', 'app\FluentFin.exe', 'app\libmpv\libmpv-2.dll', 'app\libmpv\BUILD-MANIFEST.txt', 'app\backend\fluentfin-mpv-backend.exe', 'LICENSE', 'README.txt', 'THIRD-PARTY-NOTICES.txt') {
     if (-not (Test-Path (Join-Path $package $needed))) { throw "the package has no $needed" }
 }
+# the top of the folder: the launcher, the three texts and app\, nothing else to look through
+$top = @(Get-ChildItem $package -Force | ForEach-Object { $_.Name } | Sort-Object)
+if (($top -join ',') -ne 'app,FluentFin.exe,LICENSE,README.txt,THIRD-PARTY-NOTICES.txt') { throw "the top of the package holds $($top -join ', ')" }
 $devFiles = @(Get-ChildItem $package -Recurse -File -Include '*.runtimeconfig.dev.json', 'LocalSettings.json')
 if ($devFiles) { throw "dev-only files in the package: $($devFiles.FullName -join ', ')" }
 
@@ -389,7 +418,7 @@ $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
 
 $files = @(Get-ChildItem $package -Recurse -File)
 $zipMB = (Get-Item $zip).Length / 1MB
-$libmpvFiles = @(Get-ChildItem (Join-Path $package 'libmpv') -File)
+$libmpvFiles = @(Get-ChildItem (Join-Path $package 'app\libmpv') -File)
 Write-Host ("`n{0}`n  {1} files, {2:N1} MB unpacked (libmpv\: {3} files, {4:N1} MB)`n{5}`n  {6:N1} MB, SHA-256 {7}" -f $package, $files.Count,
     (($files | Measure-Object Length -Sum).Sum / 1MB), $libmpvFiles.Count, (($libmpvFiles | Measure-Object Length -Sum).Sum / 1MB), $zip, $zipMB, $hash)
 if ($zipMB -gt $MaxZipMB) { throw ("the zip is {0:N1} MB, more than -MaxZipMB {1}" -f $zipMB, $MaxZipMB) }

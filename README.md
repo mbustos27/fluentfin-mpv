@@ -6,7 +6,7 @@ This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv
 
 ## Download
 
-**Windows 10 or 11 (x64).** Get the zip from the [Releases](https://github.com/mbustos27/fluentfin-mpv/releases) page, unzip it anywhere and run `FluentFin.exe`. Nothing else needs installing: .NET, the playback backend and libmpv are inside. The app isn't code-signed, so Windows SmartScreen warns on the first start (**More info → Run anyway**). Changes: [CHANGELOG.md](CHANGELOG.md).
+**Windows 10 or 11 (x64).** Get the zip from the [Releases](https://github.com/mbustos27/fluentfin-mpv/releases) page, unzip it anywhere and run `FluentFin.exe` at the top of the folder (the app's own files are in `app\`). Nothing else needs installing: .NET, the playback backend and libmpv are inside. The app isn't code-signed, so Windows SmartScreen warns on the first start (**More info → Run anyway**). Changes: [CHANGELOG.md](CHANGELOG.md).
 
 Everything below the feature list is for building from source.
 
@@ -55,7 +55,7 @@ backend\.venv\Scripts\pip install -e backend[all]
 
 To play video, a source build needs **one** of these:
 
-- **libmpv**, for FluentFin's own player controls (the default). The quickest way is to copy the `libmpv\` folder out of the release zip into `vendor\libmpv\msys2-20261116-mpv-0.42.0-2\`. To build that folder yourself with MSYS2, see [vendor/libmpv/VENDORED.md](vendor/libmpv/VENDORED.md).
+- **libmpv**, for FluentFin's own player controls (the default). The quickest way is to copy the release zip's `app\libmpv\` folder into `vendor\libmpv\msys2-20261116-mpv-0.42.0-2\`. To build that folder yourself with MSYS2, see [vendor/libmpv/VENDORED.md](vendor/libmpv/VENDORED.md).
 - **mpv**, for mpv's own controls: `winget install mpv-player.mpv-CI.MSVC`. Without libmpv, FluentFin switches to these controls automatically and says so.
 
 `.\run-dev.ps1 -SelfTest` plays mpv's test pattern inside the player page, with no server needed.

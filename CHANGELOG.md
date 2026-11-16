@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **The program is easy to find in the release folder.** Its top now holds only `FluentFin.exe`, `README.txt`, `LICENSE`
+  and `THIRD-PARTY-NOTICES.txt`, plus an `app\` folder with everything else (in 1.0.0, `FluentFin.exe` was one of 675
+  files and folders). The top `FluentFin.exe` is a small launcher that starts `app\FluentFin.exe` with the same
+  arguments; shortcuts go to it. Settings and data are where they were.
+
 ## 1.0.0 (first public release)
 
 A portable zip for Windows 10/11 x64: unzip it and run `FluentFin.exe`. .NET, the Windows App SDK, the playback

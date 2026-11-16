@@ -395,7 +395,7 @@ def main():
         "FluentFin (the user interface, folder ui/ of the source)",
         "  Licence: GPL-3.0. Upstream: https://github.com/insomniachi/FluentFin (by insomniachi)",
         "",
-        "jellyfin-mpv-shim (the playback backend, folder backend/ of the source; fluentfin-mpv-backend.exe here)",
+        "jellyfin-mpv-shim (the playback backend, folder backend/ of the source; app\\backend\\fluentfin-mpv-backend.exe here)",
         "  Licence: GPL-3.0-or-later. Upstream: https://github.com/jellyfin/jellyfin-mpv-shim (the Jellyfin project and",
         "  contributors)",
         "",
@@ -406,7 +406,7 @@ def main():
         name, version, licence, source, *note = spec.split("|")
         entry(lines, {"name": name, "version": version, "licence": licence, "source": source}, note[0] if note else None)
     lines += [
-        f"Python {args.python_version} (CPython runtime inside backend\\_internal: python314.dll, the standard library and its",
+        f"Python {args.python_version} (CPython runtime inside app\\backend\\_internal: python314.dll, the standard library and its",
         "  DLLs, among them OpenSSL, libffi, SQLite, zlib, bzip2, liblzma, expat and mpdecimal)",
         "  Licence: PSF-2.0, with the licences of the libraries it includes (the text below)",
         f"  Source:  https://www.python.org/downloads/release/python-{args.python_version.replace('.', '')}/",
@@ -419,16 +419,16 @@ def main():
     third_party = os.path.join(args.fluentfin_assets or "", "THIRD-PARTY.md")
     if args.fluentfin_assets and os.path.isfile(third_party):
         # backend/fluentfin/THIRD-PARTY.md, verbatim: the mpv bar's components (uosc, its fonts, the code inside it)
-        lines += ["FluentFin MPV's mpv bar: backend\\_internal\\fluentfin (backend/fluentfin in the source). Its",
+        lines += ["FluentFin MPV's mpv bar: app\\backend\\_internal\\fluentfin (backend/fluentfin in the source). Its",
                   "THIRD-PARTY.md, with paths relative to that folder; VENDORED.md there has versions and hashes:", "",
                   read_text(third_party), ""]
-    lines += ["3. Python packages in the backend (backend\\_internal)", THIN]
+    lines += ["3. Python packages in the backend (app\\backend\\_internal)", THIN]
     for item in py_packages:
         entry(lines, item)
     lines += ["4. .NET runtime and NuGet packages (win-x64)", THIN,
-              "The .NET runtime (MIT) and the Windows App SDK runtime ship self-contained in this folder. The .NET runtime",
+              "The .NET runtime (MIT) and the Windows App SDK runtime ship self-contained in app\\. The .NET runtime",
               "packs are listed first with their own licence files; the Windows App SDK's packages carry Microsoft's licence",
-              "terms, reproduced in section 6 as shipped. Packages marked [build only] add no file of their own to this folder.", ""]
+              "terms, reproduced in section 6 as shipped. Packages marked [build only] add no file of their own to app\\.", ""]
     for item in packs:
         entry(lines, item)
     for item in nuget:

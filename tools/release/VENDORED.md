@@ -44,7 +44,7 @@ To move a pin: take the version's `urls[].digests.sha256` from `https://pypi.org
 `cp314-win_amd64` or `py3-none-any` wheel, update the requirements file and the table above, rebuild, run the
 verification (`docs\RELEASE.md`).
 
-## libmpv (the `libmpv\` folder beside FluentFin.exe)
+## libmpv (the `libmpv\` folder beside the app's FluentFin.exe: `app\libmpv\` in the release)
 
 Our own build: `tools\release\libmpv` (the recipe, in this repository) builds libmpv-2.dll from pinned sources in MSYS2
 UCRT64 and collects every non-Windows DLL it loads, with a BUILD-MANIFEST.txt (each DLL, its size, sha256 and the MSYS2

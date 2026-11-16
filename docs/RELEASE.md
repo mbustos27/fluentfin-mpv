@@ -67,7 +67,10 @@ command set and a PATH of Windows' own folders only:
 - a data folder whose saved player is VLC: the release has no VLC, so it must play with MPV, and opening Settings must
   leave the saved choice as it is;
 - the self-test (`--mpv-selftest`, no server), and once more with FluentFin killed instead of closed (its job must end the
-  backend).
+  backend);
+- the launcher: the folder's top holds only `FluentFin.exe` (the launcher, `tools\release\launcher\Launcher.cs`),
+  `README.txt`, `LICENSE`, `THIRD-PARTY-NOTICES.txt` and `app\`; the self-test started through that `FluentFin.exe`,
+  with a data folder whose name has a space, must start `app\FluentFin.exe` with the arguments unchanged and pass.
 
 Each run records every process FluentFin starts and every DLL they load (`tools\release\proc_audit.py`) and fails on
 anything from a dev checkout, a Python install or the build folder, on a token in a command line, or on a file written
