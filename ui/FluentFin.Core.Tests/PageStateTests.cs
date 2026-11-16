@@ -19,18 +19,32 @@ public sealed class PageStateTests : IDisposable
 {
 	private readonly Mock<IJellyfinClient> _client = new();
 
+	// fluentfin-mpv (merge of app-states and home-perf): Home keeps its last page in a HomeCache; each test has its own folder
+	private readonly string _homeCacheFolder = Path.Combine(Path.GetTempPath(), "fluentfin-pagestate-test-" + Guid.NewGuid().ToString("N"));
+	private readonly List<HomeCache> _homeCaches = [];
+
 	static PageStateTests() => ReactiveUI.Builder.RxAppBuilder.CreateReactiveUIBuilder().BuildApp();
 
 	public PageStateTests()
 	{
 		SessionInfo.ServerName = "Home server";
 		SessionInfo.BaseUrl = "https://jf.example:8920";
+		_client.SetupGet(x => x.BaseUrl).Returns("https://jf.example:8920");
+		_client.SetupGet(x => x.UserId).Returns(Guid.Parse("dddddddd-0000-0000-0000-000000000001"));
 	}
 
 	public void Dispose()
 	{
 		SessionInfo.ServerName = null!;
 		SessionInfo.BaseUrl = null!;
+		foreach (var cache in _homeCaches)
+		{
+			cache.Dispose();
+		}
+		if (Directory.Exists(_homeCacheFolder))
+		{
+			Directory.Delete(_homeCacheFolder, recursive: true);
+		}
 	}
 
 	// ---- Home
@@ -77,7 +91,7 @@ public sealed class PageStateTests : IDisposable
 	[Fact]
 	public async Task Home_WithEverything_HasNothingToSay()
 	{
-		var vm = Home(continueWatching: Items(1), nextUp: Items(1), recent: [Recent(3)]);
+		var vm = Home(continueWatching: Items(1), nextUp: Items(1), recent: [3]);
 
 		await vm.OnNavigatedTo(null!);
 
@@ -92,21 +106,87 @@ public sealed class PageStateTests : IDisposable
 		var continueWatching = new Queue<BaseItemDtoQueryResult?>([null, Items(2)]);
 		_client.Setup(x => x.GetContinueWatching()).ReturnsAsync(() => continueWatching.Dequeue());
 		_client.Setup(x => x.GetNextUp()).ReturnsAsync(Items(1));
-		_client.Setup(x => x.GetRecentItemsFromUserLibraries()).Returns(() => AsAsync(Recent(2)));
+		RecentRows(2);
 		var vm = CreateHome();
 		await vm.OnNavigatedTo(null!);
 		Assert.True(vm.State.HasProblem);
 
+		// the page the first load showed is now in the HomeCache, fresh: a Retry asks the server all the same
 		await vm.State.RetryCommand.ExecuteAsync(null);
 
 		Assert.False(vm.State.HasProblem);
 		Assert.Single(vm.RecentItems);
 		Assert.Equal(2, vm.ContinueItems.Count);
 		Assert.True(vm.HasContinueItems);
+		_client.Verify(x => x.GetContinueWatching(), Times.Exactly(2));
 
 		// the flag follows the list the Retry put in place
 		vm.ContinueItems.Clear();
 		Assert.False(vm.HasContinueItems);
+	}
+
+	[Fact]
+	public async Task Home_Retry_ShowsAnEmptySectionsPlaceholdersAgain_UntilItsAnswer()
+	{
+		var second = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		var continueWatching = new Queue<Task<BaseItemDtoQueryResult?>>([Task.FromResult<BaseItemDtoQueryResult?>(null), second.Task]);
+		_client.Setup(x => x.GetContinueWatching()).Returns(() => continueWatching.Dequeue());
+		_client.Setup(x => x.GetNextUp()).ReturnsAsync(Items(1));
+		RecentRows();
+		var vm = CreateHome();
+		await vm.OnNavigatedTo(null!);
+		Assert.False(vm.IsContinueLoading);
+		Assert.False(vm.HasContinueItems);
+
+		var retry = vm.State.RetryCommand.ExecuteAsync(null);
+
+		// Continue Watching failed and has nothing: its placeholders; Next Up has its cards and keeps them
+		Assert.True(vm.IsContinueLoading);
+		Assert.False(vm.IsNextUpLoading);
+		second.SetResult(Items(1));
+		await retry;
+		Assert.False(vm.IsContinueLoading);
+		Assert.True(vm.HasContinueItems);
+	}
+
+	[Fact]
+	public async Task Home_FromTheCache_WhenTheRefreshFails_KeepsTheCachedPage_WithAWarning()
+	{
+		// the last run's page, on disk: always refreshed
+		using (var lastRun = NewHomeCache())
+		{
+			await lastRun.Save(_client.Object.BaseUrl, _client.Object.UserId, new HomeSnapshot(
+				[.. Items(2).Items!], [], [new HomeSnapshotRow(View("Movies"), [.. Items(3).Items!])], []), 0);
+		}
+
+		var vm = Home(continueWatching: null, nextUp: null, recent: []);
+
+		await vm.OnNavigatedTo(null!);
+
+		Assert.True(vm.State.IsLoaded);
+		Assert.True(vm.State.HasProblem);
+		Assert.Equal("Some of Home couldn't be loaded", vm.State.Title);
+		Assert.Equal(2, vm.ContinueItems.Count);
+		Assert.Equal(["Movies"], vm.RecentItems.Select(x => x.Library.Name));
+	}
+
+	[Fact]
+	public async Task Home_FreshFromTheCache_HasNothingToSay_AndAsksNothing()
+	{
+		var cache = NewHomeCache();
+		_client.Setup(x => x.GetContinueWatching()).ReturnsAsync(Items(1));
+		_client.Setup(x => x.GetNextUp()).ReturnsAsync(Items(0));
+		RecentRows(2);
+		await CreateHome(cache).OnNavigatedTo(null!);
+		_client.Invocations.Clear();
+
+		var back = CreateHome(cache);
+		await back.OnNavigatedTo(null!);
+
+		Assert.True(back.State.IsLoaded);
+		Assert.False(back.State.HasProblem);
+		Assert.False(back.State.HasMessage);
+		Assert.DoesNotContain(_client.Invocations, x => x.Method.Name.StartsWith("Get", StringComparison.Ordinal));
 	}
 
 	// ---- Library
@@ -299,15 +379,38 @@ public sealed class PageStateTests : IDisposable
 
 	// ---- helpers
 
-	private HomeViewModel Home(BaseItemDtoQueryResult? continueWatching, BaseItemDtoQueryResult? nextUp, RecentItemDtoQueryResult[] recent)
+	/// <param name="recent">The items of each library's "Recently added" row, one library per entry (none: no libraries).</param>
+	private HomeViewModel Home(BaseItemDtoQueryResult? continueWatching, BaseItemDtoQueryResult? nextUp, int[] recent)
 	{
 		_client.Setup(x => x.GetContinueWatching()).ReturnsAsync(continueWatching);
 		_client.Setup(x => x.GetNextUp()).ReturnsAsync(nextUp);
-		_client.Setup(x => x.GetRecentItemsFromUserLibraries()).Returns(() => AsAsync(recent));
+		RecentRows(recent);
 		return CreateHome();
 	}
 
-	private HomeViewModel CreateHome() => new(_client.Object, Observable.Never<IOutboundWebSocketMessage>(), Commands());
+	private HomeViewModel CreateHome(HomeCache? cache = null) =>
+		new(_client.Object, Observable.Never<IOutboundWebSocketMessage>(), Commands(), cache ?? NewHomeCache());
+
+	private HomeCache NewHomeCache()
+	{
+		var cache = new HomeCache(_homeCacheFolder, Observable.Never<IOutboundWebSocketMessage>(), new CoreListLogger<HomeCache>(), TimeProvider.System);
+		_homeCaches.Add(cache);
+		return cache;
+	}
+
+	/// <summary>One library per count, its "Recently added" row that many items.</summary>
+	private void RecentRows(params int[] counts)
+	{
+		var views = counts.Select((_, i) => View(i == 0 ? "Movies" : $"Library {i}")).ToList();
+		_client.Setup(x => x.GetUserViews()).ReturnsAsync(views);
+		foreach (var (view, count) in views.Zip(counts))
+		{
+			_client.Setup(x => x.GetLatestItems(It.Is<BaseItemDto>(v => v.Id == view.Id))).ReturnsAsync([.. Items(count).Items!]);
+		}
+	}
+
+	private static BaseItemDto View(string name) =>
+		new() { Id = Guid.NewGuid(), Name = name, Type = BaseItemDto_Type.CollectionFolder, CollectionType = BaseItemDto_CollectionType.Movies };
 
 	private GlobalCommands Commands() => new(Mock.Of<INavigationServiceCore>(), _client.Object, Mock.Of<INavigationViewServiceCore>(), Mock.Of<ISettings>());
 
@@ -334,18 +437,6 @@ public sealed class PageStateTests : IDisposable
 	{
 		Items = [.. Enumerable.Range(0, count).Select(i => new BaseItemDto { Id = Guid.NewGuid(), Name = $"Item {i}", Type = BaseItemDto_Type.Movie })],
 	};
-
-	private static RecentItemDtoQueryResult Recent(int count) =>
-		new(new BaseItemDto { Id = Guid.NewGuid(), Name = "Movies" }, [.. Items(count).Items!]);
-
-	private static async IAsyncEnumerable<RecentItemDtoQueryResult> AsAsync(params RecentItemDtoQueryResult[] items)
-	{
-		foreach (var item in items)
-		{
-			await Task.Yield();
-			yield return item;
-		}
-	}
 
 	private static async Task WaitUntil(Func<bool> condition)
 	{

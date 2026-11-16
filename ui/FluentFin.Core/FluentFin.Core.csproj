@@ -22,4 +22,9 @@
 		<PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
 		<PackageReference Include="TMDbLib" Version="3.0.0" />
 	</ItemGroup>
+
+	<!-- fluentfin-mpv: the tests set JellyfinClient's clock and hand it server messages -->
+	<ItemGroup>
+		<InternalsVisibleTo Include="FluentFin.Core.Tests" />
+	</ItemGroup>
 </Project>

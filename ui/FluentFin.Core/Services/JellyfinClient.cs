@@ -48,9 +48,10 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		_settings.Initialize(SessionInfo.ClientName, SessionInfo.ClientVersion, SessionInfo.DeviceName, SessionInfo.DeviceId);
 		_settings.SetAccessToken(_token);
 		_settings.SetServerUrl(baseUrl);
+		ForgetUserViews(); // fluentfin-mpv: another server or user (GetUserViews)
 		_jellyfinApiClient = new Jellyfin.Sdk.JellyfinApiClient(new Jellyfin.Sdk.JellyfinRequestAdapter(new Jellyfin.Sdk.JellyfinAuthenticationProvider(_settings), _settings));
 
-		await _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto
+		var capabilities = _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto
 		{
 			SupportsMediaControl = true,
 			PlayableMediaTypes = [MediaType.Video],
@@ -59,15 +60,14 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 			SupportedCommands = SupportedCommands(settings.MediaPlayer),
 		});
 
-		await GetPlugins();
+		// fluentfin-mpv: capabilities, plugins and views do not depend on each other: asked together they cost one round
+		// trip instead of three before the window and Home show. The views stay in GetUserViews, so Home does not ask again.
+		var plugins = GetPlugins();
+		var views = GetUserViews();
+		await Task.WhenAll(capabilities, plugins, views);
 		StartWebSocketConnection();
 
-		var libaries = new List<BaseItemDto>();
-		await foreach (var item in GetUserLibraries())
-		{
-			libaries.Add(item);
-		}
-		await jumpListService.Initialize(libaries);
+		await jumpListService.Initialize(await views);
 	}
 
 	/// <summary>
