@@ -409,7 +409,7 @@ foreach ($needed in 'Seaglass.exe', 'app\Seaglass.exe', 'app\libmpv\libmpv-2.dll
 }
 # the top of the folder: the launcher, the three texts and app\, nothing else to look through
 $top = @(Get-ChildItem $package -Force | ForEach-Object { $_.Name } | Sort-Object)
-if (($top -join ',') -ne 'app,Seaglass.exe,LICENSE,README.txt,THIRD-PARTY-NOTICES.txt') { throw "the top of the package holds $($top -join ', ')" }
+if (($top -join ',') -ne 'app,LICENSE,README.txt,Seaglass.exe,THIRD-PARTY-NOTICES.txt') { throw "the top of the package holds $($top -join ', ')" }
 $devFiles = @(Get-ChildItem $package -Recurse -File -Include '*.runtimeconfig.dev.json', 'LocalSettings.json')
 if ($devFiles) { throw "dev-only files in the package: $($devFiles.FullName -join ', ')" }
 
