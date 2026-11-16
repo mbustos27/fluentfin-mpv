@@ -79,9 +79,15 @@ class _Photo:
     def __init__(self):
         self.item = {"Id": "a" * 32, "Type": "Photo", "MediaType": "Photo"}
         self.media_source = {"Path": "/media/photo.jpg", "MediaStreams": []}
+        self.titles = 0
 
     def get_proper_title(self):
-        raise _Reached()
+        # FluentFin MPV reads it once before the url is handed over; the
+        # second read, after the start, ends it as before.
+        self.titles += 1
+        if self.titles > 1:
+            raise _Reached()
+        return "Photo"
 
 
 def _errors():

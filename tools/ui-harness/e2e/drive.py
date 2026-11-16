@@ -348,7 +348,10 @@ def left_behind(cfg):
     ps = ("Get-CimInstance Win32_Process | Where-Object { $_.CommandLine } | "
           "ForEach-Object { '{0}|{1}|{2}' -f $_.ProcessId, $_.Name, $_.CommandLine }")
     exe = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
-    out = subprocess.run([exe, "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=120).stdout.splitlines()
+    # errors="replace": Windows PowerShell writes in the console code page, and any process on the machine can have a
+    # command line that is not UTF-8 there (it crashed the run on a 0x81); only our config path is looked for.
+    out = subprocess.run([exe, "-NoProfile", "-Command", ps], capture_output=True, text=True, errors="replace",
+                         timeout=120).stdout.splitlines()
     key = cfg.replace("/", "\\").lower()
     return [r.split("|")[:2] for r in out if key in r.replace("/", "\\").lower() and "powershell" not in r.lower()]
 

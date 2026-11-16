@@ -100,6 +100,9 @@ class FakeVideo:
         #: The quality override the next negotiation asks for
         #: (`set_trs_override`; None: the default bitrate).
         self.trs_ovr = None
+        #: fluentfin-mpv: `media.Video.intros`, the media segments fetched
+        #: at the start (`media.Intro`: type, start, end, has_triggered).
+        self.intros = []
 
     def reauthorize_sidecars(self):
         self.sidecars_reauthorized += 1
@@ -151,6 +154,8 @@ class FakeHandle:
         if args[:2] == ("set", "sub-pos"):
             # mpv's `set` takes a string (docs/mpv-backends.md section 1)
             self.sub_pos = float(args[2])
+        if args[0] == "seek" and args[2:] == ("absolute",):
+            self.playback_time = float(args[1])
 
     def play(self, url):
         self.played.append(url)
@@ -541,6 +546,22 @@ class FakePM:
                 video, self.queue_next = self.queue_next, None
                 self._move_to(video)
 
+    def timeline_handle(self):
+        # The real one wakes the progress reporter for an early report.
+        self._note("timeline_handle")
+
+    def skip_intro(self):
+        # fluentfin-mpv: the shim's Skip (`PlayerManager.skip_intro`): a
+        # seek to the end of the FIRST segment the position is in (end
+        # included), if any.
+        self._note("skip_intro")
+        video, position = self._video, self._player.playback_time
+        for intro in (getattr(video, "intros", None) or ()):
+            if position is not None and intro.start <= position <= intro.end:
+                self._player.playback_time = intro.end
+                intro.has_triggered = True
+                return
+
     def play_prev(self):
         self._note("play_prev")
         if self.queue_prev is not None:
@@ -788,6 +809,10 @@ class FakeRuntime:
 
     _run_steps = staticmethod(bridge_mod.ShimRuntime._run_steps)
     _bound_replies = staticmethod(bridge_mod.ShimRuntime._bound_replies)
+    # fluentfin-mpv: the real ones (the shim's settings and labels).
+    segments_of = staticmethod(bridge_mod.ShimRuntime.segments_of)
+    auto_play = staticmethod(bridge_mod.ShimRuntime.auto_play)
+    segment_label = staticmethod(bridge_mod.ShimRuntime.segment_label)
 
     def start_player(self, window, defer_surface=False):
         self.journal.append(("start_player", window["mode"]))
@@ -897,6 +922,10 @@ class BridgeCase(unittest.TestCase):
         self.addCleanup(window_embed.configure, None)
         self.addCleanup(setattr, window_embed, "on_fullscreen_request", None)
         self.addCleanup(proto._secrets.clear)
+        # fluentfin-mpv: a connect points the S key at this bridge.
+        from jellyfin_mpv_shim import fluentfin_osc
+
+        self.addCleanup(setattr, fluentfin_osc, "skip_handler", None)
         patcher = mock.patch.object(proto, "is_window_handle",
                                     return_value=True)
         self.is_window = patcher.start()
@@ -1349,6 +1378,216 @@ class SetControlsTest(BridgeCase):
         self.assertTrue(self.connect()["ok"])
         self.assertTrue(self.send("set_controls", {"controls": "ui"})["ok"])
         self.assertEqual(self.osc_calls(), [False])
+
+
+class SegmentsTest(BridgeCase):
+    """fluentfin-mpv: media segments over the bridge (BRIDGE.md sections 4
+    and 5): sampled from the shim's own list, the ``skip_segment``
+    command, and the offer handed to mpv's bar."""
+
+    def setUp(self):
+        super().setUp()
+        from jellyfin_mpv_shim.media import Intro
+
+        self.Intro = Intro
+
+    def playing(self, position=None):
+        self.connect_server()
+        pm = self.runtime.pm
+        video = FakeVideo(A, parent=FakeQueue([A, B]))
+        video.intros = [self.Intro("Intro", 10.0, 70.0),
+                        self.Intro("Outro", 100.0, 120.0),
+                        self.Intro("Commercial", 30.0, 40.0)]
+        pm.play(video)
+        pm._player.playback_time = position
+        return pm, video
+
+    def tick(self):
+        obs = self.bridge._observe()
+        events = self.bridge.tracker.update(obs)
+        self.bridge._push_offer()
+        return events
+
+    def skip_texts(self, pm):
+        return [c[2] for c in pm._player.commands
+                if c[:2] == ("set", "user-data/fluentfin/skip")]
+
+    def test_sampled_with_what_each_type_is_set_to(self):
+        from jellyfin_mpv_shim.conf import settings
+
+        pm, video = self.playing(20.0)
+        with mock.patch.multiple(settings, segment_intro="ask",
+                                 segment_outro="always",
+                                 segment_commercial="off", auto_play=True):
+            events = self.tick()
+        data, = [d for n, d in events if n == "segments"]
+        self.assertEqual([(s["type"], s["action"]) for s in data["segments"]],
+                         [("Intro", "ask"), ("Outro", "always")])
+        self.assertEqual(data["current"], 0)
+        following, = [d for n, d in events if n == "next"]
+        self.assertEqual(following, {"itemId": A, "nextItemId": B,
+                                     "autoPlay": True})
+
+    def test_skip_segment(self):
+        self.assertEqual(self.code("skip_segment"), "not_connected")
+        self.connect_server()
+        self.assertEqual(self.code("skip_segment"), "no_playback")
+        pm, video = self.playing(5.0)
+        self.tick()
+        self.assertEqual(self.send("skip_segment")["result"],
+                         {"skipped": False}, "nothing on offer yet")
+        self.assertNotIn(("skip_intro",), self.runtime.journal)
+        pm._player.playback_time = 12.0
+        self.tick()
+        answer = self.send("skip_segment")
+        self.assertEqual(answer["result"], {"skipped": True})
+        # On the action thread: a seek to the offered segment's end.
+        self.assertIn(("put_task",), self.runtime.journal)
+        pm.run_deferred()
+        self.assertIn(("seek", 70.0, "absolute"), pm._player.commands)
+        self.assertEqual(pm._player.playback_time, 70.0)
+        self.assertTrue(video.intros[0].has_triggered)
+        self.assertIn(("timeline_handle",), self.runtime.journal)
+        events = self.tick()
+        data, = [d for n, d in events if n == "segments"]
+        self.assertIsNone(data["current"], "the skip ended the offer")
+        self.assertEqual(self.send("skip_segment")["result"],
+                         {"skipped": False})
+
+    def test_the_segment_skipped_is_the_one_offered(self):
+        """Reviewer: `skip_intro` goes to the end of the FIRST segment the
+        position is in, end included. A recap ending where the intro
+        begins (0-90, 90-120) at 90, or an always-skipped recap overlapping
+        it (0-100, 90-120) at 95: the offer is the intro, and the seek went
+        to the recap's end."""
+        from jellyfin_mpv_shim.conf import settings
+
+        for recap_end, position in ((90.0, 90.0), (100.0, 95.0)):
+            with self.subTest(recap_end=recap_end), mock.patch.multiple(
+                    settings, segment_recap="always", segment_intro="ask"):
+                self.setUp()
+                pm, video = self.playing(position)
+                video.intros = [self.Intro("Recap", 0.0, recap_end),
+                                self.Intro("Intro", 90.0, 120.0)]
+                self.tick()
+                self.assertEqual(self.bridge.tracker.offer()["type"],
+                                 "Intro")
+                self.assertEqual(self.send("skip_segment")["result"],
+                                 {"skipped": True})
+                pm.run_deferred()
+                seeks = [c for c in pm._player.commands if c[0] == "seek"]
+                self.assertEqual(seeks, [("seek", 120.0, "absolute")])
+                self.assertEqual([s.has_triggered for s in video.intros],
+                                 [False, True])
+
+    def test_a_position_that_left_the_segment_skips_nothing(self):
+        pm, video = self.playing(15.0)
+        self.tick()
+        # Seen in the segment; mpv has moved past it before the action
+        # thread gets there: no seek back.
+        self.assertEqual(self.send("skip_segment")["result"],
+                         {"skipped": True})
+        pm._player.playback_time = 75.0
+        pm.run_deferred()
+        self.assertEqual([c for c in pm._player.commands if c[0] == "seek"],
+                         [])
+        # Sampled outside it: nothing on offer, nothing accepted.
+        self.tick()
+        self.assertEqual(self.send("skip_segment")["result"],
+                         {"skipped": False})
+
+    def test_the_s_key_skips_the_offered_segment_too(self):
+        from jellyfin_mpv_shim import fluentfin_osc
+
+        self.addCleanup(setattr, fluentfin_osc, "skip_handler", None)
+        self.addCleanup(fluentfin_osc.configure, False)
+        pm, video = self.playing(15.0)
+        fluentfin_osc.configure(True)
+        self.tick()
+        self.assertTrue(fluentfin_osc.on_message(pm, ["fluentfin-skip"]))
+        pm.run_deferred()
+        self.assertIn(("seek", 70.0, "absolute"), pm._player.commands)
+        self.assertNotIn(("skip_intro",), self.runtime.journal)
+
+    def test_the_bar_shows_the_offer_only_with_mpvs_controls(self):
+        pm, video = self.playing(5.0)
+        for _ in range(3):
+            self.tick()
+        self.assertEqual(self.skip_texts(pm), [""], "written once")
+        pm._player.playback_time = 15.0
+        for _ in range(3):
+            self.tick()
+        self.assertEqual(self.skip_texts(pm), ["", "Skip Intro"])
+        # FluentFin's controls: they offer it, mpv's bar does not.
+        self.send("set_controls", {"controls": "ui"})
+        self.tick()
+        self.assertEqual(self.skip_texts(pm)[-1], "")
+        self.send("set_controls", {"controls": "mpv"})
+        self.tick()
+        self.assertEqual(self.skip_texts(pm)[-1], "Skip Intro")
+        # A new mpv is told again.
+        pm._player = FakeHandle()
+        pm._player.playback_time = 15.0
+        self.tick()
+        self.assertEqual(self.skip_texts(pm), ["Skip Intro"])
+        pm._player.playback_time = 71.0
+        self.tick()
+        self.assertEqual(self.skip_texts(pm), ["Skip Intro", ""])
+
+    def test_the_bar_knows_whether_there_is_a_next_item(self):
+        pm, video = self.playing(5.0)           # A of [A, B]
+
+        def flags():
+            return [c[2] for c in pm._player.commands
+                    if c[:2] == ("set", "user-data/fluentfin/next")]
+
+        for _ in range(3):
+            self.tick()
+        self.assertEqual(flags(), ["1"], "written once")
+        last = FakeVideo(B, parent=FakeQueue([A, B], seq=1))
+        pm.play(last)
+        for _ in range(3):
+            self.tick()
+        self.assertEqual(flags(), ["1", ""])
+
+    def test_the_monitor_outlives_a_label_that_will_not_come(self):
+        """`_push_offer` runs on the monitor thread, which every later
+        event comes from: nothing in it may end that thread."""
+        pm, video = self.playing(15.0)
+        self.tick()
+        with mock.patch.object(self.runtime, "segment_label",
+                               side_effect=ImportError("no media")):
+            self.bridge._offer_pushed = None
+            self.bridge._push_offer()           # never raises
+        self.start_threads()
+        with mock.patch.object(self.runtime, "segment_label",
+                               side_effect=ImportError("no media")):
+            self.bridge._offer_pushed = None
+            for _ in range(3):
+                self.bridge.poke()
+                time.sleep(0.2)
+            self.assertTrue(self.thread("bridge-monitor").is_alive())
+
+    def test_nothing_is_written_once_the_monitor_stops(self):
+        pm, video = self.playing(15.0)
+        self.bridge.tracker.update(self.bridge._observe())
+        self.bridge._monitor_stop.set()
+        self.bridge._push_offer()
+        self.assertEqual(self.skip_texts(pm), [])
+
+    def test_a_failing_write_is_tried_again(self):
+        pm, video = self.playing(15.0)
+        self.tick()
+
+        def refuse(*args):
+            raise BrokenPipeError("mpv went away")
+
+        with mock.patch.object(pm._player, "command", refuse):
+            self.bridge._push_offer()           # never raises
+        pm._player.commands.clear()
+        self.bridge._offer_pushed = None
+        self.bridge._push_offer()
+        self.assertEqual(self.skip_texts(pm), ["Skip Intro"])
 
 
 class DevConnectTest(BridgeCase):
@@ -1874,8 +2113,9 @@ class TrackerTest(unittest.TestCase):
         events = self.step(video=a, position=0.0, duration=60.0,
                            paused=False)
         self.assertEqual(self.names(events),
-                         ["item", "tracks", "state", "position"])
-        snap = events[2][1]
+                         ["item", "tracks", "segments", "next", "state",
+                          "position"])
+        snap = events[4][1]
         self.assertEqual((snap["state"], snap["itemId"], snap["mediaSourceId"],
                           snap["playSessionId"], snap["playMethod"],
                           snap["queue"]),
@@ -1897,7 +2137,8 @@ class TrackerTest(unittest.TestCase):
         self.assertEqual(events[0][1]["itemId"], B)
         events = self.step(video=b, position=0.0, duration=30.0)
         self.assertEqual(self.names(events),
-                         ["ended", "item", "tracks", "state", "position"])
+                         ["ended", "item", "tracks", "segments", "next",
+                          "state", "position"])
         self.assertEqual(events[0][1], {"itemId": A, "reason": "eof"})
         events = self.step(video=None)
         self.assertEqual(self.names(events), ["ended", "state"])
@@ -1996,6 +2237,107 @@ class TrackerTest(unittest.TestCase):
         for reason in ("replaced", "eof", "stopped"):
             self.tracker.mark_ended(a, reason)
         self.assertEqual(self.step(video=None)[0][1]["reason"], "eof")
+
+    # -- fluentfin-mpv: segments and next (BRIDGE.md section 5) -------------
+
+    SEGMENTS = [("Intro", 10.0, 70.0, "ask"), ("Outro", 100.0, 120.0,
+                                                 "always")]
+
+    def of(self, events, name):
+        return [d for n, d in events if n == name]
+
+    def test_segments_follow_the_position_and_say_each_change_once(self):
+        queue = FakeQueue([A, B])
+        a = FakeVideo(A, parent=queue)
+        events = self.step(video=a, opening=a, start_in_progress=True,
+                           position=40.0, segments=self.SEGMENTS)
+        self.assertEqual(self.names(events)[:4],
+                         ["item", "tracks", "segments", "next"])
+        first, = self.of(events, "segments")
+        self.assertEqual(first["itemId"], A)
+        self.assertEqual([s["type"] for s in first["segments"]],
+                         ["Intro", "Outro"])
+        self.assertIsNone(first["current"],
+                          "no offer from a position read while opening")
+        self.assertIsNone(self.tracker.offer())
+        currents = []
+        for position in (0.0, 5.0, 10.0, 30.0, 60.0, 69.9, 70.0, 80.0,
+                         101.0, 110.0, 130.0):
+            events = self.step(video=a, position=position,
+                               segments=self.SEGMENTS)
+            for data in self.of(events, "segments"):
+                currents.append((position, data["current"]))
+        # Sent when it changed and only then; never for the always one.
+        self.assertEqual(currents, [(10.0, 0), (70.0, None)])
+        for _ in range(3):
+            self.assertEqual(self.of(self.step(video=a, position=130.0,
+                                               segments=self.SEGMENTS),
+                                     "segments"), [], "nothing walks")
+
+    def test_the_offer_is_the_last_one_sent(self):
+        a = FakeVideo(A)
+        self.step(video=a, position=20.0, segments=self.SEGMENTS)
+        self.assertEqual(self.tracker.offer()["type"], "Intro")
+        self.step(video=a, position=70.0, segments=self.SEGMENTS)
+        self.assertIsNone(self.tracker.offer())
+        self.step(video=a, position=20.0, segments=self.SEGMENTS)
+        self.step(video=None)
+        self.assertIsNone(self.tracker.offer(), "an ended item offers none")
+
+    def test_a_restart_withholds_the_offer_until_it_plays(self):
+        a = FakeVideo(A)
+        self.step(video=a, position=20.0, segments=self.SEGMENTS)
+        events = self.step(video=a, opening=a, start_in_progress=True,
+                           position=20.0, segments=self.SEGMENTS)
+        self.assertEqual(self.of(events, "segments"), [],
+                         "a restart sends nothing of the item's again")
+        events = self.step(video=a, position=20.0, segments=self.SEGMENTS)
+        self.assertEqual(self.of(events, "segments"), [])
+        self.assertEqual(self.tracker.offer()["type"], "Intro")
+
+    def test_next_follows_the_queue_and_each_item_gets_its_own(self):
+        queue = FakeQueue([A, B, C], seq=1)
+        b = FakeVideo(B, parent=queue)
+        events = self.step(video=b, position=1.0, auto_play=True)
+        self.assertEqual(self.of(events, "next"), [
+            {"itemId": B, "nextItemId": C, "previousItemId": A,
+             "autoPlay": True}])
+        for _ in range(3):
+            self.assertEqual(self.of(self.step(video=b, position=2.0,
+                                               auto_play=True), "next"), [])
+        # The queue changes around it (widened backwards: previous now
+        # prepends the season's start) -- said once.
+        queue.queue.insert(0, {"Id": DASHED_N, "PlaylistItemId": "p9"})
+        queue.seq = 2
+        events = self.step(video=b, position=3.0, auto_play=True)
+        self.assertEqual(self.of(events, "next"), [],
+                         "the same neighbours: nothing new")
+        queue.queue.pop(1)                  # A gone from before B
+        queue.seq = 1
+        events = self.step(video=b, position=4.0, auto_play=True)
+        self.assertEqual(self.of(events, "next"), [
+            {"itemId": B, "nextItemId": C, "previousItemId": DASHED_N,
+             "autoPlay": True}])
+        # Auto play turned off.
+        events = self.step(video=b, position=5.0, auto_play=False)
+        self.assertEqual(self.of(events, "next")[0]["autoPlay"], False)
+        # The next item, with the same segments as this one: its own
+        # events all the same.
+        c = FakeVideo(C, parent=queue)
+        queue.seq = 2
+        events = self.step(video=c, position=0.0, auto_play=False)
+        self.assertEqual(self.names(events)[:5],
+                         ["ended", "item", "tracks", "segments", "next"])
+        self.assertEqual(self.of(events, "next"), [
+            {"itemId": C, "previousItemId": B, "autoPlay": False}])
+
+    def test_a_file_gets_no_segments_or_next(self):
+        item = bridge_state.DevItem("av://lavfi:testsrc")
+        item.phase = "active"
+        for _ in range(3):
+            events = self.step(dev=item, position=20.0,
+                               segments=self.SEGMENTS)
+            self.assertFalse({"segments", "next"} & set(self.names(events)))
 
     def test_volume_mute_fullscreen_are_state(self):
         events = self.step(volume=40.4, muted=True, fullscreen=True)
@@ -2156,7 +2498,8 @@ class PlayerNamesTest(unittest.TestCase):
                      "send_timeline_initial", "_notify_load_start",
                      "_apply_auth_headers", "get_timeline_options",
                      "update", "_queue_finished", "restart_playback",
-                     "_handle_mpv_disconnect", "_report_stopped_offline"):
+                     "_handle_mpv_disconnect", "_report_stopped_offline",
+                     "skip_intro", "timeline_handle"):
             with self.subTest(name=name):
                 self.assertIn(name, names)
 
@@ -4184,7 +4527,10 @@ class RestartNotTakenTest(BridgeCase):
                 self.assertEqual(self.reported(), [(A, new, "none")])
                 errors = self.errors()
                 self.assertEqual([e["code"] for e in errors], ["mpv_failed"])
-                self.assertIn(A, errors[0]["message"])
+                # fluentfin-mpv: for the user -- the item by its title,
+                # never its id.
+                self.assertIn('"Item"', errors[0]["message"])
+                self.assertNotIn(A, errors[0]["message"])
                 state = self.bridge.tracker.snapshot(self.bridge._observe())
                 self.assertEqual((state["state"], state["playSessionId"],
                                   state["mediaSourceId"]),
@@ -4261,6 +4607,85 @@ class RestartNotTakenTest(BridgeCase):
         self.assertEqual(asked[-1], (800000, True))
         self.assertEqual(self.a.trs_ovr, (None, True))
 
+    # -- fluentfin-mpv: the message is the user's --------------------------
+
+    def change_fails(self, command, args, outcome):
+        """``command`` restarts the item (a transcode's track change), and
+        the restart finds nothing: ``outcome`` is play()'s (``"fail"``: no
+        url) or what it raises. The one ``error`` event and the log."""
+        self.pm.restart_on_tracks = True
+        self.pm.on_negotiate = lambda: setattr(self.a, "play_method", None)
+        self.pm.next_play = outcome
+        with self.assertLogs("bridge", "WARNING") as logs:
+            self.assertTrue(self.send(command, args)["ok"])
+            self.run_plays()
+        errors = self.errors()
+        self.assertEqual(len(errors), 1, errors)
+        return errors[0], "\n".join(logs.output)
+
+    def test_a_failed_change_is_said_for_the_user(self):
+        """The visual check: FluentFin's notice showed the item id and
+        "ServerUnreachable ... HTTP 500". It shows this message as it is."""
+        from jellyfin_apiclient_python.exceptions import HTTPException
+
+        self.a.item = {"Name": "Mac's Big Break", "Type": "Episode",
+                       "SeriesName": "It's Always Sunny in Philadelphia",
+                       "ParentIndexNumber": 6, "IndexNumber": 4}
+        title = ('"It\'s Always Sunny in Philadelphia — S6E4 · '
+                 'Mac\'s Big Break"')
+        for command, args, outcome, want, raw in (
+                ("set_subtitle", {"index": 3}, "fail",
+                 "The subtitles of %s could not be changed: the server "
+                 "offered no stream this player can play." % title,
+                 "no stream this player can play"),
+                ("set_audio", {"index": 2}, HTTPException(500, None),
+                 "The audio track of %s could not be changed: the server "
+                 "answered with an error." % title, "500"),
+                ("set_subtitle", {"index": 4},
+                 HTTPException("ServerUnreachable", None),
+                 "The subtitles of %s could not be changed: the server "
+                 "could not be reached." % title, "ServerUnreachable"),
+                ("set_audio", {"index": 5},
+                 HTTPException("Unauthorized", None),
+                 "The audio track of %s could not be changed: the server "
+                 "refused the request." % title, "Unauthorized")):
+            with self.subTest(command=command, outcome=outcome):
+                error, log_text = self.change_fails(command, args, outcome)
+                self.assertEqual(error["message"],
+                                 want + " It goes on playing as before.")
+                self.assertFalse(error["fatal"])
+                for raw_part in (A, "HTTP", "Exception", "ps-"):
+                    self.assertNotIn(raw_part, error["message"])
+                # The raw cause is in the log, with the item.
+                self.assertIn(raw, log_text)
+                self.assertIn(A, log_text)
+
+    def test_a_failed_quality_change_says_quality(self):
+        def no_stream():
+            self.a.playback_info = {"PlaySessionId": "ps-q"}
+            self.a.play_method = None
+
+        menu = threading.Thread(target=self.a.set_trs_override,
+                                args=(1500000, True), daemon=True)
+        menu.start()
+        menu.join(5)
+        self.pm.on_negotiate = no_stream
+        self.pm.next_play = "fail"
+        self.pm.put_task(self.pm.restart_playback)
+        self.pm.run_deferred()
+        error, = self.errors()
+        self.assertEqual(error["message"],
+                         'The quality of "Item" could not be changed: the '
+                         "server offered no stream this player can play. "
+                         "It goes on playing as before.")
+
+    def test_without_a_name_it_is_this_item(self):
+        self.a.item = {"Type": "Movie"}
+        error, _log = self.change_fails("set_subtitle", {"index": 3}, "fail")
+        self.assertTrue(error["message"].startswith(
+            "The subtitles of this item could not be changed"),
+            error["message"])
+
     def test_mpvs_auth_header_is_put_back(self):
         """``http-header-fields`` is global (docs/auth-headers.md): play()'s
         no-URL return revokes it, and a subtitle the old stream loads later
@@ -4292,15 +4717,26 @@ class RestartNotTakenTest(BridgeCase):
         from jellyfin_apiclient_python.exceptions import HTTPException
 
         self.pm.restart_on_tracks = True
-        self.pm.next_play = HTTPException(
+        error = HTTPException(
             "ServerUnreachable", "the server answered PlaybackInfo with "
             "HTTP 500")
-        self.assertTrue(self.send("set_audio", {"index": 1})["ok"])
-        self.run_plays()
+        # As `check_play_info` marks it (PlaybackInfoAnswerTest).
+        error.bridge_answered, error.bridge_http_status = True, 500
+        self.pm.next_play = error
+        with self.assertLogs("bridge", "WARNING") as logs:
+            self.assertTrue(self.send("set_audio", {"index": 1})["ok"])
+            self.run_plays()
         errors = self.errors()
         self.assertEqual([e["code"] for e in errors], ["server_unreachable"])
-        self.assertIn(A, errors[0]["message"])
-        self.assertIn("HTTP 500", errors[0]["message"])
+        # fluentfin-mpv: the visual check's case. The user reads words;
+        # the id and "ServerUnreachable ... HTTP 500" are in the log only.
+        self.assertEqual(errors[0]["message"],
+                         'The audio track of "Item" could not be changed: '
+                         "the server answered with an error. It goes on "
+                         "playing as before.")
+        log_text = "\n".join(logs.output)
+        self.assertIn(A, log_text)
+        self.assertIn("HTTP 500", log_text)
         self.assertIs(self.pm._video, self.a)
         self.assertIs(self.pm.should_send_timeline, True)
 
@@ -6836,12 +7272,15 @@ class PlaybackInfoAnswerTest(_RealClientCase):
     def test_an_answer_that_is_not_one_is_server_unreachable(self):
         from jellyfin_apiclient_python.exceptions import HTTPException
 
-        for name, status, body, raw, says in (
-                ("500", 500, None, None, "HTTP 500"),
-                ("empty", 200, None, b"", "empty or not JSON"),
-                ("not json", 200, None, b"<html>", "empty or not JSON"),
+        answered = "the server answered with an error"
+        unusable = "the server's answer could not be used"
+        for name, status, body, raw, says, user in (
+                ("500", 500, None, None, "HTTP 500", answered),
+                ("empty", 200, None, b"", "empty or not JSON", unusable),
+                ("not json", 200, None, b"<html>", "empty or not JSON",
+                 unusable),
                 ("no sources", 200, {"PlaySessionId": "p"}, None,
-                 "no media sources")):
+                 "no media sources", unusable)):
             with self.subTest(name):
                 with self.assertRaises(HTTPException) as caught:
                     self.info(status, body, raw)
@@ -6852,6 +7291,10 @@ class PlaybackInfoAnswerTest(_RealClientCase):
                 self.assertIn("PlaybackInfo", message)
                 self.assertIn(says, message)
                 self.assertNotIn("NoneType", message)
+                # fluentfin-mpv: what the user is told (the log has the
+                # above): the server did answer.
+                self.assertEqual(bridge_mod.failure_cause(
+                    "server_unreachable", error), user)
 
     def test_only_the_bridges_own_sentence_is_shown(self):
         """`describe_exception`: the apiclient's HTTPException carries the

@@ -1595,9 +1595,10 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         rather than a documented one, so the failure it could produce -- an
         OSC style with no OSC at all -- is caught rather than shipped.
         """
-        # FluentFin MPV: the bridge always takes the fork, which carries its
-        # patches and draws previews on any mpv (a 0.41.0-dev reads as 0.41
-        # and has no Preview API). See fluentfin_osc.
+        # FluentFin MPV: the bridge loads its own bar (uosc), else the fork,
+        # which carries its patches and draws previews on any mpv (a
+        # 0.41.0-dev reads as 0.41 and has no Preview API). See
+        # fluentfin_osc and fluentfin_bar.
         from . import fluentfin_osc
 
         if (not fluentfin_osc.active() and osc_preview_api_works(
@@ -1611,6 +1612,8 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
                 log.warning("mpv refused %s; falling back to the bundled OSC.",
                             BUILTIN_OSC, exc_info=True)
         elif fluentfin_osc.active():
+            if fluentfin_osc.load_bar(self._player):
+                return
             log.info("Bridge mode: using the bundled OSC with FluentFin's "
                      "look.")
         else:
@@ -2472,6 +2475,11 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
             elif args[0] == "jms-lua":
                 if self._lua_probe is not None:
                     self._lua_probe.set()
+            # FluentFin MPV: the bar's and the key map's (fluentfin.lua).
+            elif args[0].startswith("fluentfin-"):
+                from . import fluentfin_osc
+
+                fluentfin_osc.on_message(self, args)
         except Exception:
             log.warning("Error when processing client-message.", exc_info=True)
 
@@ -3366,6 +3374,10 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
                     except _mpv_errors:
                         log.debug("could not hold the load paused",
                                   exc_info=True)
+                # FluentFin MPV: the title before the file. Without it mpv's
+                # media-title is the url while the file opens (the bar shows
+                # it), and a transcode's url carries ApiKey. Set again below.
+                self._player.force_media_title = video.get_proper_title()
                 self._player.play(self.url)
                 loaded = wait_property(
                     self._player,
