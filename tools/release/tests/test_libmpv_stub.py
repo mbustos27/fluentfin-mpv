@@ -27,7 +27,7 @@ CSS = ["dvdcss_close", "dvdcss_error", "dvdcss_is_scrambled", "dvdcss_open", "dv
        "dvdcss_readv", "dvdcss_seek"]
 EXCLUDED = {"libdvdcss-2.dll"}
 REAL_OWNER = "mingw-w64-ucrt-x86_64-libdvdcss 1.6.0-1"
-STUB_OWNER = "built here: stub of libdvdcss (FluentFin MPV), every call fails"
+STUB_OWNER = "fluentfin-dvdcss-stub 1.0.0"  # as the libmpv build writes it
 
 
 def sha256(path):
@@ -92,7 +92,8 @@ def make_sources(root, stub_line=True, real_package=True):
         info.size = len(data)
         tar.addfile(info, io.BytesIO(data))
     if stub_line:
-        rows.append(f"fluentfin-mpv-libdvdcss-stub | 1.0.0 | spdx:GPL-3.0-or-later | libdvdcss-2.dll | stub/libdvdcss-stub-1.0.0.tar.gz | {sha256(stub)}")
+        rows.append("fluentfin-mpv-libdvdcss-stub | 1.0.0 | GPL-3.0-or-later: FluentFin MPV's own stub (GPLv3); replaces libdvdcss"
+                    f" | libdvdcss-2.dll | stub/libdvdcss-stub-1.0.0.tar.gz | {sha256(stub)}")
     with open(os.path.join(root, "SOURCES.txt"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write("# Licence files: licenses/<package>/ (COPYING and the like)\n"
                  "# component | version | licence (package metadata) | DLLs | file | SHA-256\n" + "\n".join(rows) + "\n")
@@ -114,7 +115,7 @@ class Fixture(unittest.TestCase):
 
 
 class StubRule(unittest.TestCase):
-    OWNERS = {STUB_OWNER: True, "stub": True, "Stub (GPL-3.0)": True, "built here (stub)": True, "built here": False,
+    OWNERS = {STUB_OWNER: True, "built here: stub of libdvdcss": True, "stub": True, "Stub (GPL-3.0)": True, "built here (stub)": True, "built here": False,
               REAL_OWNER: False, "mingw-w64-ucrt-x86_64-libdvdcss-stub 1.0": False, "stubborn": False}
 
     def test_a_stub_is_an_owner_with_the_word_stub_that_is_no_msys2_package(self):

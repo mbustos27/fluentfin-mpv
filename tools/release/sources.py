@@ -64,7 +64,8 @@ def sources_rows(text):
         cols = [c.strip() for c in line.split("|")]
         if len(cols) < 5 or line.lstrip().startswith("#"):
             continue
-        rows.append({"component": cols[0], "version": cols[1], "licence": cols[2].replace("spdx:", ""),
+        # the licence: its SPDX expression, without a note after it ("GPL-3.0-or-later: FluentFin MPV's own stub ...")
+        rows.append({"component": cols[0], "version": cols[1], "licence": cols[2].replace("spdx:", "").split(": ", 1)[0].strip(),
                      "dlls": {d.strip().lower() for d in cols[3].split(",") if d.strip()},
                      "file": cols[4].replace("\\", "/").strip("/")})
     return rows
