@@ -5,17 +5,19 @@ FluentFin MPV's own module (not upstream). Two things live here:
 * :func:`media_title`, the title the shim hands mpv (``force-media-title``)
   and so the one the OSC shows: ``"Series — S6E4 · Episode"`` for an
   episode, the film's name (and year) for a film. Used in every mode.
-* The OSC's look in **bridge mode** (``configure(True)``, called by
+* The bar's look in **bridge mode** (``configure(True, bar)``, called by
   ``bridge.ShimRuntime.start_player`` before the player is imported, like
-  ``window_embed``). The bridge always loads the shim's own OSC fork
-  (``trickplay-osc.lua``): it draws trickplay previews on any mpv -- a
+  ``window_embed``). Which bar is `fluentfin_bar.choose`'s: uosc with
+  ``fluentfin.lua`` by default, or the shim's own OSC fork
+  (``trickplay-osc.lua``), which draws trickplay previews on any mpv -- a
   0.41.0-dev build reports 0.41 and has no OSC Preview API, so the stock
-  OSC drew none -- and it carries the FluentFin patches (marked
+  OSC drew none -- and carries the FluentFin patches (marked
   ``FluentFin MPV`` there), each behind an option whose default is
   upstream's look. :func:`script_opts` turns them on: no cache readout,
   track names instead of "1/2", subtitles moved above the bar while it is
   shown, FluentFin's player colours (its ``PlayerControlsScrimBrush``, the
-  Windows accent on the seek bar), sizes that follow Windows text scaling.
+  Windows accent on the seek bar), sizes that follow Windows text scaling;
+  and for uosc, the same look in uosc's options.
 
 Imports nothing from the player or a backend (like ``mpv_options`` and
 ``window_embed``), so all of it is testable without opening a window.
@@ -26,11 +28,17 @@ import os
 import re
 import sys
 
+from . import fluentfin_bar
+
 log = logging.getLogger("fluentfin_osc")
 
 #: Whether the bridge runs this process. Module state because the player is
 #: a module-level singleton built at import, after `configure`.
 _active = False
+
+#: The bar the bridge loads (`fluentfin_bar.UOSC`, `fluentfin_bar.FORK`),
+#: None for osc_style "none"/"custom".
+_bar = None
 
 #: The OSC the bridge loads (a resource of this package).
 OSC_SCRIPT = "trickplay-osc.lua"
@@ -65,11 +73,17 @@ WHEEL_STEP = 5
 WHEEL_OSD = True
 
 
-def configure(enabled):
-    """Turn the bridge's OSC look on or off. Call before the player is
-    first imported."""
-    global _active
+def configure(enabled, bar=fluentfin_bar.FORK):
+    """Turn the bridge's look on or off, with the bar `fluentfin_bar.choose`
+    picked. Call before the player is first imported."""
+    global _active, _bar
     _active = bool(enabled)
+    _bar = bar if _active else None
+
+
+def bar():
+    """The bar of this run, None outside bridge mode."""
+    return _bar
 
 
 def active():
@@ -226,6 +240,17 @@ def user_osc_conf(confdir=None):
         return False
 
 
+def user_uosc_conf(confdir=None):
+    """Whether the config folder has a ``script-opts/uosc.conf`` of the
+    user's: then uosc's look is theirs (`user_osc_conf`'s rule)."""
+    try:
+        base = confdir if confdir is not None else _confdir()
+        return os.path.isfile(os.path.join(base, "script-opts", "uosc.conf"))
+    except Exception:
+        log.debug("could not look for uosc.conf", exc_info=True)
+        return False
+
+
 def user_sets(option, confdir=None):
     """Whether the user's ``mpv.conf`` sets ``option`` at its top level
     (profiles are conditional, see `mpv_options.hwdec_pinned_by_config`)."""
@@ -250,14 +275,26 @@ def user_sets(option, confdir=None):
 # ------------------------------------------------------------- the options
 
 def script_opts(confdir=None, accent=None, scale=None):
-    """The ``osc-*`` ``script-opts`` entries for the bridge's OSC, in the
-    order they are appended; empty outside bridge mode or when the user has
-    an ``osc.conf`` of their own. ``accent`` and ``scale`` are for tests.
-    """
-    if not _active or user_osc_conf(confdir):
+    """The ``script-opts`` entries for the bridge's bar, in the order they
+    are appended; empty outside bridge mode. The fork's (``osc-*``) unless
+    the user has an ``osc.conf`` of their own -- also with uosc, so a uosc
+    that will not load falls back to the fork in FluentFin's look --, then
+    uosc's (``uosc-*``, unless a ``uosc.conf`` of theirs) and
+    ``fluentfin.lua``'s. ``accent`` and ``scale`` are for tests."""
+    if not _active:
         return []
     accent = accent or accent_colour()
     scale = scale if scale is not None else text_scale()
+    opts = [] if user_osc_conf(confdir) else _fork_opts(accent, scale)
+    if _bar == fluentfin_bar.UOSC and not user_uosc_conf(confdir):
+        opts.extend(fluentfin_bar.uosc_script_opts(accent, scale, BAR_COLOUR,
+                                                   BAR_ALPHA))
+    if _bar is not None:
+        opts.extend(fluentfin_bar.lua_script_opts())
+    return opts
+
+
+def _fork_opts(accent, scale):
     scale = ("%.2f" % scale).rstrip("0").rstrip(".")
     return [
         # The subtitle raise is measured against the bottom bar.
@@ -294,8 +331,42 @@ def script_opts(confdir=None, accent=None, scale=None):
 def apply_to_options(mpv_options, confdir=None):
     """Construction options for the bridge's look, in place: the OSD font
     (the OSC's text, and mpv's own messages, in FluentFin's font) unless
-    the user's ``mpv.conf`` sets one. Windows only; a no-op otherwise."""
+    the user's ``mpv.conf`` sets one (Windows only), and uosc's fonts and
+    volume range (`fluentfin_bar.construction_options`). A no-op outside
+    bridge mode."""
     if (_active and sys.platform.startswith("win32")
             and not user_sets("osd-font", confdir)):
         mpv_options["osd_font"] = FONT
+    if _active:
+        fluentfin_bar.construction_options(
+            mpv_options, _bar, lambda option: user_sets(option, confdir))
     return mpv_options
+
+
+def load_bar(player):
+    """`PlayerManager._load_classic_osc` in bridge mode: load this run's
+    bar into ``player``. True when it did (uosc); False when the caller
+    loads the fork, as it would without the bridge."""
+    if not _active or _bar is None:
+        return False
+    return fluentfin_bar.load(player, _bar)
+
+
+#: ``fluentfin.lua``'s messages (``script-message <name>``) -> the shim's
+#: own action, the same ones its keys and its HUD's buttons run.
+MESSAGES = {
+    "fluentfin-skip": "skip_intro",
+    "fluentfin-next": "play_next",
+    "fluentfin-prev": "play_prev",
+}
+
+
+def on_message(pm, args):
+    """A ``fluentfin-*`` client message (``PlayerManager._on_client_message``,
+    on mpv's event thread): queued on the action thread, as the shim's own
+    keys do, never run here. Unknown names are ignored."""
+    action = MESSAGES.get(args[0]) if args else None
+    if action is None or not _active:
+        return False
+    pm.put_task(getattr(pm, action))
+    return True

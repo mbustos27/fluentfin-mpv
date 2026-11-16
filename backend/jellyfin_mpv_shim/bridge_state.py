@@ -419,6 +419,12 @@ class Tracker:
         with self._lock:
             return self._offer
 
+    def following(self):
+        """fluentfin-mpv: the last ``next`` payload sent for the item
+        playing, or None."""
+        with self._lock:
+            return self._last_next
+
     def _segments_and_next(self, obs, video):
         """``segments`` and ``next`` for the announced ``video``, each when
         it differs from the last one sent (always, after a new item).

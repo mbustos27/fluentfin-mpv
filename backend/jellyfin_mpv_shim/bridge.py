@@ -457,10 +457,17 @@ class ShimRuntime:
                 self._override(key, value)
         window_embed.configure(window["hwnd"] if embedded else None,
                                attach=attached)
-        # The OSC's look and the fork that carries it (fluentfin_osc).
-        from . import fluentfin_osc
+        # The bar mpv draws, and its look (fluentfin_bar, fluentfin_osc).
+        from . import fluentfin_bar, fluentfin_osc
+        from .conf import settings
 
-        fluentfin_osc.configure(True)
+        bar = fluentfin_bar.choose(settings.osc_style, window["mode"],
+                                   fluentfin_osc.user_sets("osd-fonts-dir"))
+        fluentfin_osc.configure(True, bar=bar)
+        if bar is not None and settings.kb_kill_shader == "k":
+            # FluentFin's key map has k for pause, as FluentFin's own
+            # controls do; the shim's binding is forced and would win.
+            self._override("kb_kill_shader", "K")
         try:
             from . import player as player_module
         except BaseException:
@@ -2742,13 +2749,14 @@ class Bridge:
             self._send_reported()
 
     def _push_offer(self):
-        """fluentfin-mpv: the segment on offer, for the bar mpv draws
-        (``fluentfin.lua``: its Skip button and prompt): the button's text
-        in ``user-data/fluentfin/skip``, empty when there is none or when
-        FluentFin draws the controls (``set_controls`` ``"ui"``: the UI
-        offers it from the ``segments`` event). Written when it changes,
-        and again for a new mpv. Never raises: a lost mpv is the shim's to
-        notice."""
+        """fluentfin-mpv: what the bar mpv draws (``fluentfin.lua``) needs
+        from the bridge: the Skip button's text for the segment on offer in
+        ``user-data/fluentfin/skip`` (empty when there is none, or when
+        FluentFin draws the controls -- ``set_controls`` ``"ui"``: the UI
+        offers it from the ``segments`` event), and ``"1"`` in
+        ``user-data/fluentfin/next`` while the queue has a next item (its
+        Next button). Written when they change, and again for a new mpv.
+        Never raises: a lost mpv is the shim's to notice."""
         pm = self.runtime.pm
         if pm is None or not pm._mpv_alive:
             return
@@ -2756,15 +2764,19 @@ class Bridge:
         text = ""
         if offer is not None and not self.controls.ui:
             text = self.runtime.segment_label(offer["type"])
+        following = self.tracker.following()
+        has_next = "1" if following and following.get("nextItemId") else ""
         player = pm._player
         pushed = self._offer_pushed
-        if pushed is not None and pushed[0] is player and pushed[1] == text:
+        if (pushed is not None and pushed[0] is player
+                and pushed[1:] == (text, has_next)):
             return
         try:
             player.command("set", "user-data/fluentfin/skip", text)
-            self._offer_pushed = (player, text)
+            player.command("set", "user-data/fluentfin/next", has_next)
+            self._offer_pushed = (player, text, has_next)
         except Exception:
-            log.debug("could not show the skip offer", exc_info=True)
+            log.debug("could not update the bar", exc_info=True)
 
     def _observe(self, cheap=False):
         """One sample. ``cheap`` reads nothing from mpv."""

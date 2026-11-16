@@ -1438,6 +1438,22 @@ class SegmentsTest(BridgeCase):
         self.tick()
         self.assertEqual(self.skip_texts(pm), ["Skip Intro", ""])
 
+    def test_the_bar_knows_whether_there_is_a_next_item(self):
+        pm, video = self.playing(5.0)           # A of [A, B]
+
+        def flags():
+            return [c[2] for c in pm._player.commands
+                    if c[:2] == ("set", "user-data/fluentfin/next")]
+
+        for _ in range(3):
+            self.tick()
+        self.assertEqual(flags(), ["1"], "written once")
+        last = FakeVideo(B, parent=FakeQueue([A, B], seq=1))
+        pm.play(last)
+        for _ in range(3):
+            self.tick()
+        self.assertEqual(flags(), ["1", ""])
+
     def test_a_failing_write_is_tried_again(self):
         pm, video = self.playing(15.0)
         self.tick()

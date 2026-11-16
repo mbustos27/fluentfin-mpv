@@ -347,15 +347,61 @@ draws its own controls) and `tls_*` client certificates. Measured with
 
 ## 4a. The on-screen controller
 
-`fluentfin_osc` (FluentFin MPV's own module), switched on by
-`start_player` before the player is imported, like `window_embed`:
+`fluentfin_osc` and `fluentfin_bar` (FluentFin MPV's own modules),
+switched on by `start_player` before the player is imported, like
+`window_embed`:
 
-- **The OSC is always the fork**, `trickplay-osc.lua`, whatever the mpv
-  version (`_load_classic_osc`). The winget mpv-CI build on the development
-  machine reports `v0.41.0-dev`, which `osc_preview_api_works` reads as
-  0.41, and its stock OSC has no `user-data/osc/draw-preview` (none in the
-  binary): the stock OSC drew no trickplay preview at all. The fork asks
-  `thumbfast.lua` itself, on any mpv.
+- **Which bar** (`fluentfin_bar.choose`, from the *configured* `osc_style`;
+  bridge mode resolves the shim's default "mpvtk" to "mpv", since the HUD
+  needs the library browser): **uosc** (vendored under `fluentfin/mpv`,
+  `fluentfin/VENDORED.md`) for "mpvtk"/"jellyfin", the default; **the fork**
+  for "mpv"/"default", and as the fallback wherever uosc cannot run: its
+  files missing, an `attached` window (FluentFin's own mpv gets no
+  construction option, so no `osd-fonts-dir` for uosc's icon font), a user
+  `mpv.conf` that sets `osd-fonts-dir`, or a uosc that will not load.
+  "none" and "custom" are the shim's, as without the bridge. Either way the
+  shim builds mpv with style "mpv", and `_load_classic_osc` asks
+  `fluentfin_osc.load_bar` first: it `load-script`s uosc's folder and
+  `fluentfin.lua` (after the `script-opts` appends, so both read their
+  options at their start), or only `fluentfin.lua`, and the fork then loads
+  as before. With a bar of ours, a `kb_kill_shader` still at its default `k`
+  moves to `K` for the run (the shim's binding is forced, and `k` is pause
+  in FluentFin's key map).
+- **uosc's look** is `fluentfin_bar.uosc_script_opts`: FluentFin's controls
+  left to right (play/pause, previous and next in the shim's queue, -10 s,
+  +30 s, Skip when a segment is on offer, audio, subtitles, editions,
+  chapters, full screen), the title on top with no window buttons, no
+  progress line while hidden, the seek line in the accent with no cache
+  ranges or buffered readout, the wheel over it not a seek
+  (`timeline_step=0`), the volume slider in steps of 5, FluentFin's scrim
+  colour at 75 %, Windows' text scale, `languages=en` (no translations are
+  vendored), no idle or audio indicator. Construction options:
+  `osd-fonts-dir` (uosc's two fonts) and `volume-max=100` unless `mpv.conf`
+  sets it. The fork's options go with uosc's, for the fallback. A user
+  `script-opts/uosc.conf` keeps uosc's look theirs.
+- **`fluentfin.lua`** goes with either bar: the keys of FluentFin's own
+  controls (k pause, j/l -/+10 s, Up/Down volume +-5 held to 0..100, s skip,
+  N next, P previous; non-forced, so the user's `input.conf` wins; s, N
+  and P are `fluentfin-*` script messages that `PlayerManager.
+  _on_client_message` hands to `fluentfin_osc.on_message`, which queues the
+  shim's own `skip_intro`/`play_next`/`play_prev` on the action thread),
+  and the Skip prompt (an OSD message from `user-data/fluentfin/skip`,
+  which the bridge writes, section 5). Once uosc has published
+  `user-data/fluentfin/bar` (its one local patch) it also makes the wheel
+  the volume (horizontal: nothing), raises the subtitles above the bar
+  (restores deferred 150 ms, so a `sub-pos` the bridge writes with a hide
+  is kept), fills uosc's managed buttons (`fluentfin_prev`,
+  `fluentfin_next` from `user-data/fluentfin/next`, `fluentfin_skip`) and
+  turns the shim's `osc-visibility never`/`auto` (its `enable_osc`, which
+  `set_controls` uses) into uosc's `disable-elements`. User-data strings
+  are observed as `native`: observed as `string` they arrive JSON-quoted.
+- **The fork** is `trickplay-osc.lua`, whatever the mpv version. The winget
+  mpv-CI build on the development machine reports `v0.41.0-dev`, which
+  `osc_preview_api_works` reads as 0.41, and its stock OSC has no
+  `user-data/osc/draw-preview` (none in the binary): the stock OSC drew no
+  trickplay preview at all. The fork asks `thumbfast.lua` itself, on any
+  mpv; uosc asks it through thumbfast's own messages, which the shim's
+  `thumbfast.lua` answers with Jellyfin's tiles.
 - **FluentFin's patches live in the fork**, each between `-- BEGIN patch
   FluentFin MPV` and `-- END patch`, each behind an option whose default is
   upstream's look, so a standalone shim is unchanged. `script_opts` turns
@@ -381,9 +427,15 @@ draws its own controls) and `tls_*` client certificates. Measured with
   show there), and a film's "Name (Year)". A sidecar is `sub-add`ed with
   its stream's title and language (`sidecar_labels`), which mpv cannot know.
 
-Tests: `test_fluentfin_osc` (pure), `test_fluentfin_osc_player` (imports
-the player: off-screen), `test_fluentfin_osc_lua` (the raise, the wheel and
-the labels against a real mpv, `--vo=null`, no window).
+Tests: `test_fluentfin_osc` and `test_fluentfin_bar` (pure),
+`test_fluentfin_osc_player` (imports the player: off-screen),
+`test_fluentfin_osc_lua` (the fork's raise, wheel and labels against a real
+mpv, `--vo=null`, no window), `test_fluentfin_bar_lua` (`fluentfin.lua`
+against a real mpv with no window and a stand-in uosc that records its
+messages; the vendored uosc itself needs a video output, so those cases run
+only on a private desktop, i.e. through `run_suite.py`, and skip on the
+user's). Those start `mpv.exe`, not the `mpv.com` console wrapper, which
+starts mpv as a child a kill of its own handle leaves running.
 
 ## 5. Commands and events
 

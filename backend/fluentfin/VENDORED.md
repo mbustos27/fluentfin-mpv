@@ -35,7 +35,7 @@ thumbfast (MPL-2.0).
 | `scripts/uosc/bin/ziggy-*` (darwin, linux, windows.exe) | Executables. uosc calls them only for its self-updater, subtitle downloads and clipboard paths, none of which FluentFin's bar exposes; without them those paths log an error |
 | `scripts/uosc/intl/*.json` | Translations. The bar is configured with `languages=en`; a missing locale file is read as "no translation" |
 | `scripts/uosc/char-conv/zh.json` | Chinese romanisation for menu search; loaded only for a `zh` language |
-| `script-opts/uosc.conf` | Defaults for reference only; FluentFin's options are sent as `script-opts` (`fluentfin_osc.uosc_script_opts`) |
+| `script-opts/uosc.conf` | Defaults for reference only; FluentFin's options are sent as `script-opts` (`jellyfin_mpv_shim/fluentfin_bar.py`, `uosc_script_opts`); a `script-opts/uosc.conf` of the user's in the config folder replaces them |
 | upstream thumbfast | Never installed: the shim's own `thumbfast.lua` answers the same messages with Jellyfin's trickplay tiles. A second one would take the script name and decode the authenticated stream in a background mpv |
 
 ## Local patches
@@ -44,4 +44,9 @@ Each is marked `FluentFin MPV` in the file.
 
 | File | Change | Why |
 |---|---|---|
-| (none yet) | | |
+| `scripts/uosc/main.lua`, `update_margins` | Publishes `user-data/fluentfin/bar`: the bottom bar's share of the window height as shown now (proximity reveals included; uosc's own margins count only a persistent bar), 0 when hidden | `fluentfin.lua` raises the subtitles above the bar from it, and takes its first value as "uosc is running" |
+
+## Not uosc's
+
+`mpv/scripts/fluentfin.lua` is FluentFin MPV's own (not part of the vendored copy): the key
+map, the Skip prompt and the glue between the shim and uosc (`backend/docs/bridge.md` §4a).
