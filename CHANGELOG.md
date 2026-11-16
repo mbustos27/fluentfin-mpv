@@ -16,8 +16,12 @@ server sees one session, FluentFin's, and only the backend reports playback.
   mpv that runs inside FluentFin (the libmpv in the zip). Or mpv's own bar, [uosc](https://github.com/tomasklaen/uosc)
   in FluentFin's look (the shim's bar as its fallback), with mpv in a window inside FluentFin's: chosen in Settings, or
   used automatically, with a notice, when libmpv cannot load on the PC. mpv's controls run mpv.exe from PATH.
+  FluentFin's controls: seek, play/pause, ±10/30 s, Skip intro and Skip credits (a button above the seek bar while the
+  server marks a segment, and the S key), Next episode (with the next episode's name, off at the end of the queue),
+  volume, audio and subtitle menus, full screen.
 - **The shim's playback**: PlaybackInfo and the direct play / transcode decision, track selection and remembered
-  tracks, next episode, skip intro/credits and trickplay with mpv's controls, progress reporting.
+  tracks, next episode, the media segments behind Skip intro/credits (which ones are offered is the shim's setting),
+  trickplay previews with mpv's controls, progress reporting.
 - **A TV journal**: what you watched, per server and user, with ratings, reviews, rewatches, filters and CSV/JSON
   export; kept on this PC.
 - **A faster Home**, loading, error and empty states with Try again, Settings > Playback, keyboard and Narrator work,
@@ -54,4 +58,6 @@ server sees one session, FluentFin's, and only the backend reports playback.
   the build did not record their revisions (`SOURCES.txt` lists them).
 - With the mpv player: no SyncPlay, and remote "play next" / "play last" are not supported.
 - The backend's own messages are in English.
+- **With FluentFin's controls, no trickplay previews or Up Next card yet** (Skip and Next are there); mpv's controls
+  have both.
 - More, with where each lives: `docs/KNOWN-ISSUES.md`.
