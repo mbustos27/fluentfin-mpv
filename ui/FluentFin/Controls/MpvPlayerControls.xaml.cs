@@ -4,8 +4,11 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Composition;
+using FluentFin.Services;
 
 namespace FluentFin.Controls;
 
@@ -26,13 +29,24 @@ public sealed partial class MpvPlayerControls : UserControl
 	public MpvPlayerControls()
 	{
 		InitializeComponent();
-		Loaded += (_, _) => StartTick();
-		Unloaded += (_, _) => StopTick();
+		Loaded += (_, _) =>
+		{
+			StartTick();
+			GlassMode.Changed += OnGlassModeChanged;
+			ConfigureFades();
+		};
+		Unloaded += (_, _) =>
+		{
+			StopTick();
+			GlassMode.Changed -= OnGlassModeChanged;
+		};
 
 		// the slider marks the pointer handled itself: listen anyway, for the start and the end of a drag or a click
 		SeekBar.AddHandler(PointerPressedEvent, new PointerEventHandler(OnSeekBarPointerPressed), handledEventsToo: true);
 		SeekBar.AddHandler(PointerReleasedEvent, new PointerEventHandler(OnSeekBarPointerReleased), handledEventsToo: true);
 		SeekBar.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(OnSeekBarPointerReleased), handledEventsToo: true);
+		SeekBar.AddHandler(PointerMovedEvent, new PointerEventHandler(OnSeekBarPointerMoved), handledEventsToo: true);
+		SeekBar.AddHandler(PointerExitedEvent, new PointerEventHandler(OnSeekBarPointerExited), handledEventsToo: true);
 	}
 
 	public MpvControlsViewModel? Controls
@@ -247,7 +261,7 @@ public sealed partial class MpvPlayerControls : UserControl
 	{
 		for (var node = source; node is not null; node = VisualTreeHelper.GetParent(node))
 		{
-			if (ReferenceEquals(node, TopBar) || ReferenceEquals(node, BottomBar))
+			if (ReferenceEquals(node, TopBar) || ReferenceEquals(node, BottomBar) || ReferenceEquals(node, NextPill))
 			{
 				return true;
 			}
@@ -262,7 +276,7 @@ public sealed partial class MpvPlayerControls : UserControl
 	}
 
 	/// <summary>A tap there is a control's, not the video's (the bars, and the Skip button over the video).</summary>
-	private bool IsOnControls(DependencyObject? source) => IsInBars(source) || (source is not null && IsWithin(source, SkipSegmentButton));
+	private bool IsOnControls(DependencyObject? source) => IsInBars(source) || (source is not null && IsWithin(source, PillRow));
 
 	private void OnBarPointerEntered(object sender, PointerRoutedEventArgs e)
 	{
@@ -308,7 +322,7 @@ public sealed partial class MpvPlayerControls : UserControl
 	// -- the Skip button's place -----------------------------------------------------------------------------------------
 
 	/// <summary>The Skip button's distance from the right edge (the bottom bar's own padding) and, bars hidden, from the bottom.</summary>
-	private const double SkipEdgeRight = 20, SkipEdgeBottom = 24;
+	private const double SkipEdgeRight = 32, SkipEdgeBottom = 24;
 
 	/// <summary>Its gap above the bottom bar's controls while they show.</summary>
 	private const double SkipGapAboveBar = 12;
@@ -329,9 +343,9 @@ public sealed partial class MpvPlayerControls : UserControl
 
 		var bottom = Controls is { ControlsVisible: true } && _barControlsHeight > 0 ? _barControlsHeight + SkipGapAboveBar : SkipEdgeBottom;
 		var margin = new Thickness(0, 0, SkipEdgeRight, bottom);
-		if (SkipSegmentButton.Margin != margin)
+		if (PillRow.Margin != margin)
 		{
-			SkipSegmentButton.Margin = margin;
+			PillRow.Margin = margin;
 		}
 	}
 
@@ -352,7 +366,89 @@ public sealed partial class MpvPlayerControls : UserControl
 		return size;
 	}
 
+	// -- the bars fade (Seaglass) -----------------------------------------------------------------------------------------
+
+	private void OnGlassModeChanged(object? sender, EventArgs e) => DispatcherQueue.TryEnqueue(ConfigureFades);
+
+	/// <summary>
+	/// The bars fade in and out as their Visibility changes (implicit animations keep them drawn until the fade ends); with
+	/// motion allowed they also slide a little. Without (Reduced, Solid, animations off) it is the fade alone.
+	/// </summary>
+	private void ConfigureFades()
+	{
+		var motion = GlassMode.MotionAllowed;
+		ConfigureFade(TopBar, -12, motion);
+		ConfigureFade(BottomBar, 12, motion);
+	}
+
+	private static void ConfigureFade(FrameworkElement bar, float slide, bool motion)
+	{
+		var compositor = ElementCompositionPreview.GetElementVisual(bar).Compositor;
+		ElementCompositionPreview.SetIsTranslationEnabled(bar, true);
+
+		var fadeIn = compositor.CreateScalarKeyFrameAnimation();
+		fadeIn.Target = "Opacity";
+		fadeIn.InsertKeyFrame(0f, 0f);
+		fadeIn.InsertKeyFrame(1f, 1f);
+		fadeIn.Duration = TimeSpan.FromMilliseconds(motion ? 220 : 150);
+
+		var fadeOut = compositor.CreateScalarKeyFrameAnimation();
+		fadeOut.Target = "Opacity";
+		fadeOut.InsertKeyFrame(1f, 0f);
+		fadeOut.Duration = TimeSpan.FromMilliseconds(motion ? 300 : 150);
+
+		var show = compositor.CreateAnimationGroup();
+		show.Add(fadeIn);
+		var hide = compositor.CreateAnimationGroup();
+		hide.Add(fadeOut);
+
+		if (motion)
+		{
+			var slideIn = compositor.CreateScalarKeyFrameAnimation();
+			slideIn.Target = "Translation.Y";
+			slideIn.InsertKeyFrame(0f, slide);
+			slideIn.InsertKeyFrame(1f, 0f);
+			slideIn.Duration = TimeSpan.FromMilliseconds(220);
+			show.Add(slideIn);
+
+			var slideOut = compositor.CreateScalarKeyFrameAnimation();
+			slideOut.Target = "Translation.Y";
+			slideOut.InsertKeyFrame(1f, slide);
+			slideOut.Duration = TimeSpan.FromMilliseconds(300);
+			hide.Add(slideOut);
+		}
+
+		ElementCompositionPreview.SetImplicitShowAnimation(bar, show);
+		ElementCompositionPreview.SetImplicitHideAnimation(bar, hide);
+	}
+
 	// -- the seek bar ----------------------------------------------------------------------------------------------------
+
+	/// <summary>The time under the pointer, in a small label above the bar.</summary>
+	private void OnSeekBarPointerMoved(object sender, PointerRoutedEventArgs e)
+	{
+		if (Controls is not { DurationTicks: > 0 } controls || SeekBar.ActualWidth <= 0)
+		{
+			return;
+		}
+
+		var x = Math.Clamp(e.GetCurrentPoint(SeekBar).Position.X, 0, SeekBar.ActualWidth);
+		var ticks = (long)(controls.DurationTicks * (x / SeekBar.ActualWidth));
+		HoverTimeText.Text = HoverTimeFor(ticks);
+		HoverTime.Visibility = Visibility.Visible;
+		HoverTime.UpdateLayout();
+		HoverTime.Margin = new Thickness(Math.Clamp(x - HoverTime.ActualWidth / 2, 0, Math.Max(0, SeekBar.ActualWidth - HoverTime.ActualWidth)), 0, 0, 34);
+	}
+
+	private void OnSeekBarPointerExited(object sender, PointerRoutedEventArgs e)
+	{
+		if (!_seekBarPressed)
+		{
+			HoverTime.Visibility = Visibility.Collapsed;
+		}
+	}
+
+	public static string HoverTimeFor(long ticks) => MpvControlsViewModel.FormatTime(TimeSpan.FromTicks(Math.Max(0, ticks)));
 
 	private void OnSeekBarPointerPressed(object sender, PointerRoutedEventArgs e)
 	{
@@ -429,6 +525,9 @@ public sealed partial class MpvPlayerControls : UserControl
 	// -- x:Bind helpers --------------------------------------------------------------------------------------------------
 
 	public Visibility VisibleIf(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
+
+	/// <summary>The Next pill: with the bars, an episode with a next one.</summary>
+	public Visibility NextPillVisibility(bool controlsVisible, bool showsNext, bool canNext) => controlsVisible && showsNext && canNext ? Visibility.Visible : Visibility.Collapsed;
 
 	public Visibility VisibleIfText(string? value) => string.IsNullOrEmpty(value) ? Visibility.Collapsed : Visibility.Visible;
 

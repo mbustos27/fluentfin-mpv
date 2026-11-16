@@ -16,27 +16,105 @@
     mc:Ignorable="d">
 
     <UserControl.Resources>
+        <ResourceDictionary>
+        <ResourceDictionary.ThemeDictionaries>
+            <ResourceDictionary x:Key="Default">
+                <SolidColorBrush x:Key="PlayerGlassFill" Color="#33FFFFFF" />
+                <SolidColorBrush x:Key="PlayerGlassFillHover" Color="#4DFFFFFF" />
+                <SolidColorBrush x:Key="PlayerGlassFillPressed" Color="#26FFFFFF" />
+                <SolidColorBrush x:Key="PlayerGlassForeground" Color="#FFFFFFFF" />
+                <SolidColorBrush x:Key="PlayerHoverTimeFill" Color="#E6101C20" />
+            </ResourceDictionary>
+            <ResourceDictionary x:Key="HighContrast">
+                <SolidColorBrush x:Key="PlayerGlassFill" Color="{ThemeResource SystemColorWindowColor}" />
+                <SolidColorBrush x:Key="PlayerGlassFillHover" Color="{ThemeResource SystemColorHighlightColor}" />
+                <SolidColorBrush x:Key="PlayerGlassFillPressed" Color="{ThemeResource SystemColorHighlightColor}" />
+                <SolidColorBrush x:Key="PlayerGlassForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
+                <SolidColorBrush x:Key="PlayerHoverTimeFill" Color="{ThemeResource SystemColorWindowColor}" />
+            </ResourceDictionary>
+        </ResourceDictionary.ThemeDictionaries>
+        <!--
+            Seaglass player (docs/design/SEAGLASS.md): no acrylic over the video (it cannot blur the swap chain), so the bars sit
+            on gradient scrims, the buttons are light translucent fills with the glass edge, and the menus are on
+            GlassPanelStrongBrush.
+        -->
         <LinearGradientBrush x:Key="TopScrim" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Offset="0" Color="#B0000000" />
+            <GradientStop Offset="0" Color="#B3000000" />
             <GradientStop Offset="1" Color="#00000000" />
         </LinearGradientBrush>
         <LinearGradientBrush x:Key="BottomScrim" StartPoint="0,1" EndPoint="0,0">
-            <GradientStop Offset="0" Color="#C8000000" />
-            <GradientStop Offset="0.6" Color="#78000000" />
+            <GradientStop Offset="0" Color="#C0000000" />
+            <GradientStop Offset="0.55" Color="#80000000" />
             <GradientStop Offset="1" Color="#00000000" />
         </LinearGradientBrush>
-        <!--  FluentFin's PlayerControlsScrimBrush (Styles\Button.xaml), here so the control carries its own  -->
-        <SolidColorBrush
-            x:Key="SkipScrim"
-            Opacity="0.75"
-            Color="#101010" />
+
+        <!--  the seek bar: thin, rounded, the accent as its fill  -->
+        <SolidColorBrush x:Key="SliderTrackFill" Color="#4DFFFFFF" />
+        <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#66FFFFFF" />
+        <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#66FFFFFF" />
+        <SolidColorBrush x:Key="SliderTrackValueFill" Color="{ThemeResource SeaglassAccentColor}" />
+        <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="{ThemeResource SeaglassAccentColor}" />
+        <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="{ThemeResource SeaglassAccentColor}" />
+        <SolidColorBrush x:Key="SliderThumbBackground" Color="#FFFFFFFF" />
+        <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#FFFFFFFF" />
+        <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#FFE0E0E0" />
+        <x:Double x:Key="SliderTrackThemeHeight">4</x:Double>
+
+                <StaticResource x:Key="ButtonBackground" ResourceKey="PlayerGlassFill" />
+                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="PlayerGlassFillHover" />
+                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="PlayerGlassFillPressed" />
+                <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="PlayerGlassFillPressed" />
+                <StaticResource x:Key="ButtonBorderBrush" ResourceKey="GlassStrokeBrush" />
+                <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="GlassStrokeBrush" />
+                <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="GlassStrokeBrush" />
+                <StaticResource x:Key="ButtonForeground" ResourceKey="PlayerGlassForeground" />
+                <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="PlayerGlassForeground" />
+                <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="PlayerGlassForeground" />
+        <!--  round icon buttons and pills on the scrim: translucent fill, the glass edge, no acrylic  -->
         <Style x:Key="PlayerButton" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
             <Setter Property="Width" Value="44" />
-            <Setter Property="Height" Value="40" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="22" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Background" Value="{ThemeResource PlayerGlassFill}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource PlayerGlassForeground}" />
         </Style>
+        <Style x:Key="PlayerPill" BasedOn="{StaticResource PlayerButton}" TargetType="Button">
+            <Setter Property="Width" Value="NaN" />
+            <Setter Property="MinWidth" Value="120" />
+            <Setter Property="Padding" Value="18,0" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="15" />
+        </Style>
+        <!--  the one primary action: play/pause, in the accent  -->
+        <Style x:Key="PlayerPlayButton" BasedOn="{StaticResource PlayerButton}" TargetType="Button">
+            <Setter Property="Width" Value="60" />
+            <Setter Property="Height" Value="60" />
+            <Setter Property="CornerRadius" Value="30" />
+            <Setter Property="Background" Value="{ThemeResource SeaglassAccentBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource SeaglassDeepBrush}" />
+        </Style>
+
+        <!--  menus: the strongly tinted glass, one layer, rounded  -->
+        <Style x:Key="PlayerMenuPresenter" TargetType="MenuFlyoutPresenter">
+            <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Padding" Value="6" />
+        </Style>
+        <Style x:Key="PlayerFlyoutPresenter" TargetType="FlyoutPresenter">
+            <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Padding" Value="12" />
+        </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <Grid
@@ -49,10 +127,10 @@
 
         <SwapChainPanel x:Name="VideoPanel" />
 
-        <!--  top: back and the title  -->
+        <!--  top: back and the title, on a scrim  -->
         <Grid
             x:Name="TopBar"
-            Padding="12,8,24,40"
+            Padding="24,16,32,56"
             VerticalAlignment="Top"
             Background="{StaticResource TopScrim}"
             GotFocus="OnBarFocusChanged"
@@ -60,10 +138,10 @@
             PointerEntered="OnBarPointerEntered"
             PointerExited="OnBarPointerExited"
             Visibility="{x:Bind VisibleIf(Controls.ControlsVisible), Mode=OneWay}">
-            <StackPanel Orientation="Horizontal" Spacing="12">
+            <StackPanel Orientation="Horizontal" Spacing="16">
                 <Button
                     x:Name="BackButton"
-                    VerticalAlignment="Top"
+                    VerticalAlignment="Center"
                     AutomationProperties.Name="Back"
                     Click="OnBackClick"
                     Style="{StaticResource PlayerButton}"
@@ -73,15 +151,19 @@
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock
                         x:Name="TitleText"
+                        FontFamily="{StaticResource GlassDisplayFontFamily}"
+                        FontSize="22"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
                         MaxLines="1"
-                        Style="{ThemeResource SubtitleTextBlockStyle}"
                         Text="{x:Bind Controls.Title, Mode=OneWay}"
                         TextTrimming="CharacterEllipsis" />
                     <TextBlock
                         x:Name="SubtitleText"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        FontFamily="{StaticResource GlassTextFontFamily}"
+                        FontSize="15"
+                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
                         MaxLines="1"
-                        Style="{ThemeResource BodyTextBlockStyle}"
                         Text="{x:Bind Controls.Subtitle, Mode=OneWay}"
                         TextTrimming="CharacterEllipsis"
                         Visibility="{x:Bind VisibleIfText(Controls.Subtitle), Mode=OneWay}" />
@@ -92,12 +174,14 @@
         <!--  the wheel's volume, shown briefly, also while the bars are hidden  -->
         <Border
             x:Name="VolumeIndicator"
-            Margin="0,72,0,0"
-            Padding="16,8"
+            Margin="0,88,0,0"
+            Padding="18,10"
             HorizontalAlignment="Center"
             VerticalAlignment="Top"
-            Background="#C0202020"
-            CornerRadius="8"
+            Background="{ThemeResource GlassPanelStrongBrush}"
+            BorderBrush="{ThemeResource GlassStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="22"
             IsHitTestVisible="False"
             Visibility="{x:Bind VisibleIf(Controls.VolumeIndicatorVisible), Mode=OneWay}">
             <StackPanel Orientation="Horizontal" Spacing="10">
@@ -110,10 +194,10 @@
             </StackPanel>
         </Border>
 
-        <!--  bottom: the seek bar and the transport  -->
+        <!--  bottom: the seek bar and the transport, on a scrim  -->
         <Grid
             x:Name="BottomBar"
-            Padding="20,40,20,12"
+            Padding="32,64,32,20"
             VerticalAlignment="Bottom"
             Background="{StaticResource BottomScrim}"
             GotFocus="OnBarFocusChanged"
@@ -127,7 +211,7 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Grid ColumnSpacing="12">
+            <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -136,6 +220,8 @@
                 <TextBlock
                     x:Name="ElapsedText"
                     VerticalAlignment="Center"
+                    Typography.NumeralAlignment="Tabular"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
                     Style="{ThemeResource CaptionTextBlockStyle}"
                     Text="{x:Bind Controls.ElapsedText, Mode=OneWay}" />
                 <Slider
@@ -149,60 +235,48 @@
                     StepFrequency="1"
                     Value="{x:Bind Seconds(Controls.PositionTicks), Mode=OneWay}"
                     ValueChanged="OnSeekBarValueChanged" />
+                <!--  the time under the pointer, above the bar  -->
+                <Border
+                    x:Name="HoverTime"
+                    Grid.Column="1"
+                    Margin="0,0,0,34"
+                    Padding="10,4"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Background="{ThemeResource PlayerHoverTimeFill}"
+                    BorderBrush="{ThemeResource GlassStrokeBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="HoverTimeText"
+                        Typography.NumeralAlignment="Tabular"
+                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}" />
+                </Border>
                 <TextBlock
                     x:Name="RemainingText"
                     Grid.Column="2"
                     VerticalAlignment="Center"
+                    Typography.NumeralAlignment="Tabular"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
                     Style="{ThemeResource CaptionTextBlockStyle}"
                     Text="{x:Bind Controls.RemainingText, Mode=OneWay}" />
             </Grid>
 
-            <Grid Grid.Row="1">
-                <StackPanel HorizontalAlignment="Left" Orientation="Horizontal" Spacing="4">
-                    <Button
-                        x:Name="PlayPauseButton"
-                        AutomationProperties.Name="{x:Bind PlayPauseName(Controls.IsPaused), Mode=OneWay}"
-                        Click="OnPlayPauseClick"
-                        Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="{x:Bind PlayPauseName(Controls.IsPaused), Mode=OneWay}">
-                        <FontIcon FontSize="20" Glyph="{x:Bind PlayPauseGlyph(Controls.IsPaused), Mode=OneWay}" />
-                    </Button>
-                    <Button
-                        x:Name="SkipBackButton"
-                        AutomationProperties.Name="Back 10 seconds"
-                        Click="OnSkipBackClick"
-                        Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="Back 10 seconds">
-                        <FontIcon FontSize="18" Glyph="&#xED3C;" />
-                    </Button>
-                    <Button
-                        x:Name="SkipForwardButton"
-                        AutomationProperties.Name="Forward 30 seconds"
-                        Click="OnSkipForwardClick"
-                        Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="Forward 30 seconds">
-                        <FontIcon FontSize="18" Glyph="&#xED3D;" />
-                    </Button>
-                    <!--  a disabled button gets no pointer input, so no tooltip: disabled, "No next episode" is the wrapper's  -->
-                    <Border
-                        x:Name="NextButtonHost"
-                        Background="Transparent"
-                        ToolTipService.ToolTip="{x:Bind ToolTipUnless(Controls.CanNext, Controls.NextToolTip), Mode=OneWay}"
-                        Visibility="{x:Bind VisibleIf(Controls.ShowsNext), Mode=OneWay}">
-                        <Button
-                            x:Name="NextButton"
-                            AutomationProperties.HelpText="{x:Bind Controls.NextToolTip, Mode=OneWay}"
-                            AutomationProperties.Name="Next episode"
-                            Click="OnNextClick"
-                            IsEnabled="{x:Bind Controls.CanNext, Mode=OneWay}"
-                            Style="{StaticResource PlayerButton}"
-                            ToolTipService.ToolTip="{x:Bind ToolTipIf(Controls.CanNext, Controls.NextToolTip), Mode=OneWay}">
-                            <FontIcon FontSize="18" Glyph="&#xE893;" />
-                        </Button>
-                    </Border>
-                </StackPanel>
+            <Grid Grid.Row="1" Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="4">
+                <StackPanel
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="8">
                     <Button
                         x:Name="VolumeButton"
                         AutomationProperties.Name="Volume"
@@ -213,6 +287,7 @@
                             <Flyout
                                 x:Name="VolumeFlyout"
                                 Closed="OnMenuClosed"
+                                FlyoutPresenterStyle="{StaticResource PlayerFlyoutPresenter}"
                                 Opened="OnMenuOpened"
                                 Placement="Top">
                                 <StackPanel
@@ -245,6 +320,53 @@
                             </Flyout>
                         </Button.Flyout>
                     </Button>
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="16">
+                    <Button
+                        x:Name="SkipBackButton"
+                        AutomationProperties.Name="Back 10 seconds"
+                        Click="OnSkipBackClick"
+                        Style="{StaticResource PlayerButton}"
+                        ToolTipService.ToolTip="Back 10 seconds">
+                        <FontIcon FontSize="18" Glyph="&#xED3C;" />
+                    </Button>
+                    <Button
+                        x:Name="PlayPauseButton"
+                        AutomationProperties.Name="{x:Bind PlayPauseName(Controls.IsPaused), Mode=OneWay}"
+                        Click="OnPlayPauseClick"
+                        Style="{StaticResource PlayerPlayButton}"
+                        ToolTipService.ToolTip="{x:Bind PlayPauseName(Controls.IsPaused), Mode=OneWay}">
+                        <Button.Resources>
+                                <StaticResource x:Key="ButtonBackground" ResourceKey="SeaglassAccentBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SeaglassAccentBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SeaglassAccentBrush" />
+                                <StaticResource x:Key="ButtonForeground" ResourceKey="SeaglassDeepBrush" />
+                                <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="SeaglassDeepBrush" />
+                                <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="SeaglassDeepBrush" />
+                        </Button.Resources>
+                        <FontIcon FontSize="26" Glyph="{x:Bind PlayPauseGlyph(Controls.IsPaused), Mode=OneWay}" />
+                    </Button>
+                    <Button
+                        x:Name="SkipForwardButton"
+                        AutomationProperties.Name="Forward 30 seconds"
+                        Click="OnSkipForwardClick"
+                        Style="{StaticResource PlayerButton}"
+                        ToolTipService.ToolTip="Forward 30 seconds">
+                        <FontIcon FontSize="18" Glyph="&#xED3D;" />
+                    </Button>
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Column="2"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="8">
                     <Button
                         x:Name="AudioButton"
                         AutomationProperties.Name="Audio"
@@ -256,6 +378,7 @@
                             <MenuFlyout
                                 x:Name="AudioMenu"
                                 Closed="OnMenuClosed"
+                                MenuFlyoutPresenterStyle="{StaticResource PlayerMenuPresenter}"
                                 Opened="OnMenuOpened"
                                 Opening="OnAudioMenuOpening"
                                 Placement="Top" />
@@ -272,6 +395,7 @@
                             <MenuFlyout
                                 x:Name="SubtitlesMenu"
                                 Closed="OnMenuClosed"
+                                MenuFlyoutPresenterStyle="{StaticResource PlayerMenuPresenter}"
                                 Opened="OnMenuOpened"
                                 Opening="OnSubtitlesMenuOpening"
                                 Placement="Top" />
@@ -290,41 +414,65 @@
         </Grid>
 
         <!--
-            Skip intro / Skip credits while the backend offers a segment (docs/BRIDGE.md §5 segments), in the style of
-            FluentFin's own player's Skip, where streaming apps put it (Jellyfin web, Netflix): bottom right, just above the
-            bottom bar's controls while they show, a small margin from the bottom while they are hidden (its Margin is set
-            by PlaceSkipButton). It stays for the whole offer, also while the bars are hidden; last in the tree, so it is on
+            Skip intro / Skip credits (docs/BRIDGE.md section 5 segments) and the Next episode pill, bottom right, just above the
+            bottom bar's controls while they show, a small margin from the bottom while they are hidden (the row's Margin is
+            set by PlaceSkipButton). Skip stays for the whole offer, also while the bars are hidden; the Next pill only with
+            the bars (it is one of them: it holds them up under the pointer and the keyboard). Last in the tree, so it is on
             top of the bars' scrim. Never focused by itself: Space stays play.
-            It does not hold the bars up under the pointer: it collapses when pressed, and an element that collapses under
-            the pointer need not get its PointerExited (the bars would stay up).
+            The Skip pill does not hold the bars up under the pointer: it collapses when pressed, and an element that
+            collapses under the pointer need not get its PointerExited (the bars would stay up).
         -->
-        <Button
-            x:Name="SkipSegmentButton"
-            Height="50"
-            MinWidth="150"
-            Margin="0,0,20,24"
-            Padding="16,0"
+        <StackPanel
+            x:Name="PillRow"
+            Margin="0,0,32,24"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
-            VerticalContentAlignment="Center"
-            AutomationProperties.Name="{x:Bind Controls.SkipText, Mode=OneWay}"
-            Background="{StaticResource SkipScrim}"
-            Click="OnSkipSegmentClick"
-            FontSize="20"
-            FontWeight="Bold"
-            Foreground="White"
-            ToolTipService.ToolTip="{x:Bind SkipToolTip(Controls.SkipText), Mode=OneWay}"
-            Visibility="{x:Bind VisibleIf(Controls.IsSkipVisible), Mode=OneWay}">
-            <StackPanel
-                VerticalAlignment="Center"
-                Orientation="Horizontal"
-                Spacing="10">
-                <FontIcon VerticalAlignment="Center" Glyph="&#xEB9D;" />
-                <TextBlock
-                    x:Name="SkipSegmentText"
-                    VerticalAlignment="Center"
-                    Text="{x:Bind Controls.SkipText, Mode=OneWay}" />
-            </StackPanel>
-        </Button>
+            Orientation="Horizontal"
+            Spacing="12">
+            <Button
+                x:Name="NextPill"
+                AutomationProperties.HelpText="{x:Bind Controls.NextToolTip, Mode=OneWay}"
+                AutomationProperties.Name="Next episode"
+                Click="OnNextClick"
+                GotFocus="OnBarFocusChanged"
+                LostFocus="OnBarFocusChanged"
+                PointerEntered="OnBarPointerEntered"
+                PointerExited="OnBarPointerExited"
+                Style="{StaticResource PlayerPill}"
+                ToolTipService.ToolTip="{x:Bind Controls.NextToolTip, Mode=OneWay}"
+                Visibility="{x:Bind NextPillVisibility(Controls.ControlsVisible, Controls.ShowsNext, Controls.CanNext), Mode=OneWay}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock
+                        x:Name="NextPillText"
+                        MaxWidth="360"
+                        VerticalAlignment="Center"
+                        MaxLines="1"
+                        Text="{x:Bind Controls.NextToolTip, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis" />
+                    <FontIcon
+                        VerticalAlignment="Center"
+                        FontSize="14"
+                        Glyph="&#xE893;" />
+                </StackPanel>
+            </Button>
+            <Button
+                x:Name="SkipSegmentButton"
+                AutomationProperties.Name="{x:Bind Controls.SkipText, Mode=OneWay}"
+                Click="OnSkipSegmentClick"
+                Style="{StaticResource PlayerPill}"
+                ToolTipService.ToolTip="{x:Bind SkipToolTip(Controls.SkipText), Mode=OneWay}"
+                Visibility="{x:Bind VisibleIf(Controls.IsSkipVisible), Mode=OneWay}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <FontIcon
+                        VerticalAlignment="Center"
+                        FontSize="14"
+                        Glyph="&#xEB9D;" />
+                    <TextBlock
+                        x:Name="SkipSegmentText"
+                        VerticalAlignment="Center"
+                        Text="{x:Bind Controls.SkipText, Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
     </Grid>
 </UserControl>
