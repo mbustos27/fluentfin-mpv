@@ -51,7 +51,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--excluded", action="append", default=[], help="a DLL the release leaves out; nothing may import it")
     args = ap.parse_args()
+    excluded = {e.lower() for e in args.excluded}
     problems = []
     manifest = os.path.join(args.dir, "BUILD-MANIFEST.txt")
     entries = {}
@@ -85,6 +87,10 @@ def main():
         for dep in sorted(imports(os.path.join(args.dir, name))):
             low = dep.lower()
             stem = low[:-4] if low.endswith(".dll") else low
+            if low in excluded:
+                problems.append(f"{name} imports {dep}, which the release leaves out (-LibmpvExclude): without it {name}"
+                                " does not load; it needs a libmpv built without it, or to be shipped")
+                continue
             if low in present or low.startswith(("api-ms-win-", "ext-ms-win-")):
                 continue
             if stem in DRIVERS:

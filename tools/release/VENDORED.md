@@ -54,8 +54,10 @@ release takes that folder (`build-release.ps1 -LibmpvDir`, by default the one Fl
 graphics driver's (named in README.txt); the publish copies the folder into `libmpv\`, where Libmpv.cs loads it from and
 from nowhere else. Its sources (`-LibmpvSources`, by default `sources` beside the folder: `msys2\*.src.tar.zst` with
 their `.sig`, `mpv\mpv-<commit>.tar.gz`) go into `dist\sources\libmpv`; `sources.py` fails the build when a DLL's
-source is not there, and `notices.py` takes each DLL's licence from its source package's PKGBUILD and the licence
-files from the sources themselves.
+source is not there, and `notices.py` takes each DLL's licence from the folder's SOURCES.txt (or its source package's
+PKGBUILD) and the licence files from its `licenses\<package>\` (or the source archive). `-LibmpvExclude` (default
+`libdvdcss-2.dll`) leaves DLLs and their source packages out, and stops the build if a shipped DLL imports one.
+`bundle_sources.py` packs `dist\sources` into one archive under GitHub's 2 GiB file limit, or numbered parts.
 
 ## The mpv bar (uosc, inside `backend\_internal\fluentfin`)
 

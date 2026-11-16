@@ -110,7 +110,8 @@ $forbidden = @(
     @{ what = 'the build''s work folder'; root = (Join-Path $repo 'dist\.work') },
     @{ what = 'a Python install'; root = 'C:\Python3' },
     @{ what = 'a Python install'; root = (Join-Path $env:LOCALAPPDATA 'Programs\Python') },
-    @{ what = 'the harness Python'; root = (Split-Path (Split-Path $HarnessPython)) }
+    @{ what = 'the harness Python'; root = (Split-Path (Split-Path $HarnessPython)) },
+    @{ what = 'an MSYS2 install (libmpv''s DLLs must be the package''s)'; root = 'C:\msys64' }
 )
 function Start-Audit([string]$Name) {
     $stop = Join-Path $Out "$Name\audit.stop"

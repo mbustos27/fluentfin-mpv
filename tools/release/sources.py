@@ -91,42 +91,22 @@ def read_manifest(libmpv_dir):
 
 
 def libmpv_sources(libmpv_dir, sources_dir, out, lines):
-    """Copies and checks libmpv's sources; returns (status for notices, problems)."""
+    """Copies and checks libmpv's sources: only what the folder's DLLs need (their source packages with signatures, the
+    licence folders of their packages, mpv's tarball, other files as they are). Returns (status for notices, problems)."""
     path, header, entries, problems = read_manifest(libmpv_dir)
     if not path:
         return None, problems
+    if not os.path.isdir(sources_dir):
+        return None, problems + [f"no libmpv sources folder at {sources_dir}"]
     dest = os.path.join(out, "libmpv")
     os.makedirs(dest, exist_ok=True)
     shutil.copyfile(path, os.path.join(dest, "BUILD-MANIFEST.txt"))
-    copied = {}
-    if not os.path.isdir(sources_dir):
-        return None, problems + [f"no libmpv sources folder at {sources_dir}"]
+    listing = []
     for root, _dirs, files in os.walk(sources_dir):
         for f in sorted(files):
-            src = os.path.join(root, f)
-            rel = os.path.relpath(src, sources_dir).replace(os.sep, "/")
-            target = os.path.join(dest, rel)
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            shutil.copyfile(src, target)
-            copied[rel] = sha256(target)
-    # a SOURCES.txt of libmpv's own (beside the sources, or in the DLL folder): kept, and its hashes checked
-    for candidate in (os.path.join(sources_dir, "SOURCES.txt"), os.path.join(libmpv_dir, "SOURCES.txt"),
-                      os.path.join(os.path.dirname(sources_dir), "SOURCES.txt")):
-        if os.path.isfile(candidate):
-            text = open(candidate, encoding="utf-8-sig").read()
-            shutil.copyfile(candidate, os.path.join(dest, "SOURCES-libmpv.txt"))
-            by_name = {rel.rsplit("/", 1)[-1]: digest for rel, digest in copied.items()}
-            for line in text.splitlines():
-                digests = re.findall(r"\b[0-9a-fA-F]{64}\b", line)
-                # whole names only: X.src.tar.zst is not on X.src.tar.zst.sig's line
-                tokens = {t.replace("\\", "/").rsplit("/", 1)[-1].strip("`'\"(),;") for t in line.split()}
-                names = [n for n in by_name if n in tokens]
-                for name in names:
-                    if digests and by_name[name] not in (d.lower() for d in digests):
-                        problems.append(f"{name}: sha256 {by_name[name]} is not the one {candidate} gives")
-            break
-    packages = {rel.rsplit("/", 1)[-1][:-len(".src.tar.zst")]: rel for rel in copied if rel.endswith(".src.tar.zst")}
-    mpv_tarballs = [rel for rel in copied if re.search(r"(^|/)mpv-[0-9a-f]{40}\.tar\.gz$", rel)]
+            listing.append(os.path.relpath(os.path.join(root, f), sources_dir).replace(os.sep, "/"))
+    packages = {rel.rsplit("/", 1)[-1][:-len(".src.tar.zst")]: rel for rel in listing if rel.endswith(".src.tar.zst")}
+    mpv_tarballs = [rel for rel in listing if re.search(r"(^|/)mpv-[0-9a-f]{40}\.tar\.gz$", rel)]
     built_from = sorted(set(SOURCE_PACKAGE.findall("\n".join(header))))
     commit = (re.search(r"\bmpv ([0-9a-f]{40})\b", "\n".join(header)) or [None, None])[1]
     for package in built_from:
@@ -134,7 +114,8 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines):
             problems.append(f"BUILD-MANIFEST.txt says the build used {package}; its .src.tar.zst is not in the sources")
     if commit and not any(commit in rel for rel in mpv_tarballs):
         problems.append(f"no mpv-{commit}.tar.gz in the sources")
-    dlls = []
+
+    dlls, needed, owners = [], set(), set()
     for name, size, digest, owner in entries:
         item = {"name": name, "size": size, "sha256": digest, "owner": owner, "sources": []}
         m = OWNER.match(owner)
@@ -144,6 +125,7 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines):
         elif m:
             short, version = m.group(2), m.group(3)
             item["package"], item["version"] = m.group(1), version
+            owners.add(m.group(1))
             exact = f"mingw-w64-{short}-{version}"
             same_version = [p for p in packages if p.endswith("-" + version)]
             chosen = exact if exact in packages else (same_version[0] if len(same_version) == 1 else None)
@@ -156,23 +138,81 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines):
                 item["sources"] = [packages[chosen]]
         else:
             problems.append(f"{name}: BUILD-MANIFEST.txt names an owner it cannot read: {owner!r}")
+        needed.update(item["sources"])
         dlls.append(item)
 
+    # copy: the needed source packages and their signatures, the licence folders of the shipped DLLs' packages, and
+    # anything else that is neither a source package, a signature nor a licence folder (SOURCES.txt is handled below)
+    copied, left_out = {}, []
+    for rel in listing:
+        base = rel.rsplit("/", 1)[-1]
+        top = rel.split("/", 1)[0]
+        if base == "SOURCES.txt" and "/" not in rel:
+            continue
+        if rel.endswith(".src.tar.zst"):
+            keep = rel in needed
+        elif rel.endswith(".sig"):
+            keep = rel[:-len(".sig")] in needed or not rel[:-len(".sig")].endswith(".src.tar.zst")
+        elif top in ("licenses", "licences") and "/" in rel:
+            keep = rel.split("/")[1] in owners
+        else:
+            keep = rel not in mpv_tarballs or rel in needed or not entries
+        if not keep:
+            left_out.append(rel)
+            continue
+        target = os.path.join(dest, rel)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.copyfile(os.path.join(sources_dir, rel), target)
+        copied[rel] = sha256(target)
+
+    # a SOURCES.txt of libmpv's own: its lines for what was left out dropped, its hashes checked, its licence column read
+    declared = {}
+    for candidate in (os.path.join(sources_dir, "SOURCES.txt"), os.path.join(libmpv_dir, "SOURCES.txt"),
+                      os.path.join(os.path.dirname(sources_dir), "SOURCES.txt")):
+        if not os.path.isfile(candidate):
+            continue
+        text = open(candidate, encoding="utf-8-sig").read()
+        by_name = {rel.rsplit("/", 1)[-1]: (rel, digest) for rel, digest in copied.items()}
+        dropped = {rel.rsplit("/", 1)[-1] for rel in left_out}
+        kept_lines = []
+        for line in text.splitlines():
+            tokens = {t.replace("\\", "/").rsplit("/", 1)[-1].strip("`'\"(),;|") for t in line.split()}
+            if tokens & dropped:
+                continue
+            kept_lines.append(line)
+            digests = re.findall(r"\b[0-9a-fA-F]{64}\b", line)
+            # whole names only: X.src.tar.zst is not on X.src.tar.zst.sig's line
+            for name in [n for n in by_name if n in tokens]:
+                if digests and by_name[name][1] not in (d.lower() for d in digests):
+                    problems.append(f"{name}: sha256 {by_name[name][1]} is not the one {candidate} gives")
+            cols = [c.strip() for c in line.split("|")]
+            if len(cols) >= 5 and not line.lstrip().startswith("#"):
+                for col in cols:
+                    if col in by_name and col.endswith(".src.tar.zst"):
+                        declared[by_name[col][0]] = cols[2].replace("spdx:", "")
+        if dropped:
+            kept_lines.insert(0, "# FluentFin MPV's release leaves out: " + ", ".join(sorted(dropped)) + " (and their lines below)")
+        with open(os.path.join(dest, "SOURCES-libmpv.txt"), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write("\n".join(kept_lines) + "\n")
+        break
+
     lines += ["2. libmpv (the libmpv folder: libmpv-2.dll and every DLL it loads)", "-" * 100,
-              "Built by tools/release/libmpv/build-libmpv.sh (in FluentFin MPV's source above) in MSYS2 UCRT64. Each DLL, the",
-              "MSYS2 package it comes from (or 'built here') and its source in libmpv/ (BUILD-MANIFEST.txt there has the",
-              "sizes and sha256 of the DLLs):", ""]
+              "Each DLL of the libmpv folder (BUILD-MANIFEST.txt in libmpv/ has their sizes and sha256), the package it comes",
+              "from and its source in libmpv/ (SOURCES-libmpv.txt there is the folder's own record; vendor/libmpv/VENDORED.md",
+              "and tools/release/libmpv in FluentFin MPV's source say how it was made):", ""]
     for item in dlls:
         lines.append(f"  {item['name']}  ({item['owner']})")
         for rel in item["sources"]:
-            lines.append(f"    libmpv/{rel}  sha256 {copied[rel]}")
+            lines.append(f"    libmpv/{rel}  sha256 {copied.get(rel, '(not copied)')}")
+    if left_out:
+        lines += ["", "  Not in this release, nor their sources: " + ", ".join(sorted({r.rsplit('/', 1)[-1] for r in left_out}))]
     lines += ["", "  Every file in libmpv/:"]
     lines += [f"    {rel}  sha256 {digest}" for rel, digest in sorted(copied.items())]
     lines.append("")
-    status = {"dlls": dlls, "builtFrom": built_from, "mpvCommit": commit, "sourcesDir": dest,
-              "files": {rel: digest for rel, digest in copied.items()}}
+    licenses = next((os.path.join(dest, d) for d in ("licenses", "licences") if os.path.isdir(os.path.join(dest, d))), None)
+    status = {"dlls": dlls, "builtFrom": built_from, "mpvCommit": commit, "sourcesDir": dest, "licensesDir": licenses,
+              "declared": declared, "files": {rel: digest for rel, digest in copied.items()}, "leftOut": left_out}
     return status, problems
-
 
 def main():
     ap = argparse.ArgumentParser()

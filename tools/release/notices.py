@@ -231,31 +231,39 @@ def pkgbuild_licence(path):
 
 
 def libmpv_section(status, cache_dir):
-    """The libmpv folder's DLLs (sources.py's status), each with its package and licence, and the licence texts of
-    their sources: (lines, [(heading, text)])."""
+    """The libmpv folder's DLLs (sources.py's status), each with its package and licence, and the licence texts: from the
+    folder's licenses/<package>/ when it has them, else from that package's source archive. (lines, [(heading, text)])."""
     lines = ["5. libmpv (the libmpv folder): libmpv-2.dll and every DLL it loads", THIN,
-             "Built for FluentFin MPV from the sources in the release's sources (libmpv/), as listed below and in",
-             "SOURCES.txt. Each DLL, where it comes from and the licence its source package declares:", ""]
-    texts = []
-    licences = {}
-    for rel in status["files"]:
-        if rel.endswith(".src.tar.zst"):
-            licences[rel] = pkgbuild_licence(os.path.join(status["sourcesDir"], rel))
+             "Each DLL, the MSYS2 package it comes from and the licence that package declares; their sources are in the",
+             "release's sources (libmpv/, SOURCES.txt) and their licence texts in section 6.", ""]
+    declared = status.get("declared") or {}
+    licensesDir = status.get("licensesDir")
+    texts, done = [], set()
     for dll in status["dlls"]:
-        declared = "; ".join(sorted({licences.get(rel, "") for rel in dll["sources"]} - {""}))
-        if dll["owner"].strip().lower() == "built here":
-            declared = ("GPL-2.0-or-later (mpv built with -Dgpl=true; FFmpeg and libplacebo inside it: "
-                        + (declared or "see their texts") + ")") if dll["name"].lower() == "libmpv-2.dll" else declared
+        found = {declared.get(rel, "") for rel in dll["sources"]} - {""}
+        if not found:
+            found = {pkgbuild_licence(os.path.join(status["sourcesDir"], rel)) for rel in dll["sources"]
+                     if rel.endswith(".src.tar.zst")} - {""}
         lines.append(f"{dll['name']} ({dll['owner']})")
-        lines.append(f"  Licence: {declared or 'see the licence texts of its source below'}")
-        lines.append(f"  Source:  " + ", ".join(f"libmpv/{rel}" for rel in dll["sources"]))
+        lines.append(f"  Licence: {'; '.join(sorted(found)) or 'see the licence texts of its package below'}")
+        lines.append("  Source:  " + ", ".join(f"libmpv/{rel}" for rel in dll["sources"]))
         lines.append("")
-    for rel in sorted(status["files"]):
-        if rel.endswith((".src.tar.zst", ".tar.gz", ".tar.xz")):
-            for where, text in archive_licences(os.path.join(status["sourcesDir"], rel), cache_dir):
-                texts.append((f"libmpv source {rel}: {where}", text))
+        package = dll.get("package", "")
+        if package in done:
+            continue
+        done.add(package)
+        folder = os.path.join(licensesDir, package) if licensesDir and package else None
+        if folder and os.path.isdir(folder):
+            for root, dirs, files in os.walk(folder):
+                dirs.sort()
+                for f in sorted(files):
+                    rel = os.path.relpath(os.path.join(root, f), folder).replace(os.sep, "/")
+                    texts.append((f"{package} {dll.get('version', '')}: {rel}", read_text(os.path.join(root, f))))
+        else:
+            for rel in dll["sources"]:
+                for where, text in archive_licences(os.path.join(status["sourcesDir"], rel), cache_dir):
+                    texts.append((f"{package or dll['name']} (from libmpv/{rel}): {where}", text))
     return lines, texts
-
 
 def nuget_packages(assets_path, shipped=frozenset()):
     with open(assets_path, encoding="utf-8-sig") as fh:

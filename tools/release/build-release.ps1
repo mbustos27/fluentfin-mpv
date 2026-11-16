@@ -41,7 +41,8 @@ param(
     [switch]$SkipTests,  # only to try the packaging itself; a release runs them
     [string]$LibmpvDir,  # the libmpv folder (libmpv-2.dll, its DLLs, BUILD-MANIFEST.txt); default: FluentFin.csproj's
     [string]$LibmpvSources,  # its sources (msys2\*.src.tar.zst, mpv\mpv-<commit>.tar.gz); default: 'sources' beside it
-    [int]$MaxZipMB = 300  # the zip may not be bigger
+    [int]$MaxZipMB = 300,  # the zip may not be bigger
+    [string[]]$LibmpvExclude = @('libdvdcss-2.dll')  # left out of libmpv\ and of the sources; nothing may import them
 )
 
 $ErrorActionPreference = 'Stop'
@@ -97,6 +98,18 @@ $LibmpvSources = [IO.Path]::GetFullPath($LibmpvSources).TrimEnd('\')
 if (-not (Test-Path $LibmpvSources)) { throw "no libmpv sources at $LibmpvSources (-LibmpvSources)" }
 Write-Host "libmpv: $LibmpvDir
   sources: $LibmpvSources"
+# what the release leaves out of libmpv (-LibmpvExclude: libdvdcss, DVD decryption, by default): a copy of the folder
+# without those DLLs and their manifest lines, which everything after uses (the check below fails if a DLL imports one)
+$libmpvOrigin = $LibmpvDir
+if ($LibmpvExclude) {
+    $LibmpvDir = Join-Path $work 'libmpv-folder'
+    if (Test-Path $LibmpvDir) { Remove-Item -Recurse -Force $LibmpvDir }
+    New-Item -ItemType Directory -Force $LibmpvDir | Out-Null
+    Get-ChildItem $libmpvOrigin -File | Where-Object { $_.Name -notin $LibmpvExclude -and $_.Name -ne 'BUILD-MANIFEST.txt' } | Copy-Item -Destination $LibmpvDir
+    $manifestLines = Get-Content (Join-Path $libmpvOrigin 'BUILD-MANIFEST.txt') | Where-Object { ($_ -split '\s+')[0] -notin $LibmpvExclude }
+    [IO.File]::WriteAllLines((Join-Path $LibmpvDir 'BUILD-MANIFEST.txt'), [string[]]$manifestLines, [Text.UTF8Encoding]::new($false))
+    Write-Host "  left out: $($LibmpvExclude -join ', ')"
+}
 
 $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
 $dotnet = (Get-Command dotnet.exe -ErrorAction SilentlyContinue).Source
@@ -155,7 +168,9 @@ Invoke-Checked 'pip check' { & $venvPython -I -m pip check --disable-pip-version
 # the libmpv folder: each DLL the one its BUILD-MANIFEST.txt lists, and what they import there or Windows' (or a driver's)
 Step 'libmpv folder'
 $libmpvCheck = Join-Path $work 'libmpv-check.json'
-Invoke-Checked 'libmpv folder' { & $venvPython -I (Join-Path $PSScriptRoot 'libmpv_check.py') --dir $LibmpvDir --out $libmpvCheck }
+$checkArgs = @('-I', (Join-Path $PSScriptRoot 'libmpv_check.py'), '--dir', $LibmpvDir, '--out', $libmpvCheck)
+foreach ($x in $LibmpvExclude) { $checkArgs += @('--excluded', $x) }
+Invoke-Checked 'libmpv folder' { & $venvPython @checkArgs }
 $libmpvInfo = Get-Content $libmpvCheck -Raw | ConvertFrom-Json
 
 # --- 2b. the tests: a failure stops the release ---------------------------------------------------------------------
@@ -365,6 +380,9 @@ $libmpvFiles = @(Get-ChildItem (Join-Path $package 'libmpv') -File)
 Write-Host ("`n{0}`n  {1} files, {2:N1} MB unpacked (libmpv\: {3} files, {4:N1} MB)`n{5}`n  {6:N1} MB, SHA-256 {7}" -f $package, $files.Count,
     (($files | Measure-Object Length -Sum).Sum / 1MB), $libmpvFiles.Count, (($libmpvFiles | Measure-Object Length -Sum).Sum / 1MB), $zip, $zipMB, $hash)
 if ($zipMB -gt $MaxZipMB) { throw ("the zip is {0:N1} MB, more than -MaxZipMB {1}" -f $zipMB, $MaxZipMB) }
+# the sources as the release attaches them: one archive under GitHub's 2 GiB file limit, or numbered parts
+Step 'sources archive'
+Invoke-Checked 'sources archive' { & $venvPython -I (Join-Path $PSScriptRoot 'bundle_sources.py') --dir $sources --out $dist --name "FluentFinMPV-$Version-sources" }
 $sourceFiles = @(Get-ChildItem $sources -Recurse -File)
 Write-Host ("{0}
   {1} files, {2:N1} MB (SOURCES.txt)" -f $sources, $sourceFiles.Count, (($sourceFiles | Measure-Object Length -Sum).Sum / 1MB))

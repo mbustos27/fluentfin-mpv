@@ -25,7 +25,9 @@ is jellyfin-mpv-shim's version and does not change with ours.
   (`tools\README.md`).
 - The libmpv folder from `tools\release\libmpv` (`vendor\libmpv\VENDORED.md`): libmpv-2.dll, its DLLs and BUILD-MANIFEST.txt,
   with its sources beside it (`sources\msys2`, `sources\mpv`). In this checkout's `vendor\libmpv\<build>` (the one
-  FluentFin.csproj names), or pass `-LibmpvDir` (and `-LibmpvSources` if they are elsewhere).
+  FluentFin.csproj names), or pass `-LibmpvDir` (and `-LibmpvSources` if they are elsewhere). `-LibmpvExclude` (by
+  default `libdvdcss-2.dll`, DVD decryption) leaves DLLs and their sources out; the build stops if a shipped DLL
+  imports one.
 - The build PC: Windows x64, the .NET 10 SDK, mpv on PATH (for the backend tests the build runs), git, and network
   access to python.org, PyPI, nuget.org, GitHub and code.videolan.org. Nothing else:
   the build brings its own Python.
@@ -77,7 +79,9 @@ the first sign-in, a playback.
 1. Tag the commit the zip was built from: `git tag -a v<version> -m "FluentFin MPV <version>"`, push the tag.
 2. Create the GitHub release on that tag: title `FluentFin MPV <version>`, the notes from `CHANGELOG.md`'s section
    (what it is, what is verified, the known limits), the `.zip` and the `.sha256` as assets, and every file of
-   `dist\sources\` (`SOURCES.txt` first) as assets too: the GPL source of what the zip ships.
+   `dist\FluentFinMPV-<version>-sources.zip` (or its numbered parts, each under GitHub's 2 GiB limit) with
+   `dist\FluentFinMPV-<version>-sources.txt` (SOURCES.txt with the parts and their SHA-256): the source of what the
+   zip ships.
 3. The package's README.txt links the source at `https://github.com/mbustos27/fluentfin-mpv/tree/v<version>`: the tag
    must exist under that name.
 
