@@ -10,6 +10,12 @@ using ReactiveUI;
 
 namespace FluentFin.Core.ViewModels;
 
+/// <summary>fluentfin-mpv: a "Player controls" choice in the Settings list.</summary>
+public sealed record MpvPlayerControlsChoice(MpvPlayerControls Controls, string Name)
+{
+	public override string ToString() => Name;
+}
+
 /// <summary>A player in the Settings list.</summary>
 public sealed record MediaPlayerChoice(MediaPlayerType Type, string Name)
 {
@@ -58,6 +64,39 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 
 	public bool IsMpvSelected => MediaPlayerType == MediaPlayerType.Mpv;
 
+	/// <summary>fluentfin-mpv: the choices for who draws the player controls (docs/research/player-controls.md).</summary>
+	public static IReadOnlyList<MpvPlayerControlsChoice> PlayerControlsChoices { get; } =
+	[
+		new(MpvPlayerControls.FluentFin, "FluentFin"),
+		new(MpvPlayerControls.Mpv, "mpv"),
+	];
+
+	/// <summary>Used from the next playback on (a change restarts the backend then, docs/BRIDGE.md §3 window_locked).</summary>
+	public MpvPlayerControls PlayerControls
+	{
+		get => field;
+		set
+		{
+			if (SetProperty(ref field, value))
+			{
+				settings.MpvPlayerControls = value;
+				OnPropertyChanged(nameof(SelectedPlayerControls));
+			}
+		}
+	}
+
+	public MpvPlayerControlsChoice? SelectedPlayerControls
+	{
+		get => PlayerControlsChoices.FirstOrDefault(x => x.Controls == PlayerControls);
+		set
+		{
+			if (value is not null)
+			{
+				PlayerControls = value.Controls;
+			}
+		}
+	}
+
 	/// <summary>Empty = found automatically; see <see cref="SettingKeys.MpvBackendCommand"/>.</summary>
 	public string MpvBackendCommand
 	{
@@ -85,6 +124,7 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	{
 		MediaPlayerType = settings.MediaPlayer;
 		MpvBackendCommand = settings.MpvBackendCommand;
+		PlayerControls = settings.MpvPlayerControls;
 
 		_statusSubscription?.Dispose();
 		_statusSubscription = mpvBackend.StatusChanged

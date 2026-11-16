@@ -4,6 +4,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace FluentFin.Core.Mpv;
 
+/// <summary>One entry of the controls' audio or subtitles menu: a Jellyfin stream index (-1: subtitles off), its name, whether it plays.</summary>
+public sealed record MpvTrackChoice(int Index, string Label, bool IsSelected);
+
 /// <summary>What a key over the player does with FluentFin's controls (docs/research/player-controls.md).</summary>
 public enum MpvControlsAction
 {
@@ -36,6 +39,12 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>A seek just sent: the position shown stays where it went until the backend reports it there, at most this long.</summary>
 	public static readonly TimeSpan SeekSettle = TimeSpan.FromSeconds(2);
 
+	/// <summary>
+	/// A volume or mute change just made here: for this long the backend's state does not set them back (a state sent
+	/// before the change landed would, say, show 95 between two wheel notches that went 100, 95, 90).
+	/// </summary>
+	public static readonly TimeSpan AudioSettle = TimeSpan.FromSeconds(1.5);
+
 	public const int SmallSeekSeconds = 5;
 	public const int LargeSeekSeconds = 10;
 	public const int SkipBackSeconds = 10;
@@ -54,8 +63,10 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	private int _menusOpen;
 	private double _bottomBarFraction;
 	private double? _sentInset;
+	private bool _announced;
 	private int? _pendingVolume;
 	private bool _volumeInFlight;
+	private DateTimeOffset _audioChangedAt;
 
 	/// <param name="send">Sends one bridge command; never throws (the player page's sender logs and swallows).</param>
 	/// <param name="now">The clock; the page passes the real one, tests one they move.</param>
@@ -224,6 +235,9 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			case Bridge.Events.Item when e.DataAs<BridgeItem>() is { } item:
 				OnItem(item);
 				break;
+			case Bridge.Events.Tracks when e.DataAs<BridgeTracks>() is { } tracks:
+				OnTracks(tracks);
+				break;
 		}
 	}
 
@@ -233,8 +247,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		var position = CurrentPosition(now);
 		IsOpening = state.State == Bridge.States.Opening;
 		IsPaused = state.State == Bridge.States.Paused;
-		Volume = state.Volume;
-		IsMuted = state.Muted;
+		if (!_volumeInFlight && now - _audioChangedAt >= AudioSettle)
+		{
+			Volume = state.Volume;
+			IsMuted = state.Muted;
+		}
+
+		OnTrackIndices(state.AudioStreamIndex, state.SubtitleStreamIndex);
 		if (state.Queue is { ItemIds.Count: > 0 } queue)
 		{
 			CanPrevious = queue.Index > 0;
@@ -282,6 +301,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		{
 			DurationTicks = runtime;
 		}
+
+		// a new item: its own tracks come with the tracks event that follows this one
+		_audioTracks = [];
+		_subtitleTracks = [];
+		_audioIndex = null;
+		_subtitleIndex = null;
+		RebuildTrackChoices();
 
 		// a new item starts from its own position, not the last one's
 		_seekTarget = null;
@@ -364,6 +390,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		NotifyActivity();
 		IsMuted = !IsMuted;
+		_audioChangedAt = _now();
 		return _send(Bridge.Commands.SetMute, BridgeCommands.Mute(IsMuted));
 	}
 
@@ -380,6 +407,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 		volume = Math.Clamp(volume, 0, 100);
 		Volume = volume;
+		_audioChangedAt = _now();
 		if (IsMuted && volume > 0)
 		{
 			IsMuted = false;
@@ -411,6 +439,144 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		NotifyActivity();
 		SetFullScreen?.Invoke(!IsFullScreen);
+	}
+
+	// -- audio and subtitle tracks -------------------------------------------------------------------------------------
+
+	private IReadOnlyList<BridgeTrack> _audioTracks = [];
+	private IReadOnlyList<BridgeTrack> _subtitleTracks = [];
+	private int? _audioIndex;
+	private int? _subtitleIndex;
+
+	/// <summary>The audio menu: one entry per track of the item, the one playing selected.</summary>
+	[ObservableProperty]
+	public partial IReadOnlyList<MpvTrackChoice> AudioChoices { get; set; } = [];
+
+	/// <summary>The subtitles menu: "Off", then one entry per track, the one showing selected.</summary>
+	[ObservableProperty]
+	public partial IReadOnlyList<MpvTrackChoice> SubtitleChoices { get; set; } = [];
+
+	/// <summary>There is something to choose between (two audio tracks or more).</summary>
+	public bool HasAudioChoice => AudioChoices.Count > 1;
+
+	/// <summary>There is a subtitle track to turn on or off.</summary>
+	public bool HasSubtitleChoice => SubtitleChoices.Count > 1;
+
+	partial void OnAudioChoicesChanged(IReadOnlyList<MpvTrackChoice> value) => OnPropertyChanged(nameof(HasAudioChoice));
+
+	partial void OnSubtitleChoicesChanged(IReadOnlyList<MpvTrackChoice> value) => OnPropertyChanged(nameof(HasSubtitleChoice));
+
+	/// <summary>The <c>tracks</c> event: the item's streams, by Jellyfin index (docs/BRIDGE.md §5).</summary>
+	public void OnTracks(BridgeTracks tracks)
+	{
+		_audioTracks = tracks.Audio ?? [];
+		_subtitleTracks = tracks.Subtitle ?? [];
+		RebuildTrackChoices();
+	}
+
+	/// <summary>Which streams play now (the <c>state</c>'s indices); null is "not known", -1 subtitles off.</summary>
+	private void OnTrackIndices(int? audio, int? subtitle)
+	{
+		if (audio == _audioIndex && subtitle == _subtitleIndex)
+		{
+			return;
+		}
+
+		_audioIndex = audio;
+		_subtitleIndex = subtitle;
+		RebuildTrackChoices();
+	}
+
+	private void RebuildTrackChoices()
+	{
+		AudioChoices = [.. _audioTracks.Select(t => new MpvTrackChoice(t.Index, AudioLabel(t), t.Index == _audioIndex))];
+		SubtitleChoices = _subtitleTracks.Count == 0
+			? []
+			: [new MpvTrackChoice(-1, "Off", _subtitleIndex is null or -1), .. _subtitleTracks.Select(t => new MpvTrackChoice(t.Index, SubtitleLabel(t), t.Index == _subtitleIndex))];
+	}
+
+	/// <summary>The audio menu's pick (a Jellyfin stream index). The one playing already: nothing is sent.</summary>
+	public Task SetAudio(int index)
+	{
+		NotifyActivity();
+		if (index == _audioIndex)
+		{
+			return Task.CompletedTask;
+		}
+
+		_audioIndex = index;
+		RebuildTrackChoices();
+		return _send(Bridge.Commands.SetAudio, BridgeCommands.Index(index));
+	}
+
+	/// <summary>The subtitles menu's pick: a Jellyfin stream index, or -1 for off.</summary>
+	public Task SetSubtitle(int index)
+	{
+		NotifyActivity();
+		var current = _subtitleIndex ?? -1;
+		if (index == current)
+		{
+			return Task.CompletedTask;
+		}
+
+		_subtitleIndex = index;
+		RebuildTrackChoices();
+		return _send(Bridge.Commands.SetSubtitle, BridgeCommands.Index(index));
+	}
+
+	/// <summary>
+	/// An audio track's name: the server's display title ("English - Dolby Digital - 5.1"), else the language, else the
+	/// stream's position; the stream's own title ("Commentary") added when the display title does not already say it.
+	/// </summary>
+	public static string AudioLabel(BridgeTrack track) => WithStreamTitle(BaseLabel(track), track);
+
+	/// <summary>A subtitle track's name, as <see cref="AudioLabel"/>, with Forced, SDH and External added when the name does not say so.</summary>
+	public static string SubtitleLabel(BridgeTrack track)
+	{
+		var label = WithStreamTitle(BaseLabel(track), track);
+		var tags = new List<string>();
+		if (track.IsForced == true && !Says(label, "forced"))
+		{
+			tags.Add("Forced");
+		}
+
+		if (track.IsHearingImpaired == true && !Says(label, "sdh") && !Says(label, "hearing"))
+		{
+			tags.Add("SDH");
+		}
+
+		if (track.IsExternal && !Says(label, "external"))
+		{
+			tags.Add("External");
+		}
+
+		return tags.Count == 0 ? label : $"{label} · {string.Join(" · ", tags)}";
+	}
+
+	private static string BaseLabel(BridgeTrack track) =>
+		!string.IsNullOrWhiteSpace(track.Title) ? track.Title.Trim()
+		: !string.IsNullOrWhiteSpace(track.Language) ? LanguageName(track.Language.Trim())
+		: string.Create(CultureInfo.InvariantCulture, $"Track {track.Index}");
+
+	private static string WithStreamTitle(string label, BridgeTrack track) =>
+		string.IsNullOrWhiteSpace(track.StreamTitle) || Says(label, track.StreamTitle.Trim()) ? label : $"{label} ({track.StreamTitle.Trim()})";
+
+	private static bool Says(string label, string word) => label.Contains(word, StringComparison.OrdinalIgnoreCase);
+
+	/// <summary>"eng" or "en" as the language's English name; the code itself when .NET does not know it.</summary>
+	public static string LanguageName(string code)
+	{
+		try
+		{
+			var culture = CultureInfo.GetCultures(CultureTypes.NeutralCultures)
+				.FirstOrDefault(c => string.Equals(c.ThreeLetterISOLanguageName, code, StringComparison.OrdinalIgnoreCase)
+					|| string.Equals(c.TwoLetterISOLanguageName, code, StringComparison.OrdinalIgnoreCase));
+			return culture is null || string.IsNullOrEmpty(culture.Name) ? code : culture.EnglishName;
+		}
+		catch (CultureNotFoundException)
+		{
+			return code;
+		}
 	}
 
 	// -- mouse wheel: volume -------------------------------------------------------------------------------------------
@@ -471,11 +637,23 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		return SendInsetIfChanged();
 	}
 
-	/// <summary>Tells the backend FluentFin draws the controls (and where the subtitles go), once and on every change.</summary>
-	public Task SendControls() => SendInsetIfChanged(force: true);
+	/// <summary>
+	/// Tells the backend FluentFin draws the controls (and where the subtitles go), now and on every change after: the
+	/// page calls it once its playback was taken. Before that nothing is sent (no backend may be running yet).
+	/// </summary>
+	public Task SendControls()
+	{
+		_announced = true;
+		return SendInsetIfChanged(force: true);
+	}
 
 	private Task SendInsetIfChanged(bool force = false)
 	{
+		if (!_announced)
+		{
+			return Task.CompletedTask;
+		}
+
 		var inset = BridgeCommands.RoundInset(ControlsVisible ? _bottomBarFraction : 0);
 		if (!force && _sentInset == inset)
 		{

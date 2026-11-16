@@ -19,6 +19,27 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `signout_*`), not by driving FluentFin itself: its data folder can't be redirected, so a
   fake login would land in the real FluentFin settings.
 - **The libmpv path.** Only external mpv (mpv-CI 0.41 via winget) is installed and tested.
+- **"Player controls: FluentFin"** (opt-in, default mpv; docs\research\player-controls.md). Built
+  and measured off-screen only (`tools\ui-harness\composition-spike`, `tools\ui-harness\fluentfin-controls`).
+  Not seen on the real desktop: the real mouse (hover, wheel event, clicks, hidden pointer), Tab order
+  and Narrator, menus over the video, light/high-contrast themes; a DPI change, independent flip and
+  HDR on an HDR display (Windows HDR is off on every display here). Its libmpv (`vendor\libmpv`) is
+  downloaded per checkout, not in git: without it FluentFin falls back to mpv's controls and says so.
+
+## Player controls: FluentFin's (`ui\FluentFin\Mpv\MpvCompositionVideo.cs` and around)
+- **One crash domain**: mpv runs inside FluentFin, so an mpv or GPU-driver crash ends the app (a
+  `quit` only ends the core; the next playback makes a new one on a new pipe and restarts the backend).
+  The mpv choice keeps mpv out of process.
+- **No trickplay, skip intro/credits or Up Next yet** with FluentFin's controls: the bridge carries no
+  segments or tiles (the shim still skips automatically what its own settings say).
+- **What the shim's command line gave mpv is not there in attached mode**: thumbfast/mouse scripts
+  (unused: mpv's OSC is off) and `tls_*` client certificates (a server that needs one will not stream).
+  `hwdec` follows the shim's setting as on the other path (its default is `no`).
+- **The display is read when a playback starts**: a window moved to a display with another HDR state
+  or refresh rate mid-playback keeps the first one's until the next playback.
+- **A pause or volume change can be undone for a moment by a state echo**: volume and mute are held
+  for 1.5 s after a change (the wheel's case, measured); pause is not, a stale `state` can flip the
+  button back until the next one.
 
 ## UI (`ui\FluentFin.Core\Mpv`, `ui\FluentFin`)
 - **Play on a season starts at the series' first unplayed episode**, not the season's

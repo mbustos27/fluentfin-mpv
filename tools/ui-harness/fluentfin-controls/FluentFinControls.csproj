@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Phase 2b harness (docs/research/player-controls.md): FluentFin's own player controls (ui\FluentFin\Controls\
+       MpvPlayerControls.xaml, MpvControlsViewModel) over the in-process mpv (ui\FluentFin\Mpv\MpvCompositionVideo.cs),
+       with the REAL backend attached to it (connect.window "attached"). A WinUI window of its own, never FluentFin.exe.
+       Compiles this repo's (or -p:UiDir=<copy>'s) sources, references FluentFin.Core, copies libmpv-2.dll. Built and run
+       by run.ps1 from a copy under its -Out, never inside ui\. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>FluentFin</RootNamespace>
+    <AssemblyName>FluentFinControls</AssemblyName>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>preview</LangVersion>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <RepoDir Condition="'$(RepoDir)' == ''">$(MSBuildThisFileDirectory)..\..\..</RepoDir>
+    <UiDir Condition="'$(UiDir)' == ''">$(RepoDir)\ui</UiDir>
+    <CoreDir Condition="'$(CoreDir)' == ''">$(UiDir)\FluentFin.Core</CoreDir>
+    <ControlsHostDir Condition="'$(ControlsHostDir)' == ''">$(RepoDir)\tools\ui-harness\controls-host</ControlsHostDir>
+    <LibmpvDir Condition="'$(LibmpvDir)' == ''">$(RepoDir)\vendor\libmpv\20261111-git-bcde6b93cc</LibmpvDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="$(ControlsHostDir)\Shots.cs" Link="Linked\Shots.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\Libmpv.cs" Link="Linked\Libmpv.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\MpvInProcessCore.cs" Link="Linked\MpvInProcessCore.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\MpvSwapChainInterop.cs" Link="Linked\MpvSwapChainInterop.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\MpvCompositionVideo.cs" Link="Linked\MpvCompositionVideo.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\JobObject.cs" Link="Linked\JobObject.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\JobProcess.cs" Link="Linked\JobProcess.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Mpv\WindowsMpvBackendLauncher.cs" Link="Linked\WindowsMpvBackendLauncher.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Controls\MpvPlayerControls.xaml.cs" Link="Linked\MpvPlayerControls.xaml.cs" />
+    <Page Include="$(UiDir)\FluentFin\Controls\MpvPlayerControls.xaml" Link="Linked\MpvPlayerControls.xaml" />
+    <ProjectReference Include="$(CoreDir)\FluentFin.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(LibmpvDir)\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="fakeserver.py" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CheckLibmpv" BeforeTargets="Build">
+    <Error Condition="!Exists('$(LibmpvDir)\libmpv-2.dll')" Text="libmpv-2.dll not found in $(LibmpvDir): download it as vendor\libmpv\VENDORED.md says" />
+  </Target>
+</Project>

@@ -63,9 +63,25 @@ flip mode, HDR on an HDR display), so "every row passes on this PC" does not hol
 
 ## Phase 2b: FluentFin's controls over the composition video
 
+Built (`wip/player-controls`), measured off-screen in `tools\ui-harness\fluentfin-controls` (32 checks
+against the real backend attached to FluentFin's mpv; pictures in its `shots\`).
+
+| Piece | Where |
+|---|---|
+| libmpv in FluentFin, composition mode, the swap chain in the page's panel, its size, scale and display (HDR hint when Windows HDR is on, the refresh rate) | `ui\FluentFin\Mpv\MpvInProcessCore.cs`, `MpvCompositionVideo.cs`, `MpvSwapChainInterop.cs`, `Libmpv.cs` |
+| Which video the backend gets: the setting, and libmpv being there | `MpvVideoSurfaceChoice.cs` (`IMpvVideoSurface.GetWindowAsync`) |
+| The controls: top bar (back, series, "S1E2 · Episode"), seek bar with times, play/pause, -10 s, +30 s, Next episode, volume (flyout with slider and mute), audio and subtitle menus (Jellyfin names, Forced/SDH/External, "Off"), full screen; auto-hide after 3 s with the pointer; wheel = volume with an indicator | `ui\FluentFin\Controls\MpvPlayerControls.xaml(.cs)` over `ui\FluentFin.Core\Mpv\MpvControlsViewModel.cs` |
+| The page: the controls instead of the child window, keys before a focused button, Escape stays the page's | `VideoPlayerPage.xaml(.cs)`, `VideoPlayerViewModel.Mpv.cs` |
+| The setting | Settings, "Player controls" (`SettingKeys.MpvPlayerControls`), shown with the MPV player |
+
+Not in this phase: trickplay previews, skip intro/credits, Up Next (the bridge does not carry segments
+or tiles yet; the shim still auto-skips what its settings say), the Tab order through
+the bar and Narrator checks (phase 3).
+
 - **Setting**: Settings → Playback, "Player controls: FluentFin / mpv". `mpv` is today's path,
   unchanged (`--wid`, the shim's OSC). `FluentFin` is B1. The default is FluentFin only if every row
-  of the go/no-go table passed on this PC.
+  of the go/no-go table passed on this PC: it is **mpv** (three rows not verified). Without
+  `libmpv-2.dll` next to FluentFin.exe the choice falls back to mpv's controls with a notice.
 - **Protocol** (docs\BRIDGE.md): `connect.window` gains `{"mode": "attached", "ipc": "<pipe>"}`: the
   UI's own mpv listens on that pipe before `connect` and lives as long as the backend; the backend
   attaches through the shim's external backend and never starts, quits, sizes or fullscreens it.
@@ -101,5 +117,9 @@ the real desktop, since the off-screen tools cannot see a no-redirection window.
 ## Open, for the user's eyes
 
 - HDR on an HDR display, independent flip, and a DPI change are not verifiable off-screen (table).
-- The caption of the main window, the light theme and Narrator over the new bar have not been seen
-  on the real desktop.
+- On the real desktop, not seen yet: the real mouse (hover, the wheel's own event, click and
+  double-click, the hidden pointer), the keyboard focus and Tab order through the bar, the menus over
+  the video, light theme and high contrast, Narrator. Off-screen the harness drives the view model, the
+  way those handlers do.
+- One crash domain: an mpv or GPU driver crash now ends FluentFin (the setting's mpv choice keeps mpv
+  out of process).

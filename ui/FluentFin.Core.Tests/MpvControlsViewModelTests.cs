@@ -185,6 +185,45 @@ public sealed class MpvControlsViewModelTests
 	}
 
 	[Fact]
+	public void A_state_sent_before_a_volume_change_landed_does_not_put_the_old_volume_back()
+	{
+		Playing();
+		_ = _vm.Wheel(-MpvControlsViewModel.WheelNotch);
+		_ = _vm.Wheel(-MpvControlsViewModel.WheelNotch);
+		Assert.Equal(70, _vm.Volume);
+
+		// the backend's echo of the first notch, sent before the second landed (measured in tools\ui-harness\fluentfin-controls)
+		_vm.OnState(new BridgeState { State = Bridge.States.Playing, Volume = 75 });
+		Assert.Equal(70, _vm.Volume);
+		Assert.Equal("70 %", _vm.VolumeText);
+
+		Wait(2);
+		_vm.OnState(new BridgeState { State = Bridge.States.Playing, Volume = 70 });
+		Assert.Equal(70, _vm.Volume);
+
+		// later, a change made elsewhere (a remote control) is shown
+		Wait(2);
+		_vm.OnState(new BridgeState { State = Bridge.States.Playing, Volume = 40, Muted = true });
+		Assert.Equal(40, _vm.Volume);
+		Assert.True(_vm.IsMuted);
+	}
+
+	[Fact]
+	public void Nothing_is_sent_about_the_bar_before_the_page_announces_its_controls()
+	{
+		// the view measures its bar as soon as it is laid out, before any backend runs
+		_vm.SetBottomBarFraction(0.18);
+		Wait(3.1);
+		_vm.NotifyActivity();
+		Assert.DoesNotContain(_sent, x => x.Command == Bridge.Commands.SetControls);
+
+		_vm.SendControls();
+		Wait(3.1);
+		var insets = _sent.Where(x => x.Command == Bridge.Commands.SetControls).Select(x => (double)x.Args!["subtitleInset"]!).ToList();
+		Assert.Equal([0.18, 0.0], insets);
+	}
+
+	[Fact]
 	public void Keys_map_like_FluentFins_player_and_the_web_conventions()
 	{
 		var k = MpvControlsViewModel.Keys.K;

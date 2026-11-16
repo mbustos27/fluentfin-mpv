@@ -12,6 +12,9 @@ public interface ISettings
 	/// <summary>Command that starts the mpv backend, see <see cref="SettingKeys.MpvBackendCommand"/>. Empty = automatic.</summary>
 	string MpvBackendCommand { get; set; }
 
+	/// <summary>fluentfin-mpv: who draws the controls over the mpv player's video, see <see cref="SettingKeys.MpvPlayerControls"/>.</summary>
+	MpvPlayerControls MpvPlayerControls { get; set; }
+
 	void ListenToChanges();
 
 	void SaveServerDetails();
@@ -33,6 +36,12 @@ public partial class Settings(ILocalSettingsService localSettingsService) : Obse
 	{
 		get => localSettingsService.ReadSetting(SettingKeys.MpvBackendCommand) ?? "";
 		set => localSettingsService.SaveSetting(SettingKeys.MpvBackendCommand, value ?? "");
+	}
+
+	public MpvPlayerControls MpvPlayerControls
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.MpvPlayerControls);
+		set => localSettingsService.SaveSetting(SettingKeys.MpvPlayerControls, value);
 	}
 
 	public void SaveServerDetails() => localSettingsService.SaveSetting(SettingKeys.Servers, Servers);

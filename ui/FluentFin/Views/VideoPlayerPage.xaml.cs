@@ -18,7 +18,10 @@ namespace FluentFin.Views;
 public sealed partial class VideoPlayerPage : Page
 {
 	private readonly MpvVideoHost _videoHost = App.GetService<MpvVideoHost>();
+	// fluentfin-mpv player controls: the in-process mpv's video, shown in MpvControlsView instead of the window above
+	private readonly MpvCompositionVideo _composition = App.GetService<MpvCompositionVideo>();
 	private bool _videoAttached;
+	private bool _attachedComposition;
 	private bool _mpvFullScreen;
 
 	/// <summary>This page's frame navigated away from it (the only way the page hears it was left).</summary>
@@ -44,7 +47,7 @@ public sealed partial class VideoPlayerPage : Page
 		ViewModel.ToggleFullScreen = () => MediaPlayerHost.OnPlayerDoubleTapped(MediaPlayerHost, new Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs());
 		ViewModel.SetFullScreen = SetMpvFullScreen;
 		ViewModel.IsFullScreen = () => App.MainWindow.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
-		ViewModel.FocusVideo = () => _videoHost.Focus();
+		ViewModel.FocusVideo = FocusVideo;
 		ViewModel.GoBack = GoBack;
 	}
 
@@ -89,8 +92,13 @@ public sealed partial class VideoPlayerPage : Page
 			case nameof(VideoPlayerViewModel.IsMpv) when ViewModel.IsMpv && IsLoaded:
 				AttachVideo();
 				break;
-			case nameof(VideoPlayerViewModel.IsMpvVideoVisible) when _videoAttached:
+			case nameof(VideoPlayerViewModel.IsMpvVideoVisible) when _videoAttached && !_attachedComposition:
 				_videoHost.SetVideoVisible(ViewModel.IsMpvVideoVisible);
+				break;
+			case nameof(VideoPlayerViewModel.UsesFluentFinControls) when _videoAttached && ViewModel.UsesFluentFinControls != _attachedComposition:
+				// fluentfin-mpv player controls: decided when the page opened; attached before that, so attached again
+				DetachVideo();
+				AttachVideo();
 				break;
 		}
 	}
@@ -102,8 +110,19 @@ public sealed partial class VideoPlayerPage : Page
 			return;
 		}
 
-		_videoHost.Attach(MpvVideoArea);
-		_videoHost.SetVideoVisible(ViewModel.IsMpvVideoVisible);
+		_attachedComposition = ViewModel.UsesFluentFinControls;
+		if (_attachedComposition)
+		{
+			// fluentfin-mpv player controls: no window over the page; mpv's swap chain in the controls' panel
+			_composition.CoreLost += OnCompositionCoreLost;
+			_composition.Attach(MpvControlsView.VideoSurface);
+		}
+		else
+		{
+			_videoHost.Attach(MpvVideoArea);
+			_videoHost.SetVideoVisible(ViewModel.IsMpvVideoVisible);
+		}
+
 		_videoAttached = true;
 	}
 
@@ -114,8 +133,17 @@ public sealed partial class VideoPlayerPage : Page
 			return;
 		}
 
-		// a player page that replaced this one may already have taken the window over
-		_videoHost.Detach(MpvVideoArea);
+		// a player page that replaced this one may already have taken the window (or the video) over
+		if (_attachedComposition)
+		{
+			_composition.CoreLost -= OnCompositionCoreLost;
+			_composition.Detach(MpvControlsView.VideoSurface);
+		}
+		else
+		{
+			_videoHost.Detach(MpvVideoArea);
+		}
+
 		_videoAttached = false;
 	}
 
@@ -170,6 +198,33 @@ public sealed partial class VideoPlayerPage : Page
 		return (Frame is { } frame && setup.Frame == frame ? setup : App.GetService<INavigationService>()).GoBack();
 	}
 
+	/// <summary>fluentfin-mpv player controls: the keyboard to the player (the controls take it), or to mpv's window.</summary>
+	private void FocusVideo()
+	{
+		if (_attachedComposition)
+		{
+			MpvControlsView.Focus(FocusState.Programmatic);
+		}
+		else
+		{
+			_videoHost.Focus();
+		}
+	}
+
+	/// <summary>
+	/// fluentfin-mpv player controls: the player's keys anywhere on the page (Space, arrows, F, M, ...), before a focused
+	/// button or slider takes them. Escape stays the page's accelerator (full screen off, else back).
+	/// </summary>
+	private void OnMpvPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+	{
+		if (ViewModel.UsesFluentFinControls && e.Key != VirtualKey.Escape && MpvControlsView.HandleKey(e.Key))
+		{
+			e.Handled = true;
+		}
+	}
+
+	private void OnCompositionCoreLost() => ViewModel.OnMpvCoreLost();
+
 	// fluentfin-mpv: closed by its button: gone in the view model too, so the next notice shows even with the same text
 	private void OnMpvNoticeCloseButtonClick(InfoBar sender, object args) => ViewModel.DismissMpvNotice();
 
@@ -178,6 +233,8 @@ public sealed partial class VideoPlayerPage : Page
 	public Visibility CollapsedIf(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
 
 	public bool HasText(string? value) => !string.IsNullOrEmpty(value);
+
+	public Visibility VisibleIfBoth(bool first, bool second) => first && second ? Visibility.Visible : Visibility.Collapsed;
 
 	public InfoBarSeverity SeverityOf(bool isError) => isError ? InfoBarSeverity.Error : InfoBarSeverity.Informational;
 }

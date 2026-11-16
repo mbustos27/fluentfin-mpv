@@ -26,8 +26,12 @@
         <!--
             MPV player: the backend's mpv draws into a Win32 child window that FluentFin keeps exactly over MpvVideoArea.
             XAML cannot draw over that window, so the message bar has its own row above it; transport controls are mpv's OSC.
+            fluentfin-mpv player controls: or (Player controls: FluentFin) MpvControlsView shows an mpv inside FluentFin.
         -->
-        <Grid x:Name="MpvRoot" Visibility="{x:Bind VisibleIf(ViewModel.IsMpv), Mode=OneWay}">
+        <Grid
+            x:Name="MpvRoot"
+            PreviewKeyDown="OnMpvPreviewKeyDown"
+            Visibility="{x:Bind VisibleIf(ViewModel.IsMpv), Mode=OneWay}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -61,6 +65,13 @@
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{ThemeResource BodyTextBlockStyle}"
                     Text="{x:Bind ViewModel.MpvStatusText, Mode=OneWay}" />
+
+                <!--  fluentfin-mpv player controls (Settings, Player controls: FluentFin): the video of an mpv inside FluentFin with FluentFin's controls over it, no window on top  -->
+                <controls:MpvPlayerControls
+                    x:Name="MpvControlsView"
+                    Controls="{x:Bind ViewModel.MpvControls, Mode=OneWay}"
+                    IsTabStop="True"
+                    Visibility="{x:Bind VisibleIfBoth(ViewModel.UsesFluentFinControls, ViewModel.IsMpvVideoVisible), Mode=OneWay}" />
             </Grid>
         </Grid>
     </Grid>

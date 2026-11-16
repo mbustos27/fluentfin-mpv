@@ -66,6 +66,19 @@
                     ItemsSource="{x:Bind vm:SettingsViewModel.MediaPlayers}"
                     SelectedItem="{x:Bind ViewModel.SelectedMediaPlayer, Mode=TwoWay}" />
             </ctk:SettingsCard>
+            <!--  fluentfin-mpv: who draws the controls over the mpv player's video (docs/research/player-controls.md)  -->
+            <ctk:SettingsCard
+                Description="FluentFin: FluentFin's own controls over the video, with mpv running inside FluentFin. mpv: mpv's on-screen controls. Used from the next playback."
+                Header="Player controls"
+                HeaderIcon="{ui:FontIcon Glyph=&#xE768;}"
+                Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                <ComboBox
+                    x:Name="PlayerControlsBox"
+                    AutomationProperties.Name="Player controls"
+                    DisplayMemberPath="Name"
+                    ItemsSource="{x:Bind vm:SettingsViewModel.PlayerControlsChoices}"
+                    SelectedItem="{x:Bind ViewModel.SelectedPlayerControls, Mode=TwoWay}" />
+            </ctk:SettingsCard>
             <ctk:SettingsCard
                 Description="Leave empty to find it automatically. Otherwise the command up to --config-dir, for example C:\jellyfin-mpv-shim\.venv\Scripts\python.exe -I -m jellyfin_mpv_shim.bridge. Used the next time the backend starts."
                 Header="MPV backend command"
