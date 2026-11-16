@@ -235,6 +235,7 @@ public sealed class DiaryViewModelTests : IDisposable
 
 		_vm.MirrorRating = true;
 		_vm.AutoLog = true;
+		await _vm.SettingsSaved;
 
 		Assert.Equal(new JournalSettings { AutoLog = true, MirrorRatingToJellyfin = true }, _journal.Store.GetSettings());
 	}

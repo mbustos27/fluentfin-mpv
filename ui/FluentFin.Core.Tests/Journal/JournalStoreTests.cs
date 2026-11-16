@@ -26,11 +26,11 @@ public sealed class JournalStoreTests : IDisposable
 	};
 
 	[Fact]
-	public void ANewFile_GetsSchema1_WithEveryTable()
+	public void ANewFile_GetsTheLatestSchema_WithEveryTable()
 	{
 		Store.EnsureOpen();
 
-		Assert.Equal(1, Store.GetSchemaVersion());
+		Assert.Equal(2, Store.GetSchemaVersion());
 		Assert.Equal(JournalStore.SchemaVersion, Store.GetSchemaVersion());
 		Assert.True(File.Exists(Path.Combine(_journal.Folder, "journal.db")));
 
@@ -57,7 +57,7 @@ public sealed class JournalStoreTests : IDisposable
 		Store.Dispose();
 
 		using var again = new JournalStore(Store.Path);
-		Assert.Equal(1, again.GetSchemaVersion());
+		Assert.Equal(2, again.GetSchemaVersion());
 		Assert.Equal(added.Id, Assert.Single(again.GetEntries(TempJournal.Alice)).Id);
 	}
 
@@ -90,7 +90,7 @@ public sealed class JournalStoreTests : IDisposable
 
 		Store.EnsureOpen();
 
-		Assert.Equal(1, Store.GetSchemaVersion());
+		Assert.Equal(2, Store.GetSchemaVersion());
 		var aside = Assert.Single(Directory.GetFiles(_journal.Folder, "journal.db.corrupt-*"));
 		Assert.StartsWith("this is not a database", File.ReadAllText(aside));
 	}

@@ -110,10 +110,27 @@ public sealed class JournalService
 		NotifyChanged(profile);
 		if (value > 0 && Store.GetSettings().MirrorRatingToJellyfin)
 		{
-			await Server.SetRatingAsync(item.Id, value, cancellationToken);
+			await AskAsync(() => Server.SetRatingAsync(item.Id, value, cancellationToken), false, cancellationToken).ConfigureAwait(false);
 		}
 
 		return true;
+	}
+
+	/// <summary>
+	/// A request to the server that, whatever happens, answers <paramref name="failed"/> instead of throwing (but for our own
+	/// cancellation). <see cref="IJournalServer"/> promises not to throw; this holds the journal to that if it ever does.
+	/// </summary>
+	internal async Task<T> AskAsync<T>(Func<Task<T>> request, T failed, CancellationToken cancellationToken = default)
+	{
+		try
+		{
+			return await request().ConfigureAwait(false);
+		}
+		catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+		{
+			Logger.LogWarning("Journal: a request to Jellyfin failed: {Error}", ex.GetType().Name);
+			return failed;
+		}
 	}
 
 	/// <summary>
@@ -143,7 +160,13 @@ public sealed class JournalService
 					continue;
 				}
 
-				var data = await Server.GetUserDataAsync(action.ItemId, cancellationToken);
+				var data = await AskAsync(() => Server.GetUserDataAsync(action.ItemId, cancellationToken), null, cancellationToken).ConfigureAwait(false);
+				if (Session.Current != profile)
+				{
+					// the answer may be another user's, and the next request would be sent as them
+					return;
+				}
+
 				if (data is null)
 				{
 					Store.FailPendingAction(action.Id, "user data not readable");
@@ -152,7 +175,7 @@ public sealed class JournalService
 
 				// the server has this play already (the report may have arrived after all)
 				var done = data.Played && data.LastPlayedDate is { } last && last >= action.At - JournalSync.SamePlayWindow;
-				if (!done && !await Server.MarkPlayedAsync(action.ItemId, action.At, cancellationToken))
+				if (!done && !await AskAsync(() => Server.MarkPlayedAsync(action.ItemId, action.At, cancellationToken), false, cancellationToken).ConfigureAwait(false))
 				{
 					Store.FailPendingAction(action.Id, "mark played refused");
 					continue;

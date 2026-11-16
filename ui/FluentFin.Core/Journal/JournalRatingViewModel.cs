@@ -78,7 +78,8 @@ public sealed partial class JournalRatingViewModel(JournalService journal, ILogg
 	{
 		try
 		{
-			await journal.SetRatingAsync(item, value);
+			// the write (and a mirror to Jellyfin) never on the UI thread a click came from
+			await Task.Run(() => journal.SetRatingAsync(item, value));
 		}
 		catch (Exception ex)
 		{

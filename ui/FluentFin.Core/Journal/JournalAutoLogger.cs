@@ -174,9 +174,18 @@ public sealed class JournalAutoLogger : IDisposable
 			}
 		}
 
-		// the server is asked only while FluentFin is still signed in as the server and user the session was played as
+		// the server is asked only while FluentFin is still signed in as the server and user the session was played as, and an
+		// answer counts only if that is still so when it arrives (the server answers as whoever is signed in)
 		var canAsk = _journal.Session.Current == profile;
-		var item = canAsk ? await _journal.Server.GetItemAsync(play.ItemId) : null;
+		var item = canAsk ? await _journal.AskAsync(() => _journal.Server.GetItemAsync(play.ItemId), null) : null;
+		var after = play.Outcome == BridgeReported.Sent && canAsk ? item?.UserData ?? await _journal.AskAsync(() => _journal.Server.GetUserDataAsync(play.ItemId), null) : null;
+		if (canAsk && _journal.Session.Current != profile)
+		{
+			canAsk = false;
+			item = null;
+			after = null;
+		}
+
 		if (item is not null && !item.IsEpisode)
 		{
 			return;
@@ -188,7 +197,16 @@ public sealed class JournalAutoLogger : IDisposable
 			return;
 		}
 
-		var after = play.Outcome == BridgeReported.Sent && canAsk ? item?.UserData ?? await _journal.Server.GetUserDataAsync(play.ItemId) : null;
+		Log(play, profile, item, before, after, canAsk);
+		if (canAsk && play.Outcome == BridgeReported.Sent)
+		{
+			// the server answers again: anything still owed can go now
+			await _journal.DrainPendingAsync(profile);
+		}
+	}
+
+	private void Log(PlayCompleted play, JournalProfile profile, JournalEpisode? item, JournalUserData? before, JournalUserData? after, bool canAsk)
+	{
 		var decision = AutoLogRules.Decide(play, before, after, canAsk);
 		if (!decision.Log)
 		{
@@ -198,7 +216,9 @@ public sealed class JournalAutoLogger : IDisposable
 
 		var store = _journal.Store;
 		var watchedAt = play.EndedAt ?? _journal.Clock.GetUtcNow();
-		var entry = store.AddEntry(profile, new DiaryEntry
+		// checked and added in one transaction: not when an earlier session of this same play (a restart near the end) or a
+		// sync already logged it
+		var entry = store.AddPlayedSession(profile, new DiaryEntry
 		{
 			ItemId = play.ItemId,
 			SeriesId = item?.SeriesId,
@@ -213,14 +233,15 @@ public sealed class JournalAutoLogger : IDisposable
 			WatchedAt = watchedAt,
 			DateSource = DiaryDateSource.Session,
 			Source = DiaryEntrySource.AutoLog,
-			Rewatch = store.HasEntryFor(profile, play.ItemId) || before?.Played == true,
+			// the store also makes it a rewatch when the episode already has an entry
+			Rewatch = before?.Played == true,
 			PlaySessionId = play.PlaySessionId,
 			OnServer = decision.OnServer,
-		});
+		}, play.OpenedAt);
 
 		if (entry is null)
 		{
-			// the same play session was logged meanwhile
+			_logger.LogInformation("Journal: play session {PlaySession} of {ItemId} is already in the journal", play.PlaySessionId, play.ItemId);
 			return;
 		}
 
@@ -231,11 +252,6 @@ public sealed class JournalAutoLogger : IDisposable
 		}
 
 		_journal.NotifyChanged(profile);
-		if (canAsk && play.Outcome == BridgeReported.Sent)
-		{
-			// the server answers again: anything still owed can go now
-			await _journal.DrainPendingAsync(profile);
-		}
 	}
 
 	private sealed record Opened(JournalProfile? Profile, Task<JournalUserData?> Baseline);

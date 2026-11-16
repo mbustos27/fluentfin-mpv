@@ -34,7 +34,7 @@ and it is private to this PC. There is no TMDB yet; everything uses Jellyfin met
   - `Controls/HalfStarRating`, `Controls/JournalRatingPanel`.
   - App wiring is tested in `ui/FluentFin.Tests/JournalPluginTests.cs`.
 
-## Storage: `journal.db`, schema 1
+## Storage: `journal.db`, schema 2
 
 `PRAGMA user_version` is the schema version. `JournalStore.Migrations` lists the steps; each one runs in a transaction
 together with its `user_version`. Never edit a step that has shipped: add one.
@@ -42,16 +42,23 @@ together with its `user_version`. Never edit a step that has shipped: add one.
 | Table | What |
 |---|---|
 | `profiles` | One row per journal: `server_id` (lower case) and `user_id` (N format), plus display names. |
-| `entries` | One watch of one episode. <ul><li>Ids and names of the episode, season and series; S/E numbers; runtime.</li><li>Image tags: the episode still, and the series poster as fallback.</li><li>`watched_at` (fixed-width UTC text, or NULL for "date unknown").</li><li>`date_source`: `session` / `playback_reporting` / `last_played` / `manual` / `unknown`; `last_played` and `unknown` are "approximate".</li><li>`source`: `auto` / `backfill` / `catchup` / `manual`.</li><li>`rewatch`, `review`, `spoiler`, `play_session_id`.</li><li>`on_server`: 0 while a mark-played is owed.</li><li>`deleted_at`: deletes are tombstones.</li></ul> A unique index on (`profile_id`, `play_session_id`) is the auto-log dedupe. |
+| `entries` | One watch of one episode. <ul><li>Ids and names of the episode, season and series; S/E numbers; runtime.</li><li>Image tags: the episode still, and the series poster as fallback.</li><li>`watched_at` (fixed-width UTC text, or NULL for "date unknown").</li><li>`date_source`: `session` / `playback_reporting` / `last_played` / `manual` / `unknown`; `last_played` and `unknown` are "approximate".</li><li>`source`: `auto` / `backfill` / `catchup` / `manual`.</li><li>`rewatch`, `review`, `spoiler`, `play_session_id`.</li><li>`on_server`: 0 while a mark-played is owed.</li><li>`deleted_at`: deletes are tombstones.</li><li>`logged_at` (schema 2): the date the play was logged with. Editing or clearing `watched_at` leaves it, and every "already in the journal?" check uses it, so an edited date never makes a sync add the play again.</li></ul> A unique index on (`profile_id`, `play_session_id`) backs the auto-log dedupe. |
 | `ratings` | Per item (series, season or episode), 1-10. The diary shows the episode's rating; there is no per-watch rating yet. |
 | `statuses` | Placeholder for Watching / Completed / Paused / Dropped / Watchlist (increment 2). |
 | `sync_state` | Per journal: last sync start, backfill time, whether Playback Reporting was readable, the last error. |
 | `pending_actions` | Writes owed to Jellyfin (`mark_played` with its date and entry). Dropped after 20 failed attempts. |
 | `settings` | `auto_log` (1), `rating_prompt` (Off), `mirror_rating` (0); shared by every journal on this PC. |
 
-- A file that is not a database is kept as `journal.db.corrupt-<time>` and a new one starts.
+- The file is checked at open with `PRAGMA quick_check`, which reads every page: the header alone says nothing about the
+  pages behind it. A damaged file, or one that is not a database, is kept as `journal.db.corrupt-<time>` and a new one
+  starts.
+- Damage found later (a query fails with SQLITE_CORRUPT/NOTADB) closes the file and shows "damaged" on the Diary. The next
+  use checks it again, keeps it aside and starts a new journal.
+- Every SQLite failure reaches the pages as `JournalUnavailableException`, never a raw `SqliteException`.
 - A file with a newer schema is left untouched, and the journal is off: no entries, no rating panel, an error on the Diary.
 - The app always runs on.
+- The check and the insert are one transaction: for the auto-logger (`AddPlayedSession`) and for each sync page
+  (`AddSyncedEntries`). A sync and the auto-logger can't both add the same play.
 
 ## Auto-log (decision 3)
 
@@ -92,7 +99,18 @@ On `reported` (`AutoLogRules`):
 Each logged entry gets:
 - **Date:** the session's `ended` time (`date_source = session`).
 - **Rewatch:** when the episode is already in the diary, or Jellyfin had it as played before.
-- **Dedupe:** by play session id, deleted entries included.
+- **Dedupe**, deleted entries included:
+  - by play session id;
+  - a track or quality change restarts the stream on a new play session (the old one gets `failed`). An auto-logged
+    entry of the item dated at or after this session opened is the same watch, so a change at 95 % is not logged twice
+    or as a rewatch.
+  - a synced entry of the item dated no earlier than 10 minutes before this session opened: a sync logged this play
+    from the server first.
+
+Robustness:
+- Server answers count only while FluentFin is still signed in as the journal's user when they arrive.
+- A server that throws, such as HttpClient's own timeout (a `TaskCanceledException` nobody asked for), counts as "did not
+  answer". `JellyfinClient_Journal` catches it too.
 
 The rules for the crash case and for other players:
 - A backend that crashes never sends `reported`. Its play is picked up by the next catch-up, if the server counted it
@@ -109,14 +127,27 @@ Each sync asks `GET /Items` for played episodes, `SortBy=DatePlayed` descending,
   - Never marked rewatch.
 - **Later syncs (catch-up):**
   - Reads down to the last sync start minus a day of overlap, for clock differences.
-  - Skips an episode that already has an entry (deleted ones too) at or after its `LastPlayedDate` minus 12 h: the
-    auto-logged play, or one synced before.
+  - Skips an episode that already has an entry (deleted ones too) logged at or after **the date this sync would write**,
+    minus 12 h: the auto-logged play, or one synced before. That date is the Playback Reporting date when there is one, so
+    marking a series played elsewhere does not duplicate plays the plugin dated.
   - A new play of an episode already in the diary is a rewatch.
 - **Playback Reporting (when readable):**
   - Request: `POST /user_usage_stats/submit_custom_query`, with
     `SELECT DateCreated, ItemId, PlayDuration FROM PlaybackActivity WHERE <user> AND ItemType='Episode'`.
   - The episode's latest play gives the exact date: its start plus its duration (`playback_reporting`).
-- **Failure:** a failed page keeps the last sync time, so the next sync covers the same ground.
+  - The plugin stores the server's local time with no zone. Its source (read 2026-11-15) does
+    `PlaybackInfo(date: DateTime.Now)` and writes a Local `DateTime` as `yyyy-MM-dd HH:mm:ss.FFFFFFF`.
+  - So times are read as this PC's local time (a home server is usually in the same zone).
+  - The sync then compares them with Jellyfin's own UTC `LastPlayedDate` of the same plays. Jellyfin sets it when the play
+    starts, and the plugin records it then too.
+  - When the median difference over at least 3 plays (within 14 h) is 30 minutes or more, the server runs in another
+    zone: every plugin date is moved by that, to the quarter hour. A zone with different daylight-saving dates can still
+    be an hour off for part of the year.
+- **Failure:** a failed page, or a server that throws, keeps the last sync time, so the next sync covers the same ground.
+- **Account switch:** every answer is checked against who is signed in once it arrives. After a switch the sync stops, writes
+  nothing more and does not save its state; pages read before the switch stay. The queued writes stop the same way.
+- **Threads:** the sync runs on the thread pool whoever starts it (the Sync button), a page (200 episodes) per transaction.
+  Rating clicks and settings switches are written off the UI thread too.
 - **Concurrency:** one sync at a time.
 
 ## UI
@@ -161,11 +192,12 @@ Each sync asks `GET /Items` for played episodes, `SortBy=DatePlayed` descending,
 1. Does Jellyfin raise `PlayCount` and reset `Played` at playback start? The rules are safe either way; this only
    decides how often the session's own end is what counts.
 2. Does `POST /UserItems/{id}/UserData` with `Rating` stick on the user's server? That is why mirroring defaults off.
-3. Playback Reporting:
-   - Is the custom-query endpoint there?
-   - Is the answer's shape `colums` / `results`?
-   - Is `DateCreated` UTC or the server's local time? It is read as UTC, so it may be hours off.
-   - Is the endpoint administrators only? A 403 is handled quietly.
+3. Playback Reporting against the user's server.
+   - Settled from the plugin's source (master, read 2026-11-15):
+     - the endpoint and its `colums` / `results` / `message` answer;
+     - `RequiresElevation` (administrators only; a 403 is handled quietly);
+     - `DateCreated` is server-local time with no zone (handled above).
+   - Not tried yet: whether the user has the plugin and is an administrator, and the clock-shift check on real data.
 4. How many of the user's series lack a TMDB id (matters for the TMDB layer).
 
 ## Visual check still to do

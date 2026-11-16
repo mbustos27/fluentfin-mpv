@@ -20,7 +20,7 @@ public partial class JellyfinClient : IJournalServer
 			var data = await _jellyfinApiClient.UserItems[itemId].UserData.GetAsync(x => x.QueryParameters.UserId = UserId, cancellationToken);
 			return data is null ? null : ToJournal(data);
 		}
-		catch (Exception ex) when (ex is not OperationCanceledException)
+		catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
 		{
 			logger.LogWarning("Journal: reading the user data of {ItemId} failed: {Error}", itemId, JournalError(ex));
 			return null;
@@ -34,7 +34,7 @@ public partial class JellyfinClient : IJournalServer
 			var dto = await _jellyfinApiClient.Items[itemId].GetAsync(x => x.QueryParameters.UserId = UserId, cancellationToken);
 			return dto is null ? null : ToJournal(dto);
 		}
-		catch (Exception ex) when (ex is not OperationCanceledException)
+		catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
 		{
 			logger.LogWarning("Journal: reading item {ItemId} failed: {Error}", itemId, JournalError(ex));
 			return null;
@@ -69,7 +69,7 @@ public partial class JellyfinClient : IJournalServer
 
 			return new JournalPage<JournalEpisode>([.. (result.Items ?? []).Select(ToJournal).OfType<JournalEpisode>()], result.TotalRecordCount);
 		}
-		catch (Exception ex) when (ex is not OperationCanceledException)
+		catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
 		{
 			logger.LogWarning("Journal: reading the played episodes from {Start} failed: {Error}", startIndex, JournalError(ex));
 			return null;
@@ -87,7 +87,7 @@ public partial class JellyfinClient : IJournalServer
 			}, cancellationToken);
 			return true;
 		}
-		catch (Exception ex) when (ex is not OperationCanceledException)
+		catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
 		{
 			logger.LogWarning("Journal: marking {ItemId} played failed: {Error}", itemId, JournalError(ex));
 			return false;
@@ -101,7 +101,7 @@ public partial class JellyfinClient : IJournalServer
 			await _jellyfinApiClient.UserItems[itemId].UserData.PostAsync(new UpdateUserItemDataDto { Rating = rating }, x => x.QueryParameters.UserId = UserId, cancellationToken);
 			return true;
 		}
-		catch (Exception ex) when (ex is not OperationCanceledException)
+		catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
 		{
 			logger.LogWarning("Journal: sending the rating of {ItemId} to Jellyfin failed: {Error}", itemId, JournalError(ex));
 			return false;
@@ -138,7 +138,7 @@ public partial class JellyfinClient : IJournalServer
 				return PlaybackHistory.Unavailable($"HTTP {response.StatusCode}");
 			}
 
-			var history = PlaybackReportingQuery.Parse(await response.GetStringAsync());
+			var history = PlaybackReportingQuery.Parse(await response.GetStringAsync(), TimeZoneInfo.Local);
 			if (!history.Available)
 			{
 				logger.LogWarning("Journal: the Playback Reporting history was not readable: {Reason}", history.Reason);
@@ -179,6 +179,8 @@ public partial class JellyfinClient : IJournalServer
 		ApiException { ResponseStatusCode: > 0 } api => $"HTTP {api.ResponseStatusCode}",
 		FlurlHttpException { StatusCode: { } status } => $"HTTP {status}",
 		FlurlHttpTimeoutException => "timed out",
+		// HttpClient's own timeout (not our token): a hung server
+		OperationCanceledException => "timed out",
 		_ => ex.GetType().Name,
 	};
 }

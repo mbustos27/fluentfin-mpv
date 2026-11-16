@@ -49,6 +49,8 @@ public sealed class JournalAutoLoggerTests : IDisposable
 		long from = 0, long? to = null, Guid? item = null, string type = "Episode", bool waitForBaseline = true)
 	{
 		var id = item ?? _episode.Id;
+		// a play opens after the one before it ended (a session ending as another opens is the same play restarted)
+		_journal.Clock.Advance(TimeSpan.FromSeconds(1));
 		Server.State[id] = before;
 		var reads = Server.UserDataReads;
 		Send(Item(id, type, "Severance", 2, 5, Runtime, "Trojan's Horse"), State("opening", id, session));

@@ -28,7 +28,7 @@ internal sealed class FakeSession(JournalProfile? current) : IJournalSession
 
 /// <summary>
 /// Jellyfin as the journal sees it. <see cref="State"/> is the user data the server has now (the test changes it the way the
-/// server would). Records every call. <see cref="Down"/> makes every call fail as the real client does (null / false).
+/// server would). Records every call. <see cref="Down"/> makes every call throw what a hung server gives: HttpClient's timeout.
 /// </summary>
 internal sealed class FakeJournalServer : IJournalServer
 {
@@ -48,7 +48,28 @@ internal sealed class FakeJournalServer : IJournalServer
 	/// <summary>Page requests from this start index on fail.</summary>
 	public int? FailPagesFrom { get; set; }
 
-	public ConcurrentQueue<string> Calls { get; } = new();
+	private readonly ConcurrentQueue<string> _calls = new();
+
+	/// <summary>Every call, and the managed thread it was made on.</summary>
+	public ConcurrentQueue<int> Threads { get; } = new();
+
+	public CallLog Calls => new(_calls, Threads);
+
+	/// <summary>Records a call with its thread.</summary>
+	public sealed class CallLog(ConcurrentQueue<string> calls, ConcurrentQueue<int> threads) : IEnumerable<string>
+	{
+		public int Count => calls.Count;
+
+		public void Enqueue(string call)
+		{
+			threads.Enqueue(Environment.CurrentManagedThreadId);
+			calls.Enqueue(call);
+		}
+
+		public IEnumerator<string> GetEnumerator() => calls.GetEnumerator();
+
+		System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+	}
 
 	public ConcurrentQueue<(Guid ItemId, DateTimeOffset Date)> MarkedPlayed { get; } = new();
 
@@ -68,6 +89,8 @@ internal sealed class FakeJournalServer : IJournalServer
 
 	public ConcurrentDictionary<string, Guid> SeriesIds { get; } = new();
 
+	private static TaskCanceledException Timeout() => new("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException());
+
 	public async Task WaitForUserDataReads(int count)
 	{
 		var until = DateTime.UtcNow.AddSeconds(10);
@@ -86,13 +109,18 @@ internal sealed class FakeJournalServer : IJournalServer
 	{
 		Calls.Enqueue($"userdata {itemId:N}");
 		Interlocked.Increment(ref _userDataReads);
-		return Task.FromResult(Down ? null : State.TryGetValue(itemId, out var data) ? data : new JournalUserData(false, 0, null));
+		return Down ? Task.FromException<JournalUserData?>(Timeout()) : Task.FromResult<JournalUserData?>(State.TryGetValue(itemId, out var data) ? data : new JournalUserData(false, 0, null));
 	}
 
 	public Task<JournalEpisode?> GetItemAsync(Guid itemId, CancellationToken cancellationToken = default)
 	{
 		Calls.Enqueue($"item {itemId:N}");
-		if (Down || !Items.TryGetValue(itemId, out var item))
+		if (Down)
+		{
+			return Task.FromException<JournalEpisode?>(Timeout());
+		}
+
+		if (!Items.TryGetValue(itemId, out var item))
 		{
 			return Task.FromResult<JournalEpisode?>(null);
 		}
@@ -103,7 +131,12 @@ internal sealed class FakeJournalServer : IJournalServer
 	public Task<JournalPage<JournalEpisode>?> GetPlayedEpisodesAsync(int startIndex, int limit, CancellationToken cancellationToken = default)
 	{
 		Calls.Enqueue($"played {startIndex} {limit}");
-		if (Down || startIndex >= FailPagesFrom)
+		if (Down)
+		{
+			return Task.FromException<JournalPage<JournalEpisode>?>(Timeout());
+		}
+
+		if (startIndex >= FailPagesFrom)
 		{
 			return Task.FromResult<JournalPage<JournalEpisode>?>(null);
 		}
@@ -115,7 +148,12 @@ internal sealed class FakeJournalServer : IJournalServer
 	public Task<bool> MarkPlayedAsync(Guid itemId, DateTimeOffset datePlayed, CancellationToken cancellationToken = default)
 	{
 		Calls.Enqueue($"markplayed {itemId:N}");
-		if (Down || RefuseMarkPlayed)
+		if (Down)
+		{
+			return Task.FromException<bool>(Timeout());
+		}
+
+		if (RefuseMarkPlayed)
 		{
 			return Task.FromResult(false);
 		}
@@ -131,7 +169,7 @@ internal sealed class FakeJournalServer : IJournalServer
 		Calls.Enqueue($"rating {itemId:N} {rating}");
 		if (Down)
 		{
-			return Task.FromResult(false);
+			return Task.FromException<bool>(Timeout());
 		}
 
 		Ratings.Enqueue((itemId, rating));
@@ -141,7 +179,73 @@ internal sealed class FakeJournalServer : IJournalServer
 	public Task<PlaybackHistory> GetPlaybackHistoryAsync(Guid userId, CancellationToken cancellationToken = default)
 	{
 		Calls.Enqueue("history");
-		return Task.FromResult(Down ? PlaybackHistory.Unavailable("request failed") : History);
+		return Down ? Task.FromException<PlaybackHistory>(Timeout()) : Task.FromResult(History);
+	}
+}
+
+/// <summary>A UI thread as far as the journal can tell: one thread with its own synchronization context.</summary>
+internal sealed class UiThread : IDisposable
+{
+	private readonly BlockingCollection<Action> _queue = new();
+	private readonly Thread _thread;
+
+	public UiThread()
+	{
+		using var started = new ManualResetEventSlim();
+		_thread = new Thread(() =>
+		{
+			ThreadId = Environment.CurrentManagedThreadId;
+			SynchronizationContext.SetSynchronizationContext(new Context(_queue));
+			started.Set();
+			foreach (var work in _queue.GetConsumingEnumerable())
+			{
+				work();
+			}
+		})
+		{ IsBackground = true, Name = "journal test UI thread" };
+		_thread.Start();
+		started.Wait();
+	}
+
+	public int ThreadId { get; private set; }
+
+	/// <summary>Starts <paramref name="work"/> on this thread; completes when it has.</summary>
+	public Task Run(Func<Task> work)
+	{
+		var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		_queue.Add(() => work().ContinueWith(t =>
+		{
+			if (t.Exception is { } ex)
+			{
+				done.TrySetException(ex.InnerExceptions);
+			}
+			else
+			{
+				done.TrySetResult();
+			}
+		}, TaskScheduler.Default));
+		return done.Task;
+	}
+
+	public void Dispose() => _queue.CompleteAdding();
+
+	private sealed class Context(BlockingCollection<Action> queue) : SynchronizationContext
+	{
+		public override void Post(SendOrPostCallback d, object? state)
+		{
+			try
+			{
+				queue.Add(() => d(state));
+			}
+			catch (InvalidOperationException)
+			{
+				// the test is over
+			}
+		}
+
+		public override void Send(SendOrPostCallback d, object? state) => throw new NotSupportedException();
+
+		public override SynchronizationContext CreateCopy() => this;
 	}
 }
 

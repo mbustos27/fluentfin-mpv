@@ -157,10 +157,11 @@ public sealed partial class DiaryViewModel(JournalService journal, JournalSync s
 			StatusText = Describe(state);
 			ShowError(state.LastError is { } error ? $"The last sync did not finish: {error}." : null);
 		}
-		catch (JournalUnavailableException ex)
+		catch (Exception ex) when (ex is JournalUnavailableException or Microsoft.Data.Sqlite.SqliteException)
 		{
+			// the store turns every SQLite failure into JournalUnavailableException; a raw one must not blank the page either
 			_entries = [];
-			ShowError(ex.Message);
+			ShowError(ex is JournalUnavailableException ? ex.Message : $"The journal could not be read: {ex.Message}");
 		}
 
 		Rebuild();
@@ -206,6 +207,9 @@ public sealed partial class DiaryViewModel(JournalService journal, JournalSync s
 
 	partial void OnMirrorRatingChanged(bool value) => SaveSettings(x => x with { MirrorRatingToJellyfin = value });
 
+	/// <summary>The settings changes made so far are saved when this completes (they are saved in order, off the UI thread).</summary>
+	public Task SettingsSaved { get; private set; } = Task.CompletedTask;
+
 	private void SaveSettings(Func<JournalSettings, JournalSettings> change)
 	{
 		if (_loading)
@@ -213,14 +217,17 @@ public sealed partial class DiaryViewModel(JournalService journal, JournalSync s
 			return;
 		}
 
-		try
+		SettingsSaved = SettingsSaved.ContinueWith(_ =>
 		{
-			journal.SaveSettings(change(journal.GetSettings()));
-		}
-		catch (JournalUnavailableException ex)
-		{
-			ShowError(ex.Message);
-		}
+			try
+			{
+				journal.SaveSettings(change(journal.GetSettings()));
+			}
+			catch (JournalUnavailableException ex)
+			{
+				Post(() => ShowError(ex.Message));
+			}
+		}, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
 	}
 
 	/// <summary>Builds the filters and the month groups from what was read.</summary>
@@ -335,11 +342,14 @@ public sealed partial class DiaryViewModel(JournalService journal, JournalSync s
 
 		try
 		{
-			await Task.Run(() => journal.UpdateEntry(entry.Id, result.Edit));
-			if (StarRating.Normalize(result.Rating) != entry.Rating)
+			await Task.Run(async () =>
 			{
-				await journal.SetRatingAsync(new RatedItem(entry.Entry.ItemId, RatedItemKind.Episode, entry.Entry.SeriesId, entry.Entry.Title), result.Rating);
-			}
+				journal.UpdateEntry(entry.Id, result.Edit);
+				if (StarRating.Normalize(result.Rating) != entry.Rating)
+				{
+					await journal.SetRatingAsync(new RatedItem(entry.Entry.ItemId, RatedItemKind.Episode, entry.Entry.SeriesId, entry.Entry.Title), result.Rating);
+				}
+			});
 		}
 		catch (JournalUnavailableException ex)
 		{

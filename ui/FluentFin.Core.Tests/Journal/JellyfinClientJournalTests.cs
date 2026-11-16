@@ -145,6 +145,38 @@ public sealed class JellyfinClientJournalTests : IAsyncLifetime
 	}
 
 	[Fact]
+	public async Task AHungServer_IsNullOrFalse_NeverAnException()
+	{
+		_server.Hang($"/UserItems/{ItemId}/UserData");
+		_server.Hang($"/Items/{ItemId}");
+		_server.Hang("/Items");
+		_server.Hang($"/UserPlayedItems/{ItemId}");
+		UseHttpTimeout(TimeSpan.FromMilliseconds(300));
+
+		// HttpClient's timeout is a TaskCanceledException nobody asked for: a failed request, not a cancellation
+		Assert.Null(await _client.GetUserDataAsync(ItemId));
+		Assert.Null(await _client.GetItemAsync(ItemId));
+		Assert.Null(await _client.GetPlayedEpisodesAsync(0, 10));
+		Assert.False(await _client.MarkPlayedAsync(ItemId, DateTimeOffset.UnixEpoch));
+		Assert.False(await _client.SetRatingAsync(ItemId, 7));
+
+		Assert.Equal(5, _log.Entries.Count(x => x.Level == LogLevel.Warning && x.Message.Contains("timed out", StringComparison.Ordinal)));
+		AssertTokenNeverLeaked();
+	}
+
+	/// <summary>
+	/// FluentFin's client keeps the SDK's 100 s HttpClient timeout; the test gives it a short one, so a hung server shows
+	/// sooner. Same settings (url, identity, token), only the HttpClient differs.
+	/// </summary>
+	private void UseHttpTimeout(TimeSpan timeout)
+	{
+		const System.Reflection.BindingFlags Private = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+		var settings = (Jellyfin.Sdk.JellyfinSdkSettings)typeof(JellyfinClient).GetField("_settings", Private)!.GetValue(_client)!;
+		var api = new Jellyfin.Sdk.JellyfinApiClient(new Jellyfin.Sdk.JellyfinRequestAdapter(new Jellyfin.Sdk.JellyfinAuthenticationProvider(settings), settings, new HttpClient { Timeout = timeout }));
+		typeof(JellyfinClient).GetField("_jellyfinApiClient", Private)!.SetValue(_client, api);
+	}
+
+	[Fact]
 	public async Task PlaybackReporting_IsAskedForThisUser_WithTheTokenInTheHeader()
 	{
 		_server.Respond("/user_usage_stats/submit_custom_query", 200, $$"""
@@ -154,7 +186,9 @@ public sealed class JellyfinClientJournalTests : IAsyncLifetime
 		var history = await _client.GetPlaybackHistoryAsync(UserId);
 
 		Assert.True(history.Available);
-		Assert.Equal(new PlaybackHistoryPlay(ItemId, new DateTimeOffset(2026, 11, 1, 20, 15, 0, TimeSpan.Zero), TimeSpan.FromMinutes(44)), Assert.Single(history.Plays));
+		// the plugin's server-local time with no zone, read in this PC's zone (the sync corrects for a server elsewhere)
+		var wall = new DateTime(2026, 11, 1, 20, 15, 0);
+		Assert.Equal(new PlaybackHistoryPlay(ItemId, new DateTimeOffset(wall, TimeZoneInfo.Local.GetUtcOffset(wall)), TimeSpan.FromMinutes(44)), Assert.Single(history.Plays));
 		var request = _server.Requests.Last();
 		Assert.Equal("POST", request.Method);
 		Assert.Equal($"MediaBrowser Token=\"{FakeToken}\"", request.Authorization);
@@ -208,6 +242,12 @@ internal sealed class RecordingJellyfin : IDisposable
 
 	public void Respond(string path, int status, string body) => _responses[path] = (status, body);
 
+	private readonly ConcurrentDictionary<string, bool> _hung = new(StringComparer.OrdinalIgnoreCase);
+	private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+	/// <summary>Requests to this path get no answer until the server is disposed.</summary>
+	public void Hang(string path) => _hung[path] = true;
+
 	public void Start()
 	{
 		var probe = new TcpListener(IPAddress.Loopback, 0);
@@ -241,6 +281,14 @@ internal sealed class RecordingJellyfin : IDisposable
 				return;
 			}
 
+			// each request on its own, so one held back (Hang) does not hold the others
+			_ = Task.Run(() => HandleAsync(context));
+		}
+	}
+
+	private async Task HandleAsync(HttpListenerContext context)
+	{
+		{
 			var request = context.Request;
 			string body;
 			using (var reader = new StreamReader(request.InputStream, request.ContentEncoding ?? Encoding.UTF8))
@@ -256,6 +304,12 @@ internal sealed class RecordingJellyfin : IDisposable
 			var (status, responseBody) = _responses.TryGetValue(url.AbsolutePath, out var response) ? response : (404, "");
 			try
 			{
+				if (_hung.ContainsKey(url.AbsolutePath))
+				{
+					// a hung server: no answer until the test ends
+					await _released.Task;
+				}
+
 				context.Response.StatusCode = status;
 				if (responseBody.Length > 0)
 				{
@@ -276,6 +330,7 @@ internal sealed class RecordingJellyfin : IDisposable
 
 	public void Dispose()
 	{
+		_released.TrySetResult();
 		try
 		{
 			_listener.Stop();
