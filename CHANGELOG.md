@@ -12,9 +12,10 @@ FluentFin's WinUI 3 interface with [jellyfin-mpv-shim](https://github.com/jellyf
 engine, running headless as a child process and talking to FluentFin over a stdio protocol (`docs/BRIDGE.md`). The
 server sees one session, FluentFin's, and only the backend reports playback.
 
-- **Two kinds of player controls** (Settings > Playback > Player controls): FluentFin's own, drawn over an mpv that runs
-  inside FluentFin (libmpv); or mpv's own bar, [uosc](https://github.com/tomasklaen/uosc) in FluentFin's look (the
-  shim's bar as the fallback), in a window inside FluentFin's.
+- **Two kinds of player controls** (Settings > Playback > Player controls). By default FluentFin's own, drawn over an
+  mpv that runs inside FluentFin (the libmpv in the zip). Or mpv's own bar, [uosc](https://github.com/tomasklaen/uosc)
+  in FluentFin's look (the shim's bar as its fallback), with mpv in a window inside FluentFin's: chosen in Settings, or
+  used automatically, with a notice, when libmpv cannot load on the PC. mpv's controls run mpv.exe from PATH.
 - **The shim's playback**: PlaybackInfo and the direct play / transcode decision, track selection and remembered
   tracks, next episode, skip intro/credits and trickplay with mpv's controls, progress reporting.
 - **A TV journal**: what you watched, per server and user, with ratings, reviews, rewatches, filters and CSV/JSON
@@ -28,7 +29,8 @@ server sees one session, FluentFin's, and only the backend reports playback.
   bridge smoke test and the end-to-end harness, which drives the real backend against a fake Jellyfin server.
 - The release zip itself (`tools\release\verify-package.ps1`): unzipped outside the repository and run off-screen
   against the fake server, with a PATH of Windows' own folders only (no Python, no mpv) and no backend configured:
-  sign-in, an episode played and stopped with FluentFin's controls, the same with mpv's controls (mpv on PATH), mpv's
+  sign-in, an episode played and stopped with the default settings (FluentFin's controls on the bundled libmpv), the
+  same with mpv's controls (mpv on PATH), mpv's
   controls without mpv (playback stops with an error, nothing is reported), and the self-test. Every process the app
   started and every DLL they loaded came from the package or from Windows, the backend was the bundled one, nothing
   was written into the package folder, and closing the app (or killing it) ended the backend.

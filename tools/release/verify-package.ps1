@@ -10,7 +10,7 @@
     Windows' own folders only (no Python, no mpv), through tools\ui-harness\offscreen\drive.ps1 on a private desktop
     inside a kill-on-close job (tools\backend-bench\hidden_run.py), with no backend command set (FluentFin finds its
     bundled backend by itself):
-      FluentFin  "Player controls: FluentFin": sign in, play an episode, stop, close.
+      Default    a clean data folder with no player-controls setting (what a new user gets: FluentFin's controls on the`n                 bundled libmpv): sign in, play an episode, stop, close; the logs must show the in-process mpv
       Mpv        "Player controls: mpv", with mpv's folder added to PATH (the documented requirement for mpv's
                  controls): the same steps. Skipped when no mpv.exe is on the Machine/User PATH.
       NoMpv      "Player controls: mpv" without mpv on PATH: sign in and play; playback must stop with "mpv could not be
@@ -32,7 +32,7 @@ param(
     [Parameter(Mandatory)][string]$Out,
     [string]$HarnessPython,
     [string]$Cache = (Join-Path $env:TEMP 'fluentfin-mpv-harness'),
-    [ValidateSet('FluentFin', 'Mpv', 'NoMpv', 'SelfTest', 'Kill')][string[]]$Runs = @('FluentFin', 'Mpv', 'NoMpv', 'SelfTest', 'Kill'),
+    [ValidateSet('Default', 'Mpv', 'NoMpv', 'SelfTest', 'Kill')][string[]]$Runs = @('Default', 'Mpv', 'NoMpv', 'SelfTest', 'Kill'),
     [int]$TimeoutSeconds = 600
 )
 
@@ -144,6 +144,11 @@ function Complete-Audit($Audit, [string]$Name, [bool]$MpvAllowed) {
     $backend = @($procs | Where-Object { $_.image -like '*\backend\fluentfin-mpv-backend.exe' })
     Check "$($Name): the backend is the bundled one" ($backend.Count -ge 1) $(if ($backend) { $backend[0].commandLine } else { 'no fluentfin-mpv-backend.exe started' })
     if ($Name -eq 'Mpv') { Check "$($Name): mpv.exe from PATH was used (mpv's controls)" $mpvSeen $mpvDir }
+    if ($Name -in 'Default', 'SelfTest', 'Kill') {
+        $own = Join-Path $pkg 'libmpv-2.dll'
+        $loaded = @($procs | Where-Object { $_.image -like '*\FluentFin.exe' } | ForEach-Object { @($_.modules) } | Where-Object { ($_ -replace '^\\\\\?\\', '') -ieq $own })
+        Check "$($Name): FluentFin loaded the package's libmpv-2.dll" ($loaded.Count -gt 0) $own
+    }
     if ($other.Count) { Write-Host "  outside the package and Windows (drivers, shell extensions; allowed): $(($other | Sort-Object) -join ', ')" }
 }
 
@@ -154,7 +159,7 @@ function Invoke-ServerRun([string]$Name, [string]$Controls, [bool]$WithMpv, [str
     foreach ($d in $runOut, $data) { if (Test-Path $d) { Remove-Item -Recurse -Force $d } }
     New-Item -ItemType Directory -Force $runOut, $data | Out-Null
     # no backend command: FluentFin resolves its bundled backend itself (MpvBackendCommand.Resolve)
-    $prepared = Initialize-HarnessSettings $data '' @("MpvPlayerControls=$Controls")
+    $prepared = Initialize-HarnessSettings $data '' @(if ($Controls) { "MpvPlayerControls=$Controls" })
     [void](Initialize-HarnessMpvConf $data)
     $envA = Join-Path $runOut 'env\appdata'; $envL = Join-Path $runOut 'env\localappdata'
     New-Item -ItemType Directory -Force $envA, $envL | Out-Null
@@ -165,7 +170,7 @@ function Invoke-ServerRun([string]$Name, [string]$Controls, [bool]$WithMpv, [str
         '-Exe', $exe, '-DataDir', $data, '-Out', $runOut, '-Python', $HarnessPython, '-Media', $media,
         '-SignIn', 'quickconnect', '-PlayerControls', $prepared.PlayerControls, '-StepsFile', $stepsFile, '-NoA11y')
     $audit = Start-Audit $Name
-    Write-Host "`n== $Name (controls $Controls, mpv on PATH: $WithMpv; $runOut)"
+    Write-Host "`n== $Name (controls $(if ($Controls) { $Controls } else { "not set: the default" }), mpv on PATH: $WithMpv; $runOut)"
     & $HarnessPython -B -I $hidden --log (Join-Path $runOut 'hidden_run.log') --timeout $TimeoutSeconds --desktop "ffv-$Name-$PID" `
         --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" --env "PATH=$path" -- $ps @driveArgs | Out-Host
     Complete-Audit $audit $Name ($Name -eq 'Mpv')
@@ -191,7 +196,16 @@ function Invoke-ServerRun([string]$Name, [string]$Controls, [bool]$WithMpv, [str
 
 foreach ($run in $Runs) {
     switch ($run) {
-        'FluentFin' { [void](Invoke-ServerRun 'FluentFin' 'FluentFin' $false 'season,play,leave,close') }
+        'Default' {
+            # no MpvPlayerControls in the settings: the app's own default decides
+            $data = Invoke-ServerRun 'Default' $null $false 'season,play,leave,close'
+            $appLog = @(Get-ChildItem (Join-Path $data 'Logs') -Filter 'log*.txt' -ErrorAction SilentlyContinue)
+            $core = $appLog | Select-String -Pattern 'Started the in-process mpv core \(composition mode\)' | Select-Object -First 1
+            $attached = (Test-Path (Join-Path $data 'Logs\mpv-backend.log')) -and (Select-String -Path (Join-Path $data 'Logs\mpv-backend.log') -Pattern 'connect: mpv started in .* \(attached window\)' -Quiet)
+            Check "Default: FluentFin's controls by default (the in-process mpv, the backend attached to it)" ([bool]$core -and $attached) $(if ($core) { $core.Line.Trim() } else { 'no in-process mpv core in FluentFin''s log' })
+            $client = $appLog | Select-String -Pattern 'Connecting the mpv backend: .* as FluentFin MPV ([0-9.]+) ' | Select-Object -First 1
+            Check 'Default: the client version sent to Jellyfin is the package''s' ([bool]$client -and $pkg -like "*-$($client.Matches[0].Groups[1].Value)-win-x64") $(if ($client) { 'FluentFin MPV ' + $client.Matches[0].Groups[1].Value } else { 'no connect line' })
+        }
         'Mpv' {
             if (-not $mpvDir) { Write-Host "`n== Mpv: skipped (no mpv.exe on the Machine/User PATH)"; continue }
             $data = Invoke-ServerRun 'Mpv' 'Mpv' $true 'season,play,leave,close'

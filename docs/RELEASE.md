@@ -45,7 +45,8 @@ It unzips the package fresh, then runs it off-screen (a private desktop, a kill-
 APPDATA/LOCALAPPDATA redirected, test media that is digital silence) against the fake Jellyfin server, with no backend
 command set and a PATH of Windows' own folders only:
 
-- FluentFin's player controls: sign in, play an episode, stop, close;
+- the default settings (a clean data folder: FluentFin's controls on the package's libmpv): sign in, play an episode,
+  stop, close;
 - mpv's controls with mpv's folder on PATH (skipped when there is no mpv on this PC), and without it (playback must
   stop with "mpv could not be started", nothing reported to the server);
 - the self-test (`--mpv-selftest`, no server), and once more with FluentFin killed instead of closed (its job must end the
