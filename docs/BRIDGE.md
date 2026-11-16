@@ -126,7 +126,7 @@ the backend to change it.
 | `set_subtitle` | `index: int` | `-1` = off. |
 | `set_volume` | `volume: int` 0–100 | |
 | `set_mute` | `muted: bool` | |
-| `set_fullscreen` | `fullscreen: bool` | Embedded mode: tells the backend the UI's window state (for the OSC button); standalone mode: mpv goes fullscreen. |
+| `set_fullscreen` | `fullscreen: bool` | Embedded and attached mode: tells the backend the UI's window state (for the OSC button); standalone mode: mpv goes fullscreen. |
 | `set_controls` | `controls: "ui" \| "mpv"` (required), `subtitleInset: number = 0` (0 to 0.5) | Who draws the player controls. `"mpv"` (what a backend starts with): the shim's OSC, subtitles where mpv puts them. `"ui"`: the UI draws its own over the video, mpv's OSC is hidden and stays hidden (across items, and after mpv is restarted), and `subtitleInset` is the share of the video area's height the UI's bottom controls cover **now**: mpv's subtitles move up by that share of the window's height (`sub-pos`, from the value mpv had), and back with `0`. The UI sends it again whenever the controls or their height change. With `"mpv"`, `subtitleInset` is ignored. |
 | `get_state` | — | result = the `state` snapshot (§5). |
 | `shutdown` | — | result `{}`, then the process exits 0 (1 when the 8 s deadline in §3 ran out). |
@@ -156,13 +156,15 @@ Command details:
   "accessToken": "<token>",
   "device": {"id": "<DeviceId FluentFin uses>", "name": "<device name>"},
   "client": {"name": "FluentFin", "version": "1.0.0"},
-  "window": {"mode": "embedded", "hwnd": 1311242}   // or {"mode": "standalone"}
+  "window": {"mode": "embedded", "hwnd": 1311242}   // or {"mode": "attached", "ipc": "fluentfin-mpv-4242-0011223344556677"}, or {"mode": "standalone"}
 }
 ```
 
 - `server.name` and `user.name` are optional. `window.hwnd` is the HWND as an **unsigned
   32-bit integer** (0 < hwnd ≤ 4294967295), never negative; the backend rejects anything
   else with `bad_args` (a negative or truncated value makes mpv open its own window).
+  `window.ipc` (attached mode) is the name of a Windows named pipe without `\\.\pipe\`: 1 to 100
+  characters from `A-Z a-z 0-9 . _ -`, the first a letter or a digit; anything else is `bad_args`.
 - v1 has **no enqueue**: remote PlayNext/PlayLast are not supported with the mpv player
   (the UI tells the user); remote PlayNow becomes a `play`.
 - The backend reuses **FluentFin's identity** (token, device id/name, client name), so the
@@ -174,6 +176,19 @@ Command details:
   over the player page. mpv never resizes, moves, retitles or fullscreens that window;
   the shim's fullscreen key/double-click becomes a `fullscreen_request` event and the UI
   does it. `standalone`: mpv has its own top-level window, as the shim does today.
+- `attached` (fluentfin-mpv player controls, added in protocol 1 without a version bump): mpv already
+  runs **in the UI's process** (libmpv in composition mode: no window, the UI shows its video in its
+  own XAML and draws its controls over it) and answers mpv's JSON IPC on the pipe `ipc`. The backend
+  attaches to it as an IPC client (the shim's external backend with `mpv_ext_start=False`) and never
+  starts, quits, resizes, retitles or fullscreens it, nor ends it on `shutdown` (it only closes its
+  pipe). No construction option reaches that mpv: the UI creates it with what the backend would
+  have given (`vo=gpu-next`, `gpu-context=d3d11`, `d3d11-output-mode=composition`, `idle`,
+  `force-window`, `osc=no`, no input bindings, `input-ipc-server`, the backend's config dir for
+  `mpv.conf`); everything the shim sets at runtime (title, hwdec per file, tracks, OSC scripts) it
+  still sets. Full screen is the UI's, as embedded. The UI's mpv listens before `connect` and lives as
+  long as the backend process; one that ended is replaced on a new pipe, so the next `connect` has a
+  different `window` and the UI restarts the backend (`window_locked`). A pipe that does not answer
+  fails the first `connect` with `mpv_failed`. The UI sends `set_controls` `"ui"` for its controls.
 - The backend must not bind any network port, start the tray, the in-player library
   browser, update checks, Discord presence, gamepad-to-browser navigation, or the
   single-instance listener of a standalone install.
@@ -227,7 +242,7 @@ the item has started (a `stop` in between drops them); they are not acknowledged
   "audioStreamIndex": null, "subtitleStreamIndex": null,
   "queue": {"itemIds": [], "index": 0},
   "fullscreen": false,
-  "window": "embedded" | "standalone" | null
+  "window": "embedded" | "attached" | "standalone" | null
 }
 ```
 
@@ -242,7 +257,7 @@ the item has started (a `stop` in between drops them); they are not acknowledged
 | Progress / start / stop reports to the server | **backend only** — the UI must not also report. One exception: when the backend exits **unexpectedly** (crash or watchdog kill, not `shutdown`/EOF or a kill the UI's own close decided, whatever the exit code) while a play session is still **open**, the UI sends **one** Stopped report itself. A session is open from the first `state` that shows it (`opening`/`playing`/`paused` with a `playSessionId`) until a `reported` event for that `playSessionId` arrives — **not** until `idle` or `ended`, since a deferred `stop` answers and goes `idle` before its report is sent. The UI tracks only the latest session (a newer one replaces it; the backend reports the outgoing one itself). A session stays closed once its `reported` has arrived, even if a later `state` shows it again (a replacement that fails before mpv starts can leave the old item showing after its Stopped was sent), and a `reported` that arrives before any `state` of its session keeps that session from opening. Whether the exit was unexpected is decided by what happened **first**, the process exit or the UI's own shutdown, not by when the UI gets round to handling the exit. The report carries that session's `itemId`, `mediaSourceId`, `playSessionId` and the position from the latest `position` event **for that play session** (not the older `state` snapshot, and not a position of an earlier session of the same item), so the server closes the session and its transcode instead of waiting for its idle timeout. If no `position` event was seen for that session (e.g. it was still `opening`, whose snapshot always says 0, even when the same item played before), the report is sent with **`Failed = true`** and no position, so the server closes the session without overwriting the item's resume point. The report goes only to the server and user the session was played as: if the UI has since switched to another server or user, it is skipped and logged (the backend reports a switched-away session itself, §5). After `shutdown`/EOF, or a kill the UI's own close decided (a backend still starting, or with a `connect` unanswered, after 3 s), the UI never reports, even on exit 1 (the backend's report may still be in flight or its server hung); a session whose Stopped was still pending then gets none, an accepted cost of closing a hung backend. Once the close returns, any Stopped the UI owes has been attempted (it waits, bounded, for the exit it caused before deciding). Accepted cost: a backend that dies between sending its Stopped and emitting `reported` gets a second Stopped from the UI |
 | Media segments (skip intro/credits), trickplay preview | backend (shim OSC) with `set_controls` `"mpv"`; the UI with `"ui"` (it asks the server for segments and trickplay tiles itself; a segment set to skip automatically in the shim's settings is still skipped by the shim) |
 | Player controls, and all input over the video | mpv's OSC (`"mpv"`), or the UI (`"ui"`: mpv's window gets no input, the UI sends commands) |
-| Video surface | backend's mpv inside the UI's child window |
+| Video surface | backend's mpv inside the UI's child window (embedded), or the UI's own in-process mpv the backend attaches to (attached) |
 | Window, fullscreen, back navigation | UI |
 | SyncPlay | not supported with the mpv player in v1; UI disables it in that mode |
 | End of playback | UI leaves the player page when `state` goes to `idle` after its playback; if the last `ended` reason was `error`, it stays and shows the error |

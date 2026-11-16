@@ -6727,6 +6727,106 @@ class ErrorClearingTest(BridgeCase):
                 self.run_plays()
 
 
+class AttachedWindowTest(BridgeCase):
+    """fluentfin-mpv player controls: ``connect.window`` ``attached``, the
+    UI's own mpv on a pipe (BRIDGE.md section 4)."""
+
+    ATTACHED = {"mode": "attached", "ipc": "fluentfin-mpv-1-0011223344556677"}
+
+    def test_it_reaches_the_runtime_and_the_state_and_is_fixed(self):
+        self.assertTrue(self.connect_server(self.ATTACHED)["ok"])
+        self.assertEqual(self.runtime.started,
+                         [{"mode": "attached", "hwnd": None,
+                           "ipc": "fluentfin-mpv-1-0011223344556677"}])
+        self.assertEqual(self.send("get_state")["result"]["window"],
+                         "attached")
+        # another pipe is another window: the UI restarts the backend
+        self.assertEqual(self.code("connect", dict(
+            SERVER, protocol=1, window=dict(self.ATTACHED, ipc="other"))),
+            "window_locked")
+        self.assertEqual(len(self.runtime.started), 1)
+
+    def test_full_screen_is_the_uis_as_when_embedded(self):
+        self.connect_server(self.ATTACHED)
+        self.assertTrue(self.send("set_fullscreen",
+                                  {"fullscreen": True})["ok"])
+        self.assertIn(("set_embedded_fullscreen", True),
+                      self.runtime.journal)
+        window_embed.ui_fullscreen = True
+        self.addCleanup(setattr, window_embed, "ui_fullscreen", False)
+        self.assertIs(self.send("get_state")["result"]["fullscreen"], True)
+
+
+class AttachedRuntimeTest(unittest.TestCase):
+    """`ShimRuntime.start_player` for an ``attached`` window: the shim's
+    external backend on the UI's pipe, never starting an mpv, for the run
+    only. The player module is a stand-in (importing the real one builds a
+    real mpv, docs/testing.md section 1)."""
+
+    def test_the_external_backend_attaches_to_the_uis_pipe(self):
+        import jellyfin_mpv_shim
+        from jellyfin_mpv_shim.conf import settings
+
+        keys = ([k for k, _v in bridge_mod.ShimRuntime.EMBEDDED_OVERRIDES]
+                + [k for k, _v in
+                   bridge_mod.ShimRuntime.attached_overrides("p")])
+        for key in keys:
+            self.addCleanup(setattr, settings, key, getattr(settings, key))
+        self.addCleanup(window_embed.configure, None)
+        # start_player also switches these on, for the life of a backend
+        from jellyfin_mpv_shim import fluentfin_osc
+
+        self.addCleanup(fluentfin_osc.configure, fluentfin_osc.active())
+        self.addCleanup(logging.getLogger().setLevel,
+                        logging.getLogger().level)
+        on_disk = settings.dict()
+
+        seen = {}
+        pm = mock.Mock()
+        pm._player.mpv_version = "mpv 0.42.0"
+
+        class Player(types.ModuleType):
+            is_using_ext_mpv = True
+
+            @property
+            def playerManager(self):
+                # what the real import reads, at the moment it would build mpv
+                seen.update({k: getattr(settings, k) for k in keys})
+                seen["embedded"] = (window_embed.active(),
+                                    window_embed.attached, window_embed.hwnd)
+                return pm
+
+        fake_player = Player("jellyfin_mpv_shim.player")
+        stubs = {"jellyfin_mpv_shim.player": fake_player,
+                 "jellyfin_mpv_shim.action_thread": mock.Mock(),
+                 "jellyfin_mpv_shim.timeline": mock.Mock()}
+        runtime = bridge_mod.ShimRuntime("unused")
+        with mock.patch.dict(sys.modules, stubs), \
+                mock.patch.object(jellyfin_mpv_shim, "player", fake_player,
+                                  create=True), \
+                mock.patch.object(jellyfin_mpv_shim, "action_thread",
+                                  stubs["jellyfin_mpv_shim.action_thread"],
+                                  create=True), \
+                mock.patch.object(jellyfin_mpv_shim, "timeline",
+                                  stubs["jellyfin_mpv_shim.timeline"],
+                                  create=True):
+            info = runtime.start_player(
+                {"mode": "attached", "hwnd": None, "ipc": "the-pipe"})
+
+        self.assertEqual(info, {"mpv": "mpv 0.42.0",
+                                "mpvBackend": "external"})
+        self.assertIs(seen["mpv_ext"], True)
+        self.assertIs(seen["mpv_ext_start"], False, "never starts an mpv")
+        self.assertEqual(seen["mpv_ext_ipc"], "the-pipe")
+        self.assertIs(seen["mpv_ext_no_ovr"], False)
+        self.assertIs(seen["fullscreen"], False, "the UI's window")
+        self.assertIs(seen["raise_mpv"], False)
+        self.assertEqual(seen["embedded"], (True, True, None))
+        for key in keys:
+            self.assertEqual(settings.dict()[key], on_disk[key],
+                             "%s reached conf.json" % key)
+
+
 class DefaultsTest(unittest.TestCase):
     def test_default_config_dir_is_the_forks_own(self):
         with mock.patch.dict(os.environ, {"LOCALAPPDATA": r"C:\L",

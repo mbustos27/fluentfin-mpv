@@ -327,6 +327,21 @@ class ShimRuntime:
         ("remember_window_size", False),
     )
 
+    @staticmethod
+    def attached_overrides(pipe):
+        """fluentfin-mpv player controls: an ``attached`` window. The shim's
+        external backend, connecting to the UI's mpv on ``pipe`` instead of
+        starting one (``mpv_ext_start``), whatever conf.json says; and with
+        its runtime writes on (``mpv_ext_no_ovr`` off: the OSC lever and the
+        track and title writes are how it plays). Like every override, for
+        the run only: none of it reaches conf.json."""
+        return (
+            ("mpv_ext", True),
+            ("mpv_ext_start", False),
+            ("mpv_ext_ipc", pipe),
+            ("mpv_ext_no_ovr", False),
+        )
+
     def __init__(self, config_dir):
         self.config_dir = config_dir
         self.pm = None
@@ -431,10 +446,17 @@ class ShimRuntime:
         from . import window_embed
 
         embedded = window["mode"] == "embedded"
-        if embedded:
+        # fluentfin-mpv player controls: the UI's own mpv, attached to over
+        # its pipe (BRIDGE.md section 4); its window is the UI's, as embedded.
+        attached = window["mode"] == "attached"
+        if embedded or attached:
             for key, value in self.EMBEDDED_OVERRIDES:
                 self._override(key, value)
-        window_embed.configure(window["hwnd"] if embedded else None)
+        if attached:
+            for key, value in self.attached_overrides(window["ipc"]):
+                self._override(key, value)
+        window_embed.configure(window["hwnd"] if embedded else None,
+                               attach=attached)
         # The OSC's look and the fork that carries it (fluentfin_osc).
         from . import fluentfin_osc
 
@@ -2537,7 +2559,8 @@ class Bridge:
     def cmd_set_fullscreen(self, args):
         pm = self._require_player()
         fullscreen = proto.get_bool(args, "fullscreen")
-        if self.window["mode"] == "embedded":
+        # fluentfin-mpv player controls: attached is the UI's window too
+        if self.window["mode"] in ("embedded", "attached"):
             pm.set_embedded_fullscreen(fullscreen)
         else:
             pm.run_action(lambda p: p.set_fullscreen(fullscreen))
@@ -2678,7 +2701,8 @@ class Bridge:
             return obs
         obs.video = pm._video
         obs.start_in_progress = bool(pm._start_in_progress)
-        embedded = from_window == "embedded"
+        # fluentfin-mpv player controls: attached is the UI's window too
+        embedded = from_window in ("embedded", "attached")
         if embedded:
             from . import window_embed
 

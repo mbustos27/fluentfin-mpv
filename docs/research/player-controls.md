@@ -39,7 +39,27 @@ in-process, off-screen (private desktop, kill-on-close job), every core with `ao
 `local` plays a 1080p60 H.264 clip, resizes, goes full screen and back, resizes six times quickly;
 `hdr` plays a 10-bit BT.2020 clip with the HDR hint forced; `bridge` runs the real backend from this
 checkout attached to the in-process core (`mpv_ext`, `mpv_ext_start=false`, `mpv_ext_ipc`) against a
-fake server; `quit` sends `quit` over IPC. Results: see the go/no-go table below (filled by the spike).
+fake server; `quit` sends `quit` over IPC; `repeat` makes ten cores in a row.
+
+### Go/no-go (2026-11-15, this PC: RX 9070 XT, Windows 11, three displays, all with Windows HDR off)
+
+Off-screen (a private desktop: one virtual monitor at 100 %, DWM composes it, PrintWindow pictures).
+
+| Row | Measured | Result |
+|---|---|---|
+| `display-swapchain` arrives | bound 56-118 ms after the core is made, median 63 ms, 10 of 10 cores in one process (`repeat`); 67 ms after `loadfile` (`local`); never more than one change per core | **pass** |
+| Resize | after a resize and after six quick resizes in a row, the swap chain equals the panel in physical pixels (1584x861, 1369x786) | **pass** |
+| Full screen | 2560x1440 swap chain in full screen, back to the window size after | **pass** |
+| DPI change | the private desktop has one monitor at 100 %: no other scale to move to. The code sets the swap chain's inverse scale (`SetMatrixTransform`) and renders at the panel's physical size | **not verified** |
+| Pacing, composition vs `--wid` | 1080p60 H.264, 20 s windowed and 15 s full screen: 0 dropped, 0 delayed, 0 mistimed frames in both modes. In composition mpv knows no display rate (`display-fps` empty, `--wid`: 144), so FluentFin sets `override-display-fps`. Whether DWM promotes the composition swap chain to independent flip or an overlay plane needs PresentMon on the real desktop | **pass** (drops); flip mode **not verified** |
+| d3d11va | `hwdec-current=d3d11va` in both modes, H.264 and 10-bit AV1. Note: the shim's own `hwdec` default is `no` and it applies it at every file, in both paths | **pass** |
+| HDR10 on the RX 9070 XT | forced with `target-colorspace-hint`: mpv reconfigured its swap chain to R10G10B10A2 with `RGB_FULL_G2084_NONE_P2020` (it logs "Failed to query swap chain's output information": composition has no output, as PR #16795 says). Every display here has Windows HDR off, so what an HDR display shows is not verifiable without changing the user's display settings | forced **pass**; on screen **not verified** |
+| Crash and quit | a `quit` over IPC ends the in-process core (SHUTDOWN event); the process lives on and a second core plays in the same panel. A real mpv or driver crash takes FluentFin down: one crash domain, the accepted cost of B1 | **pass** (quit) |
+| The shim attached | the real backend from this checkout, `connect.window` `attached` (`mpv_ext_start=False` on the core's pipe), no shim patch: connect, `set_controls` (sub-pos 85), play, pause, seek, stop with one Stopped at the server, `state.window` `attached`; its shutdown leaves the core playing | **pass** |
+
+**Go.** No row failed, so phase 2b goes ahead (below). Three rows could not be verified here (DPI change,
+flip mode, HDR on an HDR display), so "every row passes on this PC" does not hold: the setting's default stays
+**mpv**, and FluentFin's controls are opt-in until those three are seen on the real desktop.
 
 ## Phase 2b: FluentFin's controls over the composition video
 

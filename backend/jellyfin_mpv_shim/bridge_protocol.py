@@ -423,15 +423,30 @@ def validate_play(args):
     }
 
 
+#: fluentfin-mpv player controls: an ``attached`` window's pipe name, without
+#: ``\\.\pipe\`` (BRIDGE.md section 4).
+_PIPE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
+
+
 def validate_window(window):
-    """A ``connect`` window, normalised to ``{"mode", "hwnd"}``."""
+    """A ``connect`` window, normalised to ``{"mode", "hwnd"}`` (plus
+    ``"ipc"`` for ``attached``)."""
     if not isinstance(window, dict):
         raise _bad("window must be an object")
     mode = window.get("mode")
     if mode == "standalone":
         return {"mode": "standalone", "hwnd": None}
+    if mode == "attached":
+        # fluentfin-mpv player controls: the UI's own mpv, on this pipe.
+        ipc = window.get("ipc")
+        if not isinstance(ipc, str) or not _PIPE_NAME.fullmatch(ipc):
+            raise _bad("window.ipc must be a pipe name (1 to 100 of A-Z a-z "
+                       "0-9 . _ -, the first a letter or digit) for "
+                       "attached mode")
+        return {"mode": "attached", "hwnd": None, "ipc": ipc}
     if mode != "embedded":
-        raise _bad('window.mode must be "embedded" or "standalone"')
+        raise _bad('window.mode must be "embedded", "attached" or '
+                   '"standalone"')
     hwnd = normalize_hwnd(window.get("hwnd"))
     if hwnd is None:
         raise _bad("window.hwnd must be an integer with 0 < hwnd <= "

@@ -371,6 +371,27 @@ class ConnectValidationTest(_BadArgs, unittest.TestCase):
             with self.subTest(window=window):
                 self.bad(proto.validate_window, window)
 
+    def test_attached_window_shapes(self):
+        """fluentfin-mpv player controls: the UI's own mpv on a named pipe
+        (BRIDGE.md section 4). The name goes to python-mpv-jsonipc, which
+        prefixes ``\\\\.\\pipe\\``: no separators, no path, no prefix."""
+        for name in ("fluentfin-mpv-4242-0011223344556677", "a", "A.b_c-9",
+                     "x" * 100):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    proto.validate_window({"mode": "attached", "ipc": name,
+                                           "hwnd": 5}),
+                    {"mode": "attached", "hwnd": None, "ipc": name})
+        for name in ("", "x" * 101, "-lead", ".lead", r"\\.\pipe\mpv",
+                     "a/b", "a b", "a:b", None, 5, ["a"]):
+            with self.subTest(name=name):
+                self.bad(proto.validate_window,
+                         {"mode": "attached", "ipc": name})
+        self.bad(proto.validate_window, {"mode": "attached"})
+        self.assertEqual(proto.validate_connect(self.full(
+            window={"mode": "attached", "ipc": "p1"}))["window"],
+            {"mode": "attached", "hwnd": None, "ipc": "p1"})
+
     def test_the_handle_range_is_0_exclusive_to_2_to_the_32(self):
         """BRIDGE.md: 0 < hwnd <= 4294967295. mpv reads a negative or
         out-of-range wid as "no window" and opens its own, so a

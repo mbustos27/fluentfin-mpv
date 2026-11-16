@@ -20,8 +20,11 @@ public sealed record BridgeIdentity(
 	public override string ToString() => $"{UserName} ({UserId}) on {ServerName} {BridgeRedaction.ServerForLog(ServerUrl)} as {ClientName} {ClientVersion} / {DeviceName}";
 }
 
-/// <summary>Where mpv draws: <c>embedded</c> into a window FluentFin owns, or <c>standalone</c>.</summary>
-public sealed record BridgeWindow(string Mode, long? Hwnd)
+/// <summary>
+/// Where mpv draws: <c>embedded</c> into a window FluentFin owns, <c>attached</c> (fluentfin-mpv player controls): the
+/// backend attaches to an mpv FluentFin runs itself, listening on the pipe <see cref="Ipc"/>; or <c>standalone</c>.
+/// </summary>
+public sealed record BridgeWindow(string Mode, long? Hwnd, string? Ipc = null)
 {
 	/// <summary>
 	/// HWNDs carry 32 significant bits; sent as an unsigned 32-bit number so it can never come out negative (mpv opens a
@@ -30,6 +33,9 @@ public sealed record BridgeWindow(string Mode, long? Hwnd)
 	public static BridgeWindow Embedded(nint hwnd) => new("embedded", unchecked((uint)hwnd));
 
 	public static BridgeWindow Standalone { get; } = new("standalone", null);
+
+	/// <summary>fluentfin-mpv player controls: FluentFin's own mpv, answering JSON IPC on <paramref name="pipe"/> (the name, without <c>\\.\pipe\</c>).</summary>
+	public static BridgeWindow Attached(string pipe) => new("attached", null, pipe);
 }
 
 /// <summary>Arguments of <c>play</c>, mirroring the server's remote Play command.</summary>
@@ -122,6 +128,7 @@ public static class BridgeCommands
 		{
 			["mode"] = window.Mode,
 			["hwnd"] = window.Hwnd,
+			["ipc"] = window.Ipc,
 		});
 
 		return args;

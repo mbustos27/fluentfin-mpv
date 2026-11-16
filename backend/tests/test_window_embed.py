@@ -346,6 +346,24 @@ class OptionsTest(unittest.TestCase):
         self.assertEqual(got["background_color"], "#000000")
         self.assertIs(got["osc"], False, "everything else is left alone")
 
+    def test_attached_is_the_uis_window_with_no_options(self):
+        """fluentfin-mpv player controls: the UI's own mpv, which the shim
+        only attaches to. Full screen is the UI's (active), but there is no
+        handle and nothing to put on a command line: the options are left
+        as they are (python-mpv-jsonipc drops them when it only connects)."""
+        window_embed.configure(None, attach=True)
+        self.assertTrue(window_embed.active())
+        self.assertTrue(window_embed.attached)
+        self.assertIsNone(window_embed.hwnd)
+        self.assertEqual(window_embed.apply_to_options(self.options()),
+                         self.options())
+        # an embedded window is never "attached", and configure resets it
+        window_embed.configure(5, attach=True)
+        self.assertFalse(window_embed.attached)
+        window_embed.configure(None)
+        self.assertFalse(window_embed.active())
+        self.assertFalse(window_embed.attached)
+
     def test_the_handle_is_unsigned_32_bit(self):
         window_embed.configure(0xFFFFFFFE)
         self.assertEqual(window_embed.apply_to_options({})["wid"],

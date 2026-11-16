@@ -390,7 +390,8 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 
 	public async Task<string?> ConnectAsync(BridgeIdentity? identity, CancellationToken cancellationToken = default)
 	{
-		var window = BridgeWindow.Embedded(await surface.GetHandleAsync());
+		// fluentfin-mpv player controls: embedded, or attached to FluentFin's own mpv (the surface decides)
+		var window = await surface.GetWindowAsync();
 
 		await _lifecycle.WaitAsync(cancellationToken);
 		try
@@ -411,7 +412,7 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 				return session.MpvVersion;
 			}
 
-			logger.LogInformation("Connecting the mpv backend: {Identity}, window {Mode} {Hwnd}", identity?.ToString() ?? "(dev, no server)", window.Mode, window.Hwnd);
+			logger.LogInformation("Connecting the mpv backend: {Identity}, window {Mode} {Hwnd}", identity?.ToString() ?? "(dev, no server)", window.Mode, window.Hwnd?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? window.Ipc);
 
 			JsonNode? result;
 			try
