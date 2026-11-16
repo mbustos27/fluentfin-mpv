@@ -1,6 +1,6 @@
 # FluentFin MPV: UX/UI audit against industry standards
 
-Date: 2026-11-15. Code: `C:\Users\moise\Dev\fluentfin-mpv` at ff0c97c (clean tree).
+Date: 2026-11-15. Code: the repository at ff0c97c (clean tree).
 Method: read-only code review of `ui\` and the bridge parts of `backend\`, the four upstream
 screenshots in `ui\Screenshots\`, the repo's own research (`docs\research\perf-ui.md`,
 `docs\research\winui-mpv-embed.md`, `docs\research\perf-backend.md`) and `docs\KNOWN-ISSUES.md`,
@@ -596,7 +596,7 @@ unless noted.
 62. WinUIEx custom backdrops — https://dotmorten.github.io/WinUIEx/concepts/CustomBackdrops.html
 63. DXGI flip model and overlays — https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/for-best-performance--use-dxgi-flip-model
 64. Win32 owned windows — https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features
-65. (repo) winui-mpv-embed.md, perf-ui.md, perf-backend.md, KNOWN-ISSUES.md — `C:\Users\moise\Dev\fluentfin-mpv\docs\`
+65. (repo) winui-mpv-embed.md, perf-ui.md, perf-backend.md, KNOWN-ISSUES.md — `docs\` in the repository
 66. Microsoft Q&A, transparent WinUI 3 window — https://learn.microsoft.com/en-sg/answers/questions/1463839/how-to-make-winui-3-window-transparent
 67. Richasy mpv-winui (libmpv → SwapChainPanel via OpenGL) — https://github.com/richasy/mpv-winui
 68. mpv PRs: composition mode #16285, D3D11 render API #17764 — https://github.com/mpv-player/mpv/pull/16285 ; https://github.com/mpv-player/mpv/pull/17764

@@ -11,7 +11,9 @@ import os, subprocess, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 BEFORE = os.environ.get("BEFORE_DIR") or sys.exit("set BEFORE_DIR to a folder holding a pre-fix copy of backend/ (with jellyfin_mpv_shim inside)")
 sys.path.insert(0, HERE)
-sys.path.insert(0, r"C:\Users\moise\Dev\fluentfin-mpv\backend\tools")
+import os as _os  # noqa: E402
+_REPO = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", ".."))  # the repository
+sys.path.insert(0, _os.path.join(_REPO, "backend", "tools"))
 import bridge_smoke  # noqa: E402
 
 _Popen = subprocess.Popen

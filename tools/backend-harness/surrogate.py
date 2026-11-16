@@ -1,5 +1,7 @@
 import json, sys, threading, time
-sys.path.insert(0, "C:/Users/moise/Dev/fluentfin-mpv/backend")
+import os as _os  # noqa: E402
+_REPO = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", ".."))  # the repository
+sys.path.insert(0, _os.path.join(_REPO, "backend"))
 sys.argv = sys.argv[:1]
 from tests import test_bridge as tb
 from jellyfin_mpv_shim import bridge as bridge_mod, bridge_protocol as proto

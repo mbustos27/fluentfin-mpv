@@ -1,7 +1,9 @@
 import os, sys, time, json
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.path.insert(0, r"C:\Users\moise\Dev\fluentfin-mpv\backend\tools")
+import os as _os  # noqa: E402
+_REPO = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", ".."))  # the repository
+sys.path.insert(0, _os.path.join(_REPO, "backend", "tools"))
 from bridge_smoke import BridgeProcess
 from probe import PY, OUT, mpv_procs, kill_pids
 

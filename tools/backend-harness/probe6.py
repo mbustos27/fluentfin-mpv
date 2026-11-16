@@ -4,9 +4,11 @@ import os
 import sys
 import time
 
-REV = r"C:\Users\moise\AppData\Local\Temp\claude\4cb39b71e0149222\e4cf1356-33e7-412e-b62a-03eff8dc99f0\scratchpad\rev-backend\harness"
+import os as _os  # noqa: E402
+_REPO = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", ".."))  # the repository
+REV = _os.path.dirname(_os.path.abspath(__file__))
 sys.path.insert(0, REV)
-sys.path.insert(0, r"C:\Users\moise\Dev\fluentfin-mpv\backend\tools")
+sys.path.insert(0, _os.path.join(_REPO, "backend", "tools"))
 from bridge_smoke import BridgeProcess  # noqa: E402
 from fakejf import FakeJF  # noqa: E402
 import probe  # noqa: E402

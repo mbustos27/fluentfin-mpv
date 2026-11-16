@@ -2,11 +2,13 @@
 import json, os, subprocess, sys, time, threading
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.path.insert(0, r"C:\Users\moise\Dev\fluentfin-mpv\backend\tools")
+import os as _os  # noqa: E402
+_REPO = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", ".."))  # the repository
+sys.path.insert(0, _os.path.join(_REPO, "backend", "tools"))
 from bridge_smoke import BridgeProcess  # noqa
 from fakejf2 import FakeJF  # noqa
 
-PY = r"C:\Users\moise\Dev\fluentfin-mpv\backend\.venv\Scripts\python.exe"
+PY = _os.path.join(_REPO, "backend", ".venv", "Scripts", "python.exe")
 RR = os.path.dirname(HERE)
 #: Where the bridges' config dirs and logs go, and the clip the fake servers
 #: stream: RR_OUT / RR_MKV, so a run keeps them in its own scratch folder.

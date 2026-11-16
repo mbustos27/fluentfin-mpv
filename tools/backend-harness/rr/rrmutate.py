@@ -1,11 +1,13 @@
 """Re-review mutations on a scratch copy of backend/, tests run off-screen via hidden_run."""
 import os, re, shutil, subprocess, sys
 RR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = r"C:\Users\moise\Dev\fluentfin-mpv\backend"
+import os as _os  # noqa: E402
+_REPO = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", ".."))  # the repository
+SRC = _os.path.join(_REPO, "backend")
 S = os.path.join(RR, "mut")
 PY = os.path.join(SRC, ".venv", "Scripts", "python.exe")
-HR = r"C:\Users\moise\Dev\fluentfin-mpv\tools\backend-bench\hidden_run.py"
-MPVD = r"C:\Users\moise\AppData\Local\Microsoft\WinGet\Packages\mpv-player.mpv-CI.MSVC_Microsoft.Winget.Source_8wekyb3d8bbwe"
+HR = _os.path.join(_REPO, "tools", "backend-bench", "hidden_run.py")
+MPVD = _os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\mpv-player.mpv-CI.MSVC_Microsoft.Winget.Source_8wekyb3d8bbwe")
 P = os.path.join(S, "jellyfin_mpv_shim")
 ENV = os.path.join(RR, "env-mut")
 

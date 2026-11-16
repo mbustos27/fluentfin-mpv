@@ -7,10 +7,12 @@ time (F*): each must be caught. mut3.py [prefix ...]
     MUT_WORK=<a folder outside the repo>  (copies, logs, sandboxed APPDATA)"""
 import os, re, shutil, subprocess, sys
 R2 = os.environ.get("MUT_WORK") or sys.exit("set MUT_WORK to a work folder outside the repo (copies, logs, sandboxed APPDATA go there)")
-SRC = r"C:\Users\moise\Dev\fluentfin-mpv\backend"
+import os as _os  # noqa: E402
+_REPO = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..", ".."))  # the repository
+SRC = _os.path.join(_REPO, "backend")
 S = os.path.join(R2, "mut")
 PY = os.path.join(SRC, ".venv", "Scripts", "python.exe")
-HR = r"C:\Users\moise\Dev\fluentfin-mpv\tools\backend-bench\hidden_run.py"
+HR = _os.path.join(_REPO, "tools", "backend-bench", "hidden_run.py")
 MPVD = os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\mpv-player.mpv-CI.MSVC_Microsoft.Winget.Source_8wekyb3d8bbwe")
 P = os.path.join(S, "jellyfin_mpv_shim")
 ENV = os.path.join(R2, "env-mut")

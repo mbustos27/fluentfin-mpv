@@ -7,11 +7,13 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.path.insert(0, r"C:\Users\moise\Dev\fluentfin-mpv\backend\tools")
+import os as _os  # noqa: E402
+_REPO = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", ".."))  # the repository
+sys.path.insert(0, _os.path.join(_REPO, "backend", "tools"))
 from bridge_smoke import BridgeProcess, ok, error_code  # noqa: E402
 from fakejf import FakeJF, Sniffer  # noqa: E402
 
-PY = r"C:\Users\moise\Dev\fluentfin-mpv\backend\.venv\Scripts\python.exe"
+PY = _os.path.join(_REPO, "backend", ".venv", "Scripts", "python.exe")
 OUT = os.environ.get("PROBE_OUT") or sys.exit("set PROBE_OUT to a scratch folder outside the repo")
 MKV = os.environ.get("PROBE_MKV") or sys.exit("set PROBE_MKV to a small test .mkv")
 UID = "0123456789abcdef0123456789abcdef"

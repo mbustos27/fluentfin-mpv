@@ -7,7 +7,7 @@ only file written in the repo is this report.
 Paths below are written `FluentFin\...`; in the repo they are `ui\FluentFin\...` (same for
 `FluentFin.Core\...` -> `ui\FluentFin.Core\...`). Line numbers are from 4dc492e.
 
-`<scratchpad>` = `C:\Users\moise\AppData\Local\Temp\claude\4cb39b71e0149222\e4cf1356-33e7-412e-b62a-03eff8dc99f0\scratchpad`.
+`<scratchpad>` = the session's scratch folder, outside the repository.
 All logs and harnesses are under `<scratchpad>\perf-ui\` (temporary folder; copy what you want to keep).
 
 > The repo's `ui\` is being changed right now (MPV player path in `MediaPlayerHost`,
