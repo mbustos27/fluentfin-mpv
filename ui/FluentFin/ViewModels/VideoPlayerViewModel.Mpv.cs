@@ -392,8 +392,10 @@ public partial class VideoPlayerViewModel
 
 		try
 		{
-			// fluentfin-mpv player controls: what they show (the state is passed on by OnMpvState, for this page's playback only)
-			if (MpvControls is { } controls && _mpvPlayAccepted && e.Name is Bridge.Events.Position or Bridge.Events.Item or Bridge.Events.Tracks)
+			// fluentfin-mpv player controls: what they show (the state is passed on by OnMpvState, for this page's playback only);
+			// segments and next: the Skip button and the Next button's state (docs/BRIDGE.md §5)
+			if (MpvControls is { } controls && _mpvPlayAccepted
+				&& e.Name is Bridge.Events.Position or Bridge.Events.Item or Bridge.Events.Tracks or Bridge.Events.Segments or Bridge.Events.Next)
 			{
 				controls.OnEvent(e);
 			}
@@ -634,9 +636,11 @@ public partial class VideoPlayerViewModel
 	/// </summary>
 	private MpvControlsViewModel CreateMpvControls(long generation) => new((command, args) => SendMpv(generation, command, args))
 	{
-		// Settings > Playback: the same wheel and step as FluentFin's own players
+		// Settings > Playback: the same wheel, step and Skip button as FluentFin's own players
 		WheelChangesVolume = settings.MouseWheelVolume,
 		Step = settings.VolumeStep,
+		ShowSkipPrompt = settings.ShowSkipPrompt,
+		NameItem = NameMpvItem,
 		IsFullScreen = IsFullScreen?.Invoke() ?? false,
 		SetFullScreen = fullScreen =>
 		{
@@ -651,6 +655,30 @@ public partial class VideoPlayerViewModel
 			}
 		},
 	};
+
+	/// <summary>
+	/// fluentfin-mpv player controls: an item's title for the Next button's tooltip, from the server (the <c>next</c> event
+	/// carries ids only). Null when it cannot be had; never throws.
+	/// </summary>
+	private async Task<string?> NameMpvItem(string itemId)
+	{
+		if (!Guid.TryParse(itemId, out var id))
+		{
+			return null;
+		}
+
+		try
+		{
+			return await JellyfinClient.GetItem(id) is { } dto
+				? MpvControlsViewModel.NextTitle(new BridgeItem(itemId, dto.Name, dto.Type?.ToString(), dto.SeriesName, dto.ParentIndexNumber, dto.IndexNumber))
+				: null;
+		}
+		catch (Exception ex)
+		{
+			logger.LogInformation("The next item {ItemId} could not be named for the Next button: {Error}", itemId, BridgeRedaction.Redact(ex.Message));
+			return null;
+		}
+	}
 
 	/// <summary><c>set_controls</c> for the start (before <c>play</c>): FluentFin's controls, nothing under them yet. Null: mpv's.</summary>
 	private System.Text.Json.Nodes.JsonObject? ControlsCommand() => MpvControls is null ? null : BridgeCommands.Controls(ui: true, 0);

@@ -552,13 +552,5 @@ public sealed class MpvControlsViewModelTests
 		Assert.Equal(Bridge.Commands.SetVolume, sent[^1].Command);
 	}
 
-	[Fact]
-	public void S_is_not_a_player_key_while_nothing_skips_segments()
-	{
-		const int s = 0x53;
-		Playing();
-		Assert.Null(MpvControlsViewModel.ActionFor(s, false, false, false));
-		Assert.False(_vm.HandleKey(s), "a key that does nothing is not taken from the page");
-		Assert.Empty(Commands());
-	}
+	// S (skip the segment on offer): MpvControlsSkipTests
 }

@@ -100,7 +100,7 @@ class FakeJF:
                     time.sleep(outer.item_delay)
                     return self._json(200, outer.item(mm.group(2)))
                 if path.startswith("/MediaSegments/"):
-                    return self._json(200, {"Items": []})
+                    return self._json(200, {"Items": outer.segments(path[len("/MediaSegments/"):].strip("/"))})
                 if path.startswith("/DisplayPreferences/"):
                     return self._json(200, {"CustomPrefs": {}})
                 return self._json(200, {})
@@ -196,6 +196,10 @@ class FakeJF:
                 "MediaType": "Video", "RunTimeTicks": 1200000000,
                 "UserData": {"PlaybackPositionTicks": 0, "Played": False},
                 "MediaSources": [self.source(item_id)], "ServerId": "srv" + self.name}
+
+    def segments(self, item_id):
+        """The item's MediaSegments (Jellyfin's MediaSegmentDto list): none; a harness's subclass gives some."""
+        return []
 
     def source(self, item_id):
         return {"Id": item_id, "Path": "/media/%s.mkv" % item_id, "Protocol": "File",

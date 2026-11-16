@@ -59,11 +59,17 @@ public sealed partial class MpvPlayerControls : UserControl
 			controls.PropertyChanging += self.OnControlsPropertyChanging;
 			self.UpdateCursor();
 			self.ReportBottomBar();
+			self.PlaceSkipButton();
 		}
 	}
 
 	private void OnControlsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
+		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible))
+		{
+			PlaceSkipButton();
+		}
+
 		if (e.PropertyName == nameof(MpvControlsViewModel.CursorHidden))
 		{
 			UpdateCursor();
@@ -71,6 +77,14 @@ public sealed partial class MpvPlayerControls : UserControl
 		else if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible) && Controls is { ControlsVisible: false })
 		{
 			// a focus the collapse left nowhere
+			if (XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is null)
+			{
+				Focus(FocusState.Programmatic);
+			}
+		}
+		else if (e.PropertyName == nameof(MpvControlsViewModel.IsSkipVisible) && Controls is { IsSkipVisible: false })
+		{
+			// the Skip button went (pressed, or the segment is over): a focus it left nowhere
 			if (XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is null)
 			{
 				Focus(FocusState.Programmatic);
@@ -88,6 +102,13 @@ public sealed partial class MpvPlayerControls : UserControl
 		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible) && Controls is { ControlsVisible: true })
 		{
 			KeepKeyboardWhenBarsHide();
+		}
+		else if (e.PropertyName == nameof(MpvControlsViewModel.IsSkipVisible) && Controls is { IsSkipVisible: true }
+			&& XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is DependencyObject focused && IsWithin(focused, SkipSegmentButton))
+		{
+			// the Skip button is about to go with the focus on it (the keyboard's, or the click's): the player takes it now,
+			// so its keys go on working (WinUI would hand it to the next control outside the player)
+			Focus(FocusState.Programmatic);
 		}
 	}
 
@@ -188,7 +209,7 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnVideoTapped(object sender, TappedRoutedEventArgs e)
 	{
-		if (Controls is not { } controls || IsInBars(e.OriginalSource as DependencyObject))
+		if (Controls is not { } controls || IsOnControls(e.OriginalSource as DependencyObject))
 		{
 			return;
 		}
@@ -199,7 +220,7 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnVideoDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
 	{
-		if (Controls is not { } controls || IsInBars(e.OriginalSource as DependencyObject))
+		if (Controls is not { } controls || IsOnControls(e.OriginalSource as DependencyObject))
 		{
 			return;
 		}
@@ -240,6 +261,9 @@ public sealed partial class MpvPlayerControls : UserControl
 		return false;
 	}
 
+	/// <summary>A tap there is a control's, not the video's (the bars, and the Skip button over the video).</summary>
+	private bool IsOnControls(DependencyObject? source) => IsInBars(source) || (source is not null && IsWithin(source, SkipSegmentButton));
+
 	private void OnBarPointerEntered(object sender, PointerRoutedEventArgs e)
 	{
 		if (Controls is { } controls)
@@ -275,7 +299,41 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	// -- the subtitles keep clear of the bottom bar ----------------------------------------------------------------------
 
-	private void OnBottomBarSizeChanged(object sender, SizeChangedEventArgs e) => ReportBottomBar();
+	private void OnBottomBarSizeChanged(object sender, SizeChangedEventArgs e)
+	{
+		ReportBottomBar();
+		PlaceSkipButton();
+	}
+
+	// -- the Skip button's place -----------------------------------------------------------------------------------------
+
+	/// <summary>The Skip button's distance from the right edge (the bottom bar's own padding) and, bars hidden, from the bottom.</summary>
+	private const double SkipEdgeRight = 20, SkipEdgeBottom = 24;
+
+	/// <summary>Its gap above the bottom bar's controls while they show.</summary>
+	private const double SkipGapAboveBar = 12;
+
+	/// <summary>The height of the bottom bar's controls (without its scrim's transparent top), last measured while it showed.</summary>
+	private double _barControlsHeight;
+
+	/// <summary>
+	/// The Skip button sits bottom right: just above the seek bar while the bars show (clear of them), a small margin from
+	/// the bottom while they are hidden, as streaming apps place it. A collapsed bar measures nothing: its last height is kept.
+	/// </summary>
+	private void PlaceSkipButton()
+	{
+		if (BottomBar.Visibility == Visibility.Visible && BottomBar.ActualHeight > 0)
+		{
+			_barControlsHeight = Math.Max(0, BottomBar.ActualHeight - BottomBar.Padding.Top);
+		}
+
+		var bottom = Controls is { ControlsVisible: true } && _barControlsHeight > 0 ? _barControlsHeight + SkipGapAboveBar : SkipEdgeBottom;
+		var margin = new Thickness(0, 0, SkipEdgeRight, bottom);
+		if (SkipSegmentButton.Margin != margin)
+		{
+			SkipSegmentButton.Margin = margin;
+		}
+	}
 
 	private void ReportBottomBar()
 	{
@@ -333,6 +391,8 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnNextClick(object sender, RoutedEventArgs e) => _ = Controls?.Next();
 
+	private void OnSkipSegmentClick(object sender, RoutedEventArgs e) => _ = Controls?.SkipSegment();
+
 	private void OnFullScreenClick(object sender, RoutedEventArgs e) => Controls?.ToggleFullScreen();
 
 	private void OnMuteClick(object sender, RoutedEventArgs e) => _ = Controls?.ToggleMute();
@@ -381,6 +441,13 @@ public sealed partial class MpvPlayerControls : UserControl
 	/// the backend), so the binding only echoes it and a value change then is always the user's.
 	/// </summary>
 	public double Seconds(long ticks) => Math.Max(0, TimeSpan.FromTicks(ticks).TotalSeconds);
+
+	public string SkipToolTip(string text) => $"{text} (S)";
+
+	/// <summary>A tooltip only while <paramref name="shown"/> (the Next button's own while enabled, its wrapper's while disabled).</summary>
+	public string? ToolTipIf(bool shown, string text) => shown ? text : null;
+
+	public string? ToolTipUnless(bool hidden, string text) => hidden ? null : text;
 
 	public string PlayPauseGlyph(bool paused) => paused ? "\uE768" : "\uE769";
 
