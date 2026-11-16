@@ -1,7 +1,8 @@
 # Cutting a release
 
-A release is one portable zip for Windows 10/11 x64, `FluentFinMPV-<version>-win-x64.zip`, with its `.sha256`, built
-by `tools\release\build-release.ps1` and attached to a GitHub release on the tag `v<version>`. What it contains and
+A release is an installer and a portable zip of the same files for Windows 10/11 x64,
+`FluentFinMPV-<version>-win-x64.msi` and `FluentFinMPV-<version>-win-x64.zip`, each with its `.sha256`, built by
+`tools\release\build-release.ps1` and attached to a GitHub release on the tag `v<version>`. What it contains and
 where each third-party file comes from: `tools\release\VENDORED.md`.
 
 ## 1. The version
