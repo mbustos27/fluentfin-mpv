@@ -32,10 +32,10 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `quit` only ends the core; the next playback makes a new one on a new pipe and restarts the backend).
   The mpv choice keeps mpv out of process.
 - **No trickplay or Up Next card yet** with FluentFin's controls. Skip intro/credits is there
-  (2026-11-16, skip-ui: a Skip button top right while the backend's `segments` event offers one,
-  also with the bars hidden, and the S key, `skip_segment`), and the Next button follows the `next`
-  event (disabled at the end of the queue, the next episode named in its tooltip). Which segments
-  are offered is the backend's settings' (ask/always/off); Settings > Playback's *Show Skip intro
+  (2026-11-16, skip-ui: a Skip button bottom right, above the seek bar, while the backend's
+  `segments` event offers one, also with the bars hidden, and the S key, `skip_segment`), and
+  the Next button follows the `next` event (disabled at the end of the queue, the next episode
+  named in its tooltip). Which segments are offered is the backend's settings' (ask/always/off); Settings > Playback's *Show Skip intro
   and Skip credits* only hides the button (S still skips). Trickplay tiles still have no bridge
   path (the UI would ask the server). The shim skips by itself the segment types its settings set
   to always.

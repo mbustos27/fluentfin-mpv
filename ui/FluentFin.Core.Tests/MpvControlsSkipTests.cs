@@ -142,6 +142,33 @@ public sealed class MpvControlsSkipTests
 		Assert.Equal(2, _sent.Count);
 	}
 
+	/// <summary>
+	/// Skipped, then a quick seek back into the intro: the backend's offer may never have left the intro (its sampling missed
+	/// the end), so no segments event says so. The seek itself offers it again; a seek elsewhere does not.
+	/// </summary>
+	[Fact]
+	public async Task Skip_is_offered_again_after_a_seek_back_into_the_skipped_segment()
+	{
+		PlayingEpisode(positionSeconds: 5);
+		Segments(current: 0);
+		await _vm.SkipSegment();
+		Assert.False(_vm.IsSkipVisible);
+
+		await _vm.SeekBy(MpvControlsViewModel.SmallSeekSeconds);
+		Assert.False(_vm.IsSkipVisible, "a seek on, past the intro: still skipped");
+
+		await _vm.SeekTo(Ticks(8));
+		Assert.True(_vm.IsSkipVisible, "back in the intro with no change of offer from the backend");
+		Assert.True(_vm.HandleKey(MpvControlsViewModel.Keys.S));
+		Assert.Equal(2, Commands().Count(c => c == Bridge.Commands.SkipSegment));
+		Assert.False(_vm.IsSkipVisible);
+
+		await _vm.SeekBy(-LargeBack);
+		Assert.True(_vm.IsSkipVisible, "a seek back by keys, into the intro, too");
+	}
+
+	private const int LargeBack = 10;
+
 	[Fact]
 	public async Task Skip_with_nothing_on_offer_sends_nothing()
 	{

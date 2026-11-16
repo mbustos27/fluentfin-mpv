@@ -77,9 +77,10 @@ against the real backend attached to FluentFin's mpv; pictures in its `shots\`).
 
 Not in this phase: trickplay previews, skip intro/credits, Up Next (the bridge does not carry segments
 or tiles yet; the shim still auto-skips what its settings say), the Tab order through
-the bar and Narrator checks (phase 3). Later (2026-11-16, skip-ui): the Skip button (top right,
-FluentFin's own player's place and style, shown for the whole offer of the backend's `segments`
-event, S or a click sends `skip_segment`) and the Next button's state from the `next` event.
+the bar and Narrator checks (phase 3). Later (2026-11-16, skip-ui): the Skip button (bottom right
+above the seek bar, as streaming apps place it, in FluentFin's own player's style; shown for the
+whole offer of the backend's `segments` event, S or a click sends `skip_segment`) and the Next
+button's state from the `next` event.
 
 - **Setting**: Settings → Playback, "Player controls: FluentFin / mpv". `mpv` is today's path,
   unchanged (`--wid`, the shim's OSC). `FluentFin` is B1 and the default (`SettingKeys.MpvPlayerControls`).

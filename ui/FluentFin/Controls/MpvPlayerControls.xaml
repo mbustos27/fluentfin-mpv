@@ -284,9 +284,11 @@
         </Grid>
 
         <!--
-            Skip intro / Skip credits while the backend offers a segment (docs/BRIDGE.md §5 segments): where FluentFin's own
-            player has its Skip (top right) and in its style. It stays for the whole offer, also while the bars are hidden
-            (as streaming apps do); last in the tree, so it is on top of the bars. Never focused by itself: Space stays play.
+            Skip intro / Skip credits while the backend offers a segment (docs/BRIDGE.md §5 segments), in the style of
+            FluentFin's own player's Skip, where streaming apps put it (Jellyfin web, Netflix): bottom right, just above the
+            bottom bar's controls while they show, a small margin from the bottom while they are hidden (its Margin is set
+            by PlaceSkipButton). It stays for the whole offer, also while the bars are hidden; last in the tree, so it is on
+            top of the bars' scrim. Never focused by itself: Space stays play.
             It does not hold the bars up under the pointer: it collapses when pressed, and an element that collapses under
             the pointer need not get its PointerExited (the bars would stay up).
         -->
@@ -294,10 +296,10 @@
             x:Name="SkipSegmentButton"
             Height="50"
             MinWidth="150"
-            Margin="10,30"
+            Margin="0,0,20,24"
             Padding="16,0"
             HorizontalAlignment="Right"
-            VerticalAlignment="Top"
+            VerticalAlignment="Bottom"
             VerticalContentAlignment="Center"
             AutomationProperties.Name="{x:Bind Controls.SkipText, Mode=OneWay}"
             Background="{StaticResource SkipScrim}"

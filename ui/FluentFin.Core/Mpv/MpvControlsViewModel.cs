@@ -381,6 +381,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		}
 
 		HoldSeek(target);
+		OfferAgainIfBackIn(target);
 		return _send(Bridge.Commands.SeekRelative, BridgeCommands.SeekRelative(seconds));
 	}
 
@@ -405,6 +406,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		NotifyActivity();
 		var target = Clamp(ticks);
 		HoldSeek(target);
+		OfferAgainIfBackIn(target);
 		return _send(Bridge.Commands.Seek, BridgeCommands.Seek(target));
 	}
 
@@ -605,6 +607,20 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		UpdateSkip();
 		HoldSeek(Clamp(segment.EndTicks));
 		return _send(Bridge.Commands.SkipSegment, null);
+	}
+
+	/// <summary>
+	/// A seek of the user's back into a segment that was skipped: its skip is offered again. The backend's offer may never
+	/// have left it (its sampling, about every 0.5 s, can miss the time at the segment's end between a skip and a quick
+	/// seek back), so waiting for the offer to change would leave the button away, and S doing nothing, for the segment.
+	/// </summary>
+	private void OfferAgainIfBackIn(long target)
+	{
+		if (_skipped is { } skipped && target >= skipped.StartTicks && target < skipped.EndTicks)
+		{
+			_skipped = null;
+			UpdateSkip();
+		}
 	}
 
 	private void UpdateSkip()

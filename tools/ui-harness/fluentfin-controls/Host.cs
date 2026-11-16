@@ -504,6 +504,13 @@ internal static partial class Host
 		controls.NotifyActivity();
 		await Picture(main, "skip-intro-bars");
 
+		// where streaming apps put it: bottom right, just above the seek bar (clear of the bar's controls)
+		var seekBar = (FrameworkElement)view.FindName("SeekBar");
+		var skipBox = Bounds(skip, view);
+		var seekBox = Bounds(seekBar, view);
+		Check(skipBox.Bottom <= seekBox.Top - 8 && skipBox.Bottom >= seekBox.Top - 60 && view.ActualWidth - skipBox.Right is >= 0 and <= 40,
+			$"with the bars, the Skip button is bottom right just above the seek bar (button {Box(skipBox)}, seek bar {Box(seekBox)}, view {view.ActualWidth:0}x{view.ActualHeight:0})");
+
 		// the bars hide, the Skip button stays over the video
 		var hideBy = DateTime.UtcNow.AddSeconds(6);
 		while (controls.ControlsVisible && DateTime.UtcNow < hideBy)
@@ -515,6 +522,9 @@ internal static partial class Host
 		Check(!controls.ControlsVisible && !Visible(view, "BottomBar") && Visible(view, "SkipSegmentButton"),
 			"the bars hid after 3 s; the Skip button stays for the intro");
 		await Picture(main, "skip-intro");
+		skipBox = Bounds(skip, view);
+		Check(view.ActualHeight - skipBox.Bottom is >= 8 and <= 40 && view.ActualWidth - skipBox.Right is >= 0 and <= 40,
+			$"without the bars, it stays bottom right with a small margin (button {Box(skipBox)}, view {view.ActualWidth:0}x{view.ActualHeight:0})");
 
 		// the keyboard can be on it; S skips, and the keyboard goes back to the player with it
 		Check(skip.Focus(FocusState.Keyboard) && ReferenceEquals(FocusManager.GetFocusedElement(root), skip), "the Skip button takes the keyboard's focus");
@@ -616,6 +626,11 @@ internal static partial class Host
 		await Picture(main, "jump-windowed");
 		controls.NotifyActivity();
 	}
+
+	private static Windows.Foundation.Rect Bounds(FrameworkElement element, UIElement relativeTo) =>
+		element.TransformToVisual(relativeTo).TransformBounds(new Windows.Foundation.Rect(0, 0, element.ActualWidth, element.ActualHeight));
+
+	private static string Box(Windows.Foundation.Rect r) => string.Create(CultureInfo.InvariantCulture, $"{r.Left:0},{r.Top:0}-{r.Right:0},{r.Bottom:0}");
 
 	private static string Describe(object? element) => element switch
 	{

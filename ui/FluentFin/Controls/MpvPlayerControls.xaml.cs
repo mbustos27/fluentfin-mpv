@@ -59,11 +59,17 @@ public sealed partial class MpvPlayerControls : UserControl
 			controls.PropertyChanging += self.OnControlsPropertyChanging;
 			self.UpdateCursor();
 			self.ReportBottomBar();
+			self.PlaceSkipButton();
 		}
 	}
 
 	private void OnControlsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
+		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible))
+		{
+			PlaceSkipButton();
+		}
+
 		if (e.PropertyName == nameof(MpvControlsViewModel.CursorHidden))
 		{
 			UpdateCursor();
@@ -293,7 +299,41 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	// -- the subtitles keep clear of the bottom bar ----------------------------------------------------------------------
 
-	private void OnBottomBarSizeChanged(object sender, SizeChangedEventArgs e) => ReportBottomBar();
+	private void OnBottomBarSizeChanged(object sender, SizeChangedEventArgs e)
+	{
+		ReportBottomBar();
+		PlaceSkipButton();
+	}
+
+	// -- the Skip button's place -----------------------------------------------------------------------------------------
+
+	/// <summary>The Skip button's distance from the right edge (the bottom bar's own padding) and, bars hidden, from the bottom.</summary>
+	private const double SkipEdgeRight = 20, SkipEdgeBottom = 24;
+
+	/// <summary>Its gap above the bottom bar's controls while they show.</summary>
+	private const double SkipGapAboveBar = 12;
+
+	/// <summary>The height of the bottom bar's controls (without its scrim's transparent top), last measured while it showed.</summary>
+	private double _barControlsHeight;
+
+	/// <summary>
+	/// The Skip button sits bottom right: just above the seek bar while the bars show (clear of them), a small margin from
+	/// the bottom while they are hidden, as streaming apps place it. A collapsed bar measures nothing: its last height is kept.
+	/// </summary>
+	private void PlaceSkipButton()
+	{
+		if (BottomBar.Visibility == Visibility.Visible && BottomBar.ActualHeight > 0)
+		{
+			_barControlsHeight = Math.Max(0, BottomBar.ActualHeight - BottomBar.Padding.Top);
+		}
+
+		var bottom = Controls is { ControlsVisible: true } && _barControlsHeight > 0 ? _barControlsHeight + SkipGapAboveBar : SkipEdgeBottom;
+		var margin = new Thickness(0, 0, SkipEdgeRight, bottom);
+		if (SkipSegmentButton.Margin != margin)
+		{
+			SkipSegmentButton.Margin = margin;
+		}
+	}
 
 	private void ReportBottomBar()
 	{
