@@ -71,7 +71,7 @@ against the real backend attached to FluentFin's mpv; pictures in its `shots\`).
 | libmpv in FluentFin, composition mode, the swap chain in the page's panel, its size, scale and display (HDR hint when Windows HDR is on, the refresh rate) | `ui\FluentFin\Mpv\MpvInProcessCore.cs`, `MpvCompositionVideo.cs`, `MpvSwapChainInterop.cs`, `Libmpv.cs` |
 | Which video the backend gets: the setting, and libmpv being there | `MpvVideoSurfaceChoice.cs` (`IMpvVideoSurface.GetWindowAsync`) |
 | The controls: top bar (back, series, "S1E2 · Episode"), seek bar with times, play/pause, -10 s, +30 s, Next episode, volume (flyout with slider and mute), audio and subtitle menus (Jellyfin names, Forced/SDH/External, "Off"), full screen; auto-hide after 3 s with the pointer; wheel = volume with an indicator | `ui\FluentFin\Controls\MpvPlayerControls.xaml(.cs)` over `ui\FluentFin.Core\Mpv\MpvControlsViewModel.cs` |
-| The page: the controls instead of the child window, keys before a focused button, Escape stays the page's | `VideoPlayerPage.xaml(.cs)`, `VideoPlayerViewModel.Mpv.cs` |
+| The page: the controls instead of the child window; the player's keys previewed while the video shows (Space and Enter stay a button's that the keyboard is on, `MpvPlayerKeys`), Escape stays the page's | `VideoPlayerPage.xaml(.cs)`, `VideoPlayerViewModel.Mpv.cs`, `ui\FluentFin\Controls\MpvPlayerKeys.cs` |
 | The setting | Settings, "Player controls" (`SettingKeys.MpvPlayerControls`), shown with the MPV player |
 
 Not in this phase: trickplay previews, skip intro/credits, Up Next (the bridge does not carry segments
@@ -83,7 +83,8 @@ the bar and Narrator checks (phase 3).
   of the go/no-go table passed on this PC: it is **mpv** (three rows not verified). Without
   `libmpv-2.dll` next to FluentFin.exe the choice falls back to mpv's controls with a notice.
 - **Protocol** (docs\BRIDGE.md): `connect.window` gains `{"mode": "attached", "ipc": "<pipe>"}`: the
-  UI's own mpv listens on that pipe before `connect` and lives as long as the backend; the backend
+  UI's own mpv listens on that pipe before `connect` and lives as long as the backend process (its shutdown, a
+  crash or a kill ends it too, so nothing plays on that nobody reports); the backend
   attaches through the shim's external backend and never starts, quits, sizes or fullscreens it.
   `set_controls` (`"ui"`, `subtitleInset`) hides the shim's OSC and keeps the subtitles above the bar.
   Tracks carry `streamTitle` and `isHearingImpaired` for the pickers' labels.

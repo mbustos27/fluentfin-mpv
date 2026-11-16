@@ -456,4 +456,109 @@ public sealed class MpvControlsViewModelTests
 		Assert.True(_vm.ControlsVisible);
 		Assert.Equal(("Show", "S1E2 · Next one"), (_vm.Title, _vm.Subtitle));
 	}
+
+	[Fact]
+	public void Controls_stay_while_the_keyboard_is_on_them_and_hide_once_it_left()
+	{
+		Playing();
+		_vm.NotifyActivity();
+		_vm.KeyboardInControls = true;
+		for (var round = 0; round < 3; round++)
+		{
+			Wait(10);
+			Assert.True(_vm.ControlsVisible, $"round {round}: Tab is on a button of the bar");
+			Assert.Equal("the keyboard is on them", _vm.HeldBy);
+		}
+
+		_vm.KeyboardInControls = false;
+		_vm.NotifyActivity();
+		Wait(2.9);
+		Assert.True(_vm.ControlsVisible);
+		Wait(0.2);
+		Assert.False(_vm.ControlsVisible, "gone 3 s after the keyboard left them");
+	}
+
+	/// <summary>A volume above 100 (an mpv.conf's <c>volume=130</c>): the protocol sets 0-100, so a step up keeps it, never lowers it.</summary>
+	[Fact]
+	public void A_step_up_never_lowers_a_volume_above_100()
+	{
+		_vm.OnState(new BridgeState { State = Bridge.States.Playing, Volume = 130 });
+		for (var round = 0; round < 3; round++)
+		{
+			_vm.Wheel(MpvControlsViewModel.WheelNotch);
+			Assert.Equal(130, _vm.Volume);
+			Assert.True(_vm.HandleKey(MpvControlsViewModel.Keys.Up));
+			Assert.Equal(130, _vm.Volume);
+		}
+
+		Assert.DoesNotContain(_sent, x => x.Command == Bridge.Commands.SetVolume);
+
+		// down still lowers it (into the range FluentFin sets)
+		_vm.Wheel(-MpvControlsViewModel.WheelNotch);
+		Assert.Equal(100, _vm.Volume);
+		Assert.Equal(100, (int)_sent.Single(x => x.Command == Bridge.Commands.SetVolume).Args!["volume"]!);
+	}
+
+	[Fact]
+	public void A_step_up_above_100_while_muted_only_unmutes()
+	{
+		_vm.OnState(new BridgeState { State = Bridge.States.Playing, Volume = 130, Muted = true });
+		_vm.Wheel(MpvControlsViewModel.WheelNotch);
+		Assert.False(_vm.IsMuted);
+		Assert.Equal(130, _vm.Volume);
+		Assert.Equal([Bridge.Commands.SetMute], Commands());
+		Assert.False((bool)_sent[0].Args!["muted"]!);
+	}
+
+	/// <summary>
+	/// Wheel notches while muted: the first unmutes and its volume waits behind the unmute; a later notch must not be
+	/// overtaken by the first one's older volume (the last <c>set_volume</c> is the newest).
+	/// </summary>
+	[Fact]
+	public async Task Wheel_notches_while_muted_send_the_newest_volume_last()
+	{
+		var answers = new List<TaskCompletionSource>();
+		var sent = new List<(string Command, JsonObject? Args)>();
+		var vm = new MpvControlsViewModel((command, args) =>
+		{
+			sent.Add((command, args?.DeepClone() as JsonObject));
+			var answer = new TaskCompletionSource();
+			answers.Add(answer);
+			return answer.Task;
+		}, () => _now);
+		vm.OnState(new BridgeState { State = Bridge.States.Playing, Volume = 80, Muted = true });
+
+		var first = vm.Wheel(MpvControlsViewModel.WheelNotch);
+		_ = vm.Wheel(MpvControlsViewModel.WheelNotch);
+		_ = vm.Wheel(MpvControlsViewModel.WheelNotch);
+		Assert.Equal(95, vm.Volume);
+
+		// the backend answers each command as it comes
+		for (var i = 0; i < 40; i++)
+		{
+			foreach (var answer in answers.ToArray())
+			{
+				answer.TrySetResult();
+			}
+
+			await Task.Delay(10);
+		}
+
+		await first;
+		var volumes = sent.Where(x => x.Command == Bridge.Commands.SetVolume).Select(x => (int)x.Args!["volume"]!).ToList();
+		Assert.Equal(Bridge.Commands.SetMute, sent[0].Command);
+		Assert.NotEmpty(volumes);
+		Assert.Equal(95, volumes[^1]);
+		Assert.Equal(Bridge.Commands.SetVolume, sent[^1].Command);
+	}
+
+	[Fact]
+	public void S_is_not_a_player_key_while_nothing_skips_segments()
+	{
+		const int s = 0x53;
+		Playing();
+		Assert.Null(MpvControlsViewModel.ActionFor(s, false, false, false));
+		Assert.False(_vm.HandleKey(s), "a key that does nothing is not taken from the page");
+		Assert.Empty(Commands());
+	}
 }

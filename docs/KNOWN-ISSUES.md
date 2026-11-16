@@ -40,6 +40,11 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 - **A pause or volume change can be undone for a moment by a state echo**: volume and mute are held
   for 1.5 s after a change (the wheel's case, measured); pause is not, a stale `state` can flip the
   button back until the next one.
+- **A volume above 100** (an mpv.conf's `volume=130`) stays until it is lowered: `set_volume` is 0-100,
+  so a step up (wheel, Up) leaves it, only unmuting; a step down sets it within 0-100.
+- **Keys off-screen**: a key message posted to FluentFin reaches WinUI only through the window's
+  `InputSiteWindowClass` child (the thread's focus window), not its `DesktopChildSiteBridge`; the
+  fluentfin-controls harness posts there (Space, F, Escape through the page's key path).
 
 ## UI (`ui\FluentFin.Core\Mpv`, `ui\FluentFin`)
 - **Play on a season starts at the series' first unplayed episode**, not the season's

@@ -260,13 +260,14 @@ public sealed partial class VideoPlayerPage : Page
 
 	/// <summary>
 	/// fluentfin-mpv player controls: the player's keys anywhere on the page (Space, arrows, F, M, ...), before a focused
-	/// button or slider takes them. Escape stays the page's accelerator (full screen off, else back).
+	/// slider takes them; only while the video is shown, and Space and Enter stay a focused button's (MpvPlayerKeys).
+	/// Escape stays the page's accelerator (full screen off, else back).
 	/// </summary>
 	private void OnMpvPreviewKeyDown(object sender, KeyRoutedEventArgs e)
 	{
-		if (ViewModel.UsesFluentFinControls && e.Key != VirtualKey.Escape && MpvControlsView.HandleKey(e.Key))
+		if (ViewModel.UsesFluentFinControls)
 		{
-			e.Handled = true;
+			FluentFin.Controls.MpvPlayerKeys.OnPreviewKeyDown(MpvControlsView, ViewModel.IsMpvVideoVisible, e);
 		}
 	}
 

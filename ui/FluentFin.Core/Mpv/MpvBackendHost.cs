@@ -133,6 +133,40 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 		}
 
 		public BridgeWindow? Window { get; set; }
+
+		// fluentfin-mpv player controls: every window a connect offered this backend (it may have attached to any of them)
+		private readonly List<BridgeWindow> _offeredWindows = [];
+		private bool _windowsEnded;
+
+		/// <summary>A connect is about to offer <paramref name="window"/>. False when this backend has already ended (its windows went with it).</summary>
+		public bool OfferWindow(BridgeWindow window)
+		{
+			lock (_offeredWindows)
+			{
+				if (!_windowsEnded && !_offeredWindows.Contains(window))
+				{
+					_offeredWindows.Add(window);
+				}
+
+				return !_windowsEnded;
+			}
+		}
+
+		/// <summary>The windows offered so far, once: this backend has ended, so they end with it (docs/BRIDGE.md §4, attached).</summary>
+		public List<BridgeWindow> EndWindows()
+		{
+			lock (_offeredWindows)
+			{
+				if (_windowsEnded)
+				{
+					return [];
+				}
+
+				_windowsEnded = true;
+				return [.. _offeredWindows];
+			}
+		}
+
 		public bool Connected { get; set; }
 		public string? MpvVersion { get; set; }
 		public string? MpvKind { get; set; }
@@ -413,6 +447,12 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 			}
 
 			logger.LogInformation("Connecting the mpv backend: {Identity}, window {Mode} {Hwnd}", identity?.ToString() ?? "(dev, no server)", window.Mode, window.Hwnd?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? window.Ipc);
+
+			// fluentfin-mpv player controls: an mpv FluentFin runs for this window ends with this backend (EndWindows)
+			if (!session.OfferWindow(window))
+			{
+				throw new BridgeClosedException("The mpv backend is not running");
+			}
 
 			JsonNode? result;
 			try
@@ -722,6 +762,10 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 		}
 
 		Interlocked.CompareExchange(ref _session, null, session);
+
+		// fluentfin-mpv player controls: the backend has exited (or was killed): FluentFin's mpv it was attached to ends with it,
+		// before whatever comes next (a restart attaches to a new one), docs/BRIDGE.md §4
+		EndWindowsOf(session);
 		if (gone is not null)
 		{
 			// a crash: its handling reads the backend's last events (a late `reported` closes the play session), which the
@@ -731,6 +775,25 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 		}
 
 		ReleaseSession(session);
+	}
+
+	/// <summary>
+	/// fluentfin-mpv player controls: tells the surface, once per backend, that the windows it was offered are done with
+	/// (an mpv FluentFin runs for one ends: it lives as long as the backend, docs/BRIDGE.md §4). Never throws.
+	/// </summary>
+	private void EndWindowsOf(Session session)
+	{
+		foreach (var window in session.EndWindows())
+		{
+			try
+			{
+				surface.OnBackendExited(window);
+			}
+			catch (Exception ex)
+			{
+				logger.LogError(ex, "Ending the video window {Mode} of the mpv backend (pid {Pid}) failed", window.Mode, SafeId(session));
+			}
+		}
 	}
 
 	private void ReleaseSession(Session session)
@@ -870,6 +933,10 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 		var exitSeenAt = Environment.TickCount64;
 		try
 		{
+			// fluentfin-mpv player controls: whatever the exit was, FluentFin's mpv this backend was attached to stops now
+			// (a crash would otherwise leave it playing behind the error), docs/BRIDGE.md §4
+			EndWindowsOf(session);
+
 			// decided by what came first (docs/BRIDGE.md §6), whenever this runs: FluentFin's stop (shutdown, stdin EOF or a
 			// kill the close decided, any exit code: the backend's report may still be in flight, or its server hung), or the
 			// exit or a kill decided before the stop (a crash, even when the close path began before the exit was seen)
@@ -995,6 +1062,7 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 		{
 			session.MarkShuttingDown();
 			KillProcess(session);
+			EndWindowsOf(session);
 			ReleaseSession(session);
 		}
 	}

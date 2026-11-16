@@ -80,6 +80,46 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		Assert.Contains("play", _backend.Commands);
 	}
 
+	/// <summary>The same fallback through the real choice and the real libmpv probe (not a stubbed answer), of a DLL that is not libmpv.</summary>
+	[Fact]
+	public async Task FluentFinControls_ChosenButLibmpvIsNotUsable_TheRealCheckFallsBackToMpvsAndSaysSo()
+	{
+		var movie = Movie();
+		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
+		_settings.SetupGet(x => x.MpvPlayerControls).Returns(MpvPlayerControls.FluentFin);
+		var vm = CreateViewModel();
+		vm.LibmpvUnavailable = () => FluentFin.Mpv.Libmpv.ProbeFile(Path.Combine(Environment.SystemDirectory, "version.dll"));
+
+		await vm.OnNavigatedTo(movie);
+
+		Assert.False(vm.UsesFluentFinControls);
+		Assert.Null(vm.MpvControls);
+		Assert.Contains("version.dll is not libmpv", vm.MpvNotice);
+		Assert.Contains("mpv's controls are used", vm.MpvNotice);
+		Assert.DoesNotContain("set_controls", _backend.Commands);
+		Assert.Contains("play", _backend.Commands);
+	}
+
+	/// <summary>Nothing replaced at all: the setting and the probe of the libmpv next to FluentFin (the tests' folder) decide.</summary>
+	[Fact]
+	public async Task FluentFinControls_Chosen_TheRealCheckOfTheLibmpvNextToFluentFinDecides()
+	{
+		var movie = Movie();
+		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
+		_settings.SetupGet(x => x.MpvPlayerControls).Returns(MpvPlayerControls.FluentFin);
+		var vm = CreateViewModel();
+
+		await vm.OnNavigatedTo(movie);
+
+		var there = File.Exists(Path.Combine(AppContext.BaseDirectory, FluentFin.Mpv.Libmpv.Dll));
+		Assert.Equal(there, vm.UsesFluentFinControls);
+		Assert.Equal(there, _backend.Commands.Contains("set_controls"));
+		if (!there)
+		{
+			Assert.Contains("libmpv-2.dll was not found next to FluentFin", vm.MpvNotice);
+		}
+	}
+
 	[Fact]
 	public async Task FluentFinControls_FollowThisPagesPlayback_AndSendThroughIt()
 	{

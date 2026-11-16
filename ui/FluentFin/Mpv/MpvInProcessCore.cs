@@ -27,11 +27,14 @@ internal sealed unsafe class MpvInProcessCore : IDisposable
 	/// <summary>The core ended by itself (a <c>quit</c> reached it): every later call on it is refused here.</summary>
 	public bool IsShutDown { get; private set; }
 
-	/// <summary>The swap chain mpv presents to changed (event thread); 0 = none. The pointer is mpv's: the panel takes its own reference.</summary>
-	public event Action<long>? SwapChainChanged;
+	/// <summary>
+	/// The swap chain mpv presents to changed (event thread); 0 = none. The pointer is mpv's, and mpv may release it at any
+	/// time after: a handler that keeps it takes a reference of its own before it returns (<see cref="MpvSwapChainSlot.Publish"/>).
+	/// </summary>
+	public event Action<MpvInProcessCore, long>? SwapChainChanged;
 
 	/// <summary>The core ended by itself (event thread).</summary>
-	public event Action? ShutDown;
+	public event Action<MpvInProcessCore>? ShutDown;
 
 	private MpvInProcessCore(ILogger logger, nint ctx, string pipe)
 	{
@@ -80,6 +83,13 @@ internal sealed unsafe class MpvInProcessCore : IDisposable
 		return options;
 	}
 
+	/// <summary>
+	/// The options the core cannot run without (the composition output the panel shows, and the pipe the backend attaches
+	/// to): one that mpv refuses makes <see cref="Create"/> fail instead of only logging. The availability probe asks libmpv
+	/// for the same before the setting is honoured (<see cref="Libmpv.Required"/>).
+	/// </summary>
+	internal static bool IsRequired(string name) => name == "input-ipc-server" || Libmpv.Required.Any(x => x.Name == name);
+
 	/// <summary>A pipe name nobody else uses: the process id and 16 random hex digits.</summary>
 	public static string NewPipeName() =>
 		string.Create(CultureInfo.InvariantCulture, $"fluentfin-mpv-{Environment.ProcessId}-{Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(8)).ToLowerInvariant()}");
@@ -99,6 +109,12 @@ internal sealed unsafe class MpvInProcessCore : IDisposable
 			foreach (var (name, value) in Options(pipe, configDir).Concat(extraOptions ?? []))
 			{
 				var rc = Libmpv.mpv_set_option_string(ctx, name, value);
+				if (rc < 0 && IsRequired(name))
+				{
+					// fails closed: without composition output (or its pipe) the controls would draw over no video
+					throw new InvalidOperationException($"mpv refused {name}={value}: {Libmpv.Error(rc)}");
+				}
+
 				if (rc < 0)
 				{
 					logger.LogWarning("mpv option {Name}={Value} was refused: {Error}", name, value, Libmpv.Error(rc));
@@ -165,7 +181,7 @@ internal sealed unsafe class MpvInProcessCore : IDisposable
 					case Libmpv.EventIdShutdown:
 						IsShutDown = true;
 						_logger.LogWarning("The in-process mpv core ended (a quit reached it)");
-						ShutDown?.Invoke();
+						ShutDown?.Invoke(this);
 						return;
 
 					case Libmpv.EventIdLogMessage:
@@ -184,7 +200,7 @@ internal sealed unsafe class MpvInProcessCore : IDisposable
 						if (Libmpv.Utf8(p->Name) == "display-swapchain")
 						{
 							var value = p->Format == Libmpv.FormatInt64 && p->Data != 0 ? *(long*)p->Data : 0;
-							SwapChainChanged?.Invoke(value);
+							SwapChainChanged?.Invoke(this, value);
 						}
 
 						continue;

@@ -66,6 +66,51 @@ public sealed partial class MpvPlayerControls : UserControl
 		{
 			UpdateCursor();
 		}
+		else if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible) && Controls is { ControlsVisible: false })
+		{
+			KeepKeyboardWhenBarsHide();
+		}
+	}
+
+	// -- the keyboard in the bars ----------------------------------------------------------------------------------------
+
+	/// <summary>
+	/// The keyboard moved into, within or out of the bars: while Tab has it on one of their controls they stay up (a hidden
+	/// bar would take the focused control, and the keyboard, with it).
+	/// </summary>
+	private void OnBarFocusChanged(object sender, RoutedEventArgs e)
+	{
+		if (Controls is not { } controls || XamlRoot is null)
+		{
+			return;
+		}
+
+		var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+		var inBars = focused is Control { FocusState: FocusState.Keyboard } && IsInBars(focused);
+		if (inBars && !controls.KeyboardInControls)
+		{
+			controls.NotifyActivity();
+		}
+
+		controls.KeyboardInControls = inBars;
+	}
+
+	/// <summary>
+	/// The bars hid while the focus was on one of their controls (one the mouse clicked: the keyboard's hold them up) or
+	/// went nowhere with them: the player takes it back, so its keys go on working.
+	/// </summary>
+	private void KeepKeyboardWhenBarsHide()
+	{
+		if (XamlRoot is null)
+		{
+			return;
+		}
+
+		var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
+		if (focused is null || IsInBars(focused))
+		{
+			Focus(FocusState.Programmatic);
+		}
 	}
 
 	private void StartTick()

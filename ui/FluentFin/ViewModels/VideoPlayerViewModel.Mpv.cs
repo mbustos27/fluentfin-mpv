@@ -83,8 +83,23 @@ public partial class VideoPlayerViewModel
 	[ObservableProperty]
 	public partial MpvControlsViewModel? MpvControls { get; set; }
 
-	/// <summary>Whether FluentFin's controls are chosen and can be had (tests replace it). Null whyNot: not chosen, or fine.</summary>
-	internal Func<(bool Use, string? WhyNot)> FluentFinControlsChoice { get; set; } = () => (FluentFin.Mpv.MpvVideoSurfaceChoice.UsesFluentFinControls(settings, out var whyNot), whyNot);
+	/// <summary>Whether FluentFin's controls are chosen and can be had (tests replace it). Null whyNot: not chosen, or fine. Null: the real choice.</summary>
+	internal Func<(bool Use, string? WhyNot)>? FluentFinControlsChoice { get; set; }
+
+	/// <summary>Why libmpv cannot be used, null when it can: the real probe of the libmpv next to FluentFin (tests probe another file).</summary>
+	internal Func<string?> LibmpvUnavailable { get; set; } = FluentFin.Mpv.Libmpv.Unavailable;
+
+	/// <summary>The same answer the video surface gives the backend at connect (<see cref="FluentFin.Mpv.MpvVideoSurfaceChoice"/>).</summary>
+	private (bool Use, string? WhyNot) ChooseControls()
+	{
+		if (FluentFinControlsChoice is { } choice)
+		{
+			return choice();
+		}
+
+		var use = FluentFin.Mpv.MpvVideoSurfaceChoice.UsesFluentFinControls(settings, LibmpvUnavailable, out var whyNot);
+		return (use, whyNot);
+	}
 
 	/// <summary>This page's play was taken by the backend: item, track and position events are its own from here.</summary>
 	private bool _mpvPlayAccepted;
@@ -149,7 +164,7 @@ public partial class VideoPlayerViewModel
 		_mpvItems = parameter is MpvSelfTestRequest ? null : new HashSet<string>(StringComparer.Ordinal);
 		var generation = _mpvGeneration = mpvPlayback.Begin("a player page opened");
 		// fluentfin-mpv player controls: the same answer the video surface gives the backend at connect
-		var (useFluentFinControls, whyNot) = FluentFinControlsChoice();
+		var (useFluentFinControls, whyNot) = ChooseControls();
 		UsesFluentFinControls = useFluentFinControls;
 		MpvControls = useFluentFinControls ? CreateMpvControls(generation) : null;
 		if (whyNot is not null)

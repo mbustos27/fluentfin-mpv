@@ -186,9 +186,13 @@ Command details:
   `force-window`, `osc=no`, no input bindings, `input-ipc-server`, the backend's config dir for
   `mpv.conf`); everything the shim sets at runtime (title, hwdec per file, tracks, OSC scripts) it
   still sets. Full screen is the UI's, as embedded. The UI's mpv listens before `connect` and lives as
-  long as the backend process; one that ended is replaced on a new pipe, so the next `connect` has a
-  different `window` and the UI restarts the backend (`window_locked`). A pipe that does not answer
-  fails the first `connect` with `mpv_failed`. The UI sends `set_controls` `"ui"` for its controls.
+  long as the backend process: when that process ends for any reason (its `shutdown`, stdin EOF, a
+  crash, a kill) the UI ends that mpv too, off its UI thread, so nothing plays on after the backend that
+  played and reported it (on a `shutdown` whose final report ran out of time the backend only closed
+  its pipe; the UI's end of the mpv is what stops it). The next `connect` gets a new mpv on a new pipe.
+  An mpv that ended by itself is replaced on a new pipe as well, so the next `connect` has a different
+  `window` and the UI restarts the backend (`window_locked`). A pipe that does not answer fails the
+  first `connect` with `mpv_failed`. The UI sends `set_controls` `"ui"` for its controls.
 - The backend must not bind any network port, start the tray, the in-player library
   browser, update checks, Discord presence, gamepad-to-browser navigation, or the
   single-instance listener of a standalone install.
