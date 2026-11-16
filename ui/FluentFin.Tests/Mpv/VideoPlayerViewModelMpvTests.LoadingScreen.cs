@@ -171,6 +171,27 @@ public sealed partial class VideoPlayerViewModelMpvTests
 	}
 
 	[Fact]
+	public async Task OnceTheVideoIsShown_TheLoadingScreenAndItsButtonAreGone_UntilItIsHiddenAgain()
+	{
+		// the reviewer's finding: the button kept the keyboard under mpv's window, so Space or Enter while the item opened
+		// left the page and stopped the playback
+		var movie = new FakeLibrary(_client).AddMovie();
+		var vm = CreateViewModel();
+
+		await vm.OnNavigatedTo(movie);
+
+		Assert.True(vm.IsMpvVideoVisible);
+		Assert.False(vm.IsMpvStartScreenVisible);
+		Assert.False(vm.LeaveMpvCommand.CanExecute(null));
+
+		// a crash hides the video: the screen and its Go back are back
+		vm.OnMpvStatus(vm.MpvGeneration, new MpvBackendStatus(MpvBackendState.Crashed, LastError: "The mpv backend stopped unexpectedly (exit code 3)"));
+		Assert.True(vm.IsMpvStartScreenVisible);
+		Assert.True(vm.LeaveMpvCommand.CanExecute(null));
+		Assert.Equal("Go back", vm.MpvLeaveText);
+	}
+
+	[Fact]
 	public async Task OtherPlayers_ShowNoLoadingScreen()
 	{
 		_settings.SetupGet(x => x.MediaPlayer).Returns(MediaPlayerType.Vlc);

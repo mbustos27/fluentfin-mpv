@@ -148,10 +148,11 @@ namespace FluentFin.Core.Contracts.Services
 		Task<UserDto?> GetCurrentUser();
 
 		/// <summary>
-		/// fluentfin-mpv: saves the signed-in user's configuration on the server (<c>POST /Users/Configuration</c>), as
-		/// jellyfin-web's Playback settings do; the whole configuration, as the server replaces it. False when it failed.
+		/// fluentfin-mpv: saves <paramref name="userId"/>'s configuration on the server (<c>POST /Users/Configuration</c>), as
+		/// jellyfin-web's Playback settings do; the whole configuration, as the server replaces it. The user is the caller's,
+		/// not whoever is signed in when the request goes out. False when it failed.
 		/// </summary>
-		Task<bool> SaveUserConfiguration(UserConfiguration configuration);
+		Task<bool> SaveUserConfiguration(Guid userId, UserConfiguration configuration);
 
 		Task<UserDto?> CreateUser(string username, string password);
 

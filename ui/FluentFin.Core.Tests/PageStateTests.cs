@@ -225,11 +225,17 @@ public sealed class PageStateTests : IDisposable
 		var now = new Subject<string>();
 		var slow = new TaskCompletionSource<BaseItemDtoQueryResult?>();
 		var updates = new List<SearchUpdate>();
-		using var _ = SearchSuggestions.Pipeline(typed, now, query => query == "old" ? slow.Task : Task.FromResult<BaseItemDtoQueryResult?>(Items(1)), TimeSpan.FromMilliseconds(10))
+		var started = new System.Collections.Concurrent.ConcurrentQueue<string>();
+		using var _ = SearchSuggestions.Pipeline(typed, now, query =>
+			{
+				started.Enqueue(query);
+				return query == "old" ? slow.Task : Task.FromResult<BaseItemDtoQueryResult?>(Items(1));
+			}, TimeSpan.FromMilliseconds(10))
 			.Synchronize()
 			.Subscribe(updates.Add);
 
 		now.OnNext("old");
+		await WaitUntil(() => started.Contains("old"));
 		now.OnNext("new");
 		await WaitUntil(() => updates.Count == 1);
 		slow.SetResult(Items(5));
@@ -270,6 +276,25 @@ public sealed class PageStateTests : IDisposable
 		await WaitUntil(() => updates.Count == 2);
 		Assert.Equal(["matr", "matr"], searched);
 		Assert.Equal(2, updates[1].Suggestions.Count);
+	}
+
+	[Fact]
+	public async Task Search_EnterAfterABackspace_SearchesWhatIsInTheBox_NotTheTypedQueryStillWaiting()
+	{
+		// the reviewer's R1: "abc" typed (held by the pause), backspaced to "ab" (under 3 letters, never typed through), Enter
+		var typed = new Subject<string>();
+		var now = new Subject<string>();
+		var updates = new List<SearchUpdate>();
+		using var _ = SearchSuggestions.Pipeline(typed, now,
+			query => Task.FromResult<BaseItemDtoQueryResult?>(new BaseItemDtoQueryResult { Items = [new BaseItemDto { Id = Guid.NewGuid(), Name = query }] }),
+			TimeSpan.FromMilliseconds(200)).Synchronize().Subscribe(updates.Add);
+
+		typed.OnNext("abc");
+		now.OnNext("ab");
+		await Task.Delay(700);
+
+		Assert.Equal("ab", updates[^1].Query);
+		Assert.DoesNotContain(updates, x => x.Query == "abc");
 	}
 
 	// ---- helpers

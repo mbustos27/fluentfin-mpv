@@ -219,11 +219,11 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task<bool> SaveUserConfiguration(UserConfiguration configuration)
+	public async Task<bool> SaveUserConfiguration(Guid userId, UserConfiguration configuration)
 	{
 		try
 		{
-			await _jellyfinApiClient.Users.Configuration.PostAsync(configuration, x => x.QueryParameters.UserId = UserId);
+			await _jellyfinApiClient.Users.Configuration.PostAsync(configuration, x => x.QueryParameters.UserId = userId);
 			return true;
 		}
 		catch (Exception ex)

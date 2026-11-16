@@ -38,7 +38,15 @@ public partial class VideoPlayerViewModel
 
 	/// <summary>The video window is shown over the video area (hidden while nothing plays, so messages there can be read).</summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsMpvStartScreenVisible))]
+	[NotifyCanExecuteChangedFor(nameof(LeaveMpvCommand))]
 	public partial bool IsMpvVideoVisible { get; set; }
+
+	/// <summary>
+	/// fluentfin-mpv: the loading screen (and its Cancel / Go back) is there only while the video is not: under mpv's window
+	/// it would still hold the keyboard, take Space or Enter as a click and be read out by Narrator.
+	/// </summary>
+	public bool IsMpvStartScreenVisible => !IsMpvVideoVisible;
 
 	/// <summary>Shown in the bar above the video area.</summary>
 	[ObservableProperty]
@@ -227,7 +235,7 @@ public partial class VideoPlayerViewModel
 	/// the page's leave stops whatever the start got to (a start whose page is gone goes no further: MpvPlaybackService).
 	/// With nothing to go back to, the start is stopped here and the page says so.
 	/// </summary>
-	[CommunityToolkit.Mvvm.Input.RelayCommand]
+	[CommunityToolkit.Mvvm.Input.RelayCommand(CanExecute = nameof(IsMpvStartScreenVisible))]
 	private async Task LeaveMpv()
 	{
 		logger.LogInformation("Player page (generation {Generation}): {Button} pressed", _mpvGeneration, IsMpvStarting ? "Cancel" : "Go back");

@@ -117,7 +117,7 @@ namespace FluentFin.Services
 					return;
 				}
 
-				_controller.Volume = Core.Settings.PlaybackPreferences.StepVolume(_controller.Volume, 1, _volumeStep());
+				_controller.Volume = Core.Settings.PlaybackPreferences.StepVolume(_controller.Volume, 1, _volumeStep(), MediaPlayers.MediaPlayerVolume.FullVolume(_controller));
 			}).Id);
 
 			_keySubscriptions.Add(_listener.Subscribe(Key.Down, () =>
@@ -127,7 +127,7 @@ namespace FluentFin.Services
 					return;
 				}
 
-				_controller.Volume = Core.Settings.PlaybackPreferences.StepVolume(_controller.Volume, -1, _volumeStep());
+				_controller.Volume = Core.Settings.PlaybackPreferences.StepVolume(_controller.Volume, -1, _volumeStep(), MediaPlayers.MediaPlayerVolume.FullVolume(_controller));
 			}).Id);
 		}
 

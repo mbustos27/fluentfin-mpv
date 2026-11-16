@@ -49,70 +49,74 @@
                 Background="Black">
                 <!--
                     fluentfin-mpv: the loading screen (docs/research/ux-review.md V10): what is starting, its backdrop, the
-                    step and a Cancel. Seen only while mpv's window is hidden: from then on that window covers the area.
+                    step and a Cancel. Collapsed while mpv's window is shown: under it the button would keep the keyboard.
                 -->
-                <Image
-                    x:Name="MpvBackdrop"
-                    AutomationProperties.AccessibilityView="Raw"
-                    Opacity="0.35"
-                    Source="{x:Bind c:BaseItemDtoConverters.GetImage(ViewModel.MpvStartingItem, jm:ImageType.Backdrop, 720), Mode=OneWay}"
-                    Stretch="UniformToFill" />
-                <Rectangle AutomationProperties.AccessibilityView="Raw">
-                    <Rectangle.Fill>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                            <GradientStop Offset="0" Color="#66000000" />
-                            <GradientStop Offset="1" Color="#E6000000" />
-                        </LinearGradientBrush>
-                    </Rectangle.Fill>
-                </Rectangle>
-                <StackPanel
-                    x:Name="MpvStartPanel"
-                    MaxWidth="640"
-                    Padding="24"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    RequestedTheme="Dark"
-                    Spacing="12">
-                    <TextBlock
-                        AutomationProperties.HeadingLevel="Level1"
+                <Grid x:Name="MpvStartScreen" Visibility="{x:Bind VisibleIf(ViewModel.IsMpvStartScreenVisible), Mode=OneWay}">
+                    <Image
+                        x:Name="MpvBackdrop"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Opacity="0.35"
+                        Source="{x:Bind c:BaseItemDtoConverters.GetImage(ViewModel.MpvStartingItem, jm:ImageType.Backdrop, 720), Mode=OneWay}"
+                        Stretch="UniformToFill" />
+                    <Rectangle AutomationProperties.AccessibilityView="Raw">
+                        <Rectangle.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Offset="0" Color="#66000000" />
+                                <GradientStop Offset="1" Color="#E6000000" />
+                            </LinearGradientBrush>
+                        </Rectangle.Fill>
+                    </Rectangle>
+                    <StackPanel
+                        x:Name="MpvStartPanel"
+                        MaxWidth="640"
+                        Padding="24"
                         HorizontalAlignment="Center"
-                        Style="{ThemeResource TitleTextBlockStyle}"
-                        Text="{x:Bind ViewModel.MpvStartingTitle, Mode=OneWay}"
-                        TextAlignment="Center"
-                        TextWrapping="WrapWholeWords"
-                        Visibility="{x:Bind VisibleIfText(ViewModel.MpvStartingTitle), Mode=OneWay}" />
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{ThemeResource BodyLargeTextBlockStyle}"
-                        Text="{x:Bind ViewModel.MpvStartingSubtitle, Mode=OneWay}"
-                        TextAlignment="Center"
-                        TextWrapping="WrapWholeWords"
-                        Visibility="{x:Bind VisibleIfText(ViewModel.MpvStartingSubtitle), Mode=OneWay}" />
-                    <ProgressRing
-                        Width="48"
-                        Height="48"
-                        Margin="0,12,0,0"
-                        HorizontalAlignment="Center"
-                        IsActive="{x:Bind ViewModel.IsMpvStarting, Mode=OneWay}"
-                        Visibility="{x:Bind VisibleIf(ViewModel.IsMpvStarting), Mode=OneWay}" />
-                    <TextBlock
-                        x:Name="MpvStepText"
-                        HorizontalAlignment="Center"
-                        AutomationProperties.LiveSetting="Polite"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{ThemeResource BodyTextBlockStyle}"
-                        Text="{x:Bind ViewModel.MpvStatusText, Mode=OneWay}"
-                        TextAlignment="Center"
-                        TextWrapping="WrapWholeWords" />
-                    <Button
-                        x:Name="MpvLeaveButton"
-                        MinWidth="120"
-                        Margin="0,8,0,0"
-                        HorizontalAlignment="Center"
-                        Command="{x:Bind ViewModel.LeaveMpvCommand}"
-                        Content="{x:Bind ViewModel.MpvLeaveText, Mode=OneWay}" />
-                </StackPanel>
+                        VerticalAlignment="Center"
+                        RequestedTheme="Dark"
+                        Spacing="12">
+                        <TextBlock
+                            AutomationProperties.HeadingLevel="Level1"
+                            HorizontalAlignment="Center"
+                            Style="{ThemeResource TitleTextBlockStyle}"
+                            Text="{x:Bind ViewModel.MpvStartingTitle, Mode=OneWay}"
+                            TextAlignment="Center"
+                            TextWrapping="WrapWholeWords"
+                            Visibility="{x:Bind VisibleIfText(ViewModel.MpvStartingTitle), Mode=OneWay}" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource BodyLargeTextBlockStyle}"
+                            Text="{x:Bind ViewModel.MpvStartingSubtitle, Mode=OneWay}"
+                            TextAlignment="Center"
+                            TextWrapping="WrapWholeWords"
+                            Visibility="{x:Bind VisibleIfText(ViewModel.MpvStartingSubtitle), Mode=OneWay}" />
+                        <ProgressRing
+                            Width="48"
+                            Height="48"
+                            Margin="0,12,0,0"
+                            HorizontalAlignment="Center"
+                            IsActive="{x:Bind ViewModel.IsMpvStarting, Mode=OneWay}"
+                            Visibility="{x:Bind VisibleIf(ViewModel.IsMpvStarting), Mode=OneWay}" />
+                        <TextBlock
+                            x:Name="MpvStepText"
+                            HorizontalAlignment="Center"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource BodyTextBlockStyle}"
+                            Text="{x:Bind ViewModel.MpvStatusText, Mode=OneWay}"
+                            TextAlignment="Center"
+                            TextWrapping="WrapWholeWords" />
+                        <Button
+                            x:Name="MpvLeaveButton"
+                            MinWidth="120"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Center"
+                            Command="{x:Bind ViewModel.LeaveMpvCommand}"
+                            Content="{x:Bind ViewModel.MpvLeaveText, Mode=OneWay}"
+                            GotFocus="OnLeaveButtonFocus"
+                            LostFocus="OnLeaveButtonFocus" />
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Grid>
     </Grid>

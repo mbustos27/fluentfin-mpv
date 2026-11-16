@@ -177,7 +177,7 @@ public sealed partial class MediaPlayerHost : UserControl
 			return;
 		}
 
-		player.Volume = Core.Settings.PlaybackPreferences.StepVolume(player.Volume, notch, settings.VolumeStep);
+		player.Volume = Core.Settings.PlaybackPreferences.StepVolume(player.Volume, notch, settings.VolumeStep, MediaPlayers.MediaPlayerVolume.FullVolume(player));
 		e.Handled = true;
 		ShowTransportControls();
 	}

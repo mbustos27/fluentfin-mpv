@@ -33,10 +33,12 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 {
 	private IDisposable? _statusSubscription;
 
-	// fluentfin-mpv: the server's copy of the user's configuration, changed and posted back whole
-	private UserConfiguration? _configuration;
+	// fluentfin-mpv: whose preferences the page shows (a save for anyone else is dropped), and the save waiting for the
+	// changes to stop (Settings > Playback)
+	private Guid? _loadedUserId;
 	private bool _showingPreferences;
 	private readonly SemaphoreSlim _saving = new(1, 1);
+	private CancellationTokenSource? _pendingSave;
 
 	public ObservableCollection<SavedServer> Servers { get; } = settings.Servers;
 
@@ -131,6 +133,12 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 
 	public static LanguageChoice AnyLanguage { get; } = new("", "Any language");
 
+	/// <summary>
+	/// How long the preferences must stay unchanged before they are saved: arrowing through a closed list is one save, not
+	/// one for each item passed. Leaving the page saves at once.
+	/// </summary>
+	public TimeSpan SaveDelay { get; set; } = TimeSpan.FromMilliseconds(500);
+
 	/// <summary>Kept on this PC: see <see cref="SettingKeys.ShowSkipPrompt"/>.</summary>
 	public bool ShowSkipPrompt
 	{
@@ -181,6 +189,14 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		_statusSubscription?.Dispose();
 		_statusSubscription = null;
 		PlaybackPreferences.Reset();
+
+		// a change still waiting for its save goes now
+		if (Interlocked.Exchange(ref _pendingSave, null) is { } pending)
+		{
+			pending.Cancel();
+			_ = SavePlaybackPreferences();
+		}
+
 		return Task.CompletedTask;
 	}
 
@@ -233,7 +249,7 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		_showingPreferences = false;
 		try
 		{
-			_configuration = configuration;
+			_loadedUserId = user.Id;
 			Languages = [AnyLanguage, .. languages, .. Missing(languages, configuration.AudioLanguagePreference, configuration.SubtitleLanguagePreference)];
 			AudioLanguage = Find(configuration.AudioLanguagePreference);
 			SubtitleLanguage = Find(configuration.SubtitleLanguagePreference);
@@ -269,21 +285,53 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	{
 		if (value is not null)
 		{
-			_ = SavePlaybackPreferences();
+			SaveSoon();
 		}
 	}
 
-	partial void OnAutoPlayNextEpisodeChanged(bool value) => _ = SavePlaybackPreferences();
+	partial void OnAutoPlayNextEpisodeChanged(bool value) => SaveSoon();
+
+	/// <summary>Saves once the preferences have stayed unchanged for <see cref="SaveDelay"/> (each change restarts the wait).</summary>
+	private void SaveSoon()
+	{
+		if (!_showingPreferences || _loadedUserId is null)
+		{
+			return;
+		}
+
+		var pending = new CancellationTokenSource();
+		Interlocked.Exchange(ref _pendingSave, pending)?.Cancel();
+		_ = SaveAfterDelay(pending);
+	}
+
+	private async Task SaveAfterDelay(CancellationTokenSource pending)
+	{
+		try
+		{
+			await Task.Delay(SaveDelay, pending.Token);
+		}
+		catch (OperationCanceledException)
+		{
+			return;
+		}
+
+		if (Interlocked.CompareExchange(ref _pendingSave, null, pending) == pending)
+		{
+			await SavePlaybackPreferences();
+		}
+	}
 
 	/// <summary>
-	/// fluentfin-mpv: a change goes to the server at once, the whole configuration as loaded with this page's four fields
-	/// changed (the server replaces it). One save at a time, each with the latest values. A failure is said on the page with
-	/// a Retry; the values stay as picked. The session's copy is updated, so FluentFin's own players follow at once.
+	/// fluentfin-mpv: saves this page's four fields into the user's configuration as the server has it now, read just
+	/// before (as jellyfin-web does): a change made elsewhere while the page was open is kept, not undone by an old copy.
+	/// Only for the user the page was loaded for: after a switch of user the save is dropped. One save at a time, each with
+	/// the latest values. A failure is said on the page with Try again; the values stay as picked. The session's copy is
+	/// updated, so FluentFin's own players follow at once.
 	/// </summary>
 	[RelayCommand]
 	private async Task SavePlaybackPreferences()
 	{
-		if (!_showingPreferences || _configuration is not { } configuration)
+		if (!_showingPreferences || _loadedUserId is not { } loadedUser)
 		{
 			return;
 		}
@@ -291,15 +339,29 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		await _saving.WaitAsync();
 		try
 		{
+			var fresh = await jellyfinClient.GetCurrentUser();
+			if (fresh?.Configuration is not { } configuration || fresh.Id is not { } userId)
+			{
+				SaveError = $"Your change didn't reach {LoadMessages.ServerName()}. Check that the server is running and that this PC can reach it, then try again.";
+				return;
+			}
+
+			if (userId != loadedUser)
+			{
+				// signed in as someone else since the page was loaded: these were the other user's preferences
+				SaveError = "";
+				return;
+			}
+
 			configuration.AudioLanguagePreference = AudioLanguage?.Code ?? "";
 			configuration.SubtitleLanguagePreference = SubtitleLanguage?.Code ?? "";
 			configuration.SubtitleMode = SubtitleMode?.Mode ?? UserConfiguration_SubtitleMode.Default;
 			configuration.EnableNextEpisodeAutoPlay = AutoPlayNextEpisode;
 
-			if (await jellyfinClient.SaveUserConfiguration(configuration))
+			if (await jellyfinClient.SaveUserConfiguration(userId, configuration))
 			{
 				SaveError = "";
-				if (SessionInfo.CurrentUser is { } user)
+				if (SessionInfo.CurrentUser is { } user && user.Id == userId)
 				{
 					user.Configuration = configuration;
 				}

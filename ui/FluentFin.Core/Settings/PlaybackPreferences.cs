@@ -6,9 +6,12 @@ namespace FluentFin.Core.Settings;
 /// </summary>
 public static class PlaybackPreferences
 {
-	/// <summary>The volume after one wheel notch or arrow key (<paramref name="direction"/>: its sign), 0 to 100.</summary>
-	public static double StepVolume(double volume, double direction, int step) =>
-		direction == 0 ? volume : Math.Clamp(volume + Math.Sign(direction) * Math.Clamp(step, 1, 20), 0, 100);
+	/// <summary>
+	/// The volume after one wheel notch or arrow key (<paramref name="direction"/>: its sign). <paramref name="step"/> is in
+	/// percent of the player's scale, which runs from 0 to <paramref name="full"/> (1 for Windows' player, 100 for the others).
+	/// </summary>
+	public static double StepVolume(double volume, double direction, int step, double full = 100) =>
+		direction == 0 ? volume : Math.Clamp(volume + Math.Sign(direction) * Math.Clamp(step, 1, 20) * full / 100, 0, full);
 
 	/// <summary>
 	/// Whether the next item starts by itself at the end of one: the server's per-user "auto-play next episode", which

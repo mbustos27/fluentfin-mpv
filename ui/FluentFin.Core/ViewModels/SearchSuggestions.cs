@@ -23,12 +23,15 @@ public static class SearchSuggestions
 {
 	/// <summary>
 	/// Typed queries are searched once the typing pauses for <paramref name="quiet"/>; queries in <paramref name="now"/>
-	/// (Enter, or choosing "try again") at once. A newer query drops the answer of any older one still running.
+	/// (Enter, or choosing "try again") at once, and they drop a typed query still waiting for its pause (so Enter after a
+	/// backspace searches what is in the box). A newer query drops the answer of any older one still running.
 	/// </summary>
 	public static IObservable<SearchUpdate> Pipeline(IObservable<string> typed, IObservable<string> now, Func<string, Task<BaseItemDtoQueryResult?>> search, TimeSpan quiet) =>
 		typed.DistinctUntilChanged()
-			.Throttle(quiet)
-			.Merge(now)
+			.Select(query => (Query: query, Wait: quiet))
+			.Merge(now.Select(query => (Query: query, Wait: TimeSpan.Zero)))
+			.Throttle(x => Observable.Timer(x.Wait))
+			.Select(x => x.Query)
 			.Select(query => Observable.FromAsync(() => search(query))
 				.Catch((Exception _) => Observable.Return<BaseItemDtoQueryResult?>(null))
 				.Select(result => new SearchUpdate(query, For(query, result))))

@@ -20,7 +20,9 @@ public sealed class PlaybackSettingsTests : IDisposable
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "FluentFinTests", Guid.NewGuid().ToString("N"));
 	private readonly Mock<IJellyfinClient> _client = new();
 	private readonly Mock<IMpvBackend> _backend = new();
+	private readonly Guid _userId = Guid.NewGuid();
 	private readonly List<UserConfiguration> _posted = [];
+	private readonly List<Guid> _postedFor = [];
 	private readonly Settings.Settings _settings;
 	private UserConfiguration _onServer = new()
 	{
@@ -38,20 +40,23 @@ public sealed class PlaybackSettingsTests : IDisposable
 	{
 		_settings = new Settings.Settings(new LocalSettingsService(new KnownFolders(_root)));
 		_backend.SetupGet(x => x.StatusChanged).Returns(Observable.Never<MpvBackendStatus>());
-		_client.Setup(x => x.GetCurrentUser()).ReturnsAsync(() => new UserDto { Id = Guid.NewGuid(), Configuration = _onServer });
+		// a fresh copy each time, as from the server: the page must not get by on changing the one it loaded in place
+		_client.Setup(x => x.GetCurrentUser()).ReturnsAsync(() => new UserDto { Id = _userId, Configuration = Copy(_onServer) });
 		_client.Setup(x => x.GetCultures()).ReturnsAsync(
 		[
 			Culture("Japanese", "jpn"),
 			Culture("English", "eng"),
 			Culture("French", "fre"),
 		]);
-		_client.Setup(x => x.SaveUserConfiguration(It.IsAny<UserConfiguration>())).ReturnsAsync((UserConfiguration c) =>
+		_client.Setup(x => x.SaveUserConfiguration(It.IsAny<Guid>(), It.IsAny<UserConfiguration>())).ReturnsAsync((Guid user, UserConfiguration c) =>
 		{
+			_postedFor.Add(user);
 			_posted.Add(Copy(c));
+			_onServer = Copy(c);
 			return true;
 		});
 		// the copy FluentFin took at sign-in
-		SessionInfo.CurrentUser = new UserDto { Configuration = new UserConfiguration { EnableNextEpisodeAutoPlay = false } };
+		SessionInfo.CurrentUser = new UserDto { Id = _userId, Configuration = new UserConfiguration { EnableNextEpisodeAutoPlay = false } };
 	}
 
 	public void Dispose()
@@ -80,8 +85,9 @@ public sealed class PlaybackSettingsTests : IDisposable
 	}
 
 	[Fact]
-	public async Task AChange_GoesToTheServerAtOnce_WithTheRestOfTheConfigurationKept()
+	public async Task AChange_GoesToTheServer_ForTheUserShown_WithTheRestOfTheConfigurationKept()
 	{
+		var views = _onServer.OrderedViews!.ToList();
 		var vm = Create();
 		await vm.OnNavigatedTo(null!);
 
@@ -89,8 +95,9 @@ public sealed class PlaybackSettingsTests : IDisposable
 		await WaitUntil(() => _posted.Count == 1);
 		vm.AudioLanguage = vm.Languages.Single(x => x.Code == "");
 		vm.AutoPlayNextEpisode = true;
-		await WaitUntil(() => _posted.Count == 3);
+		await WaitUntil(() => _posted.Count == 2);
 
+		Assert.Equal([_userId, _userId], _postedFor);
 		var last = _posted[^1];
 		Assert.Equal(UserConfiguration_SubtitleMode.Always, last.SubtitleMode);
 		Assert.Equal("", last.AudioLanguagePreference);
@@ -98,7 +105,7 @@ public sealed class PlaybackSettingsTests : IDisposable
 		Assert.True(last.EnableNextEpisodeAutoPlay);
 		// the server replaces the whole configuration: what this page does not show goes back as it came
 		Assert.True(last.HidePlayedInLatest);
-		Assert.Equal(_onServer.OrderedViews, last.OrderedViews);
+		Assert.Equal(views, last.OrderedViews);
 		// FluentFin's own players follow at once
 		Assert.True(PlaybackPreferences.PlaysNextItem());
 	}
@@ -123,7 +130,7 @@ public sealed class PlaybackSettingsTests : IDisposable
 		var vm = Create();
 		await vm.OnNavigatedTo(null!);
 		var accept = false;
-		_client.Setup(x => x.SaveUserConfiguration(It.IsAny<UserConfiguration>())).ReturnsAsync((UserConfiguration c) =>
+		_client.Setup(x => x.SaveUserConfiguration(It.IsAny<Guid>(), It.IsAny<UserConfiguration>())).ReturnsAsync((Guid _, UserConfiguration c) =>
 		{
 			_posted.Add(Copy(c));
 			return accept;
@@ -147,8 +154,8 @@ public sealed class PlaybackSettingsTests : IDisposable
 	[Fact]
 	public async Task PreferencesThatCannotBeLoaded_AreSaidWithRetry_AndNothingIsPosted()
 	{
-		var answers = new Queue<UserDto?>([null, new UserDto { Configuration = _onServer }]);
-		_client.Setup(x => x.GetCurrentUser()).ReturnsAsync(() => answers.Dequeue());
+		var answers = new Queue<UserDto?>([null, new UserDto { Id = _userId, Configuration = Copy(_onServer) }]);
+		_client.Setup(x => x.GetCurrentUser()).ReturnsAsync(() => answers.Count > 0 ? answers.Dequeue() : new UserDto { Id = _userId, Configuration = Copy(_onServer) });
 		var vm = Create();
 
 		await vm.OnNavigatedTo(null!);
@@ -179,6 +186,76 @@ public sealed class PlaybackSettingsTests : IDisposable
 	}
 
 	[Fact]
+	public async Task AChangeMadeElsewhereWhileThePageIsOpen_IsKept_NotUndoneByTheNextSave()
+	{
+		// the reviewer's R2: jellyfin-web, or another device, changes the configuration while Settings is open here
+		var vm = Create();
+		await vm.OnNavigatedTo(null!);
+
+		_onServer.HidePlayedInLatest = false;
+		_onServer.SubtitleLanguagePreference = "fre";
+		vm.AutoPlayNextEpisode = true;
+		await WaitUntil(() => _posted.Count == 1);
+
+		Assert.False(_posted[0].HidePlayedInLatest);
+		Assert.True(_posted[0].EnableNextEpisodeAutoPlay);
+		// the four fields are the page's: what it shows is what is saved
+		Assert.Equal("eng", _posted[0].SubtitleLanguagePreference);
+	}
+
+	[Fact]
+	public async Task ASaveAfterASwitchOfUser_IsDropped_NotPostedForTheNewUser()
+	{
+		var vm = Create();
+		await vm.OnNavigatedTo(null!);
+		var other = Guid.NewGuid();
+		_client.Setup(x => x.GetCurrentUser()).ReturnsAsync(() => new UserDto { Id = other, Configuration = new UserConfiguration() });
+
+		vm.AutoPlayNextEpisode = true;
+		await vm.SavePlaybackPreferencesCommand.ExecuteAsync(null);
+		await Task.Delay(100);
+
+		Assert.Empty(_posted);
+		Assert.False(vm.HasSaveError);
+	}
+
+	[Fact]
+	public async Task ChangesInQuickSuccession_AreOneSave_WithTheLastValues()
+	{
+		// the reviewer's R3: arrowing through a closed list passes every item on the way
+		var vm = Create();
+		vm.SaveDelay = TimeSpan.FromMilliseconds(500);
+		await vm.OnNavigatedTo(null!);
+
+		foreach (var mode in SettingsViewModel.SubtitleModes)
+		{
+			vm.SubtitleMode = mode;
+		}
+
+		await WaitUntil(() => _posted.Count == 1);
+		await Task.Delay(700);
+
+		var posted = Assert.Single(_posted);
+		Assert.Equal(SettingsViewModel.SubtitleModes[^1].Mode, posted.SubtitleMode);
+	}
+
+	[Fact]
+	public async Task LeavingThePage_SavesAChangeStillWaiting()
+	{
+		var vm = Create();
+		vm.SaveDelay = TimeSpan.FromSeconds(30);
+		await vm.OnNavigatedTo(null!);
+
+		vm.AutoPlayNextEpisode = true;
+		await Task.Delay(50);
+		Assert.Empty(_posted);
+		await vm.OnNavigatedFrom();
+		await WaitUntil(() => _posted.Count == 1);
+
+		Assert.True(_posted[0].EnableNextEpisodeAutoPlay);
+	}
+
+	[Fact]
 	public void TheLocalSettings_AreKeptOnThisPC_AndTheStepStaysBetween1And20()
 	{
 		var vm = Create();
@@ -203,15 +280,20 @@ public sealed class PlaybackSettingsTests : IDisposable
 	}
 
 	[Theory]
-	[InlineData(50, 120, 5, 55)]
-	[InlineData(50, -120, 5, 45)]
-	[InlineData(98, 1, 5, 100)]
-	[InlineData(2, -1, 5, 0)]
-	[InlineData(50, 0, 5, 50)]
-	[InlineData(50, 1, 0, 51)]
-	public void AWheelNotchOrArrowKey_MovesTheVolumeByTheStep_Within0And100(double volume, double direction, int step, double expected)
+	[InlineData(50, 120, 5, 100, 55)]
+	[InlineData(50, -120, 5, 100, 45)]
+	[InlineData(98, 1, 5, 100, 100)]
+	[InlineData(2, -1, 5, 100, 0)]
+	[InlineData(50, 0, 5, 100, 50)]
+	[InlineData(50, 1, 0, 100, 51)]
+	// Windows' player counts 0 to 1: a notch is 5 % of that, not 5 (which muted or went out of range)
+	[InlineData(0.5, 120, 5, 1, 0.55)]
+	[InlineData(0.5, -120, 5, 1, 0.45)]
+	[InlineData(0.98, 1, 5, 1, 1)]
+	[InlineData(0.02, -1, 5, 1, 0)]
+	public void AWheelNotchOrArrowKey_MovesTheVolumeByTheStep_WithinThePlayersScale(double volume, double direction, int step, double full, double expected)
 	{
-		Assert.Equal(expected, PlaybackPreferences.StepVolume(volume, direction, step));
+		Assert.Equal(expected, PlaybackPreferences.StepVolume(volume, direction, step, full), precision: 9);
 	}
 
 	[Fact]
@@ -231,7 +313,7 @@ public sealed class PlaybackSettingsTests : IDisposable
 		return culture;
 	}
 
-	private SettingsViewModel Create() => new(_settings, _backend.Object, _client.Object);
+	private SettingsViewModel Create() => new(_settings, _backend.Object, _client.Object) { SaveDelay = TimeSpan.FromMilliseconds(20) };
 
 	private static SubtitleModeChoice VideoSubtitleMode(UserConfiguration_SubtitleMode mode) => SettingsViewModel.SubtitleModes.Single(x => x.Mode == mode);
 
@@ -242,7 +324,7 @@ public sealed class PlaybackSettingsTests : IDisposable
 		SubtitleMode = c.SubtitleMode,
 		EnableNextEpisodeAutoPlay = c.EnableNextEpisodeAutoPlay,
 		HidePlayedInLatest = c.HidePlayedInLatest,
-		OrderedViews = c.OrderedViews,
+		OrderedViews = c.OrderedViews is null ? null : [.. c.OrderedViews],
 	};
 
 	private static async Task WaitUntil(Func<bool> condition)

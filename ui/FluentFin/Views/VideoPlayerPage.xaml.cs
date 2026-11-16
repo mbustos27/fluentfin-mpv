@@ -25,6 +25,9 @@ public sealed partial class VideoPlayerPage : Page
 	private bool _videoAttached;
 	private bool _mpvFullScreen;
 
+	// fluentfin-mpv: the loading screen's button has the keyboard (GotFocus/LostFocus come after the change that causes them)
+	private bool _leaveButtonFocused;
+
 	/// <summary>This page's frame navigated away from it (the only way the page hears it was left).</summary>
 	private bool _navigatedFrom;
 
@@ -113,6 +116,7 @@ public sealed partial class VideoPlayerPage : Page
 				break;
 			case nameof(VideoPlayerViewModel.IsMpvVideoVisible) when _videoAttached:
 				_videoHost.SetVideoVisible(ViewModel.IsMpvVideoVisible);
+				MoveFocusWithTheStartScreen();
 				break;
 			case nameof(VideoPlayerViewModel.MpvStatusText) when IsLoaded && !string.IsNullOrEmpty(ViewModel.MpvStatusText):
 				// fluentfin-mpv: Narrator hears each step without focus moving (WCAG 4.1.3, docs/research/ux-review.md A4)
@@ -120,6 +124,28 @@ public sealed partial class VideoPlayerPage : Page
 				break;
 		}
 	}
+
+	/// <summary>
+	/// fluentfin-mpv: the loading screen goes when the video is shown; if its button had the keyboard, the video gets it, as
+	/// once the item plays (FocusVideo), instead of nothing. When the screen comes back (an error, a crash) its button gets it.
+	/// </summary>
+	private void MoveFocusWithTheStartScreen()
+	{
+		if (ViewModel.IsMpvVideoVisible)
+		{
+			if (_leaveButtonFocused)
+			{
+				_leaveButtonFocused = false;
+				_videoHost.Focus();
+			}
+		}
+		else if (IsLoaded && !_navigatedFrom)
+		{
+			MpvLeaveButton.Focus(FocusState.Programmatic);
+		}
+	}
+
+	private void OnLeaveButtonFocus(object sender, RoutedEventArgs e) => _leaveButtonFocused = MpvLeaveButton.FocusState != FocusState.Unfocused;
 
 	private void AttachVideo()
 	{
