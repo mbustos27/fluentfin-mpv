@@ -153,7 +153,14 @@ internal static partial class Host
 			}
 		};
 		page.KeyboardAccelerators.Add(escape);
-		main.Content = page;
+		// the window's title bar: outside the page, before it in the tab order (where WinUI hands the focus of a collapsed bar)
+		var titleBar = new Button { Content = "Title bar" };
+		var window = new Grid { Background = new SolidColorBrush(Colors.Black), RowDefinitions = { new RowDefinition { Height = GridLength.Auto }, new RowDefinition() } };
+		Grid.SetRow(page, 1);
+		window.Children.Add(titleBar);
+		window.Children.Add(page);
+		view.KeyboardHome = page;
+		main.Content = window;
 		main.AppWindow.MoveAndResize(new RectInt32(60, 60, 1280, 760));
 		main.Activate();
 		await WhenLoaded(view);
@@ -297,7 +304,7 @@ internal static partial class Host
 			// -- keys through the player page's key path: real key messages posted to this window (never SendInput) -----
 			await backend.SendAsync(Bridge.Commands.Play, BridgeCommands.Play(new BridgePlayRequest([Episode1])));
 			Check(await Until(() => Last() is { State: Bridge.States.Playing, ItemId: Episode1 } && mpv.Flag("pause") == false, 30), "playing again, for the keys");
-			await KeysScenario(main, view, notice, controls, mpv, () => noticeClicks, () => backs, () => keysSeen);
+			await KeysScenario(main, view, notice, titleBar, controls, mpv, () => noticeClicks, () => backs, () => keysSeen);
 
 			// -- the backend dies mid-playback (the reviewer's kill repro): FluentFin's mpv ends with it ----------------
 			if (mpv.Flag("pause") == true)
@@ -346,7 +353,7 @@ internal static partial class Host
 	/// focused presses that button and leaves playback alone (the notice's close, the bar's Back), F goes full screen and
 	/// Escape comes back, the bars stay while the keyboard is on them, and hide with the keyboard handed back to the video.
 	/// </summary>
-	private static async Task KeysScenario(Window main, MpvPlayerControls view, Button notice, MpvControlsViewModel controls, MpvIpc mpv,
+	private static async Task KeysScenario(Window main, MpvPlayerControls view, Button notice, Button titleBar, MpvControlsViewModel controls, MpvIpc mpv,
 		Func<int> noticeClicks, Func<int> backs, Func<int> keysSeen)
 	{
 		bool Paused() => mpv.Flag("pause") == true;
@@ -424,6 +431,31 @@ internal static partial class Host
 		PostKey(input.Hwnd, VkSpace);
 		Check(await Until(Playing, 3), "and plays");
 
+		// the focus on a bar button that the keyboard does not hold (the mouse's; a programmatic focus counts as the keyboard's
+		// after keyboard input, as here): the bars hide and the player has the keyboard, not the title bar before the page
+		// that WinUI would hand it to (visual check: Space then did nothing)
+		async Task<(bool Hid, object? Focused)> HideWith(Control focus, FocusState how)
+		{
+			controls.NotifyActivity();
+			focus.Focus(how);
+			var gone = await Until(() => !controls.ControlsVisible, 6);
+			await Task.Delay(300);
+			return (gone, FocusManager.GetFocusedElement(root));
+		}
+
+		var (hidBack, onBack) = await HideWith(back, FocusState.Pointer);
+		Check(hidBack && ReferenceEquals(onBack, view), $"the bars hid with the mouse's focus on Back: the keyboard went to the video, not the title bar ({Describe(onBack)})");
+		PostKey(input.Hwnd, VkSpace);
+		Check(await Until(Paused, 3), "so Space pauses");
+		PostKey(input.Hwnd, VkSpace);
+		Check(await Until(Playing, 3), "and plays");
+
+		var (hidTitle, onTitle) = await HideWith(titleBar, FocusState.Keyboard);
+		Check(hidTitle && ReferenceEquals(onTitle, view), $"the bars hid with the keyboard on the title bar (outside the page): the player took it back ({Describe(onTitle)})");
+
+		var (hidNotice, onNotice) = await HideWith(notice, FocusState.Keyboard);
+		Check(hidNotice && ReferenceEquals(onNotice, notice), $"the bars hid with the keyboard on the notice's close (on the page): it stays there ({Describe(onNotice)})");
+
 		// a button the mouse clicked keeps no claim on Space: it plays and pauses, as in every player
 		controls.NotifyActivity();
 		notice.Focus(FocusState.Pointer);
@@ -436,6 +468,13 @@ internal static partial class Host
 	}
 
 	private const int VkSpace = 0x20, VkEscape = 0x1B, VkF = 0x46;
+
+	private static string Describe(object? element) => element switch
+	{
+		null => "nothing",
+		Button { Content: string text } => $"Button '{text}'",
+		_ => element.GetType().Name,
+	};
 
 	/// <summary>Where a keyboard's messages could go: the thread's focus window, then every window under the main one, then it.</summary>
 	private static List<(nint Hwnd, string Class)> InputWindows(nint main)

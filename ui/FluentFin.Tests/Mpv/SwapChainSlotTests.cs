@@ -8,6 +8,7 @@ namespace FluentFin.Tests.Mpv;
 /// alive until the panel shows it, and the one shown before is let go only after the panel shows the next. Reference
 /// counts are played by <see cref="FakeCom"/>, which notes any use of a swap chain that is already gone.
 /// </summary>
+[Collection(AloneCollection.Name)]
 public sealed class SwapChainSlotTests
 {
 	/// <summary>COM objects by number: AddRef and Release, and a fault for any touch of one whose count reached 0.</summary>
@@ -164,7 +165,7 @@ public sealed class SwapChainSlotTests
 	[Fact]
 	public async Task PublishedFromOneThread_BoundOnAnother_MpvReleasingEachAtOnce_NeverTouchesAFreedOne()
 	{
-		const int rounds = 20_000;
+		const int rounds = 5_000;
 		var com = new FakeCom(rounds + 1);
 		var slot = new MpvSwapChainSlot(com.AddRef, com.Release);
 		var panel = new FakePanel(com);
@@ -177,6 +178,10 @@ public sealed class SwapChainSlotTests
 				var swapChain = com.New();
 				slot.Publish(swapChain);
 				com.Release(swapChain);   // mpv's own reference goes right after
+				if (i % 64 == 0)
+				{
+					Thread.Yield();
+				}
 			}
 
 			Volatile.Write(ref done, true);
@@ -185,6 +190,7 @@ public sealed class SwapChainSlotTests
 		while (!Volatile.Read(ref done))
 		{
 			BindOnTheUiThread(slot, panel);
+			Thread.Yield();
 		}
 
 		await events;

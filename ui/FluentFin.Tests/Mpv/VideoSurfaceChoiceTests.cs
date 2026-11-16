@@ -10,6 +10,7 @@ namespace FluentFin.Tests.Mpv;
 /// FluentFin's in-process mpv (mpv_create, mpv_initialize: its GPU device and swap chain) takes a while, and a connect can
 /// come from the UI thread: it is made on the thread pool.
 /// </summary>
+[Collection(AloneCollection.Name)]
 public sealed class VideoSurfaceChoiceTests
 {
 	private static MpvVideoSurfaceChoice Choice() => new(new MpvVideoHost(new ListLogger<MpvVideoHost>()),

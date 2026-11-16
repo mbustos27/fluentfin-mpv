@@ -9,22 +9,32 @@ namespace FluentFin.Tests.Mpv;
 /// attached). Whatever ends the backend -- a crash, a kill, its shutdown, a restart for another window -- the surface is told
 /// once, so that mpv is ended too: a crashed backend once left it playing behind the error screen and after Back.
 /// </summary>
+[Collection(AloneCollection.Name)]
 public sealed class BackendEndsItsMpvTests : IDisposable
 {
 	private static readonly BridgeIdentity Alice = new("http://jf:8096", "srv", "Home", "aaaa", "alice", "token-alice-123", "dev", "PC", "FluentFin", "1.0");
 
 	private readonly ListLogger<MpvBackendHost> _log = new();
-	private readonly FakeLauncher _launcher = new(() => new FakeBackendProcess((_, request) => (string?)request["cmd"] == "connect"
-		? new JsonObject { ["mpv"] = "0.42.0", ["mpvBackend"] = "external" }
-		: new JsonObject()));
+	private readonly FakeLauncher _launcher;
+
+	/// <summary>Every backend started, readable from any thread (the launcher's own list is not: a restart adds to it while an exit is handled).</summary>
+	private readonly ConcurrentQueue<FakeBackendProcess> _started = new();
 
 	private readonly RecordingSurface _surface = new();
 	private readonly MpvBackendHost _host;
 
 	public BackendEndsItsMpvTests()
 	{
+		_launcher = new(() =>
+		{
+			var process = new FakeBackendProcess((_, request) => (string?)request["cmd"] == "connect"
+				? new JsonObject { ["mpv"] = "0.42.0", ["mpvBackend"] = "external" }
+				: new JsonObject());
+			_started.Enqueue(process);
+			return process;
+		});
 		_host = new MpvBackendHost(_launcher, _surface, _log) { HelloTimeout = TimeSpan.FromSeconds(5), ShutdownTimeout = TimeSpan.FromSeconds(2) };
-		_surface.Launcher = _launcher;
+		_surface.Started = _started;
 	}
 
 	public void Dispose() => _host.Dispose();
@@ -33,17 +43,31 @@ public sealed class BackendEndsItsMpvTests : IDisposable
 	{
 		public string Pipe { get; set; } = "fluentfin-mpv-1-0011223344556677";
 
-		public FakeLauncher? Launcher { get; set; }
+		public ConcurrentQueue<FakeBackendProcess> Started { get; set; } = new();
 
-		/// <summary>Each window ended, and whether the newest backend's process had ended when the surface heard it.</summary>
+		/// <summary>
+		/// Each window ended, and whether the first backend's process had ended when the surface heard it (read from the
+		/// process alone: nothing here may throw on the host's exit thread, where an exception is logged, not recorded).
+		/// </summary>
 		public ConcurrentQueue<(BridgeWindow Window, bool BackendGone)> Ended { get; } = new();
 
 		public Task<nint> GetHandleAsync() => throw new InvalidOperationException("attached: no window handle is asked for");
 
 		public Task<BridgeWindow> GetWindowAsync() => Task.FromResult(BridgeWindow.Attached(Pipe));
 
-		public void OnBackendExited(BridgeWindow window) =>
-			Ended.Enqueue((window, Launcher!.Started.FirstOrDefault(x => x.Requests.Any(r => (string?)r["args"]?["window"]?["ipc"] == window.Ipc))?.HasExited ?? false));
+		/// <summary>How long the surface takes to end a window (a slow one widens the race between the stop and the exit's handling).</summary>
+		public TimeSpan Delay { get; set; }
+
+		public void OnBackendExited(BridgeWindow window)
+		{
+			var gone = Started.TryPeek(out var first) && first.HasExited;
+			if (Delay > TimeSpan.Zero)
+			{
+				Thread.Sleep(Delay);
+			}
+
+			Ended.Enqueue((window, gone));
+		}
 
 		public string[] EndedPipes => [.. Ended.Select(x => x.Window.Ipc!)];
 	}
@@ -129,6 +153,28 @@ public sealed class BackendEndsItsMpvTests : IDisposable
 
 		await _host.ShutdownAsync();
 		Assert.Equal([old, _surface.Pipe], _surface.EndedPipes);
+	}
+
+	/// <summary>
+	/// The backend's exit wakes both the shutdown that waits for it and the exit's own handling; either may be the one that
+	/// tells the surface. The shutdown returns only once the surface heard, whichever it was (else a restart could be given
+	/// the old mpv, about to be ended under it). Several rounds: which thread wins is up to the thread pool.
+	/// </summary>
+	[Fact]
+	public async Task TheShutdown_ReturnsOnlyOnceTheSurfaceHeard_WhicheverThreadToldIt()
+	{
+		_surface.Delay = TimeSpan.FromMilliseconds(300);
+		for (var round = 0; round < 5; round++)
+		{
+			using var host = new MpvBackendHost(_launcher, _surface, _log) { HelloTimeout = TimeSpan.FromSeconds(5), ShutdownTimeout = TimeSpan.FromSeconds(2) };
+			_surface.Pipe = $"fluentfin-mpv-1-{round:x16}";
+			await host.StartAsync();
+			await host.ConnectAsync(Alice);
+
+			await host.ShutdownAsync();
+
+			Assert.Contains(_surface.Pipe, _surface.EndedPipes);
+		}
 	}
 
 	[Fact]

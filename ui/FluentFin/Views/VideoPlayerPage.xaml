@@ -42,8 +42,9 @@
             <StackPanel Grid.Row="0">
                 <InfoBar
                     x:Name="MpvMessageBar"
+                    CloseButtonClick="OnMpvMessageCloseButtonClick"
                     IsClosable="True"
-                    IsOpen="{x:Bind HasText(ViewModel.MpvMessage), Mode=OneWay}"
+                    IsOpen="{x:Bind ViewModel.HasMpvMessage, Mode=OneWay}"
                     Message="{x:Bind ViewModel.MpvMessage, Mode=OneWay}"
                     Severity="{x:Bind SeverityOf(ViewModel.MpvMessageIsError), Mode=OneWay}" />
 
@@ -52,7 +53,7 @@
                     x:Name="MpvNoticeBar"
                     CloseButtonClick="OnMpvNoticeCloseButtonClick"
                     IsClosable="True"
-                    IsOpen="{x:Bind HasText(ViewModel.MpvNotice), Mode=OneWay}"
+                    IsOpen="{x:Bind ViewModel.HasMpvNotice, Mode=OneWay}"
                     Message="{x:Bind ViewModel.MpvNotice, Mode=OneWay}"
                     Severity="Warning" />
             </StackPanel>

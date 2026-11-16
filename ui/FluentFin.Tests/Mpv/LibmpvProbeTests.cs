@@ -7,6 +7,7 @@ namespace FluentFin.Tests.Mpv;
 /// A client API 2.x is not enough: an older libmpv that has no composition output loads fine and would leave the controls
 /// over no video, so the probe makes a core handle and has it take the composition options, then destroys it.
 /// </summary>
+[Collection(AloneCollection.Name)]
 public sealed class LibmpvProbeTests
 {
 	private sealed class FakeLibmpv(ulong version = 2UL << 16 | 5)

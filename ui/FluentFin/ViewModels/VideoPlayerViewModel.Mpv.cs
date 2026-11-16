@@ -50,7 +50,14 @@ public partial class VideoPlayerViewModel
 
 	/// <summary>Shown in the bar above the video area.</summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasMpvMessage))]
 	public partial string? MpvMessage { get; set; }
+
+	/// <summary>
+	/// fluentfin-mpv: the message bar is open. A bool for its binding: x:Bind does not call a function whose argument is null,
+	/// so a bar opened by a function of the text stayed open, and empty, once the text was gone.
+	/// </summary>
+	public bool HasMpvMessage => !string.IsNullOrEmpty(MpvMessage);
 
 	[ObservableProperty]
 	public partial bool MpvMessageIsError { get; set; }
@@ -61,7 +68,11 @@ public partial class VideoPlayerViewModel
 	/// or when dismissed (<see cref="DismissMpvNotice"/>). Playback is not touched.
 	/// </summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasMpvNotice))]
 	public partial string? MpvNotice { get; set; }
+
+	/// <summary>fluentfin-mpv: the notice bar is open (as <see cref="HasMpvMessage"/>: it closes when the notice goes).</summary>
+	public bool HasMpvNotice => !string.IsNullOrEmpty(MpvNotice);
 
 	/// <summary>How long <see cref="MpvNotice"/> stays up (a newer notice starts the time again).</summary>
 	public TimeSpan MpvNoticeDuration { get; set; } = TimeSpan.FromSeconds(8);
@@ -682,6 +693,9 @@ public partial class VideoPlayerViewModel
 			MpvNotice = null;
 		}
 	}
+
+	/// <summary>The message bar's close button: gone now, and the next message opens the bar again, even with the same text.</summary>
+	public void DismissMpvMessage() => MpvMessage = null;
 
 	/// <summary>The notice's close button (or a message that replaces it): gone now, and the next notice shows even with the same text.</summary>
 	public void DismissMpvNotice()

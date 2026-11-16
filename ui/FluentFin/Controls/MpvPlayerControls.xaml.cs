@@ -50,11 +50,13 @@ public sealed partial class MpvPlayerControls : UserControl
 		if (e.OldValue is MpvControlsViewModel old)
 		{
 			old.PropertyChanged -= self.OnControlsPropertyChanged;
+			old.PropertyChanging -= self.OnControlsPropertyChanging;
 		}
 
 		if (e.NewValue is MpvControlsViewModel controls)
 		{
 			controls.PropertyChanged += self.OnControlsPropertyChanged;
+			controls.PropertyChanging += self.OnControlsPropertyChanging;
 			self.UpdateCursor();
 			self.ReportBottomBar();
 		}
@@ -68,9 +70,33 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 		else if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible) && Controls is { ControlsVisible: false })
 		{
+			// a focus the collapse left nowhere
+			if (XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is null)
+			{
+				Focus(FocusState.Programmatic);
+			}
+		}
+	}
+
+	/// <summary>
+	/// The bars are about to hide (raised before their Visibility follows): the keyboard is moved now, while they still
+	/// show. After the collapse WinUI would already have handed it to the next control outside the player (the title bar),
+	/// where Space and the player's keys do nothing.
+	/// </summary>
+	private void OnControlsPropertyChanging(object? sender, System.ComponentModel.PropertyChangingEventArgs e)
+	{
+		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible) && Controls is { ControlsVisible: true })
+		{
 			KeepKeyboardWhenBarsHide();
 		}
 	}
+
+	/// <summary>
+	/// Set by the page: the part of the window whose other controls keep the keyboard when the bars hide (a notice's close
+	/// button the keyboard went to); from anywhere outside it (the title bar) the player takes it back. Null: only from
+	/// the bars, or from nowhere.
+	/// </summary>
+	public UIElement? KeyboardHome { get; set; }
 
 	// -- the keyboard in the bars ----------------------------------------------------------------------------------------
 
@@ -96,8 +122,8 @@ public sealed partial class MpvPlayerControls : UserControl
 	}
 
 	/// <summary>
-	/// The bars hid while the focus was on one of their controls (one the mouse clicked: the keyboard's hold them up) or
-	/// went nowhere with them: the player takes it back, so its keys go on working.
+	/// The bars hide while the focus is on one of their controls (one the mouse clicked or the app focused: the keyboard's
+	/// hold them up), nowhere, or outside <see cref="KeyboardHome"/>: the player takes it, so its keys go on working.
 	/// </summary>
 	private void KeepKeyboardWhenBarsHide()
 	{
@@ -107,10 +133,23 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 
 		var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
-		if (focused is null || IsInBars(focused))
+		if (focused is null || IsInBars(focused) || (KeyboardHome is { } home && !IsWithin(focused, home)))
 		{
 			Focus(FocusState.Programmatic);
 		}
+	}
+
+	private static bool IsWithin(DependencyObject element, DependencyObject ancestor)
+	{
+		for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, ancestor))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private void StartTick()

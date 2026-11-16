@@ -7,6 +7,7 @@ namespace FluentFin.Tests.Mpv;
 /// fluentfin-mpv player controls: which keys the player page hands to the player before the focused element sees them
 /// (MpvPlayerKeys, the page's PreviewKeyDown). The real key path, with real buttons, is in the fluentfin-controls harness.
 /// </summary>
+[Collection(AloneCollection.Name)]
 public sealed class PlayerKeysTests
 {
 	[Theory]

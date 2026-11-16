@@ -47,6 +47,9 @@ public sealed partial class VideoPlayerPage : Page
 		var escape = new KeyboardAccelerator { Key = VirtualKey.Escape };
 		escape.Invoked += OnEscape;
 		KeyboardAccelerators.Add(escape);
+		// fluentfin-mpv: the page has no tooltip of its own, so WinUI made one of the accelerator's key and showed a stray
+		// "Esc" at the top of the window (the loading screen's Cancel had the focus)
+		KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
 	}
 
 	protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -76,6 +79,10 @@ public sealed partial class VideoPlayerPage : Page
 		{
 			AttachVideo();
 		}
+
+		// fluentfin-mpv player controls: when their bars hide, the keyboard comes back to the player from anywhere outside
+		// this page (the title bar), not only from the bars
+		MpvControlsView.KeyboardHome = MpvRoot;
 
 		// the loading screen's only control: Escape or Enter leaves before the start goes on
 		if (ViewModel.IsMpvStarting)
@@ -276,11 +283,11 @@ public sealed partial class VideoPlayerPage : Page
 	// fluentfin-mpv: closed by its button: gone in the view model too, so the next notice shows even with the same text
 	private void OnMpvNoticeCloseButtonClick(InfoBar sender, object args) => ViewModel.DismissMpvNotice();
 
+	private void OnMpvMessageCloseButtonClick(InfoBar sender, object args) => ViewModel.DismissMpvMessage();
+
 	public Visibility VisibleIf(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
 
 	public Visibility CollapsedIf(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
-
-	public bool HasText(string? value) => !string.IsNullOrEmpty(value);
 
 	public Visibility VisibleIfBoth(bool first, bool second) => first && second ? Visibility.Visible : Visibility.Collapsed;
 
