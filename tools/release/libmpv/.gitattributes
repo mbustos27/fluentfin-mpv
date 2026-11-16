@@ -1,2 +1,4 @@
 *.sh text eol=lf
 pins.txt text eol=lf
+# the stub's source tarball (SOURCES.txt) is made from these files: the same bytes on every checkout
+dvdcss-stub/* text eol=lf

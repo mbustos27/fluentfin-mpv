@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using FluentFin.Mpv;
 
 namespace FluentFin.Tests.Mpv;
@@ -93,21 +94,146 @@ public sealed class LibmpvProbeTests
 	}
 
 	/// <summary>
-	/// The loader looks for libmpv's DLLs in libmpv's own folder and System32 only: not FluentFin's folder, the working
+	/// What the loader asks Windows for: the full path, and libmpv's dependencies looked for in its own folder and System32
+	/// only (LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32), never FluentFin's folder, the working
 	/// directory or PATH, where other builds' DLLs of the same names can be (another FFmpeg, an msys2 bin folder).
 	/// </summary>
 	[Fact]
-	public void TheLoader_SearchesLibmpvsOwnFolderAndSystem32_AndNothingElse()
+	public void TheLoader_AsksForTheFullPath_AndLibmpvsOwnFolderAndSystem32Only()
 	{
-		const uint LoadLibrarySearchDllLoadDir = 0x100, LoadLibrarySearchSystem32 = 0x800;
+		using var dir = new TempDir();
+		var dll = Path.Combine(dir.Path, "x.dll");
+		File.WriteAllBytes(dll, [0]);
+		var calls = new List<(string Path, uint Flags)>();
 
-		Assert.Equal(LoadLibrarySearchDllLoadDir | LoadLibrarySearchSystem32, Libmpv.LoadFlags);
+		var (handle, error) = Libmpv.Load(Path.Combine(dir.Path, ".", "x.dll"), (path, flags) =>
+		{
+			calls.Add((path, flags));
+			return 0x5678;
+		});
+
+		Assert.Equal(0x5678, handle);
+		Assert.Null(error);
+		Assert.Equal([(dll, 0x100u | 0x800u)], calls);
 		Assert.Equal(Path.Combine(AppContext.BaseDirectory, "libmpv", "libmpv-2.dll"), Libmpv.InstalledPath);
 	}
 
 	/// <summary>
+	/// The load runs with Windows' critical-error boxes off for the process (a DLL missing an export would otherwise show
+	/// "Entry Point Not Found" on the user's screen and block until dismissed; the thread's mode is not enough, the loader
+	/// works on threads of its own), and the process's mode is put back after. Starts from mode 0, as a desktop app may.
+	/// </summary>
+	[Fact]
+	public void TheLoader_ShowsNoErrorBox_AndRestoresTheProcessErrorMode()
+	{
+		using var dir = new TempDir();
+		var dll = Path.Combine(dir.Path, "x.dll");
+		File.WriteAllBytes(dll, [0]);
+		var original = SetErrorMode(0);
+		try
+		{
+			uint during = 0;
+
+			var (_, error) = Libmpv.Load(dll, (_, _) =>
+			{
+				during = GetErrorMode();
+				Marshal.SetLastPInvokeError(127);
+				return 0;
+			});
+
+			Assert.Equal(0x0001u, during & 0x0001u);
+			Assert.Equal(0u, GetErrorMode());
+			Assert.Equal(new System.ComponentModel.Win32Exception(127).Message, error);
+		}
+		finally
+		{
+			SetErrorMode(original);
+		}
+	}
+
+	/// <summary>
+	/// libmpv is not loaded while an FFmpeg DLL of its folder's names is loaded from elsewhere (Flyleaf's): Windows would
+	/// give libmpv that other FFmpeg. It says to restart FluentFin, and nothing is loaded or changed.
+	/// </summary>
+	[Fact]
+	public void Libmpv_IsNotLoaded_WhileAnotherFFmpegOfTheSameNamesIsLoaded()
+	{
+		using var dir = new TempDir();
+		File.Copy(Path.Combine(Environment.SystemDirectory, "version.dll"), Path.Combine(dir.Path, "libmpv-2.dll"));
+		File.WriteAllBytes(Path.Combine(dir.Path, "avcodec-63.dll"), [0]);
+		File.WriteAllBytes(Path.Combine(dir.Path, "avutil-61.dll"), [0]);
+		var flyleaf = @"C:\Some\App\FFMpeg\avutil-61.dll";
+
+		var (handle, error) = Libmpv.LoadLibmpv(Path.Combine(dir.Path, "libmpv-2.dll"), name => name == "avutil-61.dll" ? flyleaf : null);
+
+		Assert.Equal(0, handle);
+		Assert.Contains("avutil-61.dll", error);
+		Assert.Contains(@"C:\Some\App\FFMpeg", error);
+		Assert.Contains("restart FluentFin to use its own controls", error);
+		Assert.Null(NativeModules.LoadedPath(Path.Combine(dir.Path, "libmpv-2.dll")));
+	}
+
+	/// <summary>The clash check itself, on real modules: a name loaded from another folder is reported, one from the folder not.</summary>
+	[Fact]
+	public void TheClashCheck_ReportsANameLoadedFromAnotherFolder()
+	{
+		var kernel32 = NativeModules.LoadedPath("kernel32.dll");
+
+		Assert.NotNull(kernel32);
+		Assert.Equal([("kernel32.dll", kernel32!)], NativeModules.LoadedElsewhere(["kernel32.dll", "no-such-module-x.dll"], AppContext.BaseDirectory, NativeModules.LoadedPath));
+		Assert.Empty(NativeModules.LoadedElsewhere(["kernel32.dll"], Path.GetDirectoryName(kernel32)!, NativeModules.LoadedPath));
+	}
+
+	[Fact]
+	public void FFmpegsNames_AreFoundInAFolder()
+	{
+		using var dir = new TempDir();
+		foreach (var name in new[] { "avcodec-63.dll", "swscale-10.dll", "libass-9.dll", "avcodec-63.txt", "libavcodec.dll" })
+		{
+			File.WriteAllBytes(Path.Combine(dir.Path, name), [0]);
+		}
+
+		Assert.Equal(["avcodec-63.dll", "swscale-10.dll"], NativeModules.FFmpegNames(dir.Path));
+		Assert.Empty(NativeModules.FFmpegNames(Path.Combine(dir.Path, "missing")));
+	}
+
+	/// <summary>
+	/// The libraries' configuration (GnuTLS's priority file, OpenSSL's config and providers, libxml2's catalog, libva's
+	/// drivers) points into libmpv's folder, and p11-kit reads no user configuration.
+	/// </summary>
+	[Fact]
+	public void TheLibraryEnvironment_PointsIntoLibmpvsFolder()
+	{
+		var folder = @"C:\App\libmpv";
+		var env = Libmpv.LibraryEnvironment(folder).ToDictionary(x => x.Name, x => x.Value);
+
+		Assert.Equal(["GNUTLS_SYSTEM_PRIORITY_FILE", "LIBVA_DRIVERS_PATH", "OPENSSL_CONF", "OPENSSL_CONF_INCLUDE", "OPENSSL_MODULES", "P11_KIT_NO_USER_CONFIG", "XML_CATALOG_FILES"], env.Keys.Order());
+		Assert.Equal("1", env["P11_KIT_NO_USER_CONFIG"]);
+		Assert.All(env.Where(x => x.Key != "P11_KIT_NO_USER_CONFIG"), x => Assert.StartsWith(folder + @"\", x.Value));
+	}
+
+	/// <summary>
+	/// The environment reaches the C runtime's copy the MSYS2 libraries' getenv reads, even when the runtime made that copy
+	/// before (setting Windows' environment alone does not change it), as well as Windows' own.
+	/// </summary>
+	[Fact]
+	public void TheLibraryEnvironment_ReachesTheCRuntimesGetenv_AndWindows()
+	{
+		using var dir = new TempDir();
+		_ = CGetenv("GNUTLS_SYSTEM_PRIORITY_FILE");  // the runtime's copy exists from here on
+
+		Libmpv.ApplyLibraryEnvironment(dir.Path);
+
+		foreach (var (name, value) in Libmpv.LibraryEnvironment(dir.Path))
+		{
+			Assert.Equal(value, CGetenv(name));
+			Assert.Equal(value, Environment.GetEnvironmentVariable(name));
+		}
+	}
+
+	/// <summary>
 	/// The build puts the vendored libmpv and its DLLs in the libmpv folder next to the app (here: the tests), when the
-	/// checkout has a build in vendor\libmpv (VENDORED.md); otherwise the tests below have nothing to check.
+	/// checkout has a build in vendor\libmpv (VENDORED.md).
 	/// </summary>
 	[Fact]
 	public void TheBuild_CopiesTheVendoredLibmpvIntoItsFolder_WhenTheCheckoutHasOne()
@@ -123,30 +249,44 @@ public sealed class LibmpvProbeTests
 	}
 
 	/// <summary>The vendored libmpv (vendor\libmpv\VENDORED.md), in the libmpv folder next to the tests, passes.</summary>
-	[Fact]
-	public void TheRealProbe_OfTheVendoredLibmpv_PassesWhenItIsThere()
+	[VendoredLibmpvFact]
+	public void TheRealProbe_OfTheVendoredLibmpv_Passes()
 	{
-		if (!File.Exists(Libmpv.InstalledPath))
-		{
-			return;
-		}
-
 		Assert.Null(Libmpv.ProbeFile(Libmpv.InstalledPath));
 		Assert.True(Libmpv.IsAvailable(out var why), why);
+	}
+
+	/// <summary>
+	/// Loading the vendored libmpv sets its libraries' environment first (they read it as they load) and points GnuTLS's
+	/// translations into its folder (MSYS2's GnuTLS binds them to its build machine's D:/M/msys64/... when it loads).
+	/// </summary>
+	[VendoredLibmpvFact]
+	public void LoadingTheVendoredLibmpv_KeepsItsLibrariesConfigurationInItsFolder()
+	{
+		var folder = Path.GetDirectoryName(Libmpv.InstalledPath)!;
+		using (var other = new TempDir())
+		{
+			Libmpv.ApplyLibraryEnvironment(other.Path);
+		}
+
+		var (handle, error) = Libmpv.LoadLibmpv(Libmpv.InstalledPath);
+
+		Assert.True(handle != 0, error);
+		foreach (var (name, value) in Libmpv.LibraryEnvironment(folder))
+		{
+			Assert.Equal(value, CGetenv(name));
+		}
+
+		Assert.StartsWith(folder + @"\", Libmpv.GnutlsTranslations());
 	}
 
 	/// <summary>
 	/// Once the probe has loaded it, libmpv-2.dll and every DLL of its folder that is loaded came from that folder: none was
 	/// taken from FluentFin's folder, PATH or anywhere else with the same name.
 	/// </summary>
-	[Fact]
+	[VendoredLibmpvFact]
 	public void TheVendoredLibmpv_AndItsDlls_AreLoadedFromItsFolder()
 	{
-		if (!File.Exists(Libmpv.InstalledPath))
-		{
-			return;
-		}
-
 		Assert.True(Libmpv.IsAvailable(out var why), why);
 
 		var folder = Path.GetDirectoryName(Libmpv.InstalledPath)!;
@@ -165,15 +305,10 @@ public sealed class LibmpvProbeTests
 	/// vulkan-1.dll (MSYS2 libplacebo and mpv import it) and any other DLL only a GPU driver installs must be in the
 	/// folder, so libmpv loads on a PC without a Vulkan driver.
 	/// </summary>
-	[Fact]
+	[VendoredLibmpvFact]
 	public void TheVendoredLibmpv_ImportsOnlyItsOwnOrWindowsDlls_SoNoVulkanDriverIsNeeded()
 	{
 		var folder = Path.GetDirectoryName(Libmpv.InstalledPath)!;
-		if (!File.Exists(Libmpv.InstalledPath))
-		{
-			return;
-		}
-
 		var ours = Directory.GetFiles(folder, "*.dll").Select(Path.GetFileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
 		var problems = new List<string>();
 		foreach (var dll in Directory.GetFiles(folder, "*.dll"))
@@ -188,6 +323,100 @@ public sealed class LibmpvProbeTests
 		}
 
 		Assert.Empty(problems);
+	}
+
+	/// <summary>
+	/// The folder's libdvdcss-2.dll is FluentFin MPV's stub (tools\release\libmpv\dvdcss-stub), not libdvdcss: it exports
+	/// only the seven functions libdvdread imports, and opening anything through it fails (no DVD decryption is shipped).
+	/// </summary>
+	[VendoredLibmpvFact]
+	public void TheVendoredLibdvdcss_IsTheStub_ThatOpensNothing()
+	{
+		Assert.True(Libmpv.IsAvailable(out var why), why);
+		var stub = Path.Combine(Path.GetDirectoryName(Libmpv.InstalledPath)!, "libdvdcss-2.dll");
+
+		Assert.Equal(stub, NativeModules.LoadedPath("libdvdcss-2.dll"), StringComparer.OrdinalIgnoreCase);
+		Assert.Equal(["dvdcpxm_init", "dvdcpxm_read", "dvdcss_close", "dvdcss_open", "dvdcss_open_stream", "dvdcss_read", "dvdcss_seek"], PeImports.Exports(stub).Order());
+		var open = Marshal.GetDelegateForFunctionPointer<DvdcssOpen>(NativeLibrary.GetExport(NativeLibrary.Load(stub), "dvdcss_open"));
+		Assert.Equal(0, open(@"D:\"));
+	}
+
+	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+	private delegate nint DvdcssOpen([MarshalAs(UnmanagedType.LPStr)] string target);
+
+	/// <summary>
+	/// A partial folder: a DLL whose dependency is missing fails to load with Windows' reason, through the same loader
+	/// (a copy of one of the folder's DLLs, its import renamed to a DLL no process has).
+	/// </summary>
+	[VendoredLibmpvFact]
+	public void ADllWhoseDependencyIsMissing_IsNotLoaded_AndTheProbeSaysWhy()
+	{
+		using var dir = new TempDir();
+		var dll = Patched(dir.Path, "libbrotlicommon.dll", "libbrotlicommoX.dll");
+
+		Assert.Equal($"{Path.GetFileName(dll)} could not be loaded: {new System.ComponentModel.Win32Exception(126).Message}", Libmpv.ProbeFile(dll));
+	}
+
+	/// <summary>
+	/// A DLL that lacks a function another one imports (error 127) fails to load with Windows' reason and no "Entry Point
+	/// Not Found" box (the test would hang on it).
+	/// </summary>
+	[VendoredLibmpvFact]
+	public void ADllMissingAnImportedFunction_IsNotLoaded_WithoutAnErrorBox()
+	{
+		using var dir = new TempDir();
+		File.Copy(Path.Combine(Path.GetDirectoryName(Libmpv.InstalledPath)!, "libbrotlicommon.dll"), Path.Combine(dir.Path, "libbrotlicommon.dll"));
+		var dll = Patched(dir.Path, "BrotliDefaultAllocFunc", "BrotliDefaultAllocFunX");
+
+		Assert.Equal($"{Path.GetFileName(dll)} could not be loaded: {new System.ComponentModel.Win32Exception(127).Message}", Libmpv.ProbeFile(dll));
+	}
+
+	/// <summary>A copy of the vendored libbrotlidec.dll, under a name of its own, with one import string changed.</summary>
+	private static string Patched(string dir, string from, string to)
+	{
+		var bytes = File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(Libmpv.InstalledPath)!, "libbrotlidec.dll"));
+		var at = bytes.AsSpan().IndexOf(System.Text.Encoding.ASCII.GetBytes(from + "\0"));
+		Assert.True(at >= 0, $"{from} is not in libbrotlidec.dll");
+		System.Text.Encoding.ASCII.GetBytes(to).CopyTo(bytes, at);
+		var path = Path.Combine(dir, $"fixture-{Guid.NewGuid():N}.dll");
+		File.WriteAllBytes(path, bytes);
+		return path;
+	}
+
+	[DllImport("kernel32.dll")]
+	private static extern uint GetErrorMode();
+
+	[DllImport("kernel32.dll")]
+	private static extern uint SetErrorMode(uint mode);
+
+	/// <summary>The C runtime's (ucrtbase's) getenv, as the MSYS2 UCRT64 libraries call it.</summary>
+	private static string? CGetenv(string name)
+	{
+		var p = UcrtGetenv(name);
+		return p == 0 ? null : Marshal.PtrToStringAnsi(p);
+	}
+
+	[DllImport("ucrtbase.dll", EntryPoint = "getenv", CharSet = CharSet.Ansi, BestFitMapping = false)]
+	private static extern nint UcrtGetenv(string name);
+
+	private sealed class TempDir : IDisposable
+	{
+		public string Path { get; } = Directory.CreateTempSubdirectory("ffmpv-libmpv-").FullName;
+
+		public void Dispose()
+		{
+			try
+			{
+				Directory.Delete(Path, recursive: true);
+			}
+			catch (IOException)
+			{
+				// a DLL a test loaded stays mapped until the process ends
+			}
+			catch (UnauthorizedAccessException)
+			{
+			}
+		}
 	}
 
 	/// <summary>The import reader itself, on a Windows DLL whose imports are known.</summary>
@@ -274,6 +503,32 @@ internal static class PeImports
 		return names;
 	}
 
+	/// <summary>The names a DLL exports (its export directory's name table).</summary>
+	public static List<string> Exports(string path)
+	{
+		using var stream = File.OpenRead(path);
+		using var pe = new System.Reflection.PortableExecutable.PEReader(stream);
+		var directory = (pe.PEHeaders.PEHeader ?? throw new InvalidDataException($"{path} has no PE header")).ExportTableDirectory;
+		var names = new List<string>();
+		if (directory.Size == 0)
+		{
+			return names;
+		}
+
+		// IMAGE_EXPORT_DIRECTORY: ... NumberOfNames at 24, AddressOfNames at 32
+		var reader = pe.GetSectionData(directory.RelativeVirtualAddress).GetReader();
+		reader.Offset = 24;
+		var count = reader.ReadInt32();
+		reader.Offset = 32;
+		var table = pe.GetSectionData(reader.ReadInt32()).GetReader();
+		for (var i = 0; i < count; i++)
+		{
+			names.Add(ReadString(pe, table.ReadInt32()));
+		}
+
+		return names;
+	}
+
 	/// <summary>An API set, or a DLL in System32 that is Windows' own (not one a GPU driver installs there).</summary>
 	public static bool IsWindowsDll(string name) =>
 		name.StartsWith("api-ms-win-", StringComparison.OrdinalIgnoreCase) || name.StartsWith("ext-ms-win-", StringComparison.OrdinalIgnoreCase)
@@ -289,5 +544,21 @@ internal static class PeImports
 		}
 
 		return text.ToString();
+	}
+}
+
+/// <summary>
+/// A test of the vendored libmpv (vendor\libmpv\VENDORED.md, copied into the libmpv folder next to the tests): skipped,
+/// visibly, when the checkout has none; with FLUENTFIN_MPV_REQUIRE_LIBMPV=1 or CI set it runs anyway, and fails.
+/// </summary>
+public sealed class VendoredLibmpvFactAttribute : FactAttribute
+{
+	public VendoredLibmpvFactAttribute()
+	{
+		var required = Environment.GetEnvironmentVariable("FLUENTFIN_MPV_REQUIRE_LIBMPV") == "1" || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI"));
+		if (!required && !File.Exists(Path.Combine(AppContext.BaseDirectory, "libmpv", "libmpv-2.dll")))
+		{
+			Skip = @"no vendored libmpv in libmpv\ next to the tests (vendor\libmpv\VENDORED.md); FLUENTFIN_MPV_REQUIRE_LIBMPV=1 makes this a failure";
+		}
 	}
 }

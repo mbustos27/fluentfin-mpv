@@ -149,13 +149,55 @@ public sealed class StartupTests
 public sealed class FlyleafEngineTests : IDisposable
 {
 	private readonly Action _real = FlyleafEngine.Start;
+	private readonly Func<IReadOnlyList<(string Name, string Path)>> _realClash = FlyleafEngine.FFmpegLoadedElsewhere;
 
-	public FlyleafEngineTests() => FlyleafEngine.Reset();
+	public FlyleafEngineTests()
+	{
+		FlyleafEngine.Reset();
+		// this process may have loaded the vendored libmpv's FFmpeg (LibmpvProbeTests): only the guard's own tests clash
+		FlyleafEngine.FFmpegLoadedElsewhere = () => [];
+	}
 
 	public void Dispose()
 	{
 		FlyleafEngine.Start = _real;
+		FlyleafEngine.FFmpegLoadedElsewhere = _realClash;
 		FlyleafEngine.Reset();
+	}
+
+	/// <summary>
+	/// fluentfin-mpv: Flyleaf does not start while another FFmpeg with its DLLs' names is loaded (FluentFin's own player
+	/// controls ran first): Windows would give Flyleaf that FFmpeg. It says to restart FluentFin, and is tried again later.
+	/// </summary>
+	[Fact]
+	public void EnsureStarted_RefusesWhileAnotherFFmpegOfItsNamesIsLoaded()
+	{
+		var starts = 0;
+		FlyleafEngine.Start = () => starts++;
+		FlyleafEngine.FFmpegLoadedElsewhere = () => [("avcodec-63.dll", @"C:\App\libmpv\avcodec-63.dll")];
+
+		var ex = Assert.Throws<InvalidOperationException>(FlyleafEngine.EnsureStarted);
+
+		Assert.Contains("avcodec-63.dll", ex.Message);
+		Assert.Contains(@"C:\App\libmpv", ex.Message);
+		Assert.Contains("restart FluentFin to use this player", ex.Message);
+		Assert.Equal(0, starts);
+		Assert.False(FlyleafEngine.IsStarted);
+
+		FlyleafEngine.FFmpegLoadedElsewhere = () => [];
+		FlyleafEngine.EnsureStarted();
+		Assert.Equal(1, starts);
+	}
+
+	/// <summary>The real check: names of Flyleaf's FFMpeg folder, loaded from elsewhere (none in a process that loaded no FFmpeg).</summary>
+	[Fact]
+	public void TheRealClashCheck_LooksAtFlyleafsFFmpegNames()
+	{
+		var names = FluentFin.Mpv.NativeModules.FFmpegNames(Path.Combine(AppContext.BaseDirectory, "FFMpeg"));
+		var clashes = _realClash();
+
+		Assert.All(clashes, c => Assert.Contains(c.Name, names));
+		Assert.All(clashes, c => Assert.NotEqual(Path.Combine(AppContext.BaseDirectory, "FFMpeg"), Path.GetDirectoryName(c.Path), StringComparer.OrdinalIgnoreCase));
 	}
 
 	[Fact]

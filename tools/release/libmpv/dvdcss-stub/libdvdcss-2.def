@@ -1,0 +1,9 @@
+LIBRARY libdvdcss-2.dll
+EXPORTS
+    dvdcpxm_init
+    dvdcpxm_read
+    dvdcss_close
+    dvdcss_open
+    dvdcss_open_stream
+    dvdcss_read
+    dvdcss_seek
