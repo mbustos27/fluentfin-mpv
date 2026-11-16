@@ -61,6 +61,8 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 
 	public static IReadOnlyList<MediaPlayerChoice> OfferedPlayers(MediaPlayerAvailability players) => [.. AllMediaPlayers.Where(x => players.IsAvailable(x.Type))];
 
+	private bool _loadingPlayer;
+
 	public MediaPlayerType MediaPlayerType
 	{
 		get => field;
@@ -68,7 +70,10 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		{
 			if (SetProperty(ref field, value))
 			{
-				settings.MediaPlayer = value;
+				if (!_loadingPlayer)
+				{
+					settings.MediaPlayer = value;
+				}
 				OnPropertyChanged(nameof(SelectedMediaPlayer));
 				OnPropertyChanged(nameof(IsMpvSelected));
 			}
@@ -246,7 +251,17 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 
 	public async Task OnNavigatedTo(object parameter)
 	{
-		MediaPlayerType = settings.MediaPlayer;
+		// fluentfin-mpv (release 1.0): shown, not saved. The effective player can be the fallback for a saved choice this
+		// copy cannot run (VLC, Flyleaf in the release), and only a pick may replace the saved one.
+		_loadingPlayer = true;
+		try
+		{
+			MediaPlayerType = settings.MediaPlayer;
+		}
+		finally
+		{
+			_loadingPlayer = false;
+		}
 		MpvBackendCommand = settings.MpvBackendCommand;
 		PlayerControls = settings.MpvPlayerControls;
 
