@@ -13,8 +13,10 @@ file is the contract both sides build against. Change it here first, then on bot
 
 - Started by the UI as
   `<python> -I -m jellyfin_mpv_shim.bridge --config-dir <dir> [--log-file <path>]`
-  (dev, from `backend\.venv`), or later as a frozen `fluentfin-mpv-backend.exe` with the
-  same arguments. **argv and the environment carry no secrets.**
+  (dev, from `backend\.venv`), or in a release as the frozen
+  `<app>\backend\fluentfin-mpv-backend.exe` with the same arguments (PyInstaller, one folder: the
+  interpreter runs in that process, so the job holds it from its first instruction;
+  `tools\release`). **argv and the environment carry no secrets.**
 - Default config dir: `%LOCALAPPDATA%\FluentFinMpv\mpv-backend\` — the shim's `conf.json`,
   `mpv.conf`, `input.conf`, shader packs live there. It is separate from a standalone
   jellyfin-mpv-shim install so the two never share a lock, credentials or settings.

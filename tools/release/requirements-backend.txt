@@ -1,0 +1,16 @@
+# The bundled backend's runtime packages (tools\release\build-release.ps1 installs them into its build venv with
+# pip --require-hashes --only-binary :all:, from PyPI only). The versions are the dev venv's (backend\.venv), the set
+# every test ran against; the hashes are the sha256 digests PyPI publishes for the cp314 win_amd64 / any wheels.
+# Not here: pystray and pypresence (backend[all] extras the bridge never imports: no tray, no Discord presence).
+# Regenerate after a version change from https://pypi.org/pypi/<name>/<version>/json (urls[].digests.sha256).
+certifi==2026.10.23 --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1
+charset-normalizer==3.5.2 --hash=sha256:e4e81e09c1578b8df602e3db08b0b3ea0a6947ad612f52bf8dc5ea8d47691f0c --hash=sha256:b6b751274acb69d77b3323d6b7dbaa3c7fdfc1eb829b7eb61d262f32e1af9685
+idna==3.20 --hash=sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c
+jellyfin-apiclient-python==1.21.0 --hash=sha256:0ea9c4a3023420a3010920260970cd61bc51a8b9dba44158ed2357e59cb4d730
+pillow==13.0.0 --hash=sha256:f7cbb7a64e7ec664775195e4f81923bc8a93d9451b963f844e59118f63147a7a
+python-mpv==1.0.8 --hash=sha256:b5296403e990fb7348df4ca2211937a030f524bf638657bda7e45a00bc2df0cd
+python-mpv-jsonipc==1.5.0 --hash=sha256:f9ce720a07a005c6e37b3eacccffe220ad73cf5d5b0aa9dd77dbe8578be4f249
+pywin32==312 --hash=sha256:a4dd3a848290ef724347b19f301045831d8e802fa4464f491b98b1e0a081432e
+requests==2.34.2 --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
+urllib3==2.8.0 --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
+websocket-client==1.9.2 --hash=sha256:e1a673830a9c7bfa47b1cd3d5e4178f4c9651d80a4eab02c9c23a1c3ec6250ce

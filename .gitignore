@@ -7,6 +7,9 @@ __pycache__/
 tools/mpv/
 *.log
 
+# Release builds (tools\release\build-release.ps1): the package, its zip, and dist\.work
+/dist/
+
 # Build output of the tool/harness projects
 tools/**/bin/
 tools/**/obj/
