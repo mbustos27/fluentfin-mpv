@@ -118,7 +118,9 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines):
             by_name = {rel.rsplit("/", 1)[-1]: digest for rel, digest in copied.items()}
             for line in text.splitlines():
                 digests = re.findall(r"\b[0-9a-fA-F]{64}\b", line)
-                names = [n for n in by_name if n in line]
+                # whole names only: X.src.tar.zst is not on X.src.tar.zst.sig's line
+                tokens = {t.replace("\\", "/").rsplit("/", 1)[-1].strip("`'\"(),;") for t in line.split()}
+                names = [n for n in by_name if n in tokens]
                 for name in names:
                     if digests and by_name[name] not in (d.lower() for d in digests):
                         problems.append(f"{name}: sha256 {by_name[name]} is not the one {candidate} gives")
