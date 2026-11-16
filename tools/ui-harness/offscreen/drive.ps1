@@ -22,10 +22,16 @@
     fullscreen  / windowed   full screen and back (mpv's f key, or F with FluentFin's controls)
     leave       stop (mpv's q, or Esc with FluentFin's controls): back on the season page, one Stopped, by the backend
     close       close FluentFin (WM_CLOSE) and check nothing it started survives
+    relaunch    close it as close does and start it again on the same data folder: it signs itself in with the server
+                and user the first sign-in saved (the automatic sign-in at start-up, "Signing in to ..."); on Home
+    steady      after play: playback running (FluentFin's controls: Play again, the play step paused), then the middle
+                of the video sampled over 2 s: nothing may move there (the test video is still there), so no ring or
+                indicator is drawn over it (the 1.0 test build's ring: the startup panel's, stuck after an automatic
+                sign-in, over the video of FluentFin's own mpv)
     nav:<Name>  invoke the navigation item <Name> (e.g. nav:Settings, nav:Diary) and capture the page as nav-<name>
     shot:<label>  capture the current page as <label>
     wait:<seconds>
-  'all' = login,home,library,movie,series,season,play,fullscreen,windowed,leave,close.
+  'all' = login,home,library,movie,series,season,play,fullscreen,windowed,leave,close (relaunch and steady are extra).
   -Then <script.ps1> is dot-sourced after the steps (before close): it can use this script's helpers (Capture-Page,
   Open-Nav, Open-Card, Open-Library, Find-Ui, Wait-Ui, Invoke-Element, Key, Check, Say, Invoke-Server; $fixture).
 #>
@@ -61,10 +67,11 @@ if (-not $desktop -or $desktop -eq 'Default' -or $desktop -eq $inputDesktop) {
 }
 
 $Fixed = @('login', 'home', 'library', 'movie', 'series', 'season', 'play', 'fullscreen', 'windowed', 'leave', 'close')
+$Extra = @('relaunch', 'steady')   # not in 'all'
 $wanted = if ($Steps.Trim() -eq 'all') { $Fixed } else { @($Steps -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
 foreach ($s in $wanted) {
-    if ($Fixed -notcontains $s -and $s -notmatch '^(nav|shot):.+$' -and $s -notmatch '^wait:\d+(\.\d+)?$') {
-        throw "-Steps: unknown step '$s' (steps: $($Fixed -join ', '), nav:<Name>, shot:<label>, wait:<seconds>)"
+    if ($Fixed -notcontains $s -and $Extra -notcontains $s -and $s -notmatch '^(nav|shot):.+$' -and $s -notmatch '^wait:\d+(\.\d+)?$') {
+        throw "-Steps: unknown step '$s' (steps: $(($Fixed + $Extra) -join ', '), nav:<Name>, shot:<label>, wait:<seconds>)"
     }
 }
 if ($Then) { $Then = [IO.Path]::GetFullPath($Then); if (-not (Test-Path $Then)) { throw "-Then: no script at $Then" } }
@@ -515,7 +522,7 @@ function Step-Leave {
     Capture-Page 'after-player'
 }
 
-function Step-Close {
+function Step-Close([string]$What = 'close') {
     $tree = @(Get-Descendants $script:ui.Id)
     $at = [Diagnostics.Stopwatch]::StartNew()
     [OffscreenUi]::Close($script:hwnd, $script:ui.Id)
@@ -524,12 +531,88 @@ function Step-Close {
         if (-not $hidden -and -not [OffscreenUi]::IsWindowVisible($script:hwnd)) { $hidden = $at.ElapsedMilliseconds }
         Start-Sleep -Milliseconds 25; $script:ui.Refresh()
     }
-    $timings.close_hidden_ms = $hidden
-    $timings.close_exit_ms = if ($script:ui.HasExited) { $at.ElapsedMilliseconds } else { $null }
-    Check 'close: FluentFin exited' $script:ui.HasExited "after $($timings.close_exit_ms) ms (window hidden after $hidden ms)"
+    $timings["$($What)_hidden_ms"] = $hidden
+    $timings["$($What)_exit_ms"] = if ($script:ui.HasExited) { $at.ElapsedMilliseconds } else { $null }
+    Check "$($What): FluentFin exited" $script:ui.HasExited "after $($timings["$($What)_exit_ms"]) ms (window hidden after $hidden ms)"
     Start-Sleep -Milliseconds 800
     $alive = @($tree | Where-Object { Get-TrackedProcess ([int]$_.ProcessId) })
-    Check 'close: nothing FluentFin started survives' ($alive.Count -eq 0) $(if ($alive) { ($alive | ForEach-Object { "$($_.Name)#$($_.ProcessId)" }) -join ',' } else { 'none' })
+    Check "$($What): nothing FluentFin started survives" ($alive.Count -eq 0) $(if ($alive) { ($alive | ForEach-Object { "$($_.Name)#$($_.ProcessId)" }) -join ',' } else { 'none' })
+}
+
+# FluentFin on this run's data folder: its process and main window (the window's time under $Timing)
+function Start-App([string]$Timing) {
+    $script:ui = Start-FluentFin $Exe @('--data-dir', ('"' + $DataDir + '"'))
+    $script:launchedAt = ([DateTimeOffset][DateTime]::FromFileTimeUtc($script:Tracked[$script:ui.Id].Created)).ToUnixTimeMilliseconds() / 1000.0
+    Say "FluentFin#$($script:ui.Id) started ($Exe --data-dir $DataDir)"
+    $found = Wait-Until { $h = [OffscreenUi]::MainWindow($script:ui.Id); if ($h -ne [IntPtr]::Zero) { $h } } -Seconds 60 -PollMs 20
+    if (-not $found) { throw "FluentFin showed no window within 60 s" }
+    $script:hwnd = [IntPtr]$found
+    $timings[$Timing] = Ms $script:launchedAt (Get-Epoch)
+    Say "window after $($timings[$Timing]) ms"
+}
+
+# a user saved with the run's one saved server, as "Remember me" saves one, so that the next start signs itself in
+# (DefaultActivationHandler). No password: an empty one, protected as FluentFin protects one (DPAPI, the settings'
+# Entropy). Quick Connect saves the server only. The fake server refuses the empty password: the start-up sign-in runs
+# ("Signing in to ..." in the window) and ends, as a real one does, then FluentFin shows the server page.
+function Add-AutoSignInUser {
+    Add-Type -AssemblyName System.Security
+    $file = Join-Path $DataDir 'LocalSettings.json'
+    $settings = Get-Content -LiteralPath $file -Raw -Encoding utf8 | ConvertFrom-Json
+    $servers = @($settings.Servers | Where-Object { $null -ne $_ })
+    if ($servers.Count -ne 1) { throw "relaunch: $($servers.Count) saved servers (the sign-in saves one)" }
+    if (-not $settings.PSObject.Properties['Entropy']) {
+        $bytes = New-Object byte[] 20
+        [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+        $settings | Add-Member -NotePropertyName Entropy -NotePropertyValue ([Convert]::ToBase64String($bytes))
+    }
+    $none = [Security.Cryptography.ProtectedData]::Protect([byte[]]@(), [Convert]::FromBase64String($settings.Entropy), 'CurrentUser')
+    $servers[0].Users = @([pscustomobject]@{ Username = 'harness-start-up'; Password = [Convert]::ToBase64String($none) })
+    $settings.Servers = $servers
+    [IO.File]::WriteAllText($file, ($settings | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+}
+
+# close FluentFin and start it again on the same data folder with a remembered login (Add-AutoSignInUser): it signs
+# itself in at start-up, the window saying "Signing in to ..." meanwhile (the startup panel and its ring), then the
+# server page, where the run signs in again; on Home
+function Step-Relaunch {
+    Step-Close 'relaunch'
+    Add-AutoSignInUser
+    $script:navPane = $null
+    $at = Get-Epoch
+    Start-App 'relaunch_window_ms'
+    $auth = Wait-Until { @(Get-Requests $at | Where-Object { $_.route -eq 'authenticate' }) | Select-Object -First 1 } -Seconds 30 -PollMs 100
+    Check 'relaunch: FluentFin signed itself in at start-up (the remembered login)' ([bool]$auth) $(if ($auth) { "the server answered $($auth.status)" } else { 'no sign-in at the server' })
+    $page = Wait-Until {
+        if (Find-Ui -Id 'TxtUrl' -Type 'Edit') { 'server' }
+        else { $p = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id); if ($p -and [OffscreenUi]::NavItem($p, 'Home')) { 'home' } }
+    } -Seconds 30 -PollMs 150
+    if ($page -eq 'server') { Step-SignIn $false }
+    elseif ($page -ne 'home') { throw "relaunch: neither the server page nor Home within 30 s" }
+    $script:page = 'home'
+    Start-Sleep -Seconds 1
+    Shot 'relaunched'
+}
+
+# steady playback, then the middle of the video sampled: the fake server's test video (lavfi testsrc) is still there
+# (colour bars; its scrolling band and counter are lower and to the right), so a pixel that changes from one capture to
+# the next is something drawn over the video: a spinning ring, mpv's bar's buffering or pause indicator
+function Step-Steady {
+    if ($script:page -ne 'player') { throw "steady: nothing is playing (run play first)" }
+    if ($PlayerControls -eq 'FluentFin') {
+        # the play step paused through Play/Pause so the controls stayed up: Play again (the button keeps the keyboard)
+        $pp = Find-Ui -Id 'PlayPauseButton'
+        if ($pp -and $pp.Current.Name -eq 'Play') { [void](Invoke-Element $pp); Say 'steady: Play pressed (the play step had paused)' }
+        $playing = Wait-Until { $b = Find-Ui -Id 'PlayPauseButton'; if ($b -and $b.Current.Name -eq 'Pause') { $b } } -Seconds 3 -PollMs 100
+        Check 'steady: playing (the controls offer Pause)' ([bool]$playing)
+    }
+    # past mpv's own start and FluentFin's controls hiding (3 s)
+    Start-Sleep -Seconds 5
+    $box = [OffscreenUi]::MiddleChanges($script:hwnd, $script:ui.Id, 9, 250, 0.40, 0.36, 0.60, 0.64)
+    Shot 'steady'
+    $changed = $box[0]; $area = $box[3] * $box[4]
+    Check 'steady playback: nothing moves over the middle of the video (no ring, no indicator)' ($area -gt 0 -and $changed -lt 40) `
+        ("{0} of {1} pixels changed in 2 s (box {2},{3} {4}x{5}; the video is still there)" -f $changed, $area, $box[1], $box[2], $box[3], $box[4])
 }
 
 # --- run ----------------------------------------------------------------------------------------------------------------
@@ -549,14 +632,7 @@ try {
     Say "fake server $($script:serverUrl): $($fixture.counts.movie) movies, $($fixture.counts.series) series, $($fixture.counts.episode) episodes; latency $Latency ms $(if ($LatencyRule) { '+ ' + ($LatencyRule -join ' ') })"
 
     # 2. FluentFin with its own data folder
-    $script:ui = Start-FluentFin $Exe @('--data-dir', ('"' + $DataDir + '"'))
-    $script:launchedAt = ([DateTimeOffset][DateTime]::FromFileTimeUtc($script:Tracked[$script:ui.Id].Created)).ToUnixTimeMilliseconds() / 1000.0
-    Say "FluentFin#$($script:ui.Id) started ($Exe --data-dir $DataDir)"
-    $found = Wait-Until { $h = [OffscreenUi]::MainWindow($script:ui.Id); if ($h -ne [IntPtr]::Zero) { $h } } -Seconds 60 -PollMs 20
-    if (-not $found) { throw "FluentFin showed no window within 60 s" }
-    $script:hwnd = [IntPtr]$found
-    $timings.window_ms = Ms $script:launchedAt (Get-Epoch)
-    Say "window after $($timings.window_ms) ms"
+    Start-App 'window_ms'
     # the window a key goes to: the XAML island's (hidden) input site; posted to the bridge, F and Esc never reached the
     # player page. Shift (does nothing on the server page) through Key itself, until the input site exists.
     $keyClass = Wait-Until { Key 0x10; $c = [OffscreenUi]::ClassOf($script:lastKeyWindow); if ($c -eq 'InputSiteWindowClass') { $c } } -Seconds 10 -PollMs 100
@@ -576,6 +652,8 @@ try {
             '^fullscreen$' { Step-FullScreen $true; break }
             '^windowed$' { Step-FullScreen $false; break }
             '^leave$' { Step-Leave; break }
+            '^relaunch$' { Step-Relaunch; break }
+            '^steady$' { Step-Steady; break }
             '^nav:(.+)$' {
                 $name = $Matches[1]
                 Open-Nav $name; $script:page = "nav:$name"

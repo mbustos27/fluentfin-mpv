@@ -184,6 +184,49 @@ public static class OffscreenUi {
     }
   }
 
+  // the middle of the video (the box from fractions fx0..fx1, fy0..fy1 of the video: mpv's child window with mpv's
+  // controls, else FluentFin's window, where mpv draws inside it), captured `frames` times `gapMs` apart: the number of
+  // its pixels that changed between two captures in a row (|dR|+|dG|+|dB| > 96), and the box ("x,y,w,h", window
+  // pixels). Over a still part of the video, anything that moves there is drawn over it: a spinning ring, an indicator.
+  public static int[] MiddleChanges(IntPtr main, int pid, int frames, int gapMs, double fx0, double fy0, double fx1, double fy1) {
+    if (ProcessOf(main) != (uint)pid) throw new InvalidOperationException("not FluentFin's window");
+    RECT r; GetWindowRect(main, out r);
+    int w = r.R - r.L, h = r.B - r.T;
+    int vx = 0, vy = 0, vw = w, vh = h;
+    foreach (var c in Children(main)) {
+      if (ProcessOf(c) == (uint)pid || !IsWindowVisible(c)) continue;
+      RECT cr; GetWindowRect(c, out cr);
+      vx = cr.L - r.L; vy = cr.T - r.T; vw = cr.R - cr.L; vh = cr.B - cr.T;
+      break;
+    }
+    int x0 = Math.Max(0, vx + (int)(vw * fx0)), y0 = Math.Max(0, vy + (int)(vh * fy0));
+    int x1 = Math.Min(w, vx + (int)(vw * fx1)), y1 = Math.Min(h, vy + (int)(vh * fy1));
+    int bw = Math.Max(0, x1 - x0), bh = Math.Max(0, y1 - y0);
+    var changed = new bool[bw * bh];
+    int[] previous = null;
+    for (int f = 0; f < frames; f++) {
+      if (f > 0) System.Threading.Thread.Sleep(gapMs);
+      var now = new int[bw * bh];
+      using (var bmp = new Bitmap(w, h, PixelFormat.Format32bppRgb)) {
+        using (var g = Graphics.FromImage(bmp)) { var hdc = g.GetHdc(); try { PrintWindow(main, hdc, 2); } finally { g.ReleaseHdc(hdc); } }
+        if (bw > 0 && bh > 0) {
+          var data = bmp.LockBits(new Rectangle(x0, y0, bw, bh), ImageLockMode.ReadOnly, PixelFormat.Format32bppRgb);
+          try { for (int y = 0; y < bh; y++) Marshal.Copy(data.Scan0 + y * data.Stride, now, y * bw, bw); }
+          finally { bmp.UnlockBits(data); }
+        }
+      }
+      if (previous != null) {
+        for (int i = 0; i < now.Length; i++) {
+          int a = previous[i], b = now[i];
+          int d = Math.Abs(((a >> 16) & 255) - ((b >> 16) & 255)) + Math.Abs(((a >> 8) & 255) - ((b >> 8) & 255)) + Math.Abs((a & 255) - (b & 255));
+          if (d > 96) changed[i] = true;
+        }
+      }
+      previous = now;
+    }
+    return new[] { changed.Count(x => x), x0, y0, bw, bh };
+  }
+
   static int Lit(Bitmap b, int x0, int y0, int x1, int y1) {
     x0 = Math.Max(0, x0); y0 = Math.Max(0, y0); x1 = Math.Min(b.Width, x1); y1 = Math.Min(b.Height, y1);
     if (x1 <= x0 || y1 <= y0) return 0;

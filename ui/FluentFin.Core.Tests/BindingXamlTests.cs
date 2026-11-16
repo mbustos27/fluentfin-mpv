@@ -10,7 +10,8 @@ public sealed partial class BindingXamlTests
 	/// <summary>
 	/// visual check: a bar opened through a function of its text (<c>IsOpen="{x:Bind HasText(ViewModel.MpvNotice)}"</c>)
 	/// never closed. x:Bind does not call a function whose argument is null, so the notice's bar stayed open, and empty,
-	/// after its 8 s. Such bars open from a bool of the view model instead.
+	/// after its 8 s. Such bars open from a bool of the view model instead; a ProgressRing turns on from one too (the
+	/// startup ring, <see cref="TheStartupPanel_ShowsFromItsBool"/>).
 	/// </summary>
 	[Fact]
 	public void NoBarOrPopupOpensThroughAFunction()
@@ -28,7 +29,7 @@ public sealed partial class BindingXamlTests
 			}
 		}
 
-		Assert.True(found.Count == 0, "IsOpen bound through an x:Bind function (it is not called when its argument is null): " + string.Join(" | ", found));
+		Assert.True(found.Count == 0, "IsOpen or IsActive bound through an x:Bind function (it is not called when its argument is null): " + string.Join(" | ", found));
 	}
 
 	[Fact]
@@ -40,7 +41,28 @@ public sealed partial class BindingXamlTests
 		Assert.Contains("IsOpen=\"{x:Bind ViewModel.HasMpvNotice, Mode=OneWay}\"", page);
 	}
 
-	[GeneratedRegex(@"IsOpen=""\{x:Bind\s+[\w.]+\(")]
+	/// <summary>
+	/// The 1.0 test build's ring: the window's startup panel (a ProgressRing over every page) was shown through functions
+	/// of <c>StartupStatus</c>. The automatic sign-in sets it to null when it ends, x:Bind did not call the functions with
+	/// null, and the ring stayed up, spinning, in the middle of the window: under mpv's own window nobody saw it, over the
+	/// video of FluentFin's own mpv (its controls) it sat in the middle of every episode. The panel and its ring show from a
+	/// bool of the view model.
+	/// </summary>
+	[Fact]
+	public void TheStartupPanel_ShowsFromItsBool()
+	{
+		var window = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin", "MainWindow.xaml"));
+		var at = window.IndexOf("x:Name=\"StartupPanel\"", StringComparison.Ordinal);
+		Assert.True(at >= 0, "MainWindow.xaml names its startup panel StartupPanel");
+		var panel = window[at..];
+		panel = panel[..panel.IndexOf("</StackPanel>", StringComparison.Ordinal)];
+
+		Assert.Contains("Visibility=\"{x:Bind ViewModel.HasStartupStatus, Mode=OneWay}\"", panel);
+		Assert.Contains("<ProgressRing IsActive=\"{x:Bind ViewModel.HasStartupStatus, Mode=OneWay}\" />", panel);
+		Assert.DoesNotContain("(ViewModel.StartupStatus)", window);
+	}
+
+	[GeneratedRegex(@"(IsOpen|IsActive)=""\{x:Bind\s+[\w.:]+\(")]
 	private static partial Regex OpenedByAFunction();
 
 	private static IEnumerable<string> AppXamlFiles() =>
