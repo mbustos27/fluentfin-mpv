@@ -98,11 +98,17 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `ExitHandled` term in `Owed`, the re-check after subscribing in `WaitForStopReportsAsync`).
 
 ## Start-up and pre-warm (stream `startup-perf`)
-- **Never seen on screen**: the window shown before the automatic sign-in with its "Signing in
-  to …" line, and the lazy Flyleaf start (the first Flyleaf play now starts FFmpeg: ~128 ms
-  warm, ~0.9 s the first time after an install). FluentFin was in use, so it was not launched;
-  covered by unit tests and source checks. Time-to-window and time-to-first-frame with the app
-  itself are still to measure (`[perf]` lines in the log; see the stream report).
+- **The window before the automatic sign-in was run, off-screen only**: the real FluentFin.exe
+  (Release, private desktop, its own data folder, the dev-harness fake server; before = main with
+  the same data-dir change, 5 runs each, interleaved, on a machine busy with other test runs)
+  shows its window 910 ms after the process started against 1469 ms before (850 / 1438 ms at
+  50 ms per request), and the sign-in request now goes out after the window, not before; the
+  first home row is asked for ~100 ms sooner; the pre-warm then takes ~0.6 s in the background
+  with no window of mpv's inside FluentFin's. Never looked at on the user's desktop: the
+  "Signing in to …" line was timed, not seen. Not run at all: the lazy Flyleaf start (the first
+  Flyleaf play now starts FFmpeg: ~128 ms warm, ~0.9 s the first time after an install; unit
+  tests only) and time-to-first-frame in the app (the e2e harness times PlayAsync to `playing`,
+  below).
 - **Pre-warm follows sign-in only**: choosing the MPV player in Settings while signed in does
   not pre-warm (the first play starts the backend, as before; the next sign-in pre-warms).
   Choosing another player leaves an idle pre-warmed backend running until sign-out or close.

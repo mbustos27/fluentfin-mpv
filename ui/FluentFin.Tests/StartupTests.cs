@@ -271,6 +271,57 @@ public sealed class DeviceProfileFactoryTests : IDisposable
 	}
 }
 
+/// <summary>
+/// fluentfin-mpv (startup-perf review): the window is shown before an automatic sign-in finishes, so the title bar shows the
+/// user (search, and the account menu with Log out and Switch user) only once FluentFin's session is made: a sign-out in
+/// that gap revoked the token the sign-in then opened the shell with.
+/// </summary>
+public sealed class SignInTitleBarTests
+{
+	private readonly Mock<IJellyfinClient> _client = new();
+	private readonly Mock<ITitleBarViewModel> _titleBar = new();
+	private readonly JellyfinAuthenticationService _service;
+	private readonly Jellyfin.Sdk.Generated.Models.AuthenticationResult _auth = new()
+	{
+		AccessToken = "fake-token-0123456789",
+		ServerId = "fake-server",
+		User = new Jellyfin.Sdk.Generated.Models.UserDto { Id = Guid.NewGuid(), Name = "alice" },
+	};
+
+	public SignInTitleBarTests()
+	{
+		_titleBar.SetupProperty(x => x.User);
+		_service = new JellyfinAuthenticationService(_client.Object, _titleBar.Object, Mock.Of<ILocalSettingsService>(), Mock.Of<INavigationService>(),
+			NullLogger<JellyfinAuthenticationService>.Instance);
+	}
+
+	[Fact]
+	public async Task TheUser_ShowsInTheTitleBar_OnlyOnceTheSessionIsMade()
+	{
+		var session = new TaskCompletionSource();
+		_client.Setup(x => x.Initialize("http://jf:8096", _auth)).Returns(session.Task);
+
+		var signIn = _service.FinishSignIn("http://jf:8096", _auth);
+		await Task.Delay(20);
+
+		Assert.Null(_titleBar.Object.User);
+		session.SetResult();
+		await signIn.WaitAsync(TimeSpan.FromSeconds(5));
+		Assert.Same(_auth.User, _titleBar.Object.User);
+	}
+
+	[Fact]
+	public async Task ASessionThatFails_LeavesNoUserInTheTitleBar()
+	{
+		_client.Setup(x => x.Initialize(It.IsAny<string>(), It.IsAny<Jellyfin.Sdk.Generated.Models.AuthenticationResult>()))
+			.ThrowsAsync(new HttpRequestException("unreachable"));
+
+		await Assert.ThrowsAsync<HttpRequestException>(() => _service.FinishSignIn("http://jf:8096", _auth));
+
+		Assert.Null(_titleBar.Object.User);
+	}
+}
+
 /// <summary>fluentfin-mpv (startup-perf): the shell is where signing in ends and signing out begins (docs/BRIDGE.md §3).</summary>
 public sealed class ShellPrewarmTests
 {

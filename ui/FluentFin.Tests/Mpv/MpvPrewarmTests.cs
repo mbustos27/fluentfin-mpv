@@ -3,6 +3,7 @@ using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.Mpv;
 using FluentFin.Core.Settings;
 using FluentFin.Mpv;
+using Microsoft.Extensions.Logging;
 using Moq;
 
 namespace FluentFin.Tests.Mpv;
@@ -236,6 +237,93 @@ public sealed class MpvBackendHostPrewarmTests : IDisposable
 		await _host.ConnectAsync(Alice);
 
 		Assert.Null(Assert.Single(Connects())["args"]!["prewarm"]);
+	}
+
+	/// <summary>A host whose backend answers each <c>connect</c> with <paramref name="connect"/>'s result (null: an error).</summary>
+	private (MpvBackendHost Host, FakeLauncher Launcher) HostWhoseConnect(Func<int, JsonObject?> connect, bool sayHello = true)
+	{
+		var connects = 0;
+		var launcher = new FakeLauncher(() => new FakeBackendProcess((_, request) => (string?)request["cmd"] == "connect"
+			? connect(Interlocked.Increment(ref connects))
+			: new JsonObject(), sayHello));
+		return (new MpvBackendHost(launcher, new FakeSurface(), _log) { HelloTimeout = TimeSpan.FromSeconds(5), ShutdownTimeout = TimeSpan.FromSeconds(2) }, launcher);
+	}
+
+	[Fact]
+	public async Task APrewarmThatCannotConnect_StopsTheBackend_AndTheNextPlayStartsAnother()
+	{
+		// review: the backend (and the mpv its connect started) idled unused until sign-out or close
+		var (host, launcher) = HostWhoseConnect(_ => null);
+		using (host)
+		{
+			await Assert.ThrowsAnyAsync<BridgeException>(() => host.PrewarmAsync(Alice));
+
+			Assert.Contains("shutdown", launcher.Started[0].Commands);
+			Assert.True(launcher.Started[0].Exited.IsCompleted);
+			Assert.Equal(MpvBackendState.Stopped, host.Status.State);
+
+			await host.StartAsync();
+			Assert.Equal(2, launcher.Started.Count);
+		}
+	}
+
+	[Fact]
+	public async Task APrewarmThatCannotConnect_KeepsTheBackend_WhenAPlayAskedForItMeanwhile()
+	{
+		using var answer = new ManualResetEventSlim();
+		var (host, launcher) = HostWhoseConnect(n =>
+		{
+			if (n == 1)
+			{
+				answer.Wait(TimeSpan.FromSeconds(10));
+				return null;
+			}
+
+			return new JsonObject { ["mpv"] = "0.41.0", ["mpvBackend"] = "external" };
+		});
+		using (host)
+		{
+			var prewarm = host.PrewarmAsync(Alice);
+			await WaitUntil(() => launcher.Started.Count == 1 && launcher.Started[0].Commands.Contains("connect"));
+
+			// a play: start (the pre-warm's connect holds the backend), then its own connect
+			var start = host.StartAsync();
+			answer.Set();
+			await Assert.ThrowsAnyAsync<BridgeException>(() => prewarm);
+			await start.WaitAsync(TimeSpan.FromSeconds(10));
+			Assert.Equal("0.41.0", await host.ConnectAsync(Alice));
+
+			Assert.Single(launcher.Started);
+			Assert.DoesNotContain("shutdown", launcher.Started[0].Commands);
+			Assert.Equal(MpvBackendState.Running, host.Status.State);
+		}
+	}
+
+	[Fact]
+	public async Task ASignOutDuringThePrewarmsStart_IsNoFailure()
+	{
+		// review: a cancelled start was logged as an error and Settings said "Could not start"
+		var (host, _) = HostWhoseConnect(_ => new JsonObject(), sayHello: false);
+		using (host)
+		{
+			using var signOut = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+			await Assert.ThrowsAnyAsync<Exception>(() => host.PrewarmAsync(Alice, signOut.Token));
+
+			Assert.Equal(MpvBackendState.Stopped, host.Status.State);
+			Assert.Null(host.Status.LastError);
+			Assert.DoesNotContain(_log.Entries, x => x.Level >= LogLevel.Error);
+		}
+	}
+
+	private static async Task WaitUntil(Func<bool> condition)
+	{
+		for (var i = 0; i < 500 && !condition(); i++)
+		{
+			await Task.Delay(10);
+		}
+
+		Assert.True(condition());
 	}
 
 	/// <summary>FluentFin's own player controls: the connect's window is FluentFin's in-process mpv, made when it is asked for.</summary>
