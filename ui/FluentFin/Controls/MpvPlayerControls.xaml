@@ -25,6 +25,11 @@
             <GradientStop Offset="0.6" Color="#78000000" />
             <GradientStop Offset="1" Color="#00000000" />
         </LinearGradientBrush>
+        <!--  FluentFin's PlayerControlsScrimBrush (Styles\Button.xaml), here so the control carries its own  -->
+        <SolidColorBrush
+            x:Key="SkipScrim"
+            Opacity="0.75"
+            Color="#101010" />
         <Style x:Key="PlayerButton" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
             <Setter Property="Width" Value="44" />
             <Setter Property="Height" Value="40" />
@@ -180,11 +185,13 @@
                     </Button>
                     <Button
                         x:Name="NextButton"
+                        AutomationProperties.HelpText="{x:Bind Controls.NextToolTip, Mode=OneWay}"
                         AutomationProperties.Name="Next episode"
                         Click="OnNextClick"
+                        IsEnabled="{x:Bind Controls.CanNext, Mode=OneWay}"
                         Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="Next episode"
-                        Visibility="{x:Bind VisibleIf(Controls.CanNext), Mode=OneWay}">
+                        ToolTipService.ToolTip="{x:Bind Controls.NextToolTip, Mode=OneWay}"
+                        Visibility="{x:Bind VisibleIf(Controls.ShowsNext), Mode=OneWay}">
                         <FontIcon FontSize="18" Glyph="&#xE893;" />
                     </Button>
                 </StackPanel>
@@ -275,5 +282,41 @@
                 </StackPanel>
             </Grid>
         </Grid>
+
+        <!--
+            Skip intro / Skip credits while the backend offers a segment (docs/BRIDGE.md §5 segments): where FluentFin's own
+            player has its Skip (top right) and in its style. It stays for the whole offer, also while the bars are hidden
+            (as streaming apps do); last in the tree, so it is on top of the bars. Never focused by itself: Space stays play.
+            It does not hold the bars up under the pointer: it collapses when pressed, and an element that collapses under
+            the pointer need not get its PointerExited (the bars would stay up).
+        -->
+        <Button
+            x:Name="SkipSegmentButton"
+            Height="50"
+            MinWidth="150"
+            Margin="10,30"
+            Padding="16,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            VerticalContentAlignment="Center"
+            AutomationProperties.Name="{x:Bind Controls.SkipText, Mode=OneWay}"
+            Background="{StaticResource SkipScrim}"
+            Click="OnSkipSegmentClick"
+            FontSize="20"
+            FontWeight="Bold"
+            Foreground="White"
+            ToolTipService.ToolTip="{x:Bind SkipToolTip(Controls.SkipText), Mode=OneWay}"
+            Visibility="{x:Bind VisibleIf(Controls.IsSkipVisible), Mode=OneWay}">
+            <StackPanel
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="10">
+                <FontIcon VerticalAlignment="Center" Glyph="&#xEB9D;" />
+                <TextBlock
+                    x:Name="SkipSegmentText"
+                    VerticalAlignment="Center"
+                    Text="{x:Bind Controls.SkipText, Mode=OneWay}" />
+            </StackPanel>
+        </Button>
     </Grid>
 </UserControl>

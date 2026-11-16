@@ -22,6 +22,7 @@ public enum MpvControlsAction
 	Escape,
 	Next,
 	Previous,
+	SkipSegment,
 }
 
 /// <summary>
@@ -161,7 +162,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public string? ItemId { get; private set; }
 
 	/// <summary>Anything of the controls' is on screen (the window they draw in is shown only then).</summary>
-	public bool AnythingVisible => ControlsVisible || VolumeIndicatorVisible;
+	public bool AnythingVisible => ControlsVisible || VolumeIndicatorVisible || IsSkipVisible;
 
 	partial void OnControlsVisibleChanged(bool value)
 	{
@@ -257,6 +258,12 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			case Bridge.Events.Tracks when e.DataAs<BridgeTracks>() is { } tracks:
 				OnTracks(tracks);
 				break;
+			case Bridge.Events.Segments when e.DataAs<BridgeSegments>() is { } segments:
+				OnSegments(segments);
+				break;
+			case Bridge.Events.Next when e.DataAs<BridgeNext>() is { } next:
+				OnNext(next);
+				break;
 		}
 	}
 
@@ -276,7 +283,14 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		if (state.Queue is { ItemIds.Count: > 0 } queue)
 		{
 			CanPrevious = queue.Index > 0;
-			CanNext = queue.Index < queue.ItemIds.Count - 1;
+			_queueCount = queue.ItemIds.Count;
+			if (!_nextKnown)
+			{
+				// until the item's next event says (an older backend never does)
+				CanNext = queue.Index < queue.ItemIds.Count - 1;
+			}
+
+			UpdateShowsNext();
 		}
 
 		if (state.DurationTicks is long duration && duration > 0)
@@ -321,7 +335,17 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			DurationTicks = runtime;
 		}
 
-		// a new item: its own tracks come with the tracks event that follows this one
+		// a new item: its own segments and next item come with the events that follow this one
+		_offered = null;
+		_skipped = null;
+		UpdateSkip();
+		_isEpisode = item.Type == "Episode";
+		_nextKnown = false;
+		_nextItemId = null;
+		NextToolTip = NextEpisode;
+		UpdateShowsNext();
+
+		// its own tracks come with the tracks event that follows this one
 		_audioTracks = [];
 		_subtitleTracks = [];
 		_audioIndex = null;
@@ -508,6 +532,186 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		NotifyActivity();
 		SetFullScreen?.Invoke(!IsFullScreen);
+	}
+
+	// -- Skip intro / Skip credits (the backend's segments) -----------------------------------------------------------
+
+	/// <summary>The segment the backend offers a skip for now (<see cref="BridgeSegments.Offered"/>), null when none.</summary>
+	private BridgeSegment? _offered;
+
+	/// <summary>The offer a skip was sent for: the button stays away from it until the backend's offer changes.</summary>
+	private BridgeSegment? _skipped;
+
+	/// <summary>
+	/// Settings > Playback, "Show Skip intro and Skip credits": off, the Skip button never shows (S still skips what is on
+	/// offer, as in FluentFin's own players). Which segments are offered at all is the backend's settings' (ask, always: it
+	/// skips them by itself, off: not listed), and reaches here only as its offer (docs/BRIDGE.md §5 segments).
+	/// </summary>
+	public bool ShowSkipPrompt
+	{
+		get => field;
+		set
+		{
+			field = value;
+			UpdateSkip();
+		}
+	} = true;
+
+	/// <summary>The Skip button shows: a segment is on offer, not skipped yet, and the setting allows it. Also while the bars are hidden.</summary>
+	[ObservableProperty]
+	public partial bool IsSkipVisible { get; set; }
+
+	/// <summary>The Skip button's text and accessible name: "Skip intro", "Skip credits" (<see cref="SkipTextFor"/>).</summary>
+	[ObservableProperty]
+	public partial string SkipText { get; set; } = SkipTextFor("Intro");
+
+	partial void OnIsSkipVisibleChanged(bool value) => OnPropertyChanged(nameof(AnythingVisible));
+
+	/// <summary>
+	/// The <c>segments</c> event (docs/BRIDGE.md §5): the backend's offer follows the position at its own sampling (about
+	/// every 0.5 s), so the button shows for as long as the offer lasts, whatever the bars do.
+	/// </summary>
+	public void OnSegments(BridgeSegments segments)
+	{
+		if (!IsThisItem(segments.ItemId))
+		{
+			return;
+		}
+
+		var offered = segments.Offered;
+		if (offered is null || offered != _skipped)
+		{
+			// the skipped offer is over (or another one came): the next one shows
+			_skipped = null;
+		}
+
+		_offered = offered;
+		UpdateSkip();
+	}
+
+	/// <summary>
+	/// The Skip button or S: <c>skip_segment</c> for the segment on offer (the backend seeks to its end). The button goes at
+	/// once and the time shows the segment's end; nothing on offer (or already skipped), nothing is sent.
+	/// </summary>
+	public Task SkipSegment()
+	{
+		NotifyActivity();
+		if (_offered is not { } segment || segment == _skipped)
+		{
+			return Task.CompletedTask;
+		}
+
+		_skipped = segment;
+		UpdateSkip();
+		HoldSeek(Clamp(segment.EndTicks));
+		return _send(Bridge.Commands.SkipSegment, null);
+	}
+
+	private void UpdateSkip()
+	{
+		if (_offered is { } offered)
+		{
+			SkipText = SkipTextFor(offered.Type);
+		}
+
+		IsSkipVisible = ShowSkipPrompt && _offered is { } shown && shown != _skipped;
+	}
+
+	/// <summary>The Skip button's words for a Jellyfin segment type, in FluentFin's sentence case ("Skip credits" for an outro).</summary>
+	public static string SkipTextFor(string? type) => type switch
+	{
+		"Outro" => "Skip credits",
+		"Commercial" => "Skip commercial",
+		"Preview" => "Skip preview",
+		"Recap" => "Skip recap",
+		_ => "Skip intro",
+	};
+
+	/// <summary>An event about <paramref name="itemId"/> is about the item playing now (or no item is known yet).</summary>
+	private bool IsThisItem(string? itemId) => ItemId is null || itemId is null || string.Equals(itemId, ItemId, StringComparison.OrdinalIgnoreCase);
+
+	// -- Next episode (the backend's next event) ------------------------------------------------------------------------
+
+	private const string NextEpisode = "Next episode";
+
+	private bool _nextKnown;
+	private string? _nextItemId;
+	private bool _isEpisode;
+	private int _queueCount;
+
+	/// <summary>
+	/// Set by the page: the title of an item by its id (the <c>next</c> event carries ids only, docs/BRIDGE.md §5), for the
+	/// Next button's tooltip. Null or a null answer: the tooltip stays "Next episode".
+	/// </summary>
+	public Func<string, Task<string?>>? NameItem { get; set; }
+
+	/// <summary>The Next button is there: an episode, or a queue of more than one item (it may be disabled, <see cref="CanNext"/>).</summary>
+	[ObservableProperty]
+	public partial bool ShowsNext { get; set; }
+
+	/// <summary>"Next: S1E2 · Second" once the next item's name is known; "Next episode" before, "No next episode" at the end of the queue.</summary>
+	[ObservableProperty]
+	public partial string NextToolTip { get; set; } = NextEpisode;
+
+	private void UpdateShowsNext() => ShowsNext = CanNext || _isEpisode || _queueCount > 1;
+
+	partial void OnCanNextChanged(bool value) => UpdateShowsNext();
+
+	/// <summary>
+	/// The <c>next</c> event: what <c>next</c> would play from this item. It enables the Next button (the queue in the
+	/// state only until this event came) and names the item in its tooltip.
+	/// </summary>
+	public void OnNext(BridgeNext next)
+	{
+		if (!IsThisItem(next.ItemId))
+		{
+			return;
+		}
+
+		_nextKnown = true;
+		CanNext = next.NextItemId is not null;
+		if (next.NextItemId == _nextItemId && NextToolTip != NextEpisode)
+		{
+			return;
+		}
+
+		_nextItemId = next.NextItemId;
+		NextToolTip = next.NextItemId is null ? "No next episode" : NextEpisode;
+		if (next.NextItemId is { } id)
+		{
+			_ = NameNext(id);
+		}
+	}
+
+	private async Task NameNext(string id)
+	{
+		if (NameItem is not { } name)
+		{
+			return;
+		}
+
+		string? title;
+		try
+		{
+			title = await name(id);
+		}
+		catch (Exception)
+		{
+			// the page's lookup logs its own failures: the tooltip just stays unnamed
+			return;
+		}
+
+		if (_nextItemId == id && !string.IsNullOrWhiteSpace(title))
+		{
+			NextToolTip = $"Next: {title.Trim()}";
+		}
+	}
+
+	/// <summary>How the Next button's tooltip names an item: "S1E2 · Second" for an episode (as the top bar's second line), else its name.</summary>
+	public static string NextTitle(BridgeItem item)
+	{
+		var (title, subtitle) = FormatTitle(item);
+		return subtitle.Length > 0 ? subtitle : title;
 	}
 
 	// -- audio and subtitle tracks -------------------------------------------------------------------------------------
@@ -743,7 +947,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>
 	/// A key pressed over the player (the page or the controls window). True when it is one of the player's keys and was
 	/// handled. Space/K play-pause, Left/Right 5 s (Ctrl: 10 s), J/L 10 s, Up/Down volume, M mute, F full screen,
-	/// Shift+N/Shift+P next/previous, Esc (docs/research/player-controls.md). Not S: no segments to skip yet.
+	/// Shift+N/Shift+P next/previous, S skips the segment on offer, Esc (docs/research/player-controls.md).
 	/// </summary>
 	public bool HandleKey(int virtualKey, bool control = false, bool shift = false, bool alt = false)
 	{
@@ -773,6 +977,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			case MpvControlsAction.Escape: Escape?.Invoke(); return Task.CompletedTask;
 			case MpvControlsAction.Next: return Next();
 			case MpvControlsAction.Previous: return Previous();
+			case MpvControlsAction.SkipSegment: return SkipSegment();
 			default: return Task.CompletedTask;
 		}
 	}
@@ -781,7 +986,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public static class Keys
 	{
 		public const int Escape = 0x1B, Space = 0x20, Left = 0x25, Up = 0x26, Right = 0x27, Down = 0x28;
-		public const int F = 0x46, J = 0x4A, K = 0x4B, L = 0x4C, M = 0x4D, N = 0x4E, P = 0x50;
+		public const int F = 0x46, J = 0x4A, K = 0x4B, L = 0x4C, M = 0x4D, N = 0x4E, P = 0x50, S = 0x53;
 		public const int MediaNext = 0xB0, MediaPrevious = 0xB1, MediaPlayPause = 0xB3;
 	}
 
@@ -804,7 +1009,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			Keys.Down when !control && !shift => MpvControlsAction.VolumeDown,
 			Keys.M when !control && !shift => MpvControlsAction.ToggleMute,
 			Keys.F when !control && !shift => MpvControlsAction.ToggleFullScreen,
-			// no S (skip a segment) yet: the bridge carries no segments, and a key that is taken must do something
+			// the backend's own key for its Skip (docs/BRIDGE.md §4 skip_segment); nothing on offer, nothing is sent
+			Keys.S when !control && !shift => MpvControlsAction.SkipSegment,
 			Keys.N when shift && !control => MpvControlsAction.Next,
 			Keys.P when shift && !control => MpvControlsAction.Previous,
 			Keys.MediaNext => MpvControlsAction.Next,

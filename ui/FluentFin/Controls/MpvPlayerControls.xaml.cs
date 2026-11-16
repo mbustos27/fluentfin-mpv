@@ -76,6 +76,14 @@ public sealed partial class MpvPlayerControls : UserControl
 				Focus(FocusState.Programmatic);
 			}
 		}
+		else if (e.PropertyName == nameof(MpvControlsViewModel.IsSkipVisible) && Controls is { IsSkipVisible: false })
+		{
+			// the Skip button went (pressed, or the segment is over): a focus it left nowhere
+			if (XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is null)
+			{
+				Focus(FocusState.Programmatic);
+			}
+		}
 	}
 
 	/// <summary>
@@ -88,6 +96,13 @@ public sealed partial class MpvPlayerControls : UserControl
 		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible) && Controls is { ControlsVisible: true })
 		{
 			KeepKeyboardWhenBarsHide();
+		}
+		else if (e.PropertyName == nameof(MpvControlsViewModel.IsSkipVisible) && Controls is { IsSkipVisible: true }
+			&& XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is DependencyObject focused && IsWithin(focused, SkipSegmentButton))
+		{
+			// the Skip button is about to go with the focus on it (the keyboard's, or the click's): the player takes it now,
+			// so its keys go on working (WinUI would hand it to the next control outside the player)
+			Focus(FocusState.Programmatic);
 		}
 	}
 
@@ -188,7 +203,7 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnVideoTapped(object sender, TappedRoutedEventArgs e)
 	{
-		if (Controls is not { } controls || IsInBars(e.OriginalSource as DependencyObject))
+		if (Controls is not { } controls || IsOnControls(e.OriginalSource as DependencyObject))
 		{
 			return;
 		}
@@ -199,7 +214,7 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnVideoDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
 	{
-		if (Controls is not { } controls || IsInBars(e.OriginalSource as DependencyObject))
+		if (Controls is not { } controls || IsOnControls(e.OriginalSource as DependencyObject))
 		{
 			return;
 		}
@@ -239,6 +254,9 @@ public sealed partial class MpvPlayerControls : UserControl
 
 		return false;
 	}
+
+	/// <summary>A tap there is a control's, not the video's (the bars, and the Skip button over the video).</summary>
+	private bool IsOnControls(DependencyObject? source) => IsInBars(source) || (source is not null && IsWithin(source, SkipSegmentButton));
 
 	private void OnBarPointerEntered(object sender, PointerRoutedEventArgs e)
 	{
@@ -333,6 +351,8 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnNextClick(object sender, RoutedEventArgs e) => _ = Controls?.Next();
 
+	private void OnSkipSegmentClick(object sender, RoutedEventArgs e) => _ = Controls?.SkipSegment();
+
 	private void OnFullScreenClick(object sender, RoutedEventArgs e) => Controls?.ToggleFullScreen();
 
 	private void OnMuteClick(object sender, RoutedEventArgs e) => _ = Controls?.ToggleMute();
@@ -381,6 +401,8 @@ public sealed partial class MpvPlayerControls : UserControl
 	/// the backend), so the binding only echoes it and a value change then is always the user's.
 	/// </summary>
 	public double Seconds(long ticks) => Math.Max(0, TimeSpan.FromTicks(ticks).TotalSeconds);
+
+	public string SkipToolTip(string text) => $"{text} (S)";
 
 	public string PlayPauseGlyph(bool paused) => paused ? "\uE768" : "\uE769";
 

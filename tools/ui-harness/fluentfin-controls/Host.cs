@@ -128,6 +128,8 @@ internal static partial class Host
 
 		var backs = 0;
 		controls.GoBack = () => backs++;
+		// the page names the next item from the server (VideoPlayerViewModel.NameMpvItem); the fake server's names here
+		controls.NameItem = id => Task.FromResult<string?>(id == Episode2 ? "S1E2 · Second" : null);
 
 		// the player page's key path (VideoPlayerPage: its root previews every key through MpvPlayerKeys, Escape is its
 		// accelerator), with a button above the video like the page's notice (its close button)
@@ -228,6 +230,9 @@ internal static partial class Host
 			await Picture(main, "playing-controls");
 			Check(Visible(view, "BottomBar") && Visible(view, "TopBar"), "both bars are shown");
 
+			// -- Skip intro: the fake server gives episode 1 an intro, 0:03 to 0:15 -------------------------------------
+			await SkipScenario(main, view, controls, mpv);
+
 			// pause and play through the controls
 			await controls.TogglePause();
 			Check(await Until(() => Last()?.State == Bridge.States.Paused && mpv.Flag("pause") == true, 5), "pause: the backend and mpv are paused");
@@ -297,9 +302,15 @@ internal static partial class Host
 
 			// next episode
 			Check(controls.CanNext, "Next is offered (a second episode is queued)");
+			var nextButton = (Button)view.FindName("NextButton");
+			Check(Visible(view, "NextButton") && nextButton.IsEnabled && ToolTipService.GetToolTip(nextButton) as string == "Next: S1E2 · Second",
+				$"the Next button is enabled by the next event and names the next episode ('{ToolTipService.GetToolTip(nextButton)}')");
 			await controls.Next();
 			Check(await Until(() => controls.Subtitle == "S1E2 · Second" && Last() is { State: Bridge.States.Playing, ItemId: Episode2 }, 30), $"Next plays episode 2 ({controls.Subtitle})");
-			Check(!controls.CanNext, "no Next after the last episode");
+			Check(await Until(() => !controls.CanNext, 5), "no Next after the last episode");
+			Check(Visible(view, "NextButton") && !nextButton.IsEnabled && ToolTipService.GetToolTip(nextButton) as string == "No next episode",
+				$"the last episode keeps the Next button, disabled ('{ToolTipService.GetToolTip(nextButton)}')");
+			Check(!controls.IsSkipVisible && !Visible(view, "SkipSegmentButton"), "episode 2 has no intro: no Skip button");
 
 			await backend.SendAsync(Bridge.Commands.Stop);
 			Check(await Until(() => Last()?.State == Bridge.States.Idle, 10), "stop: idle");
@@ -475,6 +486,56 @@ internal static partial class Host
 	}
 
 	private const int VkSpace = 0x20, VkEscape = 0x1B, VkF = 0x46;
+
+	/// <summary>
+	/// Skip intro over the video (the backend's segments event, docs/BRIDGE.md §5; skip_segment, §4): the button shows while
+	/// the intro plays, with its name for Narrator, stays when the bars hide, takes the keyboard's focus; S skips (the
+	/// backend seeks mpv to the intro's end), the button goes and the keyboard is the player's again; back in the intro it
+	/// shows again, and a click skips too. Pictures with the bars and without.
+	/// </summary>
+	private static async Task SkipScenario(Window main, MpvPlayerControls view, MpvControlsViewModel controls, MpvIpc mpv)
+	{
+		var skip = (Button)view.FindName("SkipSegmentButton");
+		var root = main.Content.XamlRoot;
+		Check(await Until(() => controls.IsSkipVisible && Visible(view, "SkipSegmentButton"), 15),
+			$"the intro plays: the Skip button shows (time-pos {mpv.Number("time-pos"):0.0} s)");
+		Check(Text(view, "SkipSegmentText") == "Skip intro" && Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(skip) == "Skip intro",
+			$"it says Skip intro, and Narrator reads the same ('{Text(view, "SkipSegmentText")}', '{Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(skip)}')");
+		controls.NotifyActivity();
+		await Picture(main, "skip-intro-bars");
+
+		// the bars hide, the Skip button stays over the video
+		var hideBy = DateTime.UtcNow.AddSeconds(6);
+		while (controls.ControlsVisible && DateTime.UtcNow < hideBy)
+		{
+			controls.Tick();
+			await Task.Delay(100);
+		}
+
+		Check(!controls.ControlsVisible && !Visible(view, "BottomBar") && Visible(view, "SkipSegmentButton"),
+			"the bars hid after 3 s; the Skip button stays for the intro");
+		await Picture(main, "skip-intro");
+
+		// the keyboard can be on it; S skips, and the keyboard goes back to the player with it
+		Check(skip.Focus(FocusState.Keyboard) && ReferenceEquals(FocusManager.GetFocusedElement(root), skip), "the Skip button takes the keyboard's focus");
+		Check(view.HandleKey(Windows.System.VirtualKey.S), "S is one of the player's keys");
+		Check(await Until(() => mpv.Number("time-pos") is >= 14.5, 5), $"S skipped the intro: mpv is at its end ({mpv.Number("time-pos"):0.0} s)");
+		Check(!controls.IsSkipVisible && !Visible(view, "SkipSegmentButton"), "and the Skip button went");
+		await Task.Delay(300);
+		var focused = FocusManager.GetFocusedElement(root);
+		Check(ReferenceEquals(focused, view), $"the keyboard went back to the player with it ({Describe(focused)})");
+
+		// back into the intro: offered again, and a click skips
+		await controls.SeekTo(TimeSpan.FromSeconds(5).Ticks);
+		Check(await Until(() => controls.IsSkipVisible && Visible(view, "SkipSegmentButton"), 5), $"back in the intro, the Skip button shows again ({mpv.Number("time-pos"):0.0} s)");
+		var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(skip)
+			?? new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(skip);
+		((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer).Invoke();
+		Check(await Until(() => mpv.Number("time-pos") is >= 14.5, 5), $"a click on it skipped the intro ({mpv.Number("time-pos"):0.0} s)");
+		Check(await Until(() => !controls.IsSkipVisible && !Visible(view, "SkipSegmentButton"), 3), "and it went");
+		await Task.Delay(1000);
+		Check(!controls.IsSkipVisible, "and stays away once the backend says the intro is over");
+	}
 
 	/// <summary>
 	/// Full screen and back with real keys (F, Escape, through the page's key path), the title bar row collapsing with it

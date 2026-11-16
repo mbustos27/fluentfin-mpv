@@ -31,11 +31,14 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 - **One crash domain**: mpv runs inside FluentFin, so an mpv or GPU-driver crash ends the app (a
   `quit` only ends the core; the next playback makes a new one on a new pipe and restarts the backend).
   The mpv choice keeps mpv out of process.
-- **No trickplay, skip intro/credits or Up Next yet** with FluentFin's controls. The bridge now
-  carries what the last two need (2026-11-15, osc-polish: the `segments` and `next` events and
-  `skip_segment`, docs\BRIDGE.md §4/§5; `BridgeSegments`, `BridgeNext` in FluentFin.Core), but the
-  controls do not show them yet. Trickplay tiles still have no bridge path (the UI would ask the
-  server). The shim skips by itself the segment types its settings set to always.
+- **No trickplay or Up Next card yet** with FluentFin's controls. Skip intro/credits is there
+  (2026-11-16, skip-ui: a Skip button top right while the backend's `segments` event offers one,
+  also with the bars hidden, and the S key, `skip_segment`), and the Next button follows the `next`
+  event (disabled at the end of the queue, the next episode named in its tooltip). Which segments
+  are offered is the backend's settings' (ask/always/off); Settings > Playback's *Show Skip intro
+  and Skip credits* only hides the button (S still skips). Trickplay tiles still have no bridge
+  path (the UI would ask the server). The shim skips by itself the segment types its settings set
+  to always.
 - **What the shim's command line gave mpv is not there in attached mode**: thumbfast/mouse scripts
   (unused: mpv's OSC is off) and `tls_*` client certificates (a server that needs one will not stream).
   `hwdec` follows the shim's setting as on the other path (its default is `no`).
@@ -101,8 +104,9 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 - **Settings > Playback with the MPV player** (2026-11-15): languages and subtitle mode reach
   it through the server (the per-item default tracks the backend falls back to), but four
   settings do not: *Show Skip intro and Skip credits*, *Change the volume with the mouse
-  wheel* and *Volume step* are kept on this PC and used by the built-in players only (the
-  bridge has no field for them: v1), and *Play the next episode automatically* is the
+  wheel* and *Volume step* are kept on this PC and used by the built-in players and
+  FluentFin's controls only (mpv's own controls ignore them: the bridge has no field for them,
+  v1), and *Play the next episode automatically* is the
   server's per-user setting, which the backend does not read (it uses its own `auto_play`,
   on). The cards say so. Needs a bridge field or command, or the backend reading the user's
   configuration at `connect`.

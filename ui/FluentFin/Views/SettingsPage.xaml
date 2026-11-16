@@ -149,10 +149,10 @@
                 </StackPanel>
 
                 <!--  kept on this PC; the bridge has no field for them yet (docs/BRIDGE.md v1), so mpv's own controls ignore them;
-                      FluentFin's player controls over the MPV player use the wheel and the step (MpvControlsViewModel)  -->
+                      FluentFin's player controls over the MPV player use the Skip button, the wheel and the step (MpvControlsViewModel)  -->
                 <ctk:SettingsCard
                     Margin="0,16,0,0"
-                    Description="Built-in players only for now: the MPV player doesn't use this setting yet."
+                    Description="Built-in players, and the MPV player with FluentFin's player controls. mpv's own controls follow the MPV player's settings."
                     Header="Show Skip intro and Skip credits"
                     HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
                     <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />

@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using FluentFin.Core.Mpv;
 using FluentFin.Core.Settings;
 using FluentFin.ViewModels;
+using Jellyfin.Sdk.Generated.Models;
 using Moq;
 
 namespace FluentFin.Tests.Mpv;
@@ -121,6 +122,62 @@ public sealed partial class VideoPlayerViewModelMpvTests
 
 		await controls.TogglePause();
 		Assert.Equal("toggle_pause", _backend.Commands[^1]);
+	}
+
+	/// <summary>
+	/// The backend's segments and next events reach the controls: the Skip button follows its offer and sends skip_segment,
+	/// Settings > Playback's "Show Skip intro and Skip credits" reaches them, and the next item is named from the server.
+	/// </summary>
+	[Fact]
+	public async Task FluentFinControls_OfferTheBackendsSkip_AndNameTheNextEpisode()
+	{
+		// played as a film (a queue of one, no series to load); the backend's events below are an episode's
+		var episode = Movie();
+		var second = new BaseItemDto { Id = Guid.NewGuid(), Name = "Second", Type = BaseItemDto_Type.Episode, SeriesName = "Spike Show", ParentIndexNumber = 1, IndexNumber = 2 };
+		_client.Setup(x => x.GetItem(episode.Id!.Value)).ReturnsAsync(episode);
+		_client.Setup(x => x.GetItem(second.Id!.Value)).ReturnsAsync(second);
+		_settings.SetupGet(x => x.ShowSkipPrompt).Returns(true);
+		var vm = CreateViewModelWithControls(use: true);
+		await vm.OnNavigatedTo(episode);
+		var controls = vm.MpvControls!;
+		var id = episode.Id!.Value.ToString("N");
+
+		vm.OnMpvEvent(vm.MpvGeneration, new BridgeEvent("item", new JsonObject { ["itemId"] = id, ["name"] = "Pilot", ["type"] = "Episode" }));
+		await PushState(vm, "playing", episode.Id.Value);
+		vm.OnMpvEvent(vm.MpvGeneration, new BridgeEvent("segments", JsonNode.Parse($$"""
+			{"itemId": "{{id}}", "segments": [{"type": "Outro", "startTicks": 0, "endTicks": 300000000, "action": "ask"}], "current": 0}
+			""")));
+		vm.OnMpvEvent(vm.MpvGeneration, new BridgeEvent("next", new JsonObject { ["itemId"] = id, ["nextItemId"] = second.Id!.Value.ToString("N"), ["autoPlay"] = true }));
+		await Task.Yield();
+
+		Assert.True(controls.ShowSkipPrompt);
+		Assert.True(controls.IsSkipVisible);
+		Assert.Equal("Skip credits", controls.SkipText);
+		Assert.True(controls.CanNext);
+		Assert.Equal("Next: S1E2 · Second", controls.NextToolTip);
+
+		await controls.SkipSegment();
+		Assert.Equal("skip_segment", _backend.Commands[^1]);
+		Assert.False(controls.IsSkipVisible);
+	}
+
+	[Fact]
+	public async Task FluentFinControls_TakeTheSkipSettingOff()
+	{
+		var movie = Movie();
+		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
+		_settings.SetupGet(x => x.ShowSkipPrompt).Returns(false);
+		var vm = CreateViewModelWithControls(use: true);
+		await vm.OnNavigatedTo(movie);
+		var id = movie.Id!.Value.ToString("N");
+
+		vm.OnMpvEvent(vm.MpvGeneration, new BridgeEvent("item", new JsonObject { ["itemId"] = id, ["name"] = "A movie", ["type"] = "Movie" }));
+		vm.OnMpvEvent(vm.MpvGeneration, new BridgeEvent("segments", JsonNode.Parse($$"""
+			{"itemId": "{{id}}", "segments": [{"type": "Intro", "startTicks": 0, "endTicks": 300000000, "action": "ask"}], "current": 0}
+			""")));
+
+		Assert.False(vm.MpvControls!.ShowSkipPrompt);
+		Assert.False(vm.MpvControls.IsSkipVisible);
 	}
 
 	[Fact]
