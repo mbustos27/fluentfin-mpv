@@ -238,7 +238,18 @@ public sealed class DiaryViewModelTests : IDisposable
 		Assert.Equal("The save dialog could not open, so nothing was exported. Try again.", _vm.ErrorText);
 		Assert.Equal(status, _vm.StatusText);
 
-		// the next export that gets a file goes through and clears the message
+		// the dialog opens next time and the user cancels: the message about it not opening goes, nothing is written
+		_dialogs.PickError = null;
+		_dialogs.ExportPath = null;
+		await _vm.ExportCsvCommand.ExecuteAsync(null);
+		Assert.False(_vm.HasError);
+		Assert.Null(_vm.ErrorText);
+		Assert.Equal(status, _vm.StatusText);
+
+		// the next export that gets a file goes through
+		_dialogs.PickError = new System.Runtime.InteropServices.COMException("Invalid window handle.", unchecked((int)0x80070578));
+		await _vm.ExportCsvCommand.ExecuteAsync(null);
+		Assert.True(_vm.HasError);
 		_dialogs.PickError = null;
 		Directory.CreateDirectory(_journal.Folder);
 		_dialogs.ExportPath = Path.Combine(_journal.Folder, "after.csv");

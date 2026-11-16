@@ -100,8 +100,8 @@ public static class OffscreenUi {
   }
 
   // the window WinUI reads posted keys from: the XAML island's InputSiteWindowClass child. WinUI keeps it hidden and still
-  // takes the keys posted to it; keys posted to the bridge (DesktopChildSiteBridge) never reach the app. Else the
-  // bridge, else the main window.
+  // takes the keys posted to it. Posted to the bridge (DesktopChildSiteBridge) instead, Tab still moved the focus but F
+  // and Esc never reached the player page. Else the bridge, else the main window.
   public static IntPtr KeyWindow(IntPtr main, int pid) {
     if (ProcessOf(main) != (uint)pid) throw new InvalidOperationException("not FluentFin's window");
     var kids = Children(main);
@@ -118,8 +118,9 @@ public static class OffscreenUi {
     return -1;
   }
 
-  // a key press posted to the window FluentFin reads keys from (KeyWindow; WM_KEYDOWN/WM_KEYUP; shift adds Shift around it)
-  public static void Key(IntPtr main, int pid, int vk, bool shift) {
+  // a key press posted to the window FluentFin reads keys from (KeyWindow; WM_KEYDOWN/WM_KEYUP; shift adds Shift around it);
+  // returns the window the key went to (drive.ps1 and offscreen\test_uia.ps1 check its class)
+  public static IntPtr Key(IntPtr main, int pid, int vk, bool shift) {
     var target = KeyWindow(main, pid);
     uint scan = MapVirtualKey((uint)vk, 0);
     if (shift) PostMessage(target, 0x0100, (IntPtr)0x10, (IntPtr)(1 | (MapVirtualKey(0x10, 0) << 16)));
@@ -127,6 +128,7 @@ public static class OffscreenUi {
     System.Threading.Thread.Sleep(30);
     PostMessage(target, 0x0101, (IntPtr)vk, (IntPtr)(1 | (scan << 16) | (1u << 30) | (1u << 31)));
     if (shift) PostMessage(target, 0x0101, (IntPtr)0x10, (IntPtr)(1 | (MapVirtualKey(0x10, 0) << 16) | (1u << 30) | (1u << 31)));
+    return target;
   }
 
   public static uint ScanCode(int vk) { return MapVirtualKey((uint)vk, 0); }

@@ -166,7 +166,7 @@ function Invoke-TabWalk([string]$Page) {
     $first = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id)
     if ($first) { [void]$order.Add($first) }
     for ($i = 0; $i -lt $TabStops; $i++) {
-        [OffscreenUi]::Key($script:hwnd, $script:ui.Id, 0x09, $false)
+        Key 0x09
         Start-Sleep -Milliseconds 150
         $now = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id)
         if (-not $now) { [void]$order.Add('{"note":"no element of FluentFin reports the focus"}'); break }
@@ -190,7 +190,8 @@ function Wait-Ui([string]$Name, [string]$Id, [string]$Type, [switch]$Contains, [
     Wait-Until { Find-Ui -Name $Name -Id $Id -Type $Type -Contains:$Contains -OffscreenToo:$OffscreenToo } -Seconds $Seconds -PollMs $PollMs
 }
 # a key posted to the window FluentFin reads keys from (its XAML island's input site; virtual-key code)
-function Key([int]$Vk, [switch]$Shift) { [OffscreenUi]::Key($script:hwnd, $script:ui.Id, $Vk, [bool]$Shift) }
+# ($script:lastKeyWindow: the window it went to)
+function Key([int]$Vk, [switch]$Shift) { $script:lastKeyWindow = [OffscreenUi]::Key($script:hwnd, $script:ui.Id, $Vk, [bool]$Shift) }
 
 # opens a media card: the card is one UIA button named after its item (a11y-items) that opens the item on Invoke; an
 # older build's card (an image that opens on a pointer tap) gets a posted click on its image, above its title
@@ -471,38 +472,42 @@ function Step-Play {
 function Step-FullScreen([bool]$On) {
     $before = Get-WindowState $script:hwnd
     # mpv's controls: mpv's f key in mpv's window. FluentFin's controls: F posted to FluentFin (the keyboard focus was put
-    # on the controls when playback began); if that does nothing (the focus went away when the controls hid), the Full
-    # screen button through UI Automation when it shows, and the check says so
-    $how = 'f'
+    # on the controls when playback began); if that does nothing (the focus went away when the controls hid), the check
+    # FAILs, and the Full screen button (through UI Automation, when it shows) still does it so the steps after it can run
+    $how = 'f'; $keyWorked = $true
     Send-PlayerKey 0x46 'f'
     $state = Wait-WindowState $script:hwnd $On $(if ($PlayerControls -eq 'Mpv') { 8 } else { 3 })
     if ($PlayerControls -eq 'FluentFin' -and [bool]$state.FullScreen -ne $On) {
+        $keyWorked = $false
         $btn = Find-Ui -Id 'FullScreenButton'
-        if ($btn) { [void](Invoke-Element $btn); $how = 'the Full screen button; F did nothing'; $state = Wait-WindowState $script:hwnd $On 8 }
+        if ($btn) { [void](Invoke-Element $btn); $how = 'F did nothing; the Full screen button did it'; $state = Wait-WindowState $script:hwnd $On 8 }
         else { $how = 'F did nothing and the controls are hidden' }
     }
-    if ($On) { Check "full screen ($how)" $state.FullScreen "$($before.Rect) -> $($state.Rect) on $($state.Monitor)" }
-    else { Check "windowed again ($how)" (-not $state.FullScreen) $state.Rect }
+    if ($On) { Check "full screen ($how)" ($keyWorked -and $state.FullScreen) "$($before.Rect) -> $($state.Rect) on $($state.Monitor)" }
+    else { Check "windowed again ($how)" ($keyWorked -and -not $state.FullScreen) $state.Rect }
     Start-Sleep -Seconds 1
     Shot $(if ($On) { 'fullscreen' } else { 'windowed' })
 }
 
 function Step-Leave {
     $at = Get-Epoch
-    # mpv's stop key q in mpv's window / Esc posted to FluentFin with its controls (else their Back button, when shown)
+    # mpv's stop key q in mpv's window / Esc posted to FluentFin with its controls; Esc doing nothing FAILs, and their Back
+    # button (when shown) still leaves so the steps after it can run
     $how = if ($PlayerControls -eq 'Mpv') { 'q' } else { 'Esc' }
+    $keyWorked = $true
     if ($PlayerControls -eq 'Mpv') { Send-PlayerKey 0x51 'q' } else { Key 0x1B }
     $back = Wait-Until { [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Play, ', $fixture.episode.name) } -Seconds $(if ($PlayerControls -eq 'Mpv') { 20 } else { 5 }) -PollMs 150
     if (-not $back -and $PlayerControls -eq 'FluentFin') {
+        $keyWorked = $false
         $btn = Find-Ui -Id 'BackButton'
-        if ($btn) { [void](Invoke-Element $btn); $how = 'the Back button; Esc did nothing' } else { $how = 'Esc did nothing and the controls are hidden' }
+        if ($btn) { [void](Invoke-Element $btn); $how = 'Esc did nothing; the Back button left' } else { $how = 'Esc did nothing and the controls are hidden' }
         $back = Wait-Until { [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Play, ', $fixture.episode.name) } -Seconds 15 -PollMs 150
     }
     $timings.leave_player_ms = Ms $at (Get-Epoch)
     $stopped = Wait-Until { @(Get-Requests $at | Where-Object { $_.route -eq 'report-stopped' }) | Select-Object -First 1 } -Seconds 15
     Start-Sleep -Seconds 1
     $stops = @(Get-Requests $at | Where-Object { $_.route -eq 'report-stopped' })
-    Check "left the player ($how; back on the season page)" ([bool]$back)
+    Check "left the player ($how; back on the season page)" ($keyWorked -and [bool]$back)
     Check 'stop reported once, by the backend' ($stops.Count -eq 1 -and (Get-Origin $stops[0]) -eq 'backend') ("{0} Stopped{1}" -f $stops.Count, $(if ($stops) { ' from ' + (($stops | ForEach-Object { Get-Origin $_ }) -join ', ') }))
     $state = Get-WindowState $script:hwnd
     Check 'window not full screen after leaving' (-not $state.FullScreen) $state.Rect
@@ -552,9 +557,10 @@ try {
     $script:hwnd = [IntPtr]$found
     $timings.window_ms = Ms $script:launchedAt (Get-Epoch)
     Say "window after $($timings.window_ms) ms"
-    # posted keys reach FluentFin only through its XAML island's (hidden) input site window, not through the bridge
-    $keyClass = Wait-Until { $c = [OffscreenUi]::ClassOf([OffscreenUi]::KeyWindow($script:hwnd, $script:ui.Id)); if ($c -eq 'InputSiteWindowClass') { $c } } -Seconds 10 -PollMs 100
-    Check 'keys: posted to the window WinUI reads them from (InputSiteWindowClass)' ([bool]$keyClass) $(if ($keyClass) { $keyClass } else { [OffscreenUi]::ClassOf([OffscreenUi]::KeyWindow($script:hwnd, $script:ui.Id)) })
+    # the window a key goes to: the XAML island's (hidden) input site; posted to the bridge, F and Esc never reached the
+    # player page. Shift (does nothing on the server page) through Key itself, until the input site exists.
+    $keyClass = Wait-Until { Key 0x10; $c = [OffscreenUi]::ClassOf($script:lastKeyWindow); if ($c -eq 'InputSiteWindowClass') { $c } } -Seconds 10 -PollMs 100
+    Check 'keys: posted to the window WinUI reads them from (InputSiteWindowClass)' ([bool]$keyClass) $(if ($keyClass) { $keyClass } else { [OffscreenUi]::ClassOf($script:lastKeyWindow) })
 
     # 3. sign in, then the steps in order
     Step-SignIn ($wanted -contains 'login')

@@ -218,7 +218,11 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(16, len(self.get("/Items/Latest?limit=16&parentId=" + views[0]["Id"])))
         self.assertEqual("status:500", server.rule_value(" Status:500 "))
         self.assertEqual(250.0, server.rule_value("250"))
-        for bad in ("status:abc", "status:42", "status:", "sometimes"):
+        self.assertEqual("status:400", server.rule_value("status:400"))
+        self.assertEqual("status:599", server.rule_value("status:599"))
+        # the injected answer has a JSON body: never a 1xx, 204 or 304, nor a success
+        for bad in ("status:abc", "status:42", "status:", "sometimes", "status:200", "status:204", "status:304",
+                    "status:399", "status:600"):
             with self.assertRaises(ValueError, msg=bad):
                 server.rule_value(bad)
 

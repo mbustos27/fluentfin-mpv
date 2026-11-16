@@ -15,7 +15,7 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   fillHeight/fillWidth/maxHeight/maxWidth asked for, as Jellyfin does.
 - Media: media.py's test video (built with --mpv into --media when missing).
 - Latency: --latency for every request, --latency-rule REGEX=MS for the paths matching REGEX (first match wins,
-  'hang' = never answer, 'status:NNN' = answer that status at once, 'empty' = 200 with no items); also
+  'hang' = never answer, 'status:NNN' = answer that status (400-599) at once, 'empty' = 200 with no items); also
   POST /__harness/latency {"default": ms, "rules": [["regex", ms], ...]} while running.
 - Streams: POST /__harness/streams {"encode_subtitle": true} serves the last embedded subtitle as burnt in
   ("Encode"), so picking it renegotiates the stream (a track change that can fail, with a PlaybackInfo rule).
@@ -71,14 +71,15 @@ BASE_SIZES = {  # (kind, image type) -> (width, height); None kind = any
 
 def rule_value(value):
     """A rule's value: ms (a number) of delay, 'hang' (never answer), 'status:NNN' (answer NNN at once: a failing
-    server) or 'empty' (200 with no items: an empty library). Anything else is a ValueError."""
+    server; 400-599 only, as the answer has a JSON body) or 'empty' (200 with no items: an empty library). Anything else
+    is a ValueError."""
     s = str(value).strip().lower()
     if s in ("hang", "empty"):
         return s
     if s.startswith("status:"):
         code = s.split(":", 1)[1]
-        if not code.isdigit() or not 100 <= int(code) <= 599:
-            raise ValueError("status:%s is not an HTTP status" % code)
+        if not code.isdigit() or not 400 <= int(code) <= 599:
+            raise ValueError("status:%s is not an HTTP error status (400-599)" % code)
         return "status:%d" % int(code)
     return float(value)
 
