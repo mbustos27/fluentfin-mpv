@@ -519,6 +519,21 @@ function update_margins()
 
 	if causes_margin(top_bar) then top = top_bar.title_by / display.height end
 
+	-- FluentFin MPV: the bottom bar's share of the height as it is shown NOW,
+	-- proximity reveals included (the margins below count only a persistent
+	-- bar), for fluentfin.lua's subtitle raise. 0 when it is hidden.
+	local ff_bar = 0
+	for _, element in ipairs({controls, timeline}) do
+		if element and element.enabled and element:get_visibility() > 0 then
+			ff_bar = math.max(ff_bar, (display.height - element.ay) / display.height)
+		end
+	end
+	if ff_bar ~= state.ff_bar then
+		state.ff_bar = ff_bar
+		mp.set_property_native('user-data/fluentfin/bar', ff_bar)
+	end
+	-- END FluentFin MPV
+
 	if causes_margin(volume) then
 		if options.volume == 'left' then
 			left = volume.bx / display.width

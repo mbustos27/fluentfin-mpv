@@ -328,6 +328,10 @@ class Bridge(bridge_smoke.BridgeProcess):
         with open(os.path.join(self.config_dir, "conf.json"), "w",
                   encoding="utf-8") as fh:
             json.dump(conf, fh)
+        # Silent, always: the test config's own mpv.conf (never the user's).
+        with open(os.path.join(self.config_dir, "mpv.conf"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("ao=null\nmute=yes\n")
         self.log_file = os.path.join(out_dir, name + "-bridge.log")
         self.stderr_path = os.path.join(out_dir, name + "-stderr.txt")
         self._stderr = open(self.stderr_path, "wb")
