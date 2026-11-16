@@ -54,8 +54,9 @@ public class DefaultActivationHandler : ActivationHandler<LaunchActivatedEventAr
 			{
 				_navigationService.NavigateTo<ShellViewModel>();
 
-				var cmdArgs = Environment.GetCommandLineArgs();
-				if(cmdArgs.Length == 2 && Guid.TryParse(cmdArgs[1], out var libraryId))
+				// fluentfin-mpv: a library id from the jump list, also next to --data-dir <folder>
+				var cmdArgs = KnownFolders.WithoutDataDir(Environment.GetCommandLineArgs().Skip(1));
+				if(cmdArgs.Length == 1 && Guid.TryParse(cmdArgs[0], out var libraryId))
 				{
 					_mainNavigationService.NavigateTo<LibraryViewModel>(libraryId);
 				}

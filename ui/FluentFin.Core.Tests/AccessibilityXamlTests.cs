@@ -204,6 +204,51 @@ public class AccessibilityXamlTests
 	}
 
 	[Fact]
+	public void Card_EffectAnimations_ReachTheirEffectsThroughXBind()
+	{
+		// visual-check: an effect of a PipelineVisualFactory is not found by {Binding ElementName=...} at run time, so the
+		// animation had no Target and each start (the card's buttons showing or hiding) threw "The target effect is null"
+		var doc = Load("FluentFin/Controls/BaseItemDtoCard.xaml");
+		var effects = doc.Descendants().Where(e => e.Name.LocalName is "BlurEffect" or "TintEffect").Select(e => (string?)e.Attribute(Xaml + "Name")).ToList();
+		var animations = doc.Descendants().Where(e => e.Name.LocalName.EndsWith("EffectAnimation", StringComparison.Ordinal)).ToList();
+
+		Assert.Equal(4, animations.Count);
+		Assert.All(animations, a =>
+		{
+			var target = (string?)a.Attribute("Target") ?? "";
+			Assert.Matches(@"^\{x:Bind \w+\}$", target);
+			Assert.Contains(target["{x:Bind ".Length..^1], effects);
+		});
+	}
+
+	[Theory]
+	[InlineData("FluentFin/Views/SelectServerPage.xaml", "Detect", "Next")]
+	[InlineData("FluentFin/Views/LibraryPage.xaml", "Sort", "Filter")]
+	public void ButtonsShowingAnIconAndAText_AreNamedAfterTheText(string page, string first, string second)
+	{
+		// visual-check (UIA scan): a TextBlock inside a panel does not name its button, so Narrator read "button"
+		var named = Load(page).Descendants().Where(e => e.Name.Namespace == Presentation && ButtonTypes.Contains(e.Name.LocalName))
+			.Where(b => (string?)b.Attribute("Content") is null && ContentElements(b).Any(e => e.Name.LocalName == "TextBlock") && ContentElements(b).Any(e => e.Name.LocalName != "TextBlock"))
+			.Select(b => (Name: (string?)b.Attribute("AutomationProperties.Name"), Text: ContentElements(b).Where(e => e.Name.LocalName == "TextBlock").Select(t => (string?)t.Attribute("Text")).First()))
+			.ToList();
+
+		Assert.Equal(new (string?, string?)[] { (first, first), (second, second) }, named);
+	}
+
+	[Theory]
+	[InlineData("FluentFin/Views/MoviePage.xaml")]
+	[InlineData("FluentFin/Views/EpisodePage.xaml")]
+	public void ItemPages_AudioAndSubtitleLists_AreNamedAfterTheirLabels(string page)
+	{
+		// visual-check (UIA scan): the lists sit beside a label TextBlock that does not name them
+		var lists = Load(page).Descendants(Presentation + "ComboBox").ToList();
+
+		Assert.Equal(new string?[] { "Audio", "Subtitle" }, lists.Select(c => (string?)c.Attribute("AutomationProperties.Name")));
+		Assert.Equal("{x:Bind ViewModel.AudioStreams, Mode=OneWay}", (string?)lists[0].Attribute("ItemsSource"));
+		Assert.StartsWith("{x:Bind ViewModel.SubtitleStreams,", (string?)lists[1].Attribute("ItemsSource"));
+	}
+
+	[Fact]
 	public void LibraryGrid_TheCardIsTheKeyboardStop_NotItsContainer()
 	{
 		var container = Load("FluentFin/Views/LibraryPage.xaml").Descendants(Presentation + "ItemContainer")
@@ -219,6 +264,18 @@ public class AccessibilityXamlTests
 		var container = Assert.Single(Load("FluentFin/Views/LibrariesLandingPage.xaml").Descendants(Presentation + "ItemContainer"));
 
 		Assert.Equal("{x:Bind Name}", (string?)container.Attribute("AutomationProperties.Name"));
+	}
+
+	[Fact]
+	public void SavedServerTiles_AreNamed_AndALongNameIsTrimmed()
+	{
+		// visual-check: Narrator read the tile as "ItemContainer", and "Harness Jellyfin (fake)" was cut off at both ends
+		var container = Assert.Single(Load("FluentFin/Views/SelectServerPage.xaml").Descendants(Presentation + "ItemContainer"));
+
+		Assert.Equal("{x:Bind DisplayName}", (string?)container.Attribute("AutomationProperties.Name"));
+		Assert.Equal("{x:Bind DisplayName}", (string?)container.Attribute("ToolTipService.ToolTip"));
+		var name = Assert.Single(container.Descendants(Presentation + "TextBlock"));
+		Assert.Equal("CharacterEllipsis", (string?)name.Attribute("TextTrimming"));
 	}
 
 	[Fact]
