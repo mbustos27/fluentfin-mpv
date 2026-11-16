@@ -239,10 +239,14 @@ foreach ($run in $Runs) {
         }
         'NoMpv' {
             $data = Invoke-ServerRun 'NoMpv' 'Mpv' $false 'season,play,close' $false
-            # the player page's error bar shows this exception's text (look at NoMpv\shots\*-player.png)
-            $logs = @(Get-ChildItem (Join-Path $data 'Logs') -Filter 'log*.txt' -ErrorAction SilentlyContinue)
-            $said = $logs | Select-String -Pattern 'MPV playback could not start .*mpv_failed \(mpv could not be started' | Select-Object -First 1
-            Check "NoMpv: without mpv on PATH, mpv's controls stop with 'mpv could not be started'" ([bool]$said) $(if ($said) { $said.Line.Trim() } else { 'no such line in FluentFin''s log' })
+            # the backend answers connect with mpv_not_found (BRIDGE.md section 2), and the player page says what to do
+            # (Core\Mpv\MpvNotFoundMessage): read from the page's UI Automation dump, as the user would see it
+            $backendLog = Join-Path $data 'Logs\mpv-backend.log'
+            $code = (Test-Path $backendLog) -and (Select-String -Path $backendLog -Pattern 'connect \(id \d+\) failed: mpv_not_found' -Quiet)
+            Check 'NoMpv: the backend answers connect with mpv_not_found' $code $backendLog
+            $dump = Join-Path $Out 'NoMpv\uia\player.txt'
+            $shown = if (Test-Path $dump) { Select-String -Path $dump -Pattern "mpv isn't installed on this PC.*winget install mpv-player\.mpv-CI\.MSVC" | Select-Object -First 1 }
+            Check "NoMpv: the player page says to switch to FluentFin's controls or install mpv (winget)" ([bool]$shown) $(if ($shown) { $shown.Line.Trim() } else { "no such text in $dump" })
         }
         { $_ -in 'SelfTest', 'Kill' } {
             # Kill: the self-test again, but FluentFin is ended abruptly (a crash): its job must end the bundled backend
