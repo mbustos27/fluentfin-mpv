@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--  fluentfin-mpv: the TV journal's Diary (docs/JOURNAL.md)  -->
+<Page
+    x:Class="FluentFin.Plugins.Journal.Views.DiaryPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Plugins.Journal.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:journal="using:FluentFin.Core.Journal"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:views="using:FluentFin.Plugins.Journal.Views"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <CollectionViewSource
+            x:Name="GroupedEntries"
+            IsSourceGrouped="True"
+            Source="{x:Bind ViewModel.Groups, Mode=OneWay}" />
+    </Page.Resources>
+
+    <Grid Margin="36,24,36,0" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  Title, whose journal, and the page's commands  -->
+        <Grid>
+            <StackPanel>
+                <TextBlock Style="{ThemeResource TitleTextBlockStyle}" Text="Diary" />
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ViewModel.Heading, Mode=OneWay}" />
+            </StackPanel>
+            <StackPanel
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    AutomationProperties.Name="Sync with Jellyfin"
+                    Command="{x:Bind ViewModel.SyncCommand}"
+                    ToolTipService.ToolTip="Bring in what you watched in other apps">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE895;" />
+                        <TextBlock Text="Sync" />
+                    </StackPanel>
+                </Button>
+                <DropDownButton AutomationProperties.Name="Export">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xEDE1;" />
+                        <TextBlock Text="Export" />
+                    </StackPanel>
+                    <DropDownButton.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuFlyoutItem Command="{x:Bind ViewModel.ExportCsvCommand}" Text="Diary as CSV…" />
+                            <MenuFlyoutItem Command="{x:Bind ViewModel.ExportJsonCommand}" Text="Everything as JSON…" />
+                        </MenuFlyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <Button AutomationProperties.Name="Journal settings" ToolTipService.ToolTip="Journal settings">
+                    <FontIcon FontSize="16" Glyph="&#xE713;" />
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <StackPanel Width="340" Spacing="16">
+                                <ToggleSwitch Header="Log episodes when they finish playing" IsOn="{x:Bind ViewModel.AutoLog, Mode=TwoWay}" />
+                                <StackPanel Spacing="4">
+                                    <ToggleSwitch Header="Send my star ratings to Jellyfin" IsOn="{x:Bind ViewModel.MirrorRating, Mode=TwoWay}" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{ThemeResource CaptionTextBlockStyle}"
+                                        Text="Not checked with your server yet: it may not keep them. Watched state goes to Jellyfin either way."
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!--  Filters and where the dates come from  -->
+        <Grid Grid.Row="1" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ComboBox
+                MinWidth="140"
+                AutomationProperties.Name="Year"
+                ItemsSource="{x:Bind ViewModel.Years, Mode=OneWay}"
+                SelectedItem="{x:Bind ViewModel.SelectedYear, Mode=TwoWay}" />
+            <ComboBox
+                Grid.Column="1"
+                MinWidth="220"
+                AutomationProperties.Name="Show"
+                ItemsSource="{x:Bind ViewModel.Shows, Mode=OneWay}"
+                SelectedItem="{x:Bind ViewModel.SelectedShow, Mode=TwoWay}" />
+            <TextBlock
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{x:Bind ViewModel.SummaryText, Mode=OneWay}" />
+            <StackPanel
+                Grid.Column="3"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="8">
+                <ProgressRing
+                    Width="16"
+                    Height="16"
+                    IsActive="{x:Bind ViewModel.IsSyncing, Mode=OneWay}" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    Text="{x:Bind ViewModel.StatusText, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Grid>
+
+        <InfoBar
+            Grid.Row="2"
+            IsClosable="False"
+            IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+            Message="{x:Bind ViewModel.ErrorText, Mode=OneWay}"
+            Severity="Warning" />
+
+        <!--  The diary, a month at a time  -->
+        <ListView
+            Grid.Row="3"
+            Padding="0,0,0,36"
+            IsItemClickEnabled="True"
+            ItemClick="OnItemClick"
+            ItemsSource="{x:Bind GroupedEntries.View, Mode=OneWay}"
+            SelectionMode="None"
+            Visibility="{x:Bind ViewModel.HasEntries, Mode=OneWay}">
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="8,0" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate x:DataType="journal:DiaryMonthGroup">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{x:Bind Title}" />
+                                <TextBlock
+                                    Margin="0,0,0,3"
+                                    VerticalAlignment="Bottom"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind CountText}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListView.GroupStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="journal:DiaryEntryViewModel">
+                    <Grid Padding="0,8" ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44" />
+                            <ColumnDefinition Width="160" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind DateText}">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                Style="{ThemeResource SubtitleTextBlockStyle}"
+                                Text="{x:Bind DayText}" />
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                Text="{x:Bind WeekdayText}" />
+                        </StackPanel>
+
+                        <Border
+                            Grid.Column="1"
+                            Width="160"
+                            Height="90"
+                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            CornerRadius="{StaticResource ControlCornerRadius}">
+                            <Grid>
+                                <FontIcon
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Glyph="&#xE8B2;" />
+                                <Image Source="{x:Bind views:DiaryPage.Image(ImageUrl)}" Stretch="UniformToFill" />
+                            </Grid>
+                        </Border>
+
+                        <StackPanel
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Spacing="2">
+                            <TextBlock
+                                Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                Text="{x:Bind SeriesName}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock TextTrimming="CharacterEllipsis">
+                                <Run Text="{x:Bind EpisodeCode}" />
+                                <Run Text="·" />
+                                <Run Text="{x:Bind Title}" />
+                            </TextBlock>
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                Text="{x:Bind DateText}"
+                                ToolTipService.ToolTip="{x:Bind DateNote}" />
+                            <TextBlock
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                MaxLines="2"
+                                Style="{ThemeResource CaptionTextBlockStyle}"
+                                Text="{x:Bind Review}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind HasReview}" />
+                        </StackPanel>
+
+                        <StackPanel
+                            Grid.Column="3"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="12">
+                            <FontIcon
+                                AutomationProperties.Name="Rewatch"
+                                FontSize="16"
+                                Glyph="&#xE8EE;"
+                                ToolTipService.ToolTip="Rewatch"
+                                Visibility="{x:Bind Rewatch}" />
+                            <FontIcon
+                                AutomationProperties.Name="Not on the server yet"
+                                FontSize="16"
+                                Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                Glyph="&#xE753;"
+                                ToolTipService.ToolTip="Jellyfin was not told yet; it is marked played when the server answers"
+                                Visibility="{x:Bind NotOnServer}" />
+                            <controls:HalfStarRating
+                                IsReadOnly="True"
+                                StarSize="16"
+                                Value="{x:Bind Rating, Mode=OneWay}" />
+                        </StackPanel>
+
+                        <Button
+                            Grid.Column="4"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Entry options"
+                            Background="Transparent"
+                            BorderThickness="0">
+                            <FontIcon FontSize="16" Glyph="&#xE712;" />
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem
+                                        Click="OnEditClick"
+                                        Tag="{x:Bind}"
+                                        Text="Edit…">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE70F;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem
+                                        Click="OnDeleteClick"
+                                        Tag="{x:Bind}"
+                                        Text="Delete…">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE74D;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!--  Nothing to show  -->
+        <StackPanel
+            Grid.Row="3"
+            MaxWidth="480"
+            Margin="0,48,0,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            Spacing="12"
+            Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}">
+            <FontIcon
+                FontSize="48"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                Glyph="&#xE787;" />
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{x:Bind ViewModel.EmptyText, Mode=OneWay}"
+                TextAlignment="Center"
+                TextWrapping="Wrap" />
+        </StackPanel>
+    </Grid>
+</Page>

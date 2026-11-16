@@ -20,6 +20,7 @@
         HighContrastAdjustment="None"
         IsBackButtonVisible="Collapsed"
         IsPaneOpen="False"
+        IsPaneVisible="{x:Bind Chrome.IsNavigationVisible, Mode=OneWay}"
         IsPaneToggleButtonVisible="False"
         IsSettingsVisible="False"
         Style="{StaticResource MainNavigationViewStyle}">

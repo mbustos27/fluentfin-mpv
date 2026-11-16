@@ -103,6 +103,9 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	[ObservableProperty]
 	public partial bool IsLoading { get; set; }
 
+	/// <summary>fluentfin-mpv: the library failed to load or is empty: said on the page, with Retry.</summary>
+	public LoadState State { get; } = new("this library");
+
 	public IJellyfinClient JellyfinClient { get; }
 
 	public LibraryFilter Filter { get; set; } = new();
@@ -128,20 +131,29 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	{
 		if (parameter is BaseItemDto libraryDto)
 		{
-			await Initialize(libraryDto);
+			await State.RunAsync(() => Initialize(libraryDto));
 		}
 		else if(parameter is Guid id)
 		{
-			var dto = await JellyfinClient.GetItem(id);
-			if(dto is null)
+			// fluentfin-mpv: a library opened by id (the jump list) that cannot be looked up says so, with Retry
+			await State.RunAsync(async () =>
 			{
-				return;
-			}
-			await Initialize(dto);
+				IsLoading = true;
+				try
+				{
+					var dto = await JellyfinClient.GetItem(id);
+					return dto is null ? LoadMessages.CouldNotLoad("this library") : await Initialize(dto);
+				}
+				finally
+				{
+					IsLoading = false;
+				}
+			});
 		}
 	}
 
-	private async Task Initialize(BaseItemDto dto)
+	/// <summary>fluentfin-mpv: says how it went (a failure, an empty library), for <see cref="State"/>.</summary>
+	private async Task<LoadOutcome> Initialize(BaseItemDto dto)
 	{
 		IsLoading = true;
 
@@ -151,23 +163,34 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 			if (result is null or { Items: null })
 			{
-				return;
+				return LoadMessages.CouldNotLoad("this library");
 			}
 
-			_itemsCache.AddOrUpdate(result.Items.Select(BaseItemViewModel.FromDto));
+			// a Retry starts from what the server has now
+			_itemsCache.Edit(cache =>
+			{
+				cache.Clear();
+				cache.AddOrUpdate(result.Items.Select(BaseItemViewModel.FromDto));
+			});
+
+			if (result.Items.Count == 0)
+			{
+				return LoadOutcome.Empty("This library is empty", $"Movies and shows added to it on {LoadMessages.ServerName()} appear here.");
+			}
 
 			// Only libraries have filters; a plain folder opened from a card returns none.
 			var filters = await JellyfinClient.GetFilters(dto);
 
 			if (filters is null)
 			{
-				return;
+				return LoadOutcome.Loaded;
 			}
 
 			TagsSource = filters.Tags?.ToList() ?? [];
 			GenresSource = filters.Genres?.ToList() ?? [];
 			OfficialRatingsSource = filters.OfficialRatings?.ToList() ?? [];
 			YearsSource = filters.Years?.Where(x => x.HasValue).Select(x => x!.Value.ToString()).ToList() ?? [];
+			return LoadOutcome.Loaded;
 		}
 		finally
 		{

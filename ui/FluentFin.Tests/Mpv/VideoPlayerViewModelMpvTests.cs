@@ -106,6 +106,34 @@ public sealed partial class VideoPlayerViewModelMpvTests
 	}
 
 	[Fact]
+	public async Task PlayFromBeginning_StartsTheEpisodeAtZero_InItsPlaceInTheSeries()
+	{
+		// fluentfin-mpv: "Play from beginning" on the item page (ux-review I2); the episode has a resume point of 2000 ticks
+		var show = new FakeLibrary(_client).AddSeries(seasons: 1, episodesPerSeason: 3, played: 1);
+		var episodes = show.Episodes;
+
+		await CreateViewModel().OnNavigatedTo(new PlaybackRequest(FakeLibrary.PageCopy(episodes[1]), null, FromBeginning: true));
+
+		var play = _backend.Args("play");
+		Assert.Equal(episodes.Select(x => x.Id!.Value.ToString("N")), play["itemIds"]!.AsArray().Select(x => (string?)x));
+		Assert.Equal(1, (int?)play["startIndex"]);
+		Assert.Equal(0L, (long?)play["startPositionTicks"]);
+		Assert.Null(play["audioStreamIndex"]);
+		Assert.Null(play["subtitleStreamIndex"]);
+	}
+
+	[Fact]
+	public async Task PlayFromBeginning_StartsTheMovieAtZero()
+	{
+		var movie = Movie(resumeTicks: 5_000_000);
+		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
+
+		await CreateViewModel().OnNavigatedTo(new PlaybackRequest(movie, null, FromBeginning: true));
+
+		Assert.Equal(0L, (long?)_backend.Args("play")["startPositionTicks"]);
+	}
+
+	[Fact]
 	public async Task RemotePlay_IsPlayedAsSent()
 	{
 		var request = new BridgePlayRequest(["a1", "b2"], 1, 99, "source-1", 3, 4);

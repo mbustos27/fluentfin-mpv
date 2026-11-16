@@ -371,6 +371,27 @@ class ConnectValidationTest(_BadArgs, unittest.TestCase):
             with self.subTest(window=window):
                 self.bad(proto.validate_window, window)
 
+    def test_attached_window_shapes(self):
+        """fluentfin-mpv player controls: the UI's own mpv on a named pipe
+        (BRIDGE.md section 4). The name goes to python-mpv-jsonipc, which
+        prefixes ``\\\\.\\pipe\\``: no separators, no path, no prefix."""
+        for name in ("fluentfin-mpv-4242-0011223344556677", "a", "A.b_c-9",
+                     "x" * 100):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    proto.validate_window({"mode": "attached", "ipc": name,
+                                           "hwnd": 5}),
+                    {"mode": "attached", "hwnd": None, "ipc": name})
+        for name in ("", "x" * 101, "-lead", ".lead", r"\\.\pipe\mpv",
+                     "a/b", "a b", "a:b", None, 5, ["a"]):
+            with self.subTest(name=name):
+                self.bad(proto.validate_window,
+                         {"mode": "attached", "ipc": name})
+        self.bad(proto.validate_window, {"mode": "attached"})
+        self.assertEqual(proto.validate_connect(self.full(
+            window={"mode": "attached", "ipc": "p1"}))["window"],
+            {"mode": "attached", "hwnd": None, "ipc": "p1"})
+
     def test_the_handle_range_is_0_exclusive_to_2_to_the_32(self):
         """BRIDGE.md: 0 < hwnd <= 4294967295. mpv reads a negative or
         out-of-range wid as "no window" and opens its own, so a
@@ -554,10 +575,65 @@ class TicksAndTracksTest(unittest.TestCase):
                 {"index": 3, "isDefault": False, "isExternal": True,
                  "language": "fre", "codec": "subrip", "isForced": True},
                 {"index": 4, "isDefault": False, "isExternal": False,
-                 "title": "Signs"},
+                 "title": "Signs", "streamTitle": "Signs"},
             ]})
         self.assertEqual(proto.tracks_payload(None),
                          {"audio": [], "subtitle": []})
+
+    def test_tracks_carry_the_stream_title_and_hearing_impaired(self):
+        # fluentfin-mpv player controls: labels built by the UI ("English
+        # (SDH)", "English . Commentary") need the stream's own title tag
+        # apart from the server's DisplayTitle, and the SDH flag.
+        source = {"MediaStreams": [
+            {"Index": 1, "Type": "Audio", "Language": "eng",
+             "DisplayTitle": "Commentary - English - AAC - Stereo",
+             "Title": "Commentary", "Channels": 2},
+            {"Index": 2, "Type": "Subtitle", "Language": "eng",
+             "DisplayTitle": "English (SDH) - SUBRIP", "Title": "SDH",
+             "IsHearingImpaired": True, "IsForced": False},
+            {"Index": 3, "Type": "Subtitle", "Language": "eng",
+             "DisplayTitle": "English - SUBRIP", "Title": "  ",
+             "IsHearingImpaired": False},
+            {"Index": 4, "Type": "Subtitle", "Language": "jpn"},
+        ]}
+        tracks = proto.tracks_payload(source)
+        audio, = tracks["audio"]
+        self.assertEqual((audio["title"], audio["streamTitle"]),
+                         ("Commentary - English - AAC - Stereo",
+                          "Commentary"))
+        self.assertNotIn("isHearingImpaired", audio)
+        sdh, plain, bare = tracks["subtitle"]
+        self.assertEqual((sdh["streamTitle"], sdh["isHearingImpaired"]),
+                         ("SDH", True))
+        # A blank tag is no title; a false flag is still said.
+        self.assertNotIn("streamTitle", plain)
+        self.assertIs(plain["isHearingImpaired"], False)
+        # A server that does not know the flag (before 10.9) sends nothing.
+        self.assertNotIn("isHearingImpaired", bare)
+        self.assertNotIn("streamTitle", bare)
+
+    def test_validate_controls(self):
+        self.assertEqual(proto.validate_controls({"controls": "mpv"}),
+                         ("mpv", 0.0))
+        self.assertEqual(proto.validate_controls(
+            {"controls": "ui", "subtitleInset": 0.18}), ("ui", 0.18))
+        self.assertEqual(proto.validate_controls(
+            {"controls": "ui", "subtitleInset": None}), ("ui", 0.0))
+        self.assertEqual(proto.validate_controls(
+            {"controls": "ui", "subtitleInset": 0}), ("ui", 0.0))
+        # mpv draws nothing of the UI's: its inset is ignored.
+        self.assertEqual(proto.validate_controls(
+            {"controls": "mpv", "subtitleInset": 0.3}), ("mpv", 0.0))
+        for args in ({}, {"controls": "UI"}, {"controls": 1},
+                     {"controls": "ui", "subtitleInset": 0.51},
+                     {"controls": "ui", "subtitleInset": -0.01},
+                     {"controls": "ui", "subtitleInset": "0.2"},
+                     {"controls": "ui", "subtitleInset": True},
+                     {"controls": "ui", "subtitleInset": float("nan")}):
+            with self.subTest(args=args):
+                with self.assertRaises(BridgeError) as caught:
+                    proto.validate_controls(args)
+                self.assertEqual(caught.exception.code, "bad_args")
 
     def test_item_payload(self):
         self.assertEqual(proto.item_payload("e1", {

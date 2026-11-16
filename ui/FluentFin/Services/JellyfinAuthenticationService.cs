@@ -35,12 +35,13 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		}).URI;
 	}
 
-	public static async Task<(PublicSystemInfo? Info, string? Error)> GetPublicInfo(string url)
+	// fluentfin-mpv: cancellable, so the server page can give up on an address that does not answer (a 10 s timeout)
+	public static async Task<(PublicSystemInfo? Info, string? Error)> GetPublicInfo(string url, CancellationToken cancellationToken = default)
 	{
 		try
 		{
 			var client = GetClient(url);
-			return (await client.System.Info.Public.GetAsync(), null);
+			return (await client.System.Info.Public.GetAsync(cancellationToken: cancellationToken), null);
 		}
 		catch (Exception ex)
 		{
@@ -55,6 +56,8 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 			$"The HTTPS certificate of {url} isn't trusted by Windows (for example a self-signed certificate). " +
 			"Use the server's http:// address, or add its certificate to the Windows certificate store.",
 		HttpRequestException => $"Unable to reach {url}: {ex.Message}",
+		// fluentfin-mpv: the server page's timeout (or the HTTP client's own)
+		OperationCanceledException => $"{url} didn't answer in time. Check the address and port, and that this PC can reach the server (VPN, firewall), then try again.",
 		_ => ex.Message
 	};
 
@@ -195,7 +198,7 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		var id = new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
 		var settings = new JellyfinSdkSettings();
 		settings.SetServerUrl(url);
-		settings.Initialize("FluentFin", Assembly.GetEntryAssembly()!.GetName().Version!.ToString(), Environment.MachineName, id);
+		settings.Initialize("FluentFin MPV", Assembly.GetEntryAssembly()!.GetName().Version!.ToString(), Environment.MachineName, id);
 		return new JellyfinApiClient(new JellyfinRequestAdapter(new JellyfinAuthenticationProvider(settings), settings));
 	}
 }

@@ -1,6 +1,8 @@
 -- Adapted from: https://raw.githubusercontent.com/mpv-player/mpv/bca516bd2c282670aa2c92663329e7d5ddf978e0/player/lua/osc.lua
 -- Sadly there is no way to do this without forking the entire OSC script.
 -- All of my changes are marked with -- BEGIN patch and -- END patch.
+-- FluentFin MPV's are "-- BEGIN patch FluentFin MPV", each behind an option
+-- whose default is upstream's look (docs/bridge.md section 4a).
 
 local assdraw = require 'mp.assdraw'
 local msg = require 'mp.msg'
@@ -95,6 +97,21 @@ local user_opts = {
     playlist_osd = true,        -- whether to show playlist OSD on next/prev
     chapter_fmt = "Chapter: %s", -- chapter print format for seekbar-hover. "no" to disable
     unicodeminus = false,       -- whether to use the Unicode minus sign character
+    -- BEGIN patch FluentFin MPV (look options; every default is upstream's)
+    showcache = true,           -- show the "Cache: 1m40s" readout
+    tracklabels = "number",     -- track buttons: "number" (1/2) or "name" (English)
+    raisesubs = false,          -- move subtitles above the bar while it is shown
+    background_color = "#000000", -- the bar's background
+    seekbarfg_color = "",       -- played part and handle; "" = the text colour
+    seekbarbg_color = "",       -- the track behind it; "" = the text colour
+    seekbarbg_alpha = -1,       -- the track's alpha; -1 = derived from boxalpha
+    seekbarrail = 0,            -- knob/diamond: a rail this thick instead of the full box
+    seekbarfill = 0,            -- knob/diamond: fill up to the handle, this thick
+    timecodesize = 27,          -- font size of the bar's timecodes
+    showplaylist = true,        -- the bar's playlist prev/next buttons
+    wheelvolume = 0,            -- >0: the wheel is volume +-this, 0..100, never a seek
+    wheelvolume_osd = true,     -- show mpv's volume bar for a wheel change
+    -- END patch
 }
 
 -- read options from config and command-line
@@ -133,6 +150,31 @@ local osc_styles = {
     wcTitle = "{\\1c&HFFFFFF\\fs24\\q2}",
     wcBar = "{\\1c&H000000}",
 }
+
+-- BEGIN patch FluentFin MPV (colours and sizes from the options above)
+local function ff_bgr(hex)  -- "#RRGGBB" -> ASS "BBGGRR", nil if not a colour
+    hex = tostring(hex or ""):gsub("^#", "")
+    if hex:match("^%x%x%x%x%x%x$") then
+        return hex:sub(5, 6) .. hex:sub(3, 4) .. hex:sub(1, 2)
+    end
+end
+local ff_bg = ff_bgr(user_opts.background_color)
+if ff_bg and ff_bg ~= "000000" then
+    osc_styles.box = osc_styles.box:gsub("\\1c&H000000", "\\1c&H" .. ff_bg)
+    osc_styles.wcBar = osc_styles.wcBar:gsub("\\1c&H000000", "\\1c&H" .. ff_bg)
+end
+if tonumber(user_opts.timecodesize) and user_opts.timecodesize ~= 27 then
+    osc_styles.timecodesBar = osc_styles.timecodesBar:gsub(
+        "\\fs27", "\\fs" .. user_opts.timecodesize)
+end
+local function ff_seekbar_style(hex)
+    local c = ff_bgr(hex)
+    if not c then return osc_styles.timecodesBar end
+    return "{\\blur0\\bord0\\1c&H" .. c .. "\\3c&HFFFFFF\\fs27}"
+end
+osc_styles.seekbarFg = ff_seekbar_style(user_opts.seekbarfg_color)
+osc_styles.seekbarBg = ff_seekbar_style(user_opts.seekbarbg_color)
+-- END patch
 
 -- internal states, do not touch
 local state = {
@@ -470,6 +512,91 @@ function get_track(type)
     return 0
 end
 
+-- BEGIN patch FluentFin MPV (track names on the track buttons)
+local ff_languages = {
+    ara = "Arabic", chi = "Chinese", zho = "Chinese", cze = "Czech",
+    ces = "Czech", dan = "Danish", dut = "Dutch", nld = "Dutch",
+    eng = "English", fin = "Finnish", fre = "French", fra = "French",
+    ger = "German", deu = "German", gre = "Greek", ell = "Greek",
+    heb = "Hebrew", hin = "Hindi", hun = "Hungarian", ind = "Indonesian",
+    ita = "Italian", jpn = "Japanese", kor = "Korean", may = "Malay",
+    msa = "Malay", nor = "Norwegian", nob = "Norwegian", nno = "Norwegian",
+    per = "Persian", fas = "Persian", pol = "Polish", por = "Portuguese",
+    rum = "Romanian", ron = "Romanian", rus = "Russian", spa = "Spanish",
+    swe = "Swedish", tha = "Thai", tur = "Turkish", ukr = "Ukrainian",
+    vie = "Vietnamese", ar = "Arabic", zh = "Chinese", cs = "Czech",
+    da = "Danish", nl = "Dutch", en = "English", fi = "Finnish",
+    fr = "French", de = "German", el = "Greek", he = "Hebrew", hi = "Hindi",
+    hu = "Hungarian", id = "Indonesian", it = "Italian", ja = "Japanese",
+    ko = "Korean", ms = "Malay", no = "Norwegian", nb = "Norwegian",
+    fa = "Persian", pl = "Polish", pt = "Portuguese", ro = "Romanian",
+    ru = "Russian", es = "Spanish", sv = "Swedish", th = "Thai",
+    tr = "Turkish", uk = "Ukrainian", vi = "Vietnamese",
+}
+
+local function ff_language(code)
+    if type(code) ~= "string" or code == "" then return nil end
+    local base = code:lower():match("^(%a+)")
+    if not base or base == "und" or base == "mis" or base == "zxx"
+        or base == "mul" then
+        return nil
+    end
+    return ff_languages[base] or code:upper()
+end
+
+-- A title worth showing. Not a file name (mpv titles a sidecar with the
+-- last part of its url, which can carry a query string -- ApiKey=...), and
+-- nothing that looks like a url or a query.
+local function ff_title(track)
+    local t = track.title
+    if type(t) ~= "string" or t == "" then return nil end
+    if t:find("://", 1, true) or t:find("[?&][%w_%-]+=") then
+        return nil
+    end
+    local file = track["external-filename"]
+    if track.external and type(file) == "string"
+        and file:sub(-#t) == t then
+        return nil
+    end
+    return t
+end
+
+-- "English", "Japanese", the title when it names the language more
+-- precisely ("English SDH"), "Off" for no subtitle.
+function ff_track_label(kind)
+    local track = mp.get_property(kind)
+    if track == "no" or track == nil then
+        return kind == "sub" and "Off" or "–"
+    end
+    local tr = tracks_mpv[kind][tonumber(track)]
+    if not tr then return "–" end
+    local language, title = ff_language(tr.lang), ff_title(tr)
+    local label = language or title
+    if language and title and title:lower():find(language:lower(), 1, true)
+    then
+        label = title
+    end
+    if not label then
+        label = tr.codec and tr.codec:upper() or ("#" .. tr.osc_id)
+    end
+    if tr.forced and label ~= title then
+        label = label .. " (F)"
+    end
+    -- Short enough for the button (about 11 characters of the font at its
+    -- size); whole UTF-8 characters only.
+    local chars = 0
+    local cut = nil
+    for pos in label:gmatch("()[^\128-\191]") do
+        chars = chars + 1
+        if chars == 11 then cut = pos end
+    end
+    if cut and chars > 11 then
+        label = label:sub(1, cut - 1) .. "…"
+    end
+    return (label:gsub("\\", "/"):gsub("{", "("):gsub("}", ")"))
+end
+-- END patch
+
 -- WindowControl helpers
 function window_controls_enabled()
     val = user_opts.windowcontrols
@@ -743,6 +870,13 @@ function render_elements(master_ass)
                     ass_draw_rr_h_cw(elem_ass, xp - r, foH - r,
                                      xp + r, foH + r,
                                      r, slider_lo.stype == "diamond")
+                    -- BEGIN patch FluentFin MPV (fill up to the handle)
+                    local t = user_opts.seekbarfill / 2
+                    if t > 0 and xp > foH then
+                        ass_draw_rr_h_cw(elem_ass, foH, foH - t,
+                                         xp, foH + t, t)
+                    end
+                    -- END patch
                 else
                     local h = 0
                     if seekRanges and user_opts.seekrangeseparate and slider_lo.rtype ~= "inverted" then
@@ -1553,6 +1687,11 @@ function bar_layout(direction)
     end
 
     local tsW = 90
+    -- BEGIN patch FluentFin MPV (room for a track name)
+    if user_opts.tracklabels == "name" then
+        tsW = 140
+    end
+    -- END patch
     local minW = (buttonW + padX)*5 + (tcW + padX)*4 + (tsW + padX)*2
 
     -- Special topbar handling when window controls are present
@@ -1628,13 +1767,29 @@ function bar_layout(direction)
     lo.style = osc_styles.topButtonsBar
 
     local t_l = geo.x + geo.w + padX
+    -- BEGIN patch FluentFin MPV (no playlist buttons: the title starts
+    -- above the play button)
+    if not user_opts.showplaylist then
+        elements["pl_prev"].layout = nil
+        elements["pl_next"].layout = nil
+        t_l = osc_geo.x + padX
+    end
+    -- END patch
 
     -- Cache
     geo = { x = osc_geo.x + osc_geo.w - padX, y = geo.y,
             an = 6, w = 150, h = geo.h }
+    -- BEGIN patch FluentFin MPV (no cache readout: the title takes the row)
+    if not user_opts.showcache then
+        geo.w = 0
+    else
+    -- END patch
     lo = add_layout("cache")
     lo.geometry = geo
     lo.style = osc_styles.vidtitleBar
+    -- BEGIN patch FluentFin MPV
+    end
+    -- END patch
 
     local t_r = geo.x - geo.w - padX*2
 
@@ -1724,6 +1879,20 @@ function bar_layout(direction)
         lo.box.radius = geo.h / 2
         lo.box.hexagon = user_opts["seekbarstyle"] == "diamond"
     end
+    -- BEGIN patch FluentFin MPV (seek bar colours, a thin rail)
+    lo.style = osc_styles.seekbarBg
+    if user_opts.seekbarbg_alpha >= 0 then
+        lo.alpha[1] = math.min(255, user_opts.seekbarbg_alpha)
+    end
+    if user_opts.seekbarrail > 0 and user_opts.seekbarstyle ~= "bar" then
+        -- Where the handle travels: half the bar's height in from each end.
+        lo.geometry = {x = geo.x + geo.h / 2, y = geo.y, an = geo.an,
+                       w = math.max(0, geo.w - geo.h),
+                       h = user_opts.seekbarrail}
+        lo.box.radius = user_opts.seekbarrail / 2
+        lo.box.hexagon = false
+    end
+    -- END patch
 
     lo = add_layout("seekbar")
     lo.geometry = geo
@@ -1734,6 +1903,15 @@ function bar_layout(direction)
     lo.slider.tooltip_an = 5
     lo.slider.stype = user_opts["seekbarstyle"]
     lo.slider.rtype = user_opts["seekrangestyle"]
+    -- BEGIN patch FluentFin MPV (seek bar colours; with a thin rail the
+    -- hover time sits above the bar, under the preview, not across the rail)
+    lo.style = osc_styles.seekbarFg
+    if user_opts.seekbarrail > 0 and user_opts.seekbarstyle ~= "bar" then
+        lo.slider.tooltip_an = 2
+        lo.slider.tooltip_style = osc_styles.timePosBar:gsub(
+            "\\fs30", "\\fs" .. user_opts.timecodesize)
+    end
+    -- END patch
 
     if direction < 0 then
         osc_param.video_margins.b = osc_geo.h / osc_param.playresy
@@ -1991,6 +2169,12 @@ function osc_init()
 
     ne.enabled = (#tracks_osc.audio > 0)
     ne.content = function ()
+        -- BEGIN patch FluentFin MPV (track names)
+        if user_opts.tracklabels == "name" then
+            return ("\238\132\134" .. osc_styles.smallButtonsLlabel
+                .. "{\\fs20} " .. ff_track_label("audio"))
+        end
+        -- END patch
         local aid = "–"
         if not (get_track("audio") == 0) then
             aid = get_track("audio")
@@ -2010,6 +2194,12 @@ function osc_init()
 
     ne.enabled = (#tracks_osc.sub > 0)
     ne.content = function ()
+        -- BEGIN patch FluentFin MPV (track names)
+        if user_opts.tracklabels == "name" then
+            return ("\238\132\135" .. osc_styles.smallButtonsLlabel
+                .. "{\\fs20} " .. ff_track_label("sub"))
+        end
+        -- END patch
         local sid = "–"
         if not (get_track("sub") == 0) then
             sid = get_track("sub")
@@ -2222,7 +2412,56 @@ function reset_margins()
     end
 end
 
+-- BEGIN patch FluentFin MPV (subtitles above the bar while it is shown)
+-- `base` is the sub-pos to put back: what it was when we raised it, or what
+-- somebody else wrote since. `raised` is the value we wrote.
+local ff_subs = {base = nil, raised = nil}
+
+function ff_update_subs()
+    if not user_opts.raisesubs then return end
+    local shown = state.enabled and state.osc_visible and not state.idle
+        and ((state.fullscreen and user_opts.showfullscreen)
+             or (not state.fullscreen and user_opts.showwindowed))
+    -- The bottom bar's share of the height (bar_layout sets it).
+    local bar = osc_param.video_margins.b or 0
+    if shown and bar > 0 then
+        local base = ff_subs.base or mp.get_property_number("sub-pos", 100)
+        local target = math.min(base, math.floor(100 - bar * 100))
+        ff_subs.base = base
+        if ff_subs.raised ~= target then
+            ff_subs.raised = target
+            mp.set_property_number("sub-pos", target)
+        end
+    elseif ff_subs.base then
+        local base, raised = ff_subs.base, ff_subs.raised
+        ff_subs.base, ff_subs.raised = nil, nil
+        -- A value written by somebody else whose change event has not reached
+        -- us yet (the bridge's `set_controls` hides this OSC and moves the
+        -- subtitles in two commands back to back) is newer than `base`:
+        -- keep it rather than put an older one back over it.
+        local now = mp.get_property_number("sub-pos")
+        if raised and now and math.abs(now - raised) > 0.01 then
+            return
+        end
+        mp.set_property_number("sub-pos", base)
+    end
+end
+
+-- The shim writes sub-pos as well (its subtitle position, at every start):
+-- a value that is not ours, arriving while raised, is the one to put back.
+mp.observe_property("sub-pos", "number", function(_, value)
+    if ff_subs.base and ff_subs.raised and value
+        and math.abs(value - ff_subs.raised) > 0.01 then
+        ff_subs.base, ff_subs.raised = value, nil
+        ff_update_subs()
+    end
+end)
+-- END patch
+
 function update_margins()
+    -- BEGIN patch FluentFin MPV
+    ff_update_subs()
+    -- END patch
     local margins = osc_param.video_margins
 
     -- Don't use margins if it's visible only temporarily.
@@ -2263,6 +2502,10 @@ end
 
 function shutdown()
     reset_margins()
+    -- BEGIN patch FluentFin MPV (put the subtitles back)
+    state.enabled = false
+    ff_update_subs()
+    -- END patch
     -- BEGIN patch (set_property(nil) errors on newer mpv)
     if mp.del_property then
         mp.del_property("user-data/osc-margins")
@@ -2299,6 +2542,9 @@ function hide_osc()
         -- no-op and won't render again to remove the osc, so do that manually.
         state.osc_visible = false
         render_wipe()
+        -- BEGIN patch FluentFin MPV
+        ff_update_subs()
+        -- END patch
     elseif (user_opts.fadeduration > 0) then
         if not(state.osc_visible == false) then
             state.anitype = "out"
@@ -2559,6 +2805,15 @@ end
 function process_event(source, what)
     local action = string.format("%s%s", source,
         what and ("_" .. what) or "")
+
+    -- BEGIN patch FluentFin MPV (the wheel is volume anywhere on the bar)
+    if user_opts.wheelvolume > 0 and what == "press"
+        and (source == "wheel_up" or source == "wheel_down") then
+        ff_wheel_volume(source == "wheel_up" and 1 or -1)
+        request_tick()
+        return
+    end
+    -- END patch
 
     if what == "down" or what == "press" then
 
@@ -2831,6 +3086,9 @@ mp.observe_property("window-maximized", "bool",
 mp.observe_property("idle-active", "bool",
     function(name, val)
         state.idle = val
+        -- BEGIN patch FluentFin MPV
+        ff_update_subs()
+        -- END patch
         request_tick()
     end
 )
@@ -2883,6 +3141,49 @@ mp.set_key_bindings({
                             function(e) process_event("mbtn_left", "down")  end},
 }, "window-controls", "force")
 mp.enable_key_bindings("window-controls")
+
+-- BEGIN patch FluentFin MPV (the wheel is volume, never a seek)
+-- +-wheelvolume a notch, held to 0..100: a wheel never takes the volume past
+-- 100, nor pulls it down to 100 from above. Non-forced bindings, so the
+-- user's input.conf still wins and mpv's own defaults (add volume 2, a seek
+-- on the horizontal wheel) do not. Over the bar, process_event routes here.
+function ff_wheel_volume(notches)
+    local volume = mp.get_property_number("volume")
+    if not volume or notches == 0 then return end
+    local target
+    if notches > 0 then
+        if volume >= 100 then return end
+        target = math.min(100, volume + user_opts.wheelvolume * notches)
+    else
+        if volume <= 0 then return end
+        target = math.max(0, volume + user_opts.wheelvolume * notches)
+    end
+    mp.commandv(user_opts.wheelvolume_osd and "osd-auto" or "no-osd",
+                "set", "volume", tostring(target))
+end
+
+if user_opts.wheelvolume > 0 then
+    -- A precise touchpad reports fractions of a notch (`scale`): they add
+    -- up to whole steps instead of each moving a whole step.
+    local pending = 0
+    local function wheel(direction)
+        return function(e)
+            if e.event == "up" then return end
+            pending = pending + direction * (tonumber(e.scale) or 1)
+            local whole = pending >= 0 and math.floor(pending)
+                          or math.ceil(pending)
+            pending = pending - whole
+            ff_wheel_volume(whole)
+        end
+    end
+    mp.add_key_binding("WHEEL_UP", "fluentfin-wheel-up", wheel(1),
+                       {complex = true})
+    mp.add_key_binding("WHEEL_DOWN", "fluentfin-wheel-down", wheel(-1),
+                       {complex = true})
+    mp.add_key_binding("WHEEL_LEFT", "fluentfin-wheel-left", function() end)
+    mp.add_key_binding("WHEEL_RIGHT", "fluentfin-wheel-right", function() end)
+end
+-- END patch
 
 function get_hidetimeout()
     if user_opts.visibility == "always" then

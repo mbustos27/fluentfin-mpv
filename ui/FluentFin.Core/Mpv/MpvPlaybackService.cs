@@ -49,6 +49,18 @@ public sealed class MpvPlaybackService
 	/// <summary>The generation a stop left behind (no page holds it); equal to <see cref="_generation"/> while no page plays.</summary>
 	private long _leftGeneration;
 
+	/// <summary>Sign-outs running now (<see cref="StopForSignOutAsync"/>): no generation sends <c>play</c> meanwhile.</summary>
+	private int _signOuts;
+
+	/// <summary>A new generation (<see cref="Begin"/>) and the end of a sign-out are one step each for the other.</summary>
+	private readonly Lock _signOutLock = new();
+
+	/// <summary>
+	/// The newest generation that existed when a sign-out ended: it and every older one never send <c>play</c>. Those pages
+	/// were on the shell the sign-out took away (a page still loading its queue then would play with a revoked login).
+	/// </summary>
+	private long _noPlayThrough = -1;
+
 	/// <summary>
 	/// How long signing out waits in all for the stop of the mpv playback and the backend's Stopped report: the token is
 	/// revoked right after, and the user is waiting for the login page.
@@ -117,20 +129,45 @@ public sealed class MpvPlaybackService
 	/// <summary>A player page takes over; anything older is ignored from now on. Logged with its reason, as every change of generation.</summary>
 	public long Begin(string reason = "a player page opened")
 	{
-		var generation = Interlocked.Increment(ref _generation);
-		_logger.LogInformation("mpv playback generation {Old} -> {New}: {Reason}", generation - 1, generation, reason);
+		long generation;
+		bool signingOut;
+		lock (_signOutLock)
+		{
+			generation = Interlocked.Increment(ref _generation);
+			signingOut = IsSigningOut;
+		}
+
+		_logger.LogInformation("mpv playback generation {Old} -> {New}: {Reason}{SigningOut}", generation - 1, generation, reason,
+			signingOut ? " (during a sign-out: it plays nothing)" : "");
 		return generation;
 	}
 
 	public bool IsCurrent(long generation) => Interlocked.Read(ref _generation) == generation;
 
+	/// <summary>A sign-out is running (<see cref="StopForSignOutAsync"/>).</summary>
+	public bool IsSigningOut => Volatile.Read(ref _signOuts) > 0;
+
+	/// <summary>
+	/// Something plays with mpv or still has to be reported stopped: a page's playback that no stop has left yet, or a
+	/// backend whose latest <c>state</c> is active. What a sign-out will wait for (shown while it does).
+	/// </summary>
+	public bool HasPlayback => Interlocked.Read(ref _generation) != Interlocked.Read(ref _leftGeneration) || _backend.LastState is { IsActive: true };
+
+	/// <summary>
+	/// fluentfin-mpv: this generation may not start playback: a sign-out is running (a cast that arrives meanwhile would
+	/// play past it and be reported with a revoked login), or the generation already existed when a sign-out ended (its page
+	/// was on the shell that sign-out took away).
+	/// </summary>
+	private bool PlayRefused(long generation) => IsSigningOut || generation <= Interlocked.Read(ref _noPlayThrough);
+
 	/// <summary>
 	/// Plays for the page with this generation. <paramref name="fullScreen"/> is the window's real state, sent before
 	/// <c>play</c>: the backend may still think it is full screen from an earlier page. A page that is gone before the
 	/// backend is started, or before <c>connect</c>, starts nothing more (false). <paramref name="onStep"/> hears each step
-	/// as it begins, on the caller's context.
+	/// as it begins, on the caller's context. <paramref name="controls"/>: fluentfin-mpv player controls, a <c>set_controls</c>
+	/// sent before <c>play</c> (FluentFin draws the controls from the first frame); null sends none.
 	/// </summary>
-	public async Task<bool> PlayAsync(long generation, BridgeIdentity identity, BridgePlayRequest request, bool fullScreen = false, CancellationToken cancellationToken = default, Action<MpvStartStep>? onStep = null)
+	public async Task<bool> PlayAsync(long generation, BridgeIdentity identity, BridgePlayRequest request, bool fullScreen = false, CancellationToken cancellationToken = default, Action<MpvStartStep>? onStep = null, JsonObject? controls = null)
 	{
 		if (!await StartAndConnectAsync(generation, dev: false, identity, onStep, cancellationToken))
 		{
@@ -138,13 +175,14 @@ public sealed class MpvPlaybackService
 		}
 
 		await SyncFullScreenAsync(generation, fullScreen, cancellationToken);
+		await SendControlsAsync(generation, controls, cancellationToken);
 		_logger.LogInformation("Playing {Count} item(s) with mpv from index {Index} ({ItemId}) at {Position}, mediaSource={MediaSource}, audio={Audio}, subtitle={Subtitle}",
 			request.ItemIds.Count, request.StartIndex, request.StartItemId, TimeSpan.FromTicks(request.StartPositionTicks), request.MediaSourceId, request.AudioStreamIndex, request.SubtitleStreamIndex);
-		return await SendIfCurrentAsync(generation, Bridge.Commands.Play, BridgeCommands.Play(request), cancellationToken: cancellationToken);
+		return await SendCoreAsync(generation, Bridge.Commands.Play, BridgeCommands.Play(request), startsPlayback: true, cancellationToken: cancellationToken);
 	}
 
 	/// <summary>Dev only: a backend started with <c>--dev</c>, connected with only the window, plays a file or mpv url.</summary>
-	public async Task<bool> PlayFileAsync(long generation, MpvSelfTestRequest request, bool fullScreen = false, CancellationToken cancellationToken = default, Action<MpvStartStep>? onStep = null)
+	public async Task<bool> PlayFileAsync(long generation, MpvSelfTestRequest request, bool fullScreen = false, CancellationToken cancellationToken = default, Action<MpvStartStep>? onStep = null, JsonObject? controls = null)
 	{
 		if (!await StartAndConnectAsync(generation, dev: true, null, onStep, cancellationToken))
 		{
@@ -152,8 +190,9 @@ public sealed class MpvPlaybackService
 		}
 
 		await SyncFullScreenAsync(generation, fullScreen, cancellationToken);
+		await SendControlsAsync(generation, controls, cancellationToken);
 		_logger.LogInformation("Self-test: playing {Url} with mpv", request.Url);
-		return await SendIfCurrentAsync(generation, Bridge.Commands.PlayFile, BridgeCommands.PlayFile(request.Url, request.Title), cancellationToken: cancellationToken);
+		return await SendCoreAsync(generation, Bridge.Commands.PlayFile, BridgeCommands.PlayFile(request.Url, request.Title), startsPlayback: true, cancellationToken: cancellationToken);
 	}
 
 	/// <summary>
@@ -162,7 +201,7 @@ public sealed class MpvPlaybackService
 	/// </summary>
 	private async Task<bool> StartAndConnectAsync(long generation, bool dev, BridgeIdentity? identity, Action<MpvStartStep>? onStep, CancellationToken cancellationToken)
 	{
-		if (!StillCurrent(generation, "starting the mpv backend"))
+		if (!StillCurrent(generation, "starting the mpv backend") || !PlayAllowed(generation, "starting the mpv backend"))
 		{
 			return false;
 		}
@@ -195,6 +234,18 @@ public sealed class MpvPlaybackService
 		return false;
 	}
 
+	private bool PlayAllowed(long generation, string what)
+	{
+		if (!PlayRefused(generation))
+		{
+			return true;
+		}
+
+		_logger.LogInformation("Not {What} for generation {Generation}: {Why}", what, generation,
+			IsSigningOut ? "FluentFin is signing out" : "its player page was on the shell a sign-out took away");
+		return false;
+	}
+
 	private async Task SyncFullScreenAsync(long generation, bool fullScreen, CancellationToken cancellationToken)
 	{
 		try
@@ -204,6 +255,24 @@ public sealed class MpvPlaybackService
 		catch (BridgeException ex)
 		{
 			_logger.LogWarning("Could not tell the mpv backend whether the window is full screen: {Message}", ex.Message);
+		}
+	}
+
+	/// <summary>fluentfin-mpv player controls: who draws them, before the play (a backend that refuses it plays on with its own).</summary>
+	private async Task SendControlsAsync(long generation, JsonObject? controls, CancellationToken cancellationToken)
+	{
+		if (controls is null)
+		{
+			return;
+		}
+
+		try
+		{
+			await SendIfCurrentAsync(generation, Bridge.Commands.SetControls, controls, cancellationToken: cancellationToken);
+		}
+		catch (BridgeException ex)
+		{
+			_logger.LogWarning("Could not tell the mpv backend who draws the player controls: {Message}", ex.Message);
 		}
 	}
 
@@ -299,7 +368,14 @@ public sealed class MpvPlaybackService
 		Guid.TryParse(sessionUser, out var user) && user != Guid.Empty && user == currentUser;
 
 	/// <summary>Sends a command for the page with this generation, unless a newer page took over or the backend is not running.</summary>
-	public async Task<bool> SendIfCurrentAsync(long generation, string command, JsonObject? args = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
+	public Task<bool> SendIfCurrentAsync(long generation, string command, JsonObject? args = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
+		SendCoreAsync(generation, command, args, startsPlayback: false, timeout, cancellationToken);
+
+	/// <summary>
+	/// <paramref name="startsPlayback"/>: <c>play</c> or <c>play_file</c>, which are also refused while a sign-out runs (looked
+	/// at under the same gate as the sign-out's stop: a play is either sent before that stop, which then ends it, or not at all).
+	/// </summary>
+	private async Task<bool> SendCoreAsync(long generation, string command, JsonObject? args, bool startsPlayback, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
 	{
 		await _gate.WaitAsync(cancellationToken);
 		try
@@ -307,6 +383,11 @@ public sealed class MpvPlaybackService
 			if (!IsCurrent(generation))
 			{
 				_logger.LogInformation("Not sending '{Command}' to the mpv backend: the player page that asked for it is gone", command);
+				return false;
+			}
+
+			if (startsPlayback && !PlayAllowed(generation, $"sending '{command}'"))
+			{
 				return false;
 			}
 
@@ -362,24 +443,21 @@ public sealed class MpvPlaybackService
 	/// Stopped FluentFin itself owes for a backend that died meanwhile, docs/BRIDGE.md §6). At most
 	/// <paramref name="timeout"/> (default <see cref="SignOutTimeout"/>) in all: a hung backend or server does not hold the
 	/// sign-out. Never throws.
+	/// <para>
+	/// No <c>play</c> goes out while it runs (a cast that arrives during the wait opens a player page, which plays nothing:
+	/// it would play past the sign-out, its Stopped sent with the revoked token), and no page that exists when it ends ever
+	/// plays: they are all on the shell the sign-out takes away. A page opened after it (the next login's) plays as usual.
+	/// </para>
 	/// </summary>
 	public async Task StopForSignOutAsync(TimeSpan? timeout = null)
 	{
 		var bound = timeout ?? SignOutTimeout;
 		var watch = System.Diagnostics.Stopwatch.StartNew();
 		TimeSpan Left() => bound - watch.Elapsed is var left && left > TimeSpan.Zero ? left : TimeSpan.Zero;
+		Interlocked.Increment(ref _signOuts);
 		try
 		{
-			var generation = Interlocked.Read(ref _generation);
-			if (generation != Interlocked.Read(ref _leftGeneration))
-			{
-				_logger.LogInformation("Signing out: stopping the mpv playback of generation {Generation} first, so the backend reports its stop with a login the server still accepts", generation);
-				await StopAsync(generation, "signing out").WaitAsync(Left());
-			}
-			else
-			{
-				_logger.LogInformation("Signing out: no player page plays with mpv (generation {Generation}); waiting only for stop reports still owed", generation);
-			}
+			await StopNewestForSignOutAsync().WaitAsync(Left());
 
 			if (!await _backend.WaitForStopReportsAsync(Left()))
 			{
@@ -395,6 +473,66 @@ public sealed class MpvPlaybackService
 		catch (Exception ex)
 		{
 			_logger.LogWarning(ex, "Stopping the mpv playback for the sign-out failed");
+		}
+		finally
+		{
+			// as one step for Begin: a page opened before this never plays, one opened after it is the next login's
+			long newest;
+			lock (_signOutLock)
+			{
+				newest = Interlocked.Read(ref _generation);
+				if (newest > Interlocked.Read(ref _noPlayThrough))
+				{
+					Interlocked.Exchange(ref _noPlayThrough, newest);
+				}
+
+				Interlocked.Decrement(ref _signOuts);
+			}
+
+			_logger.LogInformation("Done with the mpv playback for the sign-out after {Ms} ms: no generation up to {Newest} plays from now on", watch.ElapsedMilliseconds, newest);
+		}
+	}
+
+	/// <summary>
+	/// The sign-out's stop: the newest generation, whichever it is once the gate is taken (a page that opened while a command
+	/// held the gate is the one playing or about to), unless a stop already left it. As leaving that page does: one
+	/// <c>stop</c>, and the page's own leave later finds it done and sends nothing. Never throws.
+	/// </summary>
+	private async Task StopNewestForSignOutAsync()
+	{
+		await _gate.WaitAsync();
+		try
+		{
+			long generation;
+			do
+			{
+				generation = Interlocked.Read(ref _generation);
+				if (generation == Interlocked.Read(ref _leftGeneration))
+				{
+					_logger.LogInformation("Signing out: no player page plays with mpv (generation {Generation}); waiting only for stop reports still owed", generation);
+					return;
+				}
+			}
+			while (Interlocked.CompareExchange(ref _generation, generation + 1, generation) != generation);
+
+			Interlocked.Exchange(ref _leftGeneration, generation + 1);
+			_logger.LogInformation("Signing out: stopping the mpv playback of generation {Generation} first, so the backend reports its stop with a login the server still accepts", generation);
+			_logger.LogInformation("mpv playback generation {Old} -> {New}: {Reason}", generation, generation + 1, "signing out");
+			if (!_backend.Status.IsRunning)
+			{
+				_logger.LogInformation("Nothing to stop: the mpv backend is not running");
+				return;
+			}
+
+			await _backend.SendAsync(Bridge.Commands.Stop, timeout: TimeSpan.FromSeconds(5));
+		}
+		catch (BridgeException ex)
+		{
+			_logger.LogWarning("Could not stop mpv playback: {Message}", ex.Message);
+		}
+		finally
+		{
+			_gate.Release();
 		}
 	}
 }
@@ -425,7 +563,7 @@ public static class MpvIdentity
 			SessionInfo.AccessToken,
 			SessionInfo.DeviceId ?? "",
 			SessionInfo.DeviceName ?? Environment.MachineName,
-			SessionInfo.ClientName ?? "FluentFin",
+			SessionInfo.ClientName ?? "FluentFin MPV",
 			SessionInfo.ClientVersion ?? "");
 	}
 }

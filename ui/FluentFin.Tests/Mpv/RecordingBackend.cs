@@ -66,6 +66,9 @@ internal sealed class RecordingBackend : IMpvBackend
 		return "0.41.0";
 	}
 
+	/// <summary>A command is answered only when the task this returns for it completes (null: at once); the service holds its gate meanwhile.</summary>
+	public Func<string, Task?>? Hold { get; set; }
+
 	public Task<JsonNode?> SendAsync(string command, JsonObject? args = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
 	{
 		_sent.Enqueue((command, args));
@@ -73,6 +76,11 @@ internal sealed class RecordingBackend : IMpvBackend
 		if (CommandFailure is { } failure && failure.Command == command)
 		{
 			return Task.FromException<JsonNode?>(failure.Failure);
+		}
+
+		if (Hold?.Invoke(command) is { } held)
+		{
+			return held.ContinueWith<JsonNode?>(_ => new JsonObject(), TaskScheduler.Default);
 		}
 
 		return Task.FromResult<JsonNode?>(new JsonObject());

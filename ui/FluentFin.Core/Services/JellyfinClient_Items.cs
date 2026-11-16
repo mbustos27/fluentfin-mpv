@@ -152,6 +152,10 @@ public partial class JellyfinClient
 			logger.LogError(ex, @"Unhandled exception");
 			return;
 		}
+		finally
+		{
+			ForgetUserViews(); // fluentfin-mpv: the views changed (GetUserViews)
+		}
 	}
 
 	public async Task DeleteLibrary(string name)
@@ -169,6 +173,10 @@ public partial class JellyfinClient
 		{
 			logger.LogError(ex, @"Unhandled exception");
 			return;
+		}
+		finally
+		{
+			ForgetUserViews(); // fluentfin-mpv: the views changed (GetUserViews)
 		}
 	}
 
@@ -188,6 +196,10 @@ public partial class JellyfinClient
 		{
 			logger.LogError(ex, @"Unhandled exception");
 			return;
+		}
+		finally
+		{
+			ForgetUserViews(); // fluentfin-mpv: the views changed (GetUserViews)
 		}
 	}
 

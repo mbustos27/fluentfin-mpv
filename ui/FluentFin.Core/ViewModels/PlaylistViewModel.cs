@@ -214,4 +214,22 @@ public partial class PlaylistItem : ObservableObject
 
 	/// <summary>Streams picked on the movie/episode page; null plays with the server defaults.</summary>
 	public PlaybackSelection? Selection { get; set; }
+
+	/// <summary>fluentfin-mpv: "Play from beginning" on the item page: the next start of this item ignores its resume point.</summary>
+	public bool StartFromBeginning { get; set; }
+
+	/// <summary>
+	/// fluentfin-mpv: where the player seeks when this item starts: its resume point (as upstream, a position of 0 included),
+	/// or none once after "Play from beginning".
+	/// </summary>
+	public TimeSpan? TakeStartPosition()
+	{
+		if (StartFromBeginning)
+		{
+			StartFromBeginning = false;
+			return null;
+		}
+
+		return Dto.UserData?.PlaybackPositionTicks is { } ticks ? TimeSpan.FromTicks(ticks) : null;
+	}
 }

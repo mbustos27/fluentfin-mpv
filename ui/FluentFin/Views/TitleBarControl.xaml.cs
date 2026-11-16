@@ -1,5 +1,7 @@
 using FluentFin.Core.ViewModels;
+using FluentFin.Services;
 using FluentFin.ViewModels;
+using Jellyfin.Sdk.Generated.Models;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 
@@ -8,6 +10,12 @@ namespace FluentFin.Views;
 public sealed partial class TitleBarControl : UserControl
 {
 	public TitleBarViewModel ViewModel { get; } = (TitleBarViewModel)App.GetService<ITitleBarViewModel>();
+
+	// fluentfin-mpv: no search while a player page is open (docs/research/ux-review.md V9)
+	public PlayerChrome Chrome { get; } = App.GetService<PlayerChrome>();
+
+	public Microsoft.UI.Xaml.Visibility SearchVisibility(UserDto? user, bool isPlayerOpen) =>
+		user is not null && !isPlayerOpen ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
 	public TitleBarControl()
 	{

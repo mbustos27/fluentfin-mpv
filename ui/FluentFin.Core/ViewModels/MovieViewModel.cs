@@ -10,7 +10,14 @@ namespace FluentFin.Core.ViewModels;
 public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalCommands commands) : ObservableObject, INavigationAware
 {
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(PlayLabel), nameof(HasResumePoint))]
 	public partial BaseItemDto Dto { get; set; }
+
+	/// <summary>fluentfin-mpv: the play button's text, "Resume at 12:34" when the movie has a resume point.</summary>
+	public string PlayLabel => ItemLabels.PlayLabel(Dto);
+
+	/// <summary>fluentfin-mpv: shows "Play from beginning" next to Resume.</summary>
+	public bool HasResumePoint => ItemLabels.ResumePosition(Dto) is not null;
 
 	[ObservableProperty]
 	public partial ObservableCollection<BaseItemViewModel> Similar { get; set; }
@@ -35,6 +42,9 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 
 	public IJellyfinClient JellyfinClient { get; } = jellyfinClient;
 
+	/// <summary>fluentfin-mpv: this movie could not be loaded: said on the page, with Retry (docs/research/ux-review.md §3.11).</summary>
+	public LoadState State { get; } = new("this movie");
+
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 
 	// fluentfin-mpv: whether the user changed a picker after the page chose its defaults. The mpv player sends a track pick
@@ -49,6 +59,10 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 	[RelayCommand]
 	private Task Play() => commands.Play(Dto, PlaybackSelection.From(SelectedAudio, SelectedSubtitle), _streamsPicked);
 
+	// fluentfin-mpv: the secondary action next to Resume (docs/research/ux-review.md I2)
+	[RelayCommand]
+	private Task PlayFromBeginning() => commands.Play(Dto, PlaybackSelection.From(SelectedAudio, SelectedSubtitle), _streamsPicked, fromBeginning: true);
+
 	public async Task OnNavigatedTo(object parameter)
 	{
 		if (parameter is not BaseItemDto dto)
@@ -61,8 +75,17 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 			return;
 		}
 
-		await UpdateMovie(id);
-		await UpdateSimilar(dto);
+		await State.RunAsync(async () =>
+		{
+			await UpdateMovie(id);
+			if (Dto?.Id != id)
+			{
+				return LoadMessages.CouldNotLoad("this movie");
+			}
+
+			await UpdateSimilar(dto);
+			return LoadOutcome.Loaded;
+		});
 	}
 
 	private async Task UpdateMovie(Guid id)

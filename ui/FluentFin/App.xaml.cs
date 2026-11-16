@@ -96,10 +96,15 @@ public partial class App : Application
 
 			// mpv player: the jellyfin-mpv-shim backend as a child process, drawing into a window of ours (docs/BRIDGE.md)
 			services.AddSingleton<MpvVideoHost>();
-			services.AddSingleton<IMpvVideoSurface>(sp => sp.GetRequiredService<MpvVideoHost>());
 			services.AddSingleton<IMpvBackendLauncher, WindowsMpvBackendLauncher>();
+			// fluentfin-mpv player controls: or into an mpv inside FluentFin, attached to by the backend (Settings, Player controls)
+			services.AddSingleton(sp => new MpvCompositionVideo(sp.GetRequiredService<ILogger<MpvCompositionVideo>>(),
+				(sp.GetRequiredService<IMpvBackendLauncher>() as WindowsMpvBackendLauncher)?.ConfigDirectory));
+			services.AddSingleton<IMpvVideoSurface, MpvVideoSurfaceChoice>();
 			services.AddSingleton<IMpvBackend, MpvBackendHost>();
 			services.AddSingleton<MpvPlaybackService>();
+			// fluentfin-mpv: the nav pane and search hide while a player page is open (docs/research/ux-review.md V9)
+			services.AddSingleton(_ => new PlayerChrome(action => MainWindow.DispatcherQueue.TryEnqueue(() => action())));
 
 			// Services
 			services.AddSingleton<IActivationService, ActivationService>();
@@ -142,6 +147,8 @@ public partial class App : Application
 			// Commands
 			services.AddSingleton<GlobalCommands>();
 			services.AddSingleton<DialogCommands>();
+
+			services.AddSingleton<HomeCache>(); // fluentfin-mpv: the last home page, shown at once (HomeViewModel)
 
 			// Views and ViewModels
 			services.AddTransient<ShellViewModel>();
@@ -322,6 +329,8 @@ public partial class App : Application
 			// side, the mpv backend's shutdown and any crash report FluentFin is sending for it. Before the window goes, so the
 			// backend's mpv window is gone before ours is destroyed.
 			await CloseSequence.RunAsync(GetService<IJellyfinClient>(), GetService<MpvPlaybackService>(), GetService<ILogger<App>>());
+			// fluentfin-mpv player controls: the in-process mpv after the backend that used it (bounded)
+			GetService<MpvCompositionVideo>().Dispose();
 			await Host.StopAsync();
 		}
 		finally

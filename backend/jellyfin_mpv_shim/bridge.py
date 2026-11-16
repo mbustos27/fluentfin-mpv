@@ -39,6 +39,7 @@ import threading
 import time
 import weakref
 
+from . import bridge_controls
 from . import bridge_http
 from . import bridge_protocol as proto
 from . import bridge_state
@@ -326,6 +327,21 @@ class ShimRuntime:
         ("remember_window_size", False),
     )
 
+    @staticmethod
+    def attached_overrides(pipe):
+        """fluentfin-mpv player controls: an ``attached`` window. The shim's
+        external backend, connecting to the UI's mpv on ``pipe`` instead of
+        starting one (``mpv_ext_start``), whatever conf.json says; and with
+        its runtime writes on (``mpv_ext_no_ovr`` off: the OSC lever and the
+        track and title writes are how it plays). Like every override, for
+        the run only: none of it reaches conf.json."""
+        return (
+            ("mpv_ext", True),
+            ("mpv_ext_start", False),
+            ("mpv_ext_ipc", pipe),
+            ("mpv_ext_no_ovr", False),
+        )
+
     def __init__(self, config_dir):
         self.config_dir = config_dir
         self.pm = None
@@ -430,10 +446,21 @@ class ShimRuntime:
         from . import window_embed
 
         embedded = window["mode"] == "embedded"
-        if embedded:
+        # fluentfin-mpv player controls: the UI's own mpv, attached to over
+        # its pipe (BRIDGE.md section 4); its window is the UI's, as embedded.
+        attached = window["mode"] == "attached"
+        if embedded or attached:
             for key, value in self.EMBEDDED_OVERRIDES:
                 self._override(key, value)
-        window_embed.configure(window["hwnd"] if embedded else None)
+        if attached:
+            for key, value in self.attached_overrides(window["ipc"]):
+                self._override(key, value)
+        window_embed.configure(window["hwnd"] if embedded else None,
+                               attach=attached)
+        # The OSC's look and the fork that carries it (fluentfin_osc).
+        from . import fluentfin_osc
+
+        fluentfin_osc.configure(True)
         try:
             from . import player as player_module
         except BaseException:
@@ -808,6 +835,8 @@ class Bridge:
         self.runtime = runtime
         self.dev = dev
         self.tracker = bridge_state.Tracker()
+        #: fluentfin-mpv: who draws the player controls (``set_controls``).
+        self.controls = bridge_controls.UiControls()
 
         #: Fixed by the first connect for the life of the process.
         self.window = None
@@ -1468,7 +1497,16 @@ class Bridge:
             # Recorded first, and under that lock, so a hook deciding that
             # a start never opened (`_settle_sessions`) cannot race it.
             self._session_phase(pm._video, bridge_state.PlaySessions.OPENED)
-            return original_initial(*args, **kwargs)
+            try:
+                return original_initial(*args, **kwargs)
+            finally:
+                if self.controls.ui:
+                    # fluentfin-mpv: after `update_subtitle_visuals`, which
+                    # the start has just run: it put the shim's own sub-pos
+                    # back, and a restarted mpv brings its OSC back too
+                    # (bridge_controls).
+                    self._apply_controls(pm, at_load=True,
+                                         item_started=True)
 
         def release_stream(video):
             # Its own record: an end of file reports the item and *then*
@@ -2521,11 +2559,50 @@ class Bridge:
     def cmd_set_fullscreen(self, args):
         pm = self._require_player()
         fullscreen = proto.get_bool(args, "fullscreen")
-        if self.window["mode"] == "embedded":
+        # fluentfin-mpv player controls: attached is the UI's window too
+        if self.window["mode"] in ("embedded", "attached"):
             pm.set_embedded_fullscreen(fullscreen)
         else:
             pm.run_action(lambda p: p.set_fullscreen(fullscreen))
         return {}
+
+    def cmd_set_controls(self, args):
+        """fluentfin-mpv: who draws the player controls (BRIDGE.md section
+        4, `bridge_controls`). Applied now when the player is free, else on
+        the action thread once a start lets go of it; held for every later
+        item (each start re-applies it, `send_timeline_initial`) and for a
+        restarted mpv."""
+        pm = self._require_player()
+        controls, inset = proto.validate_controls(args)
+        self.controls.set(controls, inset)
+        pm.run_action(self._apply_controls)
+        return {}
+
+    def _subtitle_base(self):
+        """The shim's own ``sub-pos`` (its subtitle position setting), what
+        `PlayerManager.update_subtitle_visuals` writes at every item start."""
+        from .conf import settings
+
+        table = getattr(getattr(self.runtime, "player_module", None),
+                        "SUBTITLE_POS", None)
+        try:
+            return float((table or {}).get(settings.subtitle_position, 100))
+        except (TypeError, ValueError):
+            return 100.0
+
+    def _apply_controls(self, pm, at_load=False, item_started=False):
+        """Never raises. A lost mpv is the shim's to handle, except inside a
+        playback start (``at_load``), whose own path does that."""
+        if pm is None:
+            return
+        try:
+            self.controls.apply(pm, self._subtitle_base(), item_started)
+        except self.runtime.mpv_errors():
+            if not at_load:
+                pm._handle_mpv_disconnect()
+        except Exception:
+            log.warning("Could not apply the player controls' settings",
+                        exc_info=True)
 
     HANDLERS = {
         "connect": cmd_connect,
@@ -2544,6 +2621,7 @@ class Bridge:
         "set_volume": cmd_set_volume,
         "set_mute": cmd_set_mute,
         "set_fullscreen": cmd_set_fullscreen,
+        "set_controls": cmd_set_controls,
     }
 
     # -- the monitor -------------------------------------------------------
@@ -2623,7 +2701,8 @@ class Bridge:
             return obs
         obs.video = pm._video
         obs.start_in_progress = bool(pm._start_in_progress)
-        embedded = from_window == "embedded"
+        # fluentfin-mpv player controls: attached is the UI's window too
+        embedded = from_window in ("embedded", "attached")
         if embedded:
             from . import window_embed
 

@@ -24,6 +24,54 @@ public sealed partial class PagedScrollView : UserControl
 	public PagedScrollView()
 	{
 		InitializeComponent();
+
+		// fluentfin-mpv: the title opens the row's library, so it is a keyboard stop only when there is one (ux-review A1)
+		RegisterPropertyChangedCallback(TagProperty, (_, _) => HeaderButton.IsTabStop = Tag is not null);
+		HeaderButton.IsTabStop = Tag is not null;
+	}
+
+	private void HeaderButton_Click(object sender, RoutedEventArgs e)
+	{
+		if (Tag is null)
+		{
+			return;
+		}
+
+		App.GetService<INavigationService>().NavigateTo<LibraryViewModel>(Tag);
+	}
+
+	/// <summary>
+	/// fluentfin-mpv: a card that gets keyboard focus (Tab, or the arrow keys along the row) is scrolled into view; the row only
+	/// scrolls through its buttons (HorizontalScrollMode is Disabled), so it does not follow the focus by itself.
+	/// </summary>
+	private void Scroller_GotFocus(object sender, RoutedEventArgs e)
+	{
+		if (e.OriginalSource is not FrameworkElement focused || ReferenceEquals(focused, Scroller))
+		{
+			return;
+		}
+
+		// a card's own button: the whole card
+		FrameworkElement element = focused;
+		for (DependencyObject? parent = focused; parent is not null && !ReferenceEquals(parent, ContentGrid); parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+		{
+			if (parent is BaseItemDtoCard card)
+			{
+				element = card;
+				break;
+			}
+		}
+
+		if (element.ActualWidth <= 0)
+		{
+			return;
+		}
+
+		var left = element.TransformToVisual(ContentGrid).TransformPoint(new Windows.Foundation.Point(0, 0)).X;
+		if (RowScroll.OffsetToShow(Scroller.HorizontalOffset, Scroller.ViewportWidth, left, element.ActualWidth) is { } offset)
+		{
+			Scroller.ChangeView(offset, null, null);
+		}
 	}
 
 	private void Scroller_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -35,7 +83,7 @@ public sealed partial class PagedScrollView : UserControl
 	{
 		if (e.FinalView.HorizontalOffset < 1)
 		{
-			ScrollLeftBtn.Visibility = Visibility.Collapsed;
+			Hide(ScrollLeftBtn, ScrollRightBtn);
 		}
 		else if (e.FinalView.HorizontalOffset > 1)
 		{
@@ -44,7 +92,7 @@ public sealed partial class PagedScrollView : UserControl
 
 		if (e.FinalView.HorizontalOffset > Scroller.ScrollableWidth - 1)
 		{
-			ScrollRightBtn.Visibility = Visibility.Collapsed;
+			Hide(ScrollRightBtn, ScrollLeftBtn);
 		}
 		else if (e.FinalView.HorizontalOffset < Scroller.ScrollableWidth - 1)
 		{
@@ -52,16 +100,31 @@ public sealed partial class PagedScrollView : UserControl
 		}
 	}
 
+	// fluentfin-mpv: the focus stays on the arrow that was pressed, so Enter can be pressed again; it moves to the other arrow
+	// only when the row's end hides this one (upstream moved it to the other arrow on every click)
 	private void ScrollLeftBtn_Click(object sender, RoutedEventArgs e)
 	{
 		Scroller.ChangeView(Scroller.HorizontalOffset - Scroller.ViewportWidth, null, null);
-		ScrollRightBtn.Focus(FocusState.Programmatic);
 	}
 
 	private void ScrollRightBtn_Click(object sender, RoutedEventArgs e)
 	{
 		Scroller.ChangeView(Scroller.HorizontalOffset + Scroller.ViewportWidth, null, null);
-		ScrollLeftBtn.Focus(FocusState.Programmatic);
+	}
+
+	private static void Hide(Button button, Button other)
+	{
+		if (button.Visibility == Visibility.Collapsed)
+		{
+			return;
+		}
+
+		var hadFocus = button.FocusState != FocusState.Unfocused;
+		button.Visibility = Visibility.Collapsed;
+		if (hadFocus && other.Visibility == Visibility.Visible)
+		{
+			other.Focus(FocusState.Programmatic);
+		}
 	}
 
 	private void UpdateScrollButtonsVisibility()
@@ -103,13 +166,26 @@ public sealed partial class PagedScrollView : UserControl
 		textBlock.TextDecorations = Windows.UI.Text.TextDecorations.None;
 	}
 
-	private void TextBlock_PointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+}
+
+/// <summary>fluentfin-mpv: how far a row scrolls to show an element that got focus (none when it is already in view).</summary>
+internal static class RowScroll
+{
+	/// <returns>The horizontal offset that shows the element with the least scrolling, or null when it is in view.</returns>
+	public static double? OffsetToShow(double offset, double viewport, double left, double width)
 	{
-		if (Tag is null)
+		var right = left + width;
+		if (left < offset)
 		{
-			return;
+			return Math.Max(0, left);
 		}
 
-		App.GetService<INavigationService>().NavigateTo<LibraryViewModel>(Tag);
+		if (right > offset + viewport)
+		{
+			// wider than the view: its start
+			return width >= viewport ? left : right - viewport;
+		}
+
+		return null;
 	}
 }
