@@ -259,6 +259,7 @@
                                             Height="24"
                                             Padding="0"
                                             AutomationProperties.Name="Remove genre"
+                                            ToolTipService.ToolTip="Remove genre"
                                             Background="Transparent"
                                             BorderThickness="0"
                                             Command="{Binding ElementName=Page, Path=ViewModel.DeleteGenreCommand}"

@@ -232,7 +232,9 @@ namespace FluentFin.Core.Contracts.Services
 			new(audio?.Index, subtitle is null ? null : subtitle.Index ?? NoSubtitles);
 	}
 
-	public record PlaybackRequest(BaseItemDto Dto, PlaybackSelection Selection);
+	/// <param name="Selection">Streams picked on the item page; null plays with the defaults.</param>
+	/// <param name="FromBeginning">fluentfin-mpv: "Play from beginning" on the item page: the item starts at 0, not at its resume point.</param>
+	public record PlaybackRequest(BaseItemDto Dto, PlaybackSelection? Selection, bool FromBeginning = false);
 
 	public record MediaResponse(Uri Uri, PlaybackProgressInfo_PlayMethod PlayMethod, string PlaybackSessionId, string MediaSourceId, MediaSourceInfo MediaSourceInfo);
 

@@ -39,6 +39,15 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 	private TimeSpan _duration;
 	private SendCommand? _previousCommand;
 
+	// fluentfin-mpv: the item an item page's play asked for, started first (see OnNavigatedTo)
+	private PlaylistItem? _requestedItem;
+
+	/// <summary>
+	/// fluentfin-mpv: whether the player listens to the keyboard (a system-wide hook through DeftSharp). Off in tests, which
+	/// must not hook the keyboard of the PC they run on.
+	/// </summary>
+	internal bool ListenToKeyboard { get; init; } = true;
+
 
 	public TrickplayViewModel TrickplayViewModel { get; } = trickplayViewModel;
 	public IJellyfinClient JellyfinClient { get; } = jellyfinClient;
@@ -111,6 +120,8 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 			if (Playlist.Items.FirstOrDefault(x => x.Dto.Id == requestedId) is { } requestedItem)
 			{
 				requestedItem.Selection = request.Selection;
+				requestedItem.StartFromBeginning = request.FromBeginning; // fluentfin-mpv
+				_requestedItem = requestedItem; // fluentfin-mpv
 			}
 		}
 		else if (parameter is PlayQueueUpdate pqu)
@@ -136,10 +147,20 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 			.WhereNotNull()
 			.Subscribe(mp =>
 			{
-				_keyboardController?.UnsubscribeEvents();
-				_keyboardController = new KeyboardMediaPlayerController(mp, JellyfinClient, Skip, ToggleFullScreen);
+				if (ListenToKeyboard)
+				{
+					_keyboardController?.UnsubscribeEvents();
+					_keyboardController = new KeyboardMediaPlayerController(mp, JellyfinClient, Skip, ToggleFullScreen);
+				}
 
-				if (_playQueueUpdate is null)
+				if (_playQueueUpdate is null && _requestedItem is { } requested)
+				{
+					// fluentfin-mpv: the movie or episode the page asked for starts, with its streams and "Play from beginning";
+					// AutoSelect would start the series' first unwatched episode instead
+					_requestedItem = null;
+					Playlist.SelectedItem = requested;
+				}
+				else if (_playQueueUpdate is null)
 				{
 					Playlist.AutoSelect();
 				}
@@ -273,9 +294,10 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 
 		PlayMethod = mediaResponse.PlayMethod;
 
-		if (selectedItem.Dto.UserData?.PlaybackPositionTicks is { } ticks)
+		// fluentfin-mpv: the resume point, unless the item page asked for "Play from beginning"
+		if (selectedItem.TakeStartPosition() is { } start)
 		{
-			MediaPlayer.SeekTo(TimeSpan.FromTicks(ticks));
+			MediaPlayer.SeekTo(start);
 		}
 
 		if (mediaResponse.MediaSourceInfo.MediaStreams?.FirstOrDefault(x => x.Type == MediaStream_Type.Subtitle && x.Index == subtitleIndex) is { } subtitleStream)

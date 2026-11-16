@@ -10,7 +10,14 @@ namespace FluentFin.Core.ViewModels;
 public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalCommands commands) : ObservableObject, INavigationAware
 {
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(PlayLabel), nameof(HasResumePoint))]
 	public partial BaseItemDto Dto { get; set; }
+
+	/// <summary>fluentfin-mpv: the play button's text, "Resume at 12:34" when the movie has a resume point.</summary>
+	public string PlayLabel => ItemLabels.PlayLabel(Dto);
+
+	/// <summary>fluentfin-mpv: shows "Play from beginning" next to Resume.</summary>
+	public bool HasResumePoint => ItemLabels.ResumePosition(Dto) is not null;
 
 	[ObservableProperty]
 	public partial ObservableCollection<BaseItemViewModel> Similar { get; set; }
@@ -48,6 +55,10 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 
 	[RelayCommand]
 	private Task Play() => commands.Play(Dto, PlaybackSelection.From(SelectedAudio, SelectedSubtitle), _streamsPicked);
+
+	// fluentfin-mpv: the secondary action next to Resume (docs/research/ux-review.md I2)
+	[RelayCommand]
+	private Task PlayFromBeginning() => commands.Play(Dto, PlaybackSelection.From(SelectedAudio, SelectedSubtitle), _streamsPicked, fromBeginning: true);
 
 	public async Task OnNavigatedTo(object parameter)
 	{

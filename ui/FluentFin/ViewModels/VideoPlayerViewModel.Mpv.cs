@@ -132,7 +132,7 @@ public partial class VideoPlayerViewModel
 			{
 				OnStep(MpvStartStep.LoadingQueue);
 				request = parameter is PlaybackRequest picked
-					? await LoadMpvQueue(generation, picked.Dto, picked.Selection)
+					? await LoadMpvQueue(generation, picked.Dto, picked.Selection, picked.FromBeginning)
 					: await LoadMpvQueue(generation, (BaseItemDto)parameter, null);
 			}
 
@@ -170,10 +170,10 @@ public partial class VideoPlayerViewModel
 	/// FluentFin's playlist, which asks for each season in turn. Playlist stays empty: the mpv page shows none of it (mpv's
 	/// OSC is the player UI).
 	/// </summary>
-	private async Task<BridgePlayRequest?> LoadMpvQueue(long generation, BaseItemDto item, PlaybackSelection? selection)
+	private async Task<BridgePlayRequest?> LoadMpvQueue(long generation, BaseItemDto item, PlaybackSelection? selection, bool fromBeginning = false)
 	{
 		var watch = Stopwatch.StartNew();
-		var request = await MpvQueue.BuildAsync(JellyfinClient, item, selection);
+		var request = await MpvQueue.BuildAsync(JellyfinClient, item, selection, fromBeginning);
 		logger.LogInformation("Queue for {Type} {ItemId} (generation {Generation}): {Count} item(s) from index {Index}, loaded in {Ms} ms",
 			item.Type, item.Id, generation, request?.ItemIds.Count ?? 0, request?.StartIndex, watch.ElapsedMilliseconds);
 		return request;
@@ -207,7 +207,7 @@ public partial class VideoPlayerViewModel
 		MpvSelfTestRequest => "the self-test",
 		PlayQueueUpdate => "a SyncPlay queue (not played with mpv)",
 		BridgePlayRequest remote => $"a remote play of {remote.ItemIds.Count} item(s) from index {remote.StartIndex}",
-		PlaybackRequest picked => $"{picked.Dto.Type} {picked.Dto.Id:N} with streams picked on its page",
+		PlaybackRequest picked => $"{picked.Dto.Type} {picked.Dto.Id:N}{(picked.Selection is null ? "" : " with streams picked on its page")}{(picked.FromBeginning ? " from the beginning" : "")}",
 		BaseItemDto item => $"{item.Type} {item.Id:N}",
 		null => "nothing",
 		_ => parameter.GetType().Name,
