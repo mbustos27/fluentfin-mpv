@@ -10,6 +10,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dw="using:DevWinUI"
     xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:journal="using:FluentFin.Plugins.Journal.Controls"
     xmlns:labs="using:CommunityToolkit.Labs.WinUI"
     xmlns:local="using:FluentFin.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -165,6 +166,8 @@
                 Spacing="20">
                 <TextBlock Text="{x:Bind c:Converters.DateTimeOffsetToString(ViewModel.Dto.PremiereDate), Mode=OneWay}" />
                 <TextBlock Text="{x:Bind c:Converters.TicksToTime2(ViewModel.Dto.RunTimeTicks), Mode=OneWay}" />
+                <!--  fluentfin-mpv: the TV journal's rating (docs/JOURNAL.md)  -->
+                <journal:JournalRatingPanel Item="{x:Bind ViewModel.Dto, Mode=OneWay}" />
             </StackPanel>
             <StackPanel
                 Grid.RowSpan="2"
