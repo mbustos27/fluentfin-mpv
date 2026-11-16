@@ -26,7 +26,7 @@ internal static unsafe partial class Libmpv
 	/// </summary>
 	internal const uint LoadFlags = 0x00000100 | 0x00000800;
 
-	private static readonly Lazy<(nint Handle, string? Error)> s_installed = new(() => Load(InstalledPath));
+	private static readonly Lazy<(nint Handle, string? Error)> s_installed = new(() => LoadLibmpv(InstalledPath));
 
 	/// <summary>Why the imports could not be bound to the installed library (another resolver was set first), else null.</summary>
 	private static readonly string? s_resolverError;
@@ -51,22 +51,156 @@ internal static unsafe partial class Libmpv
 		return handle != 0 ? handle : throw new DllNotFoundException($"{Dll} could not be loaded from {Path.Combine(AppContext.BaseDirectory, Folder)}: {error}");
 	}
 
+	/// <summary>The loader call (tests: one that records what it is given). Sets the thread's last error on failure.</summary>
+	internal delegate nint LoadLibraryCall(string fullPath, uint flags);
+
 	/// <summary>
-	/// Loads the DLL at <paramref name="path"/> (a full path) with <see cref="LoadFlags"/>: (handle, null), or (0, why not).
+	/// Loads the DLL at <paramref name="path"/> by its full path with <see cref="LoadFlags"/>: (handle, null), or (0, why not).
+	/// Windows' "Entry Point Not Found" / "System Error" boxes are off for the call (the process's error mode, put back after):
+	/// a DLL that lacks an export fails here with its message instead of a dialog on the user's screen.
 	/// </summary>
-	internal static (nint Handle, string? Error) Load(string path)
+	internal static (nint Handle, string? Error) Load(string path, LoadLibraryCall? loader = null)
 	{
 		if (!File.Exists(path))
 		{
 			return (0, "the file is not there");
 		}
 
-		var handle = LoadLibraryExW(Path.GetFullPath(path), 0, LoadFlags);
-		return handle != 0 ? (handle, null) : (0, new Win32Exception(Marshal.GetLastPInvokeError()).Message);
+		loader ??= static (fullPath, flags) => LoadLibraryExW(fullPath, 0, flags);
+		// the process's mode, not the thread's: Windows resolves a DLL's imports on loader threads of its own, which the
+		// calling thread's mode does not reach (a missing export still showed its box with SetThreadErrorMode)
+		const uint SemFailCriticalErrors = 0x0001;
+		var previous = GetErrorMode();
+		SetErrorMode(previous | SemFailCriticalErrors);
+		try
+		{
+			var handle = loader(Path.GetFullPath(path), LoadFlags);
+			return handle != 0 ? (handle, null) : (0, new Win32Exception(Marshal.GetLastPInvokeError()).Message);
+		}
+		finally
+		{
+			SetErrorMode(previous);
+		}
+	}
+
+	/// <summary>
+	/// Loads FluentFin's libmpv at <paramref name="path"/>: the libraries' environment first (<see cref="LibraryEnvironment"/>,
+	/// they read it when they load), refused when one of its FFmpeg DLLs' names is already loaded from elsewhere (Windows would
+	/// hand libmpv that other FFmpeg), then <see cref="Load"/>, then GnuTLS's translations pointed into the folder.
+	/// </summary>
+	internal static (nint Handle, string? Error) LoadLibmpv(string path, Func<string, string?>? loadedPath = null)
+	{
+		if (!File.Exists(path))
+		{
+			return (0, "the file is not there");
+		}
+
+		var folder = Path.GetDirectoryName(Path.GetFullPath(path))!;
+		var elsewhere = NativeModules.LoadedElsewhere(NativeModules.FFmpegNames(folder), folder, loadedPath ?? NativeModules.LoadedPath);
+		if (elsewhere.Count > 0)
+		{
+			var (name, from) = elsewhere[0];
+			return (0, $"another FFmpeg's {name} is already loaded in FluentFin (from {Path.GetDirectoryName(from)}): restart FluentFin to use its own controls");
+		}
+
+		ApplyLibraryEnvironment(folder);
+		var loaded = Load(path);
+		if (loaded.Handle != 0)
+		{
+			BindTranslations(folder);
+		}
+
+		return loaded;
+	}
+
+	/// <summary>
+	/// What the libraries libmpv loads (MSYS2's builds) read their configuration from, pointed into its own folder, where
+	/// none of it is shipped, so they keep their defaults. Unset, they read files outside FluentFin's folder: GnuTLS its
+	/// system priority file at MSYS2's build path (<c>D:/M/msys64/ucrt64/etc/gnutls/config</c>, a folder any user can make
+	/// on a second drive: weaker TLS), libxml2 the catalog <c>\ucrt64\etc\xml\catalog</c> of the current drive, p11-kit the
+	/// user's own PKCS#11 configuration; and OpenSSL its <c>openssl.cnf</c> and providers next to FluentFin.exe
+	/// (<c>etc\ssl</c>, <c>lib\ossl-modules</c>: a config there loads any DLL as a provider), and libva its drivers.
+	/// </summary>
+	internal static (string Name, string Value)[] LibraryEnvironment(string folder) =>
+	[
+		("GNUTLS_SYSTEM_PRIORITY_FILE", Path.Combine(folder, "etc", "gnutls", "config")),
+		("OPENSSL_CONF", Path.Combine(folder, "etc", "ssl", "openssl.cnf")),
+		("OPENSSL_CONF_INCLUDE", Path.Combine(folder, "etc", "ssl")),
+		("OPENSSL_MODULES", Path.Combine(folder, "lib", "ossl-modules")),
+		("P11_KIT_NO_USER_CONFIG", "1"),
+		("XML_CATALOG_FILES", Path.Combine(folder, "etc", "xml", "catalog")),
+		("LIBVA_DRIVERS_PATH", Path.Combine(folder, "lib", "dri")),
+	];
+
+	/// <summary>
+	/// Sets <see cref="LibraryEnvironment"/> in this process: Windows' environment (OpenSSL reads that) and the C runtime's
+	/// copy the MSYS2 libraries' <c>getenv</c> reads (ucrtbase's <c>_wputenv_s</c> sets both; the runtime may have copied
+	/// the environment before, so <see cref="Environment.SetEnvironmentVariable(string, string)"/> alone is not enough).
+	/// The backend and its mpv inherit them, harmlessly: every path is inside FluentFin's folder.
+	/// </summary>
+	internal static void ApplyLibraryEnvironment(string folder)
+	{
+		foreach (var (name, value) in LibraryEnvironment(folder))
+		{
+			Environment.SetEnvironmentVariable(name, value);
+			_ = WPutEnvS(name, value);
+		}
+	}
+
+	/// <summary>
+	/// GnuTLS binds its translations to MSYS2's build path (<c>D:/M/msys64/ucrt64/share/locale</c>) when it loads: bound
+	/// again to the folder's <c>share\locale</c> (not shipped), so no message catalog outside FluentFin's folder is read.
+	/// </summary>
+	private static void BindTranslations(string folder)
+	{
+		if (NativeModules.LoadedPath("libintl-8.dll") is { } intl && Path.GetDirectoryName(intl) is { } dir
+			&& string.Equals(dir, folder, StringComparison.OrdinalIgnoreCase)
+			&& NativeLibrary.TryGetExport(GetModuleHandleW("libintl-8.dll"), "libintl_wbindtextdomain", out var bind))
+		{
+			var locale = Marshal.StringToHGlobalUni(Path.Combine(folder, "share", "locale"));
+			try
+			{
+				fixed (byte* domain = "gnutls\0"u8)
+				{
+					((delegate* unmanaged<byte*, nint, nint>)bind)(domain, locale);
+				}
+			}
+			finally
+			{
+				// libintl keeps its own copy of the directory name
+				Marshal.FreeHGlobal(locale);
+			}
+		}
+	}
+
+	/// <summary>Where GnuTLS's translations are bound now (tests): null when libintl is not loaded.</summary>
+	internal static string? GnutlsTranslations()
+	{
+		if (!NativeLibrary.TryGetExport(GetModuleHandleW("libintl-8.dll"), "libintl_wbindtextdomain", out var bind))
+		{
+			return null;
+		}
+
+		fixed (byte* domain = "gnutls\0"u8)
+		{
+			return Marshal.PtrToStringUni(((delegate* unmanaged<byte*, nint, nint>)bind)(domain, 0));
+		}
 	}
 
 	[LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
 	private static partial nint LoadLibraryExW(string fileName, nint file, uint flags);
+
+	[LibraryImport("kernel32.dll")]
+	private static partial uint SetErrorMode(uint mode);
+
+	[LibraryImport("kernel32.dll")]
+	private static partial uint GetErrorMode();
+
+	[LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+	private static partial nint GetModuleHandleW(string name);
+
+	[LibraryImport("ucrtbase.dll", EntryPoint = "_wputenv_s", StringMarshalling = StringMarshalling.Utf16)]
+	private static partial int WPutEnvS(string name, string value);
 
 	public const int FormatNone = 0, FormatString = 1, FormatFlag = 3, FormatInt64 = 4, FormatDouble = 5;
 	public const int EventIdNone = 0, EventIdShutdown = 1, EventIdLogMessage = 2, EventIdPropertyChange = 22;
@@ -161,15 +295,15 @@ internal static unsafe partial class Libmpv
 	}
 
 	/// <summary>
-	/// The probe of the DLL at <paramref name="path"/>, loaded as the installed one is (<see cref="Load"/>; tests: a file that
-	/// is not, or not a usable, libmpv). Never throws.
+	/// The probe of the DLL at <paramref name="path"/>, loaded as the installed one is (<see cref="LoadLibmpv"/> for a
+	/// libmpv-2.dll, else <see cref="Load"/>; tests: a file that is not, or not a usable, libmpv). Never throws.
 	/// </summary>
 	internal static string? ProbeFile(string path)
 	{
 		var name = Path.GetFileName(path);
 		try
 		{
-			var (library, error) = Load(path);
+			var (library, error) = string.Equals(name, Dll, StringComparison.OrdinalIgnoreCase) ? LoadLibmpv(path) : Load(path);
 			return library != 0 ? ProbeLibrary(library, name) : $"{name} could not be loaded: {error}";
 		}
 		catch (Exception ex)
@@ -191,9 +325,9 @@ internal static unsafe partial class Libmpv
 			var (library, error) = s_installed.Value;
 			if (library == 0)
 			{
-				return File.Exists(InstalledPath)
-					? $"{Dll} could not be loaded from FluentFin's {Folder} folder: {error}"
-					: $"{Dll} was not found in FluentFin's {Folder} folder";
+				return !File.Exists(InstalledPath) ? $"{Dll} was not found in FluentFin's {Folder} folder"
+					: error?.Contains("restart FluentFin", StringComparison.Ordinal) == true ? $"{Dll} cannot be used now: {error}"
+					: $"{Dll} could not be loaded from FluentFin's {Folder} folder: {error}";
 			}
 
 			return ProbeLibrary(library, Dll);
@@ -302,4 +436,62 @@ internal static unsafe partial class Libmpv
 			Marshal.FreeCoTaskMem(utf8);
 		}
 	}
+}
+
+/// <summary>
+/// fluentfin-mpv: which DLLs are loaded in this process, and from where. Windows hands a DLL that imports a name the
+/// already-loaded module of that name, wherever it came from: FluentFin's libmpv and Flyleaf each bring an FFmpeg with the
+/// same DLL names (avcodec-63.dll, ...), so the second to load would run on the first one's FFmpeg.
+/// </summary>
+internal static unsafe partial class NativeModules
+{
+	private static readonly System.Text.RegularExpressions.Regex s_ffmpeg = new(
+		@"^(avcodec|avdevice|avfilter|avformat|avutil|postproc|swresample|swscale)-\d+\.dll$",
+		System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+	/// <summary>The FFmpeg DLLs in <paramref name="folder"/> (their file names); none when it is not there.</summary>
+	public static string[] FFmpegNames(string folder) =>
+		Directory.Exists(folder) ? [.. Directory.EnumerateFiles(folder, "*.dll").Select(f => System.IO.Path.GetFileName(f)).Where(n => s_ffmpeg.IsMatch(n!)).Select(n => n!).Order(StringComparer.OrdinalIgnoreCase)] : [];
+
+	/// <summary>
+	/// Those of <paramref name="names"/> that are loaded already, from a folder other than <paramref name="folder"/>:
+	/// (name, full path). <paramref name="loadedPath"/> says where a loaded module of a name is from (null: not loaded).
+	/// </summary>
+	public static List<(string Name, string Path)> LoadedElsewhere(IEnumerable<string> names, string folder, Func<string, string?> loadedPath)
+	{
+		var full = System.IO.Path.GetFullPath(folder).TrimEnd('\\');
+		var found = new List<(string, string)>();
+		foreach (var name in names)
+		{
+			if (loadedPath(name) is { } path && !string.Equals(System.IO.Path.GetDirectoryName(path), full, StringComparison.OrdinalIgnoreCase))
+			{
+				found.Add((name, path));
+			}
+		}
+
+		return found;
+	}
+
+	/// <summary>The full path of the loaded module named <paramref name="name"/>, null when none is loaded.</summary>
+	public static string? LoadedPath(string name)
+	{
+		var module = GetModuleHandleW(name);
+		if (module == 0)
+		{
+			return null;
+		}
+
+		var buffer = new char[32768];
+		fixed (char* p = buffer)
+		{
+			var length = GetModuleFileNameW(module, p, (uint)buffer.Length);
+			return length == 0 ? null : new string(p, 0, (int)length);
+		}
+	}
+
+	[LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+	private static partial nint GetModuleHandleW(string name);
+
+	[LibraryImport("kernel32.dll")]
+	private static partial uint GetModuleFileNameW(nint module, char* buffer, uint size);
 }
