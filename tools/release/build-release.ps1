@@ -3,8 +3,12 @@
   Builds the portable FluentFin MPV release: dist\FluentFinMPV-<version>-win-x64\, a .zip of it and a .sha256.
 
 .DESCRIPTION
-  Runs on a Windows x64 machine with the .NET 10 SDK and network access to python.org and PyPI. Everything it builds or
-  downloads stays under this checkout's dist\ (dist\.work\ for the intermediate files); nothing is installed.
+  Runs on a Windows x64 machine with the .NET 10 SDK, git, mpv on PATH (the backend tests) and network access to python.org,
+  PyPI, nuget.org, GitHub and code.videolan.org. Everything it builds or downloads stays under this checkout's dist\
+  (dist\.work\ for the intermediate files); nothing is installed. It stops unless the working tree is clean (no change,
+  no untracked file) and the tests pass (both UI suites, the backend's bridge tests off-screen; -SkipTests only to try
+  the packaging), and it ships no debug symbols: a path gate fails the build if any file of the package or of the source
+  archive names the build machine's user, home, checkout or temp folders (tools\release\path_gate.py).
 
   1. Python: python.org's CPython $PythonVersion runtime zip (the one the Python install manager uses, listed in
      https://www.python.org/ftp/python/index-windows.json), checked against the SHA-256 pinned below and against its
@@ -32,7 +36,8 @@
 param(
     [string]$Version = '1.0.0',
     [string]$SourceUrl,
-    [switch]$Reuse
+    [switch]$Reuse,
+    [switch]$SkipTests   # only to try the packaging itself; a release runs them
 )
 
 $ErrorActionPreference = 'Stop'
@@ -90,6 +95,12 @@ $env:MSBUILDDISABLENODEREUSE = '1'
 $env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
+
+# a release is built from a commit: nothing changed, nothing untracked (ignored output such as dist\ aside). The source
+# archive is that commit (sources.py), and the package must be what it builds.
+$dirty = @(& git -C $repo status --porcelain)
+if ($LASTEXITCODE -ne 0) { throw "git status failed in $repo" }
+if ($dirty) { throw "the working tree is not clean; commit or remove these first:`n$($dirty -join "`n")" }
 New-Item -ItemType Directory -Force $work | Out-Null
 
 # --- 1. Python runtime ----------------------------------------------------------------------------------------------
@@ -129,6 +140,55 @@ Invoke-Checked 'pip install' {
         -r (Join-Path $PSScriptRoot 'requirements-backend.txt') -r (Join-Path $PSScriptRoot 'requirements-build.txt')
 }
 Invoke-Checked 'pip check' { & $venvPython -I -m pip check --disable-pip-version-check }
+
+# --- 2b. the tests: a failure stops the release ---------------------------------------------------------------------
+# Both UI suites, and the backend's bridge tests off-screen (a private desktop and a kill-on-close job through
+# tools\backend-bench\hidden_run.py, APPDATA/LOCALAPPDATA in dist\.work; mpv on PATH, which test discovery needs). A
+# test that fails is run once more on its own: the UI suites have timing tests that fail under load (KNOWN-ISSUES);
+# one that fails again stops the build, and one that passes is named in the output.
+function Invoke-UiTests([string]$project, [string[]]$extra) {
+    # dotnet test writes failures to stderr; under 'Stop', PowerShell 5.1 would end the script at the first one
+    $ErrorActionPreference = 'Continue'
+    $out = @(& $dotnet test $project @extra -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers -v:q -nologo 2>&1 | ForEach-Object { "$_" })
+    $summary = $out | Where-Object { $_ -match '^(Passed|Failed)!' }
+    Write-Host "  $(Split-Path $project -Leaf): $summary"
+    if ($LASTEXITCODE -eq 0) { return }
+    $failed = @($out | ForEach-Object { if ($_ -match '\]\s+(\S+?)(?:\(.*\))? \[FAIL\]\s*$') { $Matches[1] } } | Sort-Object -Unique)
+    if (-not $failed) { throw "$project failed, and no failed test was named:`n$(($out | Select-Object -Last 30) -join "`n")" }
+    $filter = ($failed | ForEach-Object { "FullyQualifiedName~$_" }) -join '|'
+    $again = @(& $dotnet test $project @extra -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers -v:q -nologo --filter $filter 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) { throw "$project : these tests fail again on their own: $($failed -join ', ')`n$(($again | Select-Object -Last 30) -join "`n")" }
+    Write-Warning "$(Split-Path $project -Leaf): failed in the full run and passed on their own (timing): $($failed -join ', ')"
+}
+if ($SkipTests) {
+    Write-Warning 'the tests were skipped (-SkipTests): not a release build'
+}
+else {
+    Step 'tests (UI suites, backend bridge tests)'
+    Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Core.Tests') @()
+    Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Tests') @('-p:Platform=x64')
+    $mpvCmd = Get-Command mpv.exe -ErrorAction SilentlyContinue
+    if (-not $mpvCmd) { throw 'the backend tests need mpv on PATH (winget install mpv-player.mpv-CI.MSVC)' }
+    $mpvExe = $mpvCmd.Source
+    $mpvItem = Get-Item $mpvExe
+    if ($mpvItem.LinkType -and $mpvItem.Target) { $mpvExe = [IO.Path]::GetFullPath((Join-Path (Split-Path $mpvExe) @($mpvItem.Target)[0])) }
+    $testEnv = Join-Path $work 'test-env'
+    New-Item -ItemType Directory -Force (Join-Path $testEnv 'appdata'), (Join-Path $testEnv 'localappdata') | Out-Null
+    $testLog = Join-Path $work 'backend-tests.log'
+    if (Test-Path $testLog) { Remove-Item $testLog }
+    Push-Location (Join-Path $repo 'backend')
+    try {
+        & $venvPython -B -I (Join-Path $repo 'tools\backend-bench\hidden_run.py') --log $testLog --timeout 1800 --desktop "ffr-release-tests-$PID" `
+            --env "APPDATA=$testEnv\appdata" --env "LOCALAPPDATA=$testEnv\localappdata" `
+            --env "PATH=$(Split-Path $mpvExe);$env:SystemRoot\System32;$env:SystemRoot" `
+            -- $venvPython -B -m unittest discover -s tests -k test_bridge -k test_window_embed -k test_window_geometry | Out-Null
+        $code = $LASTEXITCODE
+    }
+    finally { Pop-Location }
+    $ran = Select-String -Path $testLog -Pattern '^Ran \d+ tests' | Select-Object -Last 1
+    Write-Host "  backend bridge tests: $(if ($ran) { $ran.Line } else { 'no result' }) (log $testLog)"
+    if ($code -ne 0 -or -not (Select-String -Path $testLog -Pattern '^OK' -Quiet)) { throw "the backend bridge tests failed (see $testLog)" }
+}
 
 # --- 3. the backend, frozen -----------------------------------------------------------------------------------------
 Step 'backend (PyInstaller, one folder)'
@@ -176,7 +236,8 @@ if (Test-Path $publish) { Remove-Item -Recurse -Force $publish }
 $artifacts = Join-Path $work 'dotnet'
 Invoke-Checked 'dotnet publish' {
     & $dotnet publish (Join-Path $repo 'ui\FluentFin\FluentFin.csproj') -c Release -r win-x64 -p:Platform=x64 `
-        --self-contained true -p:WindowsPackageType=None -p:VlcWindowsX64Enabled=false `
+        --self-contained true -p:WindowsPackageType=None -p:VlcWindowsX64Enabled=false -p:FluentFinMpvRelease=true `
+        -p:DebugType=none -p:DebugSymbols=false `
         "-p:LibmpvDir=$(Split-Path $libmpv)" --artifacts-path $artifacts -o $publish `
         -nodeReuse:false -p:UseSharedCompilation=false --disable-build-servers -nologo -v:minimal
 }
@@ -190,6 +251,10 @@ foreach ($sdkFile in 'Microsoft.WindowsAppRuntime.dll', 'Microsoft.ui.xaml.dll',
 $productVersion = (Get-Item $exe).VersionInfo.ProductVersion
 if ($productVersion -ne $Version) { throw "FluentFin.exe says product version $productVersion, not $Version" }
 Assert-Sha256 (Join-Path $publish 'libmpv-2.dll') $LibmpvSha256
+# no debug symbols (they name the build machine's folders), and the release marker (no dev-checkout lookup, AppVersion)
+$pdbs = @(Get-ChildItem $publish -Recurse -Filter '*.pdb')
+if ($pdbs) { throw "the publish has debug symbols: $($pdbs.Name -join ', ')" }
+if (-not (Select-String -Path (Join-Path $publish 'FluentFin.dll') -SimpleMatch -Pattern 'FluentFinMpvRelease' -Quiet)) { throw 'FluentFin.dll has no FluentFinMpvRelease marker' }
 # upstream's VLC and Flyleaf players are not in the release: no libvlc (VlcWindowsX64Enabled=false above) and no FFMpeg
 # folder (FluentFin.csproj copies it for the dev build). FluentFin offers only the players whose libraries are there
 # (Core\Settings\MediaPlayerAvailability), so the release offers MPV and Windows Media Player.
@@ -197,7 +262,14 @@ $flyleafFFmpeg = Join-Path $publish 'FFMpeg'
 if (Test-Path $flyleafFFmpeg) { Remove-Item -Recurse -Force $flyleafFFmpeg }
 foreach ($gone in 'libvlc', 'FFMpeg') { if (Test-Path (Join-Path $publish $gone)) { throw "the publish still has $gone\" } }
 
-# --- 5. the folder, the notices, the zip ----------------------------------------------------------------------------
+# --- 5. the corresponding source, for the GitHub release (dist\sources, SOURCES.txt); the notices read it ------------
+Step 'sources (dist\sources)'
+$sources = Join-Path $dist 'sources'
+$libmpvStatus = Join-Path $work 'libmpv-status.json'
+Invoke-Checked 'sources' { & $venvPython -I (Join-Path $PSScriptRoot 'sources.py') --manifest (Join-Path $PSScriptRoot 'sources.json') `
+        --out $sources --cache (Join-Path $work 'sources-cache') --repo $repo --version $Version --status-out $libmpvStatus }
+
+# --- 6. the folder, the notices, the zip ----------------------------------------------------------------------------
 Step "package folder $package"
 if (Test-Path $package) { Remove-Item -Recurse -Force $package }
 Copy-Item -Recurse $publish $package
@@ -209,6 +281,8 @@ $readme = (Get-Content -Raw (Join-Path $PSScriptRoot 'README.txt')).Replace('{{V
 $assets = Join-Path $artifacts 'obj\FluentFin\project.assets.json'
 if (-not (Test-Path $assets)) { throw "no $assets (the restore of FluentFin)" }
 $components = @(
+    "Microsoft Visual C++ runtime (backend\_internal\VCRUNTIME140.dll, VCRUNTIME140_1.dll)|as shipped with python.org's CPython $PythonVersion|Microsoft Distributable Code, under the conditions in Python's LICENSE.txt (section 5: 'Additional Conditions for this Windows binary build')|https://www.python.org/downloads/release/python-$($PythonVersion.Replace('.', ''))/",
+    "Microsoft Visual C++ runtime for .NET (vcruntime140_cor3.dll)|as shipped in the .NET runtime pack Microsoft.NETCore.App.Runtime.win-x64|the .NET runtime pack's licence (section 4, its LICENSE.TXT in section 5)|https://github.com/dotnet/runtime",
     "libmpv (libmpv-2.dll)|mpv git-bcde6b93cc, shinchiro/mpv-winbuild-cmake release $LibmpvBuild (x86_64), with FFmpeg git-cd4e96eb3 and the other libraries its recipe builds in|GPL: mpv is GPL-2.0-or-later, and this build links FFmpeg and the other libraries it includes for GPL use|https://github.com/mpv-player/mpv/tree/bcde6b93cc ; build recipe: https://github.com/shinchiro/mpv-winbuild-cmake (release ${LibmpvBuild}: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/$LibmpvBuild). The release's sources archive (SOURCES.txt) has what of it is known exactly|SHA-256 of libmpv-2.dll: $LibmpvSha256"
 )
 $fluentfinAssets = Join-Path $repo 'backend\fluentfin'
@@ -219,8 +293,19 @@ $noticeArgs = @('-I', (Join-Path $PSScriptRoot 'notices.py'), '--out', (Join-Pat
 if (Test-Path $fluentfinAssets) { $noticeArgs += @('--fluentfin-assets', $fluentfinAssets) }
 foreach ($c in $components) { $noticeArgs += @('--component', $c) }
 # restored for the build, not shipped (see the publish step)
-$noticeArgs += @('--not-shipped', 'VideoLAN.LibVLC.Windows')
+$noticeArgs += @('--not-shipped', 'VideoLAN.LibVLC.Windows', '--package-dir', $package,
+    '--sources-manifest', (Join-Path $PSScriptRoot 'sources.json'), '--sources-dir', $sources, '--libmpv-status', $libmpvStatus)
 Invoke-Checked 'notices' { & $venvPython @noticeArgs }
+# what the notices must carry (the release review): the LGPL-3.0 text (FlyleafLib ships), the VC++ runtimes, the .NET
+# runtime pack, and no Windows App SDK package called build-only (its files ship)
+$noticeText = [IO.File]::ReadAllText((Join-Path $package 'THIRD-PARTY-NOTICES.txt'), [Text.Encoding]::UTF8)
+$noticeGaps = @()
+if ($noticeText -notmatch 'GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3') { $noticeGaps += 'the LGPL-3.0 text' }
+foreach ($must in 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll', 'vcruntime140_cor3.dll', 'Microsoft.NETCore.App.Runtime.win-x64') {
+    if (-not $noticeText.Contains($must)) { $noticeGaps += $must }
+}
+if ($noticeText -match '(?m)^Microsoft\.WindowsAppSDK[^\r\n]*\r?\n(?:  [^\r\n]*\r?\n)*?  \[build only\]') { $noticeGaps += 'a Windows App SDK package marked build only' }
+if ($noticeGaps) { throw "THIRD-PARTY-NOTICES.txt lacks: $($noticeGaps -join '; ')" }
 
 foreach ($needed in 'FluentFin.exe', 'libmpv-2.dll', 'backend\fluentfin-mpv-backend.exe', 'LICENSE', 'README.txt', 'THIRD-PARTY-NOTICES.txt') {
     if (-not (Test-Path (Join-Path $package $needed))) { throw "the package has no $needed" }
@@ -228,17 +313,20 @@ foreach ($needed in 'FluentFin.exe', 'libmpv-2.dll', 'backend\fluentfin-mpv-back
 $devFiles = @(Get-ChildItem $package -Recurse -File -Include '*.runtimeconfig.dev.json', 'LocalSettings.json')
 if ($devFiles) { throw "dev-only files in the package: $($devFiles.FullName -join ', ')" }
 
+# --- 6b. nothing names the machine it was built on ------------------------------------------------------------------
+# every file of the package (the frozen backend's archive and the zips in it included) and of the source archive,
+# case-insensitively, as UTF-8 and UTF-16: the user name, the home, the checkout, the folder above it, the temp folder
+Step 'path gate'
+$needles = @($env:USERNAME, $env:USERPROFILE, $repo, (Split-Path $repo), $env:TEMP, [IO.Path]::GetTempPath().TrimEnd('\')) | Where-Object { $_ } | Select-Object -Unique
+$gateArgs = @('-I', (Join-Path $PSScriptRoot 'path_gate.py'), '--dir', $package, '--archive', (Join-Path $sources "fluentfin-mpv-$Version-source.zip"))
+foreach ($n in $needles) { $gateArgs += @('--needle', $n) }
+Invoke-Checked 'path gate' { & $venvPython @gateArgs }
+
 Step "zip $zip"
 foreach ($f in $zip, "$zip.sha256") { if (Test-Path $f) { Remove-Item -Force $f } }
 Invoke-Checked 'zip' { & $venvPython -I (Join-Path $PSScriptRoot 'zipdir.py') $package $zip }
 $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText("$zip.sha256", "$hash *$name.zip`n", [Text.UTF8Encoding]::new($false))
-
-# --- 6. the corresponding source, for the GitHub release (dist\sources, SOURCES.txt) -------------------------------------
-Step 'sources (dist\sources)'
-$sources = Join-Path $dist 'sources'
-Invoke-Checked 'sources' { & $venvPython -I (Join-Path $PSScriptRoot 'sources.py') --manifest (Join-Path $PSScriptRoot 'sources.json') `
-        --out $sources --cache (Join-Path $work 'sources-cache') --repo $repo --version $Version }
 
 $files = @(Get-ChildItem $package -Recurse -File)
 Write-Host ("`n{0}`n  {1} files, {2:N1} MB unpacked`n{3}`n  {4:N1} MB, SHA-256 {5}" -f $package, $files.Count,

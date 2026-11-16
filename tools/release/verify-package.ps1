@@ -11,7 +11,7 @@
     inside a kill-on-close job (tools\backend-bench\hidden_run.py), with no backend command set (FluentFin finds its
     bundled backend by itself):
       SavedVlc   a data folder whose saved player is VLC (as a dev build may leave): the release has no VLC, so it
-                 must play with MPV, without a crash, and keep the saved choice
+                 must play with MPV, without a crash, and keep the saved choice, Settings opened included
       Default    a clean data folder with no player-controls setting (what a new user gets: FluentFin's controls on the`n                 bundled libmpv): sign in, play an episode, stop, close; the logs must show the in-process mpv
       Mpv        "Player controls: mpv", with mpv's folder added to PATH (the documented requirement for mpv's
                  controls): the same steps. Skipped when no mpv.exe is on the Machine/User PATH.
@@ -218,13 +218,14 @@ foreach ($run in $Runs) {
         }
         'SavedVlc' {
             # a data folder whose saved player is VLC (from a dev build): the release has no VLC, so it plays with MPV
-            $data = Invoke-ServerRun 'SavedVlc' $null $false 'season,play,leave,close' -SavedPlayer 'Vlc'
+            # and Settings opened after the play: it shows MPV and must not save it over the saved VLC
+            $data = Invoke-ServerRun 'SavedVlc' $null $false 'season,play,leave,nav:Settings,close' -SavedPlayer 'Vlc'
             $appLog = @(Get-ChildItem (Join-Path $data 'Logs') -Filter 'log*.txt' -ErrorAction SilentlyContinue)
             $core = $appLog | Select-String -Pattern 'Started the in-process mpv core' | Select-Object -First 1
             $crash = $appLog | Select-String -Pattern 'Unhandled exception|\[FTL\]|LibVLC|libvlc' | Select-Object -First 1
             Check 'SavedVlc: a saved VLC choice plays with MPV, no crash' ([bool]$core -and -not $crash) $(if ($crash) { $crash.Line.Trim() } elseif ($core) { 'MPV (FluentFin''s controls)' } else { 'no in-process mpv in FluentFin''s log' })
             $stillSaved = (Get-Content (Join-Path $data 'LocalSettings.json') -Raw | ConvertFrom-Json).MediaPlayerType
-            Check 'SavedVlc: the saved choice is kept (a dev build still finds it)' ("$stillSaved" -eq 'Vlc') "MediaPlayerType = $stillSaved"
+            Check 'SavedVlc: the saved choice is kept after playing and opening Settings (a dev build still finds it)' ("$stillSaved" -eq 'Vlc') "MediaPlayerType = $stillSaved"
         }
         'Mpv' {
             if (-not $mpvDir) { Write-Host "`n== Mpv: skipped (no mpv.exe on the Machine/User PATH)"; continue }

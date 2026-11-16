@@ -4,7 +4,7 @@
         --repo <checkout> --version 1.0.0
 
 - FluentFin MPV's own source: ``git archive`` of HEAD (FluentFin, jellyfin-mpv-shim and everything else in the
-  repository, the patched uosc included); SOURCES.txt says if the working tree had changes HEAD does not have.
+  repository, the patched uosc included). A working tree with changes or untracked files is refused (exit 1).
 - Every item of sources.json: downloaded from its official host only (GitHub, code.videolan.org, PyPI), checked
   against the sha256 its host publishes where there is one (PyPI), the sha256 recorded either way.
 - libmpv's other libraries: read from the recipe archive's packages/*.cmake (never extracted, nothing run), every
@@ -89,6 +89,7 @@ def main():
     ap.add_argument("--cache", required=True)
     ap.add_argument("--repo", required=True)
     ap.add_argument("--version", required=True)
+    ap.add_argument("--status-out", help="a JSON of the libraries in libmpv-2.dll: with exact source here, or not (for notices.py)")
     args = ap.parse_args()
     manifest = json.load(open(args.manifest, encoding="utf-8"))
     if os.path.isdir(args.out):
@@ -100,17 +101,18 @@ def main():
 
     # 1. our own source
     head = subprocess.run(["git", "-C", args.repo, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
-    dirty = subprocess.run(["git", "-C", args.repo, "status", "--porcelain", "--untracked-files=no"],
+    # untracked files count too: the archive is HEAD, and anything else in the tree would not be in it
+    dirty = subprocess.run(["git", "-C", args.repo, "status", "--porcelain"],
                            capture_output=True, text=True, check=True).stdout.strip()
+    if dirty:
+        print("the working tree has changes HEAD does not have; commit or remove them first:\n" + dirty, file=sys.stderr)
+        return 1
     own = f"fluentfin-mpv-{args.version}-source.zip"
     subprocess.run(["git", "-C", args.repo, "archive", "--format=zip", f"--prefix=fluentfin-mpv-{args.version}/",
                     "-o", os.path.join(args.out, own), "HEAD"], check=True)
     lines += ["1. FluentFin MPV (FluentFin.exe and its libraries, the backend, the mpv bar), GPL-3.0", "-" * 100,
               f"{own}  sha256 {sha256(os.path.join(args.out, own))}",
               f"  git archive of commit {head} (https://github.com/mbustos27/fluentfin-mpv/tree/v{args.version})"]
-    if dirty:
-        lines.append("  WARNING: the package was built from a working tree with changes this commit does not have:")
-        lines += ["    " + line for line in dirty.splitlines()]
     lines.append("")
 
     # 2. the components, downloaded
@@ -150,10 +152,12 @@ def main():
               "logs, which named them, were kept by GitHub for one day and are gone. So for the libraries below the exact",
               "source of this build cannot be established, and none is included. Each is listed with what the recipe",
               "names. Of them, only where libmpv-2.dll itself reports a revision is it given.", ""]
+    status = {"included": sorted(covered), "notEstablished": []}
     if recipe:
         for name, package in recipe_closure(recipe).items():
             if name in covered:
                 continue
+            status["notEstablished"].append(name)
             entry = known.get(name)
             detail = f"{entry.get('revision', '')}; " if entry and entry.get("revision") else ""
             if entry:
@@ -170,6 +174,9 @@ def main():
               "  Pillow's bundled libraries (FreeType under its FreeType Licence, the others permissive), CPython and",
               "  the rest of THIRD-PARTY-NOTICES.txt: no copyleft source obligation for what ships.", ""]
 
+    if args.status_out:
+        with open(args.status_out, "w", encoding="utf-8") as fh:
+            json.dump(status, fh, indent=1)
     with open(os.path.join(args.out, "SOURCES.txt"), "w", encoding="utf-8-sig", newline="\r\n") as fh:
         fh.write("\n".join(lines))
     total = sum(os.path.getsize(os.path.join(args.out, f)) for f in os.listdir(args.out))

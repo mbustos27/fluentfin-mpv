@@ -24,14 +24,18 @@ is jellyfin-mpv-shim's version and does not change with ours.
 - Both UI test suites, the off-screen backend suite, the bridge smoke test and the end-to-end harness pass
   (`tools\README.md`).
 - `vendor\libmpv\` has the libmpv `vendor\libmpv\VENDORED.md` names (the build checks its hash).
-- The build PC: Windows x64, the .NET 10 SDK, and network access to python.org, PyPI and nuget.org. Nothing else:
+- The build PC: Windows x64, the .NET 10 SDK, mpv on PATH (for the backend tests the build runs), git, and network
+  access to python.org, PyPI, nuget.org, GitHub and code.videolan.org. Nothing else:
   the build brings its own Python.
 
 ## 3. Build
 
     .\tools\release\build-release.ps1
 
-It downloads and checks the Python runtime, makes a build venv from hash-pinned PyPI wheels, freezes the backend with
+It stops unless the working tree is clean (`git status --porcelain` prints nothing: no change, no untracked file)
+and the tests pass: both UI suites and the backend's bridge tests (off-screen); a test that fails is run once more
+on its own, and the build stops if it fails again. It downloads and checks the Python runtime, makes a build venv from
+hash-pinned PyPI wheels, freezes the backend with
 PyInstaller, publishes FluentFin (Release, x64, self-contained, Windows App SDK self-contained, unpackaged), and writes
 `dist\FluentFinMPV-<version>-win-x64\`, the `.zip` and the `.sha256`, and collects the corresponding source of the GPL,
 LGPL and MPL code it ships into `dist\sources\` with `SOURCES.txt` (`tools\release\sources.py`, `sources.json`: official
@@ -51,8 +55,11 @@ command set and a PATH of Windows' own folders only:
 - the default settings (a clean data folder: FluentFin's controls on the package's libmpv): sign in, play an episode,
   stop, close;
 - mpv's controls with mpv's folder on PATH (skipped when there is no mpv on this PC), and without it (playback must
-  stop with "mpv could not be started", nothing reported to the server);
-- a data folder whose saved player is VLC: the release has no VLC, so it must play with MPV;
+  stop: the backend answers `connect` with `mpv_not_found` and the page says "mpv isn't installed on this PC, and mpv's
+  player controls need it. Switch to FluentFin's controls ... or install mpv: winget install mpv-player.mpv-CI.MSVC",
+  and nothing is reported to the server);
+- a data folder whose saved player is VLC: the release has no VLC, so it must play with MPV, and opening Settings must
+  leave the saved choice as it is;
 - the self-test (`--mpv-selftest`, no server), and once more with FluentFin killed instead of closed (its job must end the
   backend).
 
