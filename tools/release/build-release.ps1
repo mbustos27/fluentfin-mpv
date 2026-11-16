@@ -237,7 +237,8 @@ $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
 # --- 6. the corresponding source, for the GitHub release (dist\sources, SOURCES.txt) -------------------------------------
 Step 'sources (dist\sources)'
 $sources = Join-Path $dist 'sources'
-Invoke-Checked 'sources' { & $venvPython -I (Join-Path $PSScriptRoot 'sources.py') --manifest (Join-Path $PSScriptRoot 'sources.json') `n        --out $sources --cache (Join-Path $work 'sources-cache') --repo $repo --version $Version }
+Invoke-Checked 'sources' { & $venvPython -I (Join-Path $PSScriptRoot 'sources.py') --manifest (Join-Path $PSScriptRoot 'sources.json') `
+        --out $sources --cache (Join-Path $work 'sources-cache') --repo $repo --version $Version }
 
 $files = @(Get-ChildItem $package -Recurse -File)
 Write-Host ("`n{0}`n  {1} files, {2:N1} MB unpacked`n{3}`n  {4:N1} MB, SHA-256 {5}" -f $package, $files.Count,
