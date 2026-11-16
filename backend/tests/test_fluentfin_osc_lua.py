@@ -208,6 +208,41 @@ class SubtitlesAboveTheBarTest(_MpvCase):
         self.osc("auto")
         self.assertEqual(self.settle("sub-pos"), 80)
 
+    def test_a_value_written_with_the_hide_is_kept(self):
+        """fluentfin-mpv player controls: the bridge's ``set_controls ui``
+        hides this OSC and lifts the subtitles in two commands back to back
+        (bridge_controls.UiControls, run here against this mpv). The fork
+        handles the hide after the lift has landed but before its change
+        event reaches it: it must not put its older base back over the lift
+        (it did, in 8 of 8 runs)."""
+        from jellyfin_mpv_shim import bridge_controls
+
+        ipc = None
+
+        class Player:
+            def command(self, *args):
+                ipc.cmd(*args)
+
+        class Pm:
+            osc_enabled = True
+            _player = Player()
+
+            def enable_osc(self, enabled):
+                ipc.cmd("script-message", "osc-visibility",
+                        "auto" if enabled else "never", "False")
+
+        for _ in range(3):
+            self.start("osc-raisesubs=yes")
+            ipc = self.ipc
+            self.osc("always")
+            self.wait_for(lambda: self.ipc.get("sub-pos") < 100, "raise")
+            time.sleep(0.2)
+            controls = bridge_controls.UiControls()
+            controls.set("ui", 0.15)
+            controls.apply(Pm(), 100)
+            self.assertEqual(self.settle("sub-pos", 0.8), 85)
+            self.doCleanups()
+
     def test_off_by_default(self):
         """Upstream's OSC never touches sub-pos: the option is what does."""
         self.start()

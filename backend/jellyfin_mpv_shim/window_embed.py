@@ -34,6 +34,13 @@ log = logging.getLogger("window")
 #: The window mpv renders into, or None for an ordinary top-level window.
 hwnd = None
 
+#: fluentfin-mpv player controls: mpv runs in the UI's own process and the
+#: shim only attached to it (BRIDGE.md section 4, ``attached``). There is no
+#: window of mpv's at all; the UI's is in every respect what an embedded
+#: one is here (full screen is a request, nothing is sized or raised), and
+#: no construction option reaches that mpv (`apply_to_options`).
+attached = False
+
 #: Whether the UI says its window is fullscreen right now. Only meaningful
 #: while embedded; the UI reports it with the bridge's ``set_fullscreen``.
 ui_fullscreen = False
@@ -58,17 +65,20 @@ _TOPLEVEL_OPTIONS = ("geometry", "window_maximized", "border", "title",
                      "x11_name", "wayland_app_id")
 
 
-def configure(window_handle):
+def configure(window_handle, attach=False):
     """Embed into ``window_handle`` (an int), or ``None`` for a top-level
-    window. Call before the player is first imported."""
-    global hwnd, ui_fullscreen
+    window; ``attach``: the UI's own mpv (no window, no handle). Call before
+    the player is first imported."""
+    global hwnd, ui_fullscreen, attached
     hwnd = None if window_handle is None else int(window_handle)
+    attached = bool(attach) and hwnd is None
     ui_fullscreen = False
 
 
 def active():
-    """True while mpv renders into somebody else's window."""
-    return hwnd is not None
+    """True while mpv renders into somebody else's window (embedded, or the
+    UI's own mpv the shim attached to)."""
+    return hwnd is not None or attached
 
 
 def request_fullscreen(want):
@@ -101,7 +111,10 @@ def apply_to_options(mpv_options):
       whatever an mpv.conf says. The colour option, not ``background``,
       which an mpv before 0.38 refuses to start with.
     """
-    if not active():
+    if not active() or attached:
+        # Attached: the shim does not start that mpv, so nothing here would
+        # reach it (python-mpv-jsonipc drops construction options when it
+        # only connects); and there is no window to give it.
         return mpv_options
     for key in _TOPLEVEL_OPTIONS:
         mpv_options.pop(key, None)

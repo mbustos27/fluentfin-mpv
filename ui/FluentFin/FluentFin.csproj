@@ -101,6 +101,15 @@
 	  </Content>
 	</ItemGroup>
 
+	<!-- fluentfin-mpv player controls: libmpv for "Player controls: FluentFin" (mpv inside FluentFin), x64 only. Downloaded, not
+	     in git (vendor\libmpv\VENDORED.md); without it FluentFin uses mpv's controls and says why. -->
+	<PropertyGroup>
+		<LibmpvDir Condition="'$(LibmpvDir)' == ''">$(MSBuildThisFileDirectory)..\..\vendor\libmpv\20261111-git-bcde6b93cc</LibmpvDir>
+	</PropertyGroup>
+	<ItemGroup Condition="'$(Platform)' == 'x64' and Exists('$(LibmpvDir)\libmpv-2.dll')">
+		<None Include="$(LibmpvDir)\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
 	<ItemGroup>
 	  <!-- native FFmpeg for the target architecture; arm64 binaries are fetched at build time into FFMpeg-arm64 -->
 	  <Content Include="$(FFmpegDir)\*.dll" Link="FFMpeg\%(Filename)%(Extension)">

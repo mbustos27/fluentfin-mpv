@@ -2433,8 +2433,16 @@ function ff_update_subs()
             mp.set_property_number("sub-pos", target)
         end
     elseif ff_subs.base then
-        local base = ff_subs.base
+        local base, raised = ff_subs.base, ff_subs.raised
         ff_subs.base, ff_subs.raised = nil, nil
+        -- A value written by somebody else whose change event has not reached
+        -- us yet (the bridge's `set_controls` hides this OSC and moves the
+        -- subtitles in two commands back to back) is newer than `base`:
+        -- keep it rather than put an older one back over it.
+        local now = mp.get_property_number("sub-pos")
+        if raised and now and math.abs(now - raised) > 0.01 then
+            return
+        end
         mp.set_property_number("sub-pos", base)
     end
 end

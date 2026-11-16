@@ -123,6 +123,13 @@ public sealed record MpvInterruptedPlayback(string ItemId, string? MediaSourceId
 public interface IMpvVideoSurface
 {
 	Task<nint> GetHandleAsync();
+
+	/// <summary>
+	/// fluentfin-mpv player controls: the <c>connect.window</c> for the next connect (docs/BRIDGE.md §4): embedded into
+	/// <see cref="GetHandleAsync"/>'s window, or attached to an mpv FluentFin runs itself. A different window than the
+	/// running backend's restarts it (it is fixed for a backend's life).
+	/// </summary>
+	async Task<BridgeWindow> GetWindowAsync() => BridgeWindow.Embedded(await GetHandleAsync());
 }
 
 /// <summary>Finds and starts the backend process; the Windows implementation puts it in a kill-on-close job object.</summary>
