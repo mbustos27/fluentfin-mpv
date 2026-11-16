@@ -20,8 +20,11 @@ public sealed record BridgeIdentity(
 	public override string ToString() => $"{UserName} ({UserId}) on {ServerName} {BridgeRedaction.ServerForLog(ServerUrl)} as {ClientName} {ClientVersion} / {DeviceName}";
 }
 
-/// <summary>Where mpv draws: <c>embedded</c> into a window FluentFin owns, or <c>standalone</c>.</summary>
-public sealed record BridgeWindow(string Mode, long? Hwnd)
+/// <summary>
+/// Where mpv draws: <c>embedded</c> into a window FluentFin owns, <c>attached</c> (fluentfin-mpv player controls): the
+/// backend attaches to an mpv FluentFin runs itself, listening on the pipe <see cref="Ipc"/>; or <c>standalone</c>.
+/// </summary>
+public sealed record BridgeWindow(string Mode, long? Hwnd, string? Ipc = null)
 {
 	/// <summary>
 	/// HWNDs carry 32 significant bits; sent as an unsigned 32-bit number so it can never come out negative (mpv opens a
@@ -30,6 +33,9 @@ public sealed record BridgeWindow(string Mode, long? Hwnd)
 	public static BridgeWindow Embedded(nint hwnd) => new("embedded", unchecked((uint)hwnd));
 
 	public static BridgeWindow Standalone { get; } = new("standalone", null);
+
+	/// <summary>fluentfin-mpv player controls: FluentFin's own mpv, answering JSON IPC on <paramref name="pipe"/> (the name, without <c>\\.\pipe\</c>).</summary>
+	public static BridgeWindow Attached(string pipe) => new("attached", null, pipe);
 }
 
 /// <summary>Arguments of <c>play</c>, mirroring the server's remote Play command.</summary>
@@ -122,6 +128,7 @@ public static class BridgeCommands
 		{
 			["mode"] = window.Mode,
 			["hwnd"] = window.Hwnd,
+			["ipc"] = window.Ipc,
 		});
 
 		return args;
@@ -162,6 +169,21 @@ public static class BridgeCommands
 	public static JsonObject Mute(bool muted) => new() { ["muted"] = muted };
 
 	public static JsonObject Fullscreen(bool fullscreen) => new() { ["fullscreen"] = fullscreen };
+
+	/// <summary>
+	/// fluentfin-mpv: <c>set_controls</c> (docs/BRIDGE.md §4). <paramref name="ui"/>: FluentFin draws the controls, mpv's OSC
+	/// is hidden, and the subtitles keep clear of the bottom <paramref name="subtitleInset"/> of the video's height (clamped
+	/// to 0..0.5, rounded to 0.001 so a bar that did not really move sends the same value). Otherwise mpv's own controls.
+	/// </summary>
+	public static JsonObject Controls(bool ui, double subtitleInset = 0) => ui
+		? new JsonObject { ["controls"] = "ui", ["subtitleInset"] = RoundInset(subtitleInset) }
+		: new JsonObject { ["controls"] = "mpv" };
+
+	/// <summary>The inset as sent: 0..0.5, three decimals; anything not a number is 0.</summary>
+	public static double RoundInset(double inset) => double.IsFinite(inset) ? Math.Round(Math.Clamp(inset, 0, MaxSubtitleInset), 3) : 0;
+
+	/// <summary>The most of the video's height the bottom controls may claim (docs/BRIDGE.md §4).</summary>
+	public const double MaxSubtitleInset = 0.5;
 
 	private static JsonObject WithoutNulls(JsonObject value)
 	{

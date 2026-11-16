@@ -246,6 +246,48 @@ public sealed class SignOutStopReportTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ACastDuringTheWait_PlaysNothing_SoTheSignOutEndsAtTheReportOfWhatItStopped()
+	{
+		// signout-ux item 2: before, the cast's play went out during the wait: the backend played it (the wait then lasted
+		// until its bound) and kept playing it past the revoke, so its Stopped got a 401
+		var y = Guid.Parse("22222222222222222222222222222222").ToString("N");
+		_onStop = async process =>
+		{
+			await process.Event("state", new JsonObject { ["state"] = "idle" });
+			await Task.Delay(600);
+			await process.Reported(Item.ToString("N"), "ps-1");
+		};
+		_service.Begin();
+		await Playing();
+		Backend.Respond = (process, request) =>
+		{
+			var cmd = (string?)request["cmd"];
+			if (cmd == "stop" && _onStop is { } onStop)
+			{
+				_ = Task.Run(() => onStop(process));
+			}
+			else if (cmd == "play")
+			{
+				_ = Task.Run(() => process.Event("state", new JsonObject { ["state"] = "playing", ["itemId"] = y, ["mediaSourceId"] = y, ["playSessionId"] = "ps-2" }));
+			}
+			return new JsonObject();
+		};
+
+		var watch = Stopwatch.StartNew();
+		var signingOut = _service.StopForSignOutAsync(TimeSpan.FromSeconds(10));
+		await BridgeClientTests.WaitUntil(() => StopsSent == 1);
+		var cast = _service.Begin("a remote play (cast)");
+		var played = await _service.PlayAsync(cast, Alice, new BridgePlayRequest([y]));
+		await signingOut.WaitAsync(TimeSpan.FromSeconds(15));
+
+		Assert.False(played);
+		Assert.DoesNotContain("play", Backend.Commands.SkipWhile(x => x != "stop"));
+		// at the report (~0.6 s), not at the bound
+		Assert.InRange(watch.Elapsed.TotalSeconds, 0.5, 5);
+		Assert.Contains(_serviceLog.Messages, x => x.Contains("FluentFin is signing out", StringComparison.Ordinal));
+	}
+
+	[Fact]
 	public async Task SigningOut_IsBoundedInAll_WhenTheBackendNeverReports()
 	{
 		_service.Begin();

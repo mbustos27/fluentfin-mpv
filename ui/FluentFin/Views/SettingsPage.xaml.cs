@@ -16,7 +16,11 @@ public sealed partial class SettingsPage : Page
 		InitializeComponent();
 	}
 
-	private void RemoveUser(object sender, RoutedEventArgs e)
+	// fluentfin-mpv: where the next four settings live, so changing them here is no surprise elsewhere
+	public string ServerPreferencesCaption() =>
+		$"Saved to your account on {LoadMessages.ServerName()}, so other Jellyfin apps use them too. They choose each item's default audio and subtitles in every player.";
+
+	private async void RemoveUser(object sender, RoutedEventArgs e)
 	{
 		if (sender is not FrameworkElement button)
 		{
@@ -38,6 +42,7 @@ public sealed partial class SettingsPage : Page
 			return;
 		}
 
-		server.Users.Remove(user);
+		// fluentfin-mpv: with the home page saved for that login (never throws)
+		await ViewModel.RemoveSavedUser(server, user);
 	}
 }

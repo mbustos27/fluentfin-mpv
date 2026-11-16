@@ -7,6 +7,9 @@ namespace FluentFin.Core.ViewModels;
 
 public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : ObservableObject, INavigationAware
 {
+	/// <summary>fluentfin-mpv: this series could not be loaded: said on the page, with Retry (docs/research/ux-review.md §3.11).</summary>
+	public LoadState State { get; } = new("this series");
+
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 
 	public async Task OnNavigatedTo(object parameter)
@@ -26,11 +29,19 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 			return;
 		}
 
-		await UpdateSeries(id);
-		await UpdateNextUp(dto);
-		await UpdateSeasons(dto);
-		await UpdateSimilar(dto);
+		await State.RunAsync(async () =>
+		{
+			await UpdateSeries(id);
+			if (Dto?.Id != id)
+			{
+				return LoadMessages.CouldNotLoad("this series");
+			}
 
+			await UpdateNextUp(dto);
+			await UpdateSeasons(dto);
+			await UpdateSimilar(dto);
+			return LoadOutcome.Loaded;
+		});
 	}
 
 	[ObservableProperty]

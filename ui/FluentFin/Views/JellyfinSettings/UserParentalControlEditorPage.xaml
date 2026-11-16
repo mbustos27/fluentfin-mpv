@@ -74,9 +74,11 @@
                 <DataTemplate x:DataType="jm:AccessSchedule">
                     <ctk:SettingsCard Description="{x:Bind c:Converters.AccessScheduleToString((jm:AccessSchedule))}" Header="{x:Bind DayOfWeek}">
                         <Button
+                            AutomationProperties.Name="Delete schedule"
                             Command="{Binding ElementName=Page, Path=ViewModel.DeleteScheduleCommand}"
                             CommandParameter="{x:Bind}"
-                            Content="{ui:SymbolIcon Symbol=Delete}" />
+                            Content="{ui:SymbolIcon Symbol=Delete}"
+                            ToolTipService.ToolTip="Delete schedule" />
                     </ctk:SettingsCard>
                 </DataTemplate>
             </ctk:SettingsExpander.ItemTemplate>

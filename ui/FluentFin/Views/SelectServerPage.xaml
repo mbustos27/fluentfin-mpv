@@ -70,9 +70,16 @@
                 </ItemsView>
             </StackPanel>
 
+            <!--  fluentfin-mpv: a labelled address box with an example (docs/research/ux-review.md F2)  -->
             <StackPanel>
-                <TextBlock Text="Server" />
-                <TextBox x:Name="TxtUrl" KeyDown="InputFieldKeyDown" />
+                <TextBlock Text="Server address" />
+                <TextBox
+                    x:Name="TxtUrl"
+                    AutomationProperties.Name="Server address"
+                    InputScope="Url"
+                    IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                    KeyDown="InputFieldKeyDown"
+                    PlaceholderText="https://jellyfin.example.com:8920" />
             </StackPanel>
             <StackPanel
                 HorizontalAlignment="Center"
@@ -99,11 +106,38 @@
                     CommandParameter="{x:Bind TxtUrl.Text, Mode=OneWay}"
                     Style="{ThemeResource AccentButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xE725;" />
+                        <!--  fluentfin-mpv: progress while the address is checked  -->
+                        <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsConnecting, Mode=OneWay}">
+                            <ctk:Case IsDefault="true" Value="False">
+                                <FontIcon Glyph="&#xE725;" />
+                            </ctk:Case>
+                            <ctk:Case Value="True">
+                                <ProgressRing
+                                    Width="16"
+                                    Height="16"
+                                    IsIndeterminate="True" />
+                            </ctk:Case>
+                        </ctk:SwitchPresenter>
                         <TextBlock Text="Next" />
                     </StackPanel>
                 </Button>
             </StackPanel>
+
+            <!--  fluentfin-mpv: what is going on, and why the last attempt did not work (on the page, not in a dialog)  -->
+            <TextBlock
+                HorizontalAlignment="Center"
+                AutomationProperties.LiveSetting="Polite"
+                FontWeight="Normal"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{x:Bind ViewModel.StatusText, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
+            <InfoBar
+                x:Name="ErrorBar"
+                MaxWidth="500"
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                Severity="Warning" />
         </StackPanel>
     </Grid>
 </Page>

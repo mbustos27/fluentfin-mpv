@@ -18,8 +18,15 @@ public sealed class MpvQueueException(string message) : Exception(message);
 public static class MpvQueue
 {
 	/// <summary>Null = nothing to play (an item of another type, a series without episodes).</summary>
+	/// <param name="fromBeginning">"Play from beginning" on the item page: the first item starts at 0, not at its resume point.</param>
 	/// <exception cref="MpvQueueException">A request failed.</exception>
-	public static async Task<BridgePlayRequest?> BuildAsync(IJellyfinClient client, BaseItemDto item, PlaybackSelection? selection)
+	public static async Task<BridgePlayRequest?> BuildAsync(IJellyfinClient client, BaseItemDto item, PlaybackSelection? selection, bool fromBeginning = false)
+	{
+		var request = await BuildQueueAsync(client, item, selection);
+		return fromBeginning && request is not null ? request with { StartPositionTicks = 0 } : request;
+	}
+
+	private static async Task<BridgePlayRequest?> BuildQueueAsync(IJellyfinClient client, BaseItemDto item, PlaybackSelection? selection)
 	{
 		if (item.Id is not { } id)
 		{

@@ -3,7 +3,7 @@
 Recorded at the baseline commit (2026-11-14), after seven review/fix rounds on each side.
 The final pre-commit reviews found nothing of medium severity or above left open; everything
 below is low severity, an accepted cost of the contract, or not verified yet. Each entry
-says where it lives so it can be picked up later.
+says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
 ## Never verified
 - **A real Jellyfin server.** Every test used fake servers and fake tokens. First tried
@@ -19,6 +19,27 @@ says where it lives so it can be picked up later.
   `signout_*`), not by driving FluentFin itself: its data folder can't be redirected, so a
   fake login would land in the real FluentFin settings.
 - **The libmpv path.** Only external mpv (mpv-CI 0.41 via winget) is installed and tested.
+- **"Player controls: FluentFin"** (opt-in, default mpv; docs\research\player-controls.md). Built
+  and measured off-screen only (`tools\ui-harness\composition-spike`, `tools\ui-harness\fluentfin-controls`).
+  Not seen on the real desktop: the real mouse (hover, wheel event, clicks, hidden pointer), Tab order
+  and Narrator, menus over the video, light/high-contrast themes; a DPI change, independent flip and
+  HDR on an HDR display (Windows HDR is off on every display here). Its libmpv (`vendor\libmpv`) is
+  downloaded per checkout, not in git: without it FluentFin falls back to mpv's controls and says so.
+
+## Player controls: FluentFin's (`ui\FluentFin\Mpv\MpvCompositionVideo.cs` and around)
+- **One crash domain**: mpv runs inside FluentFin, so an mpv or GPU-driver crash ends the app (a
+  `quit` only ends the core; the next playback makes a new one on a new pipe and restarts the backend).
+  The mpv choice keeps mpv out of process.
+- **No trickplay, skip intro/credits or Up Next yet** with FluentFin's controls: the bridge carries no
+  segments or tiles (the shim still skips automatically what its own settings say).
+- **What the shim's command line gave mpv is not there in attached mode**: thumbfast/mouse scripts
+  (unused: mpv's OSC is off) and `tls_*` client certificates (a server that needs one will not stream).
+  `hwdec` follows the shim's setting as on the other path (its default is `no`).
+- **The display is read when a playback starts**: a window moved to a display with another HDR state
+  or refresh rate mid-playback keeps the first one's until the next playback.
+- **A pause or volume change can be undone for a moment by a state echo**: volume and mute are held
+  for 1.5 s after a change (the wheel's case, measured); pause is not, a stale `state` can flip the
+  button back until the next one.
 
 ## UI (`ui\FluentFin.Core\Mpv`, `ui\FluentFin`)
 - **Play on a season starts at the series' first unplayed episode**, not the season's
@@ -28,24 +49,51 @@ says where it lives so it can be picked up later.
   differs from the old path only for specials the server places within a season (they play
   there) and for missing episodes (left out). An episode the server's list does not have
   plays alone (the old path started at the first unplayed episode instead).
-- **A cast that arrives during the ≤ 2 s sign-out wait keeps playing past the sign-out**
-  (`MpvPlaybackService.StopForSignOutAsync`): its `stop` goes out only when the page is
-  removed, after the token is revoked, so that session's Stopped gets a 401 and the server
-  shows it until its idle timeout. Fix: stop again after the waits if the generation
-  changed, or refuse new plays while signing out.
 - **Sign-out with a slow or hung server**: after the 2 s bound the token is revoked while
   the backend's Stopped is still pending, so it fails with 401 (accepted cost, bounded).
-- **Sign-out feedback**: up to 2 s on the player page with the video frozen and no
-  indication; invoking Log out and Switch user back to back runs two sign-outs (the second
-  logout gets a 401, harmless).
-- **A track or quality change that cannot be applied shows nothing in the UI**: the backend
-  sends a non-fatal `error` (BRIDGE.md §5) but `VideoPlayerViewModel.Mpv.cs` only displays
-  non-fatal errors before playback has been seen.
+- **A cast during a sign-out** (fixed 2026-11-15, signout-ux: no `play` goes out while a
+  sign-out runs, and no page that exists when it ends ever plays; the sign-out's stop takes
+  whatever generation is newest under the service's gate). Left: the cast still opens a
+  player page that shows nothing until the sign-out navigates away (≤ ~2 s), and that page,
+  removed with the shell, sends a `stop` to the idle backend after the token is revoked
+  (nothing plays, so no server request).
+- **Sign-out feedback** (fixed 2026-11-15, signout-ux): a progress ring and "Stopping
+  playback…" / "Signing out…" in the title bar from the click until the logout request
+  returns; Log out and Switch user are disabled meanwhile, and one invoked anyway does
+  nothing. Never seen on screen yet (see the visual check below). A logout request that hangs
+  keeps both disabled until it returns (upstream's own command already did that for itself).
+- **A track or quality change that cannot be applied** (fixed 2026-11-15, signout-ux): a
+  non-fatal `error` once the item plays is shown above the video for 8 s as a dismissable
+  warning with the backend's own text (it names the item and says the change could not be
+  applied; the UI cannot say which change, since most come from mpv's OSC), and playback is
+  not touched. Showing it pushes the video area down while it is up (airspace: XAML cannot
+  draw over mpv's window). The same notice is all a failed `next` / auto-advance gets (its
+  item never opened, `state: error`): once it hides, the page stays on a stopped video
+  until the user leaves.
+- **Visual check still to do** (the user was using FluentFin, so neither was seen): sign out
+  while a video plays and look at the title bar (ring and text, then the login page), open
+  the account flyout again during the wait (both items greyed out); make a track or quality
+  change fail and look at the warning above the video (readable, closable, gone after 8 s,
+  the video resizes back).
 - **A kill that never takes but whose job close does end the backend**: the crash's own
   Stopped from FluentFin can come after the close has returned and be cut off (trade-off of
   not waiting twice for the same exit).
-- **Test gaps**: nothing automated drives the player page's `Unloaded` hook (250 ms
-  page-removed rule) or a real root-frame sign-out; four reviewer mutations survive
+- **Settings > Playback with the MPV player** (2026-11-15): languages and subtitle mode reach
+  it through the server (the per-item default tracks the backend falls back to), but four
+  settings do not: *Show Skip intro and Skip credits*, *Change the volume with the mouse
+  wheel* and *Volume step* are kept on this PC and used by the built-in players only (the
+  bridge has no field for them: v1), and *Play the next episode automatically* is the
+  server's per-user setting, which the backend does not read (it uses its own `auto_play`,
+  on). The cards say so. Needs a bridge field or command, or the backend reading the user's
+  configuration at `connect`.
+- **The mpv loading screen ends when the backend takes `play`**: from then on mpv's window
+  covers the page while the item opens (PlaybackInfo, stream start), black until the first
+  frame. Keeping the window hidden but sized until `playing` would need an `MpvVideoHost`
+  change and a harness check.
+- **Test gaps**: nothing automated drives a real root-frame sign-out, and the player page's
+  `Unloaded` hook is covered only through its rule (`FluentFin\Mpv\PlayerPageRemoval.cs`,
+  tests in `VideoPlayerViewModelMpvTests.PageRemoval.cs`; signout-ux), not through WinUI
+  raising `Unloaded` on a real page; four reviewer mutations survive
   (the sign-out wait's 2 s bound, the redundant `_mpvLeaving` early return, the
   `ExitHandled` term in `Owed`, the re-check after subscribing in `WaitForStopReportsAsync`).
 
