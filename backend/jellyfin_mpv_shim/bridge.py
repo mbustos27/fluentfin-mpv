@@ -877,9 +877,9 @@ class Bridge:
         self.tracker = bridge_state.Tracker()
         #: fluentfin-mpv: who draws the player controls (``set_controls``).
         self.controls = bridge_controls.UiControls()
-        #: fluentfin-mpv: ``(mpv handle, text)`` last written to
-        #: ``user-data/fluentfin/skip`` for the bar's Skip button and prompt
-        #: (`_push_offer`).
+        #: fluentfin-mpv: ``(mpv handle, skip text, next flag)`` last
+        #: written to ``user-data/fluentfin/skip`` and ``/next`` for the
+        #: bar's Skip and Next buttons (`_push_offer`).
         self._offer_pushed = None
 
         #: Fixed by the first connect for the life of the process.
@@ -2755,23 +2755,26 @@ class Bridge:
         FluentFin draws the controls -- ``set_controls`` ``"ui"``: the UI
         offers it from the ``segments`` event), and ``"1"`` in
         ``user-data/fluentfin/next`` while the queue has a next item (its
-        Next button). Written when they change, and again for a new mpv.
-        Never raises: a lost mpv is the shim's to notice."""
+        Next button). Written when they change, and again for a new mpv;
+        not once the monitor is stopping (a shutdown is ending mpv). Never
+        raises: it runs on the monitor thread, which every later event
+        comes from, and a lost mpv is the shim's to notice."""
         pm = self.runtime.pm
-        if pm is None or not pm._mpv_alive:
-            return
-        offer = self.tracker.offer()
-        text = ""
-        if offer is not None and not self.controls.ui:
-            text = self.runtime.segment_label(offer["type"])
-        following = self.tracker.following()
-        has_next = "1" if following and following.get("nextItemId") else ""
-        player = pm._player
-        pushed = self._offer_pushed
-        if (pushed is not None and pushed[0] is player
-                and pushed[1:] == (text, has_next)):
+        if pm is None or not pm._mpv_alive or self._monitor_stop.is_set():
             return
         try:
+            offer = self.tracker.offer()
+            text = ""
+            if offer is not None and not self.controls.ui:
+                text = self.runtime.segment_label(offer["type"])
+            following = self.tracker.following()
+            has_next = ("1" if following and following.get("nextItemId")
+                        else "")
+            player = pm._player
+            pushed = self._offer_pushed
+            if (pushed is not None and pushed[0] is player
+                    and pushed[1:] == (text, has_next)):
+                return
             player.command("set", "user-data/fluentfin/skip", text)
             player.command("set", "user-data/fluentfin/next", has_next)
             self._offer_pushed = (player, text, has_next)

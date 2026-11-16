@@ -66,14 +66,30 @@ class WhichOscTest(unittest.TestCase):
         return [c[1] for c in mpv.commands if c[0] == "load-script"]
 
     def test_the_bridge_loads_the_fork_whatever_the_version(self):
+        """The fork's bar: fluentfin.lua (the key map, which goes with
+        either bar), then the fork; never mpv's own OSC."""
         with Active():
             for version in (self.DEV, "mpv 0.41.0", "mpv 0.42.0",
                             "mpv 0.40.0"):
                 with self.subTest(version=version):
                     scripts = self.loaded(version)
-                    self.assertEqual(len(scripts), 1, scripts)
-                    self.assertEqual(os.path.basename(scripts[0]),
-                                     fluentfin_osc.OSC_SCRIPT)
+                    self.assertEqual([os.path.basename(s) for s in scripts],
+                                     ["fluentfin.lua",
+                                      fluentfin_osc.OSC_SCRIPT])
+
+    def test_the_uosc_bar_takes_the_forks_place(self):
+        from jellyfin_mpv_shim import fluentfin_bar
+
+        was = fluentfin_osc.active(), fluentfin_osc.bar()
+        fluentfin_osc.configure(True, bar=fluentfin_bar.UOSC)
+        try:
+            for version in (self.DEV, "mpv 0.42.0"):
+                with self.subTest(version=version):
+                    self.assertEqual(self.loaded(version),
+                                     [fluentfin_bar.uosc_dir(),
+                                      fluentfin_bar.lua_script()])
+        finally:
+            fluentfin_osc.configure(was[0], bar=was[1] or fluentfin_bar.FORK)
 
     def test_outside_the_bridge_nothing_changes(self):
         fluentfin_osc.configure(False)

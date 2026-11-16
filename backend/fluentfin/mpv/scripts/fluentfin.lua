@@ -1,6 +1,6 @@
 --[[ FluentFin MPV: FluentFin's key map in mpv's window, and the glue to uosc.
 
-Bridge mode only (backend/docs/bridge.md section 4a): the shim loads it with
+Bridge mode only (docs/bridge.md section 4a): the shim loads it with
 whichever bar it loads (jellyfin_mpv_shim/fluentfin_bar.py). Every binding is
 mp.add_key_binding's, never forced: a binding of the user's input.conf for the
 same key wins.

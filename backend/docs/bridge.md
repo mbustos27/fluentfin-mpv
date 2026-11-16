@@ -325,7 +325,7 @@ Measured on mpv 0.41/Windows: with `--wid`, writing `fullscreen`,
 fullscreen and geometry handling, and `set_fullscreen` toggles mpv.
 
 **Attached** (`{"mode": "attached", "ipc": "<pipe>"}`, FluentFin MPV's
-player controls, docs/research/player-controls.md in the repository root):
+player controls, docs\research\player-controls.md in the repository root):
 mpv runs inside FluentFin (libmpv, composition mode, no window) and answers
 JSON IPC on that pipe. `ShimRuntime.attached_overrides` makes the run the
 shim's external backend with `mpv_ext_start=False` on that pipe (and

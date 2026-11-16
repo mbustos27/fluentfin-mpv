@@ -49,4 +49,4 @@ Each is marked `FluentFin MPV` in the file.
 ## Not uosc's
 
 `mpv/scripts/fluentfin.lua` is FluentFin MPV's own (not part of the vendored copy): the key
-map, the Skip prompt and the glue between the shim and uosc (`backend/docs/bridge.md` §4a).
+map, the Skip prompt and the glue between the shim and uosc (`docs/bridge.md` §4a).

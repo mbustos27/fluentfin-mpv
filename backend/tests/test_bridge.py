@@ -1454,6 +1454,31 @@ class SegmentsTest(BridgeCase):
             self.tick()
         self.assertEqual(flags(), ["1", ""])
 
+    def test_the_monitor_outlives_a_label_that_will_not_come(self):
+        """`_push_offer` runs on the monitor thread, which every later
+        event comes from: nothing in it may end that thread."""
+        pm, video = self.playing(15.0)
+        self.tick()
+        with mock.patch.object(self.runtime, "segment_label",
+                               side_effect=ImportError("no media")):
+            self.bridge._offer_pushed = None
+            self.bridge._push_offer()           # never raises
+        self.start_threads()
+        with mock.patch.object(self.runtime, "segment_label",
+                               side_effect=ImportError("no media")):
+            self.bridge._offer_pushed = None
+            for _ in range(3):
+                self.bridge.poke()
+                time.sleep(0.2)
+            self.assertTrue(self.thread("bridge-monitor").is_alive())
+
+    def test_nothing_is_written_once_the_monitor_stops(self):
+        pm, video = self.playing(15.0)
+        self.bridge.tracker.update(self.bridge._observe())
+        self.bridge._monitor_stop.set()
+        self.bridge._push_offer()
+        self.assertEqual(self.skip_texts(pm), [])
+
     def test_a_failing_write_is_tried_again(self):
         pm, video = self.playing(15.0)
         self.tick()

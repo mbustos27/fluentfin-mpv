@@ -78,7 +78,8 @@ class ChooseTest(unittest.TestCase):
             self.assertEqual(fluentfin_bar.choose("mpvtk", "embedded",
                                                   base=empty), FORK)
             os.makedirs(os.path.join(empty, "scripts", "uosc"))
-            pathlib.Path(empty, "scripts", "uosc", "main.lua").write_text("")
+            pathlib.Path(empty, "scripts", "uosc", "main.lua").write_text(
+                "", encoding="utf-8")
             self.assertEqual(fluentfin_bar.missing(empty), [
                 os.path.join("fonts", "uosc_icons.otf"),
                 os.path.join("fonts", "uosc_textures.ttf")])
@@ -178,7 +179,8 @@ class ScriptOptsTest(unittest.TestCase):
     def test_a_uosc_conf_of_the_users_wins(self):
         with tempfile.TemporaryDirectory() as conf:
             os.makedirs(os.path.join(conf, "script-opts"))
-            pathlib.Path(conf, "script-opts", "uosc.conf").write_text("")
+            pathlib.Path(conf, "script-opts", "uosc.conf").write_text(
+                "", encoding="utf-8")
             self.assertEqual(self.prefixes(self.opts(conf, UOSC)),
                              ["fluentfin", "osc"])
 
