@@ -42,7 +42,7 @@ param(
     [string]$LibmpvDir,  # the libmpv folder (libmpv-2.dll, its DLLs, BUILD-MANIFEST.txt); default: FluentFin.csproj's
     [string]$LibmpvSources,  # its sources (msys2\*.src.tar.zst, mpv\mpv-<commit>.tar.gz); default: 'sources' beside it
     [int]$MaxZipMB = 300,  # the zip may not be bigger
-    [string[]]$LibmpvExclude = @('libdvdcss-2.dll')  # left out of libmpv\ and of the sources; nothing may import them
+    [string[]]$LibmpvExclude = @('libdvdcss-2.dll')  # left out of libmpv\ and of the sources; only a stub of one may ship
 )
 
 $ErrorActionPreference = 'Stop'
@@ -98,18 +98,8 @@ $LibmpvSources = [IO.Path]::GetFullPath($LibmpvSources).TrimEnd('\')
 if (-not (Test-Path $LibmpvSources)) { throw "no libmpv sources at $LibmpvSources (-LibmpvSources)" }
 Write-Host "libmpv: $LibmpvDir
   sources: $LibmpvSources"
-# what the release leaves out of libmpv (-LibmpvExclude: libdvdcss, DVD decryption, by default): a copy of the folder
-# without those DLLs and their manifest lines, which everything after uses (the check below fails if a DLL imports one)
-$libmpvOrigin = $LibmpvDir
-if ($LibmpvExclude) {
-    $LibmpvDir = Join-Path $work 'libmpv-folder'
-    if (Test-Path $LibmpvDir) { Remove-Item -Recurse -Force $LibmpvDir }
-    New-Item -ItemType Directory -Force $LibmpvDir | Out-Null
-    Get-ChildItem $libmpvOrigin -File | Where-Object { $_.Name -notin $LibmpvExclude -and $_.Name -ne 'BUILD-MANIFEST.txt' } | Copy-Item -Destination $LibmpvDir
-    $manifestLines = Get-Content (Join-Path $libmpvOrigin 'BUILD-MANIFEST.txt') | Where-Object { ($_ -split '\s+')[0] -notin $LibmpvExclude }
-    [IO.File]::WriteAllLines((Join-Path $LibmpvDir 'BUILD-MANIFEST.txt'), [string[]]$manifestLines, [Text.UTF8Encoding]::new($false))
-    Write-Host "  left out: $($LibmpvExclude -join ', ')"
-}
+# what the release leaves out of libmpv (-LibmpvExclude: libdvdcss, DVD decryption, by default) is left out of a copy of
+# the folder, which everything after uses: the 'libmpv folder' step below (libmpv_check.py --prepare)
 
 $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
 $dotnet = (Get-Command dotnet.exe -ErrorAction SilentlyContinue).Source
@@ -165,12 +155,20 @@ Invoke-Checked 'pip install' {
 }
 Invoke-Checked 'pip check' { & $venvPython -I -m pip check --disable-pip-version-check }
 
-# the libmpv folder: each DLL the one its BUILD-MANIFEST.txt lists, and what they import there or Windows' (or a driver's)
+# the libmpv folder: each DLL the one its BUILD-MANIFEST.txt lists, and what they import there or Windows' (or a driver's),
+# every function imported from the folder exported there. -LibmpvExclude: a copy without those libraries (dist\.work\
+# libmpv-folder), keeping a stub of one (BUILD-MANIFEST.txt's owner says "stub": libdvdcss-2.dll, which the DVD libraries
+# import); the check fails on the real one, or on a stub that lacks a function the folder imports from it
 Step 'libmpv folder'
+$excludeArgs = @()
+foreach ($x in $LibmpvExclude) { $excludeArgs += @('--excluded', $x) }
+if ($LibmpvExclude) {
+    $libmpvOrigin = $LibmpvDir
+    $LibmpvDir = Join-Path $work 'libmpv-folder'
+    Invoke-Checked 'libmpv folder copy' { & $venvPython -I (Join-Path $PSScriptRoot 'libmpv_check.py') --prepare $libmpvOrigin --dir $LibmpvDir @excludeArgs }
+}
 $libmpvCheck = Join-Path $work 'libmpv-check.json'
-$checkArgs = @('-I', (Join-Path $PSScriptRoot 'libmpv_check.py'), '--dir', $LibmpvDir, '--out', $libmpvCheck)
-foreach ($x in $LibmpvExclude) { $checkArgs += @('--excluded', $x) }
-Invoke-Checked 'libmpv folder' { & $venvPython @checkArgs }
+Invoke-Checked 'libmpv folder' { & $venvPython -I (Join-Path $PSScriptRoot 'libmpv_check.py') --dir $LibmpvDir --out $libmpvCheck @excludeArgs }
 $libmpvInfo = Get-Content $libmpvCheck -Raw | ConvertFrom-Json
 
 # --- 2b. the tests: a failure stops the release ---------------------------------------------------------------------
@@ -229,6 +227,9 @@ else {
     $ran = Select-String -Path $testLog -Pattern '^Ran \d+ tests' | Select-Object -Last 1
     Write-Host "  backend bridge tests: $(if ($ran) { $ran.Line } else { 'no result' }) (log $testLog)"
     if ($code -ne 0 -or -not (Select-String -Path $testLog -Pattern '^OK' -Quiet)) { throw "the backend bridge tests failed (see $testLog)" }
+    # the release tools' own tests (tools\release\tests: the libmpv folder check and its stub rule, sources, notices)
+    $toolTests = Join-Path $PSScriptRoot 'tests'
+    Invoke-Checked 'release tools tests' { & $venvPython -B -I -m unittest discover -s $toolTests -t $toolTests }
 }
 
 # --- 3. the backend, frozen -----------------------------------------------------------------------------------------
@@ -315,7 +316,7 @@ $sources = Join-Path $dist 'sources'
 $libmpvStatus = Join-Path $work 'libmpv-status.json'
 Invoke-Checked 'sources' { & $venvPython -I (Join-Path $PSScriptRoot 'sources.py') --manifest (Join-Path $PSScriptRoot 'sources.json') `
         --out $sources --cache (Join-Path $work 'sources-cache') --repo $repo --version $Version --status-out $libmpvStatus `
-        --libmpv-dir $LibmpvDir --libmpv-sources $LibmpvSources }
+        --libmpv-dir $LibmpvDir --libmpv-sources $LibmpvSources @excludeArgs }
 
 # --- 6. the folder, the notices, the zip ----------------------------------------------------------------------------
 Step "package folder $package"
@@ -358,6 +359,9 @@ foreach ($must in @('VCRUNTIME140.dll', 'VCRUNTIME140_1.dll', 'vcruntime140_cor3
     if (-not $noticeText.Contains($must)) { $noticeGaps += $must }
 }
 if ($noticeText -match '(?m)^Microsoft\.WindowsAppSDK[^\r\n]*\r?\n(?:  [^\r\n]*\r?\n)*?  \[build only\]') { $noticeGaps += 'a Windows App SDK package marked build only' }
+# a stub says what it is; the libdvdcss stub, that encrypted DVDs aren't supported
+if (@($libmpvInfo.stubs).Count -and -not $noticeText.Contains('A stub, not the library of that name')) { $noticeGaps += 'what the stub DLLs are' }
+if (@($libmpvInfo.stubs | Where-Object { $_.name -like 'libdvdcss*' }).Count -and -not $noticeText.Contains("Encrypted DVDs aren't supported")) { $noticeGaps += "Encrypted DVDs aren't supported" }
 if ($noticeGaps) { throw "THIRD-PARTY-NOTICES.txt lacks: $($noticeGaps -join '; ')" }
 
 foreach ($needed in 'FluentFin.exe', 'libmpv\libmpv-2.dll', 'libmpv\BUILD-MANIFEST.txt', 'backend\fluentfin-mpv-backend.exe', 'LICENSE', 'README.txt', 'THIRD-PARTY-NOTICES.txt') {

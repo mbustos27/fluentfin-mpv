@@ -26,8 +26,10 @@ is jellyfin-mpv-shim's version and does not change with ours.
 - The libmpv folder from `tools\release\libmpv` (`vendor\libmpv\VENDORED.md`): libmpv-2.dll, its DLLs and BUILD-MANIFEST.txt,
   with its sources beside it (`sources\msys2`, `sources\mpv`). In this checkout's `vendor\libmpv\<build>` (the one
   FluentFin.csproj names), or pass `-LibmpvDir` (and `-LibmpvSources` if they are elsewhere). `-LibmpvExclude` (by
-  default `libdvdcss-2.dll`, DVD decryption) leaves DLLs and their sources out; the build stops if a shipped DLL
-  imports one.
+  default `libdvdcss-2.dll`, DVD decryption) leaves those libraries and their sources out. Only a stub of one may ship
+  in its place: a DLL of that name whose BUILD-MANIFEST.txt owner says "stub" (no MSYS2 package), with its source and
+  licence on its line in the folder's SOURCES.txt; it must export every function the folder imports from it. The build
+  stops on the real library, on a stub that lacks a function, or on a DLL importing one that is not there at all.
 - The build PC: Windows x64, the .NET 10 SDK, mpv on PATH (for the backend tests the build runs), git, and network
   access to python.org, PyPI, nuget.org, GitHub and code.videolan.org. Nothing else:
   the build brings its own Python.

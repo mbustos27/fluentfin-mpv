@@ -78,6 +78,23 @@ $pkg = @(Get-ChildItem $pkgRoot -Directory)[0].FullName
 $exe = Join-Path $pkg 'FluentFin.exe'
 Check 'unzipped: one folder with FluentFin.exe, the bundled backend and libmpv' ((Test-Path $exe) -and (Test-Path (Join-Path $pkg 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $pkg 'libmpv\libmpv-2.dll'))) $pkg
 Check 'the release has no VLC or Flyleaf libraries (libvlc\, FFMpeg\)' (-not (Test-Path (Join-Path $pkg 'libvlc')) -and -not (Test-Path (Join-Path $pkg 'FFMpeg'))) $pkg
+# libmpv\ as its BUILD-MANIFEST.txt lists it, and no libdvdcss (DVD decryption): at most the stub of it, which the manifest
+# marks (its owner says "stub" and is no MSYS2 package; tools\release\libmpv_check.py is_stub)
+$libmpvPkg = Join-Path $pkg 'libmpv'
+$manifestRows = @{}
+foreach ($line in @(Get-Content (Join-Path $libmpvPkg 'BUILD-MANIFEST.txt') -ErrorAction SilentlyContinue)) {
+    if ($line -match '^(\S+\.dll)\s+(\d+)\s+([0-9a-fA-F]{64})\s+(.+?)\s*$') {
+        $manifestRows[$Matches[1].ToLowerInvariant()] = @{ sha = $Matches[3].ToLowerInvariant(); owner = $Matches[4] }
+    }
+}
+$dllsHere = @(Get-ChildItem $libmpvPkg -Filter '*.dll' -File -ErrorAction SilentlyContinue)
+$notListed = @($dllsHere | Where-Object { -not $manifestRows.ContainsKey($_.Name.ToLowerInvariant()) -or
+        (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant() -ne $manifestRows[$_.Name.ToLowerInvariant()].sha })
+Check 'libmpv\: every DLL is the one its BUILD-MANIFEST.txt lists' ($dllsHere.Count -gt 0 -and $notListed.Count -eq 0 -and $manifestRows.Count -eq $dllsHere.Count) `
+    ("{0} DLLs, {1} listed{2}" -f $dllsHere.Count, $manifestRows.Count, $(if ($notListed) { "; not as listed: $($notListed.Name -join ', ')" }))
+$css = $manifestRows['libdvdcss-2.dll']
+Check 'libmpv\: no libdvdcss (DVD decryption), at most its stub' ((-not $css) -or ($css.owner -match '\bstub\b' -and $css.owner -notmatch '^\s*mingw-w64-')) `
+    $(if ($css) { "libdvdcss-2.dll: $($css.owner)" } else { 'no libdvdcss-2.dll' })
 function Get-Listing { Get-ChildItem $pkg -Recurse -File -Force | ForEach-Object { "{0}|{1}|{2}" -f $_.FullName.Substring($pkg.Length), $_.Length, $_.LastWriteTimeUtc.Ticks } }
 $before = @(Get-Listing)
 

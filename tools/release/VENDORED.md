@@ -50,13 +50,19 @@ Our own build: `tools\release\libmpv` (the recipe, in this repository) builds li
 UCRT64 and collects every non-Windows DLL it loads, with a BUILD-MANIFEST.txt (each DLL, its size, sha256 and the MSYS2
 package it comes from, or "built here"); `vendor\libmpv\VENDORED.md` has the build and where its sources are. The
 release takes that folder (`build-release.ps1 -LibmpvDir`, by default the one FluentFin.csproj names):
-`libmpv_check.py` checks every DLL against the manifest and that each import is in the folder, Windows' own, or a
-graphics driver's (named in README.txt); the publish copies the folder into `libmpv\`, where Libmpv.cs loads it from and
+`libmpv_check.py` checks every DLL against the manifest and that each import is in the folder (every function imported
+from the folder exported there), Windows' own, or a graphics driver's (named in README.txt); the publish copies the folder into `libmpv\`, where Libmpv.cs loads it from and
 from nowhere else. Its sources (`-LibmpvSources`, by default `sources` beside the folder: `msys2\*.src.tar.zst` with
 their `.sig`, `mpv\mpv-<commit>.tar.gz`) go into `dist\sources\libmpv`; `sources.py` fails the build when a DLL's
 source is not there, and `notices.py` takes each DLL's licence from the folder's SOURCES.txt (or its source package's
 PKGBUILD) and the licence files from its `licenses\<package>\` (or the source archive). `-LibmpvExclude` (default
-`libdvdcss-2.dll`) leaves DLLs and their source packages out, and stops the build if a shipped DLL imports one.
+`libdvdcss-2.dll`) leaves those libraries, their source packages and licence folders out (`libmpv_check.py --prepare`,
+`sources.py --excluded`). A stub of one stays: the DLL of that name whose BUILD-MANIFEST.txt owner has the word "stub"
+and is no MSYS2 package (`is_stub`); its source and licence come from its line in the folder's SOURCES.txt (a file of
+the sources, or of this repository), and it must export every function the folder imports from it. libdvdread-8.dll
+imports seven from libdvdcss-2.dll, so the release ships the stub; THIRD-PARTY-NOTICES.txt then says that encrypted
+DVDs aren't supported. The build stops on the real library, a stub lacking a function, or an import of one not there.
+`tests\` has the tests of these rules (fixture DLLs from `tests\pe_fixture.py`); the build runs them.
 `bundle_sources.py` packs `dist\sources` into one archive under GitHub's 2 GiB file limit, or numbered parts.
 
 ## The mpv bar (uosc, inside `backend\_internal\fluentfin`)

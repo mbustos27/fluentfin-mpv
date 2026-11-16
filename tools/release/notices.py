@@ -175,7 +175,8 @@ def archive_licences(path, cache_dir):
         digest = hashlib.sha256(fh.read()).hexdigest()
     cache = os.path.join(cache_dir, digest + ".json") if cache_dir else None
     if cache and os.path.isfile(cache):
-        return [tuple(x) for x in json.load(open(cache, encoding="utf-8"))]
+        with open(cache, encoding="utf-8") as fh:
+            return [tuple(x) for x in json.load(fh)]
     found = []
 
     def decode(data):
@@ -208,7 +209,8 @@ def archive_licences(path, cache_dir):
                 take(member.name, member.size, lambda m=member: tar.extractfile(m).read(), "", True)
     if cache:
         os.makedirs(cache_dir, exist_ok=True)
-        json.dump(found, open(cache, "w", encoding="utf-8"))
+        with open(cache, "w", encoding="utf-8") as fh:
+            json.dump(found, fh)
     return found
 
 
@@ -236,17 +238,30 @@ def libmpv_section(status, cache_dir):
     lines = ["5. libmpv (the libmpv folder): libmpv-2.dll and every DLL it loads", THIN,
              "Each DLL, the MSYS2 package it comes from and the licence that package declares; their sources are in the",
              "release's sources (libmpv/, SOURCES.txt) and their licence texts in section 6.", ""]
+    stubs = [dll for dll in status["dlls"] if dll.get("stub")]
+    if any(dll["name"].lower().startswith("libdvdcss") for dll in stubs):
+        lines += ["Encrypted DVDs aren't supported (nothing a Jellyfin client plays from a server needs it): the release has",
+                  "no libdvdcss, the library that decrypts them. The libmpv folder's libdvdcss-2.dll is FluentFin MPV's",
+                  "stub, so that the DVD libraries libmpv uses load: it has libdvdcss's functions and every call fails.", ""]
     declared = status.get("declared") or {}
     licensesDir = status.get("licensesDir")
     texts, done = [], set()
     for dll in status["dlls"]:
         found = {declared.get(rel, "") for rel in dll["sources"]} - {""}
+        if not found and dll.get("licence"):
+            found = {dll["licence"]}
         if not found:
             found = {pkgbuild_licence(os.path.join(status["sourcesDir"], rel)) for rel in dll["sources"]
                      if rel.endswith(".src.tar.zst")} - {""}
         lines.append(f"{dll['name']} ({dll['owner']})")
-        lines.append(f"  Licence: {'; '.join(sorted(found)) or 'see the licence texts of its package below'}")
-        lines.append("  Source:  " + ", ".join(f"libmpv/{rel}" for rel in dll["sources"]))
+        if dll.get("stub"):
+            lines.append("  A stub, not the library of that name: it has that library's functions and every call fails.")
+        licence = '; '.join(sorted(found)) or 'see the licence texts of its package below'
+        if dll.get("stub") and "GPL-3.0" in licence:
+            licence += " (its text: LICENSE in this folder)"
+        lines.append(f"  Licence: {licence}")
+        lines.append("  Source:  " + ", ".join([f"libmpv/{rel}" for rel in dll["sources"]]
+                                              + [f"{path} in FluentFin MPV's source" for path in dll.get("repoSources", [])]))
         lines.append("")
         package = dll.get("package", "")
         if package in done:
@@ -260,8 +275,13 @@ def libmpv_section(status, cache_dir):
                     rel = os.path.relpath(os.path.join(root, f), folder).replace(os.sep, "/")
                     texts.append((f"{package} {dll.get('version', '')}: {rel}", read_text(os.path.join(root, f))))
         else:
+            import tarfile
+
             for rel in dll["sources"]:
-                for where, text in archive_licences(os.path.join(status["sourcesDir"], rel), cache_dir):
+                path = os.path.join(status["sourcesDir"], rel)
+                if not tarfile.is_tarfile(path):
+                    continue  # a single file (a stub's source): no licence files inside
+                for where, text in archive_licences(path, cache_dir):
                     texts.append((f"{package or dll['name']} (from libmpv/{rel}): {where}", text))
     return lines, texts
 

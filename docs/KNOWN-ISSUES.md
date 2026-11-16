@@ -256,6 +256,14 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   choice plays with MPV and stays saved. Their managed assemblies (LibVLCSharp, FlyleafLib) still ship: the XAML
   references them. A dev build has both libraries and offers all four.
 - **The backend is English only**: the shim's `.mo` catalogs are built by `gen_pkg.sh`, not in git, not shipped.
+- **Encrypted DVDs aren't supported** (irrelevant for a Jellyfin client: nothing it plays from a server needs it). The
+  release has no libdvdcss (DVD decryption): libmpv-2.dll imports libdvdread-8.dll (and libdvdnav-4.dll), and
+  libdvdread-8.dll imports seven functions of `libdvdcss-2.dll`, so the `libmpv\` folder ships our stub of that name
+  instead, GPL-3.0, its source in the release's sources. It has libdvdcss's functions and every call fails.
+  `build-release.ps1 -LibmpvExclude` (default `libdvdcss-2.dll`) leaves the real one and its source package out and
+  keeps only a DLL that BUILD-MANIFEST.txt marks a stub (its owner says "stub" and is no MSYS2 package);
+  `libmpv_check.py` fails the build on the real one, or on a stub missing a function the folder imports from it, and
+  `verify-package.ps1` checks the unzipped folder again.
 - **libmpv's sources**: every DLL of the `libmpv\` folder has its source in the release's sources (`dist\sources\libmpv`:
   the MSYS2 source packages with their signatures, mpv's tarball; `tools\release\sources.py` fails the build when a
   DLL's source is missing). The MSYS2 packages' signatures are copied, not checked by the build.

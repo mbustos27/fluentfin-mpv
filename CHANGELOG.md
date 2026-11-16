@@ -56,6 +56,9 @@ server sees one session, FluentFin's, and only the backend reports playback.
   not in the release (their libraries are left out); a saved choice of either plays with MPV.
 - With the mpv player: no SyncPlay, and remote "play next" / "play last" are not supported.
 - The backend's own messages are in English.
+- **Encrypted DVDs aren't supported** (nothing played from a Jellyfin server needs it): the release has no libdvdcss.
+  The `libmpv\libdvdcss-2.dll` it ships is FluentFin MPV's stub, which lets libmpv's DVD libraries load and fails every
+  call.
 - **With FluentFin's controls, no trickplay previews or Up Next card yet** (Skip and Next are there); mpv's controls
   have both.
 - More, with where each lives: `docs/KNOWN-ISSUES.md`.

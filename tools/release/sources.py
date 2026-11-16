@@ -11,7 +11,10 @@
   ``msys2/<package>-<version>.src.tar.zst`` with their ``.sig`` and mpv's ``mpv/mpv-<commit>.tar.gz``) are copied into
   dist/sources/libmpv; every DLL must have its source there (an MSYS2 package of the same version, or for what was built
   here mpv's tarball and the packages the manifest names). A SOURCES.txt that comes with them is copied, and every file
-  it names with a sha256 is checked.
+  it names with a sha256 is checked. A stub (BUILD-MANIFEST.txt's owner says "stub": a stand-in for a library the
+  release leaves out, libdvdcss) takes its source and licence from its line in that SOURCES.txt (a file of the sources,
+  or of FluentFin MPV's repository). Nothing of a library left out (--excluded: its MSYS2 source package, signature,
+  licence folder) may be copied.
 - Every item of sources.json (uosc, LibVLCSharp, Flyleaf, the GPL/MPL Python sdists): downloaded from its official host
   only (GitHub, code.videolan.org, PyPI), checked against the sha256 its host publishes where there is one (PyPI).
 
@@ -33,6 +36,57 @@ ALLOWED_HOSTS = {"github.com", "codeload.github.com", "code.videolan.org", "file
 MANIFEST_LINE = re.compile(r"^(\S+)\s+(\d+)\s+([0-9a-fA-F]{64})\s+(.+?)\s*$")
 OWNER = re.compile(r"^(mingw-w64-(?:ucrt-x86_64|x86_64|clang-x86_64)-(\S+))\s+(\S+)$")
 SOURCE_PACKAGE = re.compile(r"\bmingw-w64-[A-Za-z0-9._+-]+?-\d[A-Za-z0-9._~+:-]*-\d+\b")
+# the same rule as libmpv_check.is_stub (this script runs isolated, without its folder on sys.path); the release tools'
+# tests hold them together
+STUB = re.compile(r"\bstub\b", re.IGNORECASE)
+MSYS2_OWNER = re.compile(r"^\s*mingw-w64-", re.IGNORECASE)
+
+
+def is_stub(owner):
+    """A DLL the libmpv build made as a stand-in for a library the release leaves out: BUILD-MANIFEST.txt's owner
+    says "stub", and it is no MSYS2 package."""
+    return bool(STUB.search(owner)) and not MSYS2_OWNER.match(owner)
+
+
+def find_sources_txt(sources_dir, libmpv_dir):
+    """libmpv's own SOURCES.txt: in its sources folder, its DLL folder or the folder above the sources; or None."""
+    for candidate in (os.path.join(sources_dir, "SOURCES.txt"), os.path.join(libmpv_dir, "SOURCES.txt"),
+                      os.path.join(os.path.dirname(sources_dir), "SOURCES.txt")):
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def sources_rows(text):
+    """The table of libmpv's SOURCES.txt (component | version | licence | DLLs | file | SHA-256), as dicts."""
+    rows = []
+    for line in text.splitlines():
+        cols = [c.strip() for c in line.split("|")]
+        if len(cols) < 5 or line.lstrip().startswith("#"):
+            continue
+        rows.append({"component": cols[0], "version": cols[1], "licence": cols[2].replace("spdx:", ""),
+                     "dlls": {d.strip().lower() for d in cols[3].split(",") if d.strip()},
+                     "file": cols[4].replace("\\", "/").strip("/")})
+    return rows
+
+
+LICENCE_DIRS = ("licenses", "licences")
+
+
+def left_out_names(left_out):
+    """What was left out, for a reader: a file by its name, a licence folder's files as licenses/<package>/."""
+    names = set()
+    for rel in left_out:
+        parts = rel.split("/")
+        names.add(f"{parts[0]}/{parts[1]}/" if parts[0] in LICENCE_DIRS and len(parts) > 2 else parts[-1])
+    return names
+
+
+def excluded_pattern(dll):
+    """What names the MSYS2 package of a DLL the release leaves out (libdvdcss-2.dll: mingw-w64-libdvdcss-<version>
+    and mingw-w64-ucrt-x86_64-libdvdcss)."""
+    stem = re.sub(r"(-\d+)?\.dll$", "", dll.lower())
+    return re.compile(rf"^mingw-w64-(?:(?:ucrt|clang)-x86_64-|x86_64-)?{re.escape(stem)}(?:-\d|$)")
 
 
 def sha256(path):
@@ -63,8 +117,9 @@ def read_manifest(libmpv_dir):
     if not os.path.isfile(path):
         return None, [], [], [f"{libmpv_dir} has no BUILD-MANIFEST.txt"]
     entries, header, problems = [], [], []
-    for line in open(path, encoding="utf-8-sig"):
-        line = line.rstrip("\r\n")
+    with open(path, encoding="utf-8-sig") as fh:
+        text = fh.read()
+    for line in text.splitlines():
         if not line.strip():
             continue
         if line.startswith("#"):
@@ -90,9 +145,11 @@ def read_manifest(libmpv_dir):
     return path, header, entries, problems
 
 
-def libmpv_sources(libmpv_dir, sources_dir, out, lines):
+def libmpv_sources(libmpv_dir, sources_dir, out, lines, repo_files=frozenset(), excluded=()):
     """Copies and checks libmpv's sources: only what the folder's DLLs need (their source packages with signatures, the
-    licence folders of their packages, mpv's tarball, other files as they are). Returns (status for notices, problems)."""
+    licence folders of their packages, mpv's tarball, other files as they are). repo_files: the paths of FluentFin MPV's
+    own source (HEAD), where a stub's source may be; excluded: the DLLs the release leaves out. Returns (status for
+    notices, problems)."""
     path, header, entries, problems = read_manifest(libmpv_dir)
     if not path:
         return None, problems
@@ -107,6 +164,12 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines):
             listing.append(os.path.relpath(os.path.join(root, f), sources_dir).replace(os.sep, "/"))
     packages = {rel.rsplit("/", 1)[-1][:-len(".src.tar.zst")]: rel for rel in listing if rel.endswith(".src.tar.zst")}
     mpv_tarballs = [rel for rel in listing if re.search(r"(^|/)mpv-[0-9a-f]{40}\.tar\.gz$", rel)]
+    sources_txt = find_sources_txt(sources_dir, libmpv_dir)
+    sources_text = ""
+    if sources_txt:
+        with open(sources_txt, encoding="utf-8-sig") as fh:
+            sources_text = fh.read()
+    table = sources_rows(sources_text)
     built_from = sorted(set(SOURCE_PACKAGE.findall("\n".join(header))))
     commit = (re.search(r"\bmpv ([0-9a-f]{40})\b", "\n".join(header)) or [None, None])[1]
     for package in built_from:
@@ -136,6 +199,26 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines):
                 problems.append(f"{name} ({owner}): no source package of version {version} in the sources")
             else:
                 item["sources"] = [packages[chosen]]
+        elif is_stub(owner):
+            # its source and licence: its line in SOURCES.txt (never an MSYS2 package's line: that is the real library)
+            rows = [r for r in table if name.lower() in r["dlls"] and not MSYS2_OWNER.match(r["component"])]
+            item.update(stub=True, package=rows[0]["component"] if rows else name, version=rows[0]["version"] if rows else "",
+                        licence=rows[0]["licence"] if rows else "", repoSources=[])
+            for r in rows:
+                rel = r["file"]
+                hits = ([x for x in listing if x == rel or x.startswith(rel + "/")]
+                        or [x for x in listing if x.rsplit("/", 1)[-1] == rel.rsplit("/", 1)[-1]])
+                item["sources"] += hits
+                if not hits:
+                    item["repoSources"] += sorted(p for p in repo_files if p == rel or p.startswith(rel + "/"))
+            if not rows:
+                problems.append(f"{name} is a stub ({owner}); libmpv's SOURCES.txt has no line for it (its source and licence)")
+            elif not item["sources"] and not item["repoSources"]:
+                problems.append(f"{name} is a stub ({owner}); its source {rows[0]['file']} is neither in the libmpv sources"
+                                " nor in FluentFin MPV's repository")
+            if rows and not item["licence"]:
+                problems.append(f"{name} is a stub ({owner}); its line in SOURCES.txt gives no licence")
+            owners.add(item["package"])
         else:
             problems.append(f"{name}: BUILD-MANIFEST.txt names an owner it cannot read: {owner!r}")
         needed.update(item["sources"])
@@ -165,15 +248,24 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines):
         shutil.copyfile(os.path.join(sources_dir, rel), target)
         copied[rel] = sha256(target)
 
+    # nothing of a library the release leaves out: its source package, signature, licence folder
+    for dll in excluded:
+        real = excluded_pattern(dll)
+        for rel in sorted(copied):
+            if any(real.match(part.lower()) for part in rel.split("/")):
+                problems.append(f"libmpv/{rel} belongs to {dll}, which the release leaves out (-LibmpvExclude)")
+
     # a SOURCES.txt of libmpv's own: its lines for what was left out dropped, its hashes checked, its licence column read
-    declared = {}
-    for candidate in (os.path.join(sources_dir, "SOURCES.txt"), os.path.join(libmpv_dir, "SOURCES.txt"),
-                      os.path.join(os.path.dirname(sources_dir), "SOURCES.txt")):
-        if not os.path.isfile(candidate):
-            continue
-        text = open(candidate, encoding="utf-8-sig").read()
+    declared = {rel: item["licence"] for item in dlls if item.get("stub") for rel in item["sources"]}
+    for candidate in [sources_txt] if sources_txt else []:
+        text = sources_text
         by_name = {rel.rsplit("/", 1)[-1]: (rel, digest) for rel, digest in copied.items()}
-        dropped = {rel.rsplit("/", 1)[-1] for rel in left_out}
+        # what was left out, and a source package a line names that the release does not ship (the real library a
+        # stub stands in for, when its package is not in the sources folder at all)
+        # (a licence folder's files are not: their names, COPYING and the like, are on lines that stay)
+        dropped = {rel.rsplit("/", 1)[-1] for rel in left_out if rel.split("/", 1)[0] not in LICENCE_DIRS}
+        dropped |= {r["file"].rsplit("/", 1)[-1] for r in table
+                    if r["file"].endswith(".src.tar.zst") and r["file"].rsplit("/", 1)[-1] not in by_name}
         kept_lines = []
         for line in text.splitlines():
             tokens = {t.replace("\\", "/").rsplit("/", 1)[-1].strip("`'\"(),;|") for t in line.split()}
@@ -191,7 +283,8 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines):
                     if col in by_name and col.endswith(".src.tar.zst"):
                         declared[by_name[col][0]] = cols[2].replace("spdx:", "")
         if dropped:
-            kept_lines.insert(0, "# FluentFin MPV's release leaves out: " + ", ".join(sorted(dropped)) + " (and their lines below)")
+            kept_lines.insert(0, "# FluentFin MPV's release leaves out: " + ", ".join(sorted(dropped | left_out_names(left_out)))
+                              + " (and their lines below)")
         with open(os.path.join(dest, "SOURCES-libmpv.txt"), "w", encoding="utf-8", newline="\n") as fh:
             fh.write("\n".join(kept_lines) + "\n")
         break
@@ -202,10 +295,14 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines):
               "and tools/release/libmpv in FluentFin MPV's source say how it was made):", ""]
     for item in dlls:
         lines.append(f"  {item['name']}  ({item['owner']})")
+        if item.get("stub"):
+            lines.append(f"    a stub, not the library of that name: it has its functions and every call fails ({item['licence']})")
         for rel in item["sources"]:
             lines.append(f"    libmpv/{rel}  sha256 {copied.get(rel, '(not copied)')}")
+        for path in item.get("repoSources", []):
+            lines.append(f"    {path}  in FluentFin MPV's source (1. above)")
     if left_out:
-        lines += ["", "  Not in this release, nor their sources: " + ", ".join(sorted({r.rsplit('/', 1)[-1] for r in left_out}))]
+        lines += ["", "  Not in this release, nor their sources: " + ", ".join(sorted(left_out_names(left_out)))]
     lines += ["", "  Every file in libmpv/:"]
     lines += [f"    {rel}  sha256 {digest}" for rel, digest in sorted(copied.items())]
     lines.append("")
@@ -224,6 +321,7 @@ def main():
     ap.add_argument("--libmpv-dir", required=True)
     ap.add_argument("--libmpv-sources")
     ap.add_argument("--status-out", help="a JSON of libmpv's DLLs, their packages and sources (for notices.py)")
+    ap.add_argument("--excluded", action="append", default=[], help="a DLL the release leaves out: none of its source may ship")
     ap.add_argument("--allow-dirty", action="store_true", help="only to try this script; never for a release")
     args = ap.parse_args()
     manifest = json.load(open(args.manifest, encoding="utf-8"))
@@ -252,7 +350,9 @@ def main():
               f"  git archive of commit {head} (https://github.com/mbustos27/fluentfin-mpv/tree/v{args.version})", ""]
 
     # 2. libmpv and its sources
-    status, problems = libmpv_sources(args.libmpv_dir, libmpv_sources_dir, args.out, lines)
+    repo_files = set(subprocess.run(["git", "-C", args.repo, "ls-tree", "-r", "--name-only", "HEAD"],
+                                    capture_output=True, text=True, check=True).stdout.splitlines())
+    status, problems = libmpv_sources(args.libmpv_dir, libmpv_sources_dir, args.out, lines, repo_files, args.excluded)
     failed = bool(problems)
     for p in problems:
         print(f"libmpv: {p}", file=sys.stderr)
