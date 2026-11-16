@@ -2,7 +2,13 @@
 
 A Windows Jellyfin client that combines [FluentFin](https://github.com/insomniachi/FluentFin)'s WinUI 3 interface with [jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim) as its playback engine. You browse in FluentFin, and video plays in mpv inside FluentFin's own window. The server sees a single session, FluentFin's.
 
-This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv. It is tested mostly against fake servers, so see [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md) for what has and hasn't been verified on a real Jellyfin server.
+This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv. It is tested by automated suites against a fake server and in daily use against a real Jellyfin server; [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md) says what is still unverified.
+
+## Download
+
+**Windows 10 or 11 (x64).** Get the zip from the [Releases](https://github.com/mbustos27/fluentfin-mpv/releases) page, unzip it anywhere and run `FluentFin.exe`. Nothing else needs installing: .NET, the playback backend and libmpv are inside. The app isn't code-signed, so Windows SmartScreen warns on the first start (**More info → Run anyway**). Changes: [CHANGELOG.md](CHANGELOG.md).
+
+Everything below the feature list is for building from source.
 
 ## What it adds to FluentFin
 
@@ -30,24 +36,29 @@ This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv
   - The Flyleaf engine and the Windows player's codec check run only when those players are used.
   - Start-up and play timings are written to the log as `[perf]` lines.
 
-## Download
+## Build from source
 
-Windows 10/11 x64: the portable zip on the [Releases](https://github.com/mbustos27/fluentfin-mpv/releases) page. Unzip it and run `FluentFin.exe`; nothing else needs installing (its `README.txt` says what it needs and where it keeps your data). Changes: [CHANGELOG.md](CHANGELOG.md). The rest of this file is for building from source.
-
-## Requirements (building from source)
-
-- Windows 10 or 11 (x64)
-- .NET SDK 10: `winget install Microsoft.DotNet.SDK.10`
-- Python 3.14, with the backend's venv at `backend\.venv`: `py -3.14 -m venv backend\.venv`, then `backend\.venv\Scripts\pip install -e backend[all]`
-- mpv on PATH: `winget install mpv-player.mpv-CI.MSVC`
-- Optional, for FluentFin's own player controls: libmpv in `vendor\libmpv\` (see `VENDORED.md` there)
-
-## Build and run
+You need Windows 10 or 11 (x64), the .NET 10 SDK and Python 3.14:
 
 ```powershell
-.\run-dev.ps1            # build and launch
-.\run-dev.ps1 -SelfTest  # play mpv's test pattern inside the player page, no server needed
+winget install Microsoft.DotNet.SDK.10
+winget install Python.Python.3.14
 ```
+
+Then, in the repository folder:
+
+```powershell
+py -3.14 -m venv backend\.venv
+backend\.venv\Scripts\pip install -e backend[all]
+.\run-dev.ps1            # build and launch
+```
+
+To play video, a source build needs **one** of these:
+
+- **libmpv**, for FluentFin's own player controls (the default). The quickest way is to copy the `libmpv\` folder out of the release zip into `vendor\libmpv\msys2-20261116-mpv-0.42.0-2\`. To build that folder yourself with MSYS2, see [vendor/libmpv/VENDORED.md](vendor/libmpv/VENDORED.md).
+- **mpv**, for mpv's own controls: `winget install mpv-player.mpv-CI.MSVC`. Without libmpv, FluentFin switches to these controls automatically and says so.
+
+`.\run-dev.ps1 -SelfTest` plays mpv's test pattern inside the player page, with no server needed.
 
 Settings, logs and the journal go to `%LOCALAPPDATA%\FluentFinMpv`. For a separate data folder, start it with `FluentFin.exe --data-dir <folder>`.
 
