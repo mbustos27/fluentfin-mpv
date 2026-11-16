@@ -371,6 +371,27 @@ def get_object(args, key, required=True):
     return value
 
 
+#: ``set_controls``: who draws the player controls (BRIDGE.md section 4).
+CONTROLS = ("ui", "mpv")
+#: The most of the video's height the UI's bottom controls may claim.
+MAX_SUBTITLE_INSET = 0.5
+
+
+def validate_controls(args):
+    """``set_controls`` args -> ``(controls, subtitle_inset)``. The inset is
+    0 for ``"mpv"``, whatever was sent (the UI draws nothing then)."""
+    controls = get_str(args, "controls")
+    if controls not in CONTROLS:
+        raise _bad("controls must be one of %s" % ", ".join(CONTROLS))
+    inset = 0.0
+    if args.get("subtitleInset") is not None:
+        inset = float(get_number(args, "subtitleInset"))
+        if not 0.0 <= inset <= MAX_SUBTITLE_INSET:
+            raise _bad("subtitleInset must be between 0 and %g"
+                       % MAX_SUBTITLE_INSET)
+    return controls, (inset if controls == "ui" else 0.0)
+
+
 def validate_play(args):
     """``play`` args, normalised. Mirrors the server's PlayNow command."""
     item_ids = args.get("itemIds", _MISSING)
@@ -713,12 +734,19 @@ def _track(stream, audio):
     title = stream.get("DisplayTitle") or stream.get("Title")
     if title:
         out["title"] = title
+    # fluentfin-mpv (player controls): the stream's own title tag alone, and
+    # the hearing-impaired flag, for labels the UI builds itself (BRIDGE.md
+    # section 5, Track).
+    if isinstance(stream.get("Title"), str) and stream["Title"].strip():
+        out["streamTitle"] = stream["Title"]
     if stream.get("Codec"):
         out["codec"] = stream["Codec"]
     if audio and stream.get("Channels") is not None:
         out["channels"] = stream["Channels"]
     if not audio and "IsForced" in stream:
         out["isForced"] = bool(stream.get("IsForced"))
+    if "IsHearingImpaired" in stream:
+        out["isHearingImpaired"] = bool(stream.get("IsHearingImpaired"))
     return out
 
 

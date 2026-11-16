@@ -112,6 +112,8 @@ internal static partial class Host
 		var python = Arg("--python");
 		var configDir = Path.Combine(s_out, "backend-config");
 		Directory.CreateDirectory(configDir);
+		// no sound from any test run: the backend's mpv reads the mpv.conf of this run's own (scratch) config dir
+		File.WriteAllText(Path.Combine(configDir, "mpv.conf"), "# written by the controls host: tests make no sound\nao=null\n");
 		var backend = new MpvBackendHost(new Launcher(python, configDir, Path.Combine(s_out, "backend.log")), videoHost, new FileLogger<MpvBackendHost>(Path.Combine(s_out, "backend-host.log")));
 		var states = new List<string>();
 		backend.Events.Subscribe(e =>

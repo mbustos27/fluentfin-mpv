@@ -134,6 +134,9 @@ class FakeHandle:
 
     def command(self, *args):
         self.commands.append(args)
+        if args[:2] == ("set", "sub-pos"):
+            # mpv's `set` takes a string (docs/mpv-backends.md section 1)
+            self.sub_pos = float(args[2])
 
     def play(self, url):
         self.played.append(url)
@@ -544,6 +547,13 @@ class FakePM:
     def set_embedded_fullscreen(self, value):
         self._note("set_embedded_fullscreen", value)
 
+    #: fluentfin-mpv (set_controls): the style's "controls at all", which a
+    #: return to mpv's controls restores (`PlayerManager.osc_enabled`).
+    osc_enabled = True
+
+    def enable_osc(self, enabled):
+        self._note("enable_osc", enabled)
+
     def cancel_load(self):
         # Gated on the start's own flag, like the real one.
         self._note("cancel_load")
@@ -637,6 +647,10 @@ class FakePM:
                     # With the epoch: an end queued before it is stale.
                     if self._finished_lock.locked():
                         self._finished_lock.release()
+                    # `update_subtitle_visuals`, which the real start runs
+                    # just before its Playing: the shim's own sub-pos (its
+                    # "bottom" setting), over whatever was there.
+                    self._player.sub_pos = 100.0
                     self.send_timeline_initial()
                     self.should_send_timeline = True
                     # `_play_media` ends with an unconditional
@@ -1202,6 +1216,111 @@ class ConnectTest(BridgeCase):
             ConnectionRefusedError()), "server_unreachable")
         self.assertEqual(bridge_mod.classify_exception(KeyError("x")),
                          "internal")
+
+
+def _sub_pos_sets(player):
+    return [c[2] for c in player.commands if c[:2] == ("set", "sub-pos")]
+
+
+class SetControlsTest(BridgeCase):
+    """fluentfin-mpv: ``set_controls`` (BRIDGE.md section 4): FluentFin's
+    own controls over the video hide mpv's OSC and lift the subtitles while
+    their bar shows; the logic is `bridge_controls` (test_bridge_controls)."""
+
+    def osc_calls(self):
+        return [c[1] for c in self.runtime.journal if c[0] == "enable_osc"]
+
+    def test_needs_connect_and_good_args(self):
+        self.assertEqual(self.code("set_controls", {"controls": "ui"}),
+                         "not_connected")
+        self.connect_server()
+        for args in (None, {}, {"controls": "fluentfin"},
+                     {"controls": "ui", "subtitleInset": 0.9},
+                     {"controls": "ui", "subtitleInset": "0.1"}):
+            with self.subTest(args=args):
+                self.assertEqual(self.code("set_controls", args), "bad_args")
+        self.assertEqual(self.osc_calls(), [])
+
+    def test_ui_then_mpv(self):
+        self.connect_server()
+        player = self.runtime.pm._player
+        # With nothing playing: it holds for whatever plays next.
+        self.assertTrue(self.send("set_controls", {
+            "controls": "ui", "subtitleInset": 0.18})["ok"])
+        self.assertTrue(self.send("set_controls", {
+            "controls": "ui", "subtitleInset": 0})["ok"])
+        self.assertTrue(self.send("set_controls", {"controls": "mpv"})["ok"])
+        self.assertEqual(self.osc_calls(), [False, False, True])
+        self.assertEqual(_sub_pos_sets(player), ["82", "100"])
+
+    def test_waits_for_a_start_holding_the_player(self):
+        self.connect_server()
+        pm = self.runtime.pm
+        held, release = threading.Event(), threading.Event()
+
+        def start():
+            with pm._lock:          # a playback start, across its load
+                held.set()
+                release.wait(5)
+
+        holder = threading.Thread(target=start, daemon=True)
+        holder.start()
+        held.wait(5)
+        self.assertTrue(self.send("set_controls", {
+            "controls": "ui", "subtitleInset": 0.1})["ok"],
+            "answered at once")
+        self.assertEqual(self.osc_calls(), [])
+        release.set()
+        holder.join(5)
+        pm.run_deferred()
+        self.assertEqual(self.osc_calls(), [False])
+        self.assertEqual(_sub_pos_sets(pm._player), ["90"])
+
+    def test_every_item_start_lifts_the_subtitles_again(self):
+        # The shim writes its own sub-pos at every item start
+        # (update_subtitle_visuals, modelled in FakePM.play). The lift must
+        # land after it, item after item, and on a restarted mpv too.
+        self.connect_server()
+        pm = self.runtime.pm
+        self.send("set_controls", {"controls": "ui", "subtitleInset": 0.2})
+        for round_, video in enumerate((FakeVideo(A), FakeVideo(B),
+                                        FakeVideo(A))):
+            pm.play(video)
+            self.assertEqual(pm._player.sub_pos, 80.0,
+                             "item %d: above the bar after the start" % round_)
+        pm._player = FakeHandle()                 # a new mpv
+        pm.play(FakeVideo(B))
+        self.assertEqual(pm._player.sub_pos, 80.0, "a new mpv: lifted too")
+        self.assertEqual(self.osc_calls(), [False] * 5,
+                         "the OSC hidden at the command and at every start")
+        # The bar hidden: an item start leaves the shim's own value.
+        self.send("set_controls", {"controls": "ui", "subtitleInset": 0})
+        pm.play(FakeVideo(A))
+        self.assertEqual(pm._player.sub_pos, 100.0)
+        # With mpv's own controls an item start does nothing extra.
+        self.send("set_controls", {"controls": "mpv"})
+        del self.runtime.journal[:]
+        pm.play(FakeVideo(B))
+        self.assertEqual(self.osc_calls(), [])
+        self.assertEqual(pm._player.sub_pos, 100.0)
+
+    def test_a_lost_mpv_is_handed_to_the_shim(self):
+        self.connect_server()
+        pm = self.runtime.pm
+
+        def gone(*args):
+            raise BrokenPipeError("mpv went away")
+
+        pm._player.command = gone
+        self.assertTrue(self.send("set_controls", {
+            "controls": "ui", "subtitleInset": 0.1})["ok"])
+        self.assertIn(("disconnect",), self.runtime.journal)
+
+    def test_a_dev_backend_with_only_its_window(self):
+        self.bridge.dev = True
+        self.assertTrue(self.connect()["ok"])
+        self.assertTrue(self.send("set_controls", {"controls": "ui"})["ok"])
+        self.assertEqual(self.osc_calls(), [False])
 
 
 class DevConnectTest(BridgeCase):

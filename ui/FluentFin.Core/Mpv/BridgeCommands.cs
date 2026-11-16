@@ -163,6 +163,21 @@ public static class BridgeCommands
 
 	public static JsonObject Fullscreen(bool fullscreen) => new() { ["fullscreen"] = fullscreen };
 
+	/// <summary>
+	/// fluentfin-mpv: <c>set_controls</c> (docs/BRIDGE.md §4). <paramref name="ui"/>: FluentFin draws the controls, mpv's OSC
+	/// is hidden, and the subtitles keep clear of the bottom <paramref name="subtitleInset"/> of the video's height (clamped
+	/// to 0..0.5, rounded to 0.001 so a bar that did not really move sends the same value). Otherwise mpv's own controls.
+	/// </summary>
+	public static JsonObject Controls(bool ui, double subtitleInset = 0) => ui
+		? new JsonObject { ["controls"] = "ui", ["subtitleInset"] = RoundInset(subtitleInset) }
+		: new JsonObject { ["controls"] = "mpv" };
+
+	/// <summary>The inset as sent: 0..0.5, three decimals; anything not a number is 0.</summary>
+	public static double RoundInset(double inset) => double.IsFinite(inset) ? Math.Round(Math.Clamp(inset, 0, MaxSubtitleInset), 3) : 0;
+
+	/// <summary>The most of the video's height the bottom controls may claim (docs/BRIDGE.md §4).</summary>
+	public const double MaxSubtitleInset = 0.5;
+
 	private static JsonObject WithoutNulls(JsonObject value)
 	{
 		foreach (var key in value.Where(x => x.Value is null).Select(x => x.Key).ToList())
