@@ -20,6 +20,8 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 	/// <param name="fromBeginning">fluentfin-mpv: "Play from beginning": start at 0 rather than at the item's resume point.</param>
 	public async Task Play(BaseItemDto dto, PlaybackSelection? selection, bool streamsPicked = true, bool fromBeginning = false)
 	{
+		// fluentfin-mpv (startup-perf): the play timeline in the log counts from here (MpvPlayTimeline)
+		PerfLog.PlayPressed();
 		// SyncPlay is not supported with the mpv player (docs/BRIDGE.md §6): play here even if a group was joined before
 		if (SessionInfo.GroupId is not null && settings.MediaPlayer != MediaPlayerType.Mpv)
 		{

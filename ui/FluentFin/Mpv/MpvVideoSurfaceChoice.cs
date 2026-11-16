@@ -30,6 +30,12 @@ public sealed class MpvVideoSurfaceChoice(MpvVideoHost window, MpvCompositionVid
 	}
 
 	/// <summary>
+	/// fluentfin-mpv (startup-perf): FluentFin's controls make their in-process mpv when the window is asked for, so the
+	/// pre-warm only starts the backend then; mpv's controls only need the child window, so it connects too.
+	/// </summary>
+	public bool CanConnectAhead => !UsesFluentFinControls(settings, out _);
+
+	/// <summary>
 	/// FluentFin draws the controls: chosen in Settings and libmpv can be loaded. <paramref name="whyNot"/> says why not when
 	/// they were chosen but cannot be had (null otherwise). The player page asks the same, so the two always agree.
 	/// </summary>

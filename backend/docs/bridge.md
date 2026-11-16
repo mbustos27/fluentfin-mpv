@@ -308,6 +308,33 @@ save it, maximize, minimize, drag, raise or drop the surface returns early
 when embedded, and the bridge also forces `fullscreen`, `raise_mpv` and
 `remember_window_size` off (idle quit is off in every bridge, section 2).
 
+**Pre-warmed** (`connect.prewarm`, BRIDGE.md section 4; FluentFin sends it
+right after sign-in, so a `play` finds mpv running and the client checked):
+the connect that starts mpv configures `window_embed` with
+`defer_surface`, and `apply_to_options` then builds mpv with
+`force-window=no` -- `wid` and `idle` as always. mpv runs with **no video
+output**: no window of its own inside the owner's (the input queues of the
+two processes are attached only once one exists), no GPU surface. Measured
+off-screen with mpv 0.41: the backend's job idles at 85 MB working set /
+73 MB private (mpv 38 MB) against 126 / 120 MB with the output built at
+connect (mpv 79 / 86 MB), and ~0.1 % of one core either way. When the first
+`play` or `play_file` is accepted, `Bridge._claim_surface_soon` turns
+`force-window` on, once (`window_embed.claim_surface`), on a thread of its
+own -- not during a shutdown -- so mpv builds the output while the start's
+server requests run, and from then on the process behaves exactly as one
+connected without `prewarm`: the surface stays between items and after
+`stop`, and an mpv the player re-creates is built with it. The cost, on the
+first play only, measured with the e2e harness (`prewarm_play[_wan]`, n=6,
+interleaved, a loaded machine; PlayAsync to `playing`): 165 ms on a
+loopback server and 224 ms at 40 ms per request, against 66 / 198 ms with
+the output built at `connect`; building it only as mpv opens the file
+(after the start) was 146 / 283 ms -- on a remote server that is serial
+after the stream opens, so the overlap wins. A cold start (backend start
+and `connect` at play) is ~640 / ~850 ms. `tools/bridge_smoke.py`'s
+`prewarm` session checks it with the real mpv: no child window of ours
+while idle, mpv's window and the video after the first `play_file`, still
+there after `stop`.
+
 Fullscreen becomes a request (`fullscreen_request`):
 
 - the shim's own paths -- the claimed `f` key, a remote `ToggleFullscreen`
@@ -325,7 +352,7 @@ Measured on mpv 0.41/Windows: with `--wid`, writing `fullscreen`,
 fullscreen and geometry handling, and `set_fullscreen` toggles mpv.
 
 **Attached** (`{"mode": "attached", "ipc": "<pipe>"}`, FluentFin MPV's
-player controls, docs/research/player-controls.md in the repository root):
+player controls, docs\research\player-controls.md in the repository root):
 mpv runs inside FluentFin (libmpv, composition mode, no window) and answers
 JSON IPC on that pipe. `ShimRuntime.attached_overrides` makes the run the
 shim's external backend with `mpv_ext_start=False` on that pipe (and
@@ -343,19 +370,76 @@ script it loads) work as on any external mpv. Not there in attached mode:
 the scripts the shim passes on the command line (thumbfast, mouse; FluentFin
 draws its own controls) and `tls_*` client certificates. Measured with
 `tools\ui-harness\composition-spike` (scenario `bridge`) and
-`tools\ui-harness\fluentfin-controls`.
+`tools\ui-harness\fluentfin-controls`. `connect.prewarm` changes nothing
+here (`defer_surface` is for an embedded window only): the surface is the
+UI's own mpv, and FluentFin sends the attached `connect` at the first play
+anyway (it only starts the backend ahead).
 
 ## 4a. The on-screen controller
 
-`fluentfin_osc` (FluentFin MPV's own module), switched on by
-`start_player` before the player is imported, like `window_embed`:
+`fluentfin_osc` and `fluentfin_bar` (FluentFin MPV's own modules),
+switched on by `start_player` before the player is imported, like
+`window_embed`:
 
-- **The OSC is always the fork**, `trickplay-osc.lua`, whatever the mpv
-  version (`_load_classic_osc`). The winget mpv-CI build on the development
-  machine reports `v0.41.0-dev`, which `osc_preview_api_works` reads as
-  0.41, and its stock OSC has no `user-data/osc/draw-preview` (none in the
-  binary): the stock OSC drew no trickplay preview at all. The fork asks
-  `thumbfast.lua` itself, on any mpv.
+- **Which bar** (`fluentfin_bar.choose`, from the *configured* `osc_style`;
+  bridge mode resolves the shim's default "mpvtk" to "mpv", since the HUD
+  needs the library browser): **uosc** (vendored under `fluentfin/mpv`,
+  `fluentfin/VENDORED.md`) for "mpvtk"/"jellyfin", the default; **the fork**
+  for "mpv"/"default", and as the fallback wherever uosc cannot run: any
+  of its files missing (every one is listed in `fluentfin/uosc-files.txt`,
+  which a test keeps equal to the folder), an `attached` window
+  (FluentFin's own mpv gets no construction option, so no `osd-fonts-dir`
+  for uosc's icon font), a user `mpv.conf` that sets `osd-fonts-dir`, or a
+  uosc whose start fails. **mpv answers `load-script` with success before
+  the script has run**: a uosc that errors at its start (a broken file)
+  was "loaded", turned mpv's own OSC off and ended, leaving no bar at all.
+  So `fluentfin_bar.load` checks after the start (`START_CHECK`, 2 s:
+  uosc's start takes about 0.15 s here) that mpv still has a script called
+  uosc -- a `script-message-to uosc` is refused when it has not -- and
+  loads the fork when it is gone. "none" and "custom" are the shim's, as
+  without the bridge. Either way the shim builds mpv with style "mpv", and
+  `_load_classic_osc` asks `fluentfin_osc.load_bar` first: it
+  `load-script`s uosc's folder and `fluentfin.lua` (after the `script-opts`
+  appends, so both read their options at their start), or only
+  `fluentfin.lua`, and the fork then loads as before. uosc's self-updater
+  is not vendored (`VENDORED.md`). With a bar of ours, a `kb_kill_shader` still at its default `k`
+  moves to `K` for the run (the shim's binding is forced, and `k` is pause
+  in FluentFin's key map).
+- **uosc's look** is `fluentfin_bar.uosc_script_opts`: FluentFin's controls
+  left to right (play/pause, previous and next in the shim's queue, -10 s,
+  +30 s, Skip when a segment is on offer, audio, subtitles, editions,
+  chapters, full screen), the title on top with no window buttons, no
+  progress line while hidden, the seek line in the accent with no cache
+  ranges or buffered readout, the wheel over it not a seek
+  (`timeline_step=0`), the volume slider in steps of 5, FluentFin's scrim
+  colour at 75 %, Windows' text scale, `languages=en` (no translations are
+  vendored), no idle or audio indicator. Construction options:
+  `osd-fonts-dir` (uosc's two fonts) and `volume-max=100` unless `mpv.conf`
+  sets it. The fork's options go with uosc's, for the fallback. A user
+  `script-opts/uosc.conf` keeps uosc's look theirs.
+- **`fluentfin.lua`** goes with either bar: the keys of FluentFin's own
+  controls (k pause, j/l -/+10 s, Up/Down volume +-5 held to 0..100, s skip,
+  N next, P previous; non-forced, so the user's `input.conf` wins; s, N
+  and P are `fluentfin-*` script messages that `PlayerManager.
+  _on_client_message` hands to `fluentfin_osc.on_message`, which queues the
+  shim's own `skip_intro`/`play_next`/`play_prev` on the action thread),
+  and the Skip prompt (an OSD message from `user-data/fluentfin/skip`,
+  which the bridge writes, section 5). Once uosc has published
+  `user-data/fluentfin/bar` (its one local patch) it also makes the wheel
+  the volume (horizontal: nothing), raises the subtitles above the bar
+  (restores deferred 150 ms, so a `sub-pos` the bridge writes with a hide
+  is kept), fills uosc's managed buttons (`fluentfin_prev`,
+  `fluentfin_next` from `user-data/fluentfin/next`, `fluentfin_skip`) and
+  turns the shim's `osc-visibility never`/`auto` (its `enable_osc`, which
+  `set_controls` uses) into uosc's `disable-elements`. User-data strings
+  are observed as `native`: observed as `string` they arrive JSON-quoted.
+- **The fork** is `trickplay-osc.lua`, whatever the mpv version. The winget
+  mpv-CI build on the development machine reports `v0.41.0-dev`, which
+  `osc_preview_api_works` reads as 0.41, and its stock OSC has no
+  `user-data/osc/draw-preview` (none in the binary): the stock OSC drew no
+  trickplay preview at all. The fork asks `thumbfast.lua` itself, on any
+  mpv; uosc asks it through thumbfast's own messages, which the shim's
+  `thumbfast.lua` answers with Jellyfin's tiles.
 - **FluentFin's patches live in the fork**, each between `-- BEGIN patch
   FluentFin MPV` and `-- END patch`, each behind an option whose default is
   upstream's look, so a standalone shim is unchanged. `script_opts` turns
@@ -381,9 +465,15 @@ draws its own controls) and `tls_*` client certificates. Measured with
   show there), and a film's "Name (Year)". A sidecar is `sub-add`ed with
   its stream's title and language (`sidecar_labels`), which mpv cannot know.
 
-Tests: `test_fluentfin_osc` (pure), `test_fluentfin_osc_player` (imports
-the player: off-screen), `test_fluentfin_osc_lua` (the raise, the wheel and
-the labels against a real mpv, `--vo=null`, no window).
+Tests: `test_fluentfin_osc` and `test_fluentfin_bar` (pure),
+`test_fluentfin_osc_player` (imports the player: off-screen),
+`test_fluentfin_osc_lua` (the fork's raise, wheel and labels against a real
+mpv, `--vo=null`, no window), `test_fluentfin_bar_lua` (`fluentfin.lua`
+against a real mpv with no window and a stand-in uosc that records its
+messages; the vendored uosc itself needs a video output, so those cases run
+only on a private desktop, i.e. through `run_suite.py`, and skip on the
+user's). Those start `mpv.exe`, not the `mpv.com` console wrapper, which
+starts mpv as a child a kill of its own handle leaves running.
 
 ## 5. Commands and events
 
@@ -594,7 +684,14 @@ the video still current):
   ``none``; and an ``error`` event naming the item -- not the state, it
   plays on -- with the code a new item gets for the same failure
   (``mpv_failed`` for no stream, the request's own, e.g.
-  ``server_unreachable``, for a failed one; not when interrupted). Not
+  ``server_unreachable``, for a failed one; not when interrupted). Its
+  message is the user's, shown as it is by FluentFin's notice
+  (fluentfin-mpv): what was asked (`_change_asked`: audio, subtitles or
+  quality, read before `_put_back` restores them), the item by its bar
+  title (`item_title`) and the cause in words (`failure_cause`;
+  `check_play_info` marks an answer that came, with its HTTP status, so a
+  500 reads "the server answered with an error", not "could not be
+  reached"). The raw cause, with the item id, is a warning in the log. Not
   undone: the old transcode, which `get_playback_url` ends before it asks,
   so a transcoded item's stream runs out soon after, as with a
   replacement's. `get_timeline_options` also builds a report with no media
@@ -700,7 +797,7 @@ playing sets both of the shim's per-kind volumes (`video_volume`,
 `music_volume`), since the shim applies one of those at every start.
 `no_playback` is returned by `pause`/`unpause`/`toggle_pause`/`seek`/
 `seek_relative` (unless something is opening), and by `next`/`previous`/
-`set_audio`/`set_subtitle` when nothing is playing; `stop`, volume, mute and
+`set_audio`/`set_subtitle`/`skip_segment` when nothing is playing; `stop`, volume, mute and
 fullscreen always succeed once connected.
 
 Events come from `bridge_state.Tracker`, fed by the monitor's samples and
@@ -720,6 +817,30 @@ in `position` (at most every 0.45 s). The monitor *polls* mpv
 (`playback-time`, `duration`, `pause`, volume, mute, track ids) once per
 sample and observes nothing: an observer on `playback-time` would be about
 30 messages a second over JSON IPC.
+
+**Segments and the queue's neighbours** (fluentfin-mpv, BRIDGE.md sections
+4 and 5). `segments` is the shim's own list, `media.Video.intros` (fetched
+inside the start, for the types not set to off), with each type's action
+read from the settings at every sample (`ShimRuntime.segments_of`); `next`
+is `state.queue`'s neighbours plus `settings.auto_play`. Both follow
+`tracks`, for a new item always and later only when they change. The offer
+(`current`) is worked out from the monitor's own position sample with the
+rule in `bridge_protocol.offered_segment` (an `ask` segment, end exclusive,
+so the skip's seek to the end closes it), and only while the item plays:
+during a start or a restart mpv's position can still be the outgoing
+item's. `skip_segment` (and the S key and the bar's Skip button, through
+`fluentfin_osc.skip_handler`) is `Bridge._skip_offer`: the offer last sent
+(`Tracker.offer`, the one the UI saw), and, on the action thread, a seek to
+that segment's end if the item is the same and the live position is still
+in it, then what `skip_intro` records (``has_triggered``, the early
+progress report). Not `skip_intro` itself, which goes to the end of the
+FIRST segment the position is in, end included: an always-skipped recap
+overlapping the intro, or one ending where it starts, took the seek. Segment
+times are held to 0 .. 2^63-1 ticks (`bridge_protocol.MAX_TICKS`), a C#
+``long``. The monitor also writes the offer's button text to
+`user-data/fluentfin/skip` after each tick (`Bridge._push_offer`, "" with
+none or with `set_controls` `"ui"`), for the Skip button and prompt of the
+bar mpv draws (section 4a); written on change and again for a new mpv.
 
 ## 6. Testing
 
@@ -782,7 +903,14 @@ real classes' source.
 
 The smoke test runs the real bridge, with mpv, and needs no server:
 
-    backend\.venv\Scripts\python.exe backend\tools\bridge_smoke.py [--out DIR] [--only basic|eof|standalone|embedded]
+    backend\.venv\Scripts\python.exe backend\tools\bridge_smoke.py [--out DIR] [--only basic|eof|standalone|embedded|prewarm] [--this-checkout]
+
+(`--this-checkout`: the bridge from the checkout the script is in, with
+`python -E -s` and that backend folder as the working directory; `-I`, as
+FluentFin starts it, imports the installed package, and an editable install
+points at the checkout it was made from -- a git worktree shares the main
+checkout's venv. Run it through `tools\backend-bench\hidden_run.py` to keep
+its windows off the desktop.)
 
 It checks the server-less protocol, stdin EOF, `play_file` of
 `av://lavfi:testsrc` standalone (state, advancing `position`, pause, volume,

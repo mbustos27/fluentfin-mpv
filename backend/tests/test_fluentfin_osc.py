@@ -170,8 +170,12 @@ class ScriptOptsTest(unittest.TestCase):
                      "osc-scalefullscreen=1"):
             with self.subTest(want=want):
                 self.assertIn(want, opts)
+        # The fork's, and fluentfin.lua's (it goes with either bar).
         for opt in opts:
-            self.assertTrue(opt.startswith("osc-"), opt)
+            self.assertTrue(opt.startswith(("osc-", "fluentfin-")), opt)
+        self.assertIn("fluentfin-step=5", opts)
+        self.assertFalse([o for o in opts if o.startswith("uosc-")],
+                         "uosc's only with uosc")
 
     def test_every_patch_option_exists_in_the_fork(self):
         """An option the OSC does not declare is dropped by mp.options with
@@ -180,7 +184,8 @@ class ScriptOptsTest(unittest.TestCase):
         table = src[src.index("local user_opts = {"):]
         table = table[:table.index("\n}\n")]
         with Active():
-            opts = self.opts()
+            opts = [o for o in self.opts() if o.startswith("osc-")]
+        self.assertTrue(opts)
         for opt in opts:
             key = opt[len("osc-"):].split("=", 1)[0]
             with self.subTest(key=key):
@@ -201,8 +206,9 @@ class ScriptOptsTest(unittest.TestCase):
                       encoding="utf-8"):
                 pass
             with Active():
-                self.assertEqual(fluentfin_osc.script_opts(
-                    confdir=conf, accent="#000000", scale=1.0), [])
+                opts = fluentfin_osc.script_opts(
+                    confdir=conf, accent="#000000", scale=1.0)
+            self.assertEqual([o for o in opts if o.startswith("osc-")], [])
 
 
 class OscScriptOptsTest(unittest.TestCase):
@@ -327,7 +333,7 @@ class BridgeTurnsItOnTest(unittest.TestCase):
         src = (PKG / "bridge.py").read_text(encoding="utf-8")
         body = src[src.index("    def start_player("):]
         body = body[:body.index("\n    def ")]
-        self.assertLess(body.index("fluentfin_osc.configure(True)"),
+        self.assertLess(body.index("fluentfin_osc.configure(True"),
                         body.index("from . import player"))
 
 

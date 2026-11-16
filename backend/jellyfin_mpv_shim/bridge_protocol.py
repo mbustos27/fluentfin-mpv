@@ -491,10 +491,12 @@ _SERVER_KEYS = ("server", "user", "accessToken", "device", "client")
 def validate_connect(args, dev=False):
     """``connect`` args, normalised.
 
-    Returns ``{"window": {...} | None, "server": {...} | None}``. ``server``
-    carries everything the Jellyfin client is built from. Without ``--dev``
-    the server part is required; with it, ``protocol`` and ``window`` alone
-    are a valid connect (enough for ``play_file``).
+    Returns ``{"window": {...} | None, "server": {...} | None, "prewarm":
+    bool}``. ``server`` carries everything the Jellyfin client is built
+    from. Without ``--dev`` the server part is required; with it,
+    ``protocol`` and ``window`` alone are a valid connect (enough for
+    ``play_file``). ``prewarm`` (BRIDGE.md section 4): absent or null is
+    False, anything but a bool is ``bad_args``.
     """
     protocol = args.get("protocol", _MISSING)
     if protocol is _MISSING:
@@ -508,13 +510,20 @@ def validate_connect(args, dev=False):
     window = args.get("window", _MISSING)
     window = None if window is _MISSING or window is None \
         else validate_window(window)
+    # Connected ahead of playback: mpv without its video output until the
+    # first play (BRIDGE.md section 4).
+    prewarm = args.get("prewarm")
+    if prewarm is None:
+        prewarm = False
+    elif not isinstance(prewarm, bool):
+        raise _bad("prewarm must be true or false")
 
     present = [k for k in _SERVER_KEYS if args.get(k) is not None]
     if not present:
         if not dev:
             raise _bad("server, user, accessToken, device and client are "
                        "required")
-        return {"window": window, "server": None}
+        return {"window": window, "server": None, "prewarm": prewarm}
     missing = [k for k in _SERVER_KEYS if args.get(k) is None]
     if missing:
         raise _bad("%s required alongside %s" % (", ".join(missing),
@@ -543,6 +552,7 @@ def validate_connect(args, dev=False):
                         allow_empty=True, label="user.name")
     return {
         "window": window,
+        "prewarm": prewarm,
         "server": {
             "url": url.strip().rstrip("/"),
             "serverId": server_id,
@@ -791,4 +801,80 @@ def item_payload(item_id, item):
             out["episodeNumber"] = item["IndexNumber"]
     if _is_int(item.get("RunTimeTicks")):
         out["runTimeTicks"] = item["RunTimeTicks"]
+    return out
+
+
+# -- fluentfin-mpv: media segments and the queue's neighbours (BRIDGE.md
+# section 5, ``segments`` and ``next``) ---------------------------------------
+
+#: What a segment type can be set to do that the protocol lists; "off" types
+#: are neither fetched nor sent.
+SEGMENT_ACTIONS = ("ask", "always")
+
+#: The most ticks a receiver can hold: a signed 64-bit integer (C#'s
+#: ``long``, which `BridgeSegment` parses into and would throw past).
+MAX_TICKS = 2 ** 63 - 1
+
+
+def _clamp_ticks(ticks):
+    return min(MAX_TICKS, max(0, ticks))
+
+
+def segment_list(segments):
+    """The ``segments`` list from ``(type, start, end, action)`` tuples
+    (seconds), in the order given, without the ones set to off or with no
+    usable times. Times are held to 0 .. `MAX_TICKS` (a server's segment
+    data is not checked by anyone before it gets here); one left empty by
+    that is dropped."""
+    out = []
+    for kind, start, end, action in segments or ():
+        start_ticks = seconds_to_ticks(start)
+        end_ticks = seconds_to_ticks(end)
+        if start_ticks is not None:
+            start_ticks = _clamp_ticks(start_ticks)
+        if end_ticks is not None:
+            end_ticks = _clamp_ticks(end_ticks)
+        if (action not in SEGMENT_ACTIONS or not isinstance(kind, str)
+                or start_ticks is None or end_ticks is None
+                or end_ticks <= start_ticks):
+            continue
+        out.append({"type": kind, "startTicks": start_ticks,
+                    "endTicks": end_ticks, "action": action})
+    return out
+
+
+def offered_segment(segments, position):
+    """The index in ``segments`` (a `segment_list`) of the one on offer at
+    ``position`` (seconds): the first ``ask`` segment the position is in,
+    start inclusive and end exclusive -- so the seek to its end that skips
+    it also ends the offer. None when there is none, or no position."""
+    ticks = seconds_to_ticks(position)
+    if ticks is None:
+        return None
+    for index, segment in enumerate(segments):
+        if (segment["action"] == "ask"
+                and segment["startTicks"] <= ticks < segment["endTicks"]):
+            return index
+    return None
+
+
+def segments_payload(item_id, segments, current):
+    """The ``segments`` event."""
+    return {"itemId": item_id_out(item_id), "segments": segments,
+            "current": current}
+
+
+def next_payload(item_id, queue, auto_play):
+    """The ``next`` event from a ``state.queue`` (``{"itemIds", "index"}``):
+    the neighbours ``next``/``previous`` would play, and whether the backend
+    plays the next one by itself at the end."""
+    ids = (queue or {}).get("itemIds") or []
+    index = (queue or {}).get("index")
+    out = {"itemId": item_id_out(item_id)}
+    if _is_int(index) and 0 <= index < len(ids):
+        if index + 1 < len(ids) and ids[index + 1]:
+            out["nextItemId"] = ids[index + 1]
+        if index > 0 and ids[index - 1]:
+            out["previousItemId"] = ids[index - 1]
+    out["autoPlay"] = bool(auto_play) and "nextItemId" in out
     return out

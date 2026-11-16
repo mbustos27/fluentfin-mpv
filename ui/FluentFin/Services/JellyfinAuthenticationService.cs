@@ -103,9 +103,8 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 
 			if (auth is not null)
 			{
-				titleBarViewModel.User = auth.User;
 				SessionInfo.CurrentUserCrendentials = null;
-				await jellyfinClient.Initialize(url, auth);
+				await FinishSignIn(url, auth);
 				setupNavigationService.NavigateTo<ShellViewModel>();
 			}
 
@@ -182,8 +181,7 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 				return "The server returned no session.";
 			}
 
-			titleBarViewModel.User = auth.User;
-			await jellyfinClient.Initialize(url, auth);
+			await FinishSignIn(url, auth);
 			return null;
 		}
 		catch (Exception ex)
@@ -191,6 +189,19 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 			logger.LogError(ex, "Sign-in to {Url} failed", url);
 			return DescribeFailure(ex, url);
 		}
+	}
+
+	/// <summary>
+	/// fluentfin-mpv (startup-perf review): FluentFin's session first, then the user in the title bar. The user is what shows
+	/// search and the account menu (Log out, Switch user), and the window is shown before an automatic sign-in finishes
+	/// (ActivationService): a sign-out in that gap revoked the token, then the sign-in opened the shell on it anyway. Set
+	/// last, the menu exists only once the shell is about to open (the callers navigate right after, with no wait between).
+	/// A sign-in that fails leaves no user behind.
+	/// </summary>
+	internal async Task FinishSignIn(string url, AuthenticationResult auth)
+	{
+		await jellyfinClient.Initialize(url, auth);
+		titleBarViewModel.User = auth.User;
 	}
 
 	private static JellyfinApiClient GetClient(string url)

@@ -29,8 +29,11 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 - **One crash domain**: mpv runs inside FluentFin, so an mpv or GPU-driver crash ends the app (a
   `quit` only ends the core; the next playback makes a new one on a new pipe and restarts the backend).
   The mpv choice keeps mpv out of process.
-- **No trickplay, skip intro/credits or Up Next yet** with FluentFin's controls: the bridge carries no
-  segments or tiles (the shim still skips automatically what its own settings say).
+- **No trickplay, skip intro/credits or Up Next yet** with FluentFin's controls. The bridge now
+  carries what the last two need (2026-11-15, osc-polish: the `segments` and `next` events and
+  `skip_segment`, docs\BRIDGE.md §4/§5; `BridgeSegments`, `BridgeNext` in FluentFin.Core), but the
+  controls do not show them yet. Trickplay tiles still have no bridge path (the UI would ask the
+  server). The shim skips by itself the segment types its settings set to always.
 - **What the shim's command line gave mpv is not there in attached mode**: thumbfast/mouse scripts
   (unused: mpv's OSC is off) and `tls_*` client certificates (a server that needs one will not stream).
   `hwdec` follows the shim's setting as on the other path (its default is `no`).
@@ -63,9 +66,12 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   keeps both disabled until it returns (upstream's own command already did that for itself).
 - **A track or quality change that cannot be applied** (fixed 2026-11-15, signout-ux): a
   non-fatal `error` once the item plays is shown above the video for 8 s as a dismissable
-  warning with the backend's own text (it names the item and says the change could not be
-  applied; the UI cannot say which change, since most come from mpv's OSC), and playback is
-  not touched. Showing it pushes the video area down while it is up (airspace: XAML cannot
+  warning with the backend's own text, and playback is not touched. That text is the user's
+  since osc-polish (the visual check showed the item id and "ServerUnreachable ... HTTP 500"):
+  `MPV: The audio track of "Series — S6E4 · Episode" could not be changed: the server
+  answered with an error. It goes on playing as before.` The backend says which change it was
+  (audio, subtitles, quality; "track or quality change" when it cannot tell) and keeps ids,
+  URLs and status codes in its log. The "MPV: " prefix is the UI's. Showing it pushes the video area down while it is up (airspace: XAML cannot
   draw over mpv's window). The same notice is all a failed `next` / auto-advance gets (its
   item never opened, `state: error`): once it hides, the page stays on a stopped video
   until the user leaves.
@@ -95,6 +101,69 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   raising `Unloaded` on a real page; four reviewer mutations survive
   (the sign-out wait's 2 s bound, the redundant `_mpvLeaving` early return, the
   `ExitHandled` term in `Owed`, the re-check after subscribing in `WaitForStopReportsAsync`).
+
+## mpv's bar in bridge mode (uosc, `backend\fluentfin`, osc-polish)
+- **Seen off-screen only** (`tools\backend-harness\osc\osc_harness.py` on a private desktop,
+  PrintWindow shots at 100 % and 150 % text size, windowed and full screen): not yet with the real
+  mouse on the user's desktop, nor at a real 150 % display scale (the harness sets uosc's scale;
+  mpv's own HiDPI scale on top of it is not measured), nor in light or high-contrast themes.
+- **uosc's icons take the accent**: uosc has one foreground colour for icons, sliders and the
+  seek bar's fill, so FluentFin's accent fills the elapsed time and also tints the icons (white
+  icons would make the fill white too).
+- **uosc's own menus** (audio, subtitles, chapters) list mpv's tracks, as the fork's buttons
+  cycle them: a track mpv cannot see (a transcode's burned-in subtitle) is not in them, and a
+  pick there is mpv's, not a renegotiation (FluentFin's own pickers and remote `set_audio`/
+  `set_subtitle` go through the shim). Its subtitle menu also offers Load and Download, which
+  need uosc's helper (`ziggy`, not vendored) and fail.
+- **The Skip prompt is mpv's OSD message** ("Skip Intro  (S)", top left, 4 s) beside the bar's
+  Skip button; uosc has no toast of its own. The button and prompt text come from the shim's own
+  translations, the bar's tooltips are uosc's English.
+- **Attached mode keeps the fork**: FluentFin's in-process mpv gets no construction option, so no
+  `osd-fonts-dir` for uosc's icon font. `MpvInProcessCore` would need it (and `volume-max=100`) to
+  run uosc there; with FluentFin's controls mpv's bar is hidden anyway.
+- **A frozen backend** (`fluentfin-mpv-backend.exe`, later) must ship `backend\fluentfin\mpv`
+  beside the package (`fluentfin_bar.ASSETS`); without it the bar falls back to the fork.
+- **A uosc whose start fails** (a broken file) is found 2 s after it loaded and the fork
+  loads instead (`fluentfin_bar.load`): for those 2 s, and for a uosc that fails later, there is
+  no bar. A uosc that is merely slower than 2 s to start is taken for running.
+- **The restore after a hide is deferred 150 ms** (`fluentfin.lua`): a `sub-pos` the bridge writes
+  with `set_controls` "ui" lands within that and is kept; a later one is not told apart from the
+  shim's. The race it closes was seen once in about ten runs and cannot be forced in a test.
+
+## Start-up and pre-warm (stream `startup-perf`)
+- **The window before the automatic sign-in was run, off-screen only**: the real FluentFin.exe
+  (Release, private desktop, its own data folder, the dev-harness fake server; before = main with
+  the same data-dir change, 5 runs each, interleaved, on a machine busy with other test runs)
+  shows its window 910 ms after the process started against 1469 ms before (850 / 1438 ms at
+  50 ms per request), and the sign-in request now goes out after the window, not before; the
+  first home row is asked for ~100 ms sooner; the pre-warm then takes ~0.6 s in the background
+  with no window of mpv's inside FluentFin's. Never looked at on the user's desktop: the
+  "Signing in to …" line was timed, not seen. Not run at all: the lazy Flyleaf start (the first
+  Flyleaf play now starts FFmpeg: ~128 ms warm, ~0.9 s the first time after an install; unit
+  tests only) and time-to-first-frame in the app (the e2e harness times PlayAsync to `playing`,
+  below).
+- **Pre-warm follows sign-in only**: choosing the MPV player in Settings while signed in does
+  not pre-warm (the first play starts the backend, as before; the next sign-in pre-warms).
+  Choosing another player leaves an idle pre-warmed backend running until sign-out or close.
+- **With FluentFin's player controls (attached) the pre-warm only starts the backend**: the
+  `connect` needs FluentFin's in-process mpv, which is made at the first play, so that play
+  still waits for the connect (~0.5 s on a real server) and the in-process mpv. The setting is
+  read when the pre-warm runs (2 s after sign-in): switching to FluentFin's controls after a
+  pre-warm that connected restarts the backend at the next play (the window changed), as any
+  switch of that setting does. Never run with libmpv here (this worktree has none): unit tests
+  only.
+- **A pre-warmed backend's first play** has mpv build its video output then, alongside the
+  start's server requests (the price of no mpv window, GPU surface or attached input queues
+  while idle): e2e PlayAsync to `playing` 165 ms loopback / 224 ms at 40 ms per request,
+  against 66 / 198 ms with the output built at `connect` and ~640 / ~850 ms cold. If that
+  first-play difference matters more than ~40 MB and the attached queues while idle, the UI
+  can drop `prewarm` from its pre-warm `connect` (one argument in `MpvBackendHost.PrewarmAsync`).
+- **mpv before 0.41** keeps the output after the first file only because `force-window` is
+  stored (it is not acted on while idle there); only mpv 0.41 is installed, so untested.
+- **O7 (players and subscriptions never disposed) not done**: it does not apply to the mpv
+  player (no IMediaPlayerController is made; leaving the page stops playback and the backend
+  stays, by design), and for VLC, Flyleaf and the Windows player the report's dispose-order
+  risk needs its playback matrix and soak on a real server, which could not run here.
 
 ## Backend (`backend\jellyfin_mpv_shim\bridge*.py`, marked upstream diffs)
 - **A hung trickplay fetch can push `shutdown` past its 8 s deadline** (pre-existing

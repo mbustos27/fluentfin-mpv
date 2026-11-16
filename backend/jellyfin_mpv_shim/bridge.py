@@ -193,11 +193,64 @@ def _negotiated_stream(video):
             and getattr(video, "play_method", None) is not None)
 
 
-def _item_label(video):
-    """``"Name" (<id>)``, for a message that has to name an item."""
-    item_id = proto.item_id_out(getattr(video, "item_id", None))
-    name = (getattr(video, "item", None) or {}).get("Name")
-    return '"%s" (%s)' % (name, item_id) if name else str(item_id)
+# -- fluentfin-mpv: a change that could not be applied, said for the user ----
+# The non-fatal ``error`` of a track or quality change that found no stream
+# (BRIDGE.md section 5) is shown to the user as it is (FluentFin's notice
+# over the video): it names the item by its title and says what could not be
+# changed and why in plain words. Ids, urls and exception text go to the log.
+
+#: What could not be changed (`Bridge._change_asked`) -> the sentence.
+CHANGE_TEXT = {
+    "audio": "The audio track of %s could not be changed",
+    "subtitles": "The subtitles of %s could not be changed",
+    "quality": "The quality of %s could not be changed",
+    None: "The track or quality change for %s could not be applied",
+}
+
+
+def item_title(video):
+    """The item as the user knows it, quoted: the title the backend's bar
+    shows (`fluentfin_osc.media_title`: "Series — S6E4 · Episode", a film's
+    "Name (Year)"); "this item" when the server gave it no name. Never its
+    id."""
+    item = getattr(video, "item", None) or {}
+    try:
+        from . import fluentfin_osc
+
+        title = fluentfin_osc.media_title(item, item.get("Type") == "Episode")
+    except Exception:
+        title = item.get("Name")
+    title = (title or "").strip() if isinstance(title, str) else ""
+    return '"%s"' % title if title else "this item"
+
+
+def failure_cause(code, error=None, no_source=False):
+    """Why a negotiation found nothing, in words for the user: what the
+    server answered (``error`` None: it answered, with no media source or
+    nothing this player can play), or what became of the request."""
+    if error is None:
+        return ("the server has no version of it to play" if no_source
+                else "the server offered no stream this player can play")
+    if code == AUTH_FAILED:
+        return "the server refused the request"
+    if code == SERVER_UNREACHABLE:
+        response = getattr(error, "response", None)
+        if (getattr(error, "bridge_http_status", None) is not None
+                or isinstance(getattr(error, "status", None), int)
+                or getattr(response, "status_code", None)):
+            return "the server answered with an error"
+        if getattr(error, "bridge_answered", False):
+            # `bridge_http.check_play_info`: an empty, non-JSON or
+            # source-less PlaybackInfo.
+            return "the server's answer could not be used"
+        return "the server could not be reached"
+    return "something went wrong in the player"
+
+
+def change_failed_message(video, change, cause):
+    """The ``error`` message of a change that could not be applied."""
+    return "%s: %s. It goes on playing as before." % (
+        CHANGE_TEXT.get(change, CHANGE_TEXT[None]) % item_title(video), cause)
 
 
 class _SessionLedger:
@@ -440,9 +493,11 @@ class ShimRuntime:
 
     # -- the player --------------------------------------------------------
 
-    def start_player(self, window):
+    def start_player(self, window, defer_surface=False):
         """Build mpv for ``window`` and start the shim's worker threads.
-        Returns ``connect``'s result."""
+        Returns ``connect``'s result. ``defer_surface`` (a pre-warmed
+        ``connect``, embedded only): mpv starts without its video output,
+        which the first play turns on (`Bridge._claim_surface_soon`)."""
         from . import window_embed
 
         embedded = window["mode"] == "embedded"
@@ -456,11 +511,19 @@ class ShimRuntime:
             for key, value in self.attached_overrides(window["ipc"]):
                 self._override(key, value)
         window_embed.configure(window["hwnd"] if embedded else None,
-                               attach=attached)
-        # The OSC's look and the fork that carries it (fluentfin_osc).
-        from . import fluentfin_osc
+                               attach=attached,
+                               defer_surface=defer_surface and embedded)
+        # The bar mpv draws, and its look (fluentfin_bar, fluentfin_osc).
+        from . import fluentfin_bar, fluentfin_osc
+        from .conf import settings
 
-        fluentfin_osc.configure(True)
+        bar = fluentfin_bar.choose(settings.osc_style, window["mode"],
+                                   fluentfin_osc.user_sets("osd-fonts-dir"))
+        fluentfin_osc.configure(True, bar=bar)
+        if bar is not None and settings.kb_kill_shader == "k":
+            # FluentFin's key map has k for pause, as FluentFin's own
+            # controls do; the shim's binding is forced and would win.
+            self._override("kb_kill_shader", "K")
         try:
             from . import player as player_module
         except BaseException:
@@ -512,6 +575,39 @@ class ShimRuntime:
         if self.player_module is None:
             return (BrokenPipeError,)
         return self.player_module._mpv_errors
+
+    # -- fluentfin-mpv: segments and the queue (BRIDGE.md section 5) --------
+
+    @staticmethod
+    def segments_of(video):
+        """``video``'s media segments as ``(type, start, end, action)``:
+        the shim's own list (`media.Video.intros`, fetched at the start for
+        the types not set to off) with what each type is set to do."""
+        from . import conf
+
+        out = []
+        for segment in list(getattr(video, "intros", None) or ()):
+            try:
+                out.append((segment.type, segment.start, segment.end,
+                            conf.segment_action(segment.type)))
+            except Exception:
+                log.debug("unreadable segment", exc_info=True)
+        return out
+
+    @staticmethod
+    def auto_play():
+        """Whether the shim plays the next queue item at an item's end."""
+        from .conf import settings
+
+        return bool(settings.auto_play)
+
+    @staticmethod
+    def segment_label(segment_type):
+        """The Skip button's text for a segment type, in the shim's
+        language ("Skip Intro")."""
+        from .media import segment_labels
+
+        return segment_labels(segment_type)[0]
 
     # -- the server --------------------------------------------------------
 
@@ -837,10 +933,17 @@ class Bridge:
         self.tracker = bridge_state.Tracker()
         #: fluentfin-mpv: who draws the player controls (``set_controls``).
         self.controls = bridge_controls.UiControls()
+        #: fluentfin-mpv: ``(mpv handle, skip text, next flag)`` last
+        #: written to ``user-data/fluentfin/skip`` and ``/next`` for the
+        #: bar's Skip and Next buttons (`_push_offer`).
+        self._offer_pushed = None
 
         #: Fixed by the first connect for the life of the process.
         self.window = None
         self.player_info = None
+        #: The thread turning a pre-warmed mpv's video output on, started by
+        #: its first play (`_claim_surface_soon`); None before.
+        self._surface_thread = None
         self.client = None
         self.server = None
         self.connected = False
@@ -1254,9 +1357,12 @@ class Bridge:
         and restarts), the queue's finished callback, load errors, mpv
         failing to come back, and the embedded window's fullscreen
         requests."""
-        from . import window_embed
+        from . import fluentfin_osc, window_embed
 
         pm = self.runtime.pm
+        # fluentfin-mpv: the S key and the bar's Skip button skip the
+        # segment on offer, as ``skip_segment`` does.
+        fluentfin_osc.skip_handler = self._skip_offer
         original_play = pm.play
         original_finished = pm.finished_callback
         original_stopped = pm.send_timeline_stopped
@@ -1932,18 +2038,22 @@ class Bridge:
             return
         if raised is None and interrupted and _negotiated_stream(video):
             return
+        no_source = getattr(video, "media_source", None) is None
         if raised is not None:
             code, reason = (classify_exception(raised),
                             describe_exception(raised))
-        elif getattr(video, "media_source", None) is None:
+        elif no_source:
             code, reason = MPV_FAILED, "the server offered no media source"
         else:
             code, reason = MPV_FAILED, ("the server offered no stream this "
                                         "player can play")
+        # fluentfin-mpv: what was asked, before `_put_back` restores it.
+        change = self._change_asked(video)
         abandoned = _play_session(video)
-        log.info("The restart of %s found no stream (%s); it keeps the play "
-                 "session it had.", getattr(video, "item_id", "an item"),
-                 reason)
+        log.warning("The %s change of %s could not be applied (%s: %s); it "
+                    "keeps the play session it had.",
+                    change or "track or quality",
+                    getattr(video, "item_id", "an item"), code, reason)
         self._put_back(pm, video, restart)
         session = _play_session(video)
         item = getattr(video, "item_id", None)
@@ -1961,10 +2071,34 @@ class Bridge:
                 raised._bridge_reported = True
             except Exception:
                 pass
+        # fluentfin-mpv: shown to the user as it is; the raw cause is in
+        # the log line above.
         self.tracker.report_error(
-            code, "%s: the track or quality change could not be applied "
-            "(%s); it plays on as before" % (_item_label(video), reason),
+            code, change_failed_message(
+                video, change, failure_cause(code, raised, no_source)),
             item_id=item, sticky=False)
+
+    def _change_asked(self, video):
+        """fluentfin-mpv: what the restart of ``video`` that did not take
+        was asked to change -- "audio", "subtitles" or "quality" -- or None
+        (more than one, or not known). Read before `_put_back`: the tracks
+        a `set_streams` on this thread wrote (``tracks_before``), and a
+        quality override that differs from the one the stream playing was
+        negotiated with (`_quality`)."""
+        changes = []
+        tracks = getattr(self._local, "tracks_before", None)
+        if tracks is not None and tracks[0] is video:
+            if getattr(video, "aid", None) != tracks[1]:
+                changes.append("audio")
+            if getattr(video, "sid", None) != tracks[2]:
+                changes.append("subtitles")
+        try:
+            if (video in self._quality and getattr(video, "trs_ovr", None)
+                    != self._quality[video]):
+                changes.append("quality")
+        except TypeError:
+            pass
+        return changes[0] if len(changes) == 1 else None
 
     def _put_back(self, pm, video, restart):
         """`_restart_not_taken`: ``video`` as it was before its restart --
@@ -2135,12 +2269,20 @@ class Bridge:
             if (window["mode"] == "embedded"
                     and not proto.is_window_handle(window["hwnd"])):
                 raise BridgeError(BAD_ARGS, "window.hwnd is not a window")
+            # Pre-warmed (BRIDGE.md section 4): no video output inside the
+            # owner's window until the first play claims it.
+            defer = cfg["prewarm"] and window["mode"] == "embedded"
+            started = time.monotonic()
             try:
-                info = self.runtime.start_player(window)
+                info = self.runtime.start_player(window, defer_surface=defer)
             except Exception as error:
                 log.exception("mpv could not be started")
                 raise BridgeError(MPV_FAILED, "mpv could not be started: "
                                   + describe_exception(error))
+            log.info("connect: mpv started in %d ms (%s window%s)",
+                     (time.monotonic() - started) * 1000, window["mode"],
+                     ", video output deferred to the first play" if defer
+                     else "")
             self.window = window
             self.player_info = info
             self._install_hooks()
@@ -2180,6 +2322,7 @@ class Bridge:
             closing = self._shutdown.is_set()
         if closing:
             self.runtime.retire_client(client, 0)
+        checked = time.monotonic()
         try:
             self.runtime.verify_client(client, server)
         except BaseException:
@@ -2193,9 +2336,10 @@ class Bridge:
             self.server = server
             self.connected = True
         self.tracker.clear_error()
-        log.info("Connected to %s as user %s (device %s, client %s)",
-                 server["url"], server["userId"], server["deviceName"],
-                 server["clientName"])
+        log.info("Connected to %s as user %s (device %s, client %s); the "
+                 "server check took %d ms", server["url"], server["userId"],
+                 server["deviceName"], server["clientName"],
+                 (time.monotonic() - checked) * 1000)
 
     def cmd_play(self, args):
         self._require_server()
@@ -2224,9 +2368,13 @@ class Bridge:
             # also records there which video this play started, for the
             # transport queued behind it (`_transport`).
             self._local.replacing = pending
+            began = time.monotonic()
             try:
                 started = self.runtime.start_playback(client, user_id,
                                                       request)
+                log.info("play %s: the start returned after %d ms (%s)",
+                         item_id, (time.monotonic() - began) * 1000,
+                         "started" if started else "not started")
                 # Neither failure is reported once the job is superseded:
                 # the stop, play or switch that superseded it cleared the
                 # error, and a switch's retirement of this client is what
@@ -2255,7 +2403,49 @@ class Bridge:
                 self._finish_deferred()
 
         self._queue_play("play", run)
+        self._claim_surface_soon()
         return {}
+
+    def _claim_surface_soon(self):
+        """The first ``play``/``play_file`` of a pre-warmed backend (BRIDGE.md
+        section 4, ``connect.prewarm``) was accepted: `_claim_surface` on a
+        thread of its own, so mpv builds its video output while the start's
+        server requests run (item, PlaybackInfo, segments) rather than after
+        them, when it opens the stream. Measured (e2e, PlayAsync to
+        ``playing``, 40 ms per request): 224 ms, against 283 ms building it as
+        the file opens and 198 ms with the output built at ``connect``. The
+        control worker does not wait for it. Returns the thread, None when
+        nothing was deferred."""
+        from . import window_embed
+
+        if not window_embed.surface_deferred:
+            return None
+        thread = self._surface_thread = threading.Thread(
+            target=self._claim_surface, name="surface", daemon=True)
+        thread.start()
+        return thread
+
+    def _claim_surface(self):
+        """``force-window`` on, once (`window_embed.claim_surface`): mpv makes
+        its video output now and keeps it for the process, between items and
+        after ``stop``, as an mpv started with it. A start that then never
+        reaches mpv leaves an idle, black output -- what a backend not
+        pre-warmed shows there. Not during the shutdown. True when this call
+        turned it on."""
+        from . import window_embed
+
+        if self._shutdown.is_set() or not window_embed.claim_surface():
+            return False
+        started = time.monotonic()
+        try:
+            self._mpv_write(lambda p: setattr(p, "force_window", True))
+        except Exception:
+            log.exception("could not keep mpv's video output")
+            return False
+        log.info("mpv's video output is on (force-window, %d ms): the first "
+                 "play of a pre-warmed backend",
+                 (time.monotonic() - started) * 1000)
+        return True
 
     def cmd_play_file(self, args):
         pm = self.runtime.pm
@@ -2294,6 +2484,7 @@ class Bridge:
             item.loaded = True
 
         self._queue_play("play_file", run)
+        self._claim_surface_soon()
         return {}
 
     def cmd_stop(self, args):
@@ -2578,6 +2769,59 @@ class Bridge:
         pm.run_action(self._apply_controls)
         return {}
 
+    def cmd_skip_segment(self, args):
+        """fluentfin-mpv: skip the segment on offer (BRIDGE.md section 4,
+        ``segments.current``): `_skip_offer`."""
+        pm = self._require_player()
+        if self._playing(pm) is None:
+            raise BridgeError(NO_PLAYBACK, "nothing is playing")
+        return {"skipped": self._skip_offer()}
+
+    def _skip_offer(self):
+        """fluentfin-mpv: a seek to the end of the segment on offer -- the
+        one last sent, which the UI and mpv's bar showed -- and nothing
+        else. The shim's own `skip_intro` seeks to the end of the first
+        segment the position is in, which can be another one (an always-
+        skipped recap that overlaps an intro, or one ending where it
+        starts). False, and nothing done, when none is on offer or the last
+        sample of the position is outside it. The seek runs on the action
+        thread, and only if the item is the same and its live position is
+        still in the segment. Never raises."""
+        pm = self.runtime.pm
+        offer = self.tracker.offer()
+        sample = (self.tracker.last_state or {}).get("positionTicks")
+        if pm is None or offer is None or not isinstance(sample, int):
+            return False
+        if not offer["startTicks"] <= sample < offer["endTicks"]:
+            return False
+        video = self._playing(pm)
+        if video is None:
+            return False
+        start = proto.ticks_to_seconds(offer["startTicks"])
+        end = proto.ticks_to_seconds(offer["endTicks"])
+
+        def seek():
+            if pm._video is not video:
+                return
+            position = pm._player.playback_time
+            if position is None or not start <= position < end:
+                log.info("Not skipping: the position has left the segment")
+                return
+            pm._player.command("seek", end, "absolute")
+            # What `skip_intro` records for the segment it skips.
+            for segment in getattr(video, "intros", None) or ():
+                if (getattr(segment, "type", None) == offer["type"]
+                        and proto.seconds_to_ticks(segment.start)
+                        == offer["startTicks"]):
+                    segment.has_triggered = True
+            pm.is_in_intro = False
+            pm._last_intro_msg_time = time.time()
+            pm.timeline_handle()
+
+        pm.put_task(seek)
+        self.poke()
+        return True
+
     def _subtitle_base(self):
         """The shim's own ``sub-pos`` (its subtitle position setting), what
         `PlayerManager.update_subtitle_visuals` writes at every item start."""
@@ -2622,6 +2866,7 @@ class Bridge:
         "set_mute": cmd_set_mute,
         "set_fullscreen": cmd_set_fullscreen,
         "set_controls": cmd_set_controls,
+        "skip_segment": cmd_skip_segment,
     }
 
     # -- the monitor -------------------------------------------------------
@@ -2657,6 +2902,7 @@ class Bridge:
                 log.exception("monitor tick failed")
                 obs = None
             self._emit_tick(obs)
+            self._push_offer()
             with self._tick_cond:
                 self._ticks += 1
                 self._tick_cond.notify_all()
@@ -2687,6 +2933,39 @@ class Bridge:
                     log.exception("could not send a %s event", name)
             self._send_reported()
 
+    def _push_offer(self):
+        """fluentfin-mpv: what the bar mpv draws (``fluentfin.lua``) needs
+        from the bridge: the Skip button's text for the segment on offer in
+        ``user-data/fluentfin/skip`` (empty when there is none, or when
+        FluentFin draws the controls -- ``set_controls`` ``"ui"``: the UI
+        offers it from the ``segments`` event), and ``"1"`` in
+        ``user-data/fluentfin/next`` while the queue has a next item (its
+        Next button). Written when they change, and again for a new mpv;
+        not once the monitor is stopping (a shutdown is ending mpv). Never
+        raises: it runs on the monitor thread, which every later event
+        comes from, and a lost mpv is the shim's to notice."""
+        pm = self.runtime.pm
+        if pm is None or not pm._mpv_alive or self._monitor_stop.is_set():
+            return
+        try:
+            offer = self.tracker.offer()
+            text = ""
+            if offer is not None and not self.controls.ui:
+                text = self.runtime.segment_label(offer["type"])
+            following = self.tracker.following()
+            has_next = ("1" if following and following.get("nextItemId")
+                        else "")
+            player = pm._player
+            pushed = self._offer_pushed
+            if (pushed is not None and pushed[0] is player
+                    and pushed[1:] == (text, has_next)):
+                return
+            player.command("set", "user-data/fluentfin/skip", text)
+            player.command("set", "user-data/fluentfin/next", has_next)
+            self._offer_pushed = (player, text, has_next)
+        except Exception:
+            log.debug("could not update the bar", exc_info=True)
+
     def _observe(self, cheap=False):
         """One sample. ``cheap`` reads nothing from mpv."""
         from_window = self.window["mode"] if self.window else None
@@ -2701,6 +2980,10 @@ class Bridge:
             return obs
         obs.video = pm._video
         obs.start_in_progress = bool(pm._start_in_progress)
+        if obs.video is not None:
+            # fluentfin-mpv: the ``segments`` and ``next`` events.
+            obs.segments = self.runtime.segments_of(obs.video)
+            obs.auto_play = self.runtime.auto_play()
         # fluentfin-mpv player controls: attached is the UI's window too
         embedded = from_window in ("embedded", "attached")
         if embedded:

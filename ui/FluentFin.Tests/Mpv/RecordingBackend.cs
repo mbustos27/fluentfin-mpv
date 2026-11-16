@@ -34,11 +34,11 @@ internal sealed class RecordingBackend : IMpvBackend
 	/// <summary>When the backend is done with its Stopped report: <see cref="WaitForStopReportsAsync"/> waits for this (done by default).</summary>
 	public Task ReportsDone { get; set; } = Task.CompletedTask;
 
-	public MpvBackendStatus Status { get; private set; } = new(MpvBackendState.NotStarted);
+	public MpvBackendStatus Status { get; set; } = new(MpvBackendState.NotStarted);
 	public IObservable<MpvBackendStatus> StatusChanged => Observable.Return(Status);
 	public Subject<BridgeEvent> EventSubject { get; } = new();
 	public IObservable<BridgeEvent> Events => EventSubject;
-	public BridgeState? LastState => null;
+	public BridgeState? LastState { get; set; }
 	public IObservable<MpvInterruptedPlayback> PlaybackInterrupted { get; } = new Subject<MpvInterruptedPlayback>();
 
 	public async Task StartAsync(bool dev = false, CancellationToken cancellationToken = default)
@@ -64,6 +64,26 @@ internal sealed class RecordingBackend : IMpvBackend
 		}
 
 		return "0.41.0";
+	}
+
+	/// <summary>Identities pre-warmed, in order (<see cref="PrewarmAsync"/>: a start, then a <c>connect</c> with <c>prewarm</c>).</summary>
+	public List<BridgeIdentity> Prewarmed { get; } = [];
+
+	/// <summary><see cref="ShutdownAsync"/> calls.</summary>
+	public int Shutdowns { get; private set; }
+
+	public async Task PrewarmAsync(BridgeIdentity identity, CancellationToken cancellationToken = default)
+	{
+		Timeline.Enqueue("prewarm");
+		await StartAsync(false, cancellationToken);
+		cancellationToken.ThrowIfCancellationRequested();
+		await ConnectGate.WaitAsync(cancellationToken);
+		if (ConnectFailure is not null)
+		{
+			throw ConnectFailure;
+		}
+
+		Prewarmed.Add(identity);
 	}
 
 	/// <summary>A command is answered only when the task this returns for it completes (null: at once); the service holds its gate meanwhile.</summary>
@@ -102,7 +122,13 @@ internal sealed class RecordingBackend : IMpvBackend
 		}
 	}
 
-	public Task ShutdownAsync() => Task.CompletedTask;
+	public Task ShutdownAsync()
+	{
+		Shutdowns++;
+		Timeline.Enqueue("shutdown");
+		Status = new MpvBackendStatus(MpvBackendState.Stopped);
+		return Task.CompletedTask;
+	}
 
 	public void Kill(string reason)
 	{

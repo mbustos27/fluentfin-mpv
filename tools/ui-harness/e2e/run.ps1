@@ -11,6 +11,9 @@
   only. Prints each run's verdict and a summary; writes everything (logs, per-run output, summary.json) under -Out. Exit
   code 0 = every run passed.
 
+  -BackendDir runs that backend folder (python -E -s, the folder as the working directory) instead of -I, which imports the
+  installed package: with the editable install that is the main checkout's, even when this script is in a git worktree.
+
   -Scenarios takes several names, each name[:reps]: as a PowerShell list (-Scenarios kill_playing,close_playing:3) or as
   one string with commas or spaces ("kill_playing close_playing:3", which is what arrives from cmd or bash). A name given
   without -Scenarios is refused, never bound to another parameter. 'all' = every scenario once.
@@ -29,6 +32,9 @@ param(
     [string]$UiDir,
     [string]$Python,
     [string]$Mkv,
+    # the backend folder to run (python -E -s, that folder as the working directory) instead of -I, which imports the
+    # installed package: an editable install runs the checkout it was made from (a git worktree shares the main one's venv)
+    [string]$BackendDir,
     [int]$Burn = 0,
     [int]$TimeoutSeconds = 3600
 )
@@ -38,6 +44,10 @@ $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 if (-not $UiDir) { $UiDir = Join-Path $repo 'ui' }
 if (-not $Python) { $Python = Join-Path $repo 'backend\.venv\Scripts\python.exe' }
 $Out = [IO.Path]::GetFullPath($Out)
+if ($BackendDir) {
+    $BackendDir = [IO.Path]::GetFullPath($BackendDir)
+    if (-not (Test-Path (Join-Path $BackendDir 'jellyfin_mpv_shim\bridge.py'))) { throw "-BackendDir $BackendDir has no jellyfin_mpv_shim\bridge.py" }
+}
 if ($Out.StartsWith($repo + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "-Out must be outside the repository" }
 $UiDir = [IO.Path]::GetFullPath($UiDir)
 if (-not (Test-Path (Join-Path $UiDir 'FluentFin.Core\FluentFin.Core.csproj'))) { throw "-UiDir $UiDir has no FluentFin.Core\FluentFin.Core.csproj" }
@@ -101,7 +111,7 @@ $driveArgs = @('-B', '-u', (Join-Path $PSScriptRoot 'drive.py'), '--exe', $exe, 
 Write-Host "running $($Scenarios -join ' ') off-screen (log: $log)"
 & $Python $hidden --log $log --timeout $TimeoutSeconds --desktop "ui-e2e-$PID" `
     --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" `
-    --env "PATH=$mpvDir;$sysRoot\System32;$sysRoot;$dotnetDir" --env PYTHONUTF8=1 `
+    --env "PATH=$mpvDir;$sysRoot\System32;$sysRoot;$dotnetDir" --env PYTHONUTF8=1 --env "E2E_BACKEND_DIR=$BackendDir" `
     -- $Python @driveArgs | Out-Host
 $code = $LASTEXITCODE
 Get-Content $log | Select-String -Pattern 'VERDICT|summary|^\[\s*[\d.]+\]\s+\S+-\d+\s+(PASS|FAIL)' | ForEach-Object { $_.Line }

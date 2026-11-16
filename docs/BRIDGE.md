@@ -3,7 +3,7 @@
 FluentFin (C#, `ui/`) is the face of the app: login, servers, libraries, item pages,
 settings, the Jellyfin dashboard. jellyfin-mpv-shim (Python, `backend/`) is the
 playback engine: PlaybackInfo and the transcode decision, track selection, mpv and its
-options/shaders/SVP, the shim's OSC (trickplay, skip intro), progress reporting to the
+options/shaders/SVP, mpv's bar (uosc, or the shim's OSC: trickplay, skip intro), progress reporting to the
 server, next-episode handling.
 
 The UI starts the backend as a **child process** and talks to it over **stdio**. This
@@ -76,7 +76,11 @@ Error codes: `not_connected`, `bad_args`, `unknown_cmd`, `auth_failed`,
 1. Backend starts, emits `{"event":"hello","data":{"protocol":1,"backend":"jellyfin-mpv-shim","version":"<CLIENT_VERSION>","bridge":"<bridge version>"}}`
    once it is reading stdin.
 2. UI sends `connect` (§4). Until it succeeds, every other command except `ping`,
-   `get_state` and `shutdown` fails with `not_connected`.
+   `get_state` and `shutdown` fails with `not_connected`. The UI may start the backend and
+   send it right after sign-in, with `prewarm` (§4), and only `play` when the user does (with an
+   `attached` window it starts the backend then and connects at the first play); it
+   shuts such a backend down when the user signs out. A backend that dies while idle
+   leaves nothing to report (§6) and is started again by the next `play`.
 3. UI sends `play`, transport commands, etc. Backend emits events.
 4. UI sends `shutdown` (or closes stdin). Backend stops playback, sends the final
    progress report, replies, exits 0 (1 if the shutdown deadline below ran out).
@@ -132,14 +136,15 @@ the backend to change it.
 | `set_mute` | `muted: bool` | |
 | `set_fullscreen` | `fullscreen: bool` | Embedded and attached mode: tells the backend the UI's window state (for the OSC button); standalone mode: mpv goes fullscreen. |
 | `set_controls` | `controls: "ui" \| "mpv"` (required), `subtitleInset: number = 0` (0 to 0.5) | Who draws the player controls. `"mpv"` (what a backend starts with): the shim's OSC, subtitles where mpv puts them. `"ui"`: the UI draws its own over the video, mpv's OSC is hidden and stays hidden (across items, and after mpv is restarted), and `subtitleInset` is the share of the video area's height the UI's bottom controls cover **now**: mpv's subtitles move up by that share of the window's height (`sub-pos`, from the value mpv had), and back with `0`. The UI sends it again whenever the controls or their height change. With `"mpv"`, `subtitleInset` is ignored. |
+| `skip_segment` | — | fluentfin-mpv: skips the segment the backend offers now (`segments.current`, §5): seeks to that segment's end (not another one the position may also be in). Result `{"skipped": bool}`: `false`, and nothing done, when none is on offer or the backend's last sample of the position (about every 0.5 s) is outside it; `true` is the seek accepted, and it is left out if the position has left the segment by the time it would run. The backend's S key and its bar's Skip button do the same. Added in protocol 1 without a version bump. |
 | `get_state` | — | result = the `state` snapshot (§5). |
 | `shutdown` | — | result `{}`, then the process exits 0 (1 when the 8 s deadline in §3 ran out). |
 | `play_file` | `url: string`, `title: string?` | **Dev only**: exists only when the bridge was started with `--dev`, otherwise `unknown_cmd`. Plays a local file or an mpv URL such as `av://lavfi:testsrc=size=1280x720:rate=30` in the same mpv/window with no server and no reporting, and still emits `state`/`position`/`ended`. Works before `connect` (but after the window is known — with `--dev`, `connect` may be sent with only `protocol` and `window`). Used to verify embedding without a Jellyfin server. |
 
 Command details:
 - `pause`, `unpause`, `toggle_pause`, `seek`, `seek_relative` → `no_playback` when nothing is
-  playing or opening; `next`, `previous`, `set_audio`, `set_subtitle` → `no_playback` when
-  nothing is playing. `stop`, volume, mute, fullscreen and `set_controls` always succeed once
+  playing or opening; `next`, `previous`, `set_audio`, `set_subtitle`, `skip_segment` →
+  `no_playback` when nothing is playing. `stop`, volume, mute, fullscreen and `set_controls` always succeed once
   connected (`set_controls` also on a `--dev` backend connected with only its window). With nothing
   playing, `set_volume` sets the volume the next item starts at, and `set_controls` holds for every
   item after it.
@@ -160,7 +165,8 @@ Command details:
   "accessToken": "<token>",
   "device": {"id": "<DeviceId FluentFin uses>", "name": "<device name>"},
   "client": {"name": "FluentFin", "version": "1.0.0"},
-  "window": {"mode": "embedded", "hwnd": 1311242}   // or {"mode": "attached", "ipc": "fluentfin-mpv-4242-0011223344556677"}, or {"mode": "standalone"}
+  "window": {"mode": "embedded", "hwnd": 1311242},  // or {"mode": "attached", "ipc": "fluentfin-mpv-4242-0011223344556677"}, or {"mode": "standalone"}
+  "prewarm": true                                    // optional, default false
 }
 ```
 
@@ -193,6 +199,21 @@ Command details:
   long as the backend process; one that ended is replaced on a new pipe, so the next `connect` has a
   different `window` and the UI restarts the backend (`window_locked`). A pipe that does not answer
   fails the first `connect` with `mpv_failed`. The UI sends `set_controls` `"ui"` for its controls.
+- `prewarm` (true or false; absent or null = false; anything else is `bad_args`): the UI connects **ahead of
+  playback** (after sign-in, so the first `play` skips the backend start and `connect`). With
+  an `embedded` window, mpv is started **without its video output**: no window of mpv's
+  exists inside `hwnd` (no input queues attached across the processes, no GPU surface) until
+  the first `play` or `play_file` is accepted, which has mpv build it alongside that start
+  (a start that then never reaches mpv leaves an idle, black one); from then on the surface
+  stays for the process, exactly as without `prewarm`. Everything else
+  is the ordinary `connect`: the same result, the same `Users/Me` check (the only request a
+  pre-warmed backend makes while idle: it reports nothing), the window fixed for the
+  process. Only the `connect` that starts mpv (the first one with a `window`) reads it; later
+  ones, `standalone` and `attached` ignore it (an attached mpv is the UI's, and whether it exists
+  before the first play is the UI's choice: FluentFin then only starts the backend ahead, and
+  sends `connect` at the first play, since connecting needs that mpv). A UI that never sends it
+  gets today's behaviour, and a backend that does not know it ignores it (unknown fields, §2):
+  the surface then exists from `connect` on.
 - The backend must not bind any network port, start the tray, the in-player library
   browser, update checks, Discord presence, gamepad-to-browser navigation, or the
   single-instance listener of a standalone install.
@@ -206,6 +227,8 @@ Command details:
 | `position` | `{"positionTicks", "durationTicks"}` ~every 500 ms while playing, only when changed |
 | `item` | `{"itemId", "name", "type", "seriesName"?, "seasonNumber"?, "episodeNumber"?, "runTimeTicks"?}` when a queue item starts |
 | `tracks` | `{"audio": [Track], "subtitle": [Track]}` when an item opens; Track = `{"index", "language"?, "title"?, "streamTitle"?, "codec"?, "channels"?, "isDefault", "isForced"?, "isHearingImpaired"?, "isExternal"}`. `title` is the server's `DisplayTitle` (or the stream's own title when there is none); `streamTitle` is only the stream's own title tag, absent when it has none ("SDH", "Commentary", "Signs & Songs"); `isHearingImpaired` is sent when the server says (Jellyfin 10.9+). `streamTitle` and `isHearingImpaired` were added in protocol 1 without a version bump: a UI that does not know them builds its labels from `title`. |
+| `segments` | fluentfin-mpv: `{"itemId", "segments": [Segment], "current": int?}`; Segment = `{"type", "startTicks", "endTicks", "action"}`. `type` is Jellyfin's `MediaSegmentType` (`Intro`, `Outro`, `Commercial`, `Preview`, `Recap`); `action` is what the backend's settings do with it: `"ask"` (offer a skip) or `"always"` (the backend skips it by itself, in either controls mode). Types set to off are neither fetched nor listed. `current` is the index in `segments` of the one on offer now: an `ask` segment the position is in (start inclusive, end exclusive), else null; with `set_controls` `"mpv"` the backend's bar offers it too (a Skip button, a prompt, the S key), with `"ui"` only the UI does. Sent after `tracks` for every Jellyfin item that starts (an empty list included), and whenever the list or `current` changes; `current` follows the position at the backend's sampling (about every 0.5 s). Never for `play_file`. Added in protocol 1 without a version bump |
+| `next` | fluentfin-mpv: `{"itemId", "nextItemId"?, "previousItemId"?, "autoPlay": bool}` after `segments` for every Jellyfin item that starts, and whenever one of them changes: `state.queue`'s neighbours, which `next` and `previous` play (absent at an end of the queue; `previous` can still play when `previousItemId` is absent: for an episode at the queue's start it first fills the queue with the series' earlier episodes), and `autoPlay`, whether the backend plays `nextItemId` by itself when this item ends (its `auto_play` setting; false without a next item). Ids only: the UI resolves names and artwork itself. Never for `play_file`. Added in protocol 1 without a version bump |
 | `ended` | `{"itemId", "reason": "eof" \| "stopped" \| "error" \| "replaced"}` per item; after the last item, state → `idle` |
 | `reported` | `{"itemId", "playSessionId", "outcome": "sent" \| "failed" \| "none"}` once the backend is **done with its Stopped report** for that play session: `sent` = the server accepted it (a 2xx status, not merely "no exception"), `failed` = it errored, timed out or was abandoned (old client retired, shutdown deadline), `none` = the session never reached the server (no Playing was sent, e.g. it failed while opening), so there is nothing to stop. At most one per `playSessionId` for the life of the process (a server that reuses ids gets one in all). Written on the backend's next state tick after the attempt ends, after that tick's `state` events, or directly within about 1 s if no tick completes (an mpv that stops answering); so a `state` sampled earlier can still show the session after its `reported` (the UI keeps it closed, §6). Everything pending is written before the `shutdown` answer or the EOF exit, and a session whose Stopped is still pending then gets `failed`. A restart (a track or quality change that renegotiates the stream; upstream never sends the old session's Stopped) that leaves the item on a new `playSessionId` gets `failed` for the old session when the restart's start has finished (which can be up to the playback timeout after the new PlaybackInfo), whether the new session then opened, was cancelled or failed to load. A restart that never got a usable stream (its PlaybackInfo request failed, or it returned no playable source or URL) keeps the old session, which goes on reporting and gets its normal Stopped. While a restart negotiates, `state` keeps showing the old `playSessionId`; the new one appears only once mpv has started loading the new stream (so a UI tracking sessions never drops the old one for a restart that then fails). After a server switch the old server's outcome may arrive after the `connect` answer (`failed` within the 2 s grace if it hangs). It can name a session the UI never saw in a `state` (e.g. `none` for one that failed before any snapshot); a UI ignores ids it is not tracking. A UI closes the session on **any** outcome value, including ones it does not know. Not tied to `ended` or `idle`, which can come earlier (a deferred `stop`) or later. Never for `play_file`. Added in protocol 1 without a version bump: a UI that ignores it loses nothing but the §6 crash rule's precision. |
 | `fullscreen_request` | `{"fullscreen": bool}` (embedded mode only) |
@@ -220,7 +243,12 @@ superseded by `stop`, `play` or `connect` reports no `error`, even if its reques
 later (so an old server's late failure never lands after a switch).
 A track or quality change that cannot be applied (no usable stream for it) gets only an
 `error` event (`mpv_failed`, or `server_unreachable` when the request itself failed) whose
-message names the item; the item plays on with the tracks it had and `state` keeps showing
+message names the item. That message is written to be shown as it is (fluentfin-mpv, the event's
+shape unchanged): what could not be changed (the audio track, the subtitles, the quality), the
+item by the title the backend's bar shows, and the cause in plain words, e.g. `The audio track
+of "Series — S6E4 · Episode" could not be changed: the server answered with an error. It goes
+on playing as before.` No ids, URLs, status codes or exception text: those go to the backend's
+log. The item plays on with the tracks it had and `state` keeps showing
 the tracks actually playing. Known limit: for a **transcoded** item the server's old
 transcode was already ended before the new one was negotiated (upstream behaviour), so it
 plays on only as long as mpv's buffer lasts. A server answer that is not a usable PlaybackInfo (a 5xx, an empty
@@ -259,8 +287,8 @@ the item has started (a `stop` in between drops them); they are not acknowledged
 | PlaybackInfo, device profile, direct play vs transcode, stream URL | backend |
 | Track defaults and remembered tracks | backend (UI may pass explicit indices) |
 | Progress / start / stop reports to the server | **backend only** — the UI must not also report. One exception: when the backend exits **unexpectedly** (crash or watchdog kill, not `shutdown`/EOF or a kill the UI's own close decided, whatever the exit code) while a play session is still **open**, the UI sends **one** Stopped report itself. A session is open from the first `state` that shows it (`opening`/`playing`/`paused` with a `playSessionId`) until a `reported` event for that `playSessionId` arrives — **not** until `idle` or `ended`, since a deferred `stop` answers and goes `idle` before its report is sent. The UI tracks only the latest session (a newer one replaces it; the backend reports the outgoing one itself). A session stays closed once its `reported` has arrived, even if a later `state` shows it again (a replacement that fails before mpv starts can leave the old item showing after its Stopped was sent), and a `reported` that arrives before any `state` of its session keeps that session from opening. Whether the exit was unexpected is decided by what happened **first**, the process exit or the UI's own shutdown, not by when the UI gets round to handling the exit. The report carries that session's `itemId`, `mediaSourceId`, `playSessionId` and the position from the latest `position` event **for that play session** (not the older `state` snapshot, and not a position of an earlier session of the same item), so the server closes the session and its transcode instead of waiting for its idle timeout. If no `position` event was seen for that session (e.g. it was still `opening`, whose snapshot always says 0, even when the same item played before), the report is sent with **`Failed = true`** and no position, so the server closes the session without overwriting the item's resume point. The report goes only to the server and user the session was played as: if the UI has since switched to another server or user, it is skipped and logged (the backend reports a switched-away session itself, §5). After `shutdown`/EOF, or a kill the UI's own close decided (a backend still starting, or with a `connect` unanswered, after 3 s), the UI never reports, even on exit 1 (the backend's report may still be in flight or its server hung); a session whose Stopped was still pending then gets none, an accepted cost of closing a hung backend. Once the close returns, any Stopped the UI owes has been attempted (it waits, bounded, for the exit it caused before deciding). Accepted cost: a backend that dies between sending its Stopped and emitting `reported` gets a second Stopped from the UI |
-| Media segments (skip intro/credits), trickplay preview | backend (shim OSC) with `set_controls` `"mpv"`; the UI with `"ui"` (it asks the server for segments and trickplay tiles itself; a segment set to skip automatically in the shim's settings is still skipped by the shim) |
-| Player controls, and all input over the video | mpv's OSC (`"mpv"`), or the UI (`"ui"`: mpv's window gets no input, the UI sends commands) |
+| Media segments (skip intro/credits), trickplay preview | backend: it fetches the segments and skips the types set to skip automatically, in either controls mode. With `set_controls` `"mpv"` its bar offers the others (a Skip button and an on-screen prompt) and draws the trickplay previews; with `"ui"` it draws neither, and the UI offers the skip from the `segments` event with `skip_segment` (so the two never disagree about which segments to offer) and asks the server for trickplay tiles itself |
+| Player controls, and all input over the video | mpv's bar (`"mpv"`: FluentFin's key map, the wheel as volume ±5 held to 0–100 and never a seek, `backend/docs/bridge.md` §4a; a volume or mute change made there reaches the UI in `state`), or the UI (`"ui"`: mpv's window gets no input, the UI sends commands) |
 | Video surface | backend's mpv inside the UI's child window (embedded), or the UI's own in-process mpv the backend attaches to (attached) |
 | Window, fullscreen, back navigation | UI |
 | SyncPlay | not supported with the mpv player in v1; UI disables it in that mode |

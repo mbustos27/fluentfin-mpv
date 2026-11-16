@@ -103,6 +103,7 @@ public partial class App : Application
 			services.AddSingleton<IMpvVideoSurface, MpvVideoSurfaceChoice>();
 			services.AddSingleton<IMpvBackend, MpvBackendHost>();
 			services.AddSingleton<MpvPlaybackService>();
+			services.AddSingleton<MpvPrewarm>();
 			// fluentfin-mpv: the nav pane and search hide while a player page is open (docs/research/ux-review.md V9)
 			services.AddSingleton(_ => new PlayerChrome(action => MainWindow.DispatcherQueue.TryEnqueue(() => action())));
 
@@ -266,6 +267,7 @@ public partial class App : Application
 	{
 		try
 		{
+			PerfLog.Startup(GetService<ILogger<App>>(), "launched");
 			await Host.StartAsync();
 
 			Locator.SetServiceProvider(Host.Services);
@@ -277,8 +279,7 @@ public partial class App : Application
 			// a hung mpv window would freeze our input too (the queues of the two processes are attached)
 			GetService<MpvVideoHost>().Unresponsive += reason => GetService<IMpvBackend>().Kill(reason);
 
-			StartFlyleaf();
-
+			// fluentfin-mpv (startup-perf, O5): no Flyleaf engine here; it starts with the first Flyleaf player (FlyleafEngine)
 			await GetService<IActivationService>().ActivateAsync(args);
 		}
 		catch (Exception ex)
@@ -324,6 +325,9 @@ public partial class App : Application
 
 		try
 		{
+			// fluentfin-mpv (startup-perf): no pre-warm of the mpv backend from now on; one in flight gives way to the close
+			GetService<MpvPrewarm>().Cancel("FluentFin is closing");
+
 			// fluentfin-mpv: upstream's stop report (bounded: a hung server must not keep a hidden FluentFin alive) and, side by
 			// side, the mpv backend's shutdown and any crash report FluentFin is sending for it. Before the window goes, so the
 			// backend's mpv window is gone before ours is destroyed.
@@ -336,19 +340,5 @@ public partial class App : Application
 		{
 			MainWindow.Close();
 		}
-	}
-
-	private static void StartFlyleaf()
-	{
-		var location = Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly()!.Location)!, "FFMpeg");
-		FlyleafLib.Engine.Start(new FlyleafLib.EngineConfig()
-		{
-			FFmpegLoadProfile = Flyleaf.FFmpeg.LoadProfile.Main,    // Prevents loading avdevice/avfilter dll files
-			FFmpegPath = location ?? "FFmpeg",
-			FFmpegLogLevel = Flyleaf.FFmpeg.LogLevel.Quiet,
-			LogLevel = FlyleafLib.LogLevel.Quiet,
-			UIRefresh = true,    // Required for Activity, BufferedDuration, Stats in combination with Config.Player.Stats = true
-			UIRefreshInterval = 250,      // How often (in ms) to notify the UI
-		});
 	}
 }

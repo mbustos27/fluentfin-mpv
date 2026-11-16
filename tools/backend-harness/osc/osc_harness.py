@@ -15,6 +15,14 @@ OSC hidden, OSC shown (``osc-visibility always``), the seek bar hovered
 ``volume`` and ``time-pos`` over mpv's IPC (``mpv_ext_ipc``) at each step.
 ``--mkv``: any video; the e2e harness makes one with mpv's encoder.
 
+The bar is whichever the bridge chose (``--osc-style``, default the shim's
+``mpvtk``: uosc; ``mpv``: the fork). uosc is shown and hidden with its
+``set-min-visibility``, the fork with ``osc-visibility``. The episode has an
+Intro segment (25-60 s, so the seek to 31 s lands in it: the Skip button and
+prompt) and a second item in the queue (the Next button). ``--fullscreen``
+adds a full-screen step (the host window resized to ``--fs-size``, as
+FluentFin's full screen does, and ``set_fullscreen`` sent).
+
 Every process this starts is in a kill-on-close job the harness puts itself
 in first, so nothing outlives it. The host window is off-screen, never
 activated and has no taskbar button.
@@ -41,12 +49,13 @@ sys.path.insert(0, os.path.join(WT, "backend", "tools"))
 from fakejf2 import FakeJF  # noqa: E402
 import bridge_smoke  # noqa: E402
 
-MPV = shutil.which("mpv") or os.path.expandvars(
+MPV = shutil.which("mpv.exe") or shutil.which("mpv") or os.path.expandvars(
     r"%LOCALAPPDATA%\Microsoft\WinGet\Packages"
     r"\mpv-player.mpv-CI.MSVC_Microsoft.Winget.Source_8wekyb3d8bbwe\mpv.exe")
 TOKEN = "osc-harness-fake-token-0123456789"
 USER = "0123456789abcdef0123456789abcdef"
 ITEM = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ITEM2 = "dddddddddddddddddddddddddddddddd"
 SERIES = "It's Always Sunny in Philadelphia"
 
 k32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -138,6 +147,17 @@ class EpisodeJF(FakeJF):
                 data = open(outer.srts[int(m.group(1))], "rb").read()
                 h.send_response(200)
                 h.send_header("Content-Type", "text/plain; charset=utf-8")
+                h.send_header("Content-Length", str(len(data)))
+                h.end_headers()
+                h.wfile.write(data)
+                return
+            if path.startswith("/MediaSegments/"):
+                data = json.dumps({"Items": [{
+                    "Id": "c" * 32, "ItemId": ITEM, "Type": "Intro",
+                    "StartTicks": 25 * 10 ** 7, "EndTicks": 60 * 10 ** 7}]
+                }).encode()
+                h.send_response(200)
+                h.send_header("Content-Type", "application/json")
                 h.send_header("Content-Length", str(len(data)))
                 h.end_headers()
                 h.wfile.write(data)
@@ -269,10 +289,20 @@ class Host(bridge_smoke.HostWindow):
         u.SetWindowPos(self.hwnd, None, x, y, w2, h2, 0x0010 | 0x0004)
         u.ShowWindow(self.hwnd, 4)       # SW_SHOWNOACTIVATE
         self._ready.set()
+        self._frame = (w2 - cw, h2 - ch)
         msg = wt_.MSG()
         while u.GetMessageW(ctypes_.byref(msg), None, 0, 0) > 0:
             u.TranslateMessage(ctypes_.byref(msg))
             u.DispatchMessageW(ctypes_.byref(msg))
+
+    def resize_client(self, cw, ch):
+        """The client area to ``cw`` x ``ch``, in place, never activated (a
+        stand-in for FluentFin's full screen, which resizes the video's
+        window). The embedded mpv follows its parent."""
+        fw, fh = self._frame
+        self.user32.SetWindowPos(self.hwnd, None, 0, 0, cw + fw, ch + fh,
+                                 0x0002 | 0x0004 | 0x0010)  # NOMOVE|NOZORDER|NOACTIVATE
+        time.sleep(0.5)
 
 
 # ---------------------------------------------------------------- mpv ipc
@@ -328,14 +358,27 @@ class Bridge(bridge_smoke.BridgeProcess):
         with open(os.path.join(self.config_dir, "conf.json"), "w",
                   encoding="utf-8") as fh:
             json.dump(conf, fh)
+        # Silent, always: the test config's own mpv.conf (never the user's).
+        with open(os.path.join(self.config_dir, "mpv.conf"), "w",
+                  encoding="utf-8") as fh:
+            fh.write("ao=null\nmute=yes\n")
         self.log_file = os.path.join(out_dir, name + "-bridge.log")
         self.stderr_path = os.path.join(out_dir, name + "-stderr.txt")
         self._stderr = open(self.stderr_path, "wb")
-        boot = ("import sys; sys.path.insert(0, %r); "
+        # --text-scale: Windows' text size as the backend would read it from
+        # the registry, set in this bridge process only (the user's
+        # registry is never touched).
+        scale = (env or {}).get("OSC_HARNESS_TEXT_SCALE")
+        patch = ""
+        if scale:
+            patch = ("from jellyfin_mpv_shim import fluentfin_osc as _f; "
+                     "_f.text_scale = lambda value=None: %r; "
+                     % (int(scale) / 100.0))
+        boot = ("import sys; sys.path.insert(0, %r); %s"
                 "from jellyfin_mpv_shim.bridge import main; "
                 "sys.exit(main(%r))"
-                % (backend, ["--config-dir", self.config_dir,
-                             "--log-file", self.log_file]))
+                % (backend, patch, ["--config-dir", self.config_dir,
+                                    "--log-file", self.log_file]))
         self.proc = subprocess.Popen([python, "-I", "-c", boot],
                                      stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE,
@@ -372,6 +415,10 @@ def main():
     ap.add_argument("--movie", action="store_true")
     ap.add_argument("--hover-y", type=float, default=0.979)
     ap.add_argument("--text-scale", type=int, default=None)
+    ap.add_argument("--osc-style", default="mpvtk",
+                    help="conf.json osc_style (mpvtk: uosc, mpv: the fork)")
+    ap.add_argument("--fullscreen", action="store_true")
+    ap.add_argument("--fs-size", default="1920x1080")
     ap.add_argument("--runtime-opt", action="append", default=[],
                     help="script-opts entry appended over IPC once playing "
                     "(e.g. osc-scalewindowed=1.5, a Windows text scale)")
@@ -396,7 +443,7 @@ def main():
         os.makedirs(env[k], exist_ok=True)
     pipe = "osc-harness-%d-%s" % (os.getpid(), a.tag)
     conf = {"mpv_ext_ipc": pipe, "mpv_ext_path": MPV,
-            "mpv_log_level": "info"}
+            "mpv_log_level": "info", "osc_style": a.osc_style}
     if a.text_scale:
         env["OSC_HARNESS_TEXT_SCALE"] = str(a.text_scale)
     host = Host(cw, ch, px, py)
@@ -416,7 +463,7 @@ def main():
         print("connect:", r, flush=True)
         ipc = Ipc(pipe)
         mark = b.mark()
-        r = b.request("play", {"itemIds": [ITEM]}, timeout=60)
+        r = b.request("play", {"itemIds": [ITEM, ITEM2]}, timeout=60)
         print("play:", r, flush=True)
         st = b.wait_event("state", lambda d: d.get("state") == "playing",
                           timeout=60, since=mark)
@@ -434,13 +481,27 @@ def main():
             "id", "type", "lang", "title", "external", "selected", "codec")}
             for t in tracks]
         for p in ("media-title", "sub-pos", "osd-font", "script-opts",
-                  "osd-dimensions", "mpv-version", "aid", "sid"):
+                  "osd-dimensions", "mpv-version", "aid", "sid",
+                  "osd-fonts-dir", "volume-max", "user-data/fluentfin"):
             report[p] = ipc.get(p)
+        uosc = report["user-data/fluentfin"] is not None and (
+            report["user-data/fluentfin"].get("bar") is not None)
+        report["bar"] = "uosc" if uosc else "fork"
+        report["segments"] = [m for m in b.messages
+                              if m.get("event") in ("segments", "next")]
         print(json.dumps(report, indent=1), flush=True)
+
+        def show(always):
+            if uosc:
+                ipc.cmd(["script-message-to", "uosc", "set-min-visibility",
+                         "1" if always else "0"])
+            else:
+                ipc.cmd(["script-message", "osc-visibility",
+                         "always" if always else "auto", "no-osd"])
 
         report["shot_hidden"] = shot(host, os.path.join(
             out, "%s-1-osc-hidden.png" % a.tag))
-        ipc.cmd(["script-message", "osc-visibility", "always", "no-osd"])
+        show(True)
         time.sleep(2.5)
         report["sub_pos_shown"] = ipc.get("sub-pos")
         report["shot_shown"] = shot(host, os.path.join(
@@ -474,8 +535,21 @@ def main():
         print("wheel:", wheel, flush=True)
         report["shot_wheel"] = shot(host, os.path.join(
             out, "%s-3b-after-wheel.png" % a.tag))
+        if a.fullscreen:
+            fw, fh_ = (int(v) for v in a.fs_size.split("x"))
+            host.resize_client(fw, fh_)
+            b.request("set_fullscreen", {"fullscreen": True})
+            time.sleep(2.5)
+            ipc.cmd(["mouse", str(fw // 2), str(int(fh_ * 0.9))])
+            time.sleep(1.0)
+            report["sub_pos_fullscreen"] = ipc.get("sub-pos")
+            report["shot_fullscreen"] = shot(host, os.path.join(
+                out, "%s-3c-fullscreen.png" % a.tag))
+            host.resize_client(cw, ch)
+            b.request("set_fullscreen", {"fullscreen": False})
+            time.sleep(1.5)
         ipc.cmd(["mouse", str(cw // 2), str(ch // 5)])
-        ipc.cmd(["script-message", "osc-visibility", "auto", "no-osd"])
+        show(False)
         time.sleep(3)
         report["sub_pos_hidden_again"] = ipc.get("sub-pos")
         report["shot_hidden_again"] = shot(host, os.path.join(

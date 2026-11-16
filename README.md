@@ -7,7 +7,7 @@ This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv
 ## What it adds to FluentFin
 
 - **mpv playback through jellyfin-mpv-shim.** Choose the player "MPV (jellyfin-mpv-shim)". The shim runs headless in a *bridge mode*. It takes care of PlaybackInfo and the transcode decision, track selection, trickplay and skip-intro, and reports progress to the server. FluentFin talks to it over a stdio JSON-lines protocol ([docs/BRIDGE.md](docs/BRIDGE.md)), and mpv draws inside FluentFin's player page.
-- **A polished mpv bar.** It shows the series and episode title, keeps subtitles above the bar, names the tracks, uses FluentFin's colours, and the mouse wheel changes the volume.
+- **A polished mpv bar.** By default the bar is [uosc](https://github.com/tomasklaen/uosc) in FluentFin's look, with the shim's own bar as the fallback. It shows the series and episode title, fills the seek bar in your accent colour with trickplay previews, offers previous, next and a Skip Intro button, keeps subtitles above the bar, takes FluentFin's keys (k, j/l, arrows, s, Shift+N/P), and the mouse wheel changes the volume.
 - **FluentFin's own player controls (experimental, opt-in).** Under Settings → Playback → Player controls → FluentFin, libmpv renders in-process into a WinUI composition swap chain. FluentFin then draws its own controls over the video: seek, play/pause, ±10/30 s, next episode, volume, audio and subtitle menus, full screen, and auto-hide. This mode needs a libmpv build in `vendor\libmpv` (see `vendor/libmpv/VENDORED.md`). Without one, it falls back to mpv's controls.
 - **A TV journal.** A Serializd-style diary of what you watched, kept locally in SQLite, one journal per server and user.
   - Episodes are logged automatically when they're watched to the end, and synced from Jellyfin's played state (with exact dates when the Playback Reporting plugin is installed).
@@ -24,6 +24,11 @@ This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv
   - Long text wraps, with Show more.
   - Colours follow high-contrast themes.
 - **Sign-out feedback.** Signing out shows progress, playback stops cleanly first, and nothing can start playing during a sign-out.
+- **Faster start and first play.**
+  - The window appears before the automatic sign-in finishes and says "Signing in to …" (about 0.9 s after launch instead of 1.5 s in an off-screen test).
+  - After sign-in, the mpv backend is started and connected in the background, so Play doesn't wait for it: playback starts about 0.17 s after Play instead of 0.64 s, against a local test server.
+  - The Flyleaf engine and the Windows player's codec check run only when those players are used.
+  - Start-up and play timings are written to the log as `[perf]` lines.
 
 ## Download
 
