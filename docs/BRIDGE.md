@@ -3,7 +3,7 @@
 FluentFin (C#, `ui/`) is the face of the app: login, servers, libraries, item pages,
 settings, the Jellyfin dashboard. jellyfin-mpv-shim (Python, `backend/`) is the
 playback engine: PlaybackInfo and the transcode decision, track selection, mpv and its
-options/shaders/SVP, the shim's OSC (trickplay, skip intro), progress reporting to the
+options/shaders/SVP, mpv's bar (uosc, or the shim's OSC: trickplay, skip intro), progress reporting to the
 server, next-episode handling.
 
 The UI starts the backend as a **child process** and talks to it over **stdio**. This

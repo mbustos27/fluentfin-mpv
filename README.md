@@ -7,7 +7,8 @@ FluentFin's Windows UI with jellyfin-mpv-shim's playback engine. Local project, 
   **"MPV (jellyfin-mpv-shim)"**.
 - `backend/` — [jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim) (Python):
   run headless in **bridge mode**, it does PlaybackInfo and the transcode decision, track
-  selection, mpv with the shim's OSC (trickplay, skip intro), and progress reporting.
+  selection, mpv with its bar (uosc in FluentFin's look, with trickplay previews, Skip intro
+  and FluentFin's keys; the shim's OSC as the fallback), and progress reporting.
 - `docs/BRIDGE.md` — the stdio JSON-lines protocol between them (the contract).
 - `docs/UPSTREAM.md` — the upstream commits this was built from, and how to pull updates.
 - `docs/KNOWN-ISSUES.md` — what is open, accepted or never verified (a real Jellyfin server among them).
