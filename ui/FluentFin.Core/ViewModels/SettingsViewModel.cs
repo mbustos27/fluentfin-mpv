@@ -17,6 +17,12 @@ public sealed record MpvPlayerControlsChoice(MpvPlayerControls Controls, string 
 	public override string ToString() => Name;
 }
 
+/// <summary>Seaglass: a "Glass" choice in the Settings list.</summary>
+public sealed record GlassChoiceItem(GlassChoice Choice, string Name, string Description)
+{
+	public override string ToString() => Name;
+}
+
 /// <summary>A player in the Settings list.</summary>
 public sealed record MediaPlayerChoice(MediaPlayerType Type, string Name)
 {
@@ -93,6 +99,41 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	}
 
 	public bool IsMpvSelected => MediaPlayerType == MediaPlayerType.Mpv;
+
+	/// <summary>Seaglass: the choices for Settings > Appearance > Glass.</summary>
+	public static IReadOnlyList<GlassChoiceItem> GlassChoices { get; } =
+	[
+		new(GlassChoice.Automatic, "Automatic", "Follows Windows: transparency effects, animation effects and high contrast."),
+		new(GlassChoice.Full, "Full", "Frosted glass and motion."),
+		new(GlassChoice.Reduced, "Reduced", "Frosted glass, with fades only."),
+		new(GlassChoice.Solid, "Solid", "Opaque surfaces, no transparency."),
+	];
+
+	/// <summary>Saved on this PC when it changes; the app applies it (FluentFin.Services.GlassSetting) as the page hears the change.</summary>
+	public GlassChoice Glass
+	{
+		get => field;
+		set
+		{
+			if (SetProperty(ref field, value))
+			{
+				settings.Glass = value;
+				OnPropertyChanged(nameof(SelectedGlass));
+			}
+		}
+	}
+
+	public GlassChoiceItem SelectedGlass
+	{
+		get => GlassChoices.First(x => x.Choice == Glass);
+		set
+		{
+			if (value is not null)
+			{
+				Glass = value.Choice;
+			}
+		}
+	}
 
 	/// <summary>fluentfin-mpv: the choices for who draws the player controls (docs/research/player-controls.md).</summary>
 	public static IReadOnlyList<MpvPlayerControlsChoice> PlayerControlsChoices { get; } =
@@ -264,6 +305,7 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		}
 		MpvBackendCommand = settings.MpvBackendCommand;
 		PlayerControls = settings.MpvPlayerControls;
+		Glass = settings.Glass;
 
 		_statusSubscription?.Dispose();
 		_statusSubscription = mpvBackend.StatusChanged

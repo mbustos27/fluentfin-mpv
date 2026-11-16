@@ -24,6 +24,9 @@ public interface ISettings
 	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.VolumeStep"/> (1 to 20).</summary>
 	int VolumeStep { get; set; }
 
+	/// <summary>Seaglass: see <see cref="SettingKeys.Glass"/>.</summary>
+	GlassChoice Glass { get; set; }
+
 	void ListenToChanges();
 
 	void SaveServerDetails();
@@ -52,6 +55,13 @@ public partial class Settings(ILocalSettingsService localSettingsService, MediaP
 	{
 		get => localSettingsService.ReadSetting(SettingKeys.MpvPlayerControls);
 		set => localSettingsService.SaveSetting(SettingKeys.MpvPlayerControls, value);
+	}
+
+	public GlassChoice Glass
+	{
+		// a stored value that is no longer a choice (a hand-edited file) reads as Automatic
+		get => Enum.IsDefined(localSettingsService.ReadSetting(SettingKeys.Glass)) ? localSettingsService.ReadSetting(SettingKeys.Glass) : GlassChoice.Automatic;
+		set => localSettingsService.SaveSetting(SettingKeys.Glass, value);
 	}
 
 	public bool ShowSkipPrompt

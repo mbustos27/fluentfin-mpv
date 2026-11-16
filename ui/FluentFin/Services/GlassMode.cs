@@ -25,9 +25,16 @@ public static class GlassMode
 
 	static GlassMode()
 	{
-		// held in static fields: a collected UISettings stops raising its events
-		_ui.AdvancedEffectsEnabledChanged += (_, _) => Changed?.Invoke(null, EventArgs.Empty);
-		_accessibility.HighContrastChanged += (_, _) => Changed?.Invoke(null, EventArgs.Empty);
+		// held in static fields: a collected UISettings stops raising its events. Without a window thread (a test host) the
+		// subscriptions are refused: the mode then only changes through Override.
+		try
+		{
+			_ui.AdvancedEffectsEnabledChanged += (_, _) => Changed?.Invoke(null, EventArgs.Empty);
+			_accessibility.HighContrastChanged += (_, _) => Changed?.Invoke(null, EventArgs.Empty);
+		}
+		catch (System.Runtime.InteropServices.COMException)
+		{
+		}
 	}
 
 	public static event EventHandler? Changed;
