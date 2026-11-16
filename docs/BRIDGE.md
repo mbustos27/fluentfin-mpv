@@ -69,7 +69,11 @@ file is the contract both sides build against. Change it here first, then on bot
   connection fails `not_connected` before its args are checked.
 
 Error codes: `not_connected`, `bad_args`, `unknown_cmd`, `auth_failed`,
-`server_unreachable`, `mpv_failed`, `no_playback`, `window_locked`, `internal`.
+`server_unreachable`, `mpv_failed`, `mpv_not_found`, `no_playback`, `window_locked`, `internal`.
+`mpv_not_found` (added in protocol 1 without a version bump) is `connect`'s answer when the mpv the backend
+would start itself (`embedded`/`standalone`; never `attached`) cannot be found: no `mpv_ext_path` naming a
+file, none on PATH, none in a WinGet install. Any other failure to start mpv stays `mpv_failed`. A UI that does not
+know the code treats it as any failed `connect`; FluentFin says what to do (use its own controls, or install mpv).
 
 ## 3. Lifecycle
 

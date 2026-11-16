@@ -37,13 +37,15 @@ UNKNOWN_CMD = "unknown_cmd"
 AUTH_FAILED = "auth_failed"
 SERVER_UNREACHABLE = "server_unreachable"
 MPV_FAILED = "mpv_failed"
+# fluentfin-mpv (release 1.0): connect could not find the mpv it would start itself (BRIDGE.md section 2)
+MPV_NOT_FOUND = "mpv_not_found"
 NO_PLAYBACK = "no_playback"
 WINDOW_LOCKED = "window_locked"
 INTERNAL = "internal"
 
 ERROR_CODES = frozenset({
     NOT_CONNECTED, BAD_ARGS, UNKNOWN_CMD, AUTH_FAILED, SERVER_UNREACHABLE,
-    MPV_FAILED, NO_PLAYBACK, WINDOW_LOCKED, INTERNAL,
+    MPV_FAILED, MPV_NOT_FOUND, NO_PLAYBACK, WINDOW_LOCKED, INTERNAL,
 })
 
 

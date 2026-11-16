@@ -320,6 +320,11 @@ public partial class VideoPlayerViewModel
 	/// <summary>What the page shows when a start fails: which step, then why (never a token: redacted).</summary>
 	private static string StartFailureMessage(MpvStartStep? step, Exception ex)
 	{
+		if (MpvNotFoundMessage.For(ex) is { } plain)
+		{
+			return plain; // fluentfin-mpv (release 1.0): no mpv for mpv's controls, said plainly
+		}
+
 		var why = BridgeRedaction.Redact(ex.Message);
 		return step switch
 		{

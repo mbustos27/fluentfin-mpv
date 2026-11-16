@@ -45,7 +45,8 @@ from . import bridge_protocol as proto
 from . import bridge_state
 from .bridge_protocol import (BAD_ARGS, INTERNAL, MPV_FAILED, NOT_CONNECTED,
                               NO_PLAYBACK, UNKNOWN_CMD, WINDOW_LOCKED,
-                              AUTH_FAILED, SERVER_UNREACHABLE, BridgeError)
+                              AUTH_FAILED, SERVER_UNREACHABLE, BridgeError,
+                              MPV_NOT_FOUND)
 
 log = logging.getLogger("bridge")
 
@@ -127,6 +128,26 @@ def find_mpv_binary():
                 if os.path.isfile(path):
                     return path
     return None
+
+
+def mpv_binary_missing(error, window_mode, mpv_ext_path):
+    """Whether starting the player failed for want of an mpv binary
+    (``mpv_not_found``, BRIDGE.md section 2) rather than anything else.
+
+    The external backend spawns mpv, and a binary that is not there comes
+    back from ``CreateProcess`` as ENOENT (``[WinError 2]``) naming no file;
+    a missing file of any other kind names it. ``load_settings`` has already
+    put a found binary in ``mpv_ext_path``, so without one naming a file
+    there was nothing to spawn. Never for ``attached``: that mpv is the
+    UI's, and the backend starts none.
+    """
+    import errno
+
+    return (window_mode != "attached"
+            and isinstance(error, FileNotFoundError)
+            and error.errno == errno.ENOENT
+            and getattr(error, "filename", None) is None
+            and not (mpv_ext_path and os.path.isfile(mpv_ext_path)))
 
 
 def classify_exception(error):
@@ -2277,6 +2298,12 @@ class Bridge:
                 info = self.runtime.start_player(window, defer_surface=defer)
             except Exception as error:
                 log.exception("mpv could not be started")
+                from .conf import settings
+                if mpv_binary_missing(error, window["mode"],
+                                      settings.mpv_ext_path):
+                    raise BridgeError(MPV_NOT_FOUND, "mpv.exe was not found "
+                                      "(not set in mpv_ext_path, not on "
+                                      "PATH, not installed with WinGet)")
                 raise BridgeError(MPV_FAILED, "mpv could not be started: "
                                   + describe_exception(error))
             log.info("connect: mpv started in %d ms (%s window%s)",
