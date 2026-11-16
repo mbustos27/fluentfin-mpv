@@ -100,11 +100,11 @@
       "file": "uosc-5.13.0.tar.gz"
     },
     {
-      "name": "LibVLCSharp and LibVLCSharp.WinUI 3.10.2",
+      "name": "LibVLCSharp 3.10.2",
       "revision": "3.10.2 (3082c09ca955131c705fc4767fde03e9c4a14999)",
       "licence": "LGPL-2.1-or-later",
-      "shippedAs": "LibVLCSharp.dll, LibVLCSharp.WinUI.dll (managed; the release has no libvlc to run them)",
-      "why": "the NuGet packages' version, the project's tag 3.10.2",
+      "shippedAs": "LibVLCSharp.dll (managed; the release has no libvlc to run it)",
+      "why": "the NuGet package's version, the project's tag 3.10.2",
       "url": "https://code.videolan.org/videolan/LibVLCSharp/-/archive/3.10.2/LibVLCSharp-3.10.2.tar.gz",
       "file": "LibVLCSharp-3.10.2.tar.gz"
     },

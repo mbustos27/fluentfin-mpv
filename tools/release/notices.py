@@ -87,7 +87,80 @@ def python_package(name):
             "texts": texts}
 
 
-def nuget_packages(assets_path):
+BINARY = (".dll", ".exe", ".winmd")
+
+
+def binaries_in(folder):
+    """The lower-case names of the binaries a NuGet package or runtime pack holds, those inside its .msix files too
+    (the Windows App SDK's runtime package carries its DLLs that way)."""
+    import zipfile
+
+    names = set()
+    for root, _dirs, files in os.walk(folder):
+        names.update(f.lower() for f in files if f.lower().endswith(BINARY))
+        for f in files:
+            if f.lower().endswith((".msix", ".appx")):
+                try:
+                    with zipfile.ZipFile(os.path.join(root, f)) as zf:
+                        names.update(n.rsplit("/", 1)[-1].lower() for n in zf.namelist() if n.lower().endswith(BINARY))
+                except zipfile.BadZipFile:
+                    pass
+    return names
+
+
+def shipped_names(package_dir):
+    """The lower-case names of the binaries in the release folder."""
+    return binaries_in(package_dir) if package_dir else set()
+
+
+def runtime_packs(assets_path, shipped):
+    """The .NET runtime packs a self-contained publish copies (from project.assets.json's downloadDependencies) whose
+    binaries are in the folder, each with the licence files it carries."""
+    with open(assets_path, encoding="utf-8-sig") as fh:
+        assets = json.load(fh)
+    roots = list(assets.get("packageFolders", {}).keys())
+    out = []
+    for framework in assets.get("project", {}).get("frameworks", {}).values():
+        for dep in framework.get("downloadDependencies", []):
+            name = dep["name"]
+            if not (name.endswith(".win-x64") or name == "Microsoft.Windows.SDK.NET.Ref"):
+                continue
+            version = dep["version"].strip("[]").split(",")[0].strip()
+            folder = next((os.path.join(r, name.lower(), version) for r in roots
+                           if os.path.isdir(os.path.join(r, name.lower(), version))), None)
+            if not folder or not (binaries_in(folder) & shipped):
+                continue
+            texts = [(f, read_text(os.path.join(folder, f))) for f in sorted(os.listdir(folder))
+                     if os.path.isfile(os.path.join(folder, f)) and LICENCE_FILE.match(f)]
+            first = next((t for f, t in texts if f.lower().startswith("license")), "")
+            licence = "MIT" if "MIT License" in first[:200] else "see the licence text below"
+            out.append({"name": name, "version": version, "licence": licence,
+                        "source": f"https://www.nuget.org/packages/{name}/{version}", "ships": True, "texts": texts})
+    return out
+
+
+def source_licences(manifest_path, sources_dir):
+    """The licence and copyright files at the top of every source archive in dist/sources (sources.json), as
+    (heading, text): the libraries built into libmpv-2.dll, LibVLCSharp, Flyleaf, uosc and the Python sdists."""
+    import tarfile
+
+    out = []
+    manifest = json.load(open(manifest_path, encoding="utf-8"))
+    for item in manifest["items"]:
+        path = os.path.join(sources_dir, item["file"])
+        if not os.path.isfile(path):
+            continue
+        with tarfile.open(path) as tar:
+            for member in sorted(tar.getmembers(), key=lambda m: m.name):
+                parts = member.name.split("/")
+                if member.isfile() and len(parts) <= 2 and LICENCE_FILE.match(parts[-1]):
+                    text = tar.extractfile(member).read()
+                    out.append((f"{item['name']} at {item['revision']}: {parts[-1]}",
+                                text.decode("utf-8", "replace").replace("\r\n", "\n").strip("\n")))
+    return out
+
+
+def nuget_packages(assets_path, shipped=frozenset()):
     with open(assets_path, encoding="utf-8-sig") as fh:
         assets = json.load(fh)
     roots = list(assets.get("packageFolders", {}).keys())
@@ -100,6 +173,11 @@ def nuget_packages(assets_path):
         info = target.get(key, {})
         ships = any(info.get(k) for k in ("runtime", "native", "runtimeTargets", "resource", "contentFiles"))
         folder = next((os.path.join(r, lib["path"]) for r in roots if os.path.isdir(os.path.join(r, lib["path"]))), None)
+        # a package whose binaries are in the folder ships, however the build copied them (the Windows App SDK's targets)
+        ships = ships or bool(folder and binaries_in(folder) & shipped)
+        # the Windows App SDK ships self-contained: its packages together make the runtime in the folder (some carry
+        # the files, others the deployment that copies them)
+        ships = ships or (bool(shipped) and pid.startswith("Microsoft.WindowsAppSDK"))
         licence, licence_url, copyright_, project = "", "", "", ""
         texts = []
         if folder:
@@ -161,11 +239,17 @@ def main():
     ap.add_argument("--fluentfin-assets")
     ap.add_argument("--component", action="append", default=[], help="NAME|VERSION|LICENCE|SOURCE|NOTE")
     ap.add_argument("--not-shipped", action="append", default=[], help="a NuGet package id restored but left out of the folder")
+    ap.add_argument("--package-dir", help="the release folder: a package ships if its binaries are there")
+    ap.add_argument("--sources-manifest", help="tools/release/sources.json")
+    ap.add_argument("--sources-dir", help="dist/sources: licence files are taken from its archives")
+    ap.add_argument("--libmpv-status", help="the JSON sources.py writes: the libraries in libmpv-2.dll and which have source")
     args = ap.parse_args()
 
     py_packages = [python_package(n) for n in requirement_names(args.requirements)]
     pyinstaller = python_package("pyinstaller")
-    nuget = nuget_packages(args.assets)
+    shipped = shipped_names(args.package_dir)
+    nuget = nuget_packages(args.assets, shipped)
+    packs = runtime_packs(args.assets, shipped) if args.package_dir else []
     for item in nuget:
         if item["name"] in args.not_shipped:
             item["ships"], item["left_out"] = False, True
@@ -215,10 +299,20 @@ def main():
     lines += ["3. Python packages in the backend (backend\\_internal)", THIN]
     for item in py_packages:
         entry(lines, item)
-    lines += ["4. .NET (NuGet) packages restored for FluentFin (win-x64)", THIN,
-              "The .NET runtime and the Windows App SDK runtime ship self-contained in this folder (both MIT,",
-              "https://github.com/dotnet/runtime, https://github.com/microsoft/WindowsAppSDK). Packages marked",
-              "[build only] add no file of their own to this folder.", ""]
+    status = json.load(open(args.libmpv_status, encoding="utf-8")) if args.libmpv_status else None
+    if status:
+        lines += ["Libraries built into libmpv-2.dll (shinchiro/mpv-winbuild-cmake recipe; SOURCES.txt has the details)", THIN,
+                  "With their exact source in this release's sources, and their licence and copyright files in section 5:",
+                  "  " + ", ".join(status["included"]), "",
+                  "Their exact source is not established (the build did not record the revisions), so no licence or",
+                  "copyright file of theirs is reproduced here; the recipe names their repositories:",
+                  "  " + ", ".join(status["notEstablished"]), ""]
+    lines += ["4. .NET runtime and NuGet packages (win-x64)", THIN,
+              "The .NET runtime (MIT) and the Windows App SDK runtime ship self-contained in this folder. The .NET runtime",
+              "packs are listed first with their own licence files; the Windows App SDK's packages carry Microsoft's licence",
+              "terms, reproduced in section 5 as shipped. Packages marked [build only] add no file of their own to this folder.", ""]
+    for item in packs:
+        entry(lines, item)
     for item in nuget:
         note = ("[restored for the build, left out of this release]" if item.get("left_out")
                 else None if item["ships"] else "[build only]")
@@ -227,8 +321,10 @@ def main():
     lines += ["", "5. Licence texts", RULE,
               "Each text once; when several packages carry the same file, its heading names them all.", ""]
     texts = [(f"Python {args.python_version} (LICENSE.txt of the python.org runtime)", read_text(args.python_license))]
-    for item in [pyinstaller] + py_packages + nuget:
+    for item in [pyinstaller] + py_packages + packs + nuget:
         texts += [(f"{item['name']} {item['version']}: {name}", text) for name, text in item["texts"]]
+    if args.sources_manifest and args.sources_dir:
+        texts += source_licences(args.sources_manifest, args.sources_dir)
     if args.fluentfin_assets:
         for root, dirs, files in os.walk(args.fluentfin_assets):
             dirs.sort()
