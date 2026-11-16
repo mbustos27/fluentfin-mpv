@@ -76,7 +76,8 @@ public sealed class MpvPrewarmTests
 	[Fact]
 	public async Task ItWaitsItsDelay_SoTheHomePageGoesFirst()
 	{
-		var prewarm = Make(TimeSpan.FromMilliseconds(400));
+		// a margin no busy test machine eats: the check comes ~0.1 s in, the delay ends at 2 s
+		var prewarm = Make(TimeSpan.FromSeconds(2));
 
 		prewarm.SignedIn();
 		await Task.Delay(100);

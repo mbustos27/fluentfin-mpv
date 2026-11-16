@@ -309,9 +309,11 @@
                             <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind ViewModel.SelectedAudio.DisplayTitle, Mode=OneWay}" />
                         </ctk:Case>
                         <ctk:Case IsDefault="True">
+                            <!--  fluentfin-mpv: the lists are named after their labels for Narrator  -->
                             <ComboBox
                                 MinWidth="800"
                                 HorizontalAlignment="Left"
+                                AutomationProperties.Name="Audio"
                                 DisplayMemberPath="DisplayTitle"
                                 ItemsSource="{x:Bind ViewModel.AudioStreams, Mode=OneWay}"
                                 SelectedItem="{x:Bind ViewModel.SelectedAudio, Mode=TwoWay}" />
@@ -330,6 +332,7 @@
                         Grid.Column="1"
                         MinWidth="800"
                         HorizontalAlignment="Left"
+                        AutomationProperties.Name="Subtitle"
                         DisplayMemberPath="DisplayTitle"
                         ItemsSource="{x:Bind ViewModel.SubtitleStreams, Mode=OneWay, TargetNullValue='None'}"
                         SelectedItem="{x:Bind ViewModel.SelectedSubtitle, Mode=TwoWay}"
