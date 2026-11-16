@@ -21,8 +21,10 @@
             Padding="50"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
-            Background="{ThemeResource LayerOnMicaBaseAltFillColorDefaultBrush}"
-            CornerRadius="8"
+            Background="{ThemeResource GlassPanelStrongBrush}"
+            BorderBrush="{ThemeResource GlassStrokeBrush}"
+            BorderThickness="{StaticResource GlassStrokeThickness}"
+            CornerRadius="{StaticResource GlassPanelCornerRadius}"
             Spacing="20">
             <StackPanel.Resources>
                 <Style TargetType="StackPanel">
@@ -32,6 +34,13 @@
                     <Setter Property="FontWeight" Value="Bold" />
                 </Style>
             </StackPanel.Resources>
+
+            <!--  Seaglass: the app's name on the card (the rename stream changes it)  -->
+            <TextBlock
+                HorizontalAlignment="Center"
+                FontWeight="SemiBold"
+                Style="{StaticResource GlassPageTitleTextBlockStyle}"
+                Text="FluentFin MPV" />
 
             <StackPanel Margin="{StaticResource MediumBottomMargin}" Visibility="{x:Bind ViewModel.HasServers, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}">
                 <TextBlock Text="Saved Servers" />
@@ -47,7 +56,8 @@
                                 Width="100"
                                 Height="100"
                                 AutomationProperties.Name="{x:Bind DisplayName}"
-                                Background="{ThemeResource LayerOnMicaBaseAltFillColorDefault}"
+                                Background="{ThemeResource GlassPanelBrush}"
+                                CornerRadius="{StaticResource GlassCardCornerRadius}"
                                 ToolTipService.ToolTip="{x:Bind DisplayName}">
                                 <Grid Padding="8">
                                     <Grid.RowDefinitions>
@@ -90,7 +100,7 @@
                 Orientation="Horizontal"
                 Spacing="10">
                 <!--  fluentfin-mpv: named (a text in a panel does not name its button for Narrator)  -->
-                <Button AutomationProperties.Name="Detect" Command="{x:Bind ViewModel.DetectServersCommand}">
+                <Button AutomationProperties.Name="Detect" Style="{StaticResource GlassPillButtonStyle}" Command="{x:Bind ViewModel.DetectServersCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsDetecting, Mode=OneWay}">
                             <ctk:Case IsDefault="true" Value="False">
@@ -110,7 +120,7 @@
                     AutomationProperties.Name="Next"
                     Command="{x:Bind ViewModel.CheckConnectivityAndGoToLoginCommand}"
                     CommandParameter="{x:Bind TxtUrl.Text, Mode=OneWay}"
-                    Style="{ThemeResource AccentButtonStyle}">
+                    Style="{StaticResource GlassAccentPillButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <!--  fluentfin-mpv: progress while the address is checked  -->
                         <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsConnecting, Mode=OneWay}">
