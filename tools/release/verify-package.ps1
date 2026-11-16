@@ -10,6 +10,8 @@
     Windows' own folders only (no Python, no mpv), through tools\ui-harness\offscreen\drive.ps1 on a private desktop
     inside a kill-on-close job (tools\backend-bench\hidden_run.py), with no backend command set (FluentFin finds its
     bundled backend by itself):
+      SavedVlc   a data folder whose saved player is VLC (as a dev build may leave): the release has no VLC, so it
+                 must play with MPV, without a crash, and keep the saved choice
       Default    a clean data folder with no player-controls setting (what a new user gets: FluentFin's controls on the`n                 bundled libmpv): sign in, play an episode, stop, close; the logs must show the in-process mpv
       Mpv        "Player controls: mpv", with mpv's folder added to PATH (the documented requirement for mpv's
                  controls): the same steps. Skipped when no mpv.exe is on the Machine/User PATH.
@@ -32,7 +34,7 @@ param(
     [Parameter(Mandatory)][string]$Out,
     [string]$HarnessPython,
     [string]$Cache = (Join-Path $env:TEMP 'fluentfin-mpv-harness'),
-    [ValidateSet('Default', 'Mpv', 'NoMpv', 'SelfTest', 'Kill')][string[]]$Runs = @('Default', 'Mpv', 'NoMpv', 'SelfTest', 'Kill'),
+    [ValidateSet('Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill')][string[]]$Runs = @('Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill'),
     [int]$TimeoutSeconds = 600
 )
 
@@ -73,6 +75,7 @@ if ($LASTEXITCODE -ne 0) { throw "unzipping $Zip failed" }
 $pkg = @(Get-ChildItem $pkgRoot -Directory)[0].FullName
 $exe = Join-Path $pkg 'FluentFin.exe'
 Check 'unzipped: one folder with FluentFin.exe, the bundled backend and libmpv' ((Test-Path $exe) -and (Test-Path (Join-Path $pkg 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $pkg 'libmpv-2.dll'))) $pkg
+Check 'the release has no VLC or Flyleaf libraries (libvlc\, FFMpeg\)' (-not (Test-Path (Join-Path $pkg 'libvlc')) -and -not (Test-Path (Join-Path $pkg 'FFMpeg'))) $pkg
 function Get-Listing { Get-ChildItem $pkg -Recurse -File -Force | ForEach-Object { "{0}|{1}|{2}" -f $_.FullName.Substring($pkg.Length), $_.Length, $_.LastWriteTimeUtc.Ticks } }
 $before = @(Get-Listing)
 
@@ -153,7 +156,7 @@ function Complete-Audit($Audit, [string]$Name, [bool]$MpvAllowed) {
 }
 
 # --- the runs -------------------------------------------------------------------------------------------------------
-function Invoke-ServerRun([string]$Name, [string]$Controls, [bool]$WithMpv, [string]$Steps, [bool]$ExpectPlay = $true) {
+function Invoke-ServerRun([string]$Name, [string]$Controls, [bool]$WithMpv, [string]$Steps, [bool]$ExpectPlay = $true, [string]$SavedPlayer) {
     $runOut = Join-Path $Out $Name
     $data = Join-Path $Out "data-$Name"
     foreach ($d in $runOut, $data) { if (Test-Path $d) { Remove-Item -Recurse -Force $d } }
@@ -161,6 +164,13 @@ function Invoke-ServerRun([string]$Name, [string]$Controls, [bool]$WithMpv, [str
     # no backend command: FluentFin resolves its bundled backend itself (MpvBackendCommand.Resolve)
     $prepared = Initialize-HarnessSettings $data '' @(if ($Controls) { "MpvPlayerControls=$Controls" })
     [void](Initialize-HarnessMpvConf $data)
+    if ($SavedPlayer) {
+        # a player saved by another build (the harness itself only ever writes Mpv)
+        $settingsFile = Join-Path $data 'LocalSettings.json'
+        $saved = Get-Content $settingsFile -Raw | ConvertFrom-Json
+        $saved.MediaPlayerType = $SavedPlayer
+        [IO.File]::WriteAllText($settingsFile, ($saved | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
+    }
     $envA = Join-Path $runOut 'env\appdata'; $envL = Join-Path $runOut 'env\localappdata'
     New-Item -ItemType Directory -Force $envA, $envL | Out-Null
     $path = if ($WithMpv) { "$mpvDir;$windowsPath" } else { $windowsPath }
@@ -205,6 +215,16 @@ foreach ($run in $Runs) {
             Check "Default: FluentFin's controls by default (the in-process mpv, the backend attached to it)" ([bool]$core -and $attached) $(if ($core) { $core.Line.Trim() } else { 'no in-process mpv core in FluentFin''s log' })
             $client = $appLog | Select-String -Pattern 'Connecting the mpv backend: .* as FluentFin MPV ([0-9.]+) ' | Select-Object -First 1
             Check 'Default: the client version sent to Jellyfin is the package''s' ([bool]$client -and $pkg -like "*-$($client.Matches[0].Groups[1].Value)-win-x64") $(if ($client) { 'FluentFin MPV ' + $client.Matches[0].Groups[1].Value } else { 'no connect line' })
+        }
+        'SavedVlc' {
+            # a data folder whose saved player is VLC (from a dev build): the release has no VLC, so it plays with MPV
+            $data = Invoke-ServerRun 'SavedVlc' $null $false 'season,play,leave,close' -SavedPlayer 'Vlc'
+            $appLog = @(Get-ChildItem (Join-Path $data 'Logs') -Filter 'log*.txt' -ErrorAction SilentlyContinue)
+            $core = $appLog | Select-String -Pattern 'Started the in-process mpv core' | Select-Object -First 1
+            $crash = $appLog | Select-String -Pattern 'Unhandled exception|\[FTL\]|LibVLC|libvlc' | Select-Object -First 1
+            Check 'SavedVlc: a saved VLC choice plays with MPV, no crash' ([bool]$core -and -not $crash) $(if ($crash) { $crash.Line.Trim() } elseif ($core) { 'MPV (FluentFin''s controls)' } else { 'no in-process mpv in FluentFin''s log' })
+            $stillSaved = (Get-Content (Join-Path $data 'LocalSettings.json') -Raw | ConvertFrom-Json).MediaPlayerType
+            Check 'SavedVlc: the saved choice is kept (a dev build still finds it)' ("$stillSaved" -eq 'Vlc') "MediaPlayerType = $stillSaved"
         }
         'Mpv' {
             if (-not $mpvDir) { Write-Host "`n== Mpv: skipped (no mpv.exe on the Machine/User PATH)"; continue }

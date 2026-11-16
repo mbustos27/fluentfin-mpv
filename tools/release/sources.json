@@ -1,0 +1,176 @@
+{
+  "_comment": "The corresponding source of the GPL/LGPL (and MPL) code a release ships, downloaded by tools/release/sources.py into dist/sources with SOURCES.txt. Only what is known exactly is here; docs/RELEASE.md and SOURCES.txt say what is not. Hosts: GitHub, code.videolan.org, PyPI.",
+  "items": [
+    {
+      "name": "mpv",
+      "revision": "bcde6b93cca4d128d84e1a60d1a6db2cd81c889e",
+      "licence": "GPL-2.0-or-later (built with GPL options in this build)",
+      "shippedAs": "libmpv-2.dll",
+      "why": "libmpv-2.dll reports v0.42.0-38-gbcde6b93c; the shinchiro release is named git-bcde6b93cc",
+      "url": "https://github.com/mpv-player/mpv/archive/bcde6b93cca4d128d84e1a60d1a6db2cd81c889e.tar.gz",
+      "file": "mpv-bcde6b93cc.tar.gz"
+    },
+    {
+      "name": "mpv-winbuild-cmake (the build recipe of libmpv-2.dll, its patches included)",
+      "revision": "bda10a2816ce9908d419b3f4b564227330457e76",
+      "licence": "GPL-3.0",
+      "shippedAs": "how libmpv-2.dll was built",
+      "why": "the head commit of the workflow run that published release 20261111 (github.com/shinchiro/mpv-winbuild-cmake/actions/runs/42927840447)",
+      "url": "https://github.com/shinchiro/mpv-winbuild-cmake/archive/bda10a2816ce9908d419b3f4b564227330457e76.tar.gz",
+      "file": "mpv-winbuild-cmake-bda10a2816ce.tar.gz",
+      "recipe": true
+    },
+    {
+      "name": "FFmpeg",
+      "recipePackage": "ffmpeg",
+      "revision": "cd4e96eb314630788b7ff2f9820c395788c023e2",
+      "licence": "GPL-3.0-or-later as configured by the recipe (--enable-gpl --enable-version3)",
+      "shippedAs": "statically in libmpv-2.dll",
+      "why": "libmpv-2.dll reports N-128766-gcd4e96eb3; the same release's FFmpeg build is named git-cd4e96eb3",
+      "url": "https://github.com/FFmpeg/FFmpeg/archive/cd4e96eb314630788b7ff2f9820c395788c023e2.tar.gz",
+      "file": "ffmpeg-cd4e96eb3.tar.gz"
+    },
+    {
+      "name": "libass",
+      "recipePackage": "libass",
+      "revision": "21b5a54fceff49c126c201d4b51c6445287a5072",
+      "licence": "ISC",
+      "shippedAs": "statically in libmpv-2.dll",
+      "why": "libmpv-2.dll reports commit 0.17.5-25-g21b5a54fceff49c126c201d4b51c6445287a5072",
+      "url": "https://github.com/libass/libass/archive/21b5a54fceff49c126c201d4b51c6445287a5072.tar.gz",
+      "file": "libass-21b5a54.tar.gz"
+    },
+    {
+      "name": "libplacebo",
+      "recipePackage": "libplacebo",
+      "revision": "c2cf6e72daee00cbb8ef089059a5d12c06018cbd",
+      "licence": "LGPL-2.1-or-later",
+      "shippedAs": "statically in libmpv-2.dll",
+      "why": "libmpv-2.dll reports v7.387.0-37-gc2cf6e7-dirty. 'dirty' is the recipe replacing its 3rdparty/glad and 3rdparty/fast_float submodules with its own checkouts of those, whose revisions are not recorded (see below)",
+      "url": "https://github.com/haasn/libplacebo/archive/c2cf6e72daee00cbb8ef089059a5d12c06018cbd.tar.gz",
+      "file": "libplacebo-c2cf6e7.tar.gz"
+    },
+    {
+      "name": "SDL2",
+      "recipePackage": "libsdl2",
+      "revision": "cee83f2d9a916e9de30c5712e798541fdc134b06",
+      "licence": "Zlib",
+      "shippedAs": "statically in libmpv-2.dll",
+      "why": "libmpv-2.dll reports SDL-release-2.32.0-264-gcee83f2d",
+      "url": "https://github.com/libsdl-org/SDL/archive/cee83f2d9a916e9de30c5712e798541fdc134b06.tar.gz",
+      "file": "sdl2-cee83f2d.tar.gz"
+    },
+    {
+      "name": "Opus",
+      "recipePackage": "opus",
+      "revision": "0145a6248c2171bb6c4e03fb54fe016b5123e37e",
+      "licence": "BSD-3-Clause",
+      "shippedAs": "statically in libmpv-2.dll",
+      "why": "libmpv-2.dll reports libopus 1.6.1-101-g0145a62",
+      "url": "https://github.com/xiph/opus/archive/0145a6248c2171bb6c4e03fb54fe016b5123e37e.tar.gz",
+      "file": "opus-0145a62.tar.gz"
+    },
+    {
+      "name": "libvpx",
+      "recipePackage": "libvpx",
+      "revision": "d3335af9e8ec27395f66206be08e786e3de05e60",
+      "licence": "BSD-3-Clause",
+      "shippedAs": "statically in libmpv-2.dll",
+      "why": "libmpv-2.dll reports WebM Project VP8 Encoder v1.17.0-97-gd3335af9 (source from the project's GitHub mirror, github.com/webmproject/libvpx)",
+      "url": "https://github.com/webmproject/libvpx/archive/d3335af9e8ec27395f66206be08e786e3de05e60.tar.gz",
+      "file": "libvpx-d3335af9.tar.gz"
+    },
+    {
+      "name": "dav1d",
+      "recipePackage": "dav1d",
+      "revision": "662868772f73be8c055a6aa7e30f222be13a5f65",
+      "licence": "BSD-2-Clause",
+      "shippedAs": "statically in libmpv-2.dll",
+      "why": "libmpv-2.dll reports 1.5.4-52-g6628687",
+      "url": "https://code.videolan.org/videolan/dav1d/-/archive/662868772f73be8c055a6aa7e30f222be13a5f65/dav1d-662868772f73be8c055a6aa7e30f222be13a5f65.tar.gz",
+      "file": "dav1d-6628687.tar.gz"
+    },
+    {
+      "name": "uosc 5.13.0 (upstream, unpatched; FluentFin MPV's patched copy is in its own source, backend/fluentfin)",
+      "revision": "5.13.0 (d124c2c930d69446448022851373e00ae592390d)",
+      "licence": "LGPL-2.1 (the scripts and uosc_textures.ttf); its icon font is Material Symbols, Apache-2.0",
+      "shippedAs": "backend\\_internal\\fluentfin\\mpv",
+      "why": "backend/fluentfin/VENDORED.md: release 5.13.0",
+      "url": "https://github.com/tomasklaen/uosc/archive/refs/tags/5.13.0.tar.gz",
+      "file": "uosc-5.13.0.tar.gz"
+    },
+    {
+      "name": "LibVLCSharp and LibVLCSharp.WinUI 3.10.2",
+      "revision": "3.10.2 (3082c09ca955131c705fc4767fde03e9c4a14999)",
+      "licence": "LGPL-2.1-or-later",
+      "shippedAs": "LibVLCSharp.dll, LibVLCSharp.WinUI.dll (managed; the release has no libvlc to run them)",
+      "why": "the NuGet packages' version, the project's tag 3.10.2",
+      "url": "https://code.videolan.org/videolan/LibVLCSharp/-/archive/3.10.2/LibVLCSharp-3.10.2.tar.gz",
+      "file": "LibVLCSharp-3.10.2.tar.gz"
+    },
+    {
+      "name": "Flyleaf (FlyleafLib 3.11.13, FlyleafLib.Controls.WinUI 1.4.13)",
+      "revision": "v3.11.13 (10c705eef6eda8de64a06f2e653e6c8cb099aaca)",
+      "licence": "LGPL-3.0-or-later",
+      "shippedAs": "FlyleafLib.dll, FlyleafLib.Controls.WinUI.dll (managed; the release has no FFmpeg to run them)",
+      "why": "tag v3.11.13 sets FlyleafLib 3.11.13 and FlyleafLib.Controls.WinUI 1.4.13, the NuGet packages' versions",
+      "url": "https://github.com/SuRGeoNix/Flyleaf/archive/10c705eef6eda8de64a06f2e653e6c8cb099aaca.tar.gz",
+      "file": "flyleaf-v3.11.13.tar.gz"
+    },
+    {
+      "name": "jellyfin-apiclient-python 1.21.0",
+      "revision": "1.21.0",
+      "licence": "GPL-3.0",
+      "shippedAs": "backend\\fluentfin-mpv-backend.exe",
+      "why": "tools/release/requirements-backend.txt",
+      "url": "https://files.pythonhosted.org/packages/1a/b1/2637d80f74c70ea745bb023131611f193248f6fffa56482afbf736d2b6f6/jellyfin_apiclient_python-1.21.0.tar.gz",
+      "file": "jellyfin_apiclient_python-1.21.0.tar.gz",
+      "sha256": "ae385af911081da722398144c8760bcaec8f084d6a467a378d88f3e102b38812"
+    },
+    {
+      "name": "python-mpv 1.0.8",
+      "revision": "1.0.8",
+      "licence": "GPL-2.0-or-later or LGPL-2.1-or-later",
+      "shippedAs": "backend\\fluentfin-mpv-backend.exe",
+      "why": "tools/release/requirements-backend.txt",
+      "url": "https://files.pythonhosted.org/packages/77/bc/6aa34c8805ff62e2fefc7d171563c60598aac215d5241186031a2c839935/python_mpv-1.0.8.tar.gz",
+      "file": "python_mpv-1.0.8.tar.gz",
+      "sha256": "017fa359da059c831a94c419083491903e6d2f7c81b9841c33c196cabf4b3fe3"
+    },
+    {
+      "name": "certifi 2026.10.23",
+      "revision": "2026.10.23",
+      "licence": "MPL-2.0",
+      "shippedAs": "backend\\fluentfin-mpv-backend.exe and backend\\_internal\\certifi",
+      "why": "tools/release/requirements-backend.txt (MPL-2.0 also asks for the source of what ships)",
+      "url": "https://files.pythonhosted.org/packages/fd/11/b524cbd9bbdaca58608e4cf4053fd463417549e1959fa8d3aa18319f9555/certifi-2026.10.23.tar.gz",
+      "file": "certifi-2026.10.23.tar.gz",
+      "sha256": "a9895e6e2758b371e0545e321a3a8fd1fcfd9829ada8824a936dfb16aaaf36cd"
+    },
+    {
+      "name": "PyInstaller 6.22.3 (its bootloader is in fluentfin-mpv-backend.exe)",
+      "revision": "6.22.3",
+      "licence": "GPL-2.0-or-later with the bootloader exception",
+      "shippedAs": "backend\\fluentfin-mpv-backend.exe",
+      "why": "tools/release/requirements-build.txt",
+      "url": "https://files.pythonhosted.org/packages/63/41/f90302845945abd4ed647933ff5ee7c6ac93983187be67f897b6cb613331/pyinstaller-6.22.3.tar.gz",
+      "file": "pyinstaller-6.22.3.tar.gz",
+      "sha256": "05eb2f5615503e72939a7224d68b4aff572c6b0438ee4a17d0a4b481f399362d"
+    }
+  ],
+  "knownNotIncluded": [
+    {
+      "recipePackage": "aom",
+      "revision": "3.15.3-165-ge72b8558 (libmpv-2.dll reports AOMedia Project AV1 Encoder 3.15.3-165-ge72b8558)",
+      "reason": "its only official host is aomedia.googlesource.com, outside the hosts the release may download from"
+    },
+    {
+      "recipePackage": "glad",
+      "reason": "built into libplacebo from the recipe's own checkout (branch glad2); the revision is not recorded"
+    },
+    {
+      "recipePackage": "fast_float",
+      "reason": "built into libplacebo from the recipe's own checkout (branch main); the revision is not recorded"
+    }
+  ]
+}

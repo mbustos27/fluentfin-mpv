@@ -33,7 +33,10 @@ is jellyfin-mpv-shim's version and does not change with ours.
 
 It downloads and checks the Python runtime, makes a build venv from hash-pinned PyPI wheels, freezes the backend with
 PyInstaller, publishes FluentFin (Release, x64, self-contained, Windows App SDK self-contained, unpackaged), and writes
-`dist\FluentFinMPV-<version>-win-x64\`, the `.zip` and the `.sha256`. Everything stays under `dist\` (`dist\.work\` for
+`dist\FluentFinMPV-<version>-win-x64\`, the `.zip` and the `.sha256`, and collects the corresponding source of the GPL,
+LGPL and MPL code it ships into `dist\sources\` with `SOURCES.txt` (`tools\release\sources.py`, `sources.json`: official
+hosts only, PyPI hashes checked; what cannot be established exactly is listed, not guessed). Everything stays under
+`dist\` (`dist\.work\` for
 the intermediate files; `-Reuse` keeps its Python runtime and venv for a second run). No MSBuild node, build server or
 compiler server is left running.
 
@@ -49,6 +52,7 @@ command set and a PATH of Windows' own folders only:
   stop, close;
 - mpv's controls with mpv's folder on PATH (skipped when there is no mpv on this PC), and without it (playback must
   stop with "mpv could not be started", nothing reported to the server);
+- a data folder whose saved player is VLC: the release has no VLC, so it must play with MPV;
 - the self-test (`--mpv-selftest`, no server), and once more with FluentFin killed instead of closed (its job must end the
   backend).
 
@@ -63,7 +67,8 @@ the first sign-in, a playback.
 
 1. Tag the commit the zip was built from: `git tag -a v<version> -m "FluentFin MPV <version>"`, push the tag.
 2. Create the GitHub release on that tag: title `FluentFin MPV <version>`, the notes from `CHANGELOG.md`'s section
-   (what it is, what is verified, the known limits), the `.zip` and the `.sha256` as assets.
+   (what it is, what is verified, the known limits), the `.zip` and the `.sha256` as assets, and every file of
+   `dist\sources\` (`SOURCES.txt` first) as assets too: the GPL source of what the zip ships.
 3. The package's README.txt links the source at `https://github.com/mbustos27/fluentfin-mpv/tree/v<version>`: the tag
    must exist under that name.
 

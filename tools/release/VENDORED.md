@@ -66,5 +66,15 @@ frozen backend, and THIRD-PARTY-NOTICES.txt carries THIRD-PARTY.md and the licen
 
 ## From the repository as is
 
-- FluentFin's `ui\FluentFin\FFMpeg\*.dll` (Flyleaf's FFmpeg, GPL-3.0-or-later build) and the NuGet packages
-  (LibVLC 3.0.24 among them): restored and copied by `dotnet publish`, listed in THIRD-PARTY-NOTICES.txt.
+- The NuGet packages: restored and copied by `dotnet publish`, listed in THIRD-PARTY-NOTICES.txt.
+- Left out of the release: upstream FluentFin's VLC and Flyleaf players' native libraries (`libvlc\` from
+  VideoLAN.LibVLC.Windows, `-p:VlcWindowsX64Enabled=false`; `ui\FluentFin\FFMpeg\*.dll`, removed after the publish).
+  Their managed assemblies (LibVLCSharp, FlyleafLib, LGPL) still ship; their source is in `dist\sources`.
+
+## The corresponding source (`dist\sources`)
+
+`sources.json` lists every component whose exact revision is known, with why; `sources.py` downloads each from its
+official host (GitHub, code.videolan.org, PyPI; PyPI's published sha256 checked), archives this repository's HEAD,
+and writes `SOURCES.txt`. For libmpv only part is exact: mpv, FFmpeg, the recipe, and the libraries whose revision
+the DLL reports. The recipe's other libraries were cloned at their branch heads and their revisions were not recorded,
+so `SOURCES.txt` lists them as not established.

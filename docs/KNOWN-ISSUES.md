@@ -236,11 +236,20 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   (backend STARTHERE.md, `backend\docs\packaging.md` §1). GPU drivers install it; on a PC without one (a VM, the
   basic display driver) `libmpv-2.dll` does not load and FluentFin falls back to mpv's controls. Not shipped.
 - **mpv's controls need mpv.exe on PATH** (or a WinGet install): the package has no mpv.exe. Without one the
-  player page's error bar says "mpv could not be started: FileNotFoundError ...", which does not say to install mpv
-  (the backend's log does). A clearer message would be a bridge or UI change.
+  backend's `connect` answers `mpv_not_found` (BRIDGE.md section 2) and the player page says to switch to
+  FluentFin's controls or install mpv, with the winget line (`Core\Mpv\MpvNotFoundMessage`). When FluentFin fell back
+  to mpv's controls because libmpv would not load, the first of those does not help on that PC.
+- **Only the MPV and Windows Media Player players**: the release leaves out libvlc and Flyleaf's FFmpeg, and FluentFin
+  offers only the players whose libraries are there (`Core\Settings\MediaPlayerAvailability`); a saved VLC or Flyleaf
+  choice plays with MPV and stays saved. Their managed assemblies (LibVLCSharp, FlyleafLib) still ship: the XAML
+  references them. A dev build has both libraries and offers all four.
 - **The backend is English only**: the shim's `.mo` catalogs are built by `gen_pkg.sh`, not in git, not shipped.
-- **GPL binaries' sources**: THIRD-PARTY-NOTICES.txt points at the upstream sources of libmpv (and the libraries
-  its build links), FFmpeg and LibVLC; the release does not carry copies of those sources.
+- **libmpv's corresponding source is incomplete** (`dist\sources`, `tools\release\sources.json`): mpv, FFmpeg, the
+  build recipe and the libraries whose revision `libmpv-2.dll` reports (libass, libplacebo, SDL2, Opus, libvpx, dav1d)
+  are exact; aom's is known but only on googlesource. The recipe clones its other ~70 libraries at their branch heads
+  and does not record the revisions; the build's per-package logs (a one-day artifact) are gone. Closing the gap
+  needs a libmpv built from pinned sources (our own build of the recipe with every revision pinned, or another build
+  that publishes them).
 - **Verified off-screen only**: the zip, unzipped outside the repo, against the fake server with nothing on
   PATH but Windows (`verify-package.ps1`), on this PC. Not yet run on a PC without the .NET SDK or a GPU driver.
 

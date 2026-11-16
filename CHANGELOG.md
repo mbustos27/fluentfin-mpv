@@ -30,8 +30,9 @@ server sees one session, FluentFin's, and only the backend reports playback.
 - The release zip itself (`tools\release\verify-package.ps1`): unzipped outside the repository and run off-screen
   against the fake server, with a PATH of Windows' own folders only (no Python, no mpv) and no backend configured:
   sign-in, an episode played and stopped with the default settings (FluentFin's controls on the bundled libmpv), the
-  same with mpv's controls (mpv on PATH), mpv's
-  controls without mpv (playback stops with an error, nothing is reported), and the self-test. Every process the app
+  same with mpv's controls (mpv on PATH), mpv's controls without mpv (the page says to switch to FluentFin's controls
+  or install mpv, nothing is reported), a data folder whose saved player is VLC (it plays with MPV), and the
+  self-test. Every process the app
   started and every DLL they loaded came from the package or from Windows, the backend was the bundled one, nothing
   was written into the package folder, and closing the app (or killing it) ended the backend.
 - A real Jellyfin server: the developer's own (remote, HTTPS, signed in as a user who is not an administrator) has
@@ -45,7 +46,12 @@ server sees one session, FluentFin's, and only the backend reports playback.
 - **Not verified on screen** with FluentFin's controls: HDR on an HDR display, a DPI change, independent flip.
 - **FluentFin's controls need the Vulkan loader** (`vulkan-1.dll`), which graphics drivers install; without it FluentFin
   falls back to mpv's controls. **mpv's controls need mpv.exe on PATH** (`winget install mpv-player.mpv-CI.MSVC`);
-  the package does not include it.
+  the package does not include it, and without it the player says so.
+- **Two players**: MPV (jellyfin-mpv-shim) and Windows Media Player. Upstream FluentFin's VLC and Flyleaf players are
+  not in the release (their libraries are left out); a saved choice of either plays with MPV.
+- **The source of libmpv's libraries is incomplete**: the release's sources archive has mpv, FFmpeg, the build recipe
+  and every library whose exact revision the build recorded; for the rest of the libraries built into `libmpv-2.dll`,
+  the build did not record their revisions (`SOURCES.txt` lists them).
 - With the mpv player: no SyncPlay, and remote "play next" / "play last" are not supported.
 - The backend's own messages are in English.
 - More, with where each lives: `docs/KNOWN-ISSUES.md`.

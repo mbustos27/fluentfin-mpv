@@ -160,11 +160,15 @@ def main():
     ap.add_argument("--python-version", required=True)
     ap.add_argument("--fluentfin-assets")
     ap.add_argument("--component", action="append", default=[], help="NAME|VERSION|LICENCE|SOURCE|NOTE")
+    ap.add_argument("--not-shipped", action="append", default=[], help="a NuGet package id restored but left out of the folder")
     args = ap.parse_args()
 
     py_packages = [python_package(n) for n in requirement_names(args.requirements)]
     pyinstaller = python_package("pyinstaller")
     nuget = nuget_packages(args.assets)
+    for item in nuget:
+        if item["name"] in args.not_shipped:
+            item["ships"], item["left_out"] = False, True
 
     lines = [
         f"FluentFin MPV {args.version}: third-party notices",
@@ -216,7 +220,9 @@ def main():
               "https://github.com/dotnet/runtime, https://github.com/microsoft/WindowsAppSDK). Packages marked",
               "[build only] add no file of their own to this folder.", ""]
     for item in nuget:
-        entry(lines, item, None if item["ships"] else "[build only]")
+        note = ("[restored for the build, left out of this release]" if item.get("left_out")
+                else None if item["ships"] else "[build only]")
+        entry(lines, item, note)
 
     lines += ["", "5. Licence texts", RULE,
               "Each text once; when several packages carry the same file, its heading names them all.", ""]

@@ -14,10 +14,13 @@
   3. The backend frozen with PyInstaller (tools\release\fluentfin-mpv-backend.spec), one folder:
      backend\fluentfin-mpv-backend.exe, which FluentFin finds before a dev checkout (MpvBackendCommand.Resolve).
   4. FluentFin: dotnet publish Release x64, self-contained, Windows App SDK self-contained, unpackaged
-     (WindowsPackageType=None), with libmpv-2.dll from vendor\libmpv (its SHA-256 checked against VENDORED.md's).
+     (WindowsPackageType=None), with libmpv-2.dll from vendor\libmpv (its SHA-256 checked against VENDORED.md's), and
+     without upstream's VLC and Flyleaf libraries (libvlc\, FFMpeg\): the release offers MPV and Windows Media Player.
      No MSBuild node reuse, no shared compiler, no build server; bin and obj under dist\.work\dotnet.
   5. The folder: the publish output, backend\, LICENSE, README.txt and THIRD-PARTY-NOTICES.txt (tools\release\notices.py),
      then the zip (one top folder, entries sorted) and its SHA-256 in sha256sum format.
+  6. dist\sources\: the corresponding source of the GPL, LGPL and MPL code shipped, with SOURCES.txt
+     (tools\release\sources.py, sources.json; official hosts only).
 
   The version must match ui\FluentFin\FluentFin.csproj's <Version>. docs\RELEASE.md has the whole release procedure.
 
@@ -173,7 +176,7 @@ if (Test-Path $publish) { Remove-Item -Recurse -Force $publish }
 $artifacts = Join-Path $work 'dotnet'
 Invoke-Checked 'dotnet publish' {
     & $dotnet publish (Join-Path $repo 'ui\FluentFin\FluentFin.csproj') -c Release -r win-x64 -p:Platform=x64 `
-        --self-contained true -p:WindowsPackageType=None `
+        --self-contained true -p:WindowsPackageType=None -p:VlcWindowsX64Enabled=false `
         "-p:LibmpvDir=$(Split-Path $libmpv)" --artifacts-path $artifacts -o $publish `
         -nodeReuse:false -p:UseSharedCompilation=false --disable-build-servers -nologo -v:minimal
 }
@@ -187,6 +190,12 @@ foreach ($sdkFile in 'Microsoft.WindowsAppRuntime.dll', 'Microsoft.ui.xaml.dll',
 $productVersion = (Get-Item $exe).VersionInfo.ProductVersion
 if ($productVersion -ne $Version) { throw "FluentFin.exe says product version $productVersion, not $Version" }
 Assert-Sha256 (Join-Path $publish 'libmpv-2.dll') $LibmpvSha256
+# upstream's VLC and Flyleaf players are not in the release: no libvlc (VlcWindowsX64Enabled=false above) and no FFMpeg
+# folder (FluentFin.csproj copies it for the dev build). FluentFin offers only the players whose libraries are there
+# (Core\Settings\MediaPlayerAvailability), so the release offers MPV and Windows Media Player.
+$flyleafFFmpeg = Join-Path $publish 'FFMpeg'
+if (Test-Path $flyleafFFmpeg) { Remove-Item -Recurse -Force $flyleafFFmpeg }
+foreach ($gone in 'libvlc', 'FFMpeg') { if (Test-Path (Join-Path $publish $gone)) { throw "the publish still has $gone\" } }
 
 # --- 5. the folder, the notices, the zip ----------------------------------------------------------------------------
 Step "package folder $package"
@@ -199,11 +208,8 @@ $readme = (Get-Content -Raw (Join-Path $PSScriptRoot 'README.txt')).Replace('{{V
 
 $assets = Join-Path $artifacts 'obj\FluentFin\project.assets.json'
 if (-not (Test-Path $assets)) { throw "no $assets (the restore of FluentFin)" }
-$libvlc = (Select-String -Path (Join-Path $repo 'ui\FluentFin\FluentFin.csproj') -Pattern 'VideoLAN.LibVLC.Windows" Version="([^"]+)"').Matches[0].Groups[1].Value
 $components = @(
-    "libmpv (libmpv-2.dll)|mpv git-bcde6b93cc, shinchiro/mpv-winbuild-cmake release $LibmpvBuild (x86_64)|GPL: mpv is GPL-2.0-or-later, and this build links FFmpeg and the other libraries it includes for GPL use|https://github.com/mpv-player/mpv/tree/bcde6b93cc ; build recipe and the sources of every library it builds: https://github.com/shinchiro/mpv-winbuild-cmake (release ${LibmpvBuild}: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/$LibmpvBuild)|SHA-256 of libmpv-2.dll: $LibmpvSha256",
-    "FFmpeg (FFMpeg\*.dll, used by FluentFin's Flyleaf player)|libavcodec 63.8.101, libavformat 63.6.100, libavutil 61.5.100 (as shipped in upstream FluentFin's ui/FluentFin/FFMpeg)|GPL-3.0-or-later (built with --enable-gpl --enable-version3)|https://ffmpeg.org/download.html ; https://git.ffmpeg.org/ffmpeg.git",
-    "LibVLC (libvlc\win-x64, used by FluentFin's VLC player)|$libvlc (NuGet VideoLAN.LibVLC.Windows)|LGPL-2.1-or-later (libvlc, libvlccore); its plugins are LGPL-2.1-or-later or GPL-2.0-or-later|https://code.videolan.org/videolan/vlc/-/tree/3.0.x ; https://www.videolan.org/vlc/download-sources.html"
+    "libmpv (libmpv-2.dll)|mpv git-bcde6b93cc, shinchiro/mpv-winbuild-cmake release $LibmpvBuild (x86_64), with FFmpeg git-cd4e96eb3 and the other libraries its recipe builds in|GPL: mpv is GPL-2.0-or-later, and this build links FFmpeg and the other libraries it includes for GPL use|https://github.com/mpv-player/mpv/tree/bcde6b93cc ; build recipe: https://github.com/shinchiro/mpv-winbuild-cmake (release ${LibmpvBuild}: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/$LibmpvBuild). The release's sources archive (SOURCES.txt) has what of it is known exactly|SHA-256 of libmpv-2.dll: $LibmpvSha256"
 )
 $fluentfinAssets = Join-Path $repo 'backend\fluentfin'
 $noticeArgs = @('-I', (Join-Path $PSScriptRoot 'notices.py'), '--out', (Join-Path $package 'THIRD-PARTY-NOTICES.txt'), '--version', $Version,
@@ -212,6 +218,8 @@ $noticeArgs = @('-I', (Join-Path $PSScriptRoot 'notices.py'), '--out', (Join-Pat
     '--python-version', $PythonVersion)
 if (Test-Path $fluentfinAssets) { $noticeArgs += @('--fluentfin-assets', $fluentfinAssets) }
 foreach ($c in $components) { $noticeArgs += @('--component', $c) }
+# restored for the build, not shipped (see the publish step)
+$noticeArgs += @('--not-shipped', 'VideoLAN.LibVLC.Windows')
 Invoke-Checked 'notices' { & $venvPython @noticeArgs }
 
 foreach ($needed in 'FluentFin.exe', 'libmpv-2.dll', 'backend\fluentfin-mpv-backend.exe', 'LICENSE', 'README.txt', 'THIRD-PARTY-NOTICES.txt') {
@@ -226,6 +234,14 @@ Invoke-Checked 'zip' { & $venvPython -I (Join-Path $PSScriptRoot 'zipdir.py') $p
 $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText("$zip.sha256", "$hash *$name.zip`n", [Text.UTF8Encoding]::new($false))
 
+# --- 6. the corresponding source, for the GitHub release (dist\sources, SOURCES.txt) -------------------------------------
+Step 'sources (dist\sources)'
+$sources = Join-Path $dist 'sources'
+Invoke-Checked 'sources' { & $venvPython -I (Join-Path $PSScriptRoot 'sources.py') --manifest (Join-Path $PSScriptRoot 'sources.json') `n        --out $sources --cache (Join-Path $work 'sources-cache') --repo $repo --version $Version }
+
 $files = @(Get-ChildItem $package -Recurse -File)
 Write-Host ("`n{0}`n  {1} files, {2:N1} MB unpacked`n{3}`n  {4:N1} MB, SHA-256 {5}" -f $package, $files.Count,
     (($files | Measure-Object Length -Sum).Sum / 1MB), $zip, ((Get-Item $zip).Length / 1MB), $hash)
+$sourceFiles = @(Get-ChildItem $sources -File)
+Write-Host ("{0}
+  {1} files, {2:N1} MB (SOURCES.txt)" -f $sources, $sourceFiles.Count, (($sourceFiles | Measure-Object Length -Sum).Sum / 1MB))

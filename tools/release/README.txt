@@ -15,6 +15,9 @@ Requirements
 - mpv's controls (Settings > Playback > Player controls > mpv, or that fallback) run mpv.exe, which is
   not included: install mpv so mpv.exe is on PATH, for example with
       winget install mpv-player.mpv-CI.MSVC
+  Without it the player says so and plays nothing.
+- The players offered are MPV (jellyfin-mpv-shim) and Windows Media Player. Upstream FluentFin's VLC
+  and Flyleaf players are not in this release; a saved choice of either plays with MPV.
 
 First run
 ---------
@@ -42,5 +45,6 @@ name your server's address and your items, so read them before you attach them.
 Source and licence
 ------------------
 Source code of this release: {{SOURCE_URL}}
+The source of the third-party code it ships is attached to the release (SOURCES.txt says what is there).
 FluentFin MPV is free software under the GNU General Public License version 3 (LICENSE).
 The components it ships, their licences and sources: THIRD-PARTY-NOTICES.txt.
