@@ -34,7 +34,6 @@ mingw-w64-ucrt-x86_64-libcdio-paranoia 10.2+2.0.2-2
 mingw-w64-ucrt-x86_64-libdatrie 0.2.14-1
 mingw-w64-ucrt-x86_64-libdeflate 1.26-1
 mingw-w64-ucrt-x86_64-libdovi 3.4.0-1
-mingw-w64-ucrt-x86_64-libdvdcss 1.6.0-1
 mingw-w64-ucrt-x86_64-libdvdnav 7.0.0-2
 mingw-w64-ucrt-x86_64-libdvdread 7.1.1-1
 mingw-w64-ucrt-x86_64-libffi 3.8.1-1

@@ -3,36 +3,43 @@
 # all of them. What it makes and how to check it: vendor/libmpv/VENDORED.md. Run it in MSYS2's UCRT64 shell, or through
 # build-libmpv.ps1:
 #
-#   build-libmpv.sh --out <dll dir> [--sources <dir>] [--install-pinned | --write-pins]
+#   build-libmpv.sh --out <dll dir> --dvdcss-stub <dll> [--sources <dir>] [--install-pinned | --write-pins]
 #
 #   --out             the DLL folder to fill (must be empty or not exist): libmpv-2.dll, its DLLs, BUILD-MANIFEST.txt
+#   --dvdcss-stub     FluentFin MPV's own libdvdcss-2.dll (dvdcss-stub/build.ps1: every function fails), shipped in place
+#                     of MSYS2's libdvdcss: DVD CSS decryption is not shipped, but libdvdread imports the DLL
 #   --sources         also download the source package (<pkgbase>-<ver>.src.tar.zst, signature checked) of every
 #                     package a DLL comes from, into <dir> (with its .sig), each package's licence files into <dir>/licenses,
 #                     and write <dir>/SOURCES.txt
 #   --install-pinned  install the versions in pins.txt first (pacman -U from repo.msys2.org)
 #   --write-pins      record the packages this run shipped as pins.txt (a new build: update VENDORED.md too)
 #
-# Nothing is compiled: the DLLs are MSYS2's, byte for byte. vulkan-1.dll (MSYS2's vulkan-loader, the Khronos loader) is
+# Nothing is compiled here: the DLLs are MSYS2's, byte for byte, but for the libdvdcss stub. vulkan-1.dll (MSYS2's vulkan-loader, the Khronos loader) is
 # shipped too, so libmpv loads on a PC without a Vulkan driver (FluentFin renders with d3d11).
 set -euo pipefail
 
-out= sources= install_pinned=0 write_pins=0
+out= sources= install_pinned=0 write_pins=0 stub=
 while [ $# -gt 0 ]; do
   case "$1" in
     --out) out="$2"; shift 2 ;;
+    --dvdcss-stub) stub="$2"; shift 2 ;;
     --sources) sources="$2"; shift 2 ;;
     --install-pinned) install_pinned=1; shift ;;
     --write-pins) write_pins=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-[ -n "$out" ] || { echo "usage: $0 --out <dir> [--sources <dir>] [--install-pinned | --write-pins]" >&2; exit 2; }
+[ -n "$out" ] && [ -n "$stub" ] || { echo "usage: $0 --out <dir> --dvdcss-stub <dll> [--sources <dir>] [--install-pinned | --write-pins]" >&2; exit 2; }
 [ "${MSYSTEM:-}" = UCRT64 ] || { echo "run this in MSYS2's UCRT64 environment (MSYSTEM=UCRT64)" >&2; exit 2; }
 out=$(cygpath -u "$out")
+stub=$(cygpath -u "$stub")
+[ -f "$stub" ] || { echo "no $stub: dvdcss-stub/build.ps1 builds it" >&2; exit 2; }
 [ -z "$sources" ] || sources=$(cygpath -u "$sources")
 here=$(dirname "$(readlink -f "$0")")
 pins="$here/pins.txt"   # "<package> <version>" of every package a shipped DLL comes from, as built
 repo=https://repo.msys2.org/mingw/ucrt64
+stub_name=fluentfin-dvdcss-stub stub_version=1.0.0
+stub_what="FluentFin MPV's own stub (GPLv3); replaces libdvdcss"
 
 # 1. the packages: mpv and the Vulkan loader, at the pinned versions
 if [ $install_pinned -eq 1 ]; then
@@ -79,10 +86,22 @@ while [ ${#queue[@]} -gt 0 ]; do
 done
 grep -qi '/vulkan-1\.dll$' "$list" || echo /ucrt64/bin/vulkan-1.dll >> "$list"
 
+grep -qi '/libdvdcss-2\.dll$' "$list" || { echo "libdvdcss-2.dll is no longer in the closure: drop the stub" >&2; exit 1; }
+# the stub's imports must be Windows' own too
+for p in $(objdump -p "$stub" | sed -n 's/^\s*DLL Name: *//p' | tr -d '\r' | sort -u); do
+  is_system_dll "$p" || { echo "the stub imports $p, not a Windows DLL" >&2; exit 1; }
+done
+
 manifest="$out/BUILD-MANIFEST.txt"
 {
   echo "# FluentFin MPV libmpv: MSYS2 UCRT64 packages, nothing compiled. <dll> <bytes> <sha256> <package> <version>"
+  echo "# libdvdcss-2.dll is $stub_name: $stub_what (tools/release/libmpv/dvdcss-stub)"
   while read -r f; do
+    if [ "$(basename "${f,,}")" = libdvdcss-2.dll ]; then
+      cp "$stub" "$out/libdvdcss-2.dll"
+      printf '%s %s %s %s %s\n' libdvdcss-2.dll "$(stat -c %s "$stub")" "$(sha256sum "$stub" | cut -d' ' -f1)" "$stub_name" "$stub_version"
+      continue
+    fi
     cp "$f" "$out/"
     owner=$(pacman -Qo "$f" | sed 's/^.* is owned by //')
     printf '%s %s %s %s\n' "$(basename "$f")" "$(stat -c %s "$f")" "$(sha256sum "$f" | cut -d' ' -f1)" "$owner"
@@ -90,11 +109,12 @@ manifest="$out/BUILD-MANIFEST.txt"
   echo "# Windows DLLs imported (besides API sets):$windows_used"
 } > "$manifest"
 
-if [ $write_pins -eq 1 ]; then grep -v '^#' "$manifest" | awk '{ print $4, $5 }' | sort -u > "$pins"; fi
+if [ $write_pins -eq 1 ]; then grep -v '^#' "$manifest" | awk -v s="$stub_name" '$4 != s { print $4, $5 }' | sort -u > "$pins"; fi
 # the shipped packages must be the pinned ones (a rebuild with newer packages is a different build: --write-pins)
 bad=0
 while read -r dll size sha name ver; do
   [ "${dll:0:1}" = "#" ] && continue
+  [ "$name" = "$stub_name" ] && continue
   want=$(awk -v n="$name" '$1 == n { print $2 }' "$pins")
   if [ "$want" != "$ver" ]; then echo "pin: $dll comes from $name $ver, pins.txt says ${want:-nothing}" >&2; bad=1; fi
 done < "$manifest"
@@ -109,9 +129,17 @@ manifest_src="$sources/SOURCES.txt"
   echo "# Sources of FluentFin MPV's libmpv folder ($(basename "$out")): every shipped DLL comes from one MSYS2 UCRT64"
   echo "# package, whose exact source is its MSYS2 source package (upstream tarball + PKGBUILD + patches), from"
   echo "# https://repo.msys2.org/mingw/sources/ (here, with its .sig: checked against MSYS2's keyring). Licence files: licenses/<package>/."
+  echo "# libdvdcss-2.dll is $stub_what: its source is $stub_name-$stub_version.tar.gz (tools/release/libmpv/dvdcss-stub)."
   echo "# component | version | licence (package metadata) | DLLs | file | SHA-256"
 } > "$manifest_src"
-for pkg in $(grep -v '^#' "$manifest" | awk '{ print $4 }' | sort -u); do
+# the stub: its source (a tarball of tools/release/libmpv/dvdcss-stub, made reproducibly) and FluentFin MPV's licence
+stub_src="$stub_name-$stub_version.tar.gz"
+tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -C "$here" -cf - dvdcss-stub | gzip -n -9 > "$sources/$stub_src"
+mkdir -p "$sources/licenses/$stub_name"
+cp "$here/../../../LICENSE" "$sources/licenses/$stub_name/LICENSE"
+printf '%s | %s | %s | %s | %s | %s\n' "$stub_name" "$stub_version" "GPL-3.0-or-later: $stub_what" libdvdcss-2.dll "$stub_src" \
+  "$(sha256sum "$sources/$stub_src" | cut -d' ' -f1)" >> "$manifest_src"
+for pkg in $(grep -v '^#' "$manifest" | awk -v s="$stub_name" '$4 != s { print $4 }' | sort -u); do
   ver=$(pacman -Q "$pkg" | cut -d' ' -f2)
   desc=$(ls -d /var/lib/pacman/local/"$pkg-$ver")/desc
   base=$(awk '/^%BASE%$/ { getline; print; exit }' "$desc")
@@ -151,5 +179,14 @@ for pkg in $(grep -v '^#' "$manifest" | awk '{ print $4 }' | sort -u); do
   fi
   [ -n "$(ls -A "$sources/licenses/$pkg")" ] || echo "no licence file found for $pkg (see its source package)" >&2
   printf '%s | %s | %s | %s | %s | %s\n' "$pkg" "$ver" "$lic" "$dlls" "$src" "$(sha256sum "$sources/$src" | cut -d' ' -f1)" >> "$manifest_src"
+done
+# nothing else: source packages and licence folders of packages no shipped DLL comes from (MSYS2's libdvdcss) go
+for f in "$sources"/*.src.tar.zst; do
+  b=$(basename "$f")
+  grep -qF "| $b |" "$manifest_src" || { echo "removing $b (no shipped DLL comes from it)"; rm -f "$f" "$f.sig"; }
+done
+for d in "$sources"/licenses/*/; do
+  p=$(basename "$d")
+  grep -q "^$p |" "$manifest_src" || { echo "removing licenses/$p"; rm -rf "$d"; }
 done
 echo "sources: $(grep -vc '^#' "$manifest_src") packages, $(du -sb "$sources" | cut -f1) bytes in $sources"
