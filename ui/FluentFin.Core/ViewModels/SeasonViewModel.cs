@@ -38,6 +38,7 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 			}
 
 			await UpdateEpisodes(dto);
+			await UpdateSeasonPills();
 			return LoadOutcome.Loaded;
 		});
 	}
@@ -47,6 +48,23 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 
 	[ObservableProperty]
 	public partial List<BaseItemDto> Episodes { get; set; }
+
+	/// <summary>Seaglass: the series' seasons, as the picker of glass pills; empty for a series of one season.</summary>
+	[ObservableProperty]
+	public partial List<SeasonPill> SeasonPills { get; set; } = [];
+
+	// Seaglass: a series that cannot be listed leaves the picker out; the season itself is still shown
+	private async Task UpdateSeasonPills()
+	{
+		if (Dto?.SeriesId is not { } seriesId || Dto.Id is not { } id)
+		{
+			SeasonPills = [];
+			return;
+		}
+
+		var response = await jellyfinClient.GetItems(new BaseItemDto { Id = seriesId, Type = BaseItemDto_Type.Series });
+		SeasonPills = ItemSiblings.SeasonPills(response?.Items, id);
+	}
 
 
 	private async Task UpdateSeason(Guid id)

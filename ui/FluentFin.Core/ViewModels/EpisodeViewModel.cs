@@ -33,6 +33,13 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 	[ObservableProperty]
 	public partial IEnumerable<BaseItemPerson> GuestStars { get; set; }
 
+	/// <summary>Seaglass: the episode after this one in its season, for "Up next" on the page; null for the last one.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasNextEpisode))]
+	public partial BaseItemDto? NextEpisode { get; set; }
+
+	public bool HasNextEpisode => NextEpisode is not null;
+
 	[ObservableProperty]
 	public partial IEnumerable<BaseItemPerson> CastAndCrew { get; set; }
 
@@ -78,8 +85,27 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 		await State.RunAsync(async () =>
 		{
 			await UpdateEpisode(id);
-			return Dto?.Id == id ? LoadOutcome.Loaded : LoadMessages.CouldNotLoad("this episode");
+			if (Dto?.Id != id)
+			{
+				return LoadMessages.CouldNotLoad("this episode");
+			}
+
+			await UpdateNextEpisode(id);
+			return LoadOutcome.Loaded;
 		});
+	}
+
+	// Seaglass: a season that cannot be listed leaves "Up next" out; the episode itself is still shown
+	private async Task UpdateNextEpisode(Guid id)
+	{
+		NextEpisode = null;
+		if (Dto?.SeasonId is not { } seasonId)
+		{
+			return;
+		}
+
+		var response = await jellyfinClient.GetItems(new BaseItemDto { Id = seasonId, Type = BaseItemDto_Type.Season });
+		NextEpisode = ItemSiblings.NextEpisode(response?.Items, id);
 	}
 
 	private async Task UpdateEpisode(Guid id)
