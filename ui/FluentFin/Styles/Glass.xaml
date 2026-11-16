@@ -255,4 +255,29 @@
         <Setter Property="MinHeight" Value="0" />
         <Setter Property="Padding" Value="0" />
     </Style>
+    <!--  flyouts, menus and tooltips: the strong glass, the panel corner and the glass edge (high contrast: the system colours, via the brushes)  -->
+    <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassCardCornerRadius}" />
+    </Style>
+    <Style BasedOn="{StaticResource DefaultMenuFlyoutPresenterStyle}" TargetType="MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassCardCornerRadius}" />
+    </Style>
+    <Style BasedOn="{StaticResource DefaultToolTipStyle}" TargetType="ToolTip">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <Style BasedOn="{StaticResource DefaultContentDialogStyle}" TargetType="ContentDialog">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassPanelCornerRadius}" />
+    </Style>
 </ResourceDictionary>
