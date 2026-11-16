@@ -78,6 +78,7 @@ def main():
     ap.add_argument("--needle", action="append", required=True)
     ap.add_argument("--dir")
     ap.add_argument("--archive", action="append", default=[])
+    ap.add_argument("--file", action="append", default=[], help="a single file to scan (as it is, and a zip inside it)")
     args = ap.parse_args()
     pats = patterns([n for n in args.needle if n])
     hits = []
@@ -91,6 +92,10 @@ def main():
                     scan_bytes(path, fh.read(), pats, hits)
                 if name.lower().endswith(".exe"):
                     scan_pyinstaller(path, pats, hits)
+    for path in args.file:
+        files += 1
+        with open(path, "rb") as fh:
+            scan_bytes(path, fh.read(), pats, hits)
     for archive in args.archive:
         if archive.lower().endswith(".zip"):
             with zipfile.ZipFile(archive) as zf:

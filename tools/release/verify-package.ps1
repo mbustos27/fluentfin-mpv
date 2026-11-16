@@ -12,7 +12,8 @@
     bundled backend by itself):
       SavedVlc   a data folder whose saved player is VLC (as a dev build may leave): the release has no VLC, so it
                  must play with MPV, without a crash, and keep the saved choice, Settings opened included
-      Default    a clean data folder with no player-controls setting (what a new user gets: FluentFin's controls on the`n                 bundled libmpv): sign in, play an episode, stop, close; the logs must show the in-process mpv
+      Default    a clean data folder with no player-controls setting (what a new user gets: FluentFin's controls on the
+                 bundled libmpv): sign in, play an episode, stop, close; the logs must show the in-process mpv
       Mpv        "Player controls: mpv", with mpv's folder added to PATH (the documented requirement for mpv's
                  controls): the same steps. Skipped when no mpv.exe is on the Machine/User PATH.
       NoMpv      "Player controls: mpv" without mpv on PATH: sign in and play; playback must stop with "mpv could not be
@@ -74,7 +75,7 @@ New-Item -ItemType Directory $pkgRoot | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "unzipping $Zip failed" }
 $pkg = @(Get-ChildItem $pkgRoot -Directory)[0].FullName
 $exe = Join-Path $pkg 'FluentFin.exe'
-Check 'unzipped: one folder with FluentFin.exe, the bundled backend and libmpv' ((Test-Path $exe) -and (Test-Path (Join-Path $pkg 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $pkg 'libmpv-2.dll'))) $pkg
+Check 'unzipped: one folder with FluentFin.exe, the bundled backend and libmpv' ((Test-Path $exe) -and (Test-Path (Join-Path $pkg 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $pkg 'libmpv\libmpv-2.dll'))) $pkg
 Check 'the release has no VLC or Flyleaf libraries (libvlc\, FFMpeg\)' (-not (Test-Path (Join-Path $pkg 'libvlc')) -and -not (Test-Path (Join-Path $pkg 'FFMpeg'))) $pkg
 function Get-Listing { Get-ChildItem $pkg -Recurse -File -Force | ForEach-Object { "{0}|{1}|{2}" -f $_.FullName.Substring($pkg.Length), $_.Length, $_.LastWriteTimeUtc.Ticks } }
 $before = @(Get-Listing)
@@ -148,9 +149,15 @@ function Complete-Audit($Audit, [string]$Name, [bool]$MpvAllowed) {
     Check "$($Name): the backend is the bundled one" ($backend.Count -ge 1) $(if ($backend) { $backend[0].commandLine } else { 'no fluentfin-mpv-backend.exe started' })
     if ($Name -eq 'Mpv') { Check "$($Name): mpv.exe from PATH was used (mpv's controls)" $mpvSeen $mpvDir }
     if ($Name -in 'Default', 'SelfTest', 'Kill') {
-        $own = Join-Path $pkg 'libmpv-2.dll'
+        $own = Join-Path $pkg 'libmpv\libmpv-2.dll'
         $loaded = @($procs | Where-Object { $_.image -like '*\FluentFin.exe' } | ForEach-Object { @($_.modules) } | Where-Object { ($_ -replace '^\\\\\?\\', '') -ieq $own })
         Check "$($Name): FluentFin loaded the package's libmpv-2.dll" ($loaded.Count -gt 0) $own
+        # every DLL of the libmpv folder that FluentFin loaded came from that folder (Libmpv.cs loads them from nowhere else)
+        $folder = Join-Path $pkg 'libmpv'
+        $names = @(Get-ChildItem $folder -Filter '*.dll' | ForEach-Object { $_.Name.ToLowerInvariant() })
+        $elsewhere = @($procs | Where-Object { $_.image -like '*\FluentFin.exe' } | ForEach-Object { @($_.modules) } |
+            ForEach-Object { $_ -replace '^\\\\\?\\', '' } | Where-Object { $names -contains [IO.Path]::GetFileName($_).ToLowerInvariant() -and -not (Test-Under $_ $folder) })
+        Check "$($Name): libmpv's DLLs were loaded from the package's libmpv folder only" ($elsewhere.Count -eq 0) $(if ($elsewhere) { $elsewhere -join ', ' } else { $folder })
     }
     if ($other.Count) { Write-Host "  outside the package and Windows (drivers, shell extensions; allowed): $(($other | Sort-Object) -join ', ')" }
 }

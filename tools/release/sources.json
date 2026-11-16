@@ -1,95 +1,6 @@
 {
-  "_comment": "The corresponding source of the GPL/LGPL (and MPL) code a release ships, downloaded by tools/release/sources.py into dist/sources with SOURCES.txt. Only what is known exactly is here; docs/RELEASE.md and SOURCES.txt say what is not. Hosts: GitHub, code.videolan.org, PyPI.",
+  "_comment": "The corresponding source of the GPL, LGPL and MPL code a release ships besides libmpv, downloaded by tools/release/sources.py into dist/sources with SOURCES.txt (GitHub, code.videolan.org, PyPI). libmpv's folder brings its own sources (vendor/libmpv/sources: MSYS2 source packages and mpv's tarball), which sources.py copies and checks against the folder's BUILD-MANIFEST.txt.",
   "items": [
-    {
-      "name": "mpv",
-      "revision": "bcde6b93cca4d128d84e1a60d1a6db2cd81c889e",
-      "licence": "GPL-2.0-or-later (built with GPL options in this build)",
-      "shippedAs": "libmpv-2.dll",
-      "why": "libmpv-2.dll reports v0.42.0-38-gbcde6b93c; the shinchiro release is named git-bcde6b93cc",
-      "url": "https://github.com/mpv-player/mpv/archive/bcde6b93cca4d128d84e1a60d1a6db2cd81c889e.tar.gz",
-      "file": "mpv-bcde6b93cc.tar.gz"
-    },
-    {
-      "name": "mpv-winbuild-cmake (the build recipe of libmpv-2.dll, its patches included)",
-      "revision": "bda10a2816ce9908d419b3f4b564227330457e76",
-      "licence": "GPL-3.0",
-      "shippedAs": "how libmpv-2.dll was built",
-      "why": "the head commit of the workflow run that published release 20261111 (github.com/shinchiro/mpv-winbuild-cmake/actions/runs/42927840447)",
-      "url": "https://github.com/shinchiro/mpv-winbuild-cmake/archive/bda10a2816ce9908d419b3f4b564227330457e76.tar.gz",
-      "file": "mpv-winbuild-cmake-bda10a2816ce.tar.gz",
-      "recipe": true
-    },
-    {
-      "name": "FFmpeg",
-      "recipePackage": "ffmpeg",
-      "revision": "cd4e96eb314630788b7ff2f9820c395788c023e2",
-      "licence": "GPL-3.0-or-later as configured by the recipe (--enable-gpl --enable-version3)",
-      "shippedAs": "statically in libmpv-2.dll",
-      "why": "libmpv-2.dll reports N-128766-gcd4e96eb3; the same release's FFmpeg build is named git-cd4e96eb3",
-      "url": "https://github.com/FFmpeg/FFmpeg/archive/cd4e96eb314630788b7ff2f9820c395788c023e2.tar.gz",
-      "file": "ffmpeg-cd4e96eb3.tar.gz"
-    },
-    {
-      "name": "libass",
-      "recipePackage": "libass",
-      "revision": "21b5a54fceff49c126c201d4b51c6445287a5072",
-      "licence": "ISC",
-      "shippedAs": "statically in libmpv-2.dll",
-      "why": "libmpv-2.dll reports commit 0.17.5-25-g21b5a54fceff49c126c201d4b51c6445287a5072",
-      "url": "https://github.com/libass/libass/archive/21b5a54fceff49c126c201d4b51c6445287a5072.tar.gz",
-      "file": "libass-21b5a54.tar.gz"
-    },
-    {
-      "name": "libplacebo",
-      "recipePackage": "libplacebo",
-      "revision": "c2cf6e72daee00cbb8ef089059a5d12c06018cbd",
-      "licence": "LGPL-2.1-or-later",
-      "shippedAs": "statically in libmpv-2.dll",
-      "why": "libmpv-2.dll reports v7.387.0-37-gc2cf6e7-dirty. 'dirty' is the recipe replacing its 3rdparty/glad and 3rdparty/fast_float submodules with its own checkouts of those, whose revisions are not recorded (see below)",
-      "url": "https://github.com/haasn/libplacebo/archive/c2cf6e72daee00cbb8ef089059a5d12c06018cbd.tar.gz",
-      "file": "libplacebo-c2cf6e7.tar.gz"
-    },
-    {
-      "name": "SDL2",
-      "recipePackage": "libsdl2",
-      "revision": "cee83f2d9a916e9de30c5712e798541fdc134b06",
-      "licence": "Zlib",
-      "shippedAs": "statically in libmpv-2.dll",
-      "why": "libmpv-2.dll reports SDL-release-2.32.0-264-gcee83f2d",
-      "url": "https://github.com/libsdl-org/SDL/archive/cee83f2d9a916e9de30c5712e798541fdc134b06.tar.gz",
-      "file": "sdl2-cee83f2d.tar.gz"
-    },
-    {
-      "name": "Opus",
-      "recipePackage": "opus",
-      "revision": "0145a6248c2171bb6c4e03fb54fe016b5123e37e",
-      "licence": "BSD-3-Clause",
-      "shippedAs": "statically in libmpv-2.dll",
-      "why": "libmpv-2.dll reports libopus 1.6.1-101-g0145a62",
-      "url": "https://github.com/xiph/opus/archive/0145a6248c2171bb6c4e03fb54fe016b5123e37e.tar.gz",
-      "file": "opus-0145a62.tar.gz"
-    },
-    {
-      "name": "libvpx",
-      "recipePackage": "libvpx",
-      "revision": "d3335af9e8ec27395f66206be08e786e3de05e60",
-      "licence": "BSD-3-Clause",
-      "shippedAs": "statically in libmpv-2.dll",
-      "why": "libmpv-2.dll reports WebM Project VP8 Encoder v1.17.0-97-gd3335af9 (source from the project's GitHub mirror, github.com/webmproject/libvpx)",
-      "url": "https://github.com/webmproject/libvpx/archive/d3335af9e8ec27395f66206be08e786e3de05e60.tar.gz",
-      "file": "libvpx-d3335af9.tar.gz"
-    },
-    {
-      "name": "dav1d",
-      "recipePackage": "dav1d",
-      "revision": "662868772f73be8c055a6aa7e30f222be13a5f65",
-      "licence": "BSD-2-Clause",
-      "shippedAs": "statically in libmpv-2.dll",
-      "why": "libmpv-2.dll reports 1.5.4-52-g6628687",
-      "url": "https://code.videolan.org/videolan/dav1d/-/archive/662868772f73be8c055a6aa7e30f222be13a5f65/dav1d-662868772f73be8c055a6aa7e30f222be13a5f65.tar.gz",
-      "file": "dav1d-6628687.tar.gz"
-    },
     {
       "name": "uosc 5.13.0 (upstream, unpatched; FluentFin MPV's patched copy is in its own source, backend/fluentfin)",
       "revision": "5.13.0 (d124c2c930d69446448022851373e00ae592390d)",
@@ -156,21 +67,6 @@
       "url": "https://files.pythonhosted.org/packages/63/41/f90302845945abd4ed647933ff5ee7c6ac93983187be67f897b6cb613331/pyinstaller-6.22.3.tar.gz",
       "file": "pyinstaller-6.22.3.tar.gz",
       "sha256": "05eb2f5615503e72939a7224d68b4aff572c6b0438ee4a17d0a4b481f399362d"
-    }
-  ],
-  "knownNotIncluded": [
-    {
-      "recipePackage": "aom",
-      "revision": "3.15.3-165-ge72b8558 (libmpv-2.dll reports AOMedia Project AV1 Encoder 3.15.3-165-ge72b8558)",
-      "reason": "its only official host is aomedia.googlesource.com, outside the hosts the release may download from"
-    },
-    {
-      "recipePackage": "glad",
-      "reason": "built into libplacebo from the recipe's own checkout (branch glad2); the revision is not recorded"
-    },
-    {
-      "recipePackage": "fast_float",
-      "reason": "built into libplacebo from the recipe's own checkout (branch main); the revision is not recorded"
     }
   ]
 }

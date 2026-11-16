@@ -18,7 +18,8 @@
   3. The backend frozen with PyInstaller (tools\release\fluentfin-mpv-backend.spec), one folder:
      backend\fluentfin-mpv-backend.exe, which FluentFin finds before a dev checkout (MpvBackendCommand.Resolve).
   4. FluentFin: dotnet publish Release x64, self-contained, Windows App SDK self-contained, unpackaged
-     (WindowsPackageType=None), with libmpv-2.dll from vendor\libmpv (its SHA-256 checked against VENDORED.md's), and
+     (WindowsPackageType=None), with the libmpv folder (-LibmpvDir: libmpv-2.dll and every DLL it loads, checked against
+     its BUILD-MANIFEST.txt by tools\release\libmpv_check.py) copied into libmpv\ beside FluentFin.exe, and
      without upstream's VLC and Flyleaf libraries (libvlc\, FFMpeg\): the release offers MPV and Windows Media Player.
      No MSBuild node reuse, no shared compiler, no build server; bin and obj under dist\.work\dotnet.
   5. The folder: the publish output, backend\, LICENSE, README.txt and THIRD-PARTY-NOTICES.txt (tools\release\notices.py),
@@ -37,7 +38,10 @@ param(
     [string]$Version = '1.0.0',
     [string]$SourceUrl,
     [switch]$Reuse,
-    [switch]$SkipTests   # only to try the packaging itself; a release runs them
+    [switch]$SkipTests,  # only to try the packaging itself; a release runs them
+    [string]$LibmpvDir,  # the libmpv folder (libmpv-2.dll, its DLLs, BUILD-MANIFEST.txt); default: FluentFin.csproj's
+    [string]$LibmpvSources,  # its sources (msys2\*.src.tar.zst, mpv\mpv-<commit>.tar.gz); default: 'sources' beside it
+    [int]$MaxZipMB = 300  # the zip may not be bigger
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,8 +52,6 @@ Set-StrictMode -Version 3
 $PythonVersion = '3.14.10'
 $PythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-amd64.zip"
 $PythonSha256 = 'cc28026a650970cc1570bb127312f1f9634eb67abfe157ae6ca1acbbc627d091'   # python.org index-windows.json
-$LibmpvBuild = '20261111-git-bcde6b93cc'
-$LibmpvSha256 = '88504ee5560942a955405e99dfb5971368e4cf851321f36565bf2a667271db1b'  # vendor\libmpv\VENDORED.md
 
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $name = "FluentFinMPV-$Version-win-x64"
@@ -83,9 +85,18 @@ Step "FluentFin MPV $Version -> $package"
 $csproj = [xml](Get-Content -Raw (Join-Path $repo 'ui\FluentFin\FluentFin.csproj'))
 $csprojVersion = @($csproj.SelectNodes('//PropertyGroup/Version') | Where-Object { $_.GetAttribute('Condition') -match "== ''" } | ForEach-Object { $_.InnerText.Trim() })[0]
 if ($csprojVersion -ne $Version) { throw "ui\FluentFin\FluentFin.csproj says version '$csprojVersion', not $Version (docs\RELEASE.md)" }
-$libmpv = Join-Path $repo "vendor\libmpv\$LibmpvBuild\libmpv-2.dll"
-if (-not (Test-Path $libmpv)) { throw "no ${libmpv}: download it as vendor\libmpv\VENDORED.md says" }
-Assert-Sha256 $libmpv $LibmpvSha256
+# the libmpv folder: -LibmpvDir, else the one FluentFin.csproj names (vendor\libmpv\<build>, not in git: VENDORED.md)
+if (-not $LibmpvDir) {
+    $default = @($csproj.SelectNodes('//PropertyGroup/LibmpvDir') | ForEach-Object { $_.InnerText.Trim() })[0]
+    $LibmpvDir = $default.Replace('$(MSBuildThisFileDirectory)', (Join-Path $repo 'ui\FluentFin\'))
+}
+$LibmpvDir = [IO.Path]::GetFullPath($LibmpvDir).TrimEnd('\')
+if (-not (Test-Path (Join-Path $LibmpvDir 'libmpv-2.dll'))) { throw "no libmpv-2.dll in $LibmpvDir (-LibmpvDir; vendor\libmpv\VENDORED.md)" }
+if (-not $LibmpvSources) { $LibmpvSources = Join-Path (Split-Path $LibmpvDir) 'sources' }
+$LibmpvSources = [IO.Path]::GetFullPath($LibmpvSources).TrimEnd('\')
+if (-not (Test-Path $LibmpvSources)) { throw "no libmpv sources at $LibmpvSources (-LibmpvSources)" }
+Write-Host "libmpv: $LibmpvDir
+  sources: $LibmpvSources"
 
 $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
 $dotnet = (Get-Command dotnet.exe -ErrorAction SilentlyContinue).Source
@@ -140,6 +151,12 @@ Invoke-Checked 'pip install' {
         -r (Join-Path $PSScriptRoot 'requirements-backend.txt') -r (Join-Path $PSScriptRoot 'requirements-build.txt')
 }
 Invoke-Checked 'pip check' { & $venvPython -I -m pip check --disable-pip-version-check }
+
+# the libmpv folder: each DLL the one its BUILD-MANIFEST.txt lists, and what they import there or Windows' (or a driver's)
+Step 'libmpv folder'
+$libmpvCheck = Join-Path $work 'libmpv-check.json'
+Invoke-Checked 'libmpv folder' { & $venvPython -I (Join-Path $PSScriptRoot 'libmpv_check.py') --dir $LibmpvDir --out $libmpvCheck }
+$libmpvInfo = Get-Content $libmpvCheck -Raw | ConvertFrom-Json
 
 # --- 2b. the tests: a failure stops the release ---------------------------------------------------------------------
 # Both UI suites, and the backend's bridge tests off-screen (a private desktop and a kill-on-close job through
@@ -238,7 +255,7 @@ Invoke-Checked 'dotnet publish' {
     & $dotnet publish (Join-Path $repo 'ui\FluentFin\FluentFin.csproj') -c Release -r win-x64 -p:Platform=x64 `
         --self-contained true -p:WindowsPackageType=None -p:VlcWindowsX64Enabled=false -p:FluentFinMpvRelease=true `
         -p:DebugType=none -p:DebugSymbols=false `
-        "-p:LibmpvDir=$(Split-Path $libmpv)" --artifacts-path $artifacts -o $publish `
+        "-p:LibmpvDir=$LibmpvDir" --artifacts-path $artifacts -o $publish `
         -nodeReuse:false -p:UseSharedCompilation=false --disable-build-servers -nologo -v:minimal
 }
 $exe = Join-Path $publish 'FluentFin.exe'
@@ -250,7 +267,13 @@ foreach ($sdkFile in 'Microsoft.WindowsAppRuntime.dll', 'Microsoft.ui.xaml.dll',
 }
 $productVersion = (Get-Item $exe).VersionInfo.ProductVersion
 if ($productVersion -ne $Version) { throw "FluentFin.exe says product version $productVersion, not $Version" }
-Assert-Sha256 (Join-Path $publish 'libmpv-2.dll') $LibmpvSha256
+# the libmpv folder copied whole into libmpv\ (FluentFin.csproj; Libmpv.cs loads it from there), and libmpv nowhere else
+$published = @(Get-ChildItem (Join-Path $publish 'libmpv') -Filter '*.dll' -ErrorAction SilentlyContinue)
+$wanted = @($libmpvInfo.dlls)
+$missing = @($wanted | Where-Object { -not (Test-Path (Join-Path $publish "libmpv\$_")) -or (Get-FileHash (Join-Path $publish "libmpv\$_")).Hash -ne (Get-FileHash (Join-Path $LibmpvDir $_)).Hash })
+$extra = @($published | Where-Object { $_.Name -notin $wanted })
+if ($missing -or $extra) { throw "libmpv\ in the publish is not the libmpv folder: missing or different $($missing -join ', '); extra $($extra.Name -join ', ')" }
+if (Test-Path (Join-Path $publish 'libmpv-2.dll')) { throw 'a libmpv-2.dll beside FluentFin.exe: libmpv belongs in libmpv\ only' }
 # no debug symbols (they name the build machine's folders), and the release marker (no dev-checkout lookup, AppVersion)
 $pdbs = @(Get-ChildItem $publish -Recurse -Filter '*.pdb')
 if ($pdbs) { throw "the publish has debug symbols: $($pdbs.Name -join ', ')" }
@@ -267,7 +290,8 @@ Step 'sources (dist\sources)'
 $sources = Join-Path $dist 'sources'
 $libmpvStatus = Join-Path $work 'libmpv-status.json'
 Invoke-Checked 'sources' { & $venvPython -I (Join-Path $PSScriptRoot 'sources.py') --manifest (Join-Path $PSScriptRoot 'sources.json') `
-        --out $sources --cache (Join-Path $work 'sources-cache') --repo $repo --version $Version --status-out $libmpvStatus }
+        --out $sources --cache (Join-Path $work 'sources-cache') --repo $repo --version $Version --status-out $libmpvStatus `
+        --libmpv-dir $LibmpvDir --libmpv-sources $LibmpvSources }
 
 # --- 6. the folder, the notices, the zip ----------------------------------------------------------------------------
 Step "package folder $package"
@@ -275,16 +299,20 @@ if (Test-Path $package) { Remove-Item -Recurse -Force $package }
 Copy-Item -Recurse $publish $package
 Copy-Item -Recurse $backendOut (Join-Path $package 'backend')
 Copy-Item (Join-Path $repo 'LICENSE') (Join-Path $package 'LICENSE')
-$readme = (Get-Content -Raw (Join-Path $PSScriptRoot 'README.txt')).Replace('{{VERSION}}', $Version).Replace('{{SOURCE_URL}}', $SourceUrl)
+Copy-Item (Join-Path $LibmpvDir 'BUILD-MANIFEST.txt') (Join-Path $package 'libmpv\BUILD-MANIFEST.txt')
+$driverNote = if (@($libmpvInfo.drivers).Count) { "- FluentFin's own player controls (the default) load libmpv, which needs $(@($libmpvInfo.drivers) -join ', '): your
+  graphics driver installs it. Without it FluentFin uses mpv's controls instead and says why.
+" } else { '' }
+$readme = (Get-Content -Raw (Join-Path $PSScriptRoot 'README.txt')).Replace('{{VERSION}}', $Version).Replace('{{SOURCE_URL}}', $SourceUrl).Replace('{{DRIVER_NOTE}}', $driverNote)
 [IO.File]::WriteAllText((Join-Path $package 'README.txt'), ($readme -replace "`r?`n", "`r`n"), [Text.UTF8Encoding]::new($false))
 
 $assets = Join-Path $artifacts 'obj\FluentFin\project.assets.json'
 if (-not (Test-Path $assets)) { throw "no $assets (the restore of FluentFin)" }
 $components = @(
-    "Microsoft Visual C++ runtime (backend\_internal\VCRUNTIME140.dll, VCRUNTIME140_1.dll)|as shipped with python.org's CPython $PythonVersion|Microsoft Distributable Code, under the conditions in Python's LICENSE.txt (section 5: 'Additional Conditions for this Windows binary build')|https://www.python.org/downloads/release/python-$($PythonVersion.Replace('.', ''))/",
-    "Microsoft Visual C++ runtime for .NET (vcruntime140_cor3.dll)|as shipped in the .NET runtime pack Microsoft.NETCore.App.Runtime.win-x64|the .NET runtime pack's licence (section 4, its LICENSE.TXT in section 5)|https://github.com/dotnet/runtime",
-    "libmpv (libmpv-2.dll)|mpv git-bcde6b93cc, shinchiro/mpv-winbuild-cmake release $LibmpvBuild (x86_64), with FFmpeg git-cd4e96eb3 and the other libraries its recipe builds in|GPL: mpv is GPL-2.0-or-later, and this build links FFmpeg and the other libraries it includes for GPL use|https://github.com/mpv-player/mpv/tree/bcde6b93cc ; build recipe: https://github.com/shinchiro/mpv-winbuild-cmake (release ${LibmpvBuild}: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/$LibmpvBuild). The release's sources archive (SOURCES.txt) has what of it is known exactly|SHA-256 of libmpv-2.dll: $LibmpvSha256"
+    "Microsoft Visual C++ runtime (backend\_internal\VCRUNTIME140.dll, VCRUNTIME140_1.dll)|as shipped with python.org's CPython $PythonVersion|Microsoft Distributable Code, under the conditions in Python's LICENSE.txt (in the licence texts: 'Additional Conditions for this Windows binary build')|https://www.python.org/downloads/release/python-$($PythonVersion.Replace('.', ''))/",
+    "Microsoft Visual C++ runtime for .NET (vcruntime140_cor3.dll)|as shipped in the .NET runtime pack Microsoft.NETCore.App.Runtime.win-x64|the .NET runtime pack's licence (section 4; its LICENSE.TXT in the licence texts)|https://github.com/dotnet/runtime"
 )
+# libmpv: its own section, each DLL with its package, licence and source (notices.py --libmpv-status)
 $fluentfinAssets = Join-Path $repo 'backend\fluentfin'
 $noticeArgs = @('-I', (Join-Path $PSScriptRoot 'notices.py'), '--out', (Join-Path $package 'THIRD-PARTY-NOTICES.txt'), '--version', $Version,
     '--source-url', $SourceUrl, '--assets', $assets, '--requirements', (Join-Path $PSScriptRoot 'requirements-backend.txt'),
@@ -294,20 +322,21 @@ if (Test-Path $fluentfinAssets) { $noticeArgs += @('--fluentfin-assets', $fluent
 foreach ($c in $components) { $noticeArgs += @('--component', $c) }
 # restored for the build, not shipped (see the publish step)
 $noticeArgs += @('--not-shipped', 'VideoLAN.LibVLC.Windows', '--package-dir', $package,
-    '--sources-manifest', (Join-Path $PSScriptRoot 'sources.json'), '--sources-dir', $sources, '--libmpv-status', $libmpvStatus)
+    '--sources-manifest', (Join-Path $PSScriptRoot 'sources.json'), '--sources-dir', $sources, '--libmpv-status', $libmpvStatus,
+    '--cache', (Join-Path $work 'licence-cache'))
 Invoke-Checked 'notices' { & $venvPython @noticeArgs }
 # what the notices must carry (the release review): the LGPL-3.0 text (FlyleafLib ships), the VC++ runtimes, the .NET
 # runtime pack, and no Windows App SDK package called build-only (its files ship)
 $noticeText = [IO.File]::ReadAllText((Join-Path $package 'THIRD-PARTY-NOTICES.txt'), [Text.Encoding]::UTF8)
 $noticeGaps = @()
 if ($noticeText -notmatch 'GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3') { $noticeGaps += 'the LGPL-3.0 text' }
-foreach ($must in 'VCRUNTIME140.dll', 'VCRUNTIME140_1.dll', 'vcruntime140_cor3.dll', 'Microsoft.NETCore.App.Runtime.win-x64') {
+foreach ($must in @('VCRUNTIME140.dll', 'VCRUNTIME140_1.dll', 'vcruntime140_cor3.dll', 'Microsoft.NETCore.App.Runtime.win-x64') + @($libmpvInfo.dlls)) {
     if (-not $noticeText.Contains($must)) { $noticeGaps += $must }
 }
 if ($noticeText -match '(?m)^Microsoft\.WindowsAppSDK[^\r\n]*\r?\n(?:  [^\r\n]*\r?\n)*?  \[build only\]') { $noticeGaps += 'a Windows App SDK package marked build only' }
 if ($noticeGaps) { throw "THIRD-PARTY-NOTICES.txt lacks: $($noticeGaps -join '; ')" }
 
-foreach ($needed in 'FluentFin.exe', 'libmpv-2.dll', 'backend\fluentfin-mpv-backend.exe', 'LICENSE', 'README.txt', 'THIRD-PARTY-NOTICES.txt') {
+foreach ($needed in 'FluentFin.exe', 'libmpv\libmpv-2.dll', 'libmpv\BUILD-MANIFEST.txt', 'backend\fluentfin-mpv-backend.exe', 'LICENSE', 'README.txt', 'THIRD-PARTY-NOTICES.txt') {
     if (-not (Test-Path (Join-Path $package $needed))) { throw "the package has no $needed" }
 }
 $devFiles = @(Get-ChildItem $package -Recurse -File -Include '*.runtimeconfig.dev.json', 'LocalSettings.json')
@@ -319,6 +348,8 @@ if ($devFiles) { throw "dev-only files in the package: $($devFiles.FullName -joi
 Step 'path gate'
 $needles = @($env:USERNAME, $env:USERPROFILE, $repo, (Split-Path $repo), $env:TEMP, [IO.Path]::GetTempPath().TrimEnd('\')) | Where-Object { $_ } | Select-Object -Unique
 $gateArgs = @('-I', (Join-Path $PSScriptRoot 'path_gate.py'), '--dir', $package, '--archive', (Join-Path $sources "fluentfin-mpv-$Version-source.zip"))
+# the text files of the sources (SOURCES.txt, libmpv's own SOURCES-libmpv.txt and BUILD-MANIFEST.txt)
+foreach ($t in Get-ChildItem $sources -Recurse -File -Include '*.txt', '*.md') { $gateArgs += @('--file', $t.FullName) }
 foreach ($n in $needles) { $gateArgs += @('--needle', $n) }
 Invoke-Checked 'path gate' { & $venvPython @gateArgs }
 
@@ -329,8 +360,11 @@ $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText("$zip.sha256", "$hash *$name.zip`n", [Text.UTF8Encoding]::new($false))
 
 $files = @(Get-ChildItem $package -Recurse -File)
-Write-Host ("`n{0}`n  {1} files, {2:N1} MB unpacked`n{3}`n  {4:N1} MB, SHA-256 {5}" -f $package, $files.Count,
-    (($files | Measure-Object Length -Sum).Sum / 1MB), $zip, ((Get-Item $zip).Length / 1MB), $hash)
-$sourceFiles = @(Get-ChildItem $sources -File)
+$zipMB = (Get-Item $zip).Length / 1MB
+$libmpvFiles = @(Get-ChildItem (Join-Path $package 'libmpv') -File)
+Write-Host ("`n{0}`n  {1} files, {2:N1} MB unpacked (libmpv\: {3} files, {4:N1} MB)`n{5}`n  {6:N1} MB, SHA-256 {7}" -f $package, $files.Count,
+    (($files | Measure-Object Length -Sum).Sum / 1MB), $libmpvFiles.Count, (($libmpvFiles | Measure-Object Length -Sum).Sum / 1MB), $zip, $zipMB, $hash)
+if ($zipMB -gt $MaxZipMB) { throw ("the zip is {0:N1} MB, more than -MaxZipMB {1}" -f $zipMB, $MaxZipMB) }
+$sourceFiles = @(Get-ChildItem $sources -Recurse -File)
 Write-Host ("{0}
   {1} files, {2:N1} MB (SOURCES.txt)" -f $sources, $sourceFiles.Count, (($sourceFiles | Measure-Object Length -Sum).Sum / 1MB))

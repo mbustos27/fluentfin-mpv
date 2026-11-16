@@ -160,6 +160,103 @@ def source_licences(manifest_path, sources_dir):
     return out
 
 
+NESTED = (".tar.gz", ".tgz", ".tar.xz", ".tar.bz2", ".tar.zst", ".zip")
+
+
+def archive_licences(path, cache_dir):
+    """The licence and copyright files of a source archive (an MSYS2 .src.tar.zst, mpv's tarball): those at its top, and
+    those at the top of the upstream archives inside it. [(where, text)], cached by the archive's sha256."""
+    import hashlib
+    import io
+    import tarfile
+    import zipfile
+
+    with open(path, "rb") as fh:
+        digest = hashlib.sha256(fh.read()).hexdigest()
+    cache = os.path.join(cache_dir, digest + ".json") if cache_dir else None
+    if cache and os.path.isfile(cache):
+        return [tuple(x) for x in json.load(open(cache, encoding="utf-8"))]
+    found = []
+
+    def decode(data):
+        return data.decode("utf-8", "replace").replace("\r\n", "\n").strip("\n")
+
+    def take(name, size, read, where, nested):
+        parts = name.strip("./").split("/")
+        base = parts[-1]
+        if len(parts) <= 2 and LICENCE_FILE.match(base) and size < 2_000_000:
+            found.append((f"{where}{'/'.join(parts)}", decode(read())))
+        elif nested and base.lower().endswith(NESTED):
+            data = read()
+            try:
+                if base.lower().endswith(".zip"):
+                    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                        for info in zf.infolist():
+                            if not info.is_dir():
+                                take(info.filename, info.file_size, lambda i=info: zf.read(i), f"{where}{base}!", False)
+                else:
+                    with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as inner:
+                        for m in inner:
+                            if m.isfile():
+                                take(m.name, m.size, lambda m=m: inner.extractfile(m).read(), f"{where}{base}!", False)
+            except (tarfile.TarError, zipfile.BadZipFile, EOFError, OSError):
+                pass
+
+    with tarfile.open(path, mode="r:*") as tar:
+        for member in tar.getmembers():
+            if member.isfile():
+                take(member.name, member.size, lambda m=member: tar.extractfile(m).read(), "", True)
+    if cache:
+        os.makedirs(cache_dir, exist_ok=True)
+        json.dump(found, open(cache, "w", encoding="utf-8"))
+    return found
+
+
+def pkgbuild_licence(path):
+    """The licence a source package's PKGBUILD declares (its license=(...) array), or ''."""
+    import tarfile
+
+    try:
+        with tarfile.open(path, mode="r:*") as tar:
+            for member in tar.getmembers():
+                if member.isfile() and member.name.rsplit("/", 1)[-1] == "PKGBUILD":
+                    text = tar.extractfile(member).read().decode("utf-8", "replace")
+                    m = re.search(r"^\s*license=\((.*?)\)", text, re.S | re.M)
+                    if m:
+                        names = re.findall(r"['\"]([^'\"]+)['\"]|(\S+)", m.group(1))
+                        return " AND ".join(a or b for a, b in names).replace("spdx:", "")
+    except (tarfile.TarError, OSError):
+        pass
+    return ""
+
+
+def libmpv_section(status, cache_dir):
+    """The libmpv folder's DLLs (sources.py's status), each with its package and licence, and the licence texts of
+    their sources: (lines, [(heading, text)])."""
+    lines = ["5. libmpv (the libmpv folder): libmpv-2.dll and every DLL it loads", THIN,
+             "Built for FluentFin MPV from the sources in the release's sources (libmpv/), as listed below and in",
+             "SOURCES.txt. Each DLL, where it comes from and the licence its source package declares:", ""]
+    texts = []
+    licences = {}
+    for rel in status["files"]:
+        if rel.endswith(".src.tar.zst"):
+            licences[rel] = pkgbuild_licence(os.path.join(status["sourcesDir"], rel))
+    for dll in status["dlls"]:
+        declared = "; ".join(sorted({licences.get(rel, "") for rel in dll["sources"]} - {""}))
+        if dll["owner"].strip().lower() == "built here":
+            declared = ("GPL-2.0-or-later (mpv built with -Dgpl=true; FFmpeg and libplacebo inside it: "
+                        + (declared or "see their texts") + ")") if dll["name"].lower() == "libmpv-2.dll" else declared
+        lines.append(f"{dll['name']} ({dll['owner']})")
+        lines.append(f"  Licence: {declared or 'see the licence texts of its source below'}")
+        lines.append(f"  Source:  " + ", ".join(f"libmpv/{rel}" for rel in dll["sources"]))
+        lines.append("")
+    for rel in sorted(status["files"]):
+        if rel.endswith((".src.tar.zst", ".tar.gz", ".tar.xz")):
+            for where, text in archive_licences(os.path.join(status["sourcesDir"], rel), cache_dir):
+                texts.append((f"libmpv source {rel}: {where}", text))
+    return lines, texts
+
+
 def nuget_packages(assets_path, shipped=frozenset()):
     with open(assets_path, encoding="utf-8-sig") as fh:
         assets = json.load(fh)
@@ -242,7 +339,8 @@ def main():
     ap.add_argument("--package-dir", help="the release folder: a package ships if its binaries are there")
     ap.add_argument("--sources-manifest", help="tools/release/sources.json")
     ap.add_argument("--sources-dir", help="dist/sources: licence files are taken from its archives")
-    ap.add_argument("--libmpv-status", help="the JSON sources.py writes: the libraries in libmpv-2.dll and which have source")
+    ap.add_argument("--libmpv-status", help="the JSON sources.py writes: the libmpv folder's DLLs, their packages and sources")
+    ap.add_argument("--cache", help="a folder for the licence files found in source archives (by their sha256)")
     args = ap.parse_args()
 
     py_packages = [python_package(n) for n in requirement_names(args.requirements)]
@@ -299,32 +397,29 @@ def main():
     lines += ["3. Python packages in the backend (backend\\_internal)", THIN]
     for item in py_packages:
         entry(lines, item)
-    status = json.load(open(args.libmpv_status, encoding="utf-8")) if args.libmpv_status else None
-    if status:
-        lines += ["Libraries built into libmpv-2.dll (shinchiro/mpv-winbuild-cmake recipe; SOURCES.txt has the details)", THIN,
-                  "With their exact source in this release's sources, and their licence and copyright files in section 5:",
-                  "  " + ", ".join(status["included"]), "",
-                  "Their exact source is not established (the build did not record the revisions), so no licence or",
-                  "copyright file of theirs is reproduced here; the recipe names their repositories:",
-                  "  " + ", ".join(status["notEstablished"]), ""]
     lines += ["4. .NET runtime and NuGet packages (win-x64)", THIN,
               "The .NET runtime (MIT) and the Windows App SDK runtime ship self-contained in this folder. The .NET runtime",
               "packs are listed first with their own licence files; the Windows App SDK's packages carry Microsoft's licence",
-              "terms, reproduced in section 5 as shipped. Packages marked [build only] add no file of their own to this folder.", ""]
+              "terms, reproduced in section 6 as shipped. Packages marked [build only] add no file of their own to this folder.", ""]
     for item in packs:
         entry(lines, item)
     for item in nuget:
         note = ("[restored for the build, left out of this release]" if item.get("left_out")
                 else None if item["ships"] else "[build only]")
         entry(lines, item, note)
+    libmpv_texts = []
+    if args.libmpv_status:
+        section, libmpv_texts = libmpv_section(json.load(open(args.libmpv_status, encoding="utf-8")), args.cache)
+        lines += [""] + section
 
-    lines += ["", "5. Licence texts", RULE,
+    lines += ["", "6. Licence texts", RULE,
               "Each text once; when several packages carry the same file, its heading names them all.", ""]
     texts = [(f"Python {args.python_version} (LICENSE.txt of the python.org runtime)", read_text(args.python_license))]
     for item in [pyinstaller] + py_packages + packs + nuget:
         texts += [(f"{item['name']} {item['version']}: {name}", text) for name, text in item["texts"]]
     if args.sources_manifest and args.sources_dir:
         texts += source_licences(args.sources_manifest, args.sources_dir)
+    texts += libmpv_texts
     if args.fluentfin_assets:
         for root, dirs, files in os.walk(args.fluentfin_assets):
             dirs.sort()

@@ -236,9 +236,11 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 ## Release package (`tools\release`, docs\RELEASE.md)
 - **Not code-signed**: SmartScreen warns on the first start ("More info", "Run anyway"), and
   `backend\fluentfin-mpv-backend.exe` is an unsigned PyInstaller build. Needs a code-signing certificate.
-- **FluentFin's player controls need the Vulkan loader** (`vulkan-1.dll`): the shinchiro libmpv imports it
-  (backend STARTHERE.md, `backend\docs\packaging.md` §1). GPU drivers install it; on a PC without one (a VM, the
-  basic display driver) `libmpv-2.dll` does not load and FluentFin falls back to mpv's controls. Not shipped.
+- **libmpv's DLLs**: the release's `libmpv\` folder is our own build (`tools\release\libmpv`, `vendor\libmpv\VENDORED.md`),
+  libmpv-2.dll and every DLL it loads; Libmpv.cs loads them from that folder only. `tools\release\libmpv_check.py`
+  checks the folder against its BUILD-MANIFEST.txt and lists any graphics-driver DLL it imports (`vulkan-1.dll` and
+  the like), which README.txt then names as a requirement. On a PC where libmpv does not load, FluentFin falls back to
+  mpv's controls and says why.
 - **mpv's controls need mpv.exe on PATH** (or a WinGet install): the package has no mpv.exe. Without one the
   backend's `connect` answers `mpv_not_found` (BRIDGE.md section 2) and the player page says to switch to
   FluentFin's controls or install mpv, with the winget line (`Core\Mpv\MpvNotFoundMessage`). When FluentFin fell back
@@ -248,12 +250,9 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   choice plays with MPV and stays saved. Their managed assemblies (LibVLCSharp, FlyleafLib) still ship: the XAML
   references them. A dev build has both libraries and offers all four.
 - **The backend is English only**: the shim's `.mo` catalogs are built by `gen_pkg.sh`, not in git, not shipped.
-- **libmpv's corresponding source is incomplete** (`dist\sources`, `tools\release\sources.json`): mpv, FFmpeg, the
-  build recipe and the libraries whose revision `libmpv-2.dll` reports (libass, libplacebo, SDL2, Opus, libvpx, dav1d)
-  are exact; aom's is known but only on googlesource. The recipe clones its other ~70 libraries at their branch heads
-  and does not record the revisions; the build's per-package logs (a one-day artifact) are gone. Closing the gap
-  needs a libmpv built from pinned sources (our own build of the recipe with every revision pinned, or another build
-  that publishes them).
+- **libmpv's sources**: every DLL of the `libmpv\` folder has its source in the release's sources (`dist\sources\libmpv`:
+  the MSYS2 source packages with their signatures, mpv's tarball; `tools\release\sources.py` fails the build when a
+  DLL's source is missing). The MSYS2 packages' signatures are copied, not checked by the build.
 - **Verified off-screen only**: the zip, unzipped outside the repo, against the fake server with nothing on
   PATH but Windows (`verify-package.ps1`), on this PC. Not yet run on a PC without the .NET SDK or a GPU driver.
 

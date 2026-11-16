@@ -9,11 +9,8 @@ Requirements
 - Windows 10 version 1809 or later, or Windows 11, on an x64 PC.
 - Nothing to install. .NET, the Windows App SDK, the playback backend (with its own Python) and libmpv
   are all in this folder.
-- FluentFin's own player controls (the default) need the Vulkan loader, vulkan-1.dll, which current
-  NVIDIA, AMD and Intel graphics drivers install. Without it FluentFin uses mpv's controls instead and
-  says why.
-- mpv's controls (Settings > Playback > Player controls > mpv, or that fallback) run mpv.exe, which is
-  not included: install mpv so mpv.exe is on PATH, for example with
+{{DRIVER_NOTE}}- mpv's controls (Settings > Playback > Player controls > mpv, also used when libmpv cannot load) run
+  mpv.exe, which is not included: install mpv so mpv.exe is on PATH, for example with
       winget install mpv-player.mpv-CI.MSVC
   Without it the player says so and plays nothing.
 - The players offered are MPV (jellyfin-mpv-shim) and Windows Media Player. Upstream FluentFin's VLC

@@ -23,7 +23,9 @@ is jellyfin-mpv-shim's version and does not change with ours.
 - On `main` with everything for the release merged, the working tree clean.
 - Both UI test suites, the off-screen backend suite, the bridge smoke test and the end-to-end harness pass
   (`tools\README.md`).
-- `vendor\libmpv\` has the libmpv `vendor\libmpv\VENDORED.md` names (the build checks its hash).
+- The libmpv folder from `tools\release\libmpv` (`vendor\libmpv\VENDORED.md`): libmpv-2.dll, its DLLs and BUILD-MANIFEST.txt,
+  with its sources beside it (`sources\msys2`, `sources\mpv`). In this checkout's `vendor\libmpv\<build>` (the one
+  FluentFin.csproj names), or pass `-LibmpvDir` (and `-LibmpvSources` if they are elsewhere).
 - The build PC: Windows x64, the .NET 10 SDK, mpv on PATH (for the backend tests the build runs), git, and network
   access to python.org, PyPI, nuget.org, GitHub and code.videolan.org. Nothing else:
   the build brings its own Python.
@@ -84,6 +86,7 @@ the first sign-in, a playback.
 - Python runtime: the new version's `url` and `hash.sha256` from https://www.python.org/ftp/python/index-windows.json
   (`pythoncore-3.14-64`) into `build-release.ps1`.
 - PyPI packages: `tools\release\VENDORED.md` says how; keep the shipped ones at the versions the tests ran against.
-- libmpv: `vendor\libmpv\VENDORED.md`, then the hash and folder name in `build-release.ps1`.
+- libmpv: rebuild it (`tools\release\libmpv`, `vendor\libmpv\VENDORED.md`) and point FluentFin.csproj's `LibmpvDir` (or
+  `-LibmpvDir`) at the new folder; the build checks it against its BUILD-MANIFEST.txt and its sources.
 - A new Python package or package folder in the frozen backend stops the build until it is in the notices
   (`build-release.ps1` lists the folders it knows).

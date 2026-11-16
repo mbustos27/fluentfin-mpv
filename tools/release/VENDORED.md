@@ -44,11 +44,18 @@ To move a pin: take the version's `urls[].digests.sha256` from `https://pypi.org
 `cp314-win_amd64` or `py3-none-any` wheel, update the requirements file and the table above, rebuild, run the
 verification (`docs\RELEASE.md`).
 
-## libmpv (`libmpv-2.dll`, beside FluentFin.exe)
+## libmpv (the `libmpv\` folder beside FluentFin.exe)
 
-`vendor\libmpv\VENDORED.md`: shinchiro/mpv-winbuild-cmake release `20261111`, mpv `git-bcde6b93cc`, x86_64; archive and
-DLL hashes there (DLL `88504ee5560942a955405e99dfb5971368e4cf851321f36565bf2a667271db1b`, pinned in the build script).
-It imports `vulkan-1.dll`, which is not shipped (GPU drivers install it; README.txt says so).
+Our own build: `tools\release\libmpv` (the recipe, in this repository) builds libmpv-2.dll from pinned sources in MSYS2
+UCRT64 and collects every non-Windows DLL it loads, with a BUILD-MANIFEST.txt (each DLL, its size, sha256 and the MSYS2
+package it comes from, or "built here"); `vendor\libmpv\VENDORED.md` has the build and where its sources are. The
+release takes that folder (`build-release.ps1 -LibmpvDir`, by default the one FluentFin.csproj names):
+`libmpv_check.py` checks every DLL against the manifest and that each import is in the folder, Windows' own, or a
+graphics driver's (named in README.txt); the publish copies the folder into `libmpv\`, where Libmpv.cs loads it from and
+from nowhere else. Its sources (`-LibmpvSources`, by default `sources` beside the folder: `msys2\*.src.tar.zst` with
+their `.sig`, `mpv\mpv-<commit>.tar.gz`) go into `dist\sources\libmpv`; `sources.py` fails the build when a DLL's
+source is not there, and `notices.py` takes each DLL's licence from its source package's PKGBUILD and the licence
+files from the sources themselves.
 
 ## The mpv bar (uosc, inside `backend\_internal\fluentfin`)
 
@@ -59,9 +66,7 @@ frozen backend, and THIRD-PARTY-NOTICES.txt carries THIRD-PARTY.md and the licen
 ## Not shipped
 
 - **mpv.exe.** Only mpv's own controls need it (FluentFin's controls use libmpv inside FluentFin); the user installs mpv
-  and puts it on PATH. Shipping it would add a second full mpv build (libmpv alone is 122 MB) and a backend change to
-  find it.
-- **vulkan-1.dll.** See above; `backend\tools\build_win_vulkan_loader.py` builds one from source if it is ever wanted.
+  and puts it on PATH. Shipping it would add a second mpv build and a backend change to find it.
 - **The shim's translations** (`.mo`, built by `gen_pkg.sh`): the bridge shows English text.
 
 ## From the repository as is
@@ -73,8 +78,8 @@ frozen backend, and THIRD-PARTY-NOTICES.txt carries THIRD-PARTY.md and the licen
 
 ## The corresponding source (`dist\sources`)
 
-`sources.json` lists every component whose exact revision is known, with why; `sources.py` downloads each from its
+`sources.json` lists the components besides libmpv whose source must ship (uosc, LibVLCSharp, Flyleaf, the GPL and MPL
+Python packages), at the exact revision, with why; `sources.py` downloads each from its
 official host (GitHub, code.videolan.org, PyPI; PyPI's published sha256 checked), archives this repository's HEAD,
-and writes `SOURCES.txt`. For libmpv only part is exact: mpv, FFmpeg, the recipe, and the libraries whose revision
-the DLL reports. The recipe's other libraries were cloned at their branch heads and their revisions were not recorded,
-so `SOURCES.txt` lists them as not established.
+copies libmpv's own sources (above), and writes `SOURCES.txt`: every file with its sha256, and for each libmpv DLL the
+source it comes from.

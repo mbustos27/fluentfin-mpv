@@ -13,7 +13,8 @@ engine, running headless as a child process and talking to FluentFin over a stdi
 server sees one session, FluentFin's, and only the backend reports playback.
 
 - **Two kinds of player controls** (Settings > Playback > Player controls). By default FluentFin's own, drawn over an
-  mpv that runs inside FluentFin (the libmpv in the zip). Or mpv's own bar, [uosc](https://github.com/tomasklaen/uosc)
+  mpv that runs inside FluentFin (the libmpv in the zip, built for FluentFin MPV from pinned sources that ship with the
+  release). Or mpv's own bar, [uosc](https://github.com/tomasklaen/uosc)
   in FluentFin's look (the shim's bar as its fallback), with mpv in a window inside FluentFin's: chosen in Settings, or
   used automatically, with a notice, when libmpv cannot load on the PC. mpv's controls run mpv.exe from PATH.
   FluentFin's controls: seek, play/pause, ±10/30 s, Skip intro and Skip credits (a button above the seek bar while the
@@ -48,14 +49,11 @@ server sees one session, FluentFin's, and only the backend reports playback.
 - **Real-server paths not seen yet**: a real transcode, and its restart on an audio, subtitle or quality change; how a
   server handles a duplicate Stopped report.
 - **Not verified on screen** with FluentFin's controls: HDR on an HDR display, a DPI change, independent flip.
-- **FluentFin's controls need the Vulkan loader** (`vulkan-1.dll`), which graphics drivers install; without it FluentFin
-  falls back to mpv's controls. **mpv's controls need mpv.exe on PATH** (`winget install mpv-player.mpv-CI.MSVC`);
+- **When libmpv cannot load on a PC, FluentFin falls back to mpv's controls** and says why (README.txt names any
+  graphics-driver DLL libmpv needs). **mpv's controls need mpv.exe on PATH** (`winget install mpv-player.mpv-CI.MSVC`);
   the package does not include it, and without it the player says so.
 - **Two players**: MPV (jellyfin-mpv-shim) and Windows Media Player. Upstream FluentFin's VLC and Flyleaf players are
   not in the release (their libraries are left out); a saved choice of either plays with MPV.
-- **The source of libmpv's libraries is incomplete**: the release's sources archive has mpv, FFmpeg, the build recipe
-  and every library whose exact revision the build recorded; for the rest of the libraries built into `libmpv-2.dll`,
-  the build did not record their revisions (`SOURCES.txt` lists them).
 - With the mpv player: no SyncPlay, and remote "play next" / "play last" are not supported.
 - The backend's own messages are in English.
 - **With FluentFin's controls, no trickplay previews or Up Next card yet** (Skip and Next are there); mpv's controls
