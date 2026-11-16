@@ -53,6 +53,8 @@
         <StackPanel Spacing="20">
             <!--  fluentfin-mpv: Home failed, is empty, or only partly loaded (docs/research/ux-review.md H6); no ring of its own, the placeholders are the loading state  -->
             <lc:LoadStateView Margin="12,0" State="{x:Bind ViewModel.State}" />
+            <!--  Seaglass: the hero; absent until the rows have something with a backdrop to show, so the first paint is the rows' placeholders  -->
+            <lc:HomeHero Margin="12,0" Slides="{x:Bind ViewModel.Hero, Mode=OneWay}" />
             <StackPanel Padding="12,0,0,0" Visibility="{x:Bind local:HomePage.SectionVisibility(ViewModel.IsContinueLoading, ViewModel.HasContinueItems), Mode=OneWay}">
 
                 <TextBlock
