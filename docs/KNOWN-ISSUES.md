@@ -43,6 +43,12 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `hwdec` follows the shim's setting as on the other path (its default is `no`).
 - **The display is read when a playback starts**: a window moved to a display with another HDR state
   or refresh rate mid-playback keeps the first one's until the next playback.
+- **The composition probe can run on the UI thread** (whether libmpv loads and does composition output):
+  when no pre-warm ran first, the player page's first start runs it there, about 27 ms once warm.
+- **Dev builds only: two FFmpegs with the same DLL names.** A dev build has Flyleaf's `FFMpeg\avcodec-63.dll`
+  and the others beside libmpv's own in `libmpv\`; Windows loads a module of a name only once per process,
+  so after Flyleaf has played, libmpv can be handed Flyleaf's FFmpeg. The release ships no Flyleaf FFmpeg
+  (`tools\release\build-release.ps1`), so it cannot happen there.
 - **A pause or volume change can be undone for a moment by a state echo**: volume and mute are held
   for 1.5 s after a change (the wheel's case, measured); pause is not, a stale `state` can flip the
   button back until the next one.
