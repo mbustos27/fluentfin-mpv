@@ -6,14 +6,13 @@ below is low severity, an accepted cost of the contract, or not verified yet. Ea
 says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
 ## Never verified
-- **A real Jellyfin server.** Every test used fake servers and fake tokens. First tried
-  2026-11-14 (remote, HTTPS, a user who is not an administrator): login worked, but mpv
-  never started: the play request was built from FluentFin's playlist, one request per
-  season in turn (31 s for a 250-episode show), the page was left meanwhile and the start
-  went on regardless. Fixed the same day (round 7: the queue from one request, each step
-  shown, a start whose page is gone stops before the backend, the page's life in the log);
-  not yet retried on the real server. Direct play, a real **transcode** (and its restart on
-  a track change) and the server's handling of a duplicate Stopped are still untested.
+- **Parts of a real Jellyfin server.** The automated tests use fake servers and fake tokens.
+  The user's own server (remote, HTTPS, signed in as a user who is not an administrator) has
+  been in use since: sign-in, browsing and playback work, played with FluentFin's own player
+  controls (the user's report, 2026-11-15). Its first try (2026-11-14) found the slow start
+  (one play request per season, 31 s for a 250-episode show), fixed the same day in round 7.
+  Still not seen on a real server: a real **transcode** and its restart on a track change,
+  and the server's handling of a duplicate Stopped.
 - **A real sign-out in the app shell** (Log out / Switch user while a video plays). Covered
   by view-model tests and the end-to-end harness (`tools\ui-harness\e2e`, scenarios
   `signout_*`), not by driving FluentFin itself: its data folder can't be redirected, so a
@@ -146,6 +145,21 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 - The shim asks `checkip.amazonaws.com` for the public IPv4 address on each play when the
   server address is a public IPv4 (its `is_local` check). Not changed in the baseline;
   removing it was left out of the optimization plan on purpose.
+
+## Release package (`tools\release`, docs\RELEASE.md)
+- **Not code-signed**: SmartScreen warns on the first start ("More info", "Run anyway"), and
+  `backend\fluentfin-mpv-backend.exe` is an unsigned PyInstaller build. Needs a code-signing certificate.
+- **FluentFin's player controls need the Vulkan loader** (`vulkan-1.dll`): the shinchiro libmpv imports it
+  (backend STARTHERE.md, `backend\docs\packaging.md` §1). GPU drivers install it; on a PC without one (a VM, the
+  basic display driver) `libmpv-2.dll` does not load and FluentFin falls back to mpv's controls. Not shipped.
+- **mpv's controls need mpv.exe on PATH** (or a WinGet install): the package has no mpv.exe. Without one the
+  player page's error bar says "mpv could not be started: FileNotFoundError ...", which does not say to install mpv
+  (the backend's log does). A clearer message would be a bridge or UI change.
+- **The backend is English only**: the shim's `.mo` catalogs are built by `gen_pkg.sh`, not in git, not shipped.
+- **GPL binaries' sources**: THIRD-PARTY-NOTICES.txt points at the upstream sources of libmpv (and the libraries
+  its build links), FFmpeg and LibVLC; the release does not carry copies of those sources.
+- **Verified off-screen only**: the zip, unzipped outside the repo, against the fake server with nothing on
+  PATH but Windows (`verify-package.ps1`), on this PC. Not yet run on a PC without the .NET SDK or a GPU driver.
 
 ## This PC's test environment
 - 8 environmental failures in the backend suite: `test_mpvtk_pilfont` ×2 (an installed font

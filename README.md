@@ -25,7 +25,11 @@ This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv
   - Colours follow high-contrast themes.
 - **Sign-out feedback.** Signing out shows progress, playback stops cleanly first, and nothing can start playing during a sign-out.
 
-## Requirements
+## Download
+
+Windows 10/11 x64: the portable zip on the [Releases](https://github.com/mbustos27/fluentfin-mpv/releases) page. Unzip it and run `FluentFin.exe`; nothing else needs installing (its `README.txt` says what it needs and where it keeps your data). Changes: [CHANGELOG.md](CHANGELOG.md). The rest of this file is for building from source.
+
+## Requirements (building from source)
 
 - Windows 10 or 11 (x64)
 - .NET SDK 10: `winget install Microsoft.DotNet.SDK.10`
