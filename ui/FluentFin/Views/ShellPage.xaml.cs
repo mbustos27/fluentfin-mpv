@@ -69,6 +69,7 @@ public sealed partial class ShellPage : Page
 
 	private async void OnContributeTapped(object sender, TappedRoutedEventArgs e)
 	{
-		await Launcher.LaunchUriAsync(new Uri("https://github.com/insomniachi/FluentFin"));
+		// fluentfin-mpv: this project's repository (issues and contributions go here; upstream is credited in its README)
+		await Launcher.LaunchUriAsync(new Uri("https://github.com/mbustos27/fluentfin-mpv"));
 	}
 }
