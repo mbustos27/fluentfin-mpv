@@ -17,7 +17,21 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   by view-model tests and the end-to-end harness (`tools\ui-harness\e2e`, scenarios
   `signout_*`), not by driving FluentFin itself: its data folder can't be redirected, so a
   fake login would land in the real FluentFin settings.
-- **The libmpv path.** Only external mpv (mpv-CI 0.41 via winget) is installed and tested.
+- **The libmpv path.** The release bundles MSYS2's mpv 0.42.0 as libmpv (`vendor\libmpv\VENDORED.md`),
+  tested off-screen and by the user on their server. mpv's controls still run an external mpv (mpv-CI via winget).
+- **A rare crash opening a Season page** (seen twice: a dev-harness Debug run on 2026-11-15 and one release
+  verification run on 2026-11-16; reruns of the same scenario pass). FluentFin ends with a WinUI stowed exception
+  (COMException 0x80004005, 0xc000027b in Microsoft.UI.Xaml.dll via combase.dll) even though
+  `App_UnhandledException` marks it handled. No dump was kept; under investigation for 1.0.1.
+- **The admin Playback Reporting charts page** uses SkiaSharp's native view, which needs the Microsoft
+  Visual C++ runtime (MSVCP140, VCRUNTIME140, VCRUNTIME140_1). The release zip doesn't ship it, so that page
+  needs the VC++ Redistributable on PCs without it (found from the DLL imports, not seen failing).
+- **Upstream's FFmpeg DLLs in `ui\FluentFin\FFMpeg\`** (for the Flyleaf player, build N-126175-g0056dd32fd) are
+  in the repository and its source archive, as upstream FluentFin ships them; the release zip leaves them out.
+  Their exact source is upstream FFmpeg at that commit; a SOURCES row or `export-ignore` is due in 1.0.1.
+- **With libmpv unavailable and mpv not installed**, the page still says "Switch to FluentFin's controls",
+  which is already the setting; a separate message is due in 1.0.1
+  (`ui\FluentFin.Core\Mpv\MpvNotFoundMessage.cs`).
 - **"Player controls: FluentFin"** (the default; mpv's are the other choice; docs\research\player-controls.md). Built
   and measured off-screen only (`tools\ui-harness\composition-spike`, `tools\ui-harness\fluentfin-controls`).
   Not seen on the real desktop: the real mouse (hover, wheel event, clicks, hidden pointer), Tab order

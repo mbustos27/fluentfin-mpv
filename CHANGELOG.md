@@ -13,8 +13,8 @@ engine, running headless as a child process and talking to FluentFin over a stdi
 server sees one session, FluentFin's, and only the backend reports playback.
 
 - **Two kinds of player controls** (Settings > Playback > Player controls). By default FluentFin's own, drawn over an
-  mpv that runs inside FluentFin (the libmpv in the zip, built for FluentFin MPV from pinned sources that ship with the
-  release). Or mpv's own bar, [uosc](https://github.com/tomasklaen/uosc)
+  mpv that runs inside FluentFin (the libmpv in the zip: MSYS2's mpv 0.42.0 package and its pinned dependencies, whose
+  exact sources ship with the release). Or mpv's own bar, [uosc](https://github.com/tomasklaen/uosc)
   in FluentFin's look (the shim's bar as its fallback), with mpv in a window inside FluentFin's: chosen in Settings, or
   used automatically, with a notice, when libmpv cannot load on the PC. mpv's controls run mpv.exe from PATH.
   FluentFin's controls: seek, play/pause, ±10/30 s, Skip intro and Skip credits (a button above the seek bar while the
@@ -30,7 +30,8 @@ server sees one session, FluentFin's, and only the backend reports playback.
 
 ### Verified
 
-- The automated suites: the UI tests (`FluentFin.Core.Tests`, `FluentFin.Tests`), the backend suite (off-screen), the
+- The automated suites: the UI tests (`FluentFin.Core.Tests`, `FluentFin.Tests`), the backend's bridge tests
+  (the full backend suite last ran before the final backend change, with known module timeouts under load), the
   bridge smoke test and the end-to-end harness, which drives the real backend against a fake Jellyfin server.
 - The release zip itself (`tools\release\verify-package.ps1`): unzipped outside the repository and run off-screen
   against the fake server, with a PATH of Windows' own folders only (no Python, no mpv) and no backend configured:

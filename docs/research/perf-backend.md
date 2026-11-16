@@ -7,8 +7,7 @@ python-mpv-jsonipc. Everything was measured on the **pristine upstream copy**
 (a3a9a31, identical to `backend/` at 4dc492e), never in the repo. File:line
 references are upstream paths; the same paths apply under `backend/`.
 
-`S` below = `%TEMP%\claude\4cb39b71e0149222\e4cf1356-33e7-412e-b62a-03eff8dc99f0\scratchpad`
-(this session's scratchpad). Raw outputs: `S\perf-backend\`. Benchmarks: `S\perf-backend\bench\`.
+`S` below = the measuring session's scratch folder (not kept). Raw outputs: `S\perf-backend\`. Benchmarks: `S\perf-backend\bench\`.
 
 **Headline.** Steady-state playback costs the Python side ~0.2 % of one core and is
 not worth touching. The user-visible costs are all on *starts*: a new HTTPS

@@ -9,8 +9,8 @@ shows every local change.
 | `ui/` | https://github.com/insomniachi/FluentFin | `c6247584fedc867832768ce236f36066a1671cbd` (2026-11-02, "Merge pull request #38") | GPL-3.0 |
 | `backend/` | https://github.com/jellyfin/jellyfin-mpv-shim | `a3a9a31460cb3f15483a7052cbac18b9b065ec92` (2026-11-13, Weblate) | GPL-3.0-or-later |
 
-Both are GPLv3, so the combined work is GPLv3. This repository is local-only; if it is
-ever published, it must ship under GPLv3 with both upstream notices intact.
+Both are GPLv3, so the combined work is GPLv3. It is published on GitHub
+(mbustos27/fluentfin-mpv) under GPLv3, with both upstream notices intact.
 
 To pull upstream changes later: clone the upstream at a newer commit, diff it against the
 commit above, and apply that diff to the matching folder.
