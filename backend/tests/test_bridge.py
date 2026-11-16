@@ -7481,7 +7481,7 @@ class DefaultsTest(unittest.TestCase):
             path = bridge_mod.default_config_dir()
         self.assertEqual(os.path.basename(path), "mpv-backend")
         self.assertEqual(os.path.basename(os.path.dirname(path)),
-                         "FluentFinMpv")
+                         "Seaglass")
 
     def test_the_shim_parser_never_sees_our_argv(self):
         from jellyfin_mpv_shim import args as shim_args

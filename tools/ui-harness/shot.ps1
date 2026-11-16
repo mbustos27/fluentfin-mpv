@@ -6,13 +6,13 @@
   -Front brings it to the foreground first (for the keys a caller sends next; the capture does not need it).
   Writes a PNG to -Out and prints its rectangle, then one line per child window of another process (the embedded mpv):
   where it is and how much of it is not black in the capture. Throws when there is no window or the capture fails.
-  Usage: shot.ps1 -Out <file.png> [-ProcessId <pid> | -Handle <hwnd> | -ProcessName FluentFin] [-Front]
+  Usage: shot.ps1 -Out <file.png> [-ProcessId <pid> | -Handle <hwnd> | -ProcessName Seaglass] [-Front]
 #>
 param(
     [Parameter(Mandatory)][string]$Out,
     [int]$ProcessId = 0,
     [long]$Handle = 0,
-    [string]$ProcessName = 'FluentFin',
+    [string]$ProcessName = 'Seaglass',
     [switch]$Front
 )
 

@@ -102,7 +102,7 @@ def default_config_dir():
     else:
         base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
             os.path.expanduser("~"), ".config")
-    return os.path.join(base, "FluentFinMpv", "mpv-backend")
+    return os.path.join(base, "Seaglass", "mpv-backend")
 
 
 def find_mpv_binary():

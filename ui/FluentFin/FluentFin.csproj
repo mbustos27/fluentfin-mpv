@@ -4,7 +4,9 @@
 		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
 		<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
 		<RootNamespace>FluentFin</RootNamespace>
-		<ApplicationIcon>Assets/jellyfin.ico</ApplicationIcon>
+		<ApplicationIcon>Assets/Seaglass.ico</ApplicationIcon>
+		<!-- Seaglass: the app is Seaglass.exe / Seaglass.dll; the namespaces and project names stay FluentFin.* for upstream merges -->
+		<AssemblyName>Seaglass</AssemblyName>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 		<Platforms>x86;x64;arm64</Platforms>
 		<RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
@@ -16,7 +18,7 @@
 		<LangVersion>preview</LangVersion>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<!-- fluentfin-mpv: the release version (shown, and sent to Jellyfin through Core\AppVersion); docs\RELEASE.md -->
-		<Version Condition=" '$(BuildVersion)' == '' ">1.0.1</Version>
+		<Version Condition=" '$(BuildVersion)' == '' ">1.1.0</Version>
 		<Version Condition=" '$(BuildVersion)' != '' ">$(BuildVersion)</Version>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 		<AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
@@ -92,10 +94,7 @@
 	  <Content Update="Assets\GitHub.light.svg">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </Content>
-	  <Content Update="Assets\icons8-jellyfin-color-hand-drawn-70.png">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </Content>
-	  <Content Update="Assets\jellyfin.ico">
+	  <Content Update="Assets\Seaglass.ico">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </Content>
 	  <Content Update="Assets\rotten.svg">

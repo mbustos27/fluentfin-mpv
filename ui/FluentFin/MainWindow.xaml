@@ -9,7 +9,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:views="using:FluentFin.Views"
     xmlns:windowex="using:WinUIEx"
-    Title="FluentFin MPV"
+    Title="Seaglass"
     MinWidth="500"
     MinHeight="500"
     PersistenceId="MainWindow"

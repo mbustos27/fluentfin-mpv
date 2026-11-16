@@ -1,6 +1,8 @@
-# FluentFin MPV
+# Seaglass
 
-A Windows Jellyfin client that combines [FluentFin](https://github.com/insomniachi/FluentFin)'s WinUI 3 interface with [jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim) as its playback engine. You browse in FluentFin, and video plays in mpv inside FluentFin's own window. The server sees a single session, FluentFin's.
+*Formerly FluentFin MPV.* The old name and the GitHub repository name (`fluentfin-mpv`) stay in links and history.
+
+A Windows Jellyfin client that combines [FluentFin](https://github.com/insomniachi/FluentFin)'s WinUI 3 interface with [jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim) as its playback engine. You browse in FluentFin, and video plays in mpv inside FluentFin's own window. The server sees a single session, Seaglass's.
 
 This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv. It is tested by automated suites against a fake server and in daily use against a real Jellyfin server; [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md) says what is still unverified.
 
@@ -8,10 +10,10 @@ This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv
 
 **Windows 10 or 11 (x64).** From the [Releases](https://github.com/mbustos27/fluentfin-mpv/releases) page:
 
-- **Installer** (`.msi`): installs for your Windows user, with no administrator rights, and adds FluentFin MPV to the Start menu. Uninstall it in Settings → Apps.
-- **Portable** (`.zip`): unzip it anywhere and run `FluentFin.exe` at the top of the folder (the app's own files are in `app\`).
+- **Installer** (`.msi`): installs for your Windows user, with no administrator rights, and adds Seaglass to the Start menu. Uninstall it in Settings → Apps.
+- **Portable** (`.zip`): unzip it anywhere and run `Seaglass.exe` at the top of the folder (the app's own files are in `app\`).
 
-Nothing else needs installing: .NET, the playback backend and libmpv are inside. Either way your settings and data go to `%LOCALAPPDATA%\FluentFinMpv`. The app isn't code-signed, so Windows SmartScreen warns the first time (**More info → Run anyway**). Changes: [CHANGELOG.md](CHANGELOG.md).
+Nothing else needs installing: .NET, the playback backend and libmpv are inside. Either way your settings and data go to `%LOCALAPPDATA%\Seaglass`. The app isn't code-signed, so Windows SmartScreen warns the first time (**More info → Run anyway**). Changes: [CHANGELOG.md](CHANGELOG.md). Release files are named `Seaglass-<version>-win-x64.zip` and `.msi`. Coming from FluentFin MPV 1.0.x: installing the Seaglass `.msi` replaces it, and the first start copies your old data folder (`%LOCALAPPDATA%\FluentFinMpv`) to `%LOCALAPPDATA%\Seaglass`, leaving the old one in place.
 
 Everything below the feature list is for building from source.
 
@@ -65,7 +67,7 @@ To play video, a source build needs **one** of these:
 
 `.\run-dev.ps1 -SelfTest` plays mpv's test pattern inside the player page, with no server needed.
 
-Settings, logs and the journal go to `%LOCALAPPDATA%\FluentFinMpv`. For a separate data folder, start it with `FluentFin.exe --data-dir <folder>`.
+Settings, logs and the journal go to `%LOCALAPPDATA%\Seaglass`. For a separate data folder, start it with `Seaglass.exe --data-dir <folder>`.
 
 ## Development
 

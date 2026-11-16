@@ -4,12 +4,12 @@ using FluentFin.Core.Services;
 
 namespace FluentFin.Core.Tests;
 
-/// <summary>fluentfin-mpv: <c>--data-dir</c> / <c>FLUENTFIN_MPV_DATA_DIR</c> keep a dev or test run out of %LOCALAPPDATA%\FluentFinMpv.</summary>
+/// <summary>fluentfin-mpv: <c>--data-dir</c> / <c>FLUENTFIN_MPV_DATA_DIR</c> keep a dev or test run out of %LOCALAPPDATA%\Seaglass.</summary>
 public sealed class KnownFoldersDataDirTests : IDisposable
 {
 	private readonly string _root = Path.Combine(Path.GetTempPath(), "FluentFinTests", Guid.NewGuid().ToString("N"));
 
-	// stands for %LOCALAPPDATA%\FluentFinMpv: a run with its own folder must never create or write it
+	// stands for %LOCALAPPDATA%\Seaglass: a run with its own folder must never create or write it
 	private string DefaultRoot => Path.Combine(_root, "default", KnownFolders.FolderName);
 	private string DataDir => Path.Combine(_root, "data dir");
 
@@ -36,9 +36,9 @@ public sealed class KnownFoldersDataDirTests : IDisposable
 	}
 
 	[Fact]
-	public void DefaultRoot_IsLocalAppDataFluentFinMpv()
+	public void DefaultRoot_IsLocalAppDataSeaglass()
 	{
-		Assert.Equal(Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "FluentFinMpv"), KnownFolders.DefaultRoot);
+		Assert.Equal(Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "Seaglass"), KnownFolders.DefaultRoot);
 	}
 
 	[Theory]
@@ -153,7 +153,7 @@ public sealed class KnownFoldersDataDirTests : IDisposable
 		Assert.True(folders.IsCustom);
 	}
 
-	// review: a parameterless constructor meant %LOCALAPPDATA%\FluentFinMpv; a container that built KnownFolders itself would
+	// review: a parameterless constructor meant %LOCALAPPDATA%\Seaglass; a container that built KnownFolders itself would
 	// have used it and put a --data-dir run's files there
 	[Fact]
 	public void NoConstructorPicksTheFolderByItself()

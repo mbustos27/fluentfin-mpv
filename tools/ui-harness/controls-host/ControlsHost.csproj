@@ -1,5 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <!-- The player controls' test host: a WinUI window of its own (never FluentFin.exe) with the REAL backend and mpv embedded
+  <!-- The player controls' test host: a WinUI window of its own (never Seaglass.exe) with the REAL backend and mpv embedded
        through the bridge and FluentFin's controls window over the video. It compiles this repo's (or -p:UiDir=<copy>'s)
        sources: the video window, the controls window and XAML, the job launcher; and references FluentFin.Core (the
        backend host, the controls' view model). Built and run by run.ps1 from a copy under its -Out, never inside ui\. -->

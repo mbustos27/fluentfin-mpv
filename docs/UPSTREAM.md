@@ -14,3 +14,10 @@ Both are GPLv3, so the combined work is GPLv3. It is published on GitHub
 
 To pull upstream changes later: clone the upstream at a newer commit, diff it against the
 commit above, and apply that diff to the matching folder.
+
+## Rename to Seaglass (1.1.0)
+
+The app is named Seaglass (formerly FluentFin MPV), but the C# namespaces, project files and folders stay `FluentFin.*`, so
+upstream FluentFin merges still apply. The rename is `AssemblyName` in `ui\FluentFin\FluentFin.csproj`, `Core\AppIdentity.cs`
+(the client name), the data folder in `Core\KnownFolders.cs`, and plain strings in `MainWindow.xaml`, `TitleBarControl.xaml`,
+`Package.appxmanifest` and `Strings\en-us\Resources.resw`.

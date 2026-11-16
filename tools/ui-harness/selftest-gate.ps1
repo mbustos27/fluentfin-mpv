@@ -1,5 +1,5 @@
 <#
-  Gate for the mpv self-test (FluentFin.exe --mpv-selftest: no server, mpv's test pattern in the player page), with
+  Gate for the mpv self-test (Seaglass.exe --mpv-selftest: no server, mpv's test pattern in the player page), with
   mpv's own controls (Settings > Playback > Player controls: mpv; FluentFin's are the default since 2026-11-15, and
   their keys and window are checked by tools\ui-harness\fluentfin-controls and run-offscreen.ps1 instead).
    1. the video plays (screenshot);
@@ -11,7 +11,7 @@
    4. a normal close: the window hides at once, the process exits, nothing it started survives.
   Starts the exe directly (no build). Whatever fails, the finally closes what this script started and nothing else.
   Prints PASS/FAIL per check; exit code 1 if any check failed.
-  Usage: selftest-gate.ps1 -Out <dir> [-Exe <FluentFin.exe>]
+  Usage: selftest-gate.ps1 -Out <dir> [-Exe <Seaglass.exe>]
 #>
 param(
     [Parameter(Mandatory)][string]$Out,

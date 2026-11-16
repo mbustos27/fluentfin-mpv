@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Builds the portable FluentFin MPV release: dist\FluentFinMPV-<version>-win-x64\, a .zip of it and a .sha256.
+  Builds the portable Seaglass release: dist\Seaglass-<version>-win-x64\, a .zip of it and a .sha256.
 
 .DESCRIPTION
   Runs on a Windows x64 machine with the .NET 10 SDK, git, mpv on PATH (the backend tests) and network access to python.org,
@@ -19,15 +19,15 @@
      backend\fluentfin-mpv-backend.exe, which FluentFin finds before a dev checkout (MpvBackendCommand.Resolve).
   4. FluentFin: dotnet publish Release x64, self-contained, Windows App SDK self-contained, unpackaged
      (WindowsPackageType=None), with the libmpv folder (-LibmpvDir: libmpv-2.dll and every DLL it loads, checked against
-     its BUILD-MANIFEST.txt by tools\release\libmpv_check.py) copied into libmpv\ beside FluentFin.exe, and
+     its BUILD-MANIFEST.txt by tools\release\libmpv_check.py) copied into libmpv\ beside Seaglass.exe, and
      without upstream's VLC and Flyleaf libraries (libvlc\, FFMpeg\): the release offers MPV and Windows Media Player.
      No MSBuild node reuse, no shared compiler, no build server; bin and obj under dist\.work\dotnet.
      Then the launcher (tools\release\launcher\Launcher.cs, compiled with Windows' own C# compiler, .NET Framework 4).
-  5. The folder: at the top only FluentFin.exe (the launcher: it starts app\FluentFin.exe), README.txt, LICENSE and
+  5. The folder: at the top only Seaglass.exe (the launcher: it starts app\Seaglass.exe), README.txt, LICENSE and
      THIRD-PARTY-NOTICES.txt (tools\release\notices.py), so the program to run is easy to find; in app\ the publish
      output with libmpv\ and backend\. Then the zip (one top folder, entries sorted) and its SHA-256 in sha256sum format.
      English only: no language folders but English (FluentFin's own text is English).
-  7. The installer: a per-user MSI of the same folder (tools\release\installer\FluentFinMPV.wxs, WiX 5 from
+  7. The installer: a per-user MSI of the same folder (tools\release\installer\Seaglass.wxs, WiX 5 from
      dotnet-tools.json) and its SHA-256; taken back out of the MSI, the folder must match the package file by file.
   6. dist\sources\: the corresponding source of the GPL, LGPL and MPL code shipped, with SOURCES.txt
      (tools\release\sources.py, sources.json; official hosts only).
@@ -40,7 +40,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '1.0.1',
+    [string]$Version = '1.1.0',
     [string]$SourceUrl,
     [switch]$Reuse,
     [switch]$SkipTests,  # only to try the packaging itself; a release runs them
@@ -60,7 +60,7 @@ $PythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVer
 $PythonSha256 = 'cc28026a650970cc1570bb127312f1f9634eb67abfe157ae6ca1acbbc627d091'   # python.org index-windows.json
 
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$name = "FluentFinMPV-$Version-win-x64"
+$name = "Seaglass-$Version-win-x64"
 $dist = Join-Path $repo 'dist'
 $work = Join-Path $dist '.work'
 $package = Join-Path $dist $name
@@ -87,7 +87,7 @@ function Assert-PsfSigned([string]$path) {
 }
 
 # --- checks before building -----------------------------------------------------------------------------------------
-Step "FluentFin MPV $Version -> $package"
+Step "Seaglass $Version -> $package"
 $csproj = [xml](Get-Content -Raw (Join-Path $repo 'ui\FluentFin\FluentFin.csproj'))
 $csprojVersion = @($csproj.SelectNodes('//PropertyGroup/Version') | Where-Object { $_.GetAttribute('Condition') -match "== ''" } | ForEach-Object { $_.InnerText.Trim() })[0]
 if ($csprojVersion -ne $Version) { throw "ui\FluentFin\FluentFin.csproj says version '$csprojVersion', not $Version (docs\RELEASE.md)" }
@@ -288,26 +288,26 @@ Invoke-Checked 'dotnet publish' {
         "-p:LibmpvDir=$LibmpvDir" --artifacts-path $artifacts -o $publish `
         -nodeReuse:false -p:UseSharedCompilation=false --disable-build-servers -nologo -v:minimal
 }
-$exe = Join-Path $publish 'FluentFin.exe'
-if (-not (Test-Path $exe)) { throw "dotnet publish made no FluentFin.exe in $publish" }
+$exe = Join-Path $publish 'Seaglass.exe'
+if (-not (Test-Path $exe)) { throw "dotnet publish made no Seaglass.exe in $publish" }
 # the Windows App SDK self-contained (FluentFin.csproj sets WindowsAppSDKSelfContained; as a global property it would reach
 # the class libraries, which refuse it): its runtime is in the folder, so nothing needs installing
 foreach ($sdkFile in 'Microsoft.WindowsAppRuntime.dll', 'Microsoft.ui.xaml.dll', 'coreclr.dll') {
     if (-not (Test-Path (Join-Path $publish $sdkFile))) { throw "the publish is not self-contained: no $sdkFile in $publish" }
 }
 $productVersion = (Get-Item $exe).VersionInfo.ProductVersion
-if ($productVersion -ne $Version) { throw "FluentFin.exe says product version $productVersion, not $Version" }
+if ($productVersion -ne $Version) { throw "Seaglass.exe says product version $productVersion, not $Version" }
 # the libmpv folder copied whole into libmpv\ (FluentFin.csproj; Libmpv.cs loads it from there), and libmpv nowhere else
 $published = @(Get-ChildItem (Join-Path $publish 'libmpv') -Filter '*.dll' -ErrorAction SilentlyContinue)
 $wanted = @($libmpvInfo.dlls)
 $missing = @($wanted | Where-Object { -not (Test-Path (Join-Path $publish "libmpv\$_")) -or (Get-FileHash (Join-Path $publish "libmpv\$_")).Hash -ne (Get-FileHash (Join-Path $LibmpvDir $_)).Hash })
 $extra = @($published | Where-Object { $_.Name -notin $wanted })
 if ($missing -or $extra) { throw "libmpv\ in the publish is not the libmpv folder: missing or different $($missing -join ', '); extra $($extra.Name -join ', ')" }
-if (Test-Path (Join-Path $publish 'libmpv-2.dll')) { throw 'a libmpv-2.dll beside FluentFin.exe: libmpv belongs in libmpv\ only' }
+if (Test-Path (Join-Path $publish 'libmpv-2.dll')) { throw 'a libmpv-2.dll beside Seaglass.exe: libmpv belongs in libmpv\ only' }
 # no debug symbols (they name the build machine's folders), and the release marker (no dev-checkout lookup, AppVersion)
 $pdbs = @(Get-ChildItem $publish -Recurse -Filter '*.pdb')
 if ($pdbs) { throw "the publish has debug symbols: $($pdbs.Name -join ', ')" }
-if (-not (Select-String -Path (Join-Path $publish 'FluentFin.dll') -SimpleMatch -Pattern 'FluentFinMpvRelease' -Quiet)) { throw 'FluentFin.dll has no FluentFinMpvRelease marker' }
+if (-not (Select-String -Path (Join-Path $publish 'Seaglass.dll') -SimpleMatch -Pattern 'FluentFinMpvRelease' -Quiet)) { throw 'Seaglass.dll has no FluentFinMpvRelease marker' }
 # upstream's VLC and Flyleaf players are not in the release: no libvlc (VlcWindowsX64Enabled=false above) and no FFMpeg
 # folder (FluentFin.csproj copies it for the dev build). FluentFin offers only the players whose libraries are there
 # (Core\Settings\MediaPlayerAvailability), so the release offers MPV and Windows Media Player.
@@ -326,7 +326,7 @@ foreach ($dir in $languageDirs) {
 }
 Write-Host "English only: removed $($languageDirs.Count) language folders; kept $((@(Get-ChildItem $publish -Directory | Where-Object Name -match '^en(-|$)') | ForEach-Object Name) -join ', ')"
 
-# the launcher: the FluentFin.exe at the top of the release folder, which starts app\FluentFin.exe (the app's own folder
+# the launcher: the Seaglass.exe at the top of the release folder, which starts app\Seaglass.exe (the app's own folder
 # holds hundreds of files, and people looked for the program among them). Windows' own C# compiler (.NET Framework 4,
 # part of Windows 10 and 11): no toolchain to install, no third-party code in it, the app's icon and version.
 Step 'launcher (tools\release\launcher\Launcher.cs)'
@@ -337,14 +337,14 @@ if (Test-Path $launcherWork) { Remove-Item -Recurse -Force $launcherWork }
 New-Item -ItemType Directory $launcherWork | Out-Null
 $launcherVersion = Join-Path $launcherWork 'Version.cs'
 [IO.File]::WriteAllText($launcherVersion, (@(
-    '[assembly: System.Reflection.AssemblyTitle("FluentFin MPV")]',
-    '[assembly: System.Reflection.AssemblyProduct("FluentFin MPV")]',
+    '[assembly: System.Reflection.AssemblyTitle("Seaglass")]',
+    '[assembly: System.Reflection.AssemblyProduct("Seaglass")]',
     "[assembly: System.Reflection.AssemblyVersion(""$Version.0"")]",
     "[assembly: System.Reflection.AssemblyFileVersion(""$Version.0"")]",
     "[assembly: System.Reflection.AssemblyInformationalVersion(""$Version"")]") -join "`r`n"), [Text.UTF8Encoding]::new($false))
-$launcher = Join-Path $launcherWork 'FluentFin.exe'
+$launcher = Join-Path $launcherWork 'Seaglass.exe'
 Invoke-Checked 'the launcher' { & $csc /nologo /target:winexe /platform:x64 /optimize+ /debug- `
-        "/win32icon:$(Join-Path $repo 'ui\FluentFin\Assets\jellyfin.ico')" "/out:$launcher" (Join-Path $PSScriptRoot 'launcher\Launcher.cs') $launcherVersion }
+        "/win32icon:$(Join-Path $repo 'ui\FluentFin\Assets\Seaglass.ico')" "/out:$launcher" (Join-Path $PSScriptRoot 'launcher\Launcher.cs') $launcherVersion }
 if ((Get-Item $launcher).VersionInfo.ProductVersion -ne $Version) { throw "the launcher says product version $((Get-Item $launcher).VersionInfo.ProductVersion), not $Version" }
 
 # --- 5. the corresponding source, for the GitHub release (dist\sources, SOURCES.txt); the notices read it ------------
@@ -363,7 +363,7 @@ $appDir = Join-Path $package 'app'
 Copy-Item -Recurse $publish $appDir
 Copy-Item -Recurse $backendOut (Join-Path $appDir 'backend')
 Copy-Item (Join-Path $LibmpvDir 'BUILD-MANIFEST.txt') (Join-Path $appDir 'libmpv\BUILD-MANIFEST.txt')
-Copy-Item $launcher (Join-Path $package 'FluentFin.exe')
+Copy-Item $launcher (Join-Path $package 'Seaglass.exe')
 Copy-Item (Join-Path $repo 'LICENSE') (Join-Path $package 'LICENSE')
 $driverNote = if (@($libmpvInfo.drivers).Count) { "- FluentFin's own player controls (the default) load libmpv, which needs $(@($libmpvInfo.drivers) -join ', '): your
   graphics driver installs it. Without it FluentFin uses mpv's controls instead and says why.
@@ -404,12 +404,12 @@ if (@($libmpvInfo.stubs).Count -and -not $noticeText.Contains('A stub, not the l
 if (@($libmpvInfo.stubs | Where-Object { $_.name -like 'libdvdcss*' }).Count -and -not $noticeText.Contains("Encrypted DVDs aren't supported")) { $noticeGaps += "Encrypted DVDs aren't supported" }
 if ($noticeGaps) { throw "THIRD-PARTY-NOTICES.txt lacks: $($noticeGaps -join '; ')" }
 
-foreach ($needed in 'FluentFin.exe', 'app\FluentFin.exe', 'app\libmpv\libmpv-2.dll', 'app\libmpv\BUILD-MANIFEST.txt', 'app\backend\fluentfin-mpv-backend.exe', 'LICENSE', 'README.txt', 'THIRD-PARTY-NOTICES.txt') {
+foreach ($needed in 'Seaglass.exe', 'app\Seaglass.exe', 'app\libmpv\libmpv-2.dll', 'app\libmpv\BUILD-MANIFEST.txt', 'app\backend\fluentfin-mpv-backend.exe', 'LICENSE', 'README.txt', 'THIRD-PARTY-NOTICES.txt') {
     if (-not (Test-Path (Join-Path $package $needed))) { throw "the package has no $needed" }
 }
 # the top of the folder: the launcher, the three texts and app\, nothing else to look through
 $top = @(Get-ChildItem $package -Force | ForEach-Object { $_.Name } | Sort-Object)
-if (($top -join ',') -ne 'app,FluentFin.exe,LICENSE,README.txt,THIRD-PARTY-NOTICES.txt') { throw "the top of the package holds $($top -join ', ')" }
+if (($top -join ',') -ne 'app,Seaglass.exe,LICENSE,README.txt,THIRD-PARTY-NOTICES.txt') { throw "the top of the package holds $($top -join ', ')" }
 $devFiles = @(Get-ChildItem $package -Recurse -File -Include '*.runtimeconfig.dev.json', 'LocalSettings.json')
 if ($devFiles) { throw "dev-only files in the package: $($devFiles.FullName -join ', ')" }
 
@@ -437,7 +437,7 @@ Write-Host ("`n{0}`n  {1} files, {2:N1} MB unpacked (libmpv\: {3} files, {4:N1} 
     (($files | Measure-Object Length -Sum).Sum / 1MB), $libmpvFiles.Count, (($libmpvFiles | Measure-Object Length -Sum).Sum / 1MB), $zip, $zipMB, $hash)
 if ($zipMB -gt $MaxZipMB) { throw ("the zip is {0:N1} MB, more than -MaxZipMB {1}" -f $zipMB, $MaxZipMB) }
 
-# --- 7. the installer: a per-user MSI of the same folder (tools\release\installer\FluentFinMPV.wxs, WiX 5 from
+# --- 7. the installer: a per-user MSI of the same folder (tools\release\installer\Seaglass.wxs, WiX 5 from
 # dotnet-tools.json, nuget.org), then the same folder taken back out of it (an administrative install, which installs
 # nothing) and compared file by file with the package: the MSI must hold exactly what the zip holds -------------------
 $msi = Join-Path $dist "$name.msi"
@@ -447,8 +447,8 @@ Push-Location $repo
 try {
     Invoke-Checked 'dotnet tool restore' { & $dotnet tool restore }
     $env:DOTNET_ROLL_FORWARD = 'Major'   # WiX 5 targets an older .NET than the SDK this machine has
-    Invoke-Checked 'wix build' { & $dotnet tool run wix build (Join-Path $PSScriptRoot 'installer\FluentFinMPV.wxs') -arch x64 `
-            -d "Version=$Version" -d "PackageDir=$package" -d "IconFile=$(Join-Path $repo 'ui\FluentFin\Assets\jellyfin.ico')" `
+    Invoke-Checked 'wix build' { & $dotnet tool run wix build (Join-Path $PSScriptRoot 'installer\Seaglass.wxs') -arch x64 `
+            -d "Version=$Version" -d "PackageDir=$package" -d "IconFile=$(Join-Path $repo 'ui\FluentFin\Assets\Seaglass.ico')" `
             -intermediatefolder (Join-Path $work 'wix') -pdbtype none -o $msi }
 }
 finally { Remove-Item Env:DOTNET_ROLL_FORWARD -ErrorAction SilentlyContinue; Pop-Location }
@@ -456,7 +456,7 @@ $msiCheck = Join-Path $work 'msi-check'
 if (Test-Path $msiCheck) { Remove-Item -Recurse -Force $msiCheck }
 $admin = Start-Process msiexec.exe -ArgumentList @('/a', "`"$msi`"", '/qn', "TARGETDIR=`"$msiCheck`"") -Wait -PassThru
 if ($admin.ExitCode -ne 0) { throw "taking the files back out of the MSI failed (msiexec /a, exit $($admin.ExitCode))" }
-$fromMsi = Join-Path $msiCheck 'LocalApp\Programs\FluentFin MPV'
+$fromMsi = Join-Path $msiCheck 'LocalApp\Programs\Seaglass'
 function Get-Hashes([string]$dir) {
     Get-ChildItem $dir -Recurse -File | ForEach-Object { '{0}|{1}' -f $_.FullName.Substring($dir.Length), (Get-FileHash -Algorithm SHA256 $_.FullName).Hash } | Sort-Object
 }
@@ -474,7 +474,7 @@ $msiHash = (Get-FileHash -Algorithm SHA256 $msi).Hash.ToLowerInvariant()
 Write-Host ("{0}`n  {1:N1} MB, SHA-256 {2}; the same {3} files as the zip" -f $msi, ((Get-Item $msi).Length / 1MB), $msiHash, @(Get-ChildItem $package -Recurse -File).Count)
 # the sources as the release attaches them: one archive under GitHub's 2 GiB file limit, or numbered parts
 Step 'sources archive'
-Invoke-Checked 'sources archive' { & $venvPython -I (Join-Path $PSScriptRoot 'bundle_sources.py') --dir $sources --out $dist --name "FluentFinMPV-$Version-sources" }
+Invoke-Checked 'sources archive' { & $venvPython -I (Join-Path $PSScriptRoot 'bundle_sources.py') --dir $sources --out $dist --name "Seaglass-$Version-sources" }
 $sourceFiles = @(Get-ChildItem $sources -Recurse -File)
 Write-Host ("{0}
   {1} files, {2:N1} MB (SOURCES.txt)" -f $sources, $sourceFiles.Count, (($sourceFiles | Measure-Object Length -Sum).Sum / 1MB))

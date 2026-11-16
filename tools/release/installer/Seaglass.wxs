@@ -1,20 +1,20 @@
 <!--
-    FluentFin MPV's installer: a per-user MSI (no administrator, no UAC prompt) that installs the release folder as it is
-    (FluentFin.exe, app\, the texts) into %LOCALAPPDATA%\Programs\FluentFin MPV and adds a Start menu shortcut. Uninstall
+    Seaglass's installer: a per-user MSI (no administrator, no UAC prompt) that installs the release folder as it is
+    (Seaglass.exe, app\, the texts) into %LOCALAPPDATA%\Programs\Seaglass and adds a Start menu shortcut. Uninstall
     from Settings > Apps; settings and data in %LOCALAPPDATA%\FluentFinMpv stay. A newer version replaces an older one.
     Built by tools\release\build-release.ps1 with WiX 5 (dotnet-tools.json):
-        wix build FluentFinMPV.wxs -d Version=<x.y.z> -d PackageDir=<release folder> -d IconFile=<.ico> -o <msi>
+        wix build Seaglass.wxs -d Version=<x.y.z> -d PackageDir=<release folder> -d IconFile=<.ico> -o <msi>
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
     <Package
-        Name="FluentFin MPV"
-        Manufacturer="FluentFin MPV"
+        Name="Seaglass"
+        Manufacturer="Seaglass"
         Version="$(var.Version)"
         UpgradeCode="612ED1CB-52F7-49B1-9129-A1B04ADB015A"
         Scope="perUser"
         Compressed="yes">
-        <SummaryInformation Description="FluentFin MPV $(var.Version), a Jellyfin client for Windows" />
-        <MajorUpgrade DowngradeErrorMessage="A newer version of FluentFin MPV is already installed." />
+        <SummaryInformation Description="Seaglass $(var.Version), a Jellyfin client for Windows" />
+        <MajorUpgrade DowngradeErrorMessage="A newer version of Seaglass is already installed." />
         <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
         <Icon Id="AppIcon" SourceFile="$(var.IconFile)" />
@@ -25,29 +25,29 @@
 
         <StandardDirectory Id="LocalAppDataFolder">
             <Directory Id="ProgramsDir" Name="Programs">
-                <Directory Id="INSTALLFOLDER" Name="FluentFin MPV" />
+                <Directory Id="INSTALLFOLDER" Name="Seaglass" />
             </Directory>
         </StandardDirectory>
 
-        <Feature Id="Main" Title="FluentFin MPV">
+        <Feature Id="Main" Title="Seaglass">
             <!--  every file of the release folder, its subfolders included, as the zip has them  -->
             <Files Directory="INSTALLFOLDER" Include="$(var.PackageDir)\**" />
 
             <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder">
                 <Shortcut
                     Id="StartMenuShortcut"
-                    Name="FluentFin MPV"
+                    Name="Seaglass"
                     Description="A Jellyfin client: FluentFin with mpv"
-                    Target="[INSTALLFOLDER]app\FluentFin.exe"
+                    Target="[INSTALLFOLDER]app\Seaglass.exe"
                     WorkingDirectory="INSTALLFOLDER" />
-                <RegistryValue Root="HKCU" Key="Software\FluentFin MPV" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+                <RegistryValue Root="HKCU" Key="Software\Seaglass" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
             </Component>
 
             <!--  the install folders are removed on uninstall once their files are gone  -->
             <Component Id="InstallFolders" Directory="INSTALLFOLDER">
                 <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
                 <RemoveFolder Id="RemoveProgramsDir" Directory="ProgramsDir" On="uninstall" />
-                <RegistryValue Root="HKCU" Key="Software\FluentFin MPV" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+                <RegistryValue Root="HKCU" Key="Software\Seaglass" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
             </Component>
         </Feature>
 

@@ -169,7 +169,7 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   shim's. The race it closes was seen once in about ten runs and cannot be forced in a test.
 
 ## Start-up and pre-warm (stream `startup-perf`)
-- **The window before the automatic sign-in was run, off-screen only**: the real FluentFin.exe
+- **The window before the automatic sign-in was run, off-screen only**: the real Seaglass.exe
   (Release, private desktop, its own data folder, the dev-harness fake server; before = main with
   the same data-dir change, 5 runs each, interleaved, on a machine busy with other test runs)
   shows its window 910 ms after the process started against 1469 ms before (850 / 1438 ms at
@@ -221,7 +221,7 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   was pending, the position reported is right but the "server stopped sending it" notice is
   missing.
 - **A `log-file=` in the backend's `mpv.conf` writes the access token to that file**
-  (`%LOCALAPPDATA%\FluentFinMpv\mpv-backend\mpv.conf`; found 2026-11-15 by the dev-harness review). A log file
+  (`%LOCALAPPDATA%\Seaglass\mpv-backend\mpv.conf`; found 2026-11-15 by the dev-harness review). A log file
   makes mpv log verbosely, and mpv then logs `Set property: http-header-fields=["Authorization: MediaBrowser ...
   Token=\"...\""]` when the shim sets the request headers (reproduced with the fake server's token). Anyone who
   adds `log-file=` for debugging gets the real token in that log, against BRIDGE.md's rule that the token

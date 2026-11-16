@@ -1,8 +1,8 @@
 <#
-  Finding 2 check: start the self-test, wait until mpv plays, end FluentFin.exe the way Stop-Process -Force does
+  Finding 2 check: start the self-test, wait until mpv plays, end Seaglass.exe the way Stop-Process -Force does
   (TerminateProcess, through the handle it was started with) and check that none of the python/mpv processes it started
   survive. Touches only the processes this run created (common.ps1: held handles, checked start times).
-  Usage: repro-forcekill.ps1 [-Runs 3] [-Exe <FluentFin.exe>]
+  Usage: repro-forcekill.ps1 [-Runs 3] [-Exe <Seaglass.exe>]
 #>
 param([int]$Runs = 3, [string]$Exe = '')
 
