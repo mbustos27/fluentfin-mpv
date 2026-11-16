@@ -1,5 +1,4 @@
 ﻿using System.Runtime.InteropServices.WindowsRuntime;
-using Blurhash;
 using FluentFin.Core;
 using FluentFin.Core.ViewModels;
 using Flurl;
@@ -155,26 +154,18 @@ public static class BaseItemDtoConverters
 			return null;
 		}
 
-		var pixelData = new Pixel[20, 20];
-		Blurhash.Core.Decode(blurHash, pixelData, 1);
-
-		// Create a WriteableBitmap and render pixels
-		var bitmap = new WriteableBitmap(20, 20);
-		using (var stream = bitmap.PixelBuffer.AsStream())
+		// Seaglass: our own decoder (FluentFin.Core.Imaging.BlurHash), at the artwork's shape: a few hundred pixels are all a blur needs
+		var (w, h) = imageType is ImageType.Primary or ImageType.Logo ? (20, 30) : (32, 18);
+		if (Core.Imaging.BlurHash.Decode(blurHash, w, h) is not { } pixels)
 		{
-			for (int row = 0; row < 20; row++)
-			{
-				for (int col = 0; col < 20; col++)
-				{
-					Pixel pixel = pixelData[row, col];
-					stream.WriteByte((byte)MathUtils.LinearTosRgb(pixel.Blue));
-					stream.WriteByte((byte)MathUtils.LinearTosRgb(pixel.Green));
-					stream.WriteByte((byte)MathUtils.LinearTosRgb(pixel.Red));
-					stream.WriteByte(255);
-				}
-			}
+			return null;
 		}
 
+		var bitmap = new WriteableBitmap(w, h);
+		using (var stream = bitmap.PixelBuffer.AsStream())
+		{
+			stream.Write(pixels, 0, pixels.Length);
+		}
 		return bitmap;
 	}
 
@@ -195,6 +186,7 @@ public static class BaseItemDtoConverters
 			return null;
 		}
 
+		var requestedType = imageType;
 		var hasRequestTag = dto.ImageTags.AdditionalData.TryGetValue($"{imageType}", out object? requestTag);
 		var backdropTag = dto.BackdropImageTags?.FirstOrDefault();
 		var parentBackdropTag = dto.ParentBackdropImageTags?.FirstOrDefault();
@@ -257,7 +249,8 @@ public static class BaseItemDtoConverters
 		}
 
 
-		return new BitmapImage(uri.ToUri());
+		// Seaglass: decoded at the size it is drawn (the server sends fillHeight tall), not at the picture's own
+		return new BitmapImage(uri.ToUri()) { DecodePixelWidth = Core.Imaging.ImageSizes.DecodeWidth(requestedType, height) };
 	}
 
 	public static int GetCardBadgeValue(BaseItemViewModel vm)

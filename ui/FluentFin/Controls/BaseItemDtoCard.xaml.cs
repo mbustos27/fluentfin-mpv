@@ -1,4 +1,4 @@
-using CommunityToolkit.WinUI;
+﻿using CommunityToolkit.WinUI;
 using FluentFin.Core;
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.ViewModels;
@@ -10,6 +10,9 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using System.Numerics;
+using FluentFin.Services;
+using Microsoft.UI.Xaml.Hosting;
 using Windows.System;
 
 
@@ -94,10 +97,54 @@ public sealed partial class BaseItemDtoCard : UserControl
 
 	private void ImageCanvas_PointerExited(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerExited());
 
-	private void Card_GotFocus(object sender, RoutedEventArgs e) =>
+	private void Card_GotFocus(object sender, RoutedEventArgs e)
+	{
+		// the ring is for the keyboard (and a gamepad), never for a click
+		FocusRing.Visibility = ReferenceEquals(e.OriginalSource, this) && FocusState is FocusState.Keyboard or FocusState.Programmatic
+			? Visibility.Visible
+			: Visibility.Collapsed;
 		ShowActions(_actions.GotFocus(byPointer: e.OriginalSource is Control { FocusState: FocusState.Pointer }));
+	}
 
-	private void Card_LostFocus(object sender, RoutedEventArgs e) => ShowActions(_actions.LostFocus(FocusStaysWithCard));
+	private void Card_LostFocus(object sender, RoutedEventArgs e)
+	{
+		if (FocusState == FocusState.Unfocused)
+		{
+			FocusRing.Visibility = Visibility.Collapsed;
+		}
+		ShowActions(_actions.LostFocus(FocusStaysWithCard));
+	}
+
+	/// <summary>
+	/// Seaglass: the lift. In GlassMode Full a spring takes the card to 1.05 of its size and deepens its shadow; otherwise
+	/// (Reduced, Solid, animations off) it keeps its size and only the shadow changes, so nothing moves.
+	/// </summary>
+	private void Lift(bool lifted)
+	{
+		var visual = ElementCompositionPreview.GetElementVisual(RootGrid);
+		var scale = lifted && GlassMode.MotionAllowed ? RestScale * LiftScale : RestScale;
+		if (GlassMode.MotionAllowed)
+		{
+			var spring = visual.Compositor.CreateSpringVector3Animation();
+			spring.DampingRatio = 0.7f;
+			spring.Period = TimeSpan.FromMilliseconds(50);
+			spring.FinalValue = new Vector3(scale, scale, 1);
+			visual.StartAnimation("Scale", spring);
+		}
+		else
+		{
+			visual.StopAnimation("Scale");
+			visual.Scale = new Vector3(scale, scale, 1);
+		}
+
+		CardShadow.BlurRadius = lifted ? 24 : 8;
+		CardShadow.Opacity = lifted ? 0.5 : 0.25;
+		CardShadow.Offset = lifted ? "0,10" : "0,3";
+	}
+
+	/// <summary>A card sits at 0.9 of its slot (room for the lift and the shadow); the lift is 1.05 of that.</summary>
+	private const float RestScale = 0.9f;
+	private const float LiftScale = 1.05f;
 
 	private void Card_KeyDown(object sender, KeyRoutedEventArgs e)
 	{
@@ -179,9 +226,8 @@ public sealed partial class BaseItemDtoCard : UserControl
 		}
 
 		var show = _actions.Shown;
-		PlayButton.Visibility = ActionButtons.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-		(show ? Select : UnSelect).Start();
-		(show ? BlurAnimation : UnBlurAnimation).Start();
+		PlayButton.Visibility = ActionButtons.Visibility = HoverScrim.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+		Lift(show);
 
 		if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
 		{

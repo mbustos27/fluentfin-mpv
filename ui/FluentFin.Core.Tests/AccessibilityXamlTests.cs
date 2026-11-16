@@ -1,4 +1,4 @@
-using System.Xml;
+﻿using System.Xml;
 using System.Xml.Linq;
 
 namespace FluentFin.Core.Tests;
@@ -187,7 +187,11 @@ public class AccessibilityXamlTests
 		var root = Load("FluentFin/Controls/BaseItemDtoCard.xaml").Root!;
 
 		Assert.Equal("True", (string?)root.Attribute("IsTabStop"));
-		Assert.Equal("True", (string?)root.Attribute("UseSystemFocusVisuals"));
+		// Seaglass: the ring is the card's own, around the artwork (the system's rectangle would surround the whole slot)
+		Assert.Equal("False", (string?)root.Attribute("UseSystemFocusVisuals"));
+		var ring = FindByName(Load("FluentFin/Controls/BaseItemDtoCard.xaml"), "FocusRing");
+		Assert.StartsWith("{ThemeResource GlassTextPrimaryBrush}", (string?)ring.Attribute("BorderBrush"));
+		Assert.Equal("3", (string?)ring.Attribute("BorderThickness"));
 	}
 
 	[Fact]
@@ -212,7 +216,7 @@ public class AccessibilityXamlTests
 		var effects = doc.Descendants().Where(e => e.Name.LocalName is "BlurEffect" or "TintEffect").Select(e => (string?)e.Attribute(Xaml + "Name")).ToList();
 		var animations = doc.Descendants().Where(e => e.Name.LocalName.EndsWith("EffectAnimation", StringComparison.Ordinal)).ToList();
 
-		Assert.Equal(4, animations.Count);
+		// Seaglass: the card has none now (a lift replaces the blur and tint); any that return must reach their effect this way
 		Assert.All(animations, a =>
 		{
 			var target = (string?)a.Attribute("Target") ?? "";

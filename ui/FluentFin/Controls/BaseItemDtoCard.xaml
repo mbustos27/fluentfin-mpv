@@ -16,10 +16,15 @@
     xmlns:media="using:CommunityToolkit.WinUI.Media"
     xmlns:root="using:FluentFin"
     xmlns:ui="using:CommunityToolkit.WinUI"
-    CornerRadius="10"
     IsTabStop="True"
-    UseSystemFocusVisuals="True"
+    UseSystemFocusVisuals="False"
     mc:Ignorable="d">
+    <!--
+        Seaglass: opaque artwork with GlassCardCornerRadius and no border, the title and subtitle below it, progress as a thin
+        accent bar, a lift (a spring scale and a deeper shadow, only while GlassMode.MotionAllowed) on pointer-over and
+        keyboard focus, and a focus ring of its own (FocusRing) around the artwork, since the system's rectangle would
+        surround the whole slot.
+    -->
     <!--
         fluentfin-mpv: the card is a keyboard stop of its own (Enter/Space open it, arrows move along its row), shows its buttons
         while it or one of them has focus as it does on hover, and Narrator reads it as one button named after the item
@@ -48,36 +53,32 @@
         x:Name="RootGrid"
         ui:VisualExtensions.NormalizedCenterPoint="0.5, 0.5"
         ui:VisualExtensions.Scale="0.9"
-        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-        BorderThickness="1"
-        CornerRadius="10"
         ContextFlyout="{x:Bind Model.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <animations:Explicit.Animations>
-            <animations:AnimationSet x:Name="Select" IsSequential="False">
-                <animations:ScaleAnimation
-                    EasingMode="EaseOut"
-                    EasingType="Cubic"
-                    To="1"
-                    Duration="0:0:0.2" />
-            </animations:AnimationSet>
-            <animations:AnimationSet x:Name="UnSelect" IsSequential="False">
-                <animations:ScaleAnimation
-                    EasingMode="EaseOut"
-                    EasingType="Cubic"
-                    To="0.9"
-                    Duration="0:0:0.2" />
-            </animations:AnimationSet>
-        </animations:Explicit.Animations>
+        <!--  casts the shadow the lift deepens; behind the artwork, which is opaque  -->
+        <Border
+            x:Name="ShadowHost"
+            Background="{ThemeResource SeaglassDeepBrush}"
+            CornerRadius="{StaticResource GlassCardCornerRadius}">
+            <ui:Effects.Shadow>
+                <media:AttachedCardShadow
+                    x:Name="CardShadow"
+                    BlurRadius="8"
+                    CornerRadius="12"
+                    Opacity="0.25"
+                    Offset="0,3"
+                    Color="Black" />
+            </ui:Effects.Shadow>
+        </Border>
 
         <Grid
             x:Name="ImageCanvas"
             Background="Transparent"
-            CornerRadius="10 10 0 0"
+            CornerRadius="{StaticResource GlassCardCornerRadius}"
             PointerEntered="ImageCanvas_PointerEntered"
             PointerExited="ImageCanvas_PointerExited"
             Tapped="ImageCanvas_Tapped">
@@ -87,68 +88,16 @@
                     BlurHashImageSource="{x:Bind BlurHashImageSource, Mode=OneWay}"
                     EnableBlurHash="True"
                     ImageSource="{x:Bind ImageSource, Mode=OneWay}" />
-
-                <media:UIElementExtensions.VisualFactory>
-                    <media:PipelineVisualFactory>
-                        <media:BlurEffect x:Name="ImageBlurEffect" IsAnimatable="True" />
-                        <media:TintEffect x:Name="ImageColorEffect" IsAnimatable="True" />
-                    </media:PipelineVisualFactory>
-                </media:UIElementExtensions.VisualFactory>
-
-                <!--
-                    fluentfin-mpv: the effects are reached through x:Bind (their generated fields), not {Binding ElementName=...}:
-                    an effect of a PipelineVisualFactory is not found by name at run time, so the animations had no Target and
-                    every start of BlurAnimation/UnBlurAnimation (each time the buttons show or hide) threw "The target effect
-                    is null" into the app's log.
-                -->
-                <animations:Explicit.Animations>
-                    <animations:AnimationSet x:Name="BlurAnimation" IsSequential="False">
-                        <animations:ScaleAnimation
-                            EasingMode="EaseOut"
-                            EasingType="Cubic"
-                            To="1.1"
-                            Duration="0:0:0.2" />
-                        <animations:BlurEffectAnimation
-                            EasingMode="EaseOut"
-                            EasingType="Cubic"
-                            Target="{x:Bind ImageBlurEffect}"
-                            From="0"
-                            To="3"
-                            Duration="0:0:0.2" />
-                        <animations:ColorEffectAnimation
-                            EasingMode="EaseOut"
-                            EasingType="Cubic"
-                            Target="{x:Bind ImageColorEffect}"
-                            From="Transparent"
-                            To="Gray"
-                            Duration="0:0:0.2" />
-                    </animations:AnimationSet>
-
-                    <animations:AnimationSet x:Name="UnBlurAnimation" IsSequential="False">
-                        <animations:ScaleAnimation
-                            EasingMode="EaseOut"
-                            EasingType="Cubic"
-                            To="1"
-                            Duration="0:0:0.2" />
-                        <animations:BlurEffectAnimation
-                            EasingMode="EaseOut"
-                            EasingType="Cubic"
-                            Target="{x:Bind ImageBlurEffect}"
-                            From="3"
-                            To="0"
-                            Duration="0:0:0.2" />
-                        <animations:ColorEffectAnimation
-                            EasingMode="EaseOut"
-                            EasingType="Cubic"
-                            Target="{x:Bind ImageColorEffect}"
-                            From="Gray"
-                            To="Transparent"
-                            Duration="0:0:0.2" />
-                    </animations:AnimationSet>
-                </animations:Explicit.Animations>
             </Grid>
 
             <Grid x:Name="ContentOverlay">
+                <!--  under the buttons while they show, so they read on any artwork  -->
+                <Border
+                    x:Name="HoverScrim"
+                    Background="{StaticResource Black65O}"
+                    IsHitTestVisible="False"
+                    Opacity="0.55"
+                    Visibility="Collapsed" />
                 <Button
                     x:Name="PlayButton"
                     Width="50"
@@ -232,8 +181,11 @@
                 </InfoBadge>
 
                 <ProgressBar
-                    Margin="10,0,10,8"
+                    Height="4"
+                    MinHeight="4"
                     VerticalAlignment="Bottom"
+                    Background="{StaticResource Black65O}"
+                    Foreground="{ThemeResource SeaglassAccentBrush}"
                     Maximum="100"
                     Minimum="0"
                     Visibility="{x:Bind Model.UserData.PlayedPercentage, Converter={StaticResource MoreThanZeroToVisibilityConverter}, Mode=OneWay}"
@@ -298,27 +250,31 @@
 
             </Grid>
 
+            <Border
+                x:Name="FocusRing"
+                BorderBrush="{ThemeResource GlassTextPrimaryBrush}"
+                BorderThickness="3"
+                CornerRadius="{StaticResource GlassCardCornerRadius}"
+                IsHitTestVisible="False"
+                Visibility="Collapsed" />
         </Grid>
         <StackPanel
             Grid.Row="1"
-            Padding="8,6,8,8"
-            Background="{ThemeResource LayerOnMicaBaseAltFillColorSecondaryBrush}"
-            CornerRadius="0,0,10,10"
+            Padding="2,10,2,2"
             Spacing="2">
 
             <TextBlock
-                HorizontalAlignment="Center"
-                Style="{StaticResource BodyStrongTextBlockStyle}"
+                FontFamily="{StaticResource GlassTextFontFamily}"
+                FontSize="14"
+                FontWeight="SemiBold"
+                Foreground="{ThemeResource GlassTextPrimaryBrush}"
                 Text="{x:Bind Model.Dto, Converter={StaticResource NameConverter}, Mode=OneWay}"
                 TextTrimming="CharacterEllipsis"
                 TextWrapping="NoWrap" />
 
             <TextBlock
-                HorizontalAlignment="Center"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Style="{StaticResource CaptionTextBlockStyle}"
+                Style="{StaticResource GlassMetaTextBlockStyle}"
                 Text="{x:Bind Model.Dto, Converter={StaticResource SubtitleConverter}, Mode=OneWay}"
-                TextTrimming="CharacterEllipsis"
                 TextWrapping="NoWrap"
                 Visibility="{Binding RelativeSource={RelativeSource Mode=Self}, Path=Text, Converter={StaticResource EmptyStringVisibilityConverter}}" />
         </StackPanel>

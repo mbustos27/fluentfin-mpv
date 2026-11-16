@@ -58,7 +58,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Blurhash.Core" Version="4.2.1" />
 		<PackageReference Include="DeftSharp.Windows.Input" Version="0.11.0" />
 		<PackageReference Include="FlyleafLib.Controls.WinUI" Version="1.4.13" />
 		<PackageReference Include="LibVLCSharp.WinUI" Version="3.10.2" />
