@@ -198,7 +198,7 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		var id = new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
 		var settings = new JellyfinSdkSettings();
 		settings.SetServerUrl(url);
-		settings.Initialize("FluentFin MPV", Assembly.GetEntryAssembly()!.GetName().Version!.ToString(), Environment.MachineName, id);
+		settings.Initialize("FluentFin MPV", Core.AppVersion.Current, Environment.MachineName, id);
 		return new JellyfinApiClient(new JellyfinRequestAdapter(new JellyfinAuthenticationProvider(settings), settings));
 	}
 }

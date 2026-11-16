@@ -42,7 +42,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	public partial string Title { get; set; } = "";
 
 	[ObservableProperty]
-	public partial string Version { get; set; } = Assembly.GetEntryAssembly()!.GetName().Version!.ToString();
+	public partial string Version { get; set; } = Core.AppVersion.Current;
 
 	[ObservableProperty]
 	public partial bool CanGoBack { get; set; }

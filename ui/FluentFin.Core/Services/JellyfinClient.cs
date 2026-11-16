@@ -46,7 +46,7 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		_deviceId = new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
 		_settings = new Jellyfin.Sdk.JellyfinSdkSettings();
 		SessionInfo.ClientName = "FluentFin MPV";
-		SessionInfo.ClientVersion = Assembly.GetEntryAssembly()!.GetName().Version!.ToString()!;
+		SessionInfo.ClientVersion = AppVersion.Current; // fluentfin-mpv: the release version ("1.0.0")
 		SessionInfo.DeviceName = Environment.MachineName;
 		SessionInfo.DeviceId = _deviceId;
 		_settings.Initialize(SessionInfo.ClientName, SessionInfo.ClientVersion, SessionInfo.DeviceName, SessionInfo.DeviceId);

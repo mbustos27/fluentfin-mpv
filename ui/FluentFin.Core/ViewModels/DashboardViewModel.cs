@@ -35,7 +35,7 @@ public partial class DashboardViewModel(IJellyfinClient jellyfinClient,
 	public partial List<NameValuePair> Paths { get; set; } = [];
 
 	[ObservableProperty]
-	public partial string Version { get; set; } = Assembly.GetEntryAssembly()!.GetName().Version!.ToString();
+	public partial string Version { get; set; } = AppVersion.Current;
 
 
 	public Task OnNavigatedFrom()
