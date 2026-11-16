@@ -33,9 +33,7 @@ public sealed partial class BaseItemDtoCard : UserControl
 	public partial IJellyfinClient? JellyfinClient { get; set; }
 
 	// fluentfin-mpv: the buttons show while the pointer is over the image or the keyboard focus is in the card (ux-review A1)
-	private bool _pointerOver;
-	private bool _focusWithin;
-	private bool _actionsShown;
+	private readonly CardActions _actions = new();
 
 	public BaseItemDtoCard()
 	{
@@ -62,7 +60,7 @@ public sealed partial class BaseItemDtoCard : UserControl
 	/// <summary>fluentfin-mpv: the action buttons Narrator lists under the card while they show.</summary>
 	internal IEnumerable<UIElement> VisibleActions()
 	{
-		if (!_actionsShown)
+		if (!_actions.Shown)
 		{
 			yield break;
 		}
@@ -92,31 +90,14 @@ public sealed partial class BaseItemDtoCard : UserControl
 		e.Handled = true;
 	}
 
-	private void ImageCanvas_PointerEntered(object sender, PointerRoutedEventArgs e)
-	{
-		_pointerOver = true;
-		UpdateActions();
-	}
+	private void ImageCanvas_PointerEntered(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerEntered());
 
-	private void ImageCanvas_PointerExited(object sender, PointerRoutedEventArgs e)
-	{
-		_pointerOver = false;
-		UpdateActions();
-	}
+	private void ImageCanvas_PointerExited(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerExited());
 
-	private void Card_GotFocus(object sender, RoutedEventArgs e)
-	{
-		// keyboard (or programmatic) focus shows the buttons; the focus a click gives leaves them to the pointer, as before
-		_focusWithin = e.OriginalSource is not Control { FocusState: FocusState.Pointer };
-		UpdateActions();
-	}
+	private void Card_GotFocus(object sender, RoutedEventArgs e) =>
+		ShowActions(_actions.GotFocus(byPointer: e.OriginalSource is Control { FocusState: FocusState.Pointer }));
 
-	private void Card_LostFocus(object sender, RoutedEventArgs e)
-	{
-		// focus moving between the card and its own buttons, or into a menu or dialog opened from them, keeps them shown
-		_focusWithin = _focusWithin && FocusStaysWithCard();
-		UpdateActions();
-	}
+	private void Card_LostFocus(object sender, RoutedEventArgs e) => ShowActions(_actions.LostFocus(FocusStaysWithCard));
 
 	private void Card_KeyDown(object sender, KeyRoutedEventArgs e)
 	{
@@ -177,31 +158,27 @@ public sealed partial class BaseItemDtoCard : UserControl
 			return false;
 		}
 
-		DependencyObject? last = null;
-		for (var element = focused; element is not null; element = VisualTreeHelper.GetParent(element))
+		static IEnumerable<object> AndAncestors(DependencyObject element)
 		{
-			if (ReferenceEquals(element, this))
+			for (DependencyObject? e = element; e is not null; e = VisualTreeHelper.GetParent(e))
 			{
-				return true;
+				yield return e;
 			}
-
-			last = element;
 		}
 
-		// not under the window's content: a flyout or dialog, most likely opened from this card's More button or menu
-		// (focus comes back to the card when it closes)
-		return !ReferenceEquals(last, XamlRoot.Content) && VisualTreeHelper.GetOpenPopupsForXamlRoot(XamlRoot).Count > 0;
+		return CardActions.FocusStaysWithCard(AndAncestors(focused), this, XamlRoot.Content,
+			VisualTreeHelper.GetOpenPopupsForXamlRoot(XamlRoot).Select(p => (object?)p.Child));
 	}
 
-	private void UpdateActions()
+	/// <param name="changed">Whether the buttons are to show or hide now (<see cref="CardActions"/>).</param>
+	private void ShowActions(bool changed)
 	{
-		var show = _pointerOver || _focusWithin;
-		if (show == _actionsShown)
+		if (!changed)
 		{
 			return;
 		}
 
-		_actionsShown = show;
+		var show = _actions.Shown;
 		PlayButton.Visibility = ActionButtons.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
 		(show ? Select : UnSelect).Start();
 		(show ? BlurAnimation : UnBlurAnimation).Start();
@@ -243,6 +220,82 @@ public sealed partial class BaseItemDtoCard : UserControl
 		}
 
 		await JellyfinClient.SetIsFavorite(Model.Dto, !(Model.UserData?.IsFavorite ?? false));
+	}
+}
+
+/// <summary>
+/// fluentfin-mpv: when a card shows its buttons, apart from WinUI so it can be tested: while the pointer is over its image or
+/// the keyboard focus is in the card (ux-review A1). Each event returns whether <see cref="Shown"/> changed.
+/// </summary>
+internal sealed class CardActions
+{
+	private bool _pointerOver;
+	private bool _focusWithin;
+
+	public bool Shown { get; private set; }
+
+	public bool PointerEntered()
+	{
+		_pointerOver = true;
+		return Update();
+	}
+
+	public bool PointerExited()
+	{
+		_pointerOver = false;
+		return Update();
+	}
+
+	/// <param name="byPointer">The focus a click gives: it leaves the buttons to the pointer, as before.</param>
+	public bool GotFocus(bool byPointer)
+	{
+		_focusWithin = !byPointer;
+		return Update();
+	}
+
+	/// <param name="focusStaysWithCard">Asked only while keyboard focus was in the card (<see cref="FocusStaysWithCard"/>).</param>
+	public bool LostFocus(Func<bool> focusStaysWithCard)
+	{
+		_focusWithin = _focusWithin && focusStaysWithCard();
+		return Update();
+	}
+
+	/// <summary>
+	/// Whether the focus that left a card element still belongs to the card: on the card or one of its buttons, or in a menu or
+	/// dialog (most likely opened from the card's More button or menu; focus comes back to the card when it closes).
+	/// </summary>
+	/// <param name="focusedAndAncestors">The focused element, then its visual parents. The walk goes on past the window's content (in
+	/// WinUI 3 up to the window's own scroll viewer), so reaching the content is what says "in the page, not in the card".</param>
+	/// <param name="openPopupChildren">What the open popups show. A tooltip does not count: one opens on any button the
+	/// keyboard rests on for a moment.</param>
+	public static bool FocusStaysWithCard(IEnumerable<object> focusedAndAncestors, object card, object? windowContent, IEnumerable<object?> openPopupChildren)
+	{
+		foreach (var element in focusedAndAncestors)
+		{
+			if (ReferenceEquals(element, card))
+			{
+				return true;
+			}
+
+			if (ReferenceEquals(element, windowContent))
+			{
+				return false;
+			}
+		}
+
+		return openPopupChildren.Any(child => child is not ToolTip);
+	}
+
+	private bool Update()
+	{
+		var show = _pointerOver || _focusWithin;
+		if (show == Shown)
+		{
+			return false;
+		}
+
+		Shown = show;
+		return true;
 	}
 }
 

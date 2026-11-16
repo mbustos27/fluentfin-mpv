@@ -21,6 +21,84 @@ public sealed class CardAndRowAccessibilityTests
 		Assert.True(typeof(IInvokeProvider).IsAssignableFrom(typeof(BaseItemDtoCardAutomationPeer)));
 	}
 
+	[Fact]
+	public void CardButtons_ShowOnKeyboardFocus_AndOutliveThePointerLeaving()
+	{
+		var card = new CardActions();
+
+		Assert.True(card.GotFocus(byPointer: false));
+		Assert.True(card.Shown);
+
+		card.PointerEntered();
+		card.PointerExited();
+		Assert.True(card.Shown); // the focused button stays
+
+		Assert.True(card.LostFocus(() => false));
+		Assert.False(card.Shown);
+	}
+
+	[Fact]
+	public void CardButtons_FocusFromAClick_LeavesThemToThePointer()
+	{
+		var card = new CardActions();
+
+		card.PointerEntered();
+		card.GotFocus(byPointer: true);
+		card.PointerExited();
+
+		Assert.False(card.Shown);
+	}
+
+	[Fact]
+	public void CardButtons_FocusMovingToTheCardsOwnButton_KeepsThemShown()
+	{
+		var card = new CardActions();
+		card.GotFocus(byPointer: false);
+
+		card.LostFocus(() => true);
+		card.GotFocus(byPointer: false);
+
+		Assert.True(card.Shown);
+	}
+
+	[Fact]
+	public void Focus_OnTheCardOrItsButton_StaysWithTheCard()
+	{
+		var (card, content, windowScroller) = (new object(), new object(), new object());
+
+		Assert.True(CardActions.FocusStaysWithCard([new object(), new object(), card, new object(), content, windowScroller], card, content, []));
+	}
+
+	[Fact]
+	public void Focus_ElsewhereInThePage_LeavesTheCard_WhateverPopupIsOpen()
+	{
+		// the walk goes past the window's content (to its scroll viewer), and a popup is open: a tooltip, or anything else
+		var (card, content, windowScroller) = (new object(), new object(), new object());
+		object[] elsewhere = [new object(), new object(), content, windowScroller];
+
+		Assert.False(CardActions.FocusStaysWithCard(elsewhere, card, content, [ToolTip()]));
+		Assert.False(CardActions.FocusStaysWithCard(elsewhere, card, content, [new object()]));
+	}
+
+	[Fact]
+	public void Focus_InAMenuOrDialog_StaysWithTheCard_ButATooltipIsNotOne()
+	{
+		var (card, content) = (new object(), new object());
+		object[] inAPopup = [new object(), new object(), new object()];
+
+		Assert.True(CardActions.FocusStaysWithCard(inAPopup, card, content, [new object()]));
+		Assert.False(CardActions.FocusStaysWithCard(inAPopup, card, content, [ToolTip()]));
+		Assert.False(CardActions.FocusStaysWithCard(inAPopup, card, content, []));
+	}
+
+	/// <summary>A ToolTip for its type only: made without its constructor, which needs a running XAML.</summary>
+	private static object ToolTip()
+	{
+		var tip = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(Microsoft.UI.Xaml.Controls.ToolTip));
+		GC.SuppressFinalize(tip);
+		return tip;
+	}
+
 	[Theory]
 	[InlineData(false, false, 4, false, "Show more")] // short text: no toggle
 	[InlineData(false, true, 4, true, "Show more")]   // cut: "Show more"
