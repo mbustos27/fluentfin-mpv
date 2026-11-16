@@ -14,9 +14,10 @@ public partial class JellyfinClient
 			{
 				var query = x.QueryParameters;
 				query.Limit = 12;
-				query.Fields = [ItemFields.PrimaryImageAspectRatio];
+				// Seaglass: the hero shows the overview and the logo of what it features
+				query.Fields = [ItemFields.PrimaryImageAspectRatio, ItemFields.Overview];
 				query.ImageTypeLimit = 1;
-				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb];
+				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb, ImageType.Logo];
 				query.EnableTotalRecordCount = false;
 				query.MediaTypes = [MediaType.Video];
 			});
@@ -69,8 +70,10 @@ public partial class JellyfinClient
 				var query = x.QueryParameters;
 				query.UserId = UserId;
 				query.Limit = 16;
+				// Seaglass: the hero also features the latest items: their overview and logo
+				query.Fields = [ItemFields.Overview];
 				query.ImageTypeLimit = 1;
-				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb];
+				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb, ImageType.Logo];
 				query.ParentId = library.Id;
 			});
 		}

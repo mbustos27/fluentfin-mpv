@@ -48,6 +48,32 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 	public ObservableCollection<NamedQueryResult> RecentItems { get; } = [];
 
+	/// <summary>
+	/// Seaglass: the hero's slides (<see cref="HeroSlides.Pick"/>): Continue Watching, then the latest items. Replaced as a
+	/// whole, and only when what the hero would show has changed, so a refresh that changes nothing redraws nothing.
+	/// </summary>
+	[ObservableProperty]
+	public partial IReadOnlyList<HeroSlide> Hero { get; set; } = [];
+
+	private void RefreshHero()
+	{
+		var slides = HeroSlides.Pick(ContinueItems.Select(x => x.Dto), RecentItems.Where(r => !r.IsLoading).Select(r => (IReadOnlyList<BaseItemDto>)[.. r.Items.Select(i => i.Dto)]));
+		if (!Hero.SequenceEqual(slides, HeroSlideComparer.Instance))
+		{
+			Hero = slides;
+		}
+	}
+
+	private sealed class HeroSlideComparer : IEqualityComparer<HeroSlide>
+	{
+		public static readonly HeroSlideComparer Instance = new();
+
+		public bool Equals(HeroSlide? a, HeroSlide? b) =>
+			a is not null && b is not null && a.Dto.Id == b.Dto.Id && a.IsResume == b.IsResume && a.BackdropTag == b.BackdropTag && a.LogoTag == b.LogoTag;
+
+		public int GetHashCode(HeroSlide slide) => HashCode.Combine(slide.Dto.Id, slide.BackdropTag);
+	}
+
 	/// <summary>fluentfin-mpv: Home failed, is empty, or only partly loaded: said on the page, with Retry.</summary>
 	public LoadState State { get; } = new("Home");
 
@@ -152,6 +178,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			RecentItems.Add(new NamedQueryResult(row.Library) { Items = [.. row.Items.Select(BaseItemViewModel.FromDto)], IsLoading = false });
 		}
 		_emptyLibraries.UnionWith(snapshot.EmptyLibraries);
+		RefreshHero();
 	}
 
 	/// <summary>What the page shows, or null when it shows nothing (a page that failed to load is not kept).</summary>
@@ -196,6 +223,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			ContinueItems = [.. items.Select(BaseItemViewModel.FromDto)];
 		}
 		HasContinueItems = ContinueItems.Count > 0;
+		RefreshHero();
 	}
 
 	private void SetNextUpItems(IReadOnlyList<BaseItemDto> items)
@@ -228,7 +256,11 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		HasNextUpItems = newValue.Count > 0;
 	}
 
-	private void OnContinueItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => HasContinueItems = ContinueItems.Count > 0;
+	private void OnContinueItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+	{
+		HasContinueItems = ContinueItems.Count > 0;
+		RefreshHero();
+	}
 
 	private void OnNextUpItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => HasNextUpItems = NextUpItems.Count > 0;
 
@@ -338,6 +370,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		var position = views.IndexOf(library);
 		RecentItems.Insert(RecentItems.Count(x => views.FindIndex(v => v.Id == x.Library.Id) < position),
 			new NamedQueryResult(library) { Items = [.. items.Select(BaseItemViewModel.FromDto)], IsLoading = false });
+		RefreshHero();
 	}
 
 	private async Task UpdateRecentRow(NamedQueryResult row)
@@ -375,6 +408,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		finally
 		{
 			row.IsLoading = false;
+			RefreshHero();
 		}
 	}
 
