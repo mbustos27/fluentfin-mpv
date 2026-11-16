@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:CommunityToolkit.WinUI.Controls"
+    xmlns:fc="using:FluentFin.Controls"
     xmlns:core="using:FluentFin.Core.ViewModels"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:FluentFin"
@@ -23,6 +24,9 @@
             <RowDefinition Height="Auto" />
             <RowDefinition />
         </Grid.RowDefinitions>
+
+        <!--  Seaglass: the ambient backdrop under the title bar and every page, first-run pages included  -->
+        <fc:AmbientBackdropView Grid.RowSpan="2" />
 
         <views:TitleBarControl Grid.Row="0" />
 
