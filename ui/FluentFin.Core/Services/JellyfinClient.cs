@@ -50,6 +50,8 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		_settings.SetServerUrl(baseUrl);
 		_jellyfinApiClient = new Jellyfin.Sdk.JellyfinApiClient(new Jellyfin.Sdk.JellyfinRequestAdapter(new Jellyfin.Sdk.JellyfinAuthenticationProvider(_settings), _settings));
 
+		// fluentfin-mpv (startup-perf, O13): the profile the capabilities carry is ready first (was null for the Windows player)
+		await PrepareDeviceProfile();
 		await _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto
 		{
 			SupportsMediaControl = true,
@@ -68,6 +70,22 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 			libaries.Add(item);
 		}
 		await jumpListService.Initialize(libaries);
+	}
+
+	/// <summary>
+	/// fluentfin-mpv (startup-perf, O13): the device profile ready for the selected player. A probe that fails (the Windows
+	/// player's codec and audio queries) does not fail the sign-in or the play: it is logged, and tried again next time.
+	/// </summary>
+	private async Task PrepareDeviceProfile()
+	{
+		try
+		{
+			await deviceProfileFactory.PrepareAsync();
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning(ex, "The device profile could not be prepared for the selected player; it is tried again next time");
+		}
 	}
 
 	/// <summary>

@@ -42,6 +42,16 @@ ui_fullscreen = False
 #: bridge; None means nobody is listening and the request is dropped.
 on_fullscreen_request = None
 
+#: True while mpv runs without ``force-window``: a pre-warmed ``connect``
+#: (BRIDGE.md section 4) until its first play, which claims the surface
+#: (`claim_surface`). Read by `apply_to_options`, so an mpv the
+#: player has to re-create builds the surface iff it was claimed.
+surface_deferred = False
+
+#: Held across "read and clear `surface_deferred`": exactly one caller gets
+#: True and writes ``force-window``. A leaf lock.
+_surface_lock = threading.Lock()
+
 #: Held across "read `ui_fullscreen`, write mpv's ``fullscreen``": by the
 #: put-back (action thread) and by the owner's answer (the bridge's control
 #: worker). Without it the put-back could read the old state, the answer
@@ -58,17 +68,35 @@ _TOPLEVEL_OPTIONS = ("geometry", "window_maximized", "border", "title",
                      "x11_name", "wayland_app_id")
 
 
-def configure(window_handle):
+def configure(window_handle, defer_surface=False):
     """Embed into ``window_handle`` (an int), or ``None`` for a top-level
-    window. Call before the player is first imported."""
-    global hwnd, ui_fullscreen
+    window. Call before the player is first imported.
+
+    ``defer_surface`` (embedded only; ignored for a top-level window): mpv
+    starts without its video output -- no window of its own inside
+    ``window_handle`` -- until `claim_surface` (BRIDGE.md section 4,
+    ``connect.prewarm``)."""
+    global hwnd, ui_fullscreen, surface_deferred
     hwnd = None if window_handle is None else int(window_handle)
     ui_fullscreen = False
+    with _surface_lock:
+        surface_deferred = bool(defer_surface) and hwnd is not None
 
 
 def active():
     """True while mpv renders into somebody else's window."""
     return hwnd is not None
+
+
+def claim_surface():
+    """The first play of a pre-warmed backend: the video output exists
+    from now on, for the rest of the process. True exactly once, for
+    the caller that must now turn mpv's ``force-window`` on (a deferred
+    surface); False when there was nothing deferred."""
+    global surface_deferred
+    with _surface_lock:
+        claimed, surface_deferred = surface_deferred, False
+    return claimed
 
 
 def request_fullscreen(want):
@@ -92,7 +120,9 @@ def apply_to_options(mpv_options):
       mpv open its own top-level window instead.
     * ``force_window`` + ``idle``: the video surface exists from the moment
       mpv does, before the first file, so the owner's panel never shows a
-      gap where mpv will be.
+      gap where mpv will be. Not while the surface is deferred
+      (`surface_deferred`, a pre-warmed connect): then mpv idles with no
+      video output, and its first play turns ``force-window`` on.
     * ``fullscreen`` starts at the UI's state so the mirror holds from the
       first frame.
     * ``window_dragging`` off: a drag on the video would otherwise ask mpv
@@ -106,7 +136,7 @@ def apply_to_options(mpv_options):
     for key in _TOPLEVEL_OPTIONS:
         mpv_options.pop(key, None)
     mpv_options["wid"] = str(hwnd & 0xFFFFFFFF)
-    mpv_options["force_window"] = True
+    mpv_options["force_window"] = not surface_deferred
     mpv_options["idle"] = True
     mpv_options["fullscreen"] = bool(ui_fullscreen)
     mpv_options["window_dragging"] = False

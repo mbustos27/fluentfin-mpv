@@ -19,6 +19,8 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 	/// <param name="streamsPicked">fluentfin-mpv: the user changed a stream picker on the item page (only the mpv player uses it).</param>
 	public async Task Play(BaseItemDto dto, PlaybackSelection? selection, bool streamsPicked = true)
 	{
+		// fluentfin-mpv (startup-perf): the play timeline in the log counts from here (MpvPlayTimeline)
+		PerfLog.PlayPressed();
 		// SyncPlay is not supported with the mpv player (docs/BRIDGE.md §6): play here even if a group was joined before
 		if (SessionInfo.GroupId is not null && settings.MediaPlayer != MediaPlayerType.Mpv)
 		{

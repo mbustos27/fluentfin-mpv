@@ -14,9 +14,11 @@ FluentFin's Windows UI with jellyfin-mpv-shim's playback engine. Local project, 
 - `tools/README.md` — the test harnesses: off-screen backend suite, probes, mutation runners,
   the UI self-test gate and the end-to-end harness against the real backend.
 
-When you press Play with the MPV player selected, FluentFin starts the backend as a child
-process (it dies with the app), hands it the session it is already logged in with, and
-mpv draws inside FluentFin's player page. The server sees one session: FluentFin's.
+When you sign in with the MPV player selected, FluentFin starts the backend in the
+background as a child process (it dies with the app) and hands it the session it is
+already logged in with, so Play does not wait for it; mpv draws inside FluentFin's player
+page from the first play on. The server sees one session: FluentFin's. Signing out shuts
+the backend down. Start-up and play timings are in the log as `[perf]` lines.
 
 ## Requirements on this PC
 - .NET SDK 10 (`winget install Microsoft.DotNet.SDK.10`)

@@ -110,6 +110,8 @@ public sealed partial class MediaPlayerHost : UserControl
 
 	private FlyleafHost CreateFlyleaf()
 	{
+		// fluentfin-mpv (startup-perf, O5): Flyleaf's engine starts with its first player, not with the app
+		FlyleafEngine.EnsureStarted();
 		var host = new FlyleafHost();
 		host.Loaded += Host_Loaded;
 		return host;

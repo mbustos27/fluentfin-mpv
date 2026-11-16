@@ -33,6 +33,13 @@ public interface IMpvBackend
 	/// </summary>
 	Task<string?> ConnectAsync(BridgeIdentity? identity, CancellationToken cancellationToken = default);
 
+	/// <summary>
+	/// fluentfin-mpv (startup-perf): starts the backend unless it is running and connects it as this identity with
+	/// <c>prewarm</c> (docs/BRIDGE.md §4: mpv without its video window until the first play), unless it is already connected
+	/// as exactly this identity. A later <see cref="ConnectAsync"/> as the same identity then sends nothing.
+	/// </summary>
+	Task PrewarmAsync(BridgeIdentity identity, CancellationToken cancellationToken = default);
+
 	Task<JsonNode?> SendAsync(string command, JsonObject? args = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default);
 
 	/// <summary>
@@ -84,12 +91,12 @@ public sealed record MpvBackendStatus(MpvBackendState State,
 	{
 		var text = State switch
 		{
-			MpvBackendState.NotStarted => "Not running, starts with the first MPV playback",
+			MpvBackendState.NotStarted => "Not running, starts after sign-in (or with the first MPV playback)",
 			MpvBackendState.Starting => "Starting",
 			MpvBackendState.Running => "Running" +
 				(BackendVersion is null ? "" : $", jellyfin-mpv-shim {BackendVersion}") +
 				(MpvVersion is null ? ", not connected yet" : $", mpv {MpvVersion}{(MpvKind is null ? "" : $" ({MpvKind})")}"),
-			MpvBackendState.Stopped => "Stopped, starts with the next MPV playback",
+			MpvBackendState.Stopped => "Stopped, starts at the next sign-in or MPV playback",
 			MpvBackendState.Crashed => "Stopped unexpectedly, restarts with the next MPV playback",
 			MpvBackendState.Failed => "Could not start",
 			_ => State.ToString(),

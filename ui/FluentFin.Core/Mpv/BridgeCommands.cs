@@ -83,9 +83,10 @@ public static class BridgeCommands
 {
 	/// <summary>
 	/// <c>connect</c> args. Without an identity only <c>protocol</c> and <c>window</c> are sent, which a backend started with
-	/// <c>--dev</c> accepts for <c>play_file</c>.
+	/// <c>--dev</c> accepts for <c>play_file</c>. <paramref name="prewarm"/>: connected ahead of playback, mpv without its
+	/// video window until the first play (docs/BRIDGE.md §4); sent only when true.
 	/// </summary>
-	public static JsonObject Connect(BridgeIdentity? identity, BridgeWindow window)
+	public static JsonObject Connect(BridgeIdentity? identity, BridgeWindow window, bool prewarm = false)
 	{
 		var args = new JsonObject
 		{
@@ -123,6 +124,11 @@ public static class BridgeCommands
 			["mode"] = window.Mode,
 			["hwnd"] = window.Hwnd,
 		});
+
+		if (prewarm)
+		{
+			args["prewarm"] = true;
+		}
 
 		return args;
 	}

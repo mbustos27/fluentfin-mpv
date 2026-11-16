@@ -49,6 +49,28 @@ says where it lives so it can be picked up later.
   (the sign-out wait's 2 s bound, the redundant `_mpvLeaving` early return, the
   `ExitHandled` term in `Owed`, the re-check after subscribing in `WaitForStopReportsAsync`).
 
+## Start-up and pre-warm (stream `startup-perf`)
+- **Never seen on screen**: the window shown before the automatic sign-in with its "Signing in
+  to …" line, and the lazy Flyleaf start (the first Flyleaf play now starts FFmpeg: ~128 ms
+  warm, ~0.9 s the first time after an install). FluentFin was in use, so it was not launched;
+  covered by unit tests and source checks. Time-to-window and time-to-first-frame with the app
+  itself are still to measure (`[perf]` lines in the log; see the stream report).
+- **Pre-warm follows sign-in only**: choosing the MPV player in Settings while signed in does
+  not pre-warm (the first play starts the backend, as before; the next sign-in pre-warms).
+  Choosing another player leaves an idle pre-warmed backend running until sign-out or close.
+- **A pre-warmed backend's first play** has mpv build its video output then, alongside the
+  start's server requests (the price of no mpv window, GPU surface or attached input queues
+  while idle): e2e PlayAsync to `playing` 165 ms loopback / 224 ms at 40 ms per request,
+  against 66 / 198 ms with the output built at `connect` and ~640 / ~850 ms cold. If that
+  first-play difference matters more than ~40 MB and the attached queues while idle, the UI
+  can drop `prewarm` from its pre-warm `connect` (one argument in `MpvBackendHost.PrewarmAsync`).
+- **mpv before 0.41** keeps the output after the first file only because `force-window` is
+  stored (it is not acted on while idle there); only mpv 0.41 is installed, so untested.
+- **O7 (players and subscriptions never disposed) not done**: it does not apply to the mpv
+  player (no IMediaPlayerController is made; leaving the page stops playback and the backend
+  stays, by design), and for VLC, Flyleaf and the Windows player the report's dispose-order
+  risk needs its playback matrix and soak on a real server, which could not run here.
+
 ## Backend (`backend\jellyfin_mpv_shim\bridge*.py`, marked upstream diffs)
 - **A hung trickplay fetch can push `shutdown` past its 8 s deadline** (pre-existing
   upstream: `trickplay.stop()` joins with no timeout, called from `terminate`). Seen at

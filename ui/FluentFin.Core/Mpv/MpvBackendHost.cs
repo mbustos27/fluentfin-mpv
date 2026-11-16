@@ -320,6 +320,7 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 
 		SetStatus(new MpvBackendStatus(MpvBackendState.Starting, Command: command.ToString()));
 		logger.LogInformation("Starting the mpv backend ({Source}): {Command}", command.Source, command);
+		var launched = System.Diagnostics.Stopwatch.StartNew();
 
 		IMpvBackendProcess process;
 		try
@@ -383,12 +384,22 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 		}
 
 		session.Started = true;
-		logger.LogInformation("The mpv backend is running: pid {Pid}, {Backend} {Version}, bridge {Bridge}",
-			process.Id, session.Hello.Backend, session.Hello.Version, session.Hello.Bridge);
+		logger.LogInformation("The mpv backend is running: pid {Pid}, {Backend} {Version}, bridge {Bridge}; [perf] hello {Ms} ms after the launch",
+			process.Id, session.Hello.Backend, session.Hello.Version, session.Hello.Bridge, launched.ElapsedMilliseconds);
 		SetStatus(StatusOf(session));
 	}
 
-	public async Task<string?> ConnectAsync(BridgeIdentity? identity, CancellationToken cancellationToken = default)
+	public Task<string?> ConnectAsync(BridgeIdentity? identity, CancellationToken cancellationToken = default) =>
+		ConnectCoreAsync(identity, prewarm: false, cancellationToken);
+
+	/// <inheritdoc/>
+	public async Task PrewarmAsync(BridgeIdentity identity, CancellationToken cancellationToken = default)
+	{
+		await StartAsync(dev: false, cancellationToken);
+		await ConnectCoreAsync(identity, prewarm: true, cancellationToken);
+	}
+
+	private async Task<string?> ConnectCoreAsync(BridgeIdentity? identity, bool prewarm, CancellationToken cancellationToken)
 	{
 		var window = BridgeWindow.Embedded(await surface.GetHandleAsync());
 
@@ -411,12 +422,14 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 				return session.MpvVersion;
 			}
 
-			logger.LogInformation("Connecting the mpv backend: {Identity}, window {Mode} {Hwnd}", identity?.ToString() ?? "(dev, no server)", window.Mode, window.Hwnd);
+			logger.LogInformation("Connecting the mpv backend: {Identity}, window {Mode} {Hwnd}{Prewarm}", identity?.ToString() ?? "(dev, no server)", window.Mode, window.Hwnd,
+				prewarm ? ", pre-warmed (no video window until the first play)" : "");
 
 			JsonNode? result;
+			var watch = System.Diagnostics.Stopwatch.StartNew();
 			try
 			{
-				result = await session.Client.SendAsync(Bridge.Commands.Connect, BridgeCommands.Connect(identity, window), ConnectTimeout, cancellationToken);
+				result = await session.Client.SendAsync(Bridge.Commands.Connect, BridgeCommands.Connect(identity, window, prewarm), ConnectTimeout, cancellationToken);
 			}
 			catch (BridgeException ex)
 			{
@@ -430,6 +443,7 @@ public sealed class MpvBackendHost(IMpvBackendLauncher launcher,
 			session.Window = window;
 			session.MpvVersion = StringOf(result?["mpv"]);
 			session.MpvKind = StringOf(result?["mpvBackend"]);
+			logger.LogInformation("[perf] the mpv backend answered connect in {Ms} ms", watch.ElapsedMilliseconds);
 			SetStatus(StatusOf(session));
 			return session.MpvVersion;
 		}

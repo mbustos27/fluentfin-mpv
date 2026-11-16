@@ -308,6 +308,33 @@ save it, maximize, minimize, drag, raise or drop the surface returns early
 when embedded, and the bridge also forces `fullscreen`, `raise_mpv` and
 `remember_window_size` off (idle quit is off in every bridge, section 2).
 
+**Pre-warmed** (`connect.prewarm`, BRIDGE.md section 4; FluentFin sends it
+right after sign-in, so a `play` finds mpv running and the client checked):
+the connect that starts mpv configures `window_embed` with
+`defer_surface`, and `apply_to_options` then builds mpv with
+`force-window=no` -- `wid` and `idle` as always. mpv runs with **no video
+output**: no window of its own inside the owner's (the input queues of the
+two processes are attached only once one exists), no GPU surface. Measured
+off-screen with mpv 0.41: the backend's job idles at 85 MB working set /
+73 MB private (mpv 38 MB) against 126 / 120 MB with the output built at
+connect (mpv 79 / 86 MB), and ~0.1 % of one core either way. When the first
+`play` or `play_file` is accepted, `Bridge._claim_surface_soon` turns
+`force-window` on, once (`window_embed.claim_surface`), on a thread of its
+own -- not during a shutdown -- so mpv builds the output while the start's
+server requests run, and from then on the process behaves exactly as one
+connected without `prewarm`: the surface stays between items and after
+`stop`, and an mpv the player re-creates is built with it. The cost, on the
+first play only, measured with the e2e harness (`prewarm_play[_wan]`, n=6,
+interleaved, a loaded machine; PlayAsync to `playing`): 165 ms on a
+loopback server and 224 ms at 40 ms per request, against 66 / 198 ms with
+the output built at `connect`; building it only as mpv opens the file
+(after the start) was 146 / 283 ms -- on a remote server that is serial
+after the stream opens, so the overlap wins. A cold start (backend start
+and `connect` at play) is ~640 / ~850 ms. `tools/bridge_smoke.py`'s
+`prewarm` session checks it with the real mpv: no child window of ours
+while idle, mpv's window and the video after the first `play_file`, still
+there after `stop`.
+
 Fullscreen becomes a request (`fullscreen_request`):
 
 - the shim's own paths -- the claimed `f` key, a remote `ToggleFullscreen`
@@ -721,7 +748,14 @@ real classes' source.
 
 The smoke test runs the real bridge, with mpv, and needs no server:
 
-    backend\.venv\Scripts\python.exe backend\tools\bridge_smoke.py [--out DIR] [--only basic|eof|standalone|embedded]
+    backend\.venv\Scripts\python.exe backend\tools\bridge_smoke.py [--out DIR] [--only basic|eof|standalone|embedded|prewarm] [--this-checkout]
+
+(`--this-checkout`: the bridge from the checkout the script is in, with
+`python -E -s` and that backend folder as the working directory; `-I`, as
+FluentFin starts it, imports the installed package, and an editable install
+points at the checkout it was made from -- a git worktree shares the main
+checkout's venv. Run it through `tools\backend-bench\hidden_run.py` to keep
+its windows off the desktop.)
 
 It checks the server-less protocol, stdin EOF, `play_file` of
 `av://lavfi:testsrc` standalone (state, advancing `position`, pause, volume,

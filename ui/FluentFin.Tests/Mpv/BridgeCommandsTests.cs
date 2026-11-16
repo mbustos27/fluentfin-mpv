@@ -31,6 +31,19 @@ public sealed class BridgeCommandsTests
 	}
 
 	[Fact]
+	public void Connect_Prewarm_IsSentOnlyWhenAsked()
+	{
+		// fluentfin-mpv (startup-perf): docs/BRIDGE.md §4 connect.prewarm
+		var prewarmed = BridgeCommands.Connect(Identity, BridgeWindow.Embedded(42), prewarm: true);
+		var ordinary = BridgeCommands.Connect(Identity, BridgeWindow.Embedded(42));
+
+		Assert.True((bool?)prewarmed["prewarm"]);
+		Assert.False(ordinary.ContainsKey("prewarm"));
+		prewarmed.Remove("prewarm");
+		Assert.True(JsonNode.DeepEquals(ordinary, prewarmed), "otherwise the same connect");
+	}
+
+	[Fact]
 	public void Connect_WithoutIdentity_SendsOnlyProtocolAndWindow()
 	{
 		var args = BridgeCommands.Connect(null, BridgeWindow.Embedded(42));
