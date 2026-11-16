@@ -54,7 +54,15 @@ namespace FluentFin.Core.Contracts.Services
 		/// </summary>
 		Task<BaseItemDtoQueryResult?> GetSeriesEpisodes(Guid seriesId);
 
-		IAsyncEnumerable<RecentItemDtoQueryResult> GetRecentItemsFromUserLibraries();
+		/// <summary>
+		/// fluentfin-mpv: the user's views (libraries) in the server's order, read once and shared by sign-in, Home and the
+		/// Libraries page; read again after a new sign-in, a library change made here or reported by the server, a failed
+		/// read, or a few minutes. Empty when they could not be read (logged).
+		/// </summary>
+		Task<IReadOnlyList<BaseItemDto>> GetUserViews();
+
+		/// <summary>fluentfin-mpv: one library's "Recently added" row (Home asks for every row at once). Null when the request failed (logged).</summary>
+		Task<List<BaseItemDto>?> GetLatestItems(BaseItemDto library);
 
 		IAsyncEnumerable<BaseItemDto> GetUserLibraries();
 
@@ -144,6 +152,16 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<UserDto?> GetUser(Guid id);
 
+		/// <summary>fluentfin-mpv: the signed-in user, fresh from the server (<c>GET /Users/Me</c>); null when it did not answer.</summary>
+		Task<UserDto?> GetCurrentUser();
+
+		/// <summary>
+		/// fluentfin-mpv: saves <paramref name="userId"/>'s configuration on the server (<c>POST /Users/Configuration</c>), as
+		/// jellyfin-web's Playback settings do; the whole configuration, as the server replaces it. The user is the caller's,
+		/// not whoever is signed in when the request goes out. False when it failed.
+		/// </summary>
+		Task<bool> SaveUserConfiguration(Guid userId, UserConfiguration configuration);
+
 		Task<UserDto?> CreateUser(string username, string password);
 
 		Task DeleteUser(UserDto user);
@@ -218,8 +236,6 @@ namespace FluentFin.Core.Contracts.Services
 		Task SendMessage(string sessionId, MessageCommand command);
 	}
 
-	public record RecentItemDtoQueryResult(BaseItemDto Library, ObservableCollection<BaseItemDto> Items);
-
 	public record RefreshMetadataInfo(MetadataRefreshMode ImageRefreshMode, MetadataRefreshMode MetadataRefreshMode, bool ReplaceAllImages, bool RegenerateTrickplay, bool ReplaceAllMetadata);
 
 	/// <summary>Audio/subtitle streams chosen before playback starts. A null index means "use the server default"; a subtitle index of -1 means no subtitles.</summary>
@@ -232,7 +248,9 @@ namespace FluentFin.Core.Contracts.Services
 			new(audio?.Index, subtitle is null ? null : subtitle.Index ?? NoSubtitles);
 	}
 
-	public record PlaybackRequest(BaseItemDto Dto, PlaybackSelection Selection);
+	/// <param name="Selection">Streams picked on the item page; null plays with the defaults.</param>
+	/// <param name="FromBeginning">fluentfin-mpv: "Play from beginning" on the item page: the item starts at 0, not at its resume point.</param>
+	public record PlaybackRequest(BaseItemDto Dto, PlaybackSelection? Selection, bool FromBeginning = false);
 
 	public record MediaResponse(Uri Uri, PlaybackProgressInfo_PlayMethod PlayMethod, string PlaybackSessionId, string MediaSourceId, MediaSourceInfo MediaSourceInfo);
 

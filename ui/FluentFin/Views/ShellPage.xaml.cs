@@ -1,5 +1,6 @@
 ﻿using System.Reactive.Linq;
 using FluentFin.Contracts.Services;
+using FluentFin.Services;
 using FluentFin.ViewModels;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -14,6 +15,9 @@ public sealed partial class ShellPage : Page
 	{
 		get;
 	}
+
+	// fluentfin-mpv: no navigation pane while a player page is open (docs/research/ux-review.md V9)
+	public PlayerChrome Chrome { get; } = App.GetService<PlayerChrome>();
 
 	public ShellPage()
 	{

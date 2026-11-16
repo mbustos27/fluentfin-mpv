@@ -33,6 +33,21 @@ public sealed partial class VideoPlayerViewModelMpvTests
 	}
 
 	[Fact]
+	public async Task FluentFinControls_TakeTheWheelAndStepFromPlaybackSettings()
+	{
+		var movie = Movie();
+		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
+		_settings.SetupGet(x => x.MouseWheelVolume).Returns(false);
+		_settings.SetupGet(x => x.VolumeStep).Returns(12);
+		var vm = CreateViewModelWithControls(use: true);
+
+		await vm.OnNavigatedTo(movie);
+
+		Assert.False(vm.MpvControls!.WheelChangesVolume);
+		Assert.Equal(12, vm.MpvControls.Step);
+	}
+
+	[Fact]
 	public async Task MpvsControls_AreTheDefault_AndSendNoSetControls()
 	{
 		var movie = Movie();

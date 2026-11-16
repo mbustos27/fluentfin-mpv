@@ -62,7 +62,11 @@
                                     <TextBlock Text="{x:Bind local:LibrariesSettingsPage.SingleOrCount(Locations)}" />
                                 </StackPanel>
 
-                                <Button Grid.Column="1" Content="{ui:SymbolIcon Symbol=More}">
+                                <Button
+                                    Grid.Column="1"
+                                    AutomationProperties.Name="More options"
+                                    Content="{ui:SymbolIcon Symbol=More}"
+                                    ToolTipService.ToolTip="More options">
                                     <Button.Flyout>
                                         <MenuBarItemFlyout>
                                             <MenuFlyoutItem

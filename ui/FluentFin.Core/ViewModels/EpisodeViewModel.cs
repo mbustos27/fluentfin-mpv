@@ -9,7 +9,14 @@ namespace FluentFin.Core.ViewModels;
 public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalCommands commands) : ObservableObject, INavigationAware
 {
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(PlayLabel), nameof(HasResumePoint))]
 	public partial BaseItemDto Dto { get; set; }
+
+	/// <summary>fluentfin-mpv: the play button's text, "Resume at 12:34" when the episode has a resume point.</summary>
+	public string PlayLabel => ItemLabels.PlayLabel(Dto);
+
+	/// <summary>fluentfin-mpv: shows "Play from beginning" next to Resume.</summary>
+	public bool HasResumePoint => ItemLabels.ResumePosition(Dto) is not null;
 
 	[ObservableProperty]
 	public partial IList<MediaStream> AudioStreams { get; set; }
@@ -35,6 +42,9 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 	[ObservableProperty]
 	public partial bool HasSubtitles { get; set; }
 
+	/// <summary>fluentfin-mpv: this episode could not be loaded: said on the page, with Retry (docs/research/ux-review.md §3.11).</summary>
+	public LoadState State { get; } = new("this episode");
+
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 
 	// fluentfin-mpv: whether the user changed a picker after the page chose its defaults. The mpv player sends a track pick
@@ -49,6 +59,10 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 	[RelayCommand]
 	private Task Play() => commands.Play(Dto, PlaybackSelection.From(SelectedAudio, SelectedSubtitle), _streamsPicked);
 
+	// fluentfin-mpv: the secondary action next to Resume (docs/research/ux-review.md I2)
+	[RelayCommand]
+	private Task PlayFromBeginning() => commands.Play(Dto, PlaybackSelection.From(SelectedAudio, SelectedSubtitle), _streamsPicked, fromBeginning: true);
+
 	public async Task OnNavigatedTo(object parameter)
 	{
 		if (parameter is not BaseItemDto dto)
@@ -61,7 +75,11 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 			return;
 		}
 
-		await UpdateEpisode(id);
+		await State.RunAsync(async () =>
+		{
+			await UpdateEpisode(id);
+			return Dto?.Id == id ? LoadOutcome.Loaded : LoadMessages.CouldNotLoad("this episode");
+		});
 	}
 
 	private async Task UpdateEpisode(Guid id)

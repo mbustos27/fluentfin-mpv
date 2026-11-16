@@ -48,14 +48,18 @@
                         IsChecked="{x:Bind IsSelected, Mode=TwoWay}" />
                     <Button
                         Grid.Column="0"
+                        AutomationProperties.Name="Move up"
                         Command="{x:Bind MoveUpCommand}"
                         Content="{ui:FontIcon Glyph=&#xE70E;}"
+                        ToolTipService.ToolTip="Move up"
                         Visibility="{Binding RelativeSource={RelativeSource Mode=Self}, Path=IsEnabled, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     <Button
                         Grid.Column="1"
                         Margin="{StaticResource XSmallLeftMargin}"
+                        AutomationProperties.Name="Move down"
                         Command="{x:Bind MoveDownCommand}"
                         Content="{ui:FontIcon Glyph=&#xE70D;}"
+                        ToolTipService.ToolTip="Move down"
                         Visibility="{Binding RelativeSource={RelativeSource Mode=Self}, Path=IsEnabled, Converter={StaticResource BooleanToVisibilityConverter}}" />
                 </Grid>
             </ctk:SettingsCard>
@@ -98,9 +102,11 @@
                         <DataTemplate>
                             <ctk:SettingsCard Header="{Binding}">
                                 <Button
+                                    AutomationProperties.Name="Remove folder"
                                     Command="{Binding ElementName=Page, Path=ViewModel.RemoveFolderCommand}"
                                     CommandParameter="{Binding}"
-                                    Content="{ui:SymbolIcon Symbol=Remove}" />
+                                    Content="{ui:SymbolIcon Symbol=Remove}"
+                                    ToolTipService.ToolTip="Remove folder" />
                             </ctk:SettingsCard>
                         </DataTemplate>
                     </ctk:SettingsExpander.ItemTemplate>

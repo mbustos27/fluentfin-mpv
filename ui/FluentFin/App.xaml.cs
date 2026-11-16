@@ -101,6 +101,8 @@ public partial class App : Application
 			services.AddSingleton<IMpvVideoSurface, MpvVideoSurfaceChoice>();
 			services.AddSingleton<IMpvBackend, MpvBackendHost>();
 			services.AddSingleton<MpvPlaybackService>();
+			// fluentfin-mpv: the nav pane and search hide while a player page is open (docs/research/ux-review.md V9)
+			services.AddSingleton(_ => new PlayerChrome(action => MainWindow.DispatcherQueue.TryEnqueue(() => action())));
 
 			// Services
 			services.AddSingleton<IActivationService, ActivationService>();
@@ -135,6 +137,8 @@ public partial class App : Application
 			// Commands
 			services.AddSingleton<GlobalCommands>();
 			services.AddSingleton<DialogCommands>();
+
+			services.AddSingleton<HomeCache>(); // fluentfin-mpv: the last home page, shown at once (HomeViewModel)
 
 			// Views and ViewModels
 			services.AddTransient<ShellViewModel>();

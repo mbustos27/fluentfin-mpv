@@ -1,10 +1,16 @@
 using CommunityToolkit.WinUI;
+using FluentFin.Core;
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.ViewModels;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
+using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.System;
 
 
 namespace FluentFin.Controls;
@@ -26,12 +32,48 @@ public sealed partial class BaseItemDtoCard : UserControl
 	[GeneratedDependencyProperty]
 	public partial IJellyfinClient? JellyfinClient { get; set; }
 
+	// fluentfin-mpv: the buttons show while the pointer is over the image or the keyboard focus is in the card (ux-review A1)
+	private readonly CardActions _actions = new();
+
 	public BaseItemDtoCard()
 	{
 		InitializeComponent();
+
+		// fluentfin-mpv: keyboard access (ux-review A1); only keys nothing inside the card has handled
+		AddHandler(KeyDownEvent, new KeyEventHandler(Card_KeyDown), false);
+		GotFocus += Card_GotFocus;
+		LostFocus += Card_LostFocus;
+		ContextRequested += Card_ContextRequested;
 	}
 
-	private void ImageCanvas_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+	/// <summary>fluentfin-mpv: what a click on the image does: the item's page.</summary>
+	internal void Open()
+	{
+		if (Model is null)
+		{
+			return;
+		}
+
+		App.Commands.DisplayDto(Model.Dto);
+	}
+
+	/// <summary>fluentfin-mpv: the action buttons Narrator lists under the card while they show.</summary>
+	internal IEnumerable<UIElement> VisibleActions()
+	{
+		if (!_actions.Shown)
+		{
+			yield break;
+		}
+
+		yield return PlayButton;
+		yield return MarkWatchedButton;
+		yield return AddToFavoriteButton;
+		yield return MoreButton;
+	}
+
+	protected override AutomationPeer OnCreateAutomationPeer() => new BaseItemDtoCardAutomationPeer(this);
+
+	private void ImageCanvas_Tapped(object sender, TappedRoutedEventArgs e)
 	{
 		if (e.OriginalSource is not (Grid or Image))
 		{
@@ -46,6 +88,118 @@ public sealed partial class BaseItemDtoCard : UserControl
 		App.Commands.DisplayDto(Model.Dto);
 
 		e.Handled = true;
+	}
+
+	private void ImageCanvas_PointerEntered(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerEntered());
+
+	private void ImageCanvas_PointerExited(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerExited());
+
+	private void Card_GotFocus(object sender, RoutedEventArgs e) =>
+		ShowActions(_actions.GotFocus(byPointer: e.OriginalSource is Control { FocusState: FocusState.Pointer }));
+
+	private void Card_LostFocus(object sender, RoutedEventArgs e) => ShowActions(_actions.LostFocus(FocusStaysWithCard));
+
+	private void Card_KeyDown(object sender, KeyRoutedEventArgs e)
+	{
+		switch (e.Key)
+		{
+			case VirtualKey.Enter or VirtualKey.Space or VirtualKey.GamepadA when ReferenceEquals(e.OriginalSource, this):
+				if (!e.KeyStatus.WasKeyDown)
+				{
+					Open();
+				}
+				e.Handled = true;
+				break;
+			case VirtualKey.Left:
+				e.Handled = MoveFocusInRow(FocusNavigationDirection.Left);
+				break;
+			case VirtualKey.Right:
+				e.Handled = MoveFocusInRow(FocusNavigationDirection.Right);
+				break;
+			case VirtualKey.Up:
+				e.Handled = MoveFocusInRow(FocusNavigationDirection.Up);
+				break;
+			case VirtualKey.Down:
+				e.Handled = MoveFocusInRow(FocusNavigationDirection.Down);
+				break;
+		}
+	}
+
+	private void Card_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
+	{
+		// the menu key or Shift+F10 on the focused card: the menu a right click on its image opens
+		if (!ReferenceEquals(args.OriginalSource, this) || RootGrid.ContextFlyout is not { } flyout)
+		{
+			return;
+		}
+
+		flyout.ShowAt(this);
+		args.Handled = true;
+	}
+
+	/// <summary>
+	/// Arrow keys move to the next card in the row (or grid) the card is in, as in a list; at its end the key is left to the
+	/// page (its scroll viewer). The row's scroll viewer brings the card that gets focus into view.
+	/// </summary>
+	private bool MoveFocusInRow(FocusNavigationDirection direction)
+	{
+		if (FindAncestor<ItemsRepeater>(this) is not { } row)
+		{
+			return false;
+		}
+
+		return FocusManager.TryMoveFocus(direction, new FindNextElementOptions { SearchRoot = row });
+	}
+
+	private bool FocusStaysWithCard()
+	{
+		if (XamlRoot is null || FocusManager.GetFocusedElement(XamlRoot) is not DependencyObject focused)
+		{
+			return false;
+		}
+
+		static IEnumerable<object> AndAncestors(DependencyObject element)
+		{
+			for (DependencyObject? e = element; e is not null; e = VisualTreeHelper.GetParent(e))
+			{
+				yield return e;
+			}
+		}
+
+		return CardActions.FocusStaysWithCard(AndAncestors(focused), this, XamlRoot.Content,
+			VisualTreeHelper.GetOpenPopupsForXamlRoot(XamlRoot).Select(p => (object?)p.Child));
+	}
+
+	/// <param name="changed">Whether the buttons are to show or hide now (<see cref="CardActions"/>).</param>
+	private void ShowActions(bool changed)
+	{
+		if (!changed)
+		{
+			return;
+		}
+
+		var show = _actions.Shown;
+		PlayButton.Visibility = ActionButtons.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+		(show ? Select : UnSelect).Start();
+		(show ? BlurAnimation : UnBlurAnimation).Start();
+
+		if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
+		{
+			peer.RaiseAutomationEvent(AutomationEvents.StructureChanged);
+		}
+	}
+
+	private static T? FindAncestor<T>(DependencyObject element) where T : DependencyObject
+	{
+		for (var parent = VisualTreeHelper.GetParent(element); parent is not null; parent = VisualTreeHelper.GetParent(parent))
+		{
+			if (parent is T found)
+			{
+				return found;
+			}
+		}
+
+		return null;
 	}
 
 	private async void MarkWatchedButton_Clicked(object sender, RoutedEventArgs e)
@@ -67,4 +221,110 @@ public sealed partial class BaseItemDtoCard : UserControl
 
 		await JellyfinClient.SetIsFavorite(Model.Dto, !(Model.UserData?.IsFavorite ?? false));
 	}
+}
+
+/// <summary>
+/// fluentfin-mpv: when a card shows its buttons, apart from WinUI so it can be tested: while the pointer is over its image or
+/// the keyboard focus is in the card (ux-review A1). Each event returns whether <see cref="Shown"/> changed.
+/// </summary>
+internal sealed class CardActions
+{
+	private bool _pointerOver;
+	private bool _focusWithin;
+
+	public bool Shown { get; private set; }
+
+	public bool PointerEntered()
+	{
+		_pointerOver = true;
+		return Update();
+	}
+
+	public bool PointerExited()
+	{
+		_pointerOver = false;
+		return Update();
+	}
+
+	/// <param name="byPointer">The focus a click gives: it leaves the buttons to the pointer, as before.</param>
+	public bool GotFocus(bool byPointer)
+	{
+		_focusWithin = !byPointer;
+		return Update();
+	}
+
+	/// <param name="focusStaysWithCard">Asked only while keyboard focus was in the card (<see cref="FocusStaysWithCard"/>).</param>
+	public bool LostFocus(Func<bool> focusStaysWithCard)
+	{
+		_focusWithin = _focusWithin && focusStaysWithCard();
+		return Update();
+	}
+
+	/// <summary>
+	/// Whether the focus that left a card element still belongs to the card: on the card or one of its buttons, or in a menu or
+	/// dialog (most likely opened from the card's More button or menu; focus comes back to the card when it closes).
+	/// </summary>
+	/// <param name="focusedAndAncestors">The focused element, then its visual parents. The walk goes on past the window's content (in
+	/// WinUI 3 up to the window's own scroll viewer), so reaching the content is what says "in the page, not in the card".</param>
+	/// <param name="openPopupChildren">What the open popups show. A tooltip does not count: one opens on any button the
+	/// keyboard rests on for a moment.</param>
+	public static bool FocusStaysWithCard(IEnumerable<object> focusedAndAncestors, object card, object? windowContent, IEnumerable<object?> openPopupChildren)
+	{
+		foreach (var element in focusedAndAncestors)
+		{
+			if (ReferenceEquals(element, card))
+			{
+				return true;
+			}
+
+			if (ReferenceEquals(element, windowContent))
+			{
+				return false;
+			}
+		}
+
+		return openPopupChildren.Any(child => child is not ToolTip);
+	}
+
+	private bool Update()
+	{
+		var show = _pointerOver || _focusWithin;
+		if (show == Shown)
+		{
+			return false;
+		}
+
+		Shown = show;
+		return true;
+	}
+}
+
+/// <summary>
+/// fluentfin-mpv: Narrator reads a card as one button named after its item ("Inception, 2010, watched", <see cref="ItemLabels.CardName"/>)
+/// that opens the item's page (Invoke), with the card's buttons under it while they show. An AutomationProperties.Name set on
+/// the card wins over the generated name.
+/// </summary>
+internal sealed partial class BaseItemDtoCardAutomationPeer(BaseItemDtoCard owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider
+{
+	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
+
+	protected override string GetClassNameCore() => nameof(BaseItemDtoCard);
+
+	protected override string GetNameCore()
+	{
+		var name = AutomationProperties.GetName(owner);
+		return string.IsNullOrEmpty(name) ? ItemLabels.CardName(owner.Model) : name;
+	}
+
+	protected override bool IsControlElementCore() => true;
+
+	protected override bool IsContentElementCore() => true;
+
+	protected override object GetPatternCore(PatternInterface patternInterface) =>
+		patternInterface == PatternInterface.Invoke ? this : base.GetPatternCore(patternInterface);
+
+	protected override IList<AutomationPeer> GetChildrenCore() =>
+		[.. owner.VisibleActions().Select(FrameworkElementAutomationPeer.CreatePeerForElement).Where(x => x is not null)];
+
+	public void Invoke() => owner.Open();
 }

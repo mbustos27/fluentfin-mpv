@@ -35,8 +35,10 @@
                     Text="{x:Bind CurrentFolder, Mode=TwoWay}" />
                 <Button
                     Grid.Column="1"
+                    AutomationProperties.Name="Parent folder"
                     Click="Button_Click"
-                    Content="{ui:SymbolIcon Symbol=Back}" />
+                    Content="{ui:SymbolIcon Symbol=Back}"
+                    ToolTipService.ToolTip="Parent folder" />
             </Grid>
         </Border>
 

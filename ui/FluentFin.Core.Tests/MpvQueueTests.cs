@@ -113,6 +113,31 @@ public sealed class MpvQueueTests
 	}
 
 	[Fact]
+	public async Task AMovie_FromTheBeginning_StartsAtZero()
+	{
+		var id = Guid.NewGuid();
+		_client.Setup(x => x.GetItem(id)).ReturnsAsync(new BaseItemDto { Id = id, Type = BaseItemDto_Type.Movie, UserData = new UserItemDataDto { PlaybackPositionTicks = 5 } });
+
+		var request = await MpvQueue.BuildAsync(_client.Object, new BaseItemDto { Id = id, Type = BaseItemDto_Type.Movie }, new PlaybackSelection(1, 2), fromBeginning: true);
+
+		Assert.Equal([id.ToString("N")], request!.ItemIds);
+		Assert.Equal(0L, request.StartPositionTicks);
+		Assert.Equal((1, 2), (request.AudioStreamIndex, request.SubtitleStreamIndex));
+	}
+
+	[Fact]
+	public async Task AnEpisode_FromTheBeginning_KeepsItsPlaceInTheSeries_AtZero()
+	{
+		ServeEpisodes();
+
+		var request = await MpvQueue.BuildAsync(_client.Object, new BaseItemDto { Id = _episodes[3].Id, Type = BaseItemDto_Type.Episode, SeriesId = _seriesId }, null, fromBeginning: true);
+
+		Assert.Equal(Ids(_episodes), request!.ItemIds);
+		Assert.Equal(3, request.StartIndex);
+		Assert.Equal(0L, request.StartPositionTicks);
+	}
+
+	[Fact]
 	public async Task AnItemThatDoesNotSayWhatItIs_IsLookedUpFirst_AndOnlyOnce()
 	{
 		var id = Guid.NewGuid();

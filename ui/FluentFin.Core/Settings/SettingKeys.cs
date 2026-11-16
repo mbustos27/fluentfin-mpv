@@ -15,6 +15,19 @@ public static class SettingKeys
 	/// </summary>
 	public static Key<string> MpvBackendCommand { get; } = new Key<string>("MpvBackendCommand", "");
 
+	// fluentfin-mpv: Settings > Playback, kept on this PC (docs/research/ux-review.md T1). FluentFin's own players use them;
+	// the MPV player does not yet: the bridge has no field for them (docs/BRIDGE.md v1). Except with FluentFin's player
+	// controls over it (MpvPlayerControls below): those take the wheel and the volume step.
+
+	/// <summary>Show the Skip intro / Skip credits button during those segments.</summary>
+	public static Key<bool> ShowSkipPrompt { get; } = new Key<bool>("ShowSkipPrompt", true);
+
+	/// <summary>The mouse wheel over the video changes the volume.</summary>
+	public static Key<bool> MouseWheelVolume { get; } = new Key<bool>("MouseWheelVolume", true);
+
+	/// <summary>How much one wheel notch or arrow key changes the volume, in percent.</summary>
+	public static Key<int> VolumeStep { get; } = new Key<int>("VolumeStep", 5);
+
 	/// <summary>
 	/// fluentfin-mpv: who draws the player controls with the mpv player (docs/research/player-controls.md). mpv by default:
 	/// FluentFin's own controls are the default only once every row of the phase 2a go/no-go table passed on this PC.

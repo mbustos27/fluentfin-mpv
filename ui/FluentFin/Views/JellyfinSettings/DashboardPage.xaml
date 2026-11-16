@@ -214,25 +214,34 @@
                                                 CornerRadius="{StaticResource ControlCornerRadius}"
                                                 Orientation="Horizontal"
                                                 Spacing="4">
+                                                <!--  fluentfin-mpv: names and tooltips (ux-review I3)  -->
                                                 <Button
+                                                    AutomationProperties.Name="Play or pause"
                                                     Command="{x:Bind TogglePlayPauseCommand}"
                                                     Content="{x:Bind c:Converters.IsPausedToSymbol(PlayState.IsPaused), Mode=OneWay}"
                                                     Style="{StaticResource IconButtonStyle}"
+                                                    ToolTipService.ToolTip="Play or pause"
                                                     Visibility="{x:Bind c:Converters.BooleanToVisibility(MediaControlsVisible), Mode=OneWay}" />
                                                 <Button
+                                                    AutomationProperties.Name="Stop"
                                                     Command="{x:Bind StopCommand}"
                                                     Content="{ui:SymbolIcon Symbol=Stop}"
                                                     Style="{StaticResource IconButtonStyle}"
+                                                    ToolTipService.ToolTip="Stop"
                                                     Visibility="{x:Bind c:Converters.BooleanToVisibility(MediaControlsVisible), Mode=OneWay}" />
                                                 <Button
+                                                    AutomationProperties.Name="Playback information"
                                                     Command="{x:Bind InfoCommand}"
                                                     Content="{ui:FontIcon Glyph=&#xE946;}"
                                                     Style="{StaticResource IconButtonStyle}"
+                                                    ToolTipService.ToolTip="Playback information"
                                                     Visibility="{x:Bind NowPlayingItem, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}" />
                                                 <Button
+                                                    AutomationProperties.Name="Send message"
                                                     Command="{x:Bind SendMessageCommand}"
                                                     Content="{ui:FontIcon Glyph=&#xE8BD;}"
                                                     Style="{StaticResource IconButtonStyle}"
+                                                    ToolTipService.ToolTip="Send message"
                                                     Visibility="{x:Bind c:Converters.BooleanToVisibility(CanRecieveMessage)}" />
                                             </StackPanel>
                                             <TextBlock

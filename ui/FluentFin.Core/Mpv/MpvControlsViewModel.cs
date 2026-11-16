@@ -49,7 +49,18 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public const int LargeSeekSeconds = 10;
 	public const int SkipBackSeconds = 10;
 	public const int SkipForwardSeconds = 30;
+	/// <summary>The default of <see cref="Step"/>.</summary>
 	public const int VolumeStep = 5;
+
+	/// <summary>How much a wheel notch or Up/Down changes the volume, 1 to 20 (Settings > Playback, "Volume step").</summary>
+	public int Step
+	{
+		get => field;
+		set => field = Math.Clamp(value, 1, 20);
+	} = VolumeStep;
+
+	/// <summary>The wheel over the player is volume (Settings > Playback, "Change the volume with the mouse wheel"); off, it does nothing.</summary>
+	public bool WheelChangesVolume { get; set; } = true;
 
 	private readonly Func<string, JsonObject?, Task> _send;
 	private readonly Func<DateTimeOffset> _now;
@@ -605,12 +616,18 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 	/// <summary>
 	/// The mouse wheel turned over the video or the controls (<paramref name="delta"/> in Windows' units, 120 a notch, up
-	/// positive): the volume goes up or down <see cref="VolumeStep"/> a notch, 0 to 100, and the indicator shows. It never
+	/// positive): the volume goes up or down <see cref="Step"/> a notch, 0 to 100, and the indicator shows. It never
 	/// seeks and never scrolls anything; fine-grained wheels add up until they make a notch. It does not wake the bars:
 	/// the indicator is enough, and the picture stays clear.
 	/// </summary>
 	public Task Wheel(int delta)
 	{
+		if (!WheelChangesVolume)
+		{
+			// turned off in Settings: the wheel does nothing over the player (it still never seeks)
+			return Task.CompletedTask;
+		}
+
 		_wheelRemainder += delta;
 		var notches = _wheelRemainder / WheelNotch;
 		_wheelRemainder -= notches * WheelNotch;
@@ -621,7 +638,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			return Task.CompletedTask;
 		}
 
-		var volume = Math.Clamp(Volume + notches * VolumeStep, 0, 100);
+		var volume = Math.Clamp(Volume + notches * Step, 0, 100);
 		return volume == Volume && !IsMuted ? Task.CompletedTask : SetVolume(volume, wakeControls: false);
 	}
 
@@ -692,8 +709,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			case MpvControlsAction.SeekForward: return SeekBy(SmallSeekSeconds);
 			case MpvControlsAction.SeekBackLong: return SeekBy(-LargeSeekSeconds);
 			case MpvControlsAction.SeekForwardLong: return SeekBy(LargeSeekSeconds);
-			case MpvControlsAction.VolumeUp: return SetVolume(Volume + VolumeStep);
-			case MpvControlsAction.VolumeDown: return SetVolume(Volume - VolumeStep);
+			case MpvControlsAction.VolumeUp: return SetVolume(Volume + Step);
+			case MpvControlsAction.VolumeDown: return SetVolume(Volume - Step);
 			case MpvControlsAction.ToggleMute: return ToggleMute();
 			case MpvControlsAction.ToggleFullScreen: ToggleFullScreen(); return Task.CompletedTask;
 			case MpvControlsAction.Escape: Escape?.Invoke(); return Task.CompletedTask;

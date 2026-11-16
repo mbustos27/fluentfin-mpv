@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluentFin.Contracts.ViewModels;
 using FluentFin.Core.Contracts.Services;
+using FluentFin.Core.Services;
 using Jellyfin.Sdk.Generated.Models;
 using Jellyfin.Sdk.WebSockets;
 using ReactiveUI;
@@ -14,7 +15,8 @@ namespace FluentFin.Core.ViewModels;
 
 public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 								   IObservable<IOutboundWebSocketMessage> webSocketMessages,
-								   GlobalCommands commands) : ObservableObject, INavigationAware
+								   GlobalCommands commands,
+								   HomeCache homeCache) : ObservableObject, INavigationAware
 {
 	private readonly CompositeDisposable _disposable = [];
 
@@ -31,10 +33,29 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	[ObservableProperty]
 	public partial bool HasContinueItems { get; set; }
 
+	/// <summary>True until every part of the page has its data.</summary>
 	[ObservableProperty]
 	public partial bool IsLoading { get; set; }
 
+	// fluentfin-mpv: progressive home. The page no longer waits for everything behind one shimmer: Continue Watching,
+	// Next Up and each "Recently added" row (one per view, in the server's order, from the views sign-in already read)
+	// show a placeholder until their own request answers, and all those requests go out together.
+	[ObservableProperty]
+	public partial bool IsContinueLoading { get; set; } = true;
+
+	[ObservableProperty]
+	public partial bool IsNextUpLoading { get; set; } = true;
+
 	public ObservableCollection<NamedQueryResult> RecentItems { get; } = [];
+
+	/// <summary>fluentfin-mpv: Home failed, is empty, or only partly loaded: said on the page, with Retry.</summary>
+	public LoadState State { get; } = new("Home");
+
+	// fluentfin-mpv: libraries whose last answer was "nothing recent": no placeholder row for them on the next refresh
+	private readonly HashSet<Guid> _emptyLibraries = [];
+
+	// fluentfin-mpv: loads run so far; the first may show the cached page and skip a fresh one, a Retry always asks
+	private int _loads;
 
 	public IJellyfinClient JellyfinClient { get; } = jellyfinClient;
 
@@ -46,15 +67,143 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 	public async Task OnNavigatedTo(object parameter)
 	{
+		// fluentfin-mpv: listen from the start, since rows can be used (mark watched...) while others still load
+		ListenToUserDataChanges();
+
+		await State.RunAsync(LoadSections);
+	}
+
+	/// <summary>
+	/// fluentfin-mpv: loads every section and says how it went: nothing could be loaded, the server has nothing to show, or
+	/// some sections failed (docs/research/ux-review.md H6). The first load shows the last home page at once (HomeCache)
+	/// and then, unless it is still fresh, the server's answers replace whatever changed, section by section. A Retry
+	/// always asks the server: what it retries is what the last answers left out, whatever the cache's age. The client
+	/// answers a failed request with null; a failed "Recently added" row only drops its placeholder (or keeps its cached
+	/// cards), so the rows count as content, not as failures.
+	/// </summary>
+	private async Task<LoadOutcome> LoadSections()
+	{
+		var retry = _loads++ > 0;
 		IsLoading = true;
+		try
+		{
+			var cached = await homeCache.Get(JellyfinClient.BaseUrl, JellyfinClient.UserId);
+			if (!retry && cached.Snapshot is { } snapshot)
+			{
+				Show(snapshot);
+			}
 
-		await Task.WhenAll(UpdateContinueItems(), UpdateNextUpItems(), UpdateRecentItems());
+			var failed = false;
+			if (retry || !cached.IsFresh)
+			{
+				// a section with nothing in it shows its placeholders again while it is asked for again
+				IsContinueLoading |= ContinueItems.Count == 0;
+				IsNextUpLoading |= NextUpItems.Count == 0;
 
+				var continueLoaded = UpdateContinueItems();
+				var nextUpLoaded = UpdateNextUpItems();
+				await Task.WhenAll(continueLoaded, nextUpLoaded, UpdateRecentItems());
+				failed = !continueLoaded.Result || !nextUpLoaded.Result;
+
+				if (Snapshot() is { } shown)
+				{
+					await homeCache.Save(JellyfinClient.BaseUrl, JellyfinClient.UserId, shown, cached.ChangesSeen);
+				}
+			}
+
+			var nothing = ContinueItems.Count == 0 && NextUpItems.Count == 0 && RecentItems.Count == 0;
+			return (failed, nothing) switch
+			{
+				(true, true) => LoadMessages.CouldNotLoad("Home"),
+				(true, false) => LoadOutcome.Partly("Some of Home couldn't be loaded", LoadMessages.CheckServer()),
+				(false, true) => LoadOutcome.Empty("Nothing to watch yet",
+					$"Movies and shows on {LoadMessages.ServerName()} appear here once its libraries have some. Libraries shows what is there now."),
+				_ => LoadOutcome.Loaded,
+			};
+		}
+		finally
+		{
+			IsLoading = false;
+		}
+	}
+
+	private void Show(HomeSnapshot snapshot)
+	{
+		SetContinueItems(snapshot.ContinueItems);
+		IsContinueLoading = false;
+		SetNextUpItems(snapshot.NextUpItems);
+		IsNextUpLoading = false;
+		foreach (var row in snapshot.Rows)
+		{
+			RecentItems.Add(new NamedQueryResult(row.Library) { Items = [.. row.Items.Select(BaseItemViewModel.FromDto)], IsLoading = false });
+		}
+		_emptyLibraries.UnionWith(snapshot.EmptyLibraries);
+	}
+
+	/// <summary>What the page shows, or null when it shows nothing (a page that failed to load is not kept).</summary>
+	private HomeSnapshot? Snapshot()
+	{
+		var rows = RecentItems.Where(x => !x.IsLoading && x.Items.Count > 0).Select(x => new HomeSnapshotRow(x.Library, [.. x.Items.Select(i => i.Dto)])).ToList();
+		return ContinueItems.Count + NextUpItems.Count + rows.Count == 0
+			? null
+			: new HomeSnapshot([.. ContinueItems.Select(x => x.Dto)], [.. NextUpItems.Select(x => x.Dto)], rows, [.. _emptyLibraries]);
+	}
+
+	// fluentfin-mpv: an answer that matches what the page shows (a cached page that has not changed) keeps its cards,
+	// so a refresh does not redraw anything; otherwise the section is replaced
+	private static bool Same(IReadOnlyList<BaseItemViewModel> shown, IReadOnlyList<BaseItemDto> items) =>
+		shown.Count == items.Count && shown.Zip(items).All(x => x.First.Dto.Id == x.Second.Id && x.First.Dto.Name == x.Second.Name && SameUserData(x.First.Dto.UserData, x.Second.UserData));
+
+	private static bool SameUserData(UserItemDataDto? a, UserItemDataDto? b) =>
+		a?.Played == b?.Played && a?.IsFavorite == b?.IsFavorite && a?.PlaybackPositionTicks == b?.PlaybackPositionTicks &&
+		a?.PlayedPercentage == b?.PlayedPercentage && a?.UnplayedItemCount == b?.UnplayedItemCount;
+
+	// the section's flag follows its list through OnContinueItemsChanged / OnNextUpItemsChanged
+	private void SetContinueItems(IReadOnlyList<BaseItemDto> items)
+	{
+		if (!Same(ContinueItems, items))
+		{
+			ContinueItems = [.. items.Select(BaseItemViewModel.FromDto)];
+		}
 		HasContinueItems = ContinueItems.Count > 0;
-		HasNextUpItems = NextUpItems.Count > 0;
-		ContinueItems.CollectionChanged += (_, _) => HasContinueItems = ContinueItems.Count > 0;
-		NextUpItems.CollectionChanged += (_, _) => HasNextUpItems = NextUpItems.Count > 0;
+	}
 
+	private void SetNextUpItems(IReadOnlyList<BaseItemDto> items)
+	{
+		if (!Same(NextUpItems, items))
+		{
+			NextUpItems = [.. items.Select(BaseItemViewModel.FromDto)];
+		}
+		HasNextUpItems = NextUpItems.Count > 0;
+	}
+
+	// fluentfin-mpv: a section's flag follows its list, also when a refresh or a Retry replaces the list
+	partial void OnContinueItemsChanged(ObservableCollection<BaseItemViewModel> oldValue, ObservableCollection<BaseItemViewModel> newValue)
+	{
+		if (oldValue is not null)
+		{
+			oldValue.CollectionChanged -= OnContinueItemsCollectionChanged;
+		}
+		newValue.CollectionChanged += OnContinueItemsCollectionChanged;
+		HasContinueItems = newValue.Count > 0;
+	}
+
+	partial void OnNextUpItemsChanged(ObservableCollection<BaseItemViewModel> oldValue, ObservableCollection<BaseItemViewModel> newValue)
+	{
+		if (oldValue is not null)
+		{
+			oldValue.CollectionChanged -= OnNextUpItemsCollectionChanged;
+		}
+		newValue.CollectionChanged += OnNextUpItemsCollectionChanged;
+		HasNextUpItems = newValue.Count > 0;
+	}
+
+	private void OnContinueItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => HasContinueItems = ContinueItems.Count > 0;
+
+	private void OnNextUpItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => HasNextUpItems = NextUpItems.Count > 0;
+
+	private void ListenToUserDataChanges()
+	{
 		webSocketMessages
 			.Select(x => x as UserDataChangedMessage)
 			.WhereNotNull()
@@ -74,39 +223,113 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 				}
 			})
 			.DisposeWith(_disposable);
-
-		IsLoading = false;
 	}
 
-	private async Task UpdateContinueItems()
+	// fluentfin-mpv: a failed request leaves the section as it is (a placeholder goes, cached cards stay); false when the
+	// server did not answer, so the page can say so
+	private async Task<bool> UpdateContinueItems()
 	{
-		var response = await JellyfinClient.GetContinueWatching();
-
-		if (response is null or { Items: null } or { Items.Count: 0 })
+		try
 		{
-			return;
-		}
+			if (await JellyfinClient.GetContinueWatching() is not { } response)
+			{
+				return false;
+			}
 
-		ContinueItems = [.. response.Items.Select(BaseItemViewModel.FromDto)];
+			SetContinueItems(response.Items ?? []);
+			return true;
+		}
+		finally
+		{
+			IsContinueLoading = false;
+		}
 	}
 
-	private async Task UpdateNextUpItems()
+	private async Task<bool> UpdateNextUpItems()
 	{
-		var response = await JellyfinClient.GetNextUp();
-
-		if (response is null or { Items: null } or { Items.Count: 0 })
+		try
 		{
-			return;
-		}
+			if (await JellyfinClient.GetNextUp() is not { } response)
+			{
+				return false;
+			}
 
-		NextUpItems = [.. response.Items.Select(BaseItemViewModel.FromDto)];
+			SetNextUpItems(response.Items ?? []);
+			return true;
+		}
+		finally
+		{
+			IsNextUpLoading = false;
+		}
 	}
 
 	private async Task UpdateRecentItems()
 	{
-		await foreach (var list in JellyfinClient.GetRecentItemsFromUserLibraries())
+		// fluentfin-mpv: a row per view at once, in the server's order: the cached row of that library, a placeholder, or
+		// (a library that had nothing recent last time) none until it has; each fills in, or goes, as its request answers
+		var views = (await JellyfinClient.GetUserViews()).Where(x => x.CollectionType is not BaseItemDto_CollectionType.Music).ToList();
+		if (views.Count == 0 && RecentItems.Count > 0)
 		{
-			RecentItems.Add(new(list.Library, [.. list.Items.Select(BaseItemViewModel.FromDto)]));
+			return; // the views could not be read: the cached rows stay
+		}
+
+		var rows = views.Select(view => RecentItems.FirstOrDefault(x => x.Library.Id == view.Id && x.Library.Name == view.Name)
+			?? (view.Id is { } id && _emptyLibraries.Contains(id) ? null : new NamedQueryResult(view))).ToList();
+		var shown = rows.OfType<NamedQueryResult>().ToList();
+		if (!shown.SequenceEqual(RecentItems))
+		{
+			RecentItems.Clear();
+			foreach (var row in shown)
+			{
+				RecentItems.Add(row);
+			}
+		}
+
+		await Task.WhenAll(views.Zip(rows).Select(x => x.Second is { } row ? UpdateRecentRow(row) : UpdateHiddenRow(x.First, views)));
+	}
+
+	private async Task UpdateHiddenRow(BaseItemDto library, List<BaseItemDto> views)
+	{
+		if (await JellyfinClient.GetLatestItems(library) is not { Count: > 0 } items)
+		{
+			return; // still nothing recent (or the request failed)
+		}
+
+		_emptyLibraries.Remove(library.Id!.Value);
+		var position = views.IndexOf(library);
+		RecentItems.Insert(RecentItems.Count(x => views.FindIndex(v => v.Id == x.Library.Id) < position),
+			new NamedQueryResult(library) { Items = [.. items.Select(BaseItemViewModel.FromDto)], IsLoading = false });
+	}
+
+	private async Task UpdateRecentRow(NamedQueryResult row)
+	{
+		try
+		{
+			var items = await JellyfinClient.GetLatestItems(row.Library);
+
+			if (items is null && !row.IsLoading)
+			{
+				return; // failed: a cached row stays
+			}
+
+			if (items is null or { Count: 0 })
+			{
+				if (items is not null && row.Library.Id is { } id)
+				{
+					_emptyLibraries.Add(id);
+				}
+				RecentItems.Remove(row);
+				return;
+			}
+
+			if (!Same(row.Items, items))
+			{
+				row.Items = [.. items.Select(BaseItemViewModel.FromDto)];
+			}
+		}
+		finally
+		{
+			row.IsLoading = false;
 		}
 	}
 
@@ -175,4 +398,14 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	}
 }
 
-public record NamedQueryResult(BaseItemDto Library, ObservableCollection<BaseItemViewModel> Items);
+// fluentfin-mpv: was a record (Library, Items); a row now exists, showing a placeholder, before its items are in
+public partial class NamedQueryResult(BaseItemDto library) : ObservableObject
+{
+	public BaseItemDto Library { get; } = library;
+
+	[ObservableProperty]
+	public partial ObservableCollection<BaseItemViewModel> Items { get; set; } = [];
+
+	[ObservableProperty]
+	public partial bool IsLoading { get; set; } = true;
+}

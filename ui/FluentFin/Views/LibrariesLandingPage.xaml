@@ -22,7 +22,8 @@
         SelectionMode="None">
         <ItemsView.ItemTemplate>
             <DataTemplate x:DataType="jm:BaseItemDto">
-                <ItemContainer>
+                <!--  fluentfin-mpv: Narrator reads the library's name for the tile (ux-review A1)  -->
+                <ItemContainer AutomationProperties.Name="{x:Bind Name}">
                     <Grid CornerRadius="{StaticResource ControlCornerRadius}">
                         <Grid.ContextFlyout>
                             <MenuFlyout>

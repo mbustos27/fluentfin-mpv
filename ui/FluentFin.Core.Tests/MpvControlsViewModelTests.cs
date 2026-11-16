@@ -209,6 +209,30 @@ public sealed class MpvControlsViewModelTests
 	}
 
 	[Fact]
+	public void The_wheel_and_the_keys_use_the_volume_step_and_the_wheel_can_be_turned_off()
+	{
+		Playing();
+		_vm.Step = 10;
+		_ = _vm.Wheel(-MpvControlsViewModel.WheelNotch);
+		Assert.Equal(70, _vm.Volume);
+		_vm.HandleKey(MpvControlsViewModel.Keys.Up);
+		Assert.Equal(80, _vm.Volume);
+
+		_vm.WheelChangesVolume = false;
+		Wait(5);
+		var sent = _sent.Count;
+		_ = _vm.Wheel(-MpvControlsViewModel.WheelNotch);
+		Assert.Equal(80, _vm.Volume);
+		Assert.Equal(sent, _sent.Count);
+		Assert.False(_vm.VolumeIndicatorVisible, "nothing shows either");
+
+		_vm.Step = 0;
+		Assert.Equal(1, _vm.Step);
+		_vm.Step = 400;
+		Assert.Equal(20, _vm.Step);
+	}
+
+	[Fact]
 	public void Nothing_is_sent_about_the_bar_before_the_page_announces_its_controls()
 	{
 		// the view measures its bar as soon as it is laid out, before any backend runs
