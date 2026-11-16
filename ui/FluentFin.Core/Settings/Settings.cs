@@ -29,15 +29,16 @@ public interface ISettings
 	void SaveServerDetails();
 }
 
-public partial class Settings(ILocalSettingsService localSettingsService) : ObservableObject, ISettings
+public partial class Settings(ILocalSettingsService localSettingsService, MediaPlayerAvailability? players = null) : ObservableObject, ISettings
 {
 	private bool _isListening;
 
 	public ObservableCollection<SavedServer> Servers { get; set; } = localSettingsService.ReadSetting(SettingKeys.Servers);
-	
+
 	public MediaPlayerType MediaPlayer
 	{
-		get => localSettingsService.ReadSetting(SettingKeys.MediaPlayerType);
+		// fluentfin-mpv (release 1.0): a saved player this copy cannot run (VLC, Flyleaf in the release) plays with MPV
+		get => (players ?? MediaPlayerAvailability.ForThisApp).OrFallback(localSettingsService.ReadSetting(SettingKeys.MediaPlayerType));
 		set => localSettingsService.SaveSetting(SettingKeys.MediaPlayerType, value);
 	}
 

@@ -48,13 +48,18 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 
 	public ObservableCollection<SavedServer> Servers { get; } = settings.Servers;
 
-	public static IReadOnlyList<MediaPlayerChoice> MediaPlayers { get; } =
+	public static IReadOnlyList<MediaPlayerChoice> AllMediaPlayers { get; } =
 	[
 		new(MediaPlayerType.Mpv, "MPV (jellyfin-mpv-shim)"),
 		new(MediaPlayerType.Vlc, "VLC"),
 		new(MediaPlayerType.Flyleaf, "Flyleaf"),
 		new(MediaPlayerType.WindowsMediaPlayer, "Windows Media Player"),
 	];
+
+	// fluentfin-mpv (release 1.0): only the players this copy can run (the release has no VLC or Flyleaf libraries)
+	public static IReadOnlyList<MediaPlayerChoice> MediaPlayers { get; } = OfferedPlayers(MediaPlayerAvailability.ForThisApp);
+
+	public static IReadOnlyList<MediaPlayerChoice> OfferedPlayers(MediaPlayerAvailability players) => [.. AllMediaPlayers.Where(x => players.IsAvailable(x.Type))];
 
 	public MediaPlayerType MediaPlayerType
 	{
