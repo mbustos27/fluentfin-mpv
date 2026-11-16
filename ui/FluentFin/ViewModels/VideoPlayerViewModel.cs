@@ -30,7 +30,8 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 							INavigationService navigationService,
 							ISettings settings,
 							ITaskBarProgress taskBarProgress,
-							Core.Mpv.MpvPlaybackService mpvPlayback) : ObservableObject, INavigationAware
+							Core.Mpv.MpvPlaybackService mpvPlayback,
+							HomeCache homeCache) : ObservableObject, INavigationAware // fluentfin-mpv: homeCache
 {
 	private readonly CompositeDisposable _disposables = [];
 	private readonly PlaybackProgressInfo _playbackProgressInfo = new();
@@ -76,6 +77,10 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 
 	public async Task OnNavigatedFrom()
 	{
+		// fluentfin-mpv: what was watched changes Continue Watching and Next Up; the page Back goes to has already read the
+		// saved home page by now (a refresh it started is saved stale), the visit after it asks the server again
+		homeCache.MarkStale();
+
 		// the mpv backend reports the stop itself, FluentFin's own reporting must not run as well
 		if (await OnNavigatedFromMpv())
 		{
@@ -101,6 +106,10 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 
 	public async Task OnNavigatedTo(object parameter)
 	{
+		// fluentfin-mpv: Back to Home after this asks the server (Continue Watching, Next Up), websocket or not: Back reads
+		// the saved home page before this page hears it was left
+		homeCache.MarkStale();
+
 		MediaPlayerType = settings.MediaPlayer;
 
 		// with the mpv player the backend does PlaybackInfo, the stream and every report (docs/BRIDGE.md §6)

@@ -56,8 +56,10 @@ namespace FluentFin.Core.Contracts.Services
 
 		/// <summary>
 		/// fluentfin-mpv: the user's views (libraries) in the server's order, read once and shared by sign-in, Home and the
-		/// Libraries page; read again after a new sign-in, a library change made here or reported by the server, a failed
-		/// read, or a few minutes. Empty when they could not be read (logged).
+		/// Libraries page; read again after a new sign-in, a library added, removed or renamed here, a server message that
+		/// this user changed (UserUpdated: library access, view order) or that a library changed (LibraryChanged, which the
+		/// server sends only while the websocket is connected), a failed read, or a few minutes. Empty when they could not
+		/// be read (logged).
 		/// </summary>
 		Task<IReadOnlyList<BaseItemDto>> GetUserViews();
 

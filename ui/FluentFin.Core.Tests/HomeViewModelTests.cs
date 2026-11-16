@@ -261,6 +261,164 @@ public sealed class HomeViewModelTests : IDisposable
 		Assert.True(home.HasContinueItems);
 	}
 
+	// ---- review fixes (home-fixes): the session changing under a load, a saved page's empty sections, new artwork, and
+	// answers older than a watch-state change
+
+	private static readonly Guid Alice = Guid.Parse("aaaaaaaa-0000-0000-0000-00000000000a");
+	private static readonly Guid Bob = Guid.Parse("bbbbbbbb-0000-0000-0000-00000000000b");
+
+	[Fact]
+	public async Task ALoadThatEndsAfterAnotherUserSignedIn_IsSavedForNobody()
+	{
+		// Alice's Continue Watching is slow; she signs out and Bob signs in before it answers
+		var user = Alice;
+		_client.SetupGet(x => x.UserId).Returns(() => user);
+		var home = NewHome();
+		var navigation = home.OnNavigatedTo(null!);
+
+		await home.OnNavigatedFrom();
+		user = Bob;
+		AnswerEverything();
+		await navigation;
+
+		// not under Bob's key (his next Back to Home would show Alice's page, and her history would land in his file), and
+		// not under Alice's either: what is shown was read for a session that is over
+		Assert.Null((await _cache.Get(_client.Object.BaseUrl, Bob)).Snapshot);
+		Assert.Null((await _cache.Get(_client.Object.BaseUrl, Alice)).Snapshot);
+		Assert.False(Directory.Exists(_folder) && Directory.EnumerateFiles(_folder).Any());
+	}
+
+	[Fact]
+	public async Task ASavedPagesEmptySections_ShowNoPlaceholders_WhileItRefreshes()
+	{
+		// the last run's page had nothing in Continue Watching or Next Up: on the next start those sections stay hidden while
+		// the page is asked for again (6 placeholder cards that then collapse would move every row below them)
+		using (var lastRun = new HomeCache(_folder, new Subject<IOutboundWebSocketMessage>(), new CoreListLogger<HomeCache>(), _clock))
+		{
+			await lastRun.Save(_client.Object.BaseUrl, _client.Object.UserId, new HomeSnapshot([], [], [new HomeSnapshotRow(Movies, [Item("Movie 1")])], OtherLibraries), 0);
+		}
+
+		using var cache = new HomeCache(_folder, _socket, new CoreListLogger<HomeCache>(), _clock);
+		var home = NewHome(cache);
+		var navigation = home.OnNavigatedTo(null!);
+		Assert.True(SpinWait.SpinUntil(() => { lock (_latestAsked) { return _latestAsked.Count == 4; } }, TimeSpan.FromSeconds(5)), "the refresh did not start");
+
+		Assert.Equal(["Movies"], home.RecentItems.Select(x => x.Library.Name));
+		Assert.False(home.IsContinueLoading, "the empty Continue Watching showed placeholders while the saved page refreshed");
+		Assert.False(home.IsNextUpLoading, "the empty Next Up showed placeholders while the saved page refreshed");
+
+		AnswerEverything();
+		await navigation;
+		Assert.Equal(["Half watched"], home.ContinueItems.Select(x => x.Dto.Name));
+	}
+
+	[Fact]
+	public async Task NewArtwork_KeepsTheCards_ButReachesThemAndTheSavedPage()
+	{
+		var episode = Guid.NewGuid();
+		var movie = Guid.NewGuid();
+		using (var lastRun = new HomeCache(_folder, new Subject<IOutboundWebSocketMessage>(), new CoreListLogger<HomeCache>(), _clock))
+		{
+			await lastRun.Save(_client.Object.BaseUrl, _client.Object.UserId, new HomeSnapshot(
+				[Tagged(Item("Half watched", episode), "old")], [], [new HomeSnapshotRow(Movies, [Tagged(Item("Movie 1", movie), "old")])], OtherLibraries), 0);
+		}
+
+		using var cache = new HomeCache(_folder, _socket, new CoreListLogger<HomeCache>(), _clock);
+		var home = NewHome(cache);
+		var navigation = home.OnNavigatedTo(null!);
+		Assert.True(SpinWait.SpinUntil(() => home.ContinueItems.Count == 1 && home.RecentItems.Count == 1, TimeSpan.FromSeconds(5)));
+		var continueShown = home.ContinueItems;
+		var moviesShown = home.RecentItems[0].Items;
+
+		// the same items, watch state and all: only the artwork changed
+		_continue.SetResult(new BaseItemDtoQueryResult { Items = [Tagged(Item("Half watched", episode), "new")] });
+		_nextUp.SetResult(new BaseItemDtoQueryResult { Items = [] });
+		_latest[Movies.Id!.Value].SetResult([Tagged(Item("Movie 1", movie), "new")]);
+		foreach (var latest in _latest.Values)
+		{
+			latest.TrySetResult([]);
+		}
+		await navigation;
+
+		Assert.Same(continueShown, home.ContinueItems);
+		Assert.Same(moviesShown, home.RecentItems[0].Items);
+		Assert.Equal("new", Tag(home.ContinueItems[0].Dto));
+		Assert.Equal("new", Tag(home.RecentItems[0].Items[0].Dto));
+		var saved = (await cache.Get(_client.Object.BaseUrl, _client.Object.UserId)).Snapshot!;
+		Assert.Equal("new", Tag(saved.ContinueItems[0]));
+		Assert.Equal("new", Tag(saved.Rows[0].Items[0]));
+	}
+
+	[Fact]
+	public async Task AnAnswerAskedForBeforeAWatchStateChange_DoesNotUndoIt()
+	{
+		var watched = Guid.NewGuid();
+		var nextEpisode = Guid.NewGuid();
+		var movie = Guid.NewGuid();
+		using (var lastRun = new HomeCache(_folder, new Subject<IOutboundWebSocketMessage>(), new CoreListLogger<HomeCache>(), _clock))
+		{
+			await lastRun.Save(_client.Object.BaseUrl, _client.Object.UserId, new HomeSnapshot(
+				[Item("Half watched", watched), Item("Other", A)], [Item("Next episode", nextEpisode)], [new HomeSnapshotRow(Movies, [Item("Movie 1", movie)])], OtherLibraries), 0);
+		}
+
+		// Next Up is asked for twice: by the load, and again by the watch-state change (its episode was watched)
+		var nextUpAgain = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		var nextUps = new Queue<Task<BaseItemDtoQueryResult?>>([_nextUp.Task, nextUpAgain.Task]);
+		_client.Setup(x => x.GetNextUp()).Returns(() => nextUps.Dequeue());
+
+		using var cache = new HomeCache(_folder, _socket, new CoreListLogger<HomeCache>(), _clock);
+		var home = NewHome(cache);
+		var navigation = home.OnNavigatedTo(null!);
+		Assert.True(SpinWait.SpinUntil(() => { lock (_latestAsked) { return _latestAsked.Count == 4; } }, TimeSpan.FromSeconds(5)), "the refresh did not start");
+
+		// while the load waits: "Movie 1", "Half watched" and "Next episode" are watched to the end (Next Up last: the handler
+		// waits there for Next Up to be asked for again)
+		_socket.OnNext(new UserDataChangedMessage
+		{
+			Data = new UserDataChangeInfo
+			{
+				UserDataList =
+				[
+					new UserItemDataDto { ItemId = movie, Played = true, PlaybackPositionTicks = 0 },
+					new UserItemDataDto { ItemId = watched, Played = true, PlaybackPositionTicks = 0 },
+					new UserItemDataDto { ItemId = nextEpisode, Played = true, PlaybackPositionTicks = 0 },
+				],
+			},
+		});
+		Assert.True(SpinWait.SpinUntil(() => home.ContinueItems.Count == 1 && nextUps.Count == 0, TimeSpan.FromSeconds(5)), "the watch-state change was not handled");
+		Assert.True(home.RecentItems[0].Items[0].UserData!.Played);
+
+		// the newer Next Up answers first, then every answer the load asked for before the change, as it was then
+		nextUpAgain.SetResult(new BaseItemDtoQueryResult { Items = [Item("Episode after")] });
+		Assert.True(SpinWait.SpinUntil(() => home.NextUpItems.Select(x => x.Dto.Name).SequenceEqual(["Episode after"]), TimeSpan.FromSeconds(5)));
+		// (a row whose answer matches keeps its cards anyway; one with something new is replaced, the movie unwatched with it)
+		_continue.SetResult(new BaseItemDtoQueryResult { Items = [Item("Half watched", watched), Item("Other", A)] });
+		_nextUp.SetResult(new BaseItemDtoQueryResult { Items = [Item("Next episode", nextEpisode)] });
+		_latest[Movies.Id!.Value].SetResult([Item("Movie 2"), Item("Movie 1", movie)]);
+		foreach (var latest in _latest.Values)
+		{
+			latest.TrySetResult([]);
+		}
+		await navigation;
+
+		// each section as the change left it: Continue Watching without the watched item, the newer Next Up, the movie watched
+		Assert.Equal(("Other", "Episode after", true), (
+			string.Join(", ", home.ContinueItems.Select(x => x.Dto.Name)),
+			string.Join(", ", home.NextUpItems.Select(x => x.Dto.Name)),
+			home.RecentItems[0].Items.First(x => x.Id == movie).UserData?.Played == true));
+	}
+
+	// the saved pages here have a Movies row only; the other libraries had nothing recent (no placeholder rows for them)
+	private static readonly Guid[] OtherLibraries = [Shows.Id!.Value, Kids.Id!.Value, Collections.Id!.Value];
+
+	private static BaseItemDto Tagged(BaseItemDto item, string tag)
+	{
+		item.ImageTags = new BaseItemDto_ImageTags { AdditionalData = new Dictionary<string, object> { ["Primary"] = tag } };
+		return item;
+	}
+
+	private static string Tag(BaseItemDto item) => $"{item.ImageTags!.AdditionalData["Primary"]}";
+
 	private static BaseItemDto View(string name, BaseItemDto_CollectionType type) =>
 		new() { Id = Guid.NewGuid(), Name = name, Type = BaseItemDto_Type.CollectionFolder, CollectionType = type };
 

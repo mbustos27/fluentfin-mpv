@@ -313,7 +313,7 @@ public sealed class PlaybackSettingsTests : IDisposable
 		return culture;
 	}
 
-	private SettingsViewModel Create() => new(_settings, _backend.Object, _client.Object) { SaveDelay = TimeSpan.FromMilliseconds(20) };
+	private SettingsViewModel Create() => new(_settings, _backend.Object, _client.Object, TestHomeCache.Unused()) { SaveDelay = TimeSpan.FromMilliseconds(20) };
 
 	private static SubtitleModeChoice VideoSubtitleMode(UserConfiguration_SubtitleMode mode) => SettingsViewModel.SubtitleModes.Single(x => x.Mode == mode);
 

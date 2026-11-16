@@ -12,7 +12,8 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 									IObserver<IOutboundWebSocketMessage> socketMessageSender,
 									IJumpListService jumpListService,
 									IDeviceProfileFactory deviceProfileFactory,
-									Settings.ISettings settings) : IJellyfinClient
+									Settings.ISettings settings,
+									HomeCache homeCache) : IJellyfinClient // fluentfin-mpv: homeCache
 {
 	private Jellyfin.Sdk.JellyfinApiClient _jellyfinApiClient = null!;
 	private string _token = "";
@@ -37,6 +38,9 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 
 		UserId = authResult.User.Id.Value;
 		BaseUrl = baseUrl;
+
+		// fluentfin-mpv: a sign-in makes the home page in memory stale, and tells it which saved login this user's page is for
+		homeCache.SignedIn(baseUrl, UserId, authResult.ServerId, authResult.User.Name);
 
 		_token = authResult.AccessToken;
 		_deviceId = new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
@@ -111,6 +115,9 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 
 	public async Task Logout()
 	{
+		// fluentfin-mpv: the user's saved home page (their watch history) does not outlive the session; first, as it needs no server
+		await homeCache.Forget(BaseUrl, UserId);
+
 		try
 		{
 			await _jellyfinApiClient.Sessions.Logout.PostAsync();

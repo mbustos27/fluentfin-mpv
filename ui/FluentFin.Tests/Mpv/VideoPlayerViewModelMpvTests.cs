@@ -504,5 +504,6 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		_navigation.Object,
 		_settings.Object,
 		Mock.Of<ITaskBarProgress>(),
-		_playback);
+		_playback,
+		TestHomeCache.Unused());
 }

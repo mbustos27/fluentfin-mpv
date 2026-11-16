@@ -144,6 +144,122 @@ public sealed class HomeCacheTests : IDisposable
 		Assert.True((await cache.Get(Server, User)).IsFresh);
 	}
 
+	[Theory]
+	[InlineData("sign-in")]
+	[InlineData("player page")]
+	public async Task ASignInOrAPlayerPage_MakesItStale_WebsocketOrNot(string change)
+	{
+		using var cache = NewCache();
+		await cache.Save(Server, User, Some(), (await cache.Get(Server, User)).ChangesSeen);
+		Assert.True((await cache.Get(Server, User)).IsFresh);
+
+		if (change == "sign-in")
+		{
+			cache.SignedIn(Server, User, ServerId, "alice");
+		}
+		else
+		{
+			cache.MarkStale();
+		}
+
+		var cached = await cache.Get(Server, User);
+		Assert.False(cached.IsFresh);
+		Assert.NotNull(cached.Snapshot);
+	}
+
+	[Fact]
+	public async Task SigningOut_DeletesThePage_AndARefreshAskedForBefore_IsNotSaved()
+	{
+		using var cache = NewCache();
+		cache.SignedIn(Server, User, ServerId, "alice");
+		var before = await cache.Get(Server, User);
+		await cache.Save(Server, User, Some(), before.ChangesSeen);
+		Assert.Single(Directory.GetFiles(_folder));
+
+		await cache.Forget(Server + "/", User);
+
+		Assert.Empty(Directory.GetFiles(_folder));
+		Assert.Null((await cache.Get(Server, User)).Snapshot);
+
+		// a refresh that read the cache before the sign-out ends after it: its page would bring the file back
+		await cache.Save(Server, User, Some(), before.ChangesSeen);
+		Assert.Empty(Directory.GetFiles(_folder));
+		Assert.Null((await cache.Get(Server, User)).Snapshot);
+
+		// the next sign-in's pages are saved as usual
+		await cache.Save(Server, User, Some(), (await cache.Get(Server, User)).ChangesSeen);
+		Assert.Single(Directory.GetFiles(_folder));
+	}
+
+	[Fact]
+	public async Task RemovingASavedLogin_DeletesItsPage_AndPagesOfNoKnownLogin_NotOtherLogins()
+	{
+		var bob = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
+		using (var lastRun = NewCache())
+		{
+			lastRun.SignedIn(Server, User, ServerId, "Alice");
+			await lastRun.Save(Server, User, Some(), (await lastRun.Get(Server, User)).ChangesSeen);
+			lastRun.SignedIn(Server, bob, ServerId, "bob");
+			await lastRun.Save(Server, bob, Some(), (await lastRun.Get(Server, bob)).ChangesSeen);
+			await lastRun.Save("https://old.example", User, Some(), 0); // saved with no sign-in heard of: whose, not known
+		}
+		Assert.Equal(3, Directory.GetFiles(_folder).Length);
+
+		// another start: Settings > Delete User for alice on that server (the server's id as the server list keeps it)
+		using var cache = NewCache();
+		await cache.ForgetLogin(ServerId.ToUpperInvariant(), "ALICE");
+
+		Assert.Null((await cache.Get(Server, User)).Snapshot);
+		Assert.Null((await cache.Get("https://old.example", User)).Snapshot);
+		Assert.NotNull((await cache.Get(Server, bob)).Snapshot);
+		Assert.Single(Directory.GetFiles(_folder));
+	}
+
+	[Fact]
+	public async Task RemovingTheSignedInUsersSavedLogin_DropsThePageInMemory_AndARefreshFromBefore()
+	{
+		using var cache = NewCache();
+		cache.SignedIn(Server, User, ServerId, "alice");
+		var before = await cache.Get(Server, User);
+		await cache.Save(Server, User, Some(), before.ChangesSeen);
+
+		await cache.ForgetLogin(ServerId, "alice");
+		await cache.Save(Server, User, Some(), before.ChangesSeen);
+
+		Assert.Null((await cache.Get(Server, User)).Snapshot);
+		Assert.False(Directory.Exists(_folder) && Directory.GetFiles(_folder).Length > 0);
+	}
+
+	[Fact]
+	public async Task NoFilePath_IsSaved()
+	{
+		// Next Up asks the server for each episode's path (Fields=Path); a saved page is not a list of the server's files
+		var episode = Parse("""
+			{"Id":"0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a","Name":"The Return","Type":"Episode","Path":"/srv/media/Shows/Private Show/S06E04.mkv",
+			 "MediaSources":[{"Id":"0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a","Path":"/srv/media/Shows/Private Show/S06E04.mkv"}],
+			 "UserData":{"PlaybackPositionTicks":4200}}
+			""");
+		var library = Parse("""{"Id":"2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c","Name":"Shows","Type":"CollectionFolder","Path":"/srv/media/Shows"}""");
+		using (var before = NewCache())
+		{
+			await before.Save(Server, User, new HomeSnapshot([], [episode], [new HomeSnapshotRow(library, [episode])], []), 0);
+		}
+
+		var text = File.ReadAllText(Assert.Single(Directory.GetFiles(_folder)));
+		Assert.DoesNotContain("/srv/media", text, StringComparison.Ordinal);
+		Assert.DoesNotContain("\"Path\"", text, StringComparison.Ordinal);
+
+		// the page itself is all there, and the records the page shows keep their paths in memory
+		using var after = NewCache();
+		var snapshot = (await after.Get(Server, User)).Snapshot!;
+		Assert.Equal(("The Return", 4200L), (snapshot.NextUpItems[0].Name, snapshot.NextUpItems[0].UserData!.PlaybackPositionTicks));
+		Assert.Equal("Shows", snapshot.Rows[0].Library.Name);
+		Assert.Null(snapshot.NextUpItems[0].Path);
+		Assert.Equal("/srv/media/Shows/Private Show/S06E04.mkv", episode.Path);
+	}
+
+	private const string ServerId = "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e";
+
 	private static HomeSnapshot Some() => new([new BaseItemDto { Id = Guid.NewGuid(), Name = "Half watched", Type = BaseItemDto_Type.Movie }], [], [], []);
 
 	private static BaseItemDto Parse(string json)
