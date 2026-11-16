@@ -56,8 +56,8 @@ It unzips the package fresh, then runs it off-screen (a private desktop, a kill-
 APPDATA/LOCALAPPDATA redirected, test media that is digital silence) against the fake Jellyfin server, with no backend
 command set and a PATH of Windows' own folders only:
 
-- the default settings (a clean data folder: FluentFin's controls on the package's libmpv): sign in, play an episode,
-  stop, close;
+- the default settings (a clean data folder: FluentFin's controls on the package's libmpv): sign in, relaunch (the
+  automatic sign-in), play an episode, steady playback with nothing over the middle of the video, stop, close;
 - mpv's controls with mpv's folder on PATH (skipped when there is no mpv on this PC), and without it (playback must
   stop: the backend answers `connect` with `mpv_not_found` and the page says "mpv isn't installed on this PC, and mpv's
   player controls need it. Switch to FluentFin's controls ... or install mpv: winget install mpv-player.mpv-CI.MSVC",

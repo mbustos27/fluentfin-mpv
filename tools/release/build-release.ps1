@@ -181,11 +181,20 @@ $libmpvInfo = Get-Content $libmpvCheck -Raw | ConvertFrom-Json
 function Invoke-UiTests([string]$project, [string[]]$extra) {
     # dotnet test writes failures to stderr; under 'Stop', PowerShell 5.1 would end the script at the first one
     $ErrorActionPreference = 'Continue'
-    $out = @(& $dotnet test $project @extra -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers -v:q -nologo 2>&1 | ForEach-Object { "$_" })
+    # the failed tests' names come from the TRX results file: the console's lines can arrive split in two (stderr records)
+    $results = Join-Path $work 'test-results'
+    $trx = Join-Path $results "$(Split-Path $project -Leaf).trx"
+    if (Test-Path $trx) { Remove-Item $trx }
+    $out = @(& $dotnet test $project @extra -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers -v:q -nologo `
+            --results-directory $results --logger "trx;LogFileName=$(Split-Path $trx -Leaf)" 2>&1 | ForEach-Object { "$_" })
     $summary = $out | Where-Object { $_ -match '^(Passed|Failed)!' }
     Write-Host "  $(Split-Path $project -Leaf): $summary"
     if ($LASTEXITCODE -eq 0) { return }
-    $failed = @($out | ForEach-Object { if ($_ -match '\]\s+(\S+?)(?:\(.*\))? \[FAIL\]\s*$') { $Matches[1] } } | Sort-Object -Unique)
+    $failed = @()
+    if (Test-Path $trx) {
+        $failed = @(([xml](Get-Content $trx -Raw)).TestRun.Results.UnitTestResult | Where-Object { $_.outcome -eq 'Failed' } |
+            ForEach-Object { ($_.testName -split '\(')[0] } | Sort-Object -Unique)
+    }
     if (-not $failed) { throw "$project failed, and no failed test was named:`n$(($out | Select-Object -Last 30) -join "`n")" }
     $filter = ($failed | ForEach-Object { "FullyQualifiedName~$_" }) -join '|'
     $again = @(& $dotnet test $project @extra -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers -v:q -nologo --filter $filter 2>&1 | ForEach-Object { "$_" })

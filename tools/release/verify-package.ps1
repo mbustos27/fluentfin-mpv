@@ -13,7 +13,8 @@
       SavedVlc   a data folder whose saved player is VLC (as a dev build may leave): the release has no VLC, so it
                  must play with MPV, without a crash, and keep the saved choice, Settings opened included
       Default    a clean data folder with no player-controls setting (what a new user gets: FluentFin's controls on the
-                 bundled libmpv): sign in, play an episode, stop, close; the logs must show the in-process mpv
+                 bundled libmpv): sign in, relaunch (the automatic sign-in), play an episode with nothing over the middle of
+                 the video once it plays steadily, stop, close; the logs must show the in-process mpv
       Mpv        "Player controls: mpv", with mpv's folder added to PATH (the documented requirement for mpv's
                  controls): the same steps. Skipped when no mpv.exe is on the Machine/User PATH.
       NoMpv      "Player controls: mpv" without mpv on PATH: sign in and play; playback must stop with "mpv could not be
@@ -216,7 +217,9 @@ foreach ($run in $Runs) {
     switch ($run) {
         'Default' {
             # no MpvPlayerControls in the settings: the app's own default decides
-            $data = Invoke-ServerRun 'Default' $null $false 'season,play,leave,close'
+            # relaunch first (the automatic sign-in at start-up), then steady playback: nothing over the middle of the video
+            # (the sign-in ring stayed there; wip/ring-fix's check in drive.ps1)
+            $data = Invoke-ServerRun 'Default' $null $false 'relaunch,play,steady,leave,close'
             $appLog = @(Get-ChildItem (Join-Path $data 'Logs') -Filter 'log*.txt' -ErrorAction SilentlyContinue)
             $core = $appLog | Select-String -Pattern 'Started the in-process mpv core \(composition mode\)' | Select-Object -First 1
             $attached = (Test-Path (Join-Path $data 'Logs\mpv-backend.log')) -and (Select-String -Path (Join-Path $data 'Logs\mpv-backend.log') -Pattern 'connect: mpv started in .* \(attached window\)' -Quiet)
