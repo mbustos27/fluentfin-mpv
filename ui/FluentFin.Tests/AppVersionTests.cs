@@ -52,6 +52,17 @@ public sealed class AppVersionTests
 		Assert.Equal("0.0.0", AppVersion.Of((Assembly?)null));
 	}
 
+	[Fact]
+	public void OnlyTheReleaseMarker_MakesARelease()
+	{
+		Assert.True(AppVersion.IsRelease([new AssemblyMetadataAttribute("FluentFinMpvRelease", "true")]));
+		Assert.False(AppVersion.IsRelease([new AssemblyMetadataAttribute("FluentFinMpvRelease", "false")]));
+		Assert.False(AppVersion.IsRelease([new AssemblyMetadataAttribute("Other", "true")]));
+		Assert.False(AppVersion.IsRelease([]));
+		// a dev build (this test's FluentFin) is not one
+		Assert.False(AppVersion.IsRelease(App.GetCustomAttributes<AssemblyMetadataAttribute>()));
+	}
+
 	private static string FindUp(string relative)
 	{
 		for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)

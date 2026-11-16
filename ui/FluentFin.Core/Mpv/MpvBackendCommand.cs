@@ -14,7 +14,8 @@ public sealed record MpvBackendCommand(string FileName, IReadOnlyList<string> Ar
 	/// Finds the backend: the user's override (everything before <c>--config-dir</c>), else a frozen
 	/// <c>&lt;appdir&gt;\backend\fluentfin-mpv-backend.exe</c>, else a dev checkout found by walking up from the app folder to
 	/// <c>backend\pyproject.toml</c> and using <c>backend\.venv\Scripts\python.exe -I -m jellyfin_mpv_shim.bridge</c>.
-	/// Returns null with the places looked at when nothing is found.
+	/// Returns null with the places looked at when nothing is found. fluentfin-mpv (release 1.0): a release passes
+	/// <paramref name="searchCheckout"/> false, so a folder above it (a <c>C:\backend\</c>) can never supply the backend.
 	/// </summary>
 	public static MpvBackendCommand? Resolve(string? overrideCommand,
 											 string appDirectory,
@@ -22,7 +23,8 @@ public sealed record MpvBackendCommand(string FileName, IReadOnlyList<string> Ar
 											 string? logFile,
 											 bool dev,
 											 Func<string, bool> fileExists,
-											 out string searched)
+											 out string searched,
+											 bool searchCheckout = true)
 	{
 		var tail = new List<string> { "--config-dir", configDirectory };
 		if (!string.IsNullOrEmpty(logFile))
@@ -49,6 +51,12 @@ public sealed record MpvBackendCommand(string FileName, IReadOnlyList<string> Ar
 		{
 			searched = frozen;
 			return new MpvBackendCommand(frozen, tail, "bundled");
+		}
+
+		if (!searchCheckout)
+		{
+			searched = string.Join("; ", looked);
+			return null;
 		}
 
 		var checkout = false;

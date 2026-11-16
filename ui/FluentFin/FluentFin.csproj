@@ -112,6 +112,12 @@
 		<None Include="$(LibmpvDir)\libmpv-2.dll" Link="libmpv-2.dll" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
+	<!-- fluentfin-mpv: a release package (tools\release\build-release.ps1 sets FluentFinMpvRelease=true) says so; it then never
+	     looks for a dev checkout's backend above its folder (Core\AppVersion.IsReleasePackage, MpvBackendCommand.Resolve) -->
+	<ItemGroup Condition="'$(FluentFinMpvRelease)' == 'true'">
+		<AssemblyMetadata Include="FluentFinMpvRelease" Value="true" />
+	</ItemGroup>
+
 	<ItemGroup>
 	  <!-- native FFmpeg for the target architecture; arm64 binaries are fetched at build time into FFMpeg-arm64 -->
 	  <Content Include="$(FFmpegDir)\*.dll" Link="FFMpeg\%(Filename)%(Extension)">

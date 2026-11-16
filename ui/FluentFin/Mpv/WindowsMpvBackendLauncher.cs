@@ -25,7 +25,9 @@ public sealed class WindowsMpvBackendLauncher(ISettings settings, KnownFolders k
 	public MpvBackendCommand? Resolve(bool dev, out string searched)
 	{
 		Directory.CreateDirectory(ConfigDirectory);
-		return MpvBackendCommand.Resolve(settings.MpvBackendCommand, AppContext.BaseDirectory, ConfigDirectory, LogFile, dev, File.Exists, out searched);
+		// fluentfin-mpv (release 1.0): a release never looks for a dev checkout above its folder
+		return MpvBackendCommand.Resolve(settings.MpvBackendCommand, AppContext.BaseDirectory, ConfigDirectory, LogFile, dev, File.Exists, out searched,
+										 searchCheckout: !AppVersion.IsReleasePackage);
 	}
 
 	public IMpvBackendProcess Start(MpvBackendCommand command)

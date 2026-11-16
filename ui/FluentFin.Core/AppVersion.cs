@@ -29,4 +29,13 @@ public static class AppVersion
 	}
 
 	public static string Of(Version? version) => version is null ? "0.0.0" : $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}";
+
+	/// <summary>The assembly metadata key tools\release\build-release.ps1 sets (FluentFin.csproj, FluentFinMpvRelease=true).</summary>
+	public const string ReleaseMarker = "FluentFinMpvRelease";
+
+	/// <summary>Whether the running app is a release package rather than a dev build (it then never looks for a checkout).</summary>
+	public static bool IsReleasePackage { get; } = IsRelease(Assembly.GetEntryAssembly()?.GetCustomAttributes<AssemblyMetadataAttribute>() ?? []);
+
+	public static bool IsRelease(IEnumerable<AssemblyMetadataAttribute> metadata) =>
+		metadata.Any(x => x.Key == ReleaseMarker && string.Equals(x.Value, "true", StringComparison.OrdinalIgnoreCase));
 }

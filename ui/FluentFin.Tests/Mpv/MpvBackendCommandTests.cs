@@ -63,6 +63,33 @@ public sealed class MpvBackendCommandTests
 	}
 
 	[Fact]
+	public void ARelease_NeverUsesABackendFolderAboveIt()
+	{
+		// fluentfin-mpv (release 1.0, review): the bundled exe missing, a C:\backend\ with a venv would have been run
+		var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+		{
+			@"C:\backend\pyproject.toml",
+			@"C:\backend\.venv\Scripts\python.exe",
+		};
+
+		var release = MpvBackendCommand.Resolve(null, @"C:\FluentFinMPV-1.0.0-win-x64", Config, Log, dev: false, files.Contains, out var searched, searchCheckout: false);
+		var dev = MpvBackendCommand.Resolve(null, @"C:\FluentFinMPV-1.0.0-win-x64", Config, Log, dev: false, files.Contains, out _);
+
+		Assert.Null(release);
+		Assert.Equal(@"C:\FluentFinMPV-1.0.0-win-x64\backend\fluentfin-mpv-backend.exe", searched);
+		Assert.Equal(@"C:\backend\.venv\Scripts\python.exe", dev?.FileName);
+	}
+
+	[Fact]
+	public void ARelease_StillUsesItsBundledExe()
+	{
+		var command = MpvBackendCommand.Resolve(null, @"C:\FluentFinMPV", Config, Log, dev: false,
+			path => path == @"C:\FluentFinMPV\backend\fluentfin-mpv-backend.exe", out _, searchCheckout: false);
+
+		Assert.Equal("bundled", command?.Source);
+	}
+
+	[Fact]
 	public void CheckoutWithoutVenv_NamesThePythonItExpected()
 	{
 		var command = MpvBackendCommand.Resolve(null, @"C:\Dev\x\ui\bin", Config, Log, dev: false, path => path == @"C:\Dev\x\backend\pyproject.toml", out var searched);
