@@ -303,13 +303,20 @@ internal static partial class Host
 			// next episode
 			Check(controls.CanNext, "Next is offered (a second episode is queued)");
 			var nextButton = (Button)view.FindName("NextButton");
-			Check(Visible(view, "NextButton") && nextButton.IsEnabled && ToolTipService.GetToolTip(nextButton) as string == "Next: S1E2 · Second",
-				$"the Next button is enabled by the next event and names the next episode ('{ToolTipService.GetToolTip(nextButton)}')");
+			controls.NotifyActivity();
+			await Task.Delay(300);
+			Check(Visible(view, "NextButtonHost") && nextButton.IsEnabled && ToolTipUnderPointer(view, nextButton) == "Next: S1E2 · Second",
+				$"the Next button is enabled by the next event and names the next episode under the pointer ('{ToolTipUnderPointer(view, nextButton)}')");
 			await controls.Next();
 			Check(await Until(() => controls.Subtitle == "S1E2 · Second" && Last() is { State: Bridge.States.Playing, ItemId: Episode2 }, 30), $"Next plays episode 2 ({controls.Subtitle})");
 			Check(await Until(() => !controls.CanNext, 5), "no Next after the last episode");
-			Check(Visible(view, "NextButton") && !nextButton.IsEnabled && ToolTipService.GetToolTip(nextButton) as string == "No next episode",
-				$"the last episode keeps the Next button, disabled ('{ToolTipService.GetToolTip(nextButton)}')");
+			controls.NotifyActivity();
+			await Task.Delay(300);
+			// a disabled button gets no pointer input, so no tooltip of its own: the one a mouse sees is on an element under it
+			var hostTip = view.FindName("NextButtonHost") is FrameworkElement host ? ToolTipService.GetToolTip(host) as string : null;
+			Check(Visible(view, "NextButtonHost") && !nextButton.IsEnabled && ToolTipService.GetToolTip(nextButton) is null && hostTip == "No next episode"
+				&& ToolTipUnderPointer(view, nextButton) == "No next episode",
+				$"the last episode keeps the Next button, disabled; 'No next episode' is on its wrapper, which the pointer reaches (button '{ToolTipService.GetToolTip(nextButton)}', wrapper '{hostTip}', under the pointer '{ToolTipUnderPointer(view, nextButton)}')");
 			Check(!controls.IsSkipVisible && !Visible(view, "SkipSegmentButton"), "episode 2 has no intro: no Skip button");
 
 			await backend.SendAsync(Bridge.Commands.Stop);
@@ -625,6 +632,38 @@ internal static partial class Host
 		Check(offChanges == 1, $"back to the window the picture changes once, it does not jump ({offChanges} changes in {off.Count} frames)");
 		await Picture(main, "jump-windowed");
 		controls.NotifyActivity();
+	}
+
+	/// <summary>
+	/// The tooltip a mouse resting on the middle of <paramref name="element"/> gets: from the topmost element hit there that
+	/// takes pointer input (a disabled control does not), up through its parents, the first tooltip.
+	/// </summary>
+	private static string? ToolTipUnderPointer(FrameworkElement root, FrameworkElement element)
+	{
+		var center = element.TransformToVisual(null).TransformPoint(new Windows.Foundation.Point(element.ActualWidth / 2, element.ActualHeight / 2));
+		foreach (var hit in VisualTreeHelper.FindElementsInHostCoordinates(center, root))
+		{
+			if (hit is Control { IsEnabled: false })
+			{
+				continue;
+			}
+
+			for (DependencyObject? node = hit; node is not null; node = VisualTreeHelper.GetParent(node))
+			{
+				if (node is Control { IsEnabled: false })
+				{
+					// inside a disabled control: the pointer's input is not this element's
+					break;
+				}
+
+				if (node is UIElement owner && ToolTipService.GetToolTip(owner) is string tip)
+				{
+					return tip;
+				}
+			}
+		}
+
+		return null;
 	}
 
 	private static Windows.Foundation.Rect Bounds(FrameworkElement element, UIElement relativeTo) =>

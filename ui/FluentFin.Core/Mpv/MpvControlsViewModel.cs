@@ -279,6 +279,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			IsMuted = state.Muted;
 		}
 
+		DropOfferNotOf(state);
 		OnTrackIndices(state.AudioStreamIndex, state.SubtitleStreamIndex);
 		if (state.Queue is { ItemIds.Count: > 0 } queue)
 		{
@@ -544,9 +545,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>The offer a skip was sent for: the button stays away from it until the backend's offer changes.</summary>
 	private BridgeSegment? _skipped;
 
+	/// <summary>The item the offer came with (its segments event's), so a state of another item can drop it.</summary>
+	private string? _offerItemId;
+
 	/// <summary>
-	/// Settings > Playback, "Show Skip intro and Skip credits": off, the Skip button never shows (S still skips what is on
-	/// offer, as in FluentFin's own players). Which segments are offered at all is the backend's settings' (ask, always: it
+	/// Settings > Playback, "Show Skip intro and Skip credits": off, the Skip button never shows. S still skips what is on
+	/// offer, as S does in FluentFin's built-in players, whose S (KeyboardMediaPlayerController) does not read the setting
+	/// either (VideoPlayerViewModel.Skip). Which segments are offered at all is the backend's settings' (ask, always: it
 	/// skips them by itself, off: not listed), and reaches here only as its offer (docs/BRIDGE.md §5 segments).
 	/// </summary>
 	public bool ShowSkipPrompt
@@ -588,6 +593,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		}
 
 		_offered = offered;
+		_offerItemId = segments.ItemId ?? ItemId;
 		UpdateSkip();
 	}
 
@@ -618,6 +624,28 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		if (_skipped is { } skipped && target >= skipped.StartTicks && target < skipped.EndTicks)
 		{
+			_skipped = null;
+			UpdateSkip();
+		}
+	}
+
+	/// <summary>
+	/// The offer ends with its item. The backend drops it at <c>ended</c> without a <c>segments</c> event (and the controls do
+	/// not get <c>ended</c>), so a state that is no longer playback, or that names another item (the next one opening), drops
+	/// it here. Not every opening: the backend writes a new item's segments before that tick's state, so an opening of the
+	/// offer's own item keeps it (an intro from 0:00).
+	/// </summary>
+	private void DropOfferNotOf(BridgeState state)
+	{
+		if (_offered is null && _skipped is null)
+		{
+			return;
+		}
+
+		var otherItem = state.ItemId is { } id && _offerItemId is { } offerItem && !string.Equals(id, offerItem, StringComparison.OrdinalIgnoreCase);
+		if (!state.IsActive || otherItem)
+		{
+			_offered = null;
 			_skipped = null;
 			UpdateSkip();
 		}

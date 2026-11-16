@@ -444,6 +444,11 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	public string SkipToolTip(string text) => $"{text} (S)";
 
+	/// <summary>A tooltip only while <paramref name="shown"/> (the Next button's own while enabled, its wrapper's while disabled).</summary>
+	public string? ToolTipIf(bool shown, string text) => shown ? text : null;
+
+	public string? ToolTipUnless(bool hidden, string text) => hidden ? null : text;
+
 	public string PlayPauseGlyph(bool paused) => paused ? "\uE768" : "\uE769";
 
 	public string PlayPauseName(bool paused) => paused ? "Play" : "Pause";

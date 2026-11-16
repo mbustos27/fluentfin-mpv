@@ -227,6 +227,39 @@ public sealed class MpvControlsSkipTests
 		Assert.Empty(_sent);
 	}
 
+	/// <summary>
+	/// Reviewer: the credits' offer of an item that ended stayed over the next item's opening (the backend drops it at
+	/// <c>ended</c> with no segments event, and the controls do not get <c>ended</c>). A state of the next item drops it; the
+	/// next item's own offer, which the backend writes before that tick's state, stays.
+	/// </summary>
+	[Fact]
+	public async Task Skip_offer_goes_with_its_item_when_the_next_one_opens_or_playback_stops()
+	{
+		PlayingEpisode(positionSeconds: 595);
+		Segments(current: 1);
+		Assert.True(_vm.IsSkipVisible);
+		Assert.Equal("Skip credits", _vm.SkipText);
+
+		// eof: ended (not passed to the controls), then the next item opens; no segments event in between
+		_vm.OnState(new BridgeState { State = Bridge.States.Opening, ItemId = NextItem, Queue = new BridgeQueue { ItemIds = [Item, NextItem], Index = 1 } });
+		Assert.False(_vm.IsSkipVisible, "the last item's credits are not offered over the next one");
+		await _vm.SkipSegment();
+		Assert.Empty(_sent);
+
+		// the next item: item, its intro from 0:00 on offer at once, then the tick's state (still opening)
+		_vm.OnEvent(new BridgeEvent(Bridge.Events.Item, JsonNode.Parse($$"""{"itemId": "{{NextItem}}", "name": "Second", "type": "Episode"}""")));
+		_vm.OnEvent(new BridgeEvent(Bridge.Events.Segments, JsonNode.Parse($$"""
+			{"itemId": "{{NextItem}}", "segments": [{"type": "Intro", "startTicks": 0, "endTicks": {{Ticks(30)}}, "action": "ask"}], "current": 0}
+			""")));
+		_vm.OnState(new BridgeState { State = Bridge.States.Opening, ItemId = NextItem, Queue = new BridgeQueue { ItemIds = [Item, NextItem], Index = 1 } });
+		Assert.True(_vm.IsSkipVisible, "the opening item's own offer stays");
+		Assert.Equal("Skip intro", _vm.SkipText);
+
+		// stop: idle
+		_vm.OnState(new BridgeState { State = Bridge.States.Idle });
+		Assert.False(_vm.IsSkipVisible, "nothing plays: nothing to skip");
+	}
+
 	// -- Next episode -----------------------------------------------------------------------------------------------------
 
 	[Fact]

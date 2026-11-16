@@ -183,17 +183,23 @@
                         ToolTipService.ToolTip="Forward 30 seconds">
                         <FontIcon FontSize="18" Glyph="&#xED3D;" />
                     </Button>
-                    <Button
-                        x:Name="NextButton"
-                        AutomationProperties.HelpText="{x:Bind Controls.NextToolTip, Mode=OneWay}"
-                        AutomationProperties.Name="Next episode"
-                        Click="OnNextClick"
-                        IsEnabled="{x:Bind Controls.CanNext, Mode=OneWay}"
-                        Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="{x:Bind Controls.NextToolTip, Mode=OneWay}"
+                    <!--  a disabled button gets no pointer input, so no tooltip: disabled, "No next episode" is the wrapper's  -->
+                    <Border
+                        x:Name="NextButtonHost"
+                        Background="Transparent"
+                        ToolTipService.ToolTip="{x:Bind ToolTipUnless(Controls.CanNext, Controls.NextToolTip), Mode=OneWay}"
                         Visibility="{x:Bind VisibleIf(Controls.ShowsNext), Mode=OneWay}">
-                        <FontIcon FontSize="18" Glyph="&#xE893;" />
-                    </Button>
+                        <Button
+                            x:Name="NextButton"
+                            AutomationProperties.HelpText="{x:Bind Controls.NextToolTip, Mode=OneWay}"
+                            AutomationProperties.Name="Next episode"
+                            Click="OnNextClick"
+                            IsEnabled="{x:Bind Controls.CanNext, Mode=OneWay}"
+                            Style="{StaticResource PlayerButton}"
+                            ToolTipService.ToolTip="{x:Bind ToolTipIf(Controls.CanNext, Controls.NextToolTip), Mode=OneWay}">
+                            <FontIcon FontSize="18" Glyph="&#xE893;" />
+                        </Button>
+                    </Border>
                 </StackPanel>
 
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="4">
