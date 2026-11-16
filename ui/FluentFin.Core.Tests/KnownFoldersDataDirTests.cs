@@ -90,6 +90,89 @@ public sealed class KnownFoldersDataDirTests : IDisposable
 		Assert.False(Directory.Exists(DefaultRoot));
 	}
 
+	// review: a mistyped switch was ignored, so the run went to the user's folder
+	[Theory]
+	[InlineData("--datadir")]
+	[InlineData("--data-dir:{0}")]
+	[InlineData("-data-dir")]
+	[InlineData("/data-dir")]
+	[InlineData("--data_dir")]
+	[InlineData("--DataDir={0}")]
+	[InlineData("---data-dir")]
+	public void MistypedSwitch_Throws_InsteadOfUsingTheDefault(string mistyped)
+	{
+		var defaultAskedFor = false;
+		string[] arguments = [string.Format(mistyped, DataDir), DataDir];
+
+		var ex = Assert.Throws<ArgumentException>(() => KnownFolders.ForStartup(arguments, Environment(), () => { defaultAskedFor = true; return DefaultRoot; }));
+
+		Assert.Contains(KnownFolders.DataDirSwitch, ex.Message);
+		Assert.False(defaultAskedFor);
+		Assert.False(Directory.Exists(DefaultRoot));
+	}
+
+	[Fact]
+	public void OtherArguments_AreNotMistakenForTheSwitch()
+	{
+		Assert.Null(KnownFolders.ResolveDataDir(["--mpv-selftest", Guid.NewGuid().ToString(), "--data", "dir", "data-dir"], Environment()));
+	}
+
+	// review: "C:\data\" quoted by a script reaches FluentFin as C:\data" and CreateDirectory threw before any window
+	[Fact]
+	public void AFolderWithAQuote_Throws_AndSaysWhy()
+	{
+		var ex = Assert.Throws<ArgumentException>(() => KnownFolders.ResolveDataDir(["--data-dir", DataDir + "\""], Environment()));
+
+		Assert.Contains("backslash", ex.Message);
+	}
+
+	[Fact]
+	public void TryForStartup_AFolderThatCannotBeMade_GivesAMessageNamingIt()
+	{
+		Directory.CreateDirectory(_root);
+		var file = Path.Combine(_root, "a file");
+		File.WriteAllText(file, "not a folder");
+
+		var folders = KnownFolders.TryForStartup(["--data-dir", file], Environment(), out var error, () => DefaultRoot);
+
+		Assert.Null(folders);
+		Assert.NotNull(error);
+		Assert.Contains(file, error);
+		Assert.False(Directory.Exists(DefaultRoot));
+	}
+
+	[Fact]
+	public void TryForStartup_ASwitchWithoutAFolder_GivesTheMessage_AndAGoodOneTheFolders()
+	{
+		Assert.Null(KnownFolders.TryForStartup(["--data-dir"], Environment(), out var error, () => DefaultRoot));
+		Assert.Contains("needs a folder", error);
+
+		var folders = KnownFolders.TryForStartup(["--data-dir", DataDir], Environment(), out error, () => DefaultRoot);
+		Assert.Null(error);
+		Assert.Equal(DataDir, folders!.ApplicationData);
+		Assert.True(folders.IsCustom);
+	}
+
+	// review: a parameterless constructor meant %LOCALAPPDATA%\FluentFinMpv; a container that built KnownFolders itself would
+	// have used it and put a --data-dir run's files there
+	[Fact]
+	public void NoConstructorPicksTheFolderByItself()
+	{
+		var constructors = typeof(KnownFolders).GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+		Assert.NotEmpty(constructors);
+		Assert.All(constructors, c => Assert.NotEmpty(c.GetParameters()));
+	}
+
+	[Fact]
+	public void App_StartsThroughTryForStartup_SoABadFolderIsAMessage()
+	{
+		var app = File.ReadAllText(Path.Combine(FindUiFolder(), "FluentFin", "App.xaml.cs"));
+
+		Assert.Contains("KnownFolders.TryForStartup(", app);
+		Assert.Contains("services.AddSingleton(knownFolders)", app);
+	}
+
 	[Fact]
 	public void ARunWithItsOwnFolder_KeepsSettingsLogsAndBackendThere_AndNeverAsksForTheDefault()
 	{
@@ -126,13 +209,15 @@ public sealed class KnownFoldersDataDirTests : IDisposable
 	/// <summary>
 	/// Every path FluentFin writes to comes from <see cref="KnownFolders"/>, so <c>--data-dir</c> covers them all: no other
 	/// source file of the app asks Windows for a user folder, reads APPDATA/LOCALAPPDATA, uses the packaged app's
-	/// ApplicationData, the credential locker, or builds the default folders.
+	/// ApplicationData, the credential locker, or builds the default folders -- itself or by having the container build
+	/// KnownFolders (a registration by type, not the instance ForStartup made).
 	/// </summary>
 	[Fact]
 	public void NoAppSourceButKnownFolders_FindsAUserFolderOfItsOwn()
 	{
 		var ui = FindUiFolder();
-		var forbidden = new Regex(@"GetFolderPath\s*\(|SpecialFolder\.|ApplicationData\.Current|PasswordVault|""(LOCAL)?APPDATA""|new\s+(Core\.)?KnownFolders\s*\(\s*\)|IsolatedStorage", RegexOptions.Compiled);
+		var forbidden = new Regex(@"GetFolderPath\s*\(|SpecialFolder\.|ApplicationData\.Current|PasswordVault|""(LOCAL)?APPDATA""|new\s+(Core\.)?KnownFolders\s*\(\s*\)|IsolatedStorage|" +
+			@"Add(Singleton|Scoped|Transient)\s*<\s*(FluentFin\.)?(Core\.)?KnownFolders\s*(,[^>]*)?>\s*\(\s*\)|typeof\s*\(\s*(FluentFin\.)?(Core\.)?KnownFolders\s*\)", RegexOptions.Compiled);
 		var offenders = new List<string>();
 
 		foreach (var project in new[] { "FluentFin", "FluentFin.Core", "FluentFin.UI.Core", "FluentFin.Plugins" })

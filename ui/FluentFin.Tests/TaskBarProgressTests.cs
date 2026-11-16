@@ -37,6 +37,19 @@ public sealed class TaskBarProgressTests
 		Assert.Equal(0, taskbar.Calls);
 	}
 
+	// review: the failure was swallowed without a word
+	[Fact]
+	public void NoTaskbar_IsSaidOnceInTheLog()
+	{
+		var log = new Mpv.ListLogger<TaskBarProgress>();
+
+		_ = new TaskBarProgress(() => new NoTaskbar(new System.Runtime.InteropServices.COMException("no taskbar", unchecked((int)0x80004001))), log);
+
+		var entry = Assert.Single(log.Entries);
+		Assert.Contains("taskbar", entry.Message);
+		Assert.Contains("80004001", entry.Message);
+	}
+
 	[Fact]
 	public void NoTaskbarClass_LeavesAProgressThatDoesNothing()
 	{

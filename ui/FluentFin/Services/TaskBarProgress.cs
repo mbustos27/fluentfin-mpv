@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using Microsoft.Extensions.Logging;
 
 namespace FluentFin.Services;
 
@@ -6,16 +7,16 @@ internal class TaskBarProgress : ITaskBarProgress
 {
 	// fluentfin-mpv: null when there is no taskbar to show progress on
 	private readonly ITaskbarList3? _taskbarInstance;
-	public TaskBarProgress() : this(() => (ITaskbarList3)new TaskbarInstance())
+	public TaskBarProgress(ILogger<TaskBarProgress> logger) : this(() => (ITaskbarList3)new TaskbarInstance(), logger)
 	{
 	}
 
 	/// <summary>
 	/// fluentfin-mpv: with no taskbar -- a desktop without Explorer's, such as the private desktop the dev harness runs on,
-	/// or Explorer not running -- HrInit fails (E_NOTIMPL) and there is simply no progress. Throwing here made the player
-	/// page, whose view model needs this service, impossible to open there.
+	/// or Explorer not running -- HrInit fails (E_NOTIMPL) and there is simply no progress, said once in the log. Throwing
+	/// here made the player page, whose view model needs this service, impossible to open there.
 	/// </summary>
-	internal TaskBarProgress(Func<ITaskbarList3> create)
+	internal TaskBarProgress(Func<ITaskbarList3> create, ILogger? logger = null)
 	{
 		try
 		{
@@ -26,6 +27,7 @@ internal class TaskBarProgress : ITaskBarProgress
 		catch (Exception ex) when (ex is COMException or NotImplementedException or InvalidCastException)
 		{
 			_taskbarInstance = null;
+			logger?.LogInformation("No taskbar progress: the taskbar is not available ({Error}, 0x{HResult:X8})", ex.GetType().Name, ex.HResult);
 		}
 	}
 

@@ -6,7 +6,11 @@
 
 .DESCRIPTION
   - FluentFin runs with its own data folder (FluentFin.exe --data-dir <-DataDir>): settings, logs, the mpv backend's
-    config. -DataDir may not be or be under %LOCALAPPDATA%\FluentFinMpv or %LOCALAPPDATA%\FluentFin, nor in the repo.
+    config. -DataDir may not be a drive root, be or hold %LOCALAPPDATA%\FluentFinMpv or %LOCALAPPDATA%\FluentFin, nor be
+    in the repo. A reused -DataDir keeps only saved servers on this machine (loopback); others are removed.
+  - FluentFin.exe: -Exe, else the build in -BuildDir (default -Cache\build). Nothing is built unless -Build is given;
+    -Build builds ui\FluentFin into -BuildDir (its own bin and obj, not the checkout's) off-screen in a kill-on-close job,
+    without MSBuild node reuse or the shared compiler, so nothing of the build keeps running.
   - Everything runs on a private desktop (CreateDesktopW) inside a kill-on-close job, through
     tools\backend-bench\hidden_run.py: the fake server (tools\ui-harness\fakeserver, 127.0.0.1 only), FluentFin, its
     backend and mpv. When the run ends (or -TimeoutSeconds runs out) the job ends whatever is left; nothing else is
@@ -31,10 +35,11 @@
   play, fullscreen, windowed, leave, close, nav:<navigation item> (e.g. nav:Settings), shot:<label>, wait:<seconds>;
   'all' (default) = login..close. -Then <script.ps1> runs after the steps on the private desktop with the driver's
   helpers (see offscreen\drive.ps1). -Setting Name=Value (repeatable) is written into the run's LocalSettings.json
-  first (a JSON value, else a string), e.g. -Setting MpvPlayerControls=FluentFin.
+  first (a JSON value, else a string), e.g. -Setting MpvPlayerControls=FluentFin; MpvBackendCommand, Servers and
+  MediaPlayerType are the harness's and refused (the run plays with the mpv player only).
 
 .EXAMPLE
-  .\run-offscreen.ps1 -DataDir C:\scratch\ffdata -Out C:\scratch\run1
+  .\run-offscreen.ps1 -DataDir C:\scratch\ffdata -Out C:\scratch\run1 -Build
   .\run-offscreen.ps1 -DataDir C:\scratch\ffdata -Out C:\scratch\run2 -Script home,nav:Settings,close -NoA11y
   .\run-offscreen.ps1 -DataDir C:\scratch\ffdata -Out C:\scratch\run3 -Latency 150 -LatencyRule '/Items/Latest=900'
   .\run-offscreen.ps1 -DataDir C:\scratch\ffdata -Out C:\scratch\run4 -Script season,play,leave -Setting MpvPlayerControls=FluentFin
@@ -51,6 +56,7 @@ param(
     [string]$Then,
     [string]$Exe,
     [switch]$Build,
+    [string]$BuildDir,
     [string]$Python,
     [string]$Backend,
     [string]$Cache = (Join-Path $env:TEMP 'fluentfin-mpv-harness'),
@@ -60,45 +66,44 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'offscreen\prepare.ps1')
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $Out = [IO.Path]::GetFullPath($Out)
-$DataDir = [IO.Path]::GetFullPath($DataDir)
+$DataDir = Resolve-HarnessDataDir $DataDir $repo
 $Cache = [IO.Path]::GetFullPath($Cache)
-function Test-Under([string]$Path, [string]$Root) {
-    $p = $Path.TrimEnd('\') + '\'; $r = [IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
-    $p.StartsWith($r, [StringComparison]::OrdinalIgnoreCase)
-}
-$local = [Environment]::GetFolderPath('LocalApplicationData')
-foreach ($forbidden in (Join-Path $local 'FluentFinMpv'), (Join-Path $local 'FluentFin')) {
-    if ((Test-Under $DataDir $forbidden) -or (Test-Under $forbidden $DataDir)) { throw "-DataDir $DataDir would touch $forbidden (a real FluentFin data folder); use a scratch folder" }
-}
-foreach ($pair in @(@('-DataDir', $DataDir), @('-Out', $Out), @('-Cache', $Cache))) {
+if (-not $BuildDir) { $BuildDir = Join-Path $Cache 'build' }
+$BuildDir = [IO.Path]::GetFullPath($BuildDir)
+foreach ($pair in @(@('-Out', $Out), @('-Cache', $Cache), @('-BuildDir', $BuildDir))) {
     if (Test-Under $pair[1] $repo) { throw "$($pair[0]) must be outside the repository ($repo)" }
 }
 # steps are comma-separated (a navigation item's name may have spaces: nav:Media Library)
 $Script = @($Script | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 if ($Then) { $Then = [IO.Path]::GetFullPath($Then); if (-not (Test-Path $Then)) { throw "-Then: no script at $Then" } }
-if (-not $Exe) { $Exe = Join-Path $repo 'ui\FluentFin\bin\x64\Debug\net10.0-windows10.0.19041.0\FluentFin.exe' }
-$Exe = [IO.Path]::GetFullPath($Exe)
+$Exe = Resolve-HarnessExe $Exe $BuildDir ([bool]$Build)
 if (-not $Python) { $Python = Join-Path $repo 'backend\.venv\Scripts\python.exe' }
 if (-not (Test-Path $Python)) { throw "no backend venv python at $Python; pass -Python <a venv with the backend's dependencies>\Scripts\python.exe (absolute)" }
 $Python = [IO.Path]::GetFullPath($Python)
 if (-not $Backend) { $Backend = Join-Path $repo 'backend' }
 $Backend = [IO.Path]::GetFullPath($Backend)
 if (-not (Test-Path (Join-Path $Backend 'jellyfin_mpv_shim\bridge.py'))) { throw "-Backend $Backend has no jellyfin_mpv_shim\bridge.py" }
-if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
-}
+$env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+$hidden = Join-Path $repo 'tools\backend-bench\hidden_run.py'
 
-if ($Build -or -not (Test-Path $Exe)) {
-    Write-Host "building $(Join-Path $repo 'ui\FluentFin.sln')"
-    & dotnet build (Join-Path $repo 'ui\FluentFin.sln') -c Debug -p:Platform=x64 -nologo -v:q | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw "build failed" }
+if (-not $Exe) {
+    # -Build: into -BuildDir (bin and obj there, not in the checkout), off-screen in a kill-on-close job, no MSBuild
+    # node reuse and no shared compiler: nothing of the build is left running
+    $dotnet = (Get-Command dotnet.exe -ErrorAction SilentlyContinue).Source
+    if (-not $dotnet) { throw "dotnet.exe is not on PATH" }
+    New-Item -ItemType Directory -Force $Out, $BuildDir | Out-Null
+    $buildLog = Join-Path $Out 'build.log'
+    Write-Host "building FluentFin into $BuildDir (log $buildLog)"
+    & $Python -B -I $hidden --log $buildLog --timeout 1800 --desktop "ffh-build-$PID" -- $dotnet @(Get-HarnessBuildArgs $repo $BuildDir) | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "the build failed (see $buildLog)" }
+    $Exe = Find-HarnessBuiltExe $BuildDir
+    if (-not $Exe) { throw "the build made no FluentFin.exe under $BuildDir\bin\FluentFin (see $buildLog)" }
 }
-if (-not (Test-Path $Exe)) { throw "not built: $Exe" }
 
 # mpv: the official CI build from winget, on the Machine+User PATH (as tools\ui-harness\e2e\run.ps1 finds it)
-$env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
 $mpvCmd = Get-Command mpv.exe -ErrorAction SilentlyContinue
 if (-not $mpvCmd) { throw "mpv.exe is not on PATH (winget install mpv-player.mpv-CI.MSVC)" }
 $mpvExe = $mpvCmd.Source
@@ -109,7 +114,6 @@ if ($item.LinkType -and $item.Target) {
     $mpvExe = [IO.Path]::GetFullPath($target)
 }
 $mpvDir = Split-Path $mpvExe
-$hidden = Join-Path $repo 'tools\backend-bench\hidden_run.py'
 New-Item -ItemType Directory -Force $Out, $DataDir, $Cache | Out-Null
 
 # the test video (cached: building it takes about a minute), made off-screen
@@ -123,30 +127,14 @@ if ($needMedia) {
     if (-not (Test-Path $mediaJson)) { throw "the test video was not built (see $Out\media-build.log)" }
 }
 
-# the run's own data folder: the backend command, the player, -Setting values, and mpv silent
-$settingsFile = Join-Path $DataDir 'LocalSettings.json'
-$settings = if (Test-Path $settingsFile) { Get-Content $settingsFile -Raw | ConvertFrom-Json } else { [pscustomobject]@{} }
+# the run's own data folder: the backend command, the mpv player, -Setting values, only loopback saved servers, and mpv
+# silent with no log file (offscreen\prepare.ps1)
 $pycache = Join-Path $Cache 'pycache'
 $backendCommand = '"{0}" -I -X "pycache_prefix={1}" "{2}" "{3}"' -f $Python, $pycache, (Join-Path $PSScriptRoot 'offscreen\run_backend.py'), $Backend
-$settings | Add-Member -NotePropertyName MpvBackendCommand -NotePropertyValue $backendCommand -Force
-$settings | Add-Member -NotePropertyName MediaPlayerType -NotePropertyValue 'Mpv' -Force
-foreach ($pair in $Setting) {
-    $name, $value = $pair -split '=', 2
-    if (-not $name -or $null -eq $value) { throw "-Setting '$pair': use Name=Value" }
-    if ($name -in @('MpvBackendCommand', 'Servers')) { throw "-Setting $name is the harness's (backend command) or a sign-in's (servers)" }
-    $parsed = try { $value | ConvertFrom-Json } catch { $value }
-    if ($null -eq $parsed) { $parsed = $value }
-    $settings | Add-Member -NotePropertyName $name -NotePropertyValue $parsed -Force
-}
-[IO.File]::WriteAllText($settingsFile, ($settings | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
-$controls = if ($settings.PSObject.Properties['MpvPlayerControls'] -and "$($settings.MpvPlayerControls)" -in @('FluentFin', '1')) { 'FluentFin' } else { 'Mpv' }
-$mpvConfDir = Join-Path $DataDir 'mpv-backend'
-New-Item -ItemType Directory -Force $mpvConfDir | Out-Null
-$mpvConf = Join-Path $mpvConfDir 'mpv.conf'
-$kept = if (Test-Path $mpvConf) { @(Get-Content $mpvConf | Where-Object { $_ -notmatch '^\s*(ao|mute|volume|audio-device|log-file)\s*=' -and $_ -notmatch '^# fluentfin-mpv harness' }) } else { @() }
-# log-file: mpv's own log in the run's Logs folder, where the driver checks "AO: [null]"
-[IO.File]::WriteAllLines($mpvConf, @('# fluentfin-mpv harness: test runs are silent (no audio device)', 'ao=null', 'mute=yes', 'volume=0',
-    "log-file=$(Join-Path $DataDir 'Logs\mpv.log')") + $kept, [Text.UTF8Encoding]::new($false))
+$prepared = Initialize-HarnessSettings $DataDir $backendCommand $Setting
+if ($prepared.RemovedServers) { Write-Host "removed $($prepared.RemovedServers) saved server(s) that are not on this machine from $DataDir\LocalSettings.json" }
+$controls = $prepared.PlayerControls
+[void](Initialize-HarnessMpvConf $DataDir)
 
 $envA = Join-Path $Out 'env\appdata'; $envL = Join-Path $Out 'env\localappdata'
 New-Item -ItemType Directory -Force $envA, $envL | Out-Null

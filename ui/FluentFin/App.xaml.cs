@@ -236,19 +236,18 @@ public partial class App : Application
 		AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
 	}
 
-	// fluentfin-mpv: a --data-dir with no folder stops the start; the default folder would take a test run's data
+	// fluentfin-mpv: a --data-dir with no folder or a mistyped one stops the start (the default folder would take a test run's
+	// data), and so does a data folder that cannot be made, with a message instead of a crash before any window
 	private static Core.KnownFolders StartupFolders()
 	{
-		try
+		if (Core.KnownFolders.TryForStartup([.. Environment.GetCommandLineArgs().Skip(1)], Environment.GetEnvironmentVariable, out var error) is { } folders)
 		{
-			return Core.KnownFolders.ForStartup([.. Environment.GetCommandLineArgs().Skip(1)], Environment.GetEnvironmentVariable);
+			return folders;
 		}
-		catch (ArgumentException ex)
-		{
-			NativeMethods.ShowError("FluentFin could not start", ex.Message);
-			Environment.Exit(2);
-			throw;
-		}
+
+		NativeMethods.ShowError("FluentFin could not start", error ?? "The data folder could not be used.");
+		Environment.Exit(2);
+		throw new InvalidOperationException(error);
 	}
 
 	private void CurrentDomain_UnhandledException(object sender, System.UnhandledExceptionEventArgs e)

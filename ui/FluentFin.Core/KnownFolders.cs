@@ -22,14 +22,19 @@ public class KnownFolders
 	/// <summary><c>%LOCALAPPDATA%\FluentFinMpv</c>.</summary>
 	public static string DefaultRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), FolderName);
 
+	// what a mistyped data folder switch looks like: dashes or a slash, then data, dir with or without - or _ between
+	private static readonly System.Text.RegularExpressions.Regex LooksLikeDataDir =
+		new(@"^[-/]+data[-_]?dir", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
 	/// <summary>True when the folder came from <see cref="DataDirSwitch"/> or <see cref="DataDirVariable"/>.</summary>
 	public bool IsCustom { get; }
 
 	/// <summary>The FluentFin log file (Serilog adds the date to its name).</summary>
 	public string LogFile => Path.Combine(Logs, "log.txt");
 
-	public KnownFolders() : this(DefaultRoot) { }
-
+	// fluentfin-mpv: no parameterless constructor. It meant %LOCALAPPDATA%\FluentFinMpv, so a container that ever built this
+	// class itself would have put a --data-dir run's files into the user's folder; the app registers the instance
+	// ForStartup made (KnownFoldersDataDirTests guards both).
 	public KnownFolders(string root) : this(root, isCustom: false) { }
 
 	private KnownFolders(string root, bool isCustom)
@@ -55,11 +60,40 @@ public class KnownFolders
 			: new KnownFolders((defaultRoot ?? (() => DefaultRoot))());
 
 	/// <summary>
+	/// fluentfin-mpv: <see cref="ForStartup"/> for the app's start. A switch with no folder or a mistyped one, or a folder
+	/// that cannot be made (a file of that name, no access, a name Windows refuses), gives null and a message to show instead
+	/// of a crash before any window.
+	/// </summary>
+	public static KnownFolders? TryForStartup(IReadOnlyList<string> arguments, Func<string, string?> environment, out string? error, Func<string>? defaultRoot = null)
+	{
+		string? folder = null;
+		try
+		{
+			var custom = ResolveDataDir(arguments, environment);
+			folder = custom ?? (defaultRoot ?? (() => DefaultRoot))();
+			error = null;
+			return custom is not null ? new KnownFolders(custom, isCustom: true) : new KnownFolders(folder);
+		}
+		catch (ArgumentException ex)
+		{
+			error = ex.Message;
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+		{
+			error = $"FluentFin could not create its data folder {folder}: {ex.Message}";
+		}
+
+		return null;
+	}
+
+	/// <summary>
 	/// The data folder asked for as a full path, or null for the default: <c>--data-dir &lt;folder&gt;</c> or
 	/// <c>--data-dir=&lt;folder&gt;</c> in <paramref name="arguments"/> (the last one wins), else a non-blank
 	/// <see cref="DataDirVariable"/>. A relative folder is taken from the current directory. A switch with no folder (the
 	/// last argument, an empty value, or followed by another switch) throws <see cref="ArgumentException"/>: falling back to
-	/// the default folder would put a test run's data into the user's.
+	/// the default folder would put a test run's data into the user's. So does a mistyped switch (<c>--datadir</c>,
+	/// <c>-data-dir</c>, <c>--data-dir:X</c>, <c>/data_dir</c>: anything that starts like it but is not one of the two forms)
+	/// and a folder with a quote in it (<c>"C:\data\"</c> reaches the program as <c>C:\data"</c>).
 	/// </summary>
 	public static string? ResolveDataDir(IReadOnlyList<string> arguments, Func<string, string?> environment)
 	{
@@ -67,6 +101,12 @@ public class KnownFolders
 		for (var i = 0; i < arguments.Count; i++)
 		{
 			var argument = arguments[i];
+			if (LooksLikeDataDir.IsMatch(argument) && !string.Equals(argument, DataDirSwitch, StringComparison.OrdinalIgnoreCase) &&
+				!argument.StartsWith(DataDirSwitch + "=", StringComparison.OrdinalIgnoreCase))
+			{
+				throw new ArgumentException($"Unknown switch {argument}: the data folder is given as {DataDirSwitch} <folder> or {DataDirSwitch}=<folder>");
+			}
+
 			if (string.Equals(argument, DataDirSwitch, StringComparison.OrdinalIgnoreCase))
 			{
 				asked = i + 1 < arguments.Count ? arguments[++i] : "";
@@ -87,6 +127,11 @@ public class KnownFolders
 			if (string.IsNullOrWhiteSpace(asked))
 			{
 				throw new ArgumentException($"{DataDirSwitch} needs a folder: {DataDirSwitch} <folder>");
+			}
+
+			if (asked.Contains('"'))
+			{
+				throw new ArgumentException($"{DataDirSwitch} {asked}: a folder name has no quote in it. A quoted folder that ends in a backslash (\"C:\\data\\\") arrives as C:\\data\"; leave out the last backslash.");
 			}
 		}
 

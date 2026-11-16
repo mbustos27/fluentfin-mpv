@@ -48,6 +48,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$DataDir = $DataDir.TrimEnd('\', '/')   # quoted, a trailing backslash would escape the closing quote ("X\" arrives as X")
 if ($StepsFile) { $Steps = (Get-Content -LiteralPath $StepsFile -Raw -Encoding utf8).Trim() }
 $LatencyRule = if ($LatencyRulesFile) { @(Get-Content $LatencyRulesFile -Raw | ConvertFrom-Json) } else { @() }
 . (Join-Path $PSScriptRoot '..\common.ps1')
@@ -454,15 +455,15 @@ function Step-Play {
     if ($playing) { $timings.playing_report_ms = Ms $playAt $playing.t }
     $reporters = @($reqs | Where-Object { $_.route -like 'report-*' } | ForEach-Object { Get-Origin $_ } | Sort-Object -Unique)
     Check 'playback reported by the backend only' ($playing -and ($reporters -join ',') -eq 'backend') "reports from: $(if ($reporters) { $reporters -join ', ' } else { 'nobody' })"
-    # silent: mpv says which audio output it opened ("AO: [null] ..."), in its own log (the run's mpv.conf sets log-file)
-    # and through the backend's log
+    # silent: mpv says which audio output it opened ("AO: [null] ..."), and the backend's log relays it. (Not a log file
+    # of mpv's own: that logs verbosely, the access token in the request headers among it.)
     $aoLines = Wait-Until {
-        $l = @(foreach ($f in (Join-Path $DataDir 'Logs\mpv.log'), (Join-Path $DataDir 'Logs\mpv-backend.log')) {
-                if (Test-Path $f) { Get-Content -LiteralPath $f -Encoding utf8 | Where-Object { $_ -match 'AO: \[' -and $_ -notmatch 'Setting option' } } })
+        $f = Join-Path $DataDir 'Logs\mpv-backend.log'
+        $l = @(if (Test-Path $f) { Get-Content -LiteralPath $f -Encoding utf8 | Where-Object { $_ -match 'AO: \[' -and $_ -notmatch 'Setting option' } })
         if ($l) { , $l }
     } -Seconds 10 -PollMs 250
     $loud = @($aoLines | Where-Object { $_ -notmatch 'AO: \[null\]' })
-    Check 'silent: mpv opened no audio device (AO: [null])' ($aoLines -and -not $loud) $(if ($loud) { $loud[0] } elseif ($aoLines) { 'AO: [null]' } else { 'no AO line in mpv.log or mpv-backend.log' })
+    Check 'silent: mpv opened no audio device (AO: [null])' ($aoLines -and -not $loud) $(if ($loud) { $loud[0] } elseif ($aoLines) { 'AO: [null]' } else { 'no AO line in mpv-backend.log' })
     Start-Sleep -Seconds 3
     Capture-Page 'player'
 }
