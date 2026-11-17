@@ -6,7 +6,7 @@ import pathlib
 from io import BytesIO
 from sys import platform
 
-from . import conf
+from . import conf, intro_sources
 from .conf import settings
 from .language_config import apply as apply_language_config
 from .utils import (IMAGE_SUBTITLE_CODECS, answering_server,
@@ -185,13 +185,16 @@ def build_video(item_id, parent, aid=None, sid=None, srcid=None,
 
 
 class Intro(object):
-    def __init__(self, type, start, end):
+    def __init__(self, type, start, end, source="server"):
         # A Jellyfin MediaSegmentType: Intro, Outro, Commercial, Preview or
         # Recap. Named Intro for its first two.
         self.type: str = type
         self.start: float = start
         self.end: float = end
         self.has_triggered: bool = False
+        # fluentfin-mpv: where it came from (intro_sources): server,
+        # chapters, online or learned.
+        self.source: str = source
 
 
 def segment_labels(segment_type):
@@ -1021,6 +1024,8 @@ class Video(object):
             return None
         if conf.any_segment_wanted():
             self.get_intro(self.media_source["Id"])
+            # fluentfin-mpv: chapters, online lookups, learned intros.
+            intro_sources.augment(self, Intro)
 
         self.map_streams()
         url = self._get_url_from_source()

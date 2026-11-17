@@ -43,6 +43,7 @@ from . import bridge_controls
 from . import bridge_http
 from . import bridge_protocol as proto
 from . import bridge_state
+from . import intro_sources
 from .bridge_protocol import (BAD_ARGS, INTERNAL, MPV_FAILED, NOT_CONNECTED,
                               NO_PLAYBACK, UNKNOWN_CMD, WINDOW_LOCKED,
                               AUTH_FAILED, SERVER_UNREACHABLE, BridgeError,
@@ -610,7 +611,8 @@ class ShimRuntime:
         for segment in list(getattr(video, "intros", None) or ()):
             try:
                 out.append((segment.type, segment.start, segment.end,
-                            conf.segment_action(segment.type)))
+                            conf.segment_action(segment.type),
+                            getattr(segment, "source", "server")))
             except Exception:
                 log.debug("unreadable segment", exc_info=True)
         return out
@@ -952,6 +954,8 @@ class Bridge:
         self.runtime = runtime
         self.dev = dev
         self.tracker = bridge_state.Tracker()
+        #: fluentfin-mpv: learns intros from the viewer's seeks.
+        self.learner = intro_sources.SkipLearner()
         #: fluentfin-mpv: who draws the player controls (``set_controls``).
         self.controls = bridge_controls.UiControls()
         #: fluentfin-mpv: ``(mpv handle, skip text, next flag)`` last
@@ -2796,6 +2800,19 @@ class Bridge:
         pm.run_action(self._apply_controls)
         return {}
 
+    def cmd_set_skip_options(self, args):
+        """fluentfin-mpv: the Skip intro settings (BRIDGE.md section 4,
+        `bridge_protocol.validate_skip_options`). Held for every later
+        item."""
+        if not (self.connected or self.dev):
+            raise BridgeError(NOT_CONNECTED, "send connect first")
+        options = proto.validate_skip_options(args)
+        if options["onlineLookup"] is not None:
+            intro_sources.OPTIONS.lookup_online = options["onlineLookup"]
+        if options["learnIntros"] is not None:
+            intro_sources.OPTIONS.learn = options["learnIntros"]
+        return {}
+
     def cmd_skip_segment(self, args):
         """fluentfin-mpv: skip the segment on offer (BRIDGE.md section 4,
         ``segments.current``): `_skip_offer`."""
@@ -2894,6 +2911,7 @@ class Bridge:
         "set_fullscreen": cmd_set_fullscreen,
         "set_controls": cmd_set_controls,
         "skip_segment": cmd_skip_segment,
+        "set_skip_options": cmd_set_skip_options,
     }
 
     # -- the monitor -------------------------------------------------------
@@ -2946,6 +2964,11 @@ class Bridge:
         with self._emit_lock:
             try:
                 events = [] if obs is None else self.tracker.update(obs)
+                if (obs is not None and obs.video is not None
+                        and obs.pending is None and obs.opening is None
+                        and not obs.start_in_progress):
+                    # fluentfin-mpv: learned intros (intro_sources).
+                    self.learner.sample(obs.video, obs.position)
             except Exception:
                 log.exception("monitor tick failed")
                 events = []

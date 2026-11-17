@@ -687,9 +687,11 @@ class SegmentsAndNextTest(unittest.TestCase):
         ])
         self.assertEqual(segments, [
             {"type": "Intro", "startTicks": 100_000_000,
-             "endTicks": 705_000_000, "action": "ask"},
+             "endTicks": 705_000_000, "action": "ask",
+             "source": "server"},
             {"type": "Outro", "startTicks": 13_000_000_000,
-             "endTicks": 13_800_000_000, "action": "always"}])
+             "endTicks": 13_800_000_000, "action": "always",
+             "source": "server"}])
         self.assertEqual(proto.segment_list(None), [])
 
     def test_times_are_held_to_what_a_long_can_hold(self):
@@ -703,9 +705,9 @@ class SegmentsAndNextTest(unittest.TestCase):
             ("Preview", -20, -10, "ask"),       # likewise
         ]), [
             {"type": "Intro", "startTicks": 0, "endTicks": 300_000_000,
-             "action": "ask"},
+             "action": "ask", "source": "server"},
             {"type": "Outro", "startTicks": 1_000_000_000, "endTicks": big,
-             "action": "always"}])
+             "action": "always", "source": "server"}])
 
     def test_the_offer_is_an_ask_segment_from_its_start_to_before_its_end(self):
         segments = proto.segment_list([("Recap", 0, 20, "always"),
