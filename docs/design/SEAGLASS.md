@@ -3,7 +3,16 @@
 FluentFin MPV becomes **Seaglass**: the same app with a glassy, calm, Apple TV-like look on Windows. The evidence and
 the reasons are in `docs\design\SEAGLASS-RESEARCH.md` (the research report, 2026-11-16). This page is the contract.
 
-## The rule: glass on chrome, content opaque
+## The rule: glass on chrome and on section panels, content opaque
+
+Pass 2 (1.1.0) made it glassier. Glass is now also the **section panel** (`GlassSurfaceStyle`, a ContentControl: frosted
+brush, lit top edge, inner glow `GlassGlowBrush`, a soft shadow outside the panel only): on item pages the details (pickers,
+genres), cast, "more like this" and seasons; Settings groups; the hero's text block (always dark-themed); the episode list
+of a season (opaque episode cards inside one panel); and pills: the search box and the profile button. Still one layer
+deep, never a panel per card, never blur over video. The materials are clearer than before (`GlassPanelBrush` tint 0.22,
+luminosity 0.34 dark; 0.28 and 0.45 light) with a brighter edge (`GlassStrokeBrush` 55% white at the top) and
+`GlassShadowOpacity`. Text on any panel keeps 4.5:1 over the brightest backdrop the ambient dim allows; `OverlayContrastTests`
+measures it (about 6.2:1 secondary and 8.7:1 primary text, dark; more in light).
 
 - **Glass** (in-app acrylic, `GlassPanelBrush`) only on chrome: the navigation, the title bar area, flyouts, menus,
   dialogs, pills and buttons that float over content. At most a handful of glass surfaces on a screen, and one layer
@@ -12,7 +21,9 @@ the reasons are in `docs\design\SEAGLASS-RESEARCH.md` (the research report, 2026
 - **Behind everything**, the ambient backdrop: the current page's artwork, decoded tiny (about 64 px wide) and scaled
   up so it is soft, dimmed by `GlassAmbientDimBrush`, crossfaded when it changes. Pages set it with
   `Services\AmbientBackdrop.Set(uri)` (Home: the hero item's backdrop; item pages: the item's; elsewhere null).
-  The window backdrop stays Mica (BaseAlt) under it.
+  The artwork shows more (the dim is 45%, not 70%) and, in **Full** only, drifts: a compositor zoom between 1.06 and 1.16
+  over 48 s with a sway of 2% of the width (never in Reduced or Solid). The window's own backdrop is Mica (BaseAlt) under
+  artwork and in Solid, and **DesktopAcrylic** where there is no artwork (the deep colour then covers it at 55%).
 - **Over video, no blur.** Acrylic cannot sample the libmpv SwapChainPanel (it blurs transparent black there).
   The player's controls sit on a gradient scrim and strongly tinted panels.
 
@@ -43,6 +54,9 @@ Use the keys; never hard-code these values on a page.
 
 - Dark first; light must stay legible. Generous spacing: 48 px page margins at 1920 wide, 24 px between rows.
 - Text over artwork always sits on `GlassImageScrimBrush` (or a left-to-right scrim); contrast at least 4.5:1.
+- Poster tilt and sheen (Full only, `PosterTilt`): the pointed side dips away by up to 7 degrees, in perspective (distance
+  900 px), following the pointer over about 140 ms, with a soft specular radial sheen (a Composition sprite) under the
+  pointer. Mouse and pen only: touch and keyboard focus get the lift without tilt.
 - Cards: lift on pointer-over and keyboard focus: scale about 1.05 on a spring (damping 0.7, period about 50 ms),
   a deeper shadow; a visible focus ring for the keyboard (never colour alone). No tilt in Reduced or Solid.
 - Hero: up to five items, crossfade 500 to 700 ms, auto-advance every 7 s, paused on hover and focus, off in Reduced.
