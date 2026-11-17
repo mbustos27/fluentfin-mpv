@@ -61,8 +61,7 @@ public static class ItemLabels
 		}
 		else if (data?.PlayedPercentage is > 0 and < 100 and var percent)
 		{
-			// the card's progress bar: shown for any progress, so never read as 0%
-			Add($"{Math.Max(1, (int)Math.Round(percent))}% watched");
+			Add(WatchedPercent(percent));
 		}
 
 		if (data?.IsFavorite == true)
@@ -143,8 +142,7 @@ public static class ItemLabels
 		}
 		else if (data?.PlayedPercentage is > 0 and < 100 and var percent)
 		{
-			// the row's progress bar: shown for any progress, so never read as 0%
-			parts.Add($"{Math.Max(1, (int)Math.Round(percent))}% watched");
+			parts.Add(WatchedPercent(percent));
 		}
 
 		if (data?.IsFavorite == true)
@@ -154,6 +152,13 @@ public static class ItemLabels
 
 		return string.Join(", ", parts);
 	}
+
+	/// <summary>
+	/// "45% watched" for a progress bar that shows: never 0% (the bar shows for any progress) and never 100% (an item at
+	/// 99.6% is not watched; the server says so with Played).
+	/// </summary>
+	private static string WatchedPercent(double percent) =>
+		$"{Math.Clamp((int)Math.Round(percent), 1, 99)}% watched";
 
 	/// <summary>"Account, alice": the title bar button that shows only the user's picture.</summary>
 	public static string AccountButtonName(string? userName) =>

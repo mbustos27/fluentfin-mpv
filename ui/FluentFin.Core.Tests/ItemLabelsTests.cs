@@ -30,6 +30,17 @@ public sealed class ItemLabelsTests
 		Assert.Equal("Heat, 1% watched", ItemLabels.CardName(card));
 	}
 
+	[Theory]
+	[InlineData(99.5)]
+	[InlineData(99.9)]
+	public void AnUnwatchedItemNearTheEnd_IsNotReadAsAHundred(double percent)
+	{
+		// Played is the server's word for watched; a bar short of full is at most 99%
+		var card = Card(new BaseItemDto { Type = BaseItemDto_Type.Movie, Name = "Heat" }, percent: percent);
+
+		Assert.Equal("Heat, 99% watched", ItemLabels.CardName(card));
+	}
+
 	[Fact]
 	public void Episode_IsSeriesNumberAndName_InWords()
 	{
@@ -111,6 +122,8 @@ public sealed class ItemLabelsTests
 	[InlineData(1, 4, null, "Pilot", false, null, false, "S1E4 Pilot")]
 	[InlineData(2, 5, 6, "Two Parter", false, 45.4, true, "S2E5-E6 Two Parter, 45% watched, favorite")]
 	[InlineData(null, 7, null, "Special", false, 0.2, false, "E7 Special, 1% watched")]  // a sliver of progress still shows
+	[InlineData(1, 2, null, "Almost", false, 99.5, false, "S1E2 Almost, 99% watched")]   // not watched: never "100%"
+	[InlineData(1, 2, null, "Almost", false, 99.9, false, "S1E2 Almost, 99% watched")]
 	[InlineData(null, null, null, "Behind the Scenes", false, null, false, "Behind the Scenes")]
 	[InlineData(3, 1, null, null, true, 50.0, false, "S3E1, watched")]                 // watched wins over a stale percentage
 	[InlineData(3, 1, 1, " Trimmed ", false, null, false, "S3E1 Trimmed")]             // an end equal to the start is one episode
