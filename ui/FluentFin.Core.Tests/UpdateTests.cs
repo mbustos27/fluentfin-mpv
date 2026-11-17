@@ -43,10 +43,14 @@ public sealed class UpdateTests : IDisposable
 	{
 		public List<HttpRequestMessage> Requests { get; } = [];
 
+		public HttpResponseMessage Respond(HttpRequestMessage request) => answer(request);
+
 		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
 		{
 			Requests.Add(request);
-			return Task.FromResult(answer(request));
+			var response = answer(request);
+			response.RequestMessage ??= request;       // what the real handler does; the redirect's final URL
+			return Task.FromResult(response);
 		}
 	}
 
@@ -266,19 +270,72 @@ public sealed class UpdateTests : IDisposable
 	}
 
 	[Fact]
-	public async Task Coordinator_AFailedCheckCounts_SoItDoesNotAskAgainTheSameDay()
+	public async Task Coordinator_AFailedCheck_IsNotACheck_ButIsRetriedAtMostOncePerHour()
 	{
-		var (settings, _) = FakeSettings(enabled: true);
+		var (settings, state) = FakeSettings(enabled: true);
 		var now = DateTimeOffset.UtcNow;
-		var handler = new Fake(_ => new HttpResponseMessage(HttpStatusCode.BadGateway));
-		var coordinator = new UpdateCoordinator(settings.Object, new UpdateChecker(new HttpClient(handler), "1.1.1"), () => now, "1.1.1");
+		var offline = true;
+		var handler = new Fake(_ => offline ? throw new HttpRequestException("offline") : Ok(Release()));
+		UpdateCoordinator New() => new(settings.Object, new UpdateChecker(new HttpClient(handler), "1.1.1"), () => now, "1.1.1");
 
-		await coordinator.TickAsync();
-		now = now.AddHours(3);
-		await coordinator.TickAsync();
-
+		await New().TickAsync();                 // offline at start
+		Assert.Null(UpdateState.Parse(state()).LastCheck);
+		now = now.AddMinutes(20);
+		await New().TickAsync();                 // the next start within the hour: not asked
 		Assert.Single(handler.Requests);
-		Assert.Null(coordinator.Notice);
+
+		offline = false;
+		now = now.AddMinutes(45);                // the next start after the hour: asked, not a day later
+		var online = New();
+		await online.TickAsync();
+		Assert.Equal(2, handler.Requests.Count);
+		Assert.Equal("1.2.0", online.Notice!.Version);
+		Assert.NotNull(UpdateState.Parse(state()).LastCheck);
+	}
+
+	[Theory]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/Seaglass-1.2.0-win-x64.msi", true)]
+	[InlineData("http://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/a.msi", false)]
+	[InlineData("https://github.com.evil.example/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", false)]
+	[InlineData("https://evil.example/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", false)]
+	[InlineData("https://github.com@evil.example/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", false)]
+	[InlineData("https://github.com:8443/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", false)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/../../../../evil/x/raw/a.msi", false)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/%2e%2e/%2e%2e/a.msi", false)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/%2E./a.msi", false)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/.%2e/a.msi", false)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1%2f..%2fa.msi", false)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1\\..\\a.msi", false)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/", false)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv2/releases/download/v1/a.msi", false)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1/a.msi#x", false)]
+	[InlineData("https://GITHUB.com/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", true)]
+	public void IsDownload_AcceptsOnlyThisRepositorysReleaseAssets(string url, bool expected) =>
+		Assert.Equal(expected, UpdateSource.IsDownload(url));
+
+	[Theory]
+	[InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1/x", true)]
+	[InlineData("https://objects.githubusercontent.com/x", true)]
+	[InlineData("https://github.com/x", true)]
+	[InlineData("http://release-assets.githubusercontent.com/x", false)]
+	[InlineData("https://githubusercontent.com.evil.example/x", false)]
+	[InlineData("https://evil.example/x", false)]
+	public void TheRedirectMayOnlyLandOnGitHub(string url, bool expected) =>
+		Assert.Equal(expected, UpdateSource.IsDownloadHost(new Uri(url)));
+
+	[Fact]
+	public async Task Coordinator_AStoredReleaseIsCheckedAgain_BeforeItIsOffered()
+	{
+		var stored = new UpdateState(DateTimeOffset.UtcNow, new ReleaseInfo("1.2.0", "https://evil.example/page", "n", "Seaglass-1.2.0-win-x64.msi",
+			"https://github.com/mbustos27/fluentfin-mpv/releases/download/%2e%2e/%2e%2e/evil/a.msi",
+			"https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/Seaglass-1.2.0-win-x64.msi.sha256"), null).ToJson();
+		var (settings, _) = FakeSettings(enabled: true, stored);
+		var coordinator = new UpdateCoordinator(settings.Object, new UpdateChecker(new HttpClient(new Fake(_ => Ok(Release()))), "1.1.1"), () => DateTimeOffset.UtcNow, "1.1.1");
+
+		await coordinator.TickAsync();
+
+		Assert.False(coordinator.Notice!.HasInstaller);
+		Assert.StartsWith("https://github.com/mbustos27/fluentfin-mpv/releases/", coordinator.Notice.PageUrl);
 	}
 
 	[Fact]
@@ -352,6 +409,25 @@ public sealed class UpdateTests : IDisposable
 		Assert.Equal(Path.Combine(_folder, "Seaglass-1.2.0-win-x64.msi"), path);
 		Assert.Equal(msi, await File.ReadAllBytesAsync(path));
 		Assert.Empty(Directory.GetFiles(_folder, "*.part"));
+	}
+
+	[Fact]
+	public async Task Download_RefusesAFileServedFromAnotherHost()
+	{
+		var release = ReleaseInfo.Parse(Release())!;
+		var msi = Encoding.ASCII.GetBytes("pretend this is an installer");
+		var inner = Server(release, msi, $"{Sha(msi)} *{release.MsiName}\n");
+		var redirected = new Fake(request =>
+		{
+			var response = inner.Respond(request);
+			response.RequestMessage = new HttpRequestMessage(HttpMethod.Get, "https://evil.example/a.msi");
+			return response;
+		});
+		var downloader = new UpdateDownloader(new HttpClient(redirected), _folder);
+
+		await Assert.ThrowsAsync<UpdateException>(() => downloader.DownloadAsync(release));
+
+		Assert.Empty(Directory.GetFiles(_folder));
 	}
 
 	[Fact]

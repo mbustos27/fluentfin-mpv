@@ -104,4 +104,10 @@ public static class UpdateGate
 	/// </summary>
 	public static bool IsDue(DateTimeOffset? lastCheck, DateTimeOffset now) =>
 		lastCheck is not { } last || last > now || now - last >= Interval;
+
+	/// <summary>An attempt may go out when none was made in the last hour (a clock set back does not block it).</summary>
+	public static bool AttemptAllowed(DateTimeOffset? lastAttempt, DateTimeOffset now) =>
+		lastAttempt is not { } last || last > now || now - last >= RetryInterval;
+
+	public static readonly TimeSpan RetryInterval = TimeSpan.FromHours(1);
 }

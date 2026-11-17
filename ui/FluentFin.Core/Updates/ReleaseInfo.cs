@@ -12,9 +12,62 @@ public static class UpdateSource
 	private const string DownloadPrefix = RepositoryUrl + "/releases/download/";
 	private const string PagePrefix = RepositoryUrl + "/releases/";
 
-	public static bool IsReleasePage(string? url) => url is not null && url.StartsWith(PagePrefix, StringComparison.Ordinal) && Uri.TryCreate(url, UriKind.Absolute, out _);
+	public static bool IsReleasePage(string? url) =>
+		url is not null && url.StartsWith(PagePrefix, StringComparison.Ordinal) && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+		&& uri.Scheme == Uri.UriSchemeHttps && uri.Host == "github.com" && uri.UserInfo.Length == 0
+		&& !url.Contains("..", StringComparison.Ordinal) && !url.Contains("%2e", StringComparison.OrdinalIgnoreCase) && !url.Contains('\\');
 
-	public static bool IsDownload(string? url) => url is not null && url.StartsWith(DownloadPrefix, StringComparison.Ordinal) && Uri.TryCreate(url, UriKind.Absolute, out _);
+	private const string DownloadPath = "/mbustos27/fluentfin-mpv/releases/download/";
+
+	/// <summary>
+	/// Hosts a download may be served from after GitHub's redirect: the API names github.com, which answers 302 to
+	/// release-assets.githubusercontent.com (objects.githubusercontent.com before 2025).
+	/// </summary>
+	private static readonly string[] s_assetHosts = ["release-assets.githubusercontent.com", "objects.githubusercontent.com"];
+
+	/// <summary>
+	/// A release asset of this repository: https, host github.com, no credentials or port, a path under
+	/// <c>/mbustos27/fluentfin-mpv/releases/download/</c> with no dot segments, encoded dots, encoded or backslash separators.
+	/// </summary>
+	public static bool IsDownload(string? url)
+	{
+		if (string.IsNullOrEmpty(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+		{
+			return false;
+		}
+
+		if (uri.Scheme != Uri.UriSchemeHttps || !string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase)
+			|| !uri.IsDefaultPort || uri.UserInfo.Length > 0 || uri.Fragment.Length > 0)
+		{
+			return false;
+		}
+
+		// Uri collapses dot segments and decodes %2e in AbsolutePath, so look at the text as it was given
+		var raw = url;
+		var afterHost = raw.IndexOf("//", StringComparison.Ordinal) is var i and >= 0 ? raw[(i + 2)..] : raw;
+		var slash = afterHost.IndexOf('/');
+		var path = slash < 0 ? "" : afterHost[slash..];
+		var q = path.IndexOfAny(['?', '#']);
+		if (q >= 0)
+		{
+			path = path[..q];
+		}
+
+		if (path.Contains("..", StringComparison.Ordinal) || path.Contains('\\') || path.Contains("//", StringComparison.Ordinal)
+			|| path.Contains("%2e", StringComparison.OrdinalIgnoreCase) || path.Contains("%2f", StringComparison.OrdinalIgnoreCase)
+			|| path.Contains("%5c", StringComparison.OrdinalIgnoreCase) || path.Contains("%00", StringComparison.Ordinal))
+		{
+			return false;
+		}
+
+		return uri.AbsolutePath.StartsWith(DownloadPath, StringComparison.Ordinal) && uri.AbsolutePath.Length > DownloadPath.Length;
+	}
+
+	/// <summary>Where a download that started at an <see cref="IsDownload"/> address may end up: github.com or GitHub's asset host, over https.</summary>
+	public static bool IsDownloadHost(Uri? finalUri) =>
+		finalUri is { Scheme: "https" }
+		&& (string.Equals(finalUri.Host, "github.com", StringComparison.OrdinalIgnoreCase)
+			|| s_assetHosts.Contains(finalUri.Host, StringComparer.OrdinalIgnoreCase));
 }
 
 /// <summary>
@@ -24,6 +77,18 @@ public static class UpdateSource
 public sealed record ReleaseInfo(string Version, string PageUrl, string Notes, string? MsiName, string? MsiUrl, string? Sha256Url)
 {
 	public bool HasInstaller => MsiName is not null && MsiUrl is not null && Sha256Url is not null;
+
+	/// <summary>
+	/// This release with whatever does not pass today's rules taken away: a stored one (settings can be edited, or come from an
+	/// older build) is checked again before it is used. The installer goes only when both of its URLs and its name are valid.
+	/// </summary>
+	public ReleaseInfo Validated()
+	{
+		var page = UpdateSource.IsReleasePage(PageUrl) ? PageUrl : $"{UpdateSource.ReleasesPage}/tag/v{Version}";
+		var ok = HasInstaller && UpdateSource.IsDownload(MsiUrl) && UpdateSource.IsDownload(Sha256Url)
+			&& MsiName == $"Seaglass-{Version}-win-x64.msi";
+		return ok ? this with { PageUrl = page } : this with { PageUrl = page, MsiName = null, MsiUrl = null, Sha256Url = null };
+	}
 
 	/// <summary>The release as GitHub's "latest release" JSON says it; null for a draft, a pre-release, or what is not a Seaglass release.</summary>
 	public static ReleaseInfo? Parse(string? json)

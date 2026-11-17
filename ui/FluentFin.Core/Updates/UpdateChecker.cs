@@ -123,6 +123,11 @@ public sealed class UpdateDownloader(HttpClient http, string folder)
 			using (var response = await http.GetAsync(release.MsiUrl, HttpCompletionOption.ResponseHeadersRead, cancellation).ConfigureAwait(false))
 			{
 				response.EnsureSuccessStatusCode();
+				if (!UpdateSource.IsDownloadHost(response.RequestMessage?.RequestUri))
+				{
+					throw new UpdateException("The installer was served from somewhere that is not GitHub, so it was not used.");
+				}
+
 				await using var source = await response.Content.ReadAsStreamAsync(cancellation).ConfigureAwait(false);
 				await using var output = new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None);
 				await source.CopyToAsync(output, cancellation).ConfigureAwait(false);
@@ -155,6 +160,11 @@ public sealed class UpdateDownloader(HttpClient http, string folder)
 	{
 		using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellation).ConfigureAwait(false);
 		response.EnsureSuccessStatusCode();
+		if (!UpdateSource.IsDownloadHost(response.RequestMessage?.RequestUri))
+		{
+			throw new UpdateException("The checksum was served from somewhere that is not GitHub, so it was not used.");
+		}
+
 		await using var stream = await response.Content.ReadAsStreamAsync(cancellation).ConfigureAwait(false);
 		var buffer = new byte[MaxHashFileBytes + 1];
 		var read = 0;
