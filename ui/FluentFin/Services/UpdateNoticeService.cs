@@ -45,13 +45,13 @@ public sealed class UpdateNoticeService : IHostedService, IDisposable
 	}
 
 	/// <summary>"Download and install": an installed copy downloads the installer, checks it and runs it; a portable one opens the release page.</summary>
-	public async Task InstallAsync(ReleaseInfo release)
+	public async Task InstallAsync(ReleaseInfo release, Action? beforeClose = null)
 	{
 		try
 		{
 			var downloader = new UpdateDownloader(Http, _downloadFolder);
 			await UpdateFlow.InstallAsync(release, IsMsiInstall(), downloader.DownloadAsync,
-				info => Process.Start(info), OpenPage).ConfigureAwait(false);
+				info => Process.Start(info), OpenPage, () => CloseForUpdate(beforeClose)).ConfigureAwait(false);
 		}
 		catch (Exception ex)
 		{
@@ -59,6 +59,20 @@ public sealed class UpdateNoticeService : IHostedService, IDisposable
 			_logger.LogWarning("Update download failed: {Message}", ex.Message);
 			OpenPage(release.PageUrl);
 		}
+	}
+
+	/// <summary>
+	/// Once the installer is running: tell the user (the bar), then close the window, which runs the app's own clean close (the
+	/// stop report, the backend and its mpv window, the settings flushed) so the installer finds no file locked.
+	/// </summary>
+	private static void CloseForUpdate(Action? beforeClose)
+	{
+		var window = App.MainWindow;
+		window.DispatcherQueue.TryEnqueue(() =>
+		{
+			beforeClose?.Invoke();
+			window.Close();
+		});
 	}
 
 	public static void OpenPage(string url)

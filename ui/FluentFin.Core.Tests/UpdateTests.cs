@@ -483,6 +483,27 @@ public sealed class UpdateTests : IDisposable
 	}
 
 	[Fact]
+	public async Task Flow_AnInstalledCopy_ClosesTheAppAfterStartingTheInstaller_AndOnlyThen()
+	{
+		var release = ReleaseInfo.Parse(Release())!;
+		var steps = new List<string>();
+
+		await UpdateFlow.InstallAsync(release, isMsiInstall: true, (_, _) => Task.FromResult(@"C:	emp\Seaglass-1.2.0-win-x64.msi"),
+			_ => steps.Add("start"), _ => steps.Add("page"), closeApp: () => steps.Add("close"));
+		Assert.Equal(["start", "close"], steps);
+
+		steps.Clear();
+		await UpdateFlow.InstallAsync(release, isMsiInstall: false, (_, _) => Task.FromResult("x.msi"),
+			_ => steps.Add("start"), _ => steps.Add("page"), closeApp: () => steps.Add("close"));
+		Assert.Equal(["page"], steps);                      // a portable copy keeps running
+
+		steps.Clear();
+		await Assert.ThrowsAsync<InvalidOperationException>(() => UpdateFlow.InstallAsync(release, isMsiInstall: true, (_, _) => throw new InvalidOperationException(),
+			_ => steps.Add("start"), _ => steps.Add("page"), closeApp: () => steps.Add("close")));
+		Assert.Empty(steps);                                // a failed download closes nothing
+	}
+
+	[Fact]
 	public async Task Flow_APortableCopy_OpensTheReleasePageAndInstallsNothing()
 	{
 		var release = ReleaseInfo.Parse(Release())!;

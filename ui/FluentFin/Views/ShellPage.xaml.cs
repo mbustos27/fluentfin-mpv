@@ -59,6 +59,7 @@ public sealed partial class ShellPage : Page
 		}
 
 		UpdateBar.Title = $"Seaglass {notice.Version} is available";
+		UpdateInstallButton.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
 		UpdateInstallButton.Content = UpdateNoticeService.IsMsiInstall() && notice.HasInstaller ? "Download and install" : "Open the download page";
 		UpdateBar.IsOpen = true;
 	}
@@ -68,7 +69,11 @@ public sealed partial class ShellPage : Page
 		if (_updates.Coordinator.Notice is { } notice)
 		{
 			UpdateInstallButton.IsEnabled = false;
-			await _updates.InstallAsync(notice);
+			await _updates.InstallAsync(notice, () =>
+			{
+				UpdateBar.Title = "Seaglass will close to update";
+				UpdateInstallButton.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+			});
 			UpdateInstallButton.IsEnabled = true;
 		}
 	}

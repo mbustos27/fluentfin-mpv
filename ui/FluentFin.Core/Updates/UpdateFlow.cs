@@ -38,12 +38,11 @@ public static class InstallDetector
 public static class UpdateFlow
 {
 	/// <summary>
-	/// An installed copy downloads the installer, checks it and runs it (<c>msiexec /i</c>: the installer closes or replaces
-	/// the app); a portable copy, or a release without an installer, opens the release page instead.
+	/// An installed copy downloads the installer, checks it and runs it (<c>msiexec /i</c>), then has the app close itself; a portable copy, or a release without an installer, opens the release page instead.
 	/// Returns what it did, for the caller's message.
 	/// </summary>
 	public static async Task<UpdateOutcome> InstallAsync(ReleaseInfo release, bool isMsiInstall, Func<ReleaseInfo, CancellationToken, Task<string>> download,
-		Action<ProcessStartInfo> start, Action<string> openPage, CancellationToken cancellation = default)
+		Action<ProcessStartInfo> start, Action<string> openPage, Action? closeApp = null, CancellationToken cancellation = default)
 	{
 		if (!isMsiInstall || !release.HasInstaller)
 		{
@@ -53,6 +52,8 @@ public static class UpdateFlow
 
 		var msi = await download(release, cancellation).ConfigureAwait(false);
 		start(MsiexecInstall(msi));
+		// the installer replaces the app's files: the app ends cleanly now (playback, backend, settings), so none are locked
+		closeApp?.Invoke();
 		return UpdateOutcome.StartedInstaller;
 	}
 
