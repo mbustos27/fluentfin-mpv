@@ -45,6 +45,9 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<BaseItemDtoQueryResult?> Search(string searchTerm);
 
+		/// <summary>Seaglass 1.1.4: the matches of these types only (the search results page, one request per type).</summary>
+		Task<BaseItemDtoQueryResult?> Search(string searchTerm, IReadOnlyList<BaseItemKind> kinds, int limit = 100);
+
 		Task<BaseItemDto?> GetItem(Guid id);
 
 		/// <summary>

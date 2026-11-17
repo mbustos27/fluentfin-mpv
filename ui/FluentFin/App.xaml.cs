@@ -213,6 +213,7 @@ public partial class App : Application
 
 			// dashboard view models
 			services.AddTransient<DashboardViewModel>();
+			services.AddTransient<SearchResultsViewModel>(); // Seaglass 1.1.4: the search results page
 			services.AddTransient<GeneralSettingsViewModel>();
 			services.AddTransient<UsersViewModel>();
 			services.AddTransient<UserEditorViewModel>();

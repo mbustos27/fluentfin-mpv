@@ -99,7 +99,20 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	/// The shell's frame now shows a page of <paramref name="pageType"/> (null: none, the shell went: Log out and Switch user
 	/// take it away with whatever page it showed). A navigation that fails never gets here, so nothing stays hidden.
 	/// </summary>
-	public void OnPageShown(Type? pageType) => IsPlayerPageShown = pageType == typeof(VideoPlayerPage);
+	public void OnPageShown(Type? pageType)
+	{
+		IsPlayerPageShown = pageType == typeof(VideoPlayerPage);
+
+		// Seaglass 1.1.4 (interaction audit, item 2): the query stays only on its results page; any other page clears it
+		if (pageType != typeof(SearchResultsPage))
+		{
+			SearchText = "";
+		}
+	}
+
+	/// <summary>Seaglass 1.1.4: the title bar's search box's text (two-way), cleared by <see cref="OnPageShown"/>.</summary>
+	[ObservableProperty]
+	public partial string SearchText { get; set; } = "";
 
 	/// <summary>Why libmpv cannot be used, null when it can: the real probe (tests probe nothing), as the player page asks it.</summary>
 	internal Func<string?> LibmpvUnavailable { get; set; } = FluentFin.Mpv.Libmpv.Unavailable;

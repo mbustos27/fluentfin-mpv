@@ -172,6 +172,28 @@ public sealed class TitleBarAccountTests
 		_navigation.Verify(x => x.NavigateTo(typeof(SettingsViewModel).FullName!, null, false), Times.Once);
 	}
 
+	// ---- Seaglass 1.1.4 (interaction audit, item 2): the search's text clears after you leave
+
+	[Fact]
+	public void TheSearchText_StaysOnItsResultsPage_AndClearsOnAnyOther()
+	{
+		var vm = Create();
+		vm.OnPageShown(typeof(HomePage));
+		vm.SearchText = "quiet";
+
+		// Enter: the results page for it
+		vm.OnPageShown(typeof(SearchResultsPage));
+		Assert.Equal("quiet", vm.SearchText);
+
+		// a result opened from there, or anywhere else
+		vm.OnPageShown(typeof(SeriesPage));
+		Assert.Equal("", vm.SearchText);
+
+		vm.SearchText = "the";
+		vm.OnPageShown(typeof(LibraryPage));
+		Assert.Equal("", vm.SearchText);
+	}
+
 	// ---- Settings > Other devices > Quick Connect: the dialog says what OK did
 
 	[Theory]

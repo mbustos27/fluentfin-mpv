@@ -40,6 +40,8 @@ public class PageService : IPageService, IPageRegistration
 		Configure<MediaSegmentsEditorViewModel, MediaSegmentsEditorPage>();
 		Configure<LibrariesLandingPageViewModel, LibrariesLandingPage>();
 		Configure<EpisodeViewModel, EpisodePage>();
+		// Seaglass 1.1.4: Enter in the title bar's search
+		Configure<SearchResultsViewModel, SearchResultsPage>();
 
 		// Dashboard Pages
 		Configure<DashboardViewModel, DashboardPage>();

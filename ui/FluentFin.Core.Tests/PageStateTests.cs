@@ -286,12 +286,15 @@ public sealed class PageStateTests : IDisposable
 	{
 		var results = SearchSuggestions.For("matrix", Items(2));
 		Assert.Equal(2, results.Count);
-		Assert.All(results, x => Assert.IsType<BaseItemDto>(x));
+		// Seaglass 1.1.4: rows named for Narrator (SearchSuggestion), not the bare BaseItemDto
+		Assert.All(results, x => Assert.IsType<SearchSuggestion>(x));
 
 		var none = Assert.IsType<SearchMessage>(Assert.Single(SearchSuggestions.For("zzz", Items(0))));
 		Assert.Equal("No results for “zzz”", none.Title);
 		Assert.False(none.CanRetry);
-		Assert.Equal("zzz", none.ToString());
+		// the box keeps the query (TextMemberPath "Name"); Narrator reads the message (ToString)
+		Assert.Equal("zzz", none.Name);
+		Assert.Equal("No results for “zzz”. Check the spelling, or try fewer words.", none.ToString());
 
 		var failed = Assert.IsType<SearchMessage>(Assert.Single(SearchSuggestions.For("matrix", null)));
 		Assert.Equal("Couldn't search Home server", failed.Title);

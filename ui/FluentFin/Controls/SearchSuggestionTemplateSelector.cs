@@ -11,7 +11,15 @@ public sealed partial class SearchSuggestionTemplateSelector : DataTemplateSelec
 
 	public DataTemplate? MessageTemplate { get; set; }
 
-	protected override DataTemplate? SelectTemplateCore(object item) => item is SearchMessage ? MessageTemplate : ItemTemplate;
+	/// <summary>Seaglass 1.1.4: the "See all n results" row (SearchSeeAll).</summary>
+	public DataTemplate? SeeAllTemplate { get; set; }
+
+	protected override DataTemplate? SelectTemplateCore(object item) => item switch
+	{
+		SearchMessage => MessageTemplate,
+		SearchSeeAll => SeeAllTemplate,
+		_ => ItemTemplate,
+	};
 
 	protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container) => SelectTemplateCore(item);
 }

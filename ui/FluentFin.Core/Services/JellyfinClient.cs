@@ -112,7 +112,16 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		]
 		: [GeneralCommandType.DisplayMessage];
 
-	public async Task<BaseItemDtoQueryResult?> Search(string searchTerm)
+	/// <summary>
+	/// Seaglass 1.1.4: what the title bar's box suggests: movies and shows (people have no page in Seaglass, so a person's row
+	/// opened nothing; episodes, which would crowd them out, are on the results page).
+	/// </summary>
+	public static BaseItemKind[] SuggestionKinds { get; } = [BaseItemKind.Movie, BaseItemKind.Series];
+
+	public Task<BaseItemDtoQueryResult?> Search(string searchTerm) => Search(searchTerm, SuggestionKinds);
+
+	/// <summary>Seaglass 1.1.4: the matches of these types only (the results page asks for each type on its own).</summary>
+	public async Task<BaseItemDtoQueryResult?> Search(string searchTerm, IReadOnlyList<BaseItemKind> kinds, int limit = 100)
 	{
 		try
 		{
@@ -121,8 +130,8 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 				var query = x.QueryParameters;
 				query.SearchTerm = searchTerm;
 				query.Recursive = true;
-				query.Limit = 100;
-				query.IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Person];
+				query.Limit = limit;
+				query.IncludeItemTypes = [.. kinds];
 			});
 		}
 		catch (Exception ex)
