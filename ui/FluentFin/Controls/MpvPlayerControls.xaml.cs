@@ -691,7 +691,7 @@ public sealed partial class MpvPlayerControls : UserControl
 	/// </summary>
 	public double Seconds(long ticks) => Math.Max(0, TimeSpan.FromTicks(ticks).TotalSeconds);
 
-	public string SkipToolTip(string text) => $"{text} (S)";
+	public string SkipToolTip(string text, string? source = null) => source is null ? $"{text} (S)" : $"{text} (S), {source}";
 
 	/// <summary>A tooltip only while <paramref name="shown"/> (the Next button's own while enabled, its wrapper's while disabled).</summary>
 	public string? ToolTipIf(bool shown, string text) => shown ? text : null;

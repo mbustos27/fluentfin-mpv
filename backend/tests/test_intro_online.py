@@ -1,6 +1,6 @@
 """fluentfin-mpv: online intro lookups (`intro_online`). No network: every
 request goes to a recorded fixture through an injected fetcher. The rules
-under test come from TheIntroDB's terms (docs/research/intro-sources.md):
+under test come from TheIntroDB's terms (the intro-sources research note (repo root, docs, research)):
 one episode at a time, memory-only cache, honour 429 / Retry-After, a plain
 User-Agent, a minimal request."""
 

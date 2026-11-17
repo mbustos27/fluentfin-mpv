@@ -595,6 +595,10 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	[ObservableProperty]
 	public partial string SkipText { get; set; } = SkipTextFor("Intro");
 
+	/// <summary>Where the offered skip came from, as a quiet tooltip line ("from chapters"); null for the server's own.</summary>
+	[ObservableProperty]
+	public partial string? SkipSourceNote { get; set; }
+
 	partial void OnIsSkipVisibleChanged(bool value) => OnPropertyChanged(nameof(AnythingVisible));
 
 	/// <summary>
@@ -679,6 +683,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		if (_offered is { } offered)
 		{
 			SkipText = SkipTextFor(offered.Type);
+			SkipSourceNote = offered.SourceNote;
 		}
 
 		IsSkipVisible = ShowSkipPrompt && _offered is { } shown && shown != _skipped;

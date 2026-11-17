@@ -196,6 +196,26 @@
                             <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />
                         </ctk:SettingsCard>
                         <ctk:SettingsCard
+                            Description="When neither the server nor the file's chapters mark the intro or credits, ask TheIntroDB (and AniSkip for anime). Sent: the show's public ID, season, episode and length. Not sent: your server, account or file names. Off by default."
+                            Header="Look up intros online"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE774;}">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <HyperlinkButton Content="Intro times from TheIntroDB" NavigateUri="https://theintrodb.org" />
+                                <HyperlinkButton Content="AniSkip" NavigateUri="https://aniskip.com" />
+                                <ToggleSwitch AutomationProperties.Name="Look up intros online" IsOn="{x:Bind ViewModel.LookUpIntrosOnline, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctk:SettingsCard>
+                        <ctk:SettingsCard
+                            Description="When you skip ahead near the start of an episode, offer the same skip on the season's later episodes. Kept on this PC."
+                            Header="Learn intros from my skips"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE7BE;}">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.ForgetLearnedStatus, Mode=OneWay}" />
+                                <Button Command="{x:Bind ViewModel.ForgetLearnedIntrosCommand}" Content="Forget learned intros" />
+                                <ToggleSwitch AutomationProperties.Name="Learn intros from my skips" IsOn="{x:Bind ViewModel.LearnIntros, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctk:SettingsCard>
+                        <ctk:SettingsCard
                             Description="Built-in players, and the MPV player with FluentFin's player controls. mpv's own controls always change the volume with the wheel."
                             Header="Change the volume with the mouse wheel"
                             HeaderIcon="{ui:FontIcon Glyph=&#xE962;}">

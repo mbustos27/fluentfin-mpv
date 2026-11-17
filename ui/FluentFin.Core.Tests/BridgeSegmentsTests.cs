@@ -71,7 +71,7 @@ public sealed class BridgeSegmentsTests
 		var node = JsonSerializer.SerializeToNode(new BridgeSegments("a", [new BridgeSegment("Intro", 1, 2, "ask")], 0), Bridge.JsonOptions)!;
 
 		Assert.True(JsonNode.DeepEquals(JsonNode.Parse("""
-			{"itemId": "a", "segments": [{"type": "Intro", "startTicks": 1, "endTicks": 2, "action": "ask"}], "current": 0}
+			{"itemId": "a", "segments": [{"type": "Intro", "startTicks": 1, "endTicks": 2, "action": "ask", "source": "server"}], "current": 0}
 			"""), node), node.ToJsonString());
 	}
 

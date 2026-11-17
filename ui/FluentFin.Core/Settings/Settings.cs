@@ -18,6 +18,12 @@ public interface ISettings
 	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.ShowSkipPrompt"/>.</summary>
 	bool ShowSkipPrompt { get; set; }
 
+	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.LookUpIntrosOnline"/>.</summary>
+	bool LookUpIntrosOnline { get; set; }
+
+	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.LearnIntros"/>.</summary>
+	bool LearnIntros { get; set; }
+
 	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.MouseWheelVolume"/>.</summary>
 	bool MouseWheelVolume { get; set; }
 
@@ -71,6 +77,18 @@ public partial class Settings(ILocalSettingsService localSettingsService, MediaP
 	{
 		get => localSettingsService.ReadSetting(SettingKeys.ShowSkipPrompt);
 		set => localSettingsService.SaveSetting(SettingKeys.ShowSkipPrompt, value);
+	}
+
+	public bool LookUpIntrosOnline
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.LookUpIntrosOnline);
+		set => localSettingsService.SaveSetting(SettingKeys.LookUpIntrosOnline, value);
+	}
+
+	public bool LearnIntros
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.LearnIntros);
+		set => localSettingsService.SaveSetting(SettingKeys.LearnIntros, value);
 	}
 
 	public bool MouseWheelVolume

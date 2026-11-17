@@ -173,7 +173,7 @@ public sealed class MpvPlaybackService
 	/// as it begins, on the caller's context. <paramref name="controls"/>: fluentfin-mpv player controls, a <c>set_controls</c>
 	/// sent before <c>play</c> (FluentFin draws the controls from the first frame); null sends none.
 	/// </summary>
-	public async Task<bool> PlayAsync(long generation, BridgeIdentity identity, BridgePlayRequest request, bool fullScreen = false, CancellationToken cancellationToken = default, Action<MpvStartStep>? onStep = null, JsonObject? controls = null)
+	public async Task<bool> PlayAsync(long generation, BridgeIdentity identity, BridgePlayRequest request, bool fullScreen = false, CancellationToken cancellationToken = default, Action<MpvStartStep>? onStep = null, JsonObject? controls = null, JsonObject? skipOptions = null)
 	{
 		if (!await StartAndConnectAsync(generation, dev: false, identity, onStep, cancellationToken))
 		{
@@ -182,6 +182,7 @@ public sealed class MpvPlaybackService
 
 		await SyncFullScreenAsync(generation, fullScreen, cancellationToken);
 		await SendControlsAsync(generation, controls, cancellationToken);
+		await SendSkipOptionsAsync(generation, skipOptions, cancellationToken);
 		_logger.LogInformation("Playing {Count} item(s) with mpv from index {Index} ({ItemId}) at {Position}, mediaSource={MediaSource}, audio={Audio}, subtitle={Subtitle}",
 			request.ItemIds.Count, request.StartIndex, request.StartItemId, TimeSpan.FromTicks(request.StartPositionTicks), request.MediaSourceId, request.AudioStreamIndex, request.SubtitleStreamIndex);
 		var timeline = TimelineOf(generation);
@@ -283,6 +284,24 @@ public sealed class MpvPlaybackService
 		catch (BridgeException ex)
 		{
 			_logger.LogWarning("Could not tell the mpv backend whether the window is full screen: {Message}", ex.Message);
+		}
+	}
+
+	/// <summary>fluentfin-mpv: the Skip intro switches (<c>set_skip_options</c>) before the play; a backend that refuses them plays on without.</summary>
+	private async Task SendSkipOptionsAsync(long generation, JsonObject? options, CancellationToken cancellationToken)
+	{
+		if (options is null)
+		{
+			return;
+		}
+
+		try
+		{
+			await SendIfCurrentAsync(generation, Bridge.Commands.SetSkipOptions, options, cancellationToken: cancellationToken);
+		}
+		catch (BridgeException ex)
+		{
+			_logger.LogWarning("Could not tell the mpv backend the Skip intro settings: {Message}", ex.Message);
 		}
 	}
 

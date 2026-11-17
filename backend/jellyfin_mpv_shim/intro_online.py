@@ -1,4 +1,4 @@
-"""fluentfin-mpv: opt-in online intro lookups (docs/research/intro-sources.md).
+"""fluentfin-mpv: opt-in online intro lookups (the intro-sources research note (repo root, docs, research)).
 
 Sources: TheIntroDB (``api.theintrodb.org/v4/media``, no key) and, for anime,
 AniSkip (``api.aniskip.com/v2``, by MyAnimeList id). **Not** SkipMe.db: its
