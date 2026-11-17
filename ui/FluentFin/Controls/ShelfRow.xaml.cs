@@ -446,11 +446,22 @@ public sealed partial class ShelfRow : UserControl
 /// <summary>Seaglass scrolling: moves a scroll viewer by an animation unless motion is off, adding up wheel notches that arrive while it runs.</summary>
 internal static class SmoothScroll
 {
-	private sealed class Pending
+	internal sealed class Pending
 	{
 		public double Target;
 		public bool Moving;
 		public bool Hooked;
+
+		/// <summary>
+		/// Aims at <paramref name="offset"/> (clamped). False, and not moving, when that is where the view already is: a
+		/// ChangeView that changes nothing raises no ViewChanged, so a Moving left true would feed the next By a stale target.
+		/// </summary>
+		public bool Begin(double offset, double max, double current)
+		{
+			Target = Math.Clamp(offset, 0, Math.Max(0, max));
+			Moving = Math.Abs(Target - current) >= 0.5;
+			return Moving;
+		}
 	}
 
 	private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ScrollViewer, Pending> s_vertical = new();
@@ -467,8 +478,12 @@ internal static class SmoothScroll
 	{
 		var state = StateOf(viewer, horizontal);
 		var max = horizontal ? viewer.ScrollableWidth : viewer.ScrollableHeight;
-		state.Target = Math.Clamp(offset, 0, Math.Max(0, max));
-		state.Moving = true;
+		var current = horizontal ? viewer.HorizontalOffset : viewer.VerticalOffset;
+		if (!state.Begin(offset, max, current))
+		{
+			return;
+		}
+
 		if (horizontal)
 		{
 			viewer.ChangeView(state.Target, null, null, !SafeMotion.Allowed);
@@ -486,6 +501,9 @@ internal static class SmoothScroll
 		if (!state.Hooked)
 		{
 			state.Hooked = true;
+			// A press (the wheel is not one) on the content or a scrollbar thumb takes over from the animation: the next By
+			// starts from where the view is. Handled events too: the scrollbars handle theirs.
+			viewer.AddHandler(UIElement.PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) => state.Moving = false), true);
 			viewer.ViewChanged += (_, e) =>
 			{
 				if (!e.IsIntermediate)
