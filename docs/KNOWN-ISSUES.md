@@ -72,8 +72,8 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   the presenter changes, so the half-done layout (old XAML layout in the new window size) never shows; the screen is black for
   about 40-75 ms going in and 65-90 ms going out (it waits for the picture's hold to end), at most 300 ms (the UI thread's limit;
   500 ms the compositor's own, for a stuck UI thread). 1.1.2 cloaked the window instead, which showed whatever is behind it
-  for 60-95 ms. To compare on a real screen: `SEAGLASS_FULLSCREEN=cover` (default), `cloak` (1.1.2's) or `none`;
-  `FLUENTFIN_NO_CLOAK=1` still means none. Not judged on a real desktop yet (off-screen captures read the window's own surface).
+  for 60-95 ms. To compare on a real screen: `NIXIE_FULLSCREEN=cover` (default), `cloak` (1.1.2's) or `none`
+  (`SEAGLASS_FULLSCREEN`, its name before 1.2.0, still works); `FLUENTFIN_NO_CLOAK=1` still means none. Not judged on a real desktop yet (off-screen captures read the window's own surface).
   mpv's own controls are not hidden. Numbers and frame strips: `docs\research\fullscreen-smoothness.md`.
   **The 300 ms limit can lift the cover early** when mpv is slow to draw its first frame of the new size: the held, scaled
   picture then shows until it does (seen once in 24 off-screen switches, a switch out that waited about 640 ms for mpv).
@@ -88,6 +88,23 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 - **Keys off-screen**: a key message posted to FluentFin reaches WinUI only through the window's
   `InputSiteWindowClass` child (the thread's focus window), not its `DesktopChildSiteBridge`; the
   fluentfin-controls harness posts there (Space, F, Escape through the page's key path).
+
+## Nixie 1.2.0: the rename from Seaglass
+- **The MSI upgrade from Seaglass to Nixie was not installed for real** on this PC: `upgrade-test.ps1` installs into the
+  account it runs in, so it was not run (also not `-SelfCheck`). What is checked: the MSI keeps the upgrade code, builds,
+  and holds exactly the zip's files (`build-release.ps1`), the zip passes `verify-package.ps1`, and the script parses.
+  Run `upgrade-test.ps1` on a test account or a VM before publishing: Seaglass 1.1.3's MSI, then Nixie's over it.
+- **Seaglass 1.1.x's "Download and install"** only finds an asset named `Seaglass-<version>-win-x64.msi`; the build
+  makes one (a hard link of the Nixie MSI) for the release to carry (`docs\RELEASE.md` section 5). Not tried from a
+  running Seaglass against a real release.
+- **The data folder copy** (Seaglass, else FluentFinMpv, to Nixie) is tested on temporary folders only
+  (`LegacyDataFolderTests`), never on a user's real folders; a Seaglass still running during Nixie's first start is
+  covered for the journal (a SQLite backup) but its other files are copied as they are at that moment.
+- **Pinned shortcuts**: a taskbar or Start pin of Seaglass points at `Programs\Seaglass\app\Seaglass.exe`, which the
+  upgrade removes; the pin is left broken until it is pinned again (Windows does not move pins between programs).
+- **Internal names keep "Seaglass"** where they are not shown: `SeaglassPalette`, `SeaglassTheme`, `Seaglass*` brushes
+  and some code comments; the package identity (`Package.appxmanifest`'s `FluentFinMpv`) and the release marker
+  (`FluentFinMpvRelease`) did not change either. Renaming them is a separate, mechanical change.
 
 ## Seaglass 1.1.3: rail, Settings, item menus, keyboard, glass, player
 - **Checks only a real screen and real hands can settle.** The off-screen harness posts keys to the window and reads UI
@@ -113,7 +130,7 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   The card's own corner badge (watched check or unplayed count, `CardBadgeBackground`) keeps its own colours. In the
   light theme the episode's watched mark is now the light aqua: about 1.8:1 against a very bright thumbnail around it
   (4.2:1 with the old deep aqua), while its dark check has 7.7:1 on it (measured; 4.2:1 before). Measurements:
-  `docs\design\SEAGLASS.md`, 1.1.3.
+  `docs\design\DESIGN.md`, 1.1.3.
 
 ## UI (`ui\FluentFin.Core\Mpv`, `ui\FluentFin`)
 - **Play on a season starts at the series' first unplayed episode**, not the season's
@@ -256,7 +273,7 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   was pending, the position reported is right but the "server stopped sending it" notice is
   missing.
 - **A `log-file=` in the backend's `mpv.conf` writes the access token to that file**
-  (`%LOCALAPPDATA%\Seaglass\mpv-backend\mpv.conf`; found 2026-11-15 by the dev-harness review). A log file
+  (`%LOCALAPPDATA%\Nixie\mpv-backend\mpv.conf`; found 2026-11-15 by the dev-harness review). A log file
   makes mpv log verbosely, and mpv then logs `Set property: http-header-fields=["Authorization: MediaBrowser ...
   Token=\"...\""]` when the shim sets the request headers (reproduced with the fake server's token). Anyone who
   adds `log-file=` for debugging gets the real token in that log, against BRIDGE.md's rule that the token

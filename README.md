@@ -1,8 +1,8 @@
-# Seaglass
+# Nixie
 
-*Formerly FluentFin MPV.* The old name and the GitHub repository name (`fluentfin-mpv`) stay in links and history.
+*Nixie, formerly Seaglass and FluentFin MPV.* Named for the 1950s nixie tube, whose digits glow neon orange-pink. The old names and the GitHub repository name (`fluentfin-mpv`) stay in links and history.
 
-A Windows Jellyfin client with a glassy, Apple TV-inspired look. It combines [FluentFin](https://github.com/insomniachi/FluentFin)'s WinUI 3 interface with [jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim) as its playback engine: you browse in Seaglass, and video plays in mpv inside Seaglass's own window. The server sees a single session, Seaglass's.
+A Windows Jellyfin client with a glassy, Apple TV-inspired look. It combines [FluentFin](https://github.com/insomniachi/FluentFin)'s WinUI 3 interface with [jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim) as its playback engine: you browse in Nixie, and video plays in mpv inside Nixie's own window. The server sees a single session, Nixie's.
 
 This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv. It is tested by automated suites against a fake server and in daily use against a real Jellyfin server; [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md) says what is still unverified.
 
@@ -10,16 +10,16 @@ This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv
 
 **Windows 10 or 11 (x64).** From the [Releases](https://github.com/mbustos27/fluentfin-mpv/releases) page:
 
-- **Installer** (`.msi`): installs for your Windows user, with no administrator rights, and adds Seaglass to the Start menu. Uninstall it in Settings → Apps.
-- **Portable** (`.zip`): unzip it anywhere and run `Seaglass.exe` at the top of the folder (the app's own files are in `app\`).
+- **Installer** (`.msi`): installs for your Windows user, with no administrator rights, and adds Nixie to the Start menu. Uninstall it in Settings → Apps.
+- **Portable** (`.zip`): unzip it anywhere and run `Nixie.exe` at the top of the folder (the app's own files are in `app\`).
 
-Nothing else needs installing: .NET, the playback backend and libmpv are inside. Either way your settings and data go to `%LOCALAPPDATA%\Seaglass`. The app isn't code-signed, so Windows SmartScreen warns the first time (**More info → Run anyway**). Changes: [CHANGELOG.md](CHANGELOG.md). Release files are named `Seaglass-<version>-win-x64.zip` and `.msi`. Coming from FluentFin MPV 1.0.x: installing the Seaglass `.msi` replaces it, and the first start copies your old data folder (`%LOCALAPPDATA%\FluentFinMpv`) to `%LOCALAPPDATA%\Seaglass`, leaving the old one in place.
+Nothing else needs installing: .NET, the playback backend and libmpv are inside. Either way your settings and data go to `%LOCALAPPDATA%\Nixie`. The app isn't code-signed, so Windows SmartScreen warns the first time (**More info → Run anyway**). Changes: [CHANGELOG.md](CHANGELOG.md). Release files are named `Nixie-<version>-win-x64.zip` and `.msi`. Coming from Seaglass 1.1.x or FluentFin MPV 1.0.x: installing the Nixie `.msi` replaces it (pin Nixie to the taskbar again if you had pinned the old one), and the first start copies your old data folder (`%LOCALAPPDATA%\Seaglass`, or `%LOCALAPPDATA%\FluentFinMpv` when there is no Seaglass folder) to `%LOCALAPPDATA%\Nixie`, leaving the old one in place. Your saved servers and sign-ins come along: the server knows this PC as the same device.
 
 Everything below the feature list is for building from source.
 
-## What Seaglass adds to FluentFin
+## What Nixie adds to FluentFin
 
-- **The glass look.** Frosted glass on the navigation, title bar, search, menus, tooltips, dialogs and page sections, with the current title's artwork softly tinting the whole window. Posters and artwork stay solid. Settings → Appearance → Glass: **Automatic** (follows Windows' transparency, animation and high-contrast settings), **Full**, **Reduced** (no motion) or **Solid** (no translucency). The design and the research behind it: [docs/design/SEAGLASS.md](docs/design/SEAGLASS.md).
+- **The glass look.** Frosted glass on the navigation, title bar, search, menus, tooltips, dialogs and page sections, with the current title's artwork softly tinting the whole window. Posters and artwork stay solid. Settings → Appearance → Glass: **Automatic** (follows Windows' transparency, animation and high-contrast settings), **Full**, **Reduced** (no motion) or **Solid** (no translucency). The design and the research behind it: [docs/design/DESIGN.md](docs/design/DESIGN.md).
 - **Home, item pages and the player, redesigned.**
   - **Home:** a hero of up to five items that never autoplays trailers, and poster rows whose cards lift on hover.
   - **Item pages:** a full-width backdrop with the title's logo, info chips (year, rating, runtime, resolution, HDR, audio), and Play as the one highlighted action.
@@ -30,7 +30,7 @@ Everything below the feature list is for building from source.
   - Press **?** or **F1** (or Settings → About → Keyboard shortcuts) for the full list, or see [docs/SHORTCUTS.md](docs/SHORTCUTS.md).
 - **mpv playback through jellyfin-mpv-shim.** The player is "mpv" (the default). The shim runs headless in a *bridge mode*. It takes care of PlaybackInfo and the transcode decision, track selection, trickplay and skip-intro, and reports progress to the server. FluentFin talks to it over a stdio JSON-lines protocol ([docs/BRIDGE.md](docs/BRIDGE.md)), and mpv draws inside FluentFin's player page.
 - **A polished mpv bar.** By default the bar is [uosc](https://github.com/tomasklaen/uosc) in FluentFin's look, with the shim's own bar as the fallback. It shows the series and episode title, fills the seek bar in your accent colour with trickplay previews, offers previous, next and a Skip Intro button, keeps subtitles above the bar, takes FluentFin's keys (k, j/l, arrows, s, Shift+N/P), and the mouse wheel changes the volume.
-- **Seaglass's own player controls (the default).** With Settings → Playback → Player controls → Seaglass, libmpv renders in-process into a WinUI composition swap chain, and Seaglass draws its own controls over the video: seek, play/pause, ±10/30 s, Skip intro/credits (button and S key), next episode, volume, audio and subtitle menus (with text size), full screen, and auto-hide. This mode needs libmpv: the release includes it, and a source build needs it in `vendor\libmpv` (see `vendor/libmpv/VENDORED.md`). When libmpv cannot load, Seaglass falls back to mpv's controls and says so.
+- **Nixie's own player controls (the default).** With Settings → Playback → Player controls → Nixie, libmpv renders in-process into a WinUI composition swap chain, and Nixie draws its own controls over the video: seek, play/pause, ±10/30 s, Skip intro/credits (button and S key), next episode, volume, audio and subtitle menus (with text size), full screen, and auto-hide. This mode needs libmpv: the release includes it, and a source build needs it in `vendor\libmpv` (see `vendor/libmpv/VENDORED.md`). When libmpv cannot load, Nixie falls back to mpv's controls and says so.
 - **A TV journal.** A Serializd-style diary of what you watched, kept locally in SQLite, one journal per server and user.
   - Episodes are logged automatically when they're watched to the end, and synced from Jellyfin's played state (with exact dates when the Playback Reporting plugin is installed).
   - Each entry can have a half-star rating, a review and a rewatch flag.
@@ -79,7 +79,7 @@ To play video, a source build needs **one** of these:
 
 `.\run-dev.ps1 -SelfTest` plays mpv's test pattern inside the player page, with no server needed.
 
-Settings, logs and the journal go to `%LOCALAPPDATA%\Seaglass`. For a separate data folder, start it with `Seaglass.exe --data-dir <folder>`.
+Settings, logs and the journal go to `%LOCALAPPDATA%\Nixie`. For a separate data folder, start it with `Nixie.exe --data-dir <folder>`.
 
 ## Development
 
@@ -87,7 +87,7 @@ Settings, logs and the journal go to `%LOCALAPPDATA%\Seaglass`. For a separate d
 - [docs/UPSTREAM.md](docs/UPSTREAM.md): the upstream commits this is built from, and how to pull updates.
 - [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md): what is open, accepted or not yet verified.
 - [docs/JOURNAL.md](docs/JOURNAL.md): the TV journal's design.
-- [docs/design/SEAGLASS.md](docs/design/SEAGLASS.md): the glass design rules (tokens, glass modes, motion).
+- [docs/design/DESIGN.md](docs/design/DESIGN.md): the glass design rules (tokens, glass modes, motion).
 - [docs/SHORTCUTS.md](docs/SHORTCUTS.md): every keyboard and mouse shortcut.
 - [docs/RELEASE.md](docs/RELEASE.md): how a release is built, verified and published.
 - [tools/README.md](tools/README.md): the test harnesses:
