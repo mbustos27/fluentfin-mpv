@@ -2,8 +2,8 @@
 # (dot-sourced by drive.ps1 after `home`). Samples the harness's own Seaglass.exe (found by its --data-dir, never another copy) with
 # the Windows "GPU Engine" counters (the sum over its engines) and its CPU time while Home scrolls to the bottom and back 8 times.
 # Compare a Full run with -Setting Glass=Solid. The result is written next to the shots as gpu.json and printed.
-$me = Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(Seaglass|FluentFin)\.exe$' -and $_.CommandLine -like "*$DataDir*" } | Select-Object -First 1
-Check 'gpu: found the harness-started Seaglass.exe' ([bool]$me)
+$me = Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(Nixie|Seaglass|FluentFin)\.exe$' -and $_.CommandLine -like "*$DataDir*" } | Select-Object -First 1
+Check 'gpu: found the harness-started Nixie.exe' ([bool]$me)
 if ($me) {
     $procId = [int]$me.ProcessId
     $samples = New-Object System.Collections.Generic.List[double]

@@ -4,11 +4,11 @@
 
 .DESCRIPTION
   FluentFin is released unpackaged (dotnet publish + Inno Setup, see ui\publish.ps1 and ui\Installer), so the plain
-  build output runs as is: Seaglass.exe in ui\FluentFin\bin\x64\<Configuration>\net10.0-windows10.0.19041.0\.
+  build output runs as is: Nixie.exe in ui\FluentFin\bin\x64\<Configuration>\net10.0-windows10.0.19041.0\.
   The Windows App SDK is self-contained in that folder, nothing gets registered and no upstream file changes.
   Data goes to %LOCALAPPDATA%\FluentFinMpv (settings, logs, logs\mpv-backend.log, mpv-backend\ config).
 
-  -SelfTest starts Seaglass.exe --mpv-selftest: no login, the player page opens at once, the mpv backend starts with
+  -SelfTest starts Nixie.exe --mpv-selftest: no login, the player page opens at once, the mpv backend starts with
   --dev, connects with only the video window and plays av://lavfi:testsrc. It checks the video without a Jellyfin
   server: with FluentFin's player controls (the default) in FluentFin's own mpv, with mpv's (Settings > Playback) in
   mpv's embedded window. It needs the backend's dev checkout (backend\.venv\Scripts\python.exe and
@@ -33,7 +33,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $project = Join-Path $root 'ui\FluentFin\FluentFin.csproj'
-$exe = Join-Path $root "ui\FluentFin\bin\x64\$Configuration\net10.0-windows10.0.19041.0\Seaglass.exe"
+$exe = Join-Path $root "ui\FluentFin\bin\x64\$Configuration\net10.0-windows10.0.19041.0\Nixie.exe"
 
 # a fresh .NET SDK install is not on the PATH of shells that were open before it
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
@@ -43,7 +43,7 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 # a running copy of this build locks its files. Each candidate's handle is taken first and kept (the Process object
 # caches it), so its pid cannot go to another process while it is checked, closed, waited for and killed: the path is
 # read for that pid, and WaitForExit and Kill use that same handle
-$running = @(Get-Process Seaglass, FluentFin -ErrorAction SilentlyContinue | Where-Object {
+$running = @(Get-Process Nixie -ErrorAction SilentlyContinue | Where-Object {
         try { $null = $_.Handle; $_.Path -eq $exe } catch { $false }
     })
 foreach ($process in $running) {
@@ -75,4 +75,4 @@ if ($SelfTest) {
 
 $started = if ($arguments.Count -gt 0) { Start-Process -FilePath $exe -ArgumentList $arguments -PassThru } else { Start-Process -FilePath $exe -PassThru }
 Write-Host "Started FluentFin (pid $($started.Id))$(if ($SelfTest) { ' in mpv self-test mode' })"
-Write-Host "Logs: $env:LOCALAPPDATA\Seaglass\Logs (FluentFin log*.txt with the backend's stderr, mpv-backend.log from the backend)"
+Write-Host "Logs: $env:LOCALAPPDATA\Nixie\Logs (FluentFin log*.txt with the backend's stderr, mpv-backend.log from the backend)"

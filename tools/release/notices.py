@@ -1,4 +1,4 @@
-"""Writes THIRD-PARTY-NOTICES.txt for a Seaglass release (run by tools/release/build-release.ps1).
+"""Writes THIRD-PARTY-NOTICES.txt for a Nixie release (run by tools/release/build-release.ps1).
 
     <build venv>/python.exe -I notices.py --out FILE --version 1.0.0 --source-url URL
         --assets <obj>/project.assets.json --requirements requirements-backend.txt --build-requirements requirements-build.txt
@@ -241,7 +241,7 @@ def libmpv_section(status, cache_dir):
     stubs = [dll for dll in status["dlls"] if dll.get("stub")]
     if any(dll["name"].lower().startswith("libdvdcss") for dll in stubs):
         lines += ["Encrypted DVDs aren't supported (nothing a Jellyfin client plays from a server needs it): the release has",
-                  "no libdvdcss, the library that decrypts them. The libmpv folder's libdvdcss-2.dll is Seaglass's",
+                  "no libdvdcss, the library that decrypts them. The libmpv folder's libdvdcss-2.dll is Nixie's",
                   "stub, so that the DVD libraries libmpv uses load: it has libdvdcss's functions and every call fails.", ""]
     declared = status.get("declared") or {}
     licensesDir = status.get("licensesDir")
@@ -261,7 +261,7 @@ def libmpv_section(status, cache_dir):
             licence += " (its text: LICENSE in this folder)"
         lines.append(f"  Licence: {licence}")
         lines.append("  Source:  " + ", ".join([f"libmpv/{rel}" for rel in dll["sources"]]
-                                              + [f"{path} in Seaglass's source" for path in dll.get("repoSources", [])]))
+                                              + [f"{path} in Nixie's source" for path in dll.get("repoSources", [])]))
         lines.append("")
         package = dll.get("package", "")
         if package in done:
@@ -381,16 +381,16 @@ def main():
             item["ships"], item["left_out"] = False, True
 
     lines = [
-        f"Seaglass {args.version}: third-party notices",
+        f"Nixie {args.version}: third-party notices",
         RULE,
         "",
-        "Seaglass is free software under the GNU General Public License version 3 (LICENSE in this folder).",
+        "Nixie is free software under the GNU General Public License version 3 (LICENSE in this folder).",
         f"Its source code, for this release: {args.source_url}",
         "",
         "It combines two GPLv3 projects, and ships the components listed below with them. Each is listed with its",
         "version, its licence and where its source is; the licence texts follow at the end of this file.",
         "",
-        "1. The two projects Seaglass is built from",
+        "1. The two projects Nixie is built from",
         THIN,
         "FluentFin (the user interface, folder ui/ of the source)",
         "  Licence: GPL-3.0. Upstream: https://github.com/insomniachi/FluentFin (by insomniachi)",
@@ -419,7 +419,7 @@ def main():
     third_party = os.path.join(args.fluentfin_assets or "", "THIRD-PARTY.md")
     if args.fluentfin_assets and os.path.isfile(third_party):
         # backend/fluentfin/THIRD-PARTY.md, verbatim: the mpv bar's components (uosc, its fonts, the code inside it)
-        lines += ["Seaglass's mpv bar: app\\backend\\_internal\\fluentfin (backend/fluentfin in the source). Its",
+        lines += ["Nixie's mpv bar: app\\backend\\_internal\\fluentfin (backend/fluentfin in the source). Its",
                   "THIRD-PARTY.md, with paths relative to that folder; VENDORED.md there has versions and hashes:", "",
                   read_text(third_party), ""]
     lines += ["3. Python packages in the backend (app\\backend\\_internal)", THIN]
@@ -454,7 +454,7 @@ def main():
             for f in sorted(files):
                 if LICENCE_FILE.match(f) and f != "THIRD-PARTY.md":
                     rel = os.path.relpath(os.path.join(root, f), args.fluentfin_assets).replace(os.sep, "/")
-                    texts.append((f"Seaglass's mpv bar: {rel}", read_text(os.path.join(root, f))))
+                    texts.append((f"Nixie's mpv bar: {rel}", read_text(os.path.join(root, f))))
         # a licence that lives in a file's own header (THIRD-PARTY.md: "in the file")
         fzy = os.path.join(args.fluentfin_assets, "mpv", "scripts", "uosc", "lib", "fzy.lua")
         if os.path.isfile(fzy):

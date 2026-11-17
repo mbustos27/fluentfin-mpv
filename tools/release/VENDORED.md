@@ -62,7 +62,7 @@ verification (`docs\RELEASE.md`).
 into `dist\.work\wix-ext` (`WIX_EXTENSIONS`): the standard dialogs and fonts the installer's window uses. Build-time only: nothing of it ships.
 The installer's pictures are drawn by `installer\make-installer-art.ps1`; no stock art.
 
-## libmpv (the `libmpv\` folder beside the app's Seaglass.exe: `app\libmpv\` in the release)
+## libmpv (the `libmpv\` folder beside the app's Nixie.exe: `app\libmpv\` in the release)
 
 Our own build: `tools\release\libmpv` (the recipe, in this repository) builds libmpv-2.dll from pinned sources in MSYS2
 UCRT64 and collects every non-Windows DLL it loads, with a BUILD-MANIFEST.txt (each DLL, its size, sha256 and the MSYS2

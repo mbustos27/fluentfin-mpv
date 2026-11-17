@@ -51,7 +51,7 @@ function Get-AppsEntries([string[]]$Names) {
     return $found
 }
 
-# $true when nothing of Seaglass or FluentFin MPV is installed (by upgrade code, and by name in Apps): the condition before any
+# $true when nothing of Nixie, Seaglass or FluentFin MPV is installed (by upgrade code, and by name in Apps): the condition before any
 # test installs anything. $Reasons gets what was found.
 function Test-NothingInstalled([string]$UpgradeCode, [string[]]$Names, [ref]$Reasons) {
     $found = @()

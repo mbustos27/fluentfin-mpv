@@ -9,9 +9,9 @@
   - Runs, each with its own scratch data folder (--data-dir), APPDATA/LOCALAPPDATA pointed into -Out, and a PATH of
     Windows' own folders only (no Python, no mpv), through tools\ui-harness\offscreen\drive.ps1 on a private desktop
     inside a kill-on-close job (tools\backend-bench\hidden_run.py), with no backend command set (FluentFin finds its
-    bundled backend by itself). The runs start app\Seaglass.exe, except the first, which checks the launcher in front:
-      Launcher   the self-test (below) started through the top Seaglass.exe, the one people run, with a data folder
-                 whose name has a space: the launcher must end by itself and start app\Seaglass.exe with its
+    bundled backend by itself). The runs start app\Nixie.exe, except the first, which checks the launcher in front:
+      Launcher   the self-test (below) started through the top Nixie.exe, the one people run, with a data folder
+                 whose name has a space: the launcher must end by itself and start app\Nixie.exe with its
                  arguments unchanged, and the self-test then passes on that app
       SavedVlc   a data folder whose saved player is VLC (as a dev build may leave): the release has no VLC, so it
                  must play with MPV, without a crash, and keep the saved choice, Settings opened included
@@ -22,7 +22,7 @@
                  controls): the same steps. Skipped when no mpv.exe is on the Machine/User PATH.
       NoMpv      "Player controls: mpv" without mpv on PATH: sign in and play; playback must stop with "mpv could not be
                  started" and report nothing to the server (the release notes' "needs mpv on PATH"), then close.
-      SelfTest   Seaglass.exe --mpv-selftest with FluentFin's controls (no server), tools\release\selftest-offscreen.ps1.
+      SelfTest   Nixie.exe --mpv-selftest with FluentFin's controls (no server), tools\release\selftest-offscreen.ps1.
       Kill       the self-test, then FluentFin ended abruptly (a crash): its kill-on-close job must end the backend.
   - Alongside each run, tools\release\proc_audit.py records every process FluentFin starts (image, command line, every
     DLL loaded). A run fails if any of them comes from the repository, a dev checkout, a Python install, the build's
@@ -31,7 +31,7 @@
   The harness itself (fake server, hidden_run.py, proc_audit.py) runs with -HarnessPython; FluentFin never sees it.
 
 .EXAMPLE
-  .\tools\release\verify-package.ps1 -Zip dist\Seaglass-1.0.0-win-x64.zip -Out C:\scratch\verify
+  .\tools\release\verify-package.ps1 -Zip dist\Nixie-1.0.0-win-x64.zip -Out C:\scratch\verify
 #>
 [CmdletBinding()]
 param(
@@ -78,20 +78,20 @@ New-Item -ItemType Directory $pkgRoot | Out-Null
 & tar.exe -x -f $Zip -C $pkgRoot
 if ($LASTEXITCODE -ne 0) { throw "unzipping $Zip failed" }
 $pkg = @(Get-ChildItem $pkgRoot -Directory)[0].FullName
-# the top holds the launcher (the Seaglass.exe people run), the three texts and app\; the app itself is in app\
-$launcherExe = Join-Path $pkg 'Seaglass.exe'
+# the top holds the launcher (the Nixie.exe people run), the three texts and app\; the app itself is in app\
+$launcherExe = Join-Path $pkg 'Nixie.exe'
 $app = Join-Path $pkg 'app'
-$exe = Join-Path $app 'Seaglass.exe'
+$exe = Join-Path $app 'Nixie.exe'
 $top = @(Get-ChildItem $pkg -Force | ForEach-Object { $_.Name } | Sort-Object)
-Check 'the folder''s top holds only Seaglass.exe (the launcher), README.txt, LICENSE, THIRD-PARTY-NOTICES.txt and app\' (($top -join ',') -eq 'app,LICENSE,README.txt,Seaglass.exe,THIRD-PARTY-NOTICES.txt') ($top -join ', ')
-Check 'unzipped: one folder with the launcher, and app\ with Seaglass.exe, the bundled backend and libmpv' ((Test-Path $launcherExe) -and (Test-Path $exe) -and (Test-Path (Join-Path $app 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $app 'libmpv\libmpv-2.dll'))) $pkg
+Check 'the folder''s top holds only Nixie.exe (the launcher), README.txt, LICENSE, THIRD-PARTY-NOTICES.txt and app\' (($top -join ',') -eq 'app,LICENSE,README.txt,Nixie.exe,THIRD-PARTY-NOTICES.txt') ($top -join ', ')
+Check 'unzipped: one folder with the launcher, and app\ with Nixie.exe, the bundled backend and libmpv' ((Test-Path $launcherExe) -and (Test-Path $exe) -and (Test-Path (Join-Path $app 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $app 'libmpv\libmpv-2.dll'))) $pkg
 $languageDirs = @(Get-ChildItem $app -Directory | Where-Object { $_.Name -match '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' -and $_.Name -notmatch '^en(-|$)' })
 # Properties > Details on every program the package ships: company, product, description and copyright filled in, the product
-# name Seaglass (the installer's Apps entry says the same), and no empty field that would look unfinished
-foreach ($prog in @(@('Seaglass.exe (launcher)', $launcherExe), @('app\Seaglass.exe', $exe), @('backend\fluentfin-mpv-backend.exe', (Join-Path $app 'backend\fluentfin-mpv-backend.exe')))) {
+# name Nixie (the installer's Apps entry says the same), and no empty field that would look unfinished
+foreach ($prog in @(@('Nixie.exe (launcher)', $launcherExe), @('app\Nixie.exe', $exe), @('backend\fluentfin-mpv-backend.exe', (Join-Path $app 'backend\fluentfin-mpv-backend.exe')))) {
     $vi = (Get-Item $prog[1]).VersionInfo
     $empty = @(@{ n = 'CompanyName'; v = $vi.CompanyName }, @{ n = 'ProductName'; v = $vi.ProductName }, @{ n = 'FileDescription'; v = $vi.FileDescription }, @{ n = 'LegalCopyright'; v = $vi.LegalCopyright }, @{ n = 'ProductVersion'; v = $vi.ProductVersion } | Where-Object { -not $_.v } | ForEach-Object { $_.n })
-    Check "version details: $($prog[0]) has company, product, description, copyright and version" ($empty.Count -eq 0 -and $vi.CompanyName -eq 'Seaglass' -and $vi.ProductName -eq 'Seaglass') "company '$($vi.CompanyName)', product '$($vi.ProductName)', description '$($vi.FileDescription)', copyright '$($vi.LegalCopyright)'; empty: $($empty -join ', ')"
+    Check "version details: $($prog[0]) has company, product, description, copyright and version" ($empty.Count -eq 0 -and $vi.CompanyName -eq 'Nixie' -and $vi.ProductName -eq 'Nixie') "company '$($vi.CompanyName)', product '$($vi.ProductName)', description '$($vi.FileDescription)', copyright '$($vi.LegalCopyright)'; empty: $($empty -join ', ')"
 }
 Check 'English only: app\ has no language folders but English' ($languageDirs.Count -eq 0) $(if ($languageDirs) { $languageDirs.Name -join ', ' } else { (@(Get-ChildItem $app -Directory | Where-Object Name -match '^en(-|$)') | ForEach-Object Name) -join ', ' })
 Check 'the release has no VLC or Flyleaf libraries (libvlc\, FFMpeg\)' (-not (Test-Path (Join-Path $app 'libvlc')) -and -not (Test-Path (Join-Path $app 'FFMpeg'))) $app
@@ -191,12 +191,12 @@ function Complete-Audit($Audit, [string]$Name, [bool]$MpvAllowed) {
     if ($Name -eq 'Mpv') { Check "$($Name): mpv.exe from PATH was used (mpv's controls)" $mpvSeen $mpvDir }
     if ($Name -in 'Default', 'Launcher', 'SelfTest', 'Kill') {
         $own = Join-Path $app 'libmpv\libmpv-2.dll'
-        $loaded = @($procs | Where-Object { $_.image -like '*\Seaglass.exe' } | ForEach-Object { @($_.modules) } | Where-Object { ($_ -replace '^\\\\\?\\', '') -ieq $own })
+        $loaded = @($procs | Where-Object { $_.image -like '*\Nixie.exe' } | ForEach-Object { @($_.modules) } | Where-Object { ($_ -replace '^\\\\\?\\', '') -ieq $own })
         Check "$($Name): FluentFin loaded the package's libmpv-2.dll" ($loaded.Count -gt 0) $own
         # every DLL of the libmpv folder that FluentFin loaded came from that folder (Libmpv.cs loads them from nowhere else)
         $folder = Join-Path $app 'libmpv'
         $names = @(Get-ChildItem $folder -Filter '*.dll' | ForEach-Object { $_.Name.ToLowerInvariant() })
-        $elsewhere = @($procs | Where-Object { $_.image -like '*\Seaglass.exe' } | ForEach-Object { @($_.modules) } |
+        $elsewhere = @($procs | Where-Object { $_.image -like '*\Nixie.exe' } | ForEach-Object { @($_.modules) } |
             ForEach-Object { $_ -replace '^\\\\\?\\', '' } | Where-Object { $names -contains [IO.Path]::GetFileName($_).ToLowerInvariant() -and -not (Test-Under $_ $folder) })
         Check "$($Name): libmpv's DLLs were loaded from the package's libmpv folder only" ($elsewhere.Count -eq 0) $(if ($elsewhere) { $elsewhere -join ', ' } else { $folder })
     }
@@ -263,8 +263,8 @@ foreach ($run in $Runs) {
             $core = $appLog | Select-String -Pattern 'Started the in-process mpv core \(composition mode\)' | Select-Object -First 1
             $attached = (Test-Path (Join-Path $data 'Logs\mpv-backend.log')) -and (Select-String -Path (Join-Path $data 'Logs\mpv-backend.log') -Pattern 'connect: mpv started in .* \(attached window\)' -Quiet)
             Check "Default: FluentFin's controls by default (the in-process mpv, the backend attached to it)" ([bool]$core -and $attached) $(if ($core) { $core.Line.Trim() } else { 'no in-process mpv core in FluentFin''s log' })
-            $client = $appLog | Select-String -Pattern 'Connecting the mpv backend: .* as Seaglass ([0-9.]+) ' | Select-Object -First 1
-            Check 'Default: the client version sent to Jellyfin is the package''s' ([bool]$client -and $pkg -like "*-$($client.Matches[0].Groups[1].Value)-win-x64") $(if ($client) { 'Seaglass ' + $client.Matches[0].Groups[1].Value } else { 'no connect line' })
+            $client = $appLog | Select-String -Pattern 'Connecting the mpv backend: .* as Nixie ([0-9.]+) ' | Select-Object -First 1
+            Check 'Default: the client version sent to Jellyfin is the package''s' ([bool]$client -and $pkg -like "*-$($client.Matches[0].Groups[1].Value)-win-x64") $(if ($client) { 'Nixie ' + $client.Matches[0].Groups[1].Value } else { 'no connect line' })
         }
         'SavedVlc' {
             # a data folder whose saved player is VLC (from a dev build): the release has no VLC, so it plays with MPV
@@ -301,7 +301,7 @@ foreach ($run in $Runs) {
         }
         { $_ -in 'Launcher', 'SelfTest', 'Kill' } {
             # Kill: the self-test again, but FluentFin is ended abruptly (a crash): its job must end the bundled backend
-            # Launcher: the self-test started through the top Seaglass.exe, with a data folder whose name has a space
+            # Launcher: the self-test started through the top Nixie.exe, with a data folder whose name has a space
             $runOut = Join-Path $Out $run
             $data = Join-Path $Out $(if ($run -eq 'Launcher') { 'data-Launcher x' } else { "data-$run" })
             foreach ($d in $runOut, $data) { if (Test-Path $d) { Remove-Item -Recurse -Force $d } }
@@ -311,7 +311,7 @@ foreach ($run in $Runs) {
             $envA = Join-Path $runOut 'env\appdata'; $envL = Join-Path $runOut 'env\localappdata'
             New-Item -ItemType Directory -Force $envA, $envL | Out-Null
             $audit = Start-Audit $run
-            Write-Host "`n== $run (Seaglass.exe --mpv-selftest, FluentFin's controls, no mpv on PATH$(if ($run -eq 'Kill') { ', then FluentFin killed' })$(if ($run -eq 'Launcher') { ', started through the launcher' }); $runOut)"
+            Write-Host "`n== $run (Nixie.exe --mpv-selftest, FluentFin's controls, no mpv on PATH$(if ($run -eq 'Kill') { ', then FluentFin killed' })$(if ($run -eq 'Launcher') { ', started through the launcher' }); $runOut)"
             $selftestArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'selftest-offscreen.ps1'), '-Exe', $exe, '-DataDir', $data, '-Out', $runOut)
             if ($run -eq 'Kill') { $selftestArgs += '-Kill' }
             if ($run -eq 'Launcher') { $selftestArgs += @('-Launcher', $launcherExe) }

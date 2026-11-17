@@ -5,9 +5,9 @@
 .DESCRIPTION
   Run it on a private desktop so nothing appears on yours (docs\RELEASE.md):
     python tools\backend-bench\hidden_run.py --timeout 240 -- powershell -NoProfile -ExecutionPolicy Bypass -File installer-shots.ps1 -Msi <msi> -Out <folder>
-  It only ever runs an ISOLATED copy of the installer (upgrade-test.ps1's self-check build: product "SeaglassUpgradeCheck", its
-  own upgrade code): it refuses an MSI whose upgrade code is Seaglass's, so an installed Seaglass can not be touched. Pages
-  captured: welcome, progress (if it stays up long enough to catch), finish with "Launch Seaglass" ticked and unticked, the
+  It only ever runs an ISOLATED copy of the installer (upgrade-test.ps1's self-check build: product "NixieUpgradeCheck", its
+  own upgrade code): it refuses an MSI whose upgrade code is Nixie's (Seaglass's before), so an installed Nixie can not be touched. Pages
+  captured: welcome, progress (if it stays up long enough to catch), finish with "Launch Nixie" ticked and unticked, the
   cancel question and "setup was interrupted". Clicks are BM_CLICK messages posted to the dialog's own buttons (no keyboard or
   mouse input). The test product is uninstalled at the end (by the product code of the MSI it installed).
   Usage: installer-shots.ps1 -Msi <isolated msi> -Out <folder>
@@ -69,7 +69,7 @@ public static class ShotWin {
 $Msi = [IO.Path]::GetFullPath($Msi); $Out = [IO.Path]::GetFullPath($Out)
 New-Item -ItemType Directory -Force $Out | Out-Null
 $upgradeCode = Get-MsiProperty $Msi 'UpgradeCode'
-if ($upgradeCode -eq '{612ED1CB-52F7-49B1-9129-A1B04ADB015A}') { throw 'this MSI is the real Seaglass (its upgrade code): installer-shots.ps1 only runs an isolated test build (upgrade-test.ps1 -SelfCheck makes one)' }
+if ($upgradeCode -eq '{612ED1CB-52F7-49B1-9129-A1B04ADB015A}') { throw 'this MSI is the real Nixie (its upgrade code): installer-shots.ps1 only runs an isolated test build (upgrade-test.ps1 -SelfCheck makes one)' }
 $name = Get-MsiProperty $Msi 'ProductName'
 $code = Get-MsiProperty $Msi 'ProductCode'
 $reasons = $null
@@ -130,8 +130,8 @@ try {
     }
     if (-not $finish) { throw 'the finish page never came' }
     Start-Sleep -Milliseconds 500; $finish = Get-Page $p.Id
-    $box = $finish.Buttons | Where-Object { $_.Text -eq 'Launch Seaglass' }
-    Write-Host ("Launch Seaglass box: {0}" -f $(if ($box -and [ShotWin]::Checked($box.H) -eq 1) { 'ticked' } else { 'NOT ticked' }))
+    $box = $finish.Buttons | Where-Object { $_.Text -eq 'Launch Nixie' }
+    Write-Host ("Launch Nixie box: {0}" -f $(if ($box -and [ShotWin]::Checked($box.H) -eq 1) { 'ticked' } else { 'NOT ticked' }))
     Shoot $finish '03-finish-launch-ticked.png'
     # untick (so Finish starts nothing), then finish
     if ($box) { [ShotWin]::Click($box.H); Start-Sleep -Milliseconds 500; Shoot (Get-Page $p.Id) '04-finish-unticked.png' }

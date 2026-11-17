@@ -18,7 +18,7 @@ function Resolve-HarnessDataDir([string]$DataDir, [string]$Repo, [string]$LocalA
     $root = [IO.Path]::GetPathRoot($full)
     $trimmed = $full.TrimEnd('\', '/')
     if (-not $trimmed -or $trimmed -eq $root.TrimEnd('\', '/')) { throw "-DataDir $DataDir is a drive root; use a scratch folder" }
-    foreach ($forbidden in (Join-Path $LocalAppData 'Seaglass'), (Join-Path $LocalAppData 'FluentFinMpv'), (Join-Path $LocalAppData 'FluentFin')) {
+    foreach ($forbidden in (Join-Path $LocalAppData 'Nixie'), (Join-Path $LocalAppData 'Seaglass'), (Join-Path $LocalAppData 'FluentFinMpv'), (Join-Path $LocalAppData 'FluentFin')) {
         if ((Test-Under $trimmed $forbidden) -or (Test-Under $forbidden $trimmed)) { throw "-DataDir $DataDir would touch $forbidden (a real FluentFin data folder); use a scratch folder" }
     }
     if (Test-Under $trimmed $Repo) { throw "-DataDir must be outside the repository ($Repo)" }
@@ -85,7 +85,7 @@ function Initialize-HarnessMpvConf([string]$DataDir) {
     $conf
 }
 
-# Seaglass.exe for the run: -Exe, else the one -Build made in the build folder. Never builds by itself: a missing
+# Nixie.exe for the run: -Exe, else the one -Build made in the build folder. Never builds by itself: a missing
 # exe is an error that says to pass -Build or -Exe.
 function Resolve-HarnessExe([string]$Exe, [string]$BuildDir, [bool]$Build) {
     if ($Exe) {
@@ -95,14 +95,14 @@ function Resolve-HarnessExe([string]$Exe, [string]$BuildDir, [bool]$Build) {
     }
     if ($Build) { return $null }   # the caller builds, then calls Find-HarnessBuiltExe
     $built = Find-HarnessBuiltExe $BuildDir
-    if (-not $built) { throw "no Seaglass.exe in ${BuildDir}: pass -Build (builds it there) or -Exe <Seaglass.exe>" }
+    if (-not $built) { throw "no Nixie.exe in ${BuildDir}: pass -Build (builds it there) or -Exe <Nixie.exe>" }
     $built
 }
 
 function Find-HarnessBuiltExe([string]$BuildDir) {
     $bin = Join-Path $BuildDir 'bin\FluentFin'
     if (-not (Test-Path $bin)) { return $null }
-    Get-ChildItem $bin -Recurse -Filter 'Seaglass.exe' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
+    Get-ChildItem $bin -Recurse -Filter 'Nixie.exe' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
 }
 
 # The build of FluentFin for a run: its own artifacts folder (bin and obj outside the checkout), no MSBuild node left

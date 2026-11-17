@@ -1,14 +1,14 @@
 <#
 .SYNOPSIS
-  Runs the real Seaglass off-screen against the fake Jellyfin server: signs in, goes through the pages (or the
+  Runs the real Nixie off-screen against the fake Jellyfin server: signs in, goes through the pages (or the
   ones you name), plays an episode, takes window-only screenshots and UI Automation dumps, measures, and scans each
   page for accessibility gaps. Nothing appears on the user's desktop, no key or click reaches it, no sound is made.
 
 .DESCRIPTION
-  - FluentFin runs with its own data folder (Seaglass.exe --data-dir <-DataDir>): settings, logs, the mpv backend's
-    config. -DataDir may not be a drive root, be or hold %LOCALAPPDATA%\Seaglass, %LOCALAPPDATA%\FluentFinMpv or %LOCALAPPDATA%\FluentFin, nor be
+  - FluentFin runs with its own data folder (Nixie.exe --data-dir <-DataDir>): settings, logs, the mpv backend's
+    config. -DataDir may not be a drive root, be or hold %LOCALAPPDATA%\Nixie, %LOCALAPPDATA%\Seaglass, %LOCALAPPDATA%\FluentFinMpv or %LOCALAPPDATA%\FluentFin, nor be
     in the repo. A reused -DataDir keeps only saved servers on this machine (loopback); others are removed.
-  - Seaglass.exe: -Exe, else the build in -BuildDir (default -Cache\build). Nothing is built unless -Build is given;
+  - Nixie.exe: -Exe, else the build in -BuildDir (default -Cache\build). Nothing is built unless -Build is given;
     -Build builds ui\FluentFin into -BuildDir (its own bin and obj, not the checkout's) off-screen in a kill-on-close job,
     without MSBuild node reuse or the shared compiler, so nothing of the build keeps running.
   - Everything runs on a private desktop (CreateDesktopW) inside a kill-on-close job, through
@@ -103,7 +103,7 @@ if (-not $Exe) {
     & $Python -B -I $hidden --log $buildLog --timeout 1800 --desktop "ffh-build-$PID" -- $dotnet @(Get-HarnessBuildArgs $repo $BuildDir) | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "the build failed (see $buildLog)" }
     $Exe = Find-HarnessBuiltExe $BuildDir
-    if (-not $Exe) { throw "the build made no Seaglass.exe under $BuildDir\bin\FluentFin (see $buildLog)" }
+    if (-not $Exe) { throw "the build made no Nixie.exe under $BuildDir\bin\FluentFin (see $buildLog)" }
 }
 
 # mpv: the official CI build from winget, on the Machine+User PATH (as tools\ui-harness\e2e\run.ps1 finds it)

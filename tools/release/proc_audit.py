@@ -1,8 +1,8 @@
-"""Watches what a Seaglass.exe starts: every process in its tree, the image each runs, its command line and every
+"""Watches what a Nixie.exe starts: every process in its tree, the image each runs, its command line and every
 module (DLL) it loads, sampled until a stop file appears. Read-only: it opens processes to query them and never
 ends, suspends or writes to anything.
 
-    python -I proc_audit.py --root-exe <...\\Seaglass.exe> --out audit.json --stop-file <path> [--interval 0.25]
+    python -I proc_audit.py --root-exe <...\\Nixie.exe> --out audit.json --stop-file <path> [--interval 0.25]
 
 A process is in the tree when its image is --root-exe and it started after this script did, or its parent is in the
 tree and it started after that parent (a reused parent pid is never followed). Stdlib + ctypes only.

@@ -49,7 +49,7 @@ def make_folder(root, css=None, css_exports=CSS):
         write_dll(os.path.join(root, "libdvdcss-2.dll"), "libdvdcss-2.dll", css_exports)
         owners["libdvdcss-2.dll"] = css
     with open(os.path.join(root, "BUILD-MANIFEST.txt"), "w", encoding="utf-8", newline="\n") as fh:
-        fh.write("# Seaglass libmpv: a test fixture\n")
+        fh.write("# Nixie libmpv: a test fixture\n")
         for dll, owner in owners.items():
             path = os.path.join(root, dll)
             fh.write(f"{dll} {os.path.getsize(path)} {sha256(path)} {owner}\n")
@@ -92,7 +92,7 @@ def make_sources(root, stub_line=True, real_package=True):
         info.size = len(data)
         tar.addfile(info, io.BytesIO(data))
     if stub_line:
-        rows.append("fluentfin-mpv-libdvdcss-stub | 1.0.0 | GPL-3.0-or-later: Seaglass's own stub (GPLv3); replaces libdvdcss"
+        rows.append("fluentfin-mpv-libdvdcss-stub | 1.0.0 | GPL-3.0-or-later: Nixie's own stub (GPLv3); replaces libdvdcss"
                     f" | libdvdcss-2.dll | stub/libdvdcss-stub-1.0.0.tar.gz | {sha256(stub)}")
     with open(os.path.join(root, "SOURCES.txt"), "w", encoding="utf-8", newline="\n") as fh:
         fh.write("# Licence files: licenses/<package>/ (COPYING and the like)\n"
@@ -245,7 +245,7 @@ class Sources(Fixture):
         self.assertEqual(problems, [])
         stub = next(d for d in status["dlls"] if d["name"] == "libdvdcss-2.dll")
         self.assertEqual((stub["sources"], stub["repoSources"]), ([], ["stub/libdvdcss-stub-1.0.0.tar.gz"]))
-        self.assertIn("stub/libdvdcss-stub-1.0.0.tar.gz  in Seaglass's source", text)
+        self.assertIn("stub/libdvdcss-stub-1.0.0.tar.gz  in Nixie's source", text)
 
     def test_a_stub_whose_source_is_nowhere_fails(self):
         folder = make_folder(self.path("libmpv"), STUB_OWNER)
@@ -253,7 +253,7 @@ class Sources(Fixture):
         shutil.rmtree(os.path.join(sources_dir, "stub"))
         _status, problems, _text = self.run_sources(folder, sources_dir)
         self.assertEqual(len(problems), 1, problems)
-        self.assertIn("neither in the libmpv sources nor in Seaglass's repository", problems[0])
+        self.assertIn("neither in the libmpv sources nor in Nixie's repository", problems[0])
 
     def test_shipping_the_real_library_source_fails_when_it_is_left_out(self):
         # the real libdvdcss in the folder (as when the check is bypassed): its package would be copied
