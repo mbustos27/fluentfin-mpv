@@ -1,0 +1,14 @@
+<!--
+    Seaglass's installer texts: ours for the welcome page, and WiX's own strings (all marked overridable) reworded
+    for the progress and finish pages. Short and friendly; no licence step (the GPL needs no acceptance).
+-->
+<WixLocalization Culture="en-US" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+    <String Id="SeaglassWelcomeTitle" Value="Seaglass Setup" />
+    <String Id="SeaglassWelcomeHeading" Value="Welcome to Seaglass" />
+    <String Id="SeaglassWelcomeText" Value="Seaglass plays your Jellyfin library with the mpv player.&#xD;&#xA;&#xD;&#xA;It installs for you only, with no administrator prompt, in your own Programs folder. Your settings and data stay in their own folder, and uninstalling keeps them.&#xD;&#xA;&#xD;&#xA;Seaglass is free software under the GNU General Public License. There is nothing to accept; the licence and the source are at github.com/mbustos27/fluentfin-mpv." />
+    <String Id="SeaglassInstallButton" Value="&amp;Install" />
+    <String Id="ExitDialogTitle" Value="{\WixUI_Font_Bigger}Seaglass is ready" />
+    <String Id="ExitDialogDescription" Value="Click Finish to close this window." />
+    <String Id="ProgressDlgTitleInstalling" Value="{\WixUI_Font_Title}Installing Seaglass" />
+    <String Id="ProgressDlgTextInstalling" Value="This takes a moment." />
+</WixLocalization>

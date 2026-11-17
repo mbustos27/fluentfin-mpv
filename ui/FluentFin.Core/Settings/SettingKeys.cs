@@ -31,6 +31,12 @@ public static class SettingKeys
 	/// <summary>fluentfin-mpv: the subtitle text size in the mpv player's controls, in percent (50 to 200), kept on this PC.</summary>
 	public static Key<int> SubtitleSize { get; } = new Key<int>("SubtitleSize", 100);
 
+	/// <summary>Seaglass: Settings > Check for updates. Off by default: nothing is asked of GitHub until the user turns it on.</summary>
+	public static Key<bool> CheckForUpdates { get; } = new Key<bool>("CheckForUpdates", false);
+
+	/// <summary>Seaglass: what the update check remembers (when it last asked, the release it found, the one dismissed), as JSON: <see cref="Updates.UpdateState"/>.</summary>
+	public static Key<string> UpdateState { get; } = new Key<string>("UpdateState", "");
+
 	/// <summary>Seaglass: how much glass the app shows (Settings > Appearance), kept on this PC. Automatic by default.</summary>
 	public static Key<GlassChoice> Glass { get; } = new Key<GlassChoice>("Glass", GlassChoice.Automatic);
 

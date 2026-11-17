@@ -1,6 +1,6 @@
 # What a release ships that is not built from this repository
 
-Recorded for 1.0.0 (2026-11-15). `build-release.ps1` checks every hash below before it uses the file; a mismatch stops
+Recorded for 1.0.0 (2026-11-15); the bootloader and the installer extension were added after 1.1.1. `build-release.ps1` checks every hash below before it uses the file; a mismatch stops
 the build. Nothing here is committed: the build downloads it into `dist\.work\` (git-ignored).
 
 ## Python runtime (inside `backend\_internal`)
@@ -13,6 +13,18 @@ the build. Nothing here is committed: the build downloads it into `dist\.work\` 
 | SHA-256 | `cc28026a650970cc1570bb127312f1f9634eb67abfe157ae6ca1acbbc627d091`, the value that index publishes |
 | Signature | `python.exe` and `python314.dll` Authenticode-signed by the Python Software Foundation (checked by the build) |
 | Why this one | the latest 3.14 (the dev venv is 3.14.0; 3.14.10 carries the security fixes since). PyInstaller freezes from a venv of it |
+
+## PyInstaller's bootloader (built from source)
+
+| | |
+|---|---|
+| What | `run.exe` and `runw.exe`, the bootloader at the front of `fluentfin-mpv-backend.exe` (a prebuilt PyInstaller bootloader is a common antivirus false positive) |
+| Source | PyInstaller 6.22.3's own sdist from PyPI: https://files.pythonhosted.org/packages/source/p/pyinstaller/pyinstaller-6.22.3.tar.gz |
+| SHA-256 | `05eb2f5615503e72939a7224d68b4aff572c6b0438ee4a17d0a4b481f399362d` (PyPI's published value, checked by the build) |
+| Compiler | MSYS2 `mingw-w64-ucrt-x86_64-gcc` 16.2.0-7 (UCRT64), `C:\msys64\ucrt64\bin\gcc.exe`, checked for 16.2.0 by the build; `python waf distclean all --gcc --target-arch=64bit` in the sdist's `bootloader\` |
+| Result | imports only Windows DLLs (KERNEL32, USER32, ADVAPI32, the UCRT api-ms-win-crt-*); 108 KB `run.exe` against the wheel's 311 KB. The build copies both over the build venv's, and fails unless the frozen exe carries gcc's marker |
+| UPX | never used: `upx=False` in the spec, and the build fails on a UPX-packed file |
+| Licence | GPL-2.0-or-later with the bootloader exception (as before); its source is this sdist, pinned above |
 
 ## Python packages (PyPI only)
 
@@ -43,6 +55,12 @@ setuptools 84.2.1.
 To move a pin: take the version's `urls[].digests.sha256` from `https://pypi.org/pypi/<name>/<version>/json` for the
 `cp314-win_amd64` or `py3-none-any` wheel, update the requirements file and the table above, rebuild, run the
 verification (`docs\RELEASE.md`).
+
+## The installer's build-time tools
+
+`WixToolset.UI.wixext` 5.0.2 (the version of the WiX 5.0.2 in `dotnet-tools.json`), from nuget.org through `wix extension add -g`
+into `dist\.work\wix-ext` (`WIX_EXTENSIONS`): the standard dialogs and fonts the installer's window uses. Build-time only: nothing of it ships.
+The installer's pictures are drawn by `installer\make-installer-art.ps1`; no stock art.
 
 ## libmpv (the `libmpv\` folder beside the app's Seaglass.exe: `app\libmpv\` in the release)
 

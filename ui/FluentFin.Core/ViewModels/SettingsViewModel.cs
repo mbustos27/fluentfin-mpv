@@ -229,6 +229,20 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	/// </summary>
 	public TimeSpan SaveDelay { get; set; } = TimeSpan.FromMilliseconds(500);
 
+	/// <summary>Seaglass: Settings > Check for updates, off by default: see <see cref="SettingKeys.CheckForUpdates"/>.</summary>
+	public bool CheckForUpdates
+	{
+		get => settings.CheckForUpdates;
+		set
+		{
+			if (settings.CheckForUpdates != value)
+			{
+				settings.CheckForUpdates = value;
+				OnPropertyChanged();
+			}
+		}
+	}
+
 	/// <summary>Kept on this PC: see <see cref="SettingKeys.ShowSkipPrompt"/>.</summary>
 	public bool ShowSkipPrompt
 	{

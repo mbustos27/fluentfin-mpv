@@ -264,8 +264,11 @@ public partial class App : Application
 			}
 
 			// Configuration
-			// fluentfin-mpv: no WindowsUpdateService. It downloads upstream FluentFin's latest installer from GitHub on start
-			// and offers to run it, which would replace this build (and its mpv player) with upstream's.
+			// fluentfin-mpv: no WindowsUpdateService (deleted). It downloaded upstream FluentFin's latest installer from GitHub on
+			// start and offered to run it, which would replace this build (and its mpv player) with upstream's. Seaglass's own,
+			// opt-in notice (Settings > Check for updates) only ever names this repository's releases: Core/Updates.
+			services.AddSingleton<UpdateNoticeService>();
+			services.AddHostedService(sp => sp.GetRequiredService<UpdateNoticeService>());
 			services.AddHostedService<WebSocketMessageHandler>();
 		}).
 		Build();

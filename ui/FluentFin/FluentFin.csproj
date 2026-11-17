@@ -21,6 +21,12 @@
 		<Version Condition=" '$(BuildVersion)' == '' ">1.1.1</Version>
 		<Version Condition=" '$(BuildVersion)' != '' ">$(BuildVersion)</Version>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+		<!-- Seaglass: what Properties > Details shows for Seaglass.exe (the launcher and the backend say the same: tools/release) -->
+		<Company>Seaglass</Company>
+		<Product>Seaglass</Product>
+		<AssemblyTitle>Seaglass</AssemblyTitle>
+		<Description>Seaglass, a Jellyfin client for Windows</Description>
+		<Copyright>Copyright (c) Seaglass contributors, FluentFin authors and jellyfin-mpv-shim authors. GPL-3.0-or-later</Copyright>
 		<AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
 		<GenerateAppInstallerFile>True</GenerateAppInstallerFile>
 		<AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>

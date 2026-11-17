@@ -86,6 +86,13 @@ $top = @(Get-ChildItem $pkg -Force | ForEach-Object { $_.Name } | Sort-Object)
 Check 'the folder''s top holds only Seaglass.exe (the launcher), README.txt, LICENSE, THIRD-PARTY-NOTICES.txt and app\' (($top -join ',') -eq 'app,LICENSE,README.txt,Seaglass.exe,THIRD-PARTY-NOTICES.txt') ($top -join ', ')
 Check 'unzipped: one folder with the launcher, and app\ with Seaglass.exe, the bundled backend and libmpv' ((Test-Path $launcherExe) -and (Test-Path $exe) -and (Test-Path (Join-Path $app 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $app 'libmpv\libmpv-2.dll'))) $pkg
 $languageDirs = @(Get-ChildItem $app -Directory | Where-Object { $_.Name -match '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' -and $_.Name -notmatch '^en(-|$)' })
+# Properties > Details on every program the package ships: company, product, description and copyright filled in, the product
+# name Seaglass (the installer's Apps entry says the same), and no empty field that would look unfinished
+foreach ($prog in @(@('Seaglass.exe (launcher)', $launcherExe), @('app\Seaglass.exe', $exe), @('backend\fluentfin-mpv-backend.exe', (Join-Path $app 'backend\fluentfin-mpv-backend.exe')))) {
+    $vi = (Get-Item $prog[1]).VersionInfo
+    $empty = @(@{ n = 'CompanyName'; v = $vi.CompanyName }, @{ n = 'ProductName'; v = $vi.ProductName }, @{ n = 'FileDescription'; v = $vi.FileDescription }, @{ n = 'LegalCopyright'; v = $vi.LegalCopyright }, @{ n = 'ProductVersion'; v = $vi.ProductVersion } | Where-Object { -not $_.v } | ForEach-Object { $_.n })
+    Check "version details: $($prog[0]) has company, product, description, copyright and version" ($empty.Count -eq 0 -and $vi.CompanyName -eq 'Seaglass' -and $vi.ProductName -eq 'Seaglass') "company '$($vi.CompanyName)', product '$($vi.ProductName)', description '$($vi.FileDescription)', copyright '$($vi.LegalCopyright)'; empty: $($empty -join ', ')"
+}
 Check 'English only: app\ has no language folders but English' ($languageDirs.Count -eq 0) $(if ($languageDirs) { $languageDirs.Name -join ', ' } else { (@(Get-ChildItem $app -Directory | Where-Object Name -match '^en(-|$)') | ForEach-Object Name) -join ', ' })
 Check 'the release has no VLC or Flyleaf libraries (libvlc\, FFMpeg\)' (-not (Test-Path (Join-Path $app 'libvlc')) -and -not (Test-Path (Join-Path $app 'FFMpeg'))) $app
 # slim package (docs/research/slim-package.md): the .NET desktop

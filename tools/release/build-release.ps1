@@ -58,6 +58,12 @@ Set-StrictMode -Version 3
 $PythonVersion = '3.14.10'
 $PythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-amd64.zip"
 $PythonSha256 = 'cc28026a650970cc1570bb127312f1f9634eb67abfe157ae6ca1acbbc627d091'   # python.org index-windows.json
+$WixUiExtensionVersion = '5.0.2'   # WixToolset.UI.wixext: the version of dotnet-tools.json's WiX (installer\Seaglass.wxs)
+# PyInstaller's bootloader is built from its sdist with MSYS2's MinGW-w64 gcc (antivirus products flag the prebuilt one often)
+$PyInstallerVersion = '6.22.3'   # the version of requirements-build.txt
+$PyInstallerSdistSha256 = '05eb2f5615503e72939a7224d68b4aff572c6b0438ee4a17d0a4b481f399362d'   # pypi.org/pypi/pyinstaller/6.22.3/json, the sdist
+$Msys2Root = 'C:\msys64'
+$GccPinnedVersion = '16.2.0'   # mingw-w64-ucrt-x86_64-gcc 16.2.0-7 (UCRT64)
 
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $name = "Seaglass-$Version-win-x64"
@@ -160,6 +166,45 @@ Invoke-Checked 'pip install' {
 }
 Invoke-Checked 'pip check' { & $venvPython -I -m pip check --disable-pip-version-check }
 
+# PyInstaller's bootloader (the small program at the front of fluentfin-mpv-backend.exe) built from source, not the prebuilt
+# one in the wheel: prebuilt PyInstaller bootloaders are what antivirus products flag most often. The source is PyInstaller's
+# own sdist (the same version as the wheel, SHA-256 pinned above), compiled with MSYS2's MinGW-w64 gcc (UCRT64; the version is
+# pinned above and tools\release\VENDORED.md) and waf; the venv's run.exe and runw.exe are replaced with the result, so
+# PyInstaller builds the backend on them. UPX is never used (the spec says upx=False, and nothing here installs UPX).
+Step 'PyInstaller bootloader (built from source with MinGW-w64 gcc)'
+$gccBin = Join-Path $Msys2Root 'ucrt64\bin'
+$gcc = Join-Path $gccBin 'gcc.exe'
+if (-not (Test-Path $gcc)) { throw "no ${gcc}: install MSYS2 (https://www.msys2.org) and 'pacman -S mingw-w64-ucrt-x86_64-gcc' (docs\RELEASE.md)" }
+$gccBanner = (& $gcc --version | Select-Object -First 1)
+if ($gccBanner -notmatch [regex]::Escape($GccPinnedVersion)) { throw "gcc is '$gccBanner', not the pinned $GccPinnedVersion (build-release.ps1, tools\release\VENDORED.md)" }
+$pyiSourceWork = Join-Path $work 'pyinstaller-source'
+if (Test-Path $pyiSourceWork) { Remove-Item -Recurse -Force $pyiSourceWork }
+New-Item -ItemType Directory $pyiSourceWork | Out-Null
+$pyiSdist = Join-Path $pyiSourceWork "pyinstaller-$PyInstallerVersion.tar.gz"
+Invoke-WebRequest "https://files.pythonhosted.org/packages/source/p/pyinstaller/pyinstaller-$PyInstallerVersion.tar.gz" -OutFile $pyiSdist -UseBasicParsing
+Assert-Sha256 $pyiSdist $PyInstallerSdistSha256
+Invoke-Checked 'unpack the PyInstaller sdist' { & tar.exe -xzf $pyiSdist -C $pyiSourceWork }
+$bootloaderSrc = Join-Path $pyiSourceWork "pyinstaller-$PyInstallerVersion\bootloader"
+$bootloaderOut = Join-Path $pyiSourceWork "pyinstaller-$PyInstallerVersion\PyInstaller\bootloader\Windows-64bit-intel"
+$savedPathForGcc = $env:Path
+try {
+    $env:Path = "$gccBin;$env:SystemRoot\System32;$env:SystemRoot"   # gcc and Windows, nothing else
+    Push-Location $bootloaderSrc
+    try { Invoke-Checked 'bootloader (waf)' { & $python waf distclean all --gcc --target-arch=64bit | Out-Null } }
+    finally { Pop-Location }
+}
+finally { $env:Path = $savedPathForGcc }
+$venvBootloader = Join-Path $venv 'Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel'
+foreach ($loader in 'run.exe', 'runw.exe') {
+    $built = Join-Path $bootloaderOut $loader
+    if (-not (Test-Path $built)) { throw "the bootloader build made no $loader" }
+    $text = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($built))
+    if ($text -notmatch "Built by MSYS2 project\) $([regex]::Escape($GccPinnedVersion))") { throw "$loader does not carry gcc $GccPinnedVersion's marker: it was not built here" }
+    Copy-Item $built (Join-Path $venvBootloader $loader) -Force
+}
+$loaderHashes = (@('run.exe', 'runw.exe') | ForEach-Object { "$_ $((Get-FileHash -Algorithm SHA256 (Join-Path $venvBootloader $_)).Hash.ToLowerInvariant())" }) -join '; '
+Write-Host "bootloader: built from pyinstaller-$PyInstallerVersion.tar.gz with $gccBanner; $loaderHashes"
+
 # the libmpv folder: each DLL the one its BUILD-MANIFEST.txt lists, and what they import there or Windows' (or a driver's),
 # every function imported from the folder exported there. -LibmpvExclude: a copy without those libraries (dist\.work\
 # libmpv-folder), keeping a stub of one (BUILD-MANIFEST.txt's owner says "stub": libdvdcss-2.dll, which the DVD libraries
@@ -258,6 +303,13 @@ finally {
 }
 $backendOut = Join-Path $pyi 'dist\backend'
 if (-not (Test-Path (Join-Path $backendOut 'fluentfin-mpv-backend.exe'))) { throw "PyInstaller made no fluentfin-mpv-backend.exe in $backendOut" }
+# the backend runs on the bootloader built above (its gcc marker is in the exe), and nothing in it is UPX-packed (the spec's
+# upx=False; a packed file has UPX0/UPX1 sections and a "UPX!" header, a common antivirus trigger)
+$backendBytes = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes((Join-Path $backendOut 'fluentfin-mpv-backend.exe')))
+if ($backendBytes -notmatch "Built by MSYS2 project\) $([regex]::Escape($GccPinnedVersion))") { throw 'fluentfin-mpv-backend.exe does not carry the bootloader built from source here' }
+if ($backendBytes.Contains('UPX!') -or $backendBytes.Contains('UPX0')) { throw 'fluentfin-mpv-backend.exe is UPX-packed' }
+$upx = @(Get-ChildItem $backendOut -Recurse -File | Where-Object { [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($_.FullName), 0, [Math]::Min(1024, $_.Length)) -match 'UPX[01!]' })
+if ($upx) { throw "UPX-packed files in the frozen backend: $($upx.Name -join ', ')" }
 $strayMpv = @(Get-ChildItem $backendOut -Recurse -File -Include '*mpv*.dll', 'mpv.exe', 'vulkan-1.dll')
 if ($strayMpv) { throw "the frozen backend picked up mpv files it must not ship: $($strayMpv.FullName -join ', ')" }
 # every package folder that ships is one THIRD-PARTY-NOTICES.txt lists (a new one means a new dependency to list)
@@ -339,6 +391,9 @@ $launcherVersion = Join-Path $launcherWork 'Version.cs'
 [IO.File]::WriteAllText($launcherVersion, (@(
     '[assembly: System.Reflection.AssemblyTitle("Seaglass")]',
     '[assembly: System.Reflection.AssemblyProduct("Seaglass")]',
+    '[assembly: System.Reflection.AssemblyCompany("Seaglass")]',
+    '[assembly: System.Reflection.AssemblyDescription("Seaglass, a Jellyfin client for Windows (starts the app)")]',
+    '[assembly: System.Reflection.AssemblyCopyright("Copyright (c) Seaglass contributors. GPL-3.0-or-later")]',
     "[assembly: System.Reflection.AssemblyVersion(""$Version.0"")]",
     "[assembly: System.Reflection.AssemblyFileVersion(""$Version.0"")]",
     "[assembly: System.Reflection.AssemblyInformationalVersion(""$Version"")]") -join "`r`n"), [Text.UTF8Encoding]::new($false))
@@ -447,11 +502,23 @@ Push-Location $repo
 try {
     Invoke-Checked 'dotnet tool restore' { & $dotnet tool restore }
     $env:DOTNET_ROLL_FORWARD = 'Major'   # WiX 5 targets an older .NET than the SDK this machine has
-    Invoke-Checked 'wix build' { & $dotnet tool run wix build (Join-Path $PSScriptRoot 'installer\Seaglass.wxs') -arch x64 `
-            -d "Version=$Version" -d "PackageDir=$package" -d "IconFile=$(Join-Path $repo 'ui\FluentFin\Assets\Seaglass.ico')" `
+    # the installer's window: WiX's UI extension (a build-time NuGet package, pinned here; kept in dist\.work\wix-ext, not
+    # in the user's profile; nothing of it is in the installed app) and the two pictures drawn by make-installer-art.ps1
+    $env:WIX_EXTENSIONS = Join-Path $work 'wix-ext'
+    $uiExt = "WixToolset.UI.wixext/$WixUiExtensionVersion"
+    if (-not (& $dotnet tool run wix extension list -g | Select-String -SimpleMatch "WixToolset.UI.wixext $WixUiExtensionVersion" -Quiet)) {
+        Invoke-Checked 'wix extension add' { & $dotnet tool run wix extension add -g $uiExt }
+    }
+    $art = Join-Path $work 'installer-art'
+    if (Test-Path $art) { Remove-Item -Recurse -Force $art }
+    Invoke-Checked 'installer pictures' { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'installer\make-installer-art.ps1') -Out $art }
+    $wixDir = Join-Path $PSScriptRoot 'installer'
+    Invoke-Checked 'wix build' { & $dotnet tool run wix build (Join-Path $wixDir 'Seaglass.wxs') (Join-Path $wixDir 'SeaglassUI.wxs') -arch x64 `
+            -ext $uiExt -loc (Join-Path $wixDir 'Seaglass.en-us.wxl') `
+            -d "Version=$Version" -d "PackageDir=$package" -d "IconFile=$(Join-Path $repo 'ui\FluentFin\Assets\Seaglass.ico')" -d "ArtDir=$art" `
             -intermediatefolder (Join-Path $work 'wix') -pdbtype none -o $msi }
 }
-finally { Remove-Item Env:DOTNET_ROLL_FORWARD -ErrorAction SilentlyContinue; Pop-Location }
+finally { Remove-Item Env:DOTNET_ROLL_FORWARD, Env:WIX_EXTENSIONS -ErrorAction SilentlyContinue; Pop-Location }
 $msiCheck = Join-Path $work 'msi-check'
 if (Test-Path $msiCheck) { Remove-Item -Recurse -Force $msiCheck }
 $admin = Start-Process msiexec.exe -ArgumentList @('/a', "`"$msi`"", '/qn', "TARGETDIR=`"$msiCheck`"") -Wait -PassThru
