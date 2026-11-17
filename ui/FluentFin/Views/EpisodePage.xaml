@@ -80,7 +80,8 @@
                             <ctk:Case IsDefault="True">
                                 <ComboBox
                                     MaxWidth="720"
-                                    HorizontalAlignment="Stretch"
+                                    HorizontalAlignment="Left"
+                                    MinWidth="360"
                                     AutomationProperties.Name="Audio"
                                     DisplayMemberPath="DisplayTitle"
                                     ItemsSource="{x:Bind ViewModel.AudioStreams, Mode=OneWay}"
@@ -99,7 +100,8 @@
                             Grid.Row="2"
                             Grid.Column="1"
                             MaxWidth="720"
-                            HorizontalAlignment="Stretch"
+                            HorizontalAlignment="Left"
+                                    MinWidth="360"
                             AutomationProperties.Name="Subtitle"
                             DisplayMemberPath="DisplayTitle"
                             ItemsSource="{x:Bind ViewModel.SubtitleStreams, Mode=OneWay, TargetNullValue='None'}"
