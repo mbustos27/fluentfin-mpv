@@ -100,6 +100,11 @@ public partial class App : Application
 		// ReactiveUI 23+ must be initialized explicitly before any Rx/ReactiveUI type is touched
 		RxAppBuilder.CreateReactiveUIBuilder().WithWinUI().BuildApp();
 		InitializeComponent();
+		// Seaglass: SEAGLASS_THEME (harness screenshots) for the popups too; settable only here, in the constructor
+		if (GlassTheme.ForcedApplicationTheme(Environment.GetEnvironmentVariable("SEAGLASS_THEME")) is { } forced)
+		{
+			RequestedTheme = forced;
+		}
 
 		// fluentfin-mpv: --data-dir <folder> / FLUENTFIN_MPV_DATA_DIR put everything this run writes there (dev and test runs)
 		// Seaglass: the data folder was %LOCALAPPDATA%\FluentFinMpv; copied (never moved) to %LOCALAPPDATA%\Seaglass on the first start

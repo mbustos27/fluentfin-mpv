@@ -63,6 +63,15 @@ public static class SeaglassTheme
 		return null;
 	}
 
+	/// <summary>How much of what is behind a menu or a tooltip the overlay tint lets through (0xE6: 10 %), outside Solid.</summary>
+	public const byte OverlayAlpha = 0xE6;
+
+	/// <summary>
+	/// The overlay tint of menus and tooltips (GlassOverlayBrush): the palette's container colour, translucent over the menu's own
+	/// system backdrop, opaque in Solid. In Solid, GlassTheme has put GlassOverlaySolidBrush under that key, and it stays opaque.
+	/// </summary>
+	public static Color OverlayColor(SeaglassPalette p) => C(p.ContainerHigh, p.Solid ? (byte)255 : OverlayAlpha);
+
 	private static Color C(Rgb c, byte alpha = 255) => Color.FromArgb(alpha, c.R, c.G, c.B);
 
 	private static void Apply(SeaglassPalette p)
@@ -82,6 +91,8 @@ public static class SeaglassTheme
 
 		Solid("GlassPanelSolidBrush", C(p.GlassTint));
 		Solid("GlassPanelStrongSolidBrush", C(p.ContainerHigh));
+		Solid("GlassOverlaySolidBrush", C(p.ContainerHigh));
+		Solid("GlassOverlayBrush", OverlayColor(p));
 		Solid("SeaglassAccentBrush", C(p.Accent));
 		Solid("SeaglassAccentFillBrush", C(p.AccentFill));
 		Solid("SeaglassAccentForegroundBrush", C(p.OnAccent));

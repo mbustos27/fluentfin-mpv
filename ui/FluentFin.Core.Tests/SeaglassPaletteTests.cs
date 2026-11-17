@@ -189,4 +189,22 @@ public sealed class SeaglassFixedChromeTests
 		var (_, chroma, _) = OkLab.FromLinear(BlurHash.SrgbToLinear(glass.GlassTint.R), BlurHash.SrgbToLinear(glass.GlassTint.G), BlurHash.SrgbToLinear(glass.GlassTint.B));
 		Assert.True(chroma < 0.035, $"tint chroma {chroma:0.000}");
 	}
+
+	/// <summary>
+	/// Seaglass 1.1.3: the accent as a mark on the glass (a selected tab's underline, a checked icon, a toggle) keeps the 3:1 of
+	/// non-text contrast on the worst case the palette checks its text against, in Full and Solid, dark and light.
+	/// </summary>
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	[InlineData(true, true)]
+	public void The_accent_is_a_visible_mark_on_the_glass_in_the_worst_case(bool solid, bool light)
+	{
+		var p = SeaglassPalette.Build(SeaglassPalette.DefaultHue, solid, light);
+		var under = solid ? (light ? 1 : 0) : light ? SeaglassPalette.LightBackdropFloor : SeaglassPalette.BackdropCeiling;
+		var surface = OkLab.CompositeLuminance(p.GlassTint, p.TintAlpha, under);
+		var ratio = OkLab.Contrast(p.Accent.Luminance, surface);
+		Assert.True(ratio >= 3, $"solid {solid}, light {light}: the accent has {ratio:0.00}:1 on the glass");
+	}
 }

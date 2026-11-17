@@ -59,7 +59,7 @@
             </Rectangle.Fill>
         </Rectangle>
 
-        <!--  the hero sits on artwork in every theme: its words are white, not the theme's text colour  -->
+        <!--  the hero sits on artwork in every theme: its words are the dark theme's glass text (white), the system text colour in high contrast  -->
         <!--  Seaglass: the words sit on one glass panel (the left scrim keeps its backdrop dark, so the white text reads on any artwork)  -->
         <ContentControl
             MaxWidth="600"
@@ -79,18 +79,18 @@
                     Visibility="Collapsed" />
                 <TextBlock
                     x:Name="TitleText"
-                    Foreground="White"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
                     Style="{StaticResource GlassHeroTitleTextBlockStyle}" />
                 <TextBlock
                     x:Name="MetaText"
                     FontSize="14"
                     FontWeight="SemiBold"
-                    Foreground="#E6FFFFFF"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
                     TextTrimming="CharacterEllipsis" />
                 <TextBlock
                     x:Name="OverviewText"
                     FontSize="15"
-                    Foreground="#E6FFFFFF"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
                     MaxLines="2"
                     TextTrimming="CharacterEllipsis"
                     TextWrapping="Wrap" />
@@ -105,8 +105,7 @@
                         x:Name="MoreInfoButton"
                         Click="MoreInfo_Click"
                         Content="More info"
-                        Foreground="White"
-                        Style="{StaticResource GlassPillButtonStyle}" />
+                        Style="{StaticResource GlassInsetPillButtonStyle}" />
                 </StackPanel>
             </StackPanel>
 

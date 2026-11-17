@@ -183,6 +183,50 @@ public class OverlayContrastTests
 		Assert.True(ratio >= TextContrast, $"{theme} {panelKey}: {textKey} has {ratio:F2}:1, needs {TextContrast}:1");
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.3: menus and tooltips are windows of their own on the flat GlassOverlayBrush. A tooltip has no blur under
+	/// it at all, so the worst case is the brightest (dark theme) or darkest (light theme) pixel straight behind it, no dim.
+	/// This checks the XAML's colours (what shows before SeaglassTheme runs); the run-time colour, SeaglassTheme.OverlayColor,
+	/// is checked in FluentFin.Tests (GlassOverlayTests).
+	/// </summary>
+	[Theory]
+	[InlineData("Dark", "GlassTextPrimaryBrush")]
+	[InlineData("Dark", "GlassTextSecondaryBrush")]
+	[InlineData("Light", "GlassTextPrimaryBrush")]
+	[InlineData("Light", "GlassTextSecondaryBrush")]
+	public void MenusAndTooltips_KeepTextReadableOverAnythingBehindThem(string theme, string textKey)
+	{
+		var dictionary = Load("FluentFin/Styles/Glass.xaml").Descendants(Presentation + "ResourceDictionary")
+			.Single(d => (string?)d.Attribute(Xaml + "Key") == theme);
+		var behind = theme == "Dark" ? new Rgb(255, 255, 255) : new Rgb(0, 0, 0);
+		var overlay = Argb((string)Brush(dictionary, "GlassOverlayBrush").Attribute("Color")!);
+		var surface = Blend(overlay.Color, overlay.Alpha, behind);
+		var text = Argb((string)Brush(dictionary, textKey).Attribute("Color")!);
+		var ratio = Contrast(Blend(text.Color, text.Alpha, surface), surface);
+		Assert.True(ratio >= TextContrast, $"{theme} GlassOverlayBrush: {textKey} has {ratio:F2}:1, needs {TextContrast}:1");
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.3: the accent on artwork (a card's progress bar on its Black65O track, a watched badge) keeps 3:1 over the
+	/// brightest and the darkest poster, in both themes. The light theme's SeaglassAccentBrush (#13877B) has 1.6:1 on the
+	/// track over a white poster: that is why artwork gets its own token.
+	/// </summary>
+	[Theory]
+	[InlineData("Dark")]
+	[InlineData("Light")]
+	public void TheAccentOnArtwork_KeepsNonTextContrastOnAPostersTrack(string theme)
+	{
+		var dictionary = Load("FluentFin/Styles/Glass.xaml").Descendants(Presentation + "ResourceDictionary")
+			.Single(d => (string?)d.Attribute(Xaml + "Key") == theme);
+		var accent = Argb((string)Brush(dictionary, "SeaglassAccentOnImageBrush").Attribute("Color")!);
+		foreach (var poster in new[] { new Rgb(255, 255, 255), new Rgb(0, 0, 0) })
+		{
+			var track = Blend(new Rgb(0, 0, 0), 0.65, poster);
+			var ratio = Contrast(Blend(accent.Color, accent.Alpha, track), track);
+			Assert.True(ratio >= IconContrast, $"{theme}: the accent has {ratio:F2}:1 on a track over {poster}, needs {IconContrast}:1");
+		}
+	}
+
 	private static XElement Brush(XElement dictionary, string key) =>
 		dictionary.Elements(Presentation + "SolidColorBrush").Single(b => (string?)b.Attribute(Xaml + "Key") == key);
 
