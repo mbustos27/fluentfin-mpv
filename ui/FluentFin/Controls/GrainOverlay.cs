@@ -22,6 +22,8 @@ public sealed partial class GrainOverlay : Canvas
 	public GrainOverlay()
 	{
 		IsHitTestVisible = false;
+		// decoration: no part of the UI Automation tree (Narrator, the accessibility scan)
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(this, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
 		SizeChanged += (_, _) => Rebuild();
 		Loaded += (_, _) =>
 		{
@@ -79,6 +81,7 @@ public sealed partial class GrainOverlay : Canvas
 			for (var column = 0; column < columns && count < MaxTiles; column++, count++)
 			{
 				var tile = new Image { Source = GrainBitmap.Shared, Width = Grain.Size, Height = Grain.Size, Stretch = Stretch.Fill, IsHitTestVisible = false };
+				Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(tile, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
 				SetLeft(tile, column * Grain.Size);
 				SetTop(tile, row * Grain.Size);
 				Children.Add(tile);

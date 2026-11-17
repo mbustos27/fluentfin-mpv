@@ -30,6 +30,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="CommunityToolkit.WinUI.Media" Version="8.2.251219" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="$(ControlsHostDir)\Shots.cs" Link="Linked\Shots.cs" />
@@ -43,6 +44,8 @@
     <Compile Include="$(UiDir)\FluentFin\Controls\MpvPlayerControls.xaml.cs" Link="Linked\MpvPlayerControls.xaml.cs" />
     <Compile Include="$(UiDir)\FluentFin\Controls\MpvPlayerKeys.cs" Link="Linked\MpvPlayerKeys.cs" Condition="Exists('$(UiDir)\FluentFin\Controls\MpvPlayerKeys.cs')" />
     <Compile Include="$(UiDir)\FluentFin\Services\GlassMode.cs" Link="Linked\GlassMode.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Services\GrainBitmap.cs" Link="Linked\GrainBitmap.cs" />
+    <Compile Include="$(UiDir)\FluentFin\Controls\GrainOverlay.cs" Link="Linked\GrainOverlay.cs" />
     <Page Include="$(UiDir)\FluentFin\Styles\Glass.xaml" Link="Styles\Glass.xaml" />
     <Page Include="$(UiDir)\FluentFin\Controls\MpvPlayerControls.xaml" Link="Linked\MpvPlayerControls.xaml" />
     <ProjectReference Include="$(CoreDir)\FluentFin.Core.csproj" />

@@ -40,11 +40,12 @@ High contrast always uses `SystemColor*` brushes (`Styles\Glass.xaml`'s HighCont
 ## Tokens (`ui\FluentFin\Styles\Glass.xaml`)
 
 Use the keys; never hard-code these values on a page.
-- Brushes: `GlassPanelBrush`, `GlassPanelStrongBrush`, `GlassStrokeBrush` (the light top edge), `GlassHoverOverlayBrush`,
+- Brushes: `GlassBevelBrush` (the inner top-edge stroke), `GlassMilkBrush` (6 % white over the tint), `GlassPanelBrush`, `GlassPanelStrongBrush`, `GlassStrokeBrush` (the light top edge), `GlassHoverOverlayBrush`,
   `GlassPressedOverlayBrush`, `GlassTextPrimaryBrush`, `GlassTextSecondaryBrush`, `GlassImageScrimBrush`,
   `GlassAmbientDimBrush`, `SeaglassAccentBrush` (sea-glass aqua `#5CCFC1` dark / `#13877B` light).
-- Shapes: `GlassPanelCornerRadius` 20, `GlassCardCornerRadius` 12, `GlassPillCornerRadius` (a capsule),
-  `GlassPillHeight` 44.
+- Shapes (no capsules: the user does not like oblong ovals): `GlassPanelCornerRadius` 20, `GlassCardCornerRadius` 12,
+  `GlassButtonCornerRadius` 12 (the buttons, "pills", the search box, the player's pills), `GlassChipCornerRadius` 8 (info chips,
+  the hero's page dots), `GlassCircleCornerRadius` 999 (only for equal-sided round icon buttons), `GlassPillHeight` 44.
 - Type (Segoe UI Variable; no Apple fonts or assets): `GlassHeroTitleTextBlockStyle` 48, `GlassPageTitleTextBlockStyle`
   34, `GlassSectionTitleTextBlockStyle` 22, `GlassMetaTextBlockStyle` 13; card titles 14 SemiBold.
 - Styles: `GlassPanelStyle` (Border), `GlassPillButtonStyle`, `GlassAccentPillButtonStyle`, `GlassIconButtonStyle`.
@@ -72,3 +73,33 @@ Use the keys; never hard-code these values on a page.
 
 Keyboard reach and focus visuals, Narrator names on every card and icon button, high contrast, the harness
 (`tools\ui-harness`) working, start-up and scrolling speed (users on Reddit reward speed over looks), and every test.
+
+## Pass 3: real sea glass (all-in, niche on purpose)
+
+The user: "its not very glassy lets get reallllllll themed", "we can get niche". Spec: `docseports\SeaGlass theme inspiration.md`
+(its ideas only; nothing copied from the SeaGlass repo it studies, which has no licence). Solid and high contrast stay.
+
+- **Per-title palette** (`FluentFin.Core\Theming`): the artwork's BlurHash (`ItemArtwork.BackdropBlurHash`, the hero slide's)
+  is decoded to 16x9 cells (`BlurHash`), scored like Material's source colour (360 hue buckets, 30 degree window, chroma floor
+  0.02), pulled 50 % toward teal and **clamped to the sea-glass hues** (seafoam -35 to cobalt +75 degrees around 175). Only the
+  hue comes from the art. `SeaglassPalette` then lays a fixed OKLCH ladder (glass tint L 0.22 C 0.045, container +0.03, text
+  L 0.96, muted L 0.82, accent L 0.78 C 0.11, rim, a violet rim fringe) and **asserts contrast at runtime** against the worst
+  case: the tint at 0.82 over a backdrop the scrim holds to relative luminance 0.38 (`BackdropCeiling`, `GlassAmbientDimBrush`
+  alpha 0.62). Under 4.5:1 it lowers the tint L, raises the tint alpha, then the text L. No hash: hue 175.
+  Solid is the same hue with opaque surfaces at 7:1. `SeaglassTheme` recolours the shared dark-theme brushes in place and
+  crossfades them in OKLab over 500 ms (at once without motion).
+- **Material kit** (`GlassSurfaceStyle` template, so every section panel): bottom to top the frosted brush, the milk, the
+  **grain** (`GrainOverlay`: a 256 px zero-mean noise bitmap generated at run time by `Grain`, tiled, 4.5 % in Full, 2 % in
+  Reduced, none in Solid; seam-free because every pixel is independent, tested), the inner glow, the **bevel** (1 px inside,
+  lit along the top), the **rim** (`GlassStrokeBrush`: white at the top left, the title's aqua at the bottom right), and **two
+  shadows** (contact: blur 8, y 2; ambient: blur 28, y 10). The volume indicator uses the same rim and grain.
+- **Player**: no blur over video, as before. The volume indicator (wheel, volume keys and mute) is larger (a 34 px icon, 26 px
+  text, a 240 px fill) in the same place: it fades and grows in (with motion), the fill glides 160 ms between levels, it fades
+  out 1.5 s after the last change, muted shows "Muted" and an empty bar, and Narrator is told the new volume
+  (`RaiseNotificationEvent`). The subtitles menu is a flyout: the tracks, then **Text size** (50 to 200 %, steps of 10, default
+  100, live through `set_subtitle_size`, remembered in the local settings `SubtitleSize` and sent when the controls take over;
+  the backend keeps it as its own `subtitle_size`, so mpv's controls use the same value).
+- **Not done yet** (left for later passes): the navigation rail as a floating slab, glass frames and title plates on posters,
+  pointer-following sheen on panels, page-transition depth, a 64 px thumbnail fallback for items without a BlurHash,
+  an intensity slider, the Light theme (the palette recolours the dark theme only), and GPU timings on an integrated GPU
+  (step 0 measured the grain only: seams and mean; no frame-cost numbers were taken).
