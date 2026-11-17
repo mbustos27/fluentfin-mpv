@@ -118,7 +118,7 @@
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
             Background="#66000000"
-            CornerRadius="{StaticResource GlassPillCornerRadius}">
+            CornerRadius="{StaticResource GlassChipCornerRadius}">
             <StackPanel x:Name="Dots" Orientation="Horizontal" Spacing="2" />
         </Border>
     </Grid>

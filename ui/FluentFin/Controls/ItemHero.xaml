@@ -71,7 +71,7 @@
                             Background="{ThemeResource GlassPanelBrush}"
                             BorderBrush="{ThemeResource GlassStrokeBrush}"
                             BorderThickness="{StaticResource GlassStrokeThickness}"
-                            CornerRadius="{StaticResource GlassPillCornerRadius}">
+                            CornerRadius="{StaticResource GlassChipCornerRadius}">
                             <TextBlock Style="{StaticResource ItemChipTextBlockStyle}" Text="{x:Bind Text}" />
                         </Border>
                     </DataTemplate>

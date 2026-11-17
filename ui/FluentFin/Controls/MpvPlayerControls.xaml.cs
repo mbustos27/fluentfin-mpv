@@ -6,7 +6,10 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation;
+using System.Numerics;
 using Microsoft.UI.Composition;
 using FluentFin.Services;
 
@@ -79,6 +82,20 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnControlsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
+		if (e.PropertyName is nameof(MpvControlsViewModel.VolumeFraction))
+		{
+			AnimateVolumeFill();
+		}
+		else if (e.PropertyName is nameof(MpvControlsViewModel.VolumeText) && Controls is { VolumeIndicatorVisible: true } shown)
+		{
+			AnnounceVolume(shown.VolumeText);
+		}
+		else if (e.PropertyName is nameof(MpvControlsViewModel.VolumeIndicatorVisible) && Controls is { VolumeIndicatorVisible: true } appearing)
+		{
+			// a key at the limit changes no text: the indicator showing is the announcement
+			AnnounceVolume(appearing.VolumeText);
+		}
+
 		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible))
 		{
 			PlaceSkipButton();
@@ -379,6 +396,95 @@ public sealed partial class MpvPlayerControls : UserControl
 		var motion = GlassMode.MotionAllowed;
 		ConfigureFade(TopBar, -12, motion);
 		ConfigureFade(BottomBar, 12, motion);
+		ConfigureIndicatorFade(motion);
+		AnimateVolumeFill();
+	}
+
+	// -- the volume indicator (Seaglass) ----------------------------------------------------------------------------------
+
+	/// <summary>The indicator's width when full: the fill's width is this times the volume.</summary>
+	public const double VolumeFillWidth = 240;
+
+	/// <summary>How long the fill takes to glide to a new level.</summary>
+	public static readonly TimeSpan FillTime = TimeSpan.FromMilliseconds(160);
+
+	private Storyboard? _fillGlide;
+
+	/// <summary>
+	/// Fades in (and, with motion allowed, grows from 94 %) and fades out over 0.4 s as its Visibility changes; with motion not
+	/// allowed (Reduced, Solid, animations off) the fade alone.
+	/// </summary>
+	private void ConfigureIndicatorFade(bool motion)
+	{
+		var visual = ElementCompositionPreview.GetElementVisual(VolumeIndicator);
+		var compositor = visual.Compositor;
+		visual.CenterPoint = new Vector3((float)VolumeIndicator.ActualWidth / 2, (float)VolumeIndicator.ActualHeight / 2, 0);
+
+		var fadeIn = compositor.CreateScalarKeyFrameAnimation();
+		fadeIn.Target = "Opacity";
+		fadeIn.InsertKeyFrame(0f, 0f);
+		fadeIn.InsertKeyFrame(1f, 1f);
+		fadeIn.Duration = TimeSpan.FromMilliseconds(motion ? 200 : 120);
+		var fadeOut = compositor.CreateScalarKeyFrameAnimation();
+		fadeOut.Target = "Opacity";
+		fadeOut.InsertKeyFrame(1f, 0f);
+		fadeOut.Duration = TimeSpan.FromMilliseconds(motion ? 400 : 150);
+		var show = compositor.CreateAnimationGroup();
+		show.Add(fadeIn);
+		var hide = compositor.CreateAnimationGroup();
+		hide.Add(fadeOut);
+		if (motion)
+		{
+			var grow = compositor.CreateVector3KeyFrameAnimation();
+			grow.Target = "Scale";
+			grow.InsertKeyFrame(0f, new Vector3(0.94f, 0.94f, 1f));
+			grow.InsertKeyFrame(1f, Vector3.One, compositor.CreateCubicBezierEasingFunction(new Vector2(0.05f, 0.9f), new Vector2(0.1f, 1f)));
+			grow.Duration = TimeSpan.FromMilliseconds(260);
+			show.Add(grow);
+		}
+
+		ElementCompositionPreview.SetImplicitShowAnimation(VolumeIndicator, show);
+		ElementCompositionPreview.SetImplicitHideAnimation(VolumeIndicator, hide);
+	}
+
+	private void OnVolumeIndicatorSizeChanged(object sender, SizeChangedEventArgs e)
+	{
+		ElementCompositionPreview.GetElementVisual(VolumeIndicator).CenterPoint = new Vector3((float)e.NewSize.Width / 2, (float)e.NewSize.Height / 2, 0);
+	}
+
+	/// <summary>The fill glides to the volume (0 while muted); at once when motion is not allowed or nothing shows yet.</summary>
+	private void AnimateVolumeFill()
+	{
+		_fillGlide?.Stop();
+		_fillGlide = null;
+		var target = (Controls?.VolumeFraction ?? 0) * VolumeFillWidth;
+		if (!GlassMode.MotionAllowed || Controls is not { VolumeIndicatorVisible: true })
+		{
+			VolumeIndicatorFill.Width = target;
+			return;
+		}
+
+		var glide = new DoubleAnimation
+		{
+			To = target,
+			Duration = FillTime,
+			EnableDependentAnimation = true,
+			EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+		};
+		Storyboard.SetTarget(glide, VolumeIndicatorFill);
+		Storyboard.SetTargetProperty(glide, "Width");
+		_fillGlide = new Storyboard();
+		_fillGlide.Children.Add(glide);
+		_fillGlide.Begin();
+	}
+
+	/// <summary>Narrator says the new volume ("Volume 45 %" or "Muted"), without moving the focus.</summary>
+	private void AnnounceVolume(string text)
+	{
+		if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
+		{
+			peer.RaiseNotificationEvent(AutomationNotificationKind.ActionCompleted, AutomationNotificationProcessing.ImportantMostRecent, text, "SeaglassVolume");
+		}
 	}
 
 	private static void ConfigureFade(FrameworkElement bar, float slide, bool motion)
@@ -481,6 +587,8 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnPlayPauseClick(object sender, RoutedEventArgs e) => _ = Controls?.TogglePause();
 
+	private void OnShortcutsClick(object sender, RoutedEventArgs e) => FluentFin.Services.WindowShortcuts.ShowHelp(XamlRoot);
+
 	private void OnSkipBackClick(object sender, RoutedEventArgs e) => _ = Controls?.SeekBy(-MpvControlsViewModel.SkipBackSeconds);
 
 	private void OnSkipForwardClick(object sender, RoutedEventArgs e) => _ = Controls?.SeekBy(MpvControlsViewModel.SkipForwardSeconds);
@@ -507,7 +615,49 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnAudioMenuOpening(object? sender, object e) => FillMenu(AudioMenu, Controls?.AudioChoices ?? [], index => Controls?.SetAudio(index));
 
-	private void OnSubtitlesMenuOpening(object? sender, object e) => FillMenu(SubtitlesMenu, Controls?.SubtitleChoices ?? [], index => Controls?.SetSubtitle(index));
+	private IReadOnlyList<MpvTrackChoice> _subtitleChoices = [];
+	private bool _fillingSubtitles;
+
+	/// <summary>The subtitles flyout as it opens: the tracks (the one playing selected) and the remembered text size.</summary>
+	private void OnSubtitlesMenuOpening(object? sender, object e)
+	{
+		_fillingSubtitles = true;
+		try
+		{
+			_subtitleChoices = Controls?.SubtitleChoices ?? [];
+			SubtitleTracks.Items.Clear();
+			foreach (var choice in _subtitleChoices)
+			{
+				SubtitleTracks.Items.Add(choice.Label);
+			}
+
+			SubtitleTracks.SelectedIndex = _subtitleChoices.ToList().FindIndex(c => c.IsSelected);
+			SubtitleSizeSlider.Value = Controls?.SubtitleSize ?? SubtitleSizes.Default;
+		}
+		finally
+		{
+			_fillingSubtitles = false;
+		}
+	}
+
+	private void OnSubtitleTrackChanged(object sender, SelectionChangedEventArgs e)
+	{
+		if (!_fillingSubtitles && SubtitleTracks.SelectedIndex is >= 0 and var at && at < _subtitleChoices.Count)
+		{
+			_ = Controls?.SetSubtitle(_subtitleChoices[at].Index);
+		}
+	}
+
+	/// <summary>The Text size slider: live while dragging (the view model snaps to 10 % and sends each new value).</summary>
+	private void OnSubtitleSizeChanged(object sender, RangeBaseValueChangedEventArgs e)
+	{
+		if (!_fillingSubtitles && Controls is { } controls)
+		{
+			_ = controls.SetSubtitleSize((int)Math.Round(e.NewValue));
+		}
+	}
+
+	private void OnSubtitleSizeReset(object sender, RoutedEventArgs e) => SubtitleSizeSlider.Value = SubtitleSizes.Default;
 
 	/// <summary>The menu's items, rebuilt as it opens: one radio item per track (the one playing checked).</summary>
 	private static void FillMenu(MenuFlyout menu, IReadOnlyList<MpvTrackChoice> choices, Func<int, Task?> pick)

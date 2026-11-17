@@ -40,6 +40,18 @@ public static class ItemArtwork
 
 	public static bool HasLogo(BaseItemDto? dto) => LogoPath(dto, 1) is not null;
 
+	/// <summary>The BlurHash Jellyfin keeps for the item's own backdrop (the palette's source), or null (none, or the backdrop is its parent's).</summary>
+	public static string? BackdropBlurHash(BaseItemDto? dto)
+	{
+		if (dto?.BackdropImageTags?.FirstOrDefault(t => !string.IsNullOrEmpty(t)) is { } tag
+			&& dto.ImageBlurHashes?.Backdrop?.AdditionalData.TryGetValue(tag, out var hash) == true && $"{hash}" is { Length: > 0 } text)
+		{
+			return text;
+		}
+
+		return null;
+	}
+
 	public static bool HasBackdrop(BaseItemDto? dto) => BackdropPath(dto, 1) is not null;
 
 	private static string? Path(BaseItemDto? dto, string kind, int maxWidth)

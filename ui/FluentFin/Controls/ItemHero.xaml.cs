@@ -30,11 +30,12 @@ public sealed partial class ItemHero : UserControl
 		DependencyProperty.Register(nameof(PrimaryActions), typeof(object), typeof(ItemHero), new PropertyMetadata(null, (d, e) => ((ItemHero)d).PrimaryPresenter.Content = e.NewValue));
 
 	private Uri? _ambient;
+	private string? _ambientHash;
 
 	public ItemHero()
 	{
 		InitializeComponent();
-		Loaded += (_, _) => AmbientBackdrop.Set(_ambient);
+		Loaded += (_, _) => AmbientBackdrop.Set(_ambient, _ambientHash);
 		// a page that opens before this one is closed has already set its own; only take down what is ours
 		Unloaded += (_, _) =>
 		{
@@ -96,9 +97,10 @@ public sealed partial class ItemHero : UserControl
 		MoreButton.Flyout = dto is null ? null : new JellyfinFlyoutConverter().Convert(dto, typeof(object), null!, "") as FlyoutBase;
 
 		_ambient = ItemArtworkConverters.AmbientBackdrop(dto);
+		_ambientHash = ItemArtwork.BackdropBlurHash(dto);
 		if (IsLoaded)
 		{
-			AmbientBackdrop.Set(_ambient);
+			AmbientBackdrop.Set(_ambient, _ambientHash);
 		}
 	}
 

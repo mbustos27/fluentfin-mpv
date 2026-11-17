@@ -759,6 +759,20 @@ class ShimRuntime:
             except Exception:
                 log.debug("could not save the volume", exc_info=True)
 
+    def set_subtitle_size(self, percent):
+        """fluentfin-mpv: the subtitle size, in percent, kept in the shim's
+        own ``subtitle_size`` setting: every item start applies it
+        (`PlayerManager.update_subtitle_visuals`), and mpv's own controls
+        use the same value."""
+        from .conf import settings
+
+        if settings.subtitle_size != percent:
+            settings.subtitle_size = percent
+            try:
+                settings.save()
+            except Exception:
+                log.debug("could not save the subtitle size", exc_info=True)
+
     def shutdown(self, deadline=None):
         """Stop playback and deliver its final report, then end mpv and the
         shim's threads, all by ``deadline`` (``time.monotonic()``; default
@@ -2772,6 +2786,15 @@ class Bridge:
             self._mpv_write(lambda p: setattr(p, "volume", volume))
         return {}
 
+    def cmd_set_subtitle_size(self, args):
+        """fluentfin-mpv: always succeeds once connected; with nothing
+        playing the size holds for the next item."""
+        self._require_player()
+        percent = proto.get_int(args, "percent", minimum=50, maximum=200)
+        self.runtime.set_subtitle_size(percent)
+        self._mpv_write(lambda p: setattr(p, "sub_scale", percent / 100))
+        return {}
+
     def cmd_set_mute(self, args):
         self._require_player()
         muted = proto.get_bool(args, "muted")
@@ -2908,6 +2931,7 @@ class Bridge:
         "set_subtitle": cmd_set_subtitle,
         "set_volume": cmd_set_volume,
         "set_mute": cmd_set_mute,
+        "set_subtitle_size": cmd_set_subtitle_size,
         "set_fullscreen": cmd_set_fullscreen,
         "set_controls": cmd_set_controls,
         "skip_segment": cmd_skip_segment,

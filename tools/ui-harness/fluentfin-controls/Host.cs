@@ -235,6 +235,9 @@ internal static partial class Host
 			controls.OnTracks(new BridgeTracks(
 				[new BridgeTrack(1, "eng", "English - Dolby Digital - 5.1", IsDefault: true), new BridgeTrack(2, "jpn", "Japanese - AAC - Stereo")],
 				[new BridgeTrack(3, "eng", "English - SRT"), new BridgeTrack(4, "spa", "Spanish - SRT")]));
+			// the subtitles menu's Text size: the backend writes mpv's sub-scale (120 % shows in the menu shots)
+			await controls.SetSubtitleSize(120);
+			Check(await Until(() => mpv.Number("sub-scale") is { } scale && Math.Abs(scale - 1.2) < 0.01, 5), $"Text size 120 %: mpv's sub-scale is 1.2 ({mpv.Number("sub-scale")})");
 			foreach (var (mode, tag) in new GlassModeKind?[] { null, GlassModeKind.Solid }.Select(m => (m, m is null ? "full" : "solid")))
 			{
 				GlassMode.Override = mode;
@@ -252,6 +255,8 @@ internal static partial class Host
 				}
 			}
 			GlassMode.Override = null;
+			await controls.SetSubtitleSize(100);
+			Check(await Until(() => mpv.Number("sub-scale") is { } scale && Math.Abs(scale - 1.0) < 0.01, 5), $"reset to 100 %: sub-scale is 1.0 ({mpv.Number("sub-scale")})");
 			controls.OnTracks(new BridgeTracks([], []));
 			controls.NotifyActivity();
 

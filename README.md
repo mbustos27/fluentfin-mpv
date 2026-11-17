@@ -2,7 +2,7 @@
 
 *Formerly FluentFin MPV.* The old name and the GitHub repository name (`fluentfin-mpv`) stay in links and history.
 
-A Windows Jellyfin client that combines [FluentFin](https://github.com/insomniachi/FluentFin)'s WinUI 3 interface with [jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim) as its playback engine. You browse in FluentFin, and video plays in mpv inside FluentFin's own window. The server sees a single session, Seaglass's.
+A Windows Jellyfin client with a glassy, Apple TV-inspired look. It combines [FluentFin](https://github.com/insomniachi/FluentFin)'s WinUI 3 interface with [jellyfin-mpv-shim](https://github.com/jellyfin/jellyfin-mpv-shim) as its playback engine: you browse in Seaglass, and video plays in mpv inside Seaglass's own window. The server sees a single session, Seaglass's.
 
 This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv. It is tested by automated suites against a fake server and in daily use against a real Jellyfin server; [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md) says what is still unverified.
 
@@ -17,11 +17,20 @@ Nothing else needs installing: .NET, the playback backend and libmpv are inside.
 
 Everything below the feature list is for building from source.
 
-## What it adds to FluentFin
+## What Seaglass adds to FluentFin
 
+- **The glass look.** Frosted glass on the navigation, title bar, search, menus, dialogs and page sections, with the current title's artwork softly tinting the whole window. Posters and artwork stay solid. Settings → Appearance → Glass: **Automatic** (follows Windows' transparency, animation and high-contrast settings), **Full**, **Reduced** (no motion) or **Solid** (no translucency). The design and the research behind it: [docs/design/SEAGLASS.md](docs/design/SEAGLASS.md).
+- **Home, item pages and the player, redesigned.**
+  - **Home:** a hero of up to five items that never autoplays trailers, and poster rows whose cards lift on hover.
+  - **Item pages:** a full-width backdrop with the title's logo, info chips (year, rating, runtime, resolution, HDR, audio), and Play as the one highlighted action.
+  - **The player's own controls:** on a dark gradient, with Skip intro/credits and Next as buttons, and a subtitle **Text size** slider (50–200 %, remembered).
+- **Mouse and keyboard.**
+  - Mouse buttons 4 and 5, Alt+←/→ and the keyboard's Back and Forward keys go back and forward between pages.
+  - Shortcuts everywhere: search (Ctrl+F or /), Settings (Ctrl+,), and the usual player keys (Space/K, J/L, ←/→, M, C, V, B, F, 0–9 and more).
+  - Press **?** or **F1** for the full list, or see [docs/SHORTCUTS.md](docs/SHORTCUTS.md).
 - **mpv playback through jellyfin-mpv-shim.** Choose the player "MPV (jellyfin-mpv-shim)". The shim runs headless in a *bridge mode*. It takes care of PlaybackInfo and the transcode decision, track selection, trickplay and skip-intro, and reports progress to the server. FluentFin talks to it over a stdio JSON-lines protocol ([docs/BRIDGE.md](docs/BRIDGE.md)), and mpv draws inside FluentFin's player page.
 - **A polished mpv bar.** By default the bar is [uosc](https://github.com/tomasklaen/uosc) in FluentFin's look, with the shim's own bar as the fallback. It shows the series and episode title, fills the seek bar in your accent colour with trickplay previews, offers previous, next and a Skip Intro button, keeps subtitles above the bar, takes FluentFin's keys (k, j/l, arrows, s, Shift+N/P), and the mouse wheel changes the volume.
-- **FluentFin's own player controls (the default).** With Settings → Playback → Player controls → FluentFin, libmpv renders in-process into a WinUI composition swap chain. FluentFin then draws its own controls over the video: seek, play/pause, ±10/30 s, Skip intro/credits (button and S key), next episode, volume, audio and subtitle menus, full screen, and auto-hide. This mode needs libmpv: the release zip includes it, a source build needs it in `vendor\libmpv` (see `vendor/libmpv/VENDORED.md`). When libmpv cannot load, FluentFin falls back to mpv's controls and says so.
+- **Seaglass's own player controls (the default).** With Settings → Playback → Player controls → Seaglass, libmpv renders in-process into a WinUI composition swap chain, and Seaglass draws its own controls over the video: seek, play/pause, ±10/30 s, Skip intro/credits (button and S key), next episode, volume, audio and subtitle menus (with text size), full screen, and auto-hide. This mode needs libmpv: the release includes it, and a source build needs it in `vendor\libmpv` (see `vendor/libmpv/VENDORED.md`). When libmpv cannot load, Seaglass falls back to mpv's controls and says so.
 - **A TV journal.** A Serializd-style diary of what you watched, kept locally in SQLite, one journal per server and user.
   - Episodes are logged automatically when they're watched to the end, and synced from Jellyfin's played state (with exact dates when the Playback Reporting plugin is installed).
   - Each entry can have a half-star rating, a review and a rewatch flag.
@@ -32,7 +41,7 @@ Everything below the feature list is for building from source.
 - **Settings → Playback.** Audio and subtitle language and auto-play next are your Jellyfin user settings; the skip prompt and wheel volume are kept on this PC.
 - **Keyboard and screen-reader work.**
   - Cards can be reached with Tab and the arrow keys.
-  - Narrator reads each card by name, and every icon button has a name.
+  - Narrator reads each card by name, every icon button has a name, and an item page's title logo is read as its heading.
   - Item pages offer "Resume at…" and "Play from beginning".
   - Long text wraps, with Show more.
   - Colours follow high-contrast themes.
@@ -75,6 +84,9 @@ Settings, logs and the journal go to `%LOCALAPPDATA%\Seaglass`. For a separate d
 - [docs/UPSTREAM.md](docs/UPSTREAM.md): the upstream commits this is built from, and how to pull updates.
 - [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md): what is open, accepted or not yet verified.
 - [docs/JOURNAL.md](docs/JOURNAL.md): the TV journal's design.
+- [docs/design/SEAGLASS.md](docs/design/SEAGLASS.md): the glass design rules (tokens, glass modes, motion).
+- [docs/SHORTCUTS.md](docs/SHORTCUTS.md): every keyboard and mouse shortcut.
+- [docs/RELEASE.md](docs/RELEASE.md): how a release is built, verified and published.
 - [tools/README.md](tools/README.md): the test harnesses:
   - the off-screen backend suite
   - the bridge smoke test

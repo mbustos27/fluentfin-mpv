@@ -879,6 +879,9 @@ class FakeRuntime:
     def set_idle_volume(self, volume):
         self.idle_volume = volume
 
+    def set_subtitle_size(self, percent):
+        self.subtitle_size = percent
+
     def shutdown(self, deadline=None):
         self.shut = True
         self.shutdown_deadline = deadline
@@ -1050,6 +1053,7 @@ class DispatchTest(BridgeCase):
                           ("set_audio", {"index": 1}),
                           ("set_subtitle", {"index": -1}),
                           ("set_volume", {"volume": 5}),
+                          ("set_subtitle_size", {"percent": 120}),
                           ("set_mute", {"muted": True}),
                           ("set_fullscreen", {"fullscreen": True})):
             with self.subTest(cmd=cmd):
@@ -1064,6 +1068,10 @@ class DispatchTest(BridgeCase):
                           ("set_volume", {"volume": 101}),
                           ("set_volume", {"volume": -1}),
                           ("set_mute", {"muted": "yes"}),
+                          ("set_subtitle_size", {"percent": 49}),
+                          ("set_subtitle_size", {"percent": 201}),
+                          ("set_subtitle_size", {"percent": "120"}),
+                          ("set_subtitle_size", {}),
                           ("set_audio", {"index": -1}),
                           ("set_subtitle", {"index": -2}),
                           ("set_fullscreen", {}),
@@ -1091,6 +1099,16 @@ class DispatchTest(BridgeCase):
         self.assertEqual(self.runtime.idle_volume, 30)
         self.assertEqual(self.runtime.pm._player.volume, 30)
         self.assertIs(self.runtime.pm._player.mute, True)
+
+    def test_subtitle_size_holds_with_nothing_playing(self):
+        """fluentfin-mpv: kept as the shim's setting and written to mpv's
+        ``sub-scale`` (a percent is a scale of percent / 100)."""
+        self.connect_server()
+        self.assertTrue(self.send("set_subtitle_size", {"percent": 130})["ok"])
+        self.assertEqual(self.runtime.subtitle_size, 130)
+        self.assertEqual(self.runtime.pm._player.sub_scale, 1.3)
+        self.assertTrue(self.send("set_subtitle_size", {"percent": 50})["ok"])
+        self.assertEqual(self.runtime.pm._player.sub_scale, 0.5)
 
     def test_unknown_fields_are_ignored(self):
         self.connect_server()

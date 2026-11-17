@@ -264,7 +264,16 @@
                 CornerRadius="{StaticResource GlassCardCornerRadius}"
                 IsHitTestVisible="False"
                 Visibility="Collapsed" />
+
+            <!--  one very subtle light edge on the artwork, nothing else around it  -->
+            <Border
+                AutomationProperties.AccessibilityView="Raw"
+                BorderBrush="{ThemeResource GlassStrokeBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource GlassCardCornerRadius}"
+                IsHitTestVisible="False" />
         </Grid>
+        <!--  the title and subtitle are plain text under the artwork: no plate, no border  -->
         <StackPanel
             Grid.Row="1"
             Padding="2,10,2,2"

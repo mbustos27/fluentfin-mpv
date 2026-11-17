@@ -26,6 +26,8 @@ public static class Bridge
 		public const string SetSubtitle = "set_subtitle";
 		public const string SetVolume = "set_volume";
 		public const string SetMute = "set_mute";
+		/// <summary>fluentfin-mpv: the subtitle text size in percent (docs/BRIDGE.md §4).</summary>
+		public const string SetSubtitleSize = "set_subtitle_size";
 		public const string SetFullscreen = "set_fullscreen";
 		public const string SetControls = "set_controls";
 		/// <summary>fluentfin-mpv: skips the segment on offer (<see cref="BridgeSegments.Offered"/>); result <see cref="BridgeSkipResult"/> (docs/BRIDGE.md §4).</summary>

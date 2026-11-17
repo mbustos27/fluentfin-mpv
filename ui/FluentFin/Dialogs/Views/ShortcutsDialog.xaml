@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentDialog
+    x:Class="FluentFin.Dialogs.Views.ShortcutsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Keyboard shortcuts"
+    CloseButtonText="Close"
+    DefaultButton="Close"
+    Style="{StaticResource DefaultContentDialogStyleWithTitleBackground}">
+
+    <ContentDialog.Resources>
+        <Style x:Key="SheetHeading" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource GlassDisplayFontFamily}" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style x:Key="SheetKeys" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+            <Setter Property="TextWrapping" Value="WrapWholeWords" />
+        </Style>
+        <Style x:Key="SheetText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{ThemeResource GlassTextSecondaryBrush}" />
+            <Setter Property="TextWrapping" Value="WrapWholeWords" />
+        </Style>
+    </ContentDialog.Resources>
+
+    <!--  Seaglass: every key by section; the rows are built from ShortcutCatalog (the tests check it against the key maps)  -->
+    <ScrollViewer MaxHeight="520" VerticalScrollBarVisibility="Auto">
+        <StackPanel
+            x:Name="SectionsPanel"
+            MinWidth="560"
+            Margin="0,0,16,0"
+            Spacing="20" />
+    </ScrollViewer>
+</ContentDialog>

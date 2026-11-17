@@ -23,6 +23,15 @@ public enum MpvControlsAction
 	Next,
 	Previous,
 	SkipSegment,
+	SeekBackFar,
+	SeekForwardFar,
+	/// <summary>Home: back to the start.</summary>
+	SeekStart,
+	ToggleSubtitles,
+	CycleSubtitles,
+	CycleAudio,
+	/// <summary>The digits: a tenth of the length each. Keep the ten in order (<see cref="MpvControlsViewModel.PercentOf"/>).</summary>
+	Percent0, Percent1, Percent2, Percent3, Percent4, Percent5, Percent6, Percent7, Percent8, Percent9,
 }
 
 /// <summary>
@@ -135,6 +144,18 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 	[ObservableProperty]
 	public partial bool IsMuted { get; set; }
+
+	/// <summary>The subtitle text size in percent (<see cref="SubtitleSizes"/>): the remembered one, sent when the controls take over.</summary>
+	[ObservableProperty]
+	public partial int SubtitleSize { get; set; } = SubtitleSizes.Default;
+
+	/// <summary>"120%".</summary>
+	public string SubtitleSizeText => SubtitleSizes.Text(SubtitleSize);
+
+	/// <summary>Told the new size (to remember it); null: nothing remembered.</summary>
+	public Action<int>? SubtitleSizeChanged { get; set; }
+
+	partial void OnSubtitleSizeChanged(int value) => OnPropertyChanged(nameof(SubtitleSizeText));
 
 	[ObservableProperty]
 	public partial bool IsFullScreen { get; set; }
@@ -436,6 +457,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		NotifyActivity();
 		IsMuted = !IsMuted;
+		ShowVolumeIndicator();
 		_audioChangedAt = _now();
 		// a slider move's unmute still waiting would undo this mute
 		_pendingUnmute = false;
@@ -517,6 +539,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// </summary>
 	private Task StepVolume(int steps, bool wakeControls)
 	{
+		ShowVolumeIndicator();
 		if (steps > 0 && Volume >= 100)
 		{
 			if (wakeControls)
@@ -812,6 +835,64 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			: [new MpvTrackChoice(-1, "Off", _subtitleIndex is null or -1), .. _subtitleTracks.Select(t => new MpvTrackChoice(t.Index, SubtitleLabel(t), t.Index == _subtitleIndex))];
 	}
 
+	/// <summary>The digit keys: a tenth of the length per digit (0 is the start). Nothing is sent until the length is known.</summary>
+	public Task SeekToPercent(int tenths)
+	{
+		NotifyActivity();
+		return tenths is >= 0 and <= 9 && (tenths == 0 || DurationTicks > 0) ? SeekTo(DurationTicks / 10 * tenths) : Task.CompletedTask;
+	}
+
+	/// <summary>Which digit a Percent action is.</summary>
+	public static int PercentOf(MpvControlsAction action) => action - MpvControlsAction.Percent0;
+
+	private int _lastSubtitle = -1;
+
+	/// <summary>V: the next subtitle choice (off, then each track, then off again). Nothing when the item has none.</summary>
+	public Task CycleSubtitles() => CycleTo(SubtitleChoices, SetSubtitle);
+
+	/// <summary>B: the next audio track. Nothing with fewer than two.</summary>
+	public Task CycleAudio() => CycleTo(AudioChoices, SetAudio);
+
+	/// <summary>C: subtitles off if showing, else back on to the track that showed last (the first when none did).</summary>
+	public Task ToggleSubtitles()
+	{
+		if (!HasSubtitleChoice)
+		{
+			return Task.CompletedTask;
+		}
+
+		var current = SubtitleChoices.FirstOrDefault(c => c.IsSelected)?.Index ?? -1;
+		if (current >= 0)
+		{
+			_lastSubtitle = current;
+			return SetSubtitle(-1);
+		}
+
+		var back = SubtitleChoices.FirstOrDefault(c => c.Index == _lastSubtitle && c.Index >= 0) ?? SubtitleChoices.First(c => c.Index >= 0);
+		return SetSubtitle(back.Index);
+	}
+
+	private Task CycleTo(IReadOnlyList<MpvTrackChoice> choices, Func<int, Task> pick)
+	{
+		NotifyActivity();
+		if (choices.Count < 2)
+		{
+			return Task.CompletedTask;
+		}
+
+		var at = -1;
+		for (var i = 0; i < choices.Count; i++)
+		{
+			if (choices[i].IsSelected)
+			{
+				at = i;
+				break;
+			}
+		}
+
+		return pick(choices[(at + 1) % choices.Count].Index);
+	}
+
 	/// <summary>The audio menu's pick (a Jellyfin stream index). The one playing already: nothing is sent.</summary>
 	public Task SetAudio(int index)
 	{
@@ -824,6 +905,21 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_audioIndex = index;
 		RebuildTrackChoices();
 		return _send(Bridge.Commands.SetAudio, BridgeCommands.Index(index));
+	}
+
+	/// <summary>The subtitles menu's Text size slider: the new size (snapped to 50..200 in 10s) now, remembered, and sent.</summary>
+	public Task SetSubtitleSize(int percent)
+	{
+		NotifyActivity();
+		var size = SubtitleSizes.Clamp(percent);
+		if (size == SubtitleSize)
+		{
+			return Task.CompletedTask;
+		}
+
+		SubtitleSize = size;
+		SubtitleSizeChanged?.Invoke(size);
+		return _send(Bridge.Commands.SetSubtitleSize, BridgeCommands.SubtitleSize(size));
 	}
 
 	/// <summary>The subtitles menu's pick: a Jellyfin stream index, or -1 for off.</summary>
@@ -899,7 +995,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	// -- mouse wheel: volume -------------------------------------------------------------------------------------------
 
 	/// <summary>How long the volume indicator stays after the last wheel notch.</summary>
-	public static readonly TimeSpan VolumeIndicatorFor = TimeSpan.FromSeconds(1.2);
+	public static readonly TimeSpan VolumeIndicatorFor = TimeSpan.FromSeconds(1.5);
 
 	/// <summary>One wheel notch, as Windows counts it (WHEEL_DELTA).</summary>
 	public const int WheelNotch = 120;
@@ -916,9 +1012,27 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>"Volume 45 %", or "Muted".</summary>
 	public string VolumeText => IsMuted ? "Muted" : string.Create(CultureInfo.InvariantCulture, $"{Volume} %");
 
-	partial void OnVolumeChanged(int value) => OnPropertyChanged(nameof(VolumeText));
+	/// <summary>How much of the indicator's bar is filled, 0 to 1: nothing while muted.</summary>
+	public double VolumeFraction => IsMuted ? 0 : Math.Clamp(Volume, 0, 100) / 100.0;
 
-	partial void OnIsMutedChanged(bool value) => OnPropertyChanged(nameof(VolumeText));
+	partial void OnVolumeChanged(int value)
+	{
+		OnPropertyChanged(nameof(VolumeText));
+		OnPropertyChanged(nameof(VolumeFraction));
+	}
+
+	partial void OnIsMutedChanged(bool value)
+	{
+		OnPropertyChanged(nameof(VolumeText));
+		OnPropertyChanged(nameof(VolumeFraction));
+	}
+
+	/// <summary>Shows the indicator for <see cref="VolumeIndicatorFor"/> more (the wheel, the volume keys and the mute key all do).</summary>
+	private void ShowVolumeIndicator()
+	{
+		_volumeIndicatorUntil = _now() + VolumeIndicatorFor;
+		VolumeIndicatorVisible = true;
+	}
 
 	/// <summary>
 	/// The mouse wheel turned over the video or the controls (<paramref name="delta"/> in Windows' units, 120 a notch, up
@@ -937,8 +1051,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_wheelRemainder += delta;
 		var notches = _wheelRemainder / WheelNotch;
 		_wheelRemainder -= notches * WheelNotch;
-		_volumeIndicatorUntil = _now() + VolumeIndicatorFor;
-		VolumeIndicatorVisible = true;
+		ShowVolumeIndicator();
 		if (notches == 0)
 		{
 			return Task.CompletedTask;
@@ -966,7 +1079,9 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public Task SendControls()
 	{
 		_announced = true;
-		return SendInsetIfChanged(force: true);
+		// the remembered text size goes with it: applied at every playback start
+		var size = _send(Bridge.Commands.SetSubtitleSize, BridgeCommands.SubtitleSize(SubtitleSize));
+		return Task.WhenAll(size, SendInsetIfChanged(force: true));
 	}
 
 	private Task SendInsetIfChanged(bool force = false)
@@ -990,8 +1105,9 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 	/// <summary>
 	/// A key pressed over the player (the page or the controls window). True when it is one of the player's keys and was
-	/// handled. Space/K play-pause, Left/Right 5 s (Ctrl: 10 s), J/L 10 s, Up/Down volume, M mute, F full screen,
-	/// Shift+N/Shift+P next/previous, S skips the segment on offer, Esc (docs/research/player-controls.md).
+	/// handled. The whole map is in docs/SHORTCUTS.md (and <see cref="Shortcuts.ShortcutCatalog"/>): Space/K play-pause,
+	/// Left/Right 5 s (Ctrl: 10 s, Shift: 30 s), J/L 10 s, digits and Home seek, Up/Down volume, M mute, C/V subtitles, B audio,
+	/// F/F11 full screen, Shift+N/Shift+P next/previous, S skips the segment on offer, Esc.
 	/// </summary>
 	public bool HandleKey(int virtualKey, bool control = false, bool shift = false, bool alt = false)
 	{
@@ -1022,6 +1138,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			case MpvControlsAction.Next: return Next();
 			case MpvControlsAction.Previous: return Previous();
 			case MpvControlsAction.SkipSegment: return SkipSegment();
+			case MpvControlsAction.SeekBackFar: return SeekBy(-SkipForwardSeconds);
+			case MpvControlsAction.SeekForwardFar: return SeekBy(SkipForwardSeconds);
+			case MpvControlsAction.SeekStart: return SeekToPercent(0);
+			case MpvControlsAction.ToggleSubtitles: return ToggleSubtitles();
+			case MpvControlsAction.CycleSubtitles: return CycleSubtitles();
+			case MpvControlsAction.CycleAudio: return CycleAudio();
+			case >= MpvControlsAction.Percent0 and <= MpvControlsAction.Percent9: return SeekToPercent(PercentOf(action));
 			default: return Task.CompletedTask;
 		}
 	}
@@ -1030,6 +1153,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public static class Keys
 	{
 		public const int Escape = 0x1B, Space = 0x20, Left = 0x25, Up = 0x26, Right = 0x27, Down = 0x28;
+		public const int Home = 0x24, D0 = 0x30, D9 = 0x39, Numpad0 = 0x60, Numpad9 = 0x69;
+		public const int B = 0x42, C = 0x43, V = 0x56, F11 = 0x7A;
 		public const int F = 0x46, J = 0x4A, K = 0x4B, L = 0x4C, M = 0x4D, N = 0x4E, P = 0x50, S = 0x53;
 		public const int MediaNext = 0xB0, MediaPrevious = 0xB1, MediaPlayPause = 0xB3;
 	}
@@ -1045,14 +1170,24 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		return virtualKey switch
 		{
 			Keys.Space or Keys.K or Keys.MediaPlayPause when !control && !shift => MpvControlsAction.TogglePause,
-			Keys.Left when !shift => control ? MpvControlsAction.SeekBackLong : MpvControlsAction.SeekBack,
-			Keys.Right when !shift => control ? MpvControlsAction.SeekForwardLong : MpvControlsAction.SeekForward,
+			// the bar's -10 s is J and Ctrl+Left, its +30 s is Shift+Right (Shift+Left the same far, the other way)
+			Keys.Left when shift => control ? null : MpvControlsAction.SeekBackFar,
+			Keys.Right when shift => control ? null : MpvControlsAction.SeekForwardFar,
+			Keys.Left => control ? MpvControlsAction.SeekBackLong : MpvControlsAction.SeekBack,
+			Keys.Right => control ? MpvControlsAction.SeekForwardLong : MpvControlsAction.SeekForward,
+			Keys.Home when !control && !shift => MpvControlsAction.SeekStart,
+			>= Keys.D0 and <= Keys.D9 when !control && !shift => MpvControlsAction.Percent0 + (virtualKey - Keys.D0),
+			>= Keys.Numpad0 and <= Keys.Numpad9 when !control && !shift => MpvControlsAction.Percent0 + (virtualKey - Keys.Numpad0),
+			Keys.C when !control && !shift => MpvControlsAction.ToggleSubtitles,
+			Keys.V when !control && !shift => MpvControlsAction.CycleSubtitles,
+			Keys.B when !control && !shift => MpvControlsAction.CycleAudio,
 			Keys.J when !control && !shift => MpvControlsAction.SeekBackLong,
 			Keys.L when !control && !shift => MpvControlsAction.SeekForwardLong,
 			Keys.Up when !control && !shift => MpvControlsAction.VolumeUp,
 			Keys.Down when !control && !shift => MpvControlsAction.VolumeDown,
 			Keys.M when !control && !shift => MpvControlsAction.ToggleMute,
 			Keys.F when !control && !shift => MpvControlsAction.ToggleFullScreen,
+			Keys.F11 when !control && !shift => MpvControlsAction.ToggleFullScreen,
 			// the backend's own key for its Skip (docs/BRIDGE.md §4 skip_segment); nothing on offer, nothing is sent
 			Keys.S when !control && !shift => MpvControlsAction.SkipSegment,
 			Keys.N when shift && !control => MpvControlsAction.Next,

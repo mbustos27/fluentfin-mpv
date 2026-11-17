@@ -28,8 +28,8 @@ public sealed partial class VideoPlayerViewModelMpvTests
 
 		Assert.True(vm.UsesFluentFinControls);
 		Assert.NotNull(vm.MpvControls);
-		// before the play: mpv's OSC never shows; after it was taken: from then on where the bar is
-		Assert.Equal(["set_fullscreen", "set_controls", "play", "set_controls"], _backend.Commands);
+		// before the play: mpv's OSC never shows; after it was taken: the remembered subtitle size, then where the bar is
+		Assert.Equal(["set_fullscreen", "set_controls", "play", "set_subtitle_size", "set_controls"], _backend.Commands);
 		Assert.True(JsonNode.DeepEquals(new JsonObject { ["controls"] = "ui", ["subtitleInset"] = 0.0 }, _backend.Args("set_controls")), _backend.Args("set_controls").ToJsonString());
 	}
 
@@ -46,6 +46,21 @@ public sealed partial class VideoPlayerViewModelMpvTests
 
 		Assert.False(vm.MpvControls!.WheelChangesVolume);
 		Assert.Equal(12, vm.MpvControls.Step);
+	}
+
+	[Fact]
+	public async Task FluentFinControls_StartWithTheRememberedSubtitleSize_AndRememberTheNewOne()
+	{
+		var movie = Movie();
+		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
+		_settings.SetupGet(x => x.SubtitleSize).Returns(130);
+		var vm = CreateViewModelWithControls(use: true);
+
+		await vm.OnNavigatedTo(movie);
+		Assert.Equal(130, vm.MpvControls!.SubtitleSize);
+
+		await vm.MpvControls.SetSubtitleSize(160);
+		_settings.VerifySet(x => x.SubtitleSize = 160, Times.Once);
 	}
 
 	[Fact]

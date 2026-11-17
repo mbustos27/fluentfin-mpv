@@ -82,6 +82,9 @@ public static class GlassMode
 		}
 	}
 
+	/// <summary>Whether Windows' animation effects are on (the page transition and the fades honour it).</summary>
+	public static bool AnimationsOn => Animations;
+
 	public static GlassModeKind Automatic =>
 		HighContrast || !AdvancedEffects ? GlassModeKind.Solid
 		: !Animations ? GlassModeKind.Reduced

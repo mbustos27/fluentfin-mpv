@@ -20,7 +20,14 @@ public sealed partial class TitleBarControl : UserControl
 	public TitleBarControl()
 	{
 		InitializeComponent();
+		_current = this;
 	}
+
+	private static TitleBarControl? _current;
+
+	/// <summary>Seaglass: the search keys (Ctrl+E, /, WindowShortcuts): the search box takes the focus when it shows.</summary>
+	public static bool FocusSearch() =>
+		_current is { SearchBox.Visibility: Microsoft.UI.Xaml.Visibility.Visible } bar && bar.SearchBox.Focus(Microsoft.UI.Xaml.FocusState.Keyboard);
 
 	private void TitleBar_BackRequested(Microsoft.UI.Xaml.Controls.TitleBar sender, object args)
 	{

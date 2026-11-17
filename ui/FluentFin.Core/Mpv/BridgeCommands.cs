@@ -172,6 +172,8 @@ public static class BridgeCommands
 
 	public static JsonObject Volume(int volume) => new() { ["volume"] = Math.Clamp(volume, 0, 100) };
 
+	public static JsonObject SubtitleSize(int percent) => new() { ["percent"] = SubtitleSizes.Clamp(percent) };
+
 	public static JsonObject Mute(bool muted) => new() { ["muted"] = muted };
 
 	public static JsonObject Fullscreen(bool fullscreen) => new() { ["fullscreen"] = fullscreen };
