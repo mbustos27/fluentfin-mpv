@@ -333,6 +333,12 @@ public partial class JellyfinClient
 				query.Code = code;
 			}) ?? false;
 		}
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode == 404)
+		{
+			// Seaglass 1.1.4: a code that is not waiting (mistyped, expired) is the user's to fix, said in the dialog
+			logger.LogInformation("Quick Connect: the server has no request waiting with that code");
+			return false;
+		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
