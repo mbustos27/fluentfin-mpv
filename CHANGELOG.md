@@ -30,17 +30,26 @@
   - **Leaving with Up and Down** goes to what is above or below on the page: Up from the first row reaches the hero again,
     and a See all grid no longer sends the focus to the title bar.
   - Narrator no longer says "100% watched" for an episode that is not finished.
-- **One glass for menus, tooltips and dialogs.** Menus, context menus, flyouts, tooltips and every dialog share the same
-  glass, 12 px corners, light edge and text colour; opaque in Solid mode, system colours in high contrast. Menus no
-  longer stack two blurs, a dialog draws its glass once, short dialogs (a sign-in error, a yes/no question) keep a
-  readable width, and long dialog titles wrap.
+- **Full screen without flashes.** Going in and out of full screen (with Seaglass's player controls) now shows black for
+  a moment (about 40-90 ms) instead of whatever is behind the window, which in a dark room was a bright flash of the
+  desktop.
+  - Leaving the player from full screen no longer hides the window first.
+  - Going back to a window no longer shows a stale, smaller picture for a frame.
+  - Holding F or Esc no longer flips full screen over and over or leaves the player.
+  - Subtitles move to their new place with the switch, not just after it.
+  - A double click to go full screen no longer pauses and unpauses playback.
+  - `SEAGLASS_FULLSCREEN=cloak` brings back 1.1.2's way to compare, `none` turns the hiding off.
+- **A smoother volume bar.** With the wheel, the bar glides on from where it is instead of emptying and refilling on
+  every notch, and a smooth wheel or touchpad that turns back no longer spends its first part undoing the other way.
+- **One glass for menus, tooltips and dialogs.** Menus, context menus, flyouts, tooltips, the player's audio, volume and
+  subtitle menus, and every dialog share the same glass, 12 px corners, light edge and text colour; opaque in Solid
+  mode, system colours in high contrast. Menus no longer stack two blurs, a dialog draws its glass once, short dialogs
+  (a sign-in error, a yes/no question) keep a readable width, and long dialog titles wrap.
 - **Progress you can see on any poster.** Progress bars on posters and episode thumbnails sit on a dark track that runs
   the bar's whole height, in the light aqua in both themes; before, the bar sat on the artwork itself and could vanish on
   a poster of about its own lightness. The watched mark on episode thumbnails is the same aqua with a dark check.
 - **Accent details:** links and secondary accent text use Seaglass's aqua instead of Windows' accent colour, and in high
   contrast the Home hero's text takes the system text colour (it disappeared on the light contrast themes).
-- **TODO (player stream, wip/113-player, not merged yet): wheel volume fill, full screen (black cover,
-  `SEAGLASS_FULLSCREEN`) and its other fixes, the player's menus.** Replace this line when it is merged.
 
 ## 1.1.2
 

@@ -75,6 +75,8 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   for 60-95 ms. To compare on a real screen: `SEAGLASS_FULLSCREEN=cover` (default), `cloak` (1.1.2's) or `none`;
   `FLUENTFIN_NO_CLOAK=1` still means none. Not judged on a real desktop yet (off-screen captures read the window's own surface).
   mpv's own controls are not hidden. Numbers and frame strips: `docs\research\fullscreen-smoothness.md`.
+  **The 300 ms limit can lift the cover early** when mpv is slow to draw its first frame of the new size: the held, scaled
+  picture then shows until it does (seen once in 24 off-screen switches, a switch out that waited about 640 ms for mpv).
 - **Full screen and back**: mpv renders at a new size 2 to 5 frames after the panel took it; until it has
   presented a frame of that size, the panel holds its old frame scaled to where the new picture goes (the user saw
   the picture jump by the title bar's height and then snap). Left: mpv presents on its own thread, so its first new
@@ -87,14 +89,18 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `InputSiteWindowClass` child (the thread's focus window), not its `DesktopChildSiteBridge`; the
   fluentfin-controls harness posts there (Space, F, Escape through the page's key path).
 
-## Seaglass 1.1.3: rail, Settings, item menus, keyboard, glass
+## Seaglass 1.1.3: rail, Settings, item menus, keyboard, glass, player
 - **Checks only a real screen and real hands can settle.** The off-screen harness posts keys to the window and reads UI
-  Automation (`then-rows`, `then-wheel`, `then-season`, `then-library`); it cannot post Shift (WinUI reads the keyboard's
-  real state) or drive a touchpad, a gamepad or Narrator's voice. Still to try by hand: Shift+Tab out of a row, a grid
+  Automation (`then-rows`, `then-wheel`, `then-season`, `then-library`, `then-volume`, `fullscreen-burst`); it cannot
+  post Shift (WinUI reads the keyboard's real state) or drive a touchpad, a gamepad or Narrator's voice. Still to try by
+  hand: Shift+Tab out of a row, a grid
   and an episode list back to where it came from; Shift+F10 on a card and on an episode row (the harness uses the Menu
   key); a touchpad's two-finger swipe and a gamepad's D-pad and A/B in rows, grids and episode lists; Narrator by ear
   (a card's "12 of 320", an episode's "S1E4 Title, watched", "4 of 8"); holding an arrow key in a 320-card grid (real
-  key repeat).
+  key repeat). In the player: the full-screen cover against `SEAGLASS_FULLSCREEN=cloak` in a dark room (which one is
+  calmer to the eye), holding F or Esc with the keyboard's real repeat, a real double click on the video while playing
+  (posted clicks do nothing off-screen: `VideoClicksTests` only), the wheel-volume bar with a real notched wheel and a
+  touchpad, and the player's menus on the shared glass over a playing video.
 - **Copy Download URL is removed** (it put the access token on the clipboard). A token copied with an earlier version
   stays valid until that sign-in ends; signing out ends it (`/Sessions/Logout`).
 - **Delete's question is tested as behaviour** (`ItemMenu.RunAsync`: nothing runs without the yes); the delete request
