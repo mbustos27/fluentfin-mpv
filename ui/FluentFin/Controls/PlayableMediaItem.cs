@@ -20,7 +20,6 @@ public sealed partial class PlayableMediaItem : Control
 	[GeneratedDependencyProperty(DefaultValue = "\uE8B9")]
 	public partial string Glyph { get; set; }
 
-	private static IJellyfinClient _jellyfinClient = App.GetService<IJellyfinClient>();
 
 	public PlayableMediaItem()
 	{
@@ -70,7 +69,8 @@ public sealed partial class PlayableMediaItem : Control
 			return;
 		}
 
-		await _jellyfinClient.SetPlayed(Model, !(Model.UserData?.Played ?? false));
+		// Seaglass 1.1.4: the state the toggle shows, through the one path every surface uses (ItemUserData)
+		await App.Commands.SetWatched(Model, (sender as ToggleButton)?.IsChecked == true);
 	}
 
 	private async void AddToFavoriteButton_Clicked(object sender, RoutedEventArgs e)
@@ -80,6 +80,6 @@ public sealed partial class PlayableMediaItem : Control
 			return;
 		}
 
-		await _jellyfinClient.SetIsFavorite(Model, !(Model.UserData?.IsFavorite ?? false));
+		await App.Commands.SetFavorite(Model, (sender as ToggleButton)?.IsChecked == true);
 	}
 }

@@ -58,23 +58,20 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 		await jellyfinClient.ResetProgress(id);
 	}
 
-	// Seaglass 1.1.4: the item's copy follows, so the next toggle goes the other way and its name ("Mark ... as unwatched",
-	// ItemLabels.WatchedAction) tells the truth; before, a second click on an item page sent the first one's state again
+	// Seaglass 1.1.4: through ItemUserData, which puts the server's answer into the item's copy (so the next toggle goes the
+	// other way and the menu says the right thing) and tells every card, hero and row; before, a second click sent the first
+	// one's request again. The More menu uses these; a toggle button sends the state it shows (SetWatched, SetFavorite).
 	[RelayCommand]
-	public async Task ToggleWatched(BaseItemDto dto)
-	{
-		var played = !(dto.UserData?.Played ?? false);
-		await jellyfinClient.SetPlayed(dto, played);
-		(dto.UserData ??= new UserItemDataDto()).Played = played;
-	}
+	public Task ToggleWatched(BaseItemDto dto) => SetWatched(dto, !(dto.UserData?.Played ?? false));
 
 	[RelayCommand]
-	public async Task ToggleFavorite(BaseItemDto dto)
-	{
-		var favorite = !(dto.UserData?.IsFavorite ?? false);
-		await jellyfinClient.SetIsFavorite(dto, favorite);
-		(dto.UserData ??= new UserItemDataDto()).IsFavorite = favorite;
-	}
+	public Task ToggleFavorite(BaseItemDto dto) => SetFavorite(dto, !(dto.UserData?.IsFavorite ?? false));
+
+	/// <summary>Seaglass 1.1.4: a Watched toggle: the state it shows after the click (two quick clicks end where the second one left it).</summary>
+	public Task<bool> SetWatched(BaseItemDto dto, bool played) => ItemUserData.SetPlayedAsync(jellyfinClient, dto, played);
+
+	/// <summary>Seaglass 1.1.4: a Favourite toggle: the state it shows after the click.</summary>
+	public Task<bool> SetFavorite(BaseItemDto dto, bool favorite) => ItemUserData.SetFavoriteAsync(jellyfinClient, dto, favorite);
 
 	[RelayCommand]
 	public void DisplayDto(BaseItemDto dto)

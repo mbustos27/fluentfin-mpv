@@ -107,14 +107,14 @@
                 <ToggleButton
                     x:Name="WatchedButton"
                     AutomationProperties.Name="Mark as watched"
-                    Command="{x:Bind root:App.Commands.ToggleWatchedCommand}"
+                    Click="WatchedButton_Click"
                     Content="{ui:FontIcon Glyph=&#xE73E;}"
                     Style="{StaticResource ItemGlassToggleButtonStyle}"
                     ToolTipService.ToolTip="Mark as watched" />
                 <ToggleButton
                     x:Name="FavoriteButton"
                     AutomationProperties.Name="Add to favorites"
-                    Command="{x:Bind root:App.Commands.ToggleFavoriteCommand}"
+                    Click="FavoriteButton_Click"
                     Content="{ui:FontIcon Glyph=&#xEB52;}"
                     Style="{StaticResource ItemGlassToggleButtonStyle}"
                     ToolTipService.ToolTip="Add to favorites">

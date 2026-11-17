@@ -10,7 +10,45 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 	/// <summary>fluentfin-mpv: this series could not be loaded: said on the page, with Retry (docs/research/ux-review.md §3.11).</summary>
 	public LoadState State { get; } = new("this series");
 
-	public Task OnNavigatedFrom() => Task.CompletedTask;
+	public Task OnNavigatedFrom()
+	{
+		ItemUserData.Changed -= OnUserDataChanged;
+		return Task.CompletedTask;
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4: the series, one of its seasons or its next episode was marked watched (or not) here or on a card: Play's
+	/// target and Next Up follow the server, and the season cards too when the series itself changed (all its episodes did).
+	/// </summary>
+	internal async void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
+	{
+		try
+		{
+			if (e.Failed || Dto?.Id is not { } id)
+			{
+				return;
+			}
+
+			var series = e.ItemId == id;
+			if (!series && Seasons?.Any(x => x.Dto.Id == e.ItemId) != true && NextUp?.Dto.Id != e.ItemId)
+			{
+				return;
+			}
+
+			var dto = Dto;
+			if (series)
+			{
+				await UpdateSeasons(dto);
+			}
+
+			await UpdateNextUp(dto);
+			await UpdatePlayTarget(id, reset: false);
+		}
+		catch (Exception)
+		{
+			// a refresh that fails leaves the page as it was
+		}
+	}
 
 	public async Task OnNavigatedTo(object parameter)
 	{
@@ -29,6 +67,8 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 			return;
 		}
 
+		ItemUserData.Changed -= OnUserDataChanged;
+		ItemUserData.Changed += OnUserDataChanged;
 		await State.RunAsync(async () =>
 		{
 			await UpdateSeries(id);
@@ -78,9 +118,13 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 	}
 
 	// the series' episodes as Play reads them (MpvQueue): one request without images; "Play" alone when it fails
-	private async Task UpdatePlayTarget(Guid seriesId)
+	private async Task UpdatePlayTarget(Guid seriesId, bool reset = true)
 	{
-		PlayTarget = PlayTarget.Plain;
+		if (reset)
+		{
+			PlayTarget = PlayTarget.Plain;
+		}
+
 		var episodes = await JellyfinClient.GetSeriesEpisodes(seriesId);
 		if (Dto?.Id == seriesId)
 		{

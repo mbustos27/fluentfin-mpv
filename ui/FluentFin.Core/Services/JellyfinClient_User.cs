@@ -140,53 +140,55 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task SetIsFavorite(BaseItemDto dto, bool isFavorite)
+	// Seaglass 1.1.4: both return the server's answer (the item's user data after the change), so the app shows what the
+	// server has (ItemUserData); null when the request failed
+	public async Task<UserItemDataDto?> SetIsFavorite(BaseItemDto dto, bool isFavorite)
 	{
 		try
 		{
 			if (dto.Id is null)
 			{
-				return;
+				return null;
 			}
 
 			if (isFavorite)
 			{
-				await _jellyfinApiClient.UserFavoriteItems[dto.Id.Value].PostAsync();
+				return await _jellyfinApiClient.UserFavoriteItems[dto.Id.Value].PostAsync();
 			}
 			else
 			{
-				await _jellyfinApiClient.UserFavoriteItems[dto.Id.Value].DeleteAsync();
+				return await _jellyfinApiClient.UserFavoriteItems[dto.Id.Value].DeleteAsync();
 			}
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return null;
 		}
 	}
 
-	public async Task SetPlayed(BaseItemDto dto, bool played)
+	public async Task<UserItemDataDto?> SetPlayed(BaseItemDto dto, bool played)
 	{
 		try
 		{
 			if (dto.Id is null)
 			{
-				return;
+				return null;
 			}
 
 			if (played)
 			{
-				await _jellyfinApiClient.UserPlayedItems[dto.Id.Value].PostAsync(x => x.QueryParameters.DatePlayed = TimeProvider.System.GetUtcNow());
+				return await _jellyfinApiClient.UserPlayedItems[dto.Id.Value].PostAsync(x => x.QueryParameters.DatePlayed = TimeProvider.System.GetUtcNow());
 			}
 			else
 			{
-				await _jellyfinApiClient.UserPlayedItems[dto.Id.Value].DeleteAsync();
+				return await _jellyfinApiClient.UserPlayedItems[dto.Id.Value].DeleteAsync();
 			}
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return null;
 		}
 	}
 

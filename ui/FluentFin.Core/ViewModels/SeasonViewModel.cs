@@ -10,7 +10,43 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 	/// <summary>fluentfin-mpv: this season could not be loaded: said on the page, with Retry (docs/research/ux-review.md §3.11).</summary>
 	public LoadState State { get; } = new("this season");
 
-	public Task OnNavigatedFrom() => Task.CompletedTask;
+	public Task OnNavigatedFrom()
+	{
+		ItemUserData.Changed -= OnUserDataChanged;
+		return Task.CompletedTask;
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4: the season or one of its episodes was marked watched (or not), here or elsewhere: Play's target follows
+	/// the server, and the episode list too when the season itself changed (all its episodes did).
+	/// </summary>
+	internal async void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
+	{
+		try
+		{
+			if (e.Failed || Dto?.Id is not { } id)
+			{
+				return;
+			}
+
+			var season = e.ItemId == id;
+			if (!season && Episodes?.Any(x => x.Id == e.ItemId) != true)
+			{
+				return;
+			}
+
+			if (season)
+			{
+				await UpdateEpisodes(Dto);
+			}
+
+			await UpdatePlayTarget(id, reset: false);
+		}
+		catch (Exception)
+		{
+			// a refresh that fails leaves the page as it was
+		}
+	}
 
 	public async Task OnNavigatedTo(object parameter)
 	{
@@ -29,6 +65,8 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 			return;
 		}
 
+		ItemUserData.Changed -= OnUserDataChanged;
+		ItemUserData.Changed += OnUserDataChanged;
 		await State.RunAsync(async () =>
 		{
 			await UpdateSeason(id);
@@ -78,9 +116,13 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 
 
 	// the series' episodes as Play reads them (MpvQueue): one request without images; "Play" alone when it fails
-	private async Task UpdatePlayTarget(Guid seasonId)
+	private async Task UpdatePlayTarget(Guid seasonId, bool reset = true)
 	{
-		PlayTarget = PlayTarget.Plain;
+		if (reset)
+		{
+			PlayTarget = PlayTarget.Plain;
+		}
+
 		if (Dto?.SeriesId is not { } seriesId)
 		{
 			return;

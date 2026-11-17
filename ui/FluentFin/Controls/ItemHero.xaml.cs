@@ -42,7 +42,12 @@ public sealed partial class ItemHero : UserControl
 			toggle.Unchecked += (_, _) => UpdateActionNames();
 			toggle.Indeterminate += (_, _) => UpdateActionNames();
 		}
-		Loaded += (_, _) => AmbientBackdrop.Set(_ambient, _ambientHash);
+		Loaded += (_, _) =>
+		{
+			AmbientBackdrop.Set(_ambient, _ambientHash);
+			ItemUserData.Changed += OnUserDataChanged;
+		};
+		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
 		// a page that opens before this one is closed has already set its own; only take down what is ours
 		Unloaded += (_, _) =>
 		{
@@ -97,12 +102,7 @@ public sealed partial class ItemHero : UserControl
 		ChipRow.ItemsSource = ItemChips.For(dto);
 
 		TrailerButton.Visibility = ItemMeta.TrailerUrl(dto) is null ? Visibility.Collapsed : Visibility.Visible;
-		WatchedButton.CommandParameter = dto;
-		WatchedButton.IsChecked = dto?.UserData?.Played;
-		FavoriteButton.CommandParameter = dto;
-		FavoriteButton.IsChecked = dto?.UserData?.IsFavorite;
-		MoreButton.Flyout = dto is null ? null : new JellyfinFlyoutConverter().Convert(dto, typeof(object), null!, "") as FlyoutBase;
-		UpdateActionNames();
+		ApplyUserData();
 		RatingPanel.Item = dto;
 
 		_ambient = ItemArtworkConverters.AmbientBackdrop(dto);
@@ -110,6 +110,47 @@ public sealed partial class ItemHero : UserControl
 		if (IsLoaded)
 		{
 			AmbientBackdrop.Set(_ambient, _ambientHash);
+		}
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4: the toggles and the More menu (built from the item, so its "Mark as watched" text is the item's state)
+	/// show the item's user data as the server has it: on load and after every change (<see cref="ItemUserData"/>).
+	/// </summary>
+	private void ApplyUserData()
+	{
+		var dto = Dto;
+		WatchedButton.IsChecked = dto?.UserData?.Played;
+		FavoriteButton.IsChecked = dto?.UserData?.IsFavorite;
+		MoreButton.Flyout = dto is null ? null : new JellyfinFlyoutConverter().Convert(dto, typeof(object), null!, "") as FlyoutBase;
+		UpdateActionNames();
+	}
+
+	private void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
+	{
+		if (Dto is not { Id: { } id } dto || id != e.ItemId)
+		{
+			return;
+		}
+
+		dto.UserData = e.UserData;
+		ApplyUserData();
+	}
+
+	// Seaglass 1.1.4: a toggle sends the state it shows after the click (ItemUserData; a failure springs it back)
+	private async void WatchedButton_Click(object sender, RoutedEventArgs e)
+	{
+		if (Dto is { } dto)
+		{
+			await App.Commands.SetWatched(dto, WatchedButton.IsChecked == true);
+		}
+	}
+
+	private async void FavoriteButton_Click(object sender, RoutedEventArgs e)
+	{
+		if (Dto is { } dto)
+		{
+			await App.Commands.SetFavorite(dto, FavoriteButton.IsChecked == true);
 		}
 	}
 
