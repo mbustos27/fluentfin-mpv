@@ -2,52 +2,68 @@
     Seaglass's installer: a per-user MSI (no administrator, no UAC prompt) that installs the release folder as it is
     (Seaglass.exe, app\, the texts) into %LOCALAPPDATA%\Programs\Seaglass and adds a Start menu shortcut. Uninstall
     from Settings > Apps; settings and data in %LOCALAPPDATA%\FluentFinMpv stay. A newer version replaces an older one.
+    The window (SeaglassUI.wxs): a welcome page (Install / Cancel; no licence to accept, the page says where the licence
+    is), the progress page, and a finish page with "Launch Seaglass" ticked. The standard pages come from WiX's UI
+    extension (WixToolset.UI.wixext 5.0.2, a build-time NuGet package: nothing of it is in the installed app), the
+    welcome page and the texts (Seaglass.en-us.wxl) are ours, the pictures are drawn by make-installer-art.ps1.
     Built by tools\release\build-release.ps1 with WiX 5 (dotnet-tools.json):
-        wix build Seaglass.wxs -d Version=<x.y.z> -d PackageDir=<release folder> -d IconFile=<.ico> -o <msi>
+        wix build Seaglass.wxs SeaglassUI.wxs -ext WixToolset.UI.wixext/5.0.2 -loc Seaglass.en-us.wxl -arch x64
+            -d Version=<x.y.z> -d PackageDir=<release folder> -d IconFile=<.ico> -d ArtDir=<folder with Banner.bmp, Dialog.bmp> -o <msi>
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+    <!--  A release is built with these defaults. tools\release\upgrade-test.ps1's self-check builds isolated copies
+          (-d AppName=SeaglassUpgradeCheck -d UpgradeCode=<another guid>): their own name, install folder, shortcut,
+          registry key and upgrade family, so they can never touch an installed Seaglass  -->
+    <?ifndef AppName?><?define AppName="Seaglass"?><?endif?>
+    <?ifndef UpgradeCode?><?define UpgradeCode="612ED1CB-52F7-49B1-9129-A1B04ADB015A"?><?endif?>
     <Package
-        Name="Seaglass"
+        Name="$(AppName)"
         Manufacturer="Seaglass"
         Version="$(var.Version)"
-        UpgradeCode="612ED1CB-52F7-49B1-9129-A1B04ADB015A"
+        UpgradeCode="$(UpgradeCode)"
         Scope="perUser"
         Compressed="yes">
         <SummaryInformation Description="Seaglass $(var.Version), a Jellyfin client for Windows" />
-        <MajorUpgrade DowngradeErrorMessage="A newer version of Seaglass is already installed." />
+        <MajorUpgrade DowngradeErrorMessage="A newer version of $(AppName) is already installed." />
+        <UIRef Id="SeaglassUI" />   <!--  the window: SeaglassUI.wxs  -->
         <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
         <Icon Id="AppIcon" SourceFile="$(var.IconFile)" />
         <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+        <!--  Settings > Apps: the publisher is Manufacturer above ("Seaglass", the name of the program; there is no
+              company), the version and the icon are the package's; these are the links and the line under the name  -->
         <Property Id="ARPURLINFOABOUT" Value="https://github.com/mbustos27/fluentfin-mpv" />
         <Property Id="ARPHELPLINK" Value="https://github.com/mbustos27/fluentfin-mpv/issues" />
+        <Property Id="ARPURLUPDATEINFO" Value="https://github.com/mbustos27/fluentfin-mpv/releases" />
+        <Property Id="ARPCOMMENTS" Value="A Jellyfin client for Windows: FluentFin with the mpv player" />
         <Property Id="ARPNOMODIFY" Value="1" />
+        <Property Id="ARPNOREPAIR" Value="1" />
 
         <StandardDirectory Id="LocalAppDataFolder">
             <Directory Id="ProgramsDir" Name="Programs">
-                <Directory Id="INSTALLFOLDER" Name="Seaglass" />
+                <Directory Id="INSTALLFOLDER" Name="$(AppName)" />
             </Directory>
         </StandardDirectory>
 
-        <Feature Id="Main" Title="Seaglass">
+        <Feature Id="Main" Title="$(AppName)">
             <!--  every file of the release folder, its subfolders included, as the zip has them  -->
             <Files Directory="INSTALLFOLDER" Include="$(var.PackageDir)\**" />
 
             <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder">
                 <Shortcut
                     Id="StartMenuShortcut"
-                    Name="Seaglass"
+                    Name="$(AppName)"
                     Description="A Jellyfin client: FluentFin with mpv"
                     Target="[INSTALLFOLDER]app\Seaglass.exe"
                     WorkingDirectory="INSTALLFOLDER" />
-                <RegistryValue Root="HKCU" Key="Software\Seaglass" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+                <RegistryValue Root="HKCU" Key="Software\$(AppName)" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
             </Component>
 
             <!--  the install folders are removed on uninstall once their files are gone  -->
             <Component Id="InstallFolders" Directory="INSTALLFOLDER">
                 <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
                 <RemoveFolder Id="RemoveProgramsDir" Directory="ProgramsDir" On="uninstall" />
-                <RegistryValue Root="HKCU" Key="Software\Seaglass" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+                <RegistryValue Root="HKCU" Key="Software\$(AppName)" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
             </Component>
         </Feature>
 

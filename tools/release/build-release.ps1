@@ -58,6 +58,7 @@ Set-StrictMode -Version 3
 $PythonVersion = '3.14.10'
 $PythonUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-amd64.zip"
 $PythonSha256 = 'cc28026a650970cc1570bb127312f1f9634eb67abfe157ae6ca1acbbc627d091'   # python.org index-windows.json
+$WixUiExtensionVersion = '5.0.2'   # WixToolset.UI.wixext: the version of dotnet-tools.json's WiX (installer\Seaglass.wxs)
 
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $name = "Seaglass-$Version-win-x64"
@@ -447,11 +448,23 @@ Push-Location $repo
 try {
     Invoke-Checked 'dotnet tool restore' { & $dotnet tool restore }
     $env:DOTNET_ROLL_FORWARD = 'Major'   # WiX 5 targets an older .NET than the SDK this machine has
-    Invoke-Checked 'wix build' { & $dotnet tool run wix build (Join-Path $PSScriptRoot 'installer\Seaglass.wxs') -arch x64 `
-            -d "Version=$Version" -d "PackageDir=$package" -d "IconFile=$(Join-Path $repo 'ui\FluentFin\Assets\Seaglass.ico')" `
+    # the installer's window: WiX's UI extension (a build-time NuGet package, pinned here; kept in dist\.work\wix-ext, not
+    # in the user's profile; nothing of it is in the installed app) and the two pictures drawn by make-installer-art.ps1
+    $env:WIX_EXTENSIONS = Join-Path $work 'wix-ext'
+    $uiExt = "WixToolset.UI.wixext/$WixUiExtensionVersion"
+    if (-not (& $dotnet tool run wix extension list -g | Select-String -SimpleMatch "WixToolset.UI.wixext $WixUiExtensionVersion" -Quiet)) {
+        Invoke-Checked 'wix extension add' { & $dotnet tool run wix extension add -g $uiExt }
+    }
+    $art = Join-Path $work 'installer-art'
+    if (Test-Path $art) { Remove-Item -Recurse -Force $art }
+    Invoke-Checked 'installer pictures' { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'installer\make-installer-art.ps1') -Out $art }
+    $wixDir = Join-Path $PSScriptRoot 'installer'
+    Invoke-Checked 'wix build' { & $dotnet tool run wix build (Join-Path $wixDir 'Seaglass.wxs') (Join-Path $wixDir 'SeaglassUI.wxs') -arch x64 `
+            -ext $uiExt -loc (Join-Path $wixDir 'Seaglass.en-us.wxl') `
+            -d "Version=$Version" -d "PackageDir=$package" -d "IconFile=$(Join-Path $repo 'ui\FluentFin\Assets\Seaglass.ico')" -d "ArtDir=$art" `
             -intermediatefolder (Join-Path $work 'wix') -pdbtype none -o $msi }
 }
-finally { Remove-Item Env:DOTNET_ROLL_FORWARD -ErrorAction SilentlyContinue; Pop-Location }
+finally { Remove-Item Env:DOTNET_ROLL_FORWARD, Env:WIX_EXTENSIONS -ErrorAction SilentlyContinue; Pop-Location }
 $msiCheck = Join-Path $work 'msi-check'
 if (Test-Path $msiCheck) { Remove-Item -Recurse -Force $msiCheck }
 $admin = Start-Process msiexec.exe -ArgumentList @('/a', "`"$msi`"", '/qn', "TARGETDIR=`"$msiCheck`"") -Wait -PassThru

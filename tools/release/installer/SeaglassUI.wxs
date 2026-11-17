@@ -1,0 +1,53 @@
+<!--
+    Seaglass's installer window. Pages: SeaglassWelcomeDlg (ours: what it is, where it goes, where the licence is;
+    Install and Cancel, nothing to accept), then WiX's PrepareDlg and ProgressDlg, then WiX's ExitDialog with the
+    "Launch Seaglass" box ticked. Silent installs (msiexec /qn) show none of it and launch nothing.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+    <Fragment>
+        <WixVariable Id="WixUIBannerBmp" Value="$(var.ArtDir)\Banner.bmp" />
+        <WixVariable Id="WixUIDialogBmp" Value="$(var.ArtDir)\Dialog.bmp" />
+
+        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Seaglass" />
+        <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+        <CustomAction Id="LaunchSeaglass" Directory="INSTALLFOLDER" ExeCommand="&quot;[INSTALLFOLDER]Seaglass.exe&quot;"
+                      Return="asyncNoWait" Impersonate="yes" />
+
+        <UI Id="SeaglassUI">
+            <Dialog Id="SeaglassWelcomeDlg" Width="370" Height="270" Title="!(loc.SeaglassWelcomeTitle)">
+                <Control Id="Bitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="234" TabSkip="no" Text="WixUI_Bmp_Dialog" />
+                <Control Id="Title" Type="Text" X="135" Y="16" Width="220" Height="36" Transparent="yes" NoPrefix="yes"
+                         Text="{\WixUI_Font_Bigger}!(loc.SeaglassWelcomeHeading)" />
+                <Control Id="Description" Type="Text" X="135" Y="58" Width="222" Height="164" Transparent="yes" NoPrefix="yes"
+                         Text="!(loc.SeaglassWelcomeText)" />
+                <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+                <Control Id="Install" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="!(loc.SeaglassInstallButton)">
+                    <Publish Event="EndDialog" Value="Return" />
+                </Control>
+                <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="!(loc.WixUICancel)">
+                    <Publish Event="SpawnDialog" Value="CancelDlg" />
+                </Control>
+            </Dialog>
+
+            <DialogRef Id="ErrorDlg" />
+            <DialogRef Id="FatalError" />
+            <DialogRef Id="FilesInUse" />
+            <DialogRef Id="MsiRMFilesInUse" />
+            <DialogRef Id="PrepareDlg" />
+            <DialogRef Id="ProgressDlg" />
+            <DialogRef Id="ResumeDlg" />
+            <DialogRef Id="UserExit" />
+            <DialogRef Id="CancelDlg" />
+            <DialogRef Id="ExitDialog" />
+
+            <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchSeaglass" Order="1"
+                     Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+            <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999" />
+
+            <InstallUISequence>
+                <Show Dialog="SeaglassWelcomeDlg" Before="ProgressDlg" Condition="NOT Installed" />
+            </InstallUISequence>
+        </UI>
+        <UIRef Id="WixUI_Common" />
+    </Fragment>
+</Wix>
