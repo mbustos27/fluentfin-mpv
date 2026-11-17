@@ -138,7 +138,7 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	/// <summary>fluentfin-mpv: the choices for who draws the player controls (docs/research/player-controls.md).</summary>
 	public static IReadOnlyList<MpvPlayerControlsChoice> PlayerControlsChoices { get; } =
 	[
-		new(MpvPlayerControls.FluentFin, "FluentFin"),
+		new(MpvPlayerControls.FluentFin, "Seaglass"),
 		new(MpvPlayerControls.Mpv, "mpv"),
 	];
 

@@ -169,7 +169,7 @@ public sealed class LibmpvProbeTests
 		Assert.Equal(0, handle);
 		Assert.Contains("avutil-61.dll", error);
 		Assert.Contains(@"C:\Some\App\FFMpeg", error);
-		Assert.Contains("restart FluentFin to use its own controls", error);
+		Assert.Contains("restart Seaglass to use its own controls", error);
 		Assert.Null(NativeModules.LoadedPath(Path.Combine(dir.Path, "libmpv-2.dll")));
 	}
 
