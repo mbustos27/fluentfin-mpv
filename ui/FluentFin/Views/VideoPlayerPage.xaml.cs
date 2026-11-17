@@ -94,11 +94,8 @@ public sealed partial class VideoPlayerPage : Page
 
 	private void OnUnloaded(object sender, RoutedEventArgs e)
 	{
-		// never leave the window cloaked
-		if (_cloakedHwnd != 0)
-		{
-			EndSwitch();
-		}
+		// never leave the window cloaked: the switch ends whether or not a cloak is set (its timer and handlers go too)
+		EndSwitch();
 
 		// a sign-out takes the shell away with this page on it: the next shell must start with its pane
 		_chrome.Unloaded();
@@ -256,38 +253,32 @@ public sealed partial class VideoPlayerPage : Page
 		var log = App.GetService<ILogger<VideoPlayerPage>>();
 		var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
 		_switchStarted = Environment.TickCount64;
-		var cloaked = WindowCloak.Enabled && _attachedComposition && WindowCloak.Set(hwnd, true);
-		try
-		{
-			var kind = fullScreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped;
-			log.LogInformation("Full screen {On}: setting the presenter{Cloak}", fullScreen, cloaked ? " (window cloaked)" : "");
-			App.MainWindow.AppWindow.SetPresenter(kind);
-			SetTitleBar(fullScreen);
-		}
-		catch
-		{
-			if (cloaked)
+		// the cloak is remembered at once and anything after it that throws uncloaks (FullScreenCloak): never an invisible window
+		FullScreenCloak.Run(
+			() => WindowCloak.Enabled && _attachedComposition && WindowCloak.Set(hwnd, true),
+			() => WindowCloak.Set(hwnd, false),
+			cloaked => _cloakedHwnd = cloaked ? hwnd : 0,
+			() =>
 			{
-				WindowCloak.Set(hwnd, false);
-			}
+				var kind = fullScreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped;
+				log.LogInformation("Full screen {On}: setting the presenter{Cloak}", fullScreen, _cloakedHwnd != 0 ? " (window cloaked)" : "");
+				App.MainWindow.AppWindow.SetPresenter(kind);
+				SetTitleBar(fullScreen);
 
-			throw;
-		}
-
-		// the window shows again once the layout and the picture's hold are committed; the next switch waits for that
-		_switchFrames = 0;
-		_switchLayoutSeen = false;
-		_composition.PanelSizeChanged -= OnSwitchLayout;
-		_composition.PanelSizeChanged += OnSwitchLayout;
-		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSwitchFrame;
-		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnSwitchFrame;
-		_uncloakTimer ??= DispatcherQueue.CreateTimer();
-		_uncloakTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, CloakMinimumMilliseconds - (Environment.TickCount64 - _switchStarted)));
-		_uncloakTimer.IsRepeating = false;
-		_uncloakTimer.Tick -= OnUncloakTick;
-		_uncloakTimer.Tick += OnUncloakTick;
-		_cloakedHwnd = cloaked ? hwnd : 0;
-		_uncloakTimer.Start();
+				// the window shows again once the layout and the picture's hold are committed; the next switch waits for that
+				_switchFrames = 0;
+				_switchLayoutSeen = false;
+				_composition.PanelSizeChanged -= OnSwitchLayout;
+				_composition.PanelSizeChanged += OnSwitchLayout;
+				Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSwitchFrame;
+				Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnSwitchFrame;
+				_uncloakTimer ??= DispatcherQueue.CreateTimer();
+				_uncloakTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, CloakMinimumMilliseconds - (Environment.TickCount64 - _switchStarted)));
+				_uncloakTimer.IsRepeating = false;
+				_uncloakTimer.Tick -= OnUncloakTick;
+				_uncloakTimer.Tick += OnUncloakTick;
+				_uncloakTimer.Start();
+			});
 	}
 
 	private nint _cloakedHwnd;
