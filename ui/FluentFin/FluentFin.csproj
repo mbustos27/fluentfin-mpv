@@ -120,6 +120,22 @@
 		<AssemblyMetadata Include="FluentFinMpvRelease" Value="true" />
 	</ItemGroup>
 
+	<!-- fluentfin-mpv, slim release: the .NET desktop runtime pack (WPF and Windows Forms) comes in only because FlyleafLib names it.
+	     FluentFin uses WPF's input types (DeftSharp's keyboard hook: WindowsBase, PresentationCore, PresentationFramework), so
+	     those stay; Windows Forms, Visual Basic, the WPF themes, printing and designers are never loaded and are left out of
+	     the publish and of FluentFin.deps.json. verify-package.ps1 checks the package for them. -->
+	<PropertyGroup Condition="'$(FluentFinMpvRelease)' == 'true'">
+		<FluentFinSlimDrop>;System.Windows.Forms.dll;System.Windows.Forms.Primitives.dll;System.Windows.Forms.Design.dll;System.Windows.Forms.Design.Editors.dll;WindowsFormsIntegration.dll;Microsoft.VisualBasic.Forms.dll;Microsoft.VisualBasic.dll;Microsoft.VisualBasic.Core.dll;System.Design.dll;System.Drawing.Design.dll;System.Windows.Controls.Ribbon.dll;PresentationFramework.Aero.dll;PresentationFramework.Aero2.dll;PresentationFramework.AeroLite.dll;PresentationFramework.Classic.dll;PresentationFramework.Fluent.dll;PresentationFramework.Luna.dll;PresentationFramework.Royale.dll;PresentationFramework-SystemCore.dll;PresentationFramework-SystemData.dll;PresentationFramework-SystemDrawing.dll;PresentationFramework-SystemXml.dll;PresentationFramework-SystemXmlLinq.dll;PresentationUI.dll;ReachFramework.dll;System.Printing.dll;System.Windows.Presentation.dll;System.Windows.Input.Manipulations.dll;</FluentFinSlimDrop>
+	</PropertyGroup>
+	<Target Name="FluentFinSlimRelease" AfterTargets="ResolveRuntimePackAssets" Condition="'$(FluentFinMpvRelease)' == 'true'">
+		<ItemGroup>
+			<_FluentFinSlimGone Include="@(RuntimePackAsset)" Condition="$(FluentFinSlimDrop.Contains(';%(Filename)%(Extension);'))" />
+			<RuntimePackAsset Remove="@(_FluentFinSlimGone)" />
+			<_FluentFinSlimGonePaths Include="@(ReferenceCopyLocalPaths)" Condition="$(FluentFinSlimDrop.Contains(';%(Filename)%(Extension);'))" />
+			<ReferenceCopyLocalPaths Remove="@(_FluentFinSlimGonePaths)" />
+		</ItemGroup>
+	</Target>
+
 	<ItemGroup>
 	  <!-- native FFmpeg for the target architecture; arm64 binaries are fetched at build time into FFMpeg-arm64 -->
 	  <Content Include="$(FFmpegDir)\*.dll" Link="FFMpeg\%(Filename)%(Extension)">
