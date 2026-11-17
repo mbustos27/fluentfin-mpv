@@ -3,10 +3,10 @@ using System.Runtime.InteropServices;
 namespace FluentFin.Services;
 
 /// <summary>
-/// Hides a window from the screen without changing it (DWM's cloak: its surface stays, nothing is drawn). The player
-/// cloaks its window while the presenter goes full screen and back, so the few frames in which the window already has its
-/// new size and the XAML layout does not yet never show (docs/research/fullscreen-smoothness.md).
-/// <c>FLUENTFIN_NO_CLOAK=1</c> turns it off (to compare). Always paired: whoever cloaks uncloaks, a timer behind it.
+/// Hides a window from the screen without changing it (DWM's cloak: its surface stays, nothing is drawn). 1.1.2's way of
+/// hiding the player's full-screen switch; since 1.1.3 only with <c>SEAGLASS_FULLSCREEN=cloak</c> (to compare: what is behind
+/// the window shows meanwhile), the default being a black cover (docs/research/fullscreen-smoothness.md). Always paired:
+/// whoever cloaks uncloaks, a thread-pool timer behind it.
 /// </summary>
 internal static class WindowCloak
 {
@@ -18,8 +18,6 @@ internal static class WindowCloak
 
 	[DllImport("dwmapi.dll")]
 	private static extern int DwmGetWindowAttribute(nint hwnd, int attribute, out int value, int size);
-
-	public static bool Enabled { get; } = Environment.GetEnvironmentVariable("FLUENTFIN_NO_CLOAK") != "1";
 
 	/// <summary>Cloaks or uncloaks; false when DWM refused (the window stays as it is).</summary>
 	public static bool Set(nint hwnd, bool cloak)

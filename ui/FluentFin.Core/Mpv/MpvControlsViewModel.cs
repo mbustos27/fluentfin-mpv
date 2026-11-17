@@ -292,8 +292,15 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		var now = _now();
 		var position = CurrentPosition(now);
+		var paused = state.State == Bridge.States.Paused;
+		if (paused != IsPaused)
+		{
+			// paused or playing by another hand (the end of the item, a remote, mpv): a click still waiting does nothing
+			_clicks.Cancel();
+		}
+
 		IsOpening = state.State == Bridge.States.Opening;
-		IsPaused = state.State == Bridge.States.Paused;
+		IsPaused = paused;
 		if (!_volumeInFlight && now - _audioChangedAt >= AudioSettle)
 		{
 			Volume = state.Volume;
@@ -350,6 +357,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 	public void OnItem(BridgeItem item)
 	{
+		// a new item: a click on the last one's video does not pause this one
+		_clicks.Cancel();
 		ItemId = item.ItemId;
 		(Title, Subtitle) = FormatTitle(item);
 		if (item.RunTimeTicks is long runtime && runtime > 0)
@@ -384,7 +393,14 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 	// -- actions --------------------------------------------------------------------------------------------------------
 
+	/// <summary>Play or pause (a key, the button). A click on the video still waiting for its own play/pause does nothing then.</summary>
 	public Task TogglePause()
+	{
+		_clicks.Cancel();
+		return Toggle();
+	}
+
+	private Task Toggle()
 	{
 		NotifyActivity();
 		IsPaused = !IsPaused;
@@ -553,6 +569,45 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		var volume = Math.Clamp(Volume + steps * Step, 0, 100);
 		return volume == Volume && !IsMuted ? Task.CompletedTask : SetVolume(volume, wakeControls);
 	}
+
+	// -- clicks on the video (Seaglass 1.1.3) ---------------------------------------------------------------------------
+
+	private VideoClicks _clicks = new(TimeSpan.FromMilliseconds(500));
+
+	/// <summary>The system's double-click time (the view sets it): a click's play/pause waits this long.</summary>
+	public TimeSpan DoubleClickTime
+	{
+		get => _clicks.DoubleClickTime;
+		set => _clicks = new VideoClicks(value);
+	}
+
+	/// <summary>
+	/// A click on the video (not on the controls): the controls show at once, and its play/pause waits
+	/// <see cref="DoubleClickTime"/> (the view's timer then calls <see cref="ClickWaitOver"/>), so a double click is full
+	/// screen only. 1.1.2 paused at once and unpaused at the second click: going full screen stuttered the playback.
+	/// </summary>
+	public void VideoClicked()
+	{
+		NotifyActivity();
+		_clicks.Clicked();
+	}
+
+	/// <summary>The click's wait is over: its play/pause, unless something else played or paused meanwhile.</summary>
+	public Task ClickWaitOver() => _clicks.WaitOver(_now()) ? Toggle() : Task.CompletedTask;
+
+	/// <summary>A double click on the video: full screen only (the first click's play/pause is dropped, or undone if it just ran).</summary>
+	public void VideoDoubleClicked()
+	{
+		if (_clicks.DoubleClicked(_now()))
+		{
+			_ = Toggle();
+		}
+
+		ToggleFullScreen();
+	}
+
+	/// <summary>The view goes (the page is left): a click still waiting does nothing.</summary>
+	public void CancelClick() => _clicks.Cancel();
 
 	public void ToggleFullScreen()
 	{
@@ -1005,8 +1060,15 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>One wheel notch, as Windows counts it (WHEEL_DELTA).</summary>
 	public const int WheelNotch = 120;
 
+	/// <summary>
+	/// Seaglass 1.1.3: part of a notch (a smooth wheel's or a touchpad's) is kept this long for the next turn the same way;
+	/// after it, or when the wheel turns the other way, it is dropped (a reversal never spends its first part undoing it).
+	/// </summary>
+	public static readonly TimeSpan WheelRemainderFor = TimeSpan.FromSeconds(1.5);
+
 	private DateTimeOffset _volumeIndicatorUntil;
 	private int _wheelRemainder;
+	private DateTimeOffset _lastWheel;
 
 	/// <summary>The brief volume indicator a wheel turn shows, also while the bars are hidden.</summary>
 	[ObservableProperty]
@@ -1042,8 +1104,9 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>
 	/// The mouse wheel turned over the video or the controls (<paramref name="delta"/> in Windows' units, 120 a notch, up
 	/// positive): the volume goes up or down <see cref="Step"/> a notch, 0 to 100 (up never lowers one above 100), and the
-	/// indicator shows. It never seeks and never scrolls anything; fine-grained wheels add up until they make a notch. It
-	/// does not wake the bars: the indicator is enough, and the picture stays clear.
+	/// indicator shows. It never seeks and never scrolls anything; fine-grained wheels add up until they make a notch (the
+	/// part left over is dropped when the wheel turns back or after <see cref="WheelRemainderFor"/>). It does not wake the
+	/// bars: the indicator is enough, and the picture stays clear.
 	/// </summary>
 	public Task Wheel(int delta)
 	{
@@ -1053,6 +1116,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			return Task.CompletedTask;
 		}
 
+		var now = _now();
+		if (now - _lastWheel >= WheelRemainderFor || (delta != 0 && Math.Sign(delta) == -Math.Sign(_wheelRemainder)))
+		{
+			_wheelRemainder = 0;
+		}
+
+		_lastWheel = now;
 		_wheelRemainder += delta;
 		var notches = _wheelRemainder / WheelNotch;
 		_wheelRemainder -= notches * WheelNotch;

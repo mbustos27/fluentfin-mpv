@@ -10,6 +10,13 @@
 # The grabs run on the UI thread's own time (PrintWindow asks the window to paint), so they slow the switch a little: the
 # ms are the grabs', not the screen's. Env FS_BURST_ENTRIES=F,F11,dbl,button,esc picks entries; FS_BURST_REPS repeats each,
 # FS_BURST_FRAMES the frames per burst (40; 6 = hardly any grabbing, for the app's own FLUENTFIN_MPV_VIDEO_TRACE log).
+# Seaglass 1.1.3: a frame is also K (covered: the black cover, nearly all black); each switch reports how long the app hid
+# the window (its log's "shows again after N ms") and the half-done frames shown after the hide ended. FS_BURST_EXTRAS picks
+# the checks after the bursts, in this order (default all; 0: none): fheld (F held: auto-repeat), escheld (Esc held in full
+# screen), inset (the subtitle inset's timing against the presenter change), dblclick (a posted double click), back (leaving
+# the player from full screen with Back; the page is gone after it), fescleave (the review's repro: F, Esc 35 ms later, Esc 10
+# ms after that, all inside one switch: the player is left and the window must end windowed, with no switch started after
+# the leave; FS_FESC_GAP1/FS_FESC_GAP2 change the gaps; it leaves the page too). A check that leaves the player ends them.
 
 $entries = if ($env:FS_BURST_ENTRIES) { $env:FS_BURST_ENTRIES -split ',' } else { @('F', 'F11', 'button', 'esc') }
 $reps = if ($env:FS_BURST_REPS) { [int]$env:FS_BURST_REPS } else { 1 }
@@ -56,6 +63,20 @@ function Burst-Trigger([string]$How) {
     }
 }
 
+# FluentFin's log (this run's) and the backend's: lines with their times
+function App-Log { Get-ChildItem (Join-Path $DataDir 'Logs') -Filter 'log*.txt' | Sort-Object LastWriteTime | Select-Object -Last 1 }
+function Line-Time([string]$Line) {
+    if ($Line -match '(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)[.,](\d{3})') { [datetime]::ParseExact("$($Matches[1]).$($Matches[2])", 'yyyy-MM-dd HH:mm:ss.fff', $null) }
+}
+$script:hideLines = 0
+# the app's own word on the switch that just ran: "... shows again after N ms (...)" (new lines since the last call)
+function Hidden-Ms {
+    $lines = @(Select-String -LiteralPath (App-Log).FullName -Pattern 'shows again after' -SimpleMatch)
+    $new = @($lines | Select-Object -Skip $script:hideLines); $script:hideLines = $lines.Count
+    if (-not $new) { return 'not (no hide logged)' }
+    ($new | ForEach-Object { if ($_.Line -match 'shows again after (\d+) ms(.*)$') { "$($Matches[1]) ms$($Matches[2])" } }) -join '; '
+}
+
 function Run-Burst([string]$Name, [string]$How, [bool]$WantFull) {
     $trigger = Burst-Trigger $How   # the button is found before the burst (UI Automation is slow: not inside the grabs)
     $before = Get-WindowState $script:hwnd
@@ -70,8 +91,8 @@ function Run-Burst([string]$Name, [string]$How, [bool]$WantFull) {
             Black = [int]$c[4]; White = [int]$c[5]; X0 = [int]$box[0]; Y0 = [int]$box[1]; X1 = [int]$box[2]; Y1 = [int]$box[3]; Aspect = [double]$c[7]; DS = [double]$c[8]; DE = [double]$c[9]; Cloaked = ($c[10] -eq '1') }
     }
     $final = $parsed[-1]
-    # a frame is the old layout (A: like the first), the new one (B: like the last) or neither (X: a half-done switch the user would see; C: the window cloaked, nothing shown)
-    foreach ($p in $parsed) { $p | Add-Member State $(if ($p.Cloaked) { 'C' } elseif ($p.DE -le 2.0) { 'B' } elseif ($p.DS -le 2.0) { 'A' } else { 'X' }) }
+    # a frame is the old layout (A: like the first), the new one (B: like the last) or neither (X: a half-done switch the user would see; C: the window cloaked, nothing shown; K: covered, all black)
+    foreach ($p in $parsed) { $p | Add-Member State $(if ($p.Cloaked) { 'C' } elseif ($p.DE -le 2.0) { 'B' } elseif ($p.DS -le 2.0) { 'A' } elseif ($p.Black -ge 95) { 'K' } else { 'X' }) }
     $clean = $null
     for ($i = $parsed.Count - 1; $i -ge 0; $i--) { if ($parsed[$i].State -eq 'B') { $clean = $parsed[$i] } else { break } }
     $first = $parsed | Where-Object { $_.I -ge $triggerAt -and $_.State -ne 'A' } | Select-Object -First 1
@@ -80,10 +101,15 @@ function Run-Burst([string]$Name, [string]$How, [bool]$WantFull) {
     $black = @($mid | Where-Object { $_.Black -ge 95 })
     $white = @($mid | Where-Object { $_.White -ge 60 })
     $strip = ($parsed | Where-Object { $_.I -ge ($triggerAt - 1) -and ($null -eq $clean -or $_.I -le $clean.I + 1) } | ForEach-Object { "{0}{1}@{2}" -f $_.State, $_.I, $_.T }) -join ' '
-    $line = "{0}: window {1} -> {2} ({3}); first change at {4} ms, clean frame at {5} ms; half-done frames {6} (near-black {7}, near-white {8}); grab {9} ms avg; cloaked frames {11}; frames {10}" -f `
+    # what was shown once the hide ended: half-done frames after the last hidden one (C or K)
+    $lastHidden = $parsed | Where-Object { $_.I -ge $triggerAt -and $_.State -in 'C', 'K' } | Select-Object -Last 1
+    $shownHalf = @($parsed | Where-Object { $_.I -ge $triggerAt -and $_.State -eq 'X' -and (-not $lastHidden -or $_.I -gt $lastHidden.I) })
+    $covered = @($parsed | Where-Object { $_.State -eq 'K' })
+    $hiddenMs = Hidden-Ms
+    $line = "{0}: window {1} -> {2} ({3}); first change at {4} ms, clean frame at {5} ms; half-done frames {6} (near-black {7}, near-white {8}); grab {9} ms avg; cloaked frames {11}; covered frames {12}; half-done shown after the hide {13}; hidden {14}; frames {10}" -f `
         $Name, $before.Rect, $after.Rect, $(if ($after.FullScreen -eq $WantFull) { 'as wanted' } else { 'NOT as wanted' }),
         $(if ($first) { $first.T } else { 'none' }), $(if ($clean) { $clean.T } else { 'never' }), $mid.Count, $black.Count, $white.Count,
-        [int](($parsed | Measure-Object Grab -Average).Average), $strip, $cloaked.Count
+        [int](($parsed | Measure-Object Grab -Average).Average), $strip, $cloaked.Count, $covered.Count, $shownHalf.Count, $hiddenMs
     Say "burst $line"
     Add-Content -LiteralPath (Join-Path $burstDir 'summary.txt') -Value $line -Encoding utf8
     Check "burst $Name switched ($How)" ($after.FullScreen -eq $WantFull) $after.Rect
@@ -117,4 +143,131 @@ if ($PlayerControls -eq 'FluentFin' -and -not $env:FS_BURST_NO_QUICK) {
     }
     Shot 'after-quick-presses'
     if ((Get-WindowState $script:hwnd).FullScreen) { Key 0x1B; Start-Sleep -Milliseconds 1200 }
+}
+
+# ---- after the bursts (FluentFin's controls): held keys, the subtitle inset's timing, a double click, Back from full screen
+$extras = if ($env:FS_BURST_EXTRAS) { @($env:FS_BURST_EXTRAS -split ',') } else { @('fheld', 'escheld', 'inset', 'dblclick', 'back') }
+if ($PlayerControls -eq 'FluentFin' -and $extras -notcontains '0') {
+    if (-not ('FsExtras' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class FsExtras {
+  [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] static extern uint MapVirtualKey(uint code, uint type);
+  [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr h, ref POINT p);
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+  // a key down (repeat: bit 30, the key was already down) or up, posted
+  public static void Down(IntPtr t, int vk, bool repeat) { uint s = MapVirtualKey((uint)vk, 0); PostMessage(t, 0x0100, (IntPtr)vk, (IntPtr)(1 | (s << 16) | (repeat ? (1u << 30) : 0u))); }
+  public static void Up(IntPtr t, int vk) { uint s = MapVirtualKey((uint)vk, 0); PostMessage(t, 0x0101, (IntPtr)vk, (IntPtr)(1 | (s << 16) | (1u << 30) | (1u << 31))); }
+  // a double click at screen point (x, y): down, up, double-click, up, posted to t
+  public static void DoubleClick(IntPtr t, int x, int y) {
+    var p = new POINT { X = x, Y = y }; ScreenToClient(t, ref p); var lp = (IntPtr)(((p.Y & 0xFFFF) << 16) | (p.X & 0xFFFF));
+    PostMessage(t, 0x0200, IntPtr.Zero, lp); System.Threading.Thread.Sleep(40);
+    PostMessage(t, 0x0201, (IntPtr)1, lp); System.Threading.Thread.Sleep(30); PostMessage(t, 0x0202, IntPtr.Zero, lp); System.Threading.Thread.Sleep(60);
+    PostMessage(t, 0x0203, (IntPtr)1, lp); System.Threading.Thread.Sleep(30); PostMessage(t, 0x0202, IntPtr.Zero, lp);
+  }
+}
+'@
+    }
+    $kw = [OffscreenUi]::KeyWindow($script:hwnd, $script:ui.Id)
+    $backendLog = Join-Path $DataDir 'Logs\mpv-backend.log'
+    function Count-Log([string]$Pattern) { @(Select-String -LiteralPath (App-Log).FullName -Pattern $Pattern -SimpleMatch).Count }
+    function Count-Backend([string]$Pattern) { @(Select-String -LiteralPath $backendLog -Pattern $Pattern -SimpleMatch -ErrorAction SilentlyContinue).Count }
+    function Player-There { [bool](Find-Ui -Id 'FullScreenButton') }
+    if ((Get-WindowState $script:hwnd).FullScreen) { Key 0x1B; Start-Sleep -Milliseconds 1500 }
+
+    # F held about 1 s (one down, then 30 auto-repeats 33 ms apart): one switch, not one per repeat
+    if ($extras -contains 'fheld') {
+    $p0 = Count-Log 'setting the presenter'
+    [FsExtras]::Down($kw, 0x46, $false)
+    for ($i = 0; $i -lt 30; $i++) { Start-Sleep -Milliseconds 33; [FsExtras]::Down($kw, 0x46, $true) }
+    [FsExtras]::Up($kw, 0x46); Start-Sleep -Milliseconds 1500
+    $n = (Count-Log 'setting the presenter') - $p0
+    Say "extras: F held 1 s: $n presenter changes, full screen $((Get-WindowState $script:hwnd).FullScreen)"
+    Check 'extras: F held is one switch (auto-repeat ignored)' ($n -eq 1 -and (Get-WindowState $script:hwnd).FullScreen) "$n presenter changes"
+    }
+
+    # Esc held in full screen (0.7 s of repeats): leaves full screen, and the player stays
+    if ($extras -contains 'escheld') {
+    if (-not (Get-WindowState $script:hwnd).FullScreen) { Key 0x46; Start-Sleep -Milliseconds 1500 }
+    [FsExtras]::Down($kw, 0x1B, $false)
+    for ($i = 0; $i -lt 20; $i++) { Start-Sleep -Milliseconds 33; [FsExtras]::Down($kw, 0x1B, $true) }
+    [FsExtras]::Up($kw, 0x1B); Start-Sleep -Milliseconds 2000
+    $there = Player-There; $full = (Get-WindowState $script:hwnd).FullScreen
+    Say "extras: Esc held in full screen: full screen $full, player still there $there"
+    Check 'extras: Esc held leaves full screen and keeps the player' ($there -and -not $full) "full screen $full, player $there"
+    if (-not $there) { Say 'extras: the player was left: the rest is skipped'; return }
+    }
+
+    # the subtitle inset (set_controls) against the presenter change, in and out: sent before it, not after the window showed
+    if ($extras -contains 'inset') {
+    if ((Get-WindowState $script:hwnd).FullScreen) { Key 0x1B; Start-Sleep -Milliseconds 1500 }
+    foreach ($leg in @(@{ Key = 0x46; Name = 'in' }, @{ Key = 0x1B; Name = 'out' })) {
+        $since = Get-Date
+        Key $leg.Key; Start-Sleep -Milliseconds 1500
+        $presenter = @(Select-String -LiteralPath (App-Log).FullName -Pattern 'setting the presenter' -SimpleMatch | Where-Object { (Line-Time $_.Line) -ge $since.AddMilliseconds(-50) } | Select-Object -Last 1)
+        $shown = @(Select-String -LiteralPath (App-Log).FullName -Pattern 'shows again after' -SimpleMatch | Where-Object { (Line-Time $_.Line) -ge $since.AddMilliseconds(-50) } | Select-Object -Last 1)
+        $insets = @(Select-String -LiteralPath $backendLog -Pattern '<- set_controls' -SimpleMatch | Where-Object { (Line-Time $_.Line) -ge $since.AddMilliseconds(-50) })
+        if ($presenter) {
+            $tp = Line-Time $presenter[0].Line
+            $rel = ($insets | ForEach-Object { '{0:+0;-0} ms' -f ((Line-Time $_.Line) - $tp).TotalMilliseconds }) -join ', '
+            $rs = if ($shown) { '{0:+0;-0} ms' -f ((Line-Time $shown[0].Line) - $tp).TotalMilliseconds } else { 'none logged' }
+            Say "extras: inset going $($leg.Name): set_controls at [$rel] from the presenter change; the window showed at $rs"
+            $after = @($insets | Where-Object { (Line-Time $_.Line) -gt $tp })
+            Check "extras: the subtitle inset goes before the presenter change ($($leg.Name))" ($insets.Count -gt 0 -and $after.Count -eq 0) "set_controls at [$rel]"
+        }
+        else { Say "extras: inset going $($leg.Name): no presenter change logged" }
+    }
+    }
+    if ((Get-WindowState $script:hwnd).FullScreen) { Key 0x1B; Start-Sleep -Milliseconds 1500 }
+
+    # a posted double click over the video (WinUI may ignore posted clicks off-screen: then nothing happens at all)
+    if ($extras -contains 'dblclick') {
+    $r = New-Object OffscreenUi+RECT; [void][OffscreenUi]::GetWindowRect($script:hwnd, [ref]$r)
+    $t0 = Count-Backend '<- toggle_pause'; $full0 = (Get-WindowState $script:hwnd).FullScreen
+    [FsExtras]::DoubleClick([OffscreenUi]::PointerWindow($script:hwnd, $script:ui.Id), [int](($r.L + $r.R) / 2), [int]($r.T + ($r.B - $r.T) * 0.45))
+    Start-Sleep -Milliseconds 1500
+    $pauses = (Count-Backend '<- toggle_pause') - $t0; $full1 = (Get-WindowState $script:hwnd).FullScreen
+    Say "extras: posted double click: full screen $full0 -> $full1, toggle_pause commands $pauses"
+    if ($full1 -ne $full0) { Check 'extras: a double click is full screen only (no pause and unpause)' ($pauses -eq 0) "$pauses toggle_pause" }
+    else { Say 'extras: the posted double click did nothing (WinUI reads pointer input): the double click is covered by unit tests' }
+    if ((Get-WindowState $script:hwnd).FullScreen) { Key 0x1B; Start-Sleep -Milliseconds 1500 }
+    }
+
+    # Back (the browser-back key) from full screen: the player is left; the window is never hidden waiting for a layout that does not come
+    if ($extras -contains 'back') {
+    if (-not (Get-WindowState $script:hwnd).FullScreen) { Key 0x46; Start-Sleep -Milliseconds 1500 }
+    $before = Count-Log 'shows again after'
+    $sw = [Diagnostics.Stopwatch]::StartNew(); $firstHidden = $null; $lastHidden = $null
+    [FsExtras]::Down($kw, 0xA6, $false); [FsExtras]::Up($kw, 0xA6)
+    while ($sw.ElapsedMilliseconds -lt 1500) {
+        if ([OffscreenUi]::IsCloaked($script:hwnd)) { if ($null -eq $firstHidden) { $firstHidden = $sw.ElapsedMilliseconds }; $lastHidden = $sw.ElapsedMilliseconds }
+        Start-Sleep -Milliseconds 5
+    }
+    $hideLine = @(Select-String -LiteralPath (App-Log).FullName -Pattern 'shows again after' -SimpleMatch | Select-Object -Skip $before)
+    $hid = if ($null -ne $firstHidden) { "cloaked from $firstHidden to $lastHidden ms" } else { 'never cloaked' }
+    Say "extras: Back from full screen: $hid; the app: $(if ($hideLine) { ($hideLine | ForEach-Object { $_.Line -replace '^.*(shows again after .*)$', '$1' }) -join '; ' } else { 'no hide' }); now $((Get-WindowState $script:hwnd).Rect) full $((Get-WindowState $script:hwnd).FullScreen)"
+    Check 'extras: Back from full screen does not hide the window' ($null -eq $firstHidden -and -not $hideLine) $hid
+    Shot 'after-back-from-full-screen'
+    }
+
+    if ($extras -contains 'fescleave' -and (Player-There)) {
+        if ((Get-WindowState $script:hwnd).FullScreen) { Key 0x1B; Start-Sleep -Milliseconds 1500 }
+        $gap1 = if ($env:FS_FESC_GAP1) { [int]$env:FS_FESC_GAP1 } else { 35 }
+        $gap2 = if ($env:FS_FESC_GAP2) { [int]$env:FS_FESC_GAP2 } else { 10 }
+        $n0 = @(Get-Content -LiteralPath (App-Log).FullName).Count
+        foreach ($k in @(@(0x46, $gap1), @(0x1B, $gap2), @(0x1B, 0))) {
+            [FsExtras]::Down($kw, $k[0], $false); [FsExtras]::Up($kw, $k[0])
+            if ($k[1]) { Start-Sleep -Milliseconds $k[1] }
+        }
+        Start-Sleep -Milliseconds 3000
+        $lines = @(Get-Content -LiteralPath (App-Log).FullName | Select-Object -Skip $n0 | Where-Object { $_ -match 'Full screen|full screen|Player page|presenter|shows again' })
+        foreach ($l in $lines) { Say "extras: fescleave log: $($l -replace '^\S+ ', '')" }
+        $leftAt = [array]::FindIndex([string[]]$lines, [Predicate[string]]{ param($l) $l -match 'left by a navigation' })
+        $after = if ($leftAt -ge 0) { @($lines | Select-Object -Skip ($leftAt + 1) | Where-Object { $_ -match 'window covered|window cloaked' }) } else { @() }
+        $st = Get-WindowState $script:hwnd
+        Say "extras: F, Esc ($gap1 ms), Esc ($gap2 ms): full $($st.FullScreen) rect $($st.Rect); player there $(Player-There); hidden switches after the leave $($after.Count)"
+        Check 'extras: leaving the player mid-switch ends windowed, with no switch on the page being left' (-not $st.FullScreen -and $after.Count -eq 0 -and $leftAt -ge 0) "$($st.Rect), $($after.Count) hidden switches after the leave"
+        Shot 'after-f-esc-esc'
+    }
 }
