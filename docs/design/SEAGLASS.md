@@ -99,7 +99,25 @@ The user: "its not very glassy lets get reallllllll themed", "we can get niche".
   (`RaiseNotificationEvent`). The subtitles menu is a flyout: the tracks, then **Text size** (50 to 200 %, steps of 10, default
   100, live through `set_subtitle_size`, remembered in the local settings `SubtitleSize` and sent when the controls take over;
   the backend keeps it as its own `subtitle_size`, so mpv's controls use the same value).
-- **Not done yet** (left for later passes): the navigation rail as a floating slab, glass frames and title plates on posters,
-  pointer-following sheen on panels, page-transition depth, a 64 px thumbnail fallback for items without a BlurHash,
-  an intensity slider, the Light theme (the palette recolours the dark theme only), and GPU timings on an integrated GPU
-  (step 0 measured the grain only: seams and mean; no frame-cost numbers were taken).
+## Pass 3, part 2 (1.1.2): every glass feature
+
+- **The rail is a floating slab**: the pane is transparent and holds a near-opaque glass slab (`GlassPanelStrongBrush`, radius 20,
+  grain, glow, rim) 8 px in from the window edge; the rail is 84 px wide (`RailNavigationViewOpenPaneLength`).
+- **Poster frames and title plates**: a card's artwork (opaque, sharp) has a lit rim (`GlassStrokeBrush`, radius 12); under it the
+  title sits on a plate (`GlassPlateBrush`: the title's tint at 60 %, opaque in Solid, a 10 px radius, the rim). No acrylic per card.
+- **Pointer highlight** (`PanelSheen`, in the `GlassSurfaceStyle` template): a soft radial highlight follows the mouse or pen over
+  a glass panel, clipped to the panel's corners. Full mode with motion only; none for touch, Reduced, Solid.
+- **Page transitions** (`PageTransition`, from `NavigationService.OnNavigated`): Full: the page fades in, rises 14 px and grows from
+  98 % in 350 ms on the curve (0.05, 0.9, 0.1, 1.0); Reduced: a 150 ms fade; Solid, animations off and the player page: none.
+- **No BlurHash**: `ArtworkSampler` decodes the artwork down to 16x9 pixels and `SeaglassPalette.HueFromCells` scores it as it
+  scores a hash (the default hue until it is read).
+- **Light theme**: `SeaglassPalette.Build(hue, solid, light: true)`: a pale tint (L 0.95), dark text (L 0.22), a deeper accent (L 0.50)
+  with white text; checked at 4.5:1 over a backdrop at least 0.50 bright (7:1 in Solid). `SeaglassTheme` recolours both theme
+  dictionaries. `SEAGLASS_THEME=Light|Dark` forces the theme (harness screenshots).
+- **Accessibility**: the grain, the panel highlight and the window's backdrop images are `AccessibilityView` Raw: outside the control
+  view Narrator and the harness's scan use. The one image the scan still names is the item page's logo, which is the page heading.
+- **Cost** (`tools/ui-harness/offscreen/then-gpu.ps1`, Home scrolled to the bottom and back 8 times, off-screen): the app's CPU
+  was 0.31 % of all cores on average (max 1.28) in Full against 0.02 % (max 0.09) in Solid. The "GPU Engine" counters read 0 in both:
+  a private desktop is not composed by the GPU, so the GPU cost on a real desktop was NOT measured. Measure it on a screen before
+  quoting a number.
+- **Still open**: an intensity slider; the GPU numbers above.
