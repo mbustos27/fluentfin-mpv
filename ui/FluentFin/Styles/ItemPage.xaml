@@ -19,7 +19,8 @@
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
-    <x:Double x:Key="ItemHeroMinHeight">520</x:Double>
+    <!--  fixed: the backdrop is cropped to it (an image drawn at its own aspect ratio would fill the window)  -->
+    <x:Double x:Key="ItemHeroHeight">640</x:Double>
     <x:Double x:Key="ItemHeroTextMaxWidth">660</x:Double>
     <Thickness x:Key="ItemPageGutter">48,0,48,0</Thickness>
 

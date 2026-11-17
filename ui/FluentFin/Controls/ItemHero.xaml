@@ -18,7 +18,7 @@
     HorizontalContentAlignment="Stretch"
     mc:Ignorable="d">
 
-    <Grid MinHeight="{StaticResource ItemHeroMinHeight}" RequestedTheme="Dark">
+    <Grid Height="{StaticResource ItemHeroHeight}" RequestedTheme="Dark">
         <Image
             x:Name="BackdropImage"
             HorizontalAlignment="Center"
