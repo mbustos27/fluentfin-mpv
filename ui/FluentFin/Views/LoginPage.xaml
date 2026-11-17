@@ -34,7 +34,7 @@
                 HorizontalAlignment="Center"
                 FontWeight="SemiBold"
                 Style="{StaticResource GlassPageTitleTextBlockStyle}"
-                Text="FluentFin MPV" />
+                Text="Seaglass" />
             <StackPanel>
                 <TextBlock Text="Username" />
                 <AutoSuggestBox

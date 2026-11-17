@@ -40,7 +40,7 @@
                 HorizontalAlignment="Center"
                 FontWeight="SemiBold"
                 Style="{StaticResource GlassPageTitleTextBlockStyle}"
-                Text="FluentFin MPV" />
+                Text="Seaglass" />
 
             <StackPanel Margin="{StaticResource MediumBottomMargin}" Visibility="{x:Bind ViewModel.HasServers, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}">
                 <TextBlock Text="Saved Servers" />
