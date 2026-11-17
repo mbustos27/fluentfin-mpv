@@ -67,7 +67,8 @@ public sealed partial class ShelfRow : UserControl
 
 		// the wheel: on the row's content, which the event reaches before the scroll viewer's own handling; handled events too
 		List.AddHandler(PointerWheelChangedEvent, new PointerEventHandler(List_PointerWheelChanged), true);
-		Scroller.AddHandler(KeyDownEvent, new KeyEventHandler(Scroller_KeyDown), false);
+		// on the row's content, below the scroll viewer: its own Home/End/arrow handling would take the keys first
+		List.AddHandler(KeyDownEvent, new KeyEventHandler(Scroller_KeyDown), false);
 		Scroller.GettingFocus += Scroller_GettingFocus;
 		Scroller.GotFocus += Scroller_GotFocus;
 
