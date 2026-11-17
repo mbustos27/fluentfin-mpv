@@ -30,13 +30,15 @@ Settings > Apps. From the zip:
 
 Where your data is
 ------------------
-- %LOCALAPPDATA%\FluentFinMpv: settings and saved servers, the TV journal, logs (Logs\) and the mpv
+- %LOCALAPPDATA%\Seaglass: settings and saved servers, the TV journal, logs (Logs\) and the mpv
   backend's configuration (mpv-backend\: mpv.conf, input.conf, conf.json). Seaglass was called FluentFin
-  MPV before 1.1.0: the first start copies the old %LOCALAPPDATA%\FluentFinMpv folder here and leaves it as it was.
+  MPV before 1.1.0: the first start copies the old %LOCALAPPDATA%\FluentFinMpv folder here and leaves it as
+  it was. If that copy fails, Seaglass says so, uses the old folder for that session and tries again next time.
 - Seaglass.exe --data-dir <folder> keeps all of it in that folder instead.
 - Nothing is written to this folder. From the zip nothing is installed: to remove Seaglass, delete
-  this folder and %LOCALAPPDATA%\FluentFinMpv. Installed with the .msi: uninstall it in Settings > Apps,
-  and delete %LOCALAPPDATA%\FluentFinMpv too to remove your data.
+  this folder and %LOCALAPPDATA%\Seaglass. Installed with the .msi: uninstall it in Settings > Apps,
+  and delete %LOCALAPPDATA%\Seaglass too to remove your data. The old %LOCALAPPDATA%\FluentFinMpv,
+  if you used FluentFin MPV, can go once Seaglass shows your servers and journal.
 
 Reporting a problem
 -------------------
