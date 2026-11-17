@@ -63,7 +63,7 @@ $WixUiExtensionVersion = '5.0.2'   # WixToolset.UI.wixext: the version of dotnet
 $PyInstallerVersion = '6.22.3'   # the version of requirements-build.txt
 $PyInstallerSdistSha256 = '05eb2f5615503e72939a7224d68b4aff572c6b0438ee4a17d0a4b481f399362d'   # pypi.org/pypi/pyinstaller/6.22.3/json, the sdist
 $Msys2Root = 'C:\msys64'
-$GccVersion = '16.2.0'   # mingw-w64-ucrt-x86_64-gcc 16.2.0-7 (UCRT64)
+$GccPinnedVersion = '16.2.0'   # mingw-w64-ucrt-x86_64-gcc 16.2.0-7 (UCRT64)
 
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $name = "Seaglass-$Version-win-x64"
@@ -175,8 +175,8 @@ Step 'PyInstaller bootloader (built from source with MinGW-w64 gcc)'
 $gccBin = Join-Path $Msys2Root 'ucrt64\bin'
 $gcc = Join-Path $gccBin 'gcc.exe'
 if (-not (Test-Path $gcc)) { throw "no ${gcc}: install MSYS2 (https://www.msys2.org) and 'pacman -S mingw-w64-ucrt-x86_64-gcc' (docs\RELEASE.md)" }
-$gccVersion = (& $gcc --version | Select-Object -First 1)
-if ($gccVersion -notmatch [regex]::Escape($GccVersion)) { throw "gcc is '$gccVersion', not the pinned $GccVersion (build-release.ps1, tools\release\VENDORED.md)" }
+$gccBanner = (& $gcc --version | Select-Object -First 1)
+if ($gccBanner -notmatch [regex]::Escape($GccPinnedVersion)) { throw "gcc is '$gccBanner', not the pinned $GccPinnedVersion (build-release.ps1, tools\release\VENDORED.md)" }
 $pyiSourceWork = Join-Path $work 'pyinstaller-source'
 if (Test-Path $pyiSourceWork) { Remove-Item -Recurse -Force $pyiSourceWork }
 New-Item -ItemType Directory $pyiSourceWork | Out-Null
@@ -199,11 +199,11 @@ foreach ($loader in 'run.exe', 'runw.exe') {
     $built = Join-Path $bootloaderOut $loader
     if (-not (Test-Path $built)) { throw "the bootloader build made no $loader" }
     $text = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($built))
-    if ($text -notmatch "Built by MSYS2 project\) $([regex]::Escape($GccVersion))") { throw "$loader does not carry gcc $GccVersion's marker: it was not built here" }
+    if ($text -notmatch "Built by MSYS2 project\) $([regex]::Escape($GccPinnedVersion))") { throw "$loader does not carry gcc $GccPinnedVersion's marker: it was not built here" }
     Copy-Item $built (Join-Path $venvBootloader $loader) -Force
 }
 $loaderHashes = (@('run.exe', 'runw.exe') | ForEach-Object { "$_ $((Get-FileHash -Algorithm SHA256 (Join-Path $venvBootloader $_)).Hash.ToLowerInvariant())" }) -join '; '
-Write-Host "bootloader: built from pyinstaller-$PyInstallerVersion.tar.gz with $gccVersion; $loaderHashes"
+Write-Host "bootloader: built from pyinstaller-$PyInstallerVersion.tar.gz with $gccBanner; $loaderHashes"
 
 # the libmpv folder: each DLL the one its BUILD-MANIFEST.txt lists, and what they import there or Windows' (or a driver's),
 # every function imported from the folder exported there. -LibmpvExclude: a copy without those libraries (dist\.work\
@@ -306,7 +306,7 @@ if (-not (Test-Path (Join-Path $backendOut 'fluentfin-mpv-backend.exe'))) { thro
 # the backend runs on the bootloader built above (its gcc marker is in the exe), and nothing in it is UPX-packed (the spec's
 # upx=False; a packed file has UPX0/UPX1 sections and a "UPX!" header, a common antivirus trigger)
 $backendBytes = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes((Join-Path $backendOut 'fluentfin-mpv-backend.exe')))
-if ($backendBytes -notmatch "Built by MSYS2 project\) $([regex]::Escape($GccVersion))") { throw 'fluentfin-mpv-backend.exe does not carry the bootloader built from source here' }
+if ($backendBytes -notmatch "Built by MSYS2 project\) $([regex]::Escape($GccPinnedVersion))") { throw 'fluentfin-mpv-backend.exe does not carry the bootloader built from source here' }
 if ($backendBytes.Contains('UPX!') -or $backendBytes.Contains('UPX0')) { throw 'fluentfin-mpv-backend.exe is UPX-packed' }
 $upx = @(Get-ChildItem $backendOut -Recurse -File | Where-Object { [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($_.FullName), 0, [Math]::Min(1024, $_.Length)) -match 'UPX[01!]' })
 if ($upx) { throw "UPX-packed files in the frozen backend: $($upx.Name -join ', ')" }
