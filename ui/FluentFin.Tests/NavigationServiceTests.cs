@@ -39,4 +39,40 @@ public sealed class NavigationServiceTests
 		Assert.Equal([typeof(HomePage), typeof(MoviePage)], movieToMovie);
 		Assert.Equal([typeof(HomePage), typeof(VideoPlayerPage)], goingBack);
 	}
+
+	private static bool Prune(List<Type> forwardStack) => NavigationService.PruneForwardStack(forwardStack, x => x);
+
+	[Fact]
+	public void Forward_NeverLeadsIntoThePlayer()
+	{
+		// Movie -> player, Back out of the player: the player is on the forward stack; Forward would play the item again
+		var forward = new List<Type> { typeof(VideoPlayerPage) };
+
+		Assert.True(Prune(forward));
+
+		Assert.Empty(forward);
+	}
+
+	[Fact]
+	public void Forward_KeepsTheOtherPages_InOrder()
+	{
+		// Home <- Movie <- Settings <- ... going Back through pages with a player between them
+		var forward = new List<Type> { typeof(VideoPlayerPage), typeof(SeasonPage), typeof(VideoPlayerPage), typeof(MoviePage) };
+
+		Assert.True(Prune(forward));
+
+		Assert.Equal([typeof(SeasonPage), typeof(MoviePage)], forward);
+		Assert.False(Prune(forward));
+		Assert.False(Prune([]));
+	}
+
+	[Fact]
+	public void TheNewPageAfterBack_LeavesNoForward_AndAPlayerReplacedTakesOverItsEntry()
+	{
+		// the Frame itself empties the forward stack on a new navigation; what is left for Forward is only pruned pages, and the
+		// back stack keeps its one-player-entry rule
+		var back = new List<Type> { typeof(HomePage), typeof(VideoPlayerPage) };
+		Assert.True(Drop(back, typeof(VideoPlayerPage)));
+		Assert.Equal([typeof(HomePage)], back);
+	}
 }

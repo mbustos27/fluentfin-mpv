@@ -3,6 +3,7 @@ using FluentFin.Core;
 using FluentFin.Controls;
 using FluentFin.Core.ViewModels;
 using FluentFin.Services;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
@@ -25,6 +26,12 @@ public sealed partial class MainWindow : WindowEx
 		try { GlassMode.Changed += (_, _) => RunOnUi(UpdateBackdrop); }
 		catch (Exception) { }
 		UpdateBackdrop();
+
+		// Seaglass: the global keys and Mouse 4 / 5, at the window (docs/SHORTCUTS.md)
+		if (Content is UIElement root)
+		{
+			WindowShortcuts.Attach(root);
+		}
 	}
 
 	private bool _acrylic;

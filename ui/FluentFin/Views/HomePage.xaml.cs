@@ -25,11 +25,23 @@ public sealed partial class HomePage : Page
 
 	private void NextUpInvoked(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args)
 	{
+		if (FluentFin.Services.TextInput.IsTextInput(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot)))
+		{
+			return; // typing: N and C are letters then
+		}
+
+		args.Handled = true;
 		ViewModel.NextUpCommand.Execute(null);
     }
 
 	private void ContinueInvoked(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args)
 	{
+		if (FluentFin.Services.TextInput.IsTextInput(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot)))
+		{
+			return;
+		}
+
+		args.Handled = true;
 		ViewModel.ContinueCommand.Execute(null);
     }
 }

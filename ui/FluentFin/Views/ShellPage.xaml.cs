@@ -37,34 +37,9 @@ public sealed partial class ShellPage : Page
 			});
 	}
 
+	// Seaglass: Alt+Left, the Back and Forward keys and Mouse 4 / 5 are the window's (WindowShortcuts), on every page
 	private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
 	{
-		KeyboardAccelerators.Add(BuildKeyboardAccelerator(VirtualKey.Left, VirtualKeyModifiers.Menu));
-		KeyboardAccelerators.Add(BuildKeyboardAccelerator(VirtualKey.GoBack));
-	}
-
-
-	private static KeyboardAccelerator BuildKeyboardAccelerator(VirtualKey key, VirtualKeyModifiers? modifiers = null)
-	{
-		var keyboardAccelerator = new KeyboardAccelerator() { Key = key };
-
-		if (modifiers.HasValue)
-		{
-			keyboardAccelerator.Modifiers = modifiers.Value;
-		}
-
-		keyboardAccelerator.Invoked += OnKeyboardAcceleratorInvoked;
-
-		return keyboardAccelerator;
-	}
-
-	private static void OnKeyboardAcceleratorInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-	{
-		var navigationService = App.GetService<INavigationService>();
-
-		var result = navigationService.GoBack();
-
-		args.Handled = result;
 	}
 
 	private async void OnContributeTapped(object sender, TappedRoutedEventArgs e)

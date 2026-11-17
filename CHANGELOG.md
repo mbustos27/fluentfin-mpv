@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.1
+
+- **Mouse back and forward.** Mouse buttons 4 and 5, Alt+Left/Right and the keyboard's Back/Forward keys go back and
+  forward between pages, like a browser. Forward never starts playback again.
+- **Keyboard shortcuts everywhere**, listed on a new shortcut sheet (**?** or **F1**, also in Settings and the player):
+  - **Pages:** Ctrl+F, Ctrl+E or / search; Alt+Home Home; Ctrl+, Settings.
+  - **Player:**
+    - Space/K play-pause; ←/→ 5 s; J/L or Ctrl+←/→ 10 s, matching the on-screen buttons; Shift+←/→ 30 s.
+    - 0–9 jump to a tenth; Home start; S skip; Shift+N/P next/previous.
+    - ↑/↓ volume; M mute; C subtitles on/off; V next subtitle; B next audio track; F or F11 full screen; Esc leave.
+  - No shortcut fires while you type. `docs\SHORTCUTS.md` has the full map.
+- **Subtitle text size**: a Text size slider (50–200 %) in the player's subtitles menu, applied while you drag and
+  remembered for every video.
+- **Rounded rectangles** instead of oblong pill shapes for buttons, chips and the search box; round icon buttons stay
+  round.
+- **A smaller install**: the release leaves out .NET desktop pieces Seaglass never uses (Windows Forms, Visual Basic,
+  WPF themes) and two unused backend modules: 759 files instead of 789.
+
 ## 1.1.0
 
 FluentFin MPV is now **Seaglass**, with a new glassy look inspired by the Apple TV app (`docs\design\SEAGLASS.md`;

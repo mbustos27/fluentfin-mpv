@@ -88,6 +88,11 @@ Check 'unzipped: one folder with the launcher, and app\ with Seaglass.exe, the b
 $languageDirs = @(Get-ChildItem $app -Directory | Where-Object { $_.Name -match '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' -and $_.Name -notmatch '^en(-|$)' })
 Check 'English only: app\ has no language folders but English' ($languageDirs.Count -eq 0) $(if ($languageDirs) { $languageDirs.Name -join ', ' } else { (@(Get-ChildItem $app -Directory | Where-Object Name -match '^en(-|$)') | ForEach-Object Name) -join ', ' })
 Check 'the release has no VLC or Flyleaf libraries (libvlc\, FFMpeg\)' (-not (Test-Path (Join-Path $app 'libvlc')) -and -not (Test-Path (Join-Path $app 'FFMpeg'))) $app
+# slim package (docs/research/slim-package.md): the .NET desktop
+# runtime's Windows Forms and Visual Basic are not shipped (Flyleaf's and LibVLC's libraries must stay: the XAML type table loads them), and app\ stays under a file-count ceiling (raise it only with a reason)
+$slimGone = @('System.Windows.Forms.dll', 'Microsoft.VisualBasic.Forms.dll') | Where-Object { Test-Path (Join-Path $app $_) }
+$appTopFiles = @(Get-ChildItem $app -File).Count
+Check 'slim: no Windows Forms/Visual Basic assemblies, and app\ has at most 510 files at its top' ($slimGone.Count -eq 0 -and $appTopFiles -le 510) "$appTopFiles files at the top of app\$(if ($slimGone) { '; present: ' + ($slimGone -join ', ') })"
 # libmpv\ as its BUILD-MANIFEST.txt lists it, and no libdvdcss (DVD decryption): at most the stub of it, which the manifest
 # marks (its owner says "stub" and is no MSYS2 package; tools\release\libmpv_check.py is_stub)
 $libmpvPkg = Join-Path $app 'libmpv'
