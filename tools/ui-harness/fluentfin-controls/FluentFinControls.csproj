@@ -42,6 +42,8 @@
     <Compile Include="$(UiDir)\FluentFin\Mpv\WindowsMpvBackendLauncher.cs" Link="Linked\WindowsMpvBackendLauncher.cs" />
     <Compile Include="$(UiDir)\FluentFin\Controls\MpvPlayerControls.xaml.cs" Link="Linked\MpvPlayerControls.xaml.cs" />
     <Compile Include="$(UiDir)\FluentFin\Controls\MpvPlayerKeys.cs" Link="Linked\MpvPlayerKeys.cs" Condition="Exists('$(UiDir)\FluentFin\Controls\MpvPlayerKeys.cs')" />
+    <Compile Include="$(UiDir)\FluentFin\Services\GlassMode.cs" Link="Linked\GlassMode.cs" />
+    <Page Include="$(UiDir)\FluentFin\Styles\Glass.xaml" Link="Styles\Glass.xaml" />
     <Page Include="$(UiDir)\FluentFin\Controls\MpvPlayerControls.xaml" Link="Linked\MpvPlayerControls.xaml" />
     <ProjectReference Include="$(CoreDir)\FluentFin.Core.csproj" />
   </ItemGroup>

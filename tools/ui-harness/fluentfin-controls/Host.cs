@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using FluentFin.Controls;
 using FluentFin.Core.Mpv;
 using FluentFin.Mpv;
+using FluentFin.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -230,6 +231,30 @@ internal static partial class Host
 			await Picture(main, "playing-controls");
 			Check(Visible(view, "BottomBar") && Visible(view, "TopBar"), "both bars are shown");
 
+			// -- menus and Solid: the clip has one audio stream, so the view model is given a fixture with tracks ------------
+			controls.OnTracks(new BridgeTracks(
+				[new BridgeTrack(1, "eng", "English - Dolby Digital - 5.1", IsDefault: true), new BridgeTrack(2, "jpn", "Japanese - AAC - Stereo")],
+				[new BridgeTrack(3, "eng", "English - SRT"), new BridgeTrack(4, "spa", "Spanish - SRT")]));
+			foreach (var (mode, tag) in new GlassModeKind?[] { null, GlassModeKind.Solid }.Select(m => (m, m is null ? "full" : "solid")))
+			{
+				GlassMode.Override = mode;
+				controls.NotifyActivity();
+				await Task.Delay(400);
+				await Picture(main, $"controls-{tag}");
+				foreach (var (button, menu) in new[] { ("AudioButton", "audio"), ("SubtitlesButton", "subtitles") })
+				{
+					var b = (Button)view.FindName(button);
+					b.Flyout.ShowAt(b);
+					await Task.Delay(700);
+					await Picture(main, $"menu-{menu}-{tag}");
+					b.Flyout.Hide();
+					await Task.Delay(300);
+				}
+			}
+			GlassMode.Override = null;
+			controls.OnTracks(new BridgeTracks([], []));
+			controls.NotifyActivity();
+
 			// -- Skip intro: the fake server gives episode 1 an intro, 0:03 to 0:15 -------------------------------------
 			await SkipScenario(main, view, controls, mpv);
 
@@ -302,21 +327,17 @@ internal static partial class Host
 
 			// next episode
 			Check(controls.CanNext, "Next is offered (a second episode is queued)");
-			var nextButton = (Button)view.FindName("NextButton");
+			var nextButton = (Button)view.FindName("NextPill");
 			controls.NotifyActivity();
 			await Task.Delay(300);
-			Check(Visible(view, "NextButtonHost") && nextButton.IsEnabled && ToolTipUnderPointer(view, nextButton) == "Next: S1E2 · Second",
-				$"the Next button is enabled by the next event and names the next episode under the pointer ('{ToolTipUnderPointer(view, nextButton)}')");
+			Check(Visible(view, "NextPill") && nextButton.IsEnabled && ToolTipUnderPointer(view, nextButton) == "Next: S1E2 · Second",
+				$"the Next pill shows when the next event arrives and names the next episode under the pointer ('{ToolTipUnderPointer(view, nextButton)}')");
 			await controls.Next();
 			Check(await Until(() => controls.Subtitle == "S1E2 · Second" && Last() is { State: Bridge.States.Playing, ItemId: Episode2 }, 30), $"Next plays episode 2 ({controls.Subtitle})");
 			Check(await Until(() => !controls.CanNext, 5), "no Next after the last episode");
 			controls.NotifyActivity();
 			await Task.Delay(300);
-			// a disabled button gets no pointer input, so no tooltip of its own: the one a mouse sees is on an element under it
-			var hostTip = view.FindName("NextButtonHost") is FrameworkElement host ? ToolTipService.GetToolTip(host) as string : null;
-			Check(Visible(view, "NextButtonHost") && !nextButton.IsEnabled && ToolTipService.GetToolTip(nextButton) is null && hostTip == "No next episode"
-				&& ToolTipUnderPointer(view, nextButton) == "No next episode",
-				$"the last episode keeps the Next button, disabled; 'No next episode' is on its wrapper, which the pointer reaches (button '{ToolTipService.GetToolTip(nextButton)}', wrapper '{hostTip}', under the pointer '{ToolTipUnderPointer(view, nextButton)}')");
+			Check(!Visible(view, "NextPill"), "the last episode has no Next pill");
 			Check(!controls.IsSkipVisible && !Visible(view, "SkipSegmentButton"), "episode 2 has no intro: no Skip button");
 
 			await backend.SendAsync(Bridge.Commands.Stop);
