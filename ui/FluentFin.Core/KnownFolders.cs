@@ -26,75 +26,142 @@ public class KnownFolders
 	/// <summary><c>%LOCALAPPDATA%\Seaglass</c>.</summary>
 	public static string DefaultRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), FolderName);
 
+	/// <summary>What the copy step did. <see cref="Failed"/>: nothing was made under Seaglass and this run must use <see cref="LegacyRoot"/> in place.</summary>
+	public sealed record LegacyCopyResult(string? Note, bool Failed, string? LegacyRoot)
+	{
+		public static LegacyCopyResult Nothing { get; } = new(null, false, null);
+	}
+
 	/// <summary>
 	/// Seaglass: the start-up step before the folders are made. With no <see cref="DataDirSwitch"/> and no
 	/// <see cref="DataDirVariable"/> (those runs never touch the user's own folders), copies the old data folder to the new one
-	/// (<see cref="CopyLegacyFolder"/>). Returns what to log, or null when there was nothing to do.
+	/// (<see cref="CopyLegacyFolder"/>). <see cref="LegacyCopyResult.Note"/> is what to log, null when there was nothing to do.
 	/// </summary>
-	public static string? CopyLegacyForStartup(IReadOnlyList<string> arguments, Func<string, string?> environment, string? localAppData = null)
+	public static LegacyCopyResult CopyLegacyForStartup(IReadOnlyList<string> arguments, Func<string, string?> environment, string? localAppData = null, Action<string>? afterEachFile = null)
 	{
-		localAppData ??= Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 		try
 		{
+			localAppData ??= Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 			if (ResolveDataDir(arguments, environment) is not null)
 			{
-				return null;
+				return LegacyCopyResult.Nothing;
 			}
 		}
 		catch (ArgumentException)
 		{
-			return null; // TryForStartup reports it
+			return LegacyCopyResult.Nothing; // TryForStartup reports it
+		}
+		catch (Exception)
+		{
+			return LegacyCopyResult.Nothing;
 		}
 
-		return CopyLegacyFolder(localAppData);
+		var note = CopyLegacyFolder(localAppData, out var failed, afterEachFile);
+		return new LegacyCopyResult(note, failed, failed ? Path.Combine(localAppData, LegacyFolderName) : null);
 	}
 
 	/// <summary>
 	/// Seaglass: when <c>&lt;localAppData&gt;\Seaglass</c> does not exist and <c>&lt;localAppData&gt;\FluentFinMpv</c> does, COPIES the
-	/// old folder (recursively) to the new one; the old folder is never moved, changed or deleted. The copy is made beside the
-	/// target and renamed into place, so an interrupted copy never leaves a half-filled Seaglass folder that the next start would
-	/// take for the real one. Returns a line to log, or null when there was nothing to copy; a failure is returned as text too
-	/// (the app then starts with an empty folder rather than not at all).
+	/// old folder (recursively, except Logs and Updates) to the new one; the old folder is never moved, changed or deleted. The
+	/// journal database is copied with SQLite's online backup (a consistent snapshot even while FluentFin MPV 1.0.x runs), never as
+	/// its db, -wal and -shm files. The copy is made beside the target and renamed into place, so an interrupted copy never leaves
+	/// a half-filled Seaglass folder. On ANY failure the partial copy is deleted and no Seaglass folder exists: the caller runs on
+	/// the old folder in place and the next start tries again (<paramref name="failed"/> is true, the text says why).
 	/// </summary>
-	public static string? CopyLegacyFolder(string localAppData)
+	public static string? CopyLegacyFolder(string localAppData, out bool failed, Action<string>? afterEachFile = null)
 	{
+		failed = false;
 		var target = Path.Combine(localAppData, FolderName);
 		var legacy = Path.Combine(localAppData, LegacyFolderName);
-		if (Directory.Exists(target) || !Directory.Exists(legacy))
-		{
-			return null;
-		}
-
 		var partial = target + ".copying";
 		try
 		{
+			if (Directory.Exists(target) || !Directory.Exists(legacy))
+			{
+				return null;
+			}
+
 			if (Directory.Exists(partial))
 			{
 				Directory.Delete(partial, recursive: true);
 			}
 
-			CopyDirectory(legacy, partial);
+			CopyDirectory(legacy, partial, top: true, afterEachFile);
 			Directory.Move(partial, target);
 			return $"Copied the data folder {legacy} to {target} (the old folder is left as it was)";
 		}
-		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		catch (Exception ex)
 		{
-			return $"Could not copy the data folder {legacy} to {target}: {ex.Message}";
+			failed = true;
+			try
+			{
+				if (Directory.Exists(partial))
+				{
+					Directory.Delete(partial, recursive: true);
+				}
+			}
+			catch (Exception)
+			{
+				// the next start deletes it before copying
+			}
+
+			return $"Could not copy the data folder {legacy} to {target}: {ex.Message}. Using the old folder in place; the copy is tried again at the next start";
 		}
 	}
 
-	private static void CopyDirectory(string from, string to)
+	/// <summary><see cref="CopyLegacyFolder(string, out bool, Action{string}?)"/> for callers that only want the note.</summary>
+	public static string? CopyLegacyFolder(string localAppData) => CopyLegacyFolder(localAppData, out _);
+
+	private static void CopyDirectory(string from, string to, bool top, Action<string>? afterEachFile)
 	{
 		Directory.CreateDirectory(to);
 		foreach (var file in Directory.EnumerateFiles(from))
 		{
-			File.Copy(file, Path.Combine(to, Path.GetFileName(file)));
+			var name = Path.GetFileName(file);
+			if (top && name.StartsWith(Journal.JournalStore.FileName, StringComparison.OrdinalIgnoreCase))
+			{
+				if (string.Equals(name, Journal.JournalStore.FileName, StringComparison.OrdinalIgnoreCase))
+				{
+					BackupJournal(file, Path.Combine(to, name));
+					afterEachFile?.Invoke(file);
+				}
+
+				continue; // -wal, -shm, -journal: part of the snapshot the backup makes
+			}
+
+			File.Copy(file, Path.Combine(to, name));
+			afterEachFile?.Invoke(file);
 		}
 
 		foreach (var directory in Directory.EnumerateDirectories(from))
 		{
-			CopyDirectory(directory, Path.Combine(to, Path.GetFileName(directory)));
+			var name = Path.GetFileName(directory);
+			if (top && (name.Equals("Logs", StringComparison.OrdinalIgnoreCase) || name.Equals("Updates", StringComparison.OrdinalIgnoreCase)))
+			{
+				continue; // old logs and downloaded updates are not needed; skipping keeps the first start fast
+			}
+
+			CopyDirectory(directory, Path.Combine(to, name), top: false, afterEachFile);
 		}
+	}
+
+	private static void BackupJournal(string from, string to)
+	{
+		using var source = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+		{
+			DataSource = from,
+			Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWrite,
+			Pooling = false,
+		}.ToString());
+		using var destination = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+		{
+			DataSource = to,
+			Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWriteCreate,
+			Pooling = false,
+		}.ToString());
+		source.Open();
+		destination.Open();
+		source.BackupDatabase(destination);
 	}
 
 	// what a mistyped data folder switch looks like: dashes or a slash, then data, dir with or without - or _ between
