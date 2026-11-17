@@ -57,11 +57,10 @@ public class LoginPageAccessibilityTests
 	}
 
 	[Fact]
-	public void TheSplashImage_IsDecoration()
+	public void TheSplashImage_IsTheAmbientBackdrop_NotAnImageOnThePage()
 	{
-		var image = Assert.Single(Load().Descendants(Presentation + "Image"));
-
-		Assert.Equal("Raw", (string?)image.Attribute("AutomationProperties.AccessibilityView"));
+		// Seaglass: the splash is drawn by the shell's AmbientBackdropView (raw view, hit-test invisible)
+		Assert.Empty(Load().Descendants(Presentation + "Image"));
 	}
 
 	private static bool HasTextContent(XElement element) =>
