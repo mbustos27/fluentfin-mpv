@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using FluentFin.Controls;
 using FluentFin.Core.Mpv;
 using FluentFin.Mpv;
+using FluentFin.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -229,6 +230,30 @@ internal static partial class Host
 			Check(await Until(() => (mpv.Number("sub-pos") ?? 100) < 100, 3), $"subtitles moved above the bar while it shows (sub-pos {mpv.Number("sub-pos")})");
 			await Picture(main, "playing-controls");
 			Check(Visible(view, "BottomBar") && Visible(view, "TopBar"), "both bars are shown");
+
+			// -- menus and Solid: the clip has one audio stream, so the view model is given a fixture with tracks ------------
+			controls.OnTracks(new BridgeTracks(
+				[new BridgeTrack(1, "eng", "English - Dolby Digital - 5.1", IsDefault: true), new BridgeTrack(2, "jpn", "Japanese - AAC - Stereo")],
+				[new BridgeTrack(3, "eng", "English - SRT"), new BridgeTrack(4, "spa", "Spanish - SRT")]));
+			foreach (var (mode, tag) in new GlassModeKind?[] { null, GlassModeKind.Solid }.Select(m => (m, m is null ? "full" : "solid")))
+			{
+				GlassMode.Override = mode;
+				controls.NotifyActivity();
+				await Task.Delay(400);
+				await Picture(main, $"controls-{tag}");
+				foreach (var (button, menu) in new[] { ("AudioButton", "audio"), ("SubtitlesButton", "subtitles") })
+				{
+					var b = (Button)view.FindName(button);
+					b.Flyout.ShowAt(b);
+					await Task.Delay(700);
+					await Picture(main, $"menu-{menu}-{tag}");
+					b.Flyout.Hide();
+					await Task.Delay(300);
+				}
+			}
+			GlassMode.Override = null;
+			controls.OnTracks(new BridgeTracks([], []));
+			controls.NotifyActivity();
 
 			// -- Skip intro: the fake server gives episode 1 an intro, 0:03 to 0:15 -------------------------------------
 			await SkipScenario(main, view, controls, mpv);
