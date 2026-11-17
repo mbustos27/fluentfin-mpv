@@ -36,6 +36,14 @@ public sealed class CardAndRowAccessibilityTests
 	}
 
 	[Fact]
+	public void EpisodeRow_OnItsOwn_IsAButton_NotAListItemWithoutAList()
+	{
+		// the episode page's "Up next": then-season.ps1 checks the real one
+		Assert.Equal(AutomationControlType.ListItem, EpisodeRowAutomationPeer.ControlTypeFor(inList: true));
+		Assert.Equal(AutomationControlType.Button, EpisodeRowAutomationPeer.ControlTypeFor(inList: false));
+	}
+
+	[Fact]
 	public void CardButtons_ShowOnKeyboardFocus_AndOutliveThePointerLeaving()
 	{
 		var card = new CardActions();

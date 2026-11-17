@@ -101,6 +101,24 @@ Shot 'season-5-menu'
 Press 0x1B 800    # Esc
 Check 'season: Esc closes the menu, the focus back on the row' ((Info).Class -eq 'EpisodeRow') (Describe (Info))
 
+# --- the menu's Episode details opens the episode's page; its "Up next" row stands alone: a button, not an item of a list
+Press 0x5D 1200
+$detailsItem = Wait-Ui -Name 'Episode details' -Type 'MenuItem' -Seconds 5
+if ($detailsItem) { Invoke-Element $detailsItem | Out-Null }
+$epPage = Wait-ItemPage $fixture.episode.name
+Check 'season: the menu''s Episode details opens the episode''s page' ([bool]$epPage)
+$rowCond = New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, 'EpisodeRow')
+$upNext = Wait-Until { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, $rowCond)) | Where-Object { $_.Cached.Name -like 'S1E2 *' } | Select-Object -First 1 } -Seconds 10 -PollMs 200
+if ($upNext) {
+    $unPos = $upNext.GetCurrentPropertyValue($Ids::PositionInSetProperty)
+    $unType = $upNext.Cached.ControlType.ProgrammaticName -replace '^ControlType\.', ''
+    Check 'season: the episode page''s Up next row is a button, not a list item without a list' ($unType -eq 'Button' -and [int]$unPos -le 0) ("$unType '$($upNext.Cached.Name)', position $unPos")
+}
+else { Check 'season: the episode page''s Up next row is a button, not a list item without a list' $false 'no Up next row (S1E2) found' }
+Key 0xA6   # Back to the season page
+$pill = Wait-Ui -Name 'Season 1, current season' -Type 'Button' -Seconds 15
+Start-Sleep -Milliseconds 1200
+
 # --- the wheel over the rows scrolls the page
 [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0); Start-Sleep -Milliseconds 700
 $rowEl = Find-Ui -Name "S1E2 " -Type 'ListItem' -Contains
@@ -117,7 +135,14 @@ if ($rowEl) {
 [void][OffscreenUi]::SetFocus($pill); Start-Sleep -Milliseconds 300
 Press 0x09
 $playing = Info
+$enterAt = Get-Epoch
 Press 0x0D 300   # Enter
 $player = Wait-Until { if (-not (Find-Ui -Name 'Season 1, current season' -Type 'Button') -and -not (Find-Ui -Name "Play, episode 1, $($fixture.episode.name)" -Type 'Button')) { $true } } -Seconds 30 -PollMs 250
-Check 'season: Enter on a row plays its episode (the player page replaces the season page)' ([bool]$player) (Describe $playing)
-if ($player) { Start-Sleep -Seconds 3; Shot 'season-6-enter-played' }
+Check 'season: Enter on a row leaves for the player page' ([bool]$player) (Describe $playing)
+# ... and plays that episode: the server is asked for its PlaybackInfo, and the backend reports it Playing
+$episodeId = ([string]$fixture.episode.id -replace '-', '').ToLowerInvariant()
+function Is-Episode($Request) { $Request.report -and (([string]$Request.report.item -replace '-', '').ToLowerInvariant() -eq $episodeId) }
+$played = Wait-Until { @(Get-Requests $enterAt | Where-Object { $_.route -eq 'report-playing' -and (Is-Episode $_) }) | Select-Object -First 1 } -Seconds 30 -PollMs 300
+$asked = @(Get-Requests $enterAt | Where-Object { $_.route -eq 'playbackinfo' -and (Is-Episode $_) }) | Select-Object -First 1
+Check 'season: Enter on a row plays its episode (PlaybackInfo, then Playing, for that episode)' ($asked -and $played) ("PlaybackInfo: $([bool]$asked), Playing: $([bool]$played), episode $episodeId")
+if ($player) { Start-Sleep -Seconds 2; Shot 'season-6-enter-played' }

@@ -169,11 +169,14 @@ public sealed partial class EpisodeRow : UserControl
 
 /// <summary>
 /// Seaglass scrolling: Narrator reads an episode row as a list item named "S1E4 Title, watched" (<see cref="ItemLabels.EpisodeRowName"/>),
-/// "4 of 8" from its place; Invoke plays it, as Enter does. Play and Watched are under it.
+/// "4 of 8" from its place; Invoke plays it, as Enter does. Play and Watched are under it. A row on its own (the episode
+/// page's "Up next") is a button: a list item with no list around it would say "1 of 1" or nothing at all.
 /// </summary>
 internal sealed partial class EpisodeRowAutomationPeer(EpisodeRow owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider
 {
-	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.ListItem;
+	internal static AutomationControlType ControlTypeFor(bool inList) => inList ? AutomationControlType.ListItem : AutomationControlType.Button;
+
+	protected override AutomationControlType GetAutomationControlTypeCore() => ControlTypeFor(EpisodeList.Of(owner) is not null);
 
 	protected override string GetClassNameCore() => nameof(EpisodeRow);
 
