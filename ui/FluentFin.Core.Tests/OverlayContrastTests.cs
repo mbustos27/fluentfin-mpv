@@ -119,27 +119,19 @@ public class OverlayContrastTests
 
 	[Theory]
 	[MemberData(nameof(MediaInfoPageData))]
-	public void MediaInfoPage_IsDarkThemedWithScrimBehindTitleStripAndBody(string page)
+	public void MediaInfoPage_TopIsTheDarkHero_WithItsScrims_AndTheBodyKeepsTheThemesText(string page)
 	{
 		var doc = Load(page);
 
-		// the whole page is dark themed, not only the title strip: the body text sits on the same backdrop
-		var strip = FindByName(doc, "ButtonStrip");
-		Assert.Contains(strip.AncestorsAndSelf(), e => (string?)e.Attribute("RequestedTheme") == "Dark");
-		Assert.Equal("Dark", (string?)doc.Root!.Elements().Single(e => e.Name.LocalName == "Grid").Attribute("RequestedTheme"));
-
-		const string scrim = "{StaticResource MediaInfoScrimBrush}";
-
-		// title strip: the Border bottom aligned in the top rows
-		Assert.Contains(doc.Descendants(Presentation + "Border"),
-			e => (string?)e.Attribute("Background") == scrim && (string?)e.Attribute("VerticalAlignment") == "Bottom");
-
-		// body: the layer right after the blurred backdrop
-		var blurred = doc.Descendants().Single(e => e.Name.LocalName == "BlurEffect").Ancestors(Presentation + "Grid").First();
-		var overlay = blurred.ElementsAfterSelf().First();
-		Assert.Equal("Border", overlay.Name.LocalName);
-		Assert.Equal(scrim, (string?)overlay.Attribute("Background"));
-		Assert.Equal("2", (string?)overlay.Attribute("Grid.Row"));
+		// the hero is dark in both themes and scrimmed bottom and left: its text sits on the backdrop; the page itself is not forced dark
+		var hero = Load("FluentFin/Controls/ItemHero.xaml");
+		Assert.Equal("Dark", (string?)hero.Root!.Elements().Single().Attribute("RequestedTheme"));
+		var scrims = hero.Descendants(Presentation + "Border").Select(b => (string?)b.Attribute("Background")).ToList();
+		Assert.Contains("{ThemeResource GlassImageScrimBrush}", scrims);
+		Assert.Contains("{ThemeResource ItemHeroSideScrimBrush}", scrims);
+		Assert.Contains(doc.Descendants(), e => e.Name.LocalName == "ItemHero");
+		Assert.DoesNotContain(doc.Root!.Elements(Presentation + "Grid"), g => (string?)g.Attribute("RequestedTheme") == "Dark");
+		Assert.DoesNotContain(doc.Descendants(Presentation + "Image"), i => ((string?)i.Attribute("Source"))?.Contains("ImageType.Backdrop") == true);
 	}
 
 	[Theory]
