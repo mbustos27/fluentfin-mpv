@@ -239,7 +239,7 @@ public class AccessibilityXamlTests
 	}
 
 	[Theory]
-	[InlineData("FluentFin/Views/SelectServerPage.xaml", "Detect", "Next")]
+	[InlineData("FluentFin/Views/SelectServerPage.xaml", "Find servers", "Next")]
 	[InlineData("FluentFin/Views/LibraryPage.xaml", "Sort", "Filter")]
 	public void ButtonsShowingAnIconAndAText_AreNamedAfterTheText(string page, string first, string second)
 	{

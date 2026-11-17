@@ -146,7 +146,7 @@ public partial class SelectServerViewModel(ISettings settings,
 
 		if (info is null)
 		{
-			ErrorMessage = error ?? $"Unable to find a jellyfin server at {url}";
+			ErrorMessage = error ?? $"No Jellyfin server answered at {url}. Check the address and port, then try again.";
 			return;
 		}
 

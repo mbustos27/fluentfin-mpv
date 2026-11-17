@@ -4,90 +4,131 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:c="using:FluentFin.Converters"
+    xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:FluentFin.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid>
-        <!--  Seaglass: the server's splash image is the ambient backdrop behind the card (LoginPage.xaml.cs), not a full-bleed image  -->
-        <StackPanel
-            MinWidth="500"
-            Padding="50"
+    <!--
+        1.1.4 (states): one glass card, as the server page. The app's name is the page's heading and the server it
+        signs in to is said under it; labelled fields; Enter in the username goes on to the password, Enter there signs in;
+        a sign-in that fails says why ON the page (a live region, the keyboard back in the password box), not in a dialog;
+        progress on Sign in while the server answers. The server's splash image is the ambient backdrop behind the card.
+    -->
+    <ScrollViewer HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
+        <ContentControl
+            Width="560"
+            Margin="24"
+            Padding="44,40"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             Background="{ThemeResource GlassPanelStrongBrush}"
-            BorderBrush="{ThemeResource GlassStrokeBrush}"
-            BorderThickness="{StaticResource GlassStrokeThickness}"
-            CornerRadius="{StaticResource GlassPanelCornerRadius}"
-            Spacing="20">
-            <StackPanel.Resources>
-                <Style TargetType="StackPanel">
-                    <Setter Property="Spacing" Value="5" />
-                </Style>
-                <Style TargetType="TextBlock">
-                    <Setter Property="FontWeight" Value="Bold" />
-                </Style>
-            </StackPanel.Resources>
-            <!--  Seaglass: the app's name on the card (the rename stream changes it)  -->
-            <TextBlock
-                HorizontalAlignment="Center"
-                FontWeight="SemiBold"
-                Style="{StaticResource GlassPageTitleTextBlockStyle}"
-                Text="Seaglass" />
-            <StackPanel>
-                <TextBlock Text="Username" />
+            Style="{StaticResource GlassSurfaceStyle}">
+            <StackPanel Spacing="20">
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        AutomationProperties.HeadingLevel="Level1"
+                        Style="{StaticResource GlassPageTitleTextBlockStyle}"
+                        Text="Seaglass" />
+                    <TextBlock
+                        x:Name="ServerLine"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                        Style="{ThemeResource BodyTextBlockStyle}"
+                        Text="{x:Bind ViewModel.Heading, Mode=OneWay}"
+                        TextAlignment="Center"
+                        TextTrimming="CharacterEllipsis"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.Heading, Mode=OneWay}" />
+                </StackPanel>
+
                 <AutoSuggestBox
                     x:Name="UsernameBox"
                     AutomationProperties.Name="Username"
                     DisplayMemberPath="Username"
-                    ItemsSource="{x:Bind ViewModel.Server.Users}"
+                    Header="Username"
+                    IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                    ItemsSource="{x:Bind ViewModel.Server.Users, Mode=OneWay}"
                     Loaded="UsernameBox_Loaded"
+                    QuerySubmitted="UsernameBox_QuerySubmitted"
                     SuggestionChosen="AutoSuggestBox_SuggestionChosen"
                     Text="{x:Bind ViewModel.Username, Mode=TwoWay}"
                     TextMemberPath="Username" />
-            </StackPanel>
-            <StackPanel>
-                <TextBlock Text="Password" />
                 <PasswordBox
                     x:Name="PasswordBox"
                     AutomationProperties.Name="Password"
+                    Header="Password"
+                    IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
                     KeyDown="InputFieldKeyDown"
                     PasswordChanged="PasswordBox_PasswordChanged" />
+                <CheckBox Content="Remember me" IsChecked="{x:Bind ViewModel.KeepMeLoggedIn, Mode=TwoWay}" />
+
+                <!--  why the last attempt did not work and what to do (InfoBar announces itself when it opens)  -->
+                <InfoBar
+                    x:Name="ErrorBar"
+                    CornerRadius="{StaticResource GlassCardCornerRadius}"
+                    IsClosable="False"
+                    IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                    Severity="Error"
+                    Title="Couldn't sign in" />
+
+                <StackPanel
+                    HorizontalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="10">
+                    <Button
+                        AutomationProperties.Name="Switch server"
+                        Command="{x:Bind ViewModel.SwitchServerCommand}"
+                        Style="{StaticResource GlassPillButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon Glyph="&#xE8AB;" />
+                            <TextBlock Text="Switch server" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        AutomationProperties.Name="Quick Connect"
+                        Command="{x:Bind ViewModel.QuickConnectCommand}"
+                        Style="{StaticResource GlassPillButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <FontIcon Glyph="&#xE703;" />
+                            <TextBlock Text="Quick Connect" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        x:Name="SignInButton"
+                        AutomationProperties.Name="Sign in"
+                        Command="{x:Bind ViewModel.LoginCommand}"
+                        Style="{StaticResource GlassAccentPillButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsSigningIn, Mode=OneWay}">
+                                <ctk:Case IsDefault="True" Value="False">
+                                    <FontIcon Glyph="&#xE725;" />
+                                </ctk:Case>
+                                <ctk:Case Value="True">
+                                    <ProgressRing
+                                        Width="16"
+                                        Height="16"
+                                        Foreground="{ThemeResource SeaglassAccentForegroundBrush}"
+                                        IsIndeterminate="True" />
+                                </ctk:Case>
+                            </ctk:SwitchPresenter>
+                            <TextBlock Text="Sign in" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <TextBlock
+                    x:Name="StatusLine"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                    Style="{ThemeResource BodyTextBlockStyle}"
+                    Text="{x:Bind ViewModel.StatusText, Mode=OneWay}"
+                    Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsSigningIn), Mode=OneWay}" />
             </StackPanel>
-            <CheckBox Content="Remember me" IsChecked="{x:Bind ViewModel.KeepMeLoggedIn, Mode=TwoWay}" />
-            <StackPanel
-                HorizontalAlignment="Center"
-                Orientation="Horizontal"
-                Spacing="10">
-                <Button
-                    AutomationProperties.Name="Switch server"
-                    Command="{x:Bind ViewModel.SwitchServerCommand}"
-                    Style="{StaticResource GlassPillButtonStyle}">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xE8AB;" />
-                        <TextBlock Text="Switch server" />
-                    </StackPanel>
-                </Button>
-                <Button
-                    AutomationProperties.Name="Quick Connect"
-                    Command="{x:Bind ViewModel.QuickConnectCommand}"
-                    Style="{StaticResource GlassAccentPillButtonStyle}">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xE703;" />
-                        <TextBlock Text="Quick Connect" />
-                    </StackPanel>
-                </Button>
-                <Button
-                    AutomationProperties.Name="Login"
-                    Command="{x:Bind ViewModel.LoginCommand}"
-                    Style="{StaticResource GlassAccentPillButtonStyle}">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <FontIcon Glyph="&#xE725;" />
-                        <TextBlock Text="Login" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-        </StackPanel>
-    </Grid>
+        </ContentControl>
+    </ScrollViewer>
 </Page>

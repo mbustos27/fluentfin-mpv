@@ -31,7 +31,7 @@ public class LoginPageAccessibilityTests
 	[Theory]
 	[InlineData("{x:Bind ViewModel.SwitchServerCommand}", "Switch server")]
 	[InlineData("{x:Bind ViewModel.QuickConnectCommand}", "Quick Connect")]
-	[InlineData("{x:Bind ViewModel.LoginCommand}", "Login")]
+	[InlineData("{x:Bind ViewModel.LoginCommand}", "Sign in")]
 	public void EachButton_IsNamedAsItReads(string command, string name)
 	{
 		var button = Assert.Single(Load().Descendants(Presentation + "Button"), b => (string?)b.Attribute("Command") == command);
@@ -54,6 +54,30 @@ public class LoginPageAccessibilityTests
 		Assert.Equal("UsernameBox_Loaded", (string?)username.Attribute("Loaded"));
 		var code = File.ReadAllText(Path.Combine(RepoRoot, Page + ".cs"));
 		Assert.Contains("AutomationProperties.SetName(text, AutomationProperties.GetName(box))", code);
+	}
+
+	[Fact]
+	public void AFailedSignIn_IsSaidOnThePage_AndProgressIsALiveRegion()
+	{
+		// 1.1.4 (states): the error in an InfoBar on the card (it announces itself when it opens), not a dialog;
+		// "Signing in to …" a polite live region; the app's name the page's heading
+		var doc = Load();
+		var bar = Assert.Single(doc.Descendants(Presentation + "InfoBar"));
+		Assert.Equal("{x:Bind ViewModel.HasError, Mode=OneWay}", (string?)bar.Attribute("IsOpen"));
+		Assert.Equal("{x:Bind ViewModel.ErrorMessage, Mode=OneWay}", (string?)bar.Attribute("Message"));
+		var status = doc.Descendants(Presentation + "TextBlock").Single(t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.StatusText, Mode=OneWay}");
+		Assert.Equal("Polite", (string?)status.Attribute("AutomationProperties.LiveSetting"));
+		var title = doc.Descendants(Presentation + "TextBlock").Single(t => (string?)t.Attribute("Style") == "{StaticResource GlassPageTitleTextBlockStyle}");
+		Assert.Equal("Level1", (string?)title.Attribute("AutomationProperties.HeadingLevel"));
+		// the fields are labelled by their headers, and wait while the server answers
+		Assert.All(new[] { "AutoSuggestBox", "PasswordBox" }.Select(n => Assert.Single(doc.Descendants(Presentation + n))), f =>
+		{
+			Assert.NotNull(f.Attribute("Header"));
+			Assert.Equal("{x:Bind ViewModel.IsIdle, Mode=OneWay}", (string?)f.Attribute("IsEnabled"));
+		});
+		var code = File.ReadAllText(Path.Combine(RepoRoot, Page + ".cs"));
+		Assert.Contains("ViewModel.SignInFailed += ViewModel_SignInFailed", code);
+		Assert.Contains("QuerySubmitted", (string?)doc.Descendants(Presentation + "AutoSuggestBox").Single().Attribute("QuerySubmitted"));
 	}
 
 	[Fact]

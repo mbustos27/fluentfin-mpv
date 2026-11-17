@@ -49,13 +49,24 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		}
 	}
 
-	private static string DescribeFailure(Exception ex, string url) => ex switch
+	/// <summary>
+	/// Why a request to the server page's address or a sign-in failed, and what to do, in words the page shows.
+	/// 1.1.4 (states): a refused password, an account the server will not sign in, a server error and an
+	/// unreachable address each say what to do next (an error status used to show the HTTP library's own sentence).
+	/// </summary>
+	internal static string DescribeFailure(Exception ex, string url) => ex switch
 	{
-		ApiException { ResponseStatusCode: 401 } => "Incorrect username or password.",
+		ApiException { ResponseStatusCode: 401 } => "Wrong username or password. Check both (the password is case-sensitive) and try again, or sign in with Quick Connect.",
+		ApiException { ResponseStatusCode: 403 } =>
+			$"{url} doesn't let this account sign in (it may be disabled, or not allowed on this device). Ask the server's administrator.",
+		ApiException { ResponseStatusCode: >= 500 } api =>
+			$"{url} answered with an error ({api.ResponseStatusCode}): it may be starting up or have a problem. Wait a moment and try again; if it keeps happening, check the server's logs.",
+		ApiException api =>
+			$"{url} answered with an error ({api.ResponseStatusCode}). Check that this is your Jellyfin server's address, then try again.",
 		HttpRequestException { InnerException: AuthenticationException } =>
 			$"The HTTPS certificate of {url} isn't trusted by Windows (for example a self-signed certificate). " +
 			"Use the server's http:// address, or add its certificate to the Windows certificate store.",
-		HttpRequestException => $"Unable to reach {url}: {ex.Message}",
+		HttpRequestException => $"Couldn't reach {url}: {ex.Message.TrimEnd('.')}. Check the address and port, and that the server is running, then try again.",
 		// fluentfin-mpv: the server page's timeout (or the HTTP client's own)
 		OperationCanceledException => $"{url} didn't answer in time. Check the address and port, and that this PC can reach the server (VPN, firewall), then try again.",
 		_ => ex.Message
