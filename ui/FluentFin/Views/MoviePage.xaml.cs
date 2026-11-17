@@ -1,3 +1,4 @@
+using FluentFin.Core.Services;
 using FluentFin.Core.ViewModels;
 using Microsoft.UI.Xaml.Controls;
 
@@ -12,4 +13,8 @@ public sealed partial class MoviePage : Page
 	{
 		InitializeComponent();
 	}
+
+	// Seaglass scrolling: a row's "See all" opens its items as a grid
+	private void SimilarSeeAll(object sender, EventArgs e) =>
+		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("More Like This", [.. ViewModel.Similar]));
 }

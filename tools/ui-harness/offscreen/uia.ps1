@@ -27,6 +27,7 @@ public static class OffscreenUi {
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr h, ref POINT p);
   [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
@@ -127,6 +128,9 @@ public static class OffscreenUi {
     }
     return l;
   }
+
+  // sizes FluentFin's window (a narrow or a wide check); SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE
+  public static void Resize(IntPtr main, int pid, int w, int h) { if (ProcessOf(main) != (uint)pid) throw new InvalidOperationException("not FluentFin's window"); SetWindowPos(main, IntPtr.Zero, 0, 0, w, h, 0x0002 | 0x0004 | 0x0010); }
 
   // the window WinUI reads posted keys from: the XAML island's InputSiteWindowClass child. WinUI keeps it hidden and still
   // takes the keys posted to it. Posted to the bridge (DesktopChildSiteBridge) instead, Tab still moved the focus but F

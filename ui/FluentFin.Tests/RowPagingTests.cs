@@ -111,3 +111,22 @@ public sealed class RowPagingTests
 		Assert.Equal("Scroll left", RowPaging.ArrowName("", false));
 	}
 }
+
+public sealed class HeroDotsTests
+{
+	[Theory]
+	[InlineData(Windows.System.VirtualKey.Left, 0, 5, 0)]
+	[InlineData(Windows.System.VirtualKey.Left, 3, 5, 2)]
+	[InlineData(Windows.System.VirtualKey.Right, 4, 5, 4)]
+	[InlineData(Windows.System.VirtualKey.Right, 1, 5, 2)]
+	[InlineData(Windows.System.VirtualKey.Home, 3, 5, 0)]
+	[InlineData(Windows.System.VirtualKey.End, 0, 5, 4)]
+	public void ArrowsPickASlide(Windows.System.VirtualKey key, int current, int count, int expected) =>
+		Assert.Equal(expected, HeroDots.KeyTarget(key, current, count));
+
+	[Fact]
+	public void OneSlide_NothingToPick() => Assert.Null(HeroDots.KeyTarget(Windows.System.VirtualKey.Right, 0, 1));
+
+	[Fact]
+	public void OtherKeys_AreNotTheDots() => Assert.Null(HeroDots.KeyTarget(Windows.System.VirtualKey.Up, 1, 5));
+}

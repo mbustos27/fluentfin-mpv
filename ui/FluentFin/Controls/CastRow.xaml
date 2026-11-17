@@ -8,21 +8,12 @@
     xmlns:core="using:FluentFin.Core"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:local="using:FluentFin.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <StackPanel x:Name="Root" Spacing="12">
-        <TextBlock
-            x:Name="HeadingText"
-            AutomationProperties.HeadingLevel="Level2"
-            Style="{StaticResource GlassSectionTitleTextBlockStyle}" />
-        <ScrollViewer
-            HorizontalScrollBarVisibility="Auto"
-            HorizontalScrollMode="Enabled"
-            VerticalScrollBarVisibility="Disabled"
-            VerticalScrollMode="Disabled">
-            <ItemsRepeater x:Name="Repeater" Margin="0,0,0,12">
-                <ItemsRepeater.ItemTemplate>
+    <local:ShelfRow x:Name="Row">
+        <local:ShelfRow.ItemTemplate>
                     <DataTemplate x:DataType="jm:BaseItemPerson">
                         <StackPanel Width="120" Spacing="6">
                             <PersonPicture
@@ -49,11 +40,6 @@
                                 TextWrapping="Wrap" />
                         </StackPanel>
                     </DataTemplate>
-                </ItemsRepeater.ItemTemplate>
-                <ItemsRepeater.Layout>
-                    <StackLayout Orientation="Horizontal" Spacing="12" />
-                </ItemsRepeater.Layout>
-            </ItemsRepeater>
-        </ScrollViewer>
-    </StackPanel>
+        </local:ShelfRow.ItemTemplate>
+    </local:ShelfRow>
 </UserControl>

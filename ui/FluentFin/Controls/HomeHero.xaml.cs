@@ -24,6 +24,7 @@ public sealed partial class HomeHero : UserControl
 	private int _index = -1;
 	private bool _pointerIn;
 	private bool _focusIn;
+	private bool _paused;
 	private Uri? _shown;
 
 	[GeneratedDependencyProperty]
@@ -79,7 +80,7 @@ public sealed partial class HomeHero : UserControl
 	/// <summary>Auto-advance runs only with several slides, motion allowed, and no pointer or focus in the hero.</summary>
 	private void UpdateTimer()
 	{
-		if (_slides.Count > 1 && SafeMotion.Allowed && !_pointerIn && !_focusIn && IsLoaded)
+		if (_slides.Count > 1 && SafeMotion.Allowed && !_paused && !_pointerIn && !_focusIn && IsLoaded)
 		{
 			_timer.Stop();
 			_timer.Start();
@@ -95,7 +96,9 @@ public sealed partial class HomeHero : UserControl
 	private void BuildDots()
 	{
 		Dots.Children.Clear();
-		Dots.Visibility = _slides.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+		Dots.Visibility = PauseButton.Visibility = _slides.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+		Dots.KeyDown -= Dots_KeyDown;
+		Dots.KeyDown += Dots_KeyDown;
 		for (var i = 0; i < _slides.Count; i++)
 		{
 			var at = i;
@@ -106,6 +109,7 @@ public sealed partial class HomeHero : UserControl
 				Content = new Microsoft.UI.Xaml.Shapes.Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Microsoft.UI.Colors.White), Opacity = 0.45 },
 			};
 			AutomationProperties.SetName(dot, $"Slide {i + 1} of {_slides.Count}: {_slides[i].Title}");
+			dot.IsTabStop = false;
 			dot.Click += (_, _) => { Show(at, animate: true); UpdateTimer(); };
 			Dots.Children.Add(dot);
 		}
@@ -123,6 +127,7 @@ public sealed partial class HomeHero : UserControl
 		for (var i = 0; i < Dots.Children.Count; i++)
 		{
 			var ellipse = (Microsoft.UI.Xaml.Shapes.Ellipse)((Button)Dots.Children[i]).Content;
+			((Button)Dots.Children[i]).IsTabStop = i == index;
 			ellipse.Opacity = i == index ? 1 : 0.45;
 			ellipse.Width = ellipse.Height = i == index ? 10 : 8;
 		}
@@ -217,6 +222,34 @@ public sealed partial class HomeHero : UserControl
 		}
 	}
 
+	/// <summary>Seaglass scrolling: the dots are one control: the Tab stop is the dot of the slide shown (see <see cref="Show"/>), Left/Right/Home/End pick a slide.</summary>
+	private void Dots_KeyDown(object sender, KeyRoutedEventArgs e)
+	{
+		var target = HeroDots.KeyTarget(e.Key, _index, _slides.Count);
+		if (target is not { } index)
+		{
+			return;
+		}
+
+		e.Handled = true;
+		Show(index, animate: true);
+		UpdateTimer();
+		if (Dots.Children[index] is Button dot)
+		{
+			dot.Focus(FocusState.Keyboard);
+		}
+	}
+
+	private void PauseButton_Click(object sender, RoutedEventArgs e)
+	{
+		_paused = !_paused;
+		PauseIcon.Glyph = _paused ? "" : "";
+		var name = _paused ? "Play slideshow" : "Pause slideshow";
+		AutomationProperties.SetName(PauseButton, name);
+		ToolTipService.SetToolTip(PauseButton, name);
+		UpdateTimer();
+	}
+
 	private void Root_PointerEntered(object sender, PointerRoutedEventArgs e) { _pointerIn = true; UpdateTimer(); }
 
 	private void Root_PointerExited(object sender, PointerRoutedEventArgs e) { _pointerIn = false; UpdateTimer(); }
@@ -239,5 +272,26 @@ public sealed partial class HomeHero : UserControl
 			}
 		}
 		return false;
+	}
+}
+
+/// <summary>Seaglass scrolling: which slide a key picks on the hero's dots (Left/Right by one, no wrap; Home/End).</summary>
+internal static class HeroDots
+{
+	public static int? KeyTarget(Windows.System.VirtualKey key, int current, int count)
+	{
+		if (count <= 1)
+		{
+			return null;
+		}
+
+		return key switch
+		{
+			Windows.System.VirtualKey.Left => Math.Max(0, current - 1),
+			Windows.System.VirtualKey.Right => Math.Min(count - 1, current + 1),
+			Windows.System.VirtualKey.Home => 0,
+			Windows.System.VirtualKey.End => count - 1,
+			_ => null,
+		};
 	}
 }

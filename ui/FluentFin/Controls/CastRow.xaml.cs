@@ -34,8 +34,8 @@ public sealed partial class CastRow : UserControl
 	private void Apply()
 	{
 		var people = People?.ToList() ?? [];
-		HeadingText.Text = Heading;
-		Repeater.ItemsSource = people;
+		Row.Header = Heading;
+		Row.ItemsSource = people;
 		Visibility = people.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 	}
 }

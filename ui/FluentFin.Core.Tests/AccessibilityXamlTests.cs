@@ -338,7 +338,7 @@ public class AccessibilityXamlTests
 	[Fact]
 	public void SeasonEpisodeRows_NameTheirButtonsForTheEpisode()
 	{
-		var season = Load("FluentFin/Views/SeasonPage.xaml").Descendants(Presentation + "ItemsRepeater")
+		var season = Load("FluentFin/Views/SeasonPage.xaml").Descendants(Presentation + "ItemsControl")
 			.Single(r => (string?)r.Attribute("ItemsSource") == "{x:Bind ViewModel.Episodes, Mode=OneWay}");
 		Assert.Contains(season.Descendants(), e => e.Name.LocalName == "EpisodeRow");
 
