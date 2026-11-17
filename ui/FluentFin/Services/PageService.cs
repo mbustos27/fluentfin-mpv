@@ -30,6 +30,7 @@ public class PageService : IPageService, IPageRegistration
 		// Main NavView Pages
 		Configure<HomeViewModel, HomePage>();
 		Configure<LibraryViewModel, LibraryPage>();
+		Configure<ItemGridViewModel, ItemGridPage>();
 		Configure<VideoPlayerViewModel, VideoPlayerPage>();
 		Configure<MovieViewModel, MoviePage>();
 		Configure<SeriesViewModel, SeriesPage>();

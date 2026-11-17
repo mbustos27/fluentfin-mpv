@@ -176,20 +176,23 @@ public sealed partial class BaseItemDtoCard : UserControl
 				}
 				e.Handled = true;
 				break;
-			case VirtualKey.Left:
+			case VirtualKey.Left when !InShelfRow:
 				e.Handled = MoveFocusInRow(FocusNavigationDirection.Left);
 				break;
-			case VirtualKey.Right:
+			case VirtualKey.Right when !InShelfRow:
 				e.Handled = MoveFocusInRow(FocusNavigationDirection.Right);
 				break;
-			case VirtualKey.Up:
+			case VirtualKey.Up when !InShelfRow:
 				e.Handled = MoveFocusInRow(FocusNavigationDirection.Up);
 				break;
-			case VirtualKey.Down:
+			case VirtualKey.Down when !InShelfRow:
 				e.Handled = MoveFocusInRow(FocusNavigationDirection.Down);
 				break;
 		}
 	}
+
+	/// <summary>Seaglass scrolling: in a <see cref="ShelfRow"/> the row owns the arrow keys (Left/Right/Home/End, Up/Down between rows).</summary>
+	private bool InShelfRow => FindAncestor<ShelfRow>(this) is not null;
 
 	private void Card_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
 	{
@@ -371,7 +374,8 @@ internal sealed class CardActions
 /// </summary>
 internal sealed partial class BaseItemDtoCardAutomationPeer(BaseItemDtoCard owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider
 {
-	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
+	// Seaglass scrolling: a card is an item of its row's list ("3 of 12"); it still opens its page (Invoke)
+	protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.ListItem;
 
 	protected override string GetClassNameCore() => nameof(BaseItemDtoCard);
 

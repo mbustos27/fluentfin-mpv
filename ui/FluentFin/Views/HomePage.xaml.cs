@@ -1,3 +1,4 @@
+using FluentFin.Core.Services;
 using FluentFin.Core.ViewModels;
 using Microsoft.UI.Xaml.Controls;
 
@@ -44,4 +45,20 @@ public sealed partial class HomePage : Page
 		args.Handled = true;
 		ViewModel.ContinueCommand.Execute(null);
     }
+
+	// Seaglass scrolling: "See all" on a row. Recently Added opens its library; Continue Watching and Next Up, which have no
+	// library of their own, open their items as a grid.
+	private void ContinueSeeAll(object sender, EventArgs e) =>
+		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Continue Watching", [.. ViewModel.ContinueItems]));
+
+	private void NextUpSeeAll(object sender, EventArgs e) =>
+		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Next Up", [.. ViewModel.NextUpItems]));
+
+	private void RecentSeeAll(object sender, EventArgs e)
+	{
+		if (sender is FluentFin.Controls.ShelfRow { Tag: { } library })
+		{
+			App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<LibraryViewModel>(library);
+		}
+	}
 }

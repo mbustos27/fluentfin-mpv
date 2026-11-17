@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="FluentFin.Controls.ShelfRow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:FluentFin.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    IsTabStop="False"
+    mc:Ignorable="d">
+
+    <!--
+        Seaglass scrolling: the one row control of every shelf (Home's Continue Watching, Next Up and Recently Added, the
+        item pages' rows). One axis per input: the plain wheel scrolls the page (the row routes it, WinUI's horizontal
+        scroll viewer would swallow it: microsoft-ui-xaml #10172), the tilt wheel, Shift+wheel and a swipe move the row.
+        Always-visible arrows and "See all" in the header; one Tab stop (TabFocusNavigation Once), Left/Right/Home/End along
+        the row, Up/Down between rows; the title is a heading and the row a list for Narrator.
+    -->
+    <Grid x:Name="RowRoot" RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition />
+        </Grid.RowDefinitions>
+
+        <Grid Margin="0,0,12,0" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock
+                x:Name="TitleText"
+                VerticalAlignment="Center"
+                AutomationProperties.HeadingLevel="Level2"
+                Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                Text="{x:Bind Header, Mode=OneWay}" />
+
+            <!--  a real button, the row header's one Tab stop (the arrows have none: the row's keys and the wheel move it)  -->
+            <Button
+                x:Name="SeeAllButton"
+                Grid.Column="1"
+                MinHeight="32"
+                Padding="12,0"
+                VerticalAlignment="Center"
+                Click="SeeAllButton_Click"
+                Content="See all"
+                Style="{StaticResource GlassPillButtonStyle}"
+                Visibility="Collapsed" />
+
+            <Button
+                x:Name="ScrollLeftBtn"
+                Grid.Column="2"
+                Width="32"
+                Height="32"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Scroll left"
+                Click="ScrollLeftBtn_Click"
+                IsEnabled="False"
+                IsTabStop="False"
+                Style="{StaticResource GlassIconButtonStyle}"
+                ToolTipService.ToolTip="Scroll left"
+                Visibility="Collapsed">
+                <FontIcon FontSize="14" Glyph="&#xedd9;" />
+            </Button>
+            <Button
+                x:Name="ScrollRightBtn"
+                Grid.Column="3"
+                Width="32"
+                Height="32"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Scroll right"
+                Click="ScrollRightBtn_Click"
+                IsTabStop="False"
+                Style="{StaticResource GlassIconButtonStyle}"
+                ToolTipService.ToolTip="Scroll right"
+                Visibility="Collapsed">
+                <FontIcon FontSize="14" Glyph="&#xEDDA;" />
+            </Button>
+        </Grid>
+
+        <ScrollViewer
+            x:Name="Scroller"
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Hidden"
+            HorizontalScrollMode="Enabled"
+            IsTabStop="False"
+            TabFocusNavigation="Once"
+            VerticalScrollBarVisibility="Disabled"
+            VerticalScrollMode="Disabled">
+            <local:RowList x:Name="List" IsTabStop="False">
+                <ItemsRepeater
+                    x:Name="Repeater"
+                    ItemTemplate="{x:Bind ItemTemplate, Mode=OneWay}"
+                    ItemsSource="{x:Bind ItemsSource, Mode=OneWay}">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Orientation="Horizontal" Spacing="0" />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
+            </local:RowList>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

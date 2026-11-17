@@ -6,6 +6,7 @@
     xmlns:c="using:FluentFin.Converters"
     xmlns:cc="using:CommunityToolkit.WinUI.Converters"
     xmlns:controls="using:FluentFin.Controls"
+    xmlns:lc="using:FluentFin.Controls"
     xmlns:core="using:FluentFin.Core"
     xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -62,11 +63,8 @@
                             Model="{x:Bind ViewModel.NextUp, Mode=OneWay}" />
                     </StackPanel>
                     <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <StackPanel Spacing="12">
-                            <TextBlock AutomationProperties.HeadingLevel="Level2" Style="{StaticResource GlassSectionTitleTextBlockStyle}" Text="Seasons" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
-                                <ItemsRepeater Margin="0,0,0,12" ItemsSource="{x:Bind ViewModel.Seasons, Mode=OneWay}">
-                                    <ItemsRepeater.ItemTemplate>
+                        <lc:ShelfRow Header="Seasons" HasSeeAll="True" ItemsSource="{x:Bind ViewModel.Seasons, Mode=OneWay}" SeeAll="SeasonsSeeAll">
+                                <lc:ShelfRow.ItemTemplate>
                                         <DataTemplate x:DataType="viewmodels:BaseItemViewModel">
                                             <controls:BaseItemDtoCard
                                                 Width="200"
@@ -75,23 +73,15 @@
                                                 JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
                                                 Model="{x:Bind}" />
                                         </DataTemplate>
-                                    </ItemsRepeater.ItemTemplate>
-                                    <ItemsRepeater.Layout>
-                                        <StackLayout Orientation="Horizontal" Spacing="12" />
-                                    </ItemsRepeater.Layout>
-                                </ItemsRepeater>
-                            </ScrollViewer>
-                        </StackPanel>
+                                </lc:ShelfRow.ItemTemplate>
+                            </lc:ShelfRow>
                     </ContentControl>
                     <ContentControl Style="{StaticResource GlassSurfaceStyle}">
                         <controls:CastRow Heading="Cast &amp; Crew" People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />
                     </ContentControl>
                     <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <StackPanel Spacing="12">
-                            <TextBlock AutomationProperties.HeadingLevel="Level2" Style="{StaticResource GlassSectionTitleTextBlockStyle}" Text="More Like This" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                            <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" VerticalScrollBarVisibility="Disabled" VerticalScrollMode="Disabled">
-                                <ItemsRepeater Margin="0,0,0,12" ItemsSource="{x:Bind ViewModel.Similar, Mode=OneWay}">
-                                    <ItemsRepeater.ItemTemplate>
+                        <lc:ShelfRow Header="More Like This" HasSeeAll="True" ItemsSource="{x:Bind ViewModel.Similar, Mode=OneWay}" SeeAll="SimilarSeeAll">
+                                <lc:ShelfRow.ItemTemplate>
                                         <DataTemplate x:DataType="viewmodels:BaseItemViewModel">
                                             <controls:BaseItemDtoCard
                                                 Width="200"
@@ -100,13 +90,8 @@
                                                 JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
                                                 Model="{x:Bind}" />
                                         </DataTemplate>
-                                    </ItemsRepeater.ItemTemplate>
-                                    <ItemsRepeater.Layout>
-                                        <StackLayout Orientation="Horizontal" Spacing="12" />
-                                    </ItemsRepeater.Layout>
-                                </ItemsRepeater>
-                            </ScrollViewer>
-                        </StackPanel>
+                                </lc:ShelfRow.ItemTemplate>
+                            </lc:ShelfRow>
                     </ContentControl>
                 </StackPanel>
             </StackPanel>

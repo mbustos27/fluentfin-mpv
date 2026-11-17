@@ -14,6 +14,15 @@
   checksum, verified) and Release notes; a portable copy opens the release page instead.
 - **An upgrade test** (`tools\release\upgrade-test.ps1`): installs the published MSI, runs the new one over it and checks
   the result; it refuses to run where Seaglass is already installed.
+- **Rows scroll by axis, not by mode.** The mouse wheel always scrolls the page, even over a row; the tilt wheel,
+  Shift+wheel and a sideways swipe move the row. Every row (Continue Watching, Next Up, Recently Added, Seasons, More Like
+  This, Cast) is one control with always-visible arrows, a peek of the next card and a **See all** that opens the row as a
+  grid.
+- **Keyboard and gamepad, TV style:** one Tab stop per row (it returns to the card you left), Left/Right, Home/End along
+  the row, Up/Down between rows, a focused card kept clear of the edges. A card is one Tab stop; Play, Watched and
+  Favorite are in its menu (Menu key or Shift+F10). The hero's dots are one control with arrow keys, and a visible pause.
+- **Narrator:** each row is a named list with "n of m" cards under a heading.
+- Fixed: Tab never reached the later Recently Added rows on Home or the later episodes of a season.
 
 ## 1.1.1
 

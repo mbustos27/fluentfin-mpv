@@ -194,6 +194,7 @@ public partial class App : Application
 			services.AddSingleton<ITitleBarViewModel, TitleBarViewModel>();
 			services.AddTransient<HomeViewModel>();
 			services.AddTransient<LibraryViewModel>();
+			services.AddTransient<ItemGridViewModel>();
 			services.AddTransient<VideoPlayerViewModel>();
 			services.AddTransient<MovieViewModel>();
 			services.AddTransient<EpisodeViewModel>();

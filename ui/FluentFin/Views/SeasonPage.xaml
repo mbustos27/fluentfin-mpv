@@ -64,16 +64,19 @@
                         </ItemsRepeater.Layout>
                     </ItemsRepeater>
                     <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}">
-                            <ItemsRepeater.ItemTemplate>
+                        <!--  Seaglass scrolling: an ItemsControl, not a virtualizing ItemsRepeater: Tab never reached the episodes after the first  -->
+                        <ItemsControl IsTabStop="False" ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="jm:BaseItemDto">
                                     <controls:EpisodeRow Dto="{x:Bind}" />
                                 </DataTemplate>
-                            </ItemsRepeater.ItemTemplate>
-                            <ItemsRepeater.Layout>
-                                <StackLayout Spacing="10" />
-                            </ItemsRepeater.Layout>
-                        </ItemsRepeater>
+                            </ItemsControl.ItemTemplate>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="10" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
                     </ContentControl>
                     <ContentControl Style="{StaticResource GlassSurfaceStyle}">
                         <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />

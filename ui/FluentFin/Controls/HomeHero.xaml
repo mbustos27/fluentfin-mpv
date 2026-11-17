@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="FluentFin.Controls.HomeHero"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -119,7 +119,34 @@
             VerticalAlignment="Bottom"
             Background="#66000000"
             CornerRadius="{StaticResource GlassChipCornerRadius}">
-            <StackPanel x:Name="Dots" Orientation="Horizontal" Spacing="2" />
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <!--  Seaglass scrolling: a visible pause for the auto-advance (WCAG 2.2.2); the dots are one Tab stop, Left/Right pick a slide  -->
+                <Button
+                    x:Name="PauseButton"
+                    RequestedTheme="Dark"
+                    Width="24"
+                    Height="24"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Pause slideshow"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="PauseButton_Click"
+                    CornerRadius="12"
+                    ToolTipService.ToolTip="Pause slideshow">
+                    <FontIcon
+                        x:Name="PauseIcon"
+                        FontSize="11"
+                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                        Glyph="&#xE769;" />
+                </Button>
+                <StackPanel
+                    x:Name="Dots"
+                    AutomationProperties.Name="Slides"
+                    Orientation="Horizontal"
+                    Spacing="2"
+                    TabFocusNavigation="Once" />
+            </StackPanel>
         </Border>
     </Grid>
 </UserControl>
