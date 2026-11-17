@@ -46,6 +46,26 @@ public sealed class LibraryViewModelTests
 		Assert.Equal("Documentaries", vm.Title);
 	}
 
+	[Fact]
+	public async Task EachPage_SaysWhereItsCardsAreInTheWholeLibrary()
+	{
+		// Seaglass scrolling: Narrator's "n of m" for a card is its place in the library, not on the page
+		var dtos = Enumerable.Range(0, 250).Select(i => new BaseItemDto { Id = Guid.NewGuid(), Name = $"Item {i:D3}" }).ToList();
+		var client = new Mock<IJellyfinClient>();
+		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = dtos });
+		var vm = new LibraryViewModel(client.Object);
+		await vm.OnNavigatedTo(new BaseItemDto());
+
+		Assert.Equal((250, 0), (vm.TotalCount, vm.FirstIndex));
+
+		vm.SelectedPage = 2;
+		Assert.Equal((250, 200), (vm.TotalCount, vm.FirstIndex));
+		Assert.Equal(50, vm.Items.Count);
+
+		vm.UpdateSortBy(ItemSortBy.CommunityRating); // back to the first page
+		Assert.Equal((250, 0), (vm.TotalCount, vm.FirstIndex));
+	}
+
 	private static void AssertPage(LibraryViewModel vm, List<BaseItemDto> dtos, int page, bool descending = false)
 	{
 		var sorted = descending

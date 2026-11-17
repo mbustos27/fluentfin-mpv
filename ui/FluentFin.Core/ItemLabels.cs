@@ -111,6 +111,50 @@ public static class ItemLabels
 		return which.Length == 0 ? action : $"{action}, {which}";
 	}
 
+	/// <summary>
+	/// Seaglass scrolling: the name Narrator reads for an episode row, the row's one keyboard stop ("S1E4 Pilot, watched";
+	/// "S2E5-E6 Two Parter, 45% watched, favorite"); its place in the list ("4 of 8") comes from the row's position.
+	/// </summary>
+	public static string EpisodeRowName(BaseItemDto? episode)
+	{
+		if (episode is null)
+		{
+			return string.Empty;
+		}
+
+		var code = (episode.ParentIndexNumber, episode.IndexNumber) switch
+		{
+			({ } season, { } number) => $"S{season}E{number}",
+			(null, { } number) => $"E{number}",
+			_ => "",
+		};
+		if (code.Length > 0 && episode.IndexNumberEnd is { } end && end > episode.IndexNumber)
+		{
+			code += $"-E{end}";
+		}
+
+		var title = string.Join(" ", new[] { code, episode.Name?.Trim() ?? "" }.Where(x => x.Length > 0));
+		List<string> parts = title.Length > 0 ? [title] : [];
+
+		var data = episode.UserData;
+		if (data?.Played == true)
+		{
+			parts.Add("watched");
+		}
+		else if (data?.PlayedPercentage is > 0 and < 100 and var percent)
+		{
+			// the row's progress bar: shown for any progress, so never read as 0%
+			parts.Add($"{Math.Max(1, (int)Math.Round(percent))}% watched");
+		}
+
+		if (data?.IsFavorite == true)
+		{
+			parts.Add("favorite");
+		}
+
+		return string.Join(", ", parts);
+	}
+
 	/// <summary>"Account, alice": the title bar button that shows only the user's picture.</summary>
 	public static string AccountButtonName(string? userName) =>
 		string.IsNullOrWhiteSpace(userName) ? "Account" : $"Account, {userName.Trim()}";

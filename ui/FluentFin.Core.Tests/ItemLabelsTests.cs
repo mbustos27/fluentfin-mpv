@@ -107,6 +107,36 @@ public sealed class ItemLabelsTests
 	}
 
 	[Theory]
+	[InlineData(1, 4, null, "Pilot", true, null, false, "S1E4 Pilot, watched")]
+	[InlineData(1, 4, null, "Pilot", false, null, false, "S1E4 Pilot")]
+	[InlineData(2, 5, 6, "Two Parter", false, 45.4, true, "S2E5-E6 Two Parter, 45% watched, favorite")]
+	[InlineData(null, 7, null, "Special", false, 0.2, false, "E7 Special, 1% watched")]  // a sliver of progress still shows
+	[InlineData(null, null, null, "Behind the Scenes", false, null, false, "Behind the Scenes")]
+	[InlineData(3, 1, null, null, true, 50.0, false, "S3E1, watched")]                 // watched wins over a stale percentage
+	[InlineData(3, 1, 1, " Trimmed ", false, null, false, "S3E1 Trimmed")]             // an end equal to the start is one episode
+	public void EpisodeRow_IsTheCodeTheTitleAndWhatTheRowShows(int? season, int? number, int? end, string? name, bool played, double? percent, bool favorite, string expected)
+	{
+		var episode = new BaseItemDto
+		{
+			Type = BaseItemDto_Type.Episode,
+			ParentIndexNumber = season,
+			IndexNumber = number,
+			IndexNumberEnd = end,
+			Name = name,
+			UserData = new UserItemDataDto { Played = played, PlayedPercentage = percent, IsFavorite = favorite },
+		};
+
+		Assert.Equal(expected, ItemLabels.EpisodeRowName(episode));
+	}
+
+	[Fact]
+	public void EpisodeRow_WithoutAnEpisode_IsEmpty()
+	{
+		Assert.Equal("", ItemLabels.EpisodeRowName(null));
+		Assert.Equal("", ItemLabels.EpisodeRowName(new BaseItemDto()));
+	}
+
+	[Theory]
 	[InlineData("alice", "Account, alice")]
 	[InlineData(null, "Account")]
 	[InlineData(" ", "Account")]
