@@ -122,23 +122,9 @@ def private_desktop():
     opened here is seen by nobody)."""
     if os.name != "nt":
         return bool(os.environ.get("DISPLAY"))
-    import ctypes
-    from ctypes import wintypes as wt
+    from jellyfin_mpv_shim import offscreen_guard
 
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    user32.GetThreadDesktop.restype = wt.HANDLE
-    user32.GetThreadDesktop.argtypes = [wt.DWORD]
-    user32.GetUserObjectInformationW.argtypes = [
-        wt.HANDLE, ctypes.c_int, ctypes.c_void_p, wt.DWORD,
-        ctypes.POINTER(wt.DWORD)]
-    desk = user32.GetThreadDesktop(kernel32.GetCurrentThreadId())
-    buf = ctypes.create_unicode_buffer(256)
-    needed = wt.DWORD()
-    if not desk or not user32.GetUserObjectInformationW(
-            desk, 2, buf, ctypes.sizeof(buf), ctypes.byref(needed)):
-        return False
-    return buf.value.lower() != "default"
+    return not offscreen_guard.interactive_desktop()
 
 
 @unittest.skipIf(MPV is None, "no mpv on PATH")

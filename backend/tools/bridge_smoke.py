@@ -774,6 +774,19 @@ def session_prewarm(results, python, out_dir):
         host.close()
 
 
+def _offscreen_guard():
+    """This checkout's ``offscreen_guard.py``, loaded by path (this script
+    may not import the package it tests). The sessions open real mpv
+    windows, so the smoke test runs on a private desktop: hidden_run.py."""
+    import importlib.util
+
+    path = os.path.join(ROOT, "jellyfin_mpv_shim", "offscreen_guard.py")
+    spec = importlib.util.spec_from_file_location("_offscreen_guard", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def main():
     global THIS_CHECKOUT
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -796,6 +809,7 @@ def main():
                         "interpreter has installed -- for an editable "
                         "install, the checkout it was made from")
     options = parser.parse_args()
+    _offscreen_guard().check("tools\\bridge_smoke.py")
     THIS_CHECKOUT = options.this_checkout
     out_dir = options.out or tempfile.mkdtemp(prefix="bridge-smoke-")
     os.makedirs(out_dir, exist_ok=True)

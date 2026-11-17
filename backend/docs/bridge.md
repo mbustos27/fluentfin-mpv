@@ -910,7 +910,9 @@ The smoke test runs the real bridge, with mpv, and needs no server:
 FluentFin starts it, imports the installed package, and an editable install
 points at the checkout it was made from -- a git worktree shares the main
 checkout's venv. Run it through `tools\backend-bench\hidden_run.py` to keep
-its windows off the desktop.)
+its windows off the desktop: started on the desktop, it stops at once with
+exit status 3, as the unit tests do (`jellyfin_mpv_shim/offscreen_guard.py`;
+`SEAGLASS_TESTS_ON_DESKTOP=1` runs it there anyway).)
 
 It checks the server-less protocol, stdin EOF, `play_file` of
 `av://lavfi:testsrc` standalone (state, advancing `position`, pause, volume,
