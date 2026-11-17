@@ -169,6 +169,18 @@
                         Visibility="{x:Bind VisibleIfText(Controls.Subtitle), Mode=OneWay}" />
                 </StackPanel>
             </StackPanel>
+            <!--  Seaglass: the shortcut sheet (also ? and F1)  -->
+            <Button
+                x:Name="ShortcutsButton"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                AutomationProperties.AcceleratorKey="?"
+                AutomationProperties.Name="Keyboard shortcuts"
+                Click="OnShortcutsClick"
+                Style="{StaticResource PlayerButton}"
+                ToolTipService.ToolTip="Keyboard shortcuts (?)">
+                <FontIcon FontSize="16" Glyph="&#xE765;" />
+            </Button>
         </Grid>
 
         <!--  the wheel's volume, shown briefly, also while the bars are hidden  -->
@@ -329,10 +341,11 @@
                     Spacing="16">
                     <Button
                         x:Name="SkipBackButton"
+                        AutomationProperties.AcceleratorKey="J"
                         AutomationProperties.Name="Back 10 seconds"
                         Click="OnSkipBackClick"
                         Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="Back 10 seconds">
+                        ToolTipService.ToolTip="Back 10 seconds (J)">
                         <FontIcon FontSize="18" Glyph="&#xED3C;" />
                     </Button>
                     <Button
@@ -353,10 +366,11 @@
                     </Button>
                     <Button
                         x:Name="SkipForwardButton"
+                        AutomationProperties.AcceleratorKey="Shift+Right"
                         AutomationProperties.Name="Forward 30 seconds"
                         Click="OnSkipForwardClick"
                         Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="Forward 30 seconds">
+                        ToolTipService.ToolTip="Forward 30 seconds (Shift+Right)">
                         <FontIcon FontSize="18" Glyph="&#xED3D;" />
                     </Button>
                 </StackPanel>

@@ -216,6 +216,15 @@
 
                     </StackPanel>
                 </ContentControl>
+                <!--  Seaglass: the shortcut sheet (also on ? anywhere, and in the player)  -->
+                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
+                    <ctk:SettingsCard
+                        Click="OnKeyboardShortcutsClick"
+                        Description="Every key and mouse button. Press ? on any page to open it."
+                        Header="Keyboard shortcuts"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE765;}"
+                        IsClickEnabled="True" />
+                </ContentControl>
                 <!--  fluentfin-mpv: developer settings out of the way (docs/research/ux-review.md T2)  -->
                 <ctk:SettingsExpander
                     Margin="0,16,0,0"

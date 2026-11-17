@@ -37,7 +37,7 @@ public static class MpvPlayerKeys
 	/// </summary>
 	public static void OnPreviewKeyDown(MpvPlayerControls view, bool videoShown, KeyRoutedEventArgs e)
 	{
-		if (!e.Handled && Takes(e.Key, videoShown, e.OriginalSource) && view.HandleKey(e.Key))
+		if (!e.Handled && !Services.TextInput.IsTextInput(e.OriginalSource) && Takes(e.Key, videoShown, e.OriginalSource) && view.HandleKey(e.Key))
 		{
 			e.Handled = true;
 		}

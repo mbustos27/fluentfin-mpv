@@ -13,6 +13,9 @@ public enum AppShortcut
 	ShowHelp,
 }
 
+/// <summary>Where the user is: signed out (server list, login), browsing, or in the player.</summary>
+public enum ShortcutContext { SignedOut, Browsing, Player }
+
 /// <summary>
 /// Seaglass: the global key map (docs/SHORTCUTS.md), pure: which <see cref="AppShortcut"/> a key and its modifiers mean.
 /// The window's key handler asks it for every key that reaches the window; nothing fires while the focus is in a text
@@ -30,6 +33,18 @@ public static class AppShortcuts
 		/// <summary>The "/" and "?" key (VK_OEM_2), and the "," key (VK_OEM_COMMA).</summary>
 		public const int Slash = 0xBF, Comma = 0xBC;
 	}
+
+	/// <summary>
+	/// Whether <paramref name="shortcut"/> applies where the user is. Signed out: back, forward and the sheet (there is no
+	/// search, Home or Settings yet). In the player: back (it leaves) and the sheet only; going elsewhere would leave the
+	/// video playing behind another page, and Forward has nowhere to go.
+	/// </summary>
+	public static bool AllowedIn(AppShortcut shortcut, ShortcutContext context) => context switch
+	{
+		ShortcutContext.Browsing => true,
+		ShortcutContext.SignedOut => shortcut is AppShortcut.Back or AppShortcut.Forward or AppShortcut.ShowHelp,
+		_ => shortcut is AppShortcut.Back or AppShortcut.ShowHelp,
+	};
 
 	/// <summary>The key map: null for a key that is none of the global ones, or whenever <paramref name="inTextInput"/>.</summary>
 	public static AppShortcut? For(int virtualKey, bool control, bool shift, bool alt, bool inTextInput)

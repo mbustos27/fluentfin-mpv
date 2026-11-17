@@ -481,6 +481,8 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnPlayPauseClick(object sender, RoutedEventArgs e) => _ = Controls?.TogglePause();
 
+	private void OnShortcutsClick(object sender, RoutedEventArgs e) => FluentFin.Services.WindowShortcuts.ShowHelp(XamlRoot);
+
 	private void OnSkipBackClick(object sender, RoutedEventArgs e) => _ = Controls?.SeekBy(-MpvControlsViewModel.SkipBackSeconds);
 
 	private void OnSkipForwardClick(object sender, RoutedEventArgs e) => _ = Controls?.SeekBy(MpvControlsViewModel.SkipForwardSeconds);

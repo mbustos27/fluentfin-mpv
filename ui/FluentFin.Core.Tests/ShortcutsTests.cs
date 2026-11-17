@@ -48,6 +48,18 @@ public sealed class ShortcutsTests
 	}
 
 	[Fact]
+	public void WhereTheyApply_PlayerAndSignedOutKeepToBackAndHelp()
+	{
+		foreach (var shortcut in Enum.GetValues<AppShortcut>())
+		{
+			Assert.True(AppShortcuts.AllowedIn(shortcut, ShortcutContext.Browsing));
+		}
+
+		Assert.Equal([AppShortcut.Back, AppShortcut.ShowHelp], Enum.GetValues<AppShortcut>().Where(x => AppShortcuts.AllowedIn(x, ShortcutContext.Player)));
+		Assert.Equal([AppShortcut.Back, AppShortcut.Forward, AppShortcut.ShowHelp], Enum.GetValues<AppShortcut>().Where(x => AppShortcuts.AllowedIn(x, ShortcutContext.SignedOut)));
+	}
+
+	[Fact]
 	public void TheSideButtons_AreBackAndForward_AndNothingElseIs()
 	{
 		Assert.Equal(AppShortcut.Back, AppMouse.For(xButton1: true, xButton2: false));

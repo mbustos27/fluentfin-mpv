@@ -80,6 +80,27 @@ public class NavigationService : INavigationService
 		return false;
 	}
 
+	[MemberNotNullWhen(true, nameof(Frame), nameof(_frame))]
+	public bool CanGoForward => Frame != null && Frame.CanGoForward;
+
+	/// <summary>Seaglass: forward, the Frame's own forward history (<see cref="PruneForwardStack{T}"/> keeps the player out of it).</summary>
+	public bool GoForward()
+	{
+		if (CanGoForward)
+		{
+			var vmBeforeNavigation = _frame.GetPageViewModel();
+			_frame.GoForward();
+			if (vmBeforeNavigation is INavigationAware navigationAware)
+			{
+				navigationAware.OnNavigatedFrom();
+			}
+
+			return true;
+		}
+
+		return false;
+	}
+
 	public bool NavigateTo(string pageKey, object? parameter = null, bool clearNavigation = false)
 	{
 		try
@@ -120,7 +141,11 @@ public class NavigationService : INavigationService
 			if (clearNavigation)
 			{
 				frame.BackStack.Clear();
+				frame.ForwardStack.Clear();
 			}
+
+			// Seaglass: Forward never leads into the player (it would start playing again)
+			PruneForwardStack(frame.ForwardStack, x => x.SourcePageType);
 
 			// fluentfin-mpv: a player page replacing a player page (a remote Play while playing) takes over its history entry
 			DropReplacedPlayerPage(frame.BackStack, x => x.SourcePageType, e.SourcePageType, e.NavigationMode);
@@ -132,6 +157,25 @@ public class NavigationService : INavigationService
 
 			Navigated?.Invoke(sender, e);
 		}
+	}
+
+	/// <summary>
+	/// Seaglass: the player page is not a forward target (Back out of the player, then Forward, would start the item again).
+	/// Removes every player entry from the forward history; true when one was removed.
+	/// </summary>
+	internal static bool PruneForwardStack<T>(IList<T> forwardStack, Func<T, Type> pageType)
+	{
+		var removed = false;
+		for (var i = forwardStack.Count - 1; i >= 0; i--)
+		{
+			if (pageType(forwardStack[i]) == typeof(Views.VideoPlayerPage))
+			{
+				forwardStack.RemoveAt(i);
+				removed = true;
+			}
+		}
+
+		return removed;
 	}
 
 	/// <summary>
