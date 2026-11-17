@@ -19,6 +19,13 @@
     mc:Ignorable="d">
 
 
+    <Page.Resources>
+        <!--  Seaglass: the settings groups sit on glass surfaces, so the cards inside are flat  -->
+        <SolidColorBrush x:Key="SettingsCardBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="SettingsCardBackgroundPointerOver" Color="{ThemeResource SubtleFillColorSecondary}" />
+        <SolidColorBrush x:Key="SettingsCardBackgroundPressed" Color="{ThemeResource SubtleFillColorTertiary}" />
+    </Page.Resources>
+
     <!--  fluentfin-mpv: scrolls (the Playback section made it taller than a window) and narrows with the window  -->
     <ScrollViewer>
         <Grid MaxWidth="1000" Padding="24,0">
@@ -35,7 +42,7 @@
                     Text="Settings" />
             </Grid>
 
-            <StackPanel Grid.Row="1" Spacing="5">
+            <StackPanel Grid.Row="1" Spacing="20">
                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.Servers}">
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="settings:SavedServer">
@@ -65,135 +72,150 @@
                 </ItemsRepeater>
 
                 <!--  Seaglass: Settings > Appearance; the choice is saved on this PC and applies at once  -->
-                <TextBlock
-                    Margin="1,28,0,4"
-                    AutomationProperties.HeadingLevel="Level2"
-                    Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                    Text="Appearance" />
-                <ctk:SettingsCard
-                    Description="{x:Bind ViewModel.SelectedGlass.Description, Mode=OneWay}"
-                    Header="Glass"
-                    HeaderIcon="{ui:FontIcon Glyph=&#xE790;}">
-                    <ComboBox
-                        MinWidth="160"
-                        AutomationProperties.Name="Glass"
-                        DisplayMemberPath="Name"
-                        ItemsSource="{x:Bind vm:SettingsViewModel.GlassChoices}"
-                        SelectedItem="{x:Bind ViewModel.SelectedGlass, Mode=TwoWay}" />
-                </ctk:SettingsCard>
+                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            Margin="4,4,0,8"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                            Text="Appearance" />
+                        <ctk:SettingsCard
+                            Description="{x:Bind ViewModel.SelectedGlass.Description, Mode=OneWay}"
+                            Header="Glass"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE790;}">
+                            <ComboBox
+                                MinWidth="160"
+                                AutomationProperties.Name="Glass"
+                                DisplayMemberPath="Name"
+                                ItemsSource="{x:Bind vm:SettingsViewModel.GlassChoices}"
+                                SelectedItem="{x:Bind ViewModel.SelectedGlass, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
 
+                    </StackPanel>
+                </ContentControl>
                 <!--  fluentfin-mpv: Settings > Playback (docs/research/ux-review.md T1)  -->
-                <TextBlock
-                    Margin="1,28,0,4"
-                    AutomationProperties.HeadingLevel="Level2"
-                    Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                    Text="Playback" />
-                <ctk:SettingsCard
-                    Description="Remote control from other devices follows a change after you sign in again."
-                    Header="Player"
-                    HeaderIcon="{ui:FontIcon Glyph=&#xEA69;}">
-                    <ComboBox
-                        AutomationProperties.Name="Player"
-                        DisplayMemberPath="Name"
-                        ItemsSource="{x:Bind vm:SettingsViewModel.MediaPlayers}"
-                        SelectedItem="{x:Bind ViewModel.SelectedMediaPlayer, Mode=TwoWay}" />
-                </ctk:SettingsCard>
-                <!--  fluentfin-mpv player controls: who draws the controls over the MPV player's video (docs/research/player-controls.md)  -->
-                <ctk:SettingsCard
-                    Description="FluentFin (the default): FluentFin's own controls over the video, with mpv running inside FluentFin; without its libmpv, mpv's controls are used and the player says so. mpv: mpv's on-screen controls. Used from the next playback."
-                    Header="Player controls"
-                    HeaderIcon="{ui:FontIcon Glyph=&#xE768;}"
-                    Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
-                    <ComboBox
-                        x:Name="PlayerControlsBox"
-                        AutomationProperties.Name="Player controls"
-                        DisplayMemberPath="Name"
-                        ItemsSource="{x:Bind vm:SettingsViewModel.PlayerControlsChoices}"
-                        SelectedItem="{x:Bind ViewModel.SelectedPlayerControls, Mode=TwoWay}" />
-                </ctk:SettingsCard>
+                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            Margin="4,4,0,8"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                            Text="Playback" />
+                        <ctk:SettingsCard
+                            Description="Remote control from other devices follows a change after you sign in again."
+                            Header="Player"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xEA69;}">
+                            <ComboBox
+                                AutomationProperties.Name="Player"
+                                DisplayMemberPath="Name"
+                                ItemsSource="{x:Bind vm:SettingsViewModel.MediaPlayers}"
+                                SelectedItem="{x:Bind ViewModel.SelectedMediaPlayer, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
+                        <!--  fluentfin-mpv player controls: who draws the controls over the MPV player's video (docs/research/player-controls.md)  -->
+                        <ctk:SettingsCard
+                            Description="FluentFin (the default): FluentFin's own controls over the video, with mpv running inside FluentFin; without its libmpv, mpv's controls are used and the player says so. mpv: mpv's on-screen controls. Used from the next playback."
+                            Header="Player controls"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE768;}"
+                            Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                            <ComboBox
+                                x:Name="PlayerControlsBox"
+                                AutomationProperties.Name="Player controls"
+                                DisplayMemberPath="Name"
+                                ItemsSource="{x:Bind vm:SettingsViewModel.PlayerControlsChoices}"
+                                SelectedItem="{x:Bind ViewModel.SelectedPlayerControls, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
 
+                    </StackPanel>
+                </ContentControl>
                 <!--  kept by the server for this user, as jellyfin-web's Playback settings: they reach every player  -->
-                <TextBlock
-                    Margin="1,16,0,4"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{ThemeResource CaptionTextBlockStyle}"
-                    Text="{x:Bind ServerPreferencesCaption()}"
-                    TextWrapping="WrapWholeWords" />
-                <controls:LoadStateView
-                    LoadingText="Loading your playback preferences…"
-                    ShowsLoading="True"
-                    State="{x:Bind ViewModel.PlaybackPreferences}" />
-                <InfoBar
-                    IsClosable="False"
-                    IsOpen="{x:Bind ViewModel.HasSaveError, Mode=OneWay}"
-                    Message="{x:Bind ViewModel.SaveError, Mode=OneWay}"
-                    Severity="Warning"
-                    Title="Not saved">
-                    <InfoBar.ActionButton>
-                        <Button Command="{x:Bind ViewModel.SavePlaybackPreferencesCommand}" Content="Try again" />
-                    </InfoBar.ActionButton>
-                </InfoBar>
-                <StackPanel Spacing="5" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.PlaybackPreferences.IsLoaded), Mode=OneWay}">
-                    <ctk:SettingsCard Header="Preferred audio language" HeaderIcon="{ui:FontIcon Glyph=&#xE8D6;}">
-                        <ComboBox
-                            MinWidth="220"
-                            AutomationProperties.Name="Preferred audio language"
-                            ItemsSource="{x:Bind ViewModel.Languages, Mode=OneWay}"
-                            SelectedItem="{x:Bind ViewModel.AudioLanguage, Mode=TwoWay}" />
-                    </ctk:SettingsCard>
-                    <ctk:SettingsCard Header="Preferred subtitle language" HeaderIcon="{ui:FontIcon Glyph=&#xED1E;}">
-                        <ComboBox
-                            MinWidth="220"
-                            AutomationProperties.Name="Preferred subtitle language"
-                            ItemsSource="{x:Bind ViewModel.Languages, Mode=OneWay}"
-                            SelectedItem="{x:Bind ViewModel.SubtitleLanguage, Mode=TwoWay}" />
-                    </ctk:SettingsCard>
-                    <ctk:SettingsCard
-                        Description="{x:Bind ViewModel.SubtitleMode.Description, Mode=OneWay}"
-                        Header="Subtitles"
-                        HeaderIcon="{ui:FontIcon Glyph=&#xE7F0;}">
-                        <ComboBox
-                            MinWidth="220"
-                            AutomationProperties.Name="Subtitles"
-                            ItemsSource="{x:Bind vm:SettingsViewModel.SubtitleModes}"
-                            SelectedItem="{x:Bind ViewModel.SubtitleMode, Mode=TwoWay}" />
-                    </ctk:SettingsCard>
-                    <ctk:SettingsCard
-                        Description="The MPV player plays the next episode whatever this says, for now."
-                        Header="Play the next episode automatically"
-                        HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
-                        <ToggleSwitch AutomationProperties.Name="Play the next episode automatically" IsOn="{x:Bind ViewModel.AutoPlayNextEpisode, Mode=TwoWay}" />
-                    </ctk:SettingsCard>
-                </StackPanel>
+                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            Margin="4,4,0,8"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ServerPreferencesCaption()}"
+                            TextWrapping="WrapWholeWords" />
+                        <controls:LoadStateView
+                            LoadingText="Loading your playback preferences…"
+                            ShowsLoading="True"
+                            State="{x:Bind ViewModel.PlaybackPreferences}" />
+                        <InfoBar
+                            IsClosable="False"
+                            IsOpen="{x:Bind ViewModel.HasSaveError, Mode=OneWay}"
+                            Message="{x:Bind ViewModel.SaveError, Mode=OneWay}"
+                            Severity="Warning"
+                            Title="Not saved">
+                            <InfoBar.ActionButton>
+                                <Button Command="{x:Bind ViewModel.SavePlaybackPreferencesCommand}" Content="Try again" />
+                            </InfoBar.ActionButton>
+                        </InfoBar>
+                        <StackPanel Spacing="5" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.PlaybackPreferences.IsLoaded), Mode=OneWay}">
+                            <ctk:SettingsCard Header="Preferred audio language" HeaderIcon="{ui:FontIcon Glyph=&#xE8D6;}">
+                                <ComboBox
+                                    MinWidth="220"
+                                    AutomationProperties.Name="Preferred audio language"
+                                    ItemsSource="{x:Bind ViewModel.Languages, Mode=OneWay}"
+                                    SelectedItem="{x:Bind ViewModel.AudioLanguage, Mode=TwoWay}" />
+                            </ctk:SettingsCard>
+                            <ctk:SettingsCard Header="Preferred subtitle language" HeaderIcon="{ui:FontIcon Glyph=&#xED1E;}">
+                                <ComboBox
+                                    MinWidth="220"
+                                    AutomationProperties.Name="Preferred subtitle language"
+                                    ItemsSource="{x:Bind ViewModel.Languages, Mode=OneWay}"
+                                    SelectedItem="{x:Bind ViewModel.SubtitleLanguage, Mode=TwoWay}" />
+                            </ctk:SettingsCard>
+                            <ctk:SettingsCard
+                                Description="{x:Bind ViewModel.SubtitleMode.Description, Mode=OneWay}"
+                                Header="Subtitles"
+                                HeaderIcon="{ui:FontIcon Glyph=&#xE7F0;}">
+                                <ComboBox
+                                    MinWidth="220"
+                                    AutomationProperties.Name="Subtitles"
+                                    ItemsSource="{x:Bind vm:SettingsViewModel.SubtitleModes}"
+                                    SelectedItem="{x:Bind ViewModel.SubtitleMode, Mode=TwoWay}" />
+                            </ctk:SettingsCard>
+                            <ctk:SettingsCard
+                                Description="The MPV player plays the next episode whatever this says, for now."
+                                Header="Play the next episode automatically"
+                                HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
+                                <ToggleSwitch AutomationProperties.Name="Play the next episode automatically" IsOn="{x:Bind ViewModel.AutoPlayNextEpisode, Mode=TwoWay}" />
+                            </ctk:SettingsCard>
+                        </StackPanel>
 
+                    </StackPanel>
+                </ContentControl>
                 <!--  kept on this PC; the bridge has no field for them yet (docs/BRIDGE.md v1), so mpv's own controls ignore them;
                       FluentFin's player controls over the MPV player use the Skip button, the wheel and the step (MpvControlsViewModel)  -->
-                <ctk:SettingsCard
-                    Margin="0,16,0,0"
-                    Description="Built-in players, and the MPV player with FluentFin's player controls. mpv's own controls follow the MPV player's settings."
-                    Header="Show Skip intro and Skip credits"
-                    HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
-                    <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />
-                </ctk:SettingsCard>
-                <ctk:SettingsCard
-                    Description="Built-in players, and the MPV player with FluentFin's player controls. mpv's own controls always change the volume with the wheel."
-                    Header="Change the volume with the mouse wheel"
-                    HeaderIcon="{ui:FontIcon Glyph=&#xE962;}">
-                    <ToggleSwitch AutomationProperties.Name="Change the volume with the mouse wheel" IsOn="{x:Bind ViewModel.MouseWheelVolume, Mode=TwoWay}" />
-                </ctk:SettingsCard>
-                <ctk:SettingsCard
-                    Description="How much one wheel notch or arrow key changes the volume, in percent. Built-in players, and the MPV player with FluentFin's player controls."
-                    Header="Volume step"
-                    HeaderIcon="{ui:FontIcon Glyph=&#xE767;}">
-                    <NumberBox
-                        MinWidth="120"
-                        AutomationProperties.Name="Volume step, in percent"
-                        Maximum="20"
-                        Minimum="1"
-                        SpinButtonPlacementMode="Inline"
-                        Value="{x:Bind ViewModel.VolumeStep, Mode=TwoWay}" />
-                </ctk:SettingsCard>
+                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
+                    <StackPanel Spacing="4">
+                        <ctk:SettingsCard
+                            Description="Built-in players, and the MPV player with FluentFin's player controls. mpv's own controls follow the MPV player's settings."
+                            Header="Show Skip intro and Skip credits"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
+                            <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
+                        <ctk:SettingsCard
+                            Description="Built-in players, and the MPV player with FluentFin's player controls. mpv's own controls always change the volume with the wheel."
+                            Header="Change the volume with the mouse wheel"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE962;}">
+                            <ToggleSwitch AutomationProperties.Name="Change the volume with the mouse wheel" IsOn="{x:Bind ViewModel.MouseWheelVolume, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
+                        <ctk:SettingsCard
+                            Description="How much one wheel notch or arrow key changes the volume, in percent. Built-in players, and the MPV player with FluentFin's player controls."
+                            Header="Volume step"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE767;}">
+                            <NumberBox
+                                MinWidth="120"
+                                AutomationProperties.Name="Volume step, in percent"
+                                Maximum="20"
+                                Minimum="1"
+                                SpinButtonPlacementMode="Inline"
+                                Value="{x:Bind ViewModel.VolumeStep, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
 
+                    </StackPanel>
+                </ContentControl>
                 <!--  fluentfin-mpv: developer settings out of the way (docs/research/ux-review.md T2)  -->
                 <ctk:SettingsExpander
                     Margin="0,16,0,0"

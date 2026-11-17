@@ -49,9 +49,24 @@
                 x:Name="SearchBox"
                 Width="600"
                 Margin="{StaticResource XSmallTopBottomMargin}"
+                CornerRadius="{StaticResource GlassPillCornerRadius}"
                 PlaceholderText="Search movies, series, actors and more"
                 QueryIcon="Find"
                 Visibility="{x:Bind SearchVisibility(ViewModel.User, Chrome.IsPlayerOpen), Mode=OneWay}">
+                <!--  Seaglass: the search box is a glass pill: the frosted brush and the lit edge, the stronger glass while typing  -->
+                <AutoSuggestBox.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <StaticResource x:Key="TextControlBackground" ResourceKey="GlassPanelBrush" />
+                                <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="GlassPanelBrush" />
+                                <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="GlassPanelStrongBrush" />
+                                <StaticResource x:Key="TextControlBorderBrush" ResourceKey="GlassStrokeBrush" />
+                                <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="GlassStrokeBrush" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </AutoSuggestBox.Resources>
                 <AutoSuggestBox.KeyboardAccelerators>
                     <KeyboardAccelerator
                         Key="F"
@@ -134,8 +149,8 @@
                     Padding="0"
                     HorizontalAlignment="Right"
                     AutomationProperties.Name="{x:Bind core:ItemLabels.AccountButtonName(ViewModel.User.Name), Mode=OneWay}"
-                    BorderBrush="{ThemeResource CircleElevationBorderBrush}"
                     CornerRadius="16"
+                    Style="{StaticResource GlassPillButtonStyle}"
                     ToolTipService.ToolTip="{x:Bind ViewModel.User.Name}"
                     Visibility="{x:Bind ViewModel.User, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}">
                     <PersonPicture
