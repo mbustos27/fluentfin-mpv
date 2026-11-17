@@ -25,6 +25,14 @@
                 <SolidColorBrush x:Key="PlayerGlassFillPressed" Color="#26FFFFFF" />
                 <SolidColorBrush x:Key="PlayerGlassForeground" Color="#FFFFFFFF" />
                 <SolidColorBrush x:Key="PlayerHoverTimeFill" Color="#E6101C20" />
+                <!--
+                    Seaglass 1.1.4: the backing of the pills over the video (Next, Skip): dense, so their text keeps 4.5:1 over
+                    any picture (PlayerPromptContrastTests: over a white frame and a black one). The bars' light fill
+                    (PlayerGlassFill, 20 % white) left white text at about 1.6:1 over a white frame.
+                -->
+                <SolidColorBrush x:Key="PlayerPromptFill" Color="#EB101C20" />
+                <SolidColorBrush x:Key="PlayerPromptFillHover" Color="#F0213338" />
+                <SolidColorBrush x:Key="PlayerPromptFillPressed" Color="#F5091215" />
             </ResourceDictionary>
             <ResourceDictionary x:Key="HighContrast">
                 <SolidColorBrush x:Key="PlayerGlassFill" Color="{ThemeResource SystemColorWindowColor}" />
@@ -32,6 +40,9 @@
                 <SolidColorBrush x:Key="PlayerGlassFillPressed" Color="{ThemeResource SystemColorHighlightColor}" />
                 <SolidColorBrush x:Key="PlayerGlassForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
                 <SolidColorBrush x:Key="PlayerHoverTimeFill" Color="{ThemeResource SystemColorWindowColor}" />
+                <SolidColorBrush x:Key="PlayerPromptFill" Color="{ThemeResource SystemColorWindowColor}" />
+                <SolidColorBrush x:Key="PlayerPromptFillHover" Color="{ThemeResource SystemColorHighlightColor}" />
+                <SolidColorBrush x:Key="PlayerPromptFillPressed" Color="{ThemeResource SystemColorHighlightColor}" />
             </ResourceDictionary>
         </ResourceDictionary.ThemeDictionaries>
         <!--
@@ -91,6 +102,14 @@
             <Setter Property="Padding" Value="18,0" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="FontSize" Value="15" />
+        </Style>
+        <!--
+            Seaglass 1.1.4: the pills over the video (Next near the end, Skip) on the dense PlayerPromptFill. Each pill also sets
+            ButtonBackground* in its own resources: the template's pointer-over and pressed fills come from there, not from the
+            style (the bars' light ones above would come back under the pointer).
+        -->
+        <Style x:Key="PlayerPromptPill" BasedOn="{StaticResource PlayerPill}" TargetType="Button">
+            <Setter Property="Background" Value="{ThemeResource PlayerPromptFill}" />
         </Style>
         <!--  the one primary action: play/pause, in the accent  -->
         <Style x:Key="PlayerPlayButton" BasedOn="{StaticResource PlayerButton}" TargetType="Button">
@@ -239,6 +258,36 @@
             </Grid>
         </Border>
 
+        <!--
+            Seaglass 1.1.4: the speed or the subtitle delay a key just changed ("Speed 1.5×", "Subtitles 0.3 s later"), in the
+            volume indicator's place and look (the two take each other's place), also while the bars are hidden. Narrator
+            hears it from the code (Announce), so it is Raw here.
+        -->
+        <Border
+            x:Name="ToastIndicator"
+            Margin="0,88,0,0"
+            Padding="26,16"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="{ThemeResource GlassPanelStrongSolidBrush}"
+            BorderBrush="{ThemeResource GlassStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="20"
+            IsHitTestVisible="False"
+            Visibility="{x:Bind VisibleIf(Controls.ToastVisible), Mode=OneWay}">
+            <Grid>
+                <controls:GrainOverlay />
+                <TextBlock
+                    x:Name="ToastLabel"
+                    FontSize="24"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                    Style="{ThemeResource BodyStrongTextBlockStyle}"
+                    Text="{x:Bind Controls.ToastText, Mode=OneWay}" />
+            </Grid>
+        </Border>
+
         <!--  bottom: the seek bar and the transport, on a scrim  -->
         <Grid
             x:Name="BottomBar"
@@ -372,6 +421,18 @@
                     VerticalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="16">
+                    <!--  Seaglass 1.1.4: previous and next with the transport (an episode or a queue); the Next pill is the prompt near the end  -->
+                    <Button
+                        x:Name="PreviousButton"
+                        AutomationProperties.AcceleratorKey="Shift+P"
+                        AutomationProperties.Name="Previous episode"
+                        Click="OnPreviousClick"
+                        IsEnabled="{x:Bind Controls.CanPrevious, Mode=OneWay}"
+                        Style="{StaticResource PlayerButton}"
+                        ToolTipService.ToolTip="Previous episode (Shift+P)"
+                        Visibility="{x:Bind VisibleIf(Controls.ShowsNext), Mode=OneWay}">
+                        <FontIcon FontSize="16" Glyph="&#xE892;" />
+                    </Button>
                     <Button
                         x:Name="SkipBackButton"
                         AutomationProperties.AcceleratorKey="J"
@@ -406,6 +467,18 @@
                         ToolTipService.ToolTip="Forward 30 seconds (Shift+Right)">
                         <FontIcon FontSize="18" Glyph="&#xED3D;" />
                     </Button>
+                    <Button
+                        x:Name="NextButton"
+                        AutomationProperties.AcceleratorKey="Shift+N"
+                        AutomationProperties.HelpText="{x:Bind Controls.NextToolTip, Mode=OneWay}"
+                        AutomationProperties.Name="Next episode"
+                        Click="OnNextClick"
+                        IsEnabled="{x:Bind Controls.CanNext, Mode=OneWay}"
+                        Style="{StaticResource PlayerButton}"
+                        ToolTipService.ToolTip="{x:Bind NextHint(Controls.NextToolTip), Mode=OneWay}"
+                        Visibility="{x:Bind VisibleIf(Controls.ShowsNext), Mode=OneWay}">
+                        <FontIcon FontSize="16" Glyph="&#xE893;" />
+                    </Button>
                 </StackPanel>
 
                 <StackPanel
@@ -414,6 +487,38 @@
                     VerticalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="8">
+                    <!--
+                        Seaglass 1.1.4: the playback speed, a menu of 0.5x to 2x. At normal speed the button is an icon; at any
+                        other it shows the speed itself ("1.5×"), so a changed speed is always in sight with the bars.
+                    -->
+                    <Button
+                        x:Name="SpeedButton"
+                        AutomationProperties.AcceleratorKey="]"
+                        AutomationProperties.Name="{x:Bind SpeedName(Controls.Speed), Mode=OneWay}"
+                        Style="{StaticResource PlayerButton}"
+                        ToolTipService.ToolTip="{x:Bind SpeedToolTip(Controls.Speed), Mode=OneWay}">
+                        <Grid>
+                            <FontIcon
+                                FontSize="18"
+                                Glyph="&#xEC4A;"
+                                Visibility="{x:Bind CollapsedIf(Controls.IsSpeedChanged), Mode=OneWay}" />
+                            <TextBlock
+                                x:Name="SpeedButtonText"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Text="{x:Bind Controls.SpeedText, Mode=OneWay}"
+                                Visibility="{x:Bind VisibleIf(Controls.IsSpeedChanged), Mode=OneWay}" />
+                        </Grid>
+                        <Button.Flyout>
+                            <MenuFlyout
+                                x:Name="SpeedMenu"
+                                Closed="OnMenuClosed"
+                                MenuFlyoutPresenterStyle="{StaticResource PlayerMenuPresenter}"
+                                Opened="OnMenuOpened"
+                                Opening="OnSpeedMenuOpening"
+                                Placement="Top" />
+                        </Button.Flyout>
+                    </Button>
                     <Button
                         x:Name="AudioButton"
                         AutomationProperties.Name="Audio"
@@ -491,6 +596,67 @@
                                             Content="Reset"
                                             ToolTipService.ToolTip="Reset to 100%" />
                                     </Grid>
+                                    <!--
+                                        Seaglass 1.1.4: the subtitle delay, in steps of 0.1 s (Z and X too), for this item only; the
+                                        value is a live region, so Narrator hears each step
+                                    -->
+                                    <Rectangle Height="1" Fill="{ThemeResource GlassStrokeBrush}" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="Subtitle delay" />
+                                        <TextBlock
+                                            x:Name="SubtitleDelayValue"
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.LiveSetting="Polite"
+                                            AutomationProperties.Name="{x:Bind DelayName(Controls.SubtitleDelay), Mode=OneWay}"
+                                            Typography.NumeralAlignment="Tabular"
+                                            Text="{x:Bind Controls.SubtitleDelayText, Mode=OneWay}" />
+                                    </Grid>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button
+                                            x:Name="SubtitleEarlierButton"
+                                            MinWidth="44"
+                                            MinHeight="32"
+                                            Padding="8,0"
+                                            AutomationProperties.AcceleratorKey="Z"
+                                            AutomationProperties.Name="Subtitles 0.1 seconds earlier"
+                                            Click="OnSubtitleEarlierClick"
+                                            ToolTipService.ToolTip="0.1 s earlier (Z)">
+                                            <FontIcon FontSize="14" Glyph="&#xE738;" />
+                                        </Button>
+                                        <Button
+                                            x:Name="SubtitleLaterButton"
+                                            Grid.Column="1"
+                                            MinWidth="44"
+                                            MinHeight="32"
+                                            Padding="8,0"
+                                            AutomationProperties.AcceleratorKey="X"
+                                            AutomationProperties.Name="Subtitles 0.1 seconds later"
+                                            Click="OnSubtitleLaterClick"
+                                            ToolTipService.ToolTip="0.1 s later (X)">
+                                            <FontIcon FontSize="14" Glyph="&#xE710;" />
+                                        </Button>
+                                        <Button
+                                            x:Name="SubtitleDelayReset"
+                                            Grid.Column="3"
+                                            MinHeight="32"
+                                            MinWidth="32"
+                                            Padding="8,0"
+                                            AutomationProperties.Name="Reset the subtitle delay to none"
+                                            Click="OnSubtitleDelayReset"
+                                            Content="Reset"
+                                            ToolTipService.ToolTip="No delay" />
+                                    </Grid>
                                 </StackPanel>
                             </Flyout>
                         </Button.Flyout>
@@ -510,11 +676,12 @@
         <!--
             Skip intro / Skip credits (docs/BRIDGE.md section 5 segments) and the Next episode pill, bottom right, just above the
             bottom bar's controls while they show, a small margin from the bottom while they are hidden (the row's Margin is
-            set by PlaceSkipButton). Skip stays for the whole offer, also while the bars are hidden; the Next pill only with
-            the bars (it is one of them: it holds them up under the pointer and the keyboard). Last in the tree, so it is on
-            top of the bars' scrim. Never focused by itself: Space stays play.
-            The Skip pill does not hold the bars up under the pointer: it collapses when pressed, and an element that
-            collapses under the pointer need not get its PointerExited (the bars would stay up).
+            set by PlaceSkipButton). Last in the tree, so they are on top of the bars' scrim. Never focused by themselves:
+            Space stays play. Skip stays for the whole offer, also while the bars are hidden.
+            Seaglass 1.1.4: the Next pill is the prompt near the end (MpvControlsViewModel.NextPromptAt: the credits, else the last
+            30 to 40 s), also while the bars are hidden, as Skip is; Previous and Next are in the transport row. Both pills are on
+            the dense PlayerPromptFill (readable over any picture). Neither holds the bars up under the pointer: each collapses
+            when pressed, and an element that collapses under the pointer need not get its PointerExited (the bars would stay up).
         -->
         <StackPanel
             x:Name="PillRow"
@@ -525,16 +692,17 @@
             Spacing="12">
             <Button
                 x:Name="NextPill"
-                AutomationProperties.HelpText="{x:Bind Controls.NextToolTip, Mode=OneWay}"
-                AutomationProperties.Name="Next episode"
+                AutomationProperties.AcceleratorKey="Shift+N"
+                AutomationProperties.Name="{x:Bind Controls.NextToolTip, Mode=OneWay}"
                 Click="OnNextClick"
-                GotFocus="OnBarFocusChanged"
-                LostFocus="OnBarFocusChanged"
-                PointerEntered="OnBarPointerEntered"
-                PointerExited="OnBarPointerExited"
-                Style="{StaticResource PlayerPill}"
-                ToolTipService.ToolTip="{x:Bind Controls.NextToolTip, Mode=OneWay}"
-                Visibility="{x:Bind NextPillVisibility(Controls.ControlsVisible, Controls.ShowsNext, Controls.CanNext), Mode=OneWay}">
+                Style="{StaticResource PlayerPromptPill}"
+                ToolTipService.ToolTip="{x:Bind NextHint(Controls.NextToolTip), Mode=OneWay}"
+                Visibility="{x:Bind VisibleIf(Controls.IsNextPromptVisible), Mode=OneWay}">
+                <Button.Resources>
+                    <StaticResource x:Key="ButtonBackground" ResourceKey="PlayerPromptFill" />
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="PlayerPromptFillHover" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="PlayerPromptFillPressed" />
+                </Button.Resources>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock
                         x:Name="NextPillText"
@@ -551,11 +719,17 @@
             </Button>
             <Button
                 x:Name="SkipSegmentButton"
+                AutomationProperties.AcceleratorKey="S"
                 AutomationProperties.Name="{x:Bind Controls.SkipText, Mode=OneWay}"
                 Click="OnSkipSegmentClick"
-                Style="{StaticResource PlayerPill}"
+                Style="{StaticResource PlayerPromptPill}"
                 ToolTipService.ToolTip="{x:Bind SkipToolTip(Controls.SkipText, Controls.SkipSourceNote), Mode=OneWay}"
                 Visibility="{x:Bind VisibleIf(Controls.IsSkipVisible), Mode=OneWay}">
+                <Button.Resources>
+                    <StaticResource x:Key="ButtonBackground" ResourceKey="PlayerPromptFill" />
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="PlayerPromptFillHover" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="PlayerPromptFillPressed" />
+                </Button.Resources>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <FontIcon
                         VerticalAlignment="Center"

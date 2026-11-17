@@ -28,8 +28,11 @@ public sealed partial class VideoPlayerViewModelMpvTests
 
 		Assert.True(vm.UsesFluentFinControls);
 		Assert.NotNull(vm.MpvControls);
-		// before the play: mpv's OSC never shows; after it was taken: the remembered subtitle size, then where the bar is
-		Assert.Equal(["set_fullscreen", "set_controls", "play", "set_subtitle_size", "set_controls"], _backend.Commands);
+		// before the play: mpv's OSC never shows; after it was taken: the remembered subtitle size, this page's speed and
+		// subtitle delay (normal and none: Seaglass 1.1.4), then where the bar is
+		Assert.Equal(["set_fullscreen", "set_controls", "play", "set_subtitle_size", "set_speed", "set_subtitle_delay", "set_controls"], _backend.Commands);
+		Assert.True(JsonNode.DeepEquals(new JsonObject { ["speed"] = 1.0 }, _backend.Args("set_speed")), _backend.Args("set_speed").ToJsonString());
+		Assert.True(JsonNode.DeepEquals(new JsonObject { ["seconds"] = 0.0 }, _backend.Args("set_subtitle_delay")), _backend.Args("set_subtitle_delay").ToJsonString());
 		Assert.True(JsonNode.DeepEquals(new JsonObject { ["controls"] = "ui", ["subtitleInset"] = 0.0 }, _backend.Args("set_controls")), _backend.Args("set_controls").ToJsonString());
 	}
 
@@ -116,6 +119,8 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		Assert.Null(vm.MpvControls);
 		Assert.Contains("libmpv-2.dll was not found", vm.MpvNotice);
 		Assert.Contains("mpv's controls are used", vm.MpvNotice);
+		Assert.StartsWith("Seaglass's player controls", vm.MpvNotice);
+		Assert.DoesNotContain("FluentFin's", vm.MpvNotice);
 		Assert.DoesNotContain("set_controls", _backend.Commands);
 		Assert.Contains("play", _backend.Commands);
 	}

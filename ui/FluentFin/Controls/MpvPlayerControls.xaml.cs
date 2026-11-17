@@ -97,6 +97,16 @@ public sealed partial class MpvPlayerControls : UserControl
 			// a key at the limit changes no text: the indicator showing is the announcement
 			AnnounceVolume(appearing.VolumeText);
 		}
+		else if (e.PropertyName is nameof(MpvControlsViewModel.ToastText) or nameof(MpvControlsViewModel.ToastVisible) && Controls is { ToastVisible: true } toast)
+		{
+			// Seaglass 1.1.4: a key's new speed or subtitle delay
+			Announce(toast.ToastText, "SeaglassPlayerStatus");
+		}
+		else if (e.PropertyName is nameof(MpvControlsViewModel.IsNextPromptVisible) && Controls is { IsNextPromptVisible: true } prompt)
+		{
+			// Seaglass 1.1.4: the Next pill came (near the end); it is not focused, Shift+N plays it
+			Announce($"{prompt.NextToolTip}. Shift+N plays it.", "SeaglassNextPrompt");
+		}
 
 		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible))
 		{
@@ -115,9 +125,10 @@ public sealed partial class MpvPlayerControls : UserControl
 				Focus(FocusState.Programmatic);
 			}
 		}
-		else if (e.PropertyName == nameof(MpvControlsViewModel.IsSkipVisible) && Controls is { IsSkipVisible: false })
+		else if (e.PropertyName is nameof(MpvControlsViewModel.IsSkipVisible) && Controls is { IsSkipVisible: false }
+			|| e.PropertyName is nameof(MpvControlsViewModel.IsNextPromptVisible) && Controls is { IsNextPromptVisible: false })
 		{
-			// the Skip button went (pressed, or the segment is over): a focus it left nowhere
+			// the Skip button or the Next pill went (pressed, or no longer offered): a focus it left nowhere
 			if (XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is null)
 			{
 				Focus(FocusState.Programmatic);
@@ -136,9 +147,11 @@ public sealed partial class MpvPlayerControls : UserControl
 		{
 			KeepKeyboardWhenBarsHide();
 		}
-		else if (e.PropertyName == nameof(MpvControlsViewModel.IsSkipVisible) && Controls is { IsSkipVisible: true }
-			&& XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is DependencyObject focused && IsWithin(focused, SkipSegmentButton))
+		else if (XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is DependencyObject focused
+			&& (e.PropertyName == nameof(MpvControlsViewModel.IsSkipVisible) && Controls is { IsSkipVisible: true } && IsWithin(focused, SkipSegmentButton)
+				|| e.PropertyName == nameof(MpvControlsViewModel.IsNextPromptVisible) && Controls is { IsNextPromptVisible: true } && IsWithin(focused, NextPill)))
 		{
+			// Seaglass 1.1.4: the Next pill likewise (pressed: the next item starts, and it is not near its end)
 			// the Skip button is about to go with the focus on it (the keyboard's, or the click's): the player takes it now,
 			// so its keys go on working (WinUI would hand it to the next control outside the player)
 			Focus(FocusState.Programmatic);
@@ -303,7 +316,7 @@ public sealed partial class MpvPlayerControls : UserControl
 	{
 		for (var node = source; node is not null; node = VisualTreeHelper.GetParent(node))
 		{
-			if (ReferenceEquals(node, TopBar) || ReferenceEquals(node, BottomBar) || ReferenceEquals(node, NextPill))
+			if (ReferenceEquals(node, TopBar) || ReferenceEquals(node, BottomBar))
 			{
 				return true;
 			}
@@ -317,7 +330,7 @@ public sealed partial class MpvPlayerControls : UserControl
 		return false;
 	}
 
-	/// <summary>A tap there is a control's, not the video's (the bars, and the Skip button over the video).</summary>
+	/// <summary>A tap there is a control's, not the video's (the bars, and the Skip and Next pills over the video).</summary>
 	private bool IsOnControls(DependencyObject? source) => IsInBars(source) || (source is not null && IsWithin(source, PillRow));
 
 	private void OnBarPointerEntered(object sender, PointerRoutedEventArgs e)
@@ -434,6 +447,8 @@ public sealed partial class MpvPlayerControls : UserControl
 		var motion = GlassMode.MotionAllowed;
 		ConfigureFade(TopBar, -12, motion);
 		ConfigureFade(BottomBar, 12, motion);
+		ConfigureFade(ToastIndicator, -8, motion);
+		ConfigureFade(NextPill, 8, motion);
 		ConfigureIndicatorFade(motion);
 		AnimateVolumeFill();
 	}
@@ -557,11 +572,14 @@ public sealed partial class MpvPlayerControls : UserControl
 	}
 
 	/// <summary>Narrator says the new volume ("Volume 45 %" or "Muted"), without moving the focus.</summary>
-	private void AnnounceVolume(string text)
+	private void AnnounceVolume(string text) => Announce(text, "SeaglassVolume");
+
+	/// <summary>Narrator says <paramref name="text"/> without moving the focus; a newer one of the same <paramref name="id"/> replaces it.</summary>
+	private void Announce(string text, string id)
 	{
 		if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
 		{
-			peer.RaiseNotificationEvent(AutomationNotificationKind.ActionCompleted, AutomationNotificationProcessing.ImportantMostRecent, text, "SeaglassVolume");
+			peer.RaiseNotificationEvent(AutomationNotificationKind.ActionCompleted, AutomationNotificationProcessing.ImportantMostRecent, text, id);
 		}
 	}
 
@@ -673,6 +691,8 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnNextClick(object sender, RoutedEventArgs e) => _ = Controls?.Next();
 
+	private void OnPreviousClick(object sender, RoutedEventArgs e) => _ = Controls?.Previous();
+
 	private void OnSkipSegmentClick(object sender, RoutedEventArgs e) => _ = Controls?.SkipSegment();
 
 	private void OnFullScreenClick(object sender, RoutedEventArgs e) => Controls?.ToggleFullScreen();
@@ -737,6 +757,44 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnSubtitleSizeReset(object sender, RoutedEventArgs e) => SubtitleSizeSlider.Value = SubtitleSizes.Default;
 
+	// -- Seaglass 1.1.4: the subtitle delay (the subtitles flyout) and the speed (its menu) --------------------------------
+
+	private void OnSubtitleEarlierClick(object sender, RoutedEventArgs e) => StepDelay(-1);
+
+	private void OnSubtitleLaterClick(object sender, RoutedEventArgs e) => StepDelay(1);
+
+	private void OnSubtitleDelayReset(object sender, RoutedEventArgs e)
+	{
+		if (Controls is { } controls)
+		{
+			_ = controls.SetSubtitleDelay(0);
+			Announce(DelayName(controls.SubtitleDelay), "SeaglassSubtitleDelay");
+		}
+	}
+
+	/// <summary>A delay button: the new delay, said (the flyout keeps the focus on the button).</summary>
+	private void StepDelay(int steps)
+	{
+		if (Controls is { } controls)
+		{
+			_ = controls.StepSubtitleDelay(steps);
+			Announce(DelayName(controls.SubtitleDelay), "SeaglassSubtitleDelay");
+		}
+	}
+
+	/// <summary>The speed menu as it opens: one radio item per speed, the one playing checked.</summary>
+	private void OnSpeedMenuOpening(object? sender, object e)
+	{
+		SpeedMenu.Items.Clear();
+		var current = Controls?.Speed ?? PlaybackSpeeds.Normal;
+		foreach (var speed in PlaybackSpeeds.Steps)
+		{
+			var item = new RadioMenuFlyoutItem { Text = PlaybackSpeeds.Label(speed), IsChecked = speed == current, GroupName = "speeds" };
+			item.Click += (_, _) => _ = Controls?.SetSpeed(speed);
+			SpeedMenu.Items.Add(item);
+		}
+	}
+
 	/// <summary>The menu's items, rebuilt as it opens: one radio item per track (the one playing checked).</summary>
 	private static void FillMenu(MenuFlyout menu, IReadOnlyList<MpvTrackChoice> choices, Func<int, Task?> pick)
 	{
@@ -754,8 +812,18 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	public Visibility VisibleIf(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
 
-	/// <summary>The Next pill: with the bars, an episode with a next one.</summary>
-	public Visibility NextPillVisibility(bool controlsVisible, bool showsNext, bool canNext) => controlsVisible && showsNext && canNext ? Visibility.Visible : Visibility.Collapsed;
+	public Visibility CollapsedIf(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
+
+	/// <summary>The Next button's and pill's tooltip: what plays next, and its key.</summary>
+	public string NextHint(string next) => $"{next} (Shift+N)";
+
+	/// <summary>The speed button's name: "Playback speed", and the speed when it is not normal.</summary>
+	public string SpeedName(double speed) => PlaybackSpeeds.IsNormal(speed) ? "Playback speed" : $"Playback speed, {PlaybackSpeeds.Text(speed)}";
+
+	public string SpeedToolTip(double speed) => $"{SpeedName(speed)} ([ and ])";
+
+	/// <summary>The subtitle delay as Narrator says it: "Subtitle delay: 0.3 s later", "Subtitle delay: none".</summary>
+	public string DelayName(double seconds) => $"Subtitle delay: {SubtitleDelays.Describe(seconds)}";
 
 	public Visibility VisibleIfText(string? value) => string.IsNullOrEmpty(value) ? Visibility.Collapsed : Visibility.Visible;
 

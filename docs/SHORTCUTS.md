@@ -44,12 +44,15 @@ Home page only: N next up, C continue watching (they ignore typing too).
 | 0 to 9 (also the number pad) | Jump to that tenth of the video; 0 is the start |
 | Home | Start |
 | S | Skip intro or credits, while offered |
-| Shift+N, Shift+P, media keys | Next / previous item |
+| Shift+N, Shift+P, media keys | Next / previous item (also the bar's Previous and Next buttons) |
+| [, ] | Speed a step down / up: 0.5×, 0.75×, normal, 1.25×, 1.5×, 1.75×, 2× (the bar's speed button shows any speed but normal) |
+| Backspace | Normal speed |
 | Up, Down, mouse wheel | Volume (by Settings' volume step) |
 | M | Mute |
 | C | Subtitles off, or back on to the last track |
 | V | Next subtitle track (off, each track, off ...) |
 | B | Next audio track |
+| Z, X | Subtitles 0.1 s earlier / later (the subtitles menu has the same, with a reset) |
 | F, F11 | Full screen |
 | Esc | Leave full screen, then leave the player |
 
@@ -67,8 +70,11 @@ The mouse: a click on the video pauses, a double click is full screen, the wheel
 
 ## Considered and left out
 
-- Speed (`<` `>`, `[` `]`), frame step (`,` `.`), subtitle delay (z/x), End: the bridge has no command for them
-  (`docs/BRIDGE.md` §4), so they would need a protocol change on both sides. Not done here.
+- Frame step (`,` `.`) and End: the bridge has no command for them (`docs/BRIDGE.md` §4). Speed and subtitle delay got
+  theirs in Seaglass 1.1.4 (`set_speed`, `set_subtitle_delay`), with mpv's own keys (`[` `]` Backspace, `z` `x`): with mpv's
+  controls mpv's default bindings answer the same keys (its `[` and `]` change the speed by 10 % rather than a step).
+  `<` `>` (YouTube's) were the other candidate; they are Shift chords on most layouts, and `[` `]` match mpv.
+  `[` and `]` are the keys of a US layout (VK_OEM_4, VK_OEM_6): on others the key in that place.
 - F5 refresh: no page has a refresh to call.
 - Backspace as Back: too close to text editing and it would add nothing to Alt+Left and Mouse 4.
 - F11 outside the player: a full-screen window without the title bar has no use on the browsing pages.

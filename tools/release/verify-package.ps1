@@ -296,8 +296,9 @@ foreach ($run in $Runs) {
             $code = (Test-Path $backendLog) -and (Select-String -Path $backendLog -Pattern 'connect \(id \d+\) failed: mpv_not_found' -Quiet)
             Check 'NoMpv: the backend answers connect with mpv_not_found' $code $backendLog
             $dump = Join-Path $Out 'NoMpv\uia\player.txt'
-            $shown = if (Test-Path $dump) { Select-String -Path $dump -Pattern "mpv isn't installed on this PC.*winget install mpv-player\.mpv-CI\.MSVC" | Select-Object -First 1 }
-            Check "NoMpv: the player page says to switch to FluentFin's controls or install mpv (winget)" ([bool]$shown) $(if ($shown) { $shown.Line.Trim() } else { "no such text in $dump" })
+            # Seaglass 1.1.4: the app's own name (Seaglass's controls), never upstream's
+            $shown = if (Test-Path $dump) { Select-String -Path $dump -Pattern "mpv isn't installed on this PC.*Switch to Seaglass's controls.*winget install mpv-player\.mpv-CI\.MSVC" | Select-Object -First 1 }
+            Check "NoMpv: the player page says to switch to Seaglass's controls or install mpv (winget)" ([bool]$shown) $(if ($shown) { $shown.Line.Trim() } else { "no such text in $dump" })
         }
         { $_ -in 'Launcher', 'SelfTest', 'Kill' } {
             # Kill: the self-test again, but FluentFin is ended abruptly (a crash): its job must end the bundled backend

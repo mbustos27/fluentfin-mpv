@@ -27,6 +27,9 @@ public partial class VideoPlayerViewModel
 	private bool _mpvLeaving;
 	private string? _mpvLastEndReason;
 	private string? _mpvLastError;
+
+	/// <summary>Seaglass's controls were chosen but cannot be had on this PC: this page plays with mpv's (Seaglass 1.1.4).</summary>
+	private bool _mpvControlsFellBack;
 	private bool _mpvFocused;
 
 	/// <summary>The items this page asked for (null = any, the self-test): states of other items are not this page's playback.</summary>
@@ -178,9 +181,11 @@ public partial class VideoPlayerViewModel
 		var (useFluentFinControls, whyNot) = ChooseControls();
 		UsesFluentFinControls = useFluentFinControls;
 		MpvControls = useFluentFinControls ? CreateMpvControls(generation) : null;
+		_mpvControlsFellBack = whyNot is not null;
 		if (whyNot is not null)
 		{
-			ShowMpvNotice($"FluentFin's player controls are not available ({whyNot}); mpv's controls are used.");
+			// Seaglass 1.1.4: the app's name, not upstream's
+			ShowMpvNotice($"Seaglass's player controls can't be used here ({whyNot}), so mpv's controls are used.");
 		}
 		logger.LogInformation("Player page opened with the mpv player (generation {Generation}): {Request}", generation, DescribeMpvParameter(parameter));
 		SubscribeMpv(generation);
@@ -247,7 +252,7 @@ public partial class VideoPlayerViewModel
 		{
 			// as text, redacted: a failure's message may quote a request (docs/BRIDGE.md §1: no token in any log)
 			logger.LogError("MPV playback could not start (step: {Step}, generation {Generation}): {Error}", step?.ToString() ?? "play", generation, BridgeRedaction.Redact(ex.ToString()));
-			ShowMpvMessage(StartFailureMessage(step, ex), isError: true);
+			ShowMpvMessage(StartFailureMessage(step, ex, _mpvControlsFellBack), isError: true);
 		}
 
 		return true;
@@ -318,9 +323,9 @@ public partial class VideoPlayerViewModel
 	}
 
 	/// <summary>What the page shows when a start fails: which step, then why (never a token: redacted).</summary>
-	private static string StartFailureMessage(MpvStartStep? step, Exception ex)
+	private static string StartFailureMessage(MpvStartStep? step, Exception ex, bool controlsFellBack)
 	{
-		if (MpvNotFoundMessage.For(ex) is { } plain)
+		if (MpvNotFoundMessage.For(ex, controlsFellBack) is { } plain)
 		{
 			return plain; // fluentfin-mpv (release 1.0): no mpv for mpv's controls, said plainly
 		}

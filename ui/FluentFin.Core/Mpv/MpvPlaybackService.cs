@@ -12,7 +12,7 @@ public sealed record MpvSelfTestRequest(string Url, string? Title)
 	public const string CommandLineSwitch = "--mpv-selftest";
 	public const string TestSource = "av://lavfi:testsrc=size=1280x720:rate=30";
 
-	public static MpvSelfTestRequest Default { get; } = new(TestSource, "FluentFin mpv self-test");
+	public static MpvSelfTestRequest Default { get; } = new(TestSource, "Seaglass mpv self-test");
 }
 
 /// <summary>fluentfin-mpv: the steps of a start, shown on the player page while it waits.</summary>

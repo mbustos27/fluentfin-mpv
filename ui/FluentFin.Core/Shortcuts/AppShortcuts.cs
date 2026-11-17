@@ -144,6 +144,9 @@ public static class ShortcutCatalog
 			new("S", "Skip intro or credits, when offered", ShortcutScope.Player, C(MpvControlsViewModel.Keys.S)),
 			new("Shift+N, Shift+P", "Next or previous episode", ShortcutScope.Player,
 				C(MpvControlsViewModel.Keys.N, Shift: true), C(MpvControlsViewModel.Keys.P, Shift: true)),
+			new("[, ]", "Slower or faster (0.5× to 2×)", ShortcutScope.Player,
+				C(MpvControlsViewModel.Keys.OpenBracket), C(MpvControlsViewModel.Keys.CloseBracket)),
+			new("Backspace", "Normal speed", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Back)),
 		]),
 		new("Sound, subtitles and the window",
 		[
@@ -152,6 +155,7 @@ public static class ShortcutCatalog
 			new("C", "Subtitles on or off", ShortcutScope.Player, C(MpvControlsViewModel.Keys.C)),
 			new("V", "Next subtitle track", ShortcutScope.Player, C(MpvControlsViewModel.Keys.V)),
 			new("B", "Next audio track", ShortcutScope.Player, C(MpvControlsViewModel.Keys.B)),
+			new("Z, X", "Subtitles 0.1 s earlier or later", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Z), C(MpvControlsViewModel.Keys.X)),
 			new("F, F11", "Full screen", ShortcutScope.Player, C(MpvControlsViewModel.Keys.F), C(MpvControlsViewModel.Keys.F11)),
 			new("Esc", "Leave full screen, then leave the player", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Escape)),
 		]),
