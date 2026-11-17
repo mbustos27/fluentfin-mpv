@@ -31,9 +31,10 @@ is jellyfin-mpv-shim's version and does not change with ours.
   in its place: a DLL of that name whose BUILD-MANIFEST.txt owner says "stub" (no MSYS2 package), with its source and
   licence on its line in the folder's SOURCES.txt; it must export every function the folder imports from it. The build
   stops on the real library, on a stub that lacks a function, or on a DLL importing one that is not there at all.
-- The build PC: Windows x64, the .NET 10 SDK, mpv on PATH (for the backend tests the build runs), git, and network
-  access to python.org, PyPI, nuget.org, GitHub and code.videolan.org. Nothing else:
-  the build brings its own Python.
+- The build PC: Windows x64, the .NET 10 SDK, mpv on PATH (for the backend tests the build runs), git, MSYS2 with
+  `mingw-w64-ucrt-x86_64-gcc` 16.2.0 in `C:\msys64` (the PyInstaller bootloader is compiled from source with it, see
+  "Fewer antivirus false alarms" below), and network access to python.org, PyPI, nuget.org, GitHub and
+  code.videolan.org. Nothing else: the build brings its own Python.
 
 ## 3. Build
 
@@ -50,6 +51,34 @@ hosts only, PyPI hashes checked; what cannot be established exactly is listed, n
 `dist\` (`dist\.work\` for
 the intermediate files; `-Reuse` keeps its Python runtime and venv for a second run). No MSBuild node, build server or
 compiler server is left running.
+
+### The installer
+
+`installer\Seaglass.wxs` and `installer\SeaglassUI.wxs` (WiX 5, with `WixToolset.UI.wixext` 5.0.2, a build-time NuGet
+package the build keeps in `dist\.work\wix-ext`; nothing of it is in the installed app) make a per-user MSI with a welcome
+page (Install / Cancel, no licence to accept: it says where the GPL and the source are), the progress page and a finish page
+with "Launch Seaglass" ticked; `installer\Seaglass.en-us.wxl` has the texts and `installer\make-installer-art.ps1` draws
+the banner and the side picture (System.Drawing, from the icon's pebble). Settings > Apps shows the publisher "Seaglass"
+(the name of the program: there is no company), the version, the icon, the website (the repository), help (Issues),
+update info (Releases) and a one-line comment. Every shipped .exe has company, product, description and copyright
+(`Seaglass.exe` from FluentFin.csproj, the launcher from `build-release.ps1`, the backend from the PyInstaller spec;
+`verify-package.ps1` checks all three). There is no code signing, so SmartScreen still says "Unknown publisher".
+
+`installer\installer-shots.ps1` takes screenshots of each installer page, on a private desktop, and only of an isolated
+test build (never of the real product); see its header.
+
+### Fewer antivirus false alarms
+
+PyInstaller's prebuilt bootloader (the front of `fluentfin-mpv-backend.exe`) is a common false-positive trigger, so the
+build compiles it from PyInstaller's own sdist (same version, SHA-256 pinned in `build-release.ps1`) with MSYS2's
+MinGW-w64 gcc (UCRT64, 16.2.0, checked) and waf, and replaces the wheel's `run.exe` and `runw.exe` in the build venv
+with the result before freezing; the build checks the frozen backend carries gcc's marker, and that nothing is
+UPX-packed (the spec says `upx=False`; the build fails on a `UPX!` header). `tools\release\VENDORED.md` has the pins.
+Check a package locally with Microsoft Defender, which uploads nothing:
+
+    & "$env:ProgramData\Microsoft\Windows Defender\Platform\CurrentVersion\MpCmdRun.exe" -Scan -ScanType 3 -File dist\Seaglass-<version>-win-x64 -DisableRemediation
+
+Do not upload the files to VirusTotal or any other online scanner without the owner's OK.
 
 ## 4. Verify the zip
 
@@ -79,6 +108,19 @@ into the package folder. Then look at the screenshots it saved (`<Out>\<run>\sho
 
 On a second PC (or a VM) without .NET, Python or mpv, unzip and run it once by hand if you can: SmartScreen's warning,
 the first sign-in, a playback.
+
+## 4b. The upgrade test
+
+    .\tools\release\upgrade-test.ps1 -Out <scratch folder outside the repo> [-Version <x.y.z>] [-Launch]
+
+Installs the published 1.1.0 MSI (`dist\` or downloaded from its release and checked against its `.sha256`), runs the new
+MSI over it, both per user and silent, and checks: one Apps entry with the new version, the new files in place and the
+old-only ones gone, the Start menu shortcut, the user's data folders untouched (listed before and after, only read),
+and that an older MSI over the newer one is refused; then it uninstalls. **Safety:** before installing anything it asks
+the Windows Installer COM API and the Apps list whether Seaglass or FluentFin MPV is already installed; if so it
+installs nothing and exits 2 ("skipped"). `-SelfCheck` runs the whole test on two tiny isolated MSIs (another name,
+upgrade code, folder and registry key) so the script itself can be checked on a PC that has Seaglass installed. Exit
+0 passed, 1 failed, 2 skipped.
 
 ## 5. Publish (the coordinating session, after review)
 

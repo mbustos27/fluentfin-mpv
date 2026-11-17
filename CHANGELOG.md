@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **A friendlier installer.** The MSI now opens a welcome page (Install / Cancel; nothing to accept, it says where the
+  GPL licence and the source are), shows progress, and ends with "Launch Seaglass" ticked. Seaglass-style pictures,
+  and Settings > Apps shows the publisher, the version, the icon, the website, help and update links. Every program in
+  the package (Seaglass.exe, the launcher, the backend) has company, product, description and copyright in
+  Properties > Details. There is still no code signing: SmartScreen says "Unknown publisher".
+- **Fewer antivirus false alarms.** The backend's PyInstaller bootloader is compiled from source (MinGW-w64 gcc)
+  instead of using the prebuilt one, and the build checks that nothing is UPX-packed.
+- **Check for updates (off by default).** Settings > Check for updates: once a day Seaglass asks GitHub's Releases
+  whether a newer version exists (nothing else is sent) and shows a quiet bar with Download and install (the MSI and its
+  checksum, verified) and Release notes; a portable copy opens the release page instead.
+- **An upgrade test** (`tools\release\upgrade-test.ps1`): installs the published MSI, runs the new one over it and checks
+  the result; it refuses to run where Seaglass is already installed.
+
 ## 1.1.1
 
 - **Mouse back and forward.** Mouse buttons 4 and 5, Alt+Left/Right and the keyboard's Back/Forward keys go back and

@@ -198,7 +198,7 @@ $venvBootloader = Join-Path $venv 'Lib\site-packages\PyInstaller\bootloader\Wind
 foreach ($loader in 'run.exe', 'runw.exe') {
     $built = Join-Path $bootloaderOut $loader
     if (-not (Test-Path $built)) { throw "the bootloader build made no $loader" }
-    $text = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes($built))
+    $text = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($built))
     if ($text -notmatch "Built by MSYS2 project\) $([regex]::Escape($GccVersion))") { throw "$loader does not carry gcc $GccVersion's marker: it was not built here" }
     Copy-Item $built (Join-Path $venvBootloader $loader) -Force
 }
@@ -305,10 +305,10 @@ $backendOut = Join-Path $pyi 'dist\backend'
 if (-not (Test-Path (Join-Path $backendOut 'fluentfin-mpv-backend.exe'))) { throw "PyInstaller made no fluentfin-mpv-backend.exe in $backendOut" }
 # the backend runs on the bootloader built above (its gcc marker is in the exe), and nothing in it is UPX-packed (the spec's
 # upx=False; a packed file has UPX0/UPX1 sections and a "UPX!" header, a common antivirus trigger)
-$backendBytes = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes((Join-Path $backendOut 'fluentfin-mpv-backend.exe')))
+$backendBytes = [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes((Join-Path $backendOut 'fluentfin-mpv-backend.exe')))
 if ($backendBytes -notmatch "Built by MSYS2 project\) $([regex]::Escape($GccVersion))") { throw 'fluentfin-mpv-backend.exe does not carry the bootloader built from source here' }
 if ($backendBytes.Contains('UPX!') -or $backendBytes.Contains('UPX0')) { throw 'fluentfin-mpv-backend.exe is UPX-packed' }
-$upx = @(Get-ChildItem $backendOut -Recurse -File | Where-Object { [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes($_.FullName), 0, [Math]::Min(1024, $_.Length)) -match 'UPX[01!]' })
+$upx = @(Get-ChildItem $backendOut -Recurse -File | Where-Object { [Text.Encoding]::GetEncoding(28591).GetString([IO.File]::ReadAllBytes($_.FullName), 0, [Math]::Min(1024, $_.Length)) -match 'UPX[01!]' })
 if ($upx) { throw "UPX-packed files in the frozen backend: $($upx.Name -join ', ')" }
 $strayMpv = @(Get-ChildItem $backendOut -Recurse -File -Include '*mpv*.dll', 'mpv.exe', 'vulkan-1.dll')
 if ($strayMpv) { throw "the frozen backend picked up mpv files it must not ship: $($strayMpv.FullName -join ', ')" }
