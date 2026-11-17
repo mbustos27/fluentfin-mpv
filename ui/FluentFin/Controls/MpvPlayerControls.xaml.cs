@@ -507,7 +507,49 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnAudioMenuOpening(object? sender, object e) => FillMenu(AudioMenu, Controls?.AudioChoices ?? [], index => Controls?.SetAudio(index));
 
-	private void OnSubtitlesMenuOpening(object? sender, object e) => FillMenu(SubtitlesMenu, Controls?.SubtitleChoices ?? [], index => Controls?.SetSubtitle(index));
+	private IReadOnlyList<MpvTrackChoice> _subtitleChoices = [];
+	private bool _fillingSubtitles;
+
+	/// <summary>The subtitles flyout as it opens: the tracks (the one playing selected) and the remembered text size.</summary>
+	private void OnSubtitlesMenuOpening(object? sender, object e)
+	{
+		_fillingSubtitles = true;
+		try
+		{
+			_subtitleChoices = Controls?.SubtitleChoices ?? [];
+			SubtitleTracks.Items.Clear();
+			foreach (var choice in _subtitleChoices)
+			{
+				SubtitleTracks.Items.Add(choice.Label);
+			}
+
+			SubtitleTracks.SelectedIndex = _subtitleChoices.ToList().FindIndex(c => c.IsSelected);
+			SubtitleSizeSlider.Value = Controls?.SubtitleSize ?? SubtitleSizes.Default;
+		}
+		finally
+		{
+			_fillingSubtitles = false;
+		}
+	}
+
+	private void OnSubtitleTrackChanged(object sender, SelectionChangedEventArgs e)
+	{
+		if (!_fillingSubtitles && SubtitleTracks.SelectedIndex is >= 0 and var at && at < _subtitleChoices.Count)
+		{
+			_ = Controls?.SetSubtitle(_subtitleChoices[at].Index);
+		}
+	}
+
+	/// <summary>The Text size slider: live while dragging (the view model snaps to 10 % and sends each new value).</summary>
+	private void OnSubtitleSizeChanged(object sender, RangeBaseValueChangedEventArgs e)
+	{
+		if (!_fillingSubtitles && Controls is { } controls)
+		{
+			_ = controls.SetSubtitleSize((int)Math.Round(e.NewValue));
+		}
+	}
+
+	private void OnSubtitleSizeReset(object sender, RoutedEventArgs e) => SubtitleSizeSlider.Value = SubtitleSizes.Default;
 
 	/// <summary>The menu's items, rebuilt as it opens: one radio item per track (the one playing checked).</summary>
 	private static void FillMenu(MenuFlyout menu, IReadOnlyList<MpvTrackChoice> choices, Func<int, Task?> pick)

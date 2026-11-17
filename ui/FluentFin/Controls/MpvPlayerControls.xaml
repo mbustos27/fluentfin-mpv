@@ -85,6 +85,7 @@
         </Style>
         <Style x:Key="PlayerPill" BasedOn="{StaticResource PlayerButton}" TargetType="Button">
             <Setter Property="Width" Value="NaN" />
+            <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
             <Setter Property="MinWidth" Value="120" />
             <Setter Property="Padding" Value="18,0" />
             <Setter Property="FontWeight" Value="SemiBold" />
@@ -181,7 +182,7 @@
             Background="{ThemeResource GlassPanelStrongBrush}"
             BorderBrush="{ThemeResource GlassStrokeBrush}"
             BorderThickness="1"
-            CornerRadius="22"
+            CornerRadius="{StaticResource GlassButtonCornerRadius}"
             IsHitTestVisible="False"
             Visibility="{x:Bind VisibleIf(Controls.VolumeIndicatorVisible), Mode=OneWay}">
             <StackPanel Orientation="Horizontal" Spacing="10">
@@ -392,13 +393,60 @@
                         Visibility="{x:Bind VisibleIf(Controls.HasSubtitleChoice), Mode=OneWay}">
                         <FontIcon FontSize="18" Glyph="&#xED1E;" />
                         <Button.Flyout>
-                            <MenuFlyout
+                            <Flyout
                                 x:Name="SubtitlesMenu"
                                 Closed="OnMenuClosed"
-                                MenuFlyoutPresenterStyle="{StaticResource PlayerMenuPresenter}"
+                                FlyoutPresenterStyle="{StaticResource PlayerFlyoutPresenter}"
                                 Opened="OnMenuOpened"
                                 Opening="OnSubtitlesMenuOpening"
-                                Placement="Top" />
+                                Placement="Top">
+                                <!--  the subtitle tracks (filled as it opens), then the text size: 50 to 200 %, live, remembered  -->
+                                <StackPanel Width="280" Spacing="8">
+                                    <RadioButtons x:Name="SubtitleTracks" AutomationProperties.Name="Subtitles" SelectionChanged="OnSubtitleTrackChanged" />
+                                    <Rectangle Height="1" Fill="{ThemeResource GlassStrokeBrush}" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="Text size" />
+                                        <TextBlock
+                                            x:Name="SubtitleSizeValue"
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Typography.NumeralAlignment="Tabular"
+                                            Text="{x:Bind Controls.SubtitleSizeText, Mode=OneWay}" />
+                                    </Grid>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Slider
+                                            x:Name="SubtitleSizeSlider"
+                                            MinHeight="32"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="Subtitle text size"
+                                            LargeChange="20"
+                                            Maximum="200"
+                                            Minimum="50"
+                                            SmallChange="10"
+                                            StepFrequency="10"
+                                            IsThumbToolTipEnabled="False"
+                                            ValueChanged="OnSubtitleSizeChanged" />
+                                        <Button
+                                            x:Name="SubtitleSizeReset"
+                                            Grid.Column="1"
+                                            MinHeight="32"
+                                            MinWidth="32"
+                                            Padding="8,0"
+                                            AutomationProperties.Name="Reset subtitle text size to 100%"
+                                            Click="OnSubtitleSizeReset"
+                                            Content="Reset"
+                                            ToolTipService.ToolTip="Reset to 100%" />
+                                    </Grid>
+                                </StackPanel>
+                            </Flyout>
                         </Button.Flyout>
                     </Button>
                     <Button

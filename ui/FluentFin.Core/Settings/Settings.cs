@@ -24,6 +24,9 @@ public interface ISettings
 	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.VolumeStep"/> (1 to 20).</summary>
 	int VolumeStep { get; set; }
 
+	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.SubtitleSize"/> (50 to 200, steps of 10).</summary>
+	int SubtitleSize { get; set; }
+
 	/// <summary>Seaglass: see <see cref="SettingKeys.Glass"/>.</summary>
 	GlassChoice Glass { get; set; }
 
@@ -80,6 +83,12 @@ public partial class Settings(ILocalSettingsService localSettingsService, MediaP
 	{
 		get => Math.Clamp(localSettingsService.ReadSetting(SettingKeys.VolumeStep), 1, 20);
 		set => localSettingsService.SaveSetting(SettingKeys.VolumeStep, Math.Clamp(value, 1, 20));
+	}
+
+	public int SubtitleSize
+	{
+		get => Mpv.SubtitleSizes.Clamp(localSettingsService.ReadSetting(SettingKeys.SubtitleSize));
+		set => localSettingsService.SaveSetting(SettingKeys.SubtitleSize, Mpv.SubtitleSizes.Clamp(value));
 	}
 
 	public void SaveServerDetails() => localSettingsService.SaveSetting(SettingKeys.Servers, Servers);

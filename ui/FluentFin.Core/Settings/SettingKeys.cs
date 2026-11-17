@@ -28,6 +28,9 @@ public static class SettingKeys
 	/// <summary>How much one wheel notch or arrow key changes the volume, in percent.</summary>
 	public static Key<int> VolumeStep { get; } = new Key<int>("VolumeStep", 5);
 
+	/// <summary>fluentfin-mpv: the subtitle text size in the mpv player's controls, in percent (50 to 200), kept on this PC.</summary>
+	public static Key<int> SubtitleSize { get; } = new Key<int>("SubtitleSize", 100);
+
 	/// <summary>Seaglass: how much glass the app shows (Settings > Appearance), kept on this PC. Automatic by default.</summary>
 	public static Key<GlassChoice> Glass { get; } = new Key<GlassChoice>("Glass", GlassChoice.Automatic);
 

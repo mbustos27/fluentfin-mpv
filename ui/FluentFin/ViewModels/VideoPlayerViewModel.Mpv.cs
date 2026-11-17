@@ -639,6 +639,8 @@ public partial class VideoPlayerViewModel
 		// Settings > Playback: the same wheel, step and Skip button as FluentFin's own players
 		WheelChangesVolume = settings.MouseWheelVolume,
 		Step = settings.VolumeStep,
+		SubtitleSize = settings.SubtitleSize,
+		SubtitleSizeChanged = size => settings.SubtitleSize = size,
 		ShowSkipPrompt = settings.ShowSkipPrompt,
 		NameItem = NameMpvItem,
 		IsFullScreen = IsFullScreen?.Invoke() ?? false,
