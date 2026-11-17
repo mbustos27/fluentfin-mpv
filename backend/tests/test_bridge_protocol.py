@@ -656,7 +656,7 @@ class TicksAndTracksTest(unittest.TestCase):
                 self.assertEqual(caught.exception.code, "bad_args")
 
     def test_validate_speed_and_subtitle_delay(self):
-        """Seaglass 1.1.4: ``set_speed`` 0.5-2, ``set_subtitle_delay``
+        """1.2.0: ``set_speed`` 0.5-2, ``set_subtitle_delay``
         -30..30 s, numbers only, as floats."""
         self.assertEqual(proto.validate_speed({"speed": 1.5}), 1.5)
         self.assertEqual(proto.validate_speed({"speed": 2}), 2.0)

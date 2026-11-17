@@ -53,10 +53,12 @@ Home page only: N next up, C continue watching (they ignore typing too).
 | V | Next subtitle track (off, each track, off ...) |
 | B | Next audio track |
 | Z, X | Subtitles 0.1 s earlier / later (the subtitles menu has the same, with a reset) |
-| F, F11 | Full screen |
-| Esc | Leave full screen, then leave the player |
+| F, F11, Alt+Enter | Full screen (Alt+Enter since 1.2.0, the classic Windows players' key) |
+| Esc | Leave full screen. In a window it only shows the controls: it never stops the video or leaves the player (1.2.0; Back, Alt+Left, the Back key and Mouse 4 leave) |
 
-The mouse: a click on the video pauses, a double click is full screen, the wheel is volume, Mouse 4 / 5 are back / forward.
+The mouse: a click on the video pauses or plays at once (1.2.0; 1.1.3 waited the double-click time), a double click is full
+screen and puts the play state back to what it was before its first click, the wheel is volume, Mouse 4 / 5 are back /
+forward. Every button of the player names its key in its tooltip.
 
 ## Rules
 
@@ -71,7 +73,7 @@ The mouse: a click on the video pauses, a double click is full screen, the wheel
 ## Considered and left out
 
 - Frame step (`,` `.`) and End: the bridge has no command for them (`docs/BRIDGE.md` §4). Speed and subtitle delay got
-  theirs in Seaglass 1.1.4 (`set_speed`, `set_subtitle_delay`), with mpv's own keys (`[` `]` Backspace, `z` `x`): with mpv's
+  theirs in 1.2.0 (`set_speed`, `set_subtitle_delay`), with mpv's own keys (`[` `]` Backspace, `z` `x`): with mpv's
   controls mpv's default bindings answer the same keys (its `[` and `]` change the speed by 10 % rather than a step).
   `<` `>` (YouTube's) were the other candidate; they are Shift chords on most layouts, and `[` `]` match mpv.
   `[` and `]` are the keys of a US layout (VK_OEM_4, VK_OEM_6): on others the key in that place.

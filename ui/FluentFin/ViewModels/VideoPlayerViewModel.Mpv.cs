@@ -28,8 +28,14 @@ public partial class VideoPlayerViewModel
 	private string? _mpvLastEndReason;
 	private string? _mpvLastError;
 
-	/// <summary>Seaglass's controls were chosen but cannot be had on this PC: this page plays with mpv's (Seaglass 1.1.4).</summary>
+	/// <summary>The app's own controls were chosen but cannot be had on this PC: this page plays with mpv's (1.2.0).</summary>
 	private bool _mpvControlsFellBack;
+
+	/// <summary>
+	/// 1.2.0: the user's "play the next episode automatically" (Jellyfin's EnableNextEpisodeAutoPlay, Settings > Playback): sent
+	/// to the backend before every play (<c>set_auto_play</c>, either controls mode) and the controls' countdown. Tests replace it.
+	/// </summary>
+	internal Func<bool> PlaysNextItem { get; set; } = FluentFin.Core.Settings.PlaybackPreferences.PlaysNextItem;
 	private bool _mpvFocused;
 
 	/// <summary>The items this page asked for (null = any, the self-test): states of other items are not this page's playback.</summary>
@@ -184,8 +190,8 @@ public partial class VideoPlayerViewModel
 		_mpvControlsFellBack = whyNot is not null;
 		if (whyNot is not null)
 		{
-			// Seaglass 1.1.4: the app's name, not upstream's
-			ShowMpvNotice($"Seaglass's player controls can't be used here ({whyNot}), so mpv's controls are used.");
+			// 1.2.0: the app's name, not upstream's
+			ShowMpvNotice($"Nixie's player controls can't be used here ({whyNot}), so mpv's controls are used.");
 		}
 		logger.LogInformation("Player page opened with the mpv player (generation {Generation}): {Request}", generation, DescribeMpvParameter(parameter));
 		SubscribeMpv(generation);
@@ -242,7 +248,7 @@ public partial class VideoPlayerViewModel
 			}
 
 			_mpvItems = new HashSet<string>(request.ItemIds.Select(NormalizeId), StringComparer.Ordinal);
-			if (await mpvPlayback.PlayAsync(generation, identity, request, IsFullScreen?.Invoke() ?? false, onStep: OnStep, controls: ControlsCommand(), skipOptions: BridgeCommands.SkipOptions(settings.LookUpIntrosOnline, settings.LearnIntros)))
+			if (await mpvPlayback.PlayAsync(generation, identity, request, IsFullScreen?.Invoke() ?? false, onStep: OnStep, controls: ControlsCommand(), skipOptions: BridgeCommands.SkipOptions(settings.LookUpIntrosOnline, settings.LearnIntros), autoPlay: PlaysNextItem()))
 			{
 				logger.LogInformation("Sent play to the mpv backend {Ms} ms after the player page opened (generation {Generation})", opened.ElapsedMilliseconds, generation);
 				OnMpvPlayAccepted();
@@ -647,7 +653,10 @@ public partial class VideoPlayerViewModel
 		SubtitleSize = settings.SubtitleSize,
 		SubtitleSizeChanged = size => settings.SubtitleSize = size,
 		ShowSkipPrompt = settings.ShowSkipPrompt,
+		AutoPlay = PlaysNextItem(),
 		NameItem = NameMpvItem,
+		TrickplayOf = TrickplayOfMpvItem,
+		TrickplaySheetAt = (itemId, width, sheet) => Guid.TryParse(itemId, out var id) ? JellyfinClient.GetTrickplayImage(new BaseItemDto { Id = id }, sheet, width) : null,
 		IsFullScreen = IsFullScreen?.Invoke() ?? false,
 		SetFullScreen = fullScreen =>
 		{
@@ -683,6 +692,30 @@ public partial class VideoPlayerViewModel
 		catch (Exception ex)
 		{
 			logger.LogInformation("The next item {ItemId} could not be named for the Next button: {Error}", itemId, BridgeRedaction.Redact(ex.Message));
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// 1.2.0: an item's trickplay thumbnails for the seek bar, from its <c>Trickplay</c> field (docs/BRIDGE.md §6: with the
+	/// app's controls the UI asks the server itself). Null when it has none or cannot be had; never throws.
+	/// </summary>
+	private async Task<TrickplayTiles?> TrickplayOfMpvItem(string itemId)
+	{
+		if (!Guid.TryParse(itemId, out var id))
+		{
+			return null;
+		}
+
+		try
+		{
+			var tiles = TrickplayTiles.FromAdditionalData((await JellyfinClient.GetItem(id))?.Trickplay?.AdditionalData, itemId);
+			logger.LogInformation("Trickplay for {ItemId}: {Tiles}", itemId, tiles?.ToString() ?? "none");
+			return tiles;
+		}
+		catch (Exception ex)
+		{
+			logger.LogInformation("The trickplay thumbnails of {ItemId} could not be had: {Error}", itemId, BridgeRedaction.Redact(ex.Message));
 			return null;
 		}
 	}

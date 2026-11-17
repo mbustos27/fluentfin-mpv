@@ -102,7 +102,7 @@ public sealed partial class VideoPlayerPage : Page
 			root.AddHandler(PreviewKeyDownEvent, _rootPreviewKeyDown, handledEventsToo: true);
 		}
 
-		// the loading screen's only control: Escape or Enter leaves before the start goes on
+		// the loading screen's only control: Enter (its Cancel) leaves before the start goes on; Escape does not (1.2.0)
 		if (ViewModel.IsMpvStarting)
 		{
 			MpvLeaveButton.Focus(FocusState.Programmatic);
@@ -563,14 +563,18 @@ public sealed partial class VideoPlayerPage : Page
 			return;
 		}
 
-		if (_mpvFullScreen)
+		switch (PlayerEscape.For(_mpvFullScreen))
 		{
-			SetMpvFullScreen(false);
-			await ViewModel.OnFullScreenChanged(false);
-			return;
+			case PlayerEscape.Action.LeaveFullScreen:
+				SetMpvFullScreen(false);
+				await ViewModel.OnFullScreenChanged(false);
+				break;
+			default:
+				// 1.2.0 (the interaction audit, item 1): in a window Escape does nothing to playback, as in every video player;
+				// it shows the controls. Back, Alt+Left, the Back key and Mouse 4 leave the player.
+				ViewModel.MpvControls?.NotifyActivity();
+				break;
 		}
-
-		GoBack();
 	}
 
 	/// <summary>
@@ -599,7 +603,7 @@ public sealed partial class VideoPlayerPage : Page
 	/// <summary>
 	/// fluentfin-mpv player controls: the player's keys anywhere on the page (Space, arrows, F, M, ...), before a focused
 	/// slider takes them; only while the video is shown, and Space and Enter stay a focused button's (MpvPlayerKeys).
-	/// Escape stays the page's accelerator (full screen off, else back).
+	/// Escape stays the page's accelerator (full screen off; in a window, the controls shown).
 	/// </summary>
 	private void OnMpvPreviewKeyDown(object sender, KeyRoutedEventArgs e)
 	{

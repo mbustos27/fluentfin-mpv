@@ -4,7 +4,7 @@ using FluentFin.Core.Mpv;
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// Seaglass 1.1.4: the playback speed and the subtitle delay of the player's controls: their values, the commands sent
+/// 1.2.0: the playback speed and the subtitle delay of the player's controls: their values, the commands sent
 /// (<c>set_speed</c>, <c>set_subtitle_delay</c>, docs/BRIDGE.md §4), when they go back to normal, and their keys.
 /// </summary>
 public sealed class PlayerSpeedAndDelayTests
@@ -254,5 +254,18 @@ public sealed class PlayerSpeedAndDelayTests
 		Assert.Null(MpvControlsViewModel.ActionFor(key, false, true, false));
 		Assert.Null(MpvControlsViewModel.ActionFor(key, false, false, true));
 		Assert.Null(FluentFin.Core.Shortcuts.AppShortcuts.For(key, false, false, false, inTextInput: false));
+	}
+
+	/// <summary>1.2.0 (the interaction audit, item 15): the one Audio and subtitles button has something to offer with either.</summary>
+	[Fact]
+	public void The_tracks_button_offers_audio_or_subtitles()
+	{
+		Assert.False(_vm.HasTrackChoice);
+		_vm.OnTracks(new BridgeTracks([new BridgeTrack(1)], []));
+		Assert.False(_vm.HasTrackChoice, "one audio track, no subtitles");
+		_vm.OnTracks(new BridgeTracks([new BridgeTrack(1)], [new BridgeTrack(3, "eng")]));
+		Assert.True(_vm.HasTrackChoice);
+		_vm.OnTracks(new BridgeTracks([new BridgeTrack(1), new BridgeTrack(2)], []));
+		Assert.True(_vm.HasTrackChoice);
 	}
 }

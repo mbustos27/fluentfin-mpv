@@ -156,8 +156,8 @@ public static class ShortcutCatalog
 			new("V", "Next subtitle track", ShortcutScope.Player, C(MpvControlsViewModel.Keys.V)),
 			new("B", "Next audio track", ShortcutScope.Player, C(MpvControlsViewModel.Keys.B)),
 			new("Z, X", "Subtitles 0.1 s earlier or later", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Z), C(MpvControlsViewModel.Keys.X)),
-			new("F, F11", "Full screen", ShortcutScope.Player, C(MpvControlsViewModel.Keys.F), C(MpvControlsViewModel.Keys.F11)),
-			new("Esc", "Leave full screen, then leave the player", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Escape)),
+			new("F, F11, Alt+Enter", "Full screen", ShortcutScope.Player, C(MpvControlsViewModel.Keys.F), C(MpvControlsViewModel.Keys.F11), C(MpvControlsViewModel.Keys.Enter, Alt: true)),
+			new("Esc", "Leave full screen (it never stops the video)", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Escape)),
 		]),
 	];
 }

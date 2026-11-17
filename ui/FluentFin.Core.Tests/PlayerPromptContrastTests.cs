@@ -4,7 +4,7 @@ using System.Xml.Linq;
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// Seaglass 1.1.4 (UX review, prioritised fix 5): the pills over the video (Next near the end, Skip) keep their text at
+/// 1.2.0 (UX review, prioritised fix 5): the pills over the video (Next near the end, Skip) keep their text at
 /// 4.5:1 or more over any picture: their fill (PlayerPromptFill and its hover and pressed states, MpvPlayerControls.xaml)
 /// is measured over a white frame and a black one, under the controls' white text. Read from the XAML, as
 /// OverlayContrastTests does. In 1.1.3 the pills were on the bars' 20 % white (PlayerGlassFill): about 1.6:1 over white.
@@ -78,8 +78,8 @@ public sealed class PlayerPromptContrastTests
 	{
 		var pill = Controls().Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "NextPill");
 		Assert.Equal("{x:Bind VisibleIf(Controls.IsNextPromptVisible), Mode=OneWay}", (string?)pill.Attribute("Visibility"));
-		// its name is its text (what plays next), so voice control finds it by what it says
-		Assert.Equal("{x:Bind Controls.NextToolTip, Mode=OneWay}", (string?)pill.Attribute(XName.Get("AutomationProperties.Name")));
+		// its name says what it does and what plays, without the seconds (a name that changed every second would be read again)
+		Assert.Equal("{x:Bind Controls.NextPromptName, Mode=OneWay}", (string?)pill.Attribute(XName.Get("AutomationProperties.Name")));
 	}
 
 	private static string AppVersionTestsFindUp(string relative)

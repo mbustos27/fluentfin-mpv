@@ -24,8 +24,11 @@ internal sealed class RecordingBackend : IMpvBackend
 	public bool Dev { get; private set; }
 	public List<BridgeIdentity?> Identities { get; } = [];
 
-	/// <summary>The commands sent, without the Skip intro switches every play sends first (<see cref="AllCommands"/>; the test of them is in VideoPlayerViewModelMpvTests.Controls), so the order tests keep reading what they are about.</summary>
-	public string[] Commands => [.. AllCommands.Where(x => x != "set_skip_options")];
+	/// <summary>The commands sent, without the Skip intro switches and the auto-play choice every play sends first (<see cref="AllCommands"/>; the tests of them are in VideoPlayerViewModelMpvTests.Controls), so the order tests keep reading what they are about.</summary>
+	public string[] Commands => [.. AllCommands.Where(x => !IsPlaySetting(x))];
+
+	/// <summary>The settings every play sends before it (1.2.0: set_auto_play too).</summary>
+	public static bool IsPlaySetting(string command) => command is "set_skip_options" or "set_auto_play";
 
 	public string[] AllCommands => [.. _sent.Select(x => x.Command)];
 
@@ -95,7 +98,7 @@ internal sealed class RecordingBackend : IMpvBackend
 	public Task<JsonNode?> SendAsync(string command, JsonObject? args = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
 	{
 		_sent.Enqueue((command, args));
-		if (command != "set_skip_options")
+		if (!IsPlaySetting(command))
 		{
 			Timeline.Enqueue("send " + command);   // the switches every play sends are not part of the orders the timeline tests read
 		}

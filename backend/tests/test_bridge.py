@@ -882,6 +882,9 @@ class FakeRuntime:
     def set_subtitle_size(self, percent):
         self.subtitle_size = percent
 
+    def set_auto_play(self, value):
+        self.auto_play_set = value
+
     def shutdown(self, deadline=None):
         self.shut = True
         self.shutdown_deadline = deadline
@@ -1056,6 +1059,7 @@ class DispatchTest(BridgeCase):
                           ("set_subtitle_size", {"percent": 120}),
                           ("set_speed", {"speed": 1.5}),
                           ("set_subtitle_delay", {"seconds": 0.1}),
+                          ("set_auto_play", {"autoPlay": False}),
                           ("set_mute", {"muted": True}),
                           ("set_fullscreen", {"fullscreen": True})):
             with self.subTest(cmd=cmd):
@@ -1081,6 +1085,9 @@ class DispatchTest(BridgeCase):
                           ("set_subtitle_delay", {"seconds": 31}),
                           ("set_subtitle_delay", {"seconds": "-1"}),
                           ("set_subtitle_delay", {}),
+                          ("set_auto_play", {"autoPlay": "no"}),
+                          ("set_auto_play", {"autoPlay": None}),
+                          ("set_auto_play", {}),
                           ("set_audio", {"index": -1}),
                           ("set_subtitle", {"index": -2}),
                           ("set_fullscreen", {}),
@@ -1119,8 +1126,32 @@ class DispatchTest(BridgeCase):
         self.assertTrue(self.send("set_subtitle_size", {"percent": 50})["ok"])
         self.assertEqual(self.runtime.pm._player.sub_scale, 0.5)
 
+    def test_auto_play_is_the_uis_choice_held_for_later_items(self):
+        """1.2.0: ``set_auto_play`` sets the shim's ``auto_play`` (what
+        `finished_callback` reads at an item's end), with or without
+        playback; nothing goes to the server."""
+        self.connect_server()
+        self.assertTrue(self.send("set_auto_play", {"autoPlay": False})["ok"])
+        self.assertIs(self.runtime.auto_play_set, False)
+        self.runtime.pm._video = FakeVideo(A)
+        del self.runtime.journal[:]
+        self.assertTrue(self.send("set_auto_play", {"autoPlay": True})["ok"])
+        self.assertIs(self.runtime.auto_play_set, True)
+        self.assertEqual(self.runtime.journal, [])
+        # the real runtime's: the shim's own setting, which the next event reads
+        from jellyfin_mpv_shim.conf import settings
+        saved = settings.auto_play
+        try:
+            bridge_mod.ShimRuntime.set_auto_play(False)
+            self.assertIs(settings.auto_play, False)
+            self.assertIs(bridge_mod.ShimRuntime.auto_play(), False)
+            bridge_mod.ShimRuntime.set_auto_play(True)
+            self.assertIs(bridge_mod.ShimRuntime.auto_play(), True)
+        finally:
+            settings.auto_play = saved
+
     def test_speed_and_subtitle_delay_are_written_to_mpv(self):
-        """Seaglass 1.1.4: ``set_speed`` and ``set_subtitle_delay`` write
+        """1.2.0: ``set_speed`` and ``set_subtitle_delay`` write
         mpv's ``speed`` and ``sub-delay`` at once, with nothing playing and
         while an item plays; nothing goes to the server."""
         self.connect_server()

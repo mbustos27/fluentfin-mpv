@@ -3,7 +3,7 @@ using System.Globalization;
 namespace FluentFin.Core.Mpv;
 
 /// <summary>
-/// Seaglass 1.1.4: the playback speeds the player offers, 0.5x to 2x in quarter steps (the steps Jellyfin's web player
+/// 1.2.0: the playback speeds the player offers, 0.5x to 2x in quarter steps (the steps Jellyfin's web player
 /// offers), 1 normal. mpv's <c>speed</c> is the value itself; the backend writes it (<c>set_speed</c>, docs/BRIDGE.md §4).
 /// </summary>
 public static class PlaybackSpeeds

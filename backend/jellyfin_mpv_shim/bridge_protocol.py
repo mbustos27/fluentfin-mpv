@@ -394,7 +394,7 @@ def validate_controls(args):
     return controls, (inset if controls == "ui" else 0.0)
 
 
-# Seaglass 1.1.4: the playback speed and the subtitle delay (BRIDGE.md
+# 1.2.0: the playback speed and the subtitle delay (BRIDGE.md
 # section 4 ``set_speed``, ``set_subtitle_delay``).
 SPEED_RANGE = (0.5, 2.0)
 SUBTITLE_DELAY_LIMIT = 30.0

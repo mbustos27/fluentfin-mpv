@@ -43,16 +43,33 @@ public sealed class PlayerWiringTests
 		Assert.DoesNotContain("DoubleAnimation", controls);
 	}
 
-	/// <summary>A click on the video waits (the view model decides); it never plays or pauses at once.</summary>
+	/// <summary>
+	/// 1.2.0 (the interaction audit, item 8): a click on the video goes to the view model, which plays or pauses at once; no
+	/// timer waits the double-click time any more (1.1.3's made the picture go on for half a second after a click).
+	/// </summary>
 	[Fact]
-	public void A_click_on_the_video_goes_to_the_view_models_wait()
+	public void A_click_on_the_video_plays_or_pauses_at_once_through_the_view_model()
 	{
 		var controls = Source("Controls", "MpvPlayerControls.xaml.cs");
 		var tapped = Body(controls, "OnVideoTapped");
 		Assert.Contains("VideoClicked()", tapped);
 		Assert.DoesNotContain("TogglePause", tapped);
+		Assert.DoesNotContain("Timer", tapped);
 		Assert.DoesNotContain("TogglePause", Body(controls, "OnVideoDoubleTapped"));
-		Assert.Contains("DropWaitingClick", controls);
+		Assert.DoesNotContain("ClickWaitOver", controls);
+	}
+
+	/// <summary>
+	/// 1.2.0 (the interaction audit, item 1): Escape on the player page never goes back (it stopped the video in a window,
+	/// measured live in 0.4 s); it follows PlayerEscape: full screen off, else the controls shown.
+	/// </summary>
+	[Fact]
+	public void Escape_never_leaves_the_player()
+	{
+		var escape = Body(Source("Views", "VideoPlayerPage.xaml.cs"), "OnEscape");
+		Assert.Contains("PlayerEscape.For(", escape);
+		Assert.DoesNotContain("GoBack", escape);
+		Assert.DoesNotContain("Navigate", escape);
 	}
 
 	/// <summary>Leaving the page detaches the video before the switch ends, then restores the window (PlayerPageLeave).</summary>

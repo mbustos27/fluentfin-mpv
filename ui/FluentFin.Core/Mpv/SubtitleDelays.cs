@@ -3,7 +3,7 @@ using System.Globalization;
 namespace FluentFin.Core.Mpv;
 
 /// <summary>
-/// Seaglass 1.1.4: the subtitle delay, in seconds: steps of 0.1 s, -30 to 30 (positive shows the subtitles later). mpv's
+/// 1.2.0: the subtitle delay, in seconds: steps of 0.1 s, -30 to 30 (positive shows the subtitles later). mpv's
 /// <c>sub-delay</c>; the backend writes it (<c>set_subtitle_delay</c>, docs/BRIDGE.md §4).
 /// </summary>
 public static class SubtitleDelays

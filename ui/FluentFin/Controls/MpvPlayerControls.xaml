@@ -26,7 +26,7 @@
                 <SolidColorBrush x:Key="PlayerGlassForeground" Color="#FFFFFFFF" />
                 <SolidColorBrush x:Key="PlayerHoverTimeFill" Color="#E6101C20" />
                 <!--
-                    Seaglass 1.1.4: the backing of the pills over the video (Next, Skip): dense, so their text keeps 4.5:1 over
+                    1.2.0: the backing of the pills over the video (Next, Skip): dense, so their text keeps 4.5:1 over
                     any picture (PlayerPromptContrastTests: over a white frame and a black one). The bars' light fill
                     (PlayerGlassFill, 20 % white) left white text at about 1.6:1 over a white frame.
                 -->
@@ -104,7 +104,7 @@
             <Setter Property="FontSize" Value="15" />
         </Style>
         <!--
-            Seaglass 1.1.4: the pills over the video (Next near the end, Skip) on the dense PlayerPromptFill. Each pill also sets
+            1.2.0: the pills over the video (Next near the end, Skip) on the dense PlayerPromptFill. Each pill also sets
             ButtonBackground* in its own resources: the template's pointer-over and pressed fills come from there, not from the
             style (the bars' light ones above would come back under the pointer).
         -->
@@ -166,10 +166,11 @@
                 <Button
                     x:Name="BackButton"
                     VerticalAlignment="Center"
+                    AutomationProperties.AcceleratorKey="Alt+Left"
                     AutomationProperties.Name="Back"
                     Click="OnBackClick"
                     Style="{StaticResource PlayerButton}"
-                    ToolTipService.ToolTip="Back">
+                    ToolTipService.ToolTip="Back (Alt+Left)">
                     <FontIcon FontSize="16" Glyph="&#xE72B;" />
                 </Button>
                 <StackPanel VerticalAlignment="Center">
@@ -259,7 +260,7 @@
         </Border>
 
         <!--
-            Seaglass 1.1.4: the speed or the subtitle delay a key just changed ("Speed 1.5×", "Subtitles 0.3 s later"), in the
+            1.2.0: the speed or the subtitle delay a key just changed ("Speed 1.5×", "Subtitles 0.3 s later"), in the
             volume indicator's place and look (the two take each other's place), also while the bars are hidden. Narrator
             hears it from the code (Announce), so it is Raw here.
         -->
@@ -329,26 +330,6 @@
                     StepFrequency="1"
                     Value="{x:Bind Seconds(Controls.PositionTicks), Mode=OneWay}"
                     ValueChanged="OnSeekBarValueChanged" />
-                <!--  the time under the pointer, above the bar  -->
-                <Border
-                    x:Name="HoverTime"
-                    Grid.Column="1"
-                    Margin="0,0,0,34"
-                    Padding="10,4"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Top"
-                    Background="{ThemeResource PlayerHoverTimeFill}"
-                    BorderBrush="{ThemeResource GlassStrokeBrush}"
-                    BorderThickness="1"
-                    CornerRadius="10"
-                    IsHitTestVisible="False"
-                    Visibility="Collapsed">
-                    <TextBlock
-                        x:Name="HoverTimeText"
-                        Typography.NumeralAlignment="Tabular"
-                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
-                        Style="{ThemeResource CaptionTextBlockStyle}" />
-                </Border>
                 <TextBlock
                     x:Name="RemainingText"
                     Grid.Column="2"
@@ -373,9 +354,10 @@
                     Spacing="8">
                     <Button
                         x:Name="VolumeButton"
+                        AutomationProperties.AcceleratorKey="Up, Down"
                         AutomationProperties.Name="Volume"
                         Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="Volume">
+                        ToolTipService.ToolTip="Volume (Up, Down; M mutes)">
                         <FontIcon FontSize="18" Glyph="{x:Bind VolumeGlyph(Controls.Volume, Controls.IsMuted), Mode=OneWay}" />
                         <Button.Flyout>
                             <Flyout
@@ -390,10 +372,11 @@
                                     Spacing="8">
                                     <Button
                                         x:Name="MuteButton"
+                                        AutomationProperties.AcceleratorKey="M"
                                         AutomationProperties.Name="{x:Bind MuteName(Controls.IsMuted), Mode=OneWay}"
                                         Click="OnMuteClick"
                                         Style="{StaticResource PlayerButton}"
-                                        ToolTipService.ToolTip="{x:Bind MuteName(Controls.IsMuted), Mode=OneWay}">
+                                        ToolTipService.ToolTip="{x:Bind MuteToolTip(Controls.IsMuted), Mode=OneWay}">
                                         <FontIcon FontSize="16" Glyph="{x:Bind VolumeGlyph(Controls.Volume, Controls.IsMuted), Mode=OneWay}" />
                                     </Button>
                                     <Slider
@@ -421,7 +404,7 @@
                     VerticalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="16">
-                    <!--  Seaglass 1.1.4: previous and next with the transport (an episode or a queue); the Next pill is the prompt near the end  -->
+                    <!--  1.2.0: previous and next with the transport (an episode or a queue); the Next pill is the prompt near the end  -->
                     <Button
                         x:Name="PreviousButton"
                         AutomationProperties.AcceleratorKey="Shift+P"
@@ -444,10 +427,11 @@
                     </Button>
                     <Button
                         x:Name="PlayPauseButton"
+                        AutomationProperties.AcceleratorKey="Space"
                         AutomationProperties.Name="{x:Bind PlayPauseName(Controls.IsPaused), Mode=OneWay}"
                         Click="OnPlayPauseClick"
                         Style="{StaticResource PlayerPlayButton}"
-                        ToolTipService.ToolTip="{x:Bind PlayPauseName(Controls.IsPaused), Mode=OneWay}">
+                        ToolTipService.ToolTip="{x:Bind PlayPauseToolTip(Controls.IsPaused), Mode=OneWay}">
                         <Button.Resources>
                                 <StaticResource x:Key="ButtonBackground" ResourceKey="SeaglassAccentBrush" />
                                 <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SeaglassAccentBrush" />
@@ -488,7 +472,7 @@
                     Orientation="Horizontal"
                     Spacing="8">
                     <!--
-                        Seaglass 1.1.4: the playback speed, a menu of 0.5x to 2x. At normal speed the button is an icon; at any
+                        1.2.0: the playback speed, a menu of 0.5x to 2x. At normal speed the button is an icon; at any
                         other it shows the speed itself ("1.5×"), so a changed speed is always in sight with the bars.
                     -->
                     <Button
@@ -519,154 +503,173 @@
                                 Placement="Top" />
                         </Button.Flyout>
                     </Button>
+                    <!--
+                        1.2.0 (the interaction audit, item 15): one "Audio and subtitles" panel, as Netflix, Disney+ and the Apple TV
+                        app have: the audio tracks on the left, the subtitle tracks on the right with the text size and the delay
+                        under them. The button stays (disabled when there is nothing to choose), so the bar does not shift between
+                        items. Until 1.1.3: an Audio menu and a Subtitles flyout, each there only with a choice.
+                    -->
                     <Button
-                        x:Name="AudioButton"
-                        AutomationProperties.Name="Audio"
+                        x:Name="TracksButton"
+                        AutomationProperties.AcceleratorKey="B, C"
+                        AutomationProperties.Name="Audio and subtitles"
+                        IsEnabled="{x:Bind Controls.HasTrackChoice, Mode=OneWay}"
                         Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="Audio"
-                        Visibility="{x:Bind VisibleIf(Controls.HasAudioChoice), Mode=OneWay}">
-                        <FontIcon FontSize="18" Glyph="&#xE8D6;" />
-                        <Button.Flyout>
-                            <MenuFlyout
-                                x:Name="AudioMenu"
-                                Closed="OnMenuClosed"
-                                MenuFlyoutPresenterStyle="{StaticResource PlayerMenuPresenter}"
-                                Opened="OnMenuOpened"
-                                Opening="OnAudioMenuOpening"
-                                Placement="Top" />
-                        </Button.Flyout>
-                    </Button>
-                    <Button
-                        x:Name="SubtitlesButton"
-                        AutomationProperties.Name="Subtitles"
-                        Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="Subtitles"
-                        Visibility="{x:Bind VisibleIf(Controls.HasSubtitleChoice), Mode=OneWay}">
+                        ToolTipService.ToolTip="Audio and subtitles (B, C)">
                         <FontIcon FontSize="18" Glyph="&#xED1E;" />
                         <Button.Flyout>
                             <Flyout
-                                x:Name="SubtitlesMenu"
+                                x:Name="TracksMenu"
                                 Closed="OnMenuClosed"
                                 FlyoutPresenterStyle="{StaticResource PlayerFlyoutPresenter}"
                                 Opened="OnMenuOpened"
-                                Opening="OnSubtitlesMenuOpening"
+                                Opening="OnTracksMenuOpening"
                                 Placement="Top">
-                                <!--  the subtitle tracks (filled as it opens), then the text size: 50 to 200 %, live, remembered  -->
-                                <StackPanel Width="280" Spacing="8">
-                                    <RadioButtons x:Name="SubtitleTracks" AutomationProperties.Name="Subtitles" SelectionChanged="OnSubtitleTrackChanged" />
-                                    <Rectangle Height="1" Fill="{ThemeResource GlassStrokeBrush}" />
-                                    <Grid ColumnSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock VerticalAlignment="Center" Text="Text size" />
+                                <Grid ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220" />
+                                        <ColumnDefinition Width="280" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="8">
                                         <TextBlock
-                                            x:Name="SubtitleSizeValue"
-                                            Grid.Column="1"
-                                            VerticalAlignment="Center"
-                                            Typography.NumeralAlignment="Tabular"
-                                            Text="{x:Bind Controls.SubtitleSizeText, Mode=OneWay}" />
-                                    </Grid>
-                                    <Grid ColumnSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Slider
-                                            x:Name="SubtitleSizeSlider"
-                                            MinHeight="32"
-                                            VerticalAlignment="Center"
-                                            AutomationProperties.Name="Subtitle text size"
-                                            LargeChange="20"
-                                            Maximum="200"
-                                            Minimum="50"
-                                            SmallChange="10"
-                                            StepFrequency="10"
-                                            IsThumbToolTipEnabled="False"
-                                            ValueChanged="OnSubtitleSizeChanged" />
-                                        <Button
-                                            x:Name="SubtitleSizeReset"
-                                            Grid.Column="1"
-                                            MinHeight="32"
-                                            MinWidth="32"
-                                            Padding="8,0"
-                                            AutomationProperties.Name="Reset subtitle text size to 100%"
-                                            Click="OnSubtitleSizeReset"
-                                            Content="Reset"
-                                            ToolTipService.ToolTip="Reset to 100%" />
-                                    </Grid>
-                                    <!--
-                                        Seaglass 1.1.4: the subtitle delay, in steps of 0.1 s (Z and X too), for this item only; the
-                                        value is a live region, so Narrator hears each step
-                                    -->
-                                    <Rectangle Height="1" Fill="{ThemeResource GlassStrokeBrush}" />
-                                    <Grid ColumnSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock VerticalAlignment="Center" Text="Subtitle delay" />
+                                            AutomationProperties.HeadingLevel="Level2"
+                                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                            Text="Audio" />
+                                        <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto">
+                                            <RadioButtons x:Name="AudioTracks" AutomationProperties.Name="Audio" SelectionChanged="OnAudioTrackChanged" />
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                    <!--  the subtitle tracks (filled as it opens), then the text size: 50 to 200 %, live, remembered; then the delay  -->
+                                    <StackPanel Grid.Column="1" Spacing="8">
                                         <TextBlock
-                                            x:Name="SubtitleDelayValue"
-                                            Grid.Column="1"
-                                            VerticalAlignment="Center"
-                                            AutomationProperties.LiveSetting="Polite"
-                                            AutomationProperties.Name="{x:Bind DelayName(Controls.SubtitleDelay), Mode=OneWay}"
-                                            Typography.NumeralAlignment="Tabular"
-                                            Text="{x:Bind Controls.SubtitleDelayText, Mode=OneWay}" />
-                                    </Grid>
-                                    <Grid ColumnSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Button
-                                            x:Name="SubtitleEarlierButton"
-                                            MinWidth="44"
-                                            MinHeight="32"
-                                            Padding="8,0"
-                                            AutomationProperties.AcceleratorKey="Z"
-                                            AutomationProperties.Name="Subtitles 0.1 seconds earlier"
-                                            Click="OnSubtitleEarlierClick"
-                                            ToolTipService.ToolTip="0.1 s earlier (Z)">
-                                            <FontIcon FontSize="14" Glyph="&#xE738;" />
-                                        </Button>
-                                        <Button
-                                            x:Name="SubtitleLaterButton"
-                                            Grid.Column="1"
-                                            MinWidth="44"
-                                            MinHeight="32"
-                                            Padding="8,0"
-                                            AutomationProperties.AcceleratorKey="X"
-                                            AutomationProperties.Name="Subtitles 0.1 seconds later"
-                                            Click="OnSubtitleLaterClick"
-                                            ToolTipService.ToolTip="0.1 s later (X)">
-                                            <FontIcon FontSize="14" Glyph="&#xE710;" />
-                                        </Button>
-                                        <Button
-                                            x:Name="SubtitleDelayReset"
-                                            Grid.Column="3"
-                                            MinHeight="32"
-                                            MinWidth="32"
-                                            Padding="8,0"
-                                            AutomationProperties.Name="Reset the subtitle delay to none"
-                                            Click="OnSubtitleDelayReset"
-                                            Content="Reset"
-                                            ToolTipService.ToolTip="No delay" />
-                                    </Grid>
-                                </StackPanel>
+                                            AutomationProperties.HeadingLevel="Level2"
+                                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                            Text="Subtitles" />
+                                        <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
+                                            <RadioButtons x:Name="SubtitleTracks" AutomationProperties.Name="Subtitles" SelectionChanged="OnSubtitleTrackChanged" />
+                                        </ScrollViewer>
+                                        <TextBlock
+                                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                            Text="This item has no subtitles."
+                                            TextWrapping="WrapWholeWords"
+                                            Visibility="{x:Bind CollapsedIf(Controls.HasSubtitleChoice), Mode=OneWay}" />
+                                        <StackPanel Spacing="8" Visibility="{x:Bind VisibleIf(Controls.HasSubtitleChoice), Mode=OneWay}">
+                                            <Rectangle Height="1" Fill="{ThemeResource GlassStrokeBrush}" />
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock VerticalAlignment="Center" Text="Text size" />
+                                                <TextBlock
+                                                    x:Name="SubtitleSizeValue"
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    Typography.NumeralAlignment="Tabular"
+                                                    Text="{x:Bind Controls.SubtitleSizeText, Mode=OneWay}" />
+                                            </Grid>
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Slider
+                                                    x:Name="SubtitleSizeSlider"
+                                                    MinHeight="32"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.Name="Subtitle text size"
+                                                    LargeChange="20"
+                                                    Maximum="200"
+                                                    Minimum="50"
+                                                    SmallChange="10"
+                                                    StepFrequency="10"
+                                                    IsThumbToolTipEnabled="False"
+                                                    ValueChanged="OnSubtitleSizeChanged" />
+                                                <Button
+                                                    x:Name="SubtitleSizeReset"
+                                                    Grid.Column="1"
+                                                    MinHeight="32"
+                                                    MinWidth="32"
+                                                    Padding="8,0"
+                                                    AutomationProperties.Name="Reset subtitle text size to 100%"
+                                                    Click="OnSubtitleSizeReset"
+                                                    Content="Reset"
+                                                    ToolTipService.ToolTip="Reset to 100%" />
+                                            </Grid>
+                                            <!--
+                                                the subtitle delay, in steps of 0.1 s (Z and X too), for this item only; each step is
+                                                said (Announce) as well as shown
+                                            -->
+                                            <Rectangle Height="1" Fill="{ThemeResource GlassStrokeBrush}" />
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock VerticalAlignment="Center" Text="Subtitle delay" />
+                                                <TextBlock
+                                                    x:Name="SubtitleDelayValue"
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.LiveSetting="Polite"
+                                                    AutomationProperties.Name="{x:Bind DelayName(Controls.SubtitleDelay), Mode=OneWay}"
+                                                    Typography.NumeralAlignment="Tabular"
+                                                    Text="{x:Bind Controls.SubtitleDelayText, Mode=OneWay}" />
+                                            </Grid>
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Button
+                                                    x:Name="SubtitleEarlierButton"
+                                                    MinWidth="44"
+                                                    MinHeight="32"
+                                                    Padding="8,0"
+                                                    AutomationProperties.AcceleratorKey="Z"
+                                                    AutomationProperties.Name="Subtitles 0.1 seconds earlier"
+                                                    Click="OnSubtitleEarlierClick"
+                                                    ToolTipService.ToolTip="0.1 s earlier (Z)">
+                                                    <FontIcon FontSize="14" Glyph="&#xE738;" />
+                                                </Button>
+                                                <Button
+                                                    x:Name="SubtitleLaterButton"
+                                                    Grid.Column="1"
+                                                    MinWidth="44"
+                                                    MinHeight="32"
+                                                    Padding="8,0"
+                                                    AutomationProperties.AcceleratorKey="X"
+                                                    AutomationProperties.Name="Subtitles 0.1 seconds later"
+                                                    Click="OnSubtitleLaterClick"
+                                                    ToolTipService.ToolTip="0.1 s later (X)">
+                                                    <FontIcon FontSize="14" Glyph="&#xE710;" />
+                                                </Button>
+                                                <Button
+                                                    x:Name="SubtitleDelayReset"
+                                                    Grid.Column="3"
+                                                    MinHeight="32"
+                                                    MinWidth="32"
+                                                    Padding="8,0"
+                                                    AutomationProperties.Name="Reset the subtitle delay to none"
+                                                    Click="OnSubtitleDelayReset"
+                                                    Content="Reset"
+                                                    ToolTipService.ToolTip="No delay" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
                             </Flyout>
                         </Button.Flyout>
                     </Button>
                     <Button
                         x:Name="FullScreenButton"
+                        AutomationProperties.AcceleratorKey="F"
                         AutomationProperties.Name="{x:Bind FullScreenName(Controls.IsFullScreen), Mode=OneWay}"
                         Click="OnFullScreenClick"
                         Style="{StaticResource PlayerButton}"
-                        ToolTipService.ToolTip="{x:Bind FullScreenName(Controls.IsFullScreen), Mode=OneWay}">
+                        ToolTipService.ToolTip="{x:Bind FullScreenToolTip(Controls.IsFullScreen), Mode=OneWay}">
                         <FontIcon FontSize="18" Glyph="{x:Bind FullScreenGlyph(Controls.IsFullScreen), Mode=OneWay}" />
                     </Button>
                 </StackPanel>
@@ -674,11 +677,51 @@
         </Grid>
 
         <!--
+            the time under the pointer (or the thumb while dragged), above the seek bar; 1.2.0 (the interaction audit, item 9):
+            with the item's trickplay thumbnail over it when the server has them. Placed by the code (OnSeekBarPointerMoved)
+            in the player's coordinates, so it can be taller than the bar's row.
+        -->
+        <Border
+            x:Name="HoverTime"
+            Padding="4"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Background="{ThemeResource PlayerHoverTimeFill}"
+            BorderBrush="{ThemeResource GlassStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="10"
+            IsHitTestVisible="False"
+            Visibility="Collapsed">
+            <StackPanel Spacing="4">
+                <Canvas
+                    x:Name="HoverPreview"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Visibility="Collapsed">
+                    <Canvas.Clip>
+                        <RectangleGeometry x:Name="HoverPreviewClip" />
+                    </Canvas.Clip>
+                    <Image x:Name="HoverPreviewImage" Stretch="Uniform">
+                        <Image.RenderTransform>
+                            <TranslateTransform x:Name="HoverPreviewShift" />
+                        </Image.RenderTransform>
+                    </Image>
+                </Canvas>
+                <TextBlock
+                    x:Name="HoverTimeText"
+                    Margin="6,0,6,2"
+                    HorizontalAlignment="Center"
+                    Typography.NumeralAlignment="Tabular"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                    Style="{ThemeResource CaptionTextBlockStyle}" />
+            </StackPanel>
+        </Border>
+
+        <!--
             Skip intro / Skip credits (docs/BRIDGE.md section 5 segments) and the Next episode pill, bottom right, just above the
             bottom bar's controls while they show, a small margin from the bottom while they are hidden (the row's Margin is
             set by PlaceSkipButton). Last in the tree, so they are on top of the bars' scrim. Never focused by themselves:
             Space stays play. Skip stays for the whole offer, also while the bars are hidden.
-            Seaglass 1.1.4: the Next pill is the prompt near the end (MpvControlsViewModel.NextPromptAt: the credits, else the last
+            1.2.0: the Next pill is the prompt near the end (MpvControlsViewModel.NextPromptAt: the credits, else the last
             30 to 40 s), also while the bars are hidden, as Skip is; Previous and Next are in the transport row. Both pills are on
             the dense PlayerPromptFill (readable over any picture). Neither holds the bars up under the pointer: each collapses
             when pressed, and an element that collapses under the pointer need not get its PointerExited (the bars would stay up).
@@ -690,10 +733,34 @@
             VerticalAlignment="Bottom"
             Orientation="Horizontal"
             Spacing="12">
+            <!--
+                1.2.0 (the interaction audit, item 7): the Next prompt counts down when the next item plays by itself ("Next
+                episode in 8", a bar filling), with Cancel beside it; a click plays it now. Its name stays "Play the next
+                episode now: <title>" (a name that changed every second would be read again and again).
+            -->
+            <Button
+                x:Name="CancelNextButton"
+                VerticalAlignment="Bottom"
+                AutomationProperties.Name="Cancel the next episode"
+                Click="OnCancelNextClick"
+                Style="{StaticResource PlayerPromptPill}"
+                MinWidth="0"
+                ToolTipService.ToolTip="Keep watching: the next episode does not start by itself"
+                Visibility="{x:Bind VisibleIf(Controls.IsCountingDown), Mode=OneWay}">
+                <Button.Resources>
+                    <StaticResource x:Key="ButtonBackground" ResourceKey="PlayerPromptFill" />
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="PlayerPromptFillHover" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="PlayerPromptFillPressed" />
+                </Button.Resources>
+                <TextBlock Text="Cancel" />
+            </Button>
             <Button
                 x:Name="NextPill"
+                Height="NaN"
+                MinHeight="44"
+                Padding="18,8"
                 AutomationProperties.AcceleratorKey="Shift+N"
-                AutomationProperties.Name="{x:Bind Controls.NextToolTip, Mode=OneWay}"
+                AutomationProperties.Name="{x:Bind Controls.NextPromptName, Mode=OneWay}"
                 Click="OnNextClick"
                 Style="{StaticResource PlayerPromptPill}"
                 ToolTipService.ToolTip="{x:Bind NextHint(Controls.NextToolTip), Mode=OneWay}"
@@ -703,19 +770,50 @@
                     <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="PlayerPromptFillHover" />
                     <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="PlayerPromptFillPressed" />
                 </Button.Resources>
-                <StackPanel Orientation="Horizontal" Spacing="10">
+                <Grid MinWidth="200" RowSpacing="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
                     <TextBlock
                         x:Name="NextPillText"
-                        MaxWidth="360"
                         VerticalAlignment="Center"
-                        MaxLines="1"
-                        Text="{x:Bind Controls.NextToolTip, Mode=OneWay}"
-                        TextTrimming="CharacterEllipsis" />
+                        Typography.NumeralAlignment="Tabular"
+                        Text="{x:Bind Controls.NextPromptText, Mode=OneWay}" />
                     <FontIcon
+                        Grid.Column="1"
+                        Margin="12,0,0,0"
                         VerticalAlignment="Center"
                         FontSize="14"
-                        Glyph="&#xE893;" />
-                </StackPanel>
+                        Glyph="&#xE768;" />
+                    <TextBlock
+                        x:Name="NextPillTitle"
+                        Grid.Row="1"
+                        Grid.ColumnSpan="2"
+                        MaxWidth="360"
+                        FontSize="13"
+                        FontWeight="Normal"
+                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                        MaxLines="1"
+                        Text="{x:Bind Controls.NextItemTitle, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        Visibility="{x:Bind VisibleIfText(Controls.NextItemTitle), Mode=OneWay}" />
+                    <ProgressBar
+                        x:Name="NextCountdownBar"
+                        Grid.Row="2"
+                        Grid.ColumnSpan="2"
+                        Margin="0,6,0,0"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Maximum="1"
+                        Minimum="0"
+                        Value="{x:Bind Controls.NextCountdownProgress, Mode=OneWay}"
+                        Visibility="{x:Bind VisibleIf(Controls.IsCountingDown), Mode=OneWay}" />
+                </Grid>
             </Button>
             <Button
                 x:Name="SkipSegmentButton"

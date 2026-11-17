@@ -4,7 +4,7 @@ using FluentFin.Core.Mpv;
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// Seaglass 1.1.4 (UX review, prioritised fix 5): the Next pill shows only near the end of the item: from the credits when
+/// 1.2.0 (UX review, prioritised fix 5): the Next pill shows only near the end of the item: from the credits when
 /// a segment marks them, else the last 30 to 40 s (Jellyfin web's lead), and Previous follows the queue and the <c>next</c>
 /// event. In 1.1.0 it showed with the bars from the first seconds.
 /// </summary>
@@ -14,12 +14,19 @@ public sealed class PlayerNextPromptTests
 	private const string NextItem = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee2";
 
 	private DateTimeOffset _now = new(2026, 11, 17, 21, 0, 0, TimeSpan.Zero);
+	private readonly List<(string Command, JsonObject? Args)> _sent = [];
 	private readonly MpvControlsViewModel _vm;
 
 	public PlayerNextPromptTests()
 	{
-		_vm = new MpvControlsViewModel((_, _) => Task.CompletedTask, () => _now);
+		_vm = new MpvControlsViewModel((command, args) =>
+		{
+			_sent.Add((command, args?.DeepClone() as JsonObject));
+			return Task.CompletedTask;
+		}, () => _now);
 	}
+
+	private List<string> Commands() => [.. _sent.Select(x => x.Command)];
 
 	private static long Ticks(double seconds) => TimeSpan.FromSeconds(seconds).Ticks;
 
@@ -50,13 +57,126 @@ public sealed class PlayerNextPromptTests
 		_vm.OnPosition(new BridgePosition(Ticks(positionSeconds), Ticks(durationSeconds)));
 	}
 
-	private void Credits(double startSeconds, double endSeconds) =>
+	private void Credits(double startSeconds, double endSeconds, bool offered = false) =>
 		_vm.OnEvent(new BridgeEvent(Bridge.Events.Segments, JsonNode.Parse($$"""
 			{"itemId": "{{Item}}",
 			 "segments": [{"type": "Intro", "startTicks": {{Ticks(30)}}, "endTicks": {{Ticks(90)}}, "action": "ask"},
 			              {"type": "Outro", "startTicks": {{Ticks(startSeconds)}}, "endTicks": {{Ticks(endSeconds)}}, "action": "ask", "source": "chapters"}],
-			 "current": null}
+			 "current": {{(offered ? "1" : "null")}}}
 			""")));
+
+	private void Wait(double seconds, int steps)
+	{
+		for (var i = 0; i < steps; i++)
+		{
+			Wait(seconds / steps);
+		}
+	}
+
+	// -- the countdown (1.2.0, the interaction audit, item 7) -------------------------------------------------------------
+
+	[Fact]
+	public void Over_the_credits_the_prompt_counts_down_ten_seconds_then_plays_the_next_once()
+	{
+		PlayingEpisode(1229);
+		Credits(1230, 1320);
+		Assert.False(_vm.IsCountingDown);
+		Wait(1);
+		Assert.True(_vm.IsNextPromptVisible);
+		Assert.True(_vm.IsCountingDown);
+		Assert.Equal(10, _vm.NextCountdown);
+		Assert.Equal("Next episode in 10", _vm.NextPromptText);
+		Wait(4, 16);
+		Assert.Equal(6, _vm.NextCountdown);
+		Assert.InRange(_vm.NextCountdownProgress, 0.39, 0.41);
+		Assert.DoesNotContain(Bridge.Commands.Next, Commands());
+		Wait(6, 24);
+		Wait(3, 12);
+		Assert.Equal([Bridge.Commands.Next], Commands().Where(x => x == Bridge.Commands.Next));
+	}
+
+	[Fact]
+	public void Over_the_credits_Skip_credits_gives_way_to_the_Next_prompt()
+	{
+		PlayingEpisode(1231);
+		Credits(1230, 1320, offered: true);
+		Assert.True(_vm.IsNextPromptVisible);
+		Assert.False(_vm.IsSkipVisible, "one button over the credits");
+
+		// the last episode: no Next prompt, so Skip credits stays
+		PlayingEpisode(1231, hasNext: false);
+		Credits(1230, 1320, offered: true);
+		Assert.False(_vm.IsNextPromptVisible);
+		Assert.True(_vm.IsSkipVisible);
+	}
+
+	[Fact]
+	public void Without_credits_the_countdown_is_the_last_ten_seconds_and_the_backend_plays_the_next()
+	{
+		PlayingEpisode(1295);
+		Assert.True(_vm.IsNextPromptVisible, "25 s before the end");
+		Assert.False(_vm.IsCountingDown, "the episode's own ending is not cut short");
+		Wait(15, 60);
+		Assert.True(_vm.IsCountingDown);
+		Assert.Equal(10, _vm.NextCountdown);
+		Wait(11, 44);
+		Assert.Equal(0, _vm.NextCountdown);
+		Assert.DoesNotContain(Bridge.Commands.Next, Commands());
+	}
+
+	[Fact]
+	public void With_auto_play_off_the_prompt_is_a_plain_Next_episode()
+	{
+		_vm.AutoPlay = false;
+		PlayingEpisode(1229);
+		_vm.OnEvent(new BridgeEvent(Bridge.Events.Next, JsonNode.Parse($$"""{"itemId": "{{Item}}", "nextItemId": "{{NextItem}}", "autoPlay": false}""")));
+		Credits(1230, 1320);
+		Wait(20, 80);
+		Assert.True(_vm.IsNextPromptVisible);
+		Assert.False(_vm.IsCountingDown);
+		Assert.Equal("Next episode", _vm.NextPromptText);
+		Assert.DoesNotContain(Bridge.Commands.Next, Commands());
+	}
+
+	[Fact]
+	public void Cancel_stops_the_countdown_and_the_backends_auto_play_until_another_item()
+	{
+		PlayingEpisode(1231);
+		Credits(1230, 1320);
+		Assert.True(_vm.IsCountingDown);
+
+		_ = _vm.CancelNextCountdown();
+		Assert.False(_vm.IsCountingDown);
+		Assert.True(_vm.IsNextPromptVisible, "Next episode stays, to play it by hand");
+		Wait(20, 80);
+		Assert.DoesNotContain(Bridge.Commands.Next, Commands());
+		Assert.Equal([false], _sent.Where(x => x.Command == Bridge.Commands.SetAutoPlay).Select(x => (bool)x.Args!["autoPlay"]!));
+
+		// another item: the user's choice again
+		PlayingEpisode(10);
+		Assert.Equal([false, true], _sent.Where(x => x.Command == Bridge.Commands.SetAutoPlay).Select(x => (bool)x.Args!["autoPlay"]!));
+	}
+
+	[Fact]
+	public void Paused_the_countdown_waits()
+	{
+		PlayingEpisode(1231);
+		Credits(1230, 1320);
+		_vm.OnState(new BridgeState { State = Bridge.States.Paused, ItemId = Item, DurationTicks = Ticks(1320) });
+		var left = _vm.NextCountdown;
+		Wait(30, 120);
+		Assert.Equal(left, _vm.NextCountdown);
+		Assert.DoesNotContain(Bridge.Commands.Next, Commands());
+	}
+
+	[Fact]
+	public void Countdown_span_is_the_credits_ten_seconds_or_the_last_ten()
+	{
+		Assert.Equal((Ticks(1230), Ticks(1240)), MpvControlsViewModel.CountdownSpan(Ticks(1320), [Ticks(1230)]));
+		Assert.Equal((Ticks(1310), Ticks(1320)), MpvControlsViewModel.CountdownSpan(Ticks(1320)));
+		// credits shorter than the countdown: to the end, where the backend plays the next
+		Assert.Equal((Ticks(1315), Ticks(1320)), MpvControlsViewModel.CountdownSpan(Ticks(1320), [Ticks(1315)]));
+	}
 
 	[Theory]
 	[InlineData(22, 30)]

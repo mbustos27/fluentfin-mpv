@@ -625,6 +625,16 @@ class ShimRuntime:
         return bool(settings.auto_play)
 
     @staticmethod
+    def set_auto_play(value):
+        """1.2.0: the UI's choice for `auto_play` (BRIDGE.md section 4
+        ``set_auto_play``), held in memory: `finished_callback` reads the
+        setting at each item's end. Not saved: the UI sends it before every
+        play."""
+        from .conf import settings
+
+        settings.auto_play = bool(value)
+
+    @staticmethod
     def segment_label(segment_type):
         """The Skip button's text for a segment type, in the shim's
         language ("Skip Intro")."""
@@ -2796,7 +2806,7 @@ class Bridge:
         return {}
 
     def cmd_set_speed(self, args):
-        """Seaglass 1.1.4: mpv's ``speed``, written now. mpv keeps it for
+        """1.2.0: mpv's ``speed``, written now. mpv keeps it for
         every later item (it is not re-created between them); the UI says
         when it goes back to 1. Always succeeds once connected."""
         self._require_player()
@@ -2805,7 +2815,7 @@ class Bridge:
         return {}
 
     def cmd_set_subtitle_delay(self, args):
-        """Seaglass 1.1.4: mpv's ``sub-delay`` in seconds, written now and
+        """1.2.0: mpv's ``sub-delay`` in seconds, written now and
         kept by mpv like the speed (the UI sends 0 for each new item).
         Always succeeds once connected."""
         self._require_player()
@@ -2852,6 +2862,17 @@ class Bridge:
             intro_sources.OPTIONS.lookup_online = options["onlineLookup"]
         if options["learnIntros"] is not None:
             intro_sources.OPTIONS.learn = options["learnIntros"]
+        return {}
+
+    def cmd_set_auto_play(self, args):
+        """1.2.0: whether the next queue item plays by itself at an item's
+        end (BRIDGE.md section 4). Held for every later item; the ``next``
+        event's ``autoPlay`` follows at the next sample."""
+        if not (self.connected or self.dev):
+            raise BridgeError(NOT_CONNECTED, "send connect first")
+        value = proto.get_bool(args, "autoPlay")
+        self.runtime.set_auto_play(value)
+        self.poke()
         return {}
 
     def cmd_skip_segment(self, args):
@@ -2957,6 +2978,7 @@ class Bridge:
         "set_controls": cmd_set_controls,
         "skip_segment": cmd_skip_segment,
         "set_skip_options": cmd_set_skip_options,
+        "set_auto_play": cmd_set_auto_play,
     }
 
     # -- the monitor -------------------------------------------------------

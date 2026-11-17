@@ -68,7 +68,7 @@ public sealed partial class MpvPlayerControls : UserControl
 		{
 			old.PropertyChanged -= self.OnControlsPropertyChanged;
 			old.PropertyChanging -= self.OnControlsPropertyChanging;
-			self.DropWaitingClick(old);
+			DropWaitingClick(old);
 		}
 
 		if (e.NewValue is MpvControlsViewModel controls)
@@ -99,13 +99,18 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 		else if (e.PropertyName is nameof(MpvControlsViewModel.ToastText) or nameof(MpvControlsViewModel.ToastVisible) && Controls is { ToastVisible: true } toast)
 		{
-			// Seaglass 1.1.4: a key's new speed or subtitle delay
-			Announce(toast.ToastText, "SeaglassPlayerStatus");
+			// 1.2.0: a key's new speed or subtitle delay
+			Announce(toast.ToastText, "PlayerStatus");
 		}
-		else if (e.PropertyName is nameof(MpvControlsViewModel.IsNextPromptVisible) && Controls is { IsNextPromptVisible: true } prompt)
+		else if (e.PropertyName is nameof(MpvControlsViewModel.IsNextPromptVisible) && Controls is { IsNextPromptVisible: true, IsCountingDown: false } prompt)
 		{
-			// Seaglass 1.1.4: the Next pill came (near the end); it is not focused, Shift+N plays it
-			Announce($"{prompt.NextToolTip}. Shift+N plays it.", "SeaglassNextPrompt");
+			// the Next prompt came (near the end); it is not focused, Shift+N plays it
+			Announce($"{prompt.NextToolTip}. Shift+N plays it.", "NextPrompt");
+		}
+		else if (e.PropertyName is nameof(MpvControlsViewModel.IsCountingDown) && Controls is { IsCountingDown: true, NextCountdown: int seconds } counting)
+		{
+			// 1.2.0: once, as the countdown starts (not every second)
+			Announce($"Next episode in {seconds} seconds{(counting.NextItemTitle is { } title ? $": {title}" : "")}. Shift+N plays it now; Cancel keeps watching.", "NextPrompt");
 		}
 
 		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible))
@@ -126,7 +131,8 @@ public sealed partial class MpvPlayerControls : UserControl
 			}
 		}
 		else if (e.PropertyName is nameof(MpvControlsViewModel.IsSkipVisible) && Controls is { IsSkipVisible: false }
-			|| e.PropertyName is nameof(MpvControlsViewModel.IsNextPromptVisible) && Controls is { IsNextPromptVisible: false })
+			|| e.PropertyName is nameof(MpvControlsViewModel.IsNextPromptVisible) && Controls is { IsNextPromptVisible: false }
+			|| e.PropertyName is nameof(MpvControlsViewModel.IsCountingDown) && Controls is { IsCountingDown: false })
 		{
 			// the Skip button or the Next pill went (pressed, or no longer offered): a focus it left nowhere
 			if (XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is null)
@@ -149,9 +155,10 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 		else if (XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is DependencyObject focused
 			&& (e.PropertyName == nameof(MpvControlsViewModel.IsSkipVisible) && Controls is { IsSkipVisible: true } && IsWithin(focused, SkipSegmentButton)
-				|| e.PropertyName == nameof(MpvControlsViewModel.IsNextPromptVisible) && Controls is { IsNextPromptVisible: true } && IsWithin(focused, NextPill)))
+				|| e.PropertyName == nameof(MpvControlsViewModel.IsNextPromptVisible) && Controls is { IsNextPromptVisible: true } && IsWithin(focused, NextPill)
+				|| e.PropertyName == nameof(MpvControlsViewModel.IsCountingDown) && Controls is { IsCountingDown: true } && IsWithin(focused, CancelNextButton)))
 		{
-			// Seaglass 1.1.4: the Next pill likewise (pressed: the next item starts, and it is not near its end)
+			// 1.2.0: the Next pill likewise (pressed: the next item starts, and it is not near its end)
 			// the Skip button is about to go with the focus on it (the keyboard's, or the click's): the player takes it now,
 			// so its keys go on working (WinUI would hand it to the next control outside the player)
 			Focus(FocusState.Programmatic);
@@ -256,12 +263,6 @@ public sealed partial class MpvPlayerControls : UserControl
 	[System.Runtime.InteropServices.DllImport("user32.dll")]
 	private static extern uint GetDoubleClickTime();
 
-	/// <summary>
-	/// Seaglass 1.1.3: a click's play/pause waits the double-click time (<see cref="MpvControlsViewModel.VideoClicked"/>);
-	/// this timer ends the wait. Stopped when the controls go or change (a click must not reach a backend after its stop).
-	/// </summary>
-	private DispatcherQueueTimer? _clickTimer;
-
 	private void OnVideoTapped(object sender, TappedRoutedEventArgs e)
 	{
 		if (Controls is not { } controls || IsOnControls(e.OriginalSource as DependencyObject))
@@ -270,16 +271,9 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 
 		e.Handled = true;
-		controls.VideoClicked();
-		_clickTimer ??= DispatcherQueue.CreateTimer();
-		_clickTimer.Interval = controls.DoubleClickTime;
-		_clickTimer.IsRepeating = false;
-		_clickTimer.Tick -= OnClickWaitOver;
-		_clickTimer.Tick += OnClickWaitOver;
-		_clickTimer.Start();
+		// 1.2.0: plays or pauses at once (MpvControlsViewModel.VideoClicked); a double click puts it back
+		_ = controls.VideoClicked();
 	}
-
-	private void OnClickWaitOver(DispatcherQueueTimer sender, object args) => _ = Controls?.ClickWaitOver();
 
 	private void OnVideoDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
 	{
@@ -289,16 +283,11 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 
 		e.Handled = true;
-		_clickTimer?.Stop();
 		controls.VideoDoubleClicked();
 	}
 
-	/// <summary>A click still waiting does nothing (the controls go or change).</summary>
-	private void DropWaitingClick(MpvControlsViewModel? controls)
-	{
-		_clickTimer?.Stop();
-		controls?.CancelClick();
-	}
+	/// <summary>The controls go or change: a double click after this puts nothing back.</summary>
+	private static void DropWaitingClick(MpvControlsViewModel? controls) => controls?.CancelClick();
 
 	/// <summary>The wheel is volume over the whole player (never a seek, never a scroll); the volume slider's own drag is not.</summary>
 	private void OnPointerWheelChanged(object sender, PointerRoutedEventArgs e)
@@ -637,9 +626,63 @@ public sealed partial class MpvPlayerControls : UserControl
 		var x = Math.Clamp(e.GetCurrentPoint(SeekBar).Position.X, 0, SeekBar.ActualWidth);
 		var ticks = (long)(controls.DurationTicks * (x / SeekBar.ActualWidth));
 		HoverTimeText.Text = HoverTimeFor(ticks);
+		ShowPreview(controls, ticks);
 		HoverTime.Visibility = Visibility.Visible;
 		HoverTime.UpdateLayout();
-		HoverTime.Margin = new Thickness(Math.Clamp(x - HoverTime.ActualWidth / 2, 0, Math.Max(0, SeekBar.ActualWidth - HoverTime.ActualWidth)), 0, 0, 34);
+		// 1.2.0: in the player's coordinates (the label grew a thumbnail): centred over the pointer, above the bar, in the window
+		var origin = SeekBar.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0, 0));
+		var width = HoverTime.ActualWidth;
+		var left = Math.Clamp(origin.X + x - width / 2, 8, Math.Max(8, Root.ActualWidth - width - 8));
+		HoverTime.Margin = new Thickness(left, Math.Max(0, origin.Y - HoverTime.ActualHeight - 2), 0, 0);
+	}
+
+	/// <summary>1.2.0: a trickplay thumbnail's width over the seek bar, in DIPs (Netflix's and jellyfin-web's are about this size).</summary>
+	public const double PreviewWidth = 240;
+
+	/// <summary>The sheets of the item's thumbnails already asked for, by address (a 22-minute episode has two); dropped with the item.</summary>
+	private readonly Dictionary<Uri, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> _previewSheets = [];
+	private TrickplayTiles? _previewTiles;
+
+	/// <summary>
+	/// The thumbnail for <paramref name="ticks"/> over the time, when the item has trickplay tiles: its sheet (decoded at the
+	/// size shown, once per sheet), moved and clipped to the one tile. None: the time alone, as before.
+	/// </summary>
+	private void ShowPreview(MpvControlsViewModel controls, long ticks)
+	{
+		if (controls.PreviewAt(ticks) is not { } preview)
+		{
+			HoverPreview.Visibility = Visibility.Collapsed;
+			return;
+		}
+
+		var tiles = preview.Tiles;
+		if (!ReferenceEquals(_previewTiles, tiles))
+		{
+			_previewSheets.Clear();
+			_previewTiles = tiles;
+		}
+
+		var scale = PreviewWidth / tiles.Width;
+		if (!_previewSheets.TryGetValue(preview.Sheet, out var sheet))
+		{
+			sheet = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage
+			{
+				DecodePixelType = Microsoft.UI.Xaml.Media.Imaging.DecodePixelType.Logical,
+				DecodePixelWidth = (int)Math.Round(tiles.SheetWidth * scale),
+				UriSource = preview.Sheet,
+			};
+			_previewSheets[preview.Sheet] = sheet;
+		}
+
+		var height = Math.Round(tiles.Height * scale);
+		HoverPreviewImage.Source = sheet;
+		HoverPreviewImage.Width = tiles.SheetWidth * scale;
+		HoverPreview.Width = PreviewWidth;
+		HoverPreview.Height = height;
+		HoverPreviewClip.Rect = new Windows.Foundation.Rect(0, 0, PreviewWidth, height);
+		HoverPreviewShift.X = -preview.X * scale;
+		HoverPreviewShift.Y = -preview.Y * scale;
+		HoverPreview.Visibility = Visibility.Visible;
 	}
 
 	private void OnSeekBarPointerExited(object sender, PointerRoutedEventArgs e)
@@ -693,6 +736,8 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnPreviousClick(object sender, RoutedEventArgs e) => _ = Controls?.Previous();
 
+	private void OnCancelNextClick(object sender, RoutedEventArgs e) => _ = Controls?.CancelNextCountdown();
+
 	private void OnSkipSegmentClick(object sender, RoutedEventArgs e) => _ = Controls?.SkipSegment();
 
 	private void OnFullScreenClick(object sender, RoutedEventArgs e) => Controls?.ToggleFullScreen();
@@ -711,30 +756,47 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnMenuClosed(object? sender, object e) => Controls?.MenuOpened(false);
 
-	private void OnAudioMenuOpening(object? sender, object e) => FillMenu(AudioMenu, Controls?.AudioChoices ?? [], index => Controls?.SetAudio(index));
-
+	private IReadOnlyList<MpvTrackChoice> _audioChoices = [];
 	private IReadOnlyList<MpvTrackChoice> _subtitleChoices = [];
 	private bool _fillingSubtitles;
 
-	/// <summary>The subtitles flyout as it opens: the tracks (the one playing selected) and the remembered text size.</summary>
-	private void OnSubtitlesMenuOpening(object? sender, object e)
+	/// <summary>
+	/// 1.2.0: the one "Audio and subtitles" panel as it opens: the audio tracks and the subtitle tracks (those playing
+	/// selected), and the remembered text size.
+	/// </summary>
+	private void OnTracksMenuOpening(object? sender, object e)
 	{
 		_fillingSubtitles = true;
 		try
 		{
+			_audioChoices = Controls?.AudioChoices ?? [];
+			Fill(AudioTracks, _audioChoices);
 			_subtitleChoices = Controls?.SubtitleChoices ?? [];
-			SubtitleTracks.Items.Clear();
-			foreach (var choice in _subtitleChoices)
-			{
-				SubtitleTracks.Items.Add(choice.Label);
-			}
-
-			SubtitleTracks.SelectedIndex = _subtitleChoices.ToList().FindIndex(c => c.IsSelected);
+			Fill(SubtitleTracks, _subtitleChoices);
 			SubtitleSizeSlider.Value = Controls?.SubtitleSize ?? SubtitleSizes.Default;
 		}
 		finally
 		{
 			_fillingSubtitles = false;
+		}
+	}
+
+	private static void Fill(RadioButtons list, IReadOnlyList<MpvTrackChoice> choices)
+	{
+		list.Items.Clear();
+		foreach (var choice in choices)
+		{
+			list.Items.Add(choice.Label);
+		}
+
+		list.SelectedIndex = choices.ToList().FindIndex(c => c.IsSelected);
+	}
+
+	private void OnAudioTrackChanged(object sender, SelectionChangedEventArgs e)
+	{
+		if (!_fillingSubtitles && AudioTracks.SelectedIndex is >= 0 and var at && at < _audioChoices.Count)
+		{
+			_ = Controls?.SetAudio(_audioChoices[at].Index);
 		}
 	}
 
@@ -757,7 +819,7 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnSubtitleSizeReset(object sender, RoutedEventArgs e) => SubtitleSizeSlider.Value = SubtitleSizes.Default;
 
-	// -- Seaglass 1.1.4: the subtitle delay (the subtitles flyout) and the speed (its menu) --------------------------------
+	// -- 1.2.0: the subtitle delay (the subtitles flyout) and the speed (its menu) --------------------------------
 
 	private void OnSubtitleEarlierClick(object sender, RoutedEventArgs e) => StepDelay(-1);
 
@@ -768,7 +830,7 @@ public sealed partial class MpvPlayerControls : UserControl
 		if (Controls is { } controls)
 		{
 			_ = controls.SetSubtitleDelay(0);
-			Announce(DelayName(controls.SubtitleDelay), "SeaglassSubtitleDelay");
+			Announce(DelayName(controls.SubtitleDelay), "SubtitleDelay");
 		}
 	}
 
@@ -778,7 +840,7 @@ public sealed partial class MpvPlayerControls : UserControl
 		if (Controls is { } controls)
 		{
 			_ = controls.StepSubtitleDelay(steps);
-			Announce(DelayName(controls.SubtitleDelay), "SeaglassSubtitleDelay");
+			Announce(DelayName(controls.SubtitleDelay), "SubtitleDelay");
 		}
 	}
 
@@ -792,19 +854,6 @@ public sealed partial class MpvPlayerControls : UserControl
 			var item = new RadioMenuFlyoutItem { Text = PlaybackSpeeds.Label(speed), IsChecked = speed == current, GroupName = "speeds" };
 			item.Click += (_, _) => _ = Controls?.SetSpeed(speed);
 			SpeedMenu.Items.Add(item);
-		}
-	}
-
-	/// <summary>The menu's items, rebuilt as it opens: one radio item per track (the one playing checked).</summary>
-	private static void FillMenu(MenuFlyout menu, IReadOnlyList<MpvTrackChoice> choices, Func<int, Task?> pick)
-	{
-		menu.Items.Clear();
-		foreach (var choice in choices)
-		{
-			var item = new RadioMenuFlyoutItem { Text = choice.Label, IsChecked = choice.IsSelected, GroupName = "tracks" };
-			var index = choice.Index;
-			item.Click += (_, _) => _ = pick(index);
-			menu.Items.Add(item);
 		}
 	}
 
@@ -847,6 +896,13 @@ public sealed partial class MpvPlayerControls : UserControl
 	public string PlayPauseGlyph(bool paused) => paused ? "\uE768" : "\uE769";
 
 	public string PlayPauseName(bool paused) => paused ? "Play" : "Pause";
+
+	// 1.2.0 (the interaction audit, item 14): every button's tooltip names its key
+	public string PlayPauseToolTip(bool paused) => $"{PlayPauseName(paused)} (Space)";
+
+	public string FullScreenToolTip(bool fullScreen) => $"{FullScreenName(fullScreen)} (F)";
+
+	public string MuteToolTip(bool muted) => $"{MuteName(muted)} (M)";
 
 	public string FullScreenGlyph(bool fullScreen) => fullScreen ? "\uE73F" : "\uE740";
 
