@@ -94,7 +94,7 @@ public sealed class SeaglassPaletteTests
 		var text = OkLab.CompositeLuminance(glass.GlassTint, glass.TintAlpha, SeaglassPalette.BackdropCeiling);
 		Assert.True(OkLab.Contrast(glass.OnSurface.Luminance, text) >= 4.5);
 		Assert.True(OkLab.Contrast(glass.Muted.Luminance, text) >= 4.5);
-		// and the accent is a light aqua, with dark text on it
+		// and the accent is the sunset's hot pink, with dark text on it
 		Assert.True(OkLab.Contrast(glass.OnAccent.Luminance, glass.Accent.Luminance) >= 4.5);
 	}
 
@@ -135,12 +135,14 @@ public sealed class SeaglassPaletteTests
 	[InlineData(300)]
 	[InlineData(120)]
 	[InlineData(250)]
-	public void Every_title_lands_inside_the_sea_glass_hues(double seed)
+	public void Every_title_lands_inside_the_sunset_hues(double seed)
 	{
-		var hue = SeaglassPalette.ClampToSeaGlass(seed);
+		var hue = SeaglassPalette.ClampToPaletteHues(seed);
 		var offset = ((hue - SeaglassPalette.DefaultHue + 540) % 360) - 180;
 		Assert.InRange(offset, SeaglassPalette.HueBelow - 0.001, SeaglassPalette.HueAbove + 0.001);
-		Assert.Equal(hue, SeaglassPalette.ClampToSeaGlass(hue), 6);
+		Assert.Equal(hue, SeaglassPalette.ClampToPaletteHues(hue), 6);
+		// magenta-rose to peach: the sunset's own hues (its swatches are OKLCH 5 to 31)
+		Assert.InRange((hue - 340 + 360) % 360, 0, 65);
 	}
 
 	[Fact]
@@ -173,21 +175,39 @@ public sealed class SeaglassPaletteTests
 public sealed class SeaglassFixedChromeTests
 {
 	[Fact]
-	public void The_accent_is_always_sea_glass_aqua_whatever_the_hue()
+	public void The_accent_is_always_the_sunsets_hot_pink_or_crimson_whatever_the_hue()
 	{
 		foreach (var hue in new[] { 0.0, 60, 120, 175, 250, 320 })
 		{
-			Assert.Equal("#5CCFC1", SeaglassPalette.Build(hue).Accent.Hex);
-			Assert.Equal("#13877B", SeaglassPalette.Build(hue, light: true).Accent.Hex);
+			Assert.Equal("#F96985", SeaglassPalette.Build(hue).Accent.Hex);
+			Assert.Equal("#BC1E47", SeaglassPalette.Build(hue, light: true).Accent.Hex);
 		}
 	}
 
-	[Fact]
-	public void The_glass_is_neutral_dark_with_little_chroma()
+	/// <summary>1.1.4: the Play label on the accent fill: dark on hot pink (white there is only 2.8:1), white on crimson.</summary>
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void The_label_on_the_accent_fill_reads(bool light)
 	{
-		var glass = SeaglassPalette.Build(175);
-		var (_, chroma, _) = OkLab.FromLinear(BlurHash.SrgbToLinear(glass.GlassTint.R), BlurHash.SrgbToLinear(glass.GlassTint.G), BlurHash.SrgbToLinear(glass.GlassTint.B));
-		Assert.True(chroma < 0.035, $"tint chroma {chroma:0.000}");
+		var p = SeaglassPalette.Build(SeaglassPalette.DefaultHue, light: light);
+		Assert.True(OkLab.Contrast(p.OnAccent.Luminance, p.AccentFill.Luminance) >= 4.5, $"light {light}: {OkLab.Contrast(p.OnAccent.Luminance, p.AccentFill.Luminance):0.00}");
+		Assert.True(OkLab.Contrast(1.0, SeaglassPalette.AccentDark.Luminance) < 4.5, "white on hot pink must never be the label");
+	}
+
+	[Fact]
+	public void The_glass_is_a_calm_deep_plum_not_the_saturated_maroon()
+	{
+		var glass = SeaglassPalette.Build(SeaglassPalette.DefaultHue);
+		var (l, chroma, hue) = OkLab.FromLinear(BlurHash.SrgbToLinear(glass.GlassTint.R), BlurHash.SrgbToLinear(glass.GlassTint.G), BlurHash.SrgbToLinear(glass.GlassTint.B));
+		Assert.InRange(chroma, 0.02, 0.05);
+		Assert.InRange(l, 0.15, 0.26);
+		Assert.InRange((hue + 360) % 360, 0, 20);
+		// the light theme's glass leans to the pale sun and peach
+		var pale = SeaglassPalette.Build(SeaglassPalette.DefaultHue, light: true);
+		var (pl, _, ph) = OkLab.FromLinear(BlurHash.SrgbToLinear(pale.GlassTint.R), BlurHash.SrgbToLinear(pale.GlassTint.G), BlurHash.SrgbToLinear(pale.GlassTint.B));
+		Assert.True(pl > 0.9);
+		Assert.InRange(ph, 18, 40);
 	}
 
 	/// <summary>

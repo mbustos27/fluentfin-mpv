@@ -1,36 +1,50 @@
 namespace FluentFin.Core.Theming;
 
 /// <summary>
-/// Seaglass: the eight colours one title gives the whole window. Only the HUE comes from the artwork (its BlurHash, decoded to
-/// 16x9 cells, scored the way Material's colour utilities score a source colour and then pulled toward teal); lightness and
-/// chroma are Seaglass's own, so contrast is a property of the ladder, not something checked per title. The ladder is then
+/// The app's palette (1.1.4: a desert sunset, docs/design/SEAGLASS.md): the chrome's ladder is built from one hue, the deep
+/// maroon end of the sunset (<see cref="DefaultHue"/>) for the dark theme and the pale sun and peach end for the light one, with
+/// a hot-pink (dark) or crimson (light) accent. A title's artwork gives only a HUE (its BlurHash, decoded to 16x9 cells, scored
+/// the way Material's colour utilities score a source colour, pulled toward the sunset and clamped to its hues), and that hue
+/// only tints the backdrop (TitleTint). Lightness and chroma are the app's own, so contrast is a property of the ladder: it is
 /// checked against the worst case (the brightest the backdrop can be after its scrim) and adjusted until the text passes.
 /// </summary>
 public sealed class SeaglassPalette
 {
-	/// <summary>The hue of an artwork with no colour (grey, no hash): sea glass.</summary>
-	public const double DefaultHue = 175;
+	/// <summary>The hue of the dark chrome and of an artwork with no colour (grey, no hash): the sunset's deep maroon (#500723 is OKLCH 4.9).</summary>
+	public const double DefaultHue = 8;
 
-	/// <summary>How far the artwork's hue is pulled toward teal (OKLCH 175), 0..1.</summary>
-	public const double TealPull = 0.5;
+	/// <summary>The light theme's hue: the pale sun and the peach hill (#F7AFA9 is OKLCH 24, #F7AA9C 31).</summary>
+	public const double LightHue = 26;
 
-	/// <summary>The hues sea glass comes in, as degrees from teal (175): seafoam and green on one side (-35), cobalt on the other (+75). Every title lands inside.</summary>
-	public const double HueBelow = -35;
-	public const double HueAbove = 75;
+	/// <summary>How far the artwork's hue is pulled toward the palette's (<see cref="DefaultHue"/>), 0..1.</summary>
+	public const double PalettePull = 0.5;
+
+	/// <summary>
+	/// The hues of the sunset, as degrees from <see cref="DefaultHue"/>: magenta-rose on one side (-25, 343), coral and peach on the
+	/// other (+35, 43). Every title's tint lands inside.
+	/// </summary>
+	public const double HueBelow = -25;
+	public const double HueAbove = 35;
 
 	/// <summary>The brightest the page backdrop gets under its scrim (relative luminance, about L 0.67).</summary>
 	public const double BackdropCeiling = 0.22;
 
-	/// <summary>The accent is always sea-glass aqua, whatever the title (the chrome is one fixed palette; the title only tints the backdrop).</summary>
-	public static readonly Rgb AccentDark = new(0x5C, 0xCF, 0xC1);
+	/// <summary>
+	/// The accent is the sunset's hot pink in the dark theme (its label the deep maroon-black: 6.7:1) and its crimson slope in the
+	/// light one (white label: 6.2:1), whatever the title (the chrome is one fixed palette; the title only tints the backdrop).
+	/// </summary>
+	public static readonly Rgb AccentDark = new(0xF9, 0x69, 0x85);
 
-	public static readonly Rgb OnAccentDark = new(0x0A, 0x14, 0x18);
+	public static readonly Rgb OnAccentDark = new(0x24, 0x06, 0x0F);
 
-	public static readonly Rgb AccentLight = new(0x13, 0x87, 0x7B);
+	public static readonly Rgb AccentLight = new(0xBC, 0x1E, 0x47);
 
 	public static readonly Rgb OnAccentLight = new(0xFF, 0xFF, 0xFF);
 
-	public static readonly Rgb AccentFillLight = new(0x0F, 0x76, 0x6B);
+	public static readonly Rgb AccentFillLight = new(0xBC, 0x1E, 0x47);
+
+	/// <summary>The chroma of the dark glass: a calm deep plum, never the saturated maroon itself.</summary>
+	public const double DarkTintChroma = 0.04;
 
 	public const double BodyContrast = 4.5;
 	public const double SmallTextContrast = 7;
@@ -141,11 +155,11 @@ public sealed class SeaglassPalette
 			}
 		}
 
-		return ClampToSeaGlass(OkLab.LerpHue(best, DefaultHue, TealPull));
+		return ClampToPaletteHues(OkLab.LerpHue(best, DefaultHue, PalettePull));
 	}
 
-	/// <summary>The hue inside the sea-glass range (seafoam to cobalt) nearest to <paramref name="hue"/>.</summary>
-	public static double ClampToSeaGlass(double hue)
+	/// <summary>The hue inside the sunset's range (magenta-rose to peach) nearest to <paramref name="hue"/>.</summary>
+	public static double ClampToPaletteHues(double hue)
 	{
 		var offset = ((hue - DefaultHue + 540) % 360) - 180;
 		return (DefaultHue + Math.Clamp(offset, HueBelow, HueAbove) + 360) % 360;
@@ -172,9 +186,9 @@ public sealed class SeaglassPalette
 
 		for (var step = 0; step < 40; step++)
 		{
-			var tint = OkLab.ToRgb(tintL, 0.022, hue);
-			var text = OkLab.ToRgb(textL, 0.006, hue);
-			var muted = OkLab.ToRgb(Math.Min(textL - 0.14, 0.85), 0.012, hue);
+			var tint = OkLab.ToRgb(tintL, DarkTintChroma, hue);
+			var text = OkLab.ToRgb(textL, 0.010, hue);
+			var muted = OkLab.ToRgb(Math.Min(textL - 0.14, 0.85), 0.022, hue);
 			var surface = OkLab.CompositeLuminance(tint, tintAlpha, under);
 			var worst = Math.Min(OkLab.Contrast(text.Luminance, surface), OkLab.Contrast(muted.Luminance, surface));
 			palette.WorstContrast = worst;
@@ -206,28 +220,31 @@ public sealed class SeaglassPalette
 		}
 
 		palette.TintAlpha = tintAlpha;
-		palette.GlassTint = OkLab.ToRgb(tintL, 0.022, hue);
-		palette.Background = OkLab.ToRgb(Math.Max(tintL - 0.07, 0.08), 0.015, hue);
-		palette.ContainerHigh = OkLab.ToRgb(tintL + 0.03, 0.025, hue);
-		palette.OnSurface = OkLab.ToRgb(textL, 0.006, hue);
-		palette.Muted = OkLab.ToRgb(Math.Min(textL - 0.14, 0.85), 0.012, hue);
+		palette.GlassTint = OkLab.ToRgb(tintL, DarkTintChroma, hue);
+		palette.Background = OkLab.ToRgb(Math.Max(tintL - 0.07, 0.08), 0.035, hue);
+		palette.ContainerHigh = OkLab.ToRgb(tintL + 0.03, 0.045, hue);
+		palette.OnSurface = OkLab.ToRgb(textL, 0.010, hue);
+		palette.Muted = OkLab.ToRgb(Math.Min(textL - 0.14, 0.85), 0.022, hue);
 		palette.Accent = AccentDark;
 		palette.AccentFill = AccentDark;
 		palette.OnAccent = OnAccentDark;
-		// the rim goes from the seed hue toward violet (the faint chromatic fringe)
-		palette.Rim = OkLab.ToRgb(0.85, 0.08, hue);
-		palette.RimAlt = OkLab.ToRgb(0.75, 0.10, (hue + 50) % 360);
+		// the rim: the pale sun, and the coral it fades to
+		palette.Rim = OkLab.ToRgb(0.85, 0.08, hue + 16);
+		palette.RimAlt = OkLab.ToRgb(0.75, 0.12, hue + 8);
 		palette.Adjustments = adjustments;
 		return palette;
 	}
 
 	/// <summary>
-	/// The light theme: the same hue, a pale tinted glass (L 0.95) with dark text (L 0.22), checked on the worst case, a dark
-	/// backdrop under the glass. The assertion raises the tint's lightness, then its alpha, then darkens the text.
+	/// The light theme: the glass from the pale sun and peach end (the hue moved by <see cref="LightHue"/> - <see cref="DefaultHue"/>),
+	/// a pale warm tint (L 0.95) with deep maroon text (L 0.22, the dark theme's hue), checked on the worst case, a dark backdrop under
+	/// the glass. The assertion raises the tint's lightness, then its alpha, then darkens the text.
 	/// </summary>
 	private static SeaglassPalette BuildLight(double hue, bool solid)
 	{
 		hue = (hue % 360 + 360) % 360;
+		var textHue = hue;
+		hue = (hue + LightHue - DefaultHue + 360) % 360;
 		var adjustments = new List<string>();
 		var palette = new SeaglassPalette { Hue = hue, Solid = solid, Light = true };
 		var tintL = 0.95;
@@ -238,8 +255,8 @@ public sealed class SeaglassPalette
 		for (var step = 0; step < 40; step++)
 		{
 			var tint = OkLab.ToRgb(tintL, 0.02, hue);
-			var text = OkLab.ToRgb(textL, 0.015, hue);
-			var muted = OkLab.ToRgb(Math.Max(textL + 0.18, 0.1), 0.02, hue);
+			var text = OkLab.ToRgb(textL, 0.05, textHue);
+			var muted = OkLab.ToRgb(Math.Max(textL + 0.18, 0.1), 0.05, textHue);
 			var surface = OkLab.CompositeLuminance(tint, tintAlpha, under);
 			var worst = Math.Min(OkLab.Contrast(text.Luminance, surface), OkLab.Contrast(muted.Luminance, surface));
 			palette.WorstContrast = worst;
@@ -273,14 +290,14 @@ public sealed class SeaglassPalette
 		palette.GlassTint = OkLab.ToRgb(tintL, 0.02, hue);
 		palette.Background = OkLab.ToRgb(Math.Min(tintL + 0.02, 0.985), 0.012, hue);
 		palette.ContainerHigh = OkLab.ToRgb(Math.Min(tintL + 0.03, 0.99), 0.015, hue);
-		palette.OnSurface = OkLab.ToRgb(textL, 0.015, hue);
-		palette.Muted = OkLab.ToRgb(Math.Max(textL + 0.18, 0.1), 0.02, hue);
+		palette.OnSurface = OkLab.ToRgb(textL, 0.05, textHue);
+		palette.Muted = OkLab.ToRgb(Math.Max(textL + 0.18, 0.1), 0.05, textHue);
 		// the accent is deeper on light, with white text on it
 		palette.Accent = AccentLight;
 		palette.AccentFill = AccentFillLight;
 		palette.OnAccent = OnAccentLight;
-		palette.Rim = OkLab.ToRgb(0.45, 0.08, hue);
-		palette.RimAlt = OkLab.ToRgb(0.55, 0.10, (hue + 50) % 360);
+		palette.Rim = OkLab.ToRgb(0.45, 0.08, textHue);
+		palette.RimAlt = OkLab.ToRgb(0.55, 0.12, textHue);
 		palette.Adjustments = adjustments;
 		return palette;
 	}
