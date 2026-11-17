@@ -691,6 +691,8 @@ class Server:
                     self.route = "segments"
                     item = lib.get(mm.group(1))
                     segs = lib.segments(item) if item else []
+                    if os.environ.get("FAKESERVER_NO_SEGMENTS"):
+                        segs = []      # a server without Intro Skipper: Skip intro then comes from the file's chapters
                     types = {t.lower() for v in self.q.get("includesegmenttypes", []) for t in v.split(",") if t}
                     if types:
                         segs = [s for s in segs if s["Type"].lower() in types]
