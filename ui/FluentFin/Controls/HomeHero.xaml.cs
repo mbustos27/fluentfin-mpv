@@ -97,7 +97,8 @@ public sealed partial class HomeHero : UserControl
 	private void BuildDots()
 	{
 		Dots.Children.Clear();
-		Dots.Visibility = PauseButton.Visibility = _slides.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+		Dots.Visibility = PauseButton.Visibility = PreviousButton.Visibility = NextButton.Visibility =
+			_slides.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
 		Dots.KeyDown -= Dots_KeyDown;
 		Dots.KeyDown += Dots_KeyDown;
 		for (var i = 0; i < _slides.Count; i++)
@@ -225,6 +226,37 @@ public sealed partial class HomeHero : UserControl
 		}
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.4 (1.1.3 UX audit, interaction item 13): a click on the artwork, the title or the words opens the slide's
+	/// item, as More info does (and as a streaming app's billboard does); the buttons and the dots do their own thing.
+	/// </summary>
+	private void Root_Tapped(object sender, TappedRoutedEventArgs e)
+	{
+		if (_index < 0 || HeroClick.OnAControl(e.OriginalSource as DependencyObject, Root))
+		{
+			return;
+		}
+
+		App.Commands.DisplayDto(_slides[_index].Dto);
+		e.Handled = true;
+	}
+
+	// a click between the dots is not a click on the artwork
+	private void SlideControls_Tapped(object sender, TappedRoutedEventArgs e) => e.Handled = true;
+
+	private void PreviousButton_Click(object sender, RoutedEventArgs e) => Step(-1);
+
+	private void NextButton_Click(object sender, RoutedEventArgs e) => Step(1);
+
+	private void Step(int delta)
+	{
+		if (_slides.Count > 1)
+		{
+			Show(HeroDots.Step(_index, _slides.Count, delta), animate: true);
+			UpdateTimer();
+		}
+	}
+
 	/// <summary>Seaglass scrolling: the dots are one control: the Tab stop is the dot of the slide shown (see <see cref="Show"/>), Left/Right/Home/End pick a slide.</summary>
 	private void Dots_KeyDown(object sender, KeyRoutedEventArgs e)
 	{
@@ -278,9 +310,30 @@ public sealed partial class HomeHero : UserControl
 	}
 }
 
+/// <summary>Seaglass 1.1.4: whether a click on the hero landed on one of its controls (a button: Play, More info, the dots, pause, the arrows).</summary>
+internal static class HeroClick
+{
+	public static bool OnAControl(DependencyObject? source, DependencyObject hero)
+	{
+		for (var node = source; node is not null && !ReferenceEquals(node, hero); node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+}
+
 /// <summary>Seaglass scrolling: which slide a key picks on the hero's dots (Left/Right by one, no wrap; Home/End).</summary>
 internal static class HeroDots
 {
+	/// <summary>Seaglass 1.1.4: the previous or next slide's index for the arrow buttons, round from the last to the first and back.</summary>
+	public static int Step(int current, int count, int delta) =>
+		count <= 0 ? -1 : (((current + delta) % count) + count) % count;
+
 	/// <summary>Seaglass 1.1.4: each dot's target, the WCAG 2.5.8 minimum (the dot drawn in it stays 8 px, 10 for the slide shown);
 	/// the dots have no gap (HomeHero.xaml), so their centres stay 24 px apart as before (22 + 2).</summary>
 	public const double TargetSize = 24;

@@ -151,6 +151,9 @@ public class NavigationService : INavigationService
 			// fluentfin-mpv: a player page replacing a player page (a remote Play while playing) takes over its history entry
 			DropReplacedPlayerPage(frame.BackStack, x => x.SourcePageType, e.SourcePageType, e.NavigationMode);
 
+			// Seaglass 1.1.4: a season pill switches seasons in place in the history: Back goes to the page before the seasons
+			DropSwitchedSeasonPage(frame.BackStack, x => x.SourcePageType, e.SourcePageType, e.NavigationMode);
+
 			if (frame.GetPageViewModel() is INavigationAware navigationAware)
 			{
 				await navigationAware.OnNavigatedTo(e.Parameter);
@@ -177,6 +180,22 @@ public class NavigationService : INavigationService
 		}
 
 		return removed;
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4 (1.1.3 UX audit, interaction item 10): a season page opened from a season page (its season pills) takes
+	/// over that page's history entry, so looking at seasons 2, 3 and 4 does not put three pages before the series in Back's
+	/// way (Microsoft's navigation history: moving between peers in place is not added to the history).
+	/// </summary>
+	internal static bool DropSwitchedSeasonPage<T>(IList<T> backStack, Func<T, Type> pageType, Type incoming, NavigationMode mode)
+	{
+		if (mode != NavigationMode.New || incoming != typeof(Views.SeasonPage) || backStack.Count == 0 || pageType(backStack[^1]) != incoming)
+		{
+			return false;
+		}
+
+		backStack.RemoveAt(backStack.Count - 1);
+		return true;
 	}
 
 	/// <summary>

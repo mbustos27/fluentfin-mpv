@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.WinUI;
 using FluentFin.Core;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.ViewModels;
 using Microsoft.UI.Xaml;
@@ -38,12 +39,12 @@ public sealed partial class BaseItemDtoCard : UserControl
 	// fluentfin-mpv: the buttons show while the pointer is over the image or the keyboard focus is in the card (ux-review A1)
 	private readonly CardActions _actions = new();
 
-	private readonly PosterTilt _tilt;
-
 	public BaseItemDtoCard()
 	{
 		InitializeComponent();
-		_tilt = new PosterTilt(ImageCanvas, [ImageCanvas, ShadowHost], SheenHost, RootGrid);
+		// Seaglass 1.1.4: the card shows its item's watched and favourite state as the server has it, whichever surface changed it
+		Loaded += (_, _) => ItemUserData.Changed += OnUserDataChanged;
+		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
 
 		// fluentfin-mpv: keyboard access (ux-review A1); only keys nothing inside the card has handled
 		AddHandler(KeyDownEvent, new KeyEventHandler(Card_KeyDown), false);
@@ -83,41 +84,53 @@ public sealed partial class BaseItemDtoCard : UserControl
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new BaseItemDtoCardAutomationPeer(this);
 
-	private void ImageCanvas_Tapped(object sender, TappedRoutedEventArgs e)
+	/// <summary>
+	/// Seaglass 1.1.4: a click anywhere on the card opens its item (the artwork and, now, the title under it), except on one of
+	/// its buttons, which do their own thing.
+	/// </summary>
+	private void Card_Tapped(object sender, TappedRoutedEventArgs e)
 	{
-		if (e.OriginalSource is not (Grid or Image))
-		{
-			return;
-		}
-
-		if (Model is null)
+		if (Model is null || OnAButton(e.OriginalSource as DependencyObject))
 		{
 			return;
 		}
 
 		App.Commands.DisplayDto(Model.Dto);
-
 		e.Handled = true;
 	}
 
-	private void ImageCanvas_PointerEntered(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerEntered());
-
-	private void ImageCanvas_PointerExited(object sender, PointerRoutedEventArgs e)
+	private bool OnAButton(DependencyObject? source)
 	{
-		_tilt.Leave();
-		ShowActions(_actions.PointerExited());
+		for (var node = source; node is not null && !ReferenceEquals(node, this); node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is ButtonBase)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
-	// Seaglass: the tilt toward a mouse or pen; a finger and the keyboard get the lift only
-	private void ImageCanvas_PointerMoved(object sender, PointerRoutedEventArgs e)
+	private void Card_PointerEntered(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerEntered());
+
+	private void Card_PointerExited(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerExited());
+
+	/// <summary>
+	/// Seaglass 1.1.4: the item's user data changed (a toggle here or anywhere else, or a request that failed): the card takes
+	/// the server's state and re-reads every binding, so the toggles, the watched badge, the progress bar, the names and the
+	/// menus (built from the item) say what the server has.
+	/// </summary>
+	private void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
 	{
-		if (e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Touch)
+		if (Model is not { Dto.Id: { } id } model || id != e.ItemId)
 		{
 			return;
 		}
 
-		var point = e.GetCurrentPoint(ImageCanvas).Position;
-		_tilt.Move(point.X, point.Y);
+		model.Dto.UserData = e.UserData;
+		model.UserData = UserItemDataViewModel.FromDto(e.UserData);
+		Bindings.Update();
 	}
 
 	private void Card_GotFocus(object sender, RoutedEventArgs e)
@@ -274,26 +287,27 @@ public sealed partial class BaseItemDtoCard : UserControl
 		return null;
 	}
 
-	// Seaglass 1.1.4: a toggle sets the state it now shows, which its name says (ItemLabels.WatchedAction); the model's copy,
-	// which only Home refreshes, made a second click send the first one's state again
+	// Seaglass 1.1.4: a toggle sets the state it now shows, which its name says (ItemLabels.WatchedAction), through the one
+	// path every surface uses (ItemUserData: the server's answer comes back to this card and every other one of the item; a
+	// failure springs the toggle back). The model's copy, which only Home refreshed, made a second click send the first again.
 	private async void MarkWatchedButton_Clicked(object sender, RoutedEventArgs e)
 	{
-		if (Model is null || JellyfinClient is null)
+		if (Model is null)
 		{
 			return;
 		}
 
-		await JellyfinClient.SetPlayed(Model.Dto, MarkWatchedButton.IsChecked == true);
+		await App.Commands.SetWatched(Model.Dto, MarkWatchedButton.IsChecked == true);
 	}
 
 	private async void AddToFavoriteButton_Clicked(object sender, RoutedEventArgs e)
 	{
-		if (Model is null || JellyfinClient is null)
+		if (Model is null)
 		{
 			return;
 		}
 
-		await JellyfinClient.SetIsFavorite(Model.Dto, AddToFavoriteButton.IsChecked == true);
+		await App.Commands.SetFavorite(Model.Dto, AddToFavoriteButton.IsChecked == true);
 	}
 }
 

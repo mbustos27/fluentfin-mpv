@@ -34,8 +34,160 @@ public sealed class ItemButtonsXamlTests
 		// their names follow the toggle (above); a click sends that state, not the inverse of the model's copy, which only Home refreshes
 		var code = Code("FluentFin/Controls/BaseItemDtoCard.xaml.cs");
 
-		Assert.Contains("SetPlayed(Model.Dto, MarkWatchedButton.IsChecked == true)", code);
-		Assert.Contains("SetIsFavorite(Model.Dto, AddToFavoriteButton.IsChecked == true)", code);
+		Assert.Contains("App.Commands.SetWatched(Model.Dto, MarkWatchedButton.IsChecked == true)", code);
+		Assert.Contains("App.Commands.SetFavorite(Model.Dto, AddToFavoriteButton.IsChecked == true)", code);
+	}
+
+	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 3): every surface sends the state its toggle shows, through ItemUserData.</summary>
+	[Theory]
+	[InlineData("FluentFin/Controls/ItemHero.xaml.cs", "App.Commands.SetWatched(dto, WatchedButton.IsChecked == true)")]
+	[InlineData("FluentFin/Controls/ItemHero.xaml.cs", "App.Commands.SetFavorite(dto, FavoriteButton.IsChecked == true)")]
+	[InlineData("FluentFin/Controls/EpisodeRow.xaml.cs", "App.Commands.SetWatched(dto, WatchedButton.IsChecked == true)")]
+	public void ItemPageAndRowToggles_SetTheStateTheyShow(string file, string call)
+	{
+		Assert.Contains(call, Code(file));
+	}
+
+	[Fact]
+	public void TheToggles_AreNotTheOldToggleCommands()
+	{
+		// ToggleWatched/ToggleFavorite decide from the item's copy: right for a menu, wrong for a toggle that flipped already
+		foreach (var file in new[] { "FluentFin/Controls/ItemHero.xaml", "FluentFin/Controls/EpisodeRow.xaml", "FluentFin/Controls/BaseItemDtoCard.xaml" })
+		{
+			Assert.DoesNotContain("ToggleWatchedCommand", Code(file));
+			Assert.DoesNotContain("ToggleFavoriteCommand", Code(file));
+		}
+	}
+
+	/// <summary>Seaglass 1.1.4: every card, hero and row follows the item's user data as the server has it, whoever changed it.</summary>
+	[Theory]
+	[InlineData("FluentFin/Controls/BaseItemDtoCard.xaml.cs", "Bindings.Update();")]
+	[InlineData("FluentFin/Controls/ItemHero.xaml.cs", "ApplyUserData();")]
+	[InlineData("FluentFin/Controls/EpisodeRow.xaml.cs", "ApplyUserData();")]
+	public void Surfaces_FollowTheServersUserData(string file, string refresh)
+	{
+		var code = Code(file);
+
+		Assert.Contains("ItemUserData.Changed += OnUserDataChanged;", code);
+		Assert.Contains("ItemUserData.Changed -= OnUserDataChanged;", code);
+		Assert.Matches(new Regex(@"void OnUserDataChanged\(object\? sender, ItemUserDataChangedEventArgs e\)[\s\S]*?" + Regex.Escape(refresh)), code);
+	}
+
+	[Fact]
+	public void ItemHerosMenu_IsMadeAgainWithTheItemsState()
+	{
+		// the More menu's "Mark as watched" text is the item's state: made again after a change, not once on load
+		var apply = Regex.Match(Code("FluentFin/Controls/ItemHero.xaml.cs"), @"private void ApplyUserData\(\)[\s\S]*?\n\t}").Value;
+
+		Assert.Contains("MoreButton.Flyout = ", apply);
+		Assert.Contains("WatchedButton.IsChecked = dto?.UserData?.Played;", apply);
+	}
+
+	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 11): the whole card is one target, the title too; no tilt.</summary>
+	[Fact]
+	public void Card_IsOneTarget_TitleIncluded_AndDoesNotTilt()
+	{
+		var card = Load("FluentFin/Controls/BaseItemDtoCard.xaml");
+		var root = FindByName(card, "RootGrid");
+		var code = Code("FluentFin/Controls/BaseItemDtoCard.xaml.cs");
+
+		Assert.Equal("Card_Tapped", (string?)root.Attribute("Tapped"));
+		Assert.Equal("Card_PointerEntered", (string?)root.Attribute("PointerEntered"));
+		Assert.Equal("Card_PointerExited", (string?)root.Attribute("PointerExited"));
+		// the title's panel takes the pointer between its lines
+		var title = FindByName(card, "TitleArea");
+		Assert.Same(root, title.Parent);
+		Assert.Equal("Transparent", (string?)title.Attribute("Background"));
+		// a click on a button is the button's
+		Assert.Contains("if (Model is null || OnAButton(e.OriginalSource as DependencyObject))", code);
+		Assert.DoesNotContain("PosterTilt", code);
+		Assert.DoesNotContain(card.Descendants(), e => (string?)e.Attribute(Xaml + "Name") == "SheenHost");
+		Assert.False(File.Exists(Path.Combine(RepoRoot, "FluentFin/Controls/PosterTilt.cs")));
+	}
+
+	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 6): a click on an episode row plays, as Enter does.</summary>
+	[Fact]
+	public void EpisodeRow_AClickPlays_WithAPlayDisc_AndTheTitleOpensTheEpisode()
+	{
+		var row = Load("FluentFin/Controls/EpisodeRow.xaml");
+		var code = Code("FluentFin/Controls/EpisodeRow.xaml.cs");
+
+		var tapped = Regex.Match(code, @"private void Body_Tapped\([\s\S]*?\n\t}").Value;
+		Assert.Contains("Play();", tapped);
+		Assert.DoesNotContain("OpenDetails", tapped);
+		// a click on the title, a button or the title's link is not the row's
+		Assert.Contains("if (node is ButtonBase || ReferenceEquals(node, title))", code);
+		Assert.Equal("Title_Tapped", (string?)FindByName(row, "TitleText").Attribute("Tapped"));
+		Assert.Matches(new Regex(@"private void Title_Tapped\([\s\S]*?OpenDetails\(\);"), code);
+		// the play disc over the thumbnail: decorative (the row is named for Narrator), never takes the click
+		var disc = FindByName(row, "PlayDisc");
+		Assert.Equal("Raw", (string?)disc.Attribute("AutomationProperties.AccessibilityView"));
+		Assert.Equal("False", (string?)disc.Attribute("IsHitTestVisible"));
+		Assert.Equal("Collapsed", (string?)disc.Attribute("Visibility"));
+		Assert.Contains("PlayDisc.Visibility = _pointerOver || FocusRing.Visibility == Visibility.Visible", code);
+		// details stay in the row's menu for the keyboard
+		Assert.Contains("Text = \"Episode details\"", code);
+	}
+
+	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 5): Back to an item page gives its place back.</summary>
+	[Theory]
+	[InlineData("MoviePage")]
+	[InlineData("SeriesPage")]
+	[InlineData("SeasonPage")]
+	[InlineData("EpisodePage")]
+	public void ItemPages_KeepTheirPlace(string page)
+	{
+		var code = Code($"FluentFin/Views/{page}.xaml.cs");
+
+		Assert.Contains("new ItemPagePlace(this, PageContent,", code);
+		Assert.Matches(new Regex(@"override void OnNavigatedTo\(Microsoft\.UI\.Xaml\.Navigation\.NavigationEventArgs e\)[\s\S]*?_place\.Arrived\(e\);"), code);
+		Assert.Matches(new Regex(@"override void OnNavigatedFrom\(Microsoft\.UI\.Xaml\.Navigation\.NavigationEventArgs e\)[\s\S]*?_place\?\.Left\(\);"), code);
+		Assert.Equal("PageContent", (string?)Load($"FluentFin/Views/{page}.xaml").Descendants().First(e => e.Name.LocalName == "ScrollViewer").Attribute(Xaml + "Name"));
+	}
+
+	[Fact]
+	public void ThePlace_IsGivenBack_OnlyOnBackOrForward_AndScrolledThenFocused()
+	{
+		var code = Code("FluentFin/Views/ItemPagePlace.cs");
+
+		Assert.Contains("PagePlaces.ForReturn(_key, e.NavigationMode is NavigationMode.Back or NavigationMode.Forward)", code);
+		Assert.Contains("PagePlaces.Save(_key, new PagePlace(scroller.VerticalOffset, item, path));", code);
+		Assert.Contains("scroller.ChangeView(null, offset, null, disableAnimation: true);", code);
+		Assert.Contains("control.Focus(FocusState.Programmatic)", code);
+	}
+
+	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 10): switching seasons replaces the history entry.</summary>
+	[Fact]
+	public void SeasonPills_ReplaceTheSeasonInTheHistory()
+	{
+		var code = Code("FluentFin/Services/NavigationService.cs");
+
+		Assert.Contains("DropSwitchedSeasonPage(frame.BackStack, x => x.SourcePageType, e.SourcePageType, e.NavigationMode);", code);
+	}
+
+	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 13): the hero's artwork and words open the item; previous and next.</summary>
+	[Fact]
+	public void HomeHero_TheArtworkOpensTheItem_AndHasPreviousAndNext()
+	{
+		var hero = Load("FluentFin/Controls/HomeHero.xaml");
+		var code = Code("FluentFin/Controls/HomeHero.xaml.cs");
+
+		Assert.Equal("Root_Tapped", (string?)FindByName(hero, "Root").Attribute("Tapped"));
+		Assert.Matches(new Regex(@"private void Root_Tapped\([\s\S]*?HeroClick\.OnAControl[\s\S]*?App\.Commands\.DisplayDto\(_slides\[_index\]\.Dto\);"), code);
+		// a click between the dots is not on the artwork
+		Assert.Equal("SlideControls_Tapped", (string?)FindByName(hero, "SlideControls").Attribute("Tapped"));
+		Assert.Contains("private void SlideControls_Tapped(object sender, TappedRoutedEventArgs e) => e.Handled = true;", code);
+		foreach (var (name, label) in new[] { ("PreviousButton", "Previous slide"), ("NextButton", "Next slide") })
+		{
+			var button = FindByName(hero, name);
+			Assert.Equal(label, (string?)button.Attribute("AutomationProperties.Name"));
+			Assert.Equal(label, (string?)button.Attribute("ToolTipService.ToolTip"));
+			Assert.Equal("24", (string?)button.Attribute("Width"));
+			Assert.Equal("24", (string?)button.Attribute("Height"));
+			// the keyboard has Left/Right on the dots: no extra Tab stops
+			Assert.Equal("False", (string?)button.Attribute("IsTabStop"));
+			Assert.Same(FindByName(hero, "Dots").Parent, button.Parent);
+		}
 	}
 
 	[Fact]

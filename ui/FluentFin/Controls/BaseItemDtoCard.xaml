@@ -51,11 +51,20 @@
         <c:NullableBoolToValueOrDefaultConverter x:Key="NullableBoolToValueOrDefaultConverter" />
     </UserControl.Resources>
 
+    <!--
+        Seaglass 1.1.4 (1.1.3 UX audit, interaction item 11): the whole tile is one target, the title under the artwork too: the
+        pointer over any of it lifts the card and shows its buttons, a click anywhere but on a button opens the item. No tilt
+        toward the pointer and no sheen any more (a tvOS focus effect, odd with a mouse); the lift and the shadow stay.
+    -->
     <Grid
         x:Name="RootGrid"
         ui:VisualExtensions.NormalizedCenterPoint="0.5, 0.5"
         ui:VisualExtensions.Scale="0.9"
-        ContextFlyout="{x:Bind Model.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}">
+        ContextFlyout="{x:Bind Model.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}"
+        PointerCanceled="Card_PointerExited"
+        PointerEntered="Card_PointerEntered"
+        PointerExited="Card_PointerExited"
+        Tapped="Card_Tapped">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -80,11 +89,7 @@
         <Grid
             x:Name="ImageCanvas"
             Background="Transparent"
-            CornerRadius="{StaticResource GlassCardCornerRadius}"
-            PointerEntered="ImageCanvas_PointerEntered"
-            PointerExited="ImageCanvas_PointerExited"
-            PointerMoved="ImageCanvas_PointerMoved"
-            Tapped="ImageCanvas_Tapped">
+            CornerRadius="{StaticResource GlassCardCornerRadius}">
 
             <Grid ui:VisualExtensions.NormalizedCenterPoint="0.5, 0.5">
                 <controls:LazyLoadedImage
@@ -92,12 +97,6 @@
                     EnableBlurHash="True"
                     ImageSource="{x:Bind ImageSource, Mode=OneWay}" />
             </Grid>
-
-            <!--  Seaglass: the specular sheen that follows the pointer (PosterTilt); Full mode only, never takes hits  -->
-            <Border
-                x:Name="SheenHost"
-                AutomationProperties.AccessibilityView="Raw"
-                IsHitTestVisible="False" />
 
             <Grid x:Name="ContentOverlay">
                 <!--  under the buttons while they show, so they read on any artwork  -->
@@ -288,10 +287,12 @@
                 CornerRadius="{StaticResource GlassCardCornerRadius}"
                 IsHitTestVisible="False" />
         </Grid>
-        <!--  the title and subtitle are plain text under the artwork: no plate, no border  -->
+        <!--  the title and subtitle are plain text under the artwork: no plate, no border; part of the card's target (a transparent background takes the pointer between the lines)  -->
         <StackPanel
+            x:Name="TitleArea"
             Grid.Row="1"
             Padding="2,10,2,2"
+            Background="Transparent"
             Spacing="2">
 
             <TextBlock

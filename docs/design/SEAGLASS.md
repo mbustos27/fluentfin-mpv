@@ -55,11 +55,11 @@ Use the keys; never hard-code these values on a page.
 
 - Dark first; light must stay legible. Generous spacing: 48 px page margins at 1920 wide, 24 px between rows.
 - Text over artwork always sits on `GlassImageScrimBrush` (or a left-to-right scrim); contrast at least 4.5:1.
-- Poster tilt and sheen (Full only, `PosterTilt`): the pointed side dips away by up to 7 degrees, in perspective (distance
-  900 px), following the pointer over about 140 ms, with a soft specular radial sheen (a Composition sprite) under the
-  pointer. Mouse and pen only: touch and keyboard focus get the lift without tilt.
-- Cards: lift on pointer-over and keyboard focus: scale about 1.05 on a spring (damping 0.7, period about 50 ms),
-  a deeper shadow; a visible focus ring for the keyboard (never colour alone). No tilt in Reduced or Solid.
+- No poster tilt and no sheen (1.1.4, 1.1.3 UX audit interaction item 11: a tvOS remote's focus effect, odd with a mouse;
+  desktop apps lift, they do not tilt toward the pointer).
+- Cards: the whole tile, the title under the artwork included, is one target. Lift on pointer-over and keyboard focus:
+  scale about 1.05 on a spring (damping 0.7, period about 50 ms), a deeper shadow; a visible focus ring for the keyboard
+  (never colour alone). The spring only while motion is allowed (Full); Reduced and Solid change the shadow only.
 - Hero: up to five items, crossfade 500 to 700 ms, auto-advance every 7 s, paused on hover and focus, off in Reduced.
   No autoplaying trailers or theme music.
 - Artwork: BlurHash placeholder (Jellyfin's `ImageBlurHashes`) that fades into the image; decode at display size

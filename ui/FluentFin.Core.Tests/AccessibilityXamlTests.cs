@@ -220,9 +220,10 @@ public class AccessibilityXamlTests
 		var collapsing = doc.Descendants().Where(e => e.Name.LocalName == "ChangePropertyAction" && (string?)e.Attribute("PropertyName") == "Visibility").ToList();
 
 		Assert.Empty(collapsing);
-		var canvas = FindByName(doc, "ImageCanvas");
-		Assert.Equal("ImageCanvas_PointerEntered", (string?)canvas.Attribute("PointerEntered"));
-		Assert.Equal("ImageCanvas_PointerExited", (string?)canvas.Attribute("PointerExited"));
+		// Seaglass 1.1.4: on the whole card (the title too), no longer the image alone
+		var card = FindByName(doc, "RootGrid");
+		Assert.Equal("Card_PointerEntered", (string?)card.Attribute("PointerEntered"));
+		Assert.Equal("Card_PointerExited", (string?)card.Attribute("PointerExited"));
 	}
 
 	[Fact]

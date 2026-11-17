@@ -30,7 +30,12 @@ public sealed partial class EpisodeRow : UserControl
 		AddHandler(KeyDownEvent, new KeyEventHandler(Row_KeyDown), false);
 		GotFocus += (_, _) => UpdateFocusRing();
 		LostFocus += (_, _) => UpdateFocusRing();
-		Loaded += (_, _) => UpdatePlace();
+		Loaded += (_, _) =>
+		{
+			UpdatePlace();
+			ItemUserData.Changed += OnUserDataChanged;
+		};
+		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
 		// Seaglass 1.1.4: the toggle's name follows what it shows (a click flips it before the server hears it)
 		WatchedButton.Checked += (_, _) => UpdateWatchedName();
 		WatchedButton.Unchecked += (_, _) => UpdateWatchedName();
@@ -73,19 +78,41 @@ public sealed partial class EpisodeRow : UserControl
 		RuntimeText.Text = runtime;
 		RuntimeText.Visibility = runtime.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		OverviewText.Text = dto?.Overview ?? "";
+		PlayButton.CommandParameter = dto;
+		Label(PlayButton, ItemLabels.EpisodeAction("Play", dto));
+		ApplyUserData();
+		UpdatePlace();
+	}
+
+	/// <summary>Seaglass 1.1.4: the progress, the watched mark and the Watched toggle, as the server has them (<see cref="ItemUserData"/>).</summary>
+	private void ApplyUserData()
+	{
+		var dto = Dto;
 		Progress.Value = ItemRowConverters.Progress(dto);
 		Progress.Visibility = ItemRowConverters.InProgress(dto);
 		WatchedMark.Visibility = ItemRowConverters.Watched(dto);
-
-		foreach (var button in new ButtonBase[] { PlayButton, WatchedButton })
-		{
-			button.CommandParameter = dto;
-		}
-
-		Label(PlayButton, ItemLabels.EpisodeAction("Play", dto));
 		WatchedButton.IsChecked = dto?.UserData?.Played;
 		UpdateWatchedName();
-		UpdatePlace();
+	}
+
+	private void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
+	{
+		if (Dto is not { Id: { } id } dto || id != e.ItemId)
+		{
+			return;
+		}
+
+		dto.UserData = e.UserData;
+		ApplyUserData();
+	}
+
+	// Seaglass 1.1.4: the toggle sends the state it shows after the click (ItemUserData; a failure springs it back)
+	private async void WatchedButton_Click(object sender, RoutedEventArgs e)
+	{
+		if (Dto is { } dto)
+		{
+			await App.Commands.SetWatched(dto, WatchedButton.IsChecked == true);
+		}
 	}
 
 	/// <summary>
@@ -160,26 +187,80 @@ public sealed partial class EpisodeRow : UserControl
 		e.Handled = true;
 	}
 
-	private void UpdateFocusRing() =>
+	private bool _pointerOver;
+
+	private void UpdateFocusRing()
+	{
 		FocusRing.Visibility = FocusState is FocusState.Keyboard or FocusState.Programmatic ? Visibility.Visible : Visibility.Collapsed;
+		UpdatePlayDisc();
+	}
 
-	private void Body_PointerEntered(object sender, PointerRoutedEventArgs e) => HoverOverlay.Visibility = Visibility.Visible;
+	// Seaglass 1.1.4: the play disc says what a click or Enter does: shown while the pointer is on the row or the keyboard on it
+	private void UpdatePlayDisc() =>
+		PlayDisc.Visibility = _pointerOver || FocusRing.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
 
-	private void Body_PointerExited(object sender, PointerRoutedEventArgs e) => HoverOverlay.Visibility = Visibility.Collapsed;
+	private void Body_PointerEntered(object sender, PointerRoutedEventArgs e)
+	{
+		_pointerOver = true;
+		HoverOverlay.Visibility = Visibility.Visible;
+		UpdatePlayDisc();
+	}
 
+	private void Body_PointerExited(object sender, PointerRoutedEventArgs e)
+	{
+		_pointerOver = false;
+		HoverOverlay.Visibility = Visibility.Collapsed;
+		UpdatePlayDisc();
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4 (1.1.3 UX audit, interaction item 6): a click on the row plays the episode, as Enter does; Play and Watched
+	/// do their own thing, and the title opens the episode's page (<see cref="Title_Tapped"/>).
+	/// </summary>
 	private void Body_Tapped(object sender, TappedRoutedEventArgs e)
 	{
-		// Play and Watched do their own thing
-		for (var node = e.OriginalSource as DependencyObject; node is not null && !ReferenceEquals(node, Body); node = VisualTreeHelper.GetParent(node))
+		if (RowClick.For(e.OriginalSource as DependencyObject, Body, TitleText) == RowClickAction.Play)
 		{
-			if (node is ButtonBase)
+			Play();
+			e.Handled = true;
+		}
+	}
+
+	private void Title_Tapped(object sender, TappedRoutedEventArgs e)
+	{
+		OpenDetails();
+		e.Handled = true;
+	}
+
+	private void Title_PointerEntered(object sender, PointerRoutedEventArgs e) => TitleText.TextDecorations = Windows.UI.Text.TextDecorations.Underline;
+
+	private void Title_PointerExited(object sender, PointerRoutedEventArgs e) => TitleText.TextDecorations = Windows.UI.Text.TextDecorations.None;
+}
+
+/// <summary>Seaglass 1.1.4: what a click on an episode row does.</summary>
+internal enum RowClickAction
+{
+	/// <summary>The row's own action: play the episode (Enter's).</summary>
+	Play,
+
+	/// <summary>The title (its page) or a button (its own action): the row does nothing more.</summary>
+	None,
+}
+
+/// <summary>Seaglass 1.1.4: a click on the row plays, unless it was on one of the row's buttons or on the title (the link to the page).</summary>
+internal static class RowClick
+{
+	public static RowClickAction For(DependencyObject? source, DependencyObject row, DependencyObject title)
+	{
+		for (var node = source; node is not null && !ReferenceEquals(node, row); node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is ButtonBase || ReferenceEquals(node, title))
 			{
-				return;
+				return RowClickAction.None;
 			}
 		}
 
-		OpenDetails();
-		e.Handled = true;
+		return RowClickAction.Play;
 	}
 }
 

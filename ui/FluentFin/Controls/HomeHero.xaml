@@ -10,7 +10,8 @@
     <!--
         Seaglass: Home's hero (docs/design/SEAGLASS.md). The slide's backdrop fills the width, scrimmed at the left and the
         bottom so the words read on any artwork; its logo (or its title), meta line, overview, the Play pill and the More
-        info pill sit at the lower left; the dots at the lower right. Slides crossfade (600 ms); they advance by themselves
+        info pill sit at the lower left; the dots at the lower right. Seaglass 1.1.4: a click on the artwork or the words opens
+        the slide's item, as More info does; previous and next slide flank the dots. Slides crossfade (600 ms); they advance by themselves
         only when GlassMode allows motion, and not while the pointer or the focus is in the hero.
     -->
     <Grid
@@ -23,7 +24,8 @@
         GotFocus="Root_GotFocus"
         LostFocus="Root_LostFocus"
         PointerEntered="Root_PointerEntered"
-        PointerExited="Root_PointerExited">
+        PointerExited="Root_PointerExited"
+        Tapped="Root_Tapped">
         <Grid.Background>
             <SolidColorBrush Color="#FF101A1E" />
         </Grid.Background>
@@ -116,8 +118,10 @@
             Padding="10,6"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
+            x:Name="SlideControls"
             Background="#66000000"
-            CornerRadius="{StaticResource GlassChipCornerRadius}">
+            CornerRadius="{StaticResource GlassChipCornerRadius}"
+            Tapped="SlideControls_Tapped">
             <StackPanel Orientation="Horizontal" Spacing="4">
                 <!--  Seaglass scrolling: a visible pause for the auto-advance (WCAG 2.2.2); the dots are one Tab stop, Left/Right pick a slide  -->
                 <Button
@@ -139,6 +143,26 @@
                         Foreground="{ThemeResource GlassTextPrimaryBrush}"
                         Glyph="&#xE769;" />
                 </Button>
+                <!--  Seaglass 1.1.4 (1.1.3 UX audit, interaction item 13): previous and next slide for the pointer (the keyboard has Left/Right on the dots); at the dots, as the words' panel takes the hero's left edge  -->
+                <Button
+                    x:Name="PreviousButton"
+                    RequestedTheme="Dark"
+                    Width="24"
+                    Height="24"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Previous slide"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="PreviousButton_Click"
+                    CornerRadius="12"
+                    IsTabStop="False"
+                    ToolTipService.ToolTip="Previous slide">
+                    <FontIcon
+                        FontSize="11"
+                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                        Glyph="&#xE76B;" />
+                </Button>
                 <!--  Seaglass 1.1.4: the dots' targets are 24 px and touch (HeroDots.TargetSize), so they keep their old spacing  -->
                 <StackPanel
                     x:Name="Dots"
@@ -146,6 +170,25 @@
                     Orientation="Horizontal"
                     Spacing="0"
                     TabFocusNavigation="Once" />
+                <Button
+                    x:Name="NextButton"
+                    RequestedTheme="Dark"
+                    Width="24"
+                    Height="24"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Next slide"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="NextButton_Click"
+                    CornerRadius="12"
+                    IsTabStop="False"
+                    ToolTipService.ToolTip="Next slide">
+                    <FontIcon
+                        FontSize="11"
+                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                        Glyph="&#xE76C;" />
+                </Button>
             </StackPanel>
         </Border>
     </Grid>
