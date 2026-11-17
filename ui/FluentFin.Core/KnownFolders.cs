@@ -74,8 +74,20 @@ public class KnownFolders
 		var target = Path.Combine(localAppData, FolderName);
 		var legacy = Path.Combine(localAppData, LegacyFolderName);
 		var partial = target + ".copying";
+		// two Seaglass windows started together on the first run must not share the partial folder (one would delete or move
+		// the other's half-done copy): one copies, the other waits and then finds the finished folder
+		using var copyLock = new Mutex(false, @"Local\Seaglass-data-folder-copy");
 		try
 		{
+			try
+			{
+				copyLock.WaitOne(TimeSpan.FromMinutes(5));
+			}
+			catch (AbandonedMutexException)
+			{
+				// the other copier ended without releasing it: ours now, and its partial folder is deleted below
+			}
+
 			if (Directory.Exists(target) || !Directory.Exists(legacy))
 			{
 				return null;
@@ -106,6 +118,11 @@ public class KnownFolders
 			}
 
 			return $"Could not copy the data folder {legacy} to {target}: {ex.Message}. Using the old folder in place; the copy is tried again at the next start";
+		}
+		finally
+		{
+			try { copyLock.ReleaseMutex(); }
+			catch (ApplicationException) { } // not held (the wait timed out)
 		}
 	}
 
@@ -150,7 +167,7 @@ public class KnownFolders
 		using var source = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
 		{
 			DataSource = from,
-			Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadWrite,
+			Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly, // the old folder is never changed (no checkpoint on close)
 			Pooling = false,
 		}.ToString());
 		using var destination = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
