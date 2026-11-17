@@ -1,5 +1,47 @@
 # Changelog
 
+## 1.1.3
+
+- **Copy Download URL is gone: it put your access token on the clipboard.** The link it copied carried your Jellyfin
+  sign-in token, so anything that could read the clipboard (or Windows' clipboard history) could use your account. If you
+  ever pasted one somewhere, sign out of Seaglass and sign in again: signing out ends that token on the server.
+- **Delete asks first.** Delete in an item's menu now opens a question that names the item (a season's says Season), with
+  Cancel as the default, so Enter or Escape keeps everything. Removing a server or a saved sign-in in Settings asks the
+  same way, naming the server or the user.
+- **Item menus only offer what works.** Play all from here, Shuffle, Add to playlist, Add to collection and Play On did
+  nothing and are gone. Edit metadata, Edit images, Identify and Refresh metadata show only for server administrators
+  (Edit subtitles also for users allowed to manage subtitles), as in Jellyfin's web app. A poster whose menu would be
+  empty has no More button.
+- **A simpler rail and tidier Settings.**
+  - **Rail:** only places to go: Home, Libraries, Diary and Settings, and Settings is marked while it is open.
+    Contribute moved to Settings > About; Jellyseerr, which showed for everyone, moved to Settings > Integrations.
+  - **Settings:** every group has a title, in the order you need them: Appearance, Playback, Audio and subtitles,
+    Servers and accounts, Integrations, Advanced and About.
+  - **About:** the version and the licence, Check for updates, Keyboard shortcuts, Report a problem and Contribute.
+  - The player list shows only when there is more than one player to choose, and "Play the next episode automatically"
+    only for Windows Media Player, the one player that follows it.
+- **Season pages and libraries, by keyboard and Narrator.**
+  - **Episodes:** each episode is one Tab stop (it was five buttons). Up/Down/Home/End move between episodes, Enter
+    plays, and the Menu key or Shift+F10 opens its menu (Episode details, favourite and the rest). Narrator reads
+    "S1E4 Title, watched" and "4 of 8".
+  - **Library and See all grids:** one Tab stop that comes back to the card you left; the arrows in all four
+    directions, Home/End and PageUp/PageDown. Narrator says each card's place in the whole library ("12 of 320"), not in
+    its page of 100.
+  - **Leaving with Up and Down** goes to what is above or below on the page: Up from the first row reaches the hero again,
+    and a See all grid no longer sends the focus to the title bar.
+  - Narrator no longer says "100% watched" for an episode that is not finished.
+- **One glass for menus, tooltips and dialogs.** Menus, context menus, flyouts, tooltips and every dialog share the same
+  glass, 12 px corners, light edge and text colour; opaque in Solid mode, system colours in high contrast. Menus no
+  longer stack two blurs, a dialog draws its glass once, short dialogs (a sign-in error, a yes/no question) keep a
+  readable width, and long dialog titles wrap.
+- **Progress you can see on any poster.** Progress bars on posters and episode thumbnails sit on a dark track that runs
+  the bar's whole height, in the light aqua in both themes; before, the bar sat on the artwork itself and could vanish on
+  a poster of about its own lightness. The watched mark on episode thumbnails is the same aqua with a dark check.
+- **Accent details:** links and secondary accent text use Seaglass's aqua instead of Windows' accent colour, and in high
+  contrast the Home hero's text takes the system text colour (it disappeared on the light contrast themes).
+- **TODO (player stream, wip/113-player, not merged yet): wheel volume fill, full screen (black cover,
+  `SEAGLASS_FULLSCREEN`) and its other fixes, the player's menus.** Replace this line when it is merged.
+
 ## 1.1.2
 
 - **A cleaner, glassier Seaglass.**

@@ -19,7 +19,7 @@ Everything below the feature list is for building from source.
 
 ## What Seaglass adds to FluentFin
 
-- **The glass look.** Frosted glass on the navigation, title bar, search, menus, dialogs and page sections, with the current title's artwork softly tinting the whole window. Posters and artwork stay solid. Settings → Appearance → Glass: **Automatic** (follows Windows' transparency, animation and high-contrast settings), **Full**, **Reduced** (no motion) or **Solid** (no translucency). The design and the research behind it: [docs/design/SEAGLASS.md](docs/design/SEAGLASS.md).
+- **The glass look.** Frosted glass on the navigation, title bar, search, menus, tooltips, dialogs and page sections, with the current title's artwork softly tinting the whole window. Posters and artwork stay solid. Settings → Appearance → Glass: **Automatic** (follows Windows' transparency, animation and high-contrast settings), **Full**, **Reduced** (no motion) or **Solid** (no translucency). The design and the research behind it: [docs/design/SEAGLASS.md](docs/design/SEAGLASS.md).
 - **Home, item pages and the player, redesigned.**
   - **Home:** a hero of up to five items that never autoplays trailers, and poster rows whose cards lift on hover.
   - **Item pages:** a full-width backdrop with the title's logo, info chips (year, rating, runtime, resolution, HDR, audio), and Play as the one highlighted action.
@@ -27,7 +27,7 @@ Everything below the feature list is for building from source.
 - **Mouse and keyboard.**
   - Mouse buttons 4 and 5, Alt+←/→ and the keyboard's Back and Forward keys go back and forward between pages.
   - Shortcuts everywhere: search (Ctrl+F or /), Settings (Ctrl+,), and the usual player keys (Space/K, J/L, ←/→, M, C, V, B, F, 0–9 and more).
-  - Press **?** or **F1** for the full list, or see [docs/SHORTCUTS.md](docs/SHORTCUTS.md).
+  - Press **?** or **F1** (or Settings → About → Keyboard shortcuts) for the full list, or see [docs/SHORTCUTS.md](docs/SHORTCUTS.md).
 - **mpv playback through jellyfin-mpv-shim.** The player is "mpv" (the default). The shim runs headless in a *bridge mode*. It takes care of PlaybackInfo and the transcode decision, track selection, trickplay and skip-intro, and reports progress to the server. FluentFin talks to it over a stdio JSON-lines protocol ([docs/BRIDGE.md](docs/BRIDGE.md)), and mpv draws inside FluentFin's player page.
 - **A polished mpv bar.** By default the bar is [uosc](https://github.com/tomasklaen/uosc) in FluentFin's look, with the shim's own bar as the fallback. It shows the series and episode title, fills the seek bar in your accent colour with trickplay previews, offers previous, next and a Skip Intro button, keeps subtitles above the bar, takes FluentFin's keys (k, j/l, arrows, s, Shift+N/P), and the mouse wheel changes the volume.
 - **Seaglass's own player controls (the default).** With Settings → Playback → Player controls → Seaglass, libmpv renders in-process into a WinUI composition swap chain, and Seaglass draws its own controls over the video: seek, play/pause, ±10/30 s, Skip intro/credits (button and S key), next episode, volume, audio and subtitle menus (with text size), full screen, and auto-hide. This mode needs libmpv: the release includes it, and a source build needs it in `vendor\libmpv` (see `vendor/libmpv/VENDORED.md`). When libmpv cannot load, Seaglass falls back to mpv's controls and says so.
@@ -38,10 +38,13 @@ Everything below the feature list is for building from source.
   - Ratings are sent to Jellyfin only if you turn that on.
 - **Faster Home.** The libraries list is cached per session, rows are requested in parallel with a placeholder each, and the last Home page is saved and shown instantly on the next start. In a test with a 150 ms network delay, the first row appeared in about 0.18 s instead of 1.75 s.
 - **Clearer states.** A loading screen with Cancel, plus error and empty states with Try again on Home, libraries, item pages, Search and the server page.
-- **Settings → Playback, Audio and subtitles.** Audio and subtitle language are your Jellyfin user settings; the skip prompt and wheel volume are kept on this PC. Settings → About has the version, the licence, Contribute and Report a problem; Settings → Integrations opens Jellyseerr.
+- **Settings in titled groups.** Appearance, Playback, Audio and subtitles, Servers and accounts, Integrations, Advanced and About. Audio and subtitle language are your Jellyfin user settings; the skip prompt and wheel volume are kept on this PC. **Settings → About** has the version and the licence, Check for updates, Keyboard shortcuts, Report a problem and Contribute; **Settings → Integrations** opens Jellyseerr.
+- **The navigation rail** holds only places: Home, Libraries, Diary and Settings.
+- **Item menus that only offer what works.** The More menu lists only entries that do something; the editing tools (metadata, images, identify, refresh) are shown to server administrators only. **Delete** asks first and names the item, and removing a server or a saved sign-in names it too; Cancel is the default.
 - **Keyboard and screen-reader work.**
-  - Cards can be reached with Tab and the arrow keys.
-  - Narrator reads each card by name, every icon button has a name, and an item page's title logo is read as its heading.
+  - Rows, season pages' episode lists and library grids are one Tab stop each, and Tab comes back to the card or episode you left; the arrow keys, Home/End (and PageUp/PageDown in a grid) move inside them, and Up/Down leave them for what is above or below.
+  - An episode is one stop: Enter plays it, and the Menu key or Shift+F10 opens its menu.
+  - Narrator reads each card by name with its place ("12 of 320"), each episode as "S1E4 Title, watched", every icon button has a name, and an item page's title logo is read as its heading.
   - Item pages offer "Resume at…" and "Play from beginning".
   - Long text wraps, with Show more.
   - Colours follow high-contrast themes.

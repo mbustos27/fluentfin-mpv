@@ -18,7 +18,7 @@
 		<LangVersion>preview</LangVersion>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<!-- fluentfin-mpv: the release version (shown, and sent to Jellyfin through Core\AppVersion); docs\RELEASE.md -->
-		<Version Condition=" '$(BuildVersion)' == '' ">1.1.2</Version>
+		<Version Condition=" '$(BuildVersion)' == '' ">1.1.3</Version>
 		<Version Condition=" '$(BuildVersion)' != '' ">$(BuildVersion)</Version>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 		<!-- Seaglass: what Properties > Details shows for Seaglass.exe (the launcher and the backend say the same: tools/release) -->

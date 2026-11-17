@@ -84,6 +84,28 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `InputSiteWindowClass` child (the thread's focus window), not its `DesktopChildSiteBridge`; the
   fluentfin-controls harness posts there (Space, F, Escape through the page's key path).
 
+## Seaglass 1.1.3: rail, Settings, item menus, keyboard, glass
+- **Checks only a real screen and real hands can settle.** The off-screen harness posts keys to the window and reads UI
+  Automation (`then-rows`, `then-wheel`, `then-season`, `then-library`); it cannot post Shift (WinUI reads the keyboard's
+  real state) or drive a touchpad, a gamepad or Narrator's voice. Still to try by hand: Shift+Tab out of a row, a grid
+  and an episode list back to where it came from; Shift+F10 on a card and on an episode row (the harness uses the Menu
+  key); a touchpad's two-finger swipe and a gamepad's D-pad and A/B in rows, grids and episode lists; Narrator by ear
+  (a card's "12 of 320", an episode's "S1E4 Title, watched", "4 of 8"); holding an arrow key in a 320-card grid (real
+  key repeat).
+- **Copy Download URL is removed** (it put the access token on the clipboard). A token copied with an earlier version
+  stays valid until that sign-in ends; signing out ends it (`/Sessions/Logout`).
+- **Delete's question is tested as behaviour** (`ItemMenu.RunAsync`: nothing runs without the yes); the delete request
+  after the yes is upstream FluentFin's, unchanged, and was not run against a real server here.
+- **Jellyseerr** (Settings > Integrations) was not tried against a real Jellyseerr: the fake server has none.
+- **Menus and tooltips are windows of their own**: their system backdrop never shows in an off-screen capture
+  (PrintWindow draws them over black), so their colours were measured as the worst case and the look over real content
+  is still to see on a screen, in both themes.
+- **The accent on artwork** is wired on cards' and episode rows' progress bars and on the episode row's watched mark.
+  The card's own corner badge (watched check or unplayed count, `CardBadgeBackground`) keeps its own colours. In the
+  light theme the episode's watched mark is now the light aqua: about 1.8:1 against a very bright thumbnail around it
+  (4.2:1 with the old deep aqua), while its dark check has 7.7:1 on it (measured; 4.2:1 before). Measurements:
+  `docs\design\SEAGLASS.md`, 1.1.3.
+
 ## UI (`ui\FluentFin.Core\Mpv`, `ui\FluentFin`)
 - **Play on a season starts at the series' first unplayed episode**, not the season's
   (`MpvQueue`): what FluentFin's own player does, kept so the mpv path starts where the old
