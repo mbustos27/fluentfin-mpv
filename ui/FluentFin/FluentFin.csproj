@@ -18,7 +18,7 @@
 		<LangVersion>preview</LangVersion>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<!-- fluentfin-mpv: the release version (shown, and sent to Jellyfin through Core\AppVersion); docs\RELEASE.md -->
-		<Version Condition=" '$(BuildVersion)' == '' ">1.1.0</Version>
+		<Version Condition=" '$(BuildVersion)' == '' ">1.1.1</Version>
 		<Version Condition=" '$(BuildVersion)' != '' ">$(BuildVersion)</Version>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 		<AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
