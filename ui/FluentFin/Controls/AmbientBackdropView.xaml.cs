@@ -1,10 +1,13 @@
+using FluentFin.Core.Theming;
 using FluentFin.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using System.Numerics;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace FluentFin.Controls;
 
@@ -15,7 +18,11 @@ namespace FluentFin.Controls;
 public sealed partial class AmbientBackdropView : UserControl
 {
 	/// <summary>The width the artwork is decoded at: small, and scaled up, so it is soft and cheap.</summary>
-	public const int DecodeWidth = 64;
+	public const int DecodeWidth = 10;
+
+	/// <summary>The size the BlurHash is drawn at: a smooth colour field.</summary>
+	public const int HashWidth = 32;
+	public const int HashHeight = 18;
 
 	public static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(600);
 
@@ -43,10 +50,29 @@ public sealed partial class AmbientBackdropView : UserControl
 	/// <summary>The decoded-small source for an artwork address.</summary>
 	public static BitmapImage SourceFor(Uri uri) => new() { DecodePixelWidth = DecodeWidth, UriSource = uri };
 
+	/// <summary>
+	/// What the backdrop draws: the BlurHash as a 32x18 picture (a smooth colour field, no recognisable shapes), else, with no hash,
+	/// the artwork decoded 10 px wide and stretched.
+	/// </summary>
+	private static ImageSource SourceFor(Uri uri, string? hash)
+	{
+		if (BlurHash.ToBgra(hash, HashWidth, HashHeight) is { } pixels)
+		{
+			var bitmap = new WriteableBitmap(HashWidth, HashHeight);
+			pixels.CopyTo(0, bitmap.PixelBuffer, 0, pixels.Length);
+			bitmap.Invalidate();
+			return bitmap;
+		}
+
+		return SourceFor(uri);
+	}
+
 	private void OnLoaded(object sender, RoutedEventArgs e)
 	{
 		AmbientBackdrop.Changed += OnBackdropChanged;
 		GlassMode.Changed += OnModeChanged;
+		TitleTint.Changed += OnTintChanged;
+		UpdateTint();
 		UpdateMode();
 		Show(AmbientBackdrop.Current, animate: false);
 	}
@@ -55,12 +81,33 @@ public sealed partial class AmbientBackdropView : UserControl
 	{
 		AmbientBackdrop.Changed -= OnBackdropChanged;
 		GlassMode.Changed -= OnModeChanged;
+		TitleTint.Changed -= OnTintChanged;
 		_fade?.Stop();
 		// Translation can be stopped (or animated) only once it is enabled on the element; otherwise it throws
 		ElementCompositionPreview.SetIsTranslationEnabled(Drift, true);
 		var visual = ElementCompositionPreview.GetElementVisual(Drift);
 		visual.StopAnimation("Scale");
 		visual.StopAnimation("Translation");
+	}
+
+	private void OnTintChanged(object? sender, EventArgs e)
+	{
+		if (DispatcherQueue.HasThreadAccess)
+		{
+			UpdateTint();
+		}
+		else
+		{
+			DispatcherQueue.TryEnqueue(UpdateTint);
+		}
+	}
+
+	/// <summary>The title's hue as a clean mid colour, at <see cref="TitleTint.MaxOpacity"/>: all the colour a title gives the window.</summary>
+	private void UpdateTint()
+	{
+		var c = OkLab.ToRgb(0.62, 0.12, TitleTint.Hue);
+		TintBrush.Color = Windows.UI.Color.FromArgb(255, c.R, c.G, c.B);
+		Tint.Opacity = TitleTint.MaxOpacity;
 	}
 
 	private void OnBackdropChanged(object? sender, Uri? uri) => Show(uri, animate: true);
@@ -86,6 +133,7 @@ public sealed partial class AmbientBackdropView : UserControl
 		BackImage.Visibility = visibility;
 		FrontImage.Visibility = visibility;
 		Dim.Visibility = visibility;
+		Tint.Visibility = visibility;
 		UpdateBase();
 		UpdateDrift();
 	}
@@ -163,14 +211,19 @@ public sealed partial class AmbientBackdropView : UserControl
 
 		if (!animate)
 		{
-			BackImage.Source = SourceFor(uri);
+			BackImage.Source = SourceFor(uri, AmbientBackdrop.BlurHash);
 			BackImage.Opacity = 1;
 			FrontImage.Source = null;
 			return;
 		}
 
 		// shown once decoded (OnFrontImageOpened), so a slow image never leaves a hole
-		FrontImage.Source = SourceFor(uri);
+		FrontImage.Source = SourceFor(uri, AmbientBackdrop.BlurHash);
+		if (FrontImage.Source is WriteableBitmap)
+		{
+			// a drawn bitmap is ready at once: no ImageOpened to wait for
+			StartFade();
+		}
 	}
 
 	private void OnFrontImageOpened(object sender, RoutedEventArgs e)
@@ -180,6 +233,11 @@ public sealed partial class AmbientBackdropView : UserControl
 			return;
 		}
 
+		StartFade();
+	}
+
+	private void StartFade()
+	{
 		var fade = new Storyboard();
 		var animation = new DoubleAnimation { From = 0, To = 1, Duration = FadeDuration, EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut } };
 		Storyboard.SetTarget(animation, FrontImage);

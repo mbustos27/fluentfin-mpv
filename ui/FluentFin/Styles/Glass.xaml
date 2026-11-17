@@ -27,11 +27,11 @@
                 TintColor="#101C20"
                 TintLuminosityOpacity="0.8"
                 TintOpacity="0.65" />
-            <!--  the rim of thick glass: lit on the top left, the title's aqua (set per title, SeaglassTheme) on the bottom right  -->
-            <LinearGradientBrush x:Key="GlassStrokeBrush" StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Offset="0" Color="#66FFFFFF" />
-                <GradientStop Offset="0.4" Color="#1AFFFFFF" />
-                <GradientStop Offset="1" Color="#665CCFC1" />
+            <!--  one thin, light edge: brightest along the top, nearly gone below  -->
+            <LinearGradientBrush x:Key="GlassStrokeBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#4DFFFFFF" />
+                <GradientStop Offset="0.3" Color="#14FFFFFF" />
+                <GradientStop Offset="1" Color="#0AFFFFFF" />
             </LinearGradientBrush>
             <!--  the inner bevel: a second, fainter stroke just inside the rim, lit along the top edge only  -->
             <LinearGradientBrush x:Key="GlassBevelBrush" StartPoint="0,0" EndPoint="0,1">
@@ -40,9 +40,7 @@
                 <GradientStop Offset="1" Color="#00FFFFFF" />
             </LinearGradientBrush>
             <!--  the milk of frosted glass: a little white over the tint  -->
-            <SolidColorBrush x:Key="GlassMilkBrush" Color="#10FFFFFF" />
-            <!--  the title plate under a poster (SeaglassTheme tints it per title)  -->
-            <SolidColorBrush x:Key="GlassPlateBrush" Color="#9916262B" />
+            <SolidColorBrush x:Key="GlassMilkBrush" Color="#08FFFFFF" />
             <!--  the faint inner glow along a panel's top: light that seems to enter the glass edge  -->
             <LinearGradientBrush x:Key="GlassGlowBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#2EFFFFFF" />
@@ -51,7 +49,7 @@
             </LinearGradientBrush>
             <!--  the shadow under floating panels  -->
             <x:Double x:Key="GlassShadowOpacity">0.30</x:Double>
-            <x:Double x:Key="GlassContactShadowOpacity">0.45</x:Double>
+            <x:Double x:Key="GlassContactShadowOpacity">0.22</x:Double>
             <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="#1AFFFFFF" />
             <SolidColorBrush x:Key="GlassPressedOverlayBrush" Color="#0DFFFFFF" />
             <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="#FFFFFFFF" />
@@ -99,7 +97,6 @@
                 <GradientStop Offset="1" Color="#00FFFFFF" />
             </LinearGradientBrush>
             <SolidColorBrush x:Key="GlassMilkBrush" Color="#14FFFFFF" />
-            <SolidColorBrush x:Key="GlassPlateBrush" Color="#B3F4FAF9" />
             <LinearGradientBrush x:Key="GlassGlowBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#99FFFFFF" />
                 <GradientStop Offset="0.3" Color="#26FFFFFF" />
@@ -135,7 +132,6 @@
             <SolidColorBrush x:Key="GlassGlowBrush" Color="Transparent" />
             <SolidColorBrush x:Key="GlassBevelBrush" Color="Transparent" />
             <SolidColorBrush x:Key="GlassMilkBrush" Color="Transparent" />
-            <SolidColorBrush x:Key="GlassPlateBrush" Color="Transparent" />
             <x:Double x:Key="GlassShadowOpacity">0</x:Double>
             <x:Double x:Key="GlassContactShadowOpacity">0</x:Double>
             <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="Transparent" />
@@ -230,7 +226,7 @@
                         Color="Black" />
                 </ui:Effects.Shadow>
             </Border>
-            <!--  bottom to top: the frosted glass, the milk, the grain, the inner glow, the bevel, then the rim  -->
+            <!--  bottom to top: the frosted glass, the milk, the grain (barely there), the inner glow, then one thin light edge  -->
             <Border Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}" />
             <Border
                 Background="{ThemeResource GlassMilkBrush}"
@@ -244,12 +240,6 @@
                 CornerRadius="{TemplateBinding CornerRadius}"
                 IsHitTestVisible="False" />
             <controls:PanelSheen />
-            <Border
-                Margin="1"
-                BorderBrush="{ThemeResource GlassBevelBrush}"
-                BorderThickness="1"
-                CornerRadius="19"
-                IsHitTestVisible="False" />
             <Border
                 BorderBrush="{TemplateBinding BorderBrush}"
                 BorderThickness="{TemplateBinding BorderThickness}"

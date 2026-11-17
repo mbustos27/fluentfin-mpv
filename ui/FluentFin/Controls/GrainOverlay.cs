@@ -13,8 +13,8 @@ namespace FluentFin.Controls;
 /// </summary>
 public sealed partial class GrainOverlay : Canvas
 {
-	public const double FullOpacity = 0.045;
-	public const double ReducedOpacity = 0.02;
+	public const double FullOpacity = 0.015;
+	public const double ReducedOpacity = 0.008;
 
 	/// <summary>Beyond this many tiles the rest stays bare (a window-sized surface would otherwise carry hundreds).</summary>
 	public const int MaxTiles = 96;

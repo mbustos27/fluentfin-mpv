@@ -121,3 +121,22 @@ The user: "its not very glassy lets get reallllllll themed", "we can get niche".
   a private desktop is not composed by the GPU, so the GPU cost on a real desktop was NOT measured. Measure it on a screen before
   quoting a number.
 - **Still open**: an intensity slider; the GPU numbers above.
+
+## Pass 4: cleaner glass (supersedes pass 3 where they differ)
+
+The user, on his own library: "its quite ugly" (olive-brown panels, a pale green Resume, recognisable blurred faces in the backdrop,
+boxes around every poster title). So:
+
+- **One fixed palette for all chrome**: neutral dark glass (a little chroma, hue 175; pale glass in the light theme) and the accent
+  always sea-glass aqua (`#5CCFC1` dark, `#13877B` light; the light accent fill stays `#0F766B` so white text reaches 4.5:1).
+  `SeaglassTheme` applies it once (and for Solid); a title never recolours a panel or a button.
+- **The title's hue is a faint tint on the backdrop only** (`TitleTint`, at most 10 %, a clean mid colour at that hue).
+- **The ambient backdrop is a smooth colour field**: the item's BlurHash drawn as a 32x18 picture (a handful of cosine terms: no shapes,
+  no faces); with no hash, the artwork decoded 10 px wide. The dim is 78 % (`BackdropCeiling` 0.22).
+- **Cards**: opaque artwork with 12 px corners and one very subtle light edge; the title and subtitle are plain text underneath. No plate,
+  no border around the text, no second rim.
+- **Glass panels**: one thin light edge, brightest along the top (`GlassStrokeBrush`); no bevel, no violet fringe; the soft shadow stays
+  (contact 22 %, ambient 30 %). The grain is 1.5 % in Full (0.8 % Reduced, none in Solid): only noticed on a large flat panel.
+- **Kept**: the floating rail, the hero's text panel (now neutral glass), page transitions, the pointer highlight, Solid, contrast.
+- **Judging on real art**: the fake server can serve photographs: set `FAKESERVER_PHOTO_DIR=<folder of .jpg>` (Windows' own wallpapers
+  were used: scenery, not faces); its BlurHashes are still those of the colour blocks.

@@ -22,7 +22,7 @@ public sealed class GlassPass3Tests
 		Assert.Equal(GrainOverlay.FullOpacity, GrainOverlay.OpacityFor(GlassModeKind.Full));
 		Assert.Equal(GrainOverlay.ReducedOpacity, GrainOverlay.OpacityFor(GlassModeKind.Reduced));
 		Assert.Equal(0, GrainOverlay.OpacityFor(GlassModeKind.Solid));
-		Assert.InRange(GrainOverlay.FullOpacity, 0.03, 0.05);
+		Assert.InRange(GrainOverlay.FullOpacity, 0.005, 0.02); // so faint it is only noticed on a large flat panel
 	}
 
 	[Fact]

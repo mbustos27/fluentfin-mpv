@@ -75,6 +75,36 @@ public static class BlurHash
 		return cells;
 	}
 
+	/// <summary>
+	/// The hash as a small sRGB picture (BGRA, opaque), <paramref name="width"/> x <paramref name="height"/>, or null when it is not
+	/// valid. A BlurHash is a handful of cosine terms, so the picture is a smooth colour field by construction: no shapes, no faces.
+	/// </summary>
+	public static byte[]? ToBgra(string? hash, int width, int height)
+	{
+		if (Decode(hash, width, height) is not { } cells)
+		{
+			return null;
+		}
+
+		var pixels = new byte[cells.Length * 4];
+		for (var i = 0; i < cells.Length; i++)
+		{
+			pixels[i * 4] = Encode(cells[i].B);
+			pixels[i * 4 + 1] = Encode(cells[i].G);
+			pixels[i * 4 + 2] = Encode(cells[i].R);
+			pixels[i * 4 + 3] = 255;
+		}
+
+		return pixels;
+	}
+
+	private static byte Encode(double linear)
+	{
+		var v = Math.Clamp(linear, 0, 1);
+		v = v <= 0.0031308 ? v * 12.92 : 1.055 * Math.Pow(v, 1 / 2.4) - 0.055;
+		return (byte)Math.Round(v * 255);
+	}
+
 	private static double Ac(int quantised, double maximum)
 	{
 		var v = (quantised - 9) / 9.0;

@@ -259,6 +259,19 @@ class Server:
                 d["Trickplay"] = tp
         return d
 
+    def photo(self, item, kind):
+        """FAKESERVER_PHOTO_DIR=<folder of .jpg>: photographic art (the JPEG as it is, one per item) for Primary, Backdrop and Thumb, so
+        the UI can be judged on real pictures (faces, scenes) instead of the generated colour blocks. None when unset."""
+        folder = os.environ.get("FAKESERVER_PHOTO_DIR")
+        if not folder or kind not in ("Primary", "Backdrop", "Thumb"):
+            return None
+        files = sorted(f for f in os.listdir(folder) if f.lower().endswith((".jpg", ".jpeg")))
+        if not files:
+            return None
+        pick = files[int(hashlib.md5(item["Id"].encode()).hexdigest(), 16) % len(files)]
+        with open(os.path.join(folder, pick), "rb") as f:
+            return f.read()
+
     def image(self, item, kind, index, query):
         def num(key):
             v = query.get(key)
@@ -545,8 +558,9 @@ class Server:
                     if not item:
                         return self._json(404, None)
                     kind = mm.group(2).capitalize()
-                    data = outer.image(item, kind, int(mm.group(3)) if mm.group(3) else None, self.q)
-                    return self._send(200, data, "image/png", {"Cache-Control": "public, max-age=31536000",
+                    photo = outer.photo(item, kind)
+                    data = photo or outer.image(item, kind, int(mm.group(3)) if mm.group(3) else None, self.q)
+                    return self._send(200, data, "image/jpeg" if photo else "image/png", {"Cache-Control": "public, max-age=31536000",
                                                                "ETag": '"%s"' % library._tag(item["Id"], kind)})
                 mm = match(r"/videos/" + ID + r"/(?:stream|stream\.[a-z0-9]+)") or match(r"/items/" + ID + r"/download")
                 if mm and method in ("GET", "HEAD"):

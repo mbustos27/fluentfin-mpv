@@ -22,6 +22,27 @@ public sealed class SeaglassPaletteTests
 	}
 
 	[Fact]
+	public void A_hash_becomes_a_small_smooth_opaque_picture()
+	{
+		var pixels = BlurHash.ToBgra(Colourful, 32, 18);
+		Assert.NotNull(pixels);
+		Assert.Equal(32 * 18 * 4, pixels!.Length);
+		Assert.All(Enumerable.Range(0, 32 * 18), i => Assert.Equal(255, pixels[i * 4 + 3]));
+		// smooth: no two neighbouring pixels differ by much (a 4x3-term cosine field has no edges)
+		var steepest = 0;
+		for (var y = 0; y < 18; y++)
+		{
+			for (var x = 0; x < 31; x++)
+			{
+				steepest = Math.Max(steepest, Math.Abs(pixels[(y * 32 + x) * 4 + 2] - pixels[(y * 32 + x + 1) * 4 + 2]));
+			}
+		}
+
+		Assert.True(steepest < 60, $"steepest step {steepest}");
+		Assert.Null(BlurHash.ToBgra("nope", 32, 18));
+	}
+
+	[Fact]
 	public void No_hash_or_a_grey_one_gives_the_default_hue()
 	{
 		Assert.Equal(SeaglassPalette.DefaultHue, SeaglassPalette.HueFromBlurHash(null));
@@ -61,7 +82,7 @@ public sealed class SeaglassPaletteTests
 		Assert.True(light.Light);
 		Assert.True(light.WorstContrast >= SeaglassPalette.BodyContrast, $"hue {hue}: {light.WorstContrast:0.00}");
 		Assert.True(light.OnSurface.Luminance < light.GlassTint.Luminance);
-		Assert.True(OkLab.Contrast(light.OnAccent.Luminance, light.Accent.Luminance) >= 4.5, "white on the light accent");
+		Assert.True(OkLab.Contrast(light.OnAccent.Luminance, light.AccentFill.Luminance) >= 4.5, "white on the light accent fill");
 		var solid = SeaglassPalette.Build(hue, solid: true, light: true);
 		Assert.True(solid.WorstContrast >= SeaglassPalette.SmallTextContrast, $"solid {solid.WorstContrast:0.00}");
 	}
@@ -146,5 +167,26 @@ public sealed class SeaglassPaletteTests
 
 		// size flag 0 (1x1), quantised maximum 0, the DC, and a padding pair so the length is valid for the reader (6)
 		return "00" + new string(chars);
+	}
+}
+
+public sealed class SeaglassFixedChromeTests
+{
+	[Fact]
+	public void The_accent_is_always_sea_glass_aqua_whatever_the_hue()
+	{
+		foreach (var hue in new[] { 0.0, 60, 120, 175, 250, 320 })
+		{
+			Assert.Equal("#5CCFC1", SeaglassPalette.Build(hue).Accent.Hex);
+			Assert.Equal("#13877B", SeaglassPalette.Build(hue, light: true).Accent.Hex);
+		}
+	}
+
+	[Fact]
+	public void The_glass_is_neutral_dark_with_little_chroma()
+	{
+		var glass = SeaglassPalette.Build(175);
+		var (_, chroma, _) = OkLab.FromLinear(BlurHash.SrgbToLinear(glass.GlassTint.R), BlurHash.SrgbToLinear(glass.GlassTint.G), BlurHash.SrgbToLinear(glass.GlassTint.B));
+		Assert.True(chroma < 0.035, $"tint chroma {chroma:0.000}");
 	}
 }

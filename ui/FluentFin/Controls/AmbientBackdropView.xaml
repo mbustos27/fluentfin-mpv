@@ -27,6 +27,12 @@
                 Opacity="0"
                 Stretch="UniformToFill" />
         </Grid>
+        <!--  the title's colour, faintly (at most 10 %): the only place a title's hue shows  -->
+        <Rectangle x:Name="Tint" Opacity="0.1">
+            <Rectangle.Fill>
+                <SolidColorBrush x:Name="TintBrush" Color="#4FA89C" />
+            </Rectangle.Fill>
+        </Rectangle>
         <Rectangle x:Name="Dim" Fill="{ThemeResource GlassAmbientDimBrush}" />
     </Grid>
 </UserControl>

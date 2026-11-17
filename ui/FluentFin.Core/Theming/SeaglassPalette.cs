@@ -19,7 +19,18 @@ public sealed class SeaglassPalette
 	public const double HueAbove = 75;
 
 	/// <summary>The brightest the page backdrop gets under its scrim (relative luminance, about L 0.67).</summary>
-	public const double BackdropCeiling = 0.30;
+	public const double BackdropCeiling = 0.22;
+
+	/// <summary>The accent is always sea-glass aqua, whatever the title (the chrome is one fixed palette; the title only tints the backdrop).</summary>
+	public static readonly Rgb AccentDark = new(0x5C, 0xCF, 0xC1);
+
+	public static readonly Rgb OnAccentDark = new(0x0A, 0x14, 0x18);
+
+	public static readonly Rgb AccentLight = new(0x13, 0x87, 0x7B);
+
+	public static readonly Rgb OnAccentLight = new(0xFF, 0xFF, 0xFF);
+
+	public static readonly Rgb AccentFillLight = new(0x0F, 0x76, 0x6B);
 
 	public const double BodyContrast = 4.5;
 	public const double SmallTextContrast = 7;
@@ -48,6 +59,9 @@ public sealed class SeaglassPalette
 	public Rgb Accent { get; private set; }
 
 	public Rgb OnAccent { get; private set; }
+
+	/// <summary>The fill of an accent button: the accent, in the light theme a deeper aqua so white text on it reaches 4.5:1.</summary>
+	public Rgb AccentFill { get; private set; }
 
 	public Rgb Rim { get; private set; }
 
@@ -158,9 +172,9 @@ public sealed class SeaglassPalette
 
 		for (var step = 0; step < 40; step++)
 		{
-			var tint = OkLab.ToRgb(tintL, 0.045, hue);
-			var text = OkLab.ToRgb(textL, 0.01, hue);
-			var muted = OkLab.ToRgb(Math.Min(textL - 0.14, 0.85), 0.02, hue);
+			var tint = OkLab.ToRgb(tintL, 0.022, hue);
+			var text = OkLab.ToRgb(textL, 0.006, hue);
+			var muted = OkLab.ToRgb(Math.Min(textL - 0.14, 0.85), 0.012, hue);
 			var surface = OkLab.CompositeLuminance(tint, tintAlpha, under);
 			var worst = Math.Min(OkLab.Contrast(text.Luminance, surface), OkLab.Contrast(muted.Luminance, surface));
 			palette.WorstContrast = worst;
@@ -192,13 +206,14 @@ public sealed class SeaglassPalette
 		}
 
 		palette.TintAlpha = tintAlpha;
-		palette.GlassTint = OkLab.ToRgb(tintL, 0.045, hue);
-		palette.Background = OkLab.ToRgb(Math.Max(tintL - 0.07, 0.08), 0.03, hue);
-		palette.ContainerHigh = OkLab.ToRgb(tintL + 0.03, 0.05, hue);
-		palette.OnSurface = OkLab.ToRgb(textL, 0.01, hue);
-		palette.Muted = OkLab.ToRgb(Math.Min(textL - 0.14, 0.85), 0.02, hue);
-		palette.Accent = OkLab.ToRgb(0.78, 0.11, hue);
-		palette.OnAccent = OkLab.ToRgb(0.18, 0.04, hue);
+		palette.GlassTint = OkLab.ToRgb(tintL, 0.022, hue);
+		palette.Background = OkLab.ToRgb(Math.Max(tintL - 0.07, 0.08), 0.015, hue);
+		palette.ContainerHigh = OkLab.ToRgb(tintL + 0.03, 0.025, hue);
+		palette.OnSurface = OkLab.ToRgb(textL, 0.006, hue);
+		palette.Muted = OkLab.ToRgb(Math.Min(textL - 0.14, 0.85), 0.012, hue);
+		palette.Accent = AccentDark;
+		palette.AccentFill = AccentDark;
+		palette.OnAccent = OnAccentDark;
 		// the rim goes from the seed hue toward violet (the faint chromatic fringe)
 		palette.Rim = OkLab.ToRgb(0.85, 0.08, hue);
 		palette.RimAlt = OkLab.ToRgb(0.75, 0.10, (hue + 50) % 360);
@@ -261,8 +276,9 @@ public sealed class SeaglassPalette
 		palette.OnSurface = OkLab.ToRgb(textL, 0.015, hue);
 		palette.Muted = OkLab.ToRgb(Math.Max(textL + 0.18, 0.1), 0.02, hue);
 		// the accent is deeper on light, with white text on it
-		palette.Accent = OkLab.ToRgb(0.50, 0.11, hue);
-		palette.OnAccent = OkLab.ToRgb(0.98, 0.01, hue);
+		palette.Accent = AccentLight;
+		palette.AccentFill = AccentFillLight;
+		palette.OnAccent = OnAccentLight;
 		palette.Rim = OkLab.ToRgb(0.45, 0.08, hue);
 		palette.RimAlt = OkLab.ToRgb(0.55, 0.10, (hue + 50) % 360);
 		palette.Adjustments = adjustments;
