@@ -107,6 +107,12 @@
 	  </Content>
 	</ItemGroup>
 
+	<!-- 1.1.4: the wordmark's neon heading font (Monoton, SIL Open Font License 1.1, shipped unmodified beside its licence) -->
+	<ItemGroup>
+	  <Content Include="Assets\Fonts\Monoton-Regular.ttf" CopyToOutputDirectory="PreserveNewest" />
+	  <Content Include="Assets\Fonts\Monoton-OFL.txt" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
 	<!-- fluentfin-mpv player controls: libmpv for "Player controls: FluentFin" (mpv inside FluentFin), x64 only. Built, not in
 	     git (vendor\libmpv\VENDORED.md): libmpv-2.dll and every DLL it loads, copied into a libmpv folder next to
 	     FluentFin.exe, where Libmpv.cs loads them from (and from nowhere else); without it FluentFin uses mpv's controls and

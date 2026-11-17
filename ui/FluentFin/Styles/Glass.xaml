@@ -5,33 +5,34 @@
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
-        Seaglass's glass look (docs/design/GLASS.md): the materials, shapes and type that every page uses, so that the
-        pages look like one app. Glass (in-app acrylic) is for panels, bars, pills and menus, never for each card in a
+        The glass look (docs/design/SEAGLASS.md; 1.1.4: the desert-sunset palette, deep plum glass with a hot-pink accent in the
+        dark theme, pale peach glass with crimson in the light one): the materials, shapes and type that every page uses, so that
+        the pages look like one app. Glass (in-app acrylic) is for panels, bars, pills and menus, never for each card in a
         row: every acrylic surface costs GPU time. High contrast: solid system colours, no glass.
     -->
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Dark">
-            <Color x:Key="SeaglassAccentColor">#5CCFC1</Color>
-            <Color x:Key="SeaglassDeepColor">#0A1418</Color>
-            <SolidColorBrush x:Key="SeaglassAccentBrush" Color="#5CCFC1" />
-            <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="#5CCFC1" />
-            <SolidColorBrush x:Key="SeaglassOnAccentOnImageBrush" Color="#0A1418" />
-            <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#0A1418" />
+            <Color x:Key="SeaglassAccentColor">#F96985</Color>
+            <Color x:Key="SeaglassDeepColor">#170508</Color>
+            <SolidColorBrush x:Key="SeaglassAccentBrush" Color="#F96985" />
+            <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="#FF9EB1" />
+            <SolidColorBrush x:Key="SeaglassOnAccentOnImageBrush" Color="#24060F" />
+            <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#170508" />
             <AcrylicBrush
                 x:Key="GlassPanelBrush"
-                FallbackColor="#E6162226"
-                TintColor="#16262B"
+                FallbackColor="#F02A1217"
+                TintColor="#2A1217"
                 TintLuminosityOpacity="0.34"
-                TintOpacity="0.22" />
+                TintOpacity="0.62" />
             <AcrylicBrush
                 x:Key="GlassPanelStrongBrush"
-                FallbackColor="#F2101C20"
-                TintColor="#101C20"
+                FallbackColor="#F534181D"
+                TintColor="#34181D"
                 TintLuminosityOpacity="0.8"
-                TintOpacity="0.65" />
-            <!--  one thin, light edge: brightest along the top, nearly gone below  -->
+                TintOpacity="0.77" />
+            <!--  one thin, light edge: brightest along the top (the warm white of a low sun), nearly gone below  -->
             <LinearGradientBrush x:Key="GlassStrokeBrush" StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Offset="0" Color="#4DFFFFFF" />
+                <GradientStop Offset="0" Color="#59FFEDE8" />
                 <GradientStop Offset="0.3" Color="#14FFFFFF" />
                 <GradientStop Offset="1" Color="#0AFFFFFF" />
             </LinearGradientBrush>
@@ -54,59 +55,62 @@
             <x:Double x:Key="GlassContactShadowOpacity">0.22</x:Double>
             <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="#1AFFFFFF" />
             <SolidColorBrush x:Key="GlassPressedOverlayBrush" Color="#0DFFFFFF" />
-            <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="#FFFFFFFF" />
-            <SolidColorBrush x:Key="GlassTextSecondaryBrush" Color="#CCFFFFFF" />
+            <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="#F8EFF0" />
+            <SolidColorBrush x:Key="GlassTextSecondaryBrush" Color="#D3BFC1" />
             <!--  under text laid over artwork: transparent at the top, dark at the bottom  -->
             <LinearGradientBrush x:Key="GlassImageScrimBrush" StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Offset="0" Color="#000A1418" />
-                <GradientStop Offset="0.55" Color="#660A1418" />
-                <GradientStop Offset="1" Color="#F20A1418" />
+                <GradientStop Offset="0" Color="#00170508" />
+                <GradientStop Offset="0.55" Color="#66170508" />
+                <GradientStop Offset="1" Color="#F2170508" />
             </LinearGradientBrush>
             <!--  the soft artwork behind the window (AmbientBackdrop) is dimmed by this  -->
-            <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="#9E0A1418" />
+            <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="#C7170508" />
             <SolidColorBrush x:Key="GlassSelectedOverlayBrush" Color="#2EFFFFFF" />
-            <SolidColorBrush x:Key="SeaglassAccentFillBrush" Color="#5CCFC1" />
-            <SolidColorBrush x:Key="SeaglassAccentForegroundBrush" Color="#0A1418" />
+            <SolidColorBrush x:Key="SeaglassAccentFillBrush" Color="#F96985" />
+            <SolidColorBrush x:Key="SeaglassAccentForegroundBrush" Color="#24060F" />
             <!--  what GlassPanelBrush and GlassPanelStrongBrush become in Solid mode (GlassTheme): the same colours, opaque  -->
-            <SolidColorBrush x:Key="GlassPanelSolidBrush" Color="#16262B" />
-            <SolidColorBrush x:Key="GlassPanelStrongSolidBrush" Color="#101C20" />
+            <SolidColorBrush x:Key="GlassPanelSolidBrush" Color="#2A1217" />
+            <SolidColorBrush x:Key="GlassPanelStrongSolidBrush" Color="#34181D" />
             <!--
                 the overlays in windows of their own (menus, tooltips): a flat strong tint, never in-app acrylic. A menu's window
                 already has Windows' acrylic under it (its system backdrop), so this is the one blur; in Solid it is opaque.
                 SeaglassTheme sets both to the palette's container colour (OverlayColor).
             -->
-            <SolidColorBrush x:Key="GlassOverlayBrush" Color="#E6142621" />
-            <SolidColorBrush x:Key="GlassOverlaySolidBrush" Color="#10211C" />
+            <SolidColorBrush x:Key="GlassOverlayBrush" Color="#E634181D" />
+            <SolidColorBrush x:Key="GlassOverlaySolidBrush" Color="#34181D" />
             <!--  a hairline inside an overlay (a dialog's line above its buttons)  -->
             <SolidColorBrush x:Key="GlassDividerBrush" Color="#1FFFFFFF" />
             <!--  a button that sits ON a glass panel: a flat light fill, never a second acrylic, and its label  -->
             <SolidColorBrush x:Key="GlassInsetFillBrush" Color="#1AFFFFFF" />
             <StaticResource x:Key="GlassInsetTextBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <!--  keyboard focus: WinUI's two rings in the accent (outer) and the deep colour (inner); high contrast keeps WinUI's own  -->
+            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#F96985" />
+            <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#170508" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
-            <Color x:Key="SeaglassAccentColor">#13877B</Color>
-            <Color x:Key="SeaglassDeepColor">#EAF4F3</Color>
-            <SolidColorBrush x:Key="SeaglassAccentBrush" Color="#13877B" />
+            <Color x:Key="SeaglassAccentColor">#BC1E47</Color>
+            <Color x:Key="SeaglassDeepColor">#FFF6F3</Color>
+            <SolidColorBrush x:Key="SeaglassAccentBrush" Color="#BC1E47" />
             <!--
-                the accent ON ARTWORK (a progress bar on a poster's dark track, a watched badge): the light aqua in both themes.
-                The light theme's deeper aqua has 1.6:1 on the track over a bright poster (Black65O over white); this keeps 3.7:1.
+                the accent ON ARTWORK (a progress bar on a poster's dark track, a watched badge): the light pink in both themes.
+                The light theme's crimson has 1.2:1 on the track over a bright poster (Black65O over white); this keeps 3.6:1.
                 Used by BaseItemDtoCard's and EpisodeRow's progress bars, whose Black65O track fills the whole bar
                 (ProgressBarTrackHeight: WinUI draws a 1 px track line otherwise, and the bar would sit on the poster itself),
                 and by EpisodeRow's watched mark, whose check takes SeaglassOnAccentOnImageBrush.
             -->
-            <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="#5CCFC1" />
-            <SolidColorBrush x:Key="SeaglassOnAccentOnImageBrush" Color="#0A1418" />
-            <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#EAF4F3" />
+            <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="#FF9EB1" />
+            <SolidColorBrush x:Key="SeaglassOnAccentOnImageBrush" Color="#24060F" />
+            <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#FFF6F3" />
             <AcrylicBrush
                 x:Key="GlassPanelBrush"
-                FallbackColor="#E6F4FAF9"
-                TintColor="#F4FAF9"
+                FallbackColor="#F0FCEAE8"
+                TintColor="#FCEAE8"
                 TintLuminosityOpacity="0.45"
                 TintOpacity="0.28" />
             <AcrylicBrush
                 x:Key="GlassPanelStrongBrush"
-                FallbackColor="#F2F7FBFA"
-                TintColor="#F7FBFA"
+                FallbackColor="#F5FFF3F1"
+                TintColor="#FFF3F1"
                 TintLuminosityOpacity="0.85"
                 TintOpacity="0.75" />
             <LinearGradientBrush x:Key="GlassStrokeBrush" StartPoint="0,0" EndPoint="0,1">
@@ -129,25 +133,28 @@
             <x:Double x:Key="GlassContactShadowOpacity">0.20</x:Double>
             <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="#0F000000" />
             <SolidColorBrush x:Key="GlassPressedOverlayBrush" Color="#08000000" />
-            <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="#E6000000" />
-            <SolidColorBrush x:Key="GlassTextSecondaryBrush" Color="#99000000" />
+            <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="#2D0F16" />
+            <SolidColorBrush x:Key="GlassTextSecondaryBrush" Color="#633A41" />
             <LinearGradientBrush x:Key="GlassImageScrimBrush" StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Offset="0" Color="#00EAF4F3" />
-                <GradientStop Offset="0.55" Color="#80EAF4F3" />
-                <GradientStop Offset="1" Color="#F2EAF4F3" />
+                <GradientStop Offset="0" Color="#00FFF6F3" />
+                <GradientStop Offset="0.55" Color="#80FFF6F3" />
+                <GradientStop Offset="1" Color="#F2FFF6F3" />
             </LinearGradientBrush>
-            <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="#85EAF4F3" />
+            <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="#85FFF6F3" />
             <SolidColorBrush x:Key="GlassSelectedOverlayBrush" Color="#1F000000" />
-            <!--  light theme: a deeper aqua so white text on it reaches 4.5:1  -->
-            <SolidColorBrush x:Key="SeaglassAccentFillBrush" Color="#0F766B" />
+            <!--  light theme: the sunset's crimson, so white text on it reaches 4.5:1 (6.2:1)  -->
+            <SolidColorBrush x:Key="SeaglassAccentFillBrush" Color="#BC1E47" />
             <SolidColorBrush x:Key="SeaglassAccentForegroundBrush" Color="#FFFFFFFF" />
-            <SolidColorBrush x:Key="GlassPanelSolidBrush" Color="#F4FAF9" />
-            <SolidColorBrush x:Key="GlassPanelStrongSolidBrush" Color="#F7FBFA" />
-            <SolidColorBrush x:Key="GlassOverlayBrush" Color="#E6EFFCF8" />
-            <SolidColorBrush x:Key="GlassOverlaySolidBrush" Color="#EFFCF8" />
+            <SolidColorBrush x:Key="GlassPanelSolidBrush" Color="#FCEAE8" />
+            <SolidColorBrush x:Key="GlassPanelStrongSolidBrush" Color="#FFF3F1" />
+            <SolidColorBrush x:Key="GlassOverlayBrush" Color="#E6FFF3F1" />
+            <SolidColorBrush x:Key="GlassOverlaySolidBrush" Color="#FFF3F1" />
             <SolidColorBrush x:Key="GlassDividerBrush" Color="#1F000000" />
             <SolidColorBrush x:Key="GlassInsetFillBrush" Color="#0F000000" />
             <StaticResource x:Key="GlassInsetTextBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <!--  keyboard focus: WinUI's two rings in the accent (outer) and the deep colour (inner); high contrast keeps WinUI's own  -->
+            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#BC1E47" />
+            <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#FFFFFF" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <Color x:Key="SeaglassAccentColor">#FFFFFF00</Color>
@@ -183,6 +190,12 @@
             <SolidColorBrush x:Key="GlassInsetTextBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
+
+    <!--
+        the glow of a lit nixie tube: warm orange-pink, the outer halo of a focused or primary control around the accent's own
+        hot pink. One colour for both themes (it is only ever a soft shadow; GlassShadowOpacity makes it 0 in high contrast).
+    -->
+    <Color x:Key="GlassNeonGlowColor">#FF7A50</Color>
 
     <!--  shapes  -->
     <CornerRadius x:Key="GlassPanelCornerRadius">20</CornerRadius>
@@ -264,7 +277,7 @@
                         Color="Black" />
                 </ui:Effects.Shadow>
             </Border>
-            <!--  bottom to top: the frosted glass, the milk, the grain (barely there), the inner glow, then one thin light edge  -->
+            <!--  bottom to top: the frosted glass, the milk, the grain (barely there), the inner glow, the body, then one thin light edge  -->
             <Border Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}" />
             <Border
                 Background="{ThemeResource GlassMilkBrush}"
@@ -277,6 +290,8 @@
                 Background="{ThemeResource GlassGlowBrush}"
                 CornerRadius="{TemplateBinding CornerRadius}"
                 IsHitTestVisible="False" />
+            <!--  1.1.4: the slab's body: a frosted rim and a shade along the bottom (none in Solid)  -->
+            <controls:GlassVolume CornerRadius="{TemplateBinding CornerRadius}" />
             <controls:PanelSheen />
             <Border
                 BorderBrush="{TemplateBinding BorderBrush}"
@@ -306,35 +321,67 @@
 
     <!--
         Buttons. Pointer-over and pressed stay glass: a light (dark theme) or dark (light theme) overlay over the same
-        material, never the default solid fill. Keyboard focus keeps the system focus visuals; a disabled button fades.
-        The accent pill is for the primary action only.
+        material, never the default solid fill. Keyboard focus keeps the system focus visuals (in the accent, Dark and Light
+        dictionaries) and adds a soft glow of the accent; a disabled button fades. The accent pill is for the primary action
+        only, and glows softly at rest.
     -->
     <ControlTemplate x:Key="GlassPillButtonTemplate" TargetType="Button">
-        <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
-            <Border
-                x:Name="Backplate"
-                Background="{TemplateBinding Background}"
-                BorderBrush="{TemplateBinding BorderBrush}"
-                BorderThickness="{TemplateBinding BorderThickness}"
-                CornerRadius="{TemplateBinding CornerRadius}" />
-            <Border
-                x:Name="Overlay"
-                Background="Transparent"
-                CornerRadius="{TemplateBinding CornerRadius}">
-                <Border.BackgroundTransition>
-                    <BrushTransition Duration="0:0:0.12" />
-                </Border.BackgroundTransition>
-            </Border>
-            <ContentPresenter
-                x:Name="ContentPresenter"
-                Padding="{TemplateBinding Padding}"
-                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                AutomationProperties.AccessibilityView="Raw"
-                Content="{TemplateBinding Content}"
-                ContentTemplate="{TemplateBinding ContentTemplate}"
-                ContentTransitions="{TemplateBinding ContentTransitions}"
-                Foreground="{TemplateBinding Foreground}" />
+        <Grid>
+            <!--
+                keyboard focus: a nixie glow around the pill (two soft shadows, made on the first focus: the accent close in, a warm
+                orange halo further out), as well as the system's focus rings, which stay the focus mark (never colour alone).
+                High contrast: no glow (opacity 0).
+            -->
+            <Grid
+                x:Name="FocusGlow"
+                x:DeferLoadStrategy="Lazy"
+                IsHitTestVisible="False"
+                Visibility="Collapsed">
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="8"
+                            CornerRadius="16"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="24"
+                            CornerRadius="16"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{StaticResource GlassNeonGlowColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+            </Grid>
+            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+                <Border
+                    x:Name="Backplate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+                <Border
+                    x:Name="Overlay"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.BackgroundTransition>
+                        <BrushTransition Duration="0:0:0.12" />
+                    </Border.BackgroundTransition>
+                </Border>
+                <ContentPresenter
+                    x:Name="ContentPresenter"
+                    Padding="{TemplateBinding Padding}"
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    ContentTransitions="{TemplateBinding ContentTransitions}"
+                    Foreground="{TemplateBinding Foreground}" />
+            </Grid>
             <VisualStateManager.VisualStateGroups>
                 <VisualStateGroup x:Name="CommonStates">
                     <VisualState x:Name="Normal" />
@@ -354,6 +401,116 @@
                             <Setter Target="RootGrid.Opacity" Value="0.45" />
                         </VisualState.Setters>
                     </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused">
+                        <VisualState.Setters>
+                            <Setter Target="FocusGlow.Visibility" Value="Visible" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+    <!--  the accent pill: the same, with the accent's resting glow under it  -->
+    <ControlTemplate x:Key="GlassAccentPillButtonTemplate" TargetType="Button">
+        <Grid>
+        <!--  the primary action's resting glow: a soft halo of the accent, as a neon sign's (none in high contrast)  -->
+        <Border CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False">
+            <ui:Effects.Shadow>
+                <media:AttachedCardShadow
+                    BlurRadius="16"
+                    CornerRadius="14"
+                    Offset="0,2"
+                    Opacity="{ThemeResource GlassContactShadowOpacity}"
+                    Color="{StaticResource GlassNeonGlowColor}" />
+            </ui:Effects.Shadow>
+        </Border>
+            <!--
+                keyboard focus: a nixie glow around the pill (two soft shadows, made on the first focus: the accent close in, a warm
+                orange halo further out), as well as the system's focus rings, which stay the focus mark (never colour alone).
+                High contrast: no glow (opacity 0).
+            -->
+            <Grid
+                x:Name="FocusGlow"
+                x:DeferLoadStrategy="Lazy"
+                IsHitTestVisible="False"
+                Visibility="Collapsed">
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="8"
+                            CornerRadius="16"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="24"
+                            CornerRadius="16"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{StaticResource GlassNeonGlowColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+            </Grid>
+            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+                <Border
+                    x:Name="Backplate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+                <Border
+                    x:Name="Overlay"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.BackgroundTransition>
+                        <BrushTransition Duration="0:0:0.12" />
+                    </Border.BackgroundTransition>
+                </Border>
+                <ContentPresenter
+                    x:Name="ContentPresenter"
+                    Padding="{TemplateBinding Padding}"
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    ContentTransitions="{TemplateBinding ContentTransitions}"
+                    Foreground="{TemplateBinding Foreground}" />
+            </Grid>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource GlassHoverOverlayBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource GlassPressedOverlayBrush}" />
+                            <Setter Target="RootGrid.Opacity" Value="0.9" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="RootGrid.Opacity" Value="0.45" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused">
+                        <VisualState.Setters>
+                            <Setter Target="FocusGlow.Visibility" Value="Visible" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
                 </VisualStateGroup>
             </VisualStateManager.VisualStateGroups>
         </Grid>
@@ -391,7 +548,7 @@
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
-        <Setter Property="Template" Value="{StaticResource GlassPillButtonTemplate}" />
+        <Setter Property="Template" Value="{StaticResource GlassAccentPillButtonTemplate}" />
     </Style>
     <!--  a pill that sits on a glass panel (the hero's More info): the flat inset fill, so the glass is not drawn twice  -->
     <Style

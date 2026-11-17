@@ -6,6 +6,7 @@
     xmlns:controls="using:FluentFin.Controls"
     xmlns:helpers="using:FluentFin.Helpers"
     xmlns:local="using:FluentFin"
+    xmlns:media="using:CommunityToolkit.WinUI.Media"
     xmlns:ui="using:CommunityToolkit.WinUI">
 
     <ResourceDictionary.ThemeDictionaries>
@@ -973,8 +974,32 @@
                             <Grid.RenderTransform>
                                 <CompositeTransform x:Name="PaneTransform" />
                             </Grid.RenderTransform>
-                            <!--  Seaglass: the rail is a floating slab of near-opaque glass (tint 0.88 for a sidebar), not an edge-to-edge bar  -->
+                            <!--
+                                The rail is a floating slab of near-opaque glass (tint 0.88 for a sidebar), not an edge-to-edge bar.
+                                1.1.4: it is lifted off the page like the panels (a wide soft shadow and a tight one, none in high
+                                contrast) and has their body (GlassVolume: the frosted rim and the bottom shade, none in Solid).
+                            -->
                             <Grid Margin="8,8,4,8">
+                                <Border CornerRadius="20">
+                                    <ui:Effects.Shadow>
+                                        <media:AttachedCardShadow
+                                            BlurRadius="28"
+                                            CornerRadius="20"
+                                            Offset="4,8"
+                                            Opacity="{ThemeResource GlassShadowOpacity}"
+                                            Color="Black" />
+                                    </ui:Effects.Shadow>
+                                </Border>
+                                <Border CornerRadius="20">
+                                    <ui:Effects.Shadow>
+                                        <media:AttachedCardShadow
+                                            BlurRadius="8"
+                                            CornerRadius="20"
+                                            Offset="0,2"
+                                            Opacity="{ThemeResource GlassContactShadowOpacity}"
+                                            Color="Black" />
+                                    </ui:Effects.Shadow>
+                                </Border>
                                 <Border
                                     Background="{ThemeResource GlassPanelStrongBrush}"
                                     CornerRadius="20" />
@@ -985,6 +1010,7 @@
                                     Background="{ThemeResource GlassGlowBrush}"
                                     CornerRadius="20"
                                     IsHitTestVisible="False" />
+                                <controls:GlassVolume CornerRadius="20" />
                                 <Border
                                     BorderBrush="{ThemeResource GlassStrokeBrush}"
                                     BorderThickness="1"

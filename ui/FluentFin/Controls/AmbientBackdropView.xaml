@@ -8,11 +8,45 @@
     IsTabStop="False">
 
     <!--
-        Seaglass: the soft artwork behind the whole window. A deep colour, then the artwork decoded about 64 px wide and
-        stretched so it reads as blurred, then the dim brush. Solid mode and no artwork: the deep colour alone.
+        The soft artwork behind the whole window: a deep colour, then the artwork decoded small and stretched so it reads as
+        blurred, then the dim brush. With no artwork, the flat dusk scene drawn in code (FluentFin.Core.Theming.DuskScene): in
+        full on sign-in, the server page and empty states (a banded sky, a striped sun with rings, starbursts, desert hills and
+        a saguaro, faint scanlines and a vignette); inside the shell only a quiet strip of hills. High contrast: the deep colour
+        alone. Nothing here is an image file, and nothing here takes input or appears to Narrator.
     -->
     <Grid x:Name="Container">
         <Rectangle x:Name="BaseFill" Fill="{ThemeResource SeaglassDeepBrush}" />
+
+        <Grid
+            x:Name="Scene"
+            SizeChanged="OnSceneSizeChanged"
+            Visibility="Collapsed">
+            <Rectangle x:Name="Sky" />
+            <!--  the sun, its rings and the starbursts: built and placed in code for the window's size  -->
+            <Canvas x:Name="SkyArt" />
+            <!--  the hills: one 1000x100 drawing stretched along the bottom, far to near  -->
+            <Viewbox
+                x:Name="Hills"
+                VerticalAlignment="Bottom"
+                Stretch="Fill">
+                <Canvas Width="1000" Height="100">
+                    <Path x:Name="FarHill" Data="M-40,60 C120,22 220,30 320,46 C420,62 520,12 640,26 C760,40 860,56 1040,32 L1040,100 L-40,100 Z" />
+                    <Path x:Name="MesaHill" Data="M-40,72 L150,72 L172,44 L318,44 L338,64 L520,64 C600,62 680,76 760,72 L790,52 L920,52 L946,74 L1040,74 L1040,100 L-40,100 Z" />
+                    <Path x:Name="NearHill" Data="M-40,84 C160,70 300,92 470,82 C640,72 820,90 1040,80 L1040,100 L-40,100 Z" />
+                </Canvas>
+            </Viewbox>
+            <!--  one saguaro on the near hill  -->
+            <Path
+                x:Name="Saguaro"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                Data="M40,240 L40,20 A20,20 0 0 1 80,20 L80,240 Z M40,150 L18,150 A18,18 0 0 1 0,132 L0,80 A15,15 0 0 1 30,80 L30,120 L40,120 Z M80,170 L100,170 A18,18 0 0 0 118,152 L118,105 A15,15 0 0 0 88,105 L88,140 L80,140 Z"
+                Stretch="Uniform" />
+            <!--  the CRT touches (full scene, not Solid): a vignette, and scanlines drawn by the compositor  -->
+            <Rectangle x:Name="Vignette" />
+            <Border x:Name="Scanlines" />
+        </Grid>
+
         <!--  the artwork layers drift together (Full mode only): a slow zoom and sway, run by the compositor  -->
         <Grid x:Name="Drift" SizeChanged="OnDriftSizeChanged">
             <Image
@@ -30,7 +64,7 @@
         <!--  the title's colour, faintly (at most 10 %): the only place a title's hue shows  -->
         <Rectangle x:Name="Tint" Opacity="0.1">
             <Rectangle.Fill>
-                <SolidColorBrush x:Name="TintBrush" Color="#4FA89C" />
+                <SolidColorBrush x:Name="TintBrush" Color="#C25A6E" />
             </Rectangle.Fill>
         </Rectangle>
         <Rectangle x:Name="Dim" Fill="{ThemeResource GlassAmbientDimBrush}" />

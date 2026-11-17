@@ -37,13 +37,14 @@ public sealed class GlassPass2Tests
 		Assert.True(far.W > 1f, "a point pushed away must be drawn smaller (w above 1)");
 	}
 
+	/// <summary>1.1.4: the dusk scene covers the window wherever there is no artwork, so desktop acrylic is never worth its cost.</summary>
 	[Theory]
-	[InlineData(false, GlassModeKind.Full, true)]
-	[InlineData(false, GlassModeKind.Reduced, true)]
-	[InlineData(false, GlassModeKind.Solid, false)]
-	[InlineData(true, GlassModeKind.Full, false)]
-	public void WindowBackdrop_IsDesktopAcrylicOnlyWithoutArtwork_AndNeverInSolid(bool hasArtwork, GlassModeKind mode, bool acrylic) =>
-		Assert.Equal(acrylic, AmbientBackdropView.WantsDesktopAcrylic(hasArtwork ? new Uri("http://x/a.jpg") : null, mode));
+	[InlineData(false, GlassModeKind.Full)]
+	[InlineData(false, GlassModeKind.Reduced)]
+	[InlineData(false, GlassModeKind.Solid)]
+	[InlineData(true, GlassModeKind.Full)]
+	public void WindowBackdrop_IsNeverDesktopAcrylic(bool hasArtwork, GlassModeKind mode) =>
+		Assert.False(AmbientBackdropView.WantsDesktopAcrylic(hasArtwork ? new Uri("http://x/a.jpg") : null, mode));
 
 	[Fact]
 	public void Drift_IsSubtle_AndKeepsItsEdgesCovered()

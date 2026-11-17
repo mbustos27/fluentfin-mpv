@@ -81,8 +81,11 @@ public sealed class GlassSettingTests
 		var xaml = GlassXaml();
 		Assert.Contains(xaml.Elements(), e => Key(e) == key);
 
-		var template = xaml.Elements().Single(e => Key(e) == "GlassPillButtonTemplate").ToString();
-		Assert.Contains("GlassHoverOverlayBrush", template);
-		Assert.Contains("GlassPressedOverlayBrush", template);
+		foreach (var name in new[] { "GlassPillButtonTemplate", "GlassAccentPillButtonTemplate" })
+		{
+			var template = xaml.Elements().Single(e => Key(e) == name).ToString();
+			Assert.Contains("GlassHoverOverlayBrush", template);
+			Assert.Contains("GlassPressedOverlayBrush", template);
+		}
 	}
 }
