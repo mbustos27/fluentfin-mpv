@@ -41,7 +41,7 @@ public sealed record SubtitleModeChoice(UserConfiguration_SubtitleMode Mode, str
 	public override string ToString() => Name;
 }
 
-public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache, KnownFolders? knownFolders = null) : ObservableObject, INavigationAware
+public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache, KnownFolders? knownFolders = null, MpvPlaybackService? mpvPlayback = null) : ObservableObject, INavigationAware
 {
 	private IDisposable? _statusSubscription;
 
@@ -86,6 +86,8 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 				if (!_loadingPlayer)
 				{
 					settings.MediaPlayer = value;
+					// Seaglass 1.1.4 (interaction audit, item 17): remote control follows at once, not at the next sign-in
+					PlayerChanged = jellyfinClient.UpdateCapabilities();
 				}
 				OnPropertyChanged(nameof(SelectedMediaPlayer));
 				OnPropertyChanged(nameof(IsMpvSelected));
@@ -202,7 +204,14 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		}
 	}
 
-	/// <summary>Empty = found automatically; see <see cref="SettingKeys.MpvBackendCommand"/>.</summary>
+	/// <summary>The server being told of a picked player (<see cref="IJellyfinClient.UpdateCapabilities"/>); for tests.</summary>
+	internal Task PlayerChanged { get; private set; } = Task.CompletedTask;
+
+	/// <summary>
+	/// Empty = found automatically; see <see cref="SettingKeys.MpvBackendCommand"/>. Seaglass 1.1.4 (interaction audit, item 17):
+	/// a change takes effect at once: an idle backend is shut down, so the next playback starts one with the new command (it
+	/// used to wait for the next time the backend started, often the next run of Seaglass).
+	/// </summary>
 	public string MpvBackendCommand
 	{
 		get => field;
@@ -210,10 +219,34 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		{
 			if (SetProperty(ref field, value ?? ""))
 			{
-				settings.MpvBackendCommand = field.Trim();
+				var command = field.Trim();
+				if (settings.MpvBackendCommand != command)
+				{
+					settings.MpvBackendCommand = command;
+					BackendRestarted = RestartIdleBackendAsync();
+				}
 			}
 		}
 	} = "";
+
+	/// <summary>The idle backend's shutdown after a command change (<see cref="MpvBackendCommand"/>); for tests.</summary>
+	internal Task BackendRestarted { get; private set; } = Task.CompletedTask;
+
+	/// <summary>Shuts a running backend down when nothing plays; a playing one keeps its command until it next starts. Never throws.</summary>
+	private async Task RestartIdleBackendAsync()
+	{
+		try
+		{
+			if (mpvBackend.Status.State is MpvBackendState.Running or MpvBackendState.Starting && mpvPlayback?.HasPlayback != true)
+			{
+				await mpvBackend.ShutdownAsync();
+			}
+		}
+		catch (Exception)
+		{
+			// the next start uses the new command anyway
+		}
+	}
 
 	[ObservableProperty]
 	public partial string MpvBackendStatus { get; set; } = "";

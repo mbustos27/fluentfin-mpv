@@ -62,14 +62,7 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		var plugins = GetPlugins();
 		var views = GetUserViews();
 		await PrepareDeviceProfile();
-		var capabilities = _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto
-		{
-			SupportsMediaControl = true,
-			PlayableMediaTypes = [MediaType.Video],
-			DeviceProfile = deviceProfileFactory.GetDeviceProfile(),
-			IconUrl = "https://github.com/insomniachi/FluentFin/raw/master/Installer/base-icon-transparent.png",
-			SupportedCommands = SupportedCommands(settings.MediaPlayer),
-		});
+		var capabilities = PostCapabilities();
 
 		await Task.WhenAll(capabilities, plugins, views);
 		StartWebSocketConnection();
@@ -93,10 +86,40 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		}
 	}
 
+	/// <summary>What this session tells the server it can do: the selected player's device profile and remote-control commands.</summary>
+	private Task PostCapabilities() => _jellyfinApiClient.Sessions.Capabilities.Full.PostAsync(new ClientCapabilitiesDto
+	{
+		SupportsMediaControl = true,
+		PlayableMediaTypes = [MediaType.Video],
+		DeviceProfile = deviceProfileFactory.GetDeviceProfile(),
+		IconUrl = "https://github.com/insomniachi/FluentFin/raw/master/Installer/base-icon-transparent.png",
+		SupportedCommands = SupportedCommands(settings.MediaPlayer),
+	});
+
+	/// <summary>
+	/// Seaglass 1.1.4 (interaction audit, item 17): the player changed in Settings: the server hears the new player's profile
+	/// and commands at once (they were sent only at sign-in, so remote control followed the change after the next one). Never
+	/// throws; false when the server could not be told (it hears it at the next sign-in).
+	/// </summary>
+	public async Task<bool> UpdateCapabilities()
+	{
+		try
+		{
+			await PrepareDeviceProfile();
+			await PostCapabilities();
+			return true;
+		}
+		catch (Exception ex)
+		{
+			logger.LogWarning("The server could not be told of the new player; it hears it at the next sign-in: {Error}", ex.Message);
+			return false;
+		}
+	}
+
 	/// <summary>
 	/// The remote-control commands the server may send to this session. With the mpv player FluentFin forwards volume and
-	/// track commands to the backend (docs/BRIDGE.md), the other players do not handle them. Read at login, so a change of
-	/// player takes effect on the next login.
+	/// track commands to the backend (docs/BRIDGE.md), the other players do not handle them. Sent at sign-in and when the
+	/// player changes (<see cref="UpdateCapabilities"/>).
 	/// </summary>
 	internal static List<GeneralCommandType?> SupportedCommands(Contracts.Services.MediaPlayerType player) => player == Contracts.Services.MediaPlayerType.Mpv
 		? [

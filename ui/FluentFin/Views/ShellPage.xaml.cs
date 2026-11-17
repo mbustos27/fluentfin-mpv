@@ -38,6 +38,10 @@ public sealed partial class ShellPage : Page
 		NavigationFrame.Navigated += OnFrameNavigated;
 		Unloaded += (_, _) => _titleBar.OnPageShown(null);
 
+		// Seaglass 1.1.4 (interaction audit, item 16): a page the rail opens is a switch of section (PageTransition's refresh);
+		// anything else opened is a drill in, Back a drill out
+		PageTransition.IsTopLevel = IsRailPage;
+
 		// Seaglass 1.1.3: a page off the rail (Selected null) passes through too, so RailSelection can unmark Settings
 		ViewModel.WhenAnyValue(x => x.Selected)
 			.Where(x => x is null or NavigationViewItem)
@@ -56,6 +60,37 @@ public sealed partial class ShellPage : Page
 	private readonly TitleBarViewModel _titleBar = (TitleBarViewModel)App.GetService<ITitleBarViewModel>();
 
 	private void OnFrameNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e) => _titleBar.OnPageShown(e.SourcePageType);
+
+	/// <summary>
+	/// Seaglass 1.1.4: the page type one of the rail's items opens (Home, Libraries, Settings, a plugin's), not one pinned with
+	/// a parameter (a library pinned to the rail is still a page inside Libraries).
+	/// </summary>
+	private bool IsRailPage(Type pageType)
+	{
+		var pages = App.GetService<FluentFin.UI.Core.Contracts.Services.IPageService>();
+		foreach (var item in NavigationViewControl.MenuItems.Concat(NavigationViewControl.FooterMenuItems).OfType<NavigationViewItem>())
+		{
+			if (item.Tag is FluentFin.Core.Settings.CustomNavigationViewItem { Parameter: not null }
+				|| item.GetValue(FluentFin.UI.Core.NavigationHelper.NavigateToProperty) is not string key)
+			{
+				continue;
+			}
+
+			try
+			{
+				if (pages.GetPageType(key) == pageType)
+				{
+					return true;
+				}
+			}
+			catch (ArgumentException)
+			{
+				// a rail item whose page is not registered opens nothing
+			}
+		}
+
+		return false;
+	}
 
 	// Seaglass: Alt+Left, the Back and Forward keys and Mouse 4 / 5 are the window's (WindowShortcuts), on every page
 	// Seaglass 1.1.4: a shell shown again (back in the window) tells the title bar what its frame shows

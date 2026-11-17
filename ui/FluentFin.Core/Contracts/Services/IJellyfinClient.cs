@@ -45,6 +45,9 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<BaseItemDtoQueryResult?> Search(string searchTerm);
 
+		/// <summary>Seaglass 1.1.4: tells the server the selected player's profile and commands now (Settings > Player). Never throws.</summary>
+		Task<bool> UpdateCapabilities();
+
 		/// <summary>Seaglass 1.1.4: the matches of these types only (the search results page, one request per type).</summary>
 		Task<BaseItemDtoQueryResult?> Search(string searchTerm, IReadOnlyList<BaseItemKind> kinds, int limit = 100);
 

@@ -83,7 +83,7 @@
                             Text="Playback" />
                         <!--  Seaglass 1.1.3: only when this copy can run more than one player  -->
                         <ctk:SettingsCard
-                            Description="Remote control from other devices follows a change after you sign in again."
+                            Description="Plays everything you play here, and what other devices send here by remote control. Takes effect at once."
                             Header="Player"
                             HeaderIcon="{ui:FontIcon Glyph=&#xEA69;}"
                             Visibility="{x:Bind c:Converters.BooleanToVisibility(HasPlayerChoice)}">
@@ -95,7 +95,7 @@
                         </ctk:SettingsCard>
                         <!--  fluentfin-mpv player controls: who draws the controls over the MPV player's video (docs/research/player-controls.md)  -->
                         <ctk:SettingsCard
-                            Description="Seaglass (the default): Seaglass's own controls over the video, with mpv playing inside the window; if mpv's library cannot load on this PC, mpv's controls are used and the player says so. mpv: mpv's on-screen controls. Used from the next playback."
+                            Description="Seaglass (the default): Seaglass's own controls over the video, with mpv playing inside the window; if mpv's library cannot load on this PC, mpv's controls are used and the player says so. mpv: mpv's on-screen controls. Takes effect at once."
                             Header="Player controls"
                             HeaderIcon="{ui:FontIcon Glyph=&#xE768;}"
                             Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
@@ -375,7 +375,7 @@
                             HeaderIcon="{ui:FontIcon Glyph=&#xE90F;}">
                             <ctk:SettingsExpander.Items>
                                 <ctk:SettingsCard
-                                    Description="Leave empty to find it automatically. Otherwise the command up to --config-dir, for example C:\jellyfin-mpv-shim\.venv\Scripts\python.exe -I -m jellyfin_mpv_shim.bridge. Used the next time the backend starts."
+                                    Description="Leave empty to find it automatically. Otherwise the command up to --config-dir, for example C:\jellyfin-mpv-shim\.venv\Scripts\python.exe -I -m jellyfin_mpv_shim.bridge. Takes effect at once: a backend that is not playing restarts with it."
                                     Header="MPV backend command"
                                     HeaderIcon="{ui:FontIcon Glyph=&#xE756;}">
                                     <TextBox
