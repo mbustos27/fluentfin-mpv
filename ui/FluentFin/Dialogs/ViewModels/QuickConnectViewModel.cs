@@ -10,14 +10,28 @@ public partial class QuickConnectViewModel(IJellyfinClient jellyfinClient) : Obs
 	public partial string QuickConnectCode { get; set; }
 	public bool CanClose { get; set; }
 
+	/// <summary>
+	/// Seaglass 1.1.4 (Settings > Other devices > Quick Connect): what the last OK did, under the code. The dialog stays open
+	/// (it closes with Close), so the answer is said here; it used to say nothing either way.
+	/// </summary>
+	[ObservableProperty]
+	public partial string Status { get; private set; } = "";
+
+	public const string ApprovedStatus = "Approved. The other device signs in now; you can close this.";
+
+	public const string NoCodeStatus = "Enter the code the other device shows.";
+
+	public const string FailedStatus = "That code didn't work. Check it on the other device and try again: a code lasts a few minutes.";
+
 	[RelayCommand]
 	private async Task VerifyQuickConnect()
 	{
-		if (string.IsNullOrEmpty(QuickConnectCode))
+		if (string.IsNullOrWhiteSpace(QuickConnectCode))
 		{
+			Status = NoCodeStatus;
 			return;
 		}
 
-		await jellyfinClient.Authenticate(QuickConnectCode.Trim());
+		Status = await jellyfinClient.Authenticate(QuickConnectCode.Trim()) ? ApprovedStatus : FailedStatus;
 	}
 }

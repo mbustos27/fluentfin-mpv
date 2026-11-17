@@ -90,6 +90,8 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 				OnPropertyChanged(nameof(SelectedMediaPlayer));
 				OnPropertyChanged(nameof(IsMpvSelected));
 				OnPropertyChanged(nameof(FollowsAutoPlay));
+				OnPropertyChanged(nameof(IsSyncPlayAvailable));
+				OnPropertyChanged(nameof(SyncPlayDescription));
 			}
 		}
 	}
@@ -113,6 +115,24 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	/// PlaybackPreferences.PlaysNextItem); the mpv backend has its own auto_play, so with mpv the toggle did nothing.
 	/// </summary>
 	public bool FollowsAutoPlay => !IsMpvSelected;
+
+	// ---- Seaglass 1.1.4 (UX review, prioritised fix 15): Settings > Other devices, from the old profile flyout
+
+	/// <summary>
+	/// Sync Play plays in the other players only (the mpv player has no group playback; DialogCommands says so too), so with
+	/// mpv its button is disabled and the card says why rather than vanishing.
+	/// </summary>
+	public bool IsSyncPlayAvailable => !IsMpvSelected;
+
+	public string SyncPlayDescription => IsSyncPlayAvailable
+		? "Watch in step with other people on this server: join a group or start one."
+		: "Watch in step with other people on this server. Not available with the mpv player: choose another player under Playback to use it.";
+
+	/// <summary>
+	/// The server's administration (the old Dashboard: users, libraries, playback, activity, scheduled tasks) for an
+	/// administrator only, from Settings > Servers and accounts.
+	/// </summary>
+	public static bool ShowsServerAdministration(UserDto? user) => user?.Policy?.IsAdministrator == true;
 
 	/// <summary>Seaglass: the choices for Settings > Appearance > Glass.</summary>
 	public static IReadOnlyList<GlassChoiceItem> GlassChoices { get; } =

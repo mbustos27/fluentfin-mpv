@@ -37,7 +37,7 @@
         Title="Seaglass"
         BackRequested="TitleBar_BackRequested"
         IsBackButtonEnabled="{x:Bind ViewModel.CanGoBack, Mode=OneWay}"
-        IsBackButtonVisible="{x:Bind ViewModel.User, Converter={StaticResource ObjectToBoolConverter}, Mode=OneWay}"
+        IsBackButtonVisible="{x:Bind ViewModel.IsBackButtonShown, Mode=OneWay}"
         IsPaneToggleButtonVisible="False"
         Subtitle="{x:Bind ViewModel.Version}"
         Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsVisible), Mode=OneWay}">
@@ -143,34 +143,49 @@
                         Style="{ThemeResource CaptionTextBlockStyle}"
                         Text="{x:Bind ViewModel.SignOutStatus, Mode=OneWay}" />
                 </StackPanel>
+                <!--
+                    Seaglass 1.1.4 (UX review, prioritised fix 15): the Account menu: who is signed in and to which server, Switch user,
+                    Sign out and Settings. Sync Play, Quick Connect and Play On moved to Settings > Other devices; the admin Dashboard
+                    went (administrators open the server's administration from Settings > Servers and accounts). Hidden while the player
+                    page is shown (fix 5: a Sign out over a playing video is a hazard), from the navigation (TitleBarViewModel).
+                -->
                 <Button
-                    Width="32"
-                    Height="32"
+                    x:Name="AccountButton"
+                    Width="40"
+                    Height="40"
                     Padding="0"
                     HorizontalAlignment="Right"
                     AutomationProperties.Name="{x:Bind core:ItemLabels.AccountButtonName(ViewModel.User.Name), Mode=OneWay}"
                     CornerRadius="{StaticResource GlassCircleCornerRadius}"
                     Style="{StaticResource GlassPillButtonStyle}"
-                    ToolTipService.ToolTip="{x:Bind ViewModel.User.Name}"
-                    Visibility="{x:Bind ViewModel.User, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}">
+                    ToolTipService.ToolTip="Account"
+                    Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsAccountShown), Mode=OneWay}">
                     <PersonPicture
                         Width="32"
                         Height="32"
+                        AutomationProperties.AccessibilityView="Raw"
                         DisplayName="{x:Bind ViewModel.User.Name, Mode=OneWay}" />
                     <Button.Flyout>
                         <Flyout
-                            x:Name="FooterFlyout"
+                            x:Name="AccountFlyout"
                             AreOpenCloseAnimationsEnabled="True"
                             LightDismissOverlayMode="On"
                             Placement="BottomEdgeAlignedRight">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition />
-                                    <RowDefinition Height="*" />
-                                </Grid.RowDefinitions>
-
-                                <Grid ColumnSpacing="10">
+                            <!--  the menu's pane is named for Narrator ("Account"); the glass is the shared presenter's  -->
+                            <Flyout.FlyoutPresenterStyle>
+                                <Style BasedOn="{StaticResource GlassFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
+                                    <Setter Property="AutomationProperties.Name" Value="Account" />
+                                </Style>
+                            </Flyout.FlyoutPresenterStyle>
+                            <StackPanel
+                                x:Name="AccountMenu"
+                                MinWidth="260"
+                                Spacing="2">
+                                <!--  the signed-in user and the server  -->
+                                <Grid
+                                    x:Name="AccountIdentity"
+                                    Margin="4,4,4,8"
+                                    ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -178,58 +193,50 @@
                                     <PersonPicture
                                         Width="48"
                                         Height="48"
+                                        AutomationProperties.AccessibilityView="Raw"
                                         DisplayName="{x:Bind ViewModel.User.Name, Mode=OneWay}" />
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        Style="{ThemeResource BodyStrongTextBlockStyle}"
-                                        Text="{x:Bind ViewModel.User.Name, Mode=OneWay}" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock
+                                            x:Name="AccountUserName"
+                                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                            Text="{x:Bind ViewModel.User.Name, Mode=OneWay}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            x:Name="AccountServerName"
+                                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                            Style="{ThemeResource CaptionTextBlockStyle}"
+                                            Text="{x:Bind ViewModel.ServerName, Mode=OneWay}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
                                 </Grid>
 
-                                <MenuFlyoutSeparator Grid.Row="1" Margin="{StaticResource XSmallTopBottomMargin}" />
+                                <MenuFlyoutSeparator Margin="{StaticResource XSmallTopBottomMargin}" />
 
-                                <StackPanel Grid.Row="2">
-                                    <lc:MenuFlyoutButton
-                                        HorizontalAlignment="Stretch"
-                                        AllowFocusOnInteraction="False"
-                                        Click="CloseTitleBarFooterFlyout"
-                                        Command="{x:Bind ViewModel.GoToDashboardCommand}"
-                                        Content="Dashboard"
-                                        Icon="{ui:FontIcon Glyph=&#xE713;}"
-                                        Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.User.Policy.IsAdministrator), Mode=OneWay}" />
-                                    <lc:MenuFlyoutButton
-                                        HorizontalAlignment="Stretch"
-                                        Click="CloseTitleBarFooterFlyout"
-                                        Command="{x:Bind root:App.Dialogs.ChangeDefaultSessionCommand}"
-                                        Content="Play On"
-                                        Icon="{ui:SymbolIcon Symbol=Remote}" />
-                                    <lc:MenuFlyoutButton
-                                        HorizontalAlignment="Stretch"
-                                        Click="CloseTitleBarFooterFlyout"
-                                        Command="{x:Bind root:App.Dialogs.SelectSyncPlayGroupCommand}"
-                                        Content="Sync Play"
-                                        Icon="{ui:FontIcon Glyph=&#xE895;}" />
-                                    <lc:MenuFlyoutButton
-                                        HorizontalAlignment="Stretch"
-                                        Click="CloseTitleBarFooterFlyout"
-                                        Command="{x:Bind ViewModel.LogoutCommand}"
-                                        Content="Logout"
-                                        Icon="{ui:FontIcon Glyph=&#xF3B1;}" />
-                                    <lc:MenuFlyoutButton
-                                        HorizontalAlignment="Stretch"
-                                        Click="CloseTitleBarFooterFlyout"
-                                        Command="{x:Bind ViewModel.SwitchUserCommand}"
-                                        Content="Switch user"
-                                        Icon="{ui:FontIcon Glyph=&#xE748;}" />
-                                    <lc:MenuFlyoutButton
-                                        HorizontalAlignment="Stretch"
-                                        Click="CloseTitleBarFooterFlyout"
-                                        Command="{x:Bind root:App.Dialogs.QuickConnectAuthCommand}"
-                                        Content="Quick Connect"
-                                        Icon="{ui:FontIcon Glyph=&#xE703;}" />
-                                </StackPanel>
+                                <lc:MenuFlyoutButton
+                                    x:Name="SwitchUserItem"
+                                    HorizontalAlignment="Stretch"
+                                    Click="CloseAccountFlyout"
+                                    Command="{x:Bind ViewModel.SwitchUserCommand}"
+                                    Content="Switch user"
+                                    Icon="{ui:FontIcon Glyph=&#xE748;}" />
+                                <lc:MenuFlyoutButton
+                                    x:Name="SignOutItem"
+                                    HorizontalAlignment="Stretch"
+                                    Click="CloseAccountFlyout"
+                                    Command="{x:Bind ViewModel.LogoutCommand}"
+                                    Content="Sign out"
+                                    Icon="{ui:FontIcon Glyph=&#xF3B1;}" />
 
-                            </Grid>
+                                <MenuFlyoutSeparator Margin="{StaticResource XSmallTopBottomMargin}" />
+
+                                <lc:MenuFlyoutButton
+                                    x:Name="SettingsItem"
+                                    HorizontalAlignment="Stretch"
+                                    Click="CloseAccountFlyout"
+                                    Command="{x:Bind ViewModel.GoToSettingsCommand}"
+                                    Content="Settings"
+                                    Icon="{ui:FontIcon Glyph=&#xE713;}" />
+                            </StackPanel>
                         </Flyout>
                     </Button.Flyout>
                 </Button>

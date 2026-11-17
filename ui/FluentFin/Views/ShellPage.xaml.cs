@@ -1,5 +1,6 @@
 ﻿using System.Reactive.Linq;
 using FluentFin.Contracts.Services;
+using FluentFin.Core.ViewModels;
 using FluentFin.Services;
 using FluentFin.ViewModels;
 using Microsoft.UI.Xaml.Controls;
@@ -31,6 +32,12 @@ public sealed partial class ShellPage : Page
 		ViewModel.NavigationService.Frame = NavigationFrame;
 		ViewModel.NavigationViewService.Initialize(NavigationViewControl);
 
+		// Seaglass 1.1.4 (UX review, prioritised fix 5): the title bar's Back and Account follow the page this frame shows, by
+		// its type, as soon as the frame shows it (the navigation service's own Navigated waits for the page's view model:
+		// the player's waits for the playback to start). The shell going (Log out, Switch user) shows them again.
+		NavigationFrame.Navigated += OnFrameNavigated;
+		Unloaded += (_, _) => _titleBar.OnPageShown(null);
+
 		// Seaglass 1.1.3: a page off the rail (Selected null) passes through too, so RailSelection can unmark Settings
 		ViewModel.WhenAnyValue(x => x.Selected)
 			.Where(x => x is null or NavigationViewItem)
@@ -45,10 +52,14 @@ public sealed partial class ShellPage : Page
 			});
 	}
 
+	// Seaglass 1.1.4: the title bar (TitleBarViewModel.OnPageShown)
+	private readonly TitleBarViewModel _titleBar = (TitleBarViewModel)App.GetService<ITitleBarViewModel>();
+
+	private void OnFrameNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e) => _titleBar.OnPageShown(e.SourcePageType);
+
 	// Seaglass: Alt+Left, the Back and Forward keys and Mouse 4 / 5 are the window's (WindowShortcuts), on every page
-	private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-	{
-	}
+	// Seaglass 1.1.4: a shell shown again (back in the window) tells the title bar what its frame shows
+	private void OnLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _titleBar.OnPageShown(NavigationFrame.Content?.GetType());
 
 	private void OnUpdateNoticeChanged() => DispatcherQueue.TryEnqueue(ShowUpdateNotice);
 

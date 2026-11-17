@@ -28,9 +28,18 @@
             Message="To sign in with Quick Connect, select the 'Quick Connect' button on the device you are logging in from and enter the displayed code below."
             Severity="Informational" />
 
-        <StackPanel>
+        <StackPanel Spacing="4">
             <TextBlock Text="Quick connect code" />
-            <TextBox Text="{x:Bind ViewModel.QuickConnectCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBox
+                x:Name="CodeBox"
+                AutomationProperties.Name="Quick connect code"
+                Text="{x:Bind ViewModel.QuickConnectCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            <!--  Seaglass 1.1.4: what OK did (approved, or the code did not work), read out as it changes  -->
+            <TextBlock
+                x:Name="StatusText"
+                AutomationProperties.LiveSetting="Polite"
+                Text="{x:Bind ViewModel.Status, Mode=OneWay}"
+                TextWrapping="WrapWholeWords" />
         </StackPanel>
     </StackPanel>
 

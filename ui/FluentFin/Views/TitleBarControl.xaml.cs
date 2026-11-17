@@ -34,9 +34,9 @@ public sealed partial class TitleBarControl : UserControl
 		ViewModel.GoBack();
 	}
 
-	private void CloseTitleBarFooterFlyout(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+	private void CloseAccountFlyout(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
 	{
-		FooterFlyout.Hide();
+		AccountFlyout.Hide();
 	}
 
 	private void KeyboardAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)

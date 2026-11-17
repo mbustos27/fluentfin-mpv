@@ -313,6 +313,24 @@ class ServerTests(unittest.TestCase):
         self.assertNotIn(secret, text)
         self.assertNotIn(token, text)
 
+    def test_quick_connect_authorize_approves_another_devices_code_for_the_signed_in_user(self):
+        # Seaglass 1.1.4: Settings > Other devices > Quick Connect, the signed-in app approving a code
+        status, qc, _ = self.request("/QuickConnect/Initiate", "POST")
+        self.assertEqual(200, status)
+        code, secret = qc["Code"], qc["Secret"]
+        # signed out: refused, the code stays waiting
+        self.assertEqual(401, self.request("/QuickConnect/Authorize?code=" + code, "POST")[0])
+        self.assertFalse(self.request("/QuickConnect/Connect?secret=" + secret)[1]["Authenticated"])
+        # a code that is not waiting
+        self.assertEqual(404, self.request("/QuickConnect/Authorize?code=x", "POST", token=self.token)[0])
+        status, ok, _ = self.request("/QuickConnect/Authorize?code=%s&userId=%s" % (code, self.srv.user_id), "POST", token=self.token)
+        self.assertEqual(200, status)
+        self.assertIs(True, ok)
+        self.assertTrue(self.request("/QuickConnect/Connect?secret=" + secret)[1]["Authenticated"])
+        status, auth, _ = self.request("/Users/AuthenticateWithQuickConnect", "POST", {"Secret": secret})
+        self.assertEqual(200, status)
+        self.assertEqual(CREDS["username"], auth["User"]["Name"])
+
     def test_user_data_endpoint_and_absent_plugin(self):
         movie = self.get("/__harness/fixture")["movie"]["id"]
         data = self.get("/UserItems/%s/UserData" % movie)

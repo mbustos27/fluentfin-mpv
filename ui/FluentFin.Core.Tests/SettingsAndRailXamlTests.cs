@@ -67,7 +67,8 @@ public sealed class SettingsAndRailXamlTests
 			return (string?)heading.Attribute("Text");
 		}).ToList();
 
-		Assert.Equal(["Appearance", "Playback", "Audio and subtitles", "Servers and accounts", "Integrations", "Advanced", "About"], titles);
+		// Seaglass 1.1.4: Other devices (Quick Connect, Sync Play, Play On, from the old profile flyout)
+		Assert.Equal(["Appearance", "Playback", "Audio and subtitles", "Servers and accounts", "Other devices", "Integrations", "Advanced", "About"], titles);
 
 		// nothing after About
 		var stack = groups[^1].Parent!;
