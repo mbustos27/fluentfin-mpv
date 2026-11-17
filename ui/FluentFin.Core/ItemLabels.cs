@@ -121,18 +121,7 @@ public static class ItemLabels
 			return string.Empty;
 		}
 
-		var code = (episode.ParentIndexNumber, episode.IndexNumber) switch
-		{
-			({ } season, { } number) => $"S{season}E{number}",
-			(null, { } number) => $"E{number}",
-			_ => "",
-		};
-		if (code.Length > 0 && episode.IndexNumberEnd is { } end && end > episode.IndexNumber)
-		{
-			code += $"-E{end}";
-		}
-
-		var title = string.Join(" ", new[] { code, episode.Name?.Trim() ?? "" }.Where(x => x.Length > 0));
+		var title = EpisodeTitle(episode);
 		List<string> parts = title.Length > 0 ? [title] : [];
 
 		var data = episode.UserData;
@@ -153,11 +142,90 @@ public static class ItemLabels
 		return string.Join(", ", parts);
 	}
 
+	/// <summary>"S1E4", "S2E5-E6", "E7" (no season), or empty without a number: the code an episode row and Play show.</summary>
+	public static string EpisodeCode(BaseItemDto? episode)
+	{
+		var code = (episode?.ParentIndexNumber, episode?.IndexNumber) switch
+		{
+			({ } season, { } number) => $"S{season}E{number}",
+			(null, { } number) => $"E{number}",
+			_ => "",
+		};
+		if (code.Length > 0 && episode?.IndexNumberEnd is { } end && end > episode.IndexNumber)
+		{
+			code += $"-E{end}";
+		}
+
+		return code;
+	}
+
+	/// <summary>"S1E4 Pilot": the code, then the name (either alone when the other is missing).</summary>
+	public static string EpisodeTitle(BaseItemDto? episode) =>
+		string.Join(" ", new[] { EpisodeCode(episode), episode?.Name?.Trim() ?? "" }.Where(x => x.Length > 0));
+
+	/// <summary>
+	/// Seaglass 1.1.4: the item a card's or an item page's button acts on, in its name and tooltip, so thirty cards do not
+	/// read as thirty "Play" buttons (Seaglass UX review, fix 4): "Inception"; "Season 2 of Lost"; an episode with its series
+	/// and code, "The Office S2E3 The Fight" (a name that only repeats the series is left out).
+	/// </summary>
+	public static string ActionTarget(BaseItemDto? dto)
+	{
+		if (dto is null)
+		{
+			return "";
+		}
+
+		var name = dto.Name?.Trim() ?? "";
+		var series = dto.SeriesName?.Trim() ?? "";
+		switch (dto.Type)
+		{
+			case BaseItemDto_Type.Episode:
+				if (string.Equals(name, series, StringComparison.OrdinalIgnoreCase))
+				{
+					name = "";
+				}
+				return string.Join(" ", new[] { series, EpisodeCode(dto), name }.Where(x => x.Length > 0));
+			case BaseItemDto_Type.Season when series.Length > 0:
+				return name.Length > 0 ? $"{name} of {series}" : series;
+			default:
+				return name;
+		}
+	}
+
+	/// <summary>"Play Inception" (a card's Play).</summary>
+	public static string PlayAction(BaseItemDto? dto) => Phrase("Play", ActionTarget(dto), "");
+
+	/// <summary>"Play Inception from the beginning" (next to Resume on a movie or an episode page).</summary>
+	public static string PlayFromBeginningAction(BaseItemDto? dto) => Phrase("Play", ActionTarget(dto), "from the beginning");
+
+	/// <summary>
+	/// The watched toggle says what a click does now, as the item's menu does: "Mark Inception as watched", or "... as
+	/// unwatched" while it shows watched. <paramref name="watched"/> is the toggle's state (what the user sees).
+	/// </summary>
+	public static string WatchedAction(BaseItemDto? dto, bool? watched) =>
+		Phrase("Mark", ActionTarget(dto), watched == true ? "as unwatched" : "as watched");
+
+	/// <summary>"Add Inception to favorites", or "Remove Inception from favorites" while the toggle shows a favourite.</summary>
+	public static string FavoriteAction(BaseItemDto? dto, bool? favorite) =>
+		favorite == true ? Phrase("Remove", ActionTarget(dto), "from favorites") : Phrase("Add", ActionTarget(dto), "to favorites");
+
+	/// <summary>"More options for Inception".</summary>
+	public static string MoreOptions(BaseItemDto? dto) => Phrase("More options", ActionTarget(dto).Length > 0 ? "for " + ActionTarget(dto) : "", "");
+
+	/// <summary>
+	/// An episode row's watched toggle, named as its Play is ("Mark as unwatched, episode 3, Pilot"); see <see cref="WatchedAction"/>.
+	/// </summary>
+	public static string EpisodeWatchedAction(BaseItemDto? episode, bool? watched) =>
+		EpisodeAction(watched == true ? "Mark as unwatched" : "Mark as watched", episode);
+
+	private static string Phrase(string verb, string target, string tail) =>
+		string.Join(" ", new[] { verb, target, tail }.Where(x => x.Length > 0));
+
 	/// <summary>
 	/// "45% watched" for a progress bar that shows: never 0% (the bar shows for any progress) and never 100% (an item at
 	/// 99.6% is not watched; the server says so with Played).
 	/// </summary>
-	private static string WatchedPercent(double percent) =>
+	internal static string WatchedPercent(double percent) =>
 		$"{Math.Clamp((int)Math.Round(percent), 1, 99)}% watched";
 
 	/// <summary>"Account, alice": the title bar button that shows only the user's picture.</summary>

@@ -37,9 +37,12 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 				return LoadMessages.CouldNotLoad("this series");
 			}
 
+			// Seaglass 1.1.4: asked alongside the rows, so the page does not wait for it
+			var play = UpdatePlayTarget(id);
 			await UpdateNextUp(dto);
 			await UpdateSeasons(dto);
 			await UpdateSimilar(dto);
+			await play;
 			return LoadOutcome.Loaded;
 		});
 	}
@@ -56,6 +59,10 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 	[ObservableProperty]
 	public partial BaseItemViewModel NextUp { get; set; }
 
+	/// <summary>Seaglass 1.1.4: what Play starts, on the button ("Resume S1E4", "Play S2E1", "Play from the start"; <see cref="ItemPlay"/>).</summary>
+	[ObservableProperty]
+	public partial PlayTarget PlayTarget { get; set; } = PlayTarget.Plain;
+
 	public IJellyfinClient JellyfinClient { get; } = jellyfinClient;
 
 	private async Task UpdateSeries(Guid id)
@@ -68,6 +75,17 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 
 		Dto = series;
 
+	}
+
+	// the series' episodes as Play reads them (MpvQueue): one request without images; "Play" alone when it fails
+	private async Task UpdatePlayTarget(Guid seriesId)
+	{
+		PlayTarget = PlayTarget.Plain;
+		var episodes = await JellyfinClient.GetSeriesEpisodes(seriesId);
+		if (Dto?.Id == seriesId)
+		{
+			PlayTarget = ItemPlay.For(Dto, episodes?.Items);
+		}
 	}
 
 	private async Task UpdateNextUp(BaseItemDto dto)

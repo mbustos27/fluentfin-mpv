@@ -58,16 +58,22 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 		await jellyfinClient.ResetProgress(id);
 	}
 
+	// Seaglass 1.1.4: the item's copy follows, so the next toggle goes the other way and its name ("Mark ... as unwatched",
+	// ItemLabels.WatchedAction) tells the truth; before, a second click on an item page sent the first one's state again
 	[RelayCommand]
 	public async Task ToggleWatched(BaseItemDto dto)
 	{
-		await jellyfinClient.SetPlayed(dto, !(dto.UserData?.Played ?? false));
+		var played = !(dto.UserData?.Played ?? false);
+		await jellyfinClient.SetPlayed(dto, played);
+		(dto.UserData ??= new UserItemDataDto()).Played = played;
 	}
 
 	[RelayCommand]
 	public async Task ToggleFavorite(BaseItemDto dto)
 	{
-		await jellyfinClient.SetIsFavorite(dto, !(dto.UserData?.IsFavorite ?? false));
+		var favorite = !(dto.UserData?.IsFavorite ?? false);
+		await jellyfinClient.SetIsFavorite(dto, favorite);
+		(dto.UserData ??= new UserItemDataDto()).IsFavorite = favorite;
 	}
 
 	[RelayCommand]

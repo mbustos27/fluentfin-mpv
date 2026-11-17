@@ -37,8 +37,11 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 				return LoadMessages.CouldNotLoad("this season");
 			}
 
+			// Seaglass 1.1.4: asked alongside the episodes, so the page does not wait for it
+			var play = UpdatePlayTarget(id);
 			await UpdateEpisodes(dto);
 			await UpdateSeasonPills();
+			await play;
 			return LoadOutcome.Loaded;
 		});
 	}
@@ -48,6 +51,13 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 
 	[ObservableProperty]
 	public partial List<BaseItemDto> Episodes { get; set; }
+
+	/// <summary>
+	/// Seaglass 1.1.4: what Play starts, on the button (<see cref="ItemPlay"/>): the series' first episode not watched, which
+	/// can be in another season, as both players start it.
+	/// </summary>
+	[ObservableProperty]
+	public partial PlayTarget PlayTarget { get; set; } = PlayTarget.Plain;
 
 	/// <summary>Seaglass: the series' seasons, as the picker of glass pills; empty for a series of one season.</summary>
 	[ObservableProperty]
@@ -66,6 +76,22 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 		SeasonPills = ItemSiblings.SeasonPills(response?.Items, id);
 	}
 
+
+	// the series' episodes as Play reads them (MpvQueue): one request without images; "Play" alone when it fails
+	private async Task UpdatePlayTarget(Guid seasonId)
+	{
+		PlayTarget = PlayTarget.Plain;
+		if (Dto?.SeriesId is not { } seriesId)
+		{
+			return;
+		}
+
+		var episodes = await jellyfinClient.GetSeriesEpisodes(seriesId);
+		if (Dto?.Id == seasonId)
+		{
+			PlayTarget = ItemPlay.For(Dto, episodes?.Items);
+		}
+	}
 
 	private async Task UpdateSeason(Guid id)
 	{
