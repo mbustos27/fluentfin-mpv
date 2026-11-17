@@ -140,3 +140,20 @@ boxes around every poster title). So:
 - **Kept**: the floating rail, the hero's text panel (now neutral glass), page transitions, the pointer highlight, Solid, contrast.
 - **Judging on real art**: the fake server can serve photographs: set `FAKESERVER_PHOTO_DIR=<folder of .jpg>` (Windows' own wallpapers
   were used: scenery, not faces); its BlurHashes are still those of the colour blocks.
+
+## 1.1.3: one overlay recipe (supersedes the overlay lines above)
+
+Menus, context menus, the profile flyout, the player's menus, tooltips and every ContentDialog: one blur under a strong tint,
+the light edge (`GlassStrokeBrush`), **`GlassOverlayCornerRadius` 12**, the glass text colour. Never acrylic on acrylic:
+- **In the window** (Flyout, ContentDialog): `GlassPanelStrongBrush` (in-app acrylic). A dialog is ONE surface: its title, content and
+  buttons are transparent on it, with a `GlassDividerBrush` hairline above the buttons. Dialogs made in code get the same template
+  (the implicit `ContentDialog` style in `TextBlock.xaml`).
+- **A window of its own** (MenuFlyout, ToolTip): in-app acrylic has nothing to blur there, and a menu already has Windows' acrylic
+  under it (WinUI's default `SystemBackdrop`). So their background is the flat `GlassOverlayBrush`: the palette's container colour at
+  90 % (`SeaglassTheme.OverlayColor`), opaque in Solid (`GlassOverlaySolidBrush`, swapped by `GlassTheme` like the panels).
+- Keyed styles for other files: `GlassFlyoutPresenterStyle`, `GlassMenuFlyoutPresenterStyle`; a button on a glass panel uses
+  `GlassInsetPillButtonStyle` (the flat `GlassInsetFillBrush`), not a second acrylic.
+- **The accent on artwork** (a progress bar on a poster's dark track, a watched badge) is `SeaglassAccentOnImageBrush`: the light aqua
+  in both themes (the light theme's deeper aqua has 1.6:1 on the track over a bright poster).
+- `SEAGLASS_THEME` now sets the application's theme, so the harness's light screenshots show light dialogs, menus and tooltips too.
+- Measured contrast (screenshots' pixels): `shots\contrast.md` of the 1.1.3 glass stream.
