@@ -495,6 +495,73 @@ public sealed class MpvControlsViewModelTests
 		Assert.Equal(0.35, fractions[^1], 3);
 	}
 
+	private int Toggles() => _sent.Count(x => x.Command == Bridge.Commands.TogglePause);
+
+	/// <summary>Seaglass 1.1.3: a click on the video plays or pauses only once the double-click time has passed.</summary>
+	[Fact]
+	public void A_click_on_the_video_plays_or_pauses_after_the_double_click_time()
+	{
+		Playing();
+		_vm.DoubleClickTime = TimeSpan.FromMilliseconds(400);
+		_vm.VideoClicked();
+		Assert.Equal(0, Toggles());
+		Assert.True(_vm.ControlsVisible, "the controls show at once");
+		_now += TimeSpan.FromMilliseconds(400);
+		_ = _vm.ClickWaitOver();
+		Assert.Equal(1, Toggles());
+		Assert.True(_vm.IsPaused);
+		_ = _vm.ClickWaitOver();
+		Assert.Equal(1, Toggles());
+	}
+
+	/// <summary>Seaglass 1.1.3: a double click is full screen only: no pause and unpause (1.1.2 stuttered the playback).</summary>
+	[Fact]
+	public void A_double_click_on_the_video_is_full_screen_only()
+	{
+		Playing();
+		var fullScreen = new List<bool>();
+		_vm.SetFullScreen = fullScreen.Add;
+		_vm.VideoClicked();
+		_vm.VideoDoubleClicked();
+		_ = _vm.ClickWaitOver();
+		Assert.Equal(0, Toggles());
+		Assert.Equal([true], fullScreen);
+		Assert.False(_vm.IsPaused);
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.3 (review): a click, then Space within the wait: Space pauses, and the click's own toggle must not then
+	/// play again by itself. The same for the play button, a new item, and a pause or play from elsewhere (the end of an item).
+	/// </summary>
+	[Theory]
+	[InlineData("space")]
+	[InlineData("k")]
+	[InlineData("button")]
+	[InlineData("new item")]
+	[InlineData("paused elsewhere")]
+	[InlineData("page left")]
+	public void Another_play_or_pause_cancels_a_waiting_click(string what)
+	{
+		Playing();
+		_vm.VideoClicked();
+		var before = Toggles();
+		switch (what)
+		{
+			case "space": _vm.HandleKey(MpvControlsViewModel.Keys.Space); break;
+			case "k": _vm.HandleKey(MpvControlsViewModel.Keys.K); break;
+			case "button": _ = _vm.TogglePause(); break;
+			case "new item": _vm.OnItem(new BridgeItem("next", "Next", "Episode")); break;
+			case "paused elsewhere": _vm.OnState(new BridgeState { State = Bridge.States.Paused, Volume = 80 }); break;
+			case "page left": _vm.CancelClick(); break;
+		}
+
+		var after = Toggles();
+		_now += _vm.DoubleClickTime;
+		_ = _vm.ClickWaitOver();
+		Assert.Equal(after, Toggles());
+		Assert.True(after - before <= 1);
+	}
+
 	[Fact]
 	public void The_volume_keys_and_mute_show_the_indicator_too_and_it_fills_to_the_volume()
 	{

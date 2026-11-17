@@ -200,21 +200,26 @@ public sealed class FullScreenTransitionTests
 		Assert.Contains("shown Cloak", _calls);
 	}
 
+	/// <summary>
+	/// The limit timer's tick is the limit: it fired up to 0.26 ms before the switch's own clock reached 300 ms (measured),
+	/// and a check of the clock then left the switch running for good (F and Esc dead until the page was left).
+	/// </summary>
 	[Fact]
-	public void The_limit_shows_the_window_whatever_the_layout()
+	public void The_limit_shows_the_window_whatever_the_layout_and_the_clock()
 	{
 		var transition = Make(FullScreenHide.Cover);
 		transition.Apply(true, true, true);
 		transition.Frame(false);
 		RunAfterFrame();
-		_now = FullScreenReveal.SoftLimit - TimeSpan.FromMilliseconds(1);
-		transition.LimitTimer();
-		Assert.True(transition.IsRunning);
-		_now = FullScreenReveal.SoftLimit;
-		transition.LimitTimer();
+		_now = FullScreenReveal.SoftLimit - TimeSpan.FromMilliseconds(0.26);
+		transition.LimitReached();
 		Assert.False(transition.IsRunning);
 		Assert.Equal(["inset True", "hide Cover", "presenter True", "unhide", "shown Cover", "settled"], _calls);
 		Assert.True(FullScreenReveal.HardLimit > FullScreenReveal.SoftLimit, "the limit off the UI thread is the backstop");
+
+		// a late tick after the switch ended does nothing
+		transition.LimitReached();
+		Assert.Single(_calls, c => c == "settled");
 	}
 
 	/// <summary>
@@ -227,7 +232,7 @@ public sealed class FullScreenTransitionTests
 		var transition = Make(FullScreenHide.Cover);
 		transition.Apply(true, true, true);
 		_now = FullScreenReveal.SoftLimit;
-		transition.LimitTimer();
+		transition.LimitReached();
 		Assert.Equal(["inset True", "hide Cover", "presenter True", "unhide", "shown Cover", "settled"], _calls);
 		Assert.True(_full);
 		Assert.False(transition.IsRunning);
@@ -240,7 +245,7 @@ public sealed class FullScreenTransitionTests
 		transition.Apply(true, true, true);
 		transition.Frame(false);
 		_now = FullScreenReveal.SoftLimit;
-		transition.LimitTimer();
+		transition.LimitReached();
 		RunAfterFrame();
 		Assert.Single(_calls, c => c == "presenter True");
 		Assert.True(_full);
@@ -267,7 +272,7 @@ public sealed class FullScreenTransitionTests
 		else
 		{
 			_now = FullScreenReveal.SoftLimit;
-			transition.LimitTimer();
+			transition.LimitReached();
 		}
 
 		Assert.Equal(["inset True", "hide Cover", "when restored True", "unhide", "shown Cover", "settled"], _calls);

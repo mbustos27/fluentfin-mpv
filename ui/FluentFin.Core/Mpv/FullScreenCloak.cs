@@ -142,8 +142,6 @@ public sealed class FullScreenReveal(FullScreenHide mode)
 		return _readyFrames >= FramesAfterReady && now - set >= Minimum;
 	}
 
-	/// <summary>The UI thread's limit (from the switch's start at 0): show whatever the layout.</summary>
-	public static bool TimedOut(TimeSpan now) => now >= SoftLimit;
 }
 
 /// <summary>
@@ -338,19 +336,26 @@ public sealed class FullScreenTransition(FullScreenHide mode, Func<TimeSpan> clo
 		}
 	}
 
+	/// <summary>The running switch's number: the page's limit timer belongs to the switch it was started for.</summary>
+	public int Generation => _generation;
+
 	/// <summary>
-	/// The page's timer for <see cref="FullScreenReveal.SoftLimit"/>: the window shows whatever the layout. A presenter change
-	/// still waiting for the cover's frame is made first (what was asked for still happens).
+	/// The page's timer for <see cref="FullScreenReveal.SoftLimit"/> fired: the window shows whatever the layout. The tick
+	/// is the limit (the timer can fire a fraction of a millisecond before the switch's own clock says so; a check of the
+	/// clock then left the switch running for good, and F and Esc dead). A presenter change still waiting for the cover's
+	/// frame is made first (what was asked for still happens).
 	/// </summary>
-	public void LimitTimer()
+	public void LimitReached()
 	{
-		if (_reveal is not null && FullScreenReveal.TimedOut(Elapsed))
+		if (_reveal is null)
 		{
-			PresenterAfterFrame();
-			if (_reveal is not null)
-			{
-				End();
-			}
+			return;
+		}
+
+		PresenterAfterFrame();
+		if (_reveal is not null)
+		{
+			End();
 		}
 	}
 
@@ -372,5 +377,57 @@ public sealed class FullScreenTransition(FullScreenHide mode, Func<TimeSpan> clo
 		}
 
 		host.Settled();
+	}
+}
+
+/// <summary>
+/// Seaglass 1.1.3: a hide's limit that runs on another thread (the cloak's thread-pool timer) acts only for the hide it was
+/// set for: a limit from the switch before, firing late, must not show the next switch's window early. Thread-safe.
+/// </summary>
+public sealed class HideGeneration
+{
+	private readonly object _lock = new();
+	private int _current;
+
+	/// <summary>A new hide (or none: the last one ended): its number; every earlier number goes stale.</summary>
+	public int Next()
+	{
+		lock (_lock)
+		{
+			return ++_current;
+		}
+	}
+
+	/// <summary>Runs <paramref name="action"/> (under the lock) only while <paramref name="generation"/> is the current hide's.</summary>
+	public bool RunIfCurrent(int generation, Action action)
+	{
+		lock (_lock)
+		{
+			if (generation != _current)
+			{
+				return false;
+			}
+
+			action();
+			return true;
+		}
+	}
+}
+
+/// <summary>
+/// Seaglass 1.1.3: the player page being left (navigated from). In this order: the video is detached first, so a request
+/// that waited for the running switch switches at once, with no layout to wait for and nothing hidden; then the running
+/// switch ends (its hide goes; a presenter change still waiting for the cover's frame is dropped); then the window is
+/// restored, whatever the switch was doing. Ended first (1.1.3's first try), a waiting request started a new covered switch
+/// on the page being left, and the restore saw its target and did nothing: the cover sat over the next page, or the window
+/// stayed full screen.
+/// </summary>
+public static class PlayerPageLeave
+{
+	public static void Run(Action detachVideo, Action endSwitch, Action restoreWindow)
+	{
+		detachVideo();
+		endSwitch();
+		restoreWindow();
 	}
 }

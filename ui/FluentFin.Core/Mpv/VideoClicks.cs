@@ -22,6 +22,16 @@ public sealed class VideoClicks
 	/// <summary>A click on the video: its play/pause waits (the caller starts its timer for <see cref="DoubleClickTime"/>).</summary>
 	public void Clicked() => _pending = true;
 
+	/// <summary>
+	/// Another play/pause (a key, the button, the backend's: the end of the item, a new item, a remote) or the page going: the
+	/// waiting click does nothing, and nothing of it is undone later.
+	/// </summary>
+	public void Cancel()
+	{
+		_pending = false;
+		_toggledAt = null;
+	}
+
 	/// <summary>The click's wait is over at <paramref name="now"/>: true when its play/pause is to happen now.</summary>
 	public bool WaitOver(DateTimeOffset now)
 	{

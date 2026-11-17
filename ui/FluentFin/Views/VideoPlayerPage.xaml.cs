@@ -68,13 +68,18 @@ public sealed partial class VideoPlayerPage : Page
 	{
 		_navigatedFrom = true;
 		_chrome.NavigatedFrom();
-		// Seaglass 1.1.3: a switch still running ends first (its cover goes; a presenter change still waiting for the
-		// cover's frame is dropped), so the restore below starts from the window's real state
-		EndSwitch();
-		DetachVideo();
 
-		// restores the window and tells the backend, before the view model stops (the next page starts from the real state)
-		_ = ViewModel.LeaveFullScreen();
+		// Seaglass 1.1.3 (PlayerPageLeave): the video first, so a request that waited for a running switch goes at once with
+		// nothing to wait for; then the switch ends (its cover goes); then the window is restored and the backend told, before
+		// the view model stops (the next page starts from the real state), whatever a switch was doing
+		PlayerPageLeave.Run(
+			DetachVideo,
+			() =>
+			{
+				EndSwitch();
+				StopWaitingForRestore();
+			},
+			() => _ = ViewModel.LeaveFullScreen());
 	}
 
 	private void OnLoaded(object sender, RoutedEventArgs e)
@@ -326,7 +331,8 @@ public sealed partial class VideoPlayerPage : Page
 		_transition.Apply(fullScreen, _videoAttached, _attachedComposition);
 		if (_transition.IsRunning)
 		{
-			// the window shows again once the layout and the picture's hold are done, or at the limit
+			// the window shows again once the layout and the picture's hold are done, or at the limit (this switch's)
+			_softLimitGeneration = _transition.Generation;
 			_softLimit ??= DispatcherQueue.CreateTimer();
 			_softLimit.Interval = FullScreenReveal.SoftLimit;
 			_softLimit.IsRepeating = false;
@@ -365,17 +371,24 @@ public sealed partial class VideoPlayerPage : Page
 				}
 
 				_cloakedHwnd = hwnd;
-				// the window shows by then even with the UI thread stuck (DWM takes the call from any thread)
+				// the window shows by then even with the UI thread stuck (DWM takes the call from any thread); only for this
+				// cloak: a late limit of the switch before must not show the next one early (Dispose does not wait for it)
+				var generation = _cloakGeneration.Next();
 				_hardLimit?.Dispose();
-				_hardLimit = new System.Threading.Timer(_ => WindowCloak.Set(hwnd, false), null, FullScreenReveal.HardLimit, System.Threading.Timeout.InfiniteTimeSpan);
+				_hardLimit = new System.Threading.Timer(_ => _cloakGeneration.RunIfCurrent(generation, () => WindowCloak.Set(hwnd, false)),
+					null, FullScreenReveal.HardLimit, System.Threading.Timeout.InfiniteTimeSpan);
 				return true;
 			default:
 				return false;
 		}
 	}
 
+	private readonly HideGeneration _cloakGeneration = new();
+
 	private void Unhide()
 	{
+		// the running cloak's limit goes stale first: it can no longer act, even if its callback is already running
+		_cloakGeneration.Next();
 		_hardLimit?.Dispose();
 		_hardLimit = null;
 		if (_cloakedHwnd != 0)
@@ -449,7 +462,15 @@ public sealed partial class VideoPlayerPage : Page
 
 	private void OnSwitchFrame(object? sender, object e) => _transitionField?.Frame(_composition.IsHolding);
 
-	private void OnSoftLimit(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args) => _transitionField?.LimitTimer();
+	private int _softLimitGeneration;
+
+	private void OnSoftLimit(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+	{
+		if (_transitionField is { } transition && transition.Generation == _softLimitGeneration)
+		{
+			transition.LimitReached();
+		}
+	}
 
 	/// <summary>The window shows again and the switch counts as done (a request that waited goes now). Also when the page is left.</summary>
 	private void EndSwitch() => _transition.End();

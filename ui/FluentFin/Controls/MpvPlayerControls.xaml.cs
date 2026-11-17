@@ -41,6 +41,7 @@ public sealed partial class MpvPlayerControls : UserControl
 		{
 			StopTick();
 			GlassMode.Changed -= OnGlassModeChanged;
+			DropWaitingClick(Controls);
 		};
 
 		// the slider marks the pointer handled itself: listen anyway, for the start and the end of a drag or a click
@@ -67,10 +68,12 @@ public sealed partial class MpvPlayerControls : UserControl
 		{
 			old.PropertyChanged -= self.OnControlsPropertyChanged;
 			old.PropertyChanging -= self.OnControlsPropertyChanging;
+			self.DropWaitingClick(old);
 		}
 
 		if (e.NewValue is MpvControlsViewModel controls)
 		{
+			controls.DoubleClickTime = TimeSpan.FromMilliseconds(GetDoubleClickTime());
 			controls.PropertyChanged += self.OnControlsPropertyChanged;
 			controls.PropertyChanging += self.OnControlsPropertyChanging;
 			self.UpdateCursor();
@@ -240,35 +243,30 @@ public sealed partial class MpvPlayerControls : UserControl
 	[System.Runtime.InteropServices.DllImport("user32.dll")]
 	private static extern uint GetDoubleClickTime();
 
-	/// <summary>Seaglass 1.1.3: a click's play/pause waits the double-click time; a double click cancels it (<see cref="VideoClicks"/>).</summary>
-	private readonly VideoClicks _clicks = new(TimeSpan.FromMilliseconds(GetDoubleClickTime()));
-
+	/// <summary>
+	/// Seaglass 1.1.3: a click's play/pause waits the double-click time (<see cref="MpvControlsViewModel.VideoClicked"/>);
+	/// this timer ends the wait. Stopped when the controls go or change (a click must not reach a backend after its stop).
+	/// </summary>
 	private DispatcherQueueTimer? _clickTimer;
 
 	private void OnVideoTapped(object sender, TappedRoutedEventArgs e)
 	{
-		if (Controls is null || IsOnControls(e.OriginalSource as DependencyObject))
+		if (Controls is not { } controls || IsOnControls(e.OriginalSource as DependencyObject))
 		{
 			return;
 		}
 
 		e.Handled = true;
-		_clicks.Clicked();
+		controls.VideoClicked();
 		_clickTimer ??= DispatcherQueue.CreateTimer();
-		_clickTimer.Interval = _clicks.DoubleClickTime;
+		_clickTimer.Interval = controls.DoubleClickTime;
 		_clickTimer.IsRepeating = false;
 		_clickTimer.Tick -= OnClickWaitOver;
 		_clickTimer.Tick += OnClickWaitOver;
 		_clickTimer.Start();
 	}
 
-	private void OnClickWaitOver(DispatcherQueueTimer sender, object args)
-	{
-		if (_clicks.WaitOver(DateTimeOffset.Now) && Controls is { } controls)
-		{
-			_ = controls.TogglePause();
-		}
-	}
+	private void OnClickWaitOver(DispatcherQueueTimer sender, object args) => _ = Controls?.ClickWaitOver();
 
 	private void OnVideoDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
 	{
@@ -278,14 +276,15 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 
 		e.Handled = true;
-		// a double click is only full screen: its first click's play/pause is dropped (or undone, if its wait just ended)
 		_clickTimer?.Stop();
-		if (_clicks.DoubleClicked(DateTimeOffset.Now))
-		{
-			_ = controls.TogglePause();
-		}
+		controls.VideoDoubleClicked();
+	}
 
-		controls.ToggleFullScreen();
+	/// <summary>A click still waiting does nothing (the controls go or change).</summary>
+	private void DropWaitingClick(MpvControlsViewModel? controls)
+	{
+		_clickTimer?.Stop();
+		controls?.CancelClick();
 	}
 
 	/// <summary>The wheel is volume over the whole player (never a seek, never a scroll); the volume slider's own drag is not.</summary>

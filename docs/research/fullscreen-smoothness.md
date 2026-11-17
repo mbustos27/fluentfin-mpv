@@ -129,7 +129,15 @@ What changed:
   also waits for the hold, and a thread-pool timer uncloaks at 500 ms. `SEAGLASS_FULLSCREEN=none` or `FLUENTFIN_NO_CLOAK=1`: nothing
   hidden.
 - A switch waits (and hides) only while the page shows the in-process video (`FullScreenCloak.WaitsForLayout`): the page forgets
-  the composition video when it detaches it, so leaving from full screen switches at once.
+  the composition video when it detaches it, so leaving from full screen switches at once. Leaving goes in a fixed order
+  (`PlayerPageLeave`): the video is detached, then the running switch ends, then the window is restored. (A first try ended the
+  switch first: a request queued behind it, F then Esc then Back within one switch, then started a covered switch on the page
+  being left, and the restore saw its target and did nothing: the cover sat 208 ms over the next page, or with the page unloaded
+  first the window stayed full screen. `fullscreen-burst.ps1`'s `fescleave` check: FAIL before, PASS after.)
+- The UI thread's limit is its timer's tick (it fired up to 0.26 ms before the switch's own clock reached 300 ms, and a check of
+  the clock then left the switch running and F/Esc dead); the cloak's thread-pool limit acts only for its own cloak
+  (`HideGeneration`). A click's waiting play/pause is dropped by any other play/pause (Space, K, the button, a new item, a pause
+  from the backend) and when the controls go.
 - The subtitles' inset for the height the video is about to have (the display's, or the one it had in the window) goes before the
   presenter change (`MpvPlayerControls.ReportBottomBarFor`).
 - F, F11 and Escape ignore their auto-repeat (`MpvPlayerKeys.IgnoresRepeat`; Escape through a window-wide `PreviewKeyDown` the page

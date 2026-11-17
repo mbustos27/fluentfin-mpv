@@ -14,7 +14,9 @@
 # the window (its log's "shows again after N ms") and the half-done frames shown after the hide ended. FS_BURST_EXTRAS picks
 # the checks after the bursts, in this order (default all; 0: none): fheld (F held: auto-repeat), escheld (Esc held in full
 # screen), inset (the subtitle inset's timing against the presenter change), dblclick (a posted double click), back (leaving
-# the player from full screen with Back; the page is gone after it). A check that leaves the player ends them.
+# the player from full screen with Back; the page is gone after it), fescleave (the review's repro: F, Esc 35 ms later, Esc 10
+# ms after that, all inside one switch: the player is left and the window must end windowed, with no switch started after
+# the leave; FS_FESC_GAP1/FS_FESC_GAP2 change the gaps; it leaves the page too). A check that leaves the player ends them.
 
 $entries = if ($env:FS_BURST_ENTRIES) { $env:FS_BURST_ENTRIES -split ',' } else { @('F', 'F11', 'button', 'esc') }
 $reps = if ($env:FS_BURST_REPS) { [int]$env:FS_BURST_REPS } else { 1 }
@@ -247,5 +249,25 @@ public static class FsExtras {
     Say "extras: Back from full screen: $hid; the app: $(if ($hideLine) { ($hideLine | ForEach-Object { $_.Line -replace '^.*(shows again after .*)$', '$1' }) -join '; ' } else { 'no hide' }); now $((Get-WindowState $script:hwnd).Rect) full $((Get-WindowState $script:hwnd).FullScreen)"
     Check 'extras: Back from full screen does not hide the window' ($null -eq $firstHidden -and -not $hideLine) $hid
     Shot 'after-back-from-full-screen'
+    }
+
+    if ($extras -contains 'fescleave' -and (Player-There)) {
+        if ((Get-WindowState $script:hwnd).FullScreen) { Key 0x1B; Start-Sleep -Milliseconds 1500 }
+        $gap1 = if ($env:FS_FESC_GAP1) { [int]$env:FS_FESC_GAP1 } else { 35 }
+        $gap2 = if ($env:FS_FESC_GAP2) { [int]$env:FS_FESC_GAP2 } else { 10 }
+        $n0 = @(Get-Content -LiteralPath (App-Log).FullName).Count
+        foreach ($k in @(@(0x46, $gap1), @(0x1B, $gap2), @(0x1B, 0))) {
+            [FsExtras]::Down($kw, $k[0], $false); [FsExtras]::Up($kw, $k[0])
+            if ($k[1]) { Start-Sleep -Milliseconds $k[1] }
+        }
+        Start-Sleep -Milliseconds 3000
+        $lines = @(Get-Content -LiteralPath (App-Log).FullName | Select-Object -Skip $n0 | Where-Object { $_ -match 'Full screen|full screen|Player page|presenter|shows again' })
+        foreach ($l in $lines) { Say "extras: fescleave log: $($l -replace '^\S+ ', '')" }
+        $leftAt = [array]::FindIndex([string[]]$lines, [Predicate[string]]{ param($l) $l -match 'left by a navigation' })
+        $after = if ($leftAt -ge 0) { @($lines | Select-Object -Skip ($leftAt + 1) | Where-Object { $_ -match 'window covered|window cloaked' }) } else { @() }
+        $st = Get-WindowState $script:hwnd
+        Say "extras: F, Esc ($gap1 ms), Esc ($gap2 ms): full $($st.FullScreen) rect $($st.Rect); player there $(Player-There); hidden switches after the leave $($after.Count)"
+        Check 'extras: leaving the player mid-switch ends windowed, with no switch on the page being left' (-not $st.FullScreen -and $after.Count -eq 0 -and $leftAt -ge 0) "$($st.Rect), $($after.Count) hidden switches after the leave"
+        Shot 'after-f-esc-esc'
     }
 }
