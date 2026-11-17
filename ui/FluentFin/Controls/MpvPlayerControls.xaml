@@ -50,8 +50,10 @@
             on gradient scrims, the buttons are light translucent fills with the glass edge, and the menus are on
             GlassPanelStrongBrush.
         -->
+        <!--  1.2.0: denser under the title's second line (over a white frame it had about 2:1, seen off-screen)  -->
         <LinearGradientBrush x:Key="TopScrim" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Offset="0" Color="#B3000000" />
+            <GradientStop Offset="0" Color="#CC000000" />
+            <GradientStop Offset="0.55" Color="#A6000000" />
             <GradientStop Offset="1" Color="#00000000" />
         </LinearGradientBrush>
         <!--
@@ -757,7 +759,8 @@
             -->
             <Button
                 x:Name="CancelNextButton"
-                VerticalAlignment="Bottom"
+                Height="NaN"
+                VerticalAlignment="Stretch"
                 AutomationProperties.Name="Cancel the next episode"
                 Click="OnCancelNextClick"
                 Style="{StaticResource PlayerPromptPill}"

@@ -65,11 +65,13 @@ public sealed class PlayerNextPromptTests
 			 "current": {{(offered ? "1" : "null")}}}
 			""")));
 
+	/// <summary>Plays on for <paramref name="seconds"/>: the heartbeat in <paramref name="steps"/>, each followed by the backend's position report.</summary>
 	private void Wait(double seconds, int steps)
 	{
 		for (var i = 0; i < steps; i++)
 		{
 			Wait(seconds / steps);
+			_vm.OnPosition(new BridgePosition(_vm.PositionTicks, _vm.DurationTicks));
 		}
 	}
 
@@ -155,6 +157,45 @@ public sealed class PlayerNextPromptTests
 		// another item: the user's choice again
 		PlayingEpisode(10);
 		Assert.Equal([false, true], _sent.Where(x => x.Command == Bridge.Commands.SetAutoPlay).Select(x => (bool)x.Args!["autoPlay"]!));
+	}
+
+	/// <summary>
+	/// Seen off-screen: paused at the credits for a few seconds, then played, the next episode started at once. Play read the
+	/// position after the state flipped and counted the pause as played; and the countdown's own next goes only when the
+	/// backend's last report (not a guess) is at its end.
+	/// </summary>
+	[Fact]
+	public void A_play_after_a_long_pause_does_not_count_the_pause_as_played()
+	{
+		PlayingEpisode(1231);
+		Credits(1230, 1320);
+		_ = _vm.TogglePause();
+		_now += TimeSpan.FromSeconds(30);
+		_vm.Tick();
+		_ = _vm.TogglePause();
+		_vm.Tick();
+
+		Assert.InRange(_vm.PositionTicks, Ticks(1230.9), Ticks(1231.1));
+		Assert.Equal(9, _vm.NextCountdown);
+		Assert.DoesNotContain(Bridge.Commands.Next, Commands());
+	}
+
+	[Fact]
+	public void The_countdowns_next_waits_for_the_backends_report()
+	{
+		PlayingEpisode(1231);
+		Credits(1230, 1320);
+		// the time moves on between reports, but no report comes: no next on a guess
+		for (var i = 0; i < 80; i++)
+		{
+			Wait(0.25);
+		}
+
+		Assert.Equal(0, _vm.NextCountdown);
+		Assert.DoesNotContain(Bridge.Commands.Next, Commands());
+		_vm.OnPosition(new BridgePosition(Ticks(1240.2), Ticks(1320)));
+		_vm.Tick();
+		Assert.Contains(Bridge.Commands.Next, Commands());
 	}
 
 	[Fact]

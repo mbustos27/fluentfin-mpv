@@ -359,6 +359,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		}
 
 		_reportedPosition = position.PositionTicks;
+		_backendPosition = position.PositionTicks;
 		_reportedAt = now;
 		if (!_scrubbing)
 		{
@@ -391,6 +392,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_nextAutoPlay = AutoPlay;
 		_countdownCancelled = false;
 		_advanceSent = false;
+		_backendPosition = 0;
 		if (_autoPlayHeldOff)
 		{
 			// 1.2.0: the countdown cancelled for the last item held the backend's auto-play off; this item has the user's choice
@@ -505,9 +507,12 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	private Task Toggle()
 	{
 		NotifyActivity();
+		// 1.2.0: where it is now, read before the state flips: read after, a play counted the whole pause as played (the
+		// time jumped ahead until the backend's next position, and the Next countdown ended at once, seen off-screen)
+		var now = _now();
+		_reportedPosition = CurrentPosition(now);
+		_reportedAt = now;
 		IsPaused = !IsPaused;
-		_reportedPosition = CurrentPosition(_now());
-		_reportedAt = _now();
 		return _send(Bridge.Commands.TogglePause, null);
 	}
 
@@ -1019,6 +1024,9 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>The countdown's own <c>next</c> went for this item.</summary>
 	private bool _advanceSent;
 
+	/// <summary>The position the backend last reported (a <c>position</c> event), never an extrapolation.</summary>
+	private long _backendPosition;
+
 	/// <summary>Seconds left before the next item starts, while the countdown runs; null otherwise.</summary>
 	[ObservableProperty]
 	public partial int? NextCountdown { get; set; }
@@ -1060,6 +1068,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			? (credits, Math.Min(credits + length, durationTicks))
 			: (Math.Max(0, durationTicks - length), durationTicks);
 	}
+
+	/// <summary>
+	/// The countdown's own <c>next</c> goes only when the backend's last reported position (it reports about every 0.5 s while
+	/// playing) is this close to the countdown's end: the time between reports is extrapolated, and a wrong guess must never
+	/// start the next item early.
+	/// </summary>
+	public static readonly TimeSpan ReportedPositionMargin = TimeSpan.FromSeconds(1.5);
 
 	/// <summary>Closer than this to the end, the backend's own auto-play starts the next item: the countdown sends nothing (never two).</summary>
 	public static readonly TimeSpan BackendAdvanceMargin = TimeSpan.FromSeconds(2);
@@ -1108,7 +1123,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		var left = Math.Max(0, end - PositionTicks);
 		NextCountdown = (int)Math.Ceiling(left / (double)TimeSpan.TicksPerSecond / Math.Max(Speed, PlaybackSpeeds.Minimum));
 		NextCountdownProgress = end > start ? Math.Clamp(1 - left / (double)(end - start), 0, 1) : 1;
-		if (left == 0 && !_advanceSent && !IsPaused && DurationTicks - end > BackendAdvanceMargin.Ticks)
+		if (left == 0 && !_advanceSent && !IsPaused && DurationTicks - end > BackendAdvanceMargin.Ticks
+			&& end - _backendPosition <= ReportedPositionMargin.Ticks)
 		{
 			// the credits' countdown ran out well before the end: the controls play the next item (the backend would only at the end)
 			_advanceSent = true;

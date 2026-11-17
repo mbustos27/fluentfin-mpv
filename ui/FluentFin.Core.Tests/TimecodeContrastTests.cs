@@ -44,9 +44,9 @@ public sealed class TimecodeContrastTests
 	}
 
 	/// <summary>The scrim's black alpha at <paramref name="offset"/> (0 the bar's bottom, 1 its top), between its stops.</summary>
-	private static double ScrimAlpha(XDocument doc, double offset)
+	private static double ScrimAlpha(XDocument doc, double offset, string key = "BottomScrim")
 	{
-		var stops = doc.Descendants(Presentation + "LinearGradientBrush").Single(b => (string?)b.Attribute(Xaml + "Key") == "BottomScrim")
+		var stops = doc.Descendants(Presentation + "LinearGradientBrush").Single(b => (string?)b.Attribute(Xaml + "Key") == key)
 			.Elements(Presentation + "GradientStop")
 			.Select(s => (Offset: double.Parse((string)s.Attribute("Offset")!, CultureInfo.InvariantCulture), Alpha: Argb((string)s.Attribute("Color")!).A))
 			.OrderBy(s => s.Offset).ToList();
@@ -87,6 +87,20 @@ public sealed class TimecodeContrastTests
 		var withoutGlow = Contrast((255, 255, 255), (under, under, under));
 		Assert.True(withGlow >= 4.5, $"{withGlow:F2}:1 with the glow (scrim {scrim:F2} at the time's row, glow {glow})");
 		Assert.True(withoutGlow >= 4.5, $"{withoutGlow:F2}:1 without it");
+	}
+
+	/// <summary>
+	/// The top bar's second line (the episode, GlassTextSecondaryBrush: white at 80 %) over a white frame: the top bar's
+	/// padding 16 and its 44 px row, then 56 of scrim; the line's middle is about 0.45 of the bar from its top. 1.1.3's
+	/// TopScrim (#B3 fading to nothing) left it at about 2:1 (seen in the shots).
+	/// </summary>
+	[Fact]
+	public void The_top_bars_second_line_keeps_4_5_to_1_over_a_white_frame()
+	{
+		var under = 255 * (1 - ScrimAlpha(Controls(), 0.45, "TopScrim"));
+		var text = 0.8 * 255 + 0.2 * under;
+		var ratio = Contrast((text, text, text), (under, under, under));
+		Assert.True(ratio >= 4.5, $"{ratio:F2}:1");
 	}
 
 	[Fact]
