@@ -65,7 +65,7 @@ version_info = vi.VSVersionInfo(
             vi.StringStruct("FileDescription", "Seaglass playback backend (jellyfin-mpv-shim)"),
             vi.StringStruct("FileVersion", VERSION),
             vi.StringStruct("InternalName", "fluentfin-mpv-backend"),
-            vi.StringStruct("LegalCopyright", "GPL-3.0-or-later"),
+            vi.StringStruct("LegalCopyright", "Copyright (c) Seaglass contributors and the jellyfin-mpv-shim authors. GPL-3.0-or-later"),
             vi.StringStruct("OriginalFilename", "fluentfin-mpv-backend.exe"),
             vi.StringStruct("ProductName", "Seaglass"),
             vi.StringStruct("ProductVersion", VERSION),
