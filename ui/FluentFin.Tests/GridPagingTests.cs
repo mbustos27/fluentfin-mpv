@@ -87,3 +87,87 @@ public sealed class GridPagingTests
 	public void Place_IsInTheWholeSet(int index, int firstIndex, int total, int count, int position, int size) =>
 		Assert.Equal((position, size), GridPaging.Place(index, firstIndex, total, count));
 }
+
+/// <summary>Seaglass scrolling: a far card focused when the grid's scroll to it ends, unless anything happens first.</summary>
+public sealed class PendingFocusTests
+{
+	[Fact]
+	public void TheScrollsEnd_FocusesTheCard_Once()
+	{
+		var pending = new PendingFocus();
+		pending.Begin(99, scroll: 7);
+
+		Assert.Equal(99, pending.Complete(7, focusInGrid: true));
+		Assert.Equal(-1, pending.Complete(7, focusInGrid: true));
+	}
+
+	[Fact]
+	public void AnotherScrollsEnd_IsNotIts()
+	{
+		var pending = new PendingFocus();
+		pending.Begin(99, scroll: 7);
+
+		Assert.Equal(-1, pending.Complete(6, focusInGrid: true)); // the user's wheel, an earlier scroll
+		Assert.Equal(99, pending.Complete(7, focusInGrid: true));
+	}
+
+	[Fact]
+	public void AKeyBeforeTheEnd_CancelsIt()
+	{
+		// End then Home at once: Home's card is the focused one, so nothing new begins; End's must not win later
+		var pending = new PendingFocus();
+		pending.Begin(99, scroll: 7);
+
+		Assert.True(pending.Cancel());
+		Assert.False(pending.Cancel());
+		// the cancelled scroll still ran: when it ends, the card focused by then is shown again; once
+		Assert.Equal(PendingFocus.RevealFocused, pending.Complete(7, focusInGrid: true));
+		Assert.Equal(-1, pending.Complete(7, focusInGrid: true));
+	}
+
+	[Fact]
+	public void ACancelledScrollsEnd_LeavesAFocusOutsideTheGridAlone()
+	{
+		var pending = new PendingFocus();
+		pending.Begin(99, scroll: 7);
+		pending.Cancel(); // Tab away
+
+		Assert.Equal(-1, pending.Complete(7, focusInGrid: false));
+	}
+
+	[Fact]
+	public void ANewFarCard_AfterACancelledOne_IsFocusedAtItsOwnScrollsEnd()
+	{
+		// Home then End at once, both far: Home's scroll ends first and shows nothing (End's card is on its way), End's focuses its card
+		var pending = new PendingFocus();
+		pending.Begin(0, scroll: 7);
+		pending.Cancel();
+		pending.Begin(99, scroll: 8);
+
+		Assert.Equal(-1, pending.Complete(7, focusInGrid: true));
+		Assert.Equal(99, pending.Complete(8, focusInGrid: true));
+	}
+
+	[Fact]
+	public void TheFocusHavingLeftTheGrid_IsNotPulledBack()
+	{
+		// Tab or a click elsewhere before the scroll ended (the focus left, nothing cancelled it)
+		var pending = new PendingFocus();
+		pending.Begin(99, scroll: 7);
+
+		Assert.Equal(-1, pending.Complete(7, focusInGrid: false));
+		Assert.Equal(-1, pending.Index);
+	}
+
+	[Fact]
+	public void EveryCancel_MovesTheGenerationOn()
+	{
+		// a focus queued for later (the remembered card) checks it before acting
+		var pending = new PendingFocus();
+		var before = pending.Generation;
+
+		pending.Cancel();
+
+		Assert.NotEqual(before, pending.Generation);
+	}
+}

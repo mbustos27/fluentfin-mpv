@@ -132,3 +132,53 @@ if ($pager) {
     $g3 = Grid-State
     Check 'library: ... and over the pager' ($g3.V -gt $g2.V + 0.1) ("$($g2.V) -> $($g3.V) %")
 }
+# the page's margin (outside the grid and the page's own panel) takes the wheel too
+$g4 = Grid-State
+[OffscreenUi]::Wheel($script:hwnd, $script:ui.Id, [int]($g4.Rect[0] - 12), [int]($g4.Rect[1] + $g4.Rect[3] / 2), -120, $false, $false); Start-Sleep -Milliseconds 900
+$g5 = Grid-State
+Check 'library: ... and over the page''s margin' ($g5.V -gt $g4.V + 0.1) ("$($g4.V) -> $($g5.V) %")
+
+# --- a key that arrives before the grid has scrolled to a far card cancels it (keys posted in one burst, as fast typing)
+function Burst([int[]]$Vks) {
+    $target = [OffscreenUi]::KeyWindow($script:hwnd, $script:ui.Id)
+    foreach ($vk in $Vks) {
+        $sc = [OffscreenUi]::ScanCode($vk)
+        [void][OffscreenUi]::PostMessage($target, 0x0100, [IntPtr][long]$vk, [IntPtr][long](1 -bor ($sc -shl 16)))
+        [void][OffscreenUi]::PostMessage($target, 0x0101, [IntPtr][long]$vk, [IntPtr]([long](1 -bor ($sc -shl 16) -bor (1 -shl 30)) -bor 0x80000000L))
+    }
+}
+[void][OffscreenUi]::SetFocus($filter); Start-Sleep -Milliseconds 300
+Press 0x09 900
+Burst @(0x23, 0x24)   # End, Home
+Start-Sleep -Milliseconds 1500
+$eh = Info; $g6 = Grid-State
+Check 'library: End then Home at once ends on the first card, at the top (End''s far card does not take the focus later)' ($eh -and $eh.Pos -eq 1 -and $g6.V -lt 1) ("$(Describe $eh); grid at $($g6.V) %")
+Burst @(0x23, 0x09)   # End, Tab
+Start-Sleep -Milliseconds 1500
+$et = Info
+Check 'library: End then Tab at once leaves the grid (the scroll''s end does not pull the focus back)' ($et -and $et.Class -ne 'BaseItemDtoCard') (Describe $et)
+
+# --- the See all grid (Continue Watching): the same model; nothing above it in the page, so Up stays on the card
+Open-Nav 'Home'
+$seeAll = Wait-Ui -Name 'See all Continue Watching' -Type 'Button' -Seconds 15
+Check 'see all: Continue Watching has its See all' ([bool]$seeAll)
+if ($seeAll) {
+    Invoke-Element $seeAll | Out-Null
+    $saCard = Wait-Until { Find-Ui -Name 'Electric Ravenmoor' -Type 'ListItem' -Contains } -Seconds 15 -PollMs 200
+    Start-Sleep -Milliseconds 1500
+    $saCard = Find-Ui -Name 'Electric Ravenmoor' -Type 'ListItem' -Contains
+    if ($saCard) { [void][OffscreenUi]::SetFocus($saCard); Start-Sleep -Milliseconds 600 }
+    $sa1 = Info
+    Check 'see all: the first card says "1 of n" in a list named Continue Watching' ($sa1 -and $sa1.Pos -eq 1 -and $sa1.Size -ge 2 -and $sa1.ListType -eq 'List' -and $sa1.ListName -eq 'Continue Watching') ("$(Describe $sa1); $($sa1.ListType) '$($sa1.ListName)'")
+    Press 0x27   # Right
+    Check 'see all: Right moves to the next card' ((Info).Pos -eq 2)
+    Press 0x26 900   # Up from the first line: nothing above in the page
+    $saUp = Info
+    Check 'see all: Up from the first line stays on the card (never the title bar''s search box)' ($saUp -and $saUp.Class -eq 'BaseItemDtoCard' -and $saUp.Pos -eq 2) (Describe $saUp)
+    Press 0x23 900   # End
+    Press 0x28 900   # Down from the last line: nothing below in the page
+    $saDown = Info
+    Check 'see all: Down from the last line stays on the card' ($saDown -and $saDown.Class -eq 'BaseItemDtoCard' -and $saDown.Pos -eq $saDown.Size) (Describe $saDown)
+    Shot 'see-all-keys'
+    Key 0xA6; Start-Sleep -Milliseconds 1500   # Back
+}

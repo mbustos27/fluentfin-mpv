@@ -383,6 +383,20 @@ public class AccessibilityXamlTests
 		Assert.Contains("_grid.ForwardWheel(", code);
 	}
 
+	[Theory]
+	[InlineData("FluentFin/Views/LibraryPage.xaml", "LibraryRoot")]
+	[InlineData("FluentFin/Views/ItemGridPage.xaml", "GridRoot")]
+	public void CardGridPages_TakeTheWheelEverywhere_TheirMarginIsPadding(string page, string root)
+	{
+		// a page's Margin is outside it: the wheel there reached nothing. The root takes the wheel (CardGrid.ForwardWheel)
+		var doc = Load(page);
+		Assert.Null(doc.Root!.Attribute("Margin"));
+		var grid = FindByName(doc, root);
+		Assert.Equal("Transparent", (string?)grid.Attribute("Background"));
+		Assert.Equal("{StaticResource MediumLeftTopRightBottomMargin}", (string?)grid.Attribute("Padding"));
+		Assert.Contains($"_grid.ForwardWheel({root})", File.ReadAllText(Path.Combine(RepoRoot, page + ".cs")));
+	}
+
 	/// <summary>Shows an icon and no text: no Label, no text content, no TextBlock outside its property elements (a flyout's text is not the button's).</summary>
 	private static bool IsIconOnly(XElement button)
 	{

@@ -28,8 +28,7 @@ internal sealed class CardGrid
 	private ItemsSourceView? _source;
 	private object? _lastItem;
 	private bool _directed;
-	private int _pendingIndex = -1;
-	private int _pendingScroll = -1;
+	private readonly PendingFocus _pending = new();
 	private int _firstIndex;
 	private int _total;
 
@@ -42,6 +41,14 @@ internal sealed class CardGrid
 		// before the card's own KeyDown, which moves only among the cards drawn (XY) and knows no Home/End
 		list.PreviewKeyDown += List_PreviewKeyDown;
 		list.GettingFocus += List_GettingFocus;
+		// the focus leaving the grid (Tab, a click elsewhere) before a far card's scroll ends: the card does not take it back
+		list.LosingFocus += (_, _) =>
+		{
+			if (!_directed)
+			{
+				_pending.Cancel();
+			}
+		};
 		list.GotFocus += List_GotFocus;
 		list.BringIntoViewRequested += List_BringIntoViewRequested;
 		scroller.ScrollCompleted += Scroller_ScrollCompleted;
@@ -199,6 +206,8 @@ internal sealed class CardGrid
 			return;
 		}
 
+		// a key before the last one's far card was reached replaces it (End then Home at once ends on the first card)
+		_pending.Cancel();
 		var tops = Realized().Select(r => (double)r.Element.ActualOffset.Y).ToList();
 		var columns = GridPaging.Columns(tops);
 		var lines = GridPaging.LinesPerPage(_scroller.ViewportHeight, GridPaging.LineStride(tops));
@@ -211,8 +220,9 @@ internal sealed class CardGrid
 		}
 		else if (e.OriginalSource is UIElement from)
 		{
-			// past the first or the last line: what is above (sort, filter) or below (the pager); else nowhere. Looked for across
-			// the grid's whole width: from a card on the left, straight up is the title bar
+			// past the first or the last line: what is above (sort, filter) or below (the pager) in the page; else nowhere (the
+			// See all grid has nothing there). Looked for across the grid's whole width: from a card on the left, straight up
+			// is the page's title
 			MoveFocusOut(from, gridKey == GridKey.Up ? FocusNavigationDirection.Up : FocusNavigationDirection.Down, columns: _scroller, line: from as FrameworkElement);
 		}
 
@@ -220,8 +230,9 @@ internal sealed class CardGrid
 	}
 
 	/// <summary>
-	/// Moves the keyboard focus from <paramref name="from"/> to the nearest element in <paramref name="direction"/> (XY), in the
-	/// whole window: without a search root, WinUI 3's TryMoveFocus finds nothing for the arrows.
+	/// Moves the keyboard focus from <paramref name="from"/> to the nearest element in <paramref name="direction"/> (XY), within
+	/// the page <paramref name="from"/> is on: never the title bar or the navigation (with nothing in the page that way, the
+	/// See all grid's Up went to the search box). Without a search root WinUI 3's TryMoveFocus finds nothing for the arrows.
 	/// </summary>
 	/// <param name="columns">Searched straight up or down from this element's width (a grid's whole width), not only the focused one's.</param>
 	/// <param name="line">Searched from this element's top or bottom edge, not the focused one's.</param>
@@ -233,7 +244,7 @@ internal sealed class CardGrid
 			return false;
 		}
 
-		var options = new FindNextElementOptions { SearchRoot = root };
+		var options = new FindNextElementOptions { SearchRoot = PageOf(from) ?? root };
 		if ((columns ?? from as FrameworkElement) is { } across && (line ?? from as FrameworkElement) is { } edge)
 		{
 			var wide = BoundsIn(across, root);
@@ -247,6 +258,19 @@ internal sealed class CardGrid
 		}
 
 		return FocusManager.TryMoveFocus(direction, options);
+	}
+
+	private static Page? PageOf(DependencyObject element)
+	{
+		for (var node = VisualTreeHelper.GetParent(element); node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is Page page)
+			{
+				return page;
+			}
+		}
+
+		return null;
 	}
 
 	private static Rect BoundsIn(FrameworkElement element, UIElement root) =>
@@ -275,8 +299,7 @@ internal sealed class CardGrid
 			var offset = Math.Clamp(top - RevealMargin, 0, Math.Max(0, _scroller.ScrollableHeight));
 			if (Math.Abs(offset - _scroller.VerticalOffset) >= 1)
 			{
-				_pendingIndex = index;
-				_pendingScroll = _scroller.ScrollTo(_scroller.HorizontalOffset, offset, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
+				_pending.Begin(index, _scroller.ScrollTo(_scroller.HorizontalOffset, offset, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore)));
 				return true;
 			}
 		}
@@ -320,13 +343,18 @@ internal sealed class CardGrid
 
 	private void Scroller_ScrollCompleted(ScrollView sender, ScrollingScrollCompletedEventArgs args)
 	{
-		if (args.CorrelationId != _pendingScroll)
+		var index = _pending.Complete(args.CorrelationId, FocusInside());
+		if (index == PendingFocus.RevealFocused)
 		{
+			// a cancelled scroll took the view away from the card that has the focus now
+			if (_list.XamlRoot is { } xamlRoot && FocusManager.GetFocusedElement(xamlRoot) is UIElement focused)
+			{
+				focused.StartBringIntoView();
+			}
+
 			return;
 		}
 
-		var index = _pendingIndex;
-		_pendingScroll = _pendingIndex = -1;
 		if (index < 0 || index >= Count)
 		{
 			return;
@@ -352,6 +380,11 @@ internal sealed class CardGrid
 	/// </summary>
 	private void List_GettingFocus(UIElement sender, GettingFocusEventArgs e)
 	{
+		if (!_directed)
+		{
+			_pending.Cancel(); // a click on a card, or Tab, before a far card's scroll ended
+		}
+
 		if (_directed || e.FocusState == FocusState.Pointer || e.Direction is not (FocusNavigationDirection.Next or FocusNavigationDirection.Previous))
 		{
 			return;
@@ -374,7 +407,15 @@ internal sealed class CardGrid
 			}
 			else
 			{
-				_list.DispatcherQueue.TryEnqueue(() => FocusIndex(remembered));
+				// unless anything happens first (a key, a click, the focus leaving)
+				var generation = _pending.Generation;
+				_list.DispatcherQueue.TryEnqueue(() =>
+				{
+					if (_pending.Generation == generation && FocusInside())
+					{
+						FocusIndex(remembered);
+					}
+				});
 			}
 
 			return;
@@ -385,6 +426,9 @@ internal sealed class CardGrid
 			e.TrySetNewFocusedElement(first);
 		}
 	}
+
+	private bool FocusInside() =>
+		_list.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject focused && IsInside(focused, _list);
 
 	private UIElement? FirstInView()
 	{

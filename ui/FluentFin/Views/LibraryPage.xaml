@@ -16,7 +16,6 @@
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
-    Margin="{StaticResource MediumLeftTopRightBottomMargin}"
     mc:Ignorable="d">
 
     <Page.Resources>
@@ -31,8 +30,14 @@
 
     <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
         <ctk:Case Value="False">
-            <!--  Seaglass scrolling: hit-testable everywhere, so the wheel over its empty parts (beside the pager) reaches CardGrid  -->
-            <Grid x:Name="LibraryRoot" Background="Transparent">
+            <!--
+                Seaglass scrolling: hit-testable everywhere, so the wheel over its empty parts (beside the pager) reaches CardGrid,
+                and the page's margin is its padding: a margin is outside the page, where the wheel reached nothing
+            -->
+            <Grid
+                x:Name="LibraryRoot"
+                Padding="{StaticResource MediumLeftTopRightBottomMargin}"
+                Background="Transparent">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -228,7 +233,7 @@
             </Grid>
         </ctk:Case>
         <ctk:Case IsDefault="True" Value="True">
-            <StackPanel Spacing="16">
+            <StackPanel Margin="{StaticResource MediumLeftTopRightBottomMargin}" Spacing="16">
 
                 <StackPanel
                     HorizontalAlignment="Center"

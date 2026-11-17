@@ -129,3 +129,65 @@ internal static class GridPaging
 	public static (int Position, int Size) Place(int index, int firstIndex, int total, int count) =>
 		(Math.Max(0, firstIndex) + index + 1, Math.Max(total, Math.Max(0, firstIndex) + count));
 }
+
+/// <summary>
+/// Seaglass scrolling: a card a grid focuses once it has scrolled there (a far card: End, Home, a remembered one), apart from
+/// WinUI. Anything the user does before the scroll ends (another key, Tab, a click, the focus leaving) cancels it, and it
+/// never takes the focus back from outside the grid. A cancelled scroll still runs (WinUI has no way to stop it), so when it
+/// ends the card that has the focus by then is scrolled back into view (End then Home at once: the view went to the end).
+/// </summary>
+internal sealed class PendingFocus
+{
+	/// <summary>What <see cref="Complete"/> says when a cancelled scroll ended with the focus in the grid: show the focused card.</summary>
+	public const int RevealFocused = -2;
+
+	private int _scroll = -1;
+	private readonly HashSet<int> _cancelled = [];
+
+	/// <summary>The card waiting for its scroll; -1 for none.</summary>
+	public int Index { get; private set; } = -1;
+
+	/// <summary>Moves on at every cancel: a focus queued for later checks it has not changed.</summary>
+	public int Generation { get; private set; }
+
+	public void Begin(int index, int scroll)
+	{
+		Index = index;
+		_scroll = scroll;
+	}
+
+	/// <returns>Whether a card was waiting.</returns>
+	public bool Cancel()
+	{
+		var was = Index >= 0;
+		if (was)
+		{
+			_cancelled.Add(_scroll);
+		}
+
+		Index = _scroll = -1;
+		Generation++;
+		return was;
+	}
+
+	/// <summary>
+	/// A scroll ended: the card to focus now; <see cref="RevealFocused"/> for a cancelled scroll of ours with the focus still in
+	/// the grid and no newer far card on its way; else -1 (another scroll, or the focus is no longer in the grid).
+	/// </summary>
+	public int Complete(int scroll, bool focusInGrid)
+	{
+		if (_cancelled.Remove(scroll))
+		{
+			return focusInGrid && Index < 0 ? RevealFocused : -1;
+		}
+
+		if (Index < 0 || scroll != _scroll)
+		{
+			return -1;
+		}
+
+		var index = Index;
+		Index = _scroll = -1;
+		return focusInGrid ? index : -1;
+	}
+}

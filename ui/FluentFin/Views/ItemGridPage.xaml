@@ -10,7 +10,6 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
-    Margin="{StaticResource MediumLeftTopRightBottomMargin}"
     mc:Ignorable="d">
 
     <!--
@@ -19,6 +18,7 @@
     -->
     <Grid
         x:Name="GridRoot"
+        Padding="{StaticResource MediumLeftTopRightBottomMargin}"
         Background="Transparent"
         RowSpacing="16">
         <Grid.RowDefinitions>
