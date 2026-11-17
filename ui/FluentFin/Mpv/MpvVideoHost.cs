@@ -122,7 +122,7 @@ public sealed unsafe partial class MpvVideoHost(ILogger<MpvVideoHost> logger) : 
 			}
 		}
 
-		_hwnd = CreateWindowExW(0, ClassName, "Seaglass video", WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN, 0, 0, 1, 1, parent, 0, instance, 0);
+		_hwnd = CreateWindowExW(0, ClassName, $"{Core.AppIdentity.Name} video", WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN, 0, 0, 1, 1, parent, 0, instance, 0);
 		if (_hwnd == 0)
 		{
 			throw new Win32Exception(Marshal.GetLastPInvokeError(), "CreateWindowEx failed for the video window");

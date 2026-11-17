@@ -180,7 +180,7 @@ public sealed class FlyleafEngineTests : IDisposable
 
 		Assert.Contains("avcodec-63.dll", ex.Message);
 		Assert.Contains(@"C:\App\libmpv", ex.Message);
-		Assert.Contains("restart Seaglass to use this player", ex.Message);
+		Assert.Contains("restart Nixie to use this player", ex.Message);
 		Assert.Equal(0, starts);
 		Assert.False(FlyleafEngine.IsStarted);
 
