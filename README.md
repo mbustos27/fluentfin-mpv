@@ -23,7 +23,7 @@ Everything below the feature list is for building from source.
 - **Home, item pages and the player, redesigned.**
   - **Home:** a hero of up to five items that never autoplays trailers, and poster rows whose cards lift on hover.
   - **Item pages:** a full-width backdrop with the title's logo, info chips (year, rating, runtime, resolution, HDR, audio), and Play as the one highlighted action.
-  - **The player's own controls:** on a dark gradient, with Skip intro/credits and Next as buttons, a subtitle **Text size** slider (50–200 %, remembered), and a large animated volume indicator for the scroll wheel.
+  - **The player's own controls:** on a dark gradient, with Skip intro/credits and Next as buttons, and a subtitle **Text size** slider (50–200 %, remembered).
 - **Mouse and keyboard.**
   - Mouse buttons 4 and 5, Alt+←/→ and the keyboard's Back and Forward keys go back and forward between pages.
   - Shortcuts everywhere: search (Ctrl+F or /), Settings (Ctrl+,), and the usual player keys (Space/K, J/L, ←/→, M, C, V, B, F, 0–9 and more).
