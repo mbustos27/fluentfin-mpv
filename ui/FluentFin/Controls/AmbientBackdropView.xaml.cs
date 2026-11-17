@@ -56,6 +56,8 @@ public sealed partial class AmbientBackdropView : UserControl
 		AmbientBackdrop.Changed -= OnBackdropChanged;
 		GlassMode.Changed -= OnModeChanged;
 		_fade?.Stop();
+		// Translation can be stopped (or animated) only once it is enabled on the element; otherwise it throws
+		ElementCompositionPreview.SetIsTranslationEnabled(Drift, true);
 		var visual = ElementCompositionPreview.GetElementVisual(Drift);
 		visual.StopAnimation("Scale");
 		visual.StopAnimation("Translation");
@@ -103,6 +105,7 @@ public sealed partial class AmbientBackdropView : UserControl
 	/// <summary>The slow zoom and sway, in Full mode with artwork shown; nothing in Reduced or Solid.</summary>
 	private void UpdateDrift()
 	{
+		ElementCompositionPreview.SetIsTranslationEnabled(Drift, true);
 		var visual = ElementCompositionPreview.GetElementVisual(Drift);
 		visual.StopAnimation("Scale");
 		visual.StopAnimation("Translation");
