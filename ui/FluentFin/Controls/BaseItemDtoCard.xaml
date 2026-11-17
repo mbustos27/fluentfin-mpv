@@ -188,16 +188,24 @@
                     </InfoBadge.Resources>
                 </InfoBadge>
 
+                <!--
+                    Seaglass 1.1.3: the accent on artwork, on a dark track as tall as the bar (WinUI's track is a 1 px line, so the
+                    bar sat on the poster itself: any poster near the accent's own lightness hid it). Glass.xaml, SeaglassAccentOnImageBrush.
+                -->
                 <ProgressBar
                     Height="4"
                     MinHeight="4"
                     VerticalAlignment="Bottom"
                     Background="{StaticResource Black65O}"
-                    Foreground="{ThemeResource SeaglassAccentBrush}"
+                    Foreground="{ThemeResource SeaglassAccentOnImageBrush}"
                     Maximum="100"
                     Minimum="0"
                     Visibility="{x:Bind Model.UserData.PlayedPercentage, Converter={StaticResource MoreThanZeroToVisibilityConverter}, Mode=OneWay}"
-                    Value="{x:Bind Model.UserData.PlayedPercentage, Converter={StaticResource NullableDoubleToValueOrDefaultConverter}, Mode=OneWay}" />
+                    Value="{x:Bind Model.UserData.PlayedPercentage, Converter={StaticResource NullableDoubleToValueOrDefaultConverter}, Mode=OneWay}">
+                    <ProgressBar.Resources>
+                        <x:Double x:Key="ProgressBarTrackHeight">4</x:Double>
+                    </ProgressBar.Resources>
+                </ProgressBar>
 
                 <StackPanel
                     x:Name="ActionButtons"

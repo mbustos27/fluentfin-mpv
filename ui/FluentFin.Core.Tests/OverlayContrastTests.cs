@@ -227,6 +227,62 @@ public class OverlayContrastTests
 		}
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.3 integration: a card's and an episode row's progress bar is that accent, on the Black65O track the check above
+	/// models. WinUI's ProgressBar draws its Background as a ProgressBarTrackHeight line (1 px), not behind the whole bar, so
+	/// each bar sets that height to its own: otherwise the bar sits on the poster itself, and a poster near the accent's own
+	/// lightness hides it (the light aqua on a bright poster's #F0F0EA: 1.65:1; on the full track there, measured: 4.0:1).
+	/// </summary>
+	[Theory]
+	[InlineData("FluentFin/Controls/BaseItemDtoCard.xaml")]
+	[InlineData("FluentFin/Controls/EpisodeRow.xaml")]
+	public void ProgressOnArtwork_IsTheAccentOnImage_OnADarkTrackAsTallAsTheBar(string file)
+	{
+		var bar = Load(file).Descendants(Presentation + "ProgressBar").Single();
+
+		Assert.Equal("{ThemeResource SeaglassAccentOnImageBrush}", (string?)bar.Attribute("Foreground"));
+		Assert.Equal("{StaticResource Black65O}", (string?)bar.Attribute("Background"));
+		var height = (string?)bar.Attribute("Height");
+		Assert.NotNull(height);
+		// the template's grid is MinHeight tall; the track is ProgressBarTrackHeight tall within it
+		Assert.Equal(height, (string?)bar.Attribute("MinHeight"));
+		var track = bar.Element(Presentation + "ProgressBar.Resources")?.Elements()
+			.SingleOrDefault(e => (string?)e.Attribute(Xaml + "Key") == "ProgressBarTrackHeight");
+		Assert.True(track is not null, $"{file}: the progress bar's track is WinUI's 1 px line (no ProgressBarTrackHeight of its own)");
+		Assert.Equal(height, track!.Value.Trim());
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.3 integration: an episode row's watched mark is the accent on artwork too, and its check reads on it: dark on the
+	/// light aqua in both themes (the light theme's SeaglassDeepBrush, the check's colour before, is light: 1.6:1 there).
+	/// </summary>
+	[Theory]
+	[InlineData("Dark")]
+	[InlineData("Light")]
+	public void EpisodeWatchedMark_IsTheAccentOnImage_WithACheckThatReadsOnIt(string theme)
+	{
+		var mark = FindByName(Load("FluentFin/Controls/EpisodeRow.xaml"), "WatchedMark");
+		var check = mark.Descendants(Presentation + "FontIcon").Single();
+		Assert.Equal("{ThemeResource SeaglassAccentOnImageBrush}", (string?)mark.Attribute("Background"));
+		Assert.Equal("{ThemeResource SeaglassOnAccentOnImageBrush}", (string?)check.Attribute("Foreground"));
+
+		var dictionary = Load("FluentFin/Styles/Glass.xaml").Descendants(Presentation + "ResourceDictionary")
+			.Single(d => (string?)d.Attribute(Xaml + "Key") == theme);
+		var fill = Argb((string)Brush(dictionary, "SeaglassAccentOnImageBrush").Attribute("Color")!);
+		var ink = Argb((string)Brush(dictionary, "SeaglassOnAccentOnImageBrush").Attribute("Color")!);
+		var ratio = Contrast(Blend(ink.Color, ink.Alpha, fill.Color), fill.Color);
+		Assert.True(ratio >= IconContrast, $"{theme}: the watched mark's check has {ratio:F2}:1 on the mark, needs {IconContrast}:1");
+	}
+
+	[Fact]
+	public void EpisodeWatchedMark_InHighContrast_IsHighlightTextOnHighlight()
+	{
+		var dictionary = Load("FluentFin/Styles/Glass.xaml").Descendants(Presentation + "ResourceDictionary")
+			.Single(d => (string?)d.Attribute(Xaml + "Key") == "HighContrast");
+		Assert.Equal("{ThemeResource SystemColorHighlightColor}", (string?)Brush(dictionary, "SeaglassAccentOnImageBrush").Attribute("Color"));
+		Assert.Equal("{ThemeResource SystemColorHighlightTextColor}", (string?)Brush(dictionary, "SeaglassOnAccentOnImageBrush").Attribute("Color"));
+	}
+
 	private static XElement Brush(XElement dictionary, string key) =>
 		dictionary.Elements(Presentation + "SolidColorBrush").Single(b => (string?)b.Attribute(Xaml + "Key") == key);
 

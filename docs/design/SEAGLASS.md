@@ -157,8 +157,16 @@ menu's system backdrop) until they are based on the keyed styles below (1.1.3 in
 - Keyed styles for other files: `GlassFlyoutPresenterStyle`, `GlassMenuFlyoutPresenterStyle`; a button on a glass panel uses
   `GlassInsetPillButtonStyle` (the flat `GlassInsetFillBrush` with `GlassInsetTextBrush`: ButtonFace with ButtonText in high
   contrast), not a second acrylic.
-- **The accent on artwork** (a progress bar on a poster's dark track, a watched badge) should be `SeaglassAccentOnImageBrush`: the
-  light aqua in both themes (the light theme's deeper aqua has 1.6:1 on the track over a bright poster). The token exists; the cards
-  (`BaseItemDtoCard`, `EpisodeRow`) do not use it yet (1.1.3 integration).
+- **The accent on artwork** (a progress bar on a poster's dark track, a watched badge) is `SeaglassAccentOnImageBrush`: the
+  light aqua in both themes (the light theme's deeper aqua has 1.6:1 on the track over a bright poster). `BaseItemDtoCard`'s and
+  `EpisodeRow`'s progress bars use it on a `Black65O` track **as tall as the bar**: WinUI's ProgressBar draws its Background as a
+  1 px line (`ProgressBarTrackHeight`), so each bar sets that resource to its own height; without it the bar sits on the poster
+  itself, and the light aqua on a bright poster is about 1.6:1. `EpisodeRow`'s watched mark is the same aqua with its check in
+  `SeaglassOnAccentOnImageBrush` (dark in both themes; HighlightText on Highlight in high contrast). Tests:
+  `OverlayContrastTests` (`ProgressOnArtwork_*`, `EpisodeWatchedMark_*`). Measured in light-theme screenshots over bright
+  posters (#F0F0EA): before, the card's #13877B bar sat on the poster (3.8:1 against it, a 1 px track line) and the episode
+  row's #0C5F56 the same way (6.5:1 there, about 2.8:1 on a black poster); now the bar has 4.0:1 on its track and the track
+  6.6:1 on the poster, whatever the poster. The episode's watched mark: its check 7.7:1 on the aqua (4.2:1 before, a light
+  check on #13877B), the aqua itself about 1.8:1 against a bright thumbnail (4.2:1 before).
 - `SEAGLASS_THEME` now sets the application's theme, so the harness's light screenshots show light dialogs, menus and tooltips too.
 - Measured contrast (screenshots' pixels): `shots\contrast.md` of the 1.1.3 glass stream.
