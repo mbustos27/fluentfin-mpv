@@ -69,7 +69,10 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	public static IReadOnlyList<MediaPlayerChoice> OfferedPlayers(MediaPlayerAvailability players) => [.. AllMediaPlayers.Where(x => players.IsAvailable(x.Type))];
 
 	/// <summary>Seaglass 1.1.3: the Player list is shown only when there is a choice (a copy that can run one player has none).</summary>
-	public static bool HasPlayerChoice { get; } = MediaPlayers.Count > 1;
+	public static bool HasPlayerChoice { get; } = OffersAChoice(MediaPlayerAvailability.ForThisApp);
+
+	/// <summary>Whether <paramref name="players"/> leaves more than one player to choose from.</summary>
+	public static bool OffersAChoice(MediaPlayerAvailability players) => OfferedPlayers(players).Count > 1;
 
 	private bool _loadingPlayer;
 
@@ -622,7 +625,9 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	// ---- Seaglass 1.1.3: Settings > About (UX review, prioritised fixes 1, 6 and 9)
 
 	/// <summary>"Seaglass 1.1.3", the first line of About.</summary>
-	public static string AboutTitle { get; } = $"{AppIdentity.Name} {AppVersion.Current}";
+	public static string AboutTitle { get; } = AboutTitleFor(AppVersion.Current);
+
+	public static string AboutTitleFor(string version) => $"{AppIdentity.Name} {version}";
 
 	/// <summary>This project on GitHub: Contribute.</summary>
 	public const string ContributeUrl = Updates.UpdateSource.RepositoryUrl;

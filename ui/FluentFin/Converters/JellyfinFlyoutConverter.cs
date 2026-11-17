@@ -1,4 +1,6 @@
-﻿using FluentFin.Core;
+﻿using System.Windows.Input;
+using CommunityToolkit.Mvvm.Input;
+using FluentFin.Core;
 using FluentFin.Dialogs;
 using Jellyfin.Sdk.Generated.Models;
 using Microsoft.UI.Xaml;
@@ -9,7 +11,8 @@ namespace FluentFin.Converters;
 
 /// <summary>
 /// An item's More menu. Seaglass 1.1.3: its entries come from <see cref="ItemMenu"/> (every one does something, the
-/// administrative ones only for administrators); Delete asks first, naming the item.
+/// administrative ones only for administrators), and every entry runs through <see cref="ItemMenu.RunAsync"/>, so Delete
+/// asks first, naming the item. No entry is wired to a command directly.
 /// </summary>
 public partial class JellyfinFlyoutConverter : IValueConverter
 {
@@ -26,7 +29,7 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 			return null;
 		}
 
-		var groups = ItemMenu.For(dto, SessionInfo.CurrentUser, IncludePlay, CanEditSegments());
+		var groups = Groups(dto, IncludePlay);
 		if (groups.Count == 0)
 		{
 			return null;
@@ -54,81 +57,79 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 		throw new NotSupportedException();
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.3: a card's More button shows only when its menu has something (a collection or a person has nothing for
+	/// someone who is not an administrator), so it never opens nothing.
+	/// </summary>
+	public static Visibility CardMenuVisibility(BaseItemDto? dto) =>
+		dto is not null && Groups(dto, includePlay: true).Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+	private static IReadOnlyList<IReadOnlyList<ItemMenuEntry>> Groups(BaseItemDto dto, bool includePlay) =>
+		ItemMenu.For(dto, SessionInfo.CurrentUser, includePlay, CanEditSegments());
+
 	// an administrator signed in before the server's plugins were read has no list yet
 	private static bool CanEditSegments() => SessionInfo.CurrentUser?.Policy?.IsAdministrator == true && SessionInfo.Plugins is not null && SessionInfo.CanEditMediaSegments();
 
 	private static MenuFlyoutItem Make(ItemMenuEntry entry, BaseItemDto dto)
 	{
-		var item = new MenuFlyoutItem { Text = entry.Text };
-		switch (entry.Command)
+		var item = new MenuFlyoutItem { Text = entry.Text, Icon = IconFor(entry.Command) };
+		item.Click += async (sender, _) =>
 		{
-			case ItemMenuCommand.Play:
-				item.Icon = new SymbolIcon { Symbol = Symbol.Play };
-				item.Command = App.Commands.PlayDtoCommand;
-				item.CommandParameter = dto;
-				break;
-			case ItemMenuCommand.ToggleWatched:
-				item.Icon = new FontIcon { Glyph = "" };
-				item.Command = App.Commands.ToggleWatchedCommand;
-				item.CommandParameter = dto;
-				break;
-			case ItemMenuCommand.ToggleFavorite:
-				item.Icon = new FontIcon { Glyph = "" };
-				item.Command = App.Commands.ToggleFavoriteCommand;
-				item.CommandParameter = dto;
-				break;
-			case ItemMenuCommand.ResetWatchProgress:
-				item.Icon = new FontIcon { Glyph = "" };
-				item.Command = App.Commands.ResetWatchProgressCommand;
-				item.CommandParameter = dto.Id;
-				break;
-			case ItemMenuCommand.MediaInfo:
-				item.Icon = new SymbolIcon { Symbol = Symbol.MusicInfo };
-				item.Command = App.Dialogs.MediaInfoDialogCommand;
-				item.CommandParameter = dto;
-				break;
-			case ItemMenuCommand.EditMetadata:
-				item.Icon = new SymbolIcon { Symbol = Symbol.Edit };
-				item.Command = App.Dialogs.EditMetadataDialogCommand;
-				item.CommandParameter = dto;
-				break;
-			case ItemMenuCommand.EditImages:
-				item.Icon = new FontIcon { Glyph = "" };
-				item.Command = App.Dialogs.EditImagesDialogCommand;
-				item.CommandParameter = dto;
-				break;
-			case ItemMenuCommand.EditSegments:
-				item.Icon = new FontIcon { Glyph = "" };
-				item.Command = App.Commands.NavigateToSegmentsEditorCommand;
-				item.CommandParameter = dto;
-				break;
-			case ItemMenuCommand.EditSubtitles:
-				item.Icon = new SymbolIcon { Symbol = Symbol.ClosedCaption };
-				item.Command = App.Dialogs.EditSubtitlesDialogCommand;
-				item.CommandParameter = dto;
-				break;
-			case ItemMenuCommand.Identify:
-				item.Icon = new SymbolIcon { Symbol = Symbol.Edit };
-				item.Command = App.Dialogs.IdentifyDialogCommand;
-				item.CommandParameter = dto;
-				break;
-			case ItemMenuCommand.RefreshMetadata:
-				item.Icon = new SymbolIcon { Symbol = Symbol.Refresh };
-				item.Command = App.Dialogs.RefreshMetadataDialogCommand;
-				item.CommandParameter = dto.Id;
-				break;
-			case ItemMenuCommand.Delete:
-				item.Icon = new SymbolIcon { Symbol = Symbol.Delete };
-				item.Click += async (sender, _) =>
-				{
-					if (await ConfirmDialog.AskAsync((sender as UIElement)?.XamlRoot, ItemMenu.DeletePrompt(dto)))
-					{
-						await App.Commands.DeleteItemCommand.ExecuteAsync(dto);
-					}
-				};
-				break;
-		}
+			var root = (sender as UIElement)?.XamlRoot;
+			await ItemMenu.RunAsync(entry, dto, prompt => ConfirmDialog.AskAsync(root, prompt), Run);
+		};
 
 		return item;
+	}
+
+	private static IconElement IconFor(ItemMenuCommand command) => command switch
+	{
+		ItemMenuCommand.Play => new SymbolIcon { Symbol = Symbol.Play },
+		ItemMenuCommand.ToggleWatched => new FontIcon { Glyph = "" },
+		ItemMenuCommand.ToggleFavorite => new FontIcon { Glyph = "" },
+		ItemMenuCommand.ResetWatchProgress => new FontIcon { Glyph = "" },
+		ItemMenuCommand.MediaInfo => new SymbolIcon { Symbol = Symbol.MusicInfo },
+		ItemMenuCommand.EditMetadata => new SymbolIcon { Symbol = Symbol.Edit },
+		ItemMenuCommand.EditImages => new FontIcon { Glyph = "" },
+		ItemMenuCommand.EditSegments => new FontIcon { Glyph = "" },
+		ItemMenuCommand.EditSubtitles => new SymbolIcon { Symbol = Symbol.ClosedCaption },
+		ItemMenuCommand.Identify => new SymbolIcon { Symbol = Symbol.Edit },
+		ItemMenuCommand.RefreshMetadata => new SymbolIcon { Symbol = Symbol.Refresh },
+		ItemMenuCommand.Delete => new SymbolIcon { Symbol = Symbol.Delete },
+		_ => new FontIcon { Glyph = "" },
+	};
+
+	// what each entry does once ItemMenu.RunAsync lets it run (after the yes, for Delete)
+	private static Task Run(ItemMenuCommand command, BaseItemDto dto)
+	{
+		(ICommand? Action, object? Parameter) target = command switch
+		{
+			ItemMenuCommand.Play => (App.Commands.PlayDtoCommand, dto),
+			ItemMenuCommand.ToggleWatched => (App.Commands.ToggleWatchedCommand, dto),
+			ItemMenuCommand.ToggleFavorite => (App.Commands.ToggleFavoriteCommand, dto),
+			ItemMenuCommand.ResetWatchProgress => (App.Commands.ResetWatchProgressCommand, dto.Id),
+			ItemMenuCommand.MediaInfo => (App.Dialogs.MediaInfoDialogCommand, dto),
+			ItemMenuCommand.EditMetadata => (App.Dialogs.EditMetadataDialogCommand, dto),
+			ItemMenuCommand.EditImages => (App.Dialogs.EditImagesDialogCommand, dto),
+			ItemMenuCommand.EditSegments => (App.Commands.NavigateToSegmentsEditorCommand, dto),
+			ItemMenuCommand.EditSubtitles => (App.Dialogs.EditSubtitlesDialogCommand, dto),
+			ItemMenuCommand.Identify => (App.Dialogs.IdentifyDialogCommand, dto),
+			ItemMenuCommand.RefreshMetadata => (App.Dialogs.RefreshMetadataDialogCommand, dto.Id),
+			ItemMenuCommand.Delete => (App.Commands.DeleteItemCommand, dto),
+			_ => (null, null),
+		};
+		var (action, parameter) = target;
+
+		if (action is IAsyncRelayCommand asyncAction)
+		{
+			return asyncAction.CanExecute(parameter) ? asyncAction.ExecuteAsync(parameter) : Task.CompletedTask;
+		}
+
+		if (action?.CanExecute(parameter) == true)
+		{
+			action.Execute(parameter);
+		}
+
+		return Task.CompletedTask;
 	}
 }

@@ -35,7 +35,11 @@ public sealed class SettingsAndRailXamlTests
 	public void TheRail_MarksSettings_TooWhileItIsOpen()
 	{
 		// the selection follows the page from the footer items as well (Settings sits there)
-		Assert.Contains("NavigationViewControl.MenuItems.Concat(NavigationViewControl.FooterMenuItems)", Code("FluentFin/Views/ShellPage.xaml.cs"));
+		var shell = Code("FluentFin/Views/ShellPage.xaml.cs");
+		Assert.Contains("NavigationViewControl.MenuItems.Concat(NavigationViewControl.FooterMenuItems)", shell);
+		// review: a page off the rail reaches the selection (no WhereNotNull) and RailSelection unmarks Settings for it
+		Assert.DoesNotContain(".WhereNotNull()", shell);
+		Assert.Contains("NavigationViewControl.SelectedItem = RailSelection.Next(NavigationViewControl.SelectedItem, target, x => NavigationViewControl.FooterMenuItems.Contains(x));", shell);
 	}
 
 	[Fact]
@@ -126,8 +130,9 @@ public sealed class SettingsAndRailXamlTests
 		Assert.Equal(new string?[] { "{x:Bind vm:SettingsViewModel.FluentFinUri}", "{x:Bind vm:SettingsViewModel.ShimUri}" },
 			credits.Descendants(Presentation + "HyperlinkButton").Select(h => (string?)h.Attribute("NavigateUri")));
 
-		Assert.StartsWith($"{AppIdentity.Name} ", SettingsViewModel.AboutTitle);
-		Assert.EndsWith(AppVersion.Current, SettingsViewModel.AboutTitle);
+		// the title is the app's name and a release version (AppVersion, as the title bar and the server get it)
+		Assert.Equal("Seaglass 1.1.3", SettingsViewModel.AboutTitleFor("1.1.3"));
+		Assert.Matches(@"^Seaglass \d+\.\d+\.\d+", SettingsViewModel.AboutTitle);
 	}
 
 	[Theory]

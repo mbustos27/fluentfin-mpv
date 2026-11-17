@@ -31,14 +31,17 @@ public sealed partial class ShellPage : Page
 		ViewModel.NavigationService.Frame = NavigationFrame;
 		ViewModel.NavigationViewService.Initialize(NavigationViewControl);
 
+		// Seaglass 1.1.3: a page off the rail (Selected null) passes through too, so RailSelection can unmark Settings
 		ViewModel.WhenAnyValue(x => x.Selected)
-			.WhereNotNull()
-			.Where(x => x is NavigationViewItem)
+			.Where(x => x is null or NavigationViewItem)
 			.ObserveOn(RxSchedulers.MainThreadScheduler)
 			.Subscribe(item =>
 			{
 				// Seaglass 1.1.3: the footer too, so Settings is marked on the rail while it is open
-				NavigationViewControl.SelectedItem = NavigationViewControl.MenuItems.Concat(NavigationViewControl.FooterMenuItems).OfType<NavigationViewItem>().FirstOrDefault(x => x.Content == ((NavigationViewItem)item).Content);
+				var target = item is NavigationViewItem nav
+					? NavigationViewControl.MenuItems.Concat(NavigationViewControl.FooterMenuItems).OfType<NavigationViewItem>().FirstOrDefault(x => x.Content == nav.Content)
+					: null;
+				NavigationViewControl.SelectedItem = RailSelection.Next(NavigationViewControl.SelectedItem, target, x => NavigationViewControl.FooterMenuItems.Contains(x));
 			});
 	}
 

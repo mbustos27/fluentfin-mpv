@@ -107,6 +107,21 @@ public static class ItemMenu
 		return [.. new[] { yours, metadata, delete }.Where(x => x.Count > 0)];
 	}
 
+	/// <summary>
+	/// The one way a menu entry runs (the converter's every item goes through it): Delete asks first with
+	/// <see cref="DeletePrompt"/> and runs only on a yes; the others run at once. True when <paramref name="run"/> ran.
+	/// </summary>
+	public static async Task<bool> RunAsync(ItemMenuEntry entry, BaseItemDto dto, Func<ConfirmPrompt, Task<bool>> confirm, Func<ItemMenuCommand, BaseItemDto, Task> run)
+	{
+		if (entry.Command == ItemMenuCommand.Delete && !await confirm(DeletePrompt(dto)))
+		{
+			return false;
+		}
+
+		await run(entry.Command, dto);
+		return true;
+	}
+
 	private static string? DeleteText(BaseItemDto_Type type) => type switch
 	{
 		BaseItemDto_Type.Movie => "Delete Media",

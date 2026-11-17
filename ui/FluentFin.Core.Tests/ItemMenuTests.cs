@@ -177,20 +177,97 @@ public sealed class ItemMenuTests
 		Assert.Contains("season of The Archive", season.Message);
 	}
 
-	/// <summary>The menu draws every command (an entry with no command did nothing), and its Delete goes through the dialog.</summary>
+	// ---- review: Delete asks before it deletes, as behaviour, and the menu has no other way to run an entry
+
+	private static async Task<(bool Ran, List<ItemMenuCommand> Runs, List<ConfirmPrompt> Asked)> Run(ItemMenuCommand command, bool yes)
+	{
+		List<ItemMenuCommand> runs = [];
+		List<ConfirmPrompt> asked = [];
+		var ran = await ItemMenu.RunAsync(new ItemMenuEntry(command, "x"), Item(BaseItemDto_Type.Movie),
+			prompt => { asked.Add(prompt); return Task.FromResult(yes); },
+			(c, _) => { runs.Add(c); return Task.CompletedTask; });
+		return (ran, runs, asked);
+	}
+
 	[Fact]
-	public void TheConverter_GivesEveryEntryAnAction_AndDeleteAsks()
+	public async Task Delete_AsksFirst_AndANoDeletesNothing()
+	{
+		var (ran, runs, asked) = await Run(ItemMenuCommand.Delete, yes: false);
+
+		Assert.False(ran);
+		Assert.Empty(runs);
+		Assert.Equal("Delete Bridge of Avalon?", Assert.Single(asked).Title);
+	}
+
+	[Fact]
+	public async Task Delete_RunsOnlyAfterAYes()
+	{
+		var (ran, runs, asked) = await Run(ItemMenuCommand.Delete, yes: true);
+
+		Assert.True(ran);
+		Assert.Single(asked);
+		Assert.Equal([ItemMenuCommand.Delete], runs);
+	}
+
+	[Theory]
+	[InlineData(ItemMenuCommand.Play)]
+	[InlineData(ItemMenuCommand.ToggleWatched)]
+	[InlineData(ItemMenuCommand.EditMetadata)]
+	[InlineData(ItemMenuCommand.RefreshMetadata)]
+	public async Task TheOthers_RunAtOnce(ItemMenuCommand command)
+	{
+		var (ran, runs, asked) = await Run(command, yes: false);
+
+		Assert.True(ran);
+		Assert.Empty(asked);
+		Assert.Equal([command], runs);
+	}
+
+	/// <summary>
+	/// Every menu item runs through ItemMenu.RunAsync: an entry wired straight to a command (item.Command = DeleteItemCommand)
+	/// would delete without asking. Every command has its action, and the dialog is what RunAsync asks with.
+	/// </summary>
+	[Fact]
+	public void TheConverter_RunsEveryEntryThroughRunAsync_NeverStraightToACommand()
 	{
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Converters/JellyfinFlyoutConverter.cs"));
 
+		Assert.DoesNotContain(".Command =", code);
+		Assert.DoesNotContain("Command = ", code);
+		Assert.DoesNotContain("CommandParameter", code);
+		Assert.Contains("await ItemMenu.RunAsync(entry, dto, prompt => ConfirmDialog.AskAsync(root, prompt), Run);", code);
+		Assert.Single(System.Text.RegularExpressions.Regex.Matches(code, @"\.Click \+="));
 		foreach (var command in Enum.GetValues<ItemMenuCommand>())
 		{
-			Assert.Contains($"case ItemMenuCommand.{command}:", code);
+			Assert.Contains($"ItemMenuCommand.{command} => (", code);
 		}
 
-		Assert.Contains("ConfirmDialog.AskAsync", code);
-		Assert.Contains("ItemMenu.DeletePrompt(dto)", code);
 		Assert.DoesNotContain("void CopyUrlToClipboard(", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Dialogs/DialogCommands.cs")));
+	}
+
+	// ---- review: a menu with nothing in it has no More button
+
+	[Theory]
+	[InlineData(BaseItemDto_Type.BoxSet)]
+	[InlineData(BaseItemDto_Type.CollectionFolder)]
+	[InlineData(BaseItemDto_Type.Person)]
+	[InlineData(BaseItemDto_Type.Folder)]
+	public void ACollectionOrPerson_HasNoMenu_ForAViewer(BaseItemDto_Type type)
+	{
+		Assert.Empty(ItemMenu.For(Item(type), Viewer, includePlay: true, canEditSegments: false));
+		Assert.NotEmpty(ItemMenu.For(Item(type), Admin, includePlay: true, canEditSegments: false));
+	}
+
+	[Fact]
+	public void TheCardsMoreButton_ShowsOnlyWithAMenu()
+	{
+		var card = XDocument.Load(Path.Combine(RepoRoot, "FluentFin/Controls/BaseItemDtoCard.xaml"));
+		var more = card.Descendants().Single(e => (string?)e.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "MoreButton");
+		Assert.Equal("{x:Bind c:JellyfinFlyoutConverter.CardMenuVisibility(Model.Dto), Mode=OneWay}", (string?)more.Attribute("Visibility"));
+
+		var converter = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Converters/JellyfinFlyoutConverter.cs"));
+		Assert.Contains("dto is not null && Groups(dto, includePlay: true).Count > 0 ? Visibility.Visible : Visibility.Collapsed", converter);
+		Assert.Contains("if (MoreButton.Visibility == Visibility.Visible)", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/BaseItemDtoCard.xaml.cs")));
 	}
 
 	[Fact]

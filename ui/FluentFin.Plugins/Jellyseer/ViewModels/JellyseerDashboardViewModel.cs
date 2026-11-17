@@ -50,8 +50,31 @@ public partial class JellyseerDashboardViewModel(IJellyseerClient jellyseerClien
 	[RelayCommand]
 	private async Task SetServerUrl(string url)
 	{
-		JellyseerOptions.Current.ServerMapping[SessionInfo.ServerId] = url;
-		var loggedIn = await Client.Login();
+		// Seaglass 1.1.3: the address is kept only when the login with it works; a failed or throwing login puts back what was
+		// there, so Settings > Integrations never shows an address that was never set up
+		var mapping = JellyseerOptions.Current.ServerMapping;
+		var serverId = SessionInfo.ServerId;
+		var had = mapping.TryGetValue(serverId, out var previous);
+		mapping[serverId] = url;
+		var loggedIn = false;
+		try
+		{
+			loggedIn = await Client.Login();
+		}
+		finally
+		{
+			if (!loggedIn)
+			{
+				if (had)
+				{
+					mapping[serverId] = previous!;
+				}
+				else
+				{
+					mapping.Remove(serverId);
+				}
+			}
+		}
 
 		if(loggedIn)
 		{

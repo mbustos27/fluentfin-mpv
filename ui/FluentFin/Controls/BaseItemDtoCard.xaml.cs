@@ -74,7 +74,11 @@ public sealed partial class BaseItemDtoCard : UserControl
 		yield return PlayButton;
 		yield return MarkWatchedButton;
 		yield return AddToFavoriteButton;
-		yield return MoreButton;
+		// Seaglass 1.1.3: not when the menu is empty (the button is hidden then: CardMenuVisibility)
+		if (MoreButton.Visibility == Visibility.Visible)
+		{
+			yield return MoreButton;
+		}
 	}
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new BaseItemDtoCardAutomationPeer(this);
