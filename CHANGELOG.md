@@ -2,7 +2,23 @@
 
 ## 1.1.0
 
-FluentFin MPV is now **Seaglass**.
+FluentFin MPV is now **Seaglass**, with a new glassy look inspired by the Apple TV app (`docs\design\SEAGLASS.md`;
+the research behind it: `docs\design\SEAGLASS-RESEARCH.md`).
+
+- **Glass.** The navigation rail, title bar, search, menus, dialogs, the hero's text, page sections and Settings sit on
+  frosted glass with a lit edge; the current page's artwork, softened, tints the whole window and drifts slowly. Posters
+  and artwork stay solid. Settings > Appearance > Glass: Automatic (follows Windows' transparency, animation and
+  high-contrast settings), Full, Reduced (no motion) or Solid (no translucency). The accent is sea-glass aqua.
+- **Home** opens on a hero of up to five items (Continue Watching first) with Resume and More info; it moves on every
+  7 s (not while you point at it, and not with animations off), and never autoplays trailers. Rows have new cards that
+  lift (and, in Full, tilt toward the pointer with a soft sheen); artwork fades in over a blurred placeholder
+  (BlurHash) and is decoded at display size.
+- **Item pages** (movie, series, season, episode): a full-width backdrop with the title's logo, a row of chips (year,
+  rating, score, runtime, resolution, HDR, audio), Play as the one highlighted action, the journal as one glass card,
+  cast, episode cards, season pills and Up next.
+- **The player's own controls**: on a dark gradient (no blur over the video), a round play/pause, ±10/30 s, a thin
+  seek bar with the time under the pointer, Skip intro/credits and Next as pills, auto-hiding after 3 s.
+- **Contribute** opens this project's repository (it opened upstream FluentFin's).
 
 - **The new name.** The app is `Seaglass.exe` (the launcher at the top of the folder, and `app\Seaglass.exe`). Release
   files are `Seaglass-1.1.0-win-x64.zip`, `.msi`, `-sources.zip` and `.txt`. The window and title bar, About, the dashboard,
@@ -13,7 +29,9 @@ FluentFin MPV is now **Seaglass**.
   package logos. `tools\icon\make-icon.ps1` draws it.
 - **Your data is copied, not moved.** The data folder is now `%LOCALAPPDATA%\Seaglass`. On the first start, if it does not
   exist and `%LOCALAPPDATA%\FluentFinMpv` does, the old folder is copied into it (recursively) and the old one is left
-  untouched; the log says so. `--data-dir` is unchanged.
+  untouched; the log says so. The journal is copied with SQLite's backup, so it is whole even while FluentFin MPV runs.
+  If the copy fails, nothing is half-copied: Seaglass uses the old folder for that session, says so, and tries again at
+  the next start. `--data-dir` is unchanged.
 - **The client name sent to Jellyfin is "Seaglass"** (the UI and the playback backend both use it). Your server will show
   a new client in its dashboard and device list, and may ask you to sign in once.
 
