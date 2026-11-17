@@ -143,11 +143,20 @@
                             Description="How much one wheel notch or arrow key changes the volume, in percent. With Seaglass's player controls and Windows Media Player."
                             Header="Volume step"
                             HeaderIcon="{ui:FontIcon Glyph=&#xE767;}">
+                            <!--
+                                Seaglass 1.1.4 (UX review, prioritised fix 7): spin buttons of 32 x 32 px (WinUI's are 32 x 24), the text
+                                centred in the taller box; the keys are the box's: Up/Down 1, PageUp/PageDown 5, typing and Enter
+                            -->
                             <NumberBox
+                                x:Name="VolumeStepBox"
                                 MinWidth="120"
+                                Padding="10,9,6,9"
+                                controls:NumberBoxTargets.MinTargetSize="32"
                                 AutomationProperties.Name="Volume step, in percent"
+                                LargeChange="5"
                                 Maximum="20"
                                 Minimum="1"
+                                SmallChange="1"
                                 SpinButtonPlacementMode="Inline"
                                 Value="{x:Bind ViewModel.VolumeStep, Mode=TwoWay}" />
                         </ctk:SettingsCard>
