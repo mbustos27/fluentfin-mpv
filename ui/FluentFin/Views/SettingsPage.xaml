@@ -27,8 +27,13 @@
     </Page.Resources>
 
     <!--  fluentfin-mpv: scrolls (the Playback section made it taller than a window) and narrows with the window  -->
+    <!--
+        Seaglass 1.1.3 (UX review, prioritised fixes 1, 2, 6 and 9): every group has a title, in task order: Appearance,
+        Playback, Audio and subtitles, Servers and accounts, Integrations, then Advanced and About last. Removing a server or a
+        sign-in is a neutral button that asks first, naming it (SettingsViewModel.Confirm).
+    -->
     <ScrollViewer>
-        <Grid MaxWidth="1000" Padding="24,0">
+        <Grid MaxWidth="1000" Padding="24,0,24,40">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -43,34 +48,6 @@
             </Grid>
 
             <StackPanel Grid.Row="1" Spacing="20">
-                <ItemsRepeater ItemsSource="{x:Bind ViewModel.Servers}">
-                    <ItemsRepeater.ItemTemplate>
-                        <DataTemplate x:DataType="settings:SavedServer">
-                            <ctk:SettingsExpander
-                                Header="{x:Bind DisplayName}"
-                                ItemsSource="{x:Bind Users}"
-                                Tag="{x:Bind}">
-                                <Button
-                                    Command="{Binding ElementName=Page, Path=ViewModel.DeleteServerCommand}"
-                                    CommandParameter="{x:Bind}"
-                                    Content="Delete Server"
-                                    Style="{ThemeResource AccentButtonStyle}" />
-                                <ctk:SettingsExpander.ItemTemplate>
-                                    <DataTemplate x:DataType="settings:SavedUser">
-                                        <ctk:SettingsCard Header="{x:Bind Username}">
-                                            <Button
-                                                Click="RemoveUser"
-                                                Content="Delete User"
-                                                Style="{ThemeResource AccentButtonStyle}"
-                                                Tag="{x:Bind}" />
-                                        </ctk:SettingsCard>
-                                    </DataTemplate>
-                                </ctk:SettingsExpander.ItemTemplate>
-                            </ctk:SettingsExpander>
-                        </DataTemplate>
-                    </ItemsRepeater.ItemTemplate>
-                </ItemsRepeater>
-
                 <!--  Seaglass: Settings > Appearance; the choice is saved on this PC and applies at once  -->
                 <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
                     <StackPanel Spacing="4">
@@ -94,6 +71,8 @@
                     </StackPanel>
                 </ContentControl>
                 <!--  fluentfin-mpv: Settings > Playback (docs/research/ux-review.md T1)  -->
+                <!--  kept on this PC; the bridge has no field for the skip and wheel settings yet (docs/BRIDGE.md v1), so mpv's own controls ignore them;
+                      Seaglass's player controls over the MPV player use the Skip button, the wheel and the step (MpvControlsViewModel)  -->
                 <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
                     <StackPanel Spacing="4">
                         <TextBlock
@@ -101,10 +80,12 @@
                             AutomationProperties.HeadingLevel="Level2"
                             Style="{StaticResource GlassSectionTitleTextBlockStyle}"
                             Text="Playback" />
+                        <!--  Seaglass 1.1.3: only when this copy can run more than one player  -->
                         <ctk:SettingsCard
                             Description="Remote control from other devices follows a change after you sign in again."
                             Header="Player"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xEA69;}">
+                            HeaderIcon="{ui:FontIcon Glyph=&#xEA69;}"
+                            Visibility="{x:Bind c:Converters.BooleanToVisibility(HasPlayerChoice)}">
                             <ComboBox
                                 AutomationProperties.Name="Player"
                                 DisplayMemberPath="Name"
@@ -113,7 +94,7 @@
                         </ctk:SettingsCard>
                         <!--  fluentfin-mpv player controls: who draws the controls over the MPV player's video (docs/research/player-controls.md)  -->
                         <ctk:SettingsCard
-                            Description="FluentFin (the default): FluentFin's own controls over the video, with mpv running inside FluentFin; without its libmpv, mpv's controls are used and the player says so. mpv: mpv's on-screen controls. Used from the next playback."
+                            Description="Seaglass (the default): Seaglass's own controls over the video, with mpv playing inside the window; if mpv's library cannot load on this PC, mpv's controls are used and the player says so. mpv: mpv's on-screen controls. Used from the next playback."
                             Header="Player controls"
                             HeaderIcon="{ui:FontIcon Glyph=&#xE768;}"
                             Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
@@ -124,6 +105,51 @@
                                 ItemsSource="{x:Bind vm:SettingsViewModel.PlayerControlsChoices}"
                                 SelectedItem="{x:Bind ViewModel.SelectedPlayerControls, Mode=TwoWay}" />
                         </ctk:SettingsCard>
+                        <ctk:SettingsCard
+                            Description="With Seaglass's player controls and Windows Media Player. mpv's own controls have their own setting."
+                            Header="Show Skip intro and Skip credits"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
+                            <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
+                        <ctk:SettingsCard
+                            Description="When neither the server nor the file's chapters mark the intro or credits, ask TheIntroDB (and, for anime, AniSkip, which finds the show through arm.haglund.dev). Sent: the show's public ID, season, episode and length. Not sent: your server, account or file names. Off by default."
+                            Header="Look up intros online"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE774;}">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <HyperlinkButton Content="Intro times from TheIntroDB" NavigateUri="https://theintrodb.org" />
+                                <HyperlinkButton Content="AniSkip" NavigateUri="https://aniskip.com" />
+                                <HyperlinkButton Content="arm.haglund.dev" NavigateUri="https://arm.haglund.dev" />
+                                <ToggleSwitch AutomationProperties.Name="Look up intros online" IsOn="{x:Bind ViewModel.LookUpIntrosOnline, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctk:SettingsCard>
+                        <ctk:SettingsCard
+                            Description="When you skip ahead near the start of an episode, offer the same skip on the season's later episodes. Kept on this PC."
+                            Header="Learn intros from my skips"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE7BE;}">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.ForgetLearnedStatus, Mode=OneWay}" />
+                                <Button Command="{x:Bind ViewModel.ForgetLearnedIntrosCommand}" Content="Forget learned intros" />
+                                <ToggleSwitch AutomationProperties.Name="Learn intros from my skips" IsOn="{x:Bind ViewModel.LearnIntros, Mode=TwoWay}" />
+                            </StackPanel>
+                        </ctk:SettingsCard>
+                        <ctk:SettingsCard
+                            Description="With Seaglass's player controls and Windows Media Player. mpv's own controls always change the volume with the wheel."
+                            Header="Change the volume with the mouse wheel"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE962;}">
+                            <ToggleSwitch AutomationProperties.Name="Change the volume with the mouse wheel" IsOn="{x:Bind ViewModel.MouseWheelVolume, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
+                        <ctk:SettingsCard
+                            Description="How much one wheel notch or arrow key changes the volume, in percent. With Seaglass's player controls and Windows Media Player."
+                            Header="Volume step"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE767;}">
+                            <NumberBox
+                                MinWidth="120"
+                                AutomationProperties.Name="Volume step, in percent"
+                                Maximum="20"
+                                Minimum="1"
+                                SpinButtonPlacementMode="Inline"
+                                Value="{x:Bind ViewModel.VolumeStep, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
 
                     </StackPanel>
                 </ContentControl>
@@ -131,7 +157,12 @@
                 <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
                     <StackPanel Spacing="4">
                         <TextBlock
-                            Margin="4,4,0,8"
+                            Margin="4,4,0,4"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                            Text="Audio and subtitles" />
+                        <TextBlock
+                            Margin="4,0,0,8"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Style="{ThemeResource CaptionTextBlockStyle}"
                             Text="{x:Bind ServerPreferencesCaption()}"
@@ -175,89 +206,87 @@
                                     ItemsSource="{x:Bind vm:SettingsViewModel.SubtitleModes}"
                                     SelectedItem="{x:Bind ViewModel.SubtitleMode, Mode=TwoWay}" />
                             </ctk:SettingsCard>
+                            <!--  Seaglass 1.1.3: only for a player that follows it (SettingsViewModel.FollowsAutoPlay): the mpv player does not  -->
                             <ctk:SettingsCard
-                                Description="The MPV player plays the next episode whatever this says, for now."
+                                Description="Windows Media Player and other Jellyfin apps follow this."
                                 Header="Play the next episode automatically"
-                                HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
+                                HeaderIcon="{ui:FontIcon Glyph=&#xE893;}"
+                                Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.FollowsAutoPlay), Mode=OneWay}">
                                 <ToggleSwitch AutomationProperties.Name="Play the next episode automatically" IsOn="{x:Bind ViewModel.AutoPlayNextEpisode, Mode=TwoWay}" />
                             </ctk:SettingsCard>
                         </StackPanel>
 
                     </StackPanel>
                 </ContentControl>
-                <!--  kept on this PC; the bridge has no field for them yet (docs/BRIDGE.md v1), so mpv's own controls ignore them;
-                      FluentFin's player controls over the MPV player use the Skip button, the wheel and the step (MpvControlsViewModel)  -->
+                <!--  Seaglass 1.1.3: the saved servers and sign-ins, with neutral Remove buttons that ask first (no accent: that is for Play)  -->
                 <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
                     <StackPanel Spacing="4">
-                        <ctk:SettingsCard
-                            Description="Built-in players, and the MPV player with FluentFin's player controls. mpv's own controls follow the MPV player's settings."
-                            Header="Show Skip intro and Skip credits"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
-                            <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />
-                        </ctk:SettingsCard>
-                        <ctk:SettingsCard
-                            Description="When neither the server nor the file's chapters mark the intro or credits, ask TheIntroDB (and, for anime, AniSkip, which finds the show through arm.haglund.dev). Sent: the show's public ID, season, episode and length. Not sent: your server, account or file names. Off by default."
-                            Header="Look up intros online"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE774;}">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <HyperlinkButton Content="Intro times from TheIntroDB" NavigateUri="https://theintrodb.org" />
-                                <HyperlinkButton Content="AniSkip" NavigateUri="https://aniskip.com" />
-                                <HyperlinkButton Content="arm.haglund.dev" NavigateUri="https://arm.haglund.dev" />
-                                <ToggleSwitch AutomationProperties.Name="Look up intros online" IsOn="{x:Bind ViewModel.LookUpIntrosOnline, Mode=TwoWay}" />
-                            </StackPanel>
-                        </ctk:SettingsCard>
-                        <ctk:SettingsCard
-                            Description="When you skip ahead near the start of an episode, offer the same skip on the season's later episodes. Kept on this PC."
-                            Header="Learn intros from my skips"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE7BE;}">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.ForgetLearnedStatus, Mode=OneWay}" />
-                                <Button Command="{x:Bind ViewModel.ForgetLearnedIntrosCommand}" Content="Forget learned intros" />
-                                <ToggleSwitch AutomationProperties.Name="Learn intros from my skips" IsOn="{x:Bind ViewModel.LearnIntros, Mode=TwoWay}" />
-                            </StackPanel>
-                        </ctk:SettingsCard>
-                        <ctk:SettingsCard
-                            Description="Built-in players, and the MPV player with FluentFin's player controls. mpv's own controls always change the volume with the wheel."
-                            Header="Change the volume with the mouse wheel"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE962;}">
-                            <ToggleSwitch AutomationProperties.Name="Change the volume with the mouse wheel" IsOn="{x:Bind ViewModel.MouseWheelVolume, Mode=TwoWay}" />
-                        </ctk:SettingsCard>
-                        <ctk:SettingsCard
-                            Description="How much one wheel notch or arrow key changes the volume, in percent. Built-in players, and the MPV player with FluentFin's player controls."
-                            Header="Volume step"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE767;}">
-                            <NumberBox
-                                MinWidth="120"
-                                AutomationProperties.Name="Volume step, in percent"
-                                Maximum="20"
-                                Minimum="1"
-                                SpinButtonPlacementMode="Inline"
-                                Value="{x:Bind ViewModel.VolumeStep, Mode=TwoWay}" />
-                        </ctk:SettingsCard>
-
+                        <TextBlock
+                            Margin="4,4,0,4"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                            Text="Servers and accounts" />
+                        <TextBlock
+                            Margin="4,0,0,8"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="The servers and sign-ins saved on this PC. Removing one changes nothing on the server."
+                            TextWrapping="WrapWholeWords" />
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Servers}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout Spacing="4" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="settings:SavedServer">
+                                    <ctk:SettingsExpander
+                                        Header="{x:Bind DisplayName}"
+                                        HeaderIcon="{ui:FontIcon Glyph=&#xE968;}"
+                                        ItemsSource="{x:Bind Users}"
+                                        Tag="{x:Bind}">
+                                        <Button
+                                            AutomationProperties.Name="{x:Bind vm:SettingsViewModel.RemoveServerLabel(DisplayName)}"
+                                            Command="{Binding ElementName=Page, Path=ViewModel.DeleteServerCommand}"
+                                            CommandParameter="{x:Bind}"
+                                            Content="Remove server" />
+                                        <ctk:SettingsExpander.ItemTemplate>
+                                            <DataTemplate x:DataType="settings:SavedUser">
+                                                <ctk:SettingsCard Header="{x:Bind Username}" HeaderIcon="{ui:FontIcon Glyph=&#xE77B;}">
+                                                    <Button
+                                                        AutomationProperties.Name="{x:Bind vm:SettingsViewModel.RemoveUserLabel(Username)}"
+                                                        Click="RemoveUser"
+                                                        Content="Remove"
+                                                        Tag="{x:Bind}" />
+                                                </ctk:SettingsCard>
+                                            </DataTemplate>
+                                        </ctk:SettingsExpander.ItemTemplate>
+                                    </ctk:SettingsExpander>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
                     </StackPanel>
                 </ContentControl>
-                <!--  Seaglass: the opt-in update notice. Off by default; nothing is sent until it is on  -->
+                <!--  Seaglass 1.1.3: Jellyseerr left the rail (UX review, prioritised fix 1); it opens in the app, as before  -->
                 <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
-                    <ctk:SettingsCard
-                        Description="Once a day Seaglass asks GitHub whether a newer version is out. Nothing else is sent. Off by default."
-                        Header="Check for updates"
-                        HeaderIcon="{ui:FontIcon Glyph=&#xE895;}">
-                        <ToggleSwitch AutomationProperties.Name="Check for updates" IsOn="{x:Bind ViewModel.CheckForUpdates, Mode=TwoWay}" />
-                    </ctk:SettingsCard>
-                </ContentControl>
-                <!--  Seaglass: the shortcut sheet (also on ? anywhere, and in the player)  -->
-                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
-                    <ctk:SettingsCard
-                        Click="OnKeyboardShortcutsClick"
-                        Description="Every key and mouse button. Press ? on any page to open it."
-                        Header="Keyboard shortcuts"
-                        HeaderIcon="{ui:FontIcon Glyph=&#xE765;}"
-                        IsClickEnabled="True" />
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            Margin="4,4,0,8"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                            Text="Integrations" />
+                        <ctk:SettingsCard
+                            Description="{x:Bind JellyseerrDescription}"
+                            Header="Jellyseerr"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE7BC;}">
+                            <Button
+                                x:Name="JellyseerrButton"
+                                AutomationProperties.Name="{x:Bind JellyseerrButtonName}"
+                                Click="OnJellyseerrClick"
+                                Content="{x:Bind JellyseerrAction}" />
+                        </ctk:SettingsCard>
+                    </StackPanel>
                 </ContentControl>
                 <!--  fluentfin-mpv: developer settings out of the way (docs/research/ux-review.md T2)  -->
                 <ctk:SettingsExpander
-                    Margin="0,16,0,0"
                     Description="The MPV backend's command and status."
                     Header="Advanced"
                     HeaderIcon="{ui:FontIcon Glyph=&#xE90F;}"
@@ -280,6 +309,71 @@
                         </ctk:SettingsCard>
                     </ctk:SettingsExpander.Items>
                 </ctk:SettingsExpander>
+                <!--
+                    Seaglass 1.1.3: Settings > About, last (UX review, prioritised fixes 1, 6 and 9): the version, the licence, the two
+                    projects it is built from, Contribute and Report a problem (they left the rail; clickable cards are buttons, so Enter
+                    and Space work), and Check for updates and the shortcut sheet, which sat under Playback.
+                -->
+                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            Margin="4,4,0,8"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                            Text="About" />
+                        <ctk:SettingsCard
+                            x:Name="AboutVersionCard"
+                            Description="A Jellyfin client for Windows. Free software under the GNU General Public License, version 3 (GPL-3.0)."
+                            Header="{x:Bind vm:SettingsViewModel.AboutTitle}"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE946;}">
+                            <HyperlinkButton
+                                AutomationProperties.Name="Licence: GPL-3.0"
+                                Content="Licence"
+                                NavigateUri="{x:Bind vm:SettingsViewModel.LicenseUri}" />
+                        </ctk:SettingsCard>
+                        <!--  Seaglass: the opt-in update notice. Off by default; nothing is sent until it is on  -->
+                        <ctk:SettingsCard
+                            Description="Once a day Seaglass asks GitHub whether a newer version is out. Nothing else is sent. Off by default."
+                            Header="Check for updates"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE895;}">
+                            <ToggleSwitch AutomationProperties.Name="Check for updates" IsOn="{x:Bind ViewModel.CheckForUpdates, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
+                        <!--  Seaglass: the shortcut sheet (also on ? anywhere, and in the player)  -->
+                        <ctk:SettingsCard
+                            Click="OnKeyboardShortcutsClick"
+                            Description="Every key and mouse button. Press ? on any page to open it."
+                            Header="Keyboard shortcuts"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE765;}"
+                            IsClickEnabled="True" />
+                        <ctk:SettingsCard
+                            x:Name="ReportProblemCard"
+                            ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
+                            ActionIconToolTip="Opens in your browser"
+                            Click="OnReportProblemClick"
+                            Description="Opens a new issue on GitHub. Say what you did, what happened, and your Seaglass version."
+                            Header="Report a problem"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xEBE8;}"
+                            IsClickEnabled="True" />
+                        <ctk:SettingsCard
+                            x:Name="ContributeCard"
+                            ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
+                            ActionIconToolTip="Opens in your browser"
+                            Click="OnContributeClick"
+                            Description="Seaglass's code, ideas and fixes are on GitHub: github.com/mbustos27/fluentfin-mpv."
+                            Header="Contribute"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE943;}"
+                            IsClickEnabled="True" />
+                        <ctk:SettingsCard
+                            Description="FluentFin by insomniachi, its interface, and jellyfin-mpv-shim by the Jellyfin project and its contributors, its playback. Both are GPL-3.0. Seaglass is not affiliated with either, or with Jellyfin or mpv."
+                            Header="Built on FluentFin and jellyfin-mpv-shim"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE8F1;}">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <HyperlinkButton Content="FluentFin" NavigateUri="{x:Bind vm:SettingsViewModel.FluentFinUri}" />
+                                <HyperlinkButton Content="jellyfin-mpv-shim" NavigateUri="{x:Bind vm:SettingsViewModel.ShimUri}" />
+                            </StackPanel>
+                        </ctk:SettingsCard>
+                    </StackPanel>
+                </ContentControl>
             </StackPanel>
 
         </Grid>
