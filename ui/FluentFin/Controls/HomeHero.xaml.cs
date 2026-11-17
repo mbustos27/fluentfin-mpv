@@ -34,7 +34,16 @@ public sealed partial class HomeHero : UserControl
 		InitializeComponent();
 		Visibility = Visibility.Collapsed;
 		_timer.Tick += (_, _) => Advance();
-		Loaded += (_, _) => { SafeMotion.Subscribe(OnGlassModeChanged); UpdateTimer(); };
+		Loaded += (_, _) =>
+		{
+			SafeMotion.Subscribe(OnGlassModeChanged);
+			UpdateTimer();
+			// the backdrop is set only while the hero is on screen (Show), so coming back to Home puts its slide behind it again
+			if (_shown is not null)
+			{
+				AmbientBackdrop.Set(_shown);
+			}
+		};
 		Unloaded += (_, _) =>
 		{
 			SafeMotion.Unsubscribe(OnGlassModeChanged);
@@ -123,7 +132,10 @@ public sealed partial class HomeHero : UserControl
 		var next = new BitmapImage { DecodePixelWidth = BackdropWidth };
 		next.UriSource = backdrop;
 		_shown = backdrop;
-		AmbientBackdrop.Set(backdrop);
+		if (IsLoaded) // a hero that is off screen must not overwrite another page's backdrop; Loaded sets it again
+		{
+			AmbientBackdrop.Set(backdrop);
+		}
 
 		// the new image fades in over the old one; the old one then takes its place
 		var fade = animate ? FadeTime : TimeSpan.Zero;
