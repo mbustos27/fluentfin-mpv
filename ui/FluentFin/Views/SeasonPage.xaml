@@ -64,8 +64,14 @@
                         </ItemsRepeater.Layout>
                     </ItemsRepeater>
                     <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <!--  Seaglass scrolling: an ItemsControl, not a virtualizing ItemsRepeater: Tab never reached the episodes after the first  -->
-                        <ItemsControl IsTabStop="False" ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}">
+                        <!--
+                            Seaglass scrolling: an ItemsControl (EpisodeList), not a virtualizing ItemsRepeater: Tab never reached the
+                            episodes after the first. One Tab stop per episode, Up/Down/Home/End between them, a list for Narrator.
+                        -->
+                        <controls:EpisodeList
+                            AutomationProperties.Name="Episodes"
+                            IsTabStop="False"
+                            ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="jm:BaseItemDto">
                                     <controls:EpisodeRow Dto="{x:Bind}" />
@@ -76,7 +82,7 @@
                                     <StackPanel Spacing="10" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
-                        </ItemsControl>
+                        </controls:EpisodeList>
                     </ContentControl>
                     <ContentControl Style="{StaticResource GlassSurfaceStyle}">
                         <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />

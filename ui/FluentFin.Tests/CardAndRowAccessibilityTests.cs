@@ -22,6 +22,20 @@ public sealed class CardAndRowAccessibilityTests
 	}
 
 	[Fact]
+	public void EpisodeRow_IsOneListItem_ThatPlaysOnInvoke_InAList()
+	{
+		// Seaglass scrolling: the row (not its five buttons) is what Narrator and the keyboard reach; Invoke is Enter's Play
+		var row = typeof(EpisodeRow).GetMethod("OnCreateAutomationPeer", BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.Equal(typeof(EpisodeRow), row!.DeclaringType);
+		Assert.True(typeof(FrameworkElementAutomationPeer).IsAssignableFrom(typeof(EpisodeRowAutomationPeer)));
+		Assert.True(typeof(IInvokeProvider).IsAssignableFrom(typeof(EpisodeRowAutomationPeer)));
+
+		var list = typeof(EpisodeList).GetMethod("OnCreateAutomationPeer", BindingFlags.Instance | BindingFlags.NonPublic);
+		Assert.Equal(typeof(EpisodeList), list!.DeclaringType);
+		Assert.True(typeof(FrameworkElementAutomationPeer).IsAssignableFrom(typeof(EpisodeListAutomationPeer)));
+	}
+
+	[Fact]
 	public void CardButtons_ShowOnKeyboardFocus_AndOutliveThePointerLeaving()
 	{
 		var card = new CardActions();
