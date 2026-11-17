@@ -677,7 +677,9 @@ public static class OffscreenUi {
           || (bool)e.GetCachedPropertyValue(AutomationElement.IsSelectionItemPatternAvailableProperty);
       } catch (Exception) { continue; }   // gone or unreadable while the page changed: not counted
       visible++;
-      try { var hp = AutomationProperty.LookupById(30173); if (hp != null) { var level = e.GetCurrentPropertyValue(hp); if (level is int && (int)level > 80050) headings++; } } catch { }
+      // HeadingLevel: .NET Framework's client returns its AutomationHeadingLevel enum (None = 0, Level1 = 1, ...), a raw UIA
+      // value is 80050 + the level; counted as a heading either way (an int-only check never counted one)
+      try { var hp = AutomationProperty.LookupById(30173); if (hp != null) { var level = e.GetCurrentPropertyValue(hp); int lv = (level is Enum || level is int) ? Convert.ToInt32(level) : 0; if (lv > 80050) lv -= 80050; if (lv > 0) headings++; } } catch { }
       if (c.IsControlElement && (type == "ControlType.Custom" || string.IsNullOrEmpty(c.LocalizedControlType))) noType.Add(Describe(c));
       if (!clickable) {
         // a poster or still with no focusable, invokable element around it: a card that opens on a pointer tap only

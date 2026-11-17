@@ -814,6 +814,10 @@ class Server:
                 if low in ("/genres", "/studios", "/persons", "/musicgenres", "/artists"):
                     self.route = "names"
                     return self._json(200, {"Items": [], "TotalRecordCount": 0, "StartIndex": 0})
+                if low == "/environment/directorycontents":
+                    # the server's folders, for the dashboard's folder picker: /media/<library>/A..C; anything else none
+                    self.route = "directory"
+                    return self._json(200, directory_contents(self._one("path", "/"), [lib.items[v]["Name"] for v in lib.views]))
                 self.route = "unhandled"
                 self.unhandled = True
                 return self._json(404, None)
@@ -1086,6 +1090,22 @@ class WebSocket:
 
     def send_json(self, obj):
         self.send_frame(1, json.dumps(obj).encode("utf-8"))
+
+
+def directory_contents(path, libraries):
+    """The fake server's folder tree (GET /Environment/DirectoryContents): / holds media, /media one folder per library,
+    each of those the folders A, B and C (which are empty). Jellyfin's FileSystemEntryInfo, folders only."""
+    parts = [p for p in (path or "/").replace("\\", "/").split("/") if p]
+    if not parts:
+        names = ["media"]
+    elif parts == ["media"]:
+        names = [n.lower() for n in libraries]
+    elif len(parts) == 2 and parts[0] == "media" and parts[1] in [n.lower() for n in libraries]:
+        names = ["A", "B", "C"]
+    else:
+        names = []
+    base = "/" + "/".join(parts)
+    return [{"Name": n, "Path": (base.rstrip("/") + "/" + n), "Type": "Directory"} for n in names]
 
 
 def load_credentials(path):

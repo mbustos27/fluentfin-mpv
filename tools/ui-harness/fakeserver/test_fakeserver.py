@@ -326,6 +326,18 @@ class ServerTests(unittest.TestCase):
         unhandled = self.get("/__harness/summary")["unhandled"]
         self.assertFalse([k for k in unhandled if "user_usage_stats" in k or "UserData" in k], unhandled)
 
+    def test_directory_contents_is_a_small_folder_tree(self):
+        # the dashboard's folder picker: / > media > one folder per library > A, B, C (empty)
+        self.assertEqual(["media"], [e["Name"] for e in self.get("/Environment/DirectoryContents?path=/&includeDirectories=true")])
+        media = self.get("/Environment/DirectoryContents?path=/media&includeDirectories=true")
+        self.assertEqual(["movies", "shows", "documentaries", "anime"], [e["Name"] for e in media])
+        self.assertEqual("/media/movies", media[0]["Path"])
+        self.assertEqual("Directory", media[0]["Type"])
+        self.assertEqual(["/media/movies/A", "/media/movies/B", "/media/movies/C"],
+                         [e["Path"] for e in self.get("/Environment/DirectoryContents?path=/media/movies")])
+        self.assertEqual([], self.get("/Environment/DirectoryContents?path=/media/movies/A"))
+        self.assertEqual(401, self.request("/Environment/DirectoryContents?path=/")[0])
+
     def test_unknown_endpoint_is_404_and_listed(self):
         self.assertEqual(404, self.request("/No/Such/Thing", token=self.token)[0])
         self.assertIn("GET /No/Such/Thing", self.get("/__harness/summary")["unhandled"])

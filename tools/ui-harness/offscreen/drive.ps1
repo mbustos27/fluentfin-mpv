@@ -34,6 +34,8 @@
   'all' = login,home,library,movie,series,season,play,fullscreen,windowed,leave,close (relaunch and steady are extra).
   -Then <script.ps1> is dot-sourced after the steps (before close): it can use this script's helpers (Capture-Page,
   Open-Nav, Open-Card, Open-Library, Find-Ui, Wait-Ui, Invoke-Element, Key, Check, Say, Invoke-Server; $fixture).
+  -Before <script.ps1> is dot-sourced the same way before the sign-in, on the server page; it must leave FluentFin on
+  the server page (TxtUrl) with no rule in force that stops the sign-in that follows.
 #>
 param(
     [Parameter(Mandatory)][string]$Exe,
@@ -48,6 +50,7 @@ param(
     [ValidateSet('quickconnect', 'password')][string]$SignIn = 'quickconnect',
     [ValidateSet('Mpv', 'FluentFin')][string]$PlayerControls = 'Mpv',
     [string]$Then,
+    [string]$Before,
     [switch]$NoA11y,
     [int]$TabStops = 60,
     [int]$CloseSeconds = 20
@@ -75,6 +78,7 @@ foreach ($s in $wanted) {
     }
 }
 if ($Then) { $Then = [IO.Path]::GetFullPath($Then); if (-not (Test-Path $Then)) { throw "-Then: no script at $Then" } }
+if ($Before) { $Before = [IO.Path]::GetFullPath($Before); if (-not (Test-Path $Before)) { throw "-Before: no script at $Before" } }
 
 New-Item -ItemType Directory -Force $Out, (Join-Path $Out 'shots'), (Join-Path $Out 'uia'), (Join-Path $Out 'a11y'), (Join-Path $Out 'server') | Out-Null
 $log = Join-Path $Out 'drive.log'
@@ -649,7 +653,8 @@ try {
     $keyClass = Wait-Until { Key 0x10; $c = [OffscreenUi]::ClassOf($script:lastKeyWindow); if ($c -eq 'InputSiteWindowClass') { $c } } -Seconds 10 -PollMs 100
     Check 'keys: posted to the window WinUI reads them from (InputSiteWindowClass)' ([bool]$keyClass) $(if ($keyClass) { $keyClass } else { [OffscreenUi]::ClassOf($script:lastKeyWindow) })
 
-    # 3. sign in, then the steps in order
+    # 3. -Before (on the server page, before the sign-in: its states, the sign-in page's), sign in, then the steps in order
+    if ($Before) { Say "-Before $Before"; . $Before }
     Step-SignIn ($wanted -contains 'login')
     foreach ($step in $wanted) {
         switch -Regex ($step) {
