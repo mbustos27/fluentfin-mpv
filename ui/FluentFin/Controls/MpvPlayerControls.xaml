@@ -102,18 +102,21 @@
         </Style>
 
         <!--
-            menus: the menu's own system backdrop (no acrylic of ours on top of it: glass on glass) and the default radius.
-            Seaglass 1.1.3: after wip/113-glass is merged these are BasedOn GlassMenuFlyoutPresenterStyle and
-            GlassFlyoutPresenterStyle (Styles\Glass.xaml, GlassOverlayCornerRadius 12); only the padding is the player's.
+            menus: Seaglass 1.1.3, the shared overlay recipe (Styles\Glass.xaml): the audio menu is a window of its own on
+            GlassMenuFlyoutPresenterStyle's flat GlassOverlayBrush over its system backdrop (no acrylic of ours: glass on glass),
+            the volume and subtitles flyouts on GlassFlyoutPresenterStyle; GlassOverlayCornerRadius (12), the glass edge and
+            text. Only the padding is the player's (GlassOverlayTests.OverlayStyles).
         -->
-        <Style x:Key="PlayerMenuPresenter" TargetType="MenuFlyoutPresenter">
-            <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
+        <Style
+            x:Key="PlayerMenuPresenter"
+            BasedOn="{StaticResource GlassMenuFlyoutPresenterStyle}"
+            TargetType="MenuFlyoutPresenter">
             <Setter Property="Padding" Value="6" />
         </Style>
-        <Style x:Key="PlayerFlyoutPresenter" TargetType="FlyoutPresenter">
-            <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
+        <Style
+            x:Key="PlayerFlyoutPresenter"
+            BasedOn="{StaticResource GlassFlyoutPresenterStyle}"
+            TargetType="FlyoutPresenter">
             <Setter Property="Padding" Value="12" />
         </Style>
         </ResourceDictionary>

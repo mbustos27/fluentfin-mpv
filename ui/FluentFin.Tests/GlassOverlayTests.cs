@@ -51,7 +51,21 @@ public sealed class GlassOverlayTests
 		{ "Styles/Glass.xaml", "ToolTip" },
 		{ "Styles/TextBlock.xaml", "ContentDialog" },
 		{ "Styles/TextBlock.xaml", "DefaultContentDialogStyleWithTitleBackground" },
+		// the player's audio menu and its volume and subtitles flyouts (1.1.3 integration)
+		{ "Controls/MpvPlayerControls.xaml", "PlayerMenuPresenter" },
+		{ "Controls/MpvPlayerControls.xaml", "PlayerFlyoutPresenter" },
 	};
+
+	[Theory]
+	[InlineData("PlayerMenuPresenter", "GlassMenuFlyoutPresenterStyle")]
+	[InlineData("PlayerFlyoutPresenter", "GlassFlyoutPresenterStyle")]
+	public void The_players_menus_take_the_shared_overlay_and_set_only_their_padding(string style, string basedOn)
+	{
+		var found = Find("Controls/MpvPlayerControls.xaml", style, out _);
+		Assert.Equal($"{{StaticResource {basedOn}}}", (string?)found.Attribute("BasedOn"));
+		var setters = found.Elements().Where(e => e.Name.LocalName == "Setter").Select(e => (string?)e.Attribute("Property")).ToList();
+		Assert.Equal(["Padding"], setters);
+	}
 
 	private static XElement Find(string file, string keyOrType, out Dictionary<string, XElement> keyed)
 	{
@@ -81,6 +95,7 @@ public sealed class GlassOverlayTests
 	[Theory]
 	[InlineData("Styles/Glass.xaml", "MenuFlyoutPresenter")]
 	[InlineData("Styles/Glass.xaml", "ToolTip")]
+	[InlineData("Controls/MpvPlayerControls.xaml", "PlayerMenuPresenter")]
 	public void Menus_and_tooltips_are_windows_of_their_own_and_never_draw_in_app_acrylic(string file, string style)
 	{
 		// a menu's window already has Windows' acrylic under it (its default SystemBackdrop): in-app acrylic on it is acrylic on

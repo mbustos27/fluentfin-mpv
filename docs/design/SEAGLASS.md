@@ -144,9 +144,9 @@ boxes around every poster title). So:
 ## 1.1.3: one overlay recipe (supersedes the overlay lines above)
 
 Menus, context menus, the profile flyout, tooltips and every ContentDialog: one blur under a strong tint, the light edge
-(`GlassStrokeBrush`), **`GlassOverlayCornerRadius` 12**, the glass text colour. Never acrylic on acrylic. **Not yet the player's
-audio and subtitles menus**: `MpvPlayerControls.xaml` still has its own presenter styles (radius 16, in-app acrylic over the
-menu's system backdrop) until they are based on the keyed styles below (1.1.3 integration).
+(`GlassStrokeBrush`), **`GlassOverlayCornerRadius` 12**, the glass text colour. Never acrylic on acrylic. **The player's menus
+too**: `MpvPlayerControls.xaml`'s `PlayerMenuPresenter` (the audio menu) and `PlayerFlyoutPresenter` (volume, subtitles) are
+`BasedOn` the keyed styles below and set only their padding (`GlassOverlayTests.OverlayStyles`).
 - **In the window** (Flyout, ContentDialog): `GlassPanelStrongBrush` (in-app acrylic). A dialog is ONE surface: its title, content and
   buttons are transparent on it, with a `GlassDividerBrush` hairline above the buttons. Dialogs made in code get the same template
   (the implicit `ContentDialog` style in `TextBlock.xaml`), capped at WinUI's 548 px (`GlassDialog.PanelMaxWidth`; the dialog

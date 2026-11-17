@@ -412,9 +412,9 @@
         <Setter Property="Padding" Value="0" />
     </Style>
     <!--
-        Overlays: the More menu, card context menus, the profile flyout, tooltips and every ContentDialog share one recipe (the
-        player's audio and subtitles menus not yet: MpvPlayerControls.xaml has its own presenter styles until they are based on
-        the two keyed styles below): one blur under a strong tint, the light glass edge, GlassOverlayCornerRadius, the
+        Overlays: the More menu, card context menus, the profile flyout, tooltips, every ContentDialog and the player's menus
+        (MpvPlayerControls.xaml's PlayerMenuPresenter and PlayerFlyoutPresenter are BasedOn the two keyed styles below and set
+        only their padding) share one recipe: one blur under a strong tint, the light glass edge, GlassOverlayCornerRadius, the
         glass text colour. Never acrylic on acrylic: a flyout or a dialog draws inside the window and gets the strong in-app
         glass (GlassPanelStrongBrush); a menu or a tooltip is a window of its own, where in-app acrylic has nothing to blur, so
         it gets the flat GlassOverlayBrush (a menu keeps Windows' acrylic under it as its one blur). Solid makes both opaque
