@@ -99,6 +99,35 @@ public static class OffscreenUi {
     PostMessage(target, 0x0200, IntPtr.Zero, Lp(p.X, p.Y));
   }
 
+  // a wheel notch at screen point (x, y), posted to the window WinUI takes pointer input in (never SendInput):
+  // WM_MOUSEWHEEL (0x020A) or, with horizontal, WM_MOUSEHWHEEL (0x020E); wParam = delta (120 per notch, positive = up/right) in
+  // the high word and MK_SHIFT (4) in the low word; lParam = the point in SCREEN coordinates (wheel messages carry those)
+  public static void Wheel(IntPtr main, int pid, int x, int y, int delta, bool horizontal, bool shift) {
+    var target = KeyWindow(main, pid);   // the (hidden) InputSiteWindowClass: the only window WinUI took a posted wheel in (bridge and main window: nothing)
+    var p = new POINT { X = x, Y = y };
+    var c = p; ScreenToClient(target, ref c);
+    PostMessage(target, 0x0200, IntPtr.Zero, Lp(c.X - 4, c.Y - 4));
+    System.Threading.Thread.Sleep(30);
+    PostMessage(target, 0x0200, IntPtr.Zero, Lp(c.X, c.Y));
+    System.Threading.Thread.Sleep(30);
+    long w = ((long)(short)delta << 16) | (shift ? 4L : 0L);
+    PostMessage(target, horizontal ? 0x020Eu : 0x020Au, (IntPtr)(uint)(w & 0xFFFFFFFF), Lp(p.X, p.Y));
+  }
+
+  // every scrollable element (UI Automation ScrollPattern) inside FluentFin: "name|class|x,y,w,h|h%|v%|hScrollable|vScrollable"
+  public static List<string> ScrollState(IntPtr main, int pid) {
+    var l = new List<string>();
+    foreach (var e in Where(main, pid, new PropertyCondition(AutomationElement.IsScrollPatternAvailableProperty, true))) {
+      try {
+        var r = e.Cached.BoundingRectangle; if (r.IsEmpty) continue;
+        var sp = (ScrollPattern)e.GetCurrentPattern(ScrollPattern.Pattern);
+        l.Add(string.Format("{0}|{1}|{2:0},{3:0},{4:0},{5:0}|{6:0.0}|{7:0.0}|{8}|{9}", e.Cached.Name, e.Cached.ClassName, r.X, r.Y, r.Width, r.Height,
+          sp.Current.HorizontalScrollPercent, sp.Current.VerticalScrollPercent, sp.Current.HorizontallyScrollable, sp.Current.VerticallyScrollable));
+      } catch (Exception) { }
+    }
+    return l;
+  }
+
   // the window WinUI reads posted keys from: the XAML island's InputSiteWindowClass child. WinUI keeps it hidden and still
   // takes the keys posted to it. Posted to the bridge (DesktopChildSiteBridge) instead, Tab still moved the focus but F
   // and Esc never reached the player page. Else the bridge, else the main window.

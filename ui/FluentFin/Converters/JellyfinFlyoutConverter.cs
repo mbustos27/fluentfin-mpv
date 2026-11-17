@@ -167,6 +167,26 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 			};
 		}
 
+		// Seaglass scrolling: a card is one keyboard stop, so what its hover buttons do is in the menu too (the menu key or Shift+F10)
+		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Season or BaseItemDto_Type.Series or BaseItemDto_Type.Episode)
+		{
+			yield return new MenuFlyoutItem
+			{
+				Text = dto.UserData?.Played == true ? "Mark as unwatched" : "Mark as watched",
+				Icon = new FontIcon { Glyph = "" },
+				Command = App.Commands.ToggleWatchedCommand,
+				CommandParameter = dto,
+			};
+
+			yield return new MenuFlyoutItem
+			{
+				Text = dto.UserData?.IsFavorite == true ? "Remove from favorites" : "Add to favorites",
+				Icon = new FontIcon { Glyph = "" },
+				Command = App.Commands.ToggleFavoriteCommand,
+				CommandParameter = dto,
+			};
+		}
+
 		yield return new MenuFlyoutSeparator();
 	}
 

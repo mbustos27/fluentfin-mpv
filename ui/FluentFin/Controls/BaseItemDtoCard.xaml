@@ -106,7 +106,7 @@
                     Opacity="0.55"
                     Visibility="Collapsed" />
                 <Button
-                    x:Name="PlayButton"
+                    x:Name="PlayButton" IsTabStop="False"
                     Width="50"
                     Height="50"
                     HorizontalAlignment="Center"
@@ -209,7 +209,7 @@
                     Visibility="Collapsed">
 
                     <ToggleButton
-                        x:Name="MarkWatchedButton"
+                        x:Name="MarkWatchedButton" IsTabStop="False"
                         Width="40"
                         Height="40"
                         AutomationProperties.Name="Watched"
@@ -223,7 +223,7 @@
                         ToolTipService.ToolTip="Mark watched" />
 
                     <ToggleButton
-                        x:Name="AddToFavoriteButton"
+                        x:Name="AddToFavoriteButton" IsTabStop="False"
                         Width="40"
                         Height="40"
                         AutomationProperties.Name="Favorite"
@@ -241,7 +241,7 @@
                     </ToggleButton>
 
                     <Button
-                        x:Name="MoreButton"
+                        x:Name="MoreButton" IsTabStop="False"
                         Width="40"
                         Height="40"
                         AutomationProperties.Name="More options"

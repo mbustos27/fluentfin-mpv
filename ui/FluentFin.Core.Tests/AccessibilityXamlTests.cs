@@ -296,15 +296,43 @@ public class AccessibilityXamlTests
 	}
 
 	[Fact]
-	public void RowTitle_IsAButtonAndAHeading_NotAPointerOnlyTextBlock()
+	public void ShelfRow_TitleIsAHeading_AndTheArrowsAreNeitherTabStopsNorHidden()
 	{
-		var doc = Load("FluentFin/Controls/PagedScrollView.xaml");
+		var doc = Load("FluentFin/Controls/ShelfRow.xaml");
 
+		var title = FindByName(doc, "TitleText");
+		Assert.Equal("Level2", (string?)title.Attribute("AutomationProperties.HeadingLevel"));
 		Assert.DoesNotContain(doc.Descendants(), e => e.Attribute("PointerReleased") is not null);
-		var header = FindByName(doc, "HeaderButton");
-		Assert.Equal("HeaderButton_Click", (string?)header.Attribute("Click"));
-		Assert.Equal("Level2", (string?)header.Attribute("AutomationProperties.HeadingLevel"));
-		Assert.Equal("{x:Bind Header, Mode=OneWay}", (string?)header.Attribute("AutomationProperties.Name"));
+
+		// the arrows: always there (no Opacity="0" hover reveal), moved by the row's keys, so no Tab stop of their own; 32 px (WCAG 2.5.8)
+		foreach (var name in new[] { "ScrollLeftBtn", "ScrollRightBtn" })
+		{
+			var arrow = FindByName(doc, name);
+			Assert.Equal("False", (string?)arrow.Attribute("IsTabStop"));
+			Assert.Null(arrow.Attribute("Opacity"));
+			Assert.True(double.Parse((string)arrow.Attribute("Width")!) >= 24);
+			Assert.True(double.Parse((string)arrow.Attribute("Height")!) >= 24);
+		}
+
+		// one Tab stop for the row's cards
+		var scroller = FindByName(doc, "Scroller");
+		Assert.Equal("Once", (string?)scroller.Attribute("TabFocusNavigation"));
+		Assert.Equal("Enabled", (string?)scroller.Attribute("HorizontalScrollMode"));
+		Assert.Equal("Disabled", (string?)scroller.Attribute("VerticalScrollMode"));
+	}
+
+	[Fact]
+	public void Home_UsesTheShelfRowForEveryRow_AndNoRowIsAFreeScrollViewer()
+	{
+		var home = Load("FluentFin/Views/HomePage.xaml");
+		var rows = home.Descendants().Where(e => e.Name.LocalName == "ShelfRow").ToList();
+
+		Assert.Equal(3, rows.Count); // Continue Watching, Next Up, Recently Added (one template)
+		Assert.All(rows, row => Assert.Equal("True", (string?)row.Attribute("HasSeeAll")));
+		// the page's own scroll viewer is the only one left (no hand-made horizontal ScrollViewer rows)
+		Assert.Single(home.Descendants(Presentation + "ScrollViewer"));
+		// a virtualizing repeater of rows left later rows out of the Tab order
+		Assert.DoesNotContain(home.Descendants(Presentation + "ItemsRepeater"), r => (string?)r.Attribute("ItemsSource") == "{x:Bind ViewModel.RecentItems, Mode=OneWay}");
 	}
 
 	[Fact]
