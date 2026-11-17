@@ -24,6 +24,8 @@
                     <Color x:Key="SystemAccentColorLight2">#1A9A8C</Color>
                     <Color x:Key="SystemAccentColorDark1">#0C5F56</Color>
                     <Color x:Key="SystemAccentColorDark2">#094A43</Color>
+                    <Color x:Key="SystemAccentColorLight3">#22A898</Color>
+                    <Color x:Key="SystemAccentColorDark3">#063A34</Color>
                     <ImageSource x:Key="GitHubIconImage">ms-appx:///Assets/GitHub.light.svg</ImageSource>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
@@ -33,6 +35,8 @@
                     <Color x:Key="SystemAccentColorLight2">#9AE5DB</Color>
                     <Color x:Key="SystemAccentColorDark1">#47B8AA</Color>
                     <Color x:Key="SystemAccentColorDark2">#33A093</Color>
+                    <Color x:Key="SystemAccentColorLight3">#BAEEE7</Color>
+                    <Color x:Key="SystemAccentColorDark3">#1F877B</Color>
                     <ImageSource x:Key="GitHubIconImage">ms-appx:///Assets/GitHub.dark.svg</ImageSource>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">

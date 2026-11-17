@@ -14,6 +14,7 @@
             <Color x:Key="SeaglassAccentColor">#5CCFC1</Color>
             <Color x:Key="SeaglassDeepColor">#0A1418</Color>
             <SolidColorBrush x:Key="SeaglassAccentBrush" Color="#5CCFC1" />
+            <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="#5CCFC1" />
             <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#0A1418" />
             <AcrylicBrush
                 x:Key="GlassPanelBrush"
@@ -84,6 +85,11 @@
             <Color x:Key="SeaglassAccentColor">#13877B</Color>
             <Color x:Key="SeaglassDeepColor">#EAF4F3</Color>
             <SolidColorBrush x:Key="SeaglassAccentBrush" Color="#13877B" />
+            <!--
+                the accent ON ARTWORK (a progress bar on a poster's dark track, a watched badge): the light aqua in both themes.
+                The light theme's deeper aqua has 1.6:1 on the track over a bright poster (Black65O over white); this keeps 3.7:1.
+            -->
+            <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="#5CCFC1" />
             <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#EAF4F3" />
             <AcrylicBrush
                 x:Key="GlassPanelBrush"
@@ -140,6 +146,7 @@
             <Color x:Key="SeaglassAccentColor">#FFFFFF00</Color>
             <Color x:Key="SeaglassDeepColor">#FF000000</Color>
             <SolidColorBrush x:Key="SeaglassAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="SeaglassDeepBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassPanelBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassPanelStrongBrush" Color="{ThemeResource SystemColorWindowColor}" />

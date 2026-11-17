@@ -204,6 +204,27 @@ public class OverlayContrastTests
 		Assert.True(ratio >= TextContrast, $"{theme} GlassOverlayBrush: {textKey} has {ratio:F2}:1, needs {TextContrast}:1");
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.3: the accent on artwork (a card's progress bar on its Black65O track, a watched badge) keeps 3:1 over the
+	/// brightest and the darkest poster, in both themes. The light theme's SeaglassAccentBrush (#13877B) has 1.6:1 on the
+	/// track over a white poster: that is why artwork gets its own token.
+	/// </summary>
+	[Theory]
+	[InlineData("Dark")]
+	[InlineData("Light")]
+	public void TheAccentOnArtwork_KeepsNonTextContrastOnAPostersTrack(string theme)
+	{
+		var dictionary = Load("FluentFin/Styles/Glass.xaml").Descendants(Presentation + "ResourceDictionary")
+			.Single(d => (string?)d.Attribute(Xaml + "Key") == theme);
+		var accent = Argb((string)Brush(dictionary, "SeaglassAccentOnImageBrush").Attribute("Color")!);
+		foreach (var poster in new[] { new Rgb(255, 255, 255), new Rgb(0, 0, 0) })
+		{
+			var track = Blend(new Rgb(0, 0, 0), 0.65, poster);
+			var ratio = Contrast(Blend(accent.Color, accent.Alpha, track), track);
+			Assert.True(ratio >= IconContrast, $"{theme}: the accent has {ratio:F2}:1 on a track over {poster}, needs {IconContrast}:1");
+		}
+	}
+
 	private static XElement Brush(XElement dictionary, string key) =>
 		dictionary.Elements(Presentation + "SolidColorBrush").Single(b => (string?)b.Attribute(Xaml + "Key") == key);
 
