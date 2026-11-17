@@ -1,4 +1,5 @@
 using FluentFin.Core.Settings;
+using FluentFin.Services;
 using FluentFin.ViewModels;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -15,11 +16,29 @@ public sealed partial class LoginPage
 		ViewModel = App.GetService<LoginViewModel>();
 		InitializeComponent();
 		Loaded += LoginView_Loaded;
+		Unloaded += LoginView_Unloaded;
+	}
+
+	// Seaglass: the server's splash image is the soft backdrop behind the card
+	private void LoginView_Unloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+	{
+		ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+		AmbientBackdrop.Set(null);
+	}
+
+	private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(LoginViewModel.SplashScreen))
+		{
+			AmbientBackdrop.Set(ViewModel.SplashScreen);
+		}
 	}
 
 	private void LoginView_Loaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
 	{
 		PasswordBox.Password = ViewModel.Password;
+		ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+		AmbientBackdrop.Set(ViewModel.SplashScreen);
 	}
 
 	private void PasswordBox_PasswordChanged(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

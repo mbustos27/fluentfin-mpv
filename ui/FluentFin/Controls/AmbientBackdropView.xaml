@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="FluentFin.Controls.AmbientBackdropView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AccessibilityView="Raw"
+    IsHitTestVisible="False"
+    IsTabStop="False">
+
+    <!--
+        Seaglass: the soft artwork behind the whole window. A deep colour, then the artwork decoded about 64 px wide and
+        stretched so it reads as blurred, then the dim brush. Solid mode and no artwork: the deep colour alone.
+    -->
+    <Grid Background="{ThemeResource SeaglassDeepBrush}">
+        <Image
+            x:Name="BackImage"
+            Opacity="0"
+            Stretch="UniformToFill" />
+        <Image
+            x:Name="FrontImage"
+            ImageOpened="OnFrontImageOpened"
+            Opacity="0"
+            Stretch="UniformToFill" />
+        <Rectangle x:Name="Dim" Fill="{ThemeResource GlassAmbientDimBrush}" />
+    </Grid>
+</UserControl>

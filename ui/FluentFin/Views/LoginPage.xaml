@@ -10,19 +10,16 @@
     mc:Ignorable="d">
 
     <Grid>
-        <!--  fluentfin-mpv: a name for Narrator on every field and button (a UIA scan of the page found six unnamed); the  -->
-        <!--  server's splash image is decoration, not content  -->
-        <Image
-            AutomationProperties.AccessibilityView="Raw"
-            Source="{x:Bind c:Converters.GetImage(ViewModel.SplashScreen), Mode=OneWay}"
-            Stretch="UniformToFill" />
+        <!--  Seaglass: the server's splash image is the ambient backdrop behind the card (LoginPage.xaml.cs), not a full-bleed image  -->
         <StackPanel
             MinWidth="500"
             Padding="50"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
-            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-            CornerRadius="8"
+            Background="{ThemeResource GlassPanelStrongBrush}"
+            BorderBrush="{ThemeResource GlassStrokeBrush}"
+            BorderThickness="{StaticResource GlassStrokeThickness}"
+            CornerRadius="{StaticResource GlassPanelCornerRadius}"
             Spacing="20">
             <StackPanel.Resources>
                 <Style TargetType="StackPanel">
@@ -32,6 +29,12 @@
                     <Setter Property="FontWeight" Value="Bold" />
                 </Style>
             </StackPanel.Resources>
+            <!--  Seaglass: the app's name on the card (the rename stream changes it)  -->
+            <TextBlock
+                HorizontalAlignment="Center"
+                FontWeight="SemiBold"
+                Style="{StaticResource GlassPageTitleTextBlockStyle}"
+                Text="FluentFin MPV" />
             <StackPanel>
                 <TextBlock Text="Username" />
                 <AutoSuggestBox
@@ -60,7 +63,7 @@
                 <Button
                     AutomationProperties.Name="Switch server"
                     Command="{x:Bind ViewModel.SwitchServerCommand}"
-                    Style="{ThemeResource AccentButtonStyle}">
+                    Style="{StaticResource GlassPillButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <FontIcon Glyph="&#xE8AB;" />
                         <TextBlock Text="Switch server" />
@@ -69,7 +72,7 @@
                 <Button
                     AutomationProperties.Name="Quick Connect"
                     Command="{x:Bind ViewModel.QuickConnectCommand}"
-                    Style="{ThemeResource AccentButtonStyle}">
+                    Style="{StaticResource GlassAccentPillButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <FontIcon Glyph="&#xE703;" />
                         <TextBlock Text="Quick Connect" />
@@ -78,7 +81,7 @@
                 <Button
                     AutomationProperties.Name="Login"
                     Command="{x:Bind ViewModel.LoginCommand}"
-                    Style="{ThemeResource AccentButtonStyle}">
+                    Style="{StaticResource GlassAccentPillButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <FontIcon Glyph="&#xE725;" />
                         <TextBlock Text="Login" />

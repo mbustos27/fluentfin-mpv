@@ -14,6 +14,18 @@ public sealed partial class SettingsPage : Page
 	public SettingsPage()
 	{
 		InitializeComponent();
+
+		// Seaglass: a Glass pick takes effect at once (it is saved by the view model)
+		ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+		Unloaded += (_, _) => ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+	}
+
+	private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(SettingsViewModel.Glass))
+		{
+			FluentFin.Services.GlassSetting.Apply(ViewModel.Glass);
+		}
 	}
 
 	// fluentfin-mpv: where the next four settings live, so changing them here is no surprise elsewhere

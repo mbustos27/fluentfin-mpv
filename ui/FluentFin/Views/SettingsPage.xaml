@@ -31,7 +31,7 @@
                 <TextBlock
                     HorizontalAlignment="Left"
                     AutomationProperties.HeadingLevel="Level1"
-                    Style="{ThemeResource SubheaderTextBlockStyle}"
+                    Style="{StaticResource GlassPageTitleTextBlockStyle}"
                     Text="Settings" />
             </Grid>
 
@@ -64,11 +64,29 @@
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>
 
+                <!--  Seaglass: Settings > Appearance; the choice is saved on this PC and applies at once  -->
+                <TextBlock
+                    Margin="1,28,0,4"
+                    AutomationProperties.HeadingLevel="Level2"
+                    Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                    Text="Appearance" />
+                <ctk:SettingsCard
+                    Description="{x:Bind ViewModel.SelectedGlass.Description, Mode=OneWay}"
+                    Header="Glass"
+                    HeaderIcon="{ui:FontIcon Glyph=&#xE790;}">
+                    <ComboBox
+                        MinWidth="160"
+                        AutomationProperties.Name="Glass"
+                        DisplayMemberPath="Name"
+                        ItemsSource="{x:Bind vm:SettingsViewModel.GlassChoices}"
+                        SelectedItem="{x:Bind ViewModel.SelectedGlass, Mode=TwoWay}" />
+                </ctk:SettingsCard>
+
                 <!--  fluentfin-mpv: Settings > Playback (docs/research/ux-review.md T1)  -->
                 <TextBlock
                     Margin="1,28,0,4"
                     AutomationProperties.HeadingLevel="Level2"
-                    Style="{ThemeResource BodyStrongTextBlockStyle}"
+                    Style="{StaticResource GlassSectionTitleTextBlockStyle}"
                     Text="Playback" />
                 <ctk:SettingsCard
                     Description="Remote control from other devices follows a change after you sign in again."

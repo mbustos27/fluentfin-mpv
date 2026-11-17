@@ -63,7 +63,7 @@ public sealed class AppVersionTests
 		Assert.False(AppVersion.IsRelease(App.GetCustomAttributes<AssemblyMetadataAttribute>()));
 	}
 
-	private static string FindUp(string relative)
+	internal static string FindUp(string relative)
 	{
 		for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
 		{

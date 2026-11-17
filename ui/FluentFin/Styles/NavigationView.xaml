@@ -19,19 +19,19 @@
             <StaticResource x:Key="RailNavigationViewItemBorderBrush" ResourceKey="ControlFillColorTransparentBrush" />
             <!--  hover  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
-            <StaticResource x:Key="RailNavigationViewItemBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+            <StaticResource x:Key="RailNavigationViewItemBackgroundPointerOver" ResourceKey="GlassHoverOverlayBrush" />
             <!--  pressed  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundPressed" ResourceKey="TextFillColorSecondaryBrush" />
-            <StaticResource x:Key="RailNavigationViewItemBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+            <StaticResource x:Key="RailNavigationViewItemBackgroundPressed" ResourceKey="GlassPressedOverlayBrush" />
             <!--  selected  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundSelected" ResourceKey="TextFillColorPrimaryBrush" />
-            <StaticResource x:Key="RailNavigationViewItemBackgroundSelected" ResourceKey="ControlSolidFillColorDefaultBrush" />
+            <StaticResource x:Key="RailNavigationViewItemBackgroundSelected" ResourceKey="GlassSelectedOverlayBrush" />
             <!--  selected hover  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundSelectedPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
-            <StaticResource x:Key="RailNavigationViewItemBackgroundSelectedPointerOver" ResourceKey="ControlSolidFillColorDefaultBrush" />
+            <StaticResource x:Key="RailNavigationViewItemBackgroundSelectedPointerOver" ResourceKey="GlassSelectedOverlayBrush" />
             <!--  selected pressed  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundSelectedPressed" ResourceKey="TextFillColorPrimaryBrush" />
-            <StaticResource x:Key="RailNavigationViewItemBackgroundSelectedPressed" ResourceKey="ControlSolidFillColorDefaultBrush" />
+            <StaticResource x:Key="RailNavigationViewItemBackgroundSelectedPressed" ResourceKey="GlassSelectedOverlayBrush" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">
@@ -45,19 +45,19 @@
             <StaticResource x:Key="RailNavigationViewItemBorderBrush" ResourceKey="ControlFillColorTransparentBrush" />
             <!--  hover  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
-            <StaticResource x:Key="RailNavigationViewItemBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+            <StaticResource x:Key="RailNavigationViewItemBackgroundPointerOver" ResourceKey="GlassHoverOverlayBrush" />
             <!--  pressed  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundPressed" ResourceKey="TextFillColorSecondaryBrush" />
-            <StaticResource x:Key="RailNavigationViewItemBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+            <StaticResource x:Key="RailNavigationViewItemBackgroundPressed" ResourceKey="GlassPressedOverlayBrush" />
             <!--  selected  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundSelected" ResourceKey="TextFillColorPrimaryBrush" />
-            <StaticResource x:Key="RailNavigationViewItemBackgroundSelected" ResourceKey="ControlSolidFillColorDefaultBrush" />
+            <StaticResource x:Key="RailNavigationViewItemBackgroundSelected" ResourceKey="GlassSelectedOverlayBrush" />
             <!--  selected hover  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundSelectedPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
-            <StaticResource x:Key="RailNavigationViewItemBackgroundSelectedPointerOver" ResourceKey="ControlSolidFillColorDefaultBrush" />
+            <StaticResource x:Key="RailNavigationViewItemBackgroundSelectedPointerOver" ResourceKey="GlassSelectedOverlayBrush" />
             <!--  selected pressed  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundSelectedPressed" ResourceKey="TextFillColorPrimaryBrush" />
-            <StaticResource x:Key="RailNavigationViewItemBackgroundSelectedPressed" ResourceKey="ControlSolidFillColorDefaultBrush" />
+            <StaticResource x:Key="RailNavigationViewItemBackgroundSelectedPressed" ResourceKey="GlassSelectedOverlayBrush" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
@@ -340,7 +340,7 @@
                             IsPaneOpen="False"
                             IsTabStop="False"
                             OpenPaneLength="{TemplateBinding OpenPaneLength}"
-                            PaneBackground="{ThemeResource RailNavigationViewDefaultPaneBackground}"
+                            PaneBackground="{ThemeResource GlassPanelBrush}"
                             Style="{StaticResource MainNavSplitViewStyle}">
                             <SplitView.Pane>
                                 <Grid
@@ -510,7 +510,7 @@
                                 <VisualState x:Name="Compact" />
                                 <VisualState x:Name="Expanded">
                                     <VisualState.Setters>
-                                        <Setter Target="RootSplitView.PaneBackground" Value="{ThemeResource RailNavigationViewExpandedPaneBackground}" />
+                                        <Setter Target="RootSplitView.PaneBackground" Value="{ThemeResource GlassPanelBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Minimal">

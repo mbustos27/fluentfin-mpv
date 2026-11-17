@@ -83,9 +83,9 @@ public class OverlayContrastTests
 		var panel = Load("FluentFin/Views/LoginPage.xaml").Descendants(Presentation + "StackPanel")
 			.Single(e => (string?)e.Attribute("MinWidth") == "500");
 
-		// no forced theme, and an opaque theme brush so text stays readable over the splash image in light and dark
+		// no forced theme, and the strong glass brush (Solid mode swaps it for an opaque one) so text stays readable over the backdrop
 		Assert.Null(panel.Attribute("RequestedTheme"));
-		Assert.Equal("{ThemeResource SolidBackgroundFillColorBaseBrush}", (string?)panel.Attribute("Background"));
+		Assert.Equal("{ThemeResource GlassPanelStrongBrush}", (string?)panel.Attribute("Background"));
 	}
 
 	[Theory]

@@ -41,6 +41,12 @@
             </LinearGradientBrush>
             <!--  the soft artwork behind the window (AmbientBackdrop) is dimmed by this  -->
             <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="#B30A1418" />
+            <SolidColorBrush x:Key="GlassSelectedOverlayBrush" Color="#2EFFFFFF" />
+            <SolidColorBrush x:Key="SeaglassAccentFillBrush" Color="#5CCFC1" />
+            <SolidColorBrush x:Key="SeaglassAccentForegroundBrush" Color="#0A1418" />
+            <!--  what GlassPanelBrush and GlassPanelStrongBrush become in Solid mode (GlassTheme): the same colours, opaque  -->
+            <SolidColorBrush x:Key="GlassPanelSolidBrush" Color="#16262B" />
+            <SolidColorBrush x:Key="GlassPanelStrongSolidBrush" Color="#101C20" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
             <Color x:Key="SeaglassAccentColor">#13877B</Color>
@@ -74,6 +80,12 @@
                 <GradientStop Offset="1" Color="#F2EAF4F3" />
             </LinearGradientBrush>
             <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="#B3EAF4F3" />
+            <SolidColorBrush x:Key="GlassSelectedOverlayBrush" Color="#1F000000" />
+            <!--  light theme: a deeper aqua so white text on it reaches 4.5:1  -->
+            <SolidColorBrush x:Key="SeaglassAccentFillBrush" Color="#0F766B" />
+            <SolidColorBrush x:Key="SeaglassAccentForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="GlassPanelSolidBrush" Color="#F4FAF9" />
+            <SolidColorBrush x:Key="GlassPanelStrongSolidBrush" Color="#F7FBFA" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <Color x:Key="SeaglassAccentColor">#FFFFFF00</Color>
@@ -89,6 +101,11 @@
             <SolidColorBrush x:Key="GlassTextSecondaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="GlassImageScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="GlassSelectedOverlayBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="SeaglassAccentFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="SeaglassAccentForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="GlassPanelSolidBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="GlassPanelStrongSolidBrush" Color="{ThemeResource SystemColorWindowColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
@@ -141,29 +158,93 @@
     </Style>
 
     <!--
-        Buttons. The foundation's versions: the shell stream replaces their templates so pointer-over and pressed stay
-        glass (a lighter or darker overlay) instead of the default solid fill. Keep the keys.
+        Buttons. Pointer-over and pressed stay glass: a light (dark theme) or dark (light theme) overlay over the same
+        material, never the default solid fill. Keyboard focus keeps the system focus visuals; a disabled button fades.
+        The accent pill is for the primary action only.
     -->
+    <ControlTemplate x:Key="GlassPillButtonTemplate" TargetType="Button">
+        <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+            <Border
+                x:Name="Backplate"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}" />
+            <Border
+                x:Name="Overlay"
+                Background="Transparent"
+                CornerRadius="{TemplateBinding CornerRadius}">
+                <Border.BackgroundTransition>
+                    <BrushTransition Duration="0:0:0.12" />
+                </Border.BackgroundTransition>
+            </Border>
+            <ContentPresenter
+                x:Name="ContentPresenter"
+                Padding="{TemplateBinding Padding}"
+                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                AutomationProperties.AccessibilityView="Raw"
+                Content="{TemplateBinding Content}"
+                ContentTemplate="{TemplateBinding ContentTemplate}"
+                ContentTransitions="{TemplateBinding ContentTransitions}"
+                Foreground="{TemplateBinding Foreground}" />
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource GlassHoverOverlayBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource GlassPressedOverlayBrush}" />
+                            <Setter Target="RootGrid.Opacity" Value="0.9" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="RootGrid.Opacity" Value="0.45" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+
     <Style
         x:Key="GlassPillButtonStyle"
         BasedOn="{StaticResource DefaultButtonStyle}"
         TargetType="Button">
         <Setter Property="Background" Value="{ThemeResource GlassPanelBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
         <Setter Property="CornerRadius" Value="{StaticResource GlassPillCornerRadius}" />
         <Setter Property="MinHeight" Value="{StaticResource GlassPillHeight}" />
         <Setter Property="Padding" Value="20,10" />
         <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template" Value="{StaticResource GlassPillButtonTemplate}" />
     </Style>
     <Style
         x:Key="GlassAccentPillButtonStyle"
         BasedOn="{StaticResource AccentButtonStyle}"
         TargetType="Button">
+        <Setter Property="Background" Value="{ThemeResource SeaglassAccentFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource SeaglassAccentForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
         <Setter Property="CornerRadius" Value="{StaticResource GlassPillCornerRadius}" />
         <Setter Property="MinHeight" Value="{StaticResource GlassPillHeight}" />
         <Setter Property="Padding" Value="22,10" />
         <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template" Value="{StaticResource GlassPillButtonTemplate}" />
     </Style>
     <Style
         x:Key="GlassIconButtonStyle"
@@ -173,5 +254,30 @@
         <Setter Property="Height" Value="{StaticResource GlassPillHeight}" />
         <Setter Property="MinHeight" Value="0" />
         <Setter Property="Padding" Value="0" />
+    </Style>
+    <!--  flyouts, menus and tooltips: the strong glass, the panel corner and the glass edge (high contrast: the system colours, via the brushes)  -->
+    <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassCardCornerRadius}" />
+    </Style>
+    <Style BasedOn="{StaticResource DefaultMenuFlyoutPresenterStyle}" TargetType="MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassCardCornerRadius}" />
+    </Style>
+    <Style BasedOn="{StaticResource DefaultToolTipStyle}" TargetType="ToolTip">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <Style BasedOn="{StaticResource DefaultContentDialogStyle}" TargetType="ContentDialog">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassPanelCornerRadius}" />
     </Style>
 </ResourceDictionary>

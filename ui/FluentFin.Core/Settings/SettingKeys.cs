@@ -28,6 +28,9 @@ public static class SettingKeys
 	/// <summary>How much one wheel notch or arrow key changes the volume, in percent.</summary>
 	public static Key<int> VolumeStep { get; } = new Key<int>("VolumeStep", 5);
 
+	/// <summary>Seaglass: how much glass the app shows (Settings > Appearance), kept on this PC. Automatic by default.</summary>
+	public static Key<GlassChoice> Glass { get; } = new Key<GlassChoice>("Glass", GlassChoice.Automatic);
+
 	/// <summary>
 	/// fluentfin-mpv: who draws the player controls with the mpv player (docs/research/player-controls.md). FluentFin's own
 	/// by default (the user's choice, 2026-11-15); without a libmpv that does composition output next to FluentFin, the
@@ -46,3 +49,12 @@ public enum MpvPlayerControls
 	FluentFin,
 }
 
+
+/// <summary>Seaglass: Settings > Appearance > Glass. Automatic follows Windows (transparency, animation, high contrast).</summary>
+public enum GlassChoice
+{
+	Automatic,
+	Full,
+	Reduced,
+	Solid,
+}
