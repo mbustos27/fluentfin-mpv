@@ -173,6 +173,16 @@ public sealed class HomeHeroGlassTests
 	}
 
 	[Fact]
+	public void The_words_take_the_glass_text_brush_so_high_contrast_gets_the_system_text_colour()
+	{
+		// a written colour (White, #E6FFFFFF) stays white on the high contrast panel, which is the system window colour (white in
+		// the light contrast themes)
+		var foregrounds = Panel().DescendantsAndSelf().Select(e => (string?)e.Attribute("Foreground")).Where(f => f is not null).ToList();
+		Assert.NotEmpty(foregrounds);
+		Assert.All(foregrounds, f => Assert.StartsWith("{ThemeResource ", f));
+	}
+
+	[Fact]
 	public void The_buttons_on_the_glass_panel_are_flat_or_the_accent_never_a_second_acrylic()
 	{
 		var styles = Panel().Descendants().Where(e => e.Name.LocalName == "Button").Select(e => (string?)e.Attribute("Style")).ToList();
