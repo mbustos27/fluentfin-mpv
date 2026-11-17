@@ -223,6 +223,7 @@
                             Text="{x:Bind Controls.VolumeText, Mode=OneWay}" />
                         <Grid Width="240" Height="10">
                             <Border CornerRadius="5" Background="#33FFFFFF" />
+                            <!--  always full width: the code clips it to the volume (a rounded clip the compositor animates)  -->
                             <Border
                                 x:Name="VolumeIndicatorFill"
                                 HorizontalAlignment="Left"

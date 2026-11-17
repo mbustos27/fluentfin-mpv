@@ -398,6 +398,103 @@ public sealed class MpvControlsViewModelTests
 		Assert.Equal(80, _vm.Volume);
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.3: a smooth wheel or a touchpad that turns back drops the part of a notch it had made the other way; in
+	/// 1.1.2 the first part of the reversal only undid it (+100 then -120 changed nothing).
+	/// </summary>
+	[Fact]
+	public void A_wheel_that_turns_back_drops_the_part_of_a_notch_left_over()
+	{
+		Playing(); // volume 80
+		_vm.Wheel(100);
+		Assert.Equal(80, _vm.Volume);
+		_vm.Wheel(-MpvControlsViewModel.WheelNotch);
+		Assert.Equal(75, _vm.Volume);
+
+		_vm.Wheel(-100);
+		_vm.Wheel(30);
+		_vm.Wheel(90);
+		Assert.Equal(80, _vm.Volume);
+	}
+
+	/// <summary>Seaglass 1.1.3: part of a notch from a while ago does not make the next small turn a whole notch.</summary>
+	[Fact]
+	public void A_part_of_a_notch_is_forgotten_after_a_pause()
+	{
+		Playing(); // volume 80
+		_vm.Wheel(100);
+		_now += MpvControlsViewModel.WheelRemainderFor;
+		_vm.Wheel(40);
+		Assert.Equal(80, _vm.Volume);
+		Assert.Empty(Commands());
+
+		// within the pause it still adds up
+		_vm.Wheel(40);
+		_now += TimeSpan.FromSeconds(1);
+		_vm.Wheel(40);
+		Assert.Equal(85, _vm.Volume);
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.3, the "jumpy" wheel: a fast spin gives one step per notch, one command per notch, and the level the
+	/// indicator's fill is sent to never goes back, whatever the backend echoes on the way (each notch's own state arriving
+	/// late, the last one after the settle time) and also from a mute.
+	/// </summary>
+	[Fact]
+	public void A_fast_spin_moves_the_fill_one_step_per_notch_and_never_back()
+	{
+		Playing(); // volume 80
+		var fractions = new List<double>();
+		_vm.PropertyChanged += (_, e) =>
+		{
+			if (e.PropertyName == nameof(MpvControlsViewModel.VolumeFraction))
+			{
+				fractions.Add(_vm.VolumeFraction);
+			}
+		};
+
+		var echoes = new Queue<int>();
+		for (var notch = 0; notch < 12; notch++)
+		{
+			_vm.Wheel(-MpvControlsViewModel.WheelNotch);
+			echoes.Enqueue(_vm.Volume);
+			_now += TimeSpan.FromMilliseconds(30);
+			if (notch >= 2)
+			{
+				// the backend's state for the notch two before this one
+				_vm.OnState(new BridgeState { State = Bridge.States.Playing, Volume = echoes.Dequeue() });
+			}
+		}
+
+		// the last echoes come after the settle time: they are the final level
+		_now += MpvControlsViewModel.AudioSettle;
+		while (echoes.Count > 1)
+		{
+			echoes.Dequeue();
+		}
+
+		_vm.OnState(new BridgeState { State = Bridge.States.Playing, Volume = echoes.Dequeue() });
+		Assert.Equal(20, _vm.Volume);
+		Assert.Equal([.. Enumerable.Range(1, 12).Select(n => Math.Round((80 - 5 * n) / 100.0, 6))], fractions.Select(f => Math.Round(f, 6)));
+		Assert.Equal([.. Enumerable.Range(1, 12).Select(n => 80 - 5 * n)], _sent.Where(x => x.Command == Bridge.Commands.SetVolume).Select(x => (int)x.Args!["volume"]!));
+
+		// from a mute, up: nothing, then each level once, never below the one before
+		_ = _vm.ToggleMute();
+		fractions.Clear();
+		_now += TimeSpan.FromSeconds(3);
+		for (var notch = 0; notch < 3; notch++)
+		{
+			_vm.Wheel(MpvControlsViewModel.WheelNotch);
+		}
+
+		for (var i = 1; i < fractions.Count; i++)
+		{
+			Assert.True(fractions[i] >= fractions[i - 1], $"step {i}: {fractions[i - 1]} -> {fractions[i]}");
+		}
+
+		Assert.Equal(0.35, fractions[^1], 3);
+	}
+
 	[Fact]
 	public void The_volume_keys_and_mute_show_the_indicator_too_and_it_fills_to_the_volume()
 	{

@@ -8,7 +8,6 @@ using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
 using System.Numerics;
 using Microsoft.UI.Composition;
 using FluentFin.Services;
@@ -403,32 +402,51 @@ public sealed partial class MpvPlayerControls : UserControl
 	// -- the volume indicator (Seaglass) ----------------------------------------------------------------------------------
 
 	/// <summary>The indicator's width when full: the fill's width is this times the volume.</summary>
-	public const double VolumeFillWidth = 240;
+	public const double VolumeFillWidth = VolumeIndicatorMotion.FillWidth;
 
 	/// <summary>How long the fill takes to glide to a new level.</summary>
-	public static readonly TimeSpan FillTime = TimeSpan.FromMilliseconds(160);
-
-	private Storyboard? _fillGlide;
+	public static readonly TimeSpan FillTime = VolumeIndicatorMotion.FillTime;
 
 	/// <summary>
-	/// Fades in (and, with motion allowed, grows from 94 %) and fades out over 0.4 s as its Visibility changes; with motion not
-	/// allowed (Reduced, Solid, animations off) the fade alone.
+	/// Seaglass 1.1.3: the fill's shape. The fill (a full-width bar) is clipped to a rounded rectangle whose width the
+	/// compositor animates. Each new level starts from where the clip is drawn now (<c>this.StartingValue</c>), so a notch made
+	/// mid-glide carries on from there. In 1.1.2 a storyboard was stopped on every notch, and stopping it put the width back
+	/// to its base value (an empty bar): every notch emptied the bar and filled it again (measured in
+	/// <c>tools\ui-harness\offscreen\then-volume.ps1</c>: up to 87 px backwards at each notch). Off the UI thread too.
+	/// </summary>
+	private CompositionRoundedRectangleGeometry? _fillShape;
+
+	/// <summary>
+	/// Fades in (and, with motion allowed, grows from 94 %) and fades out over 0.4 s (shrinking back to 94 %) as its Visibility
+	/// changes; with motion not allowed (Reduced, Solid, animations off) the fade alone. Each starts from where the indicator
+	/// is drawn now, so a notch while it fades out brings it back from there instead of blinking it out first.
 	/// </summary>
 	private void ConfigureIndicatorFade(bool motion)
 	{
 		var visual = ElementCompositionPreview.GetElementVisual(VolumeIndicator);
 		var compositor = visual.Compositor;
 		visual.CenterPoint = new Vector3((float)VolumeIndicator.ActualWidth / 2, (float)VolumeIndicator.ActualHeight / 2, 0);
+		if (VolumeIndicator.Visibility == Visibility.Collapsed)
+		{
+			// where a show starts the first time (later, where the last hide left it)
+			visual.Opacity = 0f;
+			visual.Scale = motion ? VolumeIndicatorMotion.HiddenScale : Vector3.One;
+		}
+		else if (!motion)
+		{
+			visual.Scale = Vector3.One;
+		}
 
 		var fadeIn = compositor.CreateScalarKeyFrameAnimation();
 		fadeIn.Target = "Opacity";
-		fadeIn.InsertKeyFrame(0f, 0f);
+		fadeIn.InsertExpressionKeyFrame(0f, "this.StartingValue");
 		fadeIn.InsertKeyFrame(1f, 1f);
-		fadeIn.Duration = TimeSpan.FromMilliseconds(motion ? 200 : 120);
+		fadeIn.Duration = VolumeIndicatorMotion.FadeIn(motion);
 		var fadeOut = compositor.CreateScalarKeyFrameAnimation();
 		fadeOut.Target = "Opacity";
+		fadeOut.InsertExpressionKeyFrame(0f, "this.StartingValue");
 		fadeOut.InsertKeyFrame(1f, 0f);
-		fadeOut.Duration = TimeSpan.FromMilliseconds(motion ? 400 : 150);
+		fadeOut.Duration = VolumeIndicatorMotion.FadeOut(motion);
 		var show = compositor.CreateAnimationGroup();
 		show.Add(fadeIn);
 		var hide = compositor.CreateAnimationGroup();
@@ -437,10 +455,16 @@ public sealed partial class MpvPlayerControls : UserControl
 		{
 			var grow = compositor.CreateVector3KeyFrameAnimation();
 			grow.Target = "Scale";
-			grow.InsertKeyFrame(0f, new Vector3(0.94f, 0.94f, 1f));
+			grow.InsertExpressionKeyFrame(0f, "this.StartingValue");
 			grow.InsertKeyFrame(1f, Vector3.One, compositor.CreateCubicBezierEasingFunction(new Vector2(0.05f, 0.9f), new Vector2(0.1f, 1f)));
-			grow.Duration = TimeSpan.FromMilliseconds(260);
+			grow.Duration = VolumeIndicatorMotion.Grow;
 			show.Add(grow);
+			var shrink = compositor.CreateVector3KeyFrameAnimation();
+			shrink.Target = "Scale";
+			shrink.InsertExpressionKeyFrame(0f, "this.StartingValue");
+			shrink.InsertKeyFrame(1f, VolumeIndicatorMotion.HiddenScale);
+			shrink.Duration = VolumeIndicatorMotion.FadeOut(motion);
+			hide.Add(shrink);
 		}
 
 		ElementCompositionPreview.SetImplicitShowAnimation(VolumeIndicator, show);
@@ -452,30 +476,45 @@ public sealed partial class MpvPlayerControls : UserControl
 		ElementCompositionPreview.GetElementVisual(VolumeIndicator).CenterPoint = new Vector3((float)e.NewSize.Width / 2, (float)e.NewSize.Height / 2, 0);
 	}
 
-	/// <summary>The fill glides to the volume (0 while muted); at once when motion is not allowed or nothing shows yet.</summary>
+	/// <summary>The fill's clip, made the first time: a rounded rectangle as tall as the bar, as wide as the volume.</summary>
+	private CompositionRoundedRectangleGeometry FillShape()
+	{
+		if (_fillShape is { } shape)
+		{
+			return shape;
+		}
+
+		var visual = ElementCompositionPreview.GetElementVisual(VolumeIndicatorFill);
+		var compositor = visual.Compositor;
+		shape = compositor.CreateRoundedRectangleGeometry();
+		shape.CornerRadius = new Vector2(VolumeIndicatorMotion.FillHeight / 2);
+		shape.Size = new Vector2(0, VolumeIndicatorMotion.FillHeight);
+		visual.Clip = compositor.CreateGeometricClip(shape);
+		return _fillShape = shape;
+	}
+
+	/// <summary>
+	/// The fill goes to the volume (0 while muted): it glides from where it is drawn now, or moves at once when motion is not
+	/// allowed or the indicator is not shown (<see cref="VolumeIndicatorMotion.FillGlides"/>).
+	/// </summary>
 	private void AnimateVolumeFill()
 	{
-		_fillGlide?.Stop();
-		_fillGlide = null;
-		var target = (Controls?.VolumeFraction ?? 0) * VolumeFillWidth;
-		if (!GlassMode.MotionAllowed || Controls is not { VolumeIndicatorVisible: true })
+		var shape = FillShape();
+		var target = new Vector2(VolumeIndicatorMotion.FillTo(Controls?.VolumeFraction ?? 0), VolumeIndicatorMotion.FillHeight);
+		if (!VolumeIndicatorMotion.FillGlides(GlassMode.MotionAllowed, Controls is { VolumeIndicatorVisible: true }))
 		{
-			VolumeIndicatorFill.Width = target;
+			shape.StopAnimation("Size");
+			shape.Size = target;
 			return;
 		}
 
-		var glide = new DoubleAnimation
-		{
-			To = target,
-			Duration = FillTime,
-			EnableDependentAnimation = true,
-			EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-		};
-		Storyboard.SetTarget(glide, VolumeIndicatorFill);
-		Storyboard.SetTargetProperty(glide, "Width");
-		_fillGlide = new Storyboard();
-		_fillGlide.Children.Add(glide);
-		_fillGlide.Begin();
+		var compositor = shape.Compositor;
+		var glide = compositor.CreateVector2KeyFrameAnimation();
+		glide.InsertExpressionKeyFrame(0f, "this.StartingValue");
+		// CubicEase EaseOut (what 1.1.2 used): 1 - (1 - t)^3
+		glide.InsertKeyFrame(1f, target, compositor.CreateCubicBezierEasingFunction(new Vector2(0.33f, 1f), new Vector2(0.68f, 1f)));
+		glide.Duration = FillTime;
+		shape.StartAnimation("Size", glide);
 	}
 
 	/// <summary>Narrator says the new volume ("Volume 45 %" or "Muted"), without moving the focus.</summary>
