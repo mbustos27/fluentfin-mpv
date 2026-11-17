@@ -15,8 +15,13 @@
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
+    <!--
+        Seaglass: every ContentDialog (this keyed style, and the implicit one below for the dialogs made in code). One overlay
+        recipe (Glass.xaml): one strong glass surface, the glass edge, GlassOverlayCornerRadius. The title and the buttons sit
+        on that one surface (they used to repeat the acrylic: acrylic on acrylic); a hairline separates the buttons.
+    -->
     <Style x:Key="DefaultContentDialogStyleWithTitleBackground" TargetType="ContentDialog">
-        <Setter Property="Foreground" Value="{ThemeResource ContentDialogForeground}" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
         <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
         <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
@@ -24,7 +29,7 @@
         <Setter Property="PrimaryButtonStyle" Value="{ThemeResource DefaultButtonStyle}" />
         <Setter Property="SecondaryButtonStyle" Value="{ThemeResource DefaultButtonStyle}" />
         <Setter Property="CloseButtonStyle" Value="{ThemeResource DefaultButtonStyle}" />
-        <Setter Property="CornerRadius" Value="{StaticResource GlassPanelCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassOverlayCornerRadius}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContentDialog">
@@ -49,7 +54,7 @@
                                 <Border.RenderTransform>
                                     <ScaleTransform x:Name="ScaleTransform" />
                                 </Border.RenderTransform>
-                                <Grid x:Name="DialogSpace" CornerRadius="{ThemeResource OverlayCornerRadius}">
+                                <Grid x:Name="DialogSpace" CornerRadius="{TemplateBinding CornerRadius}">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
@@ -60,7 +65,7 @@
                                         x:Name="TitleSpace"
                                         Margin="{TemplateBinding Padding}"
                                         Padding="{StaticResource ContentDialogPadding}"
-                                        Background="{TemplateBinding Background}">
+                                        Background="Transparent">
                                         <TextBlock
                                             FontFamily="{StaticResource ContentControlThemeFontFamily}"
                                             FontSize="20"
@@ -77,8 +82,8 @@
                                         ZoomMode="Disabled">
                                         <Grid
                                             Padding="{ThemeResource ContentDialogPadding}"
-                                            Background="{ThemeResource ContentDialogTopOverlay}"
-                                            BorderBrush="{ThemeResource ContentDialogSeparatorBorderBrush}"
+                                            Background="Transparent"
+                                            BorderBrush="{ThemeResource GlassDividerBrush}"
                                             BorderThickness="{ThemeResource ContentDialogSeparatorThickness}">
                                             <ContentPresenter
                                                 x:Name="Content"
@@ -97,7 +102,7 @@
                                         Padding="{ThemeResource ContentDialogPadding}"
                                         HorizontalAlignment="Stretch"
                                         VerticalAlignment="Bottom"
-                                        Background="{TemplateBinding Background}"
+                                        Background="Transparent"
                                         XYFocusKeyboardNavigation="Enabled">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition x:Name="PrimaryColumn" Width="*" />
@@ -329,5 +334,6 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <Style BasedOn="{StaticResource DefaultContentDialogStyleWithTitleBackground}" TargetType="ContentDialog" />
 
 </ResourceDictionary>

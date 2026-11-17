@@ -106,7 +106,7 @@
                         Click="MoreInfo_Click"
                         Content="More info"
                         Foreground="White"
-                        Style="{StaticResource GlassPillButtonStyle}" />
+                        Style="{StaticResource GlassInsetPillButtonStyle}" />
                 </StackPanel>
             </StackPanel>
 

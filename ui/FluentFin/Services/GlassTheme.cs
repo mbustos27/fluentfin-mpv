@@ -12,11 +12,19 @@ namespace FluentFin.Services;
 public static class GlassTheme
 {
 	private static readonly string[] _themes = ["Dark", "Light"];
-	private static readonly string[] _keys = ["GlassPanelBrush", "GlassPanelStrongBrush"];
+	// each key's Solid stand-in is the key with "Brush" replaced by "SolidBrush" (GlassOverlayBrush: the menus' and tooltips' tint)
+	internal static readonly string[] Keys = ["GlassPanelBrush", "GlassPanelStrongBrush", "GlassOverlayBrush"];
 	private static readonly Dictionary<(string Theme, string Key), object> _acrylic = [];
 	private static bool _solid;
 	private static FrameworkElement? _root;
 	private static DispatcherQueue? _queue;
+
+	/// <summary>
+	/// The theme SEAGLASS_THEME (Light or Dark, the harness's screenshots) forces on the whole application, or null to follow
+	/// Windows. Forcing only the window's content left the dialogs, menus and tooltips (popups) in Windows' theme.
+	/// </summary>
+	public static ApplicationTheme? ForcedApplicationTheme(string? value) =>
+		Enum.TryParse<ApplicationTheme>(value?.Trim(), true, out var theme) && Enum.IsDefined(theme) ? theme : null;
 
 	/// <summary>Whether the opaque brushes are in place now.</summary>
 	public static bool IsSolid => _solid;
@@ -62,7 +70,7 @@ public static class GlassTheme
 				continue;
 			}
 
-			foreach (var key in _keys)
+			foreach (var key in Keys)
 			{
 				if (solid)
 				{
