@@ -5,8 +5,8 @@ Measured on the 1.0.1 package. Start-up and first-play times are the harness's `
 | Step | Files in zip | app\ top level | Zip | Window shown | First play position |
 |---|---|---|---|---|---|
 | Before (1.0.1) | 789 | 534 | 247 MB | 0.8 to 0.9 s | 447 ms |
-| 1: drop the desktop runtime's Windows Forms, Visual Basic, WPF themes, printing, designers | 742 | 506 | 235 MB | 0.85 to 1.3 s (noise) | 311 ms |
-| 4: backend excludes (_imagingtk, _wmi), step 1 kept | 740 (build log) | 506 | 235 MB | | |
+| 1: drop the desktop runtime's Windows Forms, Visual Basic, WPF themes, printing, designers | about 761 (not recorded; the 742 first reported was the failed Flyleaf-excluded build) | 506 | 235 MB | 0.85 to 1.3 s (noise) | 311 ms |
+| 4: backend excludes (_imagingtk, _wmi), step 1 kept | 759 (build log) | 506 | 235 MB | | |
 
 Verify: 113 original checks pass, plus the new slim check (file-count ceiling 510 at the top of app\, no Windows Forms or Visual Basic assemblies).
 
