@@ -227,6 +227,100 @@ public static class OffscreenUi {
     return new[] { changed.Count(x => x), x0, y0, bw, bh };
   }
 
+  // The same inputs as Key and Click, started on a thread of their own and returning at once, so a burst's grabs go on
+  // while the key's 30 ms between down and up (or the click's pauses) pass
+  public static void KeyAsync(IntPtr main, int pid, int vk) { new System.Threading.Thread(() => Key(main, pid, vk, false)) { IsBackground = true }.Start(); }
+  // mpv's own window (mpv's controls): WM_KEYDOWN, WM_CHAR, WM_KEYUP as Send-PlayerKey posts them, on a thread of its own
+  public static void KeyToAsync(IntPtr target, int vk, char ch) {
+    new System.Threading.Thread(() => {
+      long scan = (long)MapVirtualKey((uint)vk, 0) << 16;
+      PostMessage(target, 0x0100, (IntPtr)vk, (IntPtr)(1 | scan));
+      PostMessage(target, 0x0102, (IntPtr)(int)ch, (IntPtr)(1 | scan));
+      System.Threading.Thread.Sleep(30);
+      PostMessage(target, 0x0101, (IntPtr)vk, (IntPtr)(1 | scan | 0xC0000000L));
+    }) { IsBackground = true }.Start();
+  }
+  public static void ClickAsync(IntPtr main, int pid, int x, int y, int times) {
+    new System.Threading.Thread(() => { for (int i = 0; i < times; i++) { Click(main, pid, x, y); } }) { IsBackground = true }.Start();
+  }
+  public static InvokePattern InvokePatternOf(AutomationElement e) { return (InvokePattern)e.GetCurrentPattern(InvokePattern.Pattern); }
+  public static void InvokeAsync(InvokePattern p) { new System.Threading.Thread(() => { try { p.Invoke(); } catch (Exception) { } }) { IsBackground = true }.Start(); }
+
+  // A burst of window captures for the full-screen switch (docs/research/fullscreen-smoothness.md): `frames` PrintWindow
+  // grabs back to back, the trigger (a posted key, an invoked button: it must only post/invoke, not wait) run just before
+  // frame `triggerAt`; each frame keeps its own window rect, so a frame of the wrong size or place shows. Writes
+  // <dir>\sheet.png (every frame at 1/6 scale, numbered with its time from the trigger) and returns CSV lines:
+  // index, ms since the trigger (start of the grab), grab ms, window x y w h, % near black, % near white, picture box of the
+  // not-dark pixels (x0 y0 x1 y1 in the window) and its aspect.
+  [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int v, int size);
+  public static bool IsCloaked(IntPtr h) { return Cloaked(h); }
+  static bool Cloaked(IntPtr h) { int v; return DwmGetWindowAttribute(h, 14, out v, 4) == 0 && v != 0; }
+  public static List<string> Burst(IntPtr main, int pid, int frames, int triggerAt, Action trigger, string dir) {
+    if (ProcessOf(main) != (uint)pid) throw new InvalidOperationException("not FluentFin's window");
+    System.IO.Directory.CreateDirectory(dir);
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var bmps = new List<Bitmap>(); var rows = new List<string>(); var times = new List<double>(); var cloakedAt = new List<bool>();
+    double trig = -1;
+    for (int i = 0; i < frames; i++) {
+      if (i == triggerAt) { trig = sw.Elapsed.TotalMilliseconds; trigger(); }
+      double t0 = sw.Elapsed.TotalMilliseconds;
+      RECT r; GetWindowRect(main, out r);
+      bool cl0 = Cloaked(main);
+      int w = Math.Max(1, r.R - r.L), h = Math.Max(1, r.B - r.T);
+      var bmp = new Bitmap(w, h, PixelFormat.Format32bppRgb);
+      using (var g = Graphics.FromImage(bmp)) { var hdc = g.GetHdc(); try { PrintWindow(main, hdc, 2); } finally { g.ReleaseHdc(hdc); } }
+      double t1 = sw.Elapsed.TotalMilliseconds;
+      cloakedAt.Add(cl0 || Cloaked(main));
+      bmps.Add(bmp); times.Add(t0 - (trig < 0 ? t0 : trig));
+      int black = 0, white = 0, n = 0, bx0 = int.MaxValue, by0 = int.MaxValue, bx1 = -1, by1 = -1;
+      var d = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadOnly, PixelFormat.Format32bppRgb);
+      try {
+        var line = new int[w];
+        for (int y = 0; y < h; y += 2) {
+          Marshal.Copy(d.Scan0 + y * d.Stride, line, 0, w);
+          for (int x = 0; x < w; x += 2) {
+            int p = line[x]; int s = ((p >> 16) & 255) + ((p >> 8) & 255) + (p & 255);
+            n++; if (s < 24) black++; if (s > 735) white++;
+            if (s > 60) { if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
+          }
+        }
+      } finally { bmp.UnlockBits(d); }
+      double asp = bx1 > bx0 && by1 > by0 ? (double)(bx1 - bx0) / (by1 - by0) : 0;
+      rows.Add(string.Format("{0},{1:0},{2:0},{3} {4} {5}x{6},{7},{8},{9} {10} {11} {12},{13:0.000}", i, times[i], t1 - t0, r.L, r.T, w, h,
+        100 * black / n, 100 * white / n, bx1 < 0 ? 0 : bx0, bx1 < 0 ? 0 : by0, bx1, by1, asp));
+    }
+    // each frame's whole window stretched to 128x72 grey, compared with the first frame (before the trigger) and the last (after
+    // it): the mean absolute difference, 0-255. The video is paused, so a frame that is neither is a half-done layout.
+    var thumbs = new List<double[]>();
+    foreach (var b in bmps) {
+      using (var t = new Bitmap(128, 72, PixelFormat.Format32bppRgb)) {
+        using (var g = Graphics.FromImage(t)) { g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear; g.DrawImage(b, 0, 0, 128, 72); }
+        var v = new double[128 * 72]; var d = t.LockBits(new Rectangle(0, 0, 128, 72), ImageLockMode.ReadOnly, PixelFormat.Format32bppRgb);
+        try { var line = new int[128]; for (int y = 0; y < 72; y++) { Marshal.Copy(d.Scan0 + y * d.Stride, line, 0, 128); for (int x = 0; x < 128; x++) { int p = line[x]; v[y * 128 + x] = (((p >> 16) & 255) + ((p >> 8) & 255) + (p & 255)) / 3.0; } } }
+        finally { t.UnlockBits(d); }
+        thumbs.Add(v);
+      }
+    }
+    Func<double[], double[], double> diff = (a, b) => { double s = 0; for (int i = 0; i < a.Length; i++) s += Math.Abs(a[i] - b[i]); return s / a.Length; };
+    for (int i = 0; i < frames; i++) rows[i] += string.Format(",{0:0.0},{1:0.0},{2}", diff(thumbs[i], thumbs[0]), diff(thumbs[i], thumbs[frames - 1]), cloakedAt[i] ? 1 : 0);
+    int cols = 6, tw = 320, th = 190, lab = 14, rowsN = (frames + cols - 1) / cols;
+    using (var sheet = new Bitmap(cols * tw, rowsN * (th + lab)))
+    using (var g = Graphics.FromImage(sheet)) {
+      g.Clear(Color.FromArgb(40, 40, 40));
+      g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+      using (var f = new Font("Segoe UI", 8f)) for (int i = 0; i < frames; i++) {
+        int cx = (i % cols) * tw, cy = (i / cols) * (th + lab);
+        double k = Math.Min((double)(tw - 4) / bmps[i].Width, (double)th / bmps[i].Height);
+        g.DrawImage(bmps[i], cx + 2, cy + lab, (int)(bmps[i].Width * k), (int)(bmps[i].Height * k));
+        g.DrawString(string.Format("#{0} {1:0} ms {2}x{3}", i, times[i], bmps[i].Width, bmps[i].Height), f, Brushes.White, cx + 2, cy);
+      }
+      sheet.Save(System.IO.Path.Combine(dir, "sheet.png"), ImageFormat.Png);
+    }
+    // the first frame before the trigger, the last, and every frame full size is too much: the ones around the switch
+    for (int i = 0; i < frames; i++) { if (i >= triggerAt - 1 && i <= triggerAt + 12 || i == frames - 1) bmps[i].Save(System.IO.Path.Combine(dir, string.Format("f{0:00}.png", i)), ImageFormat.Png); bmps[i].Dispose(); }
+    return rows;
+  }
+
   static int Lit(Bitmap b, int x0, int y0, int x1, int y1) {
     x0 = Math.Max(0, x0); y0 = Math.Max(0, y0); x1 = Math.Min(b.Width, x1); y1 = Math.Min(b.Height, y1);
     if (x1 <= x0 || y1 <= y0) return 0;

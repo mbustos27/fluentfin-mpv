@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using FluentFin.Contracts.Services;
 using FluentFin.Core;
+using FluentFin.Core.Mpv;
 using FluentFin.Core.ViewModels;
 using FluentFin.Mpv;
 using FluentFin.Services;
@@ -93,6 +94,12 @@ public sealed partial class VideoPlayerPage : Page
 
 	private void OnUnloaded(object sender, RoutedEventArgs e)
 	{
+		// never leave the window cloaked
+		if (_cloakedHwnd != 0)
+		{
+			EndSwitch();
+		}
+
 		// a sign-out takes the shell away with this page on it: the next shell must start with its pane
 		_chrome.Unloaded();
 		DetachVideo();
@@ -204,19 +211,128 @@ public sealed partial class VideoPlayerPage : Page
 		_videoAttached = false;
 	}
 
-	/// <summary>Full screen the way MediaPlayerHost.OnPlayerDoubleTapped does it, but to a given state (mpv asks for one).</summary>
+	/// <summary>
+	/// Every way into and out of full screen (F, F11, the button, a double click, Escape, mpv's own request, leaving the page)
+	/// ends here, so they all switch the same way: one switch at a time (<see cref="FullScreenSwitch"/>), the window cloaked
+	/// while it changes, the last request winning. Full screen the way MediaPlayerHost.OnPlayerDoubleTapped does it, but to a
+	/// given state (mpv asks for one).
+	/// </summary>
 	private void SetMpvFullScreen(bool fullScreen)
 	{
 		_mpvFullScreen = fullScreen;
-
-		var log = App.GetService<ILogger<VideoPlayerPage>>();
-		var kind = fullScreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped;
-		if (App.MainWindow.AppWindow.Presenter.Kind != kind)
+		if (_switch.Request(fullScreen) == FullScreenSwitch.Outcome.Unchanged)
 		{
-			log.LogInformation("Full screen {On}: setting the presenter", fullScreen);
+			SetTitleBar(fullScreen);
+		}
+	}
+
+	private FullScreenSwitch? _switchField;
+
+	private FullScreenSwitch _switch => _switchField ??= new FullScreenSwitch(
+		() => App.MainWindow.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen, ApplyFullScreen);
+
+	/// <summary>
+	/// The window shows again once the panel has its new size and the picture's hold (the layout), XAML has rendered two frames
+	/// since, and at least <see cref="CloakMinimumMilliseconds"/> have passed since the presenter changed: DWM shows what XAML
+	/// committed a frame or two later, and uncloaking at the second rendered frame still let the half-done layout through (measured).
+	/// After <see cref="CloakLimitMilliseconds"/> it shows anyway: a stalled UI thread must not leave the window hidden
+	/// (docs/research/fullscreen-smoothness.md). The frames XAML renders before the layout (inside SetPresenter, with the
+	/// window's new size) do not count.
+	/// </summary>
+	private const int CloakMinimumMilliseconds = 60;
+
+	private const int CloakLimitMilliseconds = 150;
+
+	private const int CloakRenderedFrames = 2;
+
+	private int _switchFrames;
+	private bool _switchLayoutSeen;
+	private long _switchStarted;
+
+	private Microsoft.UI.Dispatching.DispatcherQueueTimer? _uncloakTimer;
+
+	private void ApplyFullScreen(bool fullScreen)
+	{
+		var log = App.GetService<ILogger<VideoPlayerPage>>();
+		var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+		_switchStarted = Environment.TickCount64;
+		var cloaked = WindowCloak.Enabled && _attachedComposition && WindowCloak.Set(hwnd, true);
+		try
+		{
+			var kind = fullScreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped;
+			log.LogInformation("Full screen {On}: setting the presenter{Cloak}", fullScreen, cloaked ? " (window cloaked)" : "");
 			App.MainWindow.AppWindow.SetPresenter(kind);
+			SetTitleBar(fullScreen);
+		}
+		catch
+		{
+			if (cloaked)
+			{
+				WindowCloak.Set(hwnd, false);
+			}
+
+			throw;
 		}
 
+		// the window shows again once the layout and the picture's hold are committed; the next switch waits for that
+		_switchFrames = 0;
+		_switchLayoutSeen = false;
+		_composition.PanelSizeChanged -= OnSwitchLayout;
+		_composition.PanelSizeChanged += OnSwitchLayout;
+		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSwitchFrame;
+		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnSwitchFrame;
+		_uncloakTimer ??= DispatcherQueue.CreateTimer();
+		_uncloakTimer.Interval = TimeSpan.FromMilliseconds(CloakMinimumMilliseconds);
+		_uncloakTimer.IsRepeating = false;
+		_uncloakTimer.Tick -= OnUncloakTick;
+		_uncloakTimer.Tick += OnUncloakTick;
+		_cloakedHwnd = cloaked ? hwnd : 0;
+		_uncloakTimer.Start();
+	}
+
+	private nint _cloakedHwnd;
+
+	private void OnUncloakTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+	{
+		if (!_attachedComposition || (_switchLayoutSeen && _switchFrames >= CloakRenderedFrames) || Environment.TickCount64 - _switchStarted >= CloakLimitMilliseconds)
+		{
+			EndSwitch();
+			return;
+		}
+
+		sender.Interval = TimeSpan.FromMilliseconds(16);
+		sender.Start();
+	}
+
+	private void OnSwitchLayout() => _switchLayoutSeen = true;
+
+	private void OnSwitchFrame(object? sender, object e)
+	{
+		if (_switchLayoutSeen)
+		{
+			_switchFrames++;
+		}
+	}
+
+	/// <summary>The window shows again and the switch counts as done (a request that waited goes now). Also when the page is left.</summary>
+	private void EndSwitch()
+	{
+		_uncloakTimer?.Stop();
+		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSwitchFrame;
+		_composition.PanelSizeChanged -= OnSwitchLayout;
+		if (_cloakedHwnd != 0)
+		{
+			App.GetService<ILogger<VideoPlayerPage>>().LogInformation("Full screen: the window shows again after {Ms} ms ({Frames} rendered frames)", Environment.TickCount64 - _switchStarted, _switchFrames);
+			WindowCloak.Set(_cloakedHwnd, false);
+			_cloakedHwnd = 0;
+		}
+
+		_switch.Settled();
+	}
+
+	private void SetTitleBar(bool fullScreen)
+	{
+		var log = App.GetService<ILogger<VideoPlayerPage>>();
 		if (App.GetService<ITitleBarViewModel>() is { } titleBar)
 		{
 			log.LogInformation("Full screen {On}: the title bar {Shown}", fullScreen, fullScreen ? "hides" : "shows");
