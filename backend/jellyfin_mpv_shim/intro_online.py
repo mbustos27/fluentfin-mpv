@@ -59,10 +59,10 @@ _SERIES = {}
 
 
 def reset():
-    """Forget everything held in memory (tests, "Forget" in Settings)."""
+    """Forget the answers held in memory (tests, "Forget" in Settings). A
+    service's Retry-After pause stays: Forget must not bypass it."""
     with _lock:
         _CACHE.clear()
-        _PAUSED.clear()
         _SERIES.clear()
 
 

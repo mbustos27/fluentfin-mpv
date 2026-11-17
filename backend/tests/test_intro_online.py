@@ -53,6 +53,7 @@ class Fake:
 class Online(unittest.TestCase):
     def setUp(self):
         net.reset()
+        net._PAUSED.clear()       # reset() keeps pauses on purpose
 
     def test_request_is_minimal(self):
         fake = Fake([("theintrodb", INTRODB_200)])
@@ -120,6 +121,14 @@ class Online(unittest.TestCase):
         self.assertEqual(len(fake.calls), 1)          # paused: not asked
         net.lookup(EPISODE, SHOW, "1", fake, clock=clock)
         self.assertEqual(len(fake.calls), 2)          # asked again after 120 s
+
+    def test_forget_keeps_the_retry_after_pause(self):
+        fake = Fake([("theintrodb", (429, {"Retry-After": "120"}, b"{}"))])
+        clock = iter([100.0, 101.0]).__next__
+        net.lookup(EPISODE, SHOW, "1", fake, clock=clock)
+        net.reset()                                   # "Forget learned intros"
+        net.lookup(EPISODE, SHOW, "1", fake, clock=clock)
+        self.assertEqual(len(fake.calls), 1)          # still paused
 
     def test_failures_are_quiet(self):
         def boom(url, headers, timeout):
