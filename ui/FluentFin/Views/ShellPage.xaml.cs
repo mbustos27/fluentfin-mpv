@@ -3,9 +3,7 @@ using FluentFin.Contracts.Services;
 using FluentFin.Services;
 using FluentFin.ViewModels;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using ReactiveUI;
-using Windows.System;
 
 namespace FluentFin.Views;
 
@@ -93,11 +91,5 @@ public sealed partial class ShellPage : Page
 		{
 			_updates.Coordinator.Dismiss();
 		}
-	}
-
-	private async void OnContributeTapped(object sender, TappedRoutedEventArgs e)
-	{
-		// fluentfin-mpv: this project's repository (issues and contributions go here; upstream is credited in its README)
-		await Launcher.LaunchUriAsync(new Uri("https://github.com/mbustos27/fluentfin-mpv"));
 	}
 }

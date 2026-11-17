@@ -15,14 +15,10 @@ public class JellyseerPlugin : IPluginWithOptions
 {
 	public Guid Id { get; } = Guid.Parse("ba4e6014-505b-4570-b11c-009281d337cf");
 
+	// Seaglass 1.1.3: not on the rail, which holds only destinations (UX review, prioritised fix 1); Settings > Integrations
+	// opens it (JellyseerrEntry)
 	public void AddNavigationViewItem(INavigationViewServiceCore navigationViewService)
 	{
-		navigationViewService.AddNavigationItem(new Core.Settings.CustomNavigationViewItem
-		{
-			Key = typeof(JellyseerDashboardViewModel).FullName!,
-			Name = "Jellyseer",
-			Glyph = "\uE8A7",
-		});
 	}
 
 	public void ConfigurePages(IPageRegistration pageRegistration)

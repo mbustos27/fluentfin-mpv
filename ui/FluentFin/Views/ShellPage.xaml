@@ -34,15 +34,9 @@
                 Content="Libraries"
                 Icon="{ui:SymbolIcon Symbol=Library}" />
         </NavigationView.MenuItems>
+        <!--  Seaglass 1.1.3: only destinations on the rail. Contribute (and Report a problem) moved to Settings > About,
+              Jellyseerr to Settings > Integrations (UX review, prioritised fix 1)  -->
         <NavigationView.FooterMenuItems>
-            <NavigationViewItem
-                Content="Contribute"
-                SelectsOnInvoked="False"
-                Tapped="OnContributeTapped">
-                <NavigationViewItem.Icon>
-                    <ImageIcon Opacity="0.6" Source="{ThemeResource GitHubIconImage}" />
-                </NavigationViewItem.Icon>
-            </NavigationViewItem>
             <NavigationViewItem
                 helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.SettingsViewModel"
                 Content="Settings"
