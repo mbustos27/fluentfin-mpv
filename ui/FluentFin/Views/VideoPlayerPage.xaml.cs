@@ -233,13 +233,13 @@ public sealed partial class VideoPlayerPage : Page
 
 	/// <summary>
 	/// The window shows again once the panel has its new size and the picture's hold (the layout), XAML has rendered two frames
-	/// since, and at least <see cref="CloakMinimumMilliseconds"/> have passed since the presenter changed: DWM shows what XAML
+	/// since, and at least <see cref="CloakMinimumMilliseconds"/> have passed since the presenter change began: DWM shows what XAML
 	/// committed a frame or two later, and uncloaking at the second rendered frame still let the half-done layout through (measured).
 	/// After <see cref="CloakLimitMilliseconds"/> it shows anyway: a stalled UI thread must not leave the window hidden
 	/// (docs/research/fullscreen-smoothness.md). The frames XAML renders before the layout (inside SetPresenter, with the
 	/// window's new size) do not count.
 	/// </summary>
-	private const int CloakMinimumMilliseconds = 60;
+	private const int CloakMinimumMilliseconds = 70;
 
 	private const int CloakLimitMilliseconds = 150;
 
@@ -282,7 +282,7 @@ public sealed partial class VideoPlayerPage : Page
 		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSwitchFrame;
 		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnSwitchFrame;
 		_uncloakTimer ??= DispatcherQueue.CreateTimer();
-		_uncloakTimer.Interval = TimeSpan.FromMilliseconds(CloakMinimumMilliseconds);
+		_uncloakTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, CloakMinimumMilliseconds - (Environment.TickCount64 - _switchStarted)));
 		_uncloakTimer.IsRepeating = false;
 		_uncloakTimer.Tick -= OnUncloakTick;
 		_uncloakTimer.Tick += OnUncloakTick;

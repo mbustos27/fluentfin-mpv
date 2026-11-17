@@ -68,6 +68,10 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   button back until the next one.
 - **A volume above 100** (an mpv.conf's `volume=130`) stays until it is lowered: `set_volume` is 0-100,
   so a step up (wheel, Up) leaves it, only unmuting; a step down sets it within 0-100.
+- **Full screen cloak**: with FluentFin's controls the window is cloaked (DWM) for about 70 ms while the presenter changes, so the
+  half-done layout (old XAML layout in the new window size, one or two frames) never shows; whatever is behind the window shows
+  for that time instead (not looked at on a real desktop). `FLUENTFIN_NO_CLOAK=1` turns it off. mpv's own controls are not cloaked.
+  Numbers and frame strips: `docs\research\fullscreen-smoothness.md`.
 - **Full screen and back**: mpv renders at a new size 2 to 5 frames after the panel took it; until it has
   presented a frame of that size, the panel holds its old frame scaled to where the new picture goes (the user saw
   the picture jump by the title bar's height and then snap). Left: mpv presents on its own thread, so its first new
