@@ -71,3 +71,12 @@ Press 0x09 700
 $back = Focus-Info
 Check 'rows: Tab back into a row lands on the card it had (not the first)' ($back -and $third -and $back.name -eq $third.name -and $back.name -notlike 'A Signal in Winter*') ("$($third.name) / $($back.name)")
 Shot 'rows-6-remembered'
+
+# Up from the first row leaves the rows for the hero above (WinUI 3's TryMoveFocus found nothing without a search root:
+# the key fell to the page, which scrolled, and the focus stayed on the card)
+[void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
+Start-Sleep -Milliseconds 900
+$topCard = Card-Focus 'Electric Ravenmoor'
+Press 0x26 900   # Up
+$aboveRows = Focus-Info
+Check 'rows: Up from the first row moves the focus up out of the rows (the hero)' ($topCard -and $aboveRows -and $aboveRows.type -ne 'ListItem' -and $aboveRows.rect[1] -lt $topCard.rect[1]) ("$($topCard.name) -> $($aboveRows.type) '$($aboveRows.name)'")

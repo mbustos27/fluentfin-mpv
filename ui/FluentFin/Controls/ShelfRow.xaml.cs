@@ -310,7 +310,7 @@ public sealed partial class ShelfRow : UserControl
 		}
 
 		// no row above: let the focus go up to the hero and the title bar
-		return down || FocusManager.TryMoveFocus(FocusNavigationDirection.Up);
+		return down || CardGrid.MoveFocusOut(this, FocusNavigationDirection.Up);
 	}
 
 	private ShelfRow? NeighbourOf(bool down, UIElement root)
