@@ -43,7 +43,7 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 # a running copy of this build locks its files. Each candidate's handle is taken first and kept (the Process object
 # caches it), so its pid cannot go to another process while it is checked, closed, waited for and killed: the path is
 # read for that pid, and WaitForExit and Kill use that same handle
-$running = @(Get-Process FluentFin -ErrorAction SilentlyContinue | Where-Object {
+$running = @(Get-Process Seaglass, FluentFin -ErrorAction SilentlyContinue | Where-Object {
         try { $null = $_.Handle; $_.Path -eq $exe } catch { $false }
     })
 foreach ($process in $running) {
