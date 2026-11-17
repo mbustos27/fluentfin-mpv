@@ -44,6 +44,26 @@ public static class GlassMode
 		}
 	}
 
+	// read as guarded as HighContrast: on a private desktop the property throws, and the exception would escape through
+	// GlassTheme.Refresh and AmbientBackdropView.UpdateMode. When it cannot be read, the effects and animations count as on.
+	private static bool AdvancedEffects
+	{
+		get
+		{
+			try { return _ui.AdvancedEffectsEnabled; }
+			catch (Exception) { return true; }
+		}
+	}
+
+	private static bool Animations
+	{
+		get
+		{
+			try { return _ui.AnimationsEnabled; }
+			catch (Exception) { return true; }
+		}
+	}
+
 	public static event EventHandler? Changed;
 
 	/// <summary>The mode Settings forces, or null for automatic.</summary>
@@ -63,13 +83,13 @@ public static class GlassMode
 	}
 
 	public static GlassModeKind Automatic =>
-		HighContrast || !_ui.AdvancedEffectsEnabled ? GlassModeKind.Solid
-		: !_ui.AnimationsEnabled ? GlassModeKind.Reduced
+		HighContrast || !AdvancedEffects ? GlassModeKind.Solid
+		: !Animations ? GlassModeKind.Reduced
 		: GlassModeKind.Full;
 
 	/// <summary>High contrast always wins over <see cref="Override"/>: it needs the system colours.</summary>
 	public static GlassModeKind Current => HighContrast ? GlassModeKind.Solid : _override ?? Automatic;
 
 	/// <summary>Motion beyond simple fades (lift, tilt, auto-advance): only in Full, never with Windows' animations off.</summary>
-	public static bool MotionAllowed => Current == GlassModeKind.Full && _ui.AnimationsEnabled;
+	public static bool MotionAllowed => Current == GlassModeKind.Full && Animations;
 }
