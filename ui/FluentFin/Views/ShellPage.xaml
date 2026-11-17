@@ -48,6 +48,39 @@
                 Content="Settings"
                 Icon="{ui:SymbolIcon Symbol=Setting}" />
         </NavigationView.FooterMenuItems>
-        <Frame x:Name="NavigationFrame" x:FieldModifier="Public" />
+        <!--  Seaglass: the opt-in update notice (Settings > Check for updates): quiet, above the page, closable, never over the player  -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <InfoBar
+                x:Name="UpdateBar"
+                Margin="16,8,16,0"
+                Closed="OnUpdateBarClosed"
+                IsClosable="True"
+                IsOpen="False"
+                Severity="Informational"
+                Visibility="{x:Bind Chrome.IsNavigationVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <InfoBar.ActionButton>
+                    <Button
+                        x:Name="UpdateInstallButton"
+                        AutomationProperties.Name="Download and install the update"
+                        Click="OnUpdateInstallClick"
+                        Content="Download and install" />
+                </InfoBar.ActionButton>
+                <InfoBar.Content>
+                    <HyperlinkButton
+                        Padding="0"
+                        AutomationProperties.Name="Release notes"
+                        Click="OnUpdateNotesClick"
+                        Content="Release notes" />
+                </InfoBar.Content>
+            </InfoBar>
+            <Frame
+                x:Name="NavigationFrame"
+                Grid.Row="1"
+                x:FieldModifier="Public" />
+        </Grid>
     </NavigationView>
 </Page>

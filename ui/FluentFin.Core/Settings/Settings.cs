@@ -30,6 +30,12 @@ public interface ISettings
 	/// <summary>Seaglass: see <see cref="SettingKeys.Glass"/>.</summary>
 	GlassChoice Glass { get; set; }
 
+	/// <summary>Seaglass: see <see cref="SettingKeys.CheckForUpdates"/>.</summary>
+	bool CheckForUpdates { get; set; }
+
+	/// <summary>Seaglass: see <see cref="SettingKeys.UpdateState"/>.</summary>
+	string UpdateState { get; set; }
+
 	void ListenToChanges();
 
 	void SaveServerDetails();
@@ -65,6 +71,18 @@ public partial class Settings(ILocalSettingsService localSettingsService, MediaP
 		// a stored value that is no longer a choice (a hand-edited file) reads as Automatic
 		get => Enum.IsDefined(localSettingsService.ReadSetting(SettingKeys.Glass)) ? localSettingsService.ReadSetting(SettingKeys.Glass) : GlassChoice.Automatic;
 		set => localSettingsService.SaveSetting(SettingKeys.Glass, value);
+	}
+
+	public bool CheckForUpdates
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.CheckForUpdates);
+		set => localSettingsService.SaveSetting(SettingKeys.CheckForUpdates, value);
+	}
+
+	public string UpdateState
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.UpdateState) ?? "";
+		set => localSettingsService.SaveSetting(SettingKeys.UpdateState, value ?? "");
 	}
 
 	public bool ShowSkipPrompt

@@ -216,6 +216,15 @@
 
                     </StackPanel>
                 </ContentControl>
+                <!--  Seaglass: the opt-in update notice. Off by default; nothing is sent until it is on  -->
+                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
+                    <ctk:SettingsCard
+                        Description="Once a day Seaglass asks GitHub whether a newer version is out. Nothing else is sent. Off by default."
+                        Header="Check for updates"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE895;}">
+                        <ToggleSwitch AutomationProperties.Name="Check for updates" IsOn="{x:Bind ViewModel.CheckForUpdates, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                </ContentControl>
                 <!--  Seaglass: the shortcut sheet (also on ? anywhere, and in the player)  -->
                 <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
                     <ctk:SettingsCard
