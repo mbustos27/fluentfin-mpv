@@ -131,7 +131,7 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   FluentFin's controls only (mpv's own controls ignore them: the bridge has no field for them,
   v1), and *Play the next episode automatically* is the
   server's per-user setting, which the backend does not read (it uses its own `auto_play`,
-  on). The cards say so. Needs a bridge field or command, or the backend reading the user's
+  on); since 1.1.3 its card is shown only with Windows Media Player, which follows it. The cards say so. Needs a bridge field or command, or the backend reading the user's
   configuration at `connect`.
 - **The mpv loading screen ends when the backend takes `play`**: from then on mpv's window
   covers the page while the item opens (PlaybackInfo, stream start), black until the first

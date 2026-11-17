@@ -4,12 +4,10 @@ using FluentFin.Dialogs.ViewModels;
 using FluentFin.Services;
 using Jellyfin.Sdk.Generated.Models;
 using Microsoft.UI.Xaml.Controls;
-using Windows.ApplicationModel.DataTransfer;
 
 namespace FluentFin.Dialogs;
 
-public partial class DialogCommands(IContentDialogService dialogService,
-									IJellyfinClient jellyfinClient)
+public partial class DialogCommands(IContentDialogService dialogService)
 {
 	[RelayCommand]
 	private async Task IdentifyDialog(BaseItemDto dto)
@@ -86,18 +84,8 @@ public partial class DialogCommands(IContentDialogService dialogService,
 		await dialogService.ShowDialog(vm, dialog => CloseOnlyOnCloseButtonClick(dialog, vm));
 	}
 
-	[RelayCommand]
-	private void CopyUrlToClipboard(BaseItemDto dto)
-	{
-		if (jellyfinClient.GetStreamUrl(dto) is not { } uri)
-		{
-			return;
-		}
-
-		var package = new DataPackage();
-		package.SetText(uri.ToString());
-		Clipboard.SetContent(package);
-	}
+	// Seaglass 1.1.3: no "Copy Download URL" (CopyUrlToClipboard): the URL carries the access token (api_key), and the
+	// clipboard is readable by every app (Core\ItemMenu)
 
 	[RelayCommand]
 	private async Task ManageLibraryDialog(VirtualFolderInfo info)

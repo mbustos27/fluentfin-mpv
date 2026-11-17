@@ -1,13 +1,27 @@
-﻿using System.Linq.Expressions;
+﻿using System.Windows.Input;
+using CommunityToolkit.Mvvm.Input;
 using FluentFin.Core;
+using FluentFin.Dialogs;
 using Jellyfin.Sdk.Generated.Models;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 
 namespace FluentFin.Converters;
 
+/// <summary>
+/// An item's More menu. Seaglass 1.1.3: its entries come from <see cref="ItemMenu"/> (every one does something, the
+/// administrative ones only for administrators), and every entry runs through <see cref="ItemMenu.RunAsync"/>, so Delete
+/// asks first, naming the item. No entry is wired to a command directly.
+/// </summary>
 public partial class JellyfinFlyoutConverter : IValueConverter
 {
+	/// <summary>
+	/// Seaglass 1.1.3: cards set this. A card is one keyboard stop and its menu is the keyboard's way to play it; item pages
+	/// and episode rows have a Play button of their own, so their menus do not repeat it.
+	/// </summary>
+	public bool IncludePlay { get; set; }
+
 	public object? Convert(object value, Type targetType, object parameter, string language)
 	{
 		if (value is not BaseItemDto dto)
@@ -15,26 +29,24 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 			return null;
 		}
 
-		if (dto.Type is not { } type)
+		var groups = Groups(dto, IncludePlay);
+		if (groups.Count == 0)
 		{
 			return null;
 		}
 
 		var flyout = new MenuBarItemFlyout();
-
-		foreach (var item in GetPlayItems(dto, type))
+		foreach (var group in groups)
 		{
-			flyout.Items.Add(item);
-		}
+			if (flyout.Items.Count > 0)
+			{
+				flyout.Items.Add(new MenuFlyoutSeparator());
+			}
 
-		foreach (var item in GetDtoItems(dto, type))
-		{
-			flyout.Items.Add(item);
-		}
-
-		foreach (var item in GetMetaDataItems(dto, type))
-		{
-			flyout.Items.Add(item);
+			foreach (var entry in group)
+			{
+				flyout.Items.Add(Make(entry, dto));
+			}
 		}
 
 		return flyout;
@@ -45,206 +57,79 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 		throw new NotSupportedException();
 	}
 
-	private static IEnumerable<MenuFlyoutItemBase> GetMetaDataItems(BaseItemDto dto, BaseItemDto_Type type)
+	/// <summary>
+	/// Seaglass 1.1.3: a card's More button shows only when its menu has something (a collection or a person has nothing for
+	/// someone who is not an administrator), so it never opens nothing.
+	/// </summary>
+	public static Visibility CardMenuVisibility(BaseItemDto? dto) =>
+		dto is not null && Groups(dto, includePlay: true).Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+	private static IReadOnlyList<IReadOnlyList<ItemMenuEntry>> Groups(BaseItemDto dto, bool includePlay) =>
+		ItemMenu.For(dto, SessionInfo.CurrentUser, includePlay, CanEditSegments());
+
+	// an administrator signed in before the server's plugins were read has no list yet
+	private static bool CanEditSegments() => SessionInfo.CurrentUser?.Policy?.IsAdministrator == true && SessionInfo.Plugins is not null && SessionInfo.CanEditMediaSegments();
+
+	private static MenuFlyoutItem Make(ItemMenuEntry entry, BaseItemDto dto)
 	{
-		yield return new MenuFlyoutItem
+		var item = new MenuFlyoutItem { Text = entry.Text, Icon = IconFor(entry.Command) };
+		item.Click += async (sender, _) =>
 		{
-			Text = "Edit Metadata",
-			Icon = new SymbolIcon { Symbol = Symbol.Edit },
-			Command = App.Dialogs.EditMetadataDialogCommand,
-			CommandParameter = dto
+			var root = (sender as UIElement)?.XamlRoot;
+			await ItemMenu.RunAsync(entry, dto, prompt => ConfirmDialog.AskAsync(root, prompt), Run);
 		};
 
-		yield return new MenuFlyoutItem
-		{
-			Text = "Edit Images",
-			Icon = new FontIcon { Glyph = "\uEE71" },
-			Command = App.Dialogs.EditImagesDialogCommand,
-			CommandParameter = dto
-		};
-
-		if (SessionInfo.CanEditMediaSegments())
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Edit Segments",
-				Icon = new FontIcon { Glyph = "\uE7A8" },
-				Command = App.Commands.NavigateToSegmentsEditorCommand,
-				CommandParameter = dto
-			};
-		}
-
-		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Episode)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Edit Subtitles",
-				Icon = new SymbolIcon { Symbol = Symbol.ClosedCaption },
-				Command = App.Dialogs.EditSubtitlesDialogCommand,
-				CommandParameter = dto
-			};
-		}
-
-		if (type is not BaseItemDto_Type.CollectionFolder)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Identify",
-				Icon = new SymbolIcon { Symbol = Symbol.Edit },
-				Command = App.Dialogs.IdentifyDialogCommand,
-				CommandParameter = dto,
-			};
-		}
-
-		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Episode)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Media Info",
-				Icon = new SymbolIcon { Symbol = Symbol.MusicInfo },
-				Command = App.Dialogs.MediaInfoDialogCommand,
-				CommandParameter = dto,
-			};
-		}
-
-		yield return new MenuFlyoutItem
-		{
-			Text = "Refresh metadata",
-			Icon = new SymbolIcon { Symbol = Symbol.Refresh },
-			Command = App.Dialogs.RefreshMetadataDialogCommand,
-			CommandParameter = dto.Id,
-		};
+		return item;
 	}
 
-	private static IEnumerable<MenuFlyoutItemBase> GetPlayItems(BaseItemDto dto, BaseItemDto_Type type)
+	private static IconElement IconFor(ItemMenuCommand command) => command switch
 	{
-		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Season or BaseItemDto_Type.Series or BaseItemDto_Type.Episode)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Play",
-				Icon = new SymbolIcon { Symbol = Symbol.Play },
-				Command = App.Commands.PlayDtoCommand,
-				CommandParameter = dto
-			};
+		ItemMenuCommand.Play => new SymbolIcon { Symbol = Symbol.Play },
+		ItemMenuCommand.ToggleWatched => new FontIcon { Glyph = "" },
+		ItemMenuCommand.ToggleFavorite => new FontIcon { Glyph = "" },
+		ItemMenuCommand.ResetWatchProgress => new FontIcon { Glyph = "" },
+		ItemMenuCommand.MediaInfo => new SymbolIcon { Symbol = Symbol.MusicInfo },
+		ItemMenuCommand.EditMetadata => new SymbolIcon { Symbol = Symbol.Edit },
+		ItemMenuCommand.EditImages => new FontIcon { Glyph = "" },
+		ItemMenuCommand.EditSegments => new FontIcon { Glyph = "" },
+		ItemMenuCommand.EditSubtitles => new SymbolIcon { Symbol = Symbol.ClosedCaption },
+		ItemMenuCommand.Identify => new SymbolIcon { Symbol = Symbol.Edit },
+		ItemMenuCommand.RefreshMetadata => new SymbolIcon { Symbol = Symbol.Refresh },
+		ItemMenuCommand.Delete => new SymbolIcon { Symbol = Symbol.Delete },
+		_ => new FontIcon { Glyph = "" },
+	};
 
-			yield return new MenuFlyoutItem
-			{
-				Text = "Play On",
-				Icon = new FontIcon { Glyph = "\uE8AF" },
-				Command = App.Dialogs.PlayOnSessionCommand,
-				CommandParameter = dto
-			};
-		}
-
-		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Episode)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Play all from here",
-				Icon = new SymbolIcon { Symbol = Symbol.Play }
-			};
-
-
-			if(dto.UserData?.PlaybackPositionTicks is > 0 && dto.Id is { } id)
-			{
-				yield return new MenuFlyoutItem
-				{
-					Text = "Reset Watch Progress",
-					Icon = new FontIcon { Glyph = "\uED62" },
-					Command = App.Commands.ResetWatchProgressCommand,
-					CommandParameter = id
-				};
-			}
-		}
-
-		if (type is BaseItemDto_Type.Season or BaseItemDto_Type.Series or BaseItemDto_Type.CollectionFolder)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Shuffle",
-				Icon = new SymbolIcon { Symbol = Symbol.Shuffle }
-			};
-		}
-
-		// Seaglass scrolling: a card is one keyboard stop, so what its hover buttons do is in the menu too (the menu key or Shift+F10)
-		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Season or BaseItemDto_Type.Series or BaseItemDto_Type.Episode)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = dto.UserData?.Played == true ? "Mark as unwatched" : "Mark as watched",
-				Icon = new FontIcon { Glyph = "" },
-				Command = App.Commands.ToggleWatchedCommand,
-				CommandParameter = dto,
-			};
-
-			yield return new MenuFlyoutItem
-			{
-				Text = dto.UserData?.IsFavorite == true ? "Remove from favorites" : "Add to favorites",
-				Icon = new FontIcon { Glyph = "" },
-				Command = App.Commands.ToggleFavoriteCommand,
-				CommandParameter = dto,
-			};
-		}
-
-		yield return new MenuFlyoutSeparator();
-	}
-
-	private static IEnumerable<MenuFlyoutItemBase> GetDtoItems(BaseItemDto dto, BaseItemDto_Type type)
+	// what each entry does once ItemMenu.RunAsync lets it run (after the yes, for Delete)
+	private static Task Run(ItemMenuCommand command, BaseItemDto dto)
 	{
-
-		yield return new MenuFlyoutItem
+		(ICommand? Action, object? Parameter) target = command switch
 		{
-			Text = "Add to playlist",
-			Icon = new FontIcon { Glyph = "\uECC8" }
+			ItemMenuCommand.Play => (App.Commands.PlayDtoCommand, dto),
+			ItemMenuCommand.ToggleWatched => (App.Commands.ToggleWatchedCommand, dto),
+			ItemMenuCommand.ToggleFavorite => (App.Commands.ToggleFavoriteCommand, dto),
+			ItemMenuCommand.ResetWatchProgress => (App.Commands.ResetWatchProgressCommand, dto.Id),
+			ItemMenuCommand.MediaInfo => (App.Dialogs.MediaInfoDialogCommand, dto),
+			ItemMenuCommand.EditMetadata => (App.Dialogs.EditMetadataDialogCommand, dto),
+			ItemMenuCommand.EditImages => (App.Dialogs.EditImagesDialogCommand, dto),
+			ItemMenuCommand.EditSegments => (App.Commands.NavigateToSegmentsEditorCommand, dto),
+			ItemMenuCommand.EditSubtitles => (App.Dialogs.EditSubtitlesDialogCommand, dto),
+			ItemMenuCommand.Identify => (App.Dialogs.IdentifyDialogCommand, dto),
+			ItemMenuCommand.RefreshMetadata => (App.Dialogs.RefreshMetadataDialogCommand, dto.Id),
+			ItemMenuCommand.Delete => (App.Commands.DeleteItemCommand, dto),
+			_ => (null, null),
 		};
+		var (action, parameter) = target;
 
-		if (type is not BaseItemDto_Type.CollectionFolder)
+		if (action is IAsyncRelayCommand asyncAction)
 		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Add to collection",
-				Icon = new SymbolIcon { Symbol = Symbol.Play }
-			};
+			return asyncAction.CanExecute(parameter) ? asyncAction.ExecuteAsync(parameter) : Task.CompletedTask;
 		}
 
-		if (type is BaseItemDto_Type.Movie)
+		if (action?.CanExecute(parameter) == true)
 		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Copy Download URL",
-				Icon = new SymbolIcon { Symbol = Symbol.Copy },
-				Command = App.Dialogs.CopyUrlToClipboardCommand,
-				CommandParameter = dto,
-			};
-
-
-			if (SessionInfo.CurrentUser?.Policy?.IsAdministrator == true)
-			{
-				yield return new MenuFlyoutItem
-				{
-					Text = "Delete Media",
-					Icon = new SymbolIcon { Symbol = Symbol.Delete },
-					Command = App.Commands.DeleteItemCommand,
-					CommandParameter = dto,
-				};
-			}
+			action.Execute(parameter);
 		}
 
-		if (type is BaseItemDto_Type.Series or BaseItemDto_Type.Season)
-		{
-			if (SessionInfo.CurrentUser?.Policy?.IsAdministrator == true)
-			{
-				yield return new MenuFlyoutItem
-				{
-					Text = "Delete Series",
-					Icon = new SymbolIcon { Symbol = Symbol.Delete },
-					Command = App.Commands.DeleteItemCommand,
-					CommandParameter = dto,
-				};
-			}
-		}
-
-		yield return new MenuFlyoutSeparator();
+		return Task.CompletedTask;
 	}
 }

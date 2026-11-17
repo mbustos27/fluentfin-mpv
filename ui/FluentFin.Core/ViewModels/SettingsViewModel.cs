@@ -56,7 +56,8 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 
 	public static IReadOnlyList<MediaPlayerChoice> AllMediaPlayers { get; } =
 	[
-		new(MediaPlayerType.Mpv, "MPV (jellyfin-mpv-shim)"),
+		// Seaglass 1.1.3: the player's name, not the backend's (UX review, Settings)
+		new(MediaPlayerType.Mpv, "mpv"),
 		new(MediaPlayerType.Vlc, "VLC"),
 		new(MediaPlayerType.Flyleaf, "Flyleaf"),
 		new(MediaPlayerType.WindowsMediaPlayer, "Windows Media Player"),
@@ -66,6 +67,12 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	public static IReadOnlyList<MediaPlayerChoice> MediaPlayers { get; } = OfferedPlayers(MediaPlayerAvailability.ForThisApp);
 
 	public static IReadOnlyList<MediaPlayerChoice> OfferedPlayers(MediaPlayerAvailability players) => [.. AllMediaPlayers.Where(x => players.IsAvailable(x.Type))];
+
+	/// <summary>Seaglass 1.1.3: the Player list is shown only when there is a choice (a copy that can run one player has none).</summary>
+	public static bool HasPlayerChoice { get; } = OffersAChoice(MediaPlayerAvailability.ForThisApp);
+
+	/// <summary>Whether <paramref name="players"/> leaves more than one player to choose from.</summary>
+	public static bool OffersAChoice(MediaPlayerAvailability players) => OfferedPlayers(players).Count > 1;
 
 	private bool _loadingPlayer;
 
@@ -82,6 +89,7 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 				}
 				OnPropertyChanged(nameof(SelectedMediaPlayer));
 				OnPropertyChanged(nameof(IsMpvSelected));
+				OnPropertyChanged(nameof(FollowsAutoPlay));
 			}
 		}
 	}
@@ -99,6 +107,12 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	}
 
 	public bool IsMpvSelected => MediaPlayerType == MediaPlayerType.Mpv;
+
+	/// <summary>
+	/// Seaglass 1.1.3: "Play the next episode automatically" is shown only for a player that follows it (Windows Media Player,
+	/// PlaybackPreferences.PlaysNextItem); the mpv backend has its own auto_play, so with mpv the toggle did nothing.
+	/// </summary>
+	public bool FollowsAutoPlay => !IsMpvSelected;
 
 	/// <summary>Seaglass: the choices for Settings > Appearance > Glass.</summary>
 	public static IReadOnlyList<GlassChoiceItem> GlassChoices { get; } =
@@ -539,10 +553,52 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		}
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.3 (UX review, prioritised fix 2): asks before a saved server or sign-in goes; set by the page (a dialog
+	/// whose default button is Cancel). Without it nothing is removed.
+	/// </summary>
+	public Func<ConfirmPrompt, Task<bool>>? Confirm { get; set; }
+
+	private async Task<bool> Asked(ConfirmPrompt prompt) => Confirm is { } confirm && await confirm(prompt);
+
+	private static string Named(SavedServer server) =>
+		!string.IsNullOrWhiteSpace(server.DisplayName) ? server.DisplayName.Trim()
+		: !string.IsNullOrWhiteSpace(server.PublicUrl) ? server.PublicUrl.Trim()
+		: "this server";
+
+	/// <summary>What Remove server asks: the server is named, and what goes (on this PC only).</summary>
+	public static ConfirmPrompt RemoveServerPrompt(SavedServer server) => new(
+		$"Remove {Named(server)}?",
+		server.Users.Count switch
+		{
+			0 => "Seaglass forgets this server. Nothing changes on the server; sign in to add it again.",
+			1 => $"Seaglass forgets this server and the sign-in saved for {server.Users[0].Username}, with its saved home page. Nothing changes on the server; sign in to add it again.",
+			var n => $"Seaglass forgets this server and its {n} saved sign-ins, with their saved home pages. Nothing changes on the server; sign in to add it again.",
+		},
+		"Remove");
+
+	/// <summary>What Remove asks for one saved sign-in: the user and the server are named.</summary>
+	public static ConfirmPrompt RemoveUserPrompt(SavedServer server, SavedUser user) => new(
+		$"Remove {user.Username} from {Named(server)}?",
+		$"Seaglass forgets the sign-in saved for {user.Username} on this PC, with its saved home page. The account on the server is not changed.",
+		"Remove");
+
+	/// <summary>Seaglass 1.1.3: the accessible name of a saved sign-in's Remove button ("Remove alice").</summary>
+	public static string RemoveUserLabel(string username) => $"Remove {username}";
+
+	/// <summary>Seaglass 1.1.3: the accessible name of a saved server's Remove button ("Remove server Home").</summary>
+	public static string RemoveServerLabel(string displayName) => string.IsNullOrWhiteSpace(displayName) ? "Remove server" : $"Remove server {displayName.Trim()}";
+
 	// fluentfin-mpv: a saved login that goes takes its saved home page (watch history) with it (HomeCache.ForgetLogin)
+	// Seaglass 1.1.3: only after the user said yes to RemoveServerPrompt
 	[RelayCommand]
 	private async Task DeleteServer(SavedServer server)
 	{
+		if (!await Asked(RemoveServerPrompt(server)))
+		{
+			return;
+		}
+
 		Servers.Remove(server);
 		foreach (var user in server.Users.ToList())
 		{
@@ -550,10 +606,47 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		}
 	}
 
-	/// <summary>fluentfin-mpv: Delete User on a saved server: the saved login goes, and the home page saved for it.</summary>
-	public async Task RemoveSavedUser(SavedServer server, SavedUser user)
+	/// <summary>
+	/// fluentfin-mpv: Delete User on a saved server: the saved login goes, and the home page saved for it. Seaglass 1.1.3: only
+	/// after the user said yes to <see cref="RemoveUserPrompt"/>; true when it went.
+	/// </summary>
+	public async Task<bool> RemoveSavedUser(SavedServer server, SavedUser user)
 	{
+		if (!await Asked(RemoveUserPrompt(server, user)))
+		{
+			return false;
+		}
+
 		server.Users.Remove(user);
 		await homeCache.ForgetLogin(server.Id, user.Username);
+		return true;
 	}
+
+	// ---- Seaglass 1.1.3: Settings > About (UX review, prioritised fixes 1, 6 and 9)
+
+	/// <summary>"Seaglass 1.1.3", the first line of About.</summary>
+	public static string AboutTitle { get; } = AboutTitleFor(AppVersion.Current);
+
+	public static string AboutTitleFor(string version) => $"{AppIdentity.Name} {version}";
+
+	/// <summary>This project on GitHub: Contribute.</summary>
+	public const string ContributeUrl = Updates.UpdateSource.RepositoryUrl;
+
+	/// <summary>A new issue on this project: Report a problem.</summary>
+	public const string ReportProblemUrl = ContributeUrl + "/issues/new";
+
+	/// <summary>The GNU GPL 3.0, as this project ships it.</summary>
+	public const string LicenseUrl = ContributeUrl + "/blob/main/LICENSE";
+
+	/// <summary>The two projects Seaglass is built from (docs/UPSTREAM.md).</summary>
+	public const string FluentFinUrl = "https://github.com/insomniachi/FluentFin";
+
+	public const string ShimUrl = "https://github.com/jellyfin/jellyfin-mpv-shim";
+
+	// for the page's HyperlinkButtons (x:Bind does not turn a string into a Uri)
+	public static Uri LicenseUri { get; } = new(LicenseUrl);
+
+	public static Uri FluentFinUri { get; } = new(FluentFinUrl);
+
+	public static Uri ShimUri { get; } = new(ShimUrl);
 }

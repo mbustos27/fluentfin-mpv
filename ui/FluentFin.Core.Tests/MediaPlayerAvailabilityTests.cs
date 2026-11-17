@@ -26,7 +26,7 @@ public sealed class MediaPlayerAvailabilityTests : IDisposable
 		var release = Folder(vlc: false, ffmpeg: false);
 
 		Assert.Equal([MediaPlayerType.Mpv, MediaPlayerType.WindowsMediaPlayer], SettingsViewModel.OfferedPlayers(release).Select(x => x.Type));
-		Assert.Equal("MPV (jellyfin-mpv-shim)", SettingsViewModel.OfferedPlayers(release)[0].Name);
+		Assert.Equal("mpv", SettingsViewModel.OfferedPlayers(release)[0].Name);
 	}
 
 	[Fact]

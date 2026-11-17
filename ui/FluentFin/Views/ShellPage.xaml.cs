@@ -3,9 +3,7 @@ using FluentFin.Contracts.Services;
 using FluentFin.Services;
 using FluentFin.ViewModels;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using ReactiveUI;
-using Windows.System;
 
 namespace FluentFin.Views;
 
@@ -33,13 +31,17 @@ public sealed partial class ShellPage : Page
 		ViewModel.NavigationService.Frame = NavigationFrame;
 		ViewModel.NavigationViewService.Initialize(NavigationViewControl);
 
+		// Seaglass 1.1.3: a page off the rail (Selected null) passes through too, so RailSelection can unmark Settings
 		ViewModel.WhenAnyValue(x => x.Selected)
-			.WhereNotNull()
-			.Where(x => x is NavigationViewItem)
+			.Where(x => x is null or NavigationViewItem)
 			.ObserveOn(RxSchedulers.MainThreadScheduler)
 			.Subscribe(item =>
 			{
-				NavigationViewControl.SelectedItem = NavigationViewControl.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(x => x.Content == ((NavigationViewItem)item).Content);
+				// Seaglass 1.1.3: the footer too, so Settings is marked on the rail while it is open
+				var target = item is NavigationViewItem nav
+					? NavigationViewControl.MenuItems.Concat(NavigationViewControl.FooterMenuItems).OfType<NavigationViewItem>().FirstOrDefault(x => x.Content == nav.Content)
+					: null;
+				NavigationViewControl.SelectedItem = RailSelection.Next(NavigationViewControl.SelectedItem, target, x => NavigationViewControl.FooterMenuItems.Contains(x));
 			});
 	}
 
@@ -93,11 +95,5 @@ public sealed partial class ShellPage : Page
 		{
 			_updates.Coordinator.Dismiss();
 		}
-	}
-
-	private async void OnContributeTapped(object sender, TappedRoutedEventArgs e)
-	{
-		// fluentfin-mpv: this project's repository (issues and contributions go here; upstream is credited in its README)
-		await Launcher.LaunchUriAsync(new Uri("https://github.com/mbustos27/fluentfin-mpv"));
 	}
 }

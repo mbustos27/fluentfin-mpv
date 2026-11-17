@@ -43,6 +43,8 @@ public sealed class SavedLoginRemovalTests : IDisposable
 		var backend = new Mock<IMpvBackend>();
 		backend.SetupGet(x => x.StatusChanged).Returns(Observable.Never<MpvBackendStatus>());
 		_settings = new SettingsViewModel(settings.Object, backend.Object, Mock.Of<IJellyfinClient>(), _cache);
+		// Seaglass 1.1.3: removing asks first; these tests answer yes (SettingsRemoveAsksTests has the other answers)
+		_settings.Confirm = _ => Task.FromResult(true);
 	}
 
 	public void Dispose()
