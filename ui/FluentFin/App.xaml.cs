@@ -35,7 +35,7 @@ namespace FluentFin;
 
 public partial class App : Application
 {
-	public IHost Host { get; }
+	public IHost Host { get; private set; } = null!;
 
 	private bool _isClosing;
 
@@ -69,6 +69,33 @@ public partial class App : Application
 
 
 	public App()
+	{
+		// Seaglass: a crash here comes before the log exists and WinUI ends the process without a word; leave a note in
+		// %TEMP%\Seaglass-startup-crash.txt so it can be told what happened
+		try
+		{
+			Construct();
+		}
+		catch (Exception ex)
+		{
+			WriteStartupCrash(ex);
+			throw;
+		}
+	}
+
+	internal static void WriteStartupCrash(Exception ex)
+	{
+		try
+		{
+			File.WriteAllText(Path.Combine(Path.GetTempPath(), "Seaglass-startup-crash.txt"), $"{DateTime.Now:O}{Environment.NewLine}{ex}");
+		}
+		catch (Exception)
+		{
+			// nowhere to say it
+		}
+	}
+
+	private void Construct()
 	{
 		// ReactiveUI 23+ must be initialized explicitly before any Rx/ReactiveUI type is touched
 		RxAppBuilder.CreateReactiveUIBuilder().WithWinUI().BuildApp();
@@ -249,7 +276,9 @@ public partial class App : Application
 
 	// fluentfin-mpv: a --data-dir with no folder or a mistyped one stops the start (the default folder would take a test run's
 	// data), and so does a data folder that cannot be made, with a message instead of a crash before any window
-	private static bool _legacyCopyFailed;
+	// an instance field: setting a static one in the constructor ran App's static initializer (which creates MainWindow, which asks
+	// for services) before the host existed, and every start crashed (1.1.0 verify)
+	private bool _legacyCopyFailed;
 
 	private static Core.KnownFolders StartupFolders(string? useInstead)
 	{
