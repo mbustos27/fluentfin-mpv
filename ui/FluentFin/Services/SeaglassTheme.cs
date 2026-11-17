@@ -28,6 +28,9 @@ public static class SeaglassTheme
 	];
 
 	private static ResourceDictionary? _dark;
+	private static ResourceDictionary? _light;
+	private static SeaglassPalette _fromLight = SeaglassPalette.Build(SeaglassPalette.DefaultHue, light: true);
+	private static SeaglassPalette _toLight = _fromLight;
 	private static DispatcherQueueTimer? _timer;
 	private static SeaglassPalette _from = SeaglassPalette.Build(SeaglassPalette.DefaultHue);
 	private static SeaglassPalette _to = _from;
@@ -39,7 +42,8 @@ public static class SeaglassTheme
 
 	public static void Attach()
 	{
-		_dark = FindDark(Application.Current.Resources);
+		_dark = FindTheme(Application.Current.Resources, "Dark");
+		_light = FindTheme(Application.Current.Resources, "Light");
 		var queue = DispatcherQueue.GetForCurrentThread();
 		_timer = queue.CreateTimer();
 		_timer.Interval = TimeSpan.FromMilliseconds(33);
@@ -69,24 +73,60 @@ public static class SeaglassTheme
 		}
 
 		_hash = hash;
+		var uri = AmbientBackdrop.Current;
 		var target = SeaglassPalette.FromBlurHash(hash, solid);
+		if (hash is null && uri is not null)
+		{
+			if (_sampledUri == uri && _sampled is { } known)
+			{
+				target = SeaglassPalette.Build(known, solid);
+			}
+			else if (_sampledUri != uri)
+			{
+				// no BlurHash: the default hue now, and the artwork itself sampled down to a few pixels meanwhile
+				_sampledUri = uri;
+				_sampled = null;
+				_ = SampleAndFollow(uri);
+			}
+		}
+
 		_from = Blend(_from, _to, _step);
+		_fromLight = Blend(_fromLight, _toLight, _step);
 		_to = target;
+		_toLight = SeaglassPalette.Build(target.Hue, solid, light: true);
 		_step = 0;
 		if (instant || !SafeMotion.Allowed || _timer is null)
 		{
 			_step = 1;
 			Apply(_to, _to, 1);
+			Apply(_toLight, _toLight, 1);
 			return;
 		}
 
 		_timer.Start();
 	}
 
+	private static double? _sampled;
+	private static Uri? _sampledUri;
+
+	/// <summary>The fallback for artwork with no BlurHash: the hue of the thumbnail sampled to 16x9 (the palette then fades to it).</summary>
+	private static async Task SampleAndFollow(Uri uri)
+	{
+		var cells = await ArtworkSampler.SampleAsync(uri);
+		if (cells is null || AmbientBackdrop.Current != uri || AmbientBackdrop.BlurHash is not null)
+		{
+			return;
+		}
+
+		_sampled = SeaglassPalette.HueFromCells(cells);
+		Follow(force: true);
+	}
+
 	private static void Tick()
 	{
 		_step = Math.Min(1, _step + 33 / FadeTime.TotalMilliseconds);
 		Apply(_from, _to, Ease(_step));
+		Apply(_fromLight, _toLight, Ease(_step));
 		if (_step >= 1)
 		{
 			_timer?.Stop();
@@ -98,16 +138,16 @@ public static class SeaglassTheme
 	/// <summary>The palette part-way between two (kept as a palette: the nearer one's hue and numbers).</summary>
 	private static SeaglassPalette Blend(SeaglassPalette from, SeaglassPalette to, double t) => t >= 1 ? to : t <= 0 ? from : (Ease(t) < 0.5 ? from : to);
 
-	private static ResourceDictionary? FindDark(ResourceDictionary resources)
+	private static ResourceDictionary? FindTheme(ResourceDictionary resources, string theme)
 	{
 		foreach (var merged in resources.MergedDictionaries)
 		{
-			if (merged.ThemeDictionaries.TryGetValue("Dark", out var dark) && dark is ResourceDictionary d && d.ContainsKey("GlassPanelSolidBrush"))
+			if (merged.ThemeDictionaries.TryGetValue(theme, out var dark) && dark is ResourceDictionary d && d.ContainsKey("GlassPanelSolidBrush"))
 			{
 				return d;
 			}
 
-			if (FindDark(merged) is { } nested)
+			if (FindTheme(merged, theme) is { } nested)
 			{
 				return nested;
 			}
@@ -123,7 +163,7 @@ public static class SeaglassTheme
 	/// <summary>Writes the mix of two palettes into the brushes.</summary>
 	private static void Apply(SeaglassPalette a, SeaglassPalette b, double t)
 	{
-		if (_dark is not { } d)
+		if ((a.Light ? _light : _dark) is not { } d)
 		{
 			return;
 		}
@@ -138,6 +178,7 @@ public static class SeaglassTheme
 
 		Solid("GlassPanelSolidBrush", M(a.GlassTint, b.GlassTint, t));
 		Solid("GlassPanelStrongSolidBrush", M(a.ContainerHigh, b.ContainerHigh, t));
+		Solid("GlassPlateBrush", M(a.GlassTint, b.GlassTint, t, b.Solid ? (byte)0xFF : (byte)0x99));
 		Solid("SeaglassAccentBrush", M(a.Accent, b.Accent, t));
 		Solid("SeaglassAccentFillBrush", M(a.Accent, b.Accent, t));
 		Solid("SeaglassAccentForegroundBrush", M(a.OnAccent, b.OnAccent, t));
@@ -164,7 +205,7 @@ public static class SeaglassTheme
 		}
 
 		// the rim: light on the top left, the title's aqua on the bottom right
-		if (d.TryGetValue("GlassStrokeBrush", out var stroke) && stroke is LinearGradientBrush rim && rim.GradientStops.Count >= 3)
+		if (!a.Light && d.TryGetValue("GlassStrokeBrush", out var stroke) && stroke is LinearGradientBrush rim && rim.GradientStops.Count >= 3)
 		{
 			rim.GradientStops[2].Color = M(a.Rim, b.Rim, t, 0x66);
 		}

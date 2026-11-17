@@ -41,6 +41,8 @@
             </LinearGradientBrush>
             <!--  the milk of frosted glass: a little white over the tint  -->
             <SolidColorBrush x:Key="GlassMilkBrush" Color="#10FFFFFF" />
+            <!--  the title plate under a poster (SeaglassTheme tints it per title)  -->
+            <SolidColorBrush x:Key="GlassPlateBrush" Color="#9916262B" />
             <!--  the faint inner glow along a panel's top: light that seems to enter the glass edge  -->
             <LinearGradientBrush x:Key="GlassGlowBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#2EFFFFFF" />
@@ -97,6 +99,7 @@
                 <GradientStop Offset="1" Color="#00FFFFFF" />
             </LinearGradientBrush>
             <SolidColorBrush x:Key="GlassMilkBrush" Color="#14FFFFFF" />
+            <SolidColorBrush x:Key="GlassPlateBrush" Color="#B3F4FAF9" />
             <LinearGradientBrush x:Key="GlassGlowBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#99FFFFFF" />
                 <GradientStop Offset="0.3" Color="#26FFFFFF" />
@@ -132,6 +135,7 @@
             <SolidColorBrush x:Key="GlassGlowBrush" Color="Transparent" />
             <SolidColorBrush x:Key="GlassBevelBrush" Color="Transparent" />
             <SolidColorBrush x:Key="GlassMilkBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="GlassPlateBrush" Color="Transparent" />
             <x:Double x:Key="GlassShadowOpacity">0</x:Double>
             <x:Double x:Key="GlassContactShadowOpacity">0</x:Double>
             <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="Transparent" />
@@ -239,6 +243,7 @@
                 Background="{ThemeResource GlassGlowBrush}"
                 CornerRadius="{TemplateBinding CornerRadius}"
                 IsHitTestVisible="False" />
+            <controls:PanelSheen />
             <Border
                 Margin="1"
                 BorderBrush="{ThemeResource GlassBevelBrush}"

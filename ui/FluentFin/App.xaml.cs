@@ -323,6 +323,12 @@ public partial class App : Application
 
 			// Seaglass: the saved Glass choice, and the glass brushes following GlassMode
 			GlassSetting.Apply(GetService<ISettings>());
+			// the harness's light-theme screenshots (SEAGLASS_THEME=Light|Dark); unset, the app follows Windows
+			if (Enum.TryParse<ElementTheme>(Environment.GetEnvironmentVariable("SEAGLASS_THEME"), true, out var forcedTheme) && forcedTheme != ElementTheme.Default)
+			{
+				((FrameworkElement)MainWindow.Content).RequestedTheme = forcedTheme;
+			}
+
 			GlassTheme.Attach((FrameworkElement)MainWindow.Content);
 			SeaglassTheme.Attach();
 

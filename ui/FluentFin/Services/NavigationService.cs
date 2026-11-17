@@ -137,6 +137,7 @@ public class NavigationService : INavigationService
 	{
 		if (sender is Frame frame)
 		{
+			PageTransition.Play(e.Content);
 			var clearNavigation = (bool)frame.Tag;
 			if (clearNavigation)
 			{

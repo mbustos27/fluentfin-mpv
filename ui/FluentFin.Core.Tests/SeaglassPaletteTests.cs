@@ -49,6 +49,23 @@ public sealed class SeaglassPaletteTests
 		Assert.Equal(1, solid.TintAlpha);
 	}
 
+	[Theory]
+	[InlineData(0)]
+	[InlineData(90)]
+	[InlineData(145)]
+	[InlineData(175)]
+	[InlineData(250)]
+	public void The_light_ladder_has_readable_dark_text_and_a_readable_accent_in_the_worst_case(double hue)
+	{
+		var light = SeaglassPalette.Build(hue, solid: false, light: true);
+		Assert.True(light.Light);
+		Assert.True(light.WorstContrast >= SeaglassPalette.BodyContrast, $"hue {hue}: {light.WorstContrast:0.00}");
+		Assert.True(light.OnSurface.Luminance < light.GlassTint.Luminance);
+		Assert.True(OkLab.Contrast(light.OnAccent.Luminance, light.Accent.Luminance) >= 4.5, "white on the light accent");
+		var solid = SeaglassPalette.Build(hue, solid: true, light: true);
+		Assert.True(solid.WorstContrast >= SeaglassPalette.SmallTextContrast, $"solid {solid.WorstContrast:0.00}");
+	}
+
 	[Fact]
 	public void The_worst_case_is_recomputed_against_a_white_backdrop_that_the_scrim_never_lets_through()
 	{
@@ -103,6 +120,16 @@ public sealed class SeaglassPaletteTests
 		var offset = ((hue - SeaglassPalette.DefaultHue + 540) % 360) - 180;
 		Assert.InRange(offset, SeaglassPalette.HueBelow - 0.001, SeaglassPalette.HueAbove + 0.001);
 		Assert.Equal(hue, SeaglassPalette.ClampToSeaGlass(hue), 6);
+	}
+
+	[Fact]
+	public void Sampled_thumbnail_cells_give_the_same_hue_as_a_hash_of_that_colour()
+	{
+		var orange = (BlurHash.SrgbToLinear(230), BlurHash.SrgbToLinear(120), BlurHash.SrgbToLinear(30));
+		var fromCells = SeaglassPalette.HueFromCells(Enumerable.Repeat(orange, 16 * 9).ToArray());
+		Assert.Equal(SeaglassPalette.HueFromBlurHash(SolidHash(230, 120, 30)), fromCells, 1);
+		Assert.Equal(SeaglassPalette.DefaultHue, SeaglassPalette.HueFromCells([]));
+		Assert.Equal(SeaglassPalette.DefaultHue, SeaglassPalette.HueFromCells(Enumerable.Repeat((0.2, 0.2, 0.2), 144).ToArray()));
 	}
 
 	/// <summary>A BlurHash of one flat colour (1x1 components: the size flag, a zero maximum, the DC).</summary>

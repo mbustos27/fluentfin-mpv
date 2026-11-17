@@ -17,10 +17,12 @@
         <Grid x:Name="Drift" SizeChanged="OnDriftSizeChanged">
             <Image
                 x:Name="BackImage"
+                AutomationProperties.AccessibilityView="Raw"
                 Opacity="0"
                 Stretch="UniformToFill" />
             <Image
                 x:Name="FrontImage"
+                AutomationProperties.AccessibilityView="Raw"
                 ImageOpened="OnFrontImageOpened"
                 Opacity="0"
                 Stretch="UniformToFill" />

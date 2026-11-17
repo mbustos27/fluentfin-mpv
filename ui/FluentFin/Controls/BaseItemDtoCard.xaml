@@ -264,10 +264,25 @@
                 CornerRadius="{StaticResource GlassCardCornerRadius}"
                 IsHitTestVisible="False"
                 Visibility="Collapsed" />
+
+            <!--  Seaglass: the glass frame: a lit rim around the artwork, which stays sharp and opaque inside it  -->
+            <Border
+                AutomationProperties.AccessibilityView="Raw"
+                BorderBrush="{ThemeResource GlassStrokeBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource GlassCardCornerRadius}"
+                IsHitTestVisible="False" />
         </Grid>
-        <StackPanel
+        <!--  the glass title plate: a tinted strip (no acrylic per card) with the rim, under the frame  -->
+        <Border
             Grid.Row="1"
-            Padding="2,10,2,2"
+            Margin="0,8,0,0"
+            Background="{ThemeResource GlassPlateBrush}"
+            BorderBrush="{ThemeResource GlassStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="10">
+        <StackPanel
+            Padding="10,6,10,6"
             Spacing="2">
 
             <TextBlock
@@ -285,5 +300,6 @@
                 TextWrapping="NoWrap"
                 Visibility="{Binding RelativeSource={RelativeSource Mode=Self}, Path=Text, Converter={StaticResource EmptyStringVisibilityConverter}}" />
         </StackPanel>
+        </Border>
     </Grid>
 </UserControl>
