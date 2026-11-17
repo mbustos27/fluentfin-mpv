@@ -247,7 +247,18 @@ function Open-Library([string]$Name) {
     $script:page = "library:$Name"
 }
 # an item page is up once its title (a Text with the item's exact name) shows
-function Wait-ItemPage([string]$Name, [double]$Seconds = 20) { Wait-Ui -Name $Name -Type 'Text' -Seconds $Seconds }
+# the item page's title: its text, or (Seaglass) the logo image that stands in for it, named after the item; matched by its id
+# so a card of the same name on the page being left does not count
+function Wait-ItemPage([string]$Name, [double]$Seconds = 20) {
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    do {
+        $hit = Find-Ui -Name $Name -Type 'Text'
+        if (-not $hit) { $hit = Find-Ui -Name $Name -Id 'LogoImage' }
+        if ($hit) { return $hit }
+        Start-Sleep -Milliseconds 150
+    } while ((Get-Date) -lt $deadline)
+    $null
+}
 
 # the video window: a visible child window of FluentFin's that belongs to the mpv this run started (mpv's own controls)
 function Get-VideoWindow {

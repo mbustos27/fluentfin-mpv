@@ -48,9 +48,10 @@
                 MaxWidth="480"
                 MaxHeight="160"
                 HorizontalAlignment="Left"
-                AutomationProperties.AccessibilityView="Raw"
+                AutomationProperties.HeadingLevel="Level1"
                 Stretch="Uniform"
                 Visibility="Collapsed" />
+            <!--  the logo stands in for the title (TitleText collapses): Narrator reads it by the item's name (set in code), as the page's heading  -->
             <TextBlock
                 x:Name="TitleText"
                 AutomationProperties.HeadingLevel="Level1"
