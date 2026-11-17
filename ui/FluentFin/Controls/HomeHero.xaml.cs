@@ -25,6 +25,7 @@ public sealed partial class HomeHero : UserControl
 	private bool _pointerIn;
 	private bool _focusIn;
 	private Uri? _shown;
+	private string? _shownHash;
 
 	[GeneratedDependencyProperty]
 	public partial IReadOnlyList<HeroSlide>? Slides { get; set; }
@@ -41,7 +42,7 @@ public sealed partial class HomeHero : UserControl
 			// the backdrop is set only while the hero is on screen (Show), so coming back to Home puts its slide behind it again
 			if (_shown is not null)
 			{
-				AmbientBackdrop.Set(_shown);
+				AmbientBackdrop.Set(_shown, _shownHash);
 			}
 		};
 		Unloaded += (_, _) =>
@@ -132,9 +133,10 @@ public sealed partial class HomeHero : UserControl
 		var next = new BitmapImage { DecodePixelWidth = BackdropWidth };
 		next.UriSource = backdrop;
 		_shown = backdrop;
+		_shownHash = slide.BackdropBlurHash;
 		if (IsLoaded) // a hero that is off screen must not overwrite another page's backdrop; Loaded sets it again
 		{
-			AmbientBackdrop.Set(backdrop);
+			AmbientBackdrop.Set(backdrop, slide.BackdropBlurHash);
 		}
 
 		// the new image fades in over the old one; the old one then takes its place

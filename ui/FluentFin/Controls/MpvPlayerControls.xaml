@@ -9,6 +9,7 @@
     x:Class="FluentFin.Controls.MpvPlayerControls"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     x:Name="Self"
@@ -173,26 +174,53 @@
         </Grid>
 
         <!--  the wheel's volume, shown briefly, also while the bars are hidden  -->
+        <!--
+            the volume indicator (wheel, volume keys, mute): glass, larger, the fill glides between levels and it fades (and
+            scales) in and out. Its place is the same as before. Over the video there is nothing to frost, so the tint is dense
+            and the rim and grain do the glass.
+        -->
         <Border
             x:Name="VolumeIndicator"
             Margin="0,88,0,0"
-            Padding="18,10"
+            Padding="26,18"
             HorizontalAlignment="Center"
             VerticalAlignment="Top"
-            Background="{ThemeResource GlassPanelStrongBrush}"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="{ThemeResource GlassPanelStrongSolidBrush}"
             BorderBrush="{ThemeResource GlassStrokeBrush}"
             BorderThickness="1"
-            CornerRadius="{StaticResource GlassButtonCornerRadius}"
+            CornerRadius="20"
             IsHitTestVisible="False"
+            SizeChanged="OnVolumeIndicatorSizeChanged"
             Visibility="{x:Bind VisibleIf(Controls.VolumeIndicatorVisible), Mode=OneWay}">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <FontIcon FontSize="18" Glyph="{x:Bind VolumeGlyph(Controls.Volume, Controls.IsMuted), Mode=OneWay}" />
-                <TextBlock
-                    x:Name="VolumeIndicatorText"
-                    VerticalAlignment="Center"
-                    Style="{ThemeResource BodyStrongTextBlockStyle}"
-                    Text="{x:Bind Controls.VolumeText, Mode=OneWay}" />
-            </StackPanel>
+            <Grid>
+                <controls:GrainOverlay />
+                <StackPanel Orientation="Horizontal" Spacing="18">
+                    <FontIcon
+                        VerticalAlignment="Center"
+                        FontSize="34"
+                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                        Glyph="{x:Bind VolumeGlyph(Controls.Volume, Controls.IsMuted), Mode=OneWay}" />
+                    <StackPanel VerticalAlignment="Center" Spacing="10">
+                        <TextBlock
+                            x:Name="VolumeIndicatorText"
+                            FontSize="26"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                            Text="{x:Bind Controls.VolumeText, Mode=OneWay}" />
+                        <Grid Width="240" Height="10">
+                            <Border CornerRadius="5" Background="#33FFFFFF" />
+                            <Border
+                                x:Name="VolumeIndicatorFill"
+                                HorizontalAlignment="Left"
+                                Background="{ThemeResource SeaglassAccentBrush}"
+                                CornerRadius="5"
+                                Width="240" />
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
         </Border>
 
         <!--  bottom: the seek bar and the transport, on a scrim  -->

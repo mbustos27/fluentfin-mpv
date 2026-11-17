@@ -399,6 +399,23 @@ public sealed class MpvControlsViewModelTests
 	}
 
 	[Fact]
+	public void The_volume_keys_and_mute_show_the_indicator_too_and_it_fills_to_the_volume()
+	{
+		Playing();
+		Wait(4);
+		Assert.False(_vm.VolumeIndicatorVisible);
+		_vm.HandleKey(MpvControlsViewModel.Keys.Down);
+		Assert.True(_vm.VolumeIndicatorVisible, "the volume key shows it");
+		Assert.Equal(0.75, _vm.VolumeFraction, 3);
+		Wait(2);
+		Assert.False(_vm.VolumeIndicatorVisible);
+		_ = _vm.ToggleMute();
+		Assert.True(_vm.VolumeIndicatorVisible, "mute shows it");
+		Assert.Equal("Muted", _vm.VolumeText);
+		Assert.Equal(0, _vm.VolumeFraction);
+	}
+
+	[Fact]
 	public void The_wheel_shows_a_brief_indicator_even_with_the_bars_hidden_and_does_not_wake_them()
 	{
 		Playing();
@@ -411,10 +428,10 @@ public sealed class MpvControlsViewModelTests
 			Assert.True(_vm.VolumeIndicatorVisible);
 			Assert.True(_vm.AnythingVisible, "the window the controls draw in shows for it");
 			Assert.False(_vm.ControlsVisible, "the bars stay hidden");
-			Wait(1.0);
+			Wait(1.3);
 			Assert.True(_vm.VolumeIndicatorVisible);
 			Wait(0.3);
-			Assert.False(_vm.VolumeIndicatorVisible, $"round {round}: gone 1.2 s after the last notch");
+			Assert.False(_vm.VolumeIndicatorVisible, $"round {round}: gone 1.5 s after the last notch");
 			Assert.False(_vm.AnythingVisible);
 		}
 

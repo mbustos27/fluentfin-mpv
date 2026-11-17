@@ -91,6 +91,20 @@ public sealed class SeaglassPaletteTests
 		Assert.NotEqual(SeaglassPalette.DefaultHue, hue);
 	}
 
+	[Theory]
+	[InlineData(30)]
+	[InlineData(0)]
+	[InlineData(300)]
+	[InlineData(120)]
+	[InlineData(250)]
+	public void Every_title_lands_inside_the_sea_glass_hues(double seed)
+	{
+		var hue = SeaglassPalette.ClampToSeaGlass(seed);
+		var offset = ((hue - SeaglassPalette.DefaultHue + 540) % 360) - 180;
+		Assert.InRange(offset, SeaglassPalette.HueBelow - 0.001, SeaglassPalette.HueAbove + 0.001);
+		Assert.Equal(hue, SeaglassPalette.ClampToSeaGlass(hue), 6);
+	}
+
 	/// <summary>A BlurHash of one flat colour (1x1 components: the size flag, a zero maximum, the DC).</summary>
 	private static string SolidHash(int r, int g, int b)
 	{

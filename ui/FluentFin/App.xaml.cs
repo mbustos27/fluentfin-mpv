@@ -324,6 +324,7 @@ public partial class App : Application
 			// Seaglass: the saved Glass choice, and the glass brushes following GlassMode
 			GlassSetting.Apply(GetService<ISettings>());
 			GlassTheme.Attach((FrameworkElement)MainWindow.Content);
+			SeaglassTheme.Attach();
 
 			// fluentfin-mpv (startup-perf, O5): no Flyleaf engine here; it starts with the first Flyleaf player (FlyleafEngine)
 			await GetService<IActivationService>().ActivateAsync(args);

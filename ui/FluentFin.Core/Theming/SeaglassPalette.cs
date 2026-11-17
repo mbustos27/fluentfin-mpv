@@ -12,7 +12,11 @@ public sealed class SeaglassPalette
 	public const double DefaultHue = 175;
 
 	/// <summary>How far the artwork's hue is pulled toward teal (OKLCH 175), 0..1.</summary>
-	public const double TealPull = 0.4;
+	public const double TealPull = 0.5;
+
+	/// <summary>The hues sea glass comes in, as degrees from teal (175): seafoam and green on one side (-35), cobalt on the other (+75). Every title lands inside.</summary>
+	public const double HueBelow = -35;
+	public const double HueAbove = 75;
 
 	/// <summary>The brightest the page backdrop gets under its scrim (relative luminance, about L 0.67).</summary>
 	public const double BackdropCeiling = 0.30;
@@ -113,7 +117,14 @@ public sealed class SeaglassPalette
 			}
 		}
 
-		return OkLab.LerpHue(best, DefaultHue, TealPull);
+		return ClampToSeaGlass(OkLab.LerpHue(best, DefaultHue, TealPull));
+	}
+
+	/// <summary>The hue inside the sea-glass range (seafoam to cobalt) nearest to <paramref name="hue"/>.</summary>
+	public static double ClampToSeaGlass(double hue)
+	{
+		var offset = ((hue - DefaultHue + 540) % 360) - 180;
+		return (DefaultHue + Math.Clamp(offset, HueBelow, HueAbove) + 360) % 360;
 	}
 
 	public static SeaglassPalette FromBlurHash(string? hash, bool solid = false) => Build(HueFromBlurHash(hash), solid);

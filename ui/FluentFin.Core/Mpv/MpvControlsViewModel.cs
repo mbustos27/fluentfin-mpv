@@ -448,6 +448,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		NotifyActivity();
 		IsMuted = !IsMuted;
+		ShowVolumeIndicator();
 		_audioChangedAt = _now();
 		// a slider move's unmute still waiting would undo this mute
 		_pendingUnmute = false;
@@ -529,6 +530,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// </summary>
 	private Task StepVolume(int steps, bool wakeControls)
 	{
+		ShowVolumeIndicator();
 		if (steps > 0 && Volume >= 100)
 		{
 			if (wakeControls)
@@ -926,7 +928,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	// -- mouse wheel: volume -------------------------------------------------------------------------------------------
 
 	/// <summary>How long the volume indicator stays after the last wheel notch.</summary>
-	public static readonly TimeSpan VolumeIndicatorFor = TimeSpan.FromSeconds(1.2);
+	public static readonly TimeSpan VolumeIndicatorFor = TimeSpan.FromSeconds(1.5);
 
 	/// <summary>One wheel notch, as Windows counts it (WHEEL_DELTA).</summary>
 	public const int WheelNotch = 120;
@@ -943,9 +945,27 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>"Volume 45 %", or "Muted".</summary>
 	public string VolumeText => IsMuted ? "Muted" : string.Create(CultureInfo.InvariantCulture, $"{Volume} %");
 
-	partial void OnVolumeChanged(int value) => OnPropertyChanged(nameof(VolumeText));
+	/// <summary>How much of the indicator's bar is filled, 0 to 1: nothing while muted.</summary>
+	public double VolumeFraction => IsMuted ? 0 : Math.Clamp(Volume, 0, 100) / 100.0;
 
-	partial void OnIsMutedChanged(bool value) => OnPropertyChanged(nameof(VolumeText));
+	partial void OnVolumeChanged(int value)
+	{
+		OnPropertyChanged(nameof(VolumeText));
+		OnPropertyChanged(nameof(VolumeFraction));
+	}
+
+	partial void OnIsMutedChanged(bool value)
+	{
+		OnPropertyChanged(nameof(VolumeText));
+		OnPropertyChanged(nameof(VolumeFraction));
+	}
+
+	/// <summary>Shows the indicator for <see cref="VolumeIndicatorFor"/> more (the wheel, the volume keys and the mute key all do).</summary>
+	private void ShowVolumeIndicator()
+	{
+		_volumeIndicatorUntil = _now() + VolumeIndicatorFor;
+		VolumeIndicatorVisible = true;
+	}
 
 	/// <summary>
 	/// The mouse wheel turned over the video or the controls (<paramref name="delta"/> in Windows' units, 120 a notch, up
@@ -964,8 +984,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_wheelRemainder += delta;
 		var notches = _wheelRemainder / WheelNotch;
 		_wheelRemainder -= notches * WheelNotch;
-		_volumeIndicatorUntil = _now() + VolumeIndicatorFor;
-		VolumeIndicatorVisible = true;
+		ShowVolumeIndicator();
 		if (notches == 0)
 		{
 			return Task.CompletedTask;
