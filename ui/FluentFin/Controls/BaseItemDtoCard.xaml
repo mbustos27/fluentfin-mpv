@@ -81,6 +81,7 @@
             CornerRadius="{StaticResource GlassCardCornerRadius}"
             PointerEntered="ImageCanvas_PointerEntered"
             PointerExited="ImageCanvas_PointerExited"
+            PointerMoved="ImageCanvas_PointerMoved"
             Tapped="ImageCanvas_Tapped">
 
             <Grid ui:VisualExtensions.NormalizedCenterPoint="0.5, 0.5">
@@ -89,6 +90,12 @@
                     EnableBlurHash="True"
                     ImageSource="{x:Bind ImageSource, Mode=OneWay}" />
             </Grid>
+
+            <!--  Seaglass: the specular sheen that follows the pointer (PosterTilt); Full mode only, never takes hits  -->
+            <Border
+                x:Name="SheenHost"
+                AutomationProperties.AccessibilityView="Raw"
+                IsHitTestVisible="False" />
 
             <Grid x:Name="ContentOverlay">
                 <!--  under the buttons while they show, so they read on any artwork  -->

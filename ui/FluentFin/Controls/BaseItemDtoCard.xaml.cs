@@ -38,9 +38,12 @@ public sealed partial class BaseItemDtoCard : UserControl
 	// fluentfin-mpv: the buttons show while the pointer is over the image or the keyboard focus is in the card (ux-review A1)
 	private readonly CardActions _actions = new();
 
+	private readonly PosterTilt _tilt;
+
 	public BaseItemDtoCard()
 	{
 		InitializeComponent();
+		_tilt = new PosterTilt(ImageCanvas, [ImageCanvas, ShadowHost], SheenHost, RootGrid);
 
 		// fluentfin-mpv: keyboard access (ux-review A1); only keys nothing inside the card has handled
 		AddHandler(KeyDownEvent, new KeyEventHandler(Card_KeyDown), false);
@@ -95,7 +98,23 @@ public sealed partial class BaseItemDtoCard : UserControl
 
 	private void ImageCanvas_PointerEntered(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerEntered());
 
-	private void ImageCanvas_PointerExited(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerExited());
+	private void ImageCanvas_PointerExited(object sender, PointerRoutedEventArgs e)
+	{
+		_tilt.Leave();
+		ShowActions(_actions.PointerExited());
+	}
+
+	// Seaglass: the tilt toward a mouse or pen; a finger and the keyboard get the lift only
+	private void ImageCanvas_PointerMoved(object sender, PointerRoutedEventArgs e)
+	{
+		if (e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Touch)
+		{
+			return;
+		}
+
+		var point = e.GetCurrentPoint(ImageCanvas).Position;
+		_tilt.Move(point.X, point.Y);
+	}
 
 	private void Card_GotFocus(object sender, RoutedEventArgs e)
 	{

@@ -148,6 +148,47 @@ public class OverlayContrastTests
 			$"{file} declares translucent brush(es) {string.Join(", ", translucent)}; define them in FluentFin/Styles/Button.xaml so the contrast tests cover them");
 	}
 
+	/// <summary>
+	/// Seaglass glass materials (Glass.xaml). Acrylic is modelled as two tint layers over the worst backdrop: the brightest
+	/// artwork the ambient dim allows (white under the dim brush). Text on the panel keeps 4.5:1 in both themes.
+	/// </summary>
+	[Theory]
+	[InlineData("Dark", "GlassPanelBrush", "GlassTextPrimaryBrush")]
+	[InlineData("Dark", "GlassPanelBrush", "GlassTextSecondaryBrush")]
+	[InlineData("Dark", "GlassPanelStrongBrush", "GlassTextPrimaryBrush")]
+	[InlineData("Dark", "GlassPanelStrongBrush", "GlassTextSecondaryBrush")]
+	[InlineData("Light", "GlassPanelBrush", "GlassTextPrimaryBrush")]
+	[InlineData("Light", "GlassPanelBrush", "GlassTextSecondaryBrush")]
+	[InlineData("Light", "GlassPanelStrongBrush", "GlassTextPrimaryBrush")]
+	[InlineData("Light", "GlassPanelStrongBrush", "GlassTextSecondaryBrush")]
+	public void GlassPanels_KeepTextReadableOverTheBrightestAmbientBackdrop(string theme, string panelKey, string textKey)
+	{
+		var dictionary = Load("FluentFin/Styles/Glass.xaml").Descendants(Presentation + "ResourceDictionary")
+			.Single(d => (string?)d.Attribute(Xaml + "Key") == theme);
+		var dim = Argb((string)Brush(dictionary, "GlassAmbientDimBrush").Attribute("Color")!);
+		// the worst backdrop for light text is white artwork, for dark text black artwork
+		var darkTheme = theme == "Dark";
+		var artwork = darkTheme ? new Rgb(255, 255, 255) : new Rgb(0, 0, 0);
+		var behind = Blend(dim.Color, dim.Alpha, artwork);
+
+		var panel = dictionary.Elements(Presentation + "AcrylicBrush").Single(b => (string?)b.Attribute(Xaml + "Key") == panelKey);
+		var tint = ParseColor((string)panel.Attribute("TintColor")!);
+		var luminosity = double.Parse((string)panel.Attribute("TintLuminosityOpacity")!, CultureInfo.InvariantCulture);
+		var tintOpacity = double.Parse((string)panel.Attribute("TintOpacity")!, CultureInfo.InvariantCulture);
+		var surface = Blend(tint, tintOpacity, Blend(tint, luminosity, behind));
+
+		var text = Argb((string)Brush(dictionary, textKey).Attribute("Color")!);
+		var ratio = Contrast(Blend(text.Color, text.Alpha, surface), surface);
+
+		Assert.True(ratio >= TextContrast, $"{theme} {panelKey}: {textKey} has {ratio:F2}:1, needs {TextContrast}:1");
+	}
+
+	private static XElement Brush(XElement dictionary, string key) =>
+		dictionary.Elements(Presentation + "SolidColorBrush").Single(b => (string?)b.Attribute(Xaml + "Key") == key);
+
+	private static (Rgb Color, double Alpha) Argb(string value) =>
+		(ParseColor("#" + value[^6..]), value.Length == 9 ? Convert.ToByte(value[1..3], 16) / 255.0 : 1.0);
+
 	public static TheoryData<string> MediaInfoPageData() => [.. MediaInfoPages];
 
 	public static TheoryData<string> ScrimmedFileData() => [.. MediaInfoPages, "FluentFin/Controls/TransportControls.xaml", "FluentFin/Views/LoginPage.xaml"];

@@ -11,16 +11,20 @@
         Seaglass: the soft artwork behind the whole window. A deep colour, then the artwork decoded about 64 px wide and
         stretched so it reads as blurred, then the dim brush. Solid mode and no artwork: the deep colour alone.
     -->
-    <Grid Background="{ThemeResource SeaglassDeepBrush}">
-        <Image
-            x:Name="BackImage"
-            Opacity="0"
-            Stretch="UniformToFill" />
-        <Image
-            x:Name="FrontImage"
-            ImageOpened="OnFrontImageOpened"
-            Opacity="0"
-            Stretch="UniformToFill" />
+    <Grid x:Name="Container">
+        <Rectangle x:Name="BaseFill" Fill="{ThemeResource SeaglassDeepBrush}" />
+        <!--  the artwork layers drift together (Full mode only): a slow zoom and sway, run by the compositor  -->
+        <Grid x:Name="Drift" SizeChanged="OnDriftSizeChanged">
+            <Image
+                x:Name="BackImage"
+                Opacity="0"
+                Stretch="UniformToFill" />
+            <Image
+                x:Name="FrontImage"
+                ImageOpened="OnFrontImageOpened"
+                Opacity="0"
+                Stretch="UniformToFill" />
+        </Grid>
         <Rectangle x:Name="Dim" Fill="{ThemeResource GlassAmbientDimBrush}" />
     </Grid>
 </UserControl>

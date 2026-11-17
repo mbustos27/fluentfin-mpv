@@ -18,8 +18,8 @@
                 x:Key="GlassPanelBrush"
                 FallbackColor="#E6162226"
                 TintColor="#16262B"
-                TintLuminosityOpacity="0.32"
-                TintOpacity="0.2" />
+                TintLuminosityOpacity="0.34"
+                TintOpacity="0.22" />
             <AcrylicBrush
                 x:Key="GlassPanelStrongBrush"
                 FallbackColor="#F2101C20"
@@ -42,7 +42,7 @@
             <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="#1AFFFFFF" />
             <SolidColorBrush x:Key="GlassPressedOverlayBrush" Color="#0DFFFFFF" />
             <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="#FFFFFFFF" />
-            <SolidColorBrush x:Key="GlassTextSecondaryBrush" Color="#BFFFFFFF" />
+            <SolidColorBrush x:Key="GlassTextSecondaryBrush" Color="#CCFFFFFF" />
             <!--  under text laid over artwork: transparent at the top, dark at the bottom  -->
             <LinearGradientBrush x:Key="GlassImageScrimBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#000A1418" />
