@@ -174,7 +174,7 @@ Invoke-Checked 'pip check' { & $venvPython -I -m pip check --disable-pip-version
 Step 'PyInstaller bootloader (built from source with MinGW-w64 gcc)'
 $gccBin = Join-Path $Msys2Root 'ucrt64\bin'
 $gcc = Join-Path $gccBin 'gcc.exe'
-if (-not (Test-Path $gcc)) { throw "no $gcc: install MSYS2 (https://www.msys2.org) and 'pacman -S mingw-w64-ucrt-x86_64-gcc' (docs\RELEASE.md)" }
+if (-not (Test-Path $gcc)) { throw "no ${gcc}: install MSYS2 (https://www.msys2.org) and 'pacman -S mingw-w64-ucrt-x86_64-gcc' (docs\RELEASE.md)" }
 $gccVersion = (& $gcc --version | Select-Object -First 1)
 if ($gccVersion -notmatch [regex]::Escape($GccVersion)) { throw "gcc is '$gccVersion', not the pinned $GccVersion (build-release.ps1, tools\release\VENDORED.md)" }
 $pyiSourceWork = Join-Path $work 'pyinstaller-source'
