@@ -196,12 +196,13 @@
                             <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />
                         </ctk:SettingsCard>
                         <ctk:SettingsCard
-                            Description="When neither the server nor the file's chapters mark the intro or credits, ask TheIntroDB (and AniSkip for anime). Sent: the show's public ID, season, episode and length. Not sent: your server, account or file names. Off by default."
+                            Description="When neither the server nor the file's chapters mark the intro or credits, ask TheIntroDB (and, for anime, AniSkip, which finds the show through arm.haglund.dev). Sent: the show's public ID, season, episode and length. Not sent: your server, account or file names. Off by default."
                             Header="Look up intros online"
                             HeaderIcon="{ui:FontIcon Glyph=&#xE774;}">
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <HyperlinkButton Content="Intro times from TheIntroDB" NavigateUri="https://theintrodb.org" />
                                 <HyperlinkButton Content="AniSkip" NavigateUri="https://aniskip.com" />
+                                <HyperlinkButton Content="arm.haglund.dev" NavigateUri="https://arm.haglund.dev" />
                                 <ToggleSwitch AutomationProperties.Name="Look up intros online" IsOn="{x:Bind ViewModel.LookUpIntrosOnline, Mode=TwoWay}" />
                             </StackPanel>
                         </ctk:SettingsCard>

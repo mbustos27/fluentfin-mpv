@@ -23,7 +23,7 @@ public static class SettingKeys
 	public static Key<bool> ShowSkipPrompt { get; } = new Key<bool>("ShowSkipPrompt", true);
 
 	/// <summary>
-	/// Look intros up online when neither the server nor the file's chapters have them (TheIntroDB, and AniSkip for anime). Off
+	/// Look intros up online when neither the server nor the file's chapters have them (TheIntroDB, and AniSkip for anime, with arm.haglund.dev mapping the show's ID to MyAnimeList). Off
 	/// until the user turns it on: the show's public id, season, episode and length are sent, nothing else.
 	/// </summary>
 	public static Key<bool> LookUpIntrosOnline { get; } = new Key<bool>("LookUpIntrosOnline", false);

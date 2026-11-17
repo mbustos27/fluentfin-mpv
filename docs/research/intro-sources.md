@@ -216,3 +216,11 @@ Read by the coordinator in a browser. The research pass could not load the page;
 - **6.2 Rate limits:** per IP; respect them, with no circumvention. Honour 429 and Retry-After, and back off.
 - **6.4:** submitting timestamps with the user's own API key is encouraged but optional (a later feature at most).
 - **9.2:** a piracy policy (legal access to the media expected), which is a note for the README.
+
+## The third service: arm.haglund.dev
+
+For anime, AniSkip needs a MyAnimeList ID. When the server has none, `intro_online.py` `mal_id_for` asks ARM
+(`https://arm.haglund.dev/api/v2/`) to map the show's public ID (AniList, AniDB, TVDB or TMDB, plus the season number) to
+MyAnimeList. What is sent: that ID and the source name in the URL, nothing else (no server address, account, file name or
+title). Like the other two it is off until "Look up intros online" is on, answers are cached in memory only, and a 429 pauses
+it. The Settings text names TheIntroDB, AniSkip and arm.haglund.dev.
