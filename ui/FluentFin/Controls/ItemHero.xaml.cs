@@ -35,6 +35,13 @@ public sealed partial class ItemHero : UserControl
 	public ItemHero()
 	{
 		InitializeComponent();
+		// Seaglass 1.1.4: the toggles' names follow what they show (a click flips them before the server hears it)
+		foreach (var toggle in new[] { WatchedButton, FavoriteButton })
+		{
+			toggle.Checked += (_, _) => UpdateActionNames();
+			toggle.Unchecked += (_, _) => UpdateActionNames();
+			toggle.Indeterminate += (_, _) => UpdateActionNames();
+		}
 		Loaded += (_, _) => AmbientBackdrop.Set(_ambient, _ambientHash);
 		// a page that opens before this one is closed has already set its own; only take down what is ours
 		Unloaded += (_, _) =>
@@ -95,6 +102,8 @@ public sealed partial class ItemHero : UserControl
 		FavoriteButton.CommandParameter = dto;
 		FavoriteButton.IsChecked = dto?.UserData?.IsFavorite;
 		MoreButton.Flyout = dto is null ? null : new JellyfinFlyoutConverter().Convert(dto, typeof(object), null!, "") as FlyoutBase;
+		UpdateActionNames();
+		RatingPanel.Item = dto;
 
 		_ambient = ItemArtworkConverters.AmbientBackdrop(dto);
 		_ambientHash = ItemArtwork.BackdropBlurHash(dto);
@@ -102,6 +111,24 @@ public sealed partial class ItemHero : UserControl
 		{
 			AmbientBackdrop.Set(_ambient, _ambientHash);
 		}
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4: "Mark Inception as watched" / "... as unwatched", "Add Inception to favorites" / "Remove ...", "More options
+	/// for Inception": named for the item and for what a click does now, the tooltip the same words (Seaglass UX review, fix 4).
+	/// </summary>
+	private void UpdateActionNames()
+	{
+		var dto = Dto;
+		Label(WatchedButton, ItemLabels.WatchedAction(dto, WatchedButton.IsChecked));
+		Label(FavoriteButton, ItemLabels.FavoriteAction(dto, FavoriteButton.IsChecked));
+		Label(MoreButton, ItemLabels.MoreOptions(dto));
+	}
+
+	private static void Label(FrameworkElement button, string name)
+	{
+		AutomationProperties.SetName(button, name);
+		ToolTipService.SetToolTip(button, name);
 	}
 
 	private async void TrailerButton_Click(object sender, RoutedEventArgs e)

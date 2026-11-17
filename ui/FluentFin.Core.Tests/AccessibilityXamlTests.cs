@@ -69,7 +69,9 @@ public class AccessibilityXamlTests
 		Assert.Equal("{StaticResource GlassAccentPillButtonStyle}", (string?)play.Attribute("Style"));
 
 		var fromBeginning = Assert.Single(buttons, b => (string?)b.Attribute("Command") == "{x:Bind ViewModel.PlayFromBeginningCommand}");
-		Assert.Equal("Play from beginning", (string?)fromBeginning.Attribute("AutomationProperties.Name"));
+		// Seaglass 1.1.4: "Play Inception from the beginning", the tooltip the same words
+		Assert.StartsWith("{x:Bind core:ItemLabels.PlayFromBeginningAction(ViewModel.Dto), Mode=OneWay", (string?)fromBeginning.Attribute("AutomationProperties.Name"));
+		Assert.Equal((string?)fromBeginning.Attribute("AutomationProperties.Name"), (string?)fromBeginning.Attribute("ToolTipService.ToolTip"));
 		Assert.Equal("{x:Bind ViewModel.HasResumePoint, Mode=OneWay}", (string?)fromBeginning.Attribute("Visibility"));
 	}
 
@@ -81,7 +83,10 @@ public class AccessibilityXamlTests
 		var hero = Assert.Single(Load(page).Descendants(), e => e.Name.LocalName == "ItemHero");
 		var play = Assert.Single(hero.Descendants(Presentation + "Button"), b => (string?)b.Attribute("Command") == "{x:Bind root:App.Commands.PlayDtoCommand}");
 
-		Assert.Contains(play.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "Play");
+		// Seaglass 1.1.4: it says what it starts ("Resume S1E4", "Play S2E1", "Play from the start"; ItemPlayTests)
+		Assert.Contains(play.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.PlayTarget.Label, Mode=OneWay}");
+		Assert.Equal("{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}", (string?)play.Attribute("AutomationProperties.Name"));
+		Assert.Equal("{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}", (string?)play.Attribute("ToolTipService.ToolTip"));
 		Assert.Equal("{StaticResource GlassAccentPillButtonStyle}", (string?)play.Attribute("Style"));
 	}
 
@@ -136,7 +141,7 @@ public class AccessibilityXamlTests
 	{
 		var hero = Load("FluentFin/Controls/ItemHero.xaml");
 
-		Assert.Equal(["Watch trailer", "Watched", "Favorite", "More options"],
+		Assert.Equal(["Watch trailer", "Mark as watched", "Add to favorites", "More options"],
 			new[] { "TrailerButton", "WatchedButton", "FavoriteButton", "MoreButton" }.Select(n => (string?)FindByName(hero, n).Attribute("AutomationProperties.Name")));
 		Assert.DoesNotContain(hero.Descendants(), e => (string?)e.Attribute("Style") == "{StaticResource GlassAccentPillButtonStyle}");
 		var scrims = hero.Descendants(Presentation + "Border").Select(b => (string?)b.Attribute("Background")).ToList();
@@ -357,7 +362,9 @@ public class AccessibilityXamlTests
 		Assert.All(buttons, b => Assert.Equal("False", (string?)b.Attribute("IsTabStop")));
 		Assert.All(buttons, b => Assert.False(string.IsNullOrWhiteSpace((string?)b.Attribute("AutomationProperties.Name"))));
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/EpisodeRow.xaml.cs"));
-		Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(code, @"ItemLabels\.EpisodeAction\(""").Count);
+		Assert.Single(System.Text.RegularExpressions.Regex.Matches(code, @"ItemLabels\.EpisodeAction\(""Play"", dto\)"));
+		// Seaglass 1.1.4: Watched says what a click does now ("Mark as unwatched, episode 1, ..."), from the toggle's state
+		Assert.Contains("ItemLabels.EpisodeWatchedAction(Dto, WatchedButton.IsChecked)", code);
 		// favourite and the rest: in the row's menu, which holds the More menu's own items
 		Assert.Contains("ContextFlyout = _menu", code);
 		Assert.Contains("new JellyfinFlyoutConverter().Convert(dto", code);

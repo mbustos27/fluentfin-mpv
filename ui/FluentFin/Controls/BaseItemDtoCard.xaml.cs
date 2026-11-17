@@ -274,6 +274,8 @@ public sealed partial class BaseItemDtoCard : UserControl
 		return null;
 	}
 
+	// Seaglass 1.1.4: a toggle sets the state it now shows, which its name says (ItemLabels.WatchedAction); the model's copy,
+	// which only Home refreshes, made a second click send the first one's state again
 	private async void MarkWatchedButton_Clicked(object sender, RoutedEventArgs e)
 	{
 		if (Model is null || JellyfinClient is null)
@@ -281,7 +283,7 @@ public sealed partial class BaseItemDtoCard : UserControl
 			return;
 		}
 
-		await JellyfinClient.SetPlayed(Model.Dto, !(Model.UserData?.Played ?? false));
+		await JellyfinClient.SetPlayed(Model.Dto, MarkWatchedButton.IsChecked == true);
 	}
 
 	private async void AddToFavoriteButton_Clicked(object sender, RoutedEventArgs e)
@@ -291,7 +293,7 @@ public sealed partial class BaseItemDtoCard : UserControl
 			return;
 		}
 
-		await JellyfinClient.SetIsFavorite(Model.Dto, !(Model.UserData?.IsFavorite ?? false));
+		await JellyfinClient.SetIsFavorite(Model.Dto, AddToFavoriteButton.IsChecked == true);
 	}
 }
 

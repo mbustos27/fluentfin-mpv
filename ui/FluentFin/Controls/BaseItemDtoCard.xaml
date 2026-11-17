@@ -9,6 +9,7 @@
     xmlns:cc="using:CommunityToolkit.WinUI.Converters"
     xmlns:cl="using:FluentFin.Controls.Lights"
     xmlns:controls="using:FluentFin.Controls"
+    xmlns:core="using:FluentFin.Core"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:i="using:Microsoft.Xaml.Interactivity"
     xmlns:local="using:FluentFin.Controls"
@@ -114,14 +115,14 @@
                     VerticalAlignment="Center"
                     ui:VisualExtensions.NormalizedCenterPoint="0.5,0.5"
                     ui:VisualExtensions.Scale="0.8"
-                    AutomationProperties.Name="Play"
+                    AutomationProperties.Name="{x:Bind core:ItemLabels.PlayAction(Model.Dto), Mode=OneWay, FallbackValue=Play}"
                     Background="{StaticResource Black65O}"
                     BorderThickness="0"
                     Command="{x:Bind root:App.Commands.PlayDtoCommand}"
                     CommandParameter="{x:Bind Model.Dto, Mode=OneWay}"
                     CornerRadius="25"
                     Style="{ThemeResource BareButtonStyle}"
-                    ToolTipService.ToolTip="Play"
+                    ToolTipService.ToolTip="{x:Bind core:ItemLabels.PlayAction(Model.Dto), Mode=OneWay, FallbackValue=Play}"
                     Visibility="Collapsed">
 
                     <animations:Implicit.ShowAnimations>
@@ -217,11 +218,15 @@
                     Spacing="4"
                     Visibility="Collapsed">
 
+                    <!--
+                        Seaglass 1.1.4: each button is named for its item and says what a click does now, its tooltip the same
+                        words (Seaglass UX review, fix 4): "Mark Inception as watched", "Remove Inception from favorites"
+                    -->
                     <ToggleButton
                         x:Name="MarkWatchedButton" IsTabStop="False"
                         Width="40"
                         Height="40"
-                        AutomationProperties.Name="Watched"
+                        AutomationProperties.Name="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay, FallbackValue='Mark as watched'}"
                         Click="MarkWatchedButton_Clicked"
                         Content="{ui:FontIcon Glyph=&#xE73E;,
                                               FontSize=15}"
@@ -229,13 +234,13 @@
                         CornerRadius="20"
                         IsChecked="{x:Bind Model.UserData.Played, Converter={StaticResource NullableBoolToValueOrDefaultConverter}, Mode=OneWay}"
                         Style="{ThemeResource IconToggleButtonStyle}"
-                        ToolTipService.ToolTip="Mark watched" />
+                        ToolTipService.ToolTip="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay, FallbackValue='Mark as watched'}" />
 
                     <ToggleButton
                         x:Name="AddToFavoriteButton" IsTabStop="False"
                         Width="40"
                         Height="40"
-                        AutomationProperties.Name="Favorite"
+                        AutomationProperties.Name="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay, FallbackValue='Add to favorites'}"
                         Click="AddToFavoriteButton_Clicked"
                         Content="{ui:FontIcon Glyph=&#xEB52;,
                                               FontSize=15}"
@@ -243,7 +248,7 @@
                         CornerRadius="20"
                         IsChecked="{x:Bind Model.UserData.IsFavorite, Converter={StaticResource NullableBoolToValueOrDefaultConverter}, Mode=OneWay}"
                         Style="{ThemeResource IconToggleButtonStyle}"
-                        ToolTipService.ToolTip="Add to favorites">
+                        ToolTipService.ToolTip="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay, FallbackValue='Add to favorites'}">
                         <ToggleButton.Resources>
                             <StaticResource x:Key="SystemAccentColor" ResourceKey="FavoriteCheckedBrush" />
                         </ToggleButton.Resources>
@@ -253,14 +258,14 @@
                         x:Name="MoreButton" IsTabStop="False"
                         Width="40"
                         Height="40"
-                        AutomationProperties.Name="More options"
+                        AutomationProperties.Name="{x:Bind core:ItemLabels.MoreOptions(Model.Dto), Mode=OneWay, FallbackValue='More options'}"
                         Content="{ui:FontIcon Glyph=&#xE712;,
                                               FontSize=15}"
                         Background="{StaticResource Black65O}"
                         CornerRadius="20"
                         Flyout="{x:Bind Model.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}"
                         Style="{ThemeResource IconButtonStyle}"
-                        ToolTipService.ToolTip="More options"
+                        ToolTipService.ToolTip="{x:Bind core:ItemLabels.MoreOptions(Model.Dto), Mode=OneWay, FallbackValue='More options'}"
                         Visibility="{x:Bind c:JellyfinFlyoutConverter.CardMenuVisibility(Model.Dto), Mode=OneWay}" />
 
                 </StackPanel>

@@ -83,7 +83,9 @@ Check 'season: Up from the first episode leaves the list (to the season pills ab
 
 # --- Play and Watched are still there for the pointer, named for the episode, not Tab stops; Favourite is not a button
 $playBtn = Find-Ui -Name "Play, episode 1, $($fixture.episode.name)" -Type 'Button'
-$watchedBtn = Find-Ui -Name "Watched, episode 1, $($fixture.episode.name)" -Type 'Button'
+# Seaglass 1.1.4: Watched says what a click does now ("Mark as unwatched, ..." on a watched episode), its tooltip the same
+$watchedBtn = Find-Ui -Name "Mark as unwatched, episode 1, $($fixture.episode.name)" -Type 'Button'
+if (-not $watchedBtn) { $watchedBtn = Find-Ui -Name "Mark as watched, episode 1, $($fixture.episode.name)" -Type 'Button' }
 Check 'season: Play and Watched stay on the row, named for the episode' ($playBtn -and $watchedBtn)
 Check 'season: ... and have no Tab stop of their own' ($playBtn -and -not $playBtn.Cached.IsKeyboardFocusable -and $watchedBtn -and -not $watchedBtn.Cached.IsKeyboardFocusable)
 Check 'season: Favourite is no longer a button on the row' (-not (Find-Ui -Name "Favorite, episode 1, $($fixture.episode.name)" -Type 'Button'))

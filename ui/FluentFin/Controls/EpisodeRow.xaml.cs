@@ -31,6 +31,10 @@ public sealed partial class EpisodeRow : UserControl
 		GotFocus += (_, _) => UpdateFocusRing();
 		LostFocus += (_, _) => UpdateFocusRing();
 		Loaded += (_, _) => UpdatePlace();
+		// Seaglass 1.1.4: the toggle's name follows what it shows (a click flips it before the server hears it)
+		WatchedButton.Checked += (_, _) => UpdateWatchedName();
+		WatchedButton.Unchecked += (_, _) => UpdateWatchedName();
+		WatchedButton.Indeterminate += (_, _) => UpdateWatchedName();
 		Apply();
 	}
 
@@ -78,10 +82,22 @@ public sealed partial class EpisodeRow : UserControl
 			button.CommandParameter = dto;
 		}
 
-		AutomationProperties.SetName(PlayButton, ItemLabels.EpisodeAction("Play", dto));
-		AutomationProperties.SetName(WatchedButton, ItemLabels.EpisodeAction("Watched", dto));
+		Label(PlayButton, ItemLabels.EpisodeAction("Play", dto));
 		WatchedButton.IsChecked = dto?.UserData?.Played;
+		UpdateWatchedName();
 		UpdatePlace();
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4: "Mark as watched, episode 3, Pilot", or "Mark as unwatched, ..." while it shows watched: what a click does
+	/// now, the tooltip the same words (Seaglass UX review, fix 4; the name was "Watched" and the tooltip "Mark watched").
+	/// </summary>
+	private void UpdateWatchedName() => Label(WatchedButton, ItemLabels.EpisodeWatchedAction(Dto, WatchedButton.IsChecked));
+
+	private static void Label(FrameworkElement button, string name)
+	{
+		AutomationProperties.SetName(button, name);
+		ToolTipService.SetToolTip(button, name);
 	}
 
 	/// <summary>Narrator's "4 of 8": the row's place in its episode list.</summary>

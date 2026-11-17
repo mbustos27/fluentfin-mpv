@@ -139,11 +139,12 @@
                         Foreground="{ThemeResource GlassTextPrimaryBrush}"
                         Glyph="&#xE769;" />
                 </Button>
+                <!--  Seaglass 1.1.4: the dots' targets are 24 px and touch (HeroDots.TargetSize), so they keep their old spacing  -->
                 <StackPanel
                     x:Name="Dots"
                     AutomationProperties.Name="Slides"
                     Orientation="Horizontal"
-                    Spacing="2"
+                    Spacing="0"
                     TabFocusNavigation="Once" />
             </StackPanel>
         </Border>

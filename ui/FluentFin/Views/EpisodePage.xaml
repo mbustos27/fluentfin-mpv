@@ -41,18 +41,17 @@
                                 </StackPanel>
                             </Button>
                             <Button
-                                AutomationProperties.Name="Play from beginning"
+                                AutomationProperties.Name="{x:Bind core:ItemLabels.PlayFromBeginningAction(ViewModel.Dto), Mode=OneWay, FallbackValue='Play from the beginning'}"
                                 Command="{x:Bind ViewModel.PlayFromBeginningCommand}"
                                 Content="{ui:FontIcon Glyph=&#xE892;}"
                                 Style="{StaticResource GlassIconButtonStyle}"
-                                ToolTipService.ToolTip="Play from beginning"
+                                ToolTipService.ToolTip="{x:Bind core:ItemLabels.PlayFromBeginningAction(ViewModel.Dto), Mode=OneWay, FallbackValue='Play from the beginning'}"
                                 Visibility="{x:Bind ViewModel.HasResumePoint, Mode=OneWay}" />
                         </StackPanel>
                     </controls:ItemHero.PrimaryActions>
                 </controls:ItemHero>
                 <StackPanel Margin="48,28,48,56" Spacing="32">
-                    <!--  fluentfin-mpv: the TV journal's rating (docs/JOURNAL.md), one glass card  -->
-                    <journal:JournalRatingPanel Item="{x:Bind ViewModel.Dto, Mode=OneWay}" />
+                    <!--  fluentfin-mpv: the TV journal's rating (docs/JOURNAL.md) is in the hero's action row since Seaglass 1.1.4 (ItemHero)  -->
                     <!--  the lists are named after their labels for Narrator (fluentfin-mpv)  -->
                     <ContentControl Style="{StaticResource GlassSurfaceStyle}">
                         <StackPanel Spacing="20"><Grid ColumnSpacing="16" RowSpacing="12">

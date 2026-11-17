@@ -110,7 +110,7 @@
                     Grid.Column="2"
                     VerticalAlignment="Center"
                     Orientation="Horizontal">
-                    <!--  for the pointer: the row is the keyboard stop (Enter plays, the menu has Watched); each named for its episode (ux-review I3)  -->
+                    <!--  for the pointer: the row is the keyboard stop (Enter plays, the menu has Watched); each named for its episode (ux-review I3), its tooltip the same words (set in code)  -->
                     <Button
                         x:Name="PlayButton"
                         Width="44"
@@ -127,14 +127,14 @@
                         x:Name="WatchedButton"
                         Width="44"
                         Height="44"
-                        AutomationProperties.Name="Watched"
+                        AutomationProperties.Name="Mark as watched"
                         Background="Transparent"
                         Command="{x:Bind root:App.Commands.ToggleWatchedCommand}"
                         Content="{ui:FontIcon Glyph=&#xE73E;}"
                         CornerRadius="22"
                         IsTabStop="False"
                         Style="{StaticResource IconToggleButtonStyle}"
-                        ToolTipService.ToolTip="Mark watched" />
+                        ToolTipService.ToolTip="Mark as watched" />
                 </StackPanel>
             </Grid>
         </Border>

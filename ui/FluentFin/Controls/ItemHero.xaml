@@ -13,6 +13,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
+    xmlns:journal="using:FluentFin.Plugins.Journal.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:root="using:FluentFin"
     HorizontalContentAlignment="Stretch"
@@ -81,7 +82,11 @@
                 </ItemsRepeater.Layout>
             </ItemsRepeater>
 
-            <!--  the page's own play buttons, then trailer, watched, favourite, more  -->
+            <!--
+                the page's own play buttons, then trailer, watched, favourite, more and "Your rating". Seaglass 1.1.4: the icon
+                buttons are named for the item and say what a click does now, their tooltips the same words (set in code,
+                UpdateActionNames); the rating sits in the row as a pill on every item page (Seaglass UX review, fix 12)
+            -->
             <ctk:WrapPanel
                 x:Name="ButtonStrip"
                 HorizontalSpacing="10"
@@ -101,14 +106,14 @@
                 </Button>
                 <ToggleButton
                     x:Name="WatchedButton"
-                    AutomationProperties.Name="Watched"
+                    AutomationProperties.Name="Mark as watched"
                     Command="{x:Bind root:App.Commands.ToggleWatchedCommand}"
                     Content="{ui:FontIcon Glyph=&#xE73E;}"
                     Style="{StaticResource ItemGlassToggleButtonStyle}"
-                    ToolTipService.ToolTip="Mark watched" />
+                    ToolTipService.ToolTip="Mark as watched" />
                 <ToggleButton
                     x:Name="FavoriteButton"
-                    AutomationProperties.Name="Favorite"
+                    AutomationProperties.Name="Add to favorites"
                     Command="{x:Bind root:App.Commands.ToggleFavoriteCommand}"
                     Content="{ui:FontIcon Glyph=&#xEB52;}"
                     Style="{StaticResource ItemGlassToggleButtonStyle}"
@@ -123,6 +128,22 @@
                     Content="{ui:SymbolIcon Symbol=More}"
                     Style="{StaticResource GlassIconButtonStyle}"
                     ToolTipService.ToolTip="More options" />
+                <!--
+                    the journal's rating of the item, as a pill of the row's height (the pill hides with the rating, which is
+                    hidden for items the journal does not rate and when there is no journal); the stars' target is at least
+                    24 px high and wide (WCAG 2.5.8; JournalRatingPanel)
+                -->
+                <Border
+                    x:Name="RatingPill"
+                    Height="{StaticResource GlassPillHeight}"
+                    Padding="18,0"
+                    Background="{ThemeResource GlassPanelBrush}"
+                    BorderBrush="{ThemeResource GlassStrokeBrush}"
+                    BorderThickness="{StaticResource GlassStrokeThickness}"
+                    CornerRadius="{StaticResource GlassButtonCornerRadius}"
+                    Visibility="{x:Bind RatingPanel.Visibility, Mode=OneWay}">
+                    <journal:JournalRatingPanel x:Name="RatingPanel" VerticalAlignment="Center" />
+                </Border>
             </ctk:WrapPanel>
 
             <controls:ExpandableText x:Name="OverviewText" CollapsedLines="4" />

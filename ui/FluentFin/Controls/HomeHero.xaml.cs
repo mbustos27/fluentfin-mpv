@@ -103,10 +103,11 @@ public sealed partial class HomeHero : UserControl
 		for (var i = 0; i < _slides.Count; i++)
 		{
 			var at = i;
+			// Seaglass 1.1.4: a 24 px target (WCAG 2.5.8; it was 22) with no gap between dots, so they sit as far apart as before
 			var dot = new Button
 			{
-				Width = 22, Height = 22, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-				BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(11),
+				Width = HeroDots.TargetSize, Height = HeroDots.TargetSize, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+				BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(HeroDots.TargetSize / 2),
 				Content = new Microsoft.UI.Xaml.Shapes.Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Microsoft.UI.Colors.White), Opacity = 0.45 },
 			};
 			AutomationProperties.SetName(dot, $"Slide {i + 1} of {_slides.Count}: {_slides[i].Title}");
@@ -280,6 +281,10 @@ public sealed partial class HomeHero : UserControl
 /// <summary>Seaglass scrolling: which slide a key picks on the hero's dots (Left/Right by one, no wrap; Home/End).</summary>
 internal static class HeroDots
 {
+	/// <summary>Seaglass 1.1.4: each dot's target, the WCAG 2.5.8 minimum (the dot drawn in it stays 8 px, 10 for the slide shown);
+	/// the dots have no gap (HomeHero.xaml), so their centres stay 24 px apart as before (22 + 2).</summary>
+	public const double TargetSize = 24;
+
 	public static int? KeyTarget(Windows.System.VirtualKey key, int current, int count)
 	{
 		if (count <= 1)
