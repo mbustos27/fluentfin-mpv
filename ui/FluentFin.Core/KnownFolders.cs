@@ -7,33 +7,50 @@ public class KnownFolders
 	public string Logs { get; }
 
 	// fluentfin-mpv: its own folder, so this build never shares settings, saved logins or logs with an upstream FluentFin install.
-	// Seaglass (1.1.0): renamed from FluentFinMpv; CopyLegacyFolder brings the old folder's contents over once.
-	public const string FolderName = "Seaglass";
+	// Seaglass (1.1.0): renamed from FluentFinMpv. Nixie (1.2.0): renamed from Seaglass. CopyLegacyFolder brings the newest
+	// old folder's contents over once.
+	public const string FolderName = "Nixie";
+
+	/// <summary>The data folder's name before the rename to Nixie (Seaglass 1.1.x).</summary>
+	public const string SeaglassFolderName = "Seaglass";
 
 	/// <summary>The data folder's name before the rename to Seaglass (FluentFin MPV 1.0.x).</summary>
-	public const string LegacyFolderName = "FluentFinMpv";
+	public const string FluentFinMpvFolderName = "FluentFinMpv";
+
+	/// <summary>The old data folders, newest first: the first one that exists is the one copied.</summary>
+	public static IReadOnlyList<string> LegacyFolderNames { get; } = [SeaglassFolderName, FluentFinMpvFolderName];
+
+	/// <summary>The app that used the old folder <paramref name="folderName"/> ("Seaglass", "FluentFin MPV"), for messages.</summary>
+	public static string LegacyAppName(string folderName) =>
+		string.Equals(folderName, FluentFinMpvFolderName, StringComparison.OrdinalIgnoreCase) ? "FluentFin MPV" : "Seaglass";
 
 	/// <summary>
-	/// fluentfin-mpv: <c>Seaglass.exe --data-dir &lt;folder&gt;</c> (or <c>--data-dir=&lt;folder&gt;</c>) keeps everything this
+	/// fluentfin-mpv: <c>Nixie.exe --data-dir &lt;folder&gt;</c> (or <c>--data-dir=&lt;folder&gt;</c>) keeps everything this
 	/// run writes -- settings and saved logins, logs, the mpv backend's config folder and log -- under that folder instead of
-	/// <c>%LOCALAPPDATA%\Seaglass</c>: a dev or test run that never touches the user's own data (tools/README.md).
+	/// <c>%LOCALAPPDATA%\Nixie</c>: a dev or test run that never touches the user's own data (tools/README.md).
 	/// </summary>
 	public const string DataDirSwitch = "--data-dir";
 
 	/// <summary>fluentfin-mpv: the same as <see cref="DataDirSwitch"/> from the environment; the switch wins when both are set.</summary>
 	public const string DataDirVariable = "FLUENTFIN_MPV_DATA_DIR";
 
-	/// <summary><c>%LOCALAPPDATA%\Seaglass</c>.</summary>
+	/// <summary><c>%LOCALAPPDATA%\Nixie</c>.</summary>
 	public static string DefaultRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), FolderName);
 
-	/// <summary>What the copy step did. <see cref="Failed"/>: nothing was made under Seaglass and this run must use <see cref="LegacyRoot"/> in place.</summary>
+	/// <summary>
+	/// What the copy step did. <see cref="Failed"/>: nothing was made under Nixie and this run must use <see cref="LegacyRoot"/>
+	/// (the old folder it tried to copy) in place.
+	/// </summary>
 	public sealed record LegacyCopyResult(string? Note, bool Failed, string? LegacyRoot)
 	{
 		public static LegacyCopyResult Nothing { get; } = new(null, false, null);
+
+		/// <summary>The app whose folder <see cref="LegacyRoot"/> is ("Seaglass", "FluentFin MPV"); null without one.</summary>
+		public string? LegacyApp => LegacyRoot is null ? null : LegacyAppName(Path.GetFileName(LegacyRoot));
 	}
 
 	/// <summary>
-	/// Seaglass: the start-up step before the folders are made. With no <see cref="DataDirSwitch"/> and no
+	/// Nixie: the start-up step before the folders are made. With no <see cref="DataDirSwitch"/> and no
 	/// <see cref="DataDirVariable"/> (those runs never touch the user's own folders), copies the old data folder to the new one
 	/// (<see cref="CopyLegacyFolder"/>). <see cref="LegacyCopyResult.Note"/> is what to log, null when there was nothing to do.
 	/// </summary>
@@ -56,27 +73,33 @@ public class KnownFolders
 			return LegacyCopyResult.Nothing;
 		}
 
-		var note = CopyLegacyFolder(localAppData, out var failed, afterEachFile);
-		return new LegacyCopyResult(note, failed, failed ? Path.Combine(localAppData, LegacyFolderName) : null);
+		var note = CopyLegacyFolder(localAppData, out var failed, out var source, afterEachFile);
+		return new LegacyCopyResult(note, failed, failed ? source : null);
 	}
 
+	/// <summary>The name of the mutex two first starts copy under (one copies, the other waits).</summary>
+	public const string CopyMutexName = @"Local\Nixie-data-folder-copy";
+
 	/// <summary>
-	/// Seaglass: when <c>&lt;localAppData&gt;\Seaglass</c> does not exist and <c>&lt;localAppData&gt;\FluentFinMpv</c> does, COPIES the
-	/// old folder (recursively, except Logs and Updates) to the new one; the old folder is never moved, changed or deleted. The
-	/// journal database is copied with SQLite's online backup (a consistent snapshot even while FluentFin MPV 1.0.x runs), never as
-	/// its db, -wal and -shm files. The copy is made beside the target and renamed into place, so an interrupted copy never leaves
-	/// a half-filled Seaglass folder. On ANY failure the partial copy is deleted and no Seaglass folder exists: the caller runs on
-	/// the old folder in place and the next start tries again (<paramref name="failed"/> is true, the text says why).
+	/// Nixie: when <c>&lt;localAppData&gt;\Nixie</c> does not exist, COPIES the newest old folder that does
+	/// (<see cref="LegacyFolderNames"/>: <c>Seaglass</c>, else <c>FluentFinMpv</c>) to the new one, recursively except Logs and
+	/// Updates; the old folder is never moved, changed or deleted. The journal database is copied with SQLite's online backup (a
+	/// consistent snapshot even while the old app runs), never as its db, -wal and -shm files. The copy is made beside the
+	/// target and renamed into place, so an interrupted copy never leaves a half-filled Nixie folder. On ANY failure the
+	/// partial copy is deleted and no Nixie folder exists: the caller runs on the old folder in place (<paramref name="source"/>)
+	/// and the next start tries again (<paramref name="failed"/> is true, the text says why). <paramref name="source"/> is the
+	/// old folder copied (or tried), null when there was nothing to do.
 	/// </summary>
-	public static string? CopyLegacyFolder(string localAppData, out bool failed, Action<string>? afterEachFile = null)
+	public static string? CopyLegacyFolder(string localAppData, out bool failed, out string? source, Action<string>? afterEachFile = null)
 	{
 		failed = false;
+		source = null;
 		var target = Path.Combine(localAppData, FolderName);
-		var legacy = Path.Combine(localAppData, LegacyFolderName);
 		var partial = target + ".copying";
-		// two Seaglass windows started together on the first run must not share the partial folder (one would delete or move
+		string? legacy = null;
+		// two Nixie windows started together on the first run must not share the partial folder (one would delete or move
 		// the other's half-done copy): one copies, the other waits and then finds the finished folder
-		using var copyLock = new Mutex(false, @"Local\Seaglass-data-folder-copy");
+		using var copyLock = new Mutex(false, CopyMutexName);
 		try
 		{
 			try
@@ -88,10 +111,18 @@ public class KnownFolders
 				// the other copier ended without releasing it: ours now, and its partial folder is deleted below
 			}
 
-			if (Directory.Exists(target) || !Directory.Exists(legacy))
+			if (Directory.Exists(target))
 			{
 				return null;
 			}
+
+			legacy = LegacyFolderNames.Select(name => Path.Combine(localAppData, name)).FirstOrDefault(Directory.Exists);
+			if (legacy is null)
+			{
+				return null;
+			}
+
+			source = legacy;
 
 			if (Directory.Exists(partial))
 			{
@@ -117,7 +148,7 @@ public class KnownFolders
 				// the next start deletes it before copying
 			}
 
-			return $"Could not copy the data folder {legacy} to {target}: {ex.Message}. Using the old folder in place; the copy is tried again at the next start";
+			return $"Could not copy the data folder {legacy ?? "(none found)"} to {target}: {ex.Message}. Using the old folder in place; the copy is tried again at the next start";
 		}
 		finally
 		{
@@ -126,7 +157,11 @@ public class KnownFolders
 		}
 	}
 
-	/// <summary><see cref="CopyLegacyFolder(string, out bool, Action{string}?)"/> for callers that only want the note.</summary>
+	/// <summary><see cref="CopyLegacyFolder(string, out bool, out string?, Action{string}?)"/> without the source.</summary>
+	public static string? CopyLegacyFolder(string localAppData, out bool failed, Action<string>? afterEachFile = null) =>
+		CopyLegacyFolder(localAppData, out failed, out _, afterEachFile);
+
+	/// <summary><see cref="CopyLegacyFolder(string, out bool, out string?, Action{string}?)"/> for callers that only want the note.</summary>
 	public static string? CopyLegacyFolder(string localAppData) => CopyLegacyFolder(localAppData, out _);
 
 	private static void CopyDirectory(string from, string to, bool top, Action<string>? afterEachFile)
@@ -191,7 +226,7 @@ public class KnownFolders
 	/// <summary>The FluentFin log file (Serilog adds the date to its name).</summary>
 	public string LogFile => Path.Combine(Logs, "log.txt");
 
-	// fluentfin-mpv: no parameterless constructor. It meant %LOCALAPPDATA%\Seaglass, so a container that ever built this
+	// fluentfin-mpv: no parameterless constructor. It meant %LOCALAPPDATA%\Nixie, so a container that ever built this
 	// class itself would have put a --data-dir run's files into the user's folder; the app registers the instance
 	// ForStartup made (KnownFoldersDataDirTests guards both).
 	public KnownFolders(string root) : this(root, isCustom: false) { }
@@ -239,7 +274,7 @@ public class KnownFolders
 		}
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
 		{
-			error = $"Seaglass could not create its data folder {folder}: {ex.Message}";
+			error = $"{AppIdentity.Name} could not create its data folder {folder}: {ex.Message}";
 		}
 
 		return null;

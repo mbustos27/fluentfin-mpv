@@ -4,9 +4,9 @@
 		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
 		<TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
 		<RootNamespace>FluentFin</RootNamespace>
-		<ApplicationIcon>Assets/Seaglass.ico</ApplicationIcon>
-		<!-- Seaglass: the app is Seaglass.exe / Seaglass.dll; the namespaces and project names stay FluentFin.* for upstream merges -->
-		<AssemblyName>Seaglass</AssemblyName>
+		<ApplicationIcon>Assets/Nixie.ico</ApplicationIcon>
+		<!-- Nixie (formerly Seaglass): the app is Nixie.exe / Nixie.dll; the namespaces and project names stay FluentFin.* for upstream merges -->
+		<AssemblyName>Nixie</AssemblyName>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 		<Platforms>x86;x64;arm64</Platforms>
 		<RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
@@ -18,15 +18,15 @@
 		<LangVersion>preview</LangVersion>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<!-- fluentfin-mpv: the release version (shown, and sent to Jellyfin through Core\AppVersion); docs\RELEASE.md -->
-		<Version Condition=" '$(BuildVersion)' == '' ">1.1.3</Version>
+		<Version Condition=" '$(BuildVersion)' == '' ">1.2.0</Version>
 		<Version Condition=" '$(BuildVersion)' != '' ">$(BuildVersion)</Version>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-		<!-- Seaglass: what Properties > Details shows for Seaglass.exe (the launcher and the backend say the same: tools/release) -->
-		<Company>Seaglass</Company>
-		<Product>Seaglass</Product>
-		<AssemblyTitle>Seaglass</AssemblyTitle>
-		<Description>Seaglass, a Jellyfin client for Windows</Description>
-		<Copyright>Copyright (c) Seaglass contributors, FluentFin authors and jellyfin-mpv-shim authors. GPL-3.0-or-later</Copyright>
+		<!-- Nixie: what Properties > Details shows for Nixie.exe (the launcher and the backend say the same: tools/release) -->
+		<Company>Nixie</Company>
+		<Product>Nixie</Product>
+		<AssemblyTitle>Nixie</AssemblyTitle>
+		<Description>Nixie, a Jellyfin client for Windows</Description>
+		<Copyright>Copyright (c) Nixie contributors, FluentFin authors and jellyfin-mpv-shim authors. GPL-3.0-or-later</Copyright>
 		<AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
 		<GenerateAppInstallerFile>True</GenerateAppInstallerFile>
 		<AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
@@ -99,7 +99,7 @@
 	  <Content Update="Assets\GitHub.light.svg">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </Content>
-	  <Content Update="Assets\Seaglass.ico">
+	  <Content Update="Assets\Nixie.ico">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </Content>
 	  <Content Update="Assets\rotten.svg">

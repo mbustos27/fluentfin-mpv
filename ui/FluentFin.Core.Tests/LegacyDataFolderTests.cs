@@ -2,56 +2,106 @@
 
 namespace FluentFin.Core.Tests;
 
-/// <summary>Seaglass: %LOCALAPPDATA%\FluentFinMpv is copied (never moved) to %LOCALAPPDATA%\Seaglass on the first start. Only temporary folders here, never the real LocalAppData.</summary>
+/// <summary>
+/// Nixie: the newest old data folder (%LOCALAPPDATA%\Seaglass, else %LOCALAPPDATA%\FluentFinMpv) is copied (never moved) to
+/// %LOCALAPPDATA%\Nixie on the first start. Only temporary folders here, never the real LocalAppData.
+/// </summary>
 public sealed class LegacyDataFolderTests : IDisposable
 {
 	private readonly string _local = Path.Combine(Path.GetTempPath(), "FluentFinTests", Guid.NewGuid().ToString("N"));
-	private string Old => Path.Combine(_local, "FluentFinMpv");
-	private string New => Path.Combine(_local, "Seaglass");
+	private string Seaglass => Path.Combine(_local, "Seaglass");
+	private string FluentFinMpv => Path.Combine(_local, "FluentFinMpv");
+	private string New => Path.Combine(_local, "Nixie");
 
 	public LegacyDataFolderTests() => Directory.CreateDirectory(_local);
 
 	public void Dispose() => Directory.Delete(_local, true);
 
-	private void MakeOld()
+	private static void MakeOld(string folder, string marker = "{\"a\":1}")
 	{
-		Directory.CreateDirectory(Path.Combine(Old, "Logs"));
-		Directory.CreateDirectory(Path.Combine(Old, "mpv-backend", "shaders"));
-		File.WriteAllText(Path.Combine(Old, "settings.json"), "{\"a\":1}");
-		File.WriteAllText(Path.Combine(Old, "Logs", "log.txt"), "old log");
-		File.WriteAllText(Path.Combine(Old, "mpv-backend", "shaders", "s.glsl"), "shader");
+		Directory.CreateDirectory(Path.Combine(folder, "Logs"));
+		Directory.CreateDirectory(Path.Combine(folder, "Updates"));
+		Directory.CreateDirectory(Path.Combine(folder, "mpv-backend", "shaders"));
+		File.WriteAllText(Path.Combine(folder, "settings.json"), marker);
+		File.WriteAllText(Path.Combine(folder, "Logs", "log.txt"), "old log");
+		File.WriteAllText(Path.Combine(folder, "Updates", "x.msi"), "old update");
+		File.WriteAllText(Path.Combine(folder, "mpv-backend", "shaders", "s.glsl"), "shader");
 	}
+
+	/// <summary>Every file under <paramref name="folder"/> with its bytes, to show an old folder was left exactly as it was.</summary>
+	private static Dictionary<string, string> Snapshot(string folder) =>
+		Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
+			.ToDictionary(f => Path.GetRelativePath(folder, f), f => Convert.ToBase64String(File.ReadAllBytes(f)));
 
 	private static Func<string, string?> NoEnvironment => _ => null;
 
 	[Fact]
 	public void NewNames()
 	{
-		Assert.Equal("Seaglass", KnownFolders.FolderName);
-		Assert.Equal("FluentFinMpv", KnownFolders.LegacyFolderName);
+		Assert.Equal("Nixie", KnownFolders.FolderName);
+		Assert.Equal("Seaglass", KnownFolders.SeaglassFolderName);
+		Assert.Equal("FluentFinMpv", KnownFolders.FluentFinMpvFolderName);
+		Assert.Equal(["Seaglass", "FluentFinMpv"], KnownFolders.LegacyFolderNames);
+		Assert.Equal(@"Local\Nixie-data-folder-copy", KnownFolders.CopyMutexName);
+		Assert.Equal("Seaglass", KnownFolders.LegacyAppName("Seaglass"));
+		Assert.Equal("FluentFin MPV", KnownFolders.LegacyAppName("FluentFinMpv"));
 	}
 
 	[Fact]
-	public void CopiesTheOldFolder_AndLeavesItAsItWas()
+	public void CopiesTheSeaglassFolder_AndLeavesItAsItWas()
 	{
-		MakeOld();
+		MakeOld(Seaglass);
+		var before = Snapshot(Seaglass);
 
-		var note = KnownFolders.CopyLegacyFolder(_local);
+		var note = KnownFolders.CopyLegacyFolder(_local, out var failed, out var source);
 
-		Assert.NotNull(note);
+		Assert.False(failed, note);
+		Assert.Equal(Seaglass, source);
 		Assert.Contains("Copied", note);
+		Assert.Contains(Seaglass, note);
 		Assert.Equal("{\"a\":1}", File.ReadAllText(Path.Combine(New, "settings.json")));
 		Assert.False(Directory.Exists(Path.Combine(New, "Logs"))); // old logs are skipped
+		Assert.False(Directory.Exists(Path.Combine(New, "Updates"))); // and downloaded updates
 		Assert.Equal("shader", File.ReadAllText(Path.Combine(New, "mpv-backend", "shaders", "s.glsl")));
-		Assert.Equal("{\"a\":1}", File.ReadAllText(Path.Combine(Old, "settings.json")));
-		Assert.True(File.Exists(Path.Combine(Old, "mpv-backend", "shaders", "s.glsl")));
+		Assert.Equal(before, Snapshot(Seaglass));
 		Assert.False(Directory.Exists(New + ".copying"));
+	}
+
+	[Fact]
+	public void WithNoSeaglassFolder_CopiesTheFluentFinMpvFolder_AndLeavesItAsItWas()
+	{
+		MakeOld(FluentFinMpv);
+		var before = Snapshot(FluentFinMpv);
+
+		var note = KnownFolders.CopyLegacyFolder(_local, out var failed, out var source);
+
+		Assert.False(failed, note);
+		Assert.Equal(FluentFinMpv, source);
+		Assert.Equal("{\"a\":1}", File.ReadAllText(Path.Combine(New, "settings.json")));
+		Assert.False(Directory.Exists(Path.Combine(New, "Logs")));
+		Assert.Equal(before, Snapshot(FluentFinMpv));
+		Assert.False(Directory.Exists(Seaglass)); // nothing is made under the in-between name
+	}
+
+	[Fact]
+	public void WithBoth_TheSeaglassFolderIsTheOneCopied()
+	{
+		MakeOld(FluentFinMpv, "{\"from\":\"fluentfin mpv\"}");
+		MakeOld(Seaglass, "{\"from\":\"seaglass\"}");
+		var olderBefore = Snapshot(FluentFinMpv);
+
+		KnownFolders.CopyLegacyFolder(_local, out var failed, out var source);
+
+		Assert.False(failed);
+		Assert.Equal(Seaglass, source);
+		Assert.Equal("{\"from\":\"seaglass\"}", File.ReadAllText(Path.Combine(New, "settings.json")));
+		Assert.Equal(olderBefore, Snapshot(FluentFinMpv));
 	}
 
 	[Fact]
 	public void AnExistingNewFolder_IsNotTouched()
 	{
-		MakeOld();
+		MakeOld(Seaglass);
 		Directory.CreateDirectory(New);
 		File.WriteAllText(Path.Combine(New, "mine.txt"), "x");
 
@@ -63,17 +113,19 @@ public sealed class LegacyDataFolderTests : IDisposable
 	[Fact]
 	public void NoOldFolder_DoesNothing()
 	{
-		Assert.Null(KnownFolders.CopyLegacyFolder(_local));
+		Assert.Null(KnownFolders.CopyLegacyFolder(_local, out var failed, out var source));
+		Assert.False(failed);
+		Assert.Null(source);
 		Assert.False(Directory.Exists(New));
 	}
 
 	[Fact]
 	public void ASecondStart_CopiesNothingAgain()
 	{
-		MakeOld();
+		MakeOld(Seaglass);
 		KnownFolders.CopyLegacyFolder(_local);
 		File.WriteAllText(Path.Combine(New, "settings.json"), "changed");
-		File.WriteAllText(Path.Combine(Old, "settings.json"), "newer old");
+		File.WriteAllText(Path.Combine(Seaglass, "settings.json"), "newer old");
 
 		Assert.Null(KnownFolders.CopyLegacyFolder(_local));
 		Assert.Equal("changed", File.ReadAllText(Path.Combine(New, "settings.json")));
@@ -82,7 +134,7 @@ public sealed class LegacyDataFolderTests : IDisposable
 	[Fact]
 	public void ALeftoverPartialCopy_IsReplaced()
 	{
-		MakeOld();
+		MakeOld(Seaglass);
 		Directory.CreateDirectory(New + ".copying");
 		File.WriteAllText(Path.Combine(New + ".copying", "stale.txt"), "x");
 
@@ -95,7 +147,8 @@ public sealed class LegacyDataFolderTests : IDisposable
 	[Fact]
 	public void ADataDirRun_DoesNotCopy()
 	{
-		MakeOld();
+		MakeOld(Seaglass);
+		MakeOld(FluentFinMpv);
 
 		Assert.Null(KnownFolders.CopyLegacyForStartup(["--data-dir", Path.Combine(_local, "d")], NoEnvironment, _local).Note);
 		Assert.Null(KnownFolders.CopyLegacyForStartup([], n => n == KnownFolders.DataDirVariable ? Path.Combine(_local, "d") : null, _local).Note);
@@ -106,30 +159,40 @@ public sealed class LegacyDataFolderTests : IDisposable
 	[Fact]
 	public void ADefaultRun_Copies()
 	{
-		MakeOld();
+		MakeOld(Seaglass);
 
-		Assert.NotNull(KnownFolders.CopyLegacyForStartup(["--mpv-selftest"], NoEnvironment, _local).Note);
+		var result = KnownFolders.CopyLegacyForStartup(["--mpv-selftest"], NoEnvironment, _local);
+
+		Assert.NotNull(result.Note);
+		Assert.False(result.Failed);
+		Assert.Null(result.LegacyRoot); // nothing to fall back to: the run uses Nixie
 		Assert.True(File.Exists(Path.Combine(New, "settings.json")));
 	}
 
-	[Fact]
-	public void AFailedCopy_LeavesNoSeaglassFolder_UsesTheOldOne_AndTheNextStartRetries()
+	[Theory]
+	[InlineData("Seaglass", "Seaglass")]
+	[InlineData("FluentFinMpv", "FluentFin MPV")]
+	public void AFailedCopy_LeavesNoNixieFolder_UsesTheOldOne_AndTheNextStartRetries(string oldFolder, string oldApp)
 	{
-		MakeOld();
+		var old = Path.Combine(_local, oldFolder);
+		MakeOld(old);
+		var before = Snapshot(old);
 		var calls = 0;
 
 		var first = KnownFolders.CopyLegacyForStartup([], NoEnvironment, _local, _ => { if (++calls == 2) throw new InvalidOperationException("disk full"); });
 
 		Assert.True(first.Failed);
-		Assert.Equal(Old, first.LegacyRoot);
+		Assert.Equal(old, first.LegacyRoot);
+		Assert.Equal(oldApp, first.LegacyApp);
 		Assert.Contains("disk full", first.Note);
 		Assert.False(Directory.Exists(New));
 		Assert.False(Directory.Exists(New + ".copying"));
+		Assert.Equal(before, Snapshot(old));
 		// the run goes on in the old folder, which is unchanged
 		var folders = KnownFolders.TryForStartup([], NoEnvironment, out var error, () => first.LegacyRoot!);
 		Assert.NotNull(folders);
 		Assert.Null(error);
-		Assert.Equal(Old, folders.ApplicationData);
+		Assert.Equal(old, folders.ApplicationData);
 		Assert.False(Directory.Exists(New));
 
 		// second start: retried, and it works
@@ -141,10 +204,51 @@ public sealed class LegacyDataFolderTests : IDisposable
 	}
 
 	[Fact]
-	public void TheJournal_IsCopiedWithItsUncheckpointedWalRows()
+	public void ASecondStartDuringTheCopy_WaitsForIt_AndThenFindsTheFinishedFolder()
 	{
-		MakeOld();
-		var db = Path.Combine(Old, "journal.db");
+		MakeOld(Seaglass);
+		using var held = new ManualResetEventSlim();
+		using var release = new ManualResetEventSlim();
+		// the first start's copy, holding the named mutex (a mutex belongs to the thread that took it)
+		var first = new Thread(() =>
+		{
+			using var mutex = new Mutex(false, KnownFolders.CopyMutexName);
+			try
+			{
+				mutex.WaitOne();
+				held.Set();
+				release.Wait();
+				KnownFolders.CopyLegacyFolder(_local);
+			}
+			finally
+			{
+				mutex.ReleaseMutex();
+			}
+		});
+		first.Start();
+		Assert.True(held.Wait(TimeSpan.FromSeconds(10)));
+
+		var second = Task.Run(() =>
+		{
+			var note = KnownFolders.CopyLegacyFolder(_local, out var failed, out var source);
+			return (note, failed, source);
+		});
+		Assert.False(second.Wait(TimeSpan.FromMilliseconds(400))); // waits for the first
+		Assert.False(Directory.Exists(New));
+		release.Set();
+		Assert.True(second.Wait(TimeSpan.FromSeconds(30)));
+		first.Join();
+
+		Assert.Null(second.Result.note); // the first copied; the second found the finished folder
+		Assert.False(second.Result.failed);
+		Assert.True(File.Exists(Path.Combine(New, "settings.json")));
+	}
+
+	[Fact]
+	public void TheJournal_IsCopiedWithItsUncheckpointedWalRows_AndTheOldOneIsNotCheckpointed()
+	{
+		MakeOld(Seaglass);
+		var db = Path.Combine(Seaglass, "journal.db");
 		var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={db};Pooling=False");
 		connection.Open();
 		Exec(connection, "PRAGMA journal_mode=WAL");
@@ -155,14 +259,16 @@ public sealed class LegacyDataFolderTests : IDisposable
 			Exec(connection, $"INSERT INTO t(v) VALUES('row{i}')");
 		}
 
-		// the writer (FluentFin MPV 1.0.x) is still open: the rows are in the -wal file, not in journal.db
+		// the writer (Seaglass 1.1.x) is still open: the rows are in the -wal file, not in journal.db
 		Assert.True(File.Exists(db + "-wal") && new FileInfo(db + "-wal").Length > 0);
+		var dbBefore = ReadShared(db);
 		try
 		{
 			var note = KnownFolders.CopyLegacyFolder(_local, out var failed);
 
 			Assert.False(failed, note);
 			Assert.False(File.Exists(Path.Combine(New, "journal.db-wal")));
+			Assert.Equal(dbBefore, ReadShared(db)); // read-only: no checkpoint into the old journal
 			using var copy = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(New, "journal.db")};Mode=ReadOnly;Pooling=False");
 			copy.Open();
 			using var count = copy.CreateCommand();
@@ -173,6 +279,15 @@ public sealed class LegacyDataFolderTests : IDisposable
 		{
 			connection.Dispose();
 		}
+	}
+
+	/// <summary>A file the open writer still holds (SQLite shares it for reading and writing).</summary>
+	private static byte[] ReadShared(string path)
+	{
+		using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+		using var copy = new MemoryStream();
+		stream.CopyTo(copy);
+		return copy.ToArray();
 	}
 
 	private static void Exec(Microsoft.Data.Sqlite.SqliteConnection connection, string sql)

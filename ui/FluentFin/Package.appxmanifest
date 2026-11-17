@@ -11,13 +11,13 @@
   <Identity
     Name="FluentFinMpv"
     Publisher="CN=348A3DEB-CA3E-4EEC-B964-9DA8537752C1"
-    Version="1.1.3.0" />
+    Version="1.2.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="3090ceee-d0c7-4f4e-8f1b-4222f884cd65" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>Seaglass</DisplayName>
-    <PublisherDisplayName>Seaglass (formerly FluentFin MPV, a fork of FluentFin by Insomniachi)</PublisherDisplayName>
+    <DisplayName>Nixie</DisplayName>
+    <PublisherDisplayName>Nixie (formerly Seaglass and FluentFin MPV, a fork of FluentFin by Insomniachi)</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -35,8 +35,8 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$" uap18:RuntimeBehavior="windowsApp">
       <uap:VisualElements
-        DisplayName="Seaglass"
-        Description="Seaglass: a Jellyfin client with mpv playback (FluentFin and jellyfin-mpv-shim)"
+        DisplayName="Nixie"
+        Description="Nixie: a Jellyfin client with mpv playback (FluentFin and jellyfin-mpv-shim)"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png">
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />

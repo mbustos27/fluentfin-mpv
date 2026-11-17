@@ -199,7 +199,8 @@ internal sealed class FakeJellyfin : IDisposable
 			}
 
 			var url = context.Request.Url!;
-			_requests.Enqueue(new FakeRequest(context.Request.HttpMethod, url.AbsolutePath, url.ToString(), System.Web.HttpUtility.ParseQueryString(url.Query)));
+			_requests.Enqueue(new FakeRequest(context.Request.HttpMethod, url.AbsolutePath, url.ToString(), System.Web.HttpUtility.ParseQueryString(url.Query),
+				context.Request.Headers["Authorization"] ?? context.Request.Headers["X-Emby-Authorization"], context.Request.UserAgent));
 			var (status, body) = _responses.TryGetValue(url.AbsolutePath, out var response) ? response : (404, "");
 			try
 			{
@@ -235,7 +236,8 @@ internal sealed class FakeJellyfin : IDisposable
 	}
 }
 
-internal sealed record FakeRequest(string Method, string Path, string Url, System.Collections.Specialized.NameValueCollection Query);
+/// <summary>A request the fake server saw; <see cref="Authorization"/> and <see cref="UserAgent"/> are the client's headers (Nixie: the client name).</summary>
+internal sealed record FakeRequest(string Method, string Path, string Url, System.Collections.Specialized.NameValueCollection Query, string? Authorization = null, string? UserAgent = null);
 
 internal sealed class CoreListLogger<T> : ILogger<T>
 {

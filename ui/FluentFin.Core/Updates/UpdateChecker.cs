@@ -24,7 +24,7 @@ public sealed record UpdateCheckResult(UpdateCheckStatus Status, ReleaseInfo? Re
 
 /// <summary>
 /// Seaglass: the opt-in update check. One request, to GitHub's "latest release" API for this repository, with a plain
-/// User-Agent ("Seaglass/x.y.z") and nothing else about the user or the PC. It fails silently, and honours GitHub's rate limit
+/// User-Agent ("Nixie/x.y.z") and nothing else about the user or the PC. It fails silently, and honours GitHub's rate limit
 /// headers (Retry-After, x-ratelimit-remaining/reset): a limited answer is reported, never retried here.
 /// </summary>
 public sealed class UpdateChecker(HttpClient http, string currentVersion)
@@ -36,7 +36,7 @@ public sealed class UpdateChecker(HttpClient http, string currentVersion)
 		try
 		{
 			using var request = new HttpRequestMessage(HttpMethod.Get, UpdateSource.LatestReleaseApi);
-			request.Headers.UserAgent.Add(new ProductInfoHeaderValue("Seaglass", currentVersion));
+			request.Headers.UserAgent.Add(new ProductInfoHeaderValue(AppIdentity.Name, currentVersion));
 			request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
 			using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
 			timeout.CancelAfter(Timeout);
@@ -109,7 +109,7 @@ public sealed class UpdateDownloader(HttpClient http, string folder)
 		if (!release.HasInstaller || !UpdateSource.IsDownload(release.MsiUrl) || !UpdateSource.IsDownload(release.Sha256Url)
 			|| release.MsiName is not { } name || name != Path.GetFileName(name) || !name.EndsWith(".msi", StringComparison.Ordinal))
 		{
-			throw new UpdateException("This release has no installer from the Seaglass releases.");
+			throw new UpdateException($"This release has no installer from the {AppIdentity.Name} releases.");
 		}
 
 		Directory.CreateDirectory(folder);

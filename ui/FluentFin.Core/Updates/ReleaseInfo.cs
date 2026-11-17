@@ -9,6 +9,13 @@ public static class UpdateSource
 	public const string RepositoryUrl = "https://github.com/mbustos27/fluentfin-mpv";
 	public const string LatestReleaseApi = "https://api.github.com/repos/mbustos27/fluentfin-mpv/releases/latest";
 	public const string ReleasesPage = RepositoryUrl + "/releases";
+
+	/// <summary>Nixie: the installer a release of <paramref name="version"/> carries, <c>Nixie-&lt;version&gt;-win-x64.msi</c> (Seaglass-... before 1.2.0).</summary>
+	public static string InstallerName(string version) => $"{AppIdentity.Name}-{version}-win-x64.msi";
+
+	/// <summary>Nixie: the MSI's registry key under HKCU (InstallFolder, StartMenuShortcut); <c>Software\Seaglass</c> before 1.2.0.</summary>
+	public const string RegistryKey = @"Software\" + AppIdentity.Name;
+
 	private const string DownloadPrefix = RepositoryUrl + "/releases/download/";
 	private const string PagePrefix = RepositoryUrl + "/releases/";
 
@@ -72,7 +79,7 @@ public static class UpdateSource
 
 /// <summary>
 /// Seaglass: a newer release found on GitHub: its version, its page, its notes and, when the release has them, the installer
-/// (<c>Seaglass-X.Y.Z-win-x64.msi</c>) and its checksum file. Only this repository's release assets are ever taken.
+/// (<c>Nixie-X.Y.Z-win-x64.msi</c>, <see cref="UpdateSource.InstallerName"/>) and its checksum file. Only this repository's release assets are ever taken.
 /// </summary>
 public sealed record ReleaseInfo(string Version, string PageUrl, string Notes, string? MsiName, string? MsiUrl, string? Sha256Url)
 {
@@ -86,11 +93,11 @@ public sealed record ReleaseInfo(string Version, string PageUrl, string Notes, s
 	{
 		var page = UpdateSource.IsReleasePage(PageUrl) ? PageUrl : $"{UpdateSource.ReleasesPage}/tag/v{Version}";
 		var ok = HasInstaller && UpdateSource.IsDownload(MsiUrl) && UpdateSource.IsDownload(Sha256Url)
-			&& MsiName == $"Seaglass-{Version}-win-x64.msi";
+			&& MsiName == UpdateSource.InstallerName(Version);
 		return ok ? this with { PageUrl = page } : this with { PageUrl = page, MsiName = null, MsiUrl = null, Sha256Url = null };
 	}
 
-	/// <summary>The release as GitHub's "latest release" JSON says it; null for a draft, a pre-release, or what is not a Seaglass release.</summary>
+	/// <summary>The release as GitHub's "latest release" JSON says it; null for a draft, a pre-release, or what is not a release of this app.</summary>
 	public static ReleaseInfo? Parse(string? json)
 	{
 		if (string.IsNullOrWhiteSpace(json))
@@ -120,8 +127,8 @@ public sealed record ReleaseInfo(string Version, string PageUrl, string Notes, s
 				page = $"{UpdateSource.ReleasesPage}/tag/v{versionText}";
 			}
 
-			// only the installer this version's release builds: Seaglass-<version>-win-x64.msi and its .sha256, from this repository
-			var msiName = $"Seaglass-{versionText}-win-x64.msi";
+			// only the installer this version's release builds: Nixie-<version>-win-x64.msi and its .sha256, from this repository
+			var msiName = UpdateSource.InstallerName(versionText);
 			string? msiUrl = null, shaUrl = null;
 			if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
 			{
