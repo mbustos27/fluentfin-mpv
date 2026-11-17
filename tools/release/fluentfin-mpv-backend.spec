@@ -50,6 +50,10 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+# slim package: PIL's Tk bridge (never imported: no tkinter) and the _wmi helper of platform (optional, platform falls back)
+# are not shipped; if the build ever needs one, take it out of this list
+a.binaries = [b for b in a.binaries if not os.path.basename(b[0]).lower().startswith(("_imagingtk", "_wmi"))]
+
 pyz = PYZ(a.pure)
 
 parts = [int(p) for p in VERSION.split("-")[0].split(".")[:3]] + [0]
