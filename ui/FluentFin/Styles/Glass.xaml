@@ -130,7 +130,9 @@
     <!--  shapes  -->
     <CornerRadius x:Key="GlassPanelCornerRadius">20</CornerRadius>
     <CornerRadius x:Key="GlassCardCornerRadius">12</CornerRadius>
-    <CornerRadius x:Key="GlassPillCornerRadius">999</CornerRadius>
+    <CornerRadius x:Key="GlassButtonCornerRadius">12</CornerRadius>
+    <CornerRadius x:Key="GlassChipCornerRadius">8</CornerRadius>
+    <CornerRadius x:Key="GlassCircleCornerRadius">999</CornerRadius>
     <Thickness x:Key="GlassStrokeThickness">1</Thickness>
     <x:Double x:Key="GlassPillHeight">44</x:Double>
 
@@ -285,7 +287,7 @@
         <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
-        <Setter Property="CornerRadius" Value="{StaticResource GlassPillCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
         <Setter Property="MinHeight" Value="{StaticResource GlassPillHeight}" />
         <Setter Property="Padding" Value="20,10" />
         <Setter Property="FontWeight" Value="SemiBold" />
@@ -302,7 +304,7 @@
         <Setter Property="Foreground" Value="{ThemeResource SeaglassAccentForegroundBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
-        <Setter Property="CornerRadius" Value="{StaticResource GlassPillCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
         <Setter Property="MinHeight" Value="{StaticResource GlassPillHeight}" />
         <Setter Property="Padding" Value="22,10" />
         <Setter Property="FontWeight" Value="SemiBold" />
@@ -315,6 +317,7 @@
         x:Key="GlassIconButtonStyle"
         BasedOn="{StaticResource GlassPillButtonStyle}"
         TargetType="Button">
+        <Setter Property="CornerRadius" Value="{StaticResource GlassCircleCornerRadius}" />
         <Setter Property="Width" Value="{StaticResource GlassPillHeight}" />
         <Setter Property="Height" Value="{StaticResource GlassPillHeight}" />
         <Setter Property="MinHeight" Value="0" />

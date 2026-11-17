@@ -139,6 +139,7 @@ the backend to change it.
 | `set_subtitle` | `index: int` | `-1` = off. |
 | `set_volume` | `volume: int` 0–100 | |
 | `set_mute` | `muted: bool` | |
+| `set_subtitle_size` | `percent: int` 50-200 | fluentfin-mpv: the subtitle text size in percent. Sets mpv's `sub-scale` to `percent / 100` now (text and ASS subtitles) and keeps it as the shim's own `subtitle_size` setting, so every later item starts with it and mpv's own controls use the same value. Always succeeds once connected, also with nothing playing. The UI sends its remembered value when it takes over the controls (§4 `set_controls`). Added in protocol 1 without a version bump. |
 | `set_fullscreen` | `fullscreen: bool` | Embedded and attached mode: tells the backend the UI's window state (for the OSC button); standalone mode: mpv goes fullscreen. |
 | `set_controls` | `controls: "ui" \| "mpv"` (required), `subtitleInset: number = 0` (0 to 0.5) | Who draws the player controls. `"mpv"` (what a backend starts with): the shim's OSC, subtitles where mpv puts them. `"ui"`: the UI draws its own over the video, mpv's OSC is hidden and stays hidden (across items, and after mpv is restarted), and `subtitleInset` is the share of the video area's height the UI's bottom controls cover **now**: mpv's subtitles move up by that share of the window's height (`sub-pos`, from the value mpv had), and back with `0`. The UI sends it again whenever the controls or their height change. With `"mpv"`, `subtitleInset` is ignored. |
 | `skip_segment` | — | fluentfin-mpv: skips the segment the backend offers now (`segments.current`, §5): seeks to that segment's end (not another one the position may also be in). Result `{"skipped": bool}`: `false`, and nothing done, when none is on offer or the backend's last sample of the position (about every 0.5 s) is outside it; `true` is the seek accepted, and it is left out if the position has left the segment by the time it would run. The backend's S key and its bar's Skip button do the same. Added in protocol 1 without a version bump. |
@@ -149,7 +150,7 @@ the backend to change it.
 Command details:
 - `pause`, `unpause`, `toggle_pause`, `seek`, `seek_relative` → `no_playback` when nothing is
   playing or opening; `next`, `previous`, `set_audio`, `set_subtitle`, `skip_segment` →
-  `no_playback` when nothing is playing. `stop`, volume, mute, fullscreen and `set_controls` always succeed once
+  `no_playback` when nothing is playing. `stop`, volume, mute, fullscreen, `set_subtitle_size` and `set_controls` always succeed once
   connected (`set_controls` also on a `--dev` backend connected with only its window). With nothing
   playing, `set_volume` sets the volume the next item starts at, and `set_controls` holds for every
   item after it.

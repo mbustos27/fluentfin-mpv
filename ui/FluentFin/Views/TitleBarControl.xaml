@@ -49,7 +49,7 @@
                 x:Name="SearchBox"
                 Width="600"
                 Margin="{StaticResource XSmallTopBottomMargin}"
-                CornerRadius="{StaticResource GlassPillCornerRadius}"
+                CornerRadius="{StaticResource GlassButtonCornerRadius}"
                 PlaceholderText="Search movies, series, actors and more"
                 QueryIcon="Find"
                 Visibility="{x:Bind SearchVisibility(ViewModel.User, Chrome.IsPlayerOpen), Mode=OneWay}">
@@ -149,7 +149,7 @@
                     Padding="0"
                     HorizontalAlignment="Right"
                     AutomationProperties.Name="{x:Bind core:ItemLabels.AccountButtonName(ViewModel.User.Name), Mode=OneWay}"
-                    CornerRadius="16"
+                    CornerRadius="{StaticResource GlassCircleCornerRadius}"
                     Style="{StaticResource GlassPillButtonStyle}"
                     ToolTipService.ToolTip="{x:Bind ViewModel.User.Name}"
                     Visibility="{x:Bind ViewModel.User, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}">

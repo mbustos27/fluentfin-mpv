@@ -145,6 +145,18 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	[ObservableProperty]
 	public partial bool IsMuted { get; set; }
 
+	/// <summary>The subtitle text size in percent (<see cref="SubtitleSizes"/>): the remembered one, sent when the controls take over.</summary>
+	[ObservableProperty]
+	public partial int SubtitleSize { get; set; } = SubtitleSizes.Default;
+
+	/// <summary>"120%".</summary>
+	public string SubtitleSizeText => SubtitleSizes.Text(SubtitleSize);
+
+	/// <summary>Told the new size (to remember it); null: nothing remembered.</summary>
+	public Action<int>? SubtitleSizeChanged { get; set; }
+
+	partial void OnSubtitleSizeChanged(int value) => OnPropertyChanged(nameof(SubtitleSizeText));
+
 	[ObservableProperty]
 	public partial bool IsFullScreen { get; set; }
 
@@ -893,6 +905,21 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		return _send(Bridge.Commands.SetAudio, BridgeCommands.Index(index));
 	}
 
+	/// <summary>The subtitles menu's Text size slider: the new size (snapped to 50..200 in 10s) now, remembered, and sent.</summary>
+	public Task SetSubtitleSize(int percent)
+	{
+		NotifyActivity();
+		var size = SubtitleSizes.Clamp(percent);
+		if (size == SubtitleSize)
+		{
+			return Task.CompletedTask;
+		}
+
+		SubtitleSize = size;
+		SubtitleSizeChanged?.Invoke(size);
+		return _send(Bridge.Commands.SetSubtitleSize, BridgeCommands.SubtitleSize(size));
+	}
+
 	/// <summary>The subtitles menu's pick: a Jellyfin stream index, or -1 for off.</summary>
 	public Task SetSubtitle(int index)
 	{
@@ -1033,7 +1060,9 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public Task SendControls()
 	{
 		_announced = true;
-		return SendInsetIfChanged(force: true);
+		// the remembered text size goes with it: applied at every playback start
+		var size = _send(Bridge.Commands.SetSubtitleSize, BridgeCommands.SubtitleSize(SubtitleSize));
+		return Task.WhenAll(size, SendInsetIfChanged(force: true));
 	}
 
 	private Task SendInsetIfChanged(bool force = false)

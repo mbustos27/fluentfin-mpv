@@ -34,7 +34,7 @@
         <Setter Property="Background" Value="{ThemeResource GlassPanelBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
         <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
-        <Setter Property="CornerRadius" Value="{StaticResource GlassPillCornerRadius}" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassCircleCornerRadius}" />
         <Setter Property="Width" Value="{StaticResource GlassPillHeight}" />
         <Setter Property="Height" Value="{StaticResource GlassPillHeight}" />
         <Setter Property="Padding" Value="0" />
