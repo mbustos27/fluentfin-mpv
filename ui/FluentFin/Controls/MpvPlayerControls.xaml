@@ -550,7 +550,7 @@
                 AutomationProperties.Name="{x:Bind Controls.SkipText, Mode=OneWay}"
                 Click="OnSkipSegmentClick"
                 Style="{StaticResource PlayerPill}"
-                ToolTipService.ToolTip="{x:Bind SkipToolTip(Controls.SkipText), Mode=OneWay}"
+                ToolTipService.ToolTip="{x:Bind SkipToolTip(Controls.SkipText, Controls.SkipSourceNote), Mode=OneWay}"
                 Visibility="{x:Bind VisibleIf(Controls.IsSkipVisible), Mode=OneWay}">
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <FontIcon

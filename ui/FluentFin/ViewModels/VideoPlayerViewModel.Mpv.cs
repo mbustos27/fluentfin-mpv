@@ -237,7 +237,7 @@ public partial class VideoPlayerViewModel
 			}
 
 			_mpvItems = new HashSet<string>(request.ItemIds.Select(NormalizeId), StringComparer.Ordinal);
-			if (await mpvPlayback.PlayAsync(generation, identity, request, IsFullScreen?.Invoke() ?? false, onStep: OnStep, controls: ControlsCommand()))
+			if (await mpvPlayback.PlayAsync(generation, identity, request, IsFullScreen?.Invoke() ?? false, onStep: OnStep, controls: ControlsCommand(), skipOptions: BridgeCommands.SkipOptions(settings.LookUpIntrosOnline, settings.LearnIntros)))
 			{
 				logger.LogInformation("Sent play to the mpv backend {Ms} ms after the player page opened (generation {Generation})", opened.ElapsedMilliseconds, generation);
 				OnMpvPlayAccepted();

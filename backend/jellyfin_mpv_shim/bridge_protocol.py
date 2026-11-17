@@ -394,6 +394,19 @@ def validate_controls(args):
     return controls, (inset if controls == "ui" else 0.0)
 
 
+def validate_skip_options(args):
+    """``set_skip_options`` args -> ``{"onlineLookup": bool|None,
+    "learnIntros": bool|None}``: each optional (None = leave as is), a bool
+    when given."""
+    out = {}
+    for key in ("onlineLookup", "learnIntros"):
+        value = args.get(key)
+        if value is not None and not isinstance(value, bool):
+            raise _bad("%s must be true or false" % key)
+        out[key] = value
+    return out
+
+
 def validate_play(args):
     """``play`` args, normalised. Mirrors the server's PlayNow command."""
     item_ids = args.get("itemIds", _MISSING)
@@ -822,14 +835,23 @@ def _clamp_ticks(ticks):
     return min(MAX_TICKS, max(0, ticks))
 
 
+#: Where a segment came from (BRIDGE.md ``segments.source``).
+SEGMENT_SOURCES = ("server", "chapters", "online", "learned")
+
+
 def segment_list(segments):
-    """The ``segments`` list from ``(type, start, end, action)`` tuples
-    (seconds), in the order given, without the ones set to off or with no
+    """The ``segments`` list from ``(type, start, end, action[, source])``
+    tuples (seconds; the source is ``server`` when left out), in the order
+    given, without the ones set to off or with no
     usable times. Times are held to 0 .. `MAX_TICKS` (a server's segment
     data is not checked by anyone before it gets here); one left empty by
     that is dropped."""
     out = []
-    for kind, start, end, action in segments or ():
+    for entry in segments or ():
+        kind, start, end, action = entry[:4]
+        source = entry[4] if len(entry) > 4 else "server"
+        if source not in SEGMENT_SOURCES:
+            source = "server"
         start_ticks = seconds_to_ticks(start)
         end_ticks = seconds_to_ticks(end)
         if start_ticks is not None:
@@ -841,7 +863,8 @@ def segment_list(segments):
                 or end_ticks <= start_ticks):
             continue
         out.append({"type": kind, "startTicks": start_ticks,
-                    "endTicks": end_ticks, "action": action})
+                    "endTicks": end_ticks, "action": action,
+                    "source": source})
     return out
 
 

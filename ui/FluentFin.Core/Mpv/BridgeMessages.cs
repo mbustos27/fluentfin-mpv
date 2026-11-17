@@ -30,6 +30,8 @@ public static class Bridge
 		public const string SetSubtitleSize = "set_subtitle_size";
 		public const string SetFullscreen = "set_fullscreen";
 		public const string SetControls = "set_controls";
+		/// <summary>fluentfin-mpv: the Skip intro settings (docs/BRIDGE.md §4): online lookups and learned intros.</summary>
+		public const string SetSkipOptions = "set_skip_options";
 		/// <summary>fluentfin-mpv: skips the segment on offer (<see cref="BridgeSegments.Offered"/>); result <see cref="BridgeSkipResult"/> (docs/BRIDGE.md §4).</summary>
 		public const string SkipSegment = "skip_segment";
 		public const string GetState = "get_state";
@@ -133,8 +135,18 @@ public sealed record BridgeTrack(int Index, string? Language = null, string? Tit
 /// fluentfin-mpv: one media segment of the <c>segments</c> event: Jellyfin's <c>MediaSegmentType</c> (<c>Intro</c>,
 /// <c>Outro</c>, <c>Commercial</c>, <c>Preview</c>, <c>Recap</c>), its span in ticks, and <see cref="Bridge.SegmentActions"/>.
 /// </summary>
-public sealed record BridgeSegment(string Type, long StartTicks, long EndTicks, string Action)
+public sealed record BridgeSegment(string Type, long StartTicks, long EndTicks, string Action, string Source = "server")
 {
+	/// <summary>The quiet tooltip line for where the skip came from; null for the server's own segments and unknown sources.</summary>
+	[JsonIgnore]
+	public string? SourceNote => Source switch
+	{
+		"chapters" => "from chapters",
+		"online" => "from an online source",
+		"learned" => "from your earlier skips",
+		_ => null,
+	};
+
 	/// <summary>The skip button's text, the backend's own words for the type ("Skip Credits" for an outro).</summary>
 	[JsonIgnore]
 	public string SkipLabel => Type switch

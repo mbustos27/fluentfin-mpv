@@ -24,7 +24,10 @@ internal sealed class RecordingBackend : IMpvBackend
 	public bool Dev { get; private set; }
 	public List<BridgeIdentity?> Identities { get; } = [];
 
-	public string[] Commands => [.. _sent.Select(x => x.Command)];
+	/// <summary>The commands sent, without the Skip intro switches every play sends first (<see cref="AllCommands"/>; the test of them is in VideoPlayerViewModelMpvTests.Controls), so the order tests keep reading what they are about.</summary>
+	public string[] Commands => [.. AllCommands.Where(x => x != "set_skip_options")];
+
+	public string[] AllCommands => [.. _sent.Select(x => x.Command)];
 
 	public JsonObject Args(string command) => _sent.Last(x => x.Command == command).Args!;
 
@@ -92,7 +95,11 @@ internal sealed class RecordingBackend : IMpvBackend
 	public Task<JsonNode?> SendAsync(string command, JsonObject? args = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
 	{
 		_sent.Enqueue((command, args));
-		Timeline.Enqueue("send " + command);
+		if (command != "set_skip_options")
+		{
+			Timeline.Enqueue("send " + command);   // the switches every play sends are not part of the orders the timeline tests read
+		}
+
 		if (CommandFailure is { } failure && failure.Command == command)
 		{
 			return Task.FromException<JsonNode?>(failure.Failure);

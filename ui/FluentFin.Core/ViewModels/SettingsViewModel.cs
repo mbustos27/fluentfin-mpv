@@ -41,7 +41,7 @@ public sealed record SubtitleModeChoice(UserConfiguration_SubtitleMode Mode, str
 	public override string ToString() => Name;
 }
 
-public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache) : ObservableObject, INavigationAware
+public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache, KnownFolders? knownFolders = null) : ObservableObject, INavigationAware
 {
 	private IDisposable? _statusSubscription;
 
@@ -255,6 +255,52 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 				OnPropertyChanged();
 			}
 		}
+	}
+
+	/// <summary>Kept on this PC: see <see cref="SettingKeys.LookUpIntrosOnline"/>. Reaches the backend with the next play.</summary>
+	public bool LookUpIntrosOnline
+	{
+		get => settings.LookUpIntrosOnline;
+		set
+		{
+			if (settings.LookUpIntrosOnline != value)
+			{
+				settings.LookUpIntrosOnline = value;
+				OnPropertyChanged();
+			}
+		}
+	}
+
+	/// <summary>Kept on this PC: see <see cref="SettingKeys.LearnIntros"/>. Reaches the backend with the next play.</summary>
+	public bool LearnIntros
+	{
+		get => settings.LearnIntros;
+		set
+		{
+			if (settings.LearnIntros != value)
+			{
+				settings.LearnIntros = value;
+				OnPropertyChanged();
+			}
+		}
+	}
+
+	/// <summary>What "Forget learned intros" said last ("" before it was pressed).</summary>
+	[ObservableProperty]
+	public partial string ForgetLearnedStatus { get; set; } = "";
+
+	/// <summary>Deletes the intros learned from the user's skips (<see cref="LearnedIntros"/>).</summary>
+	[RelayCommand]
+	private void ForgetLearnedIntros()
+	{
+		if (knownFolders is null)
+		{
+			return;
+		}
+
+		ForgetLearnedStatus = LearnedIntros.Forget(LearnedIntros.ConfigDirectory(knownFolders))
+			? "Learned intros forgotten."
+			: "Could not forget them. Close the player and try again.";
 	}
 
 	/// <summary>Kept on this PC: see <see cref="SettingKeys.MouseWheelVolume"/>.</summary>

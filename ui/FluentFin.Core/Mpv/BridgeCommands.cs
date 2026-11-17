@@ -187,6 +187,9 @@ public static class BridgeCommands
 		? new JsonObject { ["controls"] = "ui", ["subtitleInset"] = RoundInset(subtitleInset) }
 		: new JsonObject { ["controls"] = "mpv" };
 
+	/// <summary>fluentfin-mpv: <c>set_skip_options</c> (docs/BRIDGE.md §4): Settings > Playback's two switches for Skip intro.</summary>
+	public static JsonObject SkipOptions(bool onlineLookup, bool learnIntros) => new() { ["onlineLookup"] = onlineLookup, ["learnIntros"] = learnIntros };
+
 	/// <summary>The inset as sent: 0..0.5, three decimals; anything not a number is 0.</summary>
 	public static double RoundInset(double inset) => double.IsFinite(inset) ? Math.Round(Math.Clamp(inset, 0, MaxSubtitleInset), 3) : 0;
 

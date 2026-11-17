@@ -13,7 +13,7 @@ import logging
 import os
 import sys
 
-from .. import conf
+from .. import conf, intro_sources
 from ..conf import settings
 from ..language_config import apply as apply_language_config
 from ..media import Intro, Video, PLAY_DIRECT
@@ -353,6 +353,8 @@ class OfflineVideo(Video):
         # skippable segments are cached with the download (see get_intro).
         if conf.any_segment_wanted():
             self.get_intro(self.media_source.get("Id"))
+            # fluentfin-mpv: chapters and learned intros (intro_sources).
+            intro_sources.augment(self, Intro)
         self.map_streams()
         log.info("Playing local file: %s", self._local_path)
         return self._local_path

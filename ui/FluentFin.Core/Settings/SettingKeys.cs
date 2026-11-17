@@ -22,6 +22,15 @@ public static class SettingKeys
 	/// <summary>Show the Skip intro / Skip credits button during those segments.</summary>
 	public static Key<bool> ShowSkipPrompt { get; } = new Key<bool>("ShowSkipPrompt", true);
 
+	/// <summary>
+	/// Look intros up online when neither the server nor the file's chapters have them (TheIntroDB, and AniSkip for anime). Off
+	/// until the user turns it on: the show's public id, season, episode and length are sent, nothing else.
+	/// </summary>
+	public static Key<bool> LookUpIntrosOnline { get; } = new Key<bool>("LookUpIntrosOnline", false);
+
+	/// <summary>Remember where the user skips the start of an episode and offer it on the season's later episodes.</summary>
+	public static Key<bool> LearnIntros { get; } = new Key<bool>("LearnIntros", true);
+
 	/// <summary>The mouse wheel over the video changes the volume.</summary>
 	public static Key<bool> MouseWheelVolume { get; } = new Key<bool>("MouseWheelVolume", true);
 

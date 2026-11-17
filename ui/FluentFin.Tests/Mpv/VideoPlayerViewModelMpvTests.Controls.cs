@@ -33,6 +33,28 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		Assert.True(JsonNode.DeepEquals(new JsonObject { ["controls"] = "ui", ["subtitleInset"] = 0.0 }, _backend.Args("set_controls")), _backend.Args("set_controls").ToJsonString());
 	}
 
+	[Theory]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	public async Task ThePlay_IsPrecededByTheSkipIntroSwitches_FromSettings(bool online, bool learn)
+	{
+		var movie = Movie();
+		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
+		_settings.SetupGet(x => x.LookUpIntrosOnline).Returns(online);
+		_settings.SetupGet(x => x.LearnIntros).Returns(learn);
+		var vm = CreateViewModel();
+
+		await vm.OnNavigatedTo(movie);
+
+		var all = _backend.AllCommands.ToList();
+		Assert.True(all.IndexOf("set_skip_options") >= 0 && all.IndexOf("set_skip_options") < all.IndexOf("play"), string.Join(",", all));
+		var args = _backend.Args("set_skip_options");
+		Assert.Equal(online, (bool)args["onlineLookup"]!);
+		Assert.Equal(learn, (bool)args["learnIntros"]!);
+		// nothing else: no server, user, token or path rides along
+		Assert.Equal(2, args.Count);
+	}
+
 	[Fact]
 	public async Task FluentFinControls_TakeTheWheelAndStepFromPlaybackSettings()
 	{
