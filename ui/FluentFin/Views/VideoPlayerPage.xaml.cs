@@ -58,7 +58,8 @@ public sealed partial class VideoPlayerPage : Page
 		_chrome.NavigatedTo();
 		ViewModel.ToggleFullScreen = () => MediaPlayerHost.OnPlayerDoubleTapped(MediaPlayerHost, new Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs());
 		ViewModel.SetFullScreen = SetMpvFullScreen;
-		ViewModel.IsFullScreen = () => App.MainWindow.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
+		// the state a running switch is making, also before its presenter change (the cover's frame comes first)
+		ViewModel.IsFullScreen = () => _switch.Target;
 		ViewModel.FocusVideo = FocusVideo;
 		ViewModel.GoBack = GoBack;
 	}
@@ -67,6 +68,9 @@ public sealed partial class VideoPlayerPage : Page
 	{
 		_navigatedFrom = true;
 		_chrome.NavigatedFrom();
+		// Seaglass 1.1.3: a switch still running ends first (its cover goes; a presenter change still waiting for the
+		// cover's frame is dropped), so the restore below starts from the window's real state
+		EndSwitch();
 		DetachVideo();
 
 		// restores the window and tells the backend, before the view model stops (the next page starts from the real state)
@@ -85,6 +89,14 @@ public sealed partial class VideoPlayerPage : Page
 		// this page (the title bar), not only from the bars
 		MpvControlsView.KeyboardHome = MpvRoot;
 
+		// Seaglass 1.1.3: Escape's auto-repeat, seen wherever the keyboard is in the window (the accelerator is the window's)
+		if (XamlRoot?.Content is UIElement root && !ReferenceEquals(root, _keyRoot))
+		{
+			_keyRoot?.RemoveHandler(PreviewKeyDownEvent, _rootPreviewKeyDown);
+			_keyRoot = root;
+			root.AddHandler(PreviewKeyDownEvent, _rootPreviewKeyDown, handledEventsToo: true);
+		}
+
 		// the loading screen's only control: Escape or Enter leaves before the start goes on
 		if (ViewModel.IsMpvStarting)
 		{
@@ -94,12 +106,18 @@ public sealed partial class VideoPlayerPage : Page
 
 	private void OnUnloaded(object sender, RoutedEventArgs e)
 	{
-		// never leave the window cloaked: the switch ends whether or not a cloak is set (its timer and handlers go too)
+		// the video first: a request that waited for the running switch then goes at once, with nothing to wait for
+		DetachVideo();
+
+		// never leave the window hidden: the switch ends whether or not it hid it (its timers and handlers go too)
 		EndSwitch();
+		StopWaitingForRestore();
+
+		_keyRoot?.RemoveHandler(PreviewKeyDownEvent, _rootPreviewKeyDown);
+		_keyRoot = null;
 
 		// a sign-out takes the shell away with this page on it: the next shell must start with its pane
 		_chrome.Unloaded();
-		DetachVideo();
 
 		// fluentfin-mpv: a navigation of the window's root frame (Log out, Switch user) removes the shell with this page on it
 		// and tells only the shell: no OnNavigatedFrom here, nor for the view model. Looked at again once layout has settled
@@ -206,11 +224,13 @@ public sealed partial class VideoPlayerPage : Page
 		}
 
 		_videoAttached = false;
+		// Seaglass 1.1.3: nothing of the in-process video is on this page any more (a full-screen switch then waits for no layout)
+		_attachedComposition = false;
 	}
 
 	/// <summary>
 	/// Every way into and out of full screen (F, F11, the button, a double click, Escape, mpv's own request, leaving the page)
-	/// ends here, so they all switch the same way: one switch at a time (<see cref="FullScreenSwitch"/>), the window cloaked
+	/// ends here, so they all switch the same way: one switch at a time (<see cref="FullScreenSwitch"/>), the window hidden
 	/// while it changes, the last request winning. Full screen the way MediaPlayerHost.OnPlayerDoubleTapped does it, but to a
 	/// given state (mpv asks for one).
 	/// </summary>
@@ -228,97 +248,241 @@ public sealed partial class VideoPlayerPage : Page
 	private FullScreenSwitch _switch => _switchField ??= new FullScreenSwitch(
 		() => App.MainWindow.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen, ApplyFullScreen);
 
-	/// <summary>
-	/// The window shows again once the panel has its new size and the picture's hold (the layout), XAML has rendered two frames
-	/// since, and at least <see cref="CloakMinimumMilliseconds"/> have passed since the presenter change began: DWM shows what XAML
-	/// committed a frame or two later, and uncloaking at the second rendered frame still let the half-done layout through (measured).
-	/// After <see cref="CloakLimitMilliseconds"/> it shows anyway: a stalled UI thread must not leave the window hidden
-	/// (docs/research/fullscreen-smoothness.md). The frames XAML renders before the layout (inside SetPresenter, with the
-	/// window's new size) do not count.
-	/// </summary>
-	private const int CloakMinimumMilliseconds = 70;
+	/// <summary>Seaglass 1.1.3: how a switch hides the window (<c>SEAGLASS_FULLSCREEN</c>: cover, cloak, none).</summary>
+	private static readonly FullScreenHide HideMode = FullScreenCloak.FromEnvironment();
 
-	private const int CloakLimitMilliseconds = 150;
+	/// <summary>The switches' clock (TickCount64 moves in 15.6 ms steps: some 1.1.2 switches showed at 61-63 ms of a 70 ms minimum).</summary>
+	private readonly System.Diagnostics.Stopwatch _switchClock = System.Diagnostics.Stopwatch.StartNew();
 
-	private const int CloakRenderedFrames = 2;
+	private FullScreenTransition? _transitionField;
 
-	private int _switchFrames;
-	private bool _switchLayoutSeen;
-	private long _switchStarted;
-
-	private Microsoft.UI.Dispatching.DispatcherQueueTimer? _uncloakTimer;
-
-	private void ApplyFullScreen(bool fullScreen)
+	/// <summary>The running switch's rules (<see cref="FullScreenTransition"/>); this page only wires it to the window.</summary>
+	private FullScreenTransition _transition => _transitionField ??= new FullScreenTransition(HideMode, () => _switchClock.Elapsed, new FullScreenTransition.Host
 	{
-		var log = App.GetService<ILogger<VideoPlayerPage>>();
-		var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
-		_switchStarted = Environment.TickCount64;
-		// the cloak is remembered at once and anything after it that throws uncloaks (FullScreenCloak): never an invisible window
-		FullScreenCloak.Run(
-			() => WindowCloak.Enabled && _attachedComposition && WindowCloak.Set(hwnd, true),
-			() => WindowCloak.Set(hwnd, false),
-			cloaked => _cloakedHwnd = cloaked ? hwnd : 0,
-			() =>
-			{
-				var kind = fullScreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped;
-				log.LogInformation("Full screen {On}: setting the presenter{Cloak}", fullScreen, _cloakedHwnd != 0 ? " (window cloaked)" : "");
-				App.MainWindow.AppWindow.SetPresenter(kind);
-				SetTitleBar(fullScreen);
+		Hide = Hide,
+		Unhide = Unhide,
+		SetPresenter = SetPresenter,
+		PrepareInset = PrepareSubtitleInset,
+		Settled = OnSwitchSettled,
+		AfterFrame = work => DispatcherQueue.TryEnqueue(() => work()),
+		Failed = ex => App.GetService<ILogger<VideoPlayerPage>>().LogError(ex, "Full screen: the presenter change failed"),
+		Shown = (elapsed, frames, how) => App.GetService<ILogger<VideoPlayerPage>>().LogInformation(
+			"Full screen: the window shows again after {Ms} ms ({Frames} rendered frames, {Hide})", (long)elapsed.TotalMilliseconds, frames,
+			how == FullScreenHide.Cover ? "covered" : "cloaked"),
+		Minimized = () => IsIconic(WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow)),
+		SwitchWhenRestored = SwitchWhenRestored,
+	});
 
-				// the window shows again once the layout and the picture's hold are committed; the next switch waits for that
-				_switchFrames = 0;
-				_switchLayoutSeen = false;
-				_composition.PanelSizeChanged -= OnSwitchLayout;
-				_composition.PanelSizeChanged += OnSwitchLayout;
-				Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSwitchFrame;
-				Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnSwitchFrame;
-				_uncloakTimer ??= DispatcherQueue.CreateTimer();
-				_uncloakTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, CloakMinimumMilliseconds - (Environment.TickCount64 - _switchStarted)));
-				_uncloakTimer.IsRepeating = false;
-				_uncloakTimer.Tick -= OnUncloakTick;
-				_uncloakTimer.Tick += OnUncloakTick;
-				_uncloakTimer.Start();
-			});
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	[return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+	private static extern bool IsIconic(nint hwnd);
+
+	/// <summary>A switch that came due while the window was minimized: made once it is restored.</summary>
+	private bool? _afterRestore;
+
+	private void SwitchWhenRestored(bool fullScreen)
+	{
+		App.GetService<ILogger<VideoPlayerPage>>().LogInformation("Full screen {On}: the window is minimized; switching once it is restored", fullScreen);
+		_afterRestore = fullScreen;
+		App.MainWindow.AppWindow.Changed -= OnWindowChangedWhileMinimized;
+		App.MainWindow.AppWindow.Changed += OnWindowChangedWhileMinimized;
 	}
 
-	private nint _cloakedHwnd;
-
-	private void OnUncloakTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+	private void OnWindowChangedWhileMinimized(AppWindow sender, AppWindowChangedEventArgs args)
 	{
-		if (!_attachedComposition || (_switchLayoutSeen && _switchFrames >= CloakRenderedFrames) || Environment.TickCount64 - _switchStarted >= CloakLimitMilliseconds)
+		if (_afterRestore is not { } fullScreen || IsIconic(WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow)))
 		{
-			EndSwitch();
 			return;
 		}
 
-		sender.Interval = TimeSpan.FromMilliseconds(16);
-		sender.Start();
-	}
-
-	private void OnSwitchLayout() => _switchLayoutSeen = true;
-
-	private void OnSwitchFrame(object? sender, object e)
-	{
-		if (_switchLayoutSeen)
+		StopWaitingForRestore();
+		if (IsLoaded && !_navigatedFrom)
 		{
-			_switchFrames++;
+			SetMpvFullScreen(fullScreen);
 		}
 	}
 
-	/// <summary>The window shows again and the switch counts as done (a request that waited goes now). Also when the page is left.</summary>
-	private void EndSwitch()
+	private void StopWaitingForRestore()
 	{
-		_uncloakTimer?.Stop();
-		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSwitchFrame;
+		_afterRestore = null;
+		App.MainWindow.AppWindow.Changed -= OnWindowChangedWhileMinimized;
+	}
+
+	private nint _cloakedHwnd;
+	private System.Threading.Timer? _hardLimit;
+	private Microsoft.UI.Dispatching.DispatcherQueueTimer? _softLimit;
+
+	/// <summary>The video's height in a window, kept as full screen begins: the subtitle inset going back is for it.</summary>
+	private double _windowedVideoHeight;
+
+	private void ApplyFullScreen(bool fullScreen)
+	{
+		// listening before the presenter changes (a layout may come inside it); a switch that waits for nothing ends inside
+		// Apply, and OnSwitchSettled stops listening
 		_composition.PanelSizeChanged -= OnSwitchLayout;
+		_composition.PanelSizeChanged += OnSwitchLayout;
+		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSwitchFrame;
+		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnSwitchFrame;
+		_transition.Apply(fullScreen, _videoAttached, _attachedComposition);
+		if (_transition.IsRunning)
+		{
+			// the window shows again once the layout and the picture's hold are done, or at the limit
+			_softLimit ??= DispatcherQueue.CreateTimer();
+			_softLimit.Interval = FullScreenReveal.SoftLimit;
+			_softLimit.IsRepeating = false;
+			_softLimit.Tick -= OnSoftLimit;
+			_softLimit.Tick += OnSoftLimit;
+			_softLimit.Start();
+		}
+	}
+
+	private void SetPresenter(bool fullScreen)
+	{
+		var kind = fullScreen ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped;
+		App.GetService<ILogger<VideoPlayerPage>>().LogInformation("Full screen {On}: setting the presenter{Hide}", fullScreen, _transition.Hidden switch
+		{
+			FullScreenHide.Cover => " (window covered)",
+			FullScreenHide.Cloak => " (window cloaked)",
+			_ => "",
+		});
+		App.MainWindow.AppWindow.SetPresenter(kind);
+		SetTitleBar(fullScreen);
+	}
+
+	/// <summary>Hides the window for the switch: true when it did. Each hide has a limit kept off the UI thread.</summary>
+	private bool Hide(FullScreenHide mode)
+	{
+		switch (mode)
+		{
+			case FullScreenHide.Cover:
+				ShowCover();
+				return true;
+			case FullScreenHide.Cloak:
+				var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+				if (!WindowCloak.Set(hwnd, true))
+				{
+					return false;
+				}
+
+				_cloakedHwnd = hwnd;
+				// the window shows by then even with the UI thread stuck (DWM takes the call from any thread)
+				_hardLimit?.Dispose();
+				_hardLimit = new System.Threading.Timer(_ => WindowCloak.Set(hwnd, false), null, FullScreenReveal.HardLimit, System.Threading.Timeout.InfiniteTimeSpan);
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	private void Unhide()
+	{
+		_hardLimit?.Dispose();
+		_hardLimit = null;
 		if (_cloakedHwnd != 0)
 		{
-			App.GetService<ILogger<VideoPlayerPage>>().LogInformation("Full screen: the window shows again after {Ms} ms ({Frames} rendered frames)", Environment.TickCount64 - _switchStarted, _switchFrames);
 			WindowCloak.Set(_cloakedHwnd, false);
 			_cloakedHwnd = 0;
 		}
 
+		HideCover();
+	}
+
+	// -- the cover: black over the whole window while it switches (Seaglass 1.1.3) ------------------------------------------
+
+	/// <summary>Larger than any window (DIPs): the window grows under it as it goes full screen.</summary>
+	private const double CoverSize = 16384;
+
+	private Microsoft.UI.Xaml.Controls.Primitives.Popup? _cover;
+	private Border? _coverFill;
+
+	/// <summary>
+	/// A black layer over all of the window's XAML (the title bar row too: a popup is drawn above the page and the shell), so
+	/// the screen shows black for the switch instead of what is behind the window (the cloak's flash). Its compositor
+	/// animation takes it away at <see cref="FullScreenReveal.HardLimit"/> even if the UI thread never comes back.
+	/// </summary>
+	private void ShowCover()
+	{
+		if (_cover is null)
+		{
+			_coverFill = new Border
+			{
+				Width = CoverSize,
+				Height = CoverSize,
+				Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Black),
+				IsHitTestVisible = false,
+			};
+			Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(_coverFill, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+			_cover = new Microsoft.UI.Xaml.Controls.Primitives.Popup { Child = _coverFill, IsHitTestVisible = false };
+		}
+
+		_cover.XamlRoot = XamlRoot;
+		var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(_coverFill);
+		var compositor = visual.Compositor;
+		var linear = compositor.CreateLinearEasingFunction();
+		var limit = compositor.CreateScalarKeyFrameAnimation();
+		limit.InsertKeyFrame(0f, 1f, linear);
+		limit.InsertKeyFrame(0.99f, 1f, linear);
+		limit.InsertKeyFrame(1f, 0f, linear);
+		limit.Duration = FullScreenReveal.HardLimit;
+		visual.Opacity = 1f;
+		visual.StartAnimation("Opacity", limit);
+		_cover.IsOpen = true;
+	}
+
+	private void HideCover()
+	{
+		if (_cover is { IsOpen: true } cover)
+		{
+			cover.IsOpen = false;
+			if (_coverFill is { } fill)
+			{
+				var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(fill);
+				visual.StopAnimation("Opacity");
+				visual.Opacity = 1f;
+			}
+		}
+	}
+
+	// -- when the switch ends -------------------------------------------------------------------------------------------------
+
+	private void OnSwitchLayout() => _transitionField?.Layout();
+
+	private void OnSwitchFrame(object? sender, object e) => _transitionField?.Frame(_composition.IsHolding);
+
+	private void OnSoftLimit(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args) => _transitionField?.LimitTimer();
+
+	/// <summary>The window shows again and the switch counts as done (a request that waited goes now). Also when the page is left.</summary>
+	private void EndSwitch() => _transition.End();
+
+	private void OnSwitchSettled()
+	{
+		_softLimit?.Stop();
+		Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnSwitchFrame;
+		_composition.PanelSizeChanged -= OnSwitchLayout;
 		_switch.Settled();
+	}
+
+	/// <summary>
+	/// The subtitles' inset (above the bottom bar) for the height the video is about to have: the display's in full screen,
+	/// the one it had in the window going back. Sent before the presenter changes, so they move with the switch, under the
+	/// cover, not after the window shows.
+	/// </summary>
+	private void PrepareSubtitleInset(bool fullScreen)
+	{
+		double height;
+		if (fullScreen)
+		{
+			_windowedVideoHeight = MpvControlsView.ActualHeight;
+			var display = DisplayArea.GetFromWindowId(App.MainWindow.AppWindow.Id, DisplayAreaFallback.Nearest);
+			var scale = XamlRoot?.RasterizationScale is > 0 and var s ? s : 1;
+			height = display is null ? 0 : display.OuterBounds.Height / scale;
+		}
+		else
+		{
+			height = _windowedVideoHeight;
+		}
+
+		MpvControlsView.ReportBottomBarFor(height);
 	}
 
 	private void SetTitleBar(bool fullScreen)
@@ -333,6 +497,32 @@ public sealed partial class VideoPlayerPage : Page
 		// fluentfin-mpv: the navigation pane stays hidden in a window too while this page is open (PlayerChrome)
 	}
 
+	private UIElement? _keyRoot;
+	private KeyEventHandler? _rootPreviewKeyDownField;
+	private KeyEventHandler _rootPreviewKeyDown => _rootPreviewKeyDownField ??= OnRootPreviewKeyDown;
+
+	/// <summary>The Escape that is being handled now is the key's auto-repeat (it was already down).</summary>
+	private bool _escapeRepeat;
+
+	/// <summary>
+	/// Seaglass 1.1.3: every key in the window, before anything else (the accelerator too): a held Escape repeats, and each
+	/// repeat used to be another Escape: out of full screen, then out of the player, stopping the playback. Its repeats are
+	/// marked and do nothing (<see cref="FluentFin.Controls.MpvPlayerKeys.IgnoresRepeat"/>).
+	/// </summary>
+	private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
+	{
+		if (e.Key != VirtualKey.Escape)
+		{
+			return;
+		}
+
+		_escapeRepeat = FluentFin.Controls.MpvPlayerKeys.IgnoresRepeat(e.Key, e.KeyStatus.WasKeyDown);
+		if (_escapeRepeat && ViewModel.IsMpv)
+		{
+			e.Handled = true;
+		}
+	}
+
 	private async void OnEscape(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
 	{
 		if (!ViewModel.IsMpv)
@@ -341,6 +531,11 @@ public sealed partial class VideoPlayerPage : Page
 		}
 
 		args.Handled = true;
+		if (_escapeRepeat)
+		{
+			// a held Escape: the first press did its job
+			return;
+		}
 
 		if (_mpvFullScreen)
 		{

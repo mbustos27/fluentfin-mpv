@@ -237,15 +237,37 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnPointerMoved(object sender, PointerRoutedEventArgs e) => Controls?.NotifyActivity();
 
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern uint GetDoubleClickTime();
+
+	/// <summary>Seaglass 1.1.3: a click's play/pause waits the double-click time; a double click cancels it (<see cref="VideoClicks"/>).</summary>
+	private readonly VideoClicks _clicks = new(TimeSpan.FromMilliseconds(GetDoubleClickTime()));
+
+	private DispatcherQueueTimer? _clickTimer;
+
 	private void OnVideoTapped(object sender, TappedRoutedEventArgs e)
 	{
-		if (Controls is not { } controls || IsOnControls(e.OriginalSource as DependencyObject))
+		if (Controls is null || IsOnControls(e.OriginalSource as DependencyObject))
 		{
 			return;
 		}
 
 		e.Handled = true;
-		_ = controls.TogglePause();
+		_clicks.Clicked();
+		_clickTimer ??= DispatcherQueue.CreateTimer();
+		_clickTimer.Interval = _clicks.DoubleClickTime;
+		_clickTimer.IsRepeating = false;
+		_clickTimer.Tick -= OnClickWaitOver;
+		_clickTimer.Tick += OnClickWaitOver;
+		_clickTimer.Start();
+	}
+
+	private void OnClickWaitOver(DispatcherQueueTimer sender, object args)
+	{
+		if (_clicks.WaitOver(DateTimeOffset.Now) && Controls is { } controls)
+		{
+			_ = controls.TogglePause();
+		}
 	}
 
 	private void OnVideoDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
@@ -256,8 +278,13 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 
 		e.Handled = true;
-		// the first click of the two paused: undo it, a double click is only full screen
-		_ = controls.TogglePause();
+		// a double click is only full screen: its first click's play/pause is dropped (or undone, if its wait just ended)
+		_clickTimer?.Stop();
+		if (_clicks.DoubleClicked(DateTimeOffset.Now))
+		{
+			_ = controls.TogglePause();
+		}
+
 		controls.ToggleFullScreen();
 	}
 
@@ -365,15 +392,28 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 	}
 
-	private void ReportBottomBar()
+	private void ReportBottomBar() => ReportBottomBarFor(Root.ActualHeight);
+
+	/// <summary>
+	/// The share of a video <paramref name="height"/> DIPs tall the bottom bar covers, told to the view model (the subtitles
+	/// keep above it). Seaglass 1.1.3: the full-screen switch calls it with the height the video is about to have, before the
+	/// presenter changes, so the subtitles move with the switch instead of after it.
+	/// </summary>
+	public void ReportBottomBarFor(double height)
 	{
-		if (Controls is { } controls && Root.ActualHeight > 0 && BottomBar.ActualHeight > 0)
+		if (Controls is { } controls && BottomBarCover(BottomBar.ActualHeight, BottomBar.Padding.Top, height) is { } fraction)
 		{
-			// the bar's scrim starts transparent: what covers the picture is the part with the controls in it
-			var covered = Math.Max(0, BottomBar.ActualHeight - BottomBar.Padding.Top / 2);
-			_ = controls.SetBottomBarFraction(covered / Root.ActualHeight);
+			_ = controls.SetBottomBarFraction(fraction);
 		}
 	}
+
+	/// <summary>
+	/// The share of a video <paramref name="height"/> tall that a bottom bar <paramref name="barHeight"/> tall (with its top
+	/// padding) covers: the bar's scrim starts transparent, so what covers the picture is the part with the controls in it.
+	/// Null when either is not measured.
+	/// </summary>
+	public static double? BottomBarCover(double barHeight, double paddingTop, double height) =>
+		height > 0 && barHeight > 0 ? Math.Max(0, barHeight - paddingTop / 2) / height : null;
 
 	protected override Windows.Foundation.Size ArrangeOverride(Windows.Foundation.Size finalSize)
 	{

@@ -32,12 +32,25 @@ public static class MpvPlayerKeys
 		element is ButtonBase or MenuFlyoutItemBase or SelectorItem or ToggleSwitch && element is not Control { FocusState: FocusState.Pointer };
 
 	/// <summary>
+	/// Seaglass 1.1.3: the keys whose auto-repeat does nothing (<paramref name="wasKeyDown"/>: the key was already down). Held,
+	/// F and F11 switched full screen about 15 times a second, and Escape left full screen and then the player.
+	/// </summary>
+	public static bool IgnoresRepeat(VirtualKey key, bool wasKeyDown) =>
+		wasKeyDown && key is VirtualKey.F or VirtualKey.F11 or VirtualKey.Escape;
+
+	/// <summary>
 	/// The page's PreviewKeyDown with FluentFin's controls: the key goes to <paramref name="view"/> when
-	/// <see cref="Takes(VirtualKey, bool, object)"/> says so and it is one of the player's keys; then it is handled here.
+	/// <see cref="Takes(VirtualKey, bool, object)"/> says so and it is one of the player's keys; then it is handled here. A
+	/// repeat of a key that ignores repeats (<see cref="IgnoresRepeat"/>) is handled and does nothing.
 	/// </summary>
 	public static void OnPreviewKeyDown(MpvPlayerControls view, bool videoShown, KeyRoutedEventArgs e)
 	{
-		if (!e.Handled && !Services.TextInput.IsTextInput(e.OriginalSource) && Takes(e.Key, videoShown, e.OriginalSource) && view.HandleKey(e.Key))
+		if (e.Handled || Services.TextInput.IsTextInput(e.OriginalSource) || !Takes(e.Key, videoShown, e.OriginalSource))
+		{
+			return;
+		}
+
+		if (IgnoresRepeat(e.Key, e.KeyStatus.WasKeyDown) || view.HandleKey(e.Key))
 		{
 			e.Handled = true;
 		}

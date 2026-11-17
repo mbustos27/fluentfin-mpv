@@ -68,10 +68,13 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   button back until the next one.
 - **A volume above 100** (an mpv.conf's `volume=130`) stays until it is lowered: `set_volume` is 0-100,
   so a step up (wheel, Up) leaves it, only unmuting; a step down sets it within 0-100.
-- **Full screen cloak**: with FluentFin's controls the window is cloaked (DWM) for about 70 ms while the presenter changes, so the
-  half-done layout (old XAML layout in the new window size, one or two frames) never shows; whatever is behind the window shows
-  for that time instead (not looked at on a real desktop). `FLUENTFIN_NO_CLOAK=1` turns it off. mpv's own controls are not cloaked.
-  Numbers and frame strips: `docs\research\fullscreen-smoothness.md`.
+- **Full screen cover** (1.1.3): with FluentFin's controls a black cover lies over the whole window (the title bar row too) while
+  the presenter changes, so the half-done layout (old XAML layout in the new window size) never shows; the screen is black for
+  about 40-75 ms going in and 65-90 ms going out (it waits for the picture's hold to end), at most 300 ms (the UI thread's limit;
+  500 ms the compositor's own, for a stuck UI thread). 1.1.2 cloaked the window instead, which showed whatever is behind it
+  for 60-95 ms. To compare on a real screen: `SEAGLASS_FULLSCREEN=cover` (default), `cloak` (1.1.2's) or `none`;
+  `FLUENTFIN_NO_CLOAK=1` still means none. Not judged on a real desktop yet (off-screen captures read the window's own surface).
+  mpv's own controls are not hidden. Numbers and frame strips: `docs\research\fullscreen-smoothness.md`.
 - **Full screen and back**: mpv renders at a new size 2 to 5 frames after the panel took it; until it has
   presented a frame of that size, the panel holds its old frame scaled to where the new picture goes (the user saw
   the picture jump by the title bar's height and then snap). Left: mpv presents on its own thread, so its first new

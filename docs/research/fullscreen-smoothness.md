@@ -97,3 +97,44 @@ With almost no grabbing (5 frames, the app's log) the window was shown 47-79 ms 
 - Burst run with the window un-maximized (`FS_BURST_NORMAL=1`): back to `120,90 1500x900` after F and after Esc.
 - Quick presses (`F` two and three times 25 ms apart): ends windowed / in full screen, window not cloaked. (main passes it too: each
   `SetPresenter` is synchronous; the queue matters while a switch is in flight, which the unit tests cover.)
+
+## Seaglass 1.1.3: a black cover instead of the cloak, and the review's six findings
+
+Branch `wip/113-player`. An independent review of 1.1.2 (`78481b0`) found six problems; each was measured here before (1.1.2) and
+after with `tools\ui-harness\offscreen\fullscreen-burst.ps1`, extended: a frame can also be **K** (covered: nearly all black), each
+switch reports the app's own hide time (its log's "shows again after N ms") and the half-done frames shown after the hide ended, and
+`FS_BURST_EXTRAS` runs checks after the bursts (F and Esc held, the subtitle inset's timing, a posted double click, Back from full
+screen). Three runs each of F, F11, the button and Esc: 12 switches each way, the window maximized (2576x1408 on a 2560x1440 private
+desktop), FluentFin's controls, paused. Before: scratch runs `fs-before1`, `fs-before2`; after: `fs-after2` (cover) and `fs-cloak`
+(`SEAGLASS_FULLSCREEN=cloak`).
+
+| finding | 1.1.2 | 1.1.3 |
+|---|---|---|
+| 1. what the screen shows while the window is hidden | the window cloaked 62-94 ms: whatever is behind it (in a dark room, a bright flash) | a black cover over the whole window, title bar row included: in 37-76 ms, out 65-91 ms (it waits for the hold, below); 0 cloaked frames |
+| 2. leaving the player from full screen (Back) | hidden 172 ms, 0 frames rendered (cloaked 22-177 ms in the watch): it waited for a layout of a detached page | not hidden; the presenter changes at once |
+| 3. going out, the held picture shown | 4 of 12 switches out showed 2 half-done frames after the uncloak (the picture ~7 % small, at the top) | cover: 0 of 12. Cloak (`SEAGLASS_FULLSCREEN=cloak`): 0 of 12, hidden longer (in 91-100 ms, out 116-151 ms). In an earlier run one switch out waited ~640 ms for mpv's first frame of the new size: the limit (then 400 ms, now 300) showed the held picture |
+| 4. F held 1 s / Esc held in full screen | 17 presenter changes / left full screen, then the player (playback stopped) | 1 / leaves full screen, the player stays |
+| 5. the subtitle inset (`set_controls`) | sent +18 ms (in) and +56 ms (out) after the presenter change, around the time the window showed (+76, +86 ms) | sent 5 ms (in) and 2 ms (out) before it, under the cover |
+| 6. double click to full screen | the first click paused, the second unpaused (playback stuttered) | the click's pause waits the double-click time and a double click cancels it; posted clicks do nothing off-screen (WinUI reads pointer input), so this one is covered by unit tests only (`VideoClicksTests`) |
+
+What changed:
+- **The cover** (`SEAGLASS_FULLSCREEN=cover`, the default): a popup with a black border larger than any window, over all of the
+  window's XAML. The presenter changes right after the first frame that draws it, and it goes once the panel has its new size,
+  the picture's hold (`MpvCompositionVideo.IsHolding`) has ended and XAML has rendered two frames since. It needs no minimum time:
+  it is removed in the same stream of XAML commits as the layout it hides, unlike DWM's cloak, which takes effect at once while
+  DWM still shows what XAML committed a frame or two before (hence the cloak's 70 ms). Limits: 300 ms from the start on the UI
+  thread; 500 ms in the compositor (an opacity animation on the cover runs there even if the UI thread never comes back).
+- **The cloak** stays for comparison (`SEAGLASS_FULLSCREEN=cloak`): its 70 ms minimum now counts from the presenter change's return,
+  on a `Stopwatch` (1.1.2 counted from before the blocking 44-103 ms change, on `TickCount64`, which moves in 15.6 ms steps), it
+  also waits for the hold, and a thread-pool timer uncloaks at 500 ms. `SEAGLASS_FULLSCREEN=none` or `FLUENTFIN_NO_CLOAK=1`: nothing
+  hidden.
+- A switch waits (and hides) only while the page shows the in-process video (`FullScreenCloak.WaitsForLayout`): the page forgets
+  the composition video when it detaches it, so leaving from full screen switches at once.
+- The subtitles' inset for the height the video is about to have (the display's, or the one it had in the window) goes before the
+  presenter change (`MpvPlayerControls.ReportBottomBarFor`).
+- F, F11 and Escape ignore their auto-repeat (`MpvPlayerKeys.IgnoresRepeat`; Escape through a window-wide `PreviewKeyDown` the page
+  adds, since its accelerator is the window's).
+- The whole switch is `Core\Mpv\FullScreenTransition` (the page only wires it to the window): `FullScreenTransitionTests` cover the
+  hide condition (detached, mpv's controls), the cover's frame before the presenter, the hold, frames before the presenter not
+  counting, the cloak's minimum from the presenter's return, the limit, the page going mid-switch (a queued presenter change is
+  dropped), a presenter change that throws (now or after the frame). Reverting the page's use of it no longer passes silently.

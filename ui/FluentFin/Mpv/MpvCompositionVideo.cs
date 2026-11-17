@@ -319,6 +319,13 @@ public sealed partial class MpvCompositionVideo(ILogger<MpvCompositionVideo> log
 	private Microsoft.UI.Xaml.Media.CompositeTransform? _hold;
 
 	private bool _settling;
+
+	/// <summary>
+	/// Seaglass 1.1.3: the old frame is held (scaled to where the new one will be) until mpv presents a frame of the new size.
+	/// The full-screen switch keeps the window hidden while it is: a held frame shown looked a few percent too small.
+	/// </summary>
+	public bool IsHolding => _settling;
+
 	private nint _settleSwapChain;
 	private long _settleStarted;
 	private (int Width, int Height) _heldSize;

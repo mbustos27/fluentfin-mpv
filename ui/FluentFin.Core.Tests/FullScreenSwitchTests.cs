@@ -106,6 +106,24 @@ public sealed class FullScreenSwitchTests
 		Assert.Equal(FullScreenSwitch.Outcome.Applied, sw.Request(true));
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.3: the presenter changes a frame after the request (the cover is drawn first): meanwhile the target is
+	/// already the new state, so leaving the page then restores the window.
+	/// </summary>
+	[Fact]
+	public void TargetIsTheRequestedStateBeforeThePresenterHasChanged()
+	{
+		var full = false;
+		var deferred = new FullScreenSwitch(() => full, _ => { });
+		deferred.Request(true);
+		Assert.False(full);
+		Assert.True(deferred.Target);
+		full = true;
+		deferred.Settled();
+		Assert.True(deferred.Target);
+		Assert.Equal(FullScreenSwitch.Outcome.Unchanged, deferred.Request(true));
+	}
+
 	[Fact]
 	public void TargetIsTheLastRequestedStateWhileASwitchRuns()
 	{

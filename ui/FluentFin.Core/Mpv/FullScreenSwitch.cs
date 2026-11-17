@@ -9,6 +9,7 @@ namespace FluentFin.Core.Mpv;
 public sealed class FullScreenSwitch(Func<bool> isFullScreen, Action<bool> apply)
 {
 	private bool _busy;
+	private bool _applying;
 	private bool? _pending;
 
 	public enum Outcome
@@ -26,8 +27,12 @@ public sealed class FullScreenSwitch(Func<bool> isFullScreen, Action<bool> apply
 	/// <summary>A switch has begun and has not settled yet.</summary>
 	public bool IsSwitching => _busy;
 
-	/// <summary>The state the window will be in once everything asked for has been applied.</summary>
-	public bool Target => _pending ?? isFullScreen();
+	/// <summary>
+	/// The state the window will be in once everything asked for has been applied: also while the running switch has not
+	/// changed the presenter yet (Seaglass 1.1.3: the cover is drawn for a frame first), so leaving the page then still
+	/// restores the window.
+	/// </summary>
+	public bool Target => _pending ?? (_busy ? _applying : isFullScreen());
 
 	public Outcome Request(bool fullScreen)
 	{
@@ -44,6 +49,7 @@ public sealed class FullScreenSwitch(Func<bool> isFullScreen, Action<bool> apply
 		}
 
 		_busy = true;
+		_applying = fullScreen;
 		try
 		{
 			apply(fullScreen);
