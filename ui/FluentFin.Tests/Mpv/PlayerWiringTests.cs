@@ -66,4 +66,21 @@ public sealed class PlayerWiringTests
 		var restore = leave.IndexOf("LeaveFullScreen()", StringComparison.Ordinal);
 		Assert.True(detach >= 0 && detach < end && end < restore, "detach, then end the switch, then restore");
 	}
+
+	/// <summary>
+	/// Seaglass 1.1.3 integration: the page unloads while the window closes too, when the window's AppWindow is already gone.
+	/// Unloaded's stop-waiting-for-the-restore read it unguarded: a NullReferenceException at every close from the player
+	/// (then-season.ps1 ends there: "[ERR] Unhandled exception" at StopWaitingForRestore), and the rest of OnUnloaded (the
+	/// key handler, the chrome, PlayerPageRemoval) never ran.
+	/// </summary>
+	[Fact]
+	public void Unloading_during_the_close_never_reads_a_gone_AppWindow()
+	{
+		var page = Source("Views", "VideoPlayerPage.xaml.cs");
+		var unloaded = Body(page, "OnUnloaded");
+		Assert.Contains("StopWaitingForRestore()", unloaded);
+		var stop = Body(page, "StopWaitingForRestore");
+		Assert.DoesNotContain("App.MainWindow.AppWindow.", stop);
+		Assert.Contains("App.MainWindow.AppWindow is { } appWindow", stop);
+	}
 }

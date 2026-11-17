@@ -310,7 +310,12 @@ public sealed partial class VideoPlayerPage : Page
 	private void StopWaitingForRestore()
 	{
 		_afterRestore = null;
-		App.MainWindow.AppWindow.Changed -= OnWindowChangedWhileMinimized;
+		// Seaglass 1.1.3 integration: the page also unloads while the window closes, when its AppWindow is already gone; an
+		// exception here skipped the rest of OnUnloaded (the key handler, the chrome, PlayerPageRemoval) and logged an error
+		if (App.MainWindow.AppWindow is { } appWindow)
+		{
+			appWindow.Changed -= OnWindowChangedWhileMinimized;
+		}
 	}
 
 	private nint _cloakedHwnd;
