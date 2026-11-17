@@ -4,7 +4,7 @@
   fake server, failing on purpose through its rules. before-states.ps1 leaves Home's rows failing, so the first Home
   after the sign-in is the failed one (a later visit would show the saved home page instead; a Retry always asks the
   server, so the states after it come from Retry and Refresh). Each state: a screenshot, the UIA tree and scan, and the
-  Narrator probe (states-common.ps1). SG_STATES_SKIP (comma-separated: home, library, item, search, dashboard, picker)
+  Narrator probe (states-common.ps1). SG_STATES_SKIP (comma-separated: home, library, item, search, settings, dashboard, picker)
   leaves parts out.
 #>
 . (Join-Path $PSScriptRoot 'states-common.ps1')
@@ -28,6 +28,13 @@ function Search-For([string]$Term) {
 }
 function Under-Name($Root, [string]$Name) {
     @([OffscreenUi]::Under($Root, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $Name)))) | Select-Object -First 1
+}
+# an element by name in any of FluentFin's windows (a menu or a suggestion list is a popup window of its own)
+function Find-Anywhere([string]$Name) {
+    $hit = Find-Ui -Name $Name
+    if ($hit) { return $hit }
+    foreach ($w in @(Get-OtherWindows)) { $hit = Under-Name $w $Name; if ($hit) { return $hit } }
+    $null
 }
 
 if ($skip -notcontains 'home') {
@@ -70,7 +77,8 @@ if ($skip -notcontains 'library') {
     Set-Rules @()
     Press-First @('Try again', 'Refresh')
     [void](Wait-Until { [OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $fixture.movie.name) } -Seconds 20 -PollMs 200)
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 2
+    Capture-State 'library'
 }
 
 if ($skip -notcontains 'item') {
@@ -94,13 +102,23 @@ if ($skip -notcontains 'search') {
     Search-For 'zqxj'
     Start-Sleep -Seconds 2
     Capture-State 'search-no-results'
+    Shot-Popups 'search-no-results'
     Set-Rules @(, @($items, 'status:500'))
     Search-For 'zqxjk'
     Start-Sleep -Seconds 2
     Capture-State 'search-failed'
+    Shot-Popups 'search-failed'
     Set-Rules @()
+    Search-For ''
     Key 0x1B
     Start-Sleep -Milliseconds 500
+}
+
+if ($skip -notcontains 'settings') {
+    # the app's Settings (its playback preferences come from the server: a LoadStateView inside a glass group)
+    Open-Nav 'Settings'
+    Start-Sleep -Seconds 3
+    Capture-State 'settings'
 }
 
 if ($skip -notcontains 'dashboard') {
@@ -109,7 +127,7 @@ if ($skip -notcontains 'dashboard') {
     Start-Sleep -Milliseconds 800
     $dash = Wait-Until {
         $hit = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Dashboard')
-        if (-not $hit) { $w = Find-OtherWindow; if ($w) { $hit = Under-Name $w 'Dashboard' } }
+        if (-not $hit) { $hit = Find-Anywhere 'Dashboard' }
         $hit
     } -Seconds 10
     if (-not $dash) { throw 'no Dashboard in the account flyout' }
@@ -138,24 +156,28 @@ if ($skip -notcontains 'picker' -and $skip -notcontains 'dashboard') {
         if ($sub.Count -gt 1) { [void](Invoke-Element $sub[-1]) }
         Start-Sleep -Seconds 2
         Capture-State 'dashboard-libraries'
-        Press-First @('More options')
+        # the library's More options menu (a MenuBarItemFlyout: UI Automation's Invoke does not open it; a posted click does)
+        $more = Wait-Until { [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'More options') } -Seconds 10
+        if (-not $more) { throw 'no More options button' }
+        $r = [OffscreenUi]::RectOf($more)
+        [OffscreenUi]::Click($script:hwnd, $script:ui.Id, [int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
         Start-Sleep -Milliseconds 800
-        $manage = Wait-Until { $m = Find-Ui -Name 'Manage'; if (-not $m) { $w = Find-OtherWindow; if ($w) { $m = Under-Name $w 'Manage' } }; $m } -Seconds 8
+        $manage = Wait-Until { Find-Anywhere 'Manage' } -Seconds 8
         if ($manage) {
             [void](Invoke-Element $manage)
             Start-Sleep -Seconds 2
             Capture-State 'manage-library'
             Press-First @('Add')
-            $picker = Wait-Until { Find-OtherWindow } -Seconds 10
+            $picker = Wait-Until { Find-OtherWindow 'Choose a folder' } -Seconds 10
             if ($picker) {
                 $ph = [IntPtr]$picker.Current.NativeWindowHandle
                 Start-Sleep -Seconds 2
                 $main = $script:hwnd; $script:hwnd = $ph
                 try {
                     Capture-State 'picker'
-                    $media = Wait-Until { Find-Ui -Name 'media' } -Seconds 5
-                    if ($media) {
-                        [void](Invoke-Element $media); Start-Sleep -Seconds 1
+                    $folderMedia = Wait-Until { Find-Ui -Name 'media' } -Seconds 5
+                    if ($folderMedia) {
+                        [void](Invoke-Element $folderMedia); Start-Sleep -Seconds 1
                         $lib = Wait-Until { Find-Ui -Name 'movies' } -Seconds 5
                         if ($lib) { [void](Invoke-Element $lib); Start-Sleep -Seconds 1; Capture-State 'picker-movies' }
                         $a = Wait-Until { Find-Ui -Name 'A' } -Seconds 5
@@ -172,7 +194,7 @@ if ($skip -notcontains 'picker' -and $skip -notcontains 'dashboard') {
                     if ($cancel) { [void](Invoke-Element $cancel); Start-Sleep -Seconds 1 }
                 }
                 finally { $script:hwnd = $main }
-                $still = Find-OtherWindow
+                $still = Find-OtherWindow 'Choose a folder'
                 Check 'picker: Cancel closes its window' (-not $still) $(if ($still) { 'the picker window is still open' } else { 'closed' })
                 if ($still) { [void][OffscreenUi]::PostMessage([IntPtr]$still.Current.NativeWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero); Start-Sleep -Seconds 1 }
             }

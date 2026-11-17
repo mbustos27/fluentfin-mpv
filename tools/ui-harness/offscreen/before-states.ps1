@@ -39,8 +39,8 @@ Submit-Address 'http://127.0.0.1:9'
 Start-Sleep -Milliseconds 600
 Capture-State 'server-down'
 
-# 4. the server answers with an error
-Set-Rules @(, @('^/System/Info/Public$', 'status:503'))
+# 4. the server answers with an error (500: a 503 is retried by the client until the page's 10 s time-out)
+Set-Rules @(, @('^/System/Info/Public$', 'status:500'))
 Submit-Address $script:serverUrl
 [void](Wait-Until { -not (Find-Ui -Name 'Connecting to' -Contains -Type 'Text') } -Seconds 15 -PollMs 150)
 Start-Sleep -Milliseconds 600
