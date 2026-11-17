@@ -6,21 +6,96 @@ public class KnownFolders
 	public string Updates { get; }
 	public string Logs { get; }
 
-	// fluentfin-mpv: its own folder, so this build never shares settings, saved logins or logs with an upstream FluentFin install
-	public const string FolderName = "FluentFinMpv";
+	// fluentfin-mpv: its own folder, so this build never shares settings, saved logins or logs with an upstream FluentFin install.
+	// Seaglass (1.1.0): renamed from FluentFinMpv; CopyLegacyFolder brings the old folder's contents over once.
+	public const string FolderName = "Seaglass";
+
+	/// <summary>The data folder's name before the rename to Seaglass (FluentFin MPV 1.0.x).</summary>
+	public const string LegacyFolderName = "FluentFinMpv";
 
 	/// <summary>
-	/// fluentfin-mpv: <c>FluentFin.exe --data-dir &lt;folder&gt;</c> (or <c>--data-dir=&lt;folder&gt;</c>) keeps everything this
+	/// fluentfin-mpv: <c>Seaglass.exe --data-dir &lt;folder&gt;</c> (or <c>--data-dir=&lt;folder&gt;</c>) keeps everything this
 	/// run writes -- settings and saved logins, logs, the mpv backend's config folder and log -- under that folder instead of
-	/// <c>%LOCALAPPDATA%\FluentFinMpv</c>: a dev or test run that never touches the user's own data (tools/README.md).
+	/// <c>%LOCALAPPDATA%\Seaglass</c>: a dev or test run that never touches the user's own data (tools/README.md).
 	/// </summary>
 	public const string DataDirSwitch = "--data-dir";
 
 	/// <summary>fluentfin-mpv: the same as <see cref="DataDirSwitch"/> from the environment; the switch wins when both are set.</summary>
 	public const string DataDirVariable = "FLUENTFIN_MPV_DATA_DIR";
 
-	/// <summary><c>%LOCALAPPDATA%\FluentFinMpv</c>.</summary>
+	/// <summary><c>%LOCALAPPDATA%\Seaglass</c>.</summary>
 	public static string DefaultRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), FolderName);
+
+	/// <summary>
+	/// Seaglass: the start-up step before the folders are made. With no <see cref="DataDirSwitch"/> and no
+	/// <see cref="DataDirVariable"/> (those runs never touch the user's own folders), copies the old data folder to the new one
+	/// (<see cref="CopyLegacyFolder"/>). Returns what to log, or null when there was nothing to do.
+	/// </summary>
+	public static string? CopyLegacyForStartup(IReadOnlyList<string> arguments, Func<string, string?> environment, string? localAppData = null)
+	{
+		localAppData ??= Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+		try
+		{
+			if (ResolveDataDir(arguments, environment) is not null)
+			{
+				return null;
+			}
+		}
+		catch (ArgumentException)
+		{
+			return null; // TryForStartup reports it
+		}
+
+		return CopyLegacyFolder(localAppData);
+	}
+
+	/// <summary>
+	/// Seaglass: when <c>&lt;localAppData&gt;\Seaglass</c> does not exist and <c>&lt;localAppData&gt;\FluentFinMpv</c> does, COPIES the
+	/// old folder (recursively) to the new one; the old folder is never moved, changed or deleted. The copy is made beside the
+	/// target and renamed into place, so an interrupted copy never leaves a half-filled Seaglass folder that the next start would
+	/// take for the real one. Returns a line to log, or null when there was nothing to copy; a failure is returned as text too
+	/// (the app then starts with an empty folder rather than not at all).
+	/// </summary>
+	public static string? CopyLegacyFolder(string localAppData)
+	{
+		var target = Path.Combine(localAppData, FolderName);
+		var legacy = Path.Combine(localAppData, LegacyFolderName);
+		if (Directory.Exists(target) || !Directory.Exists(legacy))
+		{
+			return null;
+		}
+
+		var partial = target + ".copying";
+		try
+		{
+			if (Directory.Exists(partial))
+			{
+				Directory.Delete(partial, recursive: true);
+			}
+
+			CopyDirectory(legacy, partial);
+			Directory.Move(partial, target);
+			return $"Copied the data folder {legacy} to {target} (the old folder is left as it was)";
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		{
+			return $"Could not copy the data folder {legacy} to {target}: {ex.Message}";
+		}
+	}
+
+	private static void CopyDirectory(string from, string to)
+	{
+		Directory.CreateDirectory(to);
+		foreach (var file in Directory.EnumerateFiles(from))
+		{
+			File.Copy(file, Path.Combine(to, Path.GetFileName(file)));
+		}
+
+		foreach (var directory in Directory.EnumerateDirectories(from))
+		{
+			CopyDirectory(directory, Path.Combine(to, Path.GetFileName(directory)));
+		}
+	}
 
 	// what a mistyped data folder switch looks like: dashes or a slash, then data, dir with or without - or _ between
 	private static readonly System.Text.RegularExpressions.Regex LooksLikeDataDir =
@@ -32,7 +107,7 @@ public class KnownFolders
 	/// <summary>The FluentFin log file (Serilog adds the date to its name).</summary>
 	public string LogFile => Path.Combine(Logs, "log.txt");
 
-	// fluentfin-mpv: no parameterless constructor. It meant %LOCALAPPDATA%\FluentFinMpv, so a container that ever built this
+	// fluentfin-mpv: no parameterless constructor. It meant %LOCALAPPDATA%\Seaglass, so a container that ever built this
 	// class itself would have put a --data-dir run's files into the user's folder; the app registers the instance
 	// ForStartup made (KnownFoldersDataDirTests guards both).
 	public KnownFolders(string root) : this(root, isCustom: false) { }
@@ -80,7 +155,7 @@ public class KnownFolders
 		}
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
 		{
-			error = $"FluentFin could not create its data folder {folder}: {ex.Message}";
+			error = $"Seaglass could not create its data folder {folder}: {ex.Message}";
 		}
 
 		return null;

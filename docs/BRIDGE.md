@@ -17,13 +17,14 @@ file is the contract both sides build against. Change it here first, then on bot
   `<app>\backend\fluentfin-mpv-backend.exe` with the same arguments (PyInstaller, one folder: the
   interpreter runs in that process, so the job holds it from its first instruction;
   `tools\release`). **argv and the environment carry no secrets.**
-- Default config dir: `%LOCALAPPDATA%\FluentFinMpv\mpv-backend\` — the shim's `conf.json`,
+- Default config dir: `%LOCALAPPDATA%\Seaglass\mpv-backend\` — the shim's `conf.json`,
   `mpv.conf`, `input.conf`, shader packs live there. It is separate from a standalone
   jellyfin-mpv-shim install so the two never share a lock, credentials or settings.
-  The UI's own data folder is `%LOCALAPPDATA%\FluentFinMpv\` (not upstream FluentFin's
+  The UI's own data folder is `%LOCALAPPDATA%\Seaglass\` (not upstream FluentFin's
   `%LOCALAPPDATA%\FluentFin\`), so this fork never shares saved servers, passwords or
-  settings with an upstream FluentFin install. A dev or test run started with
-  `FluentFin.exe --data-dir <folder>` (or `FLUENTFIN_MPV_DATA_DIR=<folder>`) keeps both under
+  settings with an upstream FluentFin install. (Before 1.1.0 the folder was `%LOCALAPPDATA%\FluentFinMpv\`;
+  the UI copies it to `Seaglass\` once at start-up, never moving or deleting the old one.) A dev or test run started with
+  `Seaglass.exe --data-dir <folder>` (or `FLUENTFIN_MPV_DATA_DIR=<folder>`) keeps both under
   that folder instead (`<folder>\mpv-backend\`, `<folder>\Logs\`; `tools/README.md`).
 - Framing: UTF-8 JSON, **one object per line** (`\n`), no BOM.
   - UI → backend: the backend's **stdin**.

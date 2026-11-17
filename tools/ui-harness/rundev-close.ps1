@@ -16,7 +16,7 @@ $ErrorActionPreference = 'Stop'
 $exe = $script:DefaultExe
 $runDev = Join-Path $script:RepoRoot 'run-dev.ps1'
 if (-not (Test-Path $exe)) { throw "Not built: $exe" }
-if (Get-Process FluentFin -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }) {
+if (Get-Process Seaglass -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }) {
     throw "A copy of $exe is already running; close it first (run-dev.ps1 would close it too)"
 }
 
@@ -46,7 +46,7 @@ try {
     # the FluentFin run-dev.ps1 started (Start-Process in this PowerShell): each candidate's handle is taken at once and
     # held, so its pid cannot be reused after, and everything is checked through it: created after run-dev was called,
     # this PowerShell as its parent (alive, so its pid is not a reused one), this build's exe
-    foreach ($candidate in @(Get-Process FluentFin -ErrorAction SilentlyContinue)) {
+    foreach ($candidate in @(Get-Process Seaglass -ErrorAction SilentlyContinue)) {
         $h = try { $candidate.Handle } catch { [IntPtr]::Zero }
         if ($h -ne [IntPtr]::Zero -and $candidate.Id -ne $first.Id -and [UiHarnessNative]::CreationOf($h) -ge $runDevFt -and
             [UiHarnessNative]::ParentOf($h) -eq $PID -and [UiHarnessNative]::ImageOf($h) -eq $exe) {

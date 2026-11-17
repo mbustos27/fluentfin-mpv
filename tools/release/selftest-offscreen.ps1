@@ -1,5 +1,5 @@
 <#
-  The mpv self-test of a packaged FluentFin.exe, off-screen: FluentFin.exe --mpv-selftest --data-dir <DataDir> (no server;
+  The mpv self-test of a packaged Seaglass.exe, off-screen: Seaglass.exe --mpv-selftest --data-dir <DataDir> (no server;
   the backend plays mpv's test pattern). Runs ON a private desktop, started by verify-package.ps1 through
   tools\backend-bench\hidden_run.py inside its kill-on-close job; refuses the input desktop. No key or click is sent.
   Checks: the window shows, the backend took play_file, the video area shows the test pattern (a window-only capture
@@ -13,7 +13,7 @@ param(
     [int]$Seconds = 60,
     [int]$CloseSeconds = 20,
     [switch]$Kill,  # end FluentFin abruptly instead of closing it: its job must take the backend with it
-    [string]$Launcher  # start it through the release folder's launcher (its top FluentFin.exe), which must start $Exe
+    [string]$Launcher  # start it through the release folder's launcher (its top Seaglass.exe), which must start $Exe
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,7 +63,7 @@ try {
                     $_.ExecutablePath -ieq $Exe -and $_.CreationDate -and $_.CreationDate.ToFileTime() -ge $since })[0]
             if (-not $child) { Start-Sleep -Milliseconds 100 }
         }
-        Check 'launcher: starts app\FluentFin.exe' ([bool]$child) $(if ($child) { "FluentFin#$($child.ProcessId)" } else { "no $Exe started by the launcher (pid $($l.Id))" })
+        Check 'launcher: starts app\Seaglass.exe' ([bool]$child) $(if ($child) { "FluentFin#$($child.ProcessId)" } else { "no $Exe started by the launcher (pid $($l.Id))" })
         if (-not $child) { return }
         $line = ([string]$child.CommandLine).TrimEnd()
         Check 'launcher: passes its arguments on unchanged' ($line.EndsWith(' ' + ($arguments -join ' '))) $line

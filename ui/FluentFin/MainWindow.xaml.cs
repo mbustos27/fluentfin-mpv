@@ -12,7 +12,7 @@ public sealed partial class MainWindow : WindowEx
 	{
 		InitializeComponent();
 		ExtendsContentIntoTitleBar = true;
-		AppWindow.SetIcon("Assets/jellyfin.ico");
+		AppWindow.SetIcon("Assets/Seaglass.ico");
 
 		App.GetKeyedService<INavigationService>(NavigationRegions.InitialSetup).Frame = RootFrame;
 	}

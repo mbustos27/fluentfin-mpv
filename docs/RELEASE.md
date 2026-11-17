@@ -1,7 +1,7 @@
 # Cutting a release
 
 A release is an installer and a portable zip of the same files for Windows 10/11 x64,
-`FluentFinMPV-<version>-win-x64.msi` and `FluentFinMPV-<version>-win-x64.zip`, each with its `.sha256`, built by
+`Seaglass-<version>-win-x64.msi` and `Seaglass-<version>-win-x64.zip`, each with its `.sha256`, built by
 `tools\release\build-release.ps1` and attached to a GitHub release on the tag `v<version>`. What it contains and
 where each third-party file comes from: `tools\release\VENDORED.md`.
 
@@ -44,7 +44,7 @@ and the tests pass: both UI suites and the backend's bridge tests (off-screen); 
 on its own, and the build stops if it fails again. It downloads and checks the Python runtime, makes a build venv from
 hash-pinned PyPI wheels, freezes the backend with
 PyInstaller, publishes FluentFin (Release, x64, self-contained, Windows App SDK self-contained, unpackaged), and writes
-`dist\FluentFinMPV-<version>-win-x64\`, the `.zip` and the `.sha256`, and collects the corresponding source of the GPL,
+`dist\Seaglass-<version>-win-x64\`, the `.zip` and the `.sha256`, and collects the corresponding source of the GPL,
 LGPL and MPL code it ships into `dist\sources\` with `SOURCES.txt` (`tools\release\sources.py`, `sources.json`: official
 hosts only, PyPI hashes checked; what cannot be established exactly is listed, not guessed). Everything stays under
 `dist\` (`dist\.work\` for
@@ -53,7 +53,7 @@ compiler server is left running.
 
 ## 4. Verify the zip
 
-    .\tools\release\verify-package.ps1 -Zip dist\FluentFinMPV-<version>-win-x64.zip -Out <scratch folder outside the repo>
+    .\tools\release\verify-package.ps1 -Zip dist\Seaglass-<version>-win-x64.zip -Out <scratch folder outside the repo>
 
 It unzips the package fresh, then runs it off-screen (a private desktop, a kill-on-close job, scratch data folders,
 APPDATA/LOCALAPPDATA redirected, test media that is digital silence) against the fake Jellyfin server, with no backend
@@ -69,9 +69,9 @@ command set and a PATH of Windows' own folders only:
   leave the saved choice as it is;
 - the self-test (`--mpv-selftest`, no server), and once more with FluentFin killed instead of closed (its job must end the
   backend);
-- the launcher: the folder's top holds only `FluentFin.exe` (the launcher, `tools\release\launcher\Launcher.cs`),
-  `README.txt`, `LICENSE`, `THIRD-PARTY-NOTICES.txt` and `app\`; the self-test started through that `FluentFin.exe`,
-  with a data folder whose name has a space, must start `app\FluentFin.exe` with the arguments unchanged and pass.
+- the launcher: the folder's top holds only `Seaglass.exe` (the launcher, `tools\release\launcher\Launcher.cs`),
+  `README.txt`, `LICENSE`, `THIRD-PARTY-NOTICES.txt` and `app\`; the self-test started through that `Seaglass.exe`,
+  with a data folder whose name has a space, must start `app\Seaglass.exe` with the arguments unchanged and pass.
 
 Each run records every process FluentFin starts and every DLL they load (`tools\release\proc_audit.py`) and fails on
 anything from a dev checkout, a Python install or the build folder, on a token in a command line, or on a file written
@@ -82,12 +82,12 @@ the first sign-in, a playback.
 
 ## 5. Publish (the coordinating session, after review)
 
-1. Tag the commit the zip was built from: `git tag -a v<version> -m "FluentFin MPV <version>"`, push the tag.
-2. Create the GitHub release on that tag: title `FluentFin MPV <version>`, the notes from `CHANGELOG.md`'s section
+1. Tag the commit the zip was built from: `git tag -a v<version> -m "Seaglass <version>"`, push the tag.
+2. Create the GitHub release on that tag: title `Seaglass <version>`, the notes from `CHANGELOG.md`'s section
    (what it is, what is verified, the known limits), the installer (`.msi`) and the `.zip`, each with its `.sha256`, as
    assets (every release has an installer; the zip is the portable copy of the same files), and every file of
-   `dist\FluentFinMPV-<version>-sources.zip` (or its numbered parts, each under GitHub's 2 GiB limit) with
-   `dist\FluentFinMPV-<version>-sources.txt` (SOURCES.txt with the parts and their SHA-256): the source of what the
+   `dist\Seaglass-<version>-sources.zip` (or its numbered parts, each under GitHub's 2 GiB limit) with
+   `dist\Seaglass-<version>-sources.txt` (SOURCES.txt with the parts and their SHA-256): the source of what the
    zip ships.
 3. The package's README.txt links the source at `https://github.com/mbustos27/fluentfin-mpv/tree/v<version>`: the tag
    must exist under that name.

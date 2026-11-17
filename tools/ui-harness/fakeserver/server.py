@@ -1,4 +1,4 @@
-"""A realistic fake Jellyfin server on 127.0.0.1 for running FluentFin MPV against: FluentFin's pages (login, home,
+"""A realistic fake Jellyfin server on 127.0.0.1 for running Seaglass against: FluentFin's pages (login, home,
 libraries, item pages, search) and the mpv backend's playback (PlaybackInfo, direct play with two audio and three
 subtitle tracks, media segments, trickplay, progress reports). Standard library only.
 

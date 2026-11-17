@@ -75,6 +75,8 @@ public partial class App : Application
 		InitializeComponent();
 
 		// fluentfin-mpv: --data-dir <folder> / FLUENTFIN_MPV_DATA_DIR put everything this run writes there (dev and test runs)
+		// Seaglass: the data folder was %LOCALAPPDATA%\FluentFinMpv; copied (never moved) to %LOCALAPPDATA%\Seaglass on the first start
+		var migrationNote = Core.KnownFolders.CopyLegacyForStartup([.. Environment.GetCommandLineArgs().Skip(1)], Environment.GetEnvironmentVariable);
 		var knownFolders = StartupFolders();
 
 		Host = Microsoft.Extensions.Hosting.Host
@@ -86,6 +88,10 @@ public partial class App : Application
 				.Enrich.FromLogContext()
 				.WriteTo.File(knownFolders.LogFile, Serilog.Events.LogEventLevel.Debug, rollingInterval: RollingInterval.Day)
 				.CreateLogger();
+			if (migrationNote is not null)
+			{
+				Log.Information("{Note}", migrationNote);
+			}
 			services.AddLogging(builder => builder.AddSerilog());
 
 			// Default Activation Handler
@@ -246,7 +252,7 @@ public partial class App : Application
 			return folders;
 		}
 
-		NativeMethods.ShowError("FluentFin could not start", error ?? "The data folder could not be used.");
+		NativeMethods.ShowError("Seaglass could not start", error ?? "The data folder could not be used.");
 		Environment.Exit(2);
 		throw new InvalidOperationException(error);
 	}
@@ -290,7 +296,7 @@ public partial class App : Application
 		{
 			// App_UnhandledException marks errors handled, so a failed launch would otherwise leave a process with no window
 			GetService<ILogger<App>>().LogCritical(ex, "Startup failed");
-			NativeMethods.ShowError("FluentFin could not start", ex.Message);
+			NativeMethods.ShowError("Seaglass could not start", ex.Message);
 			Exit();
 		}
 	}
@@ -330,7 +336,7 @@ public partial class App : Application
 		try
 		{
 			// fluentfin-mpv (startup-perf): no pre-warm of the mpv backend from now on; one in flight gives way to the close
-			GetService<MpvPrewarm>().Cancel("FluentFin is closing");
+			GetService<MpvPrewarm>().Cancel("Seaglass is closing");
 
 			// fluentfin-mpv: upstream's stop report (bounded: a hung server must not keep a hidden FluentFin alive) and, side by
 			// side, the mpv backend's shutdown and any crash report FluentFin is sending for it. Before the window goes, so the

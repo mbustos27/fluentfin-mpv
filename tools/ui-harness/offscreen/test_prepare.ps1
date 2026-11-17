@@ -34,7 +34,8 @@ Check 'two trailing backslashes too' ((Resolve-HarnessDataDir ($data + '\\') $re
 $drive = [IO.Path]::GetPathRoot($Out)
 Check "a drive root is refused ($drive)" (Throws { Resolve-HarnessDataDir $drive $repo $fakeLocal } '*drive root*')
 Check "a drive root without its backslash too ($($drive.TrimEnd('\')))" (Throws { Resolve-HarnessDataDir $drive.TrimEnd('\') $repo $fakeLocal } '*drive root*')
-Check 'the user''s FluentFinMpv folder is refused' (Throws { Resolve-HarnessDataDir (Join-Path $fakeLocal 'FluentFinMpv\') $repo $fakeLocal } '*real FluentFin data folder*')
+Check 'the user''s Seaglass folder is refused' (Throws { Resolve-HarnessDataDir (Join-Path $fakeLocal 'Seaglass') $repo $fakeLocal } '*real FluentFin data folder*')
+Check 'the user''s old FluentFinMpv folder is refused' (Throws { Resolve-HarnessDataDir (Join-Path $fakeLocal 'FluentFinMpv\') $repo $fakeLocal } '*real FluentFin data folder*')
 Check 'a folder holding it too' (Throws { Resolve-HarnessDataDir $fakeLocal $repo $fakeLocal } '*real FluentFin data folder*')
 Check 'a folder in the repository is refused' (Throws { Resolve-HarnessDataDir (Join-Path $repo 'scratch') $repo $fakeLocal } '*outside the repository*')
 
@@ -98,7 +99,7 @@ Check 'a new folder gets a silent mpv.conf with no log-file' (($lines -contains 
 $build = New-Case 'build'
 Check 'no -Exe, no -Build, nothing built: an error saying to pass -Build, nothing built' (Throws { Resolve-HarnessExe '' $build $false } '*pass -Build*')
 Check 'a missing -Exe is an error' (Throws { Resolve-HarnessExe (Join-Path $build 'nope.exe') $build $false } '*does not exist*')
-$exe = Join-Path $build 'bin\FluentFin\debug_x64\FluentFin.exe'
+$exe = Join-Path $build 'bin\FluentFin\debug_x64\Seaglass.exe'
 New-Item -ItemType Directory -Force (Split-Path $exe) | Out-Null; Set-Content -LiteralPath $exe -Value 'x'
 Check 'an earlier -Build''s exe in the build folder is used' ((Resolve-HarnessExe '' $build $false) -eq $exe)
 Check '-Build leaves the build to the caller' ($null -eq (Resolve-HarnessExe '' $build $true))

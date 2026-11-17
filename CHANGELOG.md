@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0
+
+FluentFin MPV is now **Seaglass**.
+
+- **The new name.** The app is `Seaglass.exe` (the launcher at the top of the folder, and `app\Seaglass.exe`). Release
+  files are `Seaglass-1.1.0-win-x64.zip`, `.msi`, `-sources.zip` and `.txt`. The window and title bar, About, the dashboard,
+  the Start menu shortcut and the installer say Seaglass. Installing the `.msi` replaces an installed FluentFin MPV (same
+  upgrade code), into `%LOCALAPPDATA%\Programs\Seaglass`. The C# namespaces, project files and folders stay `FluentFin.*`
+  so upstream FluentFin merges keep applying, and the GitHub repository keeps its name.
+- **A new icon:** a frosted sea-glass pebble with a play triangle, for the window, taskbar, launcher, installer and the
+  package logos. `tools\icon\make-icon.ps1` draws it.
+- **Your data is copied, not moved.** The data folder is now `%LOCALAPPDATA%\Seaglass`. On the first start, if it does not
+  exist and `%LOCALAPPDATA%\FluentFinMpv` does, the old folder is copied into it (recursively) and the old one is left
+  untouched; the log says so. `--data-dir` is unchanged.
+- **The client name sent to Jellyfin is "Seaglass"** (the UI and the playback backend both use it). Your server will show
+  a new client in its dashboard and device list, and may ask you to sign in once.
+
 ## 1.0.1
 
 - **An installer.** `FluentFinMPV-1.0.1-win-x64.msi` installs FluentFin MPV for your Windows user (no administrator
