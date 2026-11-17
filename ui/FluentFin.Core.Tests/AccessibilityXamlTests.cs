@@ -350,6 +350,26 @@ public class AccessibilityXamlTests
 		Assert.Equal(5, System.Text.RegularExpressions.Regex.Matches(code, @"ItemLabels\.EpisodeAction\(""").Count);
 	}
 
+	[Theory]
+	[InlineData("FluentFin/Views/LibraryPage.xaml")]
+	[InlineData("FluentFin/Views/ItemGridPage.xaml")]
+	public void CardGrids_AreOneTabStop_AListNamedAfterThePage(string page)
+	{
+		var doc = Load(page);
+		var list = FindByName(doc, "GridList");
+		Assert.Equal("RowList", list.Name.LocalName);
+		Assert.Equal("Once", (string?)list.Attribute("TabFocusNavigation"));
+		Assert.Equal("{x:Bind ViewModel.Title, Mode=OneWay}", (string?)list.Attribute("AutomationProperties.Name"));
+		Assert.Equal("ScrollView", list.Parent!.Name.LocalName);
+		Assert.Equal("GridScroller", (string?)list.Parent!.Attribute(Xaml + "Name"));
+		var repeater = Assert.Single(list.Elements(Presentation + "ItemsRepeater"));
+		Assert.Equal("GridRepeater", (string?)repeater.Attribute(Xaml + "Name"));
+
+		var code = File.ReadAllText(Path.Combine(RepoRoot, page + ".cs"));
+		Assert.Contains("new CardGrid(GridScroller, GridList, GridRepeater)", code);
+		Assert.Contains("_grid.ForwardWheel(", code);
+	}
+
 	/// <summary>Shows an icon and no text: no Label, no text content, no TextBlock outside its property elements (a flyout's text is not the button's).</summary>
 	private static bool IsIconOnly(XElement button)
 	{
