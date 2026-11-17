@@ -2874,6 +2874,7 @@ class Bridge:
             if position is None or not start <= position < end:
                 log.info("Not skipping: the position has left the segment")
                 return
+            self.learner.note_skip()    # not a seek to learn from
             pm._player.command("seek", end, "absolute")
             # What `skip_intro` records for the segment it skips.
             for segment in getattr(video, "intros", None) or ():

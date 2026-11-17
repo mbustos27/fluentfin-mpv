@@ -148,6 +148,17 @@ class Learner(Quiet):
         self.play(Vid(self.item, [Seg("Intro", 10, 20, "chapters")]), 60, 150)
         self.assertIsNone(self.store.get(self.key))
 
+    def test_skipped_recap_or_preview_is_not_an_intro(self):
+        for kind in ("Recap", "Preview", "Outro"):
+            self.play(Vid(self.item, [Seg(kind, 30, 100, "chapters")]),
+                      40, 100.5)
+            self.assertIsNone(self.store.get(self.key), kind)
+
+    def test_jump_from_skip_segment_is_not_learned(self):
+        self.learner.note_skip(now=0.0)
+        self.play(Vid(self.item), 60, 150)
+        self.assertIsNone(self.store.get(self.key))
+
     def test_not_learned_when_off(self):
         src.OPTIONS.learn = False
         self.play(Vid(self.item), 60, 150)

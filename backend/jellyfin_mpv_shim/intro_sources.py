@@ -362,6 +362,12 @@ class SkipLearner:
         self._video = None
         self._last = None
         self._skipped = None     # (learned segment, when) after its skip
+        self._by_skip = 0.0      # until when a forward jump is a Skip press
+
+    def note_skip(self, now=None):
+        """The app itself is about to seek (`skip_segment`): that jump is
+        not the viewer finding the intro."""
+        self._by_skip = (time.monotonic() if now is None else now) + 5.0
 
     def _store_(self):
         return self._store or store()
@@ -394,7 +400,11 @@ class SkipLearner:
                 if learned.start <= previous < learned.end:
                     self._skipped = (learned, now)
             elif (not fronts and OPTIONS.learn
-                    and 0 <= previous <= LEARN_MAX_START):
+                    and 0 <= previous <= LEARN_MAX_START
+                    and now > self._by_skip
+                    and not any(s.start <= previous < s.end
+                                for s in (getattr(video, "intros", None)
+                                          or ()))):
                 self._store_().learn(key, previous, position)
         elif delta <= -BACK_MIN_JUMP and learned is not None:
             if not learned.start <= position < learned.end:
