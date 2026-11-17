@@ -2795,6 +2795,24 @@ class Bridge:
         self._mpv_write(lambda p: setattr(p, "sub_scale", percent / 100))
         return {}
 
+    def cmd_set_speed(self, args):
+        """Seaglass 1.1.4: mpv's ``speed``, written now. mpv keeps it for
+        every later item (it is not re-created between them); the UI says
+        when it goes back to 1. Always succeeds once connected."""
+        self._require_player()
+        speed = proto.validate_speed(args)
+        self._mpv_write(lambda p: setattr(p, "speed", speed))
+        return {}
+
+    def cmd_set_subtitle_delay(self, args):
+        """Seaglass 1.1.4: mpv's ``sub-delay`` in seconds, written now and
+        kept by mpv like the speed (the UI sends 0 for each new item).
+        Always succeeds once connected."""
+        self._require_player()
+        seconds = proto.validate_subtitle_delay(args)
+        self._mpv_write(lambda p: setattr(p, "sub_delay", seconds))
+        return {}
+
     def cmd_set_mute(self, args):
         self._require_player()
         muted = proto.get_bool(args, "muted")
@@ -2933,6 +2951,8 @@ class Bridge:
         "set_volume": cmd_set_volume,
         "set_mute": cmd_set_mute,
         "set_subtitle_size": cmd_set_subtitle_size,
+        "set_speed": cmd_set_speed,
+        "set_subtitle_delay": cmd_set_subtitle_delay,
         "set_fullscreen": cmd_set_fullscreen,
         "set_controls": cmd_set_controls,
         "skip_segment": cmd_skip_segment,

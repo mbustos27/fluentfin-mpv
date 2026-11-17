@@ -30,6 +30,13 @@ public enum MpvControlsAction
 	ToggleSubtitles,
 	CycleSubtitles,
 	CycleAudio,
+	/// <summary>Seaglass 1.1.4: [ and ], the playback speed a step down or up; Backspace, back to normal.</summary>
+	SpeedDown,
+	SpeedUp,
+	SpeedNormal,
+	/// <summary>Seaglass 1.1.4: Z and X, the subtitles 0.1 s earlier or later.</summary>
+	SubtitleEarlier,
+	SubtitleLater,
 	/// <summary>The digits: a tenth of the length each. Keep the ten in order (<see cref="MpvControlsViewModel.PercentOf"/>).</summary>
 	Percent0, Percent1, Percent2, Percent3, Percent4, Percent5, Percent6, Percent7, Percent8, Percent9,
 }
@@ -183,7 +190,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public string? ItemId { get; private set; }
 
 	/// <summary>Anything of the controls' is on screen (the window they draw in is shown only then).</summary>
-	public bool AnythingVisible => ControlsVisible || VolumeIndicatorVisible || IsSkipVisible;
+	public bool AnythingVisible => ControlsVisible || VolumeIndicatorVisible || IsSkipVisible || IsNextPromptVisible || ToastVisible;
 
 	partial void OnControlsVisibleChanged(bool value)
 	{
@@ -225,6 +232,11 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			VolumeIndicatorVisible = false;
 		}
 
+		if (ToastVisible && now >= _toastUntil)
+		{
+			ToastVisible = false;
+		}
+
 		if (!_scrubbing)
 		{
 			ShowPosition(CurrentPosition(now));
@@ -247,7 +259,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		var position = _reportedPosition;
 		if (!IsPaused && !IsOpening && _reportedAt != default)
 		{
-			position += (now - _reportedAt).Ticks;
+			// Seaglass 1.1.4: the video's time runs at the playback speed
+			position += (long)((now - _reportedAt).Ticks * Speed);
 		}
 
 		return DurationTicks > 0 ? Math.Min(position, DurationTicks) : position;
@@ -258,6 +271,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		PositionTicks = Math.Max(0, ticks);
 		ElapsedText = FormatTime(TimeSpan.FromTicks(PositionTicks));
 		RemainingText = DurationTicks > 0 ? "-" + FormatTime(TimeSpan.FromTicks(Math.Max(0, DurationTicks - PositionTicks))) : "";
+		UpdateNextPrompt();
 	}
 
 	// -- backend events ------------------------------------------------------------------------------------------------
@@ -311,7 +325,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		OnTrackIndices(state.AudioStreamIndex, state.SubtitleStreamIndex);
 		if (state.Queue is { ItemIds.Count: > 0 } queue)
 		{
-			CanPrevious = queue.Index > 0;
+			_queueHasPrevious = queue.Index > 0;
+			CanPrevious = _queueHasPrevious || _nextHasPrevious;
 			_queueCount = queue.ItemIds.Count;
 			if (!_nextKnown)
 			{
@@ -359,6 +374,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		// a new item: a click on the last one's video does not pause this one
 		_clicks.Cancel();
+		var another = !string.Equals(NormalizeId(item.ItemId), NormalizeId(ItemId), StringComparison.Ordinal);
 		ItemId = item.ItemId;
 		(Title, Subtitle) = FormatTitle(item);
 		if (item.RunTimeTicks is long runtime && runtime > 0)
@@ -373,6 +389,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_isEpisode = item.Type == "Episode";
 		_nextKnown = false;
 		_nextItemId = null;
+		_nextHasPrevious = false;
+		_creditsStarts = [];
 		NextToolTip = NextEpisode;
 		UpdateShowsNext();
 
@@ -389,7 +407,17 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_reportedAt = default;
 		ShowPosition(0);
 		NotifyActivity();
+
+		// Seaglass 1.1.4: a subtitle delay is the item's (mpv keeps it for the next one: docs/BRIDGE.md §4); the speed
+		// stays for the queue. The same item again (a restart for a track change) keeps its delay.
+		if (another && SubtitleDelay != 0)
+		{
+			SubtitleDelay = 0;
+			_ = _send(Bridge.Commands.SetSubtitleDelay, BridgeCommands.SubtitleDelay(0));
+		}
 	}
+
+	private static string NormalizeId(string? id) => (id ?? "").Replace("-", "", StringComparison.Ordinal).ToLowerInvariant();
 
 	// -- actions --------------------------------------------------------------------------------------------------------
 
@@ -677,6 +705,10 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_offered = offered;
 		_offerItemId = segments.ItemId ?? ItemId;
 		UpdateSkip();
+
+		// Seaglass 1.1.4: where the credits start, for the Next pill
+		_creditsStarts = [.. (segments.Segments ?? []).Where(x => x.Type == "Outro").Select(x => x.StartTicks)];
+		UpdateNextPrompt();
 	}
 
 	/// <summary>
@@ -782,7 +814,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 	private void UpdateShowsNext() => ShowsNext = CanNext || _isEpisode || _queueCount > 1;
 
-	partial void OnCanNextChanged(bool value) => UpdateShowsNext();
+	partial void OnCanNextChanged(bool value)
+	{
+		UpdateShowsNext();
+		UpdateNextPrompt();
+	}
+
+	partial void OnShowsNextChanged(bool value) => UpdateNextPrompt();
 
 	/// <summary>
 	/// The <c>next</c> event: what <c>next</c> would play from this item. It enables the Next button (the queue in the
@@ -797,6 +835,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 		_nextKnown = true;
 		CanNext = next.NextItemId is not null;
+		_nextHasPrevious = next.PreviousItemId is not null;
+		CanPrevious = _queueHasPrevious || _nextHasPrevious;
 		if (next.NextItemId == _nextItemId && NextToolTip != NextEpisode)
 		{
 			return;
@@ -839,6 +879,153 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		var (title, subtitle) = FormatTitle(item);
 		return subtitle.Length > 0 ? subtitle : title;
+	}
+
+	// -- the Next pill near the end (Seaglass 1.1.4) ------------------------------------------------------------------
+
+	private bool _queueHasPrevious;
+	private bool _nextHasPrevious;
+
+	/// <summary>Where the item's credits start (its <c>Outro</c> segments, from the server, the file's chapters or online).</summary>
+	private IReadOnlyList<long> _creditsStarts = [];
+
+	/// <summary>
+	/// The Next pill shows: there is a next item and the position is near the end (<see cref="NextPromptAt"/>). Also while
+	/// the bars are hidden, as the Skip pill: it is the prompt for what comes next. In 1.1.0 it showed with the bars from
+	/// the first seconds of an episode (UX review, the player).
+	/// </summary>
+	[ObservableProperty]
+	public partial bool IsNextPromptVisible { get; set; }
+
+	partial void OnIsNextPromptVisibleChanged(bool value) => OnPropertyChanged(nameof(AnythingVisible));
+
+	/// <summary>The Next pill's lead when the item marks no credits, by its length, as Jellyfin's web player: 30 s under 40 min.</summary>
+	public static TimeSpan NextPromptLead(long durationTicks) =>
+		TimeSpan.FromSeconds(durationTicks >= TimeSpan.FromMinutes(50).Ticks ? 40 : durationTicks >= TimeSpan.FromMinutes(40).Ticks ? 35 : 30);
+
+	/// <summary>
+	/// When the Next pill comes, in ticks: where the credits start when a segment marks them in the second half of the item
+	/// (an earlier "Outro" is not the end credits), else <see cref="NextPromptLead"/> before the end, at most the last quarter
+	/// of a short item. Never (<see cref="long.MaxValue"/>) while the length is not known.
+	/// </summary>
+	public static long NextPromptAt(long durationTicks, IEnumerable<long>? creditsStarts = null)
+	{
+		if (durationTicks <= 0)
+		{
+			return long.MaxValue;
+		}
+
+		var credits = (creditsStarts ?? []).Where(x => x >= durationTicks / 2 && x < durationTicks).DefaultIfEmpty(long.MaxValue).Min();
+		return credits != long.MaxValue ? credits : durationTicks - Math.Min(NextPromptLead(durationTicks).Ticks, durationTicks / 4);
+	}
+
+	private void UpdateNextPrompt() =>
+		IsNextPromptVisible = ShowsNext && CanNext && PositionTicks >= NextPromptAt(DurationTicks, _creditsStarts);
+
+	// -- playback speed and subtitle delay (Seaglass 1.1.4) -------------------------------------------------------------
+
+	/// <summary>
+	/// The playback speed (<see cref="PlaybackSpeeds"/>), 1 normal. Kept for the queue this page plays (mpv keeps it from one
+	/// item to the next) and normal again on the next player page (<see cref="SendControls"/>): a speed suits what is being
+	/// watched (a lecture, a series binged at 1.25x), and a film opened later must not start fast. Not saved.
+	/// </summary>
+	[ObservableProperty]
+	public partial double Speed { get; set; } = PlaybackSpeeds.Normal;
+
+	/// <summary>"1.5×".</summary>
+	public string SpeedText => PlaybackSpeeds.Text(Speed);
+
+	/// <summary>The speed is not normal: the bar's speed button shows it.</summary>
+	public bool IsSpeedChanged => !PlaybackSpeeds.IsNormal(Speed);
+
+	partial void OnSpeedChanged(double value)
+	{
+		OnPropertyChanged(nameof(SpeedText));
+		OnPropertyChanged(nameof(IsSpeedChanged));
+	}
+
+	/// <summary>
+	/// The subtitle delay in seconds (<see cref="SubtitleDelays"/>; positive: later). The item's own: 0 again when another
+	/// item starts (<see cref="OnItem"/>) and on the next player page. Not saved.
+	/// </summary>
+	[ObservableProperty]
+	public partial double SubtitleDelay { get; set; }
+
+	/// <summary>"+0.3 s".</summary>
+	public string SubtitleDelayText => SubtitleDelays.Text(SubtitleDelay);
+
+	partial void OnSubtitleDelayChanged(double value) => OnPropertyChanged(nameof(SubtitleDelayText));
+
+	/// <summary>
+	/// The speed menu's pick, or a key's step (<paramref name="announce"/>: the change is shown and said, the bars may be
+	/// hidden). The position moves on at the new speed from where it is now. The same speed again: nothing is sent.
+	/// </summary>
+	public Task SetSpeed(double speed, bool announce = false)
+	{
+		NotifyActivity();
+		var value = PlaybackSpeeds.Clamp(speed);
+		if (announce)
+		{
+			ShowToast(PlaybackSpeeds.IsNormal(value) ? "Normal speed" : $"Speed {PlaybackSpeeds.Text(value)}");
+		}
+
+		if (value == Speed)
+		{
+			return Task.CompletedTask;
+		}
+
+		var now = _now();
+		_reportedPosition = CurrentPosition(now);
+		_reportedAt = now;
+		Speed = value;
+		return _send(Bridge.Commands.SetSpeed, BridgeCommands.Speed(value));
+	}
+
+	/// <summary>The subtitles menu's delay buttons, or a key (<paramref name="announce"/> as <see cref="SetSpeed"/>).</summary>
+	public Task SetSubtitleDelay(double seconds, bool announce = false)
+	{
+		NotifyActivity();
+		var value = SubtitleDelays.Clamp(seconds);
+		if (announce)
+		{
+			ShowToast(value == 0 ? "Subtitles: no delay" : $"Subtitles {SubtitleDelays.Describe(value)}");
+		}
+
+		if (value == SubtitleDelay)
+		{
+			return Task.CompletedTask;
+		}
+
+		SubtitleDelay = value;
+		return _send(Bridge.Commands.SetSubtitleDelay, BridgeCommands.SubtitleDelay(value));
+	}
+
+	/// <summary><paramref name="steps"/> tenths of a second later (negative: earlier).</summary>
+	public Task StepSubtitleDelay(int steps, bool announce = false) => SetSubtitleDelay(SubtitleDelay + steps * SubtitleDelays.Step, announce);
+
+	// -- the indicator for a key's speed or delay (Seaglass 1.1.4) -------------------------------------------------------
+
+	/// <summary>How long the indicator stays after the last change.</summary>
+	public static readonly TimeSpan ToastFor = TimeSpan.FromSeconds(1.5);
+
+	private DateTimeOffset _toastUntil;
+
+	/// <summary>A short line where the volume indicator shows ("Speed 1.5×", "Subtitles 0.3 s later"), also while the bars are hidden.</summary>
+	[ObservableProperty]
+	public partial bool ToastVisible { get; set; }
+
+	[ObservableProperty]
+	public partial string ToastText { get; set; } = "";
+
+	partial void OnToastVisibleChanged(bool value) => OnPropertyChanged(nameof(AnythingVisible));
+
+	/// <summary>Shows <paramref name="text"/> for <see cref="ToastFor"/> in the volume indicator's place (it goes).</summary>
+	private void ShowToast(string text)
+	{
+		ToastText = text;
+		_toastUntil = _now() + ToastFor;
+		VolumeIndicatorVisible = false;
+		ToastVisible = true;
 	}
 
 	// -- audio and subtitle tracks -------------------------------------------------------------------------------------
@@ -1098,6 +1285,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	private void ShowVolumeIndicator()
 	{
 		_volumeIndicatorUntil = _now() + VolumeIndicatorFor;
+		ToastVisible = false;
 		VolumeIndicatorVisible = true;
 	}
 
@@ -1156,7 +1344,10 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_announced = true;
 		// the remembered text size goes with it: applied at every playback start
 		var size = _send(Bridge.Commands.SetSubtitleSize, BridgeCommands.SubtitleSize(SubtitleSize));
-		return Task.WhenAll(size, SendInsetIfChanged(force: true));
+		// Seaglass 1.1.4: and this page's speed and delay (normal and none at its start), whatever mpv kept from the page before
+		var speed = _send(Bridge.Commands.SetSpeed, BridgeCommands.Speed(Speed));
+		var delay = _send(Bridge.Commands.SetSubtitleDelay, BridgeCommands.SubtitleDelay(SubtitleDelay));
+		return Task.WhenAll(size, speed, delay, SendInsetIfChanged(force: true));
 	}
 
 	private Task SendInsetIfChanged(bool force = false)
@@ -1182,7 +1373,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// A key pressed over the player (the page or the controls window). True when it is one of the player's keys and was
 	/// handled. The whole map is in docs/SHORTCUTS.md (and <see cref="Shortcuts.ShortcutCatalog"/>): Space/K play-pause,
 	/// Left/Right 5 s (Ctrl: 10 s, Shift: 30 s), J/L 10 s, digits and Home seek, Up/Down volume, M mute, C/V subtitles, B audio,
-	/// F/F11 full screen, Shift+N/Shift+P next/previous, S skips the segment on offer, Esc.
+	/// F/F11 full screen, Shift+N/Shift+P next/previous, S skips the segment on offer, [ and ] the speed (Backspace normal),
+	/// Z and X the subtitle delay, Esc.
 	/// </summary>
 	public bool HandleKey(int virtualKey, bool control = false, bool shift = false, bool alt = false)
 	{
@@ -1219,6 +1411,11 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			case MpvControlsAction.ToggleSubtitles: return ToggleSubtitles();
 			case MpvControlsAction.CycleSubtitles: return CycleSubtitles();
 			case MpvControlsAction.CycleAudio: return CycleAudio();
+			case MpvControlsAction.SpeedDown: return SetSpeed(PlaybackSpeeds.Slower(Speed), announce: true);
+			case MpvControlsAction.SpeedUp: return SetSpeed(PlaybackSpeeds.Faster(Speed), announce: true);
+			case MpvControlsAction.SpeedNormal: return SetSpeed(PlaybackSpeeds.Normal, announce: true);
+			case MpvControlsAction.SubtitleEarlier: return StepSubtitleDelay(-1, announce: true);
+			case MpvControlsAction.SubtitleLater: return StepSubtitleDelay(1, announce: true);
 			case >= MpvControlsAction.Percent0 and <= MpvControlsAction.Percent9: return SeekToPercent(PercentOf(action));
 			default: return Task.CompletedTask;
 		}
@@ -1232,6 +1429,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		public const int B = 0x42, C = 0x43, V = 0x56, F11 = 0x7A;
 		public const int F = 0x46, J = 0x4A, K = 0x4B, L = 0x4C, M = 0x4D, N = 0x4E, P = 0x50, S = 0x53;
 		public const int MediaNext = 0xB0, MediaPrevious = 0xB1, MediaPlayPause = 0xB3;
+		/// <summary>Seaglass 1.1.4: Backspace, Z, X, and the "[" and "]" keys (VK_OEM_4, VK_OEM_6 on a US layout): mpv's own keys for them.</summary>
+		public const int Back = 0x08, X = 0x58, Z = 0x5A, OpenBracket = 0xDB, CloseBracket = 0xDD;
 	}
 
 	/// <summary>The key map (pure): which action a key and its modifiers mean, null for none of the player's.</summary>
@@ -1270,6 +1469,12 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			Keys.MediaNext => MpvControlsAction.Next,
 			Keys.MediaPrevious => MpvControlsAction.Previous,
 			Keys.Escape when !control && !shift => MpvControlsAction.Escape,
+			// Seaglass 1.1.4: mpv's own keys for the speed and the subtitle delay, so they are the same in mpv's controls
+			Keys.OpenBracket when !control && !shift => MpvControlsAction.SpeedDown,
+			Keys.CloseBracket when !control && !shift => MpvControlsAction.SpeedUp,
+			Keys.Back when !control && !shift => MpvControlsAction.SpeedNormal,
+			Keys.Z when !control && !shift => MpvControlsAction.SubtitleEarlier,
+			Keys.X when !control && !shift => MpvControlsAction.SubtitleLater,
 			_ => null,
 		};
 	}

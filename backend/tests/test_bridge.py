@@ -1054,6 +1054,8 @@ class DispatchTest(BridgeCase):
                           ("set_subtitle", {"index": -1}),
                           ("set_volume", {"volume": 5}),
                           ("set_subtitle_size", {"percent": 120}),
+                          ("set_speed", {"speed": 1.5}),
+                          ("set_subtitle_delay", {"seconds": 0.1}),
                           ("set_mute", {"muted": True}),
                           ("set_fullscreen", {"fullscreen": True})):
             with self.subTest(cmd=cmd):
@@ -1072,6 +1074,13 @@ class DispatchTest(BridgeCase):
                           ("set_subtitle_size", {"percent": 201}),
                           ("set_subtitle_size", {"percent": "120"}),
                           ("set_subtitle_size", {}),
+                          ("set_speed", {"speed": 0.25}),
+                          ("set_speed", {"speed": 3}),
+                          ("set_speed", {"speed": "1.5"}),
+                          ("set_speed", {}),
+                          ("set_subtitle_delay", {"seconds": 31}),
+                          ("set_subtitle_delay", {"seconds": "-1"}),
+                          ("set_subtitle_delay", {}),
                           ("set_audio", {"index": -1}),
                           ("set_subtitle", {"index": -2}),
                           ("set_fullscreen", {}),
@@ -1109,6 +1118,26 @@ class DispatchTest(BridgeCase):
         self.assertEqual(self.runtime.pm._player.sub_scale, 1.3)
         self.assertTrue(self.send("set_subtitle_size", {"percent": 50})["ok"])
         self.assertEqual(self.runtime.pm._player.sub_scale, 0.5)
+
+    def test_speed_and_subtitle_delay_are_written_to_mpv(self):
+        """Seaglass 1.1.4: ``set_speed`` and ``set_subtitle_delay`` write
+        mpv's ``speed`` and ``sub-delay`` at once, with nothing playing and
+        while an item plays; nothing goes to the server."""
+        self.connect_server()
+        player = self.runtime.pm._player
+        self.assertTrue(self.send("set_speed", {"speed": 1.5})["ok"])
+        self.assertEqual(player.speed, 1.5)
+        self.assertTrue(
+            self.send("set_subtitle_delay", {"seconds": -0.3})["ok"])
+        self.assertEqual(player.sub_delay, -0.3)
+        self.runtime.pm._video = FakeVideo(A)
+        del self.runtime.journal[:]
+        self.assertTrue(self.send("set_speed", {"speed": 1})["ok"])
+        self.assertEqual(player.speed, 1.0)
+        self.assertTrue(
+            self.send("set_subtitle_delay", {"seconds": 0.2})["ok"])
+        self.assertEqual(player.sub_delay, 0.2)
+        self.assertEqual(self.runtime.journal, [])
 
     def test_unknown_fields_are_ignored(self):
         self.connect_server()

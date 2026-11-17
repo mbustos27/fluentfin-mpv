@@ -28,6 +28,10 @@ public static class Bridge
 		public const string SetMute = "set_mute";
 		/// <summary>fluentfin-mpv: the subtitle text size in percent (docs/BRIDGE.md §4).</summary>
 		public const string SetSubtitleSize = "set_subtitle_size";
+		/// <summary>Seaglass 1.1.4: the playback speed, 0.5 to 2 (docs/BRIDGE.md §4).</summary>
+		public const string SetSpeed = "set_speed";
+		/// <summary>Seaglass 1.1.4: the subtitle delay in seconds, -30 to 30 (docs/BRIDGE.md §4).</summary>
+		public const string SetSubtitleDelay = "set_subtitle_delay";
 		public const string SetFullscreen = "set_fullscreen";
 		public const string SetControls = "set_controls";
 		/// <summary>fluentfin-mpv: the Skip intro settings (docs/BRIDGE.md §4): online lookups and learned intros.</summary>

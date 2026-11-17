@@ -655,6 +655,39 @@ class TicksAndTracksTest(unittest.TestCase):
                     proto.validate_controls(args)
                 self.assertEqual(caught.exception.code, "bad_args")
 
+    def test_validate_speed_and_subtitle_delay(self):
+        """Seaglass 1.1.4: ``set_speed`` 0.5-2, ``set_subtitle_delay``
+        -30..30 s, numbers only, as floats."""
+        self.assertEqual(proto.validate_speed({"speed": 1.5}), 1.5)
+        self.assertEqual(proto.validate_speed({"speed": 2}), 2.0)
+        self.assertIsInstance(proto.validate_speed({"speed": 1}), float)
+        self.assertEqual(proto.validate_speed({"speed": 0.5}), 0.5)
+        self.assertEqual(
+            proto.validate_subtitle_delay({"seconds": -0.3}), -0.3)
+        self.assertEqual(
+            proto.validate_subtitle_delay({"seconds": 30}), 30.0)
+        self.assertEqual(
+            proto.validate_subtitle_delay({"seconds": 0}), 0.0)
+        for check, args in (
+                (proto.validate_speed, {}),
+                (proto.validate_speed, {"speed": 0.49}),
+                (proto.validate_speed, {"speed": 2.01}),
+                (proto.validate_speed, {"speed": "1.5"}),
+                (proto.validate_speed, {"speed": True}),
+                (proto.validate_speed, {"speed": None}),
+                (proto.validate_speed, {"speed": float("nan")}),
+                (proto.validate_subtitle_delay, {}),
+                (proto.validate_subtitle_delay, {"seconds": 30.1}),
+                (proto.validate_subtitle_delay, {"seconds": -30.1}),
+                (proto.validate_subtitle_delay, {"seconds": "0.1"}),
+                (proto.validate_subtitle_delay, {"seconds": False}),
+                (proto.validate_subtitle_delay,
+                 {"seconds": float("inf")})):
+            with self.subTest(check=check.__name__, args=args):
+                with self.assertRaises(BridgeError) as caught:
+                    check(args)
+                self.assertEqual(caught.exception.code, "bad_args")
+
     def test_item_payload(self):
         self.assertEqual(proto.item_payload("e1", {
             "Name": "Pilot", "Type": "Episode", "SeriesName": "Show",

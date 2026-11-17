@@ -174,6 +174,12 @@ public static class BridgeCommands
 
 	public static JsonObject SubtitleSize(int percent) => new() { ["percent"] = SubtitleSizes.Clamp(percent) };
 
+	/// <summary>Seaglass 1.1.4: <c>set_speed</c>, on one of the offered steps (<see cref="PlaybackSpeeds"/>).</summary>
+	public static JsonObject Speed(double speed) => new() { ["speed"] = PlaybackSpeeds.Clamp(speed) };
+
+	/// <summary>Seaglass 1.1.4: <c>set_subtitle_delay</c>, in tenths of a second within ±30 s (<see cref="SubtitleDelays"/>).</summary>
+	public static JsonObject SubtitleDelay(double seconds) => new() { ["seconds"] = SubtitleDelays.Clamp(seconds) };
+
 	public static JsonObject Mute(bool muted) => new() { ["muted"] = muted };
 
 	public static JsonObject Fullscreen(bool fullscreen) => new() { ["fullscreen"] = fullscreen };

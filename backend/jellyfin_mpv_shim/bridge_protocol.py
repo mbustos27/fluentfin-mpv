@@ -394,6 +394,32 @@ def validate_controls(args):
     return controls, (inset if controls == "ui" else 0.0)
 
 
+# Seaglass 1.1.4: the playback speed and the subtitle delay (BRIDGE.md
+# section 4 ``set_speed``, ``set_subtitle_delay``).
+SPEED_RANGE = (0.5, 2.0)
+SUBTITLE_DELAY_LIMIT = 30.0
+
+
+def get_number_between(args, key, minimum, maximum):
+    """A number argument within ``minimum``..``maximum`` (inclusive), as a
+    float."""
+    value = float(get_number(args, key))
+    if not minimum <= value <= maximum:
+        raise _bad("%s must be between %g and %g" % (key, minimum, maximum))
+    return value
+
+
+def validate_speed(args):
+    """``set_speed`` args -> mpv's ``speed``."""
+    return get_number_between(args, "speed", *SPEED_RANGE)
+
+
+def validate_subtitle_delay(args):
+    """``set_subtitle_delay`` args -> mpv's ``sub-delay`` in seconds."""
+    return get_number_between(args, "seconds", -SUBTITLE_DELAY_LIMIT,
+                              SUBTITLE_DELAY_LIMIT)
+
+
 def validate_skip_options(args):
     """``set_skip_options`` args -> ``{"onlineLookup": bool|None,
     "learnIntros": bool|None}``: each optional (None = leave as is), a bool
