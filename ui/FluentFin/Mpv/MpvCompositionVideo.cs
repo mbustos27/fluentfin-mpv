@@ -299,11 +299,15 @@ public sealed partial class MpvCompositionVideo(ILogger<MpvCompositionVideo> log
 		return options;
 	}
 
+	/// <summary>The panel took a new size and the picture's hold for it is in place (the full-screen switch waits for it before the window shows again).</summary>
+	public event Action? PanelSizeChanged;
+
 	private void OnPanelSizeChanged(object sender, SizeChangedEventArgs e)
 	{
 		Trace($"panel size {e.PreviousSize.Width:0}x{e.PreviousSize.Height:0} -> {e.NewSize.Width:0}x{e.NewSize.Height:0} DIPs");
 		SendSize();
 		Settle();
+		PanelSizeChanged?.Invoke();
 	}
 
 	// -- the picture holds still while mpv catches up with a new size -------------------------------------------------------
