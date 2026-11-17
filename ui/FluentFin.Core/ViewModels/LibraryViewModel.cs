@@ -21,7 +21,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	{
 		JellyfinClient = jellyfinClient;
 
-		var pageRequest = this.WhenAnyValue(x => x.SelectedPage).Select(page => new PageRequest(page + 1, 100));
+		var pageRequest = this.WhenAnyValue(x => x.SelectedPage).Select(page => new PageRequest(page + 1, PageSize));
 		// tie-break so equal keys (e.g. unrated, never played) keep a stable order across pages
 		var comparer = this.WhenAnyValue(x => x.SortBy, x => x.Order)
 						   .Select(x => (IComparer<BaseItemViewModel>)GetComparer(x).ThenByAscending(i => i.Name ?? "").ThenByAscending(i => i.Id ?? Guid.Empty));
@@ -44,7 +44,14 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			.RefCount()
 			.Filter(Filter.IsVisible)
 			.SortAndPage(comparer, pageRequest)
-			.Do(changes => NumberOfPages = changes.Context.Response.Pages)			.Bind(out _items)
+			.Do(changes =>
+			{
+				NumberOfPages = changes.Context.Response.Pages;
+				// Seaglass scrolling: where this page's cards are in the whole (filtered) library, for Narrator's "n of m"
+				TotalCount = changes.Context.Response.TotalSize;
+				FirstIndex = Math.Max(0, changes.Context.Response.Page - 1) * PageSize;
+			})
+			.Bind(out _items)
 			.Subscribe();
 	}
 
@@ -75,6 +82,17 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	}
 
 	public ReadOnlyObservableCollection<BaseItemViewModel> Items => _items;
+
+	/// <summary>Cards on one page of the library.</summary>
+	public const int PageSize = 100;
+
+	/// <summary>Seaglass scrolling: the cards in the library as filtered (every page), the "m" of a card's "n of m".</summary>
+	[ObservableProperty]
+	public partial int TotalCount { get; set; }
+
+	/// <summary>Seaglass scrolling: the place in the library of this page's first card (0 on the first page).</summary>
+	[ObservableProperty]
+	public partial int FirstIndex { get; set; }
 
 	[ObservableProperty]
 	public partial int NumberOfPages { get; set; }

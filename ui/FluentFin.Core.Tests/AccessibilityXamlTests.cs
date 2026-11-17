@@ -336,18 +336,65 @@ public class AccessibilityXamlTests
 	}
 
 	[Fact]
-	public void SeasonEpisodeRows_NameTheirButtonsForTheEpisode()
+	public void SeasonEpisodeRows_AreOneStopEach_InANamedList_AndNameTheirButtonsForTheEpisode()
 	{
-		var season = Load("FluentFin/Views/SeasonPage.xaml").Descendants(Presentation + "ItemsControl")
+		// Seaglass scrolling: five buttons per episode became one stop per row (Enter plays, the menu has the rest)
+		var season = Load("FluentFin/Views/SeasonPage.xaml").Descendants().Where(e => e.Name.LocalName == "EpisodeList")
 			.Single(r => (string?)r.Attribute("ItemsSource") == "{x:Bind ViewModel.Episodes, Mode=OneWay}");
 		Assert.Contains(season.Descendants(), e => e.Name.LocalName == "EpisodeRow");
+		Assert.Equal("Episodes", (string?)season.Attribute("AutomationProperties.Name"));
+		// not a virtualizing ItemsRepeater: Tab never reached the episodes after the first
+		Assert.DoesNotContain(Load("FluentFin/Views/SeasonPage.xaml").Descendants(Presentation + "ItemsRepeater"), r => ((string?)r.Attribute("ItemsSource"))?.Contains("Episodes") == true);
 
 		var row = Load("FluentFin/Controls/EpisodeRow.xaml");
+		Assert.Equal("True", (string?)row.Root!.Attribute("IsTabStop"));
+		Assert.Equal("False", (string?)row.Root!.Attribute("UseSystemFocusVisuals"));
+		Assert.Equal("Collapsed", (string?)FindByName(row, "FocusRing").Attribute("Visibility"));
+
+		// Play and Watched stay for the pointer, without a Tab stop of their own, each named for its episode
 		var buttons = row.Descendants().Where(e => e.Name.LocalName is "Button" or "ToggleButton").ToList();
-		Assert.Equal(5, buttons.Count);
+		Assert.Equal(new[] { "PlayButton", "WatchedButton" }, buttons.Select(b => (string?)b.Attribute(Xaml + "Name")));
+		Assert.All(buttons, b => Assert.Equal("False", (string?)b.Attribute("IsTabStop")));
 		Assert.All(buttons, b => Assert.False(string.IsNullOrWhiteSpace((string?)b.Attribute("AutomationProperties.Name"))));
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/EpisodeRow.xaml.cs"));
-		Assert.Equal(5, System.Text.RegularExpressions.Regex.Matches(code, @"ItemLabels\.EpisodeAction\(""").Count);
+		Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(code, @"ItemLabels\.EpisodeAction\(""").Count);
+		// favourite and the rest: in the row's menu, which holds the More menu's own items
+		Assert.Contains("ContextFlyout = _menu", code);
+		Assert.Contains("new JellyfinFlyoutConverter().Convert(dto", code);
+	}
+
+	[Theory]
+	[InlineData("FluentFin/Views/LibraryPage.xaml")]
+	[InlineData("FluentFin/Views/ItemGridPage.xaml")]
+	public void CardGrids_AreOneTabStop_AListNamedAfterThePage(string page)
+	{
+		var doc = Load(page);
+		var list = FindByName(doc, "GridList");
+		Assert.Equal("RowList", list.Name.LocalName);
+		Assert.Equal("Once", (string?)list.Attribute("TabFocusNavigation"));
+		Assert.Equal("{x:Bind ViewModel.Title, Mode=OneWay}", (string?)list.Attribute("AutomationProperties.Name"));
+		Assert.Equal("ScrollView", list.Parent!.Name.LocalName);
+		Assert.Equal("GridScroller", (string?)list.Parent!.Attribute(Xaml + "Name"));
+		var repeater = Assert.Single(list.Elements(Presentation + "ItemsRepeater"));
+		Assert.Equal("GridRepeater", (string?)repeater.Attribute(Xaml + "Name"));
+
+		var code = File.ReadAllText(Path.Combine(RepoRoot, page + ".cs"));
+		Assert.Contains("new CardGrid(GridScroller, GridList, GridRepeater)", code);
+		Assert.Contains("_grid.ForwardWheel(", code);
+	}
+
+	[Theory]
+	[InlineData("FluentFin/Views/LibraryPage.xaml", "LibraryRoot")]
+	[InlineData("FluentFin/Views/ItemGridPage.xaml", "GridRoot")]
+	public void CardGridPages_TakeTheWheelEverywhere_TheirMarginIsPadding(string page, string root)
+	{
+		// a page's Margin is outside it: the wheel there reached nothing. The root takes the wheel (CardGrid.ForwardWheel)
+		var doc = Load(page);
+		Assert.Null(doc.Root!.Attribute("Margin"));
+		var grid = FindByName(doc, root);
+		Assert.Equal("Transparent", (string?)grid.Attribute("Background"));
+		Assert.Equal("{StaticResource MediumLeftTopRightBottomMargin}", (string?)grid.Attribute("Padding"));
+		Assert.Contains($"_grid.ForwardWheel({root})", File.ReadAllText(Path.Combine(RepoRoot, page + ".cs")));
 	}
 
 	/// <summary>Shows an icon and no text: no Label, no text content, no TextBlock outside its property elements (a flyout's text is not the button's).</summary>

@@ -1,149 +1,149 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
     Seaglass: an episode as an opaque card: thumbnail with its progress and a watched mark, "3. Title", runtime and a short
-    overview, and the episode's buttons (each one named for its episode, so tabbing from row to row says which).
+    overview, and Play and Watched.
+    Seaglass scrolling: the row is ONE keyboard stop (it was five buttons): Enter plays, Up/Down/Home/End move between episodes
+    (EpisodeList), the menu key or Shift+F10 (or a right click, or a long press) opens the row's menu: the episode's page, then
+    the More menu (favourite and the rest). Play and Watched stay for the pointer, named for their episode, with no Tab stop of
+    their own; a click elsewhere on the row opens the episode's page. Narrator reads the row as a list item "S1E4 Title,
+    watched", "4 of 8" (EpisodeRowAutomationPeer), with a focus ring of its own as a card has.
 -->
 <UserControl
     x:Class="FluentFin.Controls.EpisodeRow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:c="using:FluentFin.Converters"
-    xmlns:core="using:FluentFin.Core"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:root="using:FluentFin"
     xmlns:ui="using:CommunityToolkit.WinUI"
     HorizontalContentAlignment="Stretch"
+    IsTabStop="True"
+    UseSystemFocusVisuals="False"
     mc:Ignorable="d">
 
-    <Border
-        Padding="10"
-        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-        BorderThickness="1"
-        CornerRadius="{StaticResource GlassCardCornerRadius}">
-        <Grid ColumnSpacing="16">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+    <Grid>
+        <Border
+            x:Name="Body"
+            Padding="10"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource GlassCardCornerRadius}"
+            PointerEntered="Body_PointerEntered"
+            PointerExited="Body_PointerExited"
+            PointerCanceled="Body_PointerExited"
+            Tapped="Body_Tapped">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <Grid
-                Width="176"
-                Height="99"
-                CornerRadius="8">
-                <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" />
-                <Image
-                    x:Name="Thumb"
-                    AutomationProperties.AccessibilityView="Raw"
-                    Stretch="UniformToFill" />
-                <ProgressBar
-                    x:Name="Progress"
-                    Height="4"
-                    VerticalAlignment="Bottom"
-                    Maximum="100"
-                    Visibility="Collapsed" />
-                <Border
-                    x:Name="WatchedMark"
-                    Margin="6"
-                    Padding="4"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    AutomationProperties.Name="Watched"
-                    Background="{ThemeResource SeaglassAccentBrush}"
-                    CornerRadius="999"
-                    Visibility="Collapsed">
-                    <FontIcon
-                        FontSize="12"
-                        Foreground="{ThemeResource SeaglassDeepBrush}"
-                        Glyph="&#xE73E;" />
-                </Border>
+                <Grid
+                    Width="176"
+                    Height="99"
+                    CornerRadius="8">
+                    <Border Background="{ThemeResource ControlFillColorSecondaryBrush}" />
+                    <Image
+                        x:Name="Thumb"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Stretch="UniformToFill" />
+                    <ProgressBar
+                        x:Name="Progress"
+                        Height="4"
+                        VerticalAlignment="Bottom"
+                        Maximum="100"
+                        Visibility="Collapsed" />
+                    <Border
+                        x:Name="WatchedMark"
+                        Margin="6"
+                        Padding="4"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        AutomationProperties.Name="Watched"
+                        Background="{ThemeResource SeaglassAccentBrush}"
+                        CornerRadius="999"
+                        Visibility="Collapsed">
+                        <FontIcon
+                            FontSize="12"
+                            Foreground="{ThemeResource SeaglassDeepBrush}"
+                            Glyph="&#xE73E;" />
+                    </Border>
+                </Grid>
+
+                <StackPanel
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Spacing="4">
+                    <TextBlock
+                        x:Name="TitleText"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        x:Name="RuntimeText"
+                        Style="{StaticResource GlassMetaTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock
+                        x:Name="OverviewText"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        MaxLines="2"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="Buttons"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal">
+                    <!--  for the pointer: the row is the keyboard stop (Enter plays, the menu has Watched); each named for its episode (ux-review I3)  -->
+                    <Button
+                        x:Name="PlayButton"
+                        Width="44"
+                        Height="44"
+                        AutomationProperties.Name="Play"
+                        Background="Transparent"
+                        Command="{x:Bind root:App.Commands.PlayDtoCommand}"
+                        Content="{ui:SymbolIcon Symbol=Play}"
+                        CornerRadius="22"
+                        IsTabStop="False"
+                        Style="{StaticResource IconButtonStyle}"
+                        ToolTipService.ToolTip="Play" />
+                    <ToggleButton
+                        x:Name="WatchedButton"
+                        Width="44"
+                        Height="44"
+                        AutomationProperties.Name="Watched"
+                        Background="Transparent"
+                        Command="{x:Bind root:App.Commands.ToggleWatchedCommand}"
+                        Content="{ui:FontIcon Glyph=&#xE73E;}"
+                        CornerRadius="22"
+                        IsTabStop="False"
+                        Style="{StaticResource IconToggleButtonStyle}"
+                        ToolTipService.ToolTip="Mark watched" />
+                </StackPanel>
             </Grid>
+        </Border>
 
-            <StackPanel
-                Grid.Column="1"
-                VerticalAlignment="Center"
-                Spacing="4">
-                <TextBlock
-                    x:Name="TitleText"
-                    FontWeight="SemiBold"
-                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                    TextTrimming="CharacterEllipsis" />
-                <TextBlock
-                    x:Name="RuntimeText"
-                    Style="{StaticResource GlassMetaTextBlockStyle}"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <TextBlock
-                    x:Name="OverviewText"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    MaxLines="2"
-                    TextTrimming="CharacterEllipsis"
-                    TextWrapping="Wrap" />
-            </StackPanel>
+        <!--  the pointer is over the row: a click opens the episode's page  -->
+        <Border
+            x:Name="HoverOverlay"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="{ThemeResource GlassHoverOverlayBrush}"
+            CornerRadius="{StaticResource GlassCardCornerRadius}"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
 
-            <StackPanel
-                x:Name="Buttons"
-                Grid.Column="2"
-                VerticalAlignment="Center"
-                Orientation="Horizontal">
-                <!--  fluentfin-mpv: each button is named for its episode, so tabbing from row to row says which one (ux-review I3)  -->
-                <Button
-                    x:Name="DetailsButton"
-                    AutomationProperties.Name="Episode details"
-                    Width="44"
-                    Height="44"
-                    Background="Transparent"
-                    Command="{x:Bind root:App.Commands.DisplayDtoCommand}"
-                    Content="{ui:FontIcon Glyph=&#xE946;}"
-                    CornerRadius="22"
-                    Style="{StaticResource IconButtonStyle}"
-                    ToolTipService.ToolTip="Episode details" />
-                <Button
-                    x:Name="PlayButton"
-                    AutomationProperties.Name="Play"
-                    Width="44"
-                    Height="44"
-                    Background="Transparent"
-                    Command="{x:Bind root:App.Commands.PlayDtoCommand}"
-                    Content="{ui:SymbolIcon Symbol=Play}"
-                    CornerRadius="22"
-                    Style="{StaticResource IconButtonStyle}"
-                    ToolTipService.ToolTip="Play" />
-                <ToggleButton
-                    x:Name="WatchedButton"
-                    AutomationProperties.Name="Watched"
-                    Width="44"
-                    Height="44"
-                    Background="Transparent"
-                    Command="{x:Bind root:App.Commands.ToggleWatchedCommand}"
-                    Content="{ui:FontIcon Glyph=&#xE73E;}"
-                    CornerRadius="22"
-                    Style="{StaticResource IconToggleButtonStyle}"
-                    ToolTipService.ToolTip="Mark watched" />
-                <ToggleButton
-                    x:Name="FavoriteButton"
-                    AutomationProperties.Name="Favorite"
-                    Width="44"
-                    Height="44"
-                    Background="Transparent"
-                    Command="{x:Bind root:App.Commands.ToggleFavoriteCommand}"
-                    Content="{ui:FontIcon Glyph=&#xEB52;}"
-                    CornerRadius="22"
-                    Style="{StaticResource IconToggleButtonStyle}"
-                    ToolTipService.ToolTip="Add to favorites" />
-                <Button
-                    x:Name="MoreButton"
-                    AutomationProperties.Name="More options"
-                    Width="44"
-                    Height="44"
-                    Background="Transparent"
-                    Content="{ui:SymbolIcon Symbol=More}"
-                    CornerRadius="22"
-                    Style="{StaticResource IconButtonStyle}"
-                    ToolTipService.ToolTip="More options" />
-            </StackPanel>
-        </Grid>
-    </Border>
+        <!--  the keyboard focus (never colour alone): a ring as a card's, never for a click  -->
+        <Border
+            x:Name="FocusRing"
+            AutomationProperties.AccessibilityView="Raw"
+            BorderBrush="{ThemeResource GlassTextPrimaryBrush}"
+            BorderThickness="3"
+            CornerRadius="{StaticResource GlassCardCornerRadius}"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
+    </Grid>
 </UserControl>

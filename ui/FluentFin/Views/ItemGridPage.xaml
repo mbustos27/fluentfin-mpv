@@ -10,14 +10,17 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
-    Margin="{StaticResource MediumLeftTopRightBottomMargin}"
     mc:Ignorable="d">
 
     <!--
         Seaglass scrolling: "See all" on a row without a library (Continue Watching, Next Up): its items as a vertical grid that
         wraps at any width (nothing scrolls sideways, WCAG 1.4.10), the cards as the library's own.
     -->
-    <Grid RowSpacing="16">
+    <Grid
+        x:Name="GridRoot"
+        Padding="{StaticResource MediumLeftTopRightBottomMargin}"
+        Background="Transparent"
+        RowSpacing="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -31,8 +34,14 @@
             TextTrimming="CharacterEllipsis"
             TextWrapping="NoWrap" />
 
-        <ScrollView Grid.Row="1">
-            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+        <!--  the Library's grid model (Controls\CardGrid.cs): one Tab stop, arrows both ways, Home/End, the last card remembered, "n of m"  -->
+        <ScrollView x:Name="GridScroller" Grid.Row="1">
+            <lc:RowList
+                x:Name="GridList"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+                TabFocusNavigation="Once">
+            <ItemsRepeater x:Name="GridRepeater" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="vm:BaseItemViewModel">
                         <ItemContainer
@@ -59,6 +68,7 @@
                         Orientation="Horizontal" />
                 </ItemsRepeater.Layout>
             </ItemsRepeater>
+            </lc:RowList>
         </ScrollView>
     </Grid>
 </Page>

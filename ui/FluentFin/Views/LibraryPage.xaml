@@ -16,7 +16,6 @@
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
-    Margin="{StaticResource MediumLeftTopRightBottomMargin}"
     mc:Ignorable="d">
 
     <Page.Resources>
@@ -31,7 +30,14 @@
 
     <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
         <ctk:Case Value="False">
-            <Grid>
+            <!--
+                Seaglass scrolling: hit-testable everywhere, so the wheel over its empty parts (beside the pager) reaches CardGrid,
+                and the page's margin is its padding: a margin is outside the page, where the wheel reached nothing
+            -->
+            <Grid
+                x:Name="LibraryRoot"
+                Padding="{StaticResource MediumLeftTopRightBottomMargin}"
+                Background="Transparent">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -164,8 +170,19 @@
                 </StackPanel>
                 </Grid>
 
-                <ScrollView Grid.Row="1">
-                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+                <!--
+                    Seaglass scrolling: the rows' model for a grid (Controls\CardGrid.cs): the grid is one Tab stop and a list named after
+                    the library (each card "n of m" in the whole library); arrows in both directions, Home/End, PageUp/PageDown; Tab
+                    back in lands on the last-focused card; a focused card is scrolled clear of the edges; the wheel anywhere on the
+                    page scrolls the grid.
+                -->
+                <ScrollView x:Name="GridScroller" Grid.Row="1">
+                    <lc:RowList
+                        x:Name="GridList"
+                        HorizontalContentAlignment="Stretch"
+                        AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+                        TabFocusNavigation="Once">
+                    <ItemsRepeater x:Name="GridRepeater" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="vm:BaseItemViewModel">
                                 <!--  fluentfin-mpv: the card inside is the keyboard stop and the element Narrator reads; the container is neither (ux-review A1)  -->
@@ -196,6 +213,7 @@
                             <LinedFlowLayoutItemCollectionTransitionProvider />
                         </ItemsRepeater.ItemTransitionProvider>
                     </ItemsRepeater>
+                    </lc:RowList>
                 </ScrollView>
 
 
@@ -215,7 +233,7 @@
             </Grid>
         </ctk:Case>
         <ctk:Case IsDefault="True" Value="True">
-            <StackPanel Spacing="16">
+            <StackPanel Margin="{StaticResource MediumLeftTopRightBottomMargin}" Spacing="16">
 
                 <StackPanel
                     HorizontalAlignment="Center"
