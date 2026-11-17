@@ -74,9 +74,16 @@ Shot 'rows-6-remembered'
 
 # Up from the first row leaves the rows for the hero above (WinUI 3's TryMoveFocus found nothing without a search root:
 # the key fell to the page, which scrolled, and the focus stayed on the card)
+# (from the row's first and last cards: the title bar and the row's own See all must not win)
 [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
 Start-Sleep -Milliseconds 900
-$topCard = Card-Focus 'Electric Ravenmoor'
-Press 0x26 900   # Up
-$aboveRows = Focus-Info
-Check 'rows: Up from the first row moves the focus up out of the rows (the hero)' ($topCard -and $aboveRows -and $aboveRows.type -ne 'ListItem' -and $aboveRows.rect[1] -lt $topCard.rect[1]) ("$($topCard.name) -> $($aboveRows.type) '$($aboveRows.name)'")
+foreach ($endKey in 0x24, 0x23) {   # Home: the first card; End: the last
+    $anyCard = Find-Ui -Name 'Electric Ravenmoor' -Type 'ListItem' -Contains -OffscreenToo
+    if ($anyCard) { [void][OffscreenUi]::SetFocus($anyCard); Start-Sleep -Milliseconds 500 }
+    Press $endKey 1200
+    $topCard = Focus-Info
+    Press 0x26 900   # Up
+    $aboveRows = Focus-Info
+    Check "rows: Up from the first row's $(if ($endKey -eq 0x24) { 'first' } else { 'last' }) card goes up to the hero (not the title bar, nor the row's own header)" ($topCard -and $topCard.type -eq 'ListItem' -and $aboveRows -and $aboveRows.type -notin 'ListItem', 'TitleBar' -and $aboveRows.name -notlike 'See all*' -and $aboveRows.name -notlike 'Scroll *' -and $aboveRows.rect[1] -ge 60 -and $aboveRows.rect[1] -lt $topCard.rect[1] - 100) ("$($topCard.name) -> $($aboveRows.type) '$($aboveRows.name)'")
+    [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0); Start-Sleep -Milliseconds 700
+}

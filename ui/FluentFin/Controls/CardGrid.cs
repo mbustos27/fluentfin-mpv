@@ -213,7 +213,7 @@ internal sealed class CardGrid
 		{
 			// past the first or the last line: what is above (sort, filter) or below (the pager); else nowhere. Looked for across
 			// the grid's whole width: from a card on the left, straight up is the title bar
-			MoveFocusOut(from, gridKey == GridKey.Up ? FocusNavigationDirection.Up : FocusNavigationDirection.Down, _scroller);
+			MoveFocusOut(from, gridKey == GridKey.Up ? FocusNavigationDirection.Up : FocusNavigationDirection.Down, columns: _scroller, line: from as FrameworkElement);
 		}
 
 		e.Handled = true; // the grid's scroller does not also scroll by a line
@@ -223,8 +223,10 @@ internal sealed class CardGrid
 	/// Moves the keyboard focus from <paramref name="from"/> to the nearest element in <paramref name="direction"/> (XY), in the
 	/// whole window: without a search root, WinUI 3's TryMoveFocus finds nothing for the arrows.
 	/// </summary>
-	/// <param name="across">Searched from <paramref name="from"/>'s line across this element's width (a grid's), not just above or below it.</param>
-	internal static bool MoveFocusOut(UIElement from, FocusNavigationDirection direction, FrameworkElement? across = null)
+	/// <param name="columns">Searched straight up or down from this element's width (a grid's whole width), not only the focused one's.</param>
+	/// <param name="line">Searched from this element's top or bottom edge, not the focused one's.</param>
+	/// <param name="exclude">Nothing in this element is a candidate (a row's own header, above its cards).</param>
+	internal static bool MoveFocusOut(UIElement from, FocusNavigationDirection direction, FrameworkElement? columns = null, FrameworkElement? line = null, FrameworkElement? exclude = null)
 	{
 		if (from.XamlRoot?.Content is not UIElement root)
 		{
@@ -232,15 +234,23 @@ internal sealed class CardGrid
 		}
 
 		var options = new FindNextElementOptions { SearchRoot = root };
-		if (across is not null && from is FrameworkElement start)
+		if ((columns ?? from as FrameworkElement) is { } across && (line ?? from as FrameworkElement) is { } edge)
 		{
-			var line = start.TransformToVisual(root).TransformBounds(new Rect(0, 0, start.ActualWidth, start.ActualHeight));
-			var wide = across.TransformToVisual(root).TransformBounds(new Rect(0, 0, across.ActualWidth, across.ActualHeight));
-			options.HintRect = new Rect(wide.X, line.Y, wide.Width, line.Height);
+			var wide = BoundsIn(across, root);
+			var tall = BoundsIn(edge, root);
+			options.HintRect = new Rect(wide.X, tall.Y, wide.Width, tall.Height);
+		}
+
+		if (exclude is not null)
+		{
+			options.ExclusionRect = BoundsIn(exclude, root);
 		}
 
 		return FocusManager.TryMoveFocus(direction, options);
 	}
+
+	private static Rect BoundsIn(FrameworkElement element, UIElement root) =>
+		element.TransformToVisual(root).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
 
 	/// <summary>
 	/// Focuses card <paramref name="index"/>; the focus scrolls it into view. One the grid has not drawn (far down or up a

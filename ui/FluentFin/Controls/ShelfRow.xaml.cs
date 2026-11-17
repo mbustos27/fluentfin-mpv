@@ -309,8 +309,9 @@ public sealed partial class ShelfRow : UserControl
 			page.UpdateLayout();
 		}
 
-		// no row above: let the focus go up to the hero and the title bar
-		return down || CardGrid.MoveFocusOut(this, FocusNavigationDirection.Up);
+		// no row above: up to the hero, never to the row's own header (See all and the arrows are above its cards; the keys
+		// leave them alone)
+		return down || CardGrid.MoveFocusOut(from, FocusNavigationDirection.Up, exclude: this);
 	}
 
 	private ShelfRow? NeighbourOf(bool down, UIElement root)
