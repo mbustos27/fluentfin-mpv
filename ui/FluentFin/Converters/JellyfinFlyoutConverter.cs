@@ -1,13 +1,24 @@
-﻿using System.Linq.Expressions;
-using FluentFin.Core;
+﻿using FluentFin.Core;
+using FluentFin.Dialogs;
 using Jellyfin.Sdk.Generated.Models;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 
 namespace FluentFin.Converters;
 
+/// <summary>
+/// An item's More menu. Seaglass 1.1.3: its entries come from <see cref="ItemMenu"/> (every one does something, the
+/// administrative ones only for administrators); Delete asks first, naming the item.
+/// </summary>
 public partial class JellyfinFlyoutConverter : IValueConverter
 {
+	/// <summary>
+	/// Seaglass 1.1.3: cards set this. A card is one keyboard stop and its menu is the keyboard's way to play it; item pages
+	/// and episode rows have a Play button of their own, so their menus do not repeat it.
+	/// </summary>
+	public bool IncludePlay { get; set; }
+
 	public object? Convert(object value, Type targetType, object parameter, string language)
 	{
 		if (value is not BaseItemDto dto)
@@ -15,26 +26,24 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 			return null;
 		}
 
-		if (dto.Type is not { } type)
+		var groups = ItemMenu.For(dto, SessionInfo.CurrentUser, IncludePlay, CanEditSegments());
+		if (groups.Count == 0)
 		{
 			return null;
 		}
 
 		var flyout = new MenuBarItemFlyout();
-
-		foreach (var item in GetPlayItems(dto, type))
+		foreach (var group in groups)
 		{
-			flyout.Items.Add(item);
-		}
+			if (flyout.Items.Count > 0)
+			{
+				flyout.Items.Add(new MenuFlyoutSeparator());
+			}
 
-		foreach (var item in GetDtoItems(dto, type))
-		{
-			flyout.Items.Add(item);
-		}
-
-		foreach (var item in GetMetaDataItems(dto, type))
-		{
-			flyout.Items.Add(item);
+			foreach (var entry in group)
+			{
+				flyout.Items.Add(Make(entry, dto));
+			}
 		}
 
 		return flyout;
@@ -45,206 +54,81 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 		throw new NotSupportedException();
 	}
 
-	private static IEnumerable<MenuFlyoutItemBase> GetMetaDataItems(BaseItemDto dto, BaseItemDto_Type type)
+	// an administrator signed in before the server's plugins were read has no list yet
+	private static bool CanEditSegments() => SessionInfo.CurrentUser?.Policy?.IsAdministrator == true && SessionInfo.Plugins is not null && SessionInfo.CanEditMediaSegments();
+
+	private static MenuFlyoutItem Make(ItemMenuEntry entry, BaseItemDto dto)
 	{
-		yield return new MenuFlyoutItem
+		var item = new MenuFlyoutItem { Text = entry.Text };
+		switch (entry.Command)
 		{
-			Text = "Edit Metadata",
-			Icon = new SymbolIcon { Symbol = Symbol.Edit },
-			Command = App.Dialogs.EditMetadataDialogCommand,
-			CommandParameter = dto
-		};
-
-		yield return new MenuFlyoutItem
-		{
-			Text = "Edit Images",
-			Icon = new FontIcon { Glyph = "\uEE71" },
-			Command = App.Dialogs.EditImagesDialogCommand,
-			CommandParameter = dto
-		};
-
-		if (SessionInfo.CanEditMediaSegments())
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Edit Segments",
-				Icon = new FontIcon { Glyph = "\uE7A8" },
-				Command = App.Commands.NavigateToSegmentsEditorCommand,
-				CommandParameter = dto
-			};
-		}
-
-		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Episode)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Edit Subtitles",
-				Icon = new SymbolIcon { Symbol = Symbol.ClosedCaption },
-				Command = App.Dialogs.EditSubtitlesDialogCommand,
-				CommandParameter = dto
-			};
-		}
-
-		if (type is not BaseItemDto_Type.CollectionFolder)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Identify",
-				Icon = new SymbolIcon { Symbol = Symbol.Edit },
-				Command = App.Dialogs.IdentifyDialogCommand,
-				CommandParameter = dto,
-			};
-		}
-
-		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Episode)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Media Info",
-				Icon = new SymbolIcon { Symbol = Symbol.MusicInfo },
-				Command = App.Dialogs.MediaInfoDialogCommand,
-				CommandParameter = dto,
-			};
-		}
-
-		yield return new MenuFlyoutItem
-		{
-			Text = "Refresh metadata",
-			Icon = new SymbolIcon { Symbol = Symbol.Refresh },
-			Command = App.Dialogs.RefreshMetadataDialogCommand,
-			CommandParameter = dto.Id,
-		};
-	}
-
-	private static IEnumerable<MenuFlyoutItemBase> GetPlayItems(BaseItemDto dto, BaseItemDto_Type type)
-	{
-		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Season or BaseItemDto_Type.Series or BaseItemDto_Type.Episode)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Play",
-				Icon = new SymbolIcon { Symbol = Symbol.Play },
-				Command = App.Commands.PlayDtoCommand,
-				CommandParameter = dto
-			};
-
-			yield return new MenuFlyoutItem
-			{
-				Text = "Play On",
-				Icon = new FontIcon { Glyph = "\uE8AF" },
-				Command = App.Dialogs.PlayOnSessionCommand,
-				CommandParameter = dto
-			};
-		}
-
-		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Episode)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Play all from here",
-				Icon = new SymbolIcon { Symbol = Symbol.Play }
-			};
-
-
-			if(dto.UserData?.PlaybackPositionTicks is > 0 && dto.Id is { } id)
-			{
-				yield return new MenuFlyoutItem
+			case ItemMenuCommand.Play:
+				item.Icon = new SymbolIcon { Symbol = Symbol.Play };
+				item.Command = App.Commands.PlayDtoCommand;
+				item.CommandParameter = dto;
+				break;
+			case ItemMenuCommand.ToggleWatched:
+				item.Icon = new FontIcon { Glyph = "" };
+				item.Command = App.Commands.ToggleWatchedCommand;
+				item.CommandParameter = dto;
+				break;
+			case ItemMenuCommand.ToggleFavorite:
+				item.Icon = new FontIcon { Glyph = "" };
+				item.Command = App.Commands.ToggleFavoriteCommand;
+				item.CommandParameter = dto;
+				break;
+			case ItemMenuCommand.ResetWatchProgress:
+				item.Icon = new FontIcon { Glyph = "" };
+				item.Command = App.Commands.ResetWatchProgressCommand;
+				item.CommandParameter = dto.Id;
+				break;
+			case ItemMenuCommand.MediaInfo:
+				item.Icon = new SymbolIcon { Symbol = Symbol.MusicInfo };
+				item.Command = App.Dialogs.MediaInfoDialogCommand;
+				item.CommandParameter = dto;
+				break;
+			case ItemMenuCommand.EditMetadata:
+				item.Icon = new SymbolIcon { Symbol = Symbol.Edit };
+				item.Command = App.Dialogs.EditMetadataDialogCommand;
+				item.CommandParameter = dto;
+				break;
+			case ItemMenuCommand.EditImages:
+				item.Icon = new FontIcon { Glyph = "" };
+				item.Command = App.Dialogs.EditImagesDialogCommand;
+				item.CommandParameter = dto;
+				break;
+			case ItemMenuCommand.EditSegments:
+				item.Icon = new FontIcon { Glyph = "" };
+				item.Command = App.Commands.NavigateToSegmentsEditorCommand;
+				item.CommandParameter = dto;
+				break;
+			case ItemMenuCommand.EditSubtitles:
+				item.Icon = new SymbolIcon { Symbol = Symbol.ClosedCaption };
+				item.Command = App.Dialogs.EditSubtitlesDialogCommand;
+				item.CommandParameter = dto;
+				break;
+			case ItemMenuCommand.Identify:
+				item.Icon = new SymbolIcon { Symbol = Symbol.Edit };
+				item.Command = App.Dialogs.IdentifyDialogCommand;
+				item.CommandParameter = dto;
+				break;
+			case ItemMenuCommand.RefreshMetadata:
+				item.Icon = new SymbolIcon { Symbol = Symbol.Refresh };
+				item.Command = App.Dialogs.RefreshMetadataDialogCommand;
+				item.CommandParameter = dto.Id;
+				break;
+			case ItemMenuCommand.Delete:
+				item.Icon = new SymbolIcon { Symbol = Symbol.Delete };
+				item.Click += async (sender, _) =>
 				{
-					Text = "Reset Watch Progress",
-					Icon = new FontIcon { Glyph = "\uED62" },
-					Command = App.Commands.ResetWatchProgressCommand,
-					CommandParameter = id
+					if (await ConfirmDialog.AskAsync((sender as UIElement)?.XamlRoot, ItemMenu.DeletePrompt(dto)))
+					{
+						await App.Commands.DeleteItemCommand.ExecuteAsync(dto);
+					}
 				};
-			}
+				break;
 		}
 
-		if (type is BaseItemDto_Type.Season or BaseItemDto_Type.Series or BaseItemDto_Type.CollectionFolder)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Shuffle",
-				Icon = new SymbolIcon { Symbol = Symbol.Shuffle }
-			};
-		}
-
-		// Seaglass scrolling: a card is one keyboard stop, so what its hover buttons do is in the menu too (the menu key or Shift+F10)
-		if (type is BaseItemDto_Type.Movie or BaseItemDto_Type.Season or BaseItemDto_Type.Series or BaseItemDto_Type.Episode)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = dto.UserData?.Played == true ? "Mark as unwatched" : "Mark as watched",
-				Icon = new FontIcon { Glyph = "" },
-				Command = App.Commands.ToggleWatchedCommand,
-				CommandParameter = dto,
-			};
-
-			yield return new MenuFlyoutItem
-			{
-				Text = dto.UserData?.IsFavorite == true ? "Remove from favorites" : "Add to favorites",
-				Icon = new FontIcon { Glyph = "" },
-				Command = App.Commands.ToggleFavoriteCommand,
-				CommandParameter = dto,
-			};
-		}
-
-		yield return new MenuFlyoutSeparator();
-	}
-
-	private static IEnumerable<MenuFlyoutItemBase> GetDtoItems(BaseItemDto dto, BaseItemDto_Type type)
-	{
-
-		yield return new MenuFlyoutItem
-		{
-			Text = "Add to playlist",
-			Icon = new FontIcon { Glyph = "\uECC8" }
-		};
-
-		if (type is not BaseItemDto_Type.CollectionFolder)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Add to collection",
-				Icon = new SymbolIcon { Symbol = Symbol.Play }
-			};
-		}
-
-		if (type is BaseItemDto_Type.Movie)
-		{
-			yield return new MenuFlyoutItem
-			{
-				Text = "Copy Download URL",
-				Icon = new SymbolIcon { Symbol = Symbol.Copy },
-				Command = App.Dialogs.CopyUrlToClipboardCommand,
-				CommandParameter = dto,
-			};
-
-
-			if (SessionInfo.CurrentUser?.Policy?.IsAdministrator == true)
-			{
-				yield return new MenuFlyoutItem
-				{
-					Text = "Delete Media",
-					Icon = new SymbolIcon { Symbol = Symbol.Delete },
-					Command = App.Commands.DeleteItemCommand,
-					CommandParameter = dto,
-				};
-			}
-		}
-
-		if (type is BaseItemDto_Type.Series or BaseItemDto_Type.Season)
-		{
-			if (SessionInfo.CurrentUser?.Policy?.IsAdministrator == true)
-			{
-				yield return new MenuFlyoutItem
-				{
-					Text = "Delete Series",
-					Icon = new SymbolIcon { Symbol = Symbol.Delete },
-					Command = App.Commands.DeleteItemCommand,
-					CommandParameter = dto,
-				};
-			}
-		}
-
-		yield return new MenuFlyoutSeparator();
+		return item;
 	}
 }
