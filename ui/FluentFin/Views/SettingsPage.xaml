@@ -285,30 +285,41 @@
                         </ctk:SettingsCard>
                     </StackPanel>
                 </ContentControl>
-                <!--  fluentfin-mpv: developer settings out of the way (docs/research/ux-review.md T2)  -->
-                <ctk:SettingsExpander
-                    Description="The MPV backend's command and status."
-                    Header="Advanced"
-                    HeaderIcon="{ui:FontIcon Glyph=&#xE90F;}"
+                <!--  fluentfin-mpv: developer settings out of the way (docs/research/ux-review.md T2); Seaglass 1.1.3: a group like the others  -->
+                <ContentControl
+                    Padding="12"
+                    Style="{StaticResource GlassSurfaceStyle}"
                     Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
-                    <ctk:SettingsExpander.Items>
-                        <ctk:SettingsCard
-                            Description="Leave empty to find it automatically. Otherwise the command up to --config-dir, for example C:\jellyfin-mpv-shim\.venv\Scripts\python.exe -I -m jellyfin_mpv_shim.bridge. Used the next time the backend starts."
-                            Header="MPV backend command"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE756;}">
-                            <TextBox
-                                MinWidth="420"
-                                AutomationProperties.Name="MPV backend command"
-                                PlaceholderText="Automatic"
-                                Text="{x:Bind ViewModel.MpvBackendCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                        </ctk:SettingsCard>
-                        <ctk:SettingsCard Header="MPV backend" HeaderIcon="{ui:FontIcon Glyph=&#xE9D9;}">
-                            <ctk:SettingsCard.Description>
-                                <TextBlock IsTextSelectionEnabled="True" Text="{x:Bind ViewModel.MpvBackendStatus, Mode=OneWay}" TextWrapping="Wrap" />
-                            </ctk:SettingsCard.Description>
-                        </ctk:SettingsCard>
-                    </ctk:SettingsExpander.Items>
-                </ctk:SettingsExpander>
+                    <StackPanel Spacing="4">
+                        <TextBlock
+                            Margin="4,4,0,8"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                            Text="Advanced" />
+                        <ctk:SettingsExpander
+                            Description="Its command and status."
+                            Header="MPV backend"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE90F;}">
+                            <ctk:SettingsExpander.Items>
+                                <ctk:SettingsCard
+                                    Description="Leave empty to find it automatically. Otherwise the command up to --config-dir, for example C:\jellyfin-mpv-shim\.venv\Scripts\python.exe -I -m jellyfin_mpv_shim.bridge. Used the next time the backend starts."
+                                    Header="MPV backend command"
+                                    HeaderIcon="{ui:FontIcon Glyph=&#xE756;}">
+                                    <TextBox
+                                        MinWidth="420"
+                                        AutomationProperties.Name="MPV backend command"
+                                        PlaceholderText="Automatic"
+                                        Text="{x:Bind ViewModel.MpvBackendCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                                </ctk:SettingsCard>
+                                <ctk:SettingsCard Header="MPV backend status" HeaderIcon="{ui:FontIcon Glyph=&#xE9D9;}">
+                                    <ctk:SettingsCard.Description>
+                                        <TextBlock IsTextSelectionEnabled="True" Text="{x:Bind ViewModel.MpvBackendStatus, Mode=OneWay}" TextWrapping="Wrap" />
+                                    </ctk:SettingsCard.Description>
+                                </ctk:SettingsCard>
+                            </ctk:SettingsExpander.Items>
+                        </ctk:SettingsExpander>
+                    </StackPanel>
+                </ContentControl>
                 <!--
                     Seaglass 1.1.3: Settings > About, last (UX review, prioritised fixes 1, 6 and 9): the version, the licence, the two
                     projects it is built from, Contribute and Report a problem (they left the rail; clickable cards are buttons, so Enter
@@ -364,7 +375,7 @@
                             HeaderIcon="{ui:FontIcon Glyph=&#xE943;}"
                             IsClickEnabled="True" />
                         <ctk:SettingsCard
-                            Description="FluentFin by insomniachi, its interface, and jellyfin-mpv-shim by the Jellyfin project and its contributors, its playback. Both are GPL-3.0. Seaglass is not affiliated with either, or with Jellyfin or mpv."
+                            Description="Seaglass's interface comes from FluentFin by insomniachi, and its playback from jellyfin-mpv-shim by the Jellyfin project and its contributors. Both are GPL-3.0. Seaglass is not affiliated with either, nor with Jellyfin or mpv."
                             Header="Built on FluentFin and jellyfin-mpv-shim"
                             HeaderIcon="{ui:FontIcon Glyph=&#xE8F1;}">
                             <StackPanel Orientation="Horizontal" Spacing="12">

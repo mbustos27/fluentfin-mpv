@@ -35,6 +35,14 @@ public static class ConfirmDialog
 			dialog.RequestedTheme = content.ActualTheme;
 		}
 
-		return await dialog.ShowAsync() == ContentDialogResult.Primary;
+		try
+		{
+			return await dialog.ShowAsync() == ContentDialogResult.Primary;
+		}
+		catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
+		{
+			// another dialog is open (only one can be): not asked, so not confirmed
+			return false;
+		}
 	}
 }

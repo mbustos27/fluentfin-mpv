@@ -37,7 +37,8 @@ public sealed partial class ShellPage : Page
 			.ObserveOn(RxSchedulers.MainThreadScheduler)
 			.Subscribe(item =>
 			{
-				NavigationViewControl.SelectedItem = NavigationViewControl.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(x => x.Content == ((NavigationViewItem)item).Content);
+				// Seaglass 1.1.3: the footer too, so Settings is marked on the rail while it is open
+				NavigationViewControl.SelectedItem = NavigationViewControl.MenuItems.Concat(NavigationViewControl.FooterMenuItems).OfType<NavigationViewItem>().FirstOrDefault(x => x.Content == ((NavigationViewItem)item).Content);
 			});
 	}
 

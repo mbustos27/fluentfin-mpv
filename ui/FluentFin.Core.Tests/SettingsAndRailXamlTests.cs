@@ -32,6 +32,13 @@ public sealed class SettingsAndRailXamlTests
 	}
 
 	[Fact]
+	public void TheRail_MarksSettings_TooWhileItIsOpen()
+	{
+		// the selection follows the page from the footer items as well (Settings sits there)
+		Assert.Contains("NavigationViewControl.MenuItems.Concat(NavigationViewControl.FooterMenuItems)", Code("FluentFin/Views/ShellPage.xaml.cs"));
+	}
+
+	[Fact]
 	public void Jellyseerr_AddsNothingToTheRail()
 	{
 		var plugin = Code("FluentFin.Plugins/Jellyseer/JellyseerPlugin.cs");
@@ -56,7 +63,7 @@ public sealed class SettingsAndRailXamlTests
 			return (string?)heading.Attribute("Text");
 		}).ToList();
 
-		Assert.Equal(["Appearance", "Playback", "Audio and subtitles", "Servers and accounts", "Integrations", "About"], titles);
+		Assert.Equal(["Appearance", "Playback", "Audio and subtitles", "Servers and accounts", "Integrations", "Advanced", "About"], titles);
 
 		// nothing after About
 		var stack = groups[^1].Parent!;
