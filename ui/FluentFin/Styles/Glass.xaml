@@ -78,8 +78,9 @@
             <SolidColorBrush x:Key="GlassOverlaySolidBrush" Color="#10211C" />
             <!--  a hairline inside an overlay (a dialog's line above its buttons)  -->
             <SolidColorBrush x:Key="GlassDividerBrush" Color="#1FFFFFFF" />
-            <!--  a button that sits ON a glass panel: a flat light fill, never a second acrylic  -->
+            <!--  a button that sits ON a glass panel: a flat light fill, never a second acrylic, and its label  -->
             <SolidColorBrush x:Key="GlassInsetFillBrush" Color="#1AFFFFFF" />
+            <StaticResource x:Key="GlassInsetTextBrush" ResourceKey="GlassTextPrimaryBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
             <Color x:Key="SeaglassAccentColor">#13877B</Color>
@@ -88,6 +89,7 @@
             <!--
                 the accent ON ARTWORK (a progress bar on a poster's dark track, a watched badge): the light aqua in both themes.
                 The light theme's deeper aqua has 1.6:1 on the track over a bright poster (Black65O over white); this keeps 3.7:1.
+                Not used yet: BaseItemDtoCard and EpisodeRow still use the theme's accent there (1.1.3 integration).
             -->
             <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="#5CCFC1" />
             <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#EAF4F3" />
@@ -141,6 +143,7 @@
             <SolidColorBrush x:Key="GlassOverlaySolidBrush" Color="#EFFCF8" />
             <SolidColorBrush x:Key="GlassDividerBrush" Color="#1F000000" />
             <SolidColorBrush x:Key="GlassInsetFillBrush" Color="#0F000000" />
+            <StaticResource x:Key="GlassInsetTextBrush" ResourceKey="GlassTextPrimaryBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <Color x:Key="SeaglassAccentColor">#FFFFFF00</Color>
@@ -170,7 +173,9 @@
             <SolidColorBrush x:Key="GlassOverlayBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassOverlaySolidBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassDividerBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <!--  a ButtonFace fill always carries ButtonText: a custom contrast scheme may make ButtonFace differ from Window  -->
             <SolidColorBrush x:Key="GlassInsetFillBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="GlassInsetTextBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
@@ -389,6 +394,7 @@
         BasedOn="{StaticResource GlassPillButtonStyle}"
         TargetType="Button">
         <Setter Property="Background" Value="{ThemeResource GlassInsetFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassInsetTextBrush}" />
     </Style>
     <Style
         x:Key="GlassIconButtonStyle"
@@ -401,8 +407,9 @@
         <Setter Property="Padding" Value="0" />
     </Style>
     <!--
-        Overlays: the More menu, card context menus, the profile flyout, the player's audio and subtitles menus, tooltips and
-        every ContentDialog share one recipe: one blur under a strong tint, the light glass edge, GlassOverlayCornerRadius, the
+        Overlays: the More menu, card context menus, the profile flyout, tooltips and every ContentDialog share one recipe (the
+        player's audio and subtitles menus not yet: MpvPlayerControls.xaml has its own presenter styles until they are based on
+        the two keyed styles below): one blur under a strong tint, the light glass edge, GlassOverlayCornerRadius, the
         glass text colour. Never acrylic on acrylic: a flyout or a dialog draws inside the window and gets the strong in-app
         glass (GlassPanelStrongBrush); a menu or a tooltip is a window of its own, where in-app acrylic has nothing to blur, so
         it gets the flat GlassOverlayBrush (a menu keeps Windows' acrylic under it as its one blur). Solid makes both opaque

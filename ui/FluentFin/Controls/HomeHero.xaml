@@ -105,7 +105,6 @@
                         x:Name="MoreInfoButton"
                         Click="MoreInfo_Click"
                         Content="More info"
-                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
                         Style="{StaticResource GlassInsetPillButtonStyle}" />
                 </StackPanel>
             </StackPanel>

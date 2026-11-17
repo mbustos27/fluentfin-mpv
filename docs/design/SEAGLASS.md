@@ -143,17 +143,22 @@ boxes around every poster title). So:
 
 ## 1.1.3: one overlay recipe (supersedes the overlay lines above)
 
-Menus, context menus, the profile flyout, the player's menus, tooltips and every ContentDialog: one blur under a strong tint,
-the light edge (`GlassStrokeBrush`), **`GlassOverlayCornerRadius` 12**, the glass text colour. Never acrylic on acrylic:
+Menus, context menus, the profile flyout, tooltips and every ContentDialog: one blur under a strong tint, the light edge
+(`GlassStrokeBrush`), **`GlassOverlayCornerRadius` 12**, the glass text colour. Never acrylic on acrylic. **Not yet the player's
+audio and subtitles menus**: `MpvPlayerControls.xaml` still has its own presenter styles (radius 16, in-app acrylic over the
+menu's system backdrop) until they are based on the keyed styles below (1.1.3 integration).
 - **In the window** (Flyout, ContentDialog): `GlassPanelStrongBrush` (in-app acrylic). A dialog is ONE surface: its title, content and
   buttons are transparent on it, with a `GlassDividerBrush` hairline above the buttons. Dialogs made in code get the same template
-  (the implicit `ContentDialog` style in `TextBlock.xaml`).
+  (the implicit `ContentDialog` style in `TextBlock.xaml`), capped at WinUI's 548 px (`GlassDialog.PanelMaxWidth`; the dialog
+  pages keep 1000 px); a dialog's title wraps.
 - **A window of its own** (MenuFlyout, ToolTip): in-app acrylic has nothing to blur there, and a menu already has Windows' acrylic
   under it (WinUI's default `SystemBackdrop`). So their background is the flat `GlassOverlayBrush`: the palette's container colour at
   90 % (`SeaglassTheme.OverlayColor`), opaque in Solid (`GlassOverlaySolidBrush`, swapped by `GlassTheme` like the panels).
 - Keyed styles for other files: `GlassFlyoutPresenterStyle`, `GlassMenuFlyoutPresenterStyle`; a button on a glass panel uses
-  `GlassInsetPillButtonStyle` (the flat `GlassInsetFillBrush`), not a second acrylic.
-- **The accent on artwork** (a progress bar on a poster's dark track, a watched badge) is `SeaglassAccentOnImageBrush`: the light aqua
-  in both themes (the light theme's deeper aqua has 1.6:1 on the track over a bright poster).
+  `GlassInsetPillButtonStyle` (the flat `GlassInsetFillBrush` with `GlassInsetTextBrush`: ButtonFace with ButtonText in high
+  contrast), not a second acrylic.
+- **The accent on artwork** (a progress bar on a poster's dark track, a watched badge) should be `SeaglassAccentOnImageBrush`: the
+  light aqua in both themes (the light theme's deeper aqua has 1.6:1 on the track over a bright poster). The token exists; the cards
+  (`BaseItemDtoCard`, `EpisodeRow`) do not use it yet (1.1.3 integration).
 - `SEAGLASS_THEME` now sets the application's theme, so the harness's light screenshots show light dialogs, menus and tooltips too.
 - Measured contrast (screenshots' pixels): `shots\contrast.md` of the 1.1.3 glass stream.

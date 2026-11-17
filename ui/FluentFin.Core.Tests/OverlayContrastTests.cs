@@ -186,6 +186,8 @@ public class OverlayContrastTests
 	/// <summary>
 	/// Seaglass 1.1.3: menus and tooltips are windows of their own on the flat GlassOverlayBrush. A tooltip has no blur under
 	/// it at all, so the worst case is the brightest (dark theme) or darkest (light theme) pixel straight behind it, no dim.
+	/// This checks the XAML's colours (what shows before SeaglassTheme runs); the run-time colour, SeaglassTheme.OverlayColor,
+	/// is checked in FluentFin.Tests (GlassOverlayTests).
 	/// </summary>
 	[Theory]
 	[InlineData("Dark", "GlassTextPrimaryBrush")]

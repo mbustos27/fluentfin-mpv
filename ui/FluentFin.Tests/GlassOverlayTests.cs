@@ -104,6 +104,28 @@ public sealed class GlassOverlayTests
 	}
 
 	[Fact]
+	public void Dialogs_made_in_code_keep_WinUIs_width_and_every_dialog_title_wraps()
+	{
+		var textBlock = Load("Styles", "TextBlock.xaml");
+		var keyed = Styles(textBlock).Single(s => Key(s) == "DefaultContentDialogStyleWithTitleBackground");
+		var implicitDialog = Styles(textBlock).Single(s => Key(s) is null && (string?)s.Attribute("TargetType") == "ContentDialog");
+		const string cap = "services:GlassDialog.PanelMaxWidth";
+
+		// a sign-in error made in code: WinUI's 548 px, not the dialog pages' 1000 px (lines too long to read)
+		Assert.Equal(548, GlassDialog.DefaultPanelMaxWidth);
+		Assert.Equal(GlassDialog.DefaultPanelMaxWidth.ToString(System.Globalization.CultureInfo.InvariantCulture), Setter(implicitDialog, cap));
+		Assert.Equal(GlassDialog.PagePanelMaxWidth.ToString(System.Globalization.CultureInfo.InvariantCulture), Setter(keyed, cap));
+
+		var template = keyed.Descendants().Single(e => e.Name.LocalName == "ControlTemplate");
+		var panel = template.Descendants().Single(e => (string?)e.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "BackgroundElement");
+		Assert.Contains("(services:GlassDialog.PanelMaxWidth)", (string?)panel.Attribute("MaxWidth"));
+
+		// a long title wraps instead of being cut off
+		var title = template.Descendants().Single(e => e.Name.LocalName == "TextBlock" && (string?)e.Attribute("Text") == "{TemplateBinding Title}");
+		Assert.Equal("Wrap", (string?)title.Attribute("TextWrapping"));
+	}
+
+	[Fact]
 	public void Dialogs_made_in_code_get_the_same_template_as_the_dialog_pages()
 	{
 		var textBlock = Load("Styles", "TextBlock.xaml");
@@ -138,6 +160,34 @@ public sealed class GlassOverlayTests
 	[InlineData("7", null)]
 	public void SEAGLASS_THEME_forces_the_whole_application_or_nothing(string? value, Microsoft.UI.Xaml.ApplicationTheme? expected) =>
 		Assert.Equal(expected, GlassTheme.ForcedApplicationTheme(value));
+
+	/// <summary>
+	/// The colour menus and tooltips get at run time (SeaglassTheme.OverlayColor replaces the XAML's), with the palette's text on
+	/// it, over the worst thing straight behind (a tooltip has no blur): white in the dark theme, black in the light one.
+	/// </summary>
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(false, true)]
+	[InlineData(true, false)]
+	[InlineData(true, true)]
+	public void Menu_and_tooltip_text_is_readable_on_the_runtime_overlay_colour_over_anything(bool solid, bool light)
+	{
+		var palette = SeaglassPalette.Build(SeaglassPalette.DefaultHue, solid, light);
+		var overlay = SeaglassTheme.OverlayColor(palette);
+		var behind = light ? new Rgb(0, 0, 0) : new Rgb(255, 255, 255);
+		Assert.True(TextContrast(palette, overlay.A, behind) >= 4.5, $"solid {solid}, light {light}: {TextContrast(palette, overlay.A, behind):0.00}:1");
+		// the check can fail: a see-through overlay (25 %) over the same worst case does
+		Assert.True(TextContrast(palette, 0x40, behind) < 4.5);
+	}
+
+	// the lower of the primary and the muted text's contrast on the overlay tint (alpha) composited over 'behind'
+	private static double TextContrast(SeaglassPalette p, byte alpha, Rgb behind)
+	{
+		var a = alpha / 255.0;
+		byte Mix(byte top, byte under) => (byte)Math.Round(top * a + under * (1 - a));
+		var surface = new Rgb(Mix(p.ContainerHigh.R, behind.R), Mix(p.ContainerHigh.G, behind.G), Mix(p.ContainerHigh.B, behind.B));
+		return Math.Min(OkLab.Contrast(p.OnSurface.Luminance, surface.Luminance), OkLab.Contrast(p.Muted.Luminance, surface.Luminance));
+	}
 
 	[Theory]
 	[InlineData(false, false)]
@@ -180,6 +230,26 @@ public sealed class HomeHeroGlassTests
 		var foregrounds = Panel().DescendantsAndSelf().Select(e => (string?)e.Attribute("Foreground")).Where(f => f is not null).ToList();
 		Assert.NotEmpty(foregrounds);
 		Assert.All(foregrounds, f => Assert.StartsWith("{ThemeResource ", f));
+	}
+
+	[Fact]
+	public void The_inset_pill_pairs_its_ButtonFace_fill_with_ButtonText_in_high_contrast()
+	{
+		// a custom contrast scheme can make ButtonFace differ from Window: WindowText on ButtonFace may then be unreadable
+		var glass = XDocument.Load(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "Styles", "Glass.xaml"))).Root!;
+		var hc = glass.Descendants().Single(e => e.Name.LocalName == "ResourceDictionary" && (string?)e.Attribute(Xaml + "Key") == "HighContrast");
+		string? Color(string key) => (string?)hc.Elements().Single(e => (string?)e.Attribute(Xaml + "Key") == key).Attribute("Color");
+		Assert.Equal("{ThemeResource SystemColorButtonFaceColor}", Color("GlassInsetFillBrush"));
+		Assert.Equal("{ThemeResource SystemColorButtonTextColor}", Color("GlassInsetTextBrush"));
+
+		var style = glass.Elements().Single(e => (string?)e.Attribute(Xaml + "Key") == "GlassInsetPillButtonStyle");
+		var setters = style.Elements().Where(e => e.Name.LocalName == "Setter").ToDictionary(e => (string)e.Attribute("Property")!, e => (string?)e.Attribute("Value"));
+		Assert.Equal("{ThemeResource GlassInsetFillBrush}", setters["Background"]);
+		Assert.Equal("{ThemeResource GlassInsetTextBrush}", setters["Foreground"]);
+
+		// and the hero's More info takes the style's label colour, not one of its own
+		var moreInfo = Panel().Descendants().Single(e => e.Name.LocalName == "Button" && (string?)e.Attribute(Xaml + "Name") == "MoreInfoButton");
+		Assert.Null(moreInfo.Attribute("Foreground"));
 	}
 
 	[Fact]
