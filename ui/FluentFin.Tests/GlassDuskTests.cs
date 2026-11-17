@@ -190,6 +190,8 @@ public sealed class GlassDuskTests
 	public void Every_glass_ThemeResource_the_styles_use_exists_in_high_contrast()
 	{
 		var highContrast = Theme("HighContrast").Elements().Select(Key).ToHashSet();
+		// a key with a value outside the theme dictionaries falls back to it in high contrast (the glows: 0 there)
+		highContrast.UnionWith(Load("Styles", "Glass.xaml").Elements().Where(e => e.Name.LocalName == "Double").Select(Key));
 		var dark = Theme("Dark").Elements().Select(Key).ToHashSet();
 		foreach (var file in new[] { "Glass.xaml", "NavigationView.xaml", "TextBlock.xaml", "Button.xaml" })
 		{
@@ -200,22 +202,45 @@ public sealed class GlassDuskTests
 			}
 		}
 
-		// what the Dark dictionary adds beyond high contrast is WinUI's own keys (focus visuals), which WinUI defines for it
-		Assert.All(dark.Except(highContrast), k => Assert.StartsWith("SystemControl", k));
+		// what the Dark dictionary adds beyond high contrast is WinUI's own keys (focus visuals), which WinUI defines for it, and
+		// the glows, whose fallback outside the theme dictionaries is none
+		Assert.All(dark.Except(highContrast), k => Assert.Contains(k, new[] { "SystemControlFocusVisualPrimaryBrush", "SystemControlFocusVisualSecondaryBrush", "ContentDialogSmokeFill" }));
 	}
 
+	/// <summary>Dark: the neon core's near-white ring (a pink one would vanish on the hot-pink Play) around a deep line; light: crimson around white.</summary>
 	[Theory]
-	[InlineData("Dark", "#170508")]
-	[InlineData("Light", "#FFFFFF")]
-	public void The_focus_rings_are_the_accent_around_the_deep_or_white_line(string theme, string inner)
+	[InlineData("Dark", "#FFF4EE", "#170508")]
+	[InlineData("Light", "#BC1E47", "#FFFFFF")]
+	public void The_focus_rings_read_on_the_accent_and_on_the_glass(string theme, string outer, string inner)
 	{
 		var dictionary = Theme(theme);
 		string Color(string key) => (string)dictionary.Elements().Single(e => Key(e) == key).Attribute("Color")!;
-		Assert.Equal(Color("SeaglassAccentBrush"), Color("SystemControlFocusVisualPrimaryBrush"));
+		Assert.Equal(outer, Color("SystemControlFocusVisualPrimaryBrush"));
 		Assert.Equal(inner, Color("SystemControlFocusVisualSecondaryBrush"));
 		static Rgb Parse(string hex) => new(Convert.ToByte(hex[^6..^4], 16), Convert.ToByte(hex[^4..^2], 16), Convert.ToByte(hex[^2..], 16));
 		// the ring against its own inner line: 3:1 for a focus indicator
 		Assert.True(OkLab.Contrast(Parse(Color("SystemControlFocusVisualPrimaryBrush")).Luminance, Parse(inner).Luminance) >= 3);
+	}
+
+	[Theory]
+	[InlineData(Microsoft.UI.Xaml.ElementTheme.Light, Microsoft.UI.Windowing.TitleBarTheme.Light)]
+	[InlineData(Microsoft.UI.Xaml.ElementTheme.Dark, Microsoft.UI.Windowing.TitleBarTheme.Dark)]
+	[InlineData(Microsoft.UI.Xaml.ElementTheme.Default, Microsoft.UI.Windowing.TitleBarTheme.UseDefaultAppMode)]
+	public void An_app_theme_also_themes_the_caption_buttons(Microsoft.UI.Xaml.ElementTheme theme, Microsoft.UI.Windowing.TitleBarTheme expected) =>
+		Assert.Equal(expected, GlassTheme.TitleBarThemeFor(theme));
+
+	/// <summary>1.1.4 (the layout audit's boxes in boxes): a section style that draws nothing, and 12 px panels.</summary>
+	[Fact]
+	public void A_section_can_sit_on_the_page_without_a_panel_and_panels_are_12_px()
+	{
+		var glass = Load("Styles", "Glass.xaml");
+		var section = glass.Elements().Single(e => Key(e) == "GlassSectionStyle").ToString();
+		Assert.DoesNotContain("Background", section);
+		Assert.DoesNotContain("Shadow", section);
+		Assert.DoesNotContain("BorderBrush", section);
+		Assert.Equal("12", glass.Elements().Single(e => Key(e) == "GlassPanelCornerRadius").Value);
+		Assert.DoesNotContain("CornerRadius=\"20\"", glass.ToString());
+		Assert.DoesNotContain("CornerRadius=\"20\"", Load("Styles", "NavigationView.xaml").ToString());
 	}
 
 	[Fact]
@@ -224,14 +249,20 @@ public sealed class GlassDuskTests
 		var glass = Load("Styles", "Glass.xaml");
 		Assert.Contains(glass.Elements(), e => e.Name.LocalName == "Color" && Key(e) == "GlassNeonGlowColor");
 		var text = glass.ToString();
-		// each glow's opacity is a shadow opacity, which high contrast sets to 0
+		// each shadow's opacity is a shadow or glow opacity, which is 0 in high contrast (its own value, or the fallback)
 		foreach (Match m in Regex.Matches(text, @"<media:AttachedCardShadow[^>]*>", RegexOptions.Singleline))
 		{
-			Assert.Matches(@"Opacity=""\{ThemeResource Glass(Contact)?ShadowOpacity\}""", m.Value);
+			Assert.Matches(@"Opacity=""\{ThemeResource Glass(Contact|Glow|RestGlow)?ShadowOpacity\}""|Opacity=""\{ThemeResource Glass(Rest)?GlowOpacity\}""", m.Value);
 		}
 
 		var hc = Theme("HighContrast");
 		Assert.Equal("0", hc.Elements().Single(e => Key(e) == "GlassShadowOpacity").Value);
 		Assert.Equal("0", hc.Elements().Single(e => Key(e) == "GlassContactShadowOpacity").Value);
+		foreach (var key in new[] { "GlassGlowOpacity", "GlassRestGlowOpacity" })
+		{
+			Assert.DoesNotContain(hc.Elements(), e => Key(e) == key);
+			Assert.Equal("0", glass.Elements().Single(e => Key(e) == key).Value);
+			Assert.True(double.Parse(Theme("Dark").Elements().Single(e => Key(e) == key).Value, System.Globalization.CultureInfo.InvariantCulture) > 0);
+		}
 	}
 }

@@ -124,7 +124,8 @@ public sealed class DuskSceneTests
 	[Fact]
 	public void The_crt_touches_stay_faint()
 	{
-		Assert.InRange(DuskScene.ScanlineAlpha, 0.04, 0.08);
+		Assert.InRange(DuskScene.ScanlineAlpha(false), 0.04, 0.08);
+		Assert.InRange(DuskScene.ScanlineAlpha(true), 0.03, DuskScene.ScanlineAlpha(false));
 		Assert.True(DuskScene.VignetteAlpha(false) <= 0.35 && DuskScene.VignetteAlpha(true) < DuskScene.VignetteAlpha(false));
 		Assert.True(DuskScene.StripHillsHeight < DuskScene.SceneHillsHeight);
 	}

@@ -56,7 +56,7 @@ public static class DuskScene
 
 	/// <summary>The CRT touches, full scene only: a dark line every 3 DIP at this alpha, and a vignette darkest at the corners.</summary>
 	public const double ScanlinePeriod = 3;
-	public const double ScanlineAlpha = 0.07;
+	public static double ScanlineAlpha(bool light) => light ? 0.045 : 0.07;
 	public static double VignetteAlpha(bool light) => light ? 0.14 : 0.35;
 
 	/// <summary>

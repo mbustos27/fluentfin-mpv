@@ -26,6 +26,36 @@ public static class GlassTheme
 	public static ApplicationTheme? ForcedApplicationTheme(string? value) =>
 		Enum.TryParse<ApplicationTheme>(value?.Trim(), true, out var theme) && Enum.IsDefined(theme) ? theme : null;
 
+	/// <summary>
+	/// 1.1.4, for an in-app theme choice (Settings > Appearance; the setting itself is the account stream's): the window's content
+	/// takes the theme, and so do the title bar's caption buttons, which otherwise keep Windows' colours (the layout audit's trap:
+	/// pale glyphs on the pale light title bar). Default follows Windows.
+	/// </summary>
+	public static void SetAppTheme(Window window, ElementTheme theme)
+	{
+		if (window.Content is FrameworkElement root)
+		{
+			root.RequestedTheme = theme;
+		}
+
+		try
+		{
+			window.AppWindow.TitleBar.PreferredTheme = TitleBarThemeFor(theme);
+		}
+		catch (Exception)
+		{
+			// a title bar that cannot be themed (older Windows) keeps Windows' caption colours
+		}
+	}
+
+	/// <summary>The caption buttons' theme for an app theme.</summary>
+	public static Microsoft.UI.Windowing.TitleBarTheme TitleBarThemeFor(ElementTheme theme) => theme switch
+	{
+		ElementTheme.Light => Microsoft.UI.Windowing.TitleBarTheme.Light,
+		ElementTheme.Dark => Microsoft.UI.Windowing.TitleBarTheme.Dark,
+		_ => Microsoft.UI.Windowing.TitleBarTheme.UseDefaultAppMode,
+	};
+
 	/// <summary>Whether the opaque brushes are in place now.</summary>
 	public static bool IsSolid => _solid;
 

@@ -980,21 +980,21 @@
                                 contrast) and has their body (GlassVolume: the frosted rim and the bottom shade, none in Solid).
                             -->
                             <Grid Margin="8,8,4,8">
-                                <Border CornerRadius="20">
+                                <Border CornerRadius="12">
                                     <ui:Effects.Shadow>
                                         <media:AttachedCardShadow
                                             BlurRadius="28"
-                                            CornerRadius="20"
+                                            CornerRadius="12"
                                             Offset="4,8"
                                             Opacity="{ThemeResource GlassShadowOpacity}"
                                             Color="Black" />
                                     </ui:Effects.Shadow>
                                 </Border>
-                                <Border CornerRadius="20">
+                                <Border CornerRadius="12">
                                     <ui:Effects.Shadow>
                                         <media:AttachedCardShadow
                                             BlurRadius="8"
-                                            CornerRadius="20"
+                                            CornerRadius="12"
                                             Offset="0,2"
                                             Opacity="{ThemeResource GlassContactShadowOpacity}"
                                             Color="Black" />
@@ -1002,19 +1002,19 @@
                                 </Border>
                                 <Border
                                     Background="{ThemeResource GlassPanelStrongBrush}"
-                                    CornerRadius="20" />
-                                <Border CornerRadius="20" IsHitTestVisible="False">
+                                    CornerRadius="12" />
+                                <Border CornerRadius="12" IsHitTestVisible="False">
                                     <controls:GrainOverlay />
                                 </Border>
                                 <Border
                                     Background="{ThemeResource GlassGlowBrush}"
-                                    CornerRadius="20"
+                                    CornerRadius="12"
                                     IsHitTestVisible="False" />
-                                <controls:GlassVolume CornerRadius="20" />
+                                <controls:GlassVolume CornerRadius="12" />
                                 <Border
                                     BorderBrush="{ThemeResource GlassStrokeBrush}"
                                     BorderThickness="1"
-                                    CornerRadius="20"
+                                    CornerRadius="12"
                                     IsHitTestVisible="False" />
                                 <Border Child="{TemplateBinding Pane}" />
                             </Grid>

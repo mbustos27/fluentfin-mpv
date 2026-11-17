@@ -28,7 +28,7 @@ public sealed class PanelSheen : Grid
 	public const float EdgeThickness = 1.5f;
 
 	/// <summary>The corner radius the highlight is clipped to (the glass panel's).</summary>
-	public float CornerRadiusPixels { get; set; } = 20f;
+	public float CornerRadiusPixels { get; set; } = 12f;
 
 	private SpriteVisual? _sprite;
 	private ContainerVisual? _container;

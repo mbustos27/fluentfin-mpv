@@ -170,3 +170,37 @@ too**: `MpvPlayerControls.xaml`'s `PlayerMenuPresenter` (the audio menu) and `Pl
   check on #13877B), the aqua itself about 1.8:1 against a bright thumbnail (4.2:1 before).
 - `SEAGLASS_THEME` now sets the application's theme, so the harness's light screenshots show light dialogs, menus and tooltips too.
 - Measured contrast (screenshots' pixels): `shots\contrast.md` of the 1.1.3 glass stream.
+
+## 1.2.0 (Nixie): dusk, really glassy by default (supersedes the palette, accent and no-artwork lines above)
+
+The user: "really themed", "niche is fine", "all the glass features", glassy **by default** (GlassMode Full; Reduced and Solid
+keep their purpose), "no oblong ovals", and not ugly (pass 4's lesson holds: no colour on the chrome per title, no heavy grain,
+no thick rims). Then: "be inspired by these colours" (a flat desert-sunset illustration), retro-futurist desert motifs
+(atomic-age Americana, Googie starbursts, neon motel signs, drive-ins, a faint CRT glow; nothing from Fallout), and the name
+**Nixie** (the glowing number tube). The theme guide is `docs\reports\Seaglass rename and retro desert theme.md`; the feature
+list with each feature's status is the glass stream's `shots\glass-features.md`.
+
+- **Palette** (`SeaglassPalette`, Glass.xaml's Dark and Light dictionaries, App.xaml's accent ramps). Dark: the glass is a calm
+  deep plum from the sunset's maroon end (OKLCH hue 8, tint L 0.22 C 0.04; deep `#170508`), text a warm white. Light ("noon"):
+  pale peach glass (hue 26, L 0.95) with deep maroon text. **Accent**: hot pink `#F96985` with a dark label `#24060F` (6.7:1;
+  white on hot pink is 2.8:1 and is never used), crimson `#BC1E47` with white (6.2:1) in light; on artwork the light pink
+  `#FF9EB1` on its dark track. Hot pink means "you can act on this" (Play, progress, focus); decoration is coral and pale sun.
+  No aqua is left. A title's hue (at most 10 %, on the backdrop only) is clamped to the sunset's hues, 343 to 43.
+- **The dusk scene** (`FluentFin.Core.Theming.DuskScene`, drawn by `AmbientBackdropView`; vector shapes and gradients, no image
+  files): a banded sky (maroon, crimson, rose, coral, hot pink, peach; light: neon-core white to coral), a striped sun with three
+  thin rings, seven atomic-age starbursts, three hill and mesa layers and one saguaro, faint scanlines (every 3 DIP, 7 % / 4.5 %)
+  and a vignette. **In full** outside the shell (the server page and sign-in, even over the server's splash image) and for an
+  empty state that asks (`AmbientBackdrop.RequestFullScene`); **a strip** of hills (34 % / 22 %) along the bottom inside the shell
+  where there is no artwork; **nothing** over artwork. Text straight on the strip keeps 4.5:1 (no strip colour above luminance
+  0.08 in dark, none below 0.50 in light; `DuskSceneTests`). Motion (Full, window active): the stars glint, the sun's rings
+  breathe, the hills sway; Reduced is still; Solid keeps the shapes but drops the scanlines; high contrast shows none of it.
+  Desktop acrylic is no longer used: the scene covers the window wherever there is no artwork.
+- **Glass**: every glass surface (and the rail) has a body (`GlassVolume`: a frosted rim, clear in the middle, and a bottom shade;
+  none in Solid), the rail is lifted by the panels' two shadows, and the pointer lights the rim near it (`PanelSheen`'s edge
+  light). In the background (`GlassActivity`) the light edge and glow dim to 45 %, the backdrop stops and the pointer light goes out.
+- **Neon**: keyboard focus on a glass pill glows (hot pink close in, the nixie orange `GlassNeonGlowColor` `#FF7A50` further out,
+  made on first focus) besides WinUI's two focus rings, which are now the accent around a deep (dark) or white (light) line;
+  the accent pill has a soft resting glow. Every glow's opacity is a shadow opacity, 0 in high contrast.
+- **The wordmark** (`AppWordmark`): the name as a lit tube, in Monoton (SIL OFL 1.1, `Assets\Fonts`, shipped unmodified beside
+  its licence) from 36 px up, with two masked composition glows and one flicker on the first showing in Full; the plain display
+  font in the tube's colour when small (the title bar). Body text stays Segoe UI Variable; no display font on server data.

@@ -395,7 +395,7 @@ public sealed partial class AmbientBackdropView : UserControl
 			ElementCompositionPreview.SetElementChildVisual(Scanlines, _scanlines);
 		}
 
-		var line = Windows.UI.Color.FromArgb((byte)Math.Round(DuskScene.ScanlineAlpha * 255), 0, 0, 0);
+		var line = Windows.UI.Color.FromArgb((byte)Math.Round(DuskScene.ScanlineAlpha(ActualTheme == ElementTheme.Light) * 255), 0, 0, 0);
 		var lines = compositor.CreateLinearGradientBrush();
 		lines.MappingMode = CompositionMappingMode.Absolute;
 		lines.ExtendMode = CompositionGradientExtendMode.Wrap;
