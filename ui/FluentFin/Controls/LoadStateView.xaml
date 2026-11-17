@@ -2,6 +2,10 @@
 <!--
     fluentfin-mpv: a page's loading, empty and error state (docs/research/ux-review.md §3.11): what happened, what to do,
     and a Retry, instead of a blank or stuck page. Collapsed while there is nothing to say.
+    1.1.4 (states): the message sits on a glass section panel (GlassSurfaceStyle), or flat where the view is
+    already inside one (never glass on glass: LoadStateView.xaml.cs); its words in the glass text colours; Try again is a
+    neutral pill (the accent is for Play only); Narrator hears the title and what to do when the message appears, and
+    "Loading…" where the view shows the ring.
 -->
 <UserControl
     x:Class="FluentFin.Controls.LoadStateView"
@@ -12,57 +16,75 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <UserControl.Resources>
+        <!--  inside a glass panel already: the message is laid out the same, with no second panel under it  -->
+        <Style x:Key="FlatSurfaceStyle" TargetType="ContentControl">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        </Style>
+    </UserControl.Resources>
+
     <Grid>
         <!--  part of the page could not be loaded: a warning above what was  -->
         <InfoBar
             x:Name="ProblemBar"
             VerticalAlignment="Top"
+            CornerRadius="{StaticResource GlassCardCornerRadius}"
             IsClosable="False"
             IsOpen="{x:Bind State.HasProblem, Mode=OneWay, FallbackValue=False}"
             Message="{x:Bind State.Message, Mode=OneWay}"
             Severity="Warning"
             Title="{x:Bind State.Title, Mode=OneWay}">
             <InfoBar.ActionButton>
-                <Button Command="{x:Bind State.RetryCommand, Mode=OneWay}" Content="{x:Bind State.RetryText, Mode=OneWay}" />
+                <Button
+                    x:Name="ProblemRetryButton"
+                    Command="{x:Bind State.RetryCommand, Mode=OneWay}"
+                    Content="{x:Bind State.RetryText, Mode=OneWay}" />
             </InfoBar.ActionButton>
         </InfoBar>
 
         <!--  nothing could be loaded, or there is nothing: a message in place of the content  -->
-        <StackPanel
-            x:Name="MessagePanel"
-            MaxWidth="520"
-            Padding="24"
+        <ContentControl
+            x:Name="MessageSurface"
+            MaxWidth="560"
+            Padding="32,28"
             HorizontalAlignment="Center"
             VerticalAlignment="{x:Bind VerticalContentAlignment, Mode=OneWay}"
-            Spacing="12"
+            Style="{StaticResource GlassSurfaceStyle}"
             Visibility="{x:Bind c:Converters.BooleanToVisibility(State.HasMessage), Mode=OneWay, FallbackValue=Collapsed}">
-            <FontIcon
-                HorizontalAlignment="Center"
-                FontSize="40"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Glyph="{x:Bind GlyphOf(State.Status), Mode=OneWay}" />
-            <TextBlock
-                x:Name="TitleText"
-                AutomationProperties.HeadingLevel="Level2"
-                AutomationProperties.LiveSetting="Assertive"
-                Style="{ThemeResource SubtitleTextBlockStyle}"
-                Text="{x:Bind State.Title, Mode=OneWay}"
-                TextAlignment="Center"
-                TextWrapping="WrapWholeWords" />
-            <TextBlock
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Style="{ThemeResource BodyTextBlockStyle}"
-                Text="{x:Bind State.Message, Mode=OneWay}"
-                TextAlignment="Center"
-                TextWrapping="WrapWholeWords" />
-            <Button
-                x:Name="RetryButton"
-                Margin="0,8,0,0"
-                HorizontalAlignment="Center"
-                Command="{x:Bind State.RetryCommand, Mode=OneWay}"
-                Content="{x:Bind State.RetryText, Mode=OneWay}"
-                Style="{ThemeResource AccentButtonStyle}" />
-        </StackPanel>
+            <StackPanel x:Name="MessagePanel" Spacing="12">
+                <FontIcon
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    FontSize="40"
+                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                    Glyph="{x:Bind GlyphOf(State.Status), Mode=OneWay}" />
+                <TextBlock
+                    x:Name="TitleText"
+                    AutomationProperties.HeadingLevel="Level2"
+                    AutomationProperties.LiveSetting="Assertive"
+                    Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                    Text="{x:Bind State.Title, Mode=OneWay}"
+                    TextAlignment="Center"
+                    TextWrapping="WrapWholeWords" />
+                <TextBlock
+                    x:Name="MessageText"
+                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                    Style="{ThemeResource BodyTextBlockStyle}"
+                    Text="{x:Bind State.Message, Mode=OneWay}"
+                    TextAlignment="Center"
+                    TextWrapping="WrapWholeWords" />
+                <Button
+                    x:Name="RetryButton"
+                    Margin="0,8,0,0"
+                    HorizontalAlignment="Center"
+                    Command="{x:Bind State.RetryCommand, Mode=OneWay}"
+                    Content="{x:Bind State.RetryText, Mode=OneWay}"
+                    Style="{StaticResource GlassPillButtonStyle}" />
+            </StackPanel>
+        </ContentControl>
 
         <!--  only where the page has no skeleton of its own  -->
         <StackPanel
@@ -70,11 +92,15 @@
             VerticalAlignment="{x:Bind VerticalContentAlignment, Mode=OneWay}"
             Spacing="12"
             Visibility="{x:Bind IsRingShown(State.IsLoading, ShowsLoading), Mode=OneWay, FallbackValue=Collapsed}">
-            <ProgressRing HorizontalAlignment="Center" IsActive="{x:Bind State.IsLoading, Mode=OneWay}" />
+            <ProgressRing
+                HorizontalAlignment="Center"
+                AutomationProperties.Name="{x:Bind LoadingText, Mode=OneWay}"
+                IsActive="{x:Bind State.IsLoading, Mode=OneWay}" />
             <TextBlock
+                x:Name="LoadingTextBlock"
                 HorizontalAlignment="Center"
                 AutomationProperties.LiveSetting="Polite"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Foreground="{ThemeResource GlassTextSecondaryBrush}"
                 Style="{ThemeResource BodyTextBlockStyle}"
                 Text="{x:Bind LoadingText, Mode=OneWay}" />
         </StackPanel>

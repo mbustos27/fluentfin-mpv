@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+    The dashboard's folder picker: a folder on the SERVER (its own window, ServerFolderInput).
+    1.1.4 (states): a heading that says what it is for, the current path with an Up button, the folders as named
+    items (Narrator read "ItemContainer"), an empty or unreadable folder said in words with Try again, and Select this
+    folder (the primary action) and Cancel as glass pills; Cancel and the window's own close return no folder.
+-->
 <UserControl
     x:Class="FluentFin.Controls.ServerFolderPicker"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -7,90 +13,132 @@
     xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
     xmlns:local="using:FluentFin.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:ui="using:CommunityToolkit.WinUI"
     mc:Ignorable="d">
 
-    <Grid Background="{ThemeResource ContentDialogBackground}">
+    <Grid Padding="20,40,20,20" RowSpacing="14">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border
-            Grid.Row="0"
-            Margin="10,30,10,0"
-            HorizontalAlignment="Stretch"
-            BorderBrush="{ThemeResource ControlElevationBorderBrush}"
-            BorderThickness="1">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+        <TextBlock
+            AutomationProperties.HeadingLevel="Level1"
+            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+            Text="Choose a folder on the server" />
+
+        <Grid Grid.Row="1" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="UpButton"
+                AutomationProperties.Name="Parent folder"
+                Click="Button_Click"
+                IsEnabled="{x:Bind CanGoUp(CurrentFolder), Mode=OneWay}"
+                Style="{StaticResource GlassIconButtonStyle}"
+                ToolTipService.ToolTip="Parent folder">
+                <FontIcon FontSize="16" Glyph="&#xE74A;" />
+            </Button>
+            <TextBlock
+                x:Name="PathText"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="{x:Bind PathLabel(CurrentFolder), Mode=OneWay}"
+                FontFamily="Consolas"
+                Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                Text="{x:Bind CurrentFolder, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                ToolTipService.ToolTip="{x:Bind CurrentFolder, Mode=OneWay}" />
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <ItemsView
+                x:Name="FolderList"
+                AutomationProperties.Name="Folders"
+                IsItemInvokedEnabled="True"
+                ItemInvoked="ItemsView_ItemInvoked"
+                ItemsSource="{x:Bind Folders}"
+                SelectionMode="Single">
+                <ItemsView.ItemTemplate>
+                    <DataTemplate x:DataType="jm:FileSystemEntryInfo">
+                        <ItemContainer AutomationProperties.Name="{x:Bind Name}" ToolTipService.ToolTip="{x:Bind Path}">
+                            <Grid Padding="10,8" ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <FontIcon
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    FontSize="18"
+                                    Glyph="&#xE8B7;" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Text="{x:Bind Name}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                        </ItemContainer>
+                    </DataTemplate>
+                </ItemsView.ItemTemplate>
+                <ItemsView.Layout>
+                    <StackLayout Spacing="2" />
+                </ItemsView.Layout>
+            </ItemsView>
+
+            <!--  loading, an empty folder, a folder the server could not read  -->
+            <StackPanel
+                x:Name="MessagePanel"
+                MaxWidth="320"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="10"
+                Visibility="{x:Bind MessageVisibility(Status), Mode=OneWay}">
                 <TextBlock
-                    Margin="{StaticResource XSmallLeftTopRightBottomMargin}"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Center"
-                    Text="{x:Bind CurrentFolder, Mode=TwoWay}" />
+                    x:Name="MessageTitle"
+                    AutomationProperties.LiveSetting="Polite"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                    Text="{x:Bind MessageTitleOf(Status), Mode=OneWay}"
+                    TextAlignment="Center"
+                    TextWrapping="WrapWholeWords" />
+                <TextBlock
+                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                    Text="{x:Bind MessageOf(Status), Mode=OneWay}"
+                    TextAlignment="Center"
+                    TextWrapping="WrapWholeWords" />
                 <Button
-                    Grid.Column="1"
-                    AutomationProperties.Name="Parent folder"
-                    Click="Button_Click"
-                    Content="{ui:SymbolIcon Symbol=Back}"
-                    ToolTipService.ToolTip="Parent folder" />
-            </Grid>
-        </Border>
-
-        <ItemsView
-            Grid.Row="1"
-            Margin="0,30,0,0"
-            Padding="8"
-            IsItemInvokedEnabled="True"
-            ItemInvoked="ItemsView_ItemInvoked"
-            ItemsSource="{x:Bind Folders}"
-            SelectionMode="Single">
-            <ItemsView.ItemTemplate>
-                <DataTemplate x:DataType="jm:FileSystemEntryInfo">
-                    <ItemContainer>
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-
-                            <FontIcon Grid.Row="0" Glyph="&#xE8B7;" />
-
-                            <TextBlock
-                                Grid.Row="1"
-                                HorizontalAlignment="Center"
-                                Style="{ThemeResource CaptionTextBlockStyle}"
-                                Text="{x:Bind Name}"
-                                TextAlignment="Center"
-                                TextTrimming="CharacterEllipsis" />
-                        </Grid>
-                    </ItemContainer>
-                </DataTemplate>
-            </ItemsView.ItemTemplate>
-            <ItemsView.Layout>
-                <UniformGridLayout
-                    ItemsStretch="Fill"
-                    MinColumnSpacing="10"
-                    MinItemHeight="50"
-                    MinItemWidth="50"
-                    MinRowSpacing="10" />
-            </ItemsView.Layout>
-        </ItemsView>
+                    x:Name="RetryButton"
+                    HorizontalAlignment="Center"
+                    Click="Retry_Click"
+                    Content="Try again"
+                    Style="{StaticResource GlassPillButtonStyle}"
+                    Visibility="{x:Bind RetryVisibility(Status), Mode=OneWay}" />
+            </StackPanel>
+            <ProgressRing
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Loading the folders"
+                IsActive="{x:Bind IsLoadingFolders, Mode=OneWay}" />
+        </Grid>
 
         <StackPanel
-            Grid.Row="2"
-            Margin="10"
+            Grid.Row="3"
             HorizontalAlignment="Right"
             Orientation="Horizontal"
             Spacing="10">
-            <Button Click="OnCloseWindow" Content="Select Folder" />
-            <Button Click="OnCancel" Content="Cancel" />
+            <Button
+                x:Name="SelectButton"
+                Click="OnCloseWindow"
+                Content="Select this folder"
+                IsEnabled="{x:Bind CanSelect(CurrentFolder), Mode=OneWay}"
+                Style="{StaticResource GlassAccentPillButtonStyle}" />
+            <Button
+                Click="OnCancel"
+                Content="Cancel"
+                Style="{StaticResource GlassPillButtonStyle}" />
         </StackPanel>
-
     </Grid>
 </UserControl>

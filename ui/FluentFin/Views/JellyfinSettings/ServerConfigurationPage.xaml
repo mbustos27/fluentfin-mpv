@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+    A section of the server's configuration (dashboard: General, Display, Metadata, NFO, Transcoding, Resume, Trickplay).
+    1.1.4 (states): the page title in the glass type and a heading for Narrator, Save and Reset as named glass pills
+    (their text sat in a panel, so Narrator read "button"), the settings on one glass section panel, and a width that
+    shrinks with the window (it was a fixed 1000 px, cut off in a narrow window).
+-->
 <UserControl
     x:Class="FluentFin.Views.JellyfinSettings.ServerConfigurationPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -10,43 +16,63 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Margin="36">
-        <ScrollViewer>
-            <Grid Width="1000" HorizontalAlignment="Center">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
+    <ScrollViewer Padding="36,24,36,36" HorizontalScrollMode="Disabled">
+        <Grid MaxWidth="1000" RowSpacing="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-                <TextBlock Style="{ThemeResource SubheaderTextBlockStyle}" Text="{x:Bind SectionName}" />
+            <TextBlock
+                VerticalAlignment="Center"
+                AutomationProperties.HeadingLevel="Level1"
+                Style="{StaticResource GlassPageTitleTextBlockStyle}"
+                Text="{x:Bind SectionName, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
 
-                <StackPanel
-                    Padding="16"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Bottom"
-                    Orientation="Horizontal"
-                    Spacing="16">
-                    <Button Command="{x:Bind SaveCommand, Mode=OneWay}">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <SymbolIcon Symbol="Save" />
-                            <TextBlock Text="Save" />
-                        </StackPanel>
-                    </Button>
-                    <Button Command="{x:Bind ResetCommand, Mode=OneWay}">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <SymbolIcon Symbol="Refresh" />
-                            <TextBlock Text="Reset" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
+            <StackPanel
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="10">
+                <Button
+                    AutomationProperties.Name="Save"
+                    Command="{x:Bind SaveCommand, Mode=OneWay}"
+                    Style="{StaticResource GlassAccentPillButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <SymbolIcon Symbol="Save" />
+                        <TextBlock Text="Save" />
+                    </StackPanel>
+                </Button>
+                <Button
+                    AutomationProperties.Name="Reset"
+                    Command="{x:Bind ResetCommand, Mode=OneWay}"
+                    Style="{StaticResource GlassPillButtonStyle}"
+                    ToolTipService.ToolTip="Put back the server's saved values">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <SymbolIcon Symbol="Refresh" />
+                        <TextBlock Text="Reset" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
 
-                <StackPanel Grid.Row="1" Spacing="5">
+            <ContentControl
+                Grid.Row="1"
+                Grid.ColumnSpan="2"
+                Padding="20"
+                VerticalAlignment="Top"
+                Style="{StaticResource GlassSurfaceStyle}">
+                <StackPanel Spacing="5">
                     <i:Interaction.Behaviors>
                         <fb:JellyfinConfigSectionBehavior Items="{x:Bind Items, Mode=OneWay}" />
                     </i:Interaction.Behaviors>
                 </StackPanel>
-
-            </Grid>
-        </ScrollViewer>
-    </Grid>
+            </ContentControl>
+        </Grid>
+    </ScrollViewer>
 </UserControl>
