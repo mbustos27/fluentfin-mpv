@@ -12,7 +12,7 @@ of a season (opaque episode cards inside one panel); and pills: the search box a
 deep, never a panel per card, never blur over video. The materials are clearer than before (`GlassPanelBrush` tint 0.22,
 luminosity 0.34 dark; 0.28 and 0.45 light) with a brighter edge (`GlassStrokeBrush` 55% white at the top) and
 `GlassShadowOpacity`. Text on any panel keeps 4.5:1 over the brightest backdrop the ambient dim allows; `OverlayContrastTests`
-measures it (about 6.2:1 secondary and 8.7:1 primary text, dark; more in light).
+measures it (worst case: dark panel 6.5:1 primary and 4.9:1 secondary text, strong 15.8 and 10.5; light panel 12.6 and 4.8).
 
 - **Glass** (in-app acrylic, `GlassPanelBrush`) only on chrome: the navigation, the title bar area, flyouts, menus,
   dialogs, pills and buttons that float over content. At most a handful of glass surfaces on a screen, and one layer
