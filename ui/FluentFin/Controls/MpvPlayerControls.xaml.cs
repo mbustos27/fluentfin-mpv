@@ -438,8 +438,54 @@ public sealed partial class MpvPlayerControls : UserControl
 		ConfigureFade(BottomBar, 12, motion);
 		ConfigureFade(ToastIndicator, -8, motion);
 		ConfigureFade(NextPill, 8, motion);
+		ConfigureTimecodeGlow();
 		ConfigureIndicatorFade(motion);
 		AnimateVolumeFill();
+	}
+
+	// -- the timecode's glow (1.2.0, Nixie) -------------------------------------------------------------------------------
+
+	private readonly Dictionary<TextBlock, SpriteVisual> _glows = [];
+
+	/// <summary>
+	/// A soft glow in the accent behind the elapsed and remaining time, as a nixie tube's digits: a compositor drop shadow of
+	/// the text's own alpha mask (it follows the text as it changes, once a second), with no offset, on a visual behind the
+	/// text. Static: no animation, no work per frame. None in high contrast (the system colours alone).
+	/// </summary>
+	private void ConfigureTimecodeGlow()
+	{
+		var highContrast = new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
+		var accent = (Resources["SliderTrackValueFill"] as SolidColorBrush)?.Color ?? Microsoft.UI.Colors.White;
+		var opacity = (float)(double)Resources["TimecodeGlowOpacity"];
+		var blur = (float)(double)Resources["TimecodeGlowBlur"];
+		foreach (var (text, host) in new[] { (ElapsedText, ElapsedGlow), (RemainingText, RemainingGlow) })
+		{
+			if (highContrast)
+			{
+				ElementCompositionPreview.SetElementChildVisual(host, null);
+				_glows.Remove(text);
+				continue;
+			}
+
+			if (!_glows.TryGetValue(text, out var sprite))
+			{
+				var compositor = ElementCompositionPreview.GetElementVisual(text).Compositor;
+				sprite = compositor.CreateSpriteVisual();
+				sprite.Shadow = compositor.CreateDropShadow();
+				ElementCompositionPreview.SetElementChildVisual(host, sprite);
+				_glows[text] = sprite;
+				var target = sprite;
+				text.SizeChanged += (_, e) => target.Size = new Vector2((float)e.NewSize.Width, (float)e.NewSize.Height);
+			}
+
+			var shadow = (DropShadow)sprite.Shadow;
+			shadow.Mask = text.GetAlphaMask();
+			shadow.Color = accent;
+			shadow.Opacity = opacity;
+			shadow.BlurRadius = blur;
+			shadow.Offset = Vector3.Zero;
+			sprite.Size = new Vector2((float)text.ActualWidth, (float)text.ActualHeight);
+		}
 	}
 
 	// -- the volume indicator (Seaglass) ----------------------------------------------------------------------------------
