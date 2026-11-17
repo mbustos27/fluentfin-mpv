@@ -40,7 +40,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '1.1.1',
+    [string]$Version = '1.1.2',
     [string]$SourceUrl,
     [switch]$Reuse,
     [switch]$SkipTests,  # only to try the packaging itself; a release runs them

@@ -1,6 +1,20 @@
 # Changelog
 
-## Unreleased
+## 1.1.2
+
+- **A cleaner, glassier Seaglass.**
+  - **Glass:** clean neutral glass everywhere, with a sea-glass aqua accent. A floating glass navigation rail, the hero's text on glass, and page sections, Settings and Diary on glass panels with a thin lit edge and a soft shadow.
+  - **Backdrop:** the current title's artwork becomes a smooth, dark colour field behind the window, tinted only faintly by the title.
+  - **Posters:** soft rounded corners, plain titles underneath.
+  - **Motion:** in Full glass mode, a light that follows the pointer over panels and posters, and pages that settle in.
+  - **Light theme:** a new light glass theme.
+  - Solid mode and high contrast stay fully opaque.
+- **A bigger volume indicator:** changing the volume with the wheel or the keys shows a larger, animated glass slider that fills smoothly, shows Muted, and is read by Narrator.
+- **Smoother full screen:** going in and out of full screen no longer shows half-drawn frames. The window is hidden for a moment while it resizes, and comes back to exactly its old size and place.
+- **Skip intro more often, without server admin:**
+  - **Chapters:** the file's chapters (Intro, Opening, OP, Recap, Credits, Ending…) give Skip buttons when the server has none.
+  - **Learned intros:** after you skip an intro by hand once, Seaglass offers it on the rest of the season (saved on this PC; Settings can forget them).
+  - **Online lookups (opt-in):** Settings > Look up intros online asks TheIntroDB, and AniSkip for anime. It sends only the show's public ID, season, episode and length, for the episode playing; results are kept in memory for the session only.
 
 - **A friendlier installer.** The MSI now opens a welcome page (Install / Cancel; nothing to accept, it says where the
   GPL licence and the source are), shows progress, and ends with "Launch Seaglass" ticked. Seaglass-style pictures,
