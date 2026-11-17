@@ -31,7 +31,7 @@ public sealed partial class MpvControlsOverlay : Window
 	{
 		_owner = WinRT.Interop.WindowNative.GetWindowHandle(owner);
 		_hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-		Title = "FluentFin player controls";
+		Title = "Seaglass player controls";
 
 		// transparent where the controls draw nothing: the video below shows through
 		SystemBackdrop = new WinUIEx.TransparentTintBackdrop();

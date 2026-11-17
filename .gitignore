@@ -18,3 +18,7 @@ tools/**/out/
 
 # screenshots the dev streams save for review (tools\ui-harness), never committed
 /shots/
+# agent working notes in each worktree, never committed
+/HANDOFF.md
+/BRIEF.md
+/PAUSED.md

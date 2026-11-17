@@ -100,7 +100,7 @@ internal static unsafe partial class Libmpv
 		if (elsewhere.Count > 0)
 		{
 			var (name, from) = elsewhere[0];
-			return (0, $"another FFmpeg's {name} is already loaded in FluentFin (from {Path.GetDirectoryName(from)}): restart FluentFin to use its own controls");
+			return (0, $"another FFmpeg's {name} is already loaded in Seaglass (from {Path.GetDirectoryName(from)}): restart Seaglass to use its own controls");
 		}
 
 		ApplyLibraryEnvironment(folder);
@@ -319,15 +319,15 @@ internal static unsafe partial class Libmpv
 		{
 			if (s_resolverError is not null)
 			{
-				return $"{Dll} cannot be bound to FluentFin's {Folder} folder: {s_resolverError}";
+				return $"{Dll} cannot be bound to Seaglass's {Folder} folder: {s_resolverError}";
 			}
 
 			var (library, error) = s_installed.Value;
 			if (library == 0)
 			{
-				return !File.Exists(InstalledPath) ? $"{Dll} was not found in FluentFin's {Folder} folder"
-					: error?.Contains("restart FluentFin", StringComparison.Ordinal) == true ? $"{Dll} cannot be used now: {error}"
-					: $"{Dll} could not be loaded from FluentFin's {Folder} folder: {error}";
+				return !File.Exists(InstalledPath) ? $"{Dll} was not found in Seaglass's {Folder} folder"
+					: error?.Contains("restart Seaglass", StringComparison.Ordinal) == true ? $"{Dll} cannot be used now: {error}"
+					: $"{Dll} could not be loaded from Seaglass's {Folder} folder: {error}";
 			}
 
 			return ProbeLibrary(library, Dll);

@@ -76,8 +76,12 @@ public partial class App : Application
 
 		// fluentfin-mpv: --data-dir <folder> / FLUENTFIN_MPV_DATA_DIR put everything this run writes there (dev and test runs)
 		// Seaglass: the data folder was %LOCALAPPDATA%\FluentFinMpv; copied (never moved) to %LOCALAPPDATA%\Seaglass on the first start
-		var migrationNote = Core.KnownFolders.CopyLegacyForStartup([.. Environment.GetCommandLineArgs().Skip(1)], Environment.GetEnvironmentVariable);
-		var knownFolders = StartupFolders();
+		// A failed copy leaves no Seaglass folder: this run uses the old folder in place, the copy is tried again at the next start,
+		// and the user is told once the window is up (_legacyCopyFailed)
+		var legacyCopy = Core.KnownFolders.CopyLegacyForStartup([.. Environment.GetCommandLineArgs().Skip(1)], Environment.GetEnvironmentVariable);
+		var migrationNote = legacyCopy.Note;
+		_legacyCopyFailed = legacyCopy.Failed;
+		var knownFolders = StartupFolders(legacyCopy.Failed ? legacyCopy.LegacyRoot : null);
 
 		Host = Microsoft.Extensions.Hosting.Host
 		.CreateDefaultBuilder()
@@ -245,9 +249,12 @@ public partial class App : Application
 
 	// fluentfin-mpv: a --data-dir with no folder or a mistyped one stops the start (the default folder would take a test run's
 	// data), and so does a data folder that cannot be made, with a message instead of a crash before any window
-	private static Core.KnownFolders StartupFolders()
+	private static bool _legacyCopyFailed;
+
+	private static Core.KnownFolders StartupFolders(string? useInstead)
 	{
-		if (Core.KnownFolders.TryForStartup([.. Environment.GetCommandLineArgs().Skip(1)], Environment.GetEnvironmentVariable, out var error) is { } folders)
+		if (Core.KnownFolders.TryForStartup([.. Environment.GetCommandLineArgs().Skip(1)], Environment.GetEnvironmentVariable, out var error,
+			useInstead is null ? null : () => useInstead) is { } folders)
 		{
 			return folders;
 		}
@@ -291,6 +298,12 @@ public partial class App : Application
 
 			// fluentfin-mpv (startup-perf, O5): no Flyleaf engine here; it starts with the first Flyleaf player (FlyleafEngine)
 			await GetService<IActivationService>().ActivateAsync(args);
+
+			if (_legacyCopyFailed)
+			{
+				_ = GetService<IContentDialogService>().ShowMessage("Seaglass could not copy your data",
+					"Seaglass couldn't copy the data from FluentFin MPV, so it is using that folder in place for now. Nothing is lost; it will try the copy again the next time it starts.");
+			}
 		}
 		catch (Exception ex)
 		{

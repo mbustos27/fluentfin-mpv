@@ -264,7 +264,7 @@ public sealed class PlaybackSettingsTests : IDisposable
 		await vm.OnNavigatedTo(null!);
 		Assert.Equal(MpvPlayerControls.FluentFin, _settings.MpvPlayerControls);
 		Assert.Equal(MpvPlayerControls.FluentFin, vm.PlayerControls);
-		Assert.Equal("FluentFin", vm.SelectedPlayerControls?.Name);
+		Assert.Equal("Seaglass", vm.SelectedPlayerControls?.Name);
 
 		vm.SelectedPlayerControls = SettingsViewModel.PlayerControlsChoices.Single(x => x.Controls == MpvPlayerControls.Mpv);
 		Assert.Equal(MpvPlayerControls.Mpv, new Settings.Settings(new LocalSettingsService(new KnownFolders(_root))).MpvPlayerControls);
