@@ -38,11 +38,11 @@ public static class VolumeProbe {
   public static double Now() { return Clock.Elapsed.TotalMilliseconds; }
   static IntPtr Lp(int x, int y) { return (IntPtr)(((y & 0xFFFF) << 16) | (x & 0xFFFF)); }
 
-  // the accent (#5CCFC1, the player is dark) against the track (white at 20 % over the dark glass) and the test picture's
-  // cyan (no red in it): within 40 of the accent in each channel
+  // the accent (NixieAccentBrush, #F96985 on the player's dark theme since 1.2.0's desert palette; #5CCFC1 before) against
+  // the track (white at 20 % over the dark glass) and the test picture: within 40 of the accent in each channel
   public static bool Accent(int p) {
     int r = (p >> 16) & 255, g = (p >> 8) & 255, b = p & 255;
-    return Math.Abs(r - 92) <= 40 && Math.Abs(g - 207) <= 40 && Math.Abs(b - 193) <= 40;
+    return Math.Abs(r - 249) <= 40 && Math.Abs(g - 105) <= 40 && Math.Abs(b - 133) <= 40;
   }
 
   public static Bitmap Grab(IntPtr main) {
@@ -262,7 +262,7 @@ Start-Sleep -Milliseconds 2200
 # the opacity probe: a quarter along the bar (filled from 30 %), the video under it with the indicator gone; the accent
 $probeX = $bar[1] + [int]($span / 4)
 $under = @([VolumeProbe]::PixelNow($script:hwnd, $probeX, $bar[0]) -split ',' | ForEach-Object { [int]$_ })
-$accent = @(92, 207, 193)
+$accent = @(249, 105, 133)   # NixieAccentBrush on dark (1.2.0)
 $ch = 0; for ($i = 1; $i -lt 3; $i++) { if ([math]::Abs($accent[$i] - $under[$i]) -gt [math]::Abs($accent[$ch] - $under[$ch])) { $ch = $i } }
 function Alpha([int[]]$Rgb) { [math]::Round(($Rgb[$ch] - $under[$ch]) / [double]($accent[$ch] - $under[$ch]), 2) }
 Say "volume: opacity probe at $probeX,$($bar[0]): under it $($under -join ','), channel $ch"

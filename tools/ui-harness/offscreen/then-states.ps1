@@ -113,14 +113,11 @@ if ($skip -notcontains 'settings') {
 
 if ($skip -notcontains 'dashboard') {
     # 8. the dashboard's server configuration pages (General, Trickplay: ServerConfigurationPage)
-    Press-First @("Account, $($fixture.username)", 'Account')
+    # 1.2.0 merge: the account stream moved the account menu's Dashboard into Settings ("Server administration", Open)
+    Open-Nav 'Settings'
     Start-Sleep -Milliseconds 800
-    $dash = Wait-Until {
-        $hit = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Dashboard')
-        if (-not $hit) { $hit = Find-Anywhere 'Dashboard' }
-        $hit
-    } -Seconds 10
-    if (-not $dash) { throw 'no Dashboard in the account flyout' }
+    $dash = Wait-Ui -Name 'Open server administration' -Type 'Button' -OffscreenToo -Seconds 10
+    if (-not $dash) { throw 'no Server administration in Settings' }
     [void](Invoke-Element $dash)
     Start-Sleep -Seconds 2
     Capture-State 'dashboard'
@@ -149,7 +146,7 @@ if ($skip -notcontains 'picker' -and $skip -notcontains 'dashboard') {
         # the folder picker's way in: Add New Library > Content type (a ComboBox: expanded and its first type selected
         # through UI Automation) > Folder: Add. (A library's More options menu, a MenuBarItemFlyout, opened neither for
         # UI Automation's Invoke nor for a posted click.)
-        Press-First @('Add New Library')
+        Press-First @('Add library', 'Add New Library')   # the admin stream's words since 1.2.0 ("Add New Library" before)
         Start-Sleep -Seconds 2
         $combo = Wait-Until { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ComboBox)))) | Select-Object -First 1 } -Seconds 8
         $manage = $null
@@ -171,7 +168,7 @@ if ($skip -notcontains 'picker' -and $skip -notcontains 'dashboard') {
             # Automation Invoke inside the picker's window hung a run for its whole time-out, 2026-11-17)
             foreach ($round in @(@{ Name = 'picker'; Rule = $null }, @{ Name = 'picker-server-failing'; Rule = 'status:500' })) {
                 if ($round.Rule) { Set-Rules @(, @('^/Environment/DirectoryContents$', $round.Rule)) } else { Set-Rules @() }
-                Press-First @('Add')
+                Press-First @('Add folder', 'Add')   # the admin stream's name since 1.2.0 ("Add" before)
                 $picker = Wait-Until { Find-OtherWindow 'Choose a folder' } -Seconds 10
                 if (-not $picker) { Say 'no folder picker window'; break }
                 $ph = [IntPtr]$picker.Current.NativeWindowHandle

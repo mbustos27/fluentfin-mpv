@@ -47,5 +47,6 @@ if ($retry) { [void](Invoke-Element $retry) }
 [void](Wait-Until { [OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $fixture.movie.name) } -Seconds 20 -PollMs 200)
 Start-Sleep -Milliseconds 1200
 $bar = Ls-Bar
-Check 'library states: Try again: the titles, and Sort, direction, Filter and A-Z are back (no pager)' ($bar.sort -and $bar.direction -and $bar.filter -and $bar.letters -and -not $bar.pager) (Ls-Describe $bar)
+# (the direction is in the Sort menu since 1.2.0, the button review's L24: no button of its own)
+Check 'library states: Try again: the titles, and Sort, Filter and A-Z are back (no pager)' ($bar.sort -and $bar.filter -and $bar.letters -and -not $bar.pager) (Ls-Describe $bar)
 Shot 'library-state-loaded'

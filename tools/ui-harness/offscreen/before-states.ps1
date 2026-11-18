@@ -131,7 +131,8 @@ else {
         $more = Wait-Until { Find-Ui -Name $moreName -Type 'Button' } -Seconds 5
         if (-not $more) { Check "saved server: More options before $answer" $false 'gone'; break }
         [void](Invoke-Element $more); Start-Sleep -Milliseconds 800
-        $item = Wait-Until { Find-Ui -Name 'Remove' -Type 'MenuItem' } -Seconds 5
+        # 1.2.0 (the button review, S9 and S11): the item is named after the server, "Remove Harness Jellyfin (fake)"
+        $item = Wait-Until { $x = Find-Ui -Name 'Remove ' -Type 'MenuItem' -Contains; if (-not $x) { $x = Find-Ui -Name 'Remove' -Type 'MenuItem' }; $x } -Seconds 5
         if (-not $item) { Check 'saved server: More options opens a menu with Remove' $false 'no Remove item'; Key 0x1B; break }
         [void](Invoke-Element $item); Start-Sleep -Milliseconds 900
         if ($answer -eq 'Cancel') { Capture-State 'server-remove-asks' }

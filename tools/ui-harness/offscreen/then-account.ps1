@@ -188,7 +188,8 @@ Check 'settings: Server administration is there for an administrator' ([bool]$ad
 if ($admin -and -not $acShotsOnly) {
     $acBefore = Get-Epoch
     [void](Invoke-Element $admin)
-    $page = Wait-Ui -Name 'Scheduled Tasks' -Seconds 10
+    # the admin stream's sections are in sentence case since 1.2.0 ("Scheduled tasks"; the button review's A83-A96)
+    $page = Wait-Until { $x = Find-Ui -Name 'Scheduled tasks'; if (-not $x) { $x = Find-Ui -Name 'Scheduled Tasks' }; $x } -Seconds 10
     AcSettle 2500
     Check 'server administration: its pages open' ([bool]$page)
     Shot "$acTag-server-administration"

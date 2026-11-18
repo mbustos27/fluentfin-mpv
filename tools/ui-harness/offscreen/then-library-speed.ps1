@@ -16,6 +16,11 @@ function Speed-PerfLines {
 function Speed-Tile {
     Open-Nav 'Home'
     Start-Sleep -Milliseconds 600
+    # 1.2.0 (the top bar): a library is a tab of its own while the libraries fit (the fake server has four); the Libraries
+    # page and its tiles are there only when there are more
+    if (-not $script:navPane) { $script:navPane = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id) }
+    $tab = if ($script:navPane) { [OffscreenUi]::NavItem($script:navPane, $fixture.movie.library) }
+    if ($tab) { Start-Sleep -Milliseconds 300; return $tab }
     Open-Nav 'Libraries'
     $t = Wait-Until { [OffscreenUi]::FindByNameAndClass($script:hwnd, $script:ui.Id, $fixture.movie.library, 'Microsoft.UI.Xaml.Controls.ItemContainer') } -Seconds 15 -PollMs 100
     Start-Sleep -Milliseconds 800
