@@ -19,9 +19,29 @@ public sealed partial class VideoPlayerViewModelMpvTests
 
 		Assert.Equal(MpvNotFoundMessage.Text, vm.MpvMessage);
 		Assert.True(vm.MpvMessageIsError);
-		Assert.Contains("FluentFin's controls", vm.MpvMessage);
+		Assert.Contains("Switch to Nixie's controls", vm.MpvMessage);
+		Assert.DoesNotContain("FluentFin", vm.MpvMessage);
 		Assert.Contains("winget install mpv-player.mpv-CI.MSVC", vm.MpvMessage);
 		Assert.DoesNotContain("play", _backend.Commands);
+	}
+
+	/// <summary>
+	/// 1.2.0 (docs/KNOWN-ISSUES.md): Nixie's controls were chosen but cannot be had on this PC, so mpv's were tried,
+	/// and there is no mpv either: "switch to Nixie's controls" would be no help (it is the setting already).
+	/// </summary>
+	[Fact]
+	public async Task NoMpvAfterTheFallback_SaysOnlyToInstallMpv()
+	{
+		var movie = new FakeLibrary(_client).AddMovie();
+		_backend.ConnectFailure = new BridgeCommandException("connect", "mpv_not_found", "mpv.exe was not found");
+		var vm = CreateViewModelWithControls(use: false, whyNot: "libmpv-2.dll was not found in the app's libmpv folder");
+
+		await vm.OnNavigatedTo(movie);
+
+		Assert.Equal(MpvNotFoundMessage.FellBackText, vm.MpvMessage);
+		Assert.DoesNotContain("Switch to", vm.MpvMessage);
+		Assert.Contains("winget install mpv-player.mpv-CI.MSVC", vm.MpvMessage);
+		Assert.True(vm.MpvMessageIsError);
 	}
 
 	[Theory]
@@ -41,6 +61,8 @@ public sealed partial class VideoPlayerViewModelMpvTests
 	public void TheCodeOnlyCountsForConnect()
 	{
 		Assert.Equal(MpvNotFoundMessage.Text, MpvNotFoundMessage.For(new BridgeCommandException("connect", "mpv_not_found", null)));
+		Assert.Equal(MpvNotFoundMessage.FellBackText, MpvNotFoundMessage.For(new BridgeCommandException("connect", "mpv_not_found", null), fellBack: true));
+		Assert.Null(MpvNotFoundMessage.For(new BridgeCommandException("connect", "mpv_failed", null), fellBack: true));
 		Assert.Null(MpvNotFoundMessage.For(new BridgeCommandException("play", "mpv_not_found", null)));
 		Assert.Null(MpvNotFoundMessage.For(new BridgeCommandException("connect", "mpv_failed", null)));
 		Assert.Null(MpvNotFoundMessage.For(new InvalidOperationException("mpv_not_found")));

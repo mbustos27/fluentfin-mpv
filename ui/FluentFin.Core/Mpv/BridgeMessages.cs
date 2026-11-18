@@ -28,10 +28,16 @@ public static class Bridge
 		public const string SetMute = "set_mute";
 		/// <summary>fluentfin-mpv: the subtitle text size in percent (docs/BRIDGE.md §4).</summary>
 		public const string SetSubtitleSize = "set_subtitle_size";
+		/// <summary>1.2.0: the playback speed, 0.5 to 2 (docs/BRIDGE.md §4).</summary>
+		public const string SetSpeed = "set_speed";
+		/// <summary>1.2.0: the subtitle delay in seconds, -30 to 30 (docs/BRIDGE.md §4).</summary>
+		public const string SetSubtitleDelay = "set_subtitle_delay";
 		public const string SetFullscreen = "set_fullscreen";
 		public const string SetControls = "set_controls";
 		/// <summary>fluentfin-mpv: the Skip intro settings (docs/BRIDGE.md §4): online lookups and learned intros.</summary>
 		public const string SetSkipOptions = "set_skip_options";
+		/// <summary>1.2.0: whether the backend plays the next queue item by itself at an item's end (docs/BRIDGE.md §4).</summary>
+		public const string SetAutoPlay = "set_auto_play";
 		/// <summary>fluentfin-mpv: skips the segment on offer (<see cref="BridgeSegments.Offered"/>); result <see cref="BridgeSkipResult"/> (docs/BRIDGE.md §4).</summary>
 		public const string SkipSegment = "skip_segment";
 		public const string GetState = "get_state";

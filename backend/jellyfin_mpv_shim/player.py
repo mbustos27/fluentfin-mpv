@@ -302,6 +302,74 @@ def runtime_force_window_works(version):
     return (int(m.group(1)), int(m.group(2))) >= (0, 41)
 
 
+def loadfile_takes_index(version):
+    """FluentFin MPV: whether this mpv's ``loadfile`` has the ``index``
+    argument before the per-file options (mpv 0.38+: ``loadfile <url>
+    <flags> <index> <options>``; older: ``loadfile <url> <flags>
+    <options>``). An unreadable version is old: options in the wrong place
+    are refused and the start falls back to a plain loadfile."""
+    m = re.search(r"(\d+)\.(\d+)", version or "")
+    if not m:
+        return False
+    return (int(m.group(1)), int(m.group(2))) >= (0, 38)
+
+
+def past_credits(position, duration, segments):
+    """FluentFin MPV: whether ``position`` (seconds) is past the start of
+    the end credits: an ``Outro`` segment starting in the second half of an
+    item ``duration`` seconds long. Any value missing: False."""
+    if not isinstance(position, (int, float)) or not isinstance(
+            duration, (int, float)) or duration <= 0:
+        return False
+    for segment in segments or ():
+        start = getattr(segment, "start", None)
+        if (getattr(segment, "type", None) == "Outro"
+                and isinstance(start, (int, float))
+                and duration / 2 <= start < duration and position >= start):
+            return True
+    return False
+
+
+def same_track(current, wanted):
+    """FluentFin MPV: whether mpv's track property already holds
+    ``wanted`` (an mpv track id, or "no"). mpv answers "no" (python-mpv
+    may hand it over as False) or the id; anything unreadable is not the
+    same, so the write goes ahead."""
+    if current is None:
+        return False
+    if current is False:
+        current = "no"
+    return str(current).lower() == str(wanted).lower()
+
+
+def track_choice(video):
+    """FluentFin MPV: what `configure_streams` selects for ``video``, as
+    mpv track ids, decided from the item alone so it can also go into the
+    ``loadfile`` (``_track_load_options``).
+
+    ``(audio, sub, external, problem)``: ``audio`` the mpv aid or None
+    (leave mpv's: a transcode, or no answer); ``sub`` the mpv sid, "no",
+    or None (leave mpv's); ``external`` the Jellyfin index of a sidecar to
+    load (``sub`` is then "no" until it lands); ``problem`` a log line for
+    an index neither map knows."""
+    audio = sub = external = problem = None
+    audio_uid = getattr(video, "aid", None)
+    sub_uid = getattr(video, "sid", None)
+    if audio_uid is not None and not video.is_transcode:
+        audio = (getattr(video, "audio_seq", None) or {}).get(audio_uid)
+        if audio is None:
+            problem = ("audio", audio_uid)
+    if sub_uid is None or sub_uid == -1:
+        sub = "no"
+    elif sub_uid in (getattr(video, "subtitle_seq", None) or {}):
+        sub = video.subtitle_seq[sub_uid]
+    elif sub_uid in (getattr(video, "subtitle_url", None) or {}):
+        sub, external = "no", sub_uid
+    else:
+        problem = problem or ("subtitle", sub_uid)
+    return audio, sub, external, problem
+
+
 #: mpv's own name for the builtin OSC (`player/scripting.c`:
 #: `load_builtin_script(..., "@osc.lua")`). `load-script` takes it, which is
 #: how the stock OSC can be loaded *after* construction even though `--osc=no`
@@ -1301,6 +1369,13 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         except Exception:
             log.debug("could not read the mpv version", exc_info=True)
             self._runtime_force_window = False
+        # FluentFin MPV: where loadfile takes the per-file track options
+        # (_load_url); this mpv's, not a previous one's.
+        try:
+            self._loadfile_index = loadfile_takes_index(
+                str(self._player.mpv_version))
+        except Exception:
+            self._loadfile_index = None
         if not self._runtime_force_window:
             log.info("This mpv cannot give up its window on request "
                      "(needs 0.41+); minimizing will quit mpv instead.")
@@ -3186,6 +3261,13 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         # Apply the persisted per-type volume BEFORE playback starts, so the
         # track never briefly blares at the default while mpv probes/loads
         # (duration isn't known yet, so use the item we're about to play).
+        #
+        # FluentFin MPV: the outgoing item's live volume is saved first. It
+        # reached the setting only on the timeline tick, so a change made in
+        # the last seconds of an episode (mpv's keys or wheel) was undone by
+        # the next one's start: the volume jumped between episodes.
+        if getattr(self, "_video", None) is not None:
+            self._maybe_save_volume()
         try:
             v_item = getattr(video, "item", None) or {}
             v_audio = (v_item.get("MediaType") == "Audio"
@@ -3378,7 +3460,7 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
                 # media-title is the url while the file opens (the bar shows
                 # it), and a transcode's url carries ApiKey. Set again below.
                 self._player.force_media_title = video.get_proper_title()
-                self._player.play(self.url)
+                self._load_url(self.url, self._track_load_options(video))
                 loaded = wait_property(
                     self._player,
                     "duration",
@@ -4515,7 +4597,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         # than merely intended.
         video = self._video
         try:
-            self.play_next()
+            # FluentFin MPV: the mark is this method's own (play_next would
+            # make a second one past the credits)
+            self._play_next(mark_played=False)
         finally:
             self.queue_played_mark(video)
 
@@ -4533,16 +4617,46 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
 
     @synchronous("_lock")
     def play_next(self):
+        return self._play_next()
+
+    def _play_next(self, mark_played=None):
+        """`play_next`, under the player lock. FluentFin MPV (1.2.0):
+        ``mark_played`` None marks the item left played when it is past
+        its credits (`_past_credits`), behind its stop report as
+        `watched_skip` does. Jellyfin marks an item played only from 90 %,
+        and Next during the credits -- the app's countdown ends 10 s into
+        them, the button any time -- left a 23:40 episode with credits from
+        20:40 at 88 %, in Continue Watching."""
         video = self._video
         if video and video.parent.has_next:
+            if mark_played is None:
+                mark_played = self._past_credits(video)
             new_video = video.parent.get_next().video
             self.send_timeline_stopped(True)
-            if self.syncplay.is_enabled():
-                self.syncplay.request_next(video.get_playlist_id())
-            else:
-                self.play(new_video)
+            try:
+                if self.syncplay.is_enabled():
+                    self.syncplay.request_next(video.get_playlist_id())
+                else:
+                    self.play(new_video)
+            finally:
+                if mark_played:
+                    self.queue_played_mark(video)
             return True
         return False
+
+    def _past_credits(self, video):
+        """FluentFin MPV: whether the position is in ``video``'s end
+        credits: past the start of an Outro segment in the second half of
+        the item (an earlier "Outro" is not the end credits; the app's
+        controls use the same rule for their Next prompt). False when the
+        position, the length or the segments cannot be had."""
+        try:
+            position = self._player.playback_time
+            duration = self._player.duration
+        except Exception:
+            return False
+        return past_credits(position, duration,
+                            getattr(video, "intros", None))
 
     @synchronous("_lock")
     def skip_to(self, key: str):
@@ -4576,40 +4690,90 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         convenience on a keypress, and the worst honest outcome is the button
         doing nothing.
         """
-        from .utils import get_seq
+        earlier = self._earlier_episodes(video)
+        if not earlier:
+            return False
+        self._prepend_to_queue(video, earlier)
+        return True
 
+    def _earlier_episodes(self, video):
+        """The ids of the episodes before ``video`` in its series, in order,
+        from the server; None when there are none or they cannot be had.
+        Changes nothing (FluentFin MPV: split out of
+        `_widen_queue_backwards` so `widen_queue_soon` can ask without the
+        player lock)."""
         if self.syncplay.is_enabled():
             # The group owns the queue. Inventing entries it has never
             # heard of is not ours to do -- request_prev is the whole
             # protocol for this, and play_prev already routes there.
-            return False
+            return None
         client = getattr(video, "client", None)
         if client is None:
-            return False        # offline: nothing to ask
+            return None         # offline: nothing to ask
         item = getattr(video, "item", None) or {}
         if item.get("Type") != "Episode" or not item.get("SeriesId"):
-            return False
+            return None
         try:
             result = client.jellyfin.get_episodes(item["SeriesId"]) or {}
         except Exception:
             log.debug("could not read the series for a backwards step",
                       exc_info=True)
-            return False
+            return None
         ids = [e.get("Id") for e in (result.get("Items") or []) if e.get("Id")]
         try:
             index = ids.index(video.item_id)
         except ValueError:
             # The playing episode is not in its own series listing. A
             # mixed-in special, or a library that changed underneath us.
-            return False
+            return None
         if index <= 0:
-            return False        # already the first episode
+            return None         # already the first episode
+        return ids[:index]
+
+    def _prepend_to_queue(self, video, earlier):
+        """Put ``earlier`` (item ids) before everything in ``video``'s
+        queue. Under the player lock."""
+        from .utils import get_seq
+
         media = video.parent
         prefix = [{"PlaylistItemId": "playlistItem{0}".format(get_seq()),
-                   "Id": eid} for eid in ids[:index]]
+                   "Id": eid} for eid in earlier]
         media.replace_queue(prefix + list(media.queue), len(prefix) + media.seq)
         log.info("Queue widened backwards by %d episode(s).", len(prefix))
-        return True
+
+    def widen_queue_soon(self, video, run=None):
+        """FluentFin MPV (1.2.0): the episodes before ``video`` into its
+        queue now, in the background, when nothing is behind it -- an
+        episode started from Next Up or Continue Watching, whose queue
+        starts with it (#650). The app's Previous button is enabled by what
+        is behind it in the queue (the ``next`` event's ``previousItemId``),
+        and was never enabled there: `play_prev` widened the queue only once
+        pressed. One series listing per such start; the request is made
+        without the player lock (a slow server must not hold the player),
+        the queue changed under it, only if ``video`` is still playing and
+        nothing has filled the gap meanwhile. ``run`` runs the work (tests);
+        a thread otherwise."""
+        parent = getattr(video, "parent", None)
+        if parent is None or parent.has_prev:
+            return
+
+        def widen():
+            try:
+                earlier = self._earlier_episodes(video)
+                if not earlier:
+                    return
+                with self._lock:
+                    if self._video is video and not parent.has_prev:
+                        self._prepend_to_queue(video, earlier)
+            except Exception:
+                log.debug("could not widen the queue backwards",
+                          exc_info=True)
+
+        if run is not None:
+            run(widen)
+        else:
+            threading.Thread(target=widen, name="earlier-episodes",
+                             daemon=True).start()
 
     @synchronous("_lock")
     def play_prev(self):
@@ -4985,6 +5149,86 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
                 if match is not None:
                     video.sid = match
 
+    def _track_load_options(self, video):
+        """FluentFin MPV: the per-file ``aid``/``sid`` for the loadfile, so
+        mpv opens the file on the tracks `configure_streams` will select
+        (the user's 1.1.3 log, between episodes). Without them mpv opened
+        its own default tracks and the start switched afterwards: another
+        audio decoder (and an output reconfigured when the format differs)
+        on every episode whose chosen audio is not the file's default, and
+        an embedded subtitle shown, hidden, then the sidecar. Per-file
+        options end with the file (mpv restores them), so nothing leaks to
+        the next item (docs/mpv-backends.md section 6). Empty when there
+        is nothing to say.
+
+        **No ``sid`` for an item whose subtitle is a sidecar.** Measured on
+        mpv 0.41 (the external-mpv probe, 2026-11-17): a file loaded with a
+        per-file ``sid`` on which a sidecar is then selected at runtime
+        makes mpv ignore the NEXT file's per-file ``aid`` -- it opens the
+        default audio track again, the very switch this is for, on every
+        episode watched with a sidecar (an anime season with its Japanese
+        audio and a downloaded subtitle). Without the per-file ``sid`` the
+        next ``aid`` holds; the sidecar is selected when it lands, as
+        before, and `configure_streams` hides an embedded track mpv picked
+        meanwhile (one with a default or forced flag) only if it did."""
+        try:
+            audio, sub, external, _problem = track_choice(video)
+        except Exception:
+            log.debug("no track options for the load", exc_info=True)
+            return {}
+        options = {}
+        if audio is not None:
+            options["aid"] = audio
+        if sub is not None and external is None:
+            options["sid"] = sub
+        return options
+
+    def _load_url(self, url, options):
+        """FluentFin MPV: ``loadfile`` with per-file ``options`` where this
+        mpv takes them; a plain load when there are none, when the mpv's
+        version is unknown, or when it refuses them (configure_streams
+        selects the tracks either way)."""
+        where = getattr(self, "_loadfile_index", None)
+        if options and where is not None:
+            joined = ",".join("%s=%s" % (k, v) for k, v in options.items())
+            args = ["replace", "-1", joined] if where else ["replace", joined]
+            try:
+                self._player.command("loadfile", url, *args)
+                return
+            except _mpv_errors:
+                raise
+            except Exception:
+                log.info("mpv refused the track options of the load (%s); "
+                         "loading without them.", joined)
+        self._player.play(url)
+
+    def _select_track(self, prop, wanted):
+        """FluentFin MPV: write mpv's ``audio``/``sub``/``secondary_sid``
+        only when it does not already hold ``wanted``. mpv prints its whole
+        track list for every write, re-selecting the selected track
+        included, which is what read as audio re-selected and subtitles
+        flapping in the user's log; the loadfile has already chosen them.
+
+        A name in the object's ``__dict__`` is a shadow left by a refused
+        write (docs/mpv-backends.md section 1): its read answers the shadow,
+        not mpv, so the write always goes ahead then."""
+        player = self._player
+        try:
+            shadowed = prop in vars(player)
+        except TypeError:
+            shadowed = True
+        if not shadowed:
+            try:
+                current = getattr(player, prop)
+            except _mpv_errors:
+                raise
+            except Exception:
+                current = None
+            if same_track(current, wanted):
+                return False
+        setattr(player, prop, wanted)
+        return True
+
     @synchronous("_lock")
     def configure_streams(self):
         video = self._video
@@ -4992,6 +5236,7 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
             return
         audio_uid = video.aid
         sub_uid = video.sid
+        audio, sub, external, _problem = track_choice(video)
 
         if audio_uid is not None and not video.is_transcode:
             log.info("PlayerManager::play selecting audio stream index=%s" % audio_uid)
@@ -5003,25 +5248,24 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
             # unmappable (a source the server never probed reports no
             # streams at all). mpv's own default track is the right answer
             # in every one of those cases. Same shape as the subtitle branch.
-            track = video.audio_seq.get(audio_uid)
-            if track is None:
+            if audio is None:
                 log.warning("PlayerManager::audio index %s not in the stream "
                             "map %s; leaving mpv's default track.",
                             audio_uid, video.audio_seq)
             else:
-                self._player.audio = track
+                self._select_track("audio", audio)
 
         if sub_uid is None or sub_uid == -1:
             log.info("PlayerManager::play selecting subtitle stream (none)")
-            self._player.sub = "no"
+            self._select_track("sub", "no")
         else:
             log.info("PlayerManager::play selecting subtitle stream index=%s "
                      "(embedded map=%s external=%s)" % (
                          sub_uid, video.subtitle_seq,
                          list(video.subtitle_url)))
-            if sub_uid in video.subtitle_seq:
-                self._player.sub = video.subtitle_seq[sub_uid]
-            elif sub_uid in video.subtitle_url:
+            if external is None and sub is not None:
+                self._select_track("sub", sub)
+            elif external is not None:
                 log.info(
                     "PlayerManager::play selecting external subtitle id=%s" % sub_uid
                 )
@@ -5051,7 +5295,8 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
             elif sec in video.subtitle_url:
                 track = self._ensure_external_sub(sec)
         try:
-            self._player.secondary_sid = track if track is not None else "no"
+            self._select_track("secondary_sid",
+                               track if track is not None else "no")
         except _mpv_errors:
             self._handle_mpv_disconnect()
         except Exception:
@@ -5177,11 +5422,11 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
     @synchronous("_lock")
     def load_external_sub(self, sub_id: int):
         if sub_id in self.external_subtitles:
-            self._player.sub = self.external_subtitles[sub_id]
+            self._select_track("sub", self.external_subtitles[sub_id])
             return
         # Nothing until it lands -- not mpv's own default track, which is a
         # subtitle the user did not pick.
-        self._player.sub = "no"
+        self._select_track("sub", "no")
         self._add_external_sub(sub_id)
 
 

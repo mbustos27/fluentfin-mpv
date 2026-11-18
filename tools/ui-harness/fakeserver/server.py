@@ -17,6 +17,7 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
 - Latency: --latency for every request, --latency-rule REGEX=MS for the paths matching REGEX (first match wins,
   'hang' = never answer, 'status:NNN' = answer that status (400-599) at once, 'empty' = 200 with no items); also
   POST /__harness/latency {"default": ms, "rules": [["regex", ms], ...]} while running.
+- Segments: POST /__harness/segments {"outro_seconds": N}: the end credits (Outro) run the last N seconds (40).
 - Streams: POST /__harness/streams {"encode_subtitle": true} serves the last embedded subtitle as burnt in
   ("Encode"), so picking it renegotiates the stream (a track change that can fail, with a PlaybackInfo rule).
 - Request log: <out>/requests.jsonl, one line per request (time, method, path, query with keys/tokens redacted,
@@ -852,6 +853,13 @@ class Server:
                     if "encode_subtitle" in body:
                         outer.encode_subtitle = bool(body["encode_subtitle"])
                     return self._json(200, {"encode_subtitle": outer.encode_subtitle})
+                if low == "/__harness/segments" and method == "POST":
+                    # {"outro_seconds": 120}: the end credits run that long, to the end (40 s by default): credits that
+                    # start before 90 % of the item, where Jellyfin's own played mark does not reach
+                    body = self._body()
+                    if "outro_seconds" in body:
+                        outer.lib.outro_seconds = float(body["outro_seconds"])
+                    return self._json(200, {"outro_seconds": outer.lib.outro_seconds})
                 if low == "/__harness/shutdown" and method == "POST":
                     self._json(200, {"ok": True})
                     outer.stop()

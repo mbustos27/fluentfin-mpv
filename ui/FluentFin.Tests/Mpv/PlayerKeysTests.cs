@@ -68,6 +68,16 @@ public sealed class PlayerKeysTests
 		Assert.False(MpvPlayerKeys.Takes(key, videoShown: true, onAButton: true));
 	}
 
+	/// <summary>1.2.0: Alt+Enter is full screen even with the focus on a button (the button would take Enter as a press).</summary>
+	[Fact]
+	public void AltEnter_IsThePlayers_EvenOnAFocusedButton()
+	{
+		Assert.True(MpvPlayerKeys.Takes(VirtualKey.Enter, videoShown: true, onAButton: true, alt: true));
+		Assert.False(MpvPlayerKeys.Takes(VirtualKey.Enter, videoShown: true, onAButton: true, alt: false));
+		Assert.False(MpvPlayerKeys.Takes(VirtualKey.Space, videoShown: true, onAButton: true, alt: true));
+		Assert.False(MpvPlayerKeys.Takes(VirtualKey.Enter, videoShown: false, onAButton: false, alt: true));
+	}
+
 	[Theory]
 	[InlineData(VirtualKey.F)]
 	[InlineData(VirtualKey.Right)]

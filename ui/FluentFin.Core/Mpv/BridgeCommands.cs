@@ -174,7 +174,16 @@ public static class BridgeCommands
 
 	public static JsonObject SubtitleSize(int percent) => new() { ["percent"] = SubtitleSizes.Clamp(percent) };
 
+	/// <summary>1.2.0: <c>set_speed</c>, on one of the offered steps (<see cref="PlaybackSpeeds"/>).</summary>
+	public static JsonObject Speed(double speed) => new() { ["speed"] = PlaybackSpeeds.Clamp(speed) };
+
+	/// <summary>1.2.0: <c>set_subtitle_delay</c>, in tenths of a second within ±30 s (<see cref="SubtitleDelays"/>).</summary>
+	public static JsonObject SubtitleDelay(double seconds) => new() { ["seconds"] = SubtitleDelays.Clamp(seconds) };
+
 	public static JsonObject Mute(bool muted) => new() { ["muted"] = muted };
+
+	/// <summary>1.2.0: <c>set_auto_play</c> (docs/BRIDGE.md §4).</summary>
+	public static JsonObject AutoPlay(bool autoPlay) => new() { ["autoPlay"] = autoPlay };
 
 	public static JsonObject Fullscreen(bool fullscreen) => new() { ["fullscreen"] = fullscreen };
 

@@ -113,12 +113,35 @@ public sealed class ShortcutsTests
 	}
 
 	[Fact]
-	public void NoPlayerKey_FiresWithAlt()
+	public void NoPlayerKey_FiresWithAlt_ButAltEnter()
 	{
 		for (var key = 0; key < 256; key++)
 		{
-			Assert.Null(MpvControlsViewModel.ActionFor(key, false, false, true));
+			if (key != MpvControlsViewModel.Keys.Enter)
+			{
+				Assert.Null(MpvControlsViewModel.ActionFor(key, false, false, true));
+			}
 		}
+
+		// 1.2.0 (the interaction audit, item 17): Alt+Enter is full screen; Enter alone and Ctrl/Shift+Alt+Enter are not the player's
+		Assert.Equal(MpvControlsAction.ToggleFullScreen, MpvControlsViewModel.ActionFor(MpvControlsViewModel.Keys.Enter, false, false, true));
+		Assert.Null(MpvControlsViewModel.ActionFor(MpvControlsViewModel.Keys.Enter, false, false, false));
+		Assert.Null(MpvControlsViewModel.ActionFor(MpvControlsViewModel.Keys.Enter, true, false, true));
+		Assert.Null(MpvControlsViewModel.ActionFor(MpvControlsViewModel.Keys.Enter, false, true, true));
+	}
+
+	/// <summary>1.2.0 (the interaction audit, item 1): Escape leaves full screen and, in a window, only shows the controls: it never leaves the player.</summary>
+	[Fact]
+	public void Escape_LeavesFullScreenOnly()
+	{
+		Assert.Equal(PlayerEscape.Action.LeaveFullScreen, PlayerEscape.For(fullScreen: true));
+		Assert.Equal(PlayerEscape.Action.ShowControls, PlayerEscape.For(fullScreen: false));
+		// button review P27: on the loading screen (nothing plays yet) it is the Cancel again
+		Assert.Equal(PlayerEscape.Action.CancelStart, PlayerEscape.For(fullScreen: false, starting: true));
+		Assert.Equal(PlayerEscape.Action.CancelStart, PlayerEscape.For(fullScreen: true, starting: true));
+		Assert.Equal([PlayerEscape.Action.LeaveFullScreen, PlayerEscape.Action.ShowControls, PlayerEscape.Action.CancelStart], Enum.GetValues<PlayerEscape.Action>());
+		var sheet = ShortcutCatalog.Sections.SelectMany(s => s.Entries).Single(e => e.Keys == "Esc");
+		Assert.DoesNotContain("leave the player", sheet.Description, StringComparison.OrdinalIgnoreCase);
 	}
 
 	// -- what the new player keys do ------------------------------------------------------------------------------------

@@ -1281,7 +1281,8 @@ class LoopFileNeverOutlivesAudioTest(unittest.TestCase):
     #: `loop-file`, so a looser match found the comment instead of the line
     #: and the test measured the wording rather than the order.
     WRITE = "\n            self._player.loop_file ="
-    PLAY = "\n                self._player.play(self.url)"
+    # FluentFin MPV: the load is _load_url (the tracks go with it)
+    PLAY = "\n                self._load_url(self.url"
     RETURN = "\n        if not loaded:"
 
     def _src(self):

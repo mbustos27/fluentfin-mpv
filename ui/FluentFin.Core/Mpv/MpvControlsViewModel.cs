@@ -30,6 +30,13 @@ public enum MpvControlsAction
 	ToggleSubtitles,
 	CycleSubtitles,
 	CycleAudio,
+	/// <summary>1.2.0: [ and ], the playback speed a step down or up; Backspace, back to normal.</summary>
+	SpeedDown,
+	SpeedUp,
+	SpeedNormal,
+	/// <summary>1.2.0: Z and X, the subtitles 0.1 s earlier or later.</summary>
+	SubtitleEarlier,
+	SubtitleLater,
 	/// <summary>The digits: a tenth of the length each. Keep the ten in order (<see cref="MpvControlsViewModel.PercentOf"/>).</summary>
 	Percent0, Percent1, Percent2, Percent3, Percent4, Percent5, Percent6, Percent7, Percent8, Percent9,
 }
@@ -57,7 +64,15 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public const int SmallSeekSeconds = 5;
 	public const int LargeSeekSeconds = 10;
 	public const int SkipBackSeconds = 10;
+
+	/// <summary>Shift+Left and Shift+Right, 30 s.</summary>
 	public const int SkipForwardSeconds = 30;
+
+	/// <summary>
+	/// 1.2.0 (button review P8): the bar's forward button, 10 s, as its back button and as L and J (Netflix's 10 / 10); it
+	/// was +30 s, matching no plain key.
+	/// </summary>
+	public const int ForwardButtonSeconds = 10;
 	/// <summary>The default of <see cref="Step"/>.</summary>
 	public const int VolumeStep = 5;
 
@@ -183,7 +198,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public string? ItemId { get; private set; }
 
 	/// <summary>Anything of the controls' is on screen (the window they draw in is shown only then).</summary>
-	public bool AnythingVisible => ControlsVisible || VolumeIndicatorVisible || IsSkipVisible;
+	public bool AnythingVisible => ControlsVisible || VolumeIndicatorVisible || IsSkipVisible || IsNextPromptVisible || ToastVisible;
 
 	partial void OnControlsVisibleChanged(bool value)
 	{
@@ -225,6 +240,11 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			VolumeIndicatorVisible = false;
 		}
 
+		if (ToastVisible && now >= _toastUntil)
+		{
+			ToastVisible = false;
+		}
+
 		if (!_scrubbing)
 		{
 			ShowPosition(CurrentPosition(now));
@@ -247,7 +267,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		var position = _reportedPosition;
 		if (!IsPaused && !IsOpening && _reportedAt != default)
 		{
-			position += (now - _reportedAt).Ticks;
+			// 1.2.0: the video's time runs at the playback speed
+			position += (long)((now - _reportedAt).Ticks * Speed);
 		}
 
 		return DurationTicks > 0 ? Math.Min(position, DurationTicks) : position;
@@ -258,6 +279,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		PositionTicks = Math.Max(0, ticks);
 		ElapsedText = FormatTime(TimeSpan.FromTicks(PositionTicks));
 		RemainingText = DurationTicks > 0 ? "-" + FormatTime(TimeSpan.FromTicks(Math.Max(0, DurationTicks - PositionTicks))) : "";
+		UpdateNextPrompt();
 	}
 
 	// -- backend events ------------------------------------------------------------------------------------------------
@@ -293,12 +315,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		var now = _now();
 		var position = CurrentPosition(now);
 		var paused = state.State == Bridge.States.Paused;
-		if (paused != IsPaused)
-		{
-			// paused or playing by another hand (the end of the item, a remote, mpv): a click still waiting does nothing
-			_clicks.Cancel();
-		}
-
+		// 1.2.0: no click is cancelled here: a state sampled before a click's own toggle landed would look like another
+		// hand's, and a double click puts back the state before its first click with an absolute pause or play anyway
 		IsOpening = state.State == Bridge.States.Opening;
 		IsPaused = paused;
 		if (!_volumeInFlight && now - _audioChangedAt >= AudioSettle)
@@ -311,7 +329,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		OnTrackIndices(state.AudioStreamIndex, state.SubtitleStreamIndex);
 		if (state.Queue is { ItemIds.Count: > 0 } queue)
 		{
-			CanPrevious = queue.Index > 0;
+			_queueHasPrevious = queue.Index > 0;
+			CanPrevious = _queueHasPrevious || _nextHasPrevious;
 			_queueCount = queue.ItemIds.Count;
 			if (!_nextKnown)
 			{
@@ -348,6 +367,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		}
 
 		_reportedPosition = position.PositionTicks;
+		_backendPosition = position.PositionTicks;
 		_reportedAt = now;
 		if (!_scrubbing)
 		{
@@ -359,6 +379,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		// a new item: a click on the last one's video does not pause this one
 		_clicks.Cancel();
+		var another = !string.Equals(NormalizeId(item.ItemId), NormalizeId(ItemId), StringComparison.Ordinal);
 		ItemId = item.ItemId;
 		(Title, Subtitle) = FormatTitle(item);
 		if (item.RunTimeTicks is long runtime && runtime > 0)
@@ -371,8 +392,28 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_skipped = null;
 		UpdateSkip();
 		_isEpisode = item.Type == "Episode";
+		OnPropertyChanged(nameof(PreviousName));
+		OnPropertyChanged(nameof(NextButtonName));
 		_nextKnown = false;
 		_nextItemId = null;
+		_nextHasPrevious = false;
+		_creditsStarts = [];
+		NextItemTitle = null;
+		_backendPosition = 0;
+		if (another)
+		{
+			// 1.2.0: another item: its own countdown. The same item again (a restart for a track change) keeps a cancel,
+			// and the backend's auto-play held off with it
+			_nextAutoPlay = AutoPlay;
+			_countdownCancelled = false;
+			_advanceSent = false;
+			if (_autoPlayHeldOff)
+			{
+				// the countdown cancelled for the last item held the backend's auto-play off; this item has the user's choice
+				_autoPlayHeldOff = false;
+				_ = _send(Bridge.Commands.SetAutoPlay, BridgeCommands.AutoPlay(AutoPlay));
+			}
+		}
 		NextToolTip = NextEpisode;
 		UpdateShowsNext();
 
@@ -389,7 +430,74 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_reportedAt = default;
 		ShowPosition(0);
 		NotifyActivity();
+
+		// 1.2.0: a subtitle delay is the item's (mpv keeps it for the next one: docs/BRIDGE.md §4); the speed
+		// stays for the queue. The same item again (a restart for a track change) keeps its delay.
+		if (another && SubtitleDelay != 0)
+		{
+			SubtitleDelay = 0;
+			_ = _send(Bridge.Commands.SetSubtitleDelay, BridgeCommands.SubtitleDelay(0));
+		}
+
+		// 1.2.0: the seek bar's thumbnails are the item's own
+		if (another)
+		{
+			Trickplay = null;
+			if (item.ItemId is { } id)
+			{
+				_ = LoadTrickplay(id);
+			}
+		}
 	}
+
+	// -- trickplay thumbnails over the seek bar (1.2.0) -----------------------------------------------------------------
+
+	/// <summary>Set by the page: an item's trickplay tiles, from the server (null: it has none). Null: no thumbnails.</summary>
+	public Func<string, Task<TrickplayTiles?>>? TrickplayOf { get; set; }
+
+	/// <summary>Set by the page: the address of one sheet of an item's thumbnails at a width (the server's trickplay image).</summary>
+	public Func<string, int, int, Uri?>? TrickplaySheetAt { get; set; }
+
+	/// <summary>The playing item's thumbnails, once known; null while there are none.</summary>
+	[ObservableProperty]
+	public partial TrickplayTiles? Trickplay { get; set; }
+
+	private async Task LoadTrickplay(string itemId)
+	{
+		if (TrickplayOf is not { } lookup)
+		{
+			return;
+		}
+
+		try
+		{
+			var tiles = await lookup(itemId);
+			if (string.Equals(NormalizeId(ItemId), NormalizeId(itemId), StringComparison.Ordinal))
+			{
+				Trickplay = tiles is { IsValid: true } ? tiles : null;
+			}
+		}
+		catch (Exception)
+		{
+			// the page's lookup logs its own failures: the seek bar shows the time alone
+		}
+	}
+
+	/// <summary>
+	/// The thumbnail for <paramref name="ticks"/> (the pointer over the seek bar, or the thumb while dragged): its sheet's address
+	/// and its corner in the sheet, with the tiles' sizes; null without thumbnails.
+	/// </summary>
+	public (Uri Sheet, int X, int Y, TrickplayTiles Tiles)? PreviewAt(long ticks)
+	{
+		if (Trickplay is not { } tiles || ItemId is not { } id || TrickplaySheetAt is not { } sheetAt || tiles.Locate(ticks) is not { } at)
+		{
+			return null;
+		}
+
+		return sheetAt(id, tiles.Width, at.Sheet) is { } uri ? (uri, at.X, at.Y, tiles) : null;
+	}
+
+	private static string NormalizeId(string? id) => (id ?? "").Replace("-", "", StringComparison.Ordinal).ToLowerInvariant();
 
 	// -- actions --------------------------------------------------------------------------------------------------------
 
@@ -400,12 +508,26 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		return Toggle();
 	}
 
+	/// <summary>Pauses or plays, whatever the state shown (an absolute command: <c>pause</c> or <c>unpause</c>).</summary>
+	private Task SetPaused(bool paused)
+	{
+		NotifyActivity();
+		var now = _now();
+		_reportedPosition = CurrentPosition(now);
+		_reportedAt = now;
+		IsPaused = paused;
+		return _send(paused ? Bridge.Commands.Pause : Bridge.Commands.Unpause, null);
+	}
+
 	private Task Toggle()
 	{
 		NotifyActivity();
+		// 1.2.0: where it is now, read before the state flips: read after, a play counted the whole pause as played (the
+		// time jumped ahead until the backend's next position, and the Next countdown ended at once, seen off-screen)
+		var now = _now();
+		_reportedPosition = CurrentPosition(now);
+		_reportedAt = now;
 		IsPaused = !IsPaused;
-		_reportedPosition = CurrentPosition(_now());
-		_reportedAt = _now();
 		return _send(Bridge.Commands.TogglePause, null);
 	}
 
@@ -460,13 +582,27 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public Task Next()
 	{
 		NotifyActivity();
-		return CanNext ? _send(Bridge.Commands.Next, null) : Task.CompletedTask;
+		if (!CanNext)
+		{
+			return Task.CompletedTask;
+		}
+
+		// 1.2.0 (review): this item moves on now; the countdown must not send its own next before the new item's
+		// `item` event (the backend still has this item until then, and would move on a second time)
+		_advanceSent = true;
+		return _send(Bridge.Commands.Next, null);
 	}
 
 	public Task Previous()
 	{
 		NotifyActivity();
-		return CanPrevious ? _send(Bridge.Commands.Previous, null) : Task.CompletedTask;
+		if (!CanPrevious)
+		{
+			return Task.CompletedTask;
+		}
+
+		_advanceSent = true;
+		return _send(Bridge.Commands.Previous, null);
 	}
 
 	public Task ToggleMute()
@@ -582,31 +718,32 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	}
 
 	/// <summary>
-	/// A click on the video (not on the controls): the controls show at once, and its play/pause waits
-	/// <see cref="DoubleClickTime"/> (the view's timer then calls <see cref="ClickWaitOver"/>), so a double click is full
-	/// screen only. 1.1.2 paused at once and unpaused at the second click: going full screen stuttered the playback.
+	/// A click on the video (not on the controls): the controls show and it plays or pauses at once, as YouTube and Netflix do.
+	/// 1.2.0: 1.1.3 waited the double-click time first, so the picture went on for half a second after the click (the
+	/// interaction audit, item 8).
 	/// </summary>
-	public void VideoClicked()
+	public Task VideoClicked()
 	{
 		NotifyActivity();
-		_clicks.Clicked();
+		_clicks.Clicked(_now(), IsPaused);
+		return Toggle();
 	}
 
-	/// <summary>The click's wait is over: its play/pause, unless something else played or paused meanwhile.</summary>
-	public Task ClickWaitOver() => _clicks.WaitOver(_now()) ? Toggle() : Task.CompletedTask;
-
-	/// <summary>A double click on the video: full screen only (the first click's play/pause is dropped, or undone if it just ran).</summary>
+	/// <summary>
+	/// A double click on the video: full screen, and the play state back to what it was before its first click (that click
+	/// paused or played at once). Something else that played or paused in between (a key, the button) is left as it is.
+	/// </summary>
 	public void VideoDoubleClicked()
 	{
-		if (_clicks.DoubleClicked(_now()))
+		if (_clicks.DoubleClicked(_now()) is bool pausedBefore)
 		{
-			_ = Toggle();
+			_ = SetPaused(pausedBefore);
 		}
 
 		ToggleFullScreen();
 	}
 
-	/// <summary>The view goes (the page is left): a click still waiting does nothing.</summary>
+	/// <summary>The view goes (the page is left): a double click after this undoes nothing.</summary>
 	public void CancelClick() => _clicks.Cancel();
 
 	public void ToggleFullScreen()
@@ -677,6 +814,10 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_offered = offered;
 		_offerItemId = segments.ItemId ?? ItemId;
 		UpdateSkip();
+
+		// 1.2.0: where the credits start, for the Next pill
+		_creditsStarts = [.. (segments.Segments ?? []).Where(x => x.Type == "Outro").Select(x => x.StartTicks)];
+		UpdateNextPrompt();
 	}
 
 	/// <summary>
@@ -741,7 +882,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			SkipSourceNote = offered.SourceNote;
 		}
 
-		IsSkipVisible = ShowSkipPrompt && _offered is { } shown && shown != _skipped;
+		IsSkipVisible = ShowSkipPrompt && _offered is { } shown && shown != _skipped && !(shown.Type == "Outro" && IsNextPromptVisible);
 	}
 
 	/// <summary>The Skip button's words for a Jellyfin segment type, in FluentFin's sentence case ("Skip credits" for an outro).</summary>
@@ -782,7 +923,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 	private void UpdateShowsNext() => ShowsNext = CanNext || _isEpisode || _queueCount > 1;
 
-	partial void OnCanNextChanged(bool value) => UpdateShowsNext();
+	partial void OnCanNextChanged(bool value)
+	{
+		UpdateShowsNext();
+		UpdateNextPrompt();
+	}
+
+	partial void OnShowsNextChanged(bool value) => UpdateNextPrompt();
 
 	/// <summary>
 	/// The <c>next</c> event: what <c>next</c> would play from this item. It enables the Next button (the queue in the
@@ -796,13 +943,17 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		}
 
 		_nextKnown = true;
+		_nextAutoPlay = next.AutoPlay;
 		CanNext = next.NextItemId is not null;
+		_nextHasPrevious = next.PreviousItemId is not null;
+		CanPrevious = _queueHasPrevious || _nextHasPrevious;
 		if (next.NextItemId == _nextItemId && NextToolTip != NextEpisode)
 		{
 			return;
 		}
 
 		_nextItemId = next.NextItemId;
+		NextItemTitle = null;
 		NextToolTip = next.NextItemId is null ? "No next episode" : NextEpisode;
 		if (next.NextItemId is { } id)
 		{
@@ -830,6 +981,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 
 		if (_nextItemId == id && !string.IsNullOrWhiteSpace(title))
 		{
+			NextItemTitle = title.Trim();
 			NextToolTip = $"Next: {title.Trim()}";
 		}
 	}
@@ -839,6 +991,343 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		var (title, subtitle) = FormatTitle(item);
 		return subtitle.Length > 0 ? subtitle : title;
+	}
+
+	// -- the Next pill near the end (1.2.0) ------------------------------------------------------------------
+
+	private bool _queueHasPrevious;
+	private bool _nextHasPrevious;
+
+	/// <summary>Where the item's credits start (its <c>Outro</c> segments, from the server, the file's chapters or online).</summary>
+	private IReadOnlyList<long> _creditsStarts = [];
+
+	/// <summary>
+	/// The Next pill shows: there is a next item and the position is near the end (<see cref="NextPromptAt"/>). Also while
+	/// the bars are hidden, as the Skip pill: it is the prompt for what comes next. In 1.1.0 it showed with the bars from
+	/// the first seconds of an episode (UX review, the player).
+	/// </summary>
+	[ObservableProperty]
+	public partial bool IsNextPromptVisible { get; set; }
+
+	partial void OnIsNextPromptVisibleChanged(bool value)
+	{
+		OnPropertyChanged(nameof(AnythingVisible));
+		// 1.2.0: over the credits the Next prompt is the one button: "Skip credits" gives way to it
+		UpdateSkip();
+	}
+
+	/// <summary>The next item's name ("S1E2 · Second") once known, for the prompt's second line; null before.</summary>
+	[ObservableProperty]
+	public partial string? NextItemTitle { get; set; }
+
+	// -- auto-play and the countdown (1.2.0) -----------------------------------------------------------------------------
+
+	/// <summary>How long the countdown to the next item runs.</summary>
+	public const int CountdownSeconds = 10;
+
+	/// <summary>
+	/// The user's choice (Jellyfin's "play the next episode automatically", set by the page; sent to the backend before every
+	/// play as <c>set_auto_play</c>): the next item starts by itself, after the countdown. Off: the prompt is a plain
+	/// "Next episode" and playback ends with the item.
+	/// </summary>
+	public bool AutoPlay
+	{
+		get => field;
+		set
+		{
+			field = value;
+			_nextAutoPlay = value;
+			UpdateNextPrompt();
+		}
+	} = true;
+
+	/// <summary>The backend plays the next item by itself at this one's end (the <c>next</c> event's <c>autoPlay</c>).</summary>
+	private bool _nextAutoPlay = true;
+
+	/// <summary>The user cancelled this item's countdown: no countdown, and the backend's auto-play is held off until another item.</summary>
+	private bool _countdownCancelled;
+
+	/// <summary>The cancel sent <c>set_auto_play false</c>: the user's choice goes back when another item starts.</summary>
+	private bool _autoPlayHeldOff;
+
+	/// <summary>The countdown's own <c>next</c> went for this item.</summary>
+	private bool _advanceSent;
+
+	/// <summary>The position the backend last reported (a <c>position</c> event), never an extrapolation.</summary>
+	private long _backendPosition;
+
+	/// <summary>Seconds left before the next item starts, while the countdown runs; null otherwise.</summary>
+	[ObservableProperty]
+	public partial int? NextCountdown { get; set; }
+
+	/// <summary>How much of the countdown has run, 0 to 1 (the prompt's bar).</summary>
+	[ObservableProperty]
+	public partial double NextCountdownProgress { get; set; }
+
+	/// <summary>The countdown runs (the prompt says "Next episode in 8" and has Cancel). Changes only when it starts or stops.</summary>
+	[ObservableProperty]
+	public partial bool IsCountingDown { get; set; }
+
+	/// <summary>The prompt's first line: "Next episode in 8", or "Next episode".</summary>
+	public string NextPromptText => NextCountdown is int seconds
+		? string.Create(CultureInfo.InvariantCulture, $"Next episode in {seconds}")
+		: NextEpisode;
+
+	/// <summary>
+	/// The prompt's accessible name (button review P21): its visible text first, as WCAG 2.5.3 asks, so voice control finds
+	/// it by what it says ("Next episode in 8: S1E2 · Title").
+	/// </summary>
+	public string NextPromptName => NextItemTitle is { } title ? $"{NextPromptText}: {title}" : NextPromptText;
+
+	/// <summary>
+	/// The countdown's other button (button review P20, 1.2.0): it does not cancel anything the viewer asked for, it keeps
+	/// this item on. "Watch credits" while the countdown runs in marked end credits, else "Keep watching".
+	/// </summary>
+	public string CancelNextText => CreditsStart(DurationTicks, _creditsStarts) is long credits && PositionTicks >= credits
+		? "Watch credits"
+		: "Keep watching";
+
+	/// <summary>Its name and tooltip: the label, then what it does.</summary>
+	public string CancelNextName => $"{CancelNextText}: the next episode won't start by itself";
+
+	partial void OnNextCountdownChanged(int? value)
+	{
+		// the view announces the start once (IsCountingDown), not each second
+		IsCountingDown = value is not null;
+		OnPropertyChanged(nameof(NextPromptText));
+		OnPropertyChanged(nameof(NextPromptName));
+	}
+
+	partial void OnIsCountingDownChanged(bool value)
+	{
+		OnPropertyChanged(nameof(CancelNextText));
+		OnPropertyChanged(nameof(CancelNextName));
+	}
+
+	partial void OnNextItemTitleChanged(string? value)
+	{
+		OnPropertyChanged(nameof(NextPromptName));
+		OnPropertyChanged(nameof(NextButtonName));
+	}
+
+	/// <summary>The transport's Previous (button review P5): "Previous episode" in a run of episodes, else "Previous".</summary>
+	public string PreviousName => _isEpisode ? "Previous episode" : "Previous";
+
+	/// <summary>The transport's Next (button review P9): "Next episode: S1E2 · Title" once the next is named.</summary>
+	public string NextButtonName => (_isEpisode ? "Next episode" : "Next") + (NextItemTitle is { } title ? $": {title}" : "");
+
+	/// <summary>
+	/// The countdown's span in ticks: when an Outro marks the credits, from their start for <see cref="CountdownSeconds"/>
+	/// (then the controls play the next item: the rest of the credits is skipped, as Netflix does); else the last
+	/// <see cref="CountdownSeconds"/> of the item, to its end, where the backend plays the next one itself. Never past the end.
+	/// </summary>
+	public static (long Start, long End) CountdownSpan(long durationTicks, IEnumerable<long>? creditsStarts = null)
+	{
+		var length = TimeSpan.FromSeconds(CountdownSeconds).Ticks;
+		return CreditsStart(durationTicks, creditsStarts) is long credits
+			? (credits, Math.Min(credits + length, durationTicks))
+			: (Math.Max(0, durationTicks - length), durationTicks);
+	}
+
+	/// <summary>
+	/// The countdown's own <c>next</c> goes only when the backend's last reported position (it reports about every 0.5 s while
+	/// playing) is this close to the countdown's end: the time between reports is extrapolated, and a wrong guess must never
+	/// start the next item early.
+	/// </summary>
+	public static readonly TimeSpan ReportedPositionMargin = TimeSpan.FromSeconds(1.5);
+
+	/// <summary>Closer than this to the end, the backend's own auto-play starts the next item: the countdown sends nothing (never two).</summary>
+	public static readonly TimeSpan BackendAdvanceMargin = TimeSpan.FromSeconds(2);
+
+	/// <summary>
+	/// The prompt's Cancel: no countdown for this item, and the backend's auto-play off until another item starts (playback
+	/// then ends with this one, or the user plays the next with the prompt). Nothing to cancel: nothing sent.
+	/// </summary>
+	public Task CancelNextCountdown()
+	{
+		NotifyActivity();
+		if (_countdownCancelled || !IsNextPromptVisible)
+		{
+			return Task.CompletedTask;
+		}
+
+		_countdownCancelled = true;
+		UpdateNextPrompt();
+		if (!_nextAutoPlay)
+		{
+			return Task.CompletedTask;
+		}
+
+		_autoPlayHeldOff = true;
+		_nextAutoPlay = false;
+		return _send(Bridge.Commands.SetAutoPlay, BridgeCommands.AutoPlay(false));
+	}
+
+	private void UpdateCountdown()
+	{
+		if (!IsNextPromptVisible || !_nextAutoPlay || _countdownCancelled || DurationTicks <= 0)
+		{
+			NextCountdown = null;
+			NextCountdownProgress = 0;
+			return;
+		}
+
+		var (start, end) = CountdownSpan(DurationTicks, _creditsStarts);
+		if (PositionTicks < start)
+		{
+			NextCountdown = null;
+			NextCountdownProgress = 0;
+			return;
+		}
+
+		var left = Math.Max(0, end - PositionTicks);
+		NextCountdown = (int)Math.Ceiling(left / (double)TimeSpan.TicksPerSecond / Math.Max(Speed, PlaybackSpeeds.Minimum));
+		NextCountdownProgress = end > start ? Math.Clamp(1 - left / (double)(end - start), 0, 1) : 1;
+		if (left == 0 && !_advanceSent && !IsPaused && DurationTicks - end > BackendAdvanceMargin.Ticks
+			&& end - _backendPosition <= ReportedPositionMargin.Ticks)
+		{
+			// the credits' countdown ran out well before the end: the controls play the next item (the backend would only at the end)
+			_advanceSent = true;
+			_ = _send(Bridge.Commands.Next, null);
+		}
+	}
+
+	/// <summary>The Next pill's lead when the item marks no credits, by its length, as Jellyfin's web player: 30 s under 40 min.</summary>
+	public static TimeSpan NextPromptLead(long durationTicks) =>
+		TimeSpan.FromSeconds(durationTicks >= TimeSpan.FromMinutes(50).Ticks ? 40 : durationTicks >= TimeSpan.FromMinutes(40).Ticks ? 35 : 30);
+
+	/// <summary>
+	/// When the Next pill comes, in ticks: where the credits start when a segment marks them in the second half of the item
+	/// (an earlier "Outro" is not the end credits), else <see cref="NextPromptLead"/> before the end, at most the last quarter
+	/// of a short item. Never (<see cref="long.MaxValue"/>) while the length is not known.
+	/// </summary>
+	public static long NextPromptAt(long durationTicks, IEnumerable<long>? creditsStarts = null)
+	{
+		if (durationTicks <= 0)
+		{
+			return long.MaxValue;
+		}
+
+		return CreditsStart(durationTicks, creditsStarts) ?? durationTicks - Math.Min(NextPromptLead(durationTicks).Ticks, durationTicks / 4);
+	}
+
+	/// <summary>Where the end credits start: the earliest Outro in the second half of the item; null when none marks them.</summary>
+	public static long? CreditsStart(long durationTicks, IEnumerable<long>? creditsStarts)
+	{
+		var credits = (creditsStarts ?? []).Where(x => durationTicks > 0 && x >= durationTicks / 2 && x < durationTicks).DefaultIfEmpty(long.MaxValue).Min();
+		return credits == long.MaxValue ? null : credits;
+	}
+
+	private void UpdateNextPrompt()
+	{
+		IsNextPromptVisible = ShowsNext && CanNext && PositionTicks >= NextPromptAt(DurationTicks, _creditsStarts);
+		UpdateCountdown();
+	}
+
+	// -- playback speed and subtitle delay (1.2.0) -------------------------------------------------------------
+
+	/// <summary>
+	/// The playback speed (<see cref="PlaybackSpeeds"/>), 1 normal. Kept for the queue this page plays (mpv keeps it from one
+	/// item to the next) and normal again on the next player page (<see cref="SendControls"/>): a speed suits what is being
+	/// watched (a lecture, a series binged at 1.25x), and a film opened later must not start fast. Not saved.
+	/// </summary>
+	[ObservableProperty]
+	public partial double Speed { get; set; } = PlaybackSpeeds.Normal;
+
+	/// <summary>"1.5×".</summary>
+	public string SpeedText => PlaybackSpeeds.Text(Speed);
+
+	/// <summary>The speed is not normal: the bar's speed button shows it.</summary>
+	public bool IsSpeedChanged => !PlaybackSpeeds.IsNormal(Speed);
+
+	partial void OnSpeedChanged(double value)
+	{
+		OnPropertyChanged(nameof(SpeedText));
+		OnPropertyChanged(nameof(IsSpeedChanged));
+	}
+
+	/// <summary>
+	/// The subtitle delay in seconds (<see cref="SubtitleDelays"/>; positive: later). The item's own: 0 again when another
+	/// item starts (<see cref="OnItem"/>) and on the next player page. Not saved.
+	/// </summary>
+	[ObservableProperty]
+	public partial double SubtitleDelay { get; set; }
+
+	/// <summary>"+0.3 s".</summary>
+	public string SubtitleDelayText => SubtitleDelays.Text(SubtitleDelay);
+
+	partial void OnSubtitleDelayChanged(double value) => OnPropertyChanged(nameof(SubtitleDelayText));
+
+	/// <summary>
+	/// The speed menu's pick, or a key's step (<paramref name="announce"/>: the change is shown and said, the bars may be
+	/// hidden). The position moves on at the new speed from where it is now. The same speed again: nothing is sent.
+	/// </summary>
+	public Task SetSpeed(double speed, bool announce = false)
+	{
+		NotifyActivity();
+		var value = PlaybackSpeeds.Clamp(speed);
+		if (announce)
+		{
+			ShowToast(PlaybackSpeeds.IsNormal(value) ? "Normal speed" : $"Speed {PlaybackSpeeds.Text(value)}");
+		}
+
+		if (value == Speed)
+		{
+			return Task.CompletedTask;
+		}
+
+		var now = _now();
+		_reportedPosition = CurrentPosition(now);
+		_reportedAt = now;
+		Speed = value;
+		return _send(Bridge.Commands.SetSpeed, BridgeCommands.Speed(value));
+	}
+
+	/// <summary>The subtitles menu's delay buttons, or a key (<paramref name="announce"/> as <see cref="SetSpeed"/>).</summary>
+	public Task SetSubtitleDelay(double seconds, bool announce = false)
+	{
+		NotifyActivity();
+		var value = SubtitleDelays.Clamp(seconds);
+		if (announce)
+		{
+			ShowToast(value == 0 ? "Subtitles: no delay" : $"Subtitles {SubtitleDelays.Describe(value)}");
+		}
+
+		if (value == SubtitleDelay)
+		{
+			return Task.CompletedTask;
+		}
+
+		SubtitleDelay = value;
+		return _send(Bridge.Commands.SetSubtitleDelay, BridgeCommands.SubtitleDelay(value));
+	}
+
+	/// <summary><paramref name="steps"/> tenths of a second later (negative: earlier).</summary>
+	public Task StepSubtitleDelay(int steps, bool announce = false) => SetSubtitleDelay(SubtitleDelay + steps * SubtitleDelays.Step, announce);
+
+	// -- the indicator for a key's speed or delay (1.2.0) -------------------------------------------------------
+
+	/// <summary>How long the indicator stays after the last change.</summary>
+	public static readonly TimeSpan ToastFor = TimeSpan.FromSeconds(1.5);
+
+	private DateTimeOffset _toastUntil;
+
+	/// <summary>A short line where the volume indicator shows ("Speed 1.5×", "Subtitles 0.3 s later"), also while the bars are hidden.</summary>
+	[ObservableProperty]
+	public partial bool ToastVisible { get; set; }
+
+	[ObservableProperty]
+	public partial string ToastText { get; set; } = "";
+
+	partial void OnToastVisibleChanged(bool value) => OnPropertyChanged(nameof(AnythingVisible));
+
+	/// <summary>Shows <paramref name="text"/> for <see cref="ToastFor"/> in the volume indicator's place (it goes).</summary>
+	private void ShowToast(string text)
+	{
+		ToastText = text;
+		_toastUntil = _now() + ToastFor;
+		VolumeIndicatorVisible = false;
+		ToastVisible = true;
 	}
 
 	// -- audio and subtitle tracks -------------------------------------------------------------------------------------
@@ -862,9 +1351,20 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>There is a subtitle track to turn on or off.</summary>
 	public bool HasSubtitleChoice => SubtitleChoices.Count > 1;
 
-	partial void OnAudioChoicesChanged(IReadOnlyList<MpvTrackChoice> value) => OnPropertyChanged(nameof(HasAudioChoice));
+	/// <summary>1.2.0: the one "Audio and subtitles" button has something to offer (it stays, disabled, when not).</summary>
+	public bool HasTrackChoice => HasAudioChoice || HasSubtitleChoice;
 
-	partial void OnSubtitleChoicesChanged(IReadOnlyList<MpvTrackChoice> value) => OnPropertyChanged(nameof(HasSubtitleChoice));
+	partial void OnAudioChoicesChanged(IReadOnlyList<MpvTrackChoice> value)
+	{
+		OnPropertyChanged(nameof(HasAudioChoice));
+		OnPropertyChanged(nameof(HasTrackChoice));
+	}
+
+	partial void OnSubtitleChoicesChanged(IReadOnlyList<MpvTrackChoice> value)
+	{
+		OnPropertyChanged(nameof(HasSubtitleChoice));
+		OnPropertyChanged(nameof(HasTrackChoice));
+	}
 
 	/// <summary>The <c>tracks</c> event: the item's streams, by Jellyfin index (docs/BRIDGE.md §5).</summary>
 	public void OnTracks(BridgeTracks tracks)
@@ -1098,6 +1598,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	private void ShowVolumeIndicator()
 	{
 		_volumeIndicatorUntil = _now() + VolumeIndicatorFor;
+		ToastVisible = false;
 		VolumeIndicatorVisible = true;
 	}
 
@@ -1156,7 +1657,10 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_announced = true;
 		// the remembered text size goes with it: applied at every playback start
 		var size = _send(Bridge.Commands.SetSubtitleSize, BridgeCommands.SubtitleSize(SubtitleSize));
-		return Task.WhenAll(size, SendInsetIfChanged(force: true));
+		// 1.2.0: and this page's speed and delay (normal and none at its start), whatever mpv kept from the page before
+		var speed = _send(Bridge.Commands.SetSpeed, BridgeCommands.Speed(Speed));
+		var delay = _send(Bridge.Commands.SetSubtitleDelay, BridgeCommands.SubtitleDelay(SubtitleDelay));
+		return Task.WhenAll(size, speed, delay, SendInsetIfChanged(force: true));
 	}
 
 	private Task SendInsetIfChanged(bool force = false)
@@ -1182,7 +1686,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// A key pressed over the player (the page or the controls window). True when it is one of the player's keys and was
 	/// handled. The whole map is in docs/SHORTCUTS.md (and <see cref="Shortcuts.ShortcutCatalog"/>): Space/K play-pause,
 	/// Left/Right 5 s (Ctrl: 10 s, Shift: 30 s), J/L 10 s, digits and Home seek, Up/Down volume, M mute, C/V subtitles, B audio,
-	/// F/F11 full screen, Shift+N/Shift+P next/previous, S skips the segment on offer, Esc.
+	/// F/F11 full screen, Shift+N/Shift+P next/previous, S skips the segment on offer, [ and ] the speed (Backspace normal),
+	/// Z and X the subtitle delay, Esc.
 	/// </summary>
 	public bool HandleKey(int virtualKey, bool control = false, bool shift = false, bool alt = false)
 	{
@@ -1219,6 +1724,11 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			case MpvControlsAction.ToggleSubtitles: return ToggleSubtitles();
 			case MpvControlsAction.CycleSubtitles: return CycleSubtitles();
 			case MpvControlsAction.CycleAudio: return CycleAudio();
+			case MpvControlsAction.SpeedDown: return SetSpeed(PlaybackSpeeds.Slower(Speed), announce: true);
+			case MpvControlsAction.SpeedUp: return SetSpeed(PlaybackSpeeds.Faster(Speed), announce: true);
+			case MpvControlsAction.SpeedNormal: return SetSpeed(PlaybackSpeeds.Normal, announce: true);
+			case MpvControlsAction.SubtitleEarlier: return StepSubtitleDelay(-1, announce: true);
+			case MpvControlsAction.SubtitleLater: return StepSubtitleDelay(1, announce: true);
 			case >= MpvControlsAction.Percent0 and <= MpvControlsAction.Percent9: return SeekToPercent(PercentOf(action));
 			default: return Task.CompletedTask;
 		}
@@ -1227,11 +1737,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// <summary>Win32 virtual-key codes (the values of Windows.System.VirtualKey).</summary>
 	public static class Keys
 	{
-		public const int Escape = 0x1B, Space = 0x20, Left = 0x25, Up = 0x26, Right = 0x27, Down = 0x28;
+		public const int Enter = 0x0D, Escape = 0x1B, Space = 0x20, Left = 0x25, Up = 0x26, Right = 0x27, Down = 0x28;
 		public const int Home = 0x24, D0 = 0x30, D9 = 0x39, Numpad0 = 0x60, Numpad9 = 0x69;
 		public const int B = 0x42, C = 0x43, V = 0x56, F11 = 0x7A;
 		public const int F = 0x46, J = 0x4A, K = 0x4B, L = 0x4C, M = 0x4D, N = 0x4E, P = 0x50, S = 0x53;
 		public const int MediaNext = 0xB0, MediaPrevious = 0xB1, MediaPlayPause = 0xB3;
+		/// <summary>1.2.0: Backspace, Z, X, and the "[" and "]" keys (VK_OEM_4, VK_OEM_6 on a US layout): mpv's own keys for them.</summary>
+		public const int Back = 0x08, X = 0x58, Z = 0x5A, OpenBracket = 0xDB, CloseBracket = 0xDD;
 	}
 
 	/// <summary>The key map (pure): which action a key and its modifiers mean, null for none of the player's.</summary>
@@ -1239,13 +1751,14 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		if (alt)
 		{
-			return null;
+			// 1.2.0 (the interaction audit, item 17): Alt+Enter is full screen, as in the classic Windows players; nothing else with Alt
+			return virtualKey == Keys.Enter && !control && !shift ? MpvControlsAction.ToggleFullScreen : null;
 		}
 
 		return virtualKey switch
 		{
 			Keys.Space or Keys.K or Keys.MediaPlayPause when !control && !shift => MpvControlsAction.TogglePause,
-			// the bar's -10 s is J and Ctrl+Left, its +30 s is Shift+Right (Shift+Left the same far, the other way)
+			// the bar's -10 s is J and Ctrl+Left, its +10 s L and Ctrl+Right; Shift+Left and Shift+Right are 30 s
 			Keys.Left when shift => control ? null : MpvControlsAction.SeekBackFar,
 			Keys.Right when shift => control ? null : MpvControlsAction.SeekForwardFar,
 			Keys.Left => control ? MpvControlsAction.SeekBackLong : MpvControlsAction.SeekBack,
@@ -1270,6 +1783,12 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			Keys.MediaNext => MpvControlsAction.Next,
 			Keys.MediaPrevious => MpvControlsAction.Previous,
 			Keys.Escape when !control && !shift => MpvControlsAction.Escape,
+			// 1.2.0: mpv's own keys for the speed and the subtitle delay, so they are the same in mpv's controls
+			Keys.OpenBracket when !control && !shift => MpvControlsAction.SpeedDown,
+			Keys.CloseBracket when !control && !shift => MpvControlsAction.SpeedUp,
+			Keys.Back when !control && !shift => MpvControlsAction.SpeedNormal,
+			Keys.Z when !control && !shift => MpvControlsAction.SubtitleEarlier,
+			Keys.X when !control && !shift => MpvControlsAction.SubtitleLater,
 			_ => null,
 		};
 	}

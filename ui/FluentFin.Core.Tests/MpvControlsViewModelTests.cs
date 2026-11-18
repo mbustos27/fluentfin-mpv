@@ -497,69 +497,72 @@ public sealed class MpvControlsViewModelTests
 
 	private int Toggles() => _sent.Count(x => x.Command == Bridge.Commands.TogglePause);
 
-	/// <summary>Seaglass 1.1.3: a click on the video plays or pauses only once the double-click time has passed.</summary>
+	private List<string> PlayCommands() => [.. _sent.Select(x => x.Command).Where(x => x is Bridge.Commands.TogglePause or Bridge.Commands.Pause or Bridge.Commands.Unpause)];
+
+	/// <summary>1.2.0 (the interaction audit, item 8): a click on the video plays or pauses at once (1.1.3 waited the double-click time).</summary>
 	[Fact]
-	public void A_click_on_the_video_plays_or_pauses_after_the_double_click_time()
+	public void A_click_on_the_video_plays_or_pauses_at_once()
 	{
 		Playing();
 		_vm.DoubleClickTime = TimeSpan.FromMilliseconds(400);
-		_vm.VideoClicked();
-		Assert.Equal(0, Toggles());
-		Assert.True(_vm.ControlsVisible, "the controls show at once");
-		_now += TimeSpan.FromMilliseconds(400);
-		_ = _vm.ClickWaitOver();
+		_ = _vm.VideoClicked();
 		Assert.Equal(1, Toggles());
 		Assert.True(_vm.IsPaused);
-		_ = _vm.ClickWaitOver();
-		Assert.Equal(1, Toggles());
-	}
-
-	/// <summary>Seaglass 1.1.3: a double click is full screen only: no pause and unpause (1.1.2 stuttered the playback).</summary>
-	[Fact]
-	public void A_double_click_on_the_video_is_full_screen_only()
-	{
-		Playing();
-		var fullScreen = new List<bool>();
-		_vm.SetFullScreen = fullScreen.Add;
-		_vm.VideoClicked();
-		_vm.VideoDoubleClicked();
-		_ = _vm.ClickWaitOver();
-		Assert.Equal(0, Toggles());
-		Assert.Equal([true], fullScreen);
+		Assert.True(_vm.ControlsVisible, "the controls show at once");
+		_now += TimeSpan.FromSeconds(2);
+		_ = _vm.VideoClicked();
+		Assert.Equal(2, Toggles());
 		Assert.False(_vm.IsPaused);
 	}
 
 	/// <summary>
-	/// Seaglass 1.1.3 (review): a click, then Space within the wait: Space pauses, and the click's own toggle must not then
-	/// play again by itself. The same for the play button, a new item, and a pause or play from elsewhere (the end of an item).
+	/// 1.2.0: a double click is full screen, and the play state goes back to what it was before its first click, with an
+	/// absolute command (a state the backend sent before the click's toggle landed cannot turn it the wrong way).
 	/// </summary>
 	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void A_double_click_is_full_screen_and_puts_the_play_state_back(bool pausedBefore)
+	{
+		Playing(state: pausedBefore ? Bridge.States.Paused : Bridge.States.Playing);
+		var fullScreen = new List<bool>();
+		_vm.SetFullScreen = fullScreen.Add;
+		_ = _vm.VideoClicked();
+		Assert.Equal(!pausedBefore, _vm.IsPaused);
+		// the backend's state from before the toggle landed
+		_vm.OnState(new BridgeState { State = pausedBefore ? Bridge.States.Paused : Bridge.States.Playing, Volume = 80 });
+		_now += TimeSpan.FromMilliseconds(250);
+		_vm.VideoDoubleClicked();
+
+		Assert.Equal([true], fullScreen);
+		Assert.Equal(pausedBefore, _vm.IsPaused);
+		Assert.Equal([Bridge.Commands.TogglePause, pausedBefore ? Bridge.Commands.Pause : Bridge.Commands.Unpause], PlayCommands());
+	}
+
+	/// <summary>A double click long after the click, or after another play or pause in between, puts nothing back.</summary>
+	[Theory]
+	[InlineData("late")]
 	[InlineData("space")]
-	[InlineData("k")]
 	[InlineData("button")]
 	[InlineData("new item")]
-	[InlineData("paused elsewhere")]
 	[InlineData("page left")]
-	public void Another_play_or_pause_cancels_a_waiting_click(string what)
+	public void A_double_click_puts_nothing_back_after_another_play_or_pause(string what)
 	{
 		Playing();
-		_vm.VideoClicked();
-		var before = Toggles();
+		_vm.SetFullScreen = _ => { };
+		_ = _vm.VideoClicked();
 		switch (what)
 		{
+			case "late": _now += TimeSpan.FromSeconds(2); break;
 			case "space": _vm.HandleKey(MpvControlsViewModel.Keys.Space); break;
-			case "k": _vm.HandleKey(MpvControlsViewModel.Keys.K); break;
 			case "button": _ = _vm.TogglePause(); break;
 			case "new item": _vm.OnItem(new BridgeItem("next", "Next", "Episode")); break;
-			case "paused elsewhere": _vm.OnState(new BridgeState { State = Bridge.States.Paused, Volume = 80 }); break;
 			case "page left": _vm.CancelClick(); break;
 		}
 
-		var after = Toggles();
-		_now += _vm.DoubleClickTime;
-		_ = _vm.ClickWaitOver();
-		Assert.Equal(after, Toggles());
-		Assert.True(after - before <= 1);
+		var before = PlayCommands().Count;
+		_vm.VideoDoubleClicked();
+		Assert.Equal(before, PlayCommands().Count);
 	}
 
 	[Fact]

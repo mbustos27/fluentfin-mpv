@@ -135,8 +135,8 @@ public static class ShortcutCatalog
 			new("Space, K", "Play or pause", ShortcutScope.Player, C(Space), C(MpvControlsViewModel.Keys.K)),
 			new("Left, Right", "Back or forward 5 seconds", ShortcutScope.Player, C(Left), C(Right)),
 			new("J, Ctrl+Left", "Back 10 seconds (the bar's button)", ShortcutScope.Player, C(MpvControlsViewModel.Keys.J), C(Left, Control: true)),
-			new("L, Ctrl+Right", "Forward 10 seconds", ShortcutScope.Player, C(MpvControlsViewModel.Keys.L), C(Right, Control: true)),
-			new("Shift+Right", "Forward 30 seconds (the bar's button)", ShortcutScope.Player, C(Right, Shift: true)),
+			new("L, Ctrl+Right", "Forward 10 seconds (the bar's button)", ShortcutScope.Player, C(MpvControlsViewModel.Keys.L), C(Right, Control: true)),
+			new("Shift+Right", "Forward 30 seconds", ShortcutScope.Player, C(Right, Shift: true)),
 			new("Shift+Left", "Back 30 seconds", ShortcutScope.Player, C(Left, Shift: true)),
 			new("0 to 9", "Jump to that tenth of the video (0 is the start)", ShortcutScope.Player,
 				C(MpvControlsViewModel.Keys.D0), C(MpvControlsViewModel.Keys.D9), C(MpvControlsViewModel.Keys.Numpad0)),
@@ -144,6 +144,9 @@ public static class ShortcutCatalog
 			new("S", "Skip intro or credits, when offered", ShortcutScope.Player, C(MpvControlsViewModel.Keys.S)),
 			new("Shift+N, Shift+P", "Next or previous episode", ShortcutScope.Player,
 				C(MpvControlsViewModel.Keys.N, Shift: true), C(MpvControlsViewModel.Keys.P, Shift: true)),
+			new("[, ]", "Slower or faster (0.5× to 2×)", ShortcutScope.Player,
+				C(MpvControlsViewModel.Keys.OpenBracket), C(MpvControlsViewModel.Keys.CloseBracket)),
+			new("Backspace", "Normal speed", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Back)),
 		]),
 		new("Sound, subtitles and the window",
 		[
@@ -152,8 +155,9 @@ public static class ShortcutCatalog
 			new("C", "Subtitles on or off", ShortcutScope.Player, C(MpvControlsViewModel.Keys.C)),
 			new("V", "Next subtitle track", ShortcutScope.Player, C(MpvControlsViewModel.Keys.V)),
 			new("B", "Next audio track", ShortcutScope.Player, C(MpvControlsViewModel.Keys.B)),
-			new("F, F11", "Full screen", ShortcutScope.Player, C(MpvControlsViewModel.Keys.F), C(MpvControlsViewModel.Keys.F11)),
-			new("Esc", "Leave full screen, then leave the player", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Escape)),
+			new("Z, X", "Subtitles 0.1 s earlier or later", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Z), C(MpvControlsViewModel.Keys.X)),
+			new("F, F11, Alt+Enter", "Full screen", ShortcutScope.Player, C(MpvControlsViewModel.Keys.F), C(MpvControlsViewModel.Keys.F11), C(MpvControlsViewModel.Keys.Enter, Alt: true)),
+			new("Esc", "Leave full screen, or cancel a start still loading (never stops the video)", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Escape)),
 		]),
 	];
 }

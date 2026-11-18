@@ -235,7 +235,8 @@ public sealed class MpvControlsSkipTests
 	[Fact]
 	public async Task Skip_offer_goes_with_its_item_when_the_next_one_opens_or_playback_stops()
 	{
-		PlayingEpisode(positionSeconds: 595);
+		// the queue's last item: with a next one, its Next prompt takes Skip credits' place (1.2.0, PlayerNextPromptTests)
+		PlayingEpisode(positionSeconds: 595, queueCount: 1);
 		Segments(current: 1);
 		Assert.True(_vm.IsSkipVisible);
 		Assert.Equal("Skip credits", _vm.SkipText);
