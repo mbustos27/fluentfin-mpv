@@ -9,7 +9,8 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   password at all: the client asks for a code (POST /QuickConnect/Initiate), the harness approves the code the client
   shows (POST /__harness/quickconnect/approve {"code": ...}, as a user would on another device), and the client's
   next GET /QuickConnect/Connect sees it and signs in (POST /Users/AuthenticateWithQuickConnect). Either way each
-  sign-in gets a fresh random access token; tokens and Quick Connect secrets are never printed or logged.
+  sign-in gets a fresh random access token; tokens and Quick Connect secrets are never printed or logged. A signed-in
+  client approves another device's code with POST /QuickConnect/Authorize?code=... (Settings > Other devices).
 - Library: library.py (several views, hundreds of movies and shows with seasons and episodes, continue watching, next
   up, latest), artwork from imagegen.py at real sizes (posters 1000x1500, backdrops 1920x1080, ...), resized to the
   fillHeight/fillWidth/maxHeight/maxWidth asked for, as Jellyfin does.
@@ -25,7 +26,8 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   Unknown endpoints answer 404 and are listed there as unhandled.
 - Control (127.0.0.1 only, no auth): GET /__harness/fixture (the showcase items the UI harness navigates to),
   GET /__harness/summary, POST /__harness/latency, POST /__harness/streams, POST /__harness/shutdown,
-  GET /__harness/quickconnect (the codes waiting, never their secrets), POST /__harness/quickconnect/approve.
+  GET /__harness/quickconnect (the codes waiting, never their secrets), POST /__harness/quickconnect/approve,
+  POST /__harness/libraries {"rename": {"old": "new"}, "add": ["name"]} (the views change; clients hear LibraryChanged).
 """
 
 import argparse
@@ -539,6 +541,18 @@ class Server:
                     if not entry or not entry["user"]:
                         return self._send(401, b"Error processing request.", "text/plain")
                     return self._signed_in(entry["user"])
+                if low == "/quickconnect/authorize" and method == "POST":
+                    # a signed-in user approves the code another device shows (Seaglass: Settings > Other devices >
+                    # Quick Connect), as jellyfin does: true, or 404 for a code that is not waiting
+                    self.route = "quickconnect"
+                    if not self._need_auth():
+                        return
+                    code = self._one("code") or ""
+                    with outer.lock:
+                        entry = next((e for e in outer.quick.values() if e["code"] == code), None)
+                        if entry:
+                            entry["user"] = self.uid
+                    return self._json(200, True) if entry else self._json(404, None)
                 if low.startswith("/quickconnect/"):
                     self.route = "quickconnect"
                     return self._json(401, None)
@@ -884,6 +898,24 @@ class Server:
                     if not entry or not uid:
                         return self._json(404, {"error": "no such code waiting" if not entry else "no such user"})
                     return self._json(200, {"code": code, "user": outer.users[uid]["name"]})
+                if low == "/__harness/libraries" and method == "POST":
+                    # the libraries change on the server: {"rename": {"Shows": "Television Shows"}, "add": ["Concerts"]};
+                    # every connected client hears LibraryChanged, as from Jellyfin, so it reads its views again
+                    body = self._body()
+                    with outer.lock:
+                        renamed = outer.lib.rename_views(body.get("rename") or {})
+                        added = outer.lib.add_views([str(n) for n in body.get("add") or []])
+                        sockets = list(outer.sockets)
+                    message = {"MessageType": "LibraryChanged", "MessageId": uuid.uuid4().hex,
+                               "Data": {"FoldersAddedTo": [], "FoldersRemovedFrom": [], "ItemsAdded": added,
+                                        "ItemsRemoved": [], "ItemsUpdated": renamed, "CollectionFolders": added + renamed}}
+                    for ws in sockets:
+                        try:
+                            ws.send_json(message)
+                        except (ConnectionError, OSError):
+                            pass
+                    return self._json(200, {"views": [outer.lib.items[v]["Name"] for v in outer.lib.views],
+                                            "told": len(sockets)})
                 return self._json(404, None)
 
             def _quick_dto(self, entry):

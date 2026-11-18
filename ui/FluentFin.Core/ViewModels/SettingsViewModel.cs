@@ -41,7 +41,7 @@ public sealed record SubtitleModeChoice(UserConfiguration_SubtitleMode Mode, str
 	public override string ToString() => Name;
 }
 
-public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache, KnownFolders? knownFolders = null) : ObservableObject, INavigationAware
+public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBackend, IJellyfinClient jellyfinClient, Services.HomeCache homeCache, KnownFolders? knownFolders = null, MpvPlaybackService? mpvPlayback = null) : ObservableObject, INavigationAware
 {
 	private IDisposable? _statusSubscription;
 
@@ -86,10 +86,13 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 				if (!_loadingPlayer)
 				{
 					settings.MediaPlayer = value;
+					// Seaglass 1.1.4 (interaction audit, item 17): remote control follows at once, not at the next sign-in
+					PlayerChanged = jellyfinClient.UpdateCapabilities();
 				}
 				OnPropertyChanged(nameof(SelectedMediaPlayer));
 				OnPropertyChanged(nameof(IsMpvSelected));
-				OnPropertyChanged(nameof(FollowsAutoPlay));
+				OnPropertyChanged(nameof(IsSyncPlayAvailable));
+				OnPropertyChanged(nameof(SyncPlayDescription));
 			}
 		}
 	}
@@ -108,11 +111,36 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 
 	public bool IsMpvSelected => MediaPlayerType == MediaPlayerType.Mpv;
 
+	// Seaglass 1.1.4 (interaction audit, item 7): "Play the next episode automatically" is shown for every player again (it was
+	// hidden with mpv, FollowsAutoPlay): the mpv player sends the user's choice to the backend before every play (set_auto_play)
+
+	// ---- Seaglass 1.1.4 (UX review, prioritised fix 15): Settings > Other devices, from the old profile flyout
+
 	/// <summary>
-	/// Seaglass 1.1.3: "Play the next episode automatically" is shown only for a player that follows it (Windows Media Player,
-	/// PlaybackPreferences.PlaysNextItem); the mpv backend has its own auto_play, so with mpv the toggle did nothing.
+	/// SyncPlay plays in the other players only (the mpv player has no group playback; DialogCommands says so too), and only
+	/// for an account the server allows it (its policy's SyncPlayAccess). Otherwise its button is disabled and the card says
+	/// why rather than vanishing (layout audit, item 18: choosing it used to do nothing at all).
 	/// </summary>
-	public bool FollowsAutoPlay => !IsMpvSelected;
+	public bool IsSyncPlayAvailable => !IsMpvSelected && SyncPlayAllowed(CurrentUser());
+
+	/// <summary>The signed-in user, whose policy says whether SyncPlay is allowed (tests set it).</summary>
+	internal Func<UserDto?> CurrentUser { get; set; } = () => SessionInfo.CurrentUser;
+
+	/// <summary>Whether the server lets this account use SyncPlay (no policy known: assume it does, the server decides).</summary>
+	public static bool SyncPlayAllowed(UserDto? user) => user?.Policy?.SyncPlayAccess is not UserPolicy_SyncPlayAccess.None;
+
+	public string SyncPlayDescription =>
+		IsMpvSelected ? "Watch in step with other people on this server. Not available with the mpv player: choose another player under Playback to use it."
+		: !SyncPlayAllowed(CurrentUser()) ? "Watch in step with other people on this server. Not available on this server: it doesn't allow SyncPlay for your account."
+		// review: a join-only account was offered "New group", which did nothing
+		: CurrentUser()?.Policy?.SyncPlayAccess == UserPolicy_SyncPlayAccess.JoinGroups ? "Watch in step with other people on this server: join a group. Your account can't start one here."
+		: "Watch in step with other people on this server: join a group or start one.";
+
+	/// <summary>
+	/// The server's administration (the old Dashboard: users, libraries, playback, activity, scheduled tasks) for an
+	/// administrator only, from Settings > Servers and accounts.
+	/// </summary>
+	public static bool ShowsServerAdministration(UserDto? user) => user?.Policy?.IsAdministrator == true;
 
 	/// <summary>Seaglass: the choices for Settings > Appearance > Glass.</summary>
 	public static IReadOnlyList<GlassChoiceItem> GlassChoices { get; } =
@@ -182,7 +210,14 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		}
 	}
 
-	/// <summary>Empty = found automatically; see <see cref="SettingKeys.MpvBackendCommand"/>.</summary>
+	/// <summary>The server being told of a picked player (<see cref="IJellyfinClient.UpdateCapabilities"/>); for tests.</summary>
+	internal Task PlayerChanged { get; private set; } = Task.CompletedTask;
+
+	/// <summary>
+	/// Empty = found automatically; see <see cref="SettingKeys.MpvBackendCommand"/>. Seaglass 1.1.4 (interaction audit, item 17):
+	/// a change takes effect at once: an idle backend is shut down, so the next playback starts one with the new command (it
+	/// used to wait for the next time the backend started, often the next run of Seaglass).
+	/// </summary>
 	public string MpvBackendCommand
 	{
 		get => field;
@@ -190,10 +225,34 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		{
 			if (SetProperty(ref field, value ?? ""))
 			{
-				settings.MpvBackendCommand = field.Trim();
+				var command = field.Trim();
+				if (settings.MpvBackendCommand != command)
+				{
+					settings.MpvBackendCommand = command;
+					BackendRestarted = RestartIdleBackendAsync();
+				}
 			}
 		}
 	} = "";
+
+	/// <summary>The idle backend's shutdown after a command change (<see cref="MpvBackendCommand"/>); for tests.</summary>
+	internal Task BackendRestarted { get; private set; } = Task.CompletedTask;
+
+	/// <summary>Shuts a running backend down when nothing plays; a playing one keeps its command until it next starts. Never throws.</summary>
+	private async Task RestartIdleBackendAsync()
+	{
+		try
+		{
+			if (mpvBackend.Status.State is MpvBackendState.Running or MpvBackendState.Starting && mpvPlayback?.HasPlayback != true)
+			{
+				await mpvBackend.ShutdownAsync();
+			}
+		}
+		catch (Exception)
+		{
+			// the next start uses the new command anyway
+		}
+	}
 
 	[ObservableProperty]
 	public partial string MpvBackendStatus { get; set; } = "";
@@ -303,11 +362,14 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	[ObservableProperty]
 	public partial string ForgetLearnedStatus { get; set; } = "";
 
-	/// <summary>Deletes the intros learned from the user's skips (<see cref="LearnedIntros"/>).</summary>
+	/// <summary>
+	/// Deletes the intros learned from the user's skips (<see cref="LearnedIntros"/>). Seaglass 1.1.4 (button review A39): after
+	/// a yes to <see cref="ForgetLearnedPrompt"/> (it went at once, with no way back).
+	/// </summary>
 	[RelayCommand]
-	private void ForgetLearnedIntros()
+	private async Task ForgetLearnedIntros()
 	{
-		if (knownFolders is null)
+		if (knownFolders is null || !await Asked(ForgetLearnedPrompt))
 		{
 			return;
 		}
@@ -583,8 +645,17 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		$"Seaglass forgets the sign-in saved for {user.Username} on this PC, with its saved home page. The account on the server is not changed.",
 		"Remove");
 
-	/// <summary>Seaglass 1.1.3: the accessible name of a saved sign-in's Remove button ("Remove alice").</summary>
-	public static string RemoveUserLabel(string username) => $"Remove {username}";
+	/// <summary>What "Forget learned intros" asks.</summary>
+	public static ConfirmPrompt ForgetLearnedPrompt { get; } = new(
+		"Forget learned intros?",
+		"Skips you made before stop being used. The player learns again from your next skips.",
+		"Forget");
+
+	/// <summary>
+	/// Seaglass 1.1.3: the accessible name of a saved sign-in's button; 1.1.4 (button review A48): "Remove sign-in", as it
+	/// reads ("Remove the sign-in for alice").
+	/// </summary>
+	public static string RemoveUserLabel(string username) => $"Remove the sign-in for {username}";
 
 	/// <summary>Seaglass 1.1.3: the accessible name of a saved server's Remove button ("Remove server Home").</summary>
 	public static string RemoveServerLabel(string displayName) => string.IsNullOrWhiteSpace(displayName) ? "Remove server" : $"Remove server {displayName.Trim()}";

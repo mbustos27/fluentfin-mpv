@@ -55,6 +55,13 @@ public sealed partial class SettingsPage : Page
 
 	private void OnJellyseerrClick(object sender, RoutedEventArgs e) => App.GetService<INavigationService>().NavigateTo(JellyseerrEntry.PageKey);
 
+	// ---- Seaglass 1.1.4: Settings > Servers and accounts > Server administration (the account menu's old Dashboard), administrators only
+
+	public bool ShowsServerAdministration => SettingsViewModel.ShowsServerAdministration(SessionInfo.CurrentUser);
+
+	private void OnServerAdministrationClick(object sender, RoutedEventArgs e) =>
+		App.GetService<INavigationService>().NavigateTo(typeof(JellyfinSettingsViewModel).FullName!, new object());
+
 	// ---- Seaglass 1.1.3: Settings > About; the cards are buttons, so Enter and Space open the links as a click does
 
 	private async void OnReportProblemClick(object sender, RoutedEventArgs e) => await Launcher.LaunchUriAsync(new Uri(SettingsViewModel.ReportProblemUrl));

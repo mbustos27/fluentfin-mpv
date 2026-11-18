@@ -33,7 +33,7 @@
     wait:<seconds>
   'all' = login,home,library,movie,series,season,play,fullscreen,windowed,leave,close (relaunch and steady are extra).
   -Then <script.ps1> is dot-sourced after the steps (before close): it can use this script's helpers (Capture-Page,
-  Open-Nav, Open-Card, Open-Library, Find-Ui, Wait-Ui, Invoke-Element, Key, Check, Say, Invoke-Server; $fixture).
+  Open-Nav (a top-bar tab, a Libraries menu item, Settings from the Account menu), Open-Card, Open-Library, Find-Ui, Wait-Ui, Invoke-Element, Key, Check, Say, Invoke-Server; $fixture).
   -Before <script.ps1> is dot-sourced the same way before the sign-in, on the server page; it must leave FluentFin on
   the server page (TxtUrl) with no rule in force that stops the sign-in that follows.
 #>
@@ -220,35 +220,72 @@ function Open-Card([string]$Title, [double]$Seconds = 30) {
 }
 # a navigation pane item (ListItem), searched for inside the pane only (found once after sign-in): a search of the whole
 # window takes seconds on a page with many cards
+# 1.2.0 (the top bar, no rail): a section by name. A tab of the bar's tab list (TopTabStrip, AutomationId TopTabs); in a narrow
+# window the tabs are one menu button (TopTabsMenu) whose menu has them; a library inside the "Libraries" tab's menu (many
+# libraries); Settings from the Account menu (it has no tab). Invoked through UI Automation.
+function Open-NavMenuItem([string]$Name) {
+    $mi = Wait-Until { Find-Ui -Name $Name -Type 'MenuItem' } -Seconds 8 -PollMs 150
+    if (-not $mi) { throw "no menu item '$Name'" }
+    $mi
+}
 function Open-Nav([string]$Name) {
-    $item = Wait-Until {
+    if ($Name -eq 'Settings') {
+        $acct = Wait-Until { Find-Ui -Name 'Account, ' -Type 'Button' -Contains } -Seconds 15 -PollMs 150
+        if (-not $acct) { throw "no Account button (Settings is in the Account menu)" }
+        [void](Invoke-Element $acct)
+        $set = Wait-Ui -Name 'Settings' -Type 'Button' -Seconds 8
+        if (-not $set) { throw "no Settings in the Account menu" }
+        Say "nav 'Settings' (Account menu: $(Invoke-Element $set))"
+        return
+    }
+    $tab = Wait-Until {
+        if (Find-Ui -Id 'TopTabsMenu') { return 'menu' }
         try {
             if (-not $script:navPane) { $script:navPane = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id) }
-            if ($script:navPane) { [OffscreenUi]::NavItem($script:navPane, $Name) }
+            if ($script:navPane) {
+                $t = [OffscreenUi]::NavItem($script:navPane, $Name)
+                if ($t) { return $t }
+                if ([OffscreenUi]::NavItem($script:navPane, 'Home')) { return 'not-a-tab' }
+            }
         } catch { $script:navPane = $null }
     } -Seconds 15 -PollMs 150
-    if (-not $item) { throw "no navigation item '$Name'" }
-    $how = Invoke-Element $item
+    if (-not $tab) { throw "no navigation tab '$Name'" }
+    if ($tab -eq 'menu') {
+        # a narrow window: the sections' menu (a library of many: its Libraries submenu)
+        [void](Invoke-Element (Find-Ui -Id 'TopTabsMenu'))
+        $mi = Find-Ui -Name $Name -Type 'MenuItem'
+        if (-not $mi) { $sub = Find-Ui -Name 'Libraries' -Type 'MenuItem'; if ($sub) { [void](Invoke-Element $sub) }; $mi = Open-NavMenuItem $Name }
+        Say "nav '$Name' (sections menu: $(Invoke-Element $mi))"
+        return
+    }
+    if ($tab -eq 'not-a-tab') {
+        # a library inside the "Libraries" tab's menu, or the Libraries page itself ("All libraries")
+        $libs = [OffscreenUi]::NavItem($script:navPane, 'Libraries')
+        if (-not $libs) { throw "no navigation tab '$Name' (nor a Libraries tab with it)" }
+        [void](Invoke-Element $libs)
+        $mi = Open-NavMenuItem $(if ($Name -eq 'Libraries') { 'All libraries' } else { $Name })
+        Say "nav '$Name' (Libraries menu: $(Invoke-Element $mi))"
+        return
+    }
+    $how = Invoke-Element $tab
+    if ($Name -eq 'Libraries') {
+        # the Libraries tab opens its menu when there are libraries to list: its page is "All libraries"
+        $all = Wait-Until { Find-Ui -Name 'All libraries' -Type 'MenuItem' } -Seconds 3 -PollMs 150
+        if ($all) { $how = "menu: $(Invoke-Element $all)" }
+    }
     Say "nav '$Name' ($how)"
 }
-# a library: the Libraries page (from Home, so the navigation item is not already selected), then its tile there
-# (an ItemsView ItemContainer named after the library), invoked through UI Automation, else clicked
+# a library: its tab (a few libraries are tabs of their own), else through the Libraries tab's menu (Open-Nav); a build with a
+# Libraries page and no tab for it: the page's tile (an ItemContainer named after the library)
 function Open-Library([string]$Name) {
+    try { Open-Nav $Name; $script:page = "library:$Name"; return }
+    catch { Say "library '$Name': $($_.Exception.Message); trying the Libraries page" }
     Open-Nav 'Home'
     Start-Sleep -Milliseconds 300
     Open-Nav 'Libraries'
     $tile = Wait-Until { [OffscreenUi]::FindByNameAndClass($script:hwnd, $script:ui.Id, $Name, 'Microsoft.UI.Xaml.Controls.ItemContainer') } -Seconds 15 -PollMs 200
     if ($tile) { Say "library '$Name' ($(Invoke-Element $tile))"; $script:page = "library:$Name"; return }
-    $text = Wait-Ui -Name $Name -Type 'Text' -Seconds 5
-    if (-not $text) { throw "no library '$Name' on the Libraries page" }
-    $item = [OffscreenUi]::InvokableAncestor($text)
-    if ($item) { Say "library '$Name' ($(Invoke-Element $item))" }
-    else {
-        $r = [OffscreenUi]::RectOf($text)
-        [OffscreenUi]::Click($script:hwnd, $script:ui.Id, [int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
-        Say "library '$Name' (clicked)"
-    }
-    $script:page = "library:$Name"
+    throw "no library '$Name'"
 }
 # an item page is up once its title (a Text with the item's exact name) shows
 # the item page's title: its text, or (Seaglass) the logo image that stands in for it, named after the item; matched by its id
@@ -333,7 +370,7 @@ function Step-SignIn([bool]$Capture) {
     if (-not $auth) { throw "no successful sign-in at the server within 30 s" }
     $script:signedInAt = Get-Done $auth
     $timings.sign_in_ms = Ms $at $script:signedInAt
-    $shell = Wait-Until { $p = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id); if ($p -and [OffscreenUi]::NavItem($p, 'Home')) { $p } } -Seconds 30 -PollMs 150
+    $shell = Wait-Until { $p = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id); if ($p -and ([OffscreenUi]::NavItem($p, 'Home') -or (Find-Ui -Id 'TopTabsMenu'))) { $p } } -Seconds 30 -PollMs 150
     $script:navPane = $shell
     Check "signed in ($SignIn)" ([bool]$shell) "$($timings.sign_in_ms) ms to the server's answer"
     if (-not $shell) { throw "no navigation pane after signing in" }
@@ -623,7 +660,7 @@ function Step-Relaunch {
     Check 'relaunch: FluentFin signed itself in at start-up (the remembered login)' ([bool]$auth) $(if ($auth) { "the server answered $($auth.status)" } else { 'no sign-in at the server' })
     $page = Wait-Until {
         if (Find-Ui -Id 'TxtUrl' -Type 'Edit') { 'server' }
-        else { $p = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id); if ($p -and [OffscreenUi]::NavItem($p, 'Home')) { 'home' } }
+        else { $p = [OffscreenUi]::NavPane($script:hwnd, $script:ui.Id); if ($p -and ([OffscreenUi]::NavItem($p, 'Home') -or (Find-Ui -Id 'TopTabsMenu'))) { 'home' } }
     } -Seconds 30 -PollMs 150
     if ($page -eq 'server') { Step-SignIn $false }
     elseif ($page -ne 'home') { throw "relaunch: neither the server page nor Home within 30 s" }

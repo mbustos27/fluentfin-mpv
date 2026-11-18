@@ -166,7 +166,9 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   until the user leaves.
 - **Visual check still to do** (the user was using FluentFin, so neither was seen): sign out
   while a video plays and look at the title bar (ring and text, then the login page), open
-  the account flyout again during the wait (both items greyed out); make a track or quality
+  the account flyout again during the wait (both items greyed out) -- since 1.1.4 the Account
+  menu is hidden on the player page, so the title bar no longer offers a sign-out while a
+  video plays (the stop-and-report path stays for any other way in); make a track or quality
   change fail and look at the warning above the video (readable, closable, gone after 8 s,
   the video resizes back).
 - **A kill that never takes but whose job close does end the backend**: the crash's own

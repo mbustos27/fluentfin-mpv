@@ -313,6 +313,35 @@ class ServerTests(unittest.TestCase):
         self.assertNotIn(secret, text)
         self.assertNotIn(token, text)
 
+    def test_quick_connect_authorize_approves_another_devices_code_for_the_signed_in_user(self):
+        # Seaglass 1.1.4: Settings > Other devices > Quick Connect, the signed-in app approving a code
+        status, qc, _ = self.request("/QuickConnect/Initiate", "POST")
+        self.assertEqual(200, status)
+        code, secret = qc["Code"], qc["Secret"]
+        # signed out: refused, the code stays waiting
+        self.assertEqual(401, self.request("/QuickConnect/Authorize?code=" + code, "POST")[0])
+        self.assertFalse(self.request("/QuickConnect/Connect?secret=" + secret)[1]["Authenticated"])
+        # a code that is not waiting
+        self.assertEqual(404, self.request("/QuickConnect/Authorize?code=x", "POST", token=self.token)[0])
+        status, ok, _ = self.request("/QuickConnect/Authorize?code=%s&userId=%s" % (code, self.srv.user_id), "POST", token=self.token)
+        self.assertEqual(200, status)
+        self.assertIs(True, ok)
+        self.assertTrue(self.request("/QuickConnect/Connect?secret=" + secret)[1]["Authenticated"])
+        status, auth, _ = self.request("/Users/AuthenticateWithQuickConnect", "POST", {"Secret": secret})
+        self.assertEqual(200, status)
+        self.assertEqual(CREDS["username"], auth["User"]["Name"])
+
+    def test_harness_renames_a_library_and_the_views_say_so(self):
+        # the top bar's tabs follow the libraries: a long name, then back (the class shares one server)
+        def names():
+            return [v["Name"] for v in self.get("/UserViews")["Items"]]
+        status, body, _ = self.request("/__harness/libraries", "POST", {"rename": {"Shows": "Television Shows"}})
+        self.assertEqual(200, status)
+        self.assertIn("Television Shows", body["views"])
+        self.assertEqual(["Movies", "Television Shows", "Documentaries", "Anime"], names())
+        self.request("/__harness/libraries", "POST", {"rename": {"Television Shows": "Shows"}})
+        self.assertEqual(["Movies", "Shows", "Documentaries", "Anime"], names())
+
     def test_user_data_endpoint_and_absent_plugin(self):
         movie = self.get("/__harness/fixture")["movie"]["id"]
         data = self.get("/UserItems/%s/UserData" % movie)
@@ -365,6 +394,16 @@ class ServerTests(unittest.TestCase):
         with open(os.path.join(self.srv.out, "summary.json"), encoding="utf-8") as f:
             summary = f.read()
         self.assertNotIn(self.token, summary)
+
+
+class LibraryViewsTests(unittest.TestCase):
+    def test_a_library_added_is_a_fifth_view_once(self):
+        lib = library.Library("server", "user", 600, seed=3)
+        added = lib.add_views(["Concerts", "Concerts"])
+        self.assertEqual(1, len(added))
+        self.assertEqual("Concerts", lib.items[lib.views[-1]]["Name"])
+        self.assertEqual(5, len(lib.views))
+        self.assertEqual(5, len(lib.query({})["Items"]))
 
 
 class MuxTests(unittest.TestCase):

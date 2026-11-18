@@ -116,7 +116,11 @@ public partial class JellyfinClient
 		{
 			_userViews = null;
 		}
+
+		UserViewsChanged?.Invoke(this, EventArgs.Empty);
 	}
+
+	public event EventHandler? UserViewsChanged;
 
 	private async Task<IReadOnlyList<BaseItemDto>?> ReadUserViews()
 	{
@@ -339,21 +343,55 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task<bool> Authenticate(string code)
+	public async Task<bool> Authenticate(string code) => await ApproveQuickConnect(code) == QuickConnectApproval.Approved;
+
+	/// <summary>Whether Quick Connect is on at the server (GET /QuickConnect/Enabled); null when it did not say.</summary>
+	private async Task<bool?> IsQuickConnectEnabled()
 	{
 		try
 		{
-			return await _jellyfinApiClient.QuickConnect.Authorize.PostAsync(x =>
+			return await _jellyfinApiClient.QuickConnect.Enabled.GetAsync();
+		}
+		catch (Exception)
+		{
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4 (review): approves another device's Quick Connect code, and how it went: a code the server has no request
+	/// for (404: mistyped, expired), Quick Connect turned off on the server (403: it read as "That code didn't work"), or no
+	/// answer at all.
+	/// </summary>
+	public async Task<QuickConnectApproval> ApproveQuickConnect(string code)
+	{
+		try
+		{
+			var approved = await _jellyfinApiClient.QuickConnect.Authorize.PostAsync(x =>
 			{
 				var query = x.QueryParameters;
 				query.UserId = UserId;
 				query.Code = code;
 			}) ?? false;
+			return approved ? QuickConnectApproval.Approved : QuickConnectApproval.NoSuchCode;
+		}
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode == 404)
+		{
+			// Seaglass 1.1.4: a code that is not waiting (mistyped, expired) is the user's to fix, said in the dialog
+			logger.LogInformation("Quick Connect: the server has no request waiting with that code");
+			return QuickConnectApproval.NoSuchCode;
+		}
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode is 401 or 403)
+		{
+			// review: a server with Quick Connect off answers 401 (not only 403): ask it whether Quick Connect is on
+			var enabled = await IsQuickConnectEnabled();
+			logger.LogInformation("Quick Connect: the server refused the code ({Status}); Quick Connect on: {Enabled}", ex.ResponseStatusCode, enabled?.ToString() ?? "unknown");
+			return enabled == true ? QuickConnectApproval.Failed : QuickConnectApproval.Disabled;
 		}
 		catch (Exception ex)
 		{
-			logger.LogError(ex, @"Unhandled exception");
-			return false;
+			logger.LogWarning("Quick Connect: approving the code failed: {Error}", ex.Message);
+			return QuickConnectApproval.Failed;
 		}
 	}
 }

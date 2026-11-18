@@ -52,6 +52,12 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<BaseItemDtoQueryResult?> Search(string searchTerm);
 
+		/// <summary>Seaglass 1.1.4: tells the server the selected player's profile and commands now (Settings > Player). Never throws.</summary>
+		Task<bool> UpdateCapabilities();
+
+		/// <summary>Seaglass 1.1.4: the matches of these types only (the search results page, one request per type).</summary>
+		Task<BaseItemDtoQueryResult?> Search(string searchTerm, IReadOnlyList<BaseItemKind> kinds, int limit = 100);
+
 		Task<BaseItemDto?> GetItem(Guid id);
 
 		/// <summary>
@@ -69,6 +75,12 @@ namespace FluentFin.Core.Contracts.Services
 		/// be read (logged).
 		/// </summary>
 		Task<IReadOnlyList<BaseItemDto>> GetUserViews();
+
+		/// <summary>
+		/// 1.2.0 (review): the views read before are out of date (a library added, removed or renamed here, or the server's
+		/// LibraryChanged or UserUpdated): the top bar reads them again. Raised on any thread.
+		/// </summary>
+		event EventHandler? UserViewsChanged;
 
 		/// <summary>fluentfin-mpv: one library's "Recently added" row (Home asks for every row at once). Null when the request failed (logged).</summary>
 		Task<List<BaseItemDto>?> GetLatestItems(BaseItemDto library);
@@ -90,6 +102,9 @@ namespace FluentFin.Core.Contracts.Services
 		Task<UserItemDataDto?> SetUserData(Guid id, bool played, long positionTicks);
 
 		Task<bool> Authenticate(string code);
+
+		/// <summary>Seaglass 1.1.4: approves another device's Quick Connect code, and how it went.</summary>
+		Task<QuickConnectApproval> ApproveQuickConnect(string code);
 
 		Task<MediaResponse?> GetMediaUrl(BaseItemDto dto, PlaybackSelection? selection = null);
 
@@ -234,6 +249,9 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task CreateSyncPlayGroup();
 
+		/// <summary>Seaglass 1.1.4: starts a SyncPlay group; null when it started, else why not (the server's refusal said).</summary>
+		Task<string?> StartSyncPlayGroup();
+
 		Task JoinSyncPlayGroup(Guid groupId);
 
 		Task LeaveSyncPlayGroup();
@@ -283,5 +301,20 @@ namespace FluentFin.Core.Contracts.Services
 	public class Metadata
 	{
 		public bool UseFileCreationTimeForDateAdded { get; set; }
+	}
+
+	/// <summary>Seaglass 1.1.4: how approving a Quick Connect code went (IJellyfinClient.ApproveQuickConnect).</summary>
+	public enum QuickConnectApproval
+	{
+		Approved,
+
+		/// <summary>No request is waiting with that code (mistyped, expired).</summary>
+		NoSuchCode,
+
+		/// <summary>Quick Connect is turned off on the server.</summary>
+		Disabled,
+
+		/// <summary>No answer (the connection, the server).</summary>
+		Failed,
 	}
 }

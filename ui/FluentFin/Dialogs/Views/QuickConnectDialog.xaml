@@ -13,24 +13,35 @@
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
     Title="Quick Connect"
-    CloseButtonText="Close"
+    CloseButtonText="{x:Bind ViewModel.CloseText, Mode=OneWay}"
     DefaultButton="Primary"
+    IsPrimaryButtonEnabled="{x:Bind ViewModel.CanApprove, Mode=OneWay}"
     PrimaryButtonCommand="{x:Bind ViewModel.VerifyQuickConnectCommand}"
-    PrimaryButtonText="OK"
+    PrimaryButtonText="Approve"
     Style="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
     mc:Ignorable="d">
 
-    <StackPanel Width="500" Spacing="20">
-        <InfoBar
-            IsClosable="False"
-            IsIconVisible="True"
-            IsOpen="True"
-            Message="To sign in with Quick Connect, select the 'Quick Connect' button on the device you are logging in from and enter the displayed code below."
-            Severity="Informational" />
+    <!--
+        Seaglass 1.1.4 (layout audit, item 18): signs in another device with this account: one plain instruction, a "Code" field,
+        Approve / Cancel (Close once approved). It said "the device you are logging in from" in an info bar, with OK / Close.
+    -->
+    <StackPanel Width="500" Spacing="16">
+        <TextBlock Text="Enter the code shown on the other device. It signs in with your account as soon as you approve it." TextWrapping="WrapWholeWords" />
 
-        <StackPanel>
-            <TextBlock Text="Quick connect code" />
-            <TextBox Text="{x:Bind ViewModel.QuickConnectCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+        <StackPanel Spacing="4">
+            <TextBox
+                x:Name="CodeBox"
+                AutomationProperties.Name="Code"
+                FontSize="20"
+                Header="Code"
+                InputScope="Number"
+                Text="{x:Bind ViewModel.QuickConnectCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            <!--  Seaglass 1.1.4: what Approve did (approved, or the code did not work), read out as it changes  -->
+            <TextBlock
+                x:Name="StatusText"
+                AutomationProperties.LiveSetting="Polite"
+                Text="{x:Bind ViewModel.Status, Mode=OneWay}"
+                TextWrapping="WrapWholeWords" />
         </StackPanel>
     </StackPanel>
 

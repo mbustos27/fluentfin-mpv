@@ -215,6 +215,8 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 			{
 				SessionInfo.CurrentUserCrendentials = null;
 				await FinishSignIn(url, auth);
+				// Seaglass 1.1.4: as the password sign-ins do: the Account menu and the messages name the server
+				titleBarViewModel.CurrentServer = server;
 				setupNavigationService.NavigateTo<ShellViewModel>();
 			}
 

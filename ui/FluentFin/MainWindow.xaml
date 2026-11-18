@@ -28,9 +28,18 @@
         <!--  Seaglass: the ambient backdrop under the title bar and every page, first-run pages included  -->
         <fc:AmbientBackdropView Grid.RowSpan="2" />
 
-        <views:TitleBarControl Grid.Row="0" />
+        <!--
+            1.2.0 (the top bar): the pages run under the bar, which is drawn over them (after them here): the shell starts its
+            pages below the bar, or at the top for a hero (ShellPage.UpdateInsets); the pages before sign-in start below it
+            (MainWindow.OnRootNavigated).
+        -->
+        <Frame
+            x:Name="RootFrame"
+            Grid.Row="0"
+            Grid.RowSpan="2"
+            Navigated="OnRootNavigated" />
 
-        <Frame x:Name="RootFrame" Grid.Row="1" />
+        <views:TitleBarControl Grid.Row="0" VerticalAlignment="Top" />
 
         <!--
             fluentfin-mpv (startup-perf): the window is shown before the automatic sign-in, which says so here. Shown from a

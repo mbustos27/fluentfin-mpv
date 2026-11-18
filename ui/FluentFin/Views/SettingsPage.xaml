@@ -19,27 +19,31 @@
     mc:Ignorable="d">
 
 
-    <Page.Resources>
-        <!--  Seaglass: the settings groups sit on glass surfaces, so the cards inside are flat  -->
-        <SolidColorBrush x:Key="SettingsCardBackground" Color="Transparent" />
-        <SolidColorBrush x:Key="SettingsCardBackgroundPointerOver" Color="{ThemeResource SubtleFillColorSecondary}" />
-        <SolidColorBrush x:Key="SettingsCardBackgroundPressed" Color="{ThemeResource SubtleFillColorTertiary}" />
-    </Page.Resources>
+    <!--
+        Seaglass 1.1.4 (layout audit, items 3 and 17): no panel around a group: its header (Body Strong) sits above its cards,
+        which keep the toolkit's own card look, as Windows Settings does; the column is left-aligned.
+    -->
 
     <!--  fluentfin-mpv: scrolls (the Playback section made it taller than a window) and narrows with the window  -->
     <!--
         Seaglass 1.1.3 (UX review, prioritised fixes 1, 2, 6 and 9): every group has a title, in task order: Appearance,
         Playback, Audio and subtitles, Servers and accounts, Integrations, then Advanced and About last. Removing a server or a
         sign-in is a neutral button that asks first, naming it (SettingsViewModel.Confirm).
+        Seaglass 1.1.4 (fix 15): Other devices (Quick Connect, SyncPlay) after Servers and accounts.
     -->
     <ScrollViewer>
-        <Grid MaxWidth="1000" Padding="24,0,24,40">
+        <!--  left-aligned: one star column up to 1000 px; the rest of a wide window stays empty on the right  -->
+        <Grid x:Name="SettingsColumn" Padding="36,0,24,40">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="1000" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Grid Margin="0,40,0,36">
+            <Grid Margin="0,40,0,4">
                 <TextBlock
                     HorizontalAlignment="Left"
                     AutomationProperties.HeadingLevel="Level1"
@@ -47,344 +51,408 @@
                     Text="Settings" />
             </Grid>
 
-            <StackPanel Grid.Row="1" Spacing="20">
+            <StackPanel Grid.Row="1" Spacing="2">
                 <!--  Seaglass: Settings > Appearance; the choice is saved on this PC and applies at once  -->
-                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
-                    <StackPanel Spacing="4">
-                        <TextBlock
-                            Margin="4,4,0,8"
-                            AutomationProperties.HeadingLevel="Level2"
-                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                            Text="Appearance" />
-                        <ctk:SettingsCard
-                            Description="{x:Bind ViewModel.SelectedGlass.Description, Mode=OneWay}"
-                            Header="Glass"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE790;}">
-                            <ComboBox
-                                MinWidth="160"
-                                AutomationProperties.Name="Glass"
-                                DisplayMemberPath="Name"
-                                ItemsSource="{x:Bind vm:SettingsViewModel.GlassChoices}"
-                                SelectedItem="{x:Bind ViewModel.SelectedGlass, Mode=TwoWay}" />
-                        </ctk:SettingsCard>
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        Margin="1,28,0,6"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="Appearance" />
+                    <ctk:SettingsCard
+                        Description="{x:Bind ViewModel.SelectedGlass.Description, Mode=OneWay}"
+                        Header="Glass"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE790;}">
+                        <ComboBox
+                            MinWidth="160"
+                            AutomationProperties.Name="Glass"
+                            DisplayMemberPath="Name"
+                            ItemsSource="{x:Bind vm:SettingsViewModel.GlassChoices}"
+                            SelectedItem="{x:Bind ViewModel.SelectedGlass, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
 
-                    </StackPanel>
-                </ContentControl>
+                </StackPanel>
                 <!--  fluentfin-mpv: Settings > Playback (docs/research/ux-review.md T1)  -->
                 <!--  kept on this PC; the bridge has no field for the skip and wheel settings yet (docs/BRIDGE.md v1), so mpv's own controls ignore them;
                       Seaglass's player controls over the MPV player use the Skip button, the wheel and the step (MpvControlsViewModel)  -->
-                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
-                    <StackPanel Spacing="4">
-                        <TextBlock
-                            Margin="4,4,0,8"
-                            AutomationProperties.HeadingLevel="Level2"
-                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                            Text="Playback" />
-                        <!--  Seaglass 1.1.3: only when this copy can run more than one player  -->
-                        <ctk:SettingsCard
-                            Description="Remote control from other devices follows a change after you sign in again."
-                            Header="Player"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xEA69;}"
-                            Visibility="{x:Bind c:Converters.BooleanToVisibility(HasPlayerChoice)}">
-                            <ComboBox
-                                AutomationProperties.Name="Player"
-                                DisplayMemberPath="Name"
-                                ItemsSource="{x:Bind vm:SettingsViewModel.MediaPlayers}"
-                                SelectedItem="{x:Bind ViewModel.SelectedMediaPlayer, Mode=TwoWay}" />
-                        </ctk:SettingsCard>
-                        <!--  fluentfin-mpv player controls: who draws the controls over the MPV player's video (docs/research/player-controls.md)  -->
-                        <ctk:SettingsCard
-                            Description="Seaglass (the default): Seaglass's own controls over the video, with mpv playing inside the window; if mpv's library cannot load on this PC, mpv's controls are used and the player says so. mpv: mpv's on-screen controls. Used from the next playback."
-                            Header="Player controls"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE768;}"
-                            Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
-                            <ComboBox
-                                x:Name="PlayerControlsBox"
-                                AutomationProperties.Name="Player controls"
-                                DisplayMemberPath="Name"
-                                ItemsSource="{x:Bind vm:SettingsViewModel.PlayerControlsChoices}"
-                                SelectedItem="{x:Bind ViewModel.SelectedPlayerControls, Mode=TwoWay}" />
-                        </ctk:SettingsCard>
-                        <ctk:SettingsCard
-                            Description="With Seaglass's player controls and Windows Media Player. mpv's own controls have their own setting."
-                            Header="Show Skip intro and Skip credits"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
-                            <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />
-                        </ctk:SettingsCard>
-                        <ctk:SettingsCard
-                            Description="When neither the server nor the file's chapters mark the intro or credits, ask TheIntroDB (and, for anime, AniSkip, which finds the show through arm.haglund.dev). Sent: the show's public ID, season, episode and length. Not sent: your server, account or file names. Off by default."
-                            Header="Look up intros online"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE774;}">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <HyperlinkButton Content="Intro times from TheIntroDB" NavigateUri="https://theintrodb.org" />
-                                <HyperlinkButton Content="AniSkip" NavigateUri="https://aniskip.com" />
-                                <HyperlinkButton Content="arm.haglund.dev" NavigateUri="https://arm.haglund.dev" />
-                                <ToggleSwitch AutomationProperties.Name="Look up intros online" IsOn="{x:Bind ViewModel.LookUpIntrosOnline, Mode=TwoWay}" />
-                            </StackPanel>
-                        </ctk:SettingsCard>
-                        <ctk:SettingsCard
-                            Description="When you skip ahead near the start of an episode, offer the same skip on the season's later episodes. Kept on this PC."
-                            Header="Learn intros from my skips"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE7BE;}">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.ForgetLearnedStatus, Mode=OneWay}" />
-                                <Button Command="{x:Bind ViewModel.ForgetLearnedIntrosCommand}" Content="Forget learned intros" />
-                                <ToggleSwitch AutomationProperties.Name="Learn intros from my skips" IsOn="{x:Bind ViewModel.LearnIntros, Mode=TwoWay}" />
-                            </StackPanel>
-                        </ctk:SettingsCard>
-                        <ctk:SettingsCard
-                            Description="With Seaglass's player controls and Windows Media Player. mpv's own controls always change the volume with the wheel."
-                            Header="Change the volume with the mouse wheel"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE962;}">
-                            <ToggleSwitch AutomationProperties.Name="Change the volume with the mouse wheel" IsOn="{x:Bind ViewModel.MouseWheelVolume, Mode=TwoWay}" />
-                        </ctk:SettingsCard>
-                        <ctk:SettingsCard
-                            Description="How much one wheel notch or arrow key changes the volume, in percent. With Seaglass's player controls and Windows Media Player."
-                            Header="Volume step"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE767;}">
-                            <NumberBox
-                                MinWidth="120"
-                                AutomationProperties.Name="Volume step, in percent"
-                                Maximum="20"
-                                Minimum="1"
-                                SpinButtonPlacementMode="Inline"
-                                Value="{x:Bind ViewModel.VolumeStep, Mode=TwoWay}" />
-                        </ctk:SettingsCard>
-
-                    </StackPanel>
-                </ContentControl>
-                <!--  kept by the server for this user, as jellyfin-web's Playback settings: they reach every player  -->
-                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
-                    <StackPanel Spacing="4">
-                        <TextBlock
-                            Margin="4,4,0,4"
-                            AutomationProperties.HeadingLevel="Level2"
-                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                            Text="Audio and subtitles" />
-                        <TextBlock
-                            Margin="4,0,0,8"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{ThemeResource CaptionTextBlockStyle}"
-                            Text="{x:Bind ServerPreferencesCaption()}"
-                            TextWrapping="WrapWholeWords" />
-                        <controls:LoadStateView
-                            LoadingText="Loading your playback preferences…"
-                            ShowsLoading="True"
-                            State="{x:Bind ViewModel.PlaybackPreferences}" />
-                        <InfoBar
-                            IsClosable="False"
-                            IsOpen="{x:Bind ViewModel.HasSaveError, Mode=OneWay}"
-                            Message="{x:Bind ViewModel.SaveError, Mode=OneWay}"
-                            Severity="Warning"
-                            Title="Not saved">
-                            <InfoBar.ActionButton>
-                                <Button Command="{x:Bind ViewModel.SavePlaybackPreferencesCommand}" Content="Try again" />
-                            </InfoBar.ActionButton>
-                        </InfoBar>
-                        <StackPanel Spacing="5" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.PlaybackPreferences.IsLoaded), Mode=OneWay}">
-                            <ctk:SettingsCard Header="Preferred audio language" HeaderIcon="{ui:FontIcon Glyph=&#xE8D6;}">
-                                <ComboBox
-                                    MinWidth="220"
-                                    AutomationProperties.Name="Preferred audio language"
-                                    ItemsSource="{x:Bind ViewModel.Languages, Mode=OneWay}"
-                                    SelectedItem="{x:Bind ViewModel.AudioLanguage, Mode=TwoWay}" />
-                            </ctk:SettingsCard>
-                            <ctk:SettingsCard Header="Preferred subtitle language" HeaderIcon="{ui:FontIcon Glyph=&#xED1E;}">
-                                <ComboBox
-                                    MinWidth="220"
-                                    AutomationProperties.Name="Preferred subtitle language"
-                                    ItemsSource="{x:Bind ViewModel.Languages, Mode=OneWay}"
-                                    SelectedItem="{x:Bind ViewModel.SubtitleLanguage, Mode=TwoWay}" />
-                            </ctk:SettingsCard>
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        Margin="1,28,0,6"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="Playback" />
+                    <!--  Seaglass 1.1.3: only when this copy can run more than one player  -->
+                    <ctk:SettingsCard
+                        Description="Plays everything you play here, and what other devices send here by remote control. Takes effect at once."
+                        Header="Player"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xEA69;}"
+                        Visibility="{x:Bind c:Converters.BooleanToVisibility(HasPlayerChoice)}">
+                        <ComboBox
+                            AutomationProperties.Name="Player"
+                            DisplayMemberPath="Name"
+                            ItemsSource="{x:Bind vm:SettingsViewModel.MediaPlayers}"
+                            SelectedItem="{x:Bind ViewModel.SelectedMediaPlayer, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                    <!--  fluentfin-mpv player controls: who draws the controls over the MPV player's video (docs/research/player-controls.md)  -->
+                    <ctk:SettingsCard
+                        Description="This app's own controls or mpv's. If mpv's library can't load on this PC, mpv's are used and the player says so."
+                        Header="Player controls"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE768;}"
+                        Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                        <ComboBox
+                            x:Name="PlayerControlsBox"
+                            AutomationProperties.Name="Player controls"
+                            DisplayMemberPath="Name"
+                            ItemsSource="{x:Bind vm:SettingsViewModel.PlayerControlsChoices}"
+                            SelectedItem="{x:Bind ViewModel.SelectedPlayerControls, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                    <ctk:SettingsCard
+                        Description="With Seaglass's player controls and Windows Media Player. mpv's own controls have their own setting."
+                        Header="Show Skip intro and Skip credits"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
+                        <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                    <!--  Seaglass 1.1.4 (layout audit, item 17): a one-line description; what is sent and the three sources under the expander, not beside the toggle  -->
+                    <ctk:SettingsExpander
+                        x:Name="IntrosOnlineExpander"
+                        Description="When the server and the file mark no intro or credits, ask TheIntroDB or AniSkip. Off by default."
+                        Header="Look up intros online"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE774;}">
+                        <ToggleSwitch AutomationProperties.Name="Look up intros online" IsOn="{x:Bind ViewModel.LookUpIntrosOnline, Mode=TwoWay}" />
+                        <ctk:SettingsExpander.Items>
                             <ctk:SettingsCard
-                                Description="{x:Bind ViewModel.SubtitleMode.Description, Mode=OneWay}"
-                                Header="Subtitles"
-                                HeaderIcon="{ui:FontIcon Glyph=&#xE7F0;}">
-                                <ComboBox
-                                    MinWidth="220"
-                                    AutomationProperties.Name="Subtitles"
-                                    ItemsSource="{x:Bind vm:SettingsViewModel.SubtitleModes}"
-                                    SelectedItem="{x:Bind ViewModel.SubtitleMode, Mode=TwoWay}" />
+                                Description="Sent: the show's public ID, season, episode and length. Not sent: your server, account or file names. For anime, AniSkip finds the show through arm.haglund.dev."
+                                Header="What is sent">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <HyperlinkButton Content="TheIntroDB" NavigateUri="https://theintrodb.org" />
+                                    <HyperlinkButton Content="AniSkip" NavigateUri="https://aniskip.com" />
+                                    <HyperlinkButton Content="arm.haglund.dev" NavigateUri="https://arm.haglund.dev" />
+                                </StackPanel>
                             </ctk:SettingsCard>
-                            <!--  Seaglass 1.1.3: only for a player that follows it (SettingsViewModel.FollowsAutoPlay): the mpv player does not  -->
-                            <ctk:SettingsCard
-                                Description="Windows Media Player and other Jellyfin apps follow this."
-                                Header="Play the next episode automatically"
-                                HeaderIcon="{ui:FontIcon Glyph=&#xE893;}"
-                                Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.FollowsAutoPlay), Mode=OneWay}">
-                                <ToggleSwitch AutomationProperties.Name="Play the next episode automatically" IsOn="{x:Bind ViewModel.AutoPlayNextEpisode, Mode=TwoWay}" />
-                            </ctk:SettingsCard>
+                        </ctk:SettingsExpander.Items>
+                    </ctk:SettingsExpander>
+                    <ctk:SettingsCard
+                        Description="Skipped ahead near an episode's start? Offer the same skip on the season's later episodes."
+                        Header="Learn intros from my skips"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE7BE;}">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.ForgetLearnedStatus, Mode=OneWay}" />
+                            <Button Command="{x:Bind ViewModel.ForgetLearnedIntrosCommand}" Content="Forget learned intros" />
+                            <ToggleSwitch AutomationProperties.Name="Learn intros from my skips" IsOn="{x:Bind ViewModel.LearnIntros, Mode=TwoWay}" />
                         </StackPanel>
+                    </ctk:SettingsCard>
+                    <ctk:SettingsCard
+                        Description="With Seaglass's player controls and Windows Media Player. mpv's own controls always change the volume with the wheel."
+                        Header="Change the volume with the mouse wheel"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE962;}">
+                        <ToggleSwitch AutomationProperties.Name="Change the volume with the mouse wheel" IsOn="{x:Bind ViewModel.MouseWheelVolume, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                    <ctk:SettingsCard
+                        Description="How much one wheel notch or arrow key changes the volume, in percent. With Seaglass's player controls and Windows Media Player."
+                        Header="Volume step"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE767;}">
+                        <!--
+                            Seaglass 1.1.4 (UX review, prioritised fix 7): spin buttons of 32 x 32 px (WinUI's are 32 x 24), the text
+                            centred in the taller box; the keys are the box's: Up/Down 1, PageUp/PageDown 5, typing and Enter
+                        -->
+                        <NumberBox
+                            x:Name="VolumeStepBox"
+                            MinWidth="120"
+                            Padding="10,9,6,9"
+                            controls:NumberBoxTargets.MinTargetSize="32"
+                            AutomationProperties.Name="Volume step, in percent"
+                            LargeChange="5"
+                            Maximum="20"
+                            Minimum="1"
+                            SmallChange="1"
+                            SpinButtonPlacementMode="Inline"
+                            Value="{x:Bind ViewModel.VolumeStep, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
 
-                    </StackPanel>
-                </ContentControl>
-                <!--  Seaglass 1.1.3: the saved servers and sign-ins, with neutral Remove buttons that ask first (no accent: that is for Play)  -->
-                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
-                    <StackPanel Spacing="4">
-                        <TextBlock
-                            Margin="4,4,0,4"
-                            AutomationProperties.HeadingLevel="Level2"
-                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                            Text="Servers and accounts" />
-                        <TextBlock
-                            Margin="4,0,0,8"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{ThemeResource CaptionTextBlockStyle}"
-                            Text="The servers and sign-ins saved on this PC. Removing one changes nothing on the server."
-                            TextWrapping="WrapWholeWords" />
-                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Servers}">
-                            <ItemsRepeater.Layout>
-                                <StackLayout Spacing="4" />
-                            </ItemsRepeater.Layout>
-                            <ItemsRepeater.ItemTemplate>
-                                <DataTemplate x:DataType="settings:SavedServer">
-                                    <ctk:SettingsExpander
-                                        Header="{x:Bind DisplayName}"
-                                        HeaderIcon="{ui:FontIcon Glyph=&#xE968;}"
-                                        ItemsSource="{x:Bind Users}"
-                                        Tag="{x:Bind}">
-                                        <Button
-                                            AutomationProperties.Name="{x:Bind vm:SettingsViewModel.RemoveServerLabel(DisplayName)}"
-                                            Command="{Binding ElementName=Page, Path=ViewModel.DeleteServerCommand}"
-                                            CommandParameter="{x:Bind}"
-                                            Content="Remove server" />
-                                        <ctk:SettingsExpander.ItemTemplate>
-                                            <DataTemplate x:DataType="settings:SavedUser">
-                                                <ctk:SettingsCard Header="{x:Bind Username}" HeaderIcon="{ui:FontIcon Glyph=&#xE77B;}">
-                                                    <Button
-                                                        AutomationProperties.Name="{x:Bind vm:SettingsViewModel.RemoveUserLabel(Username)}"
-                                                        Click="RemoveUser"
-                                                        Content="Remove"
-                                                        Tag="{x:Bind}" />
-                                                </ctk:SettingsCard>
-                                            </DataTemplate>
-                                        </ctk:SettingsExpander.ItemTemplate>
-                                    </ctk:SettingsExpander>
-                                </DataTemplate>
-                            </ItemsRepeater.ItemTemplate>
-                        </ItemsRepeater>
-                    </StackPanel>
-                </ContentControl>
-                <!--  Seaglass 1.1.3: Jellyseerr left the rail (UX review, prioritised fix 1); it opens in the app, as before  -->
-                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
-                    <StackPanel Spacing="4">
-                        <TextBlock
-                            Margin="4,4,0,8"
-                            AutomationProperties.HeadingLevel="Level2"
-                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                            Text="Integrations" />
+                </StackPanel>
+                <!--  kept by the server for this user, as jellyfin-web's Playback settings: they reach every player  -->
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        Margin="1,28,0,6"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="Audio and subtitles" />
+                    <TextBlock
+                        Margin="1,0,0,8"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="{x:Bind ServerPreferencesCaption()}"
+                        TextWrapping="WrapWholeWords" />
+                    <controls:LoadStateView
+                        LoadingText="Loading your playback preferences…"
+                        ShowsLoading="True"
+                        State="{x:Bind ViewModel.PlaybackPreferences}" />
+                    <InfoBar
+                        IsClosable="False"
+                        IsOpen="{x:Bind ViewModel.HasSaveError, Mode=OneWay}"
+                        Message="{x:Bind ViewModel.SaveError, Mode=OneWay}"
+                        Severity="Warning"
+                        Title="Not saved">
+                        <InfoBar.ActionButton>
+                            <Button Command="{x:Bind ViewModel.SavePlaybackPreferencesCommand}" Content="Try again" />
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+                    <StackPanel Spacing="5" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.PlaybackPreferences.IsLoaded), Mode=OneWay}">
+                        <ctk:SettingsCard Header="Preferred audio language" HeaderIcon="{ui:FontIcon Glyph=&#xE8D6;}">
+                            <ComboBox
+                                MinWidth="220"
+                                AutomationProperties.Name="Preferred audio language"
+                                ItemsSource="{x:Bind ViewModel.Languages, Mode=OneWay}"
+                                SelectedItem="{x:Bind ViewModel.AudioLanguage, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
+                        <ctk:SettingsCard Header="Preferred subtitle language" HeaderIcon="{ui:FontIcon Glyph=&#xED1E;}">
+                            <ComboBox
+                                MinWidth="220"
+                                AutomationProperties.Name="Preferred subtitle language"
+                                ItemsSource="{x:Bind ViewModel.Languages, Mode=OneWay}"
+                                SelectedItem="{x:Bind ViewModel.SubtitleLanguage, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
                         <ctk:SettingsCard
-                            Description="{x:Bind JellyseerrDescription}"
-                            Header="Jellyseerr"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE7BC;}">
-                            <Button
-                                x:Name="JellyseerrButton"
-                                AutomationProperties.Name="{x:Bind JellyseerrButtonName}"
-                                Click="OnJellyseerrClick"
-                                Content="{x:Bind JellyseerrAction}" />
+                            Description="{x:Bind ViewModel.SubtitleMode.Description, Mode=OneWay}"
+                            Header="Subtitles"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE7F0;}">
+                            <ComboBox
+                                MinWidth="220"
+                                AutomationProperties.Name="Subtitles"
+                                ItemsSource="{x:Bind vm:SettingsViewModel.SubtitleModes}"
+                                SelectedItem="{x:Bind ViewModel.SubtitleMode, Mode=TwoWay}" />
+                        </ctk:SettingsCard>
+                        <!--
+                            Seaglass 1.1.4 (interaction audit, item 7): for every player again. The mpv player follows it too: the player
+                            sends the user's EnableNextEpisodeAutoPlay to the backend before every play (set_auto_play, the player stream's
+                            PlaybackPreferences.PlaysNextItem); 1.1.3 hid it with mpv, which left no way to turn auto-play off.
+                        -->
+                        <ctk:SettingsCard
+                            x:Name="AutoPlayCard"
+                            Description="When an episode ends, the next one starts by itself. Other Jellyfin apps follow this too."
+                            Header="Play the next episode automatically"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
+                            <ToggleSwitch AutomationProperties.Name="Play the next episode automatically" IsOn="{x:Bind ViewModel.AutoPlayNextEpisode, Mode=TwoWay}" />
                         </ctk:SettingsCard>
                     </StackPanel>
-                </ContentControl>
+
+                </StackPanel>
+                <!--  Seaglass 1.1.3: the saved servers and sign-ins, with neutral Remove buttons that ask first (no accent: that is for Play)  -->
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        Margin="1,28,0,6"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="Servers and accounts" />
+                    <TextBlock
+                        Margin="1,0,0,8"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="The servers and sign-ins saved on this PC. Removing one changes nothing on the server."
+                        TextWrapping="WrapWholeWords" />
+                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.Servers}">
+                        <ItemsRepeater.Layout>
+                            <StackLayout Spacing="4" />
+                        </ItemsRepeater.Layout>
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="settings:SavedServer">
+                                <!--  Seaglass 1.1.4 (layout audit, item 17): Remove server inside the expanded card, as Windows Settings > Accounts; the address under the name  -->
+                                <ctk:SettingsExpander
+                                    Description="{x:Bind PublicUrl}"
+                                    Header="{x:Bind DisplayName}"
+                                    HeaderIcon="{ui:FontIcon Glyph=&#xE968;}"
+                                    ItemsSource="{x:Bind Users}"
+                                    Tag="{x:Bind}">
+                                    <ctk:SettingsExpander.ItemsFooter>
+                                        <ctk:SettingsCard
+                                            Description="Forgets this server and the sign-ins saved for it on this PC. Nothing changes on the server."
+                                            Header="Remove this server">
+                                            <Button
+                                                AutomationProperties.Name="{x:Bind vm:SettingsViewModel.RemoveServerLabel(DisplayName)}"
+                                                Command="{Binding ElementName=Page, Path=ViewModel.DeleteServerCommand}"
+                                                CommandParameter="{x:Bind}"
+                                                Content="Remove server" />
+                                        </ctk:SettingsCard>
+                                    </ctk:SettingsExpander.ItemsFooter>
+                                    <ctk:SettingsExpander.ItemTemplate>
+                                        <DataTemplate x:DataType="settings:SavedUser">
+                                            <ctk:SettingsCard Header="{x:Bind Username}" HeaderIcon="{ui:FontIcon Glyph=&#xE77B;}">
+                                                <Button
+                                                    AutomationProperties.Name="{x:Bind vm:SettingsViewModel.RemoveUserLabel(Username)}"
+                                                    Click="RemoveUser"
+                                                    Content="Remove sign-in"
+                                                    Tag="{x:Bind}" />
+                                            </ctk:SettingsCard>
+                                        </DataTemplate>
+                                    </ctk:SettingsExpander.ItemTemplate>
+                                </ctk:SettingsExpander>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
+                    <!--
+                        Seaglass 1.1.4 (UX review, prioritised fix 15): the server's administration (the account menu's old Dashboard:
+                        users, libraries, playback, activity, scheduled tasks), for administrators only
+                    -->
+                    <ctk:SettingsCard
+                        x:Name="ServerAdministrationCard"
+                        Description="Users, libraries, playback, activity and scheduled tasks on this server. Shown to administrators."
+                        Header="Server administration"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE912;}"
+                        Visibility="{x:Bind c:Converters.BooleanToVisibility(ShowsServerAdministration)}">
+                        <Button
+                            x:Name="ServerAdministrationButton"
+                            AutomationProperties.Name="Open server administration"
+                            Click="OnServerAdministrationClick"
+                            Content="Open" />
+                    </ctk:SettingsCard>
+                </StackPanel>
+                <!--
+                    Seaglass 1.1.4 (UX review, prioritised fix 15): what the old profile flyout held for other devices. SyncPlay's button
+                    is disabled with the mpv player or an account the server does not allow it, and the card says why
+                    (SettingsViewModel.IsSyncPlayAvailable). Play On (choosing a cast target) left: its dialog showed nothing with no
+                    other device, and a cast target belongs by what you play (layout audit, item 18).
+                -->
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        Margin="1,28,0,6"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="Other devices" />
+                    <ctk:SettingsCard
+                        x:Name="QuickConnectCard"
+                        Description="Sign in on another device without typing your password: choose Quick Connect there, then enter the code it shows."
+                        Header="Quick Connect"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE703;}">
+                        <Button
+                            x:Name="QuickConnectButton"
+                            AutomationProperties.Name="Enter a code for Quick Connect"
+                            Command="{x:Bind root:App.Dialogs.QuickConnectAuthCommand}"
+                            Content="Enter a code" />
+                    </ctk:SettingsCard>
+                    <ctk:SettingsCard
+                        x:Name="SyncPlayCard"
+                        Description="{x:Bind ViewModel.SyncPlayDescription, Mode=OneWay}"
+                        Header="SyncPlay"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE895;}">
+                        <Button
+                            x:Name="SyncPlayButton"
+                            AutomationProperties.Name="Choose a group for SyncPlay"
+                            Command="{x:Bind root:App.Dialogs.SelectSyncPlayGroupCommand}"
+                            Content="Choose a group"
+                            IsEnabled="{x:Bind ViewModel.IsSyncPlayAvailable, Mode=OneWay}" />
+                    </ctk:SettingsCard>
+                </StackPanel>
+                <!--  Seaglass 1.1.3: Jellyseerr left the rail (UX review, prioritised fix 1); it opens in the app, as before  -->
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        Margin="1,28,0,6"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="Integrations" />
+                    <ctk:SettingsCard
+                        Description="{x:Bind JellyseerrDescription}"
+                        Header="Jellyseerr"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE7BC;}">
+                        <Button
+                            x:Name="JellyseerrButton"
+                            AutomationProperties.Name="{x:Bind JellyseerrButtonName}"
+                            Click="OnJellyseerrClick"
+                            Content="{x:Bind JellyseerrAction}" />
+                    </ctk:SettingsCard>
+                </StackPanel>
                 <!--  fluentfin-mpv: developer settings out of the way (docs/research/ux-review.md T2); Seaglass 1.1.3: a group like the others  -->
-                <ContentControl
-                    Padding="12"
-                    Style="{StaticResource GlassSurfaceStyle}"
-                    Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
-                    <StackPanel Spacing="4">
-                        <TextBlock
-                            Margin="4,4,0,8"
-                            AutomationProperties.HeadingLevel="Level2"
-                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                            Text="Advanced" />
-                        <ctk:SettingsExpander
-                            Description="Its command and status."
-                            Header="MPV backend"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE90F;}">
-                            <ctk:SettingsExpander.Items>
-                                <ctk:SettingsCard
-                                    Description="Leave empty to find it automatically. Otherwise the command up to --config-dir, for example C:\jellyfin-mpv-shim\.venv\Scripts\python.exe -I -m jellyfin_mpv_shim.bridge. Used the next time the backend starts."
-                                    Header="MPV backend command"
-                                    HeaderIcon="{ui:FontIcon Glyph=&#xE756;}">
-                                    <TextBox
-                                        MinWidth="420"
-                                        AutomationProperties.Name="MPV backend command"
-                                        PlaceholderText="Automatic"
-                                        Text="{x:Bind ViewModel.MpvBackendCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                                </ctk:SettingsCard>
-                                <ctk:SettingsCard Header="MPV backend status" HeaderIcon="{ui:FontIcon Glyph=&#xE9D9;}">
-                                    <ctk:SettingsCard.Description>
-                                        <TextBlock IsTextSelectionEnabled="True" Text="{x:Bind ViewModel.MpvBackendStatus, Mode=OneWay}" TextWrapping="Wrap" />
-                                    </ctk:SettingsCard.Description>
-                                </ctk:SettingsCard>
-                            </ctk:SettingsExpander.Items>
-                        </ctk:SettingsExpander>
-                    </StackPanel>
-                </ContentControl>
+                <StackPanel Spacing="4" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                    <TextBlock
+                        Margin="1,28,0,6"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="Advanced" />
+                    <ctk:SettingsExpander
+                        Description="The command that starts it, and whether it's running."
+                        Header="mpv backend"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE90F;}">
+                        <ctk:SettingsExpander.Items>
+                            <ctk:SettingsCard
+                                Description="Leave empty to find it automatically. Otherwise the command up to --config-dir, for example C:\jellyfin-mpv-shim\.venv\Scripts\python.exe -I -m jellyfin_mpv_shim.bridge. Takes effect at once: a backend that is not playing restarts with it."
+                                Header="mpv backend command"
+                                HeaderIcon="{ui:FontIcon Glyph=&#xE756;}">
+                                <TextBox
+                                    MinWidth="420"
+                                    AutomationProperties.Name="mpv backend command"
+                                    PlaceholderText="Automatic"
+                                    Text="{x:Bind ViewModel.MpvBackendCommand, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                            </ctk:SettingsCard>
+                            <ctk:SettingsCard Header="mpv backend status" HeaderIcon="{ui:FontIcon Glyph=&#xE9D9;}">
+                                <ctk:SettingsCard.Description>
+                                    <TextBlock IsTextSelectionEnabled="True" Text="{x:Bind ViewModel.MpvBackendStatus, Mode=OneWay}" TextWrapping="Wrap" />
+                                </ctk:SettingsCard.Description>
+                            </ctk:SettingsCard>
+                        </ctk:SettingsExpander.Items>
+                    </ctk:SettingsExpander>
+                </StackPanel>
                 <!--
                     Seaglass 1.1.3: Settings > About, last (UX review, prioritised fixes 1, 6 and 9): the version, the licence, the two
                     projects it is built from, Contribute and Report a problem (they left the rail; clickable cards are buttons, so Enter
                     and Space work), and Check for updates and the shortcut sheet, which sat under Playback.
                 -->
-                <ContentControl Padding="12" Style="{StaticResource GlassSurfaceStyle}">
-                    <StackPanel Spacing="4">
-                        <TextBlock
-                            Margin="4,4,0,8"
-                            AutomationProperties.HeadingLevel="Level2"
-                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                            Text="About" />
-                        <ctk:SettingsCard
-                            x:Name="AboutVersionCard"
-                            Description="A Jellyfin client for Windows. Free software under the GNU General Public License, version 3 (GPL-3.0)."
-                            Header="{x:Bind vm:SettingsViewModel.AboutTitle}"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE946;}">
-                            <HyperlinkButton
-                                AutomationProperties.Name="Licence: GPL-3.0"
-                                Content="Licence"
-                                NavigateUri="{x:Bind vm:SettingsViewModel.LicenseUri}" />
-                        </ctk:SettingsCard>
-                        <!--  Seaglass: the opt-in update notice. Off by default; nothing is sent until it is on  -->
-                        <ctk:SettingsCard
-                            Description="Once a day Seaglass asks GitHub whether a newer version is out. Nothing else is sent. Off by default."
-                            Header="Check for updates"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE895;}">
-                            <ToggleSwitch AutomationProperties.Name="Check for updates" IsOn="{x:Bind ViewModel.CheckForUpdates, Mode=TwoWay}" />
-                        </ctk:SettingsCard>
-                        <!--  Seaglass: the shortcut sheet (also on ? anywhere, and in the player)  -->
-                        <ctk:SettingsCard
-                            Click="OnKeyboardShortcutsClick"
-                            Description="Every key and mouse button. Press ? on any page to open it."
-                            Header="Keyboard shortcuts"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE765;}"
-                            IsClickEnabled="True" />
-                        <ctk:SettingsCard
-                            x:Name="ReportProblemCard"
-                            ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
-                            ActionIconToolTip="Opens in your browser"
-                            Click="OnReportProblemClick"
-                            Description="Opens a new issue on GitHub. Say what you did, what happened, and your Seaglass version."
-                            Header="Report a problem"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xEBE8;}"
-                            IsClickEnabled="True" />
-                        <ctk:SettingsCard
-                            x:Name="ContributeCard"
-                            ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
-                            ActionIconToolTip="Opens in your browser"
-                            Click="OnContributeClick"
-                            Description="Seaglass's code, ideas and fixes are on GitHub: github.com/mbustos27/fluentfin-mpv."
-                            Header="Contribute"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE943;}"
-                            IsClickEnabled="True" />
-                        <ctk:SettingsCard
-                            Description="Seaglass's interface comes from FluentFin by insomniachi, and its playback from jellyfin-mpv-shim by the Jellyfin project and its contributors. Both are GPL-3.0. Seaglass is not affiliated with either, nor with Jellyfin or mpv."
-                            Header="Built on FluentFin and jellyfin-mpv-shim"
-                            HeaderIcon="{ui:FontIcon Glyph=&#xE8F1;}">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <HyperlinkButton Content="FluentFin" NavigateUri="{x:Bind vm:SettingsViewModel.FluentFinUri}" />
-                                <HyperlinkButton Content="jellyfin-mpv-shim" NavigateUri="{x:Bind vm:SettingsViewModel.ShimUri}" />
-                            </StackPanel>
-                        </ctk:SettingsCard>
-                    </StackPanel>
-                </ContentControl>
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        Margin="1,28,0,6"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="About" />
+                    <ctk:SettingsCard
+                        x:Name="AboutVersionCard"
+                        Description="A Jellyfin client for Windows. Free software under the GNU General Public License, version 3 (GPL-3.0)."
+                        Header="{x:Bind vm:SettingsViewModel.AboutTitle}"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE946;}">
+                        <HyperlinkButton
+                            AutomationProperties.Name="License: GPL-3.0"
+                            Content="License"
+                            NavigateUri="{x:Bind vm:SettingsViewModel.LicenseUri}" />
+                    </ctk:SettingsCard>
+                    <!--  Seaglass: the opt-in update notice. Off by default; nothing is sent until it is on  -->
+                    <ctk:SettingsCard
+                        Description="Once a day Seaglass asks GitHub whether a newer version is out. Nothing else is sent. Off by default."
+                        Header="Check for updates"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE895;}">
+                        <ToggleSwitch AutomationProperties.Name="Check for updates" IsOn="{x:Bind ViewModel.CheckForUpdates, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                    <!--  Seaglass: the shortcut sheet (also on ? anywhere, and in the player)  -->
+                    <ctk:SettingsCard
+                        Click="OnKeyboardShortcutsClick"
+                        Description="Every key and mouse button. Press ? on any page to open it."
+                        Header="Keyboard shortcuts"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE765;}"
+                        IsClickEnabled="True" />
+                    <ctk:SettingsCard
+                        x:Name="ReportProblemCard"
+                        ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
+                        ActionIconToolTip="Opens in your browser"
+                        Click="OnReportProblemClick"
+                        Description="Opens a new issue on GitHub. Say what you did, what happened, and your Seaglass version."
+                        Header="Report a problem"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xEBE8;}"
+                        IsClickEnabled="True" />
+                    <ctk:SettingsCard
+                        x:Name="ContributeCard"
+                        ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
+                        ActionIconToolTip="Opens in your browser"
+                        Click="OnContributeClick"
+                        Description="Seaglass's code, ideas and fixes are on GitHub: github.com/mbustos27/fluentfin-mpv."
+                        Header="Contribute"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE943;}"
+                        IsClickEnabled="True" />
+                    <ctk:SettingsCard
+                        Description="Seaglass's interface comes from FluentFin by insomniachi, and its playback from jellyfin-mpv-shim by the Jellyfin project and its contributors. Both are GPL-3.0. Seaglass is not affiliated with either, nor with Jellyfin or mpv."
+                        Header="Built on FluentFin and jellyfin-mpv-shim"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE8F1;}">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <HyperlinkButton Content="FluentFin" NavigateUri="{x:Bind vm:SettingsViewModel.FluentFinUri}" />
+                            <HyperlinkButton Content="jellyfin-mpv-shim" NavigateUri="{x:Bind vm:SettingsViewModel.ShimUri}" />
+                        </StackPanel>
+                    </ctk:SettingsCard>
+                </StackPanel>
             </StackPanel>
 
         </Grid>

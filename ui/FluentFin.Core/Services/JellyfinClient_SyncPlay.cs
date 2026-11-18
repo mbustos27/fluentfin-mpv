@@ -34,6 +34,34 @@ namespace FluentFin.Core.Services
 			}
 		}
 
+		/// <summary>
+		/// Seaglass 1.1.4 (review): starts a group, and says why not when the server refuses: null when it started. The refusal
+		/// was swallowed (CreateSyncPlayGroup), so "New group" did nothing for an account allowed only to join.
+		/// </summary>
+		public async Task<string?> StartSyncPlayGroup()
+		{
+			try
+			{
+				await _jellyfinApiClient.SyncPlay.New.PostAsync(new NewGroupRequestDto
+				{
+					GroupName = $"{SessionInfo.CurrentUser?.Name}'s Group"
+				});
+				return null;
+			}
+			catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode is 401 or 403)
+			{
+				logger.LogInformation("SyncPlay: the server does not let this account start a group ({Status})", ex.ResponseStatusCode);
+				return SyncPlayRefused;
+			}
+			catch (Exception ex)
+			{
+				logger.LogWarning("SyncPlay: starting a group failed: {Error}", ex.Message);
+				return $"Couldn't start a group on {ViewModels.LoadMessages.ServerName()}. Check the connection, then try again.";
+			}
+		}
+
+		public const string SyncPlayRefused = "This server doesn't let your account start a SyncPlay group. You can still join one.";
+
 		public async Task JoinSyncPlayGroup(Guid groupId)
 		{
 			try

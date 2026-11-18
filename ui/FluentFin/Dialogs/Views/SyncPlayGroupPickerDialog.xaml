@@ -3,6 +3,7 @@
     x:Class="FluentFin.Dialogs.Views.SyncPlayGroupPickerDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
     xmlns:cc="using:CommunityToolkit.WinUI.Converters"
     xmlns:controls="using:FluentFin.Controls"
     xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
@@ -12,45 +13,81 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
-    Title="Play On"
+    Title="SyncPlay"
     CloseButtonText="Close"
     DefaultButton="Primary"
+    IsPrimaryButtonEnabled="{x:Bind ViewModel.CanJoin, Mode=OneWay}"
     PrimaryButtonCommand="{x:Bind ViewModel.JoinGroupCommand}"
-    PrimaryButtonCommandParameter="{x:Bind ItemsView.SelectedItem, Mode=OneWay}"
-    PrimaryButtonText="Select"
-    SecondaryButtonCommand="{x:Bind ViewModel.CreateOrExitGroupCommand}"
-    SecondaryButtonText="{x:Bind ViewModel.SecondaryButtonText, Mode=OneWay}"
+    PrimaryButtonCommandParameter="{x:Bind ViewModel.SelectedGroup, Mode=OneWay}"
+    PrimaryButtonText="Join"
+    IsSecondaryButtonEnabled="{x:Bind ViewModel.CanCreateGroup, Mode=OneWay}"
+    SecondaryButtonText="New group"
     Style="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
     mc:Ignorable="d">
 
+    <!--  Seaglass 1.1.4 (layout audit, item 18): titled SyncPlay (it said "Play On"), "Join" only once a group is chosen, plain words when there is none  -->
 
-    <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.HasActiveGroups, Mode=OneWay}">
-        <ctk:Case Value="True">
-            <ListView
-                x:Name="ItemsView"
-                ItemsSource="{x:Bind ViewModel.Groups, Mode=OneWay}"
-                SelectedItem="{x:Bind ViewModel.SelectedGroup, Mode=TwoWay}"
-                SelectionMode="Single">
-                <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="jm:GroupInfoDto">
-                        <Border Margin="0,5" Background="{ThemeResource ContentDialogSmokeFill}">
-                            <StackPanel Padding="10" Spacing="5">
-                                <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{x:Bind GroupName}" />
-                            </StackPanel>
-                        </Border>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
-        </ctk:Case>
-        <ctk:Case Value="False">
-            <InfoBar
-                IsClosable="False"
-                IsIconVisible="True"
-                IsOpen="True"
-                Message="No Active Sync Play groups, create a new one."
-                Severity="Informational" />
-        </ctk:Case>
-    </ctk:SwitchPresenter>
+    <!--
+        Seaglass 1.1.4 (button review A68, review): "New group" always starts one (SyncPlayGroupPickerDialog.xaml.cs keeps the dialog
+        open to say a refusal); "Leave group" is separate, only while in a group, and asks first.
+    -->
+    <StackPanel MinWidth="380" Spacing="12">
+        <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.HasActiveGroups, Mode=OneWay}">
+            <ctk:Case Value="True">
+                <ListView
+                    x:Name="ItemsView"
+                    AutomationProperties.Name="SyncPlay groups"
+                    ItemsSource="{x:Bind ViewModel.Groups, Mode=OneWay}"
+                    SelectedItem="{x:Bind ViewModel.SelectedGroup, Mode=TwoWay}"
+                    SelectionMode="Single">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="jm:GroupInfoDto">
+                            <Border Margin="0,5" Background="{ThemeResource ContentDialogSmokeFill}">
+                                <StackPanel Padding="10" Spacing="5">
+                                    <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{x:Bind GroupName}" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </ctk:Case>
+            <ctk:Case Value="False">
+                <TextBlock
+                    x:Name="NoGroupsText"
+                    Text="No groups yet. Start one with New group, and others on this server can join it."
+                    TextWrapping="WrapWholeWords" />
+            </ctk:Case>
+        </ctk:SwitchPresenter>
+        <TextBlock
+            x:Name="CreateHintText"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="{x:Bind ViewModel.CreateHint, Mode=OneWay}"
+            TextWrapping="WrapWholeWords"
+            Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.HasCreateHint), Mode=OneWay}" />
+        <TextBlock
+            x:Name="StatusText"
+            AutomationProperties.LiveSetting="Polite"
+            Text="{x:Bind ViewModel.Status, Mode=OneWay}"
+            TextWrapping="WrapWholeWords" />
+        <Button
+            x:Name="LeaveGroupButton"
+            Command="{x:Bind ViewModel.AskToLeaveCommand}"
+            Content="Leave group"
+            Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsInGroup), Mode=OneWay}" />
+        <StackPanel
+            x:Name="LeaveConfirm"
+            Spacing="8"
+            Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsLeaveConfirmShown), Mode=OneWay}">
+            <TextBlock Text="Leave this group? Your playback stops following the others." TextWrapping="WrapWholeWords" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button
+                    x:Name="LeaveConfirmButton"
+                    Command="{x:Bind ViewModel.LeaveGroupCommand}"
+                    Content="Leave" />
+                <Button Command="{x:Bind ViewModel.StayInGroupCommand}" Content="Stay" />
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
 
 
 

@@ -18,28 +18,34 @@ public sealed class SettingsAndRailXamlTests
 	private const string Settings = "FluentFin/Views/SettingsPage.xaml";
 	private const string Shell = "FluentFin/Views/ShellPage.xaml";
 
-	// ---- the rail
+	// ---- 1.2.0: no rail; the sections are tabs in the top bar (TopNavigationTests: which tabs, which one is marked)
 
 	[Fact]
-	public void TheRail_HasNoContributeOrJellyseerrItem()
+	public void TheShell_HasNoRail()
 	{
 		var shell = Load(Shell);
-		var items = shell.Descendants(Presentation + "NavigationViewItem").Select(x => (string?)x.Attribute("Content")).ToList();
 
-		Assert.Equal(["Home", "Libraries", "Settings"], items);
+		Assert.Empty(shell.Descendants(Presentation + "NavigationView"));
+		Assert.Empty(shell.Descendants(Presentation + "NavigationViewItem"));
 		Assert.DoesNotContain(shell.Descendants(), e => e.Attribute("Tapped") is not null);
-		Assert.DoesNotContain("OnContributeTapped", Code("FluentFin/Views/ShellPage.xaml.cs"));
+		var code = Code("FluentFin/Views/ShellPage.xaml.cs");
+		Assert.DoesNotContain("OnContributeTapped", code);
+		Assert.DoesNotContain("NavigationViewControl", code);
+		Assert.DoesNotContain("RailSelection", code);
 	}
 
 	[Fact]
-	public void TheRail_MarksSettings_TooWhileItIsOpen()
+	public void TheTopBar_HostsTheTabs_WithNoSettingsGear()
 	{
-		// the selection follows the page from the footer items as well (Settings sits there)
-		var shell = Code("FluentFin/Views/ShellPage.xaml.cs");
-		Assert.Contains("NavigationViewControl.MenuItems.Concat(NavigationViewControl.FooterMenuItems)", shell);
-		// review: a page off the rail reaches the selection (no WhereNotNull) and RailSelection unmarks Settings for it
-		Assert.DoesNotContain(".WhereNotNull()", shell);
-		Assert.Contains("NavigationViewControl.SelectedItem = RailSelection.Next(NavigationViewControl.SelectedItem, target, x => NavigationViewControl.FooterMenuItems.Contains(x));", shell);
+		var bar = Load("FluentFin/Views/TitleBarControl.xaml");
+		XNamespace local = "using:FluentFin.Controls";
+
+		var tabs = Assert.Single(bar.Descendants(local + "TopTabStrip"));
+		Assert.Equal("{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsNavigationShown), Mode=OneWay}", (string?)tabs.Attribute("Visibility"));
+		// Settings is in the Account menu (and Ctrl+,): no gear in the bar outside that menu
+		var flyout = bar.Descendants(Presentation + "Flyout").Single(f => (string?)f.Attribute(Xaml + "Name") == "AccountFlyout");
+		Assert.DoesNotContain(bar.Descendants().Where(e => !e.Ancestors().Contains(flyout)), e => e.Attributes().Any(a => a.Value.Contains('\uE713')));
+		Assert.Contains(flyout.Descendants(), e => (string?)e.Attribute("Command") == "{x:Bind ViewModel.GoToSettingsCommand}");
 	}
 
 	[Fact]
@@ -56,9 +62,8 @@ public sealed class SettingsAndRailXamlTests
 	[Fact]
 	public void EverySettingsGroup_HasATitle_AndAboutIsLast()
 	{
-		var groups = Load(Settings).Descendants(Presentation + "ContentControl")
-			.Where(x => (string?)x.Attribute("Style") == "{StaticResource GlassSurfaceStyle}")
-			.ToList();
+		// Seaglass 1.1.4: a group is its heading and its cards, no panel around them (AccountMenuXamlTests.Groups)
+		var groups = AccountMenuXamlTests.Groups().ToList();
 
 		var titles = groups.Select(g =>
 		{
@@ -67,7 +72,8 @@ public sealed class SettingsAndRailXamlTests
 			return (string?)heading.Attribute("Text");
 		}).ToList();
 
-		Assert.Equal(["Appearance", "Playback", "Audio and subtitles", "Servers and accounts", "Integrations", "Advanced", "About"], titles);
+		// Seaglass 1.1.4: Other devices (Quick Connect, SyncPlay, from the old profile flyout)
+		Assert.Equal(["Appearance", "Playback", "Audio and subtitles", "Servers and accounts", "Other devices", "Integrations", "Advanced", "About"], titles);
 
 		// nothing after About
 		var stack = groups[^1].Parent!;
@@ -102,7 +108,7 @@ public sealed class SettingsAndRailXamlTests
 		Assert.Equal("{x:Bind vm:SettingsViewModel.RemoveServerLabel(DisplayName)}", (string?)server.Attribute("AutomationProperties.Name"));
 		Assert.Equal("{Binding ElementName=Page, Path=ViewModel.DeleteServerCommand}", (string?)server.Attribute("Command"));
 
-		var user = Assert.Single(buttons, b => (string?)b.Attribute("Content") == "Remove");
+		var user = Assert.Single(buttons, b => (string?)b.Attribute("Content") == "Remove sign-in");
 		Assert.Null(user.Attribute("Style"));
 		Assert.Equal("{x:Bind vm:SettingsViewModel.RemoveUserLabel(Username)}", (string?)user.Attribute("AutomationProperties.Name"));
 		Assert.Equal("RemoveUser", (string?)user.Attribute("Click"));
@@ -203,7 +209,10 @@ public sealed class SettingsAndRailXamlTests
 		Assert.Contains("public bool HasPlayerChoice => SettingsViewModel.HasPlayerChoice;", Code("FluentFin/Views/SettingsPage.xaml.cs"));
 
 		var autoplay = Assert.Single(Load(Settings).Descendants(Toolkit + "SettingsCard"), c => (string?)c.Attribute("Header") == "Play the next episode automatically");
-		Assert.Equal("{x:Bind c:Converters.BooleanToVisibility(ViewModel.FollowsAutoPlay), Mode=OneWay}", (string?)autoplay.Attribute("Visibility"));
+		// Seaglass 1.1.4 (interaction audit, item 7): for every player, the mpv player too (it was hidden with mpv: no way to turn
+		// auto-play off with the only shipped player); bound to the user's EnableNextEpisodeAutoPlay, which the player sends on
+		Assert.Null(autoplay.Attribute("Visibility"));
+		Assert.Equal("{x:Bind ViewModel.AutoPlayNextEpisode, Mode=TwoWay}", (string?)autoplay.Descendants(Presentation + "ToggleSwitch").Single().Attribute("IsOn"));
 	}
 
 	// ---- Settings: Integrations
@@ -219,8 +228,8 @@ public sealed class SettingsAndRailXamlTests
 		Assert.Contains("NavigateTo(JellyseerrEntry.PageKey)", Code("FluentFin/Views/SettingsPage.xaml.cs"));
 	}
 
-	private static XElement Group(string title) => Load(Settings).Descendants(Presentation + "ContentControl")
-		.Single(x => (string?)x.Attribute("Style") == "{StaticResource GlassSurfaceStyle}" && (string?)x.Descendants(Presentation + "TextBlock").First().Attribute("Text") == title);
+	private static XElement Group(string title) => AccountMenuXamlTests.Groups()
+		.Single(x => (string?)x.Elements().First().Attribute("Text") == title);
 
 	private static XDocument Load(string repoRelativePath) => XDocument.Load(Path.Combine(RepoRoot, repoRelativePath), LoadOptions.SetLineInfo);
 

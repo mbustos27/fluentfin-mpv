@@ -42,4 +42,11 @@ public partial class JellyfinClient
 	// fluentfin-mpv: a library may have been added, removed or renamed from another client: read the views again
 	// (GetUserViews). Also sent for items added or changed in a library, so it costs at most one views request per use.
 	internal void OnLibraryChanged(Jellyfin.Sdk.Generated.Models.LibraryChangedMessage message) => ForgetUserViews();
+
+	/// <summary>Tests: the websocket closes (a client left behind kept reconnecting to the next test's fake server).</summary>
+	internal void StopWebSocket()
+	{
+		_webSocket?.Dispose();
+		_webSocket = null;
+	}
 }
