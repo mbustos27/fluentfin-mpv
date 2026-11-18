@@ -127,8 +127,8 @@ public static class ShortcutCatalog
 		]),
 		new("Home page",
 		[
-			new("N", "Next up", ShortcutScope.Page),
-			new("C", "Continue watching", ShortcutScope.Page),
+			new("N", "Go to the Next Up row (Enter plays)", ShortcutScope.Page),
+			new("C", "Go to the Continue Watching row (Enter plays)", ShortcutScope.Page),
 		]),
 		new("Playback",
 		[

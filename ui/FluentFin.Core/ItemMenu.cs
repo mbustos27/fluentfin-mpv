@@ -9,6 +9,8 @@ public enum ItemMenuCommand
 	ToggleWatched,
 	ToggleFavorite,
 	ResetWatchProgress,
+	/// <summary>Seaglass 1.1.4: a card of Home's Continue Watching row: out of the row, its resume point cleared, with an Undo.</summary>
+	RemoveFromContinueWatching,
 	MediaInfo,
 	EditMetadata,
 	EditImages,
@@ -36,7 +38,15 @@ public sealed record ConfirmPrompt(string Title, string Message, string ConfirmT
 public static class ItemMenu
 {
 	/// <summary>The groups for <paramref name="dto"/>; none is empty. <paramref name="user"/>'s policy decides the administrative entries.</summary>
-	public static IReadOnlyList<IReadOnlyList<ItemMenuEntry>> For(BaseItemDto dto, UserDto? user, bool includePlay, bool canEditSegments)
+	/// <param name="inContinueWatching">
+	/// Seaglass 1.1.4: the card is in Home's Continue Watching row: "Remove from Continue Watching" (with an Undo) instead of
+	/// "Reset Watch Progress", which does the same on the server.
+	/// </param>
+	/// <param name="includeToggles">
+	/// Seaglass 1.1.4 (layout audit, item 23): Mark as watched and the favorite; an item page leaves them out (its own Watched
+	/// and Favorite buttons are beside the menu), cards and episode rows keep them.
+	/// </param>
+	public static IReadOnlyList<IReadOnlyList<ItemMenuEntry>> For(BaseItemDto dto, UserDto? user, bool includePlay, bool canEditSegments, bool inContinueWatching = false, bool includeToggles = true)
 	{
 		if (dto.Type is not { } type)
 		{
@@ -56,46 +66,53 @@ public static class ItemMenu
 				yours.Add(new(ItemMenuCommand.Play, "Play"));
 			}
 
-			yours.Add(new(ItemMenuCommand.ToggleWatched, dto.UserData?.Played == true ? "Mark as unwatched" : "Mark as watched"));
-			yours.Add(new(ItemMenuCommand.ToggleFavorite, dto.UserData?.IsFavorite == true ? "Remove from favorites" : "Add to favorites"));
+			if (includeToggles)
+			{
+				yours.Add(new(ItemMenuCommand.ToggleWatched, dto.UserData?.Played == true ? "Mark as unwatched" : "Mark as watched"));
+				yours.Add(new(ItemMenuCommand.ToggleFavorite, dto.UserData?.IsFavorite == true ? "Remove from favorites" : "Add to favorites"));
+			}
 		}
 
-		if (video && dto.UserData?.PlaybackPositionTicks is > 0 && dto.Id is not null)
+		if (inContinueWatching && dto.Id is not null)
 		{
-			yours.Add(new(ItemMenuCommand.ResetWatchProgress, "Reset Watch Progress"));
+			yours.Add(new(ItemMenuCommand.RemoveFromContinueWatching, "Remove from Continue Watching"));
+		}
+		else if (video && dto.UserData?.PlaybackPositionTicks is > 0 && dto.Id is not null)
+		{
+			yours.Add(new(ItemMenuCommand.ResetWatchProgress, "Reset watch progress"));
 		}
 
 		List<ItemMenuEntry> metadata = [];
 		if (video)
 		{
-			metadata.Add(new(ItemMenuCommand.MediaInfo, "Media Info"));
+			metadata.Add(new(ItemMenuCommand.MediaInfo, "Media info"));
 		}
 
 		if (admin)
 		{
-			metadata.Add(new(ItemMenuCommand.EditMetadata, "Edit Metadata"));
-			metadata.Add(new(ItemMenuCommand.EditImages, "Edit Images"));
+			metadata.Add(new(ItemMenuCommand.EditMetadata, "Edit metadata…"));
+			metadata.Add(new(ItemMenuCommand.EditImages, "Edit images…"));
 		}
 
 		if (admin && canEditSegments)
 		{
-			metadata.Add(new(ItemMenuCommand.EditSegments, "Edit Segments"));
+			metadata.Add(new(ItemMenuCommand.EditSegments, "Edit segments…"));
 		}
 
 		// jellyfin-web: subtitle management is its own permission, which administrators always have
 		if (video && (admin || policy?.EnableSubtitleManagement == true))
 		{
-			metadata.Add(new(ItemMenuCommand.EditSubtitles, "Edit Subtitles"));
+			metadata.Add(new(ItemMenuCommand.EditSubtitles, "Edit subtitles…"));
 		}
 
 		if (admin && type is not BaseItemDto_Type.CollectionFolder)
 		{
-			metadata.Add(new(ItemMenuCommand.Identify, "Identify"));
+			metadata.Add(new(ItemMenuCommand.Identify, "Identify…"));
 		}
 
 		if (admin)
 		{
-			metadata.Add(new(ItemMenuCommand.RefreshMetadata, "Refresh metadata"));
+			metadata.Add(new(ItemMenuCommand.RefreshMetadata, "Refresh metadata…"));
 		}
 
 		List<ItemMenuEntry> delete = [];
@@ -124,9 +141,9 @@ public static class ItemMenu
 
 	private static string? DeleteText(BaseItemDto_Type type) => type switch
 	{
-		BaseItemDto_Type.Movie => "Delete Media",
-		BaseItemDto_Type.Series => "Delete Series",
-		BaseItemDto_Type.Season => "Delete Season",
+		BaseItemDto_Type.Movie => "Delete movie…",
+		BaseItemDto_Type.Series => "Delete series…",
+		BaseItemDto_Type.Season => "Delete season…",
 		_ => null,
 	};
 

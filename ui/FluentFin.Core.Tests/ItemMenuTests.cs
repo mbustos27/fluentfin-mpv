@@ -160,7 +160,40 @@ public sealed class ItemMenuTests
 	public void ASeasonsDelete_SaysSeason()
 	{
 		var delete = Assert.Single(Entries(Item(BaseItemDto_Type.Season), Admin), x => x.Command == ItemMenuCommand.Delete);
-		Assert.Equal("Delete Season", delete.Text);
+		Assert.Equal("Delete season…", delete.Text);
+	}
+
+	// Seaglass 1.1.4 (layout audit, item 13): sentence case for every command, an ellipsis where it asks for more, and
+	// Identify has an icon of its own
+	[Fact]
+	public void EveryEntry_IsInSentenceCase_TheOnesThatAskForMoreEndInAnEllipsis()
+	{
+		var item = Item(BaseItemDto_Type.Movie, position: 100);
+		var texts = ItemMenu.For(item, Admin, includePlay: true, canEditSegments: true).SelectMany(x => x).Select(x => x.Text).ToList();
+
+		Assert.Equal(["Play", "Mark as watched", "Add to favorites", "Reset watch progress", "Media info", "Edit metadata…", "Edit images…",
+			"Edit segments…", "Edit subtitles…", "Identify…", "Refresh metadata…", "Delete movie…"], texts);
+		Assert.Contains("Remove from Continue Watching", ItemMenu.For(item, Admin, true, true, inContinueWatching: true).SelectMany(x => x).Select(x => x.Text));
+
+		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Converters/JellyfinFlyoutConverter.cs"));
+		Assert.Contains("ItemMenuCommand.Identify => new SymbolIcon { Symbol = Symbol.Find }", code);
+	}
+
+	// layout audit, item 23: an item page's menu does not repeat its Watched and Favorite buttons; cards and episode rows keep them
+	[Fact]
+	public void WithoutToggles_TheMenuLeavesOutWatchedAndFavorite()
+	{
+		var item = Item(BaseItemDto_Type.Movie, position: 100);
+
+		var page = ItemMenu.For(item, Viewer, includePlay: false, canEditSegments: false, includeToggles: false).SelectMany(x => x).Select(x => x.Command).ToList();
+		var card = ItemMenu.For(item, Viewer, includePlay: true, canEditSegments: false).SelectMany(x => x).Select(x => x.Command).ToList();
+
+		Assert.DoesNotContain(ItemMenuCommand.ToggleWatched, page);
+		Assert.DoesNotContain(ItemMenuCommand.ToggleFavorite, page);
+		Assert.Contains(ItemMenuCommand.ResetWatchProgress, page);
+		Assert.Contains(ItemMenuCommand.ToggleWatched, card);
+		Assert.Contains(ItemMenuCommand.ToggleFavorite, card);
+		Assert.Contains("public bool IncludeToggles { get; set; } = true;", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Converters/JellyfinFlyoutConverter.cs")));
 	}
 
 	[Fact]
@@ -277,6 +310,53 @@ public sealed class ItemMenuTests
 
 		Assert.Contains("DefaultButton = ContentDialogButton.Close", code);
 		Assert.Contains("CloseButtonText = \"Cancel\"", code);
+	}
+
+	// Seaglass 1.1.4: a card of Home's Continue Watching row offers to take it out (with an Undo); it replaces Reset Watch
+	// Progress there, which does the same on the server; everywhere else the menu is as before
+	[Theory]
+	[InlineData(BaseItemDto_Type.Movie)]
+	[InlineData(BaseItemDto_Type.Episode)]
+	public void AContinueWatchingCard_OffersRemoveFromContinueWatching_InsteadOfReset(BaseItemDto_Type type)
+	{
+		var item = Item(type, position: 100);
+
+		var inRow = ItemMenu.For(item, Viewer, includePlay: true, canEditSegments: false, inContinueWatching: true).SelectMany(x => x).Select(x => x.Command).ToList();
+		var elsewhere = Entries(item, Viewer, includePlay: true).Select(x => x.Command).ToList();
+
+		Assert.Contains(ItemMenuCommand.RemoveFromContinueWatching, inRow);
+		Assert.DoesNotContain(ItemMenuCommand.ResetWatchProgress, inRow);
+		Assert.DoesNotContain(ItemMenuCommand.RemoveFromContinueWatching, elsewhere);
+		Assert.Contains(ItemMenuCommand.ResetWatchProgress, elsewhere);
+	}
+
+	// Seaglass 1.1.4 (interaction audit, item 3): the menu says what the item is now when it opens, not what it was when its
+	// card was made: the converter fills it again on Opening, from ItemMenu.For of the item as it is then
+	[Fact]
+	public void TheMenu_IsMadeAgainWhenItOpens_FromTheItemAsItIsThen()
+	{
+		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Converters/JellyfinFlyoutConverter.cs")).Replace("\r\n", "\n");
+
+		Assert.Contains("flyout.Opening += (sender, _) =>", code);
+		var opening = code[code.IndexOf("flyout.Opening += (sender, _) =>", StringComparison.Ordinal)..];
+		Assert.Contains("Fill(opening, dto, includePlay, includeToggles);", opening[..opening.IndexOf("};", StringComparison.Ordinal)]);
+		Assert.Contains("flyout.Items.Clear();", code);
+
+		var item = Item(BaseItemDto_Type.Movie);
+		Assert.Contains(Entries(item, Viewer), e => e.Text == "Mark as watched");
+		item.UserData!.Played = true;
+		item.UserData.IsFavorite = true;
+		Assert.Contains(Entries(item, Viewer), e => e.Text == "Mark as unwatched");
+		Assert.Contains(Entries(item, Viewer), e => e.Text == "Remove from favorites");
+	}
+
+	[Fact]
+	public void TheConverter_AsksTheRow_AndRunsTheRemovalThroughIt()
+	{
+		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Converters/JellyfinFlyoutConverter.cs"));
+
+		Assert.Contains("inContinueWatching: includePlay && ContinueWatchingRows.RowOf(dto) is not null", code);
+		Assert.Contains("ContinueWatchingRows.RowOf(dto)?.Remove(dto)", code);
 	}
 
 	[Fact]

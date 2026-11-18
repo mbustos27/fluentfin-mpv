@@ -1,6 +1,7 @@
 ﻿using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
 using FluentFin.Core;
+using FluentFin.Core.ViewModels;
 using FluentFin.Dialogs;
 using Jellyfin.Sdk.Generated.Models;
 using Microsoft.UI.Xaml;
@@ -22,6 +23,12 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 	/// </summary>
 	public bool IncludePlay { get; set; }
 
+	/// <summary>
+	/// Seaglass 1.1.4 (layout audit, item 23): Mark as watched and the favorite in the menu (cards and episode rows). An item
+	/// page sets it false: its Watched and Favorite buttons are beside its More button.
+	/// </summary>
+	public bool IncludeToggles { get; set; } = true;
+
 	public object? Convert(object value, Type targetType, object parameter, string language)
 	{
 		if (value is not BaseItemDto dto)
@@ -29,14 +36,31 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 			return null;
 		}
 
-		var groups = Groups(dto, IncludePlay);
-		if (groups.Count == 0)
+		if (Groups(dto, IncludePlay, IncludeToggles).Count == 0)
 		{
 			return null;
 		}
 
 		var flyout = new MenuBarItemFlyout();
-		foreach (var group in groups)
+		var includePlay = IncludePlay;
+		var includeToggles = IncludeToggles;
+		Fill(flyout, dto, includePlay, includeToggles);
+		// Seaglass 1.1.4 (interaction audit, item 3): made again each time it opens, from the item as it is then ("Mark as
+		// unwatched" once it was marked, "Remove from favorites" once added): it was made once, when the card was
+		flyout.Opening += (sender, _) =>
+		{
+			if (sender is MenuFlyout opening)
+			{
+				Fill(opening, dto, includePlay, includeToggles);
+			}
+		};
+		return flyout;
+	}
+
+	private static void Fill(MenuFlyout flyout, BaseItemDto dto, bool includePlay, bool includeToggles)
+	{
+		flyout.Items.Clear();
+		foreach (var group in Groups(dto, includePlay, includeToggles))
 		{
 			if (flyout.Items.Count > 0)
 			{
@@ -48,8 +72,6 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 				flyout.Items.Add(Make(entry, dto));
 			}
 		}
-
-		return flyout;
 	}
 
 	public object ConvertBack(object value, Type targetType, object parameter, string language)
@@ -64,8 +86,10 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 	public static Visibility CardMenuVisibility(BaseItemDto? dto) =>
 		dto is not null && Groups(dto, includePlay: true).Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-	private static IReadOnlyList<IReadOnlyList<ItemMenuEntry>> Groups(BaseItemDto dto, bool includePlay) =>
-		ItemMenu.For(dto, SessionInfo.CurrentUser, includePlay, CanEditSegments());
+	// Seaglass 1.1.4: a card of Home's Continue Watching row (its item record is registered by the row) offers to take it out
+	private static IReadOnlyList<IReadOnlyList<ItemMenuEntry>> Groups(BaseItemDto dto, bool includePlay, bool includeToggles = true) =>
+		ItemMenu.For(dto, SessionInfo.CurrentUser, includePlay, CanEditSegments(), inContinueWatching: includePlay && ContinueWatchingRows.RowOf(dto) is not null,
+			includeToggles: includeToggles);
 
 	// an administrator signed in before the server's plugins were read has no list yet
 	private static bool CanEditSegments() => SessionInfo.CurrentUser?.Policy?.IsAdministrator == true && SessionInfo.Plugins is not null && SessionInfo.CanEditMediaSegments();
@@ -88,16 +112,22 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 		ItemMenuCommand.ToggleWatched => new FontIcon { Glyph = "" },
 		ItemMenuCommand.ToggleFavorite => new FontIcon { Glyph = "" },
 		ItemMenuCommand.ResetWatchProgress => new FontIcon { Glyph = "" },
+		ItemMenuCommand.RemoveFromContinueWatching => new FontIcon { Glyph = "" },
 		ItemMenuCommand.MediaInfo => new SymbolIcon { Symbol = Symbol.MusicInfo },
 		ItemMenuCommand.EditMetadata => new SymbolIcon { Symbol = Symbol.Edit },
 		ItemMenuCommand.EditImages => new FontIcon { Glyph = "" },
 		ItemMenuCommand.EditSegments => new FontIcon { Glyph = "" },
 		ItemMenuCommand.EditSubtitles => new SymbolIcon { Symbol = Symbol.ClosedCaption },
-		ItemMenuCommand.Identify => new SymbolIcon { Symbol = Symbol.Edit },
+		ItemMenuCommand.Identify => new SymbolIcon { Symbol = Symbol.Find }, // its own icon (layout audit, item 13): Edit metadata has the pencil
 		ItemMenuCommand.RefreshMetadata => new SymbolIcon { Symbol = Symbol.Refresh },
 		ItemMenuCommand.Delete => new SymbolIcon { Symbol = Symbol.Delete },
 		_ => new FontIcon { Glyph = "" },
 	};
+
+	// Seaglass 1.1.4: the row the card is in takes it out (at once, with an Undo on Home's notice)
+	private static readonly AsyncRelayCommand<BaseItemDto> s_removeFromContinueWatching =
+		new(dto => dto is null ? Task.CompletedTask : ContinueWatchingRows.RowOf(dto)?.Remove(dto) ?? Task.CompletedTask,
+			AsyncRelayCommandOptions.AllowConcurrentExecutions); // two cards taken out in a row: the second does not wait for the first's answer
 
 	// what each entry does once ItemMenu.RunAsync lets it run (after the yes, for Delete)
 	private static Task Run(ItemMenuCommand command, BaseItemDto dto)
@@ -108,6 +138,7 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 			ItemMenuCommand.ToggleWatched => (App.Commands.ToggleWatchedCommand, dto),
 			ItemMenuCommand.ToggleFavorite => (App.Commands.ToggleFavoriteCommand, dto),
 			ItemMenuCommand.ResetWatchProgress => (App.Commands.ResetWatchProgressCommand, dto.Id),
+			ItemMenuCommand.RemoveFromContinueWatching => (s_removeFromContinueWatching, dto),
 			ItemMenuCommand.MediaInfo => (App.Dialogs.MediaInfoDialogCommand, dto),
 			ItemMenuCommand.EditMetadata => (App.Dialogs.EditMetadataDialogCommand, dto),
 			ItemMenuCommand.EditImages => (App.Dialogs.EditImagesDialogCommand, dto),

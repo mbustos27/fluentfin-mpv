@@ -14,7 +14,9 @@
         item pages' rows). One axis per input: the plain wheel scrolls the page (the row routes it, WinUI's horizontal
         scroll viewer would swallow it: microsoft-ui-xaml #10172), the tilt wheel, Shift+wheel and a swipe move the row.
         Always-visible arrows and "See all" in the header; one Tab stop (TabFocusNavigation Once), Left/Right/Home/End along
-        the row, Up/Down between rows; the title is a heading and the row a list for Narrator.
+        the row, Up/Down between rows; the title is a heading and the row a list for Narrator. Seaglass 1.1.4 (layout audit,
+        item 2): the title is the See all link (with a chevron), and the arrows are plain chevrons (the filled triangles read
+        as Play), quiet (half strength) until the pointer is over the row or the keyboard is in it, never hidden.
     -->
     <Grid x:Name="RowRoot" RowSpacing="8">
         <Grid.RowDefinitions>
@@ -30,6 +32,7 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
+            <!--  a row with nowhere to go: its title, a heading  -->
             <TextBlock
                 x:Name="TitleText"
                 VerticalAlignment="Center"
@@ -37,17 +40,47 @@
                 Style="{StaticResource GlassSectionTitleTextBlockStyle}"
                 Text="{x:Bind Header, Mode=OneWay}" />
 
-            <!--  a real button, the row header's one Tab stop (the arrows have none: the row's keys and the wheel move it)  -->
+            <!--
+                Seaglass 1.1.4 (UX review, fix 9): a row with a See all: the title itself is the button, with a chevron that shows
+                it opens something; Narrator hears "See all <title>, button", and the title inside is still a heading. The row
+                header's one Tab stop (the arrows have none: the row's keys and the wheel move it).
+            -->
             <Button
                 x:Name="SeeAllButton"
-                Grid.Column="1"
-                MinHeight="32"
-                Padding="12,0"
+                MinHeight="40"
+                Margin="-10,0,0,0"
+                Padding="10,2,8,2"
+                HorizontalAlignment="Left"
                 VerticalAlignment="Center"
+                Background="Transparent"
+                BorderThickness="0"
                 Click="SeeAllButton_Click"
-                Content="See all"
-                Style="{StaticResource GlassPillButtonStyle}"
-                Visibility="Collapsed" />
+                CornerRadius="{StaticResource GlassButtonCornerRadius}"
+                ToolTipService.ToolTip="See all"
+                Visibility="Collapsed">
+                <Button.Resources>
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="GlassHoverOverlayBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="GlassPressedOverlayBrush" />
+                    <StaticResource x:Key="ButtonForeground" ResourceKey="GlassTextPrimaryBrush" />
+                    <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="GlassTextPrimaryBrush" />
+                    <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="GlassTextPrimaryBrush" />
+                </Button.Resources>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock
+                        x:Name="SeeAllTitle"
+                        VerticalAlignment="Center"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                        Text="{x:Bind Header, Mode=OneWay}" />
+                    <FontIcon
+                        x:Name="SeeAllChevron"
+                        Margin="0,3,0,0"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AccessibilityView="Raw"
+                        FontSize="16"
+                        Glyph="&#xE76C;" />
+                </StackPanel>
+            </Button>
 
             <Button
                 x:Name="ScrollLeftBtn"
@@ -62,7 +95,7 @@
                 Style="{StaticResource GlassIconButtonStyle}"
                 ToolTipService.ToolTip="Scroll left"
                 Visibility="Collapsed">
-                <FontIcon FontSize="14" Glyph="&#xedd9;" />
+                <FontIcon FontSize="14" Glyph="&#xE76B;" />
             </Button>
             <Button
                 x:Name="ScrollRightBtn"
@@ -76,7 +109,7 @@
                 Style="{StaticResource GlassIconButtonStyle}"
                 ToolTipService.ToolTip="Scroll right"
                 Visibility="Collapsed">
-                <FontIcon FontSize="14" Glyph="&#xEDDA;" />
+                <FontIcon FontSize="14" Glyph="&#xE76C;" />
             </Button>
         </Grid>
 

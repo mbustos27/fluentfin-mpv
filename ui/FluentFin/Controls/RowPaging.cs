@@ -140,6 +140,27 @@ internal static class RowPaging
 		return 0;
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.4: where the focus goes when a card leaves the row (now <paramref name="count"/> cards): the focused one left,
+	/// the card that took its place (the next), or the new last one; another one left, the focused card where it is now.
+	/// </summary>
+	public static int FocusAfterRemoval(int focused, int removed, int count)
+	{
+		if (count <= 0)
+		{
+			return -1;
+		}
+
+		var index = focused > removed ? focused - 1 : focused;
+		return Math.Clamp(index, 0, count - 1);
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4 (layout audit, item 2): a row's arrows are quiet (half strength, still there: hover-only arrows fail mouse
+	/// users) until the pointer is over the row or the keyboard is in it.
+	/// </summary>
+	public static double ArrowOpacity(bool pointerOver, bool focusInside) => pointerOver || focusInside ? 1.0 : 0.5;
+
 	/// <summary>The accessible name of a row's header arrow ("Scroll Recently Added left").</summary>
 	public static string ArrowName(string header, bool forward) =>
 		string.IsNullOrWhiteSpace(header) ? (forward ? "Scroll right" : "Scroll left") : $"Scroll {header} {(forward ? "right" : "left")}";

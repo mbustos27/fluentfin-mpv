@@ -37,6 +37,34 @@ public sealed partial class ShelfRow : UserControl
 	/// <summary>Every row on screen, in no order: how Up and Down find the neighbouring row.</summary>
 	private static readonly List<ShelfRow> s_rows = [];
 
+	/// <summary>Seaglass 1.1.4: the row whose card was last focused or pressed (the card the user left a page from).</summary>
+	internal static ShelfRow? LastUsed { get; private set; }
+
+	/// <summary>The rows on screen now.</summary>
+	internal static IEnumerable<ShelfRow> Shown => s_rows.Where(r => r.IsShown);
+
+	/// <summary>The item of the row's remembered card (the last focused or pressed), or null.</summary>
+	internal object? LastItem => Repeater.ItemsSourceView is { } view && _lastIndex >= 0 && _lastIndex < view.Count ? view.GetAt(_lastIndex) : null;
+
+	/// <summary>Seaglass 1.1.4: focuses the card of the first item that <paramref name="match"/> finds (Back to Home); false when none.</summary>
+	internal bool FocusItem(Func<object, bool> match, FocusState state)
+	{
+		if (Repeater.ItemsSourceView is not { } view)
+		{
+			return false;
+		}
+
+		for (var i = 0; i < view.Count; i++)
+		{
+			if (match(view.GetAt(i)))
+			{
+				return FocusIndex(i, state);
+			}
+		}
+
+		return false;
+	}
+
 	private int _lastIndex = -1;
 	private bool _directed;
 	private ScrollViewer? _pageScroller;
@@ -57,6 +85,14 @@ public sealed partial class ShelfRow : UserControl
 		};
 		Unloaded += (_, _) => s_rows.Remove(this);
 
+		// Seaglass 1.1.4: the arrows are quiet until the pointer is over the row or the keyboard is in it
+		RowRoot.PointerEntered += (_, _) => { _pointerOver = true; UpdateQuiet(); };
+		RowRoot.PointerExited += (_, _) => { _pointerOver = false; UpdateQuiet(); };
+		RowRoot.PointerCanceled += (_, _) => { _pointerOver = false; UpdateQuiet(); };
+		GotFocus += (_, _) => { _focusInside = true; UpdateQuiet(); };
+		LostFocus += (_, _) => { _focusInside = false; UpdateQuiet(); };
+		UpdateQuiet();
+
 		Scroller.ViewChanged += (_, _) => UpdateArrows();
 		Scroller.SizeChanged += (_, _) =>
 		{
@@ -71,13 +107,90 @@ public sealed partial class ShelfRow : UserControl
 		List.AddHandler(KeyDownEvent, new KeyEventHandler(Scroller_KeyDown), false);
 		Scroller.GettingFocus += Scroller_GettingFocus;
 		Scroller.GotFocus += Scroller_GotFocus;
+		// Seaglass 1.1.4: a card clicked (which does not take the focus) is the row's remembered card too: Back comes back to it
+		List.AddHandler(PointerPressedEvent, new PointerEventHandler((_, e) =>
+		{
+			if (IndexOf(e.OriginalSource as DependencyObject) is >= 0 and var index)
+			{
+				_lastIndex = index;
+				LastUsed = this;
+			}
+		}), true);
 
 		Repeater.ElementPrepared += (_, e) => SetPosition(e.Element, e.Index);
 		Repeater.ElementIndexChanged += (_, e) => SetPosition(e.Element, e.NewIndex);
 		Repeater.Loaded += (_, _) => UpdateNames();
 		RegisterPropertyChangedCallback(HeaderProperty, (_, _) => UpdateNames());
 		RegisterPropertyChangedCallback(HasSeeAllProperty, (_, _) => UpdateNames());
-		RegisterPropertyChangedCallback(ItemsSourceProperty, (_, _) => { _lastIndex = -1; DispatcherQueue.TryEnqueue(() => { UpdateNames(); UpdateArrows(); }); });
+		RegisterPropertyChangedCallback(ItemsSourceProperty, (_, _) => { _lastIndex = -1; WatchSource(); DispatcherQueue.TryEnqueue(() => { UpdateNames(); UpdateArrows(); }); });
+	}
+
+	private System.Collections.Specialized.INotifyCollectionChanged? _source;
+
+	private void WatchSource()
+	{
+		if (_source is not null)
+		{
+			_source.CollectionChanged -= Source_CollectionChanged;
+		}
+
+		_source = ItemsSource as System.Collections.Specialized.INotifyCollectionChanged;
+		if (_source is not null)
+		{
+			_source.CollectionChanged += Source_CollectionChanged;
+		}
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4: the card the user was on leaves the row (Remove from Continue Watching, from its menu): once the menu is
+	/// closed (it gives the focus back to the card it came from, which is gone), the focus goes to the card that took its place
+	/// (or the new last one), not out of the window. A row left empty leaves it to the page.
+	/// </summary>
+	private void Source_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+	{
+		if (e.Action != System.Collections.Specialized.NotifyCollectionChangedAction.Remove || XamlRoot is not { Content: { } content } root)
+		{
+			return;
+		}
+
+		// the card may be off the repeater's books already (it handles the change first): inside it is enough; or the
+		// focus is in the menu of the row's remembered card (a menu is a popup, outside the page's tree)
+		var focused = FocusManager.GetFocusedElement(root) as DependencyObject;
+		var inRow = IsInside(focused, Repeater);
+		var inMenu = focused is not null && !IsInside(focused, content) && e.OldStartingIndex == _lastIndex && ReferenceEquals(LastUsed, this);
+		if (!inRow && !inMenu)
+		{
+			return;
+		}
+
+		var index = _lastIndex >= 0 ? _lastIndex : e.OldStartingIndex;
+		var removed = e.OldStartingIndex;
+		var state = inRow && focused is Control { FocusState: FocusState.Keyboard } ? FocusState.Keyboard : FocusState.Programmatic;
+		var tries = 0;
+		var timer = DispatcherQueue.CreateTimer();
+		timer.Interval = TimeSpan.FromMilliseconds(60);
+		timer.Tick += (t, _) =>
+		{
+			if (XamlRoot is not { Content: { } now } xamlRoot || Count == 0)
+			{
+				t.Stop();
+				return;
+			}
+
+			if (VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot).Any(p => p.Child is MenuFlyoutPresenter or FlyoutPresenter) && ++tries < 30)
+			{
+				return; // the menu is still closing
+			}
+
+			t.Stop();
+			var at = FocusManager.GetFocusedElement(xamlRoot) as DependencyObject;
+			if (at is null || IsInside(at, Repeater) || !IsInside(at, now))
+			{
+				Repeater.UpdateLayout();
+				FocusIndex(RowPaging.FocusAfterRemoval(index, removed, Count), state);
+			}
+		};
+		timer.Start();
 	}
 
 	/// <summary>The cards in the row (what the repeater has).</summary>
@@ -99,7 +212,9 @@ public sealed partial class ShelfRow : UserControl
 		AutomationProperties.SetName(ScrollLeftBtn, RowPaging.ArrowName(Header, forward: false));
 		AutomationProperties.SetName(ScrollRightBtn, RowPaging.ArrowName(Header, forward: true));
 		AutomationProperties.SetName(SeeAllButton, RowPaging.SeeAllName(Header));
+		// Seaglass 1.1.4: with a See all the title is the button (and its chevron); without, the title alone
 		SeeAllButton.Visibility = HasSeeAll ? Visibility.Visible : Visibility.Collapsed;
+		TitleText.Visibility = HasSeeAll ? Visibility.Collapsed : Visibility.Visible;
 		for (var i = 0; i < Count; i++)
 		{
 			if (Repeater.TryGetElement(i) is { } element)
@@ -108,6 +223,11 @@ public sealed partial class ShelfRow : UserControl
 			}
 		}
 	}
+
+	private bool _pointerOver;
+	private bool _focusInside;
+
+	private void UpdateQuiet() => ScrollLeftBtn.Opacity = ScrollRightBtn.Opacity = RowPaging.ArrowOpacity(_pointerOver, _focusInside);
 
 	/// <summary>The arrows show whenever the row overflows, and are disabled (not hidden) at the ends.</summary>
 	private void UpdateArrows()
@@ -211,8 +331,24 @@ public sealed partial class ShelfRow : UserControl
 		return -1;
 	}
 
+	private static bool IsInside(DependencyObject? element, DependencyObject ancestor)
+	{
+		for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, ancestor))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>Seaglass 1.1.4: the keyboard to the row (Home's N and C): its remembered card, else its first; false when it shows none.</summary>
+	internal bool FocusRow() => IsShown && FocusIndex(Math.Clamp(_lastIndex, 0, Count - 1));
+
 	/// <summary>Focuses card <paramref name="index"/> (made if the row has not drawn it yet); the focus scrolls it into view.</summary>
-	internal bool FocusIndex(int index)
+	internal bool FocusIndex(int index, FocusState state = FocusState.Keyboard)
 	{
 		if (index < 0 || index >= Count)
 		{
@@ -224,7 +360,7 @@ public sealed partial class ShelfRow : UserControl
 		_directed = true;
 		try
 		{
-			return element is Control control && control.Focus(FocusState.Keyboard);
+			return element is Control control && control.Focus(state);
 		}
 		finally
 		{
@@ -405,6 +541,7 @@ public sealed partial class ShelfRow : UserControl
 		}
 
 		_lastIndex = index;
+		LastUsed = this;
 		if (Repeater.TryGetElement(index) is not FrameworkElement card || card.ActualWidth <= 0)
 		{
 			return;

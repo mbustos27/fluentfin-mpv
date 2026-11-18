@@ -110,6 +110,24 @@ public sealed class RowPagingTests
 		Assert.Equal("See all Next Up", RowPaging.SeeAllName("Next Up"));
 		Assert.Equal("Scroll left", RowPaging.ArrowName("", false));
 	}
+
+	// Seaglass 1.1.4: a card leaves the row (Remove from Continue Watching): the keyboard stays in the row
+	[Theory]
+	[InlineData(2, 2, 5, 2)] // the focused card left: the one that took its place
+	[InlineData(4, 4, 4, 3)] // the last one left: the new last one
+	[InlineData(3, 1, 4, 2)] // one before it left: the same card, one place earlier
+	[InlineData(1, 3, 4, 1)] // one after it left: where it was
+	[InlineData(0, 0, 0, -1)] // none left
+	public void AfterACardLeaves_TheFocusStaysInTheRow(int focused, int removed, int count, int expected) =>
+		Assert.Equal(expected, RowPaging.FocusAfterRemoval(focused, removed, count));
+
+	// Seaglass 1.1.4 (layout audit, item 2): quiet at rest, never hidden (hover-only arrows fail mouse users)
+	[Theory]
+	[InlineData(false, false, 0.5)]
+	[InlineData(true, false, 1.0)]
+	[InlineData(false, true, 1.0)]
+	public void TheArrows_AreQuietUntilThePointerOrTheKeyboardIsInTheRow(bool pointer, bool focus, double opacity) =>
+		Assert.Equal(opacity, RowPaging.ArrowOpacity(pointer, focus));
 }
 
 public sealed class HeroDotsTests
