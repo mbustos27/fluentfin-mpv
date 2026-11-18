@@ -169,9 +169,12 @@ public sealed class DashboardPowerTests : IAsyncLifetime
 		Assert.DoesNotContain(_server.Requests, x => x.Path.Equals("/Sessions/Logout", StringComparison.OrdinalIgnoreCase));
 		Assert.Equal(ServerPowerState.ShutDown, _vm.Notice!.State);
 		Assert.Equal("Harness is shutting down", _vm.Notice.Title);
-		// the server is off: nothing more to send from here
+		// the server is off: nothing more to send from here, even with the notice's bar closed
 		Assert.False(_vm.RestartCommand.CanExecute(null));
 		Assert.False(_vm.StartScanCommand.CanExecute(null));
+		_vm.DismissNotice();
+		Assert.Equal(ServerPowerState.ShutDown, _vm.Notice!.State);
+		Assert.False(_vm.RestartCommand.CanExecute(null));
 	}
 
 	[Fact]

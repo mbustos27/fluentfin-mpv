@@ -89,7 +89,7 @@ public partial class DashboardViewModel : ObservableObject, INavigationAware
 	public void DismissNotice()
 	{
 		_power.Dismiss();
-		Notice = _power.NoticeFor(SessionInfo.ServerId) is { Busy: true } busy ? busy : null;
+		Notice = _power.NoticeFor(SessionInfo.ServerId) is { } kept && (kept.Busy || kept.State == ServerPowerState.ShutDown) ? kept : null;
 	}
 
 	public Task OnNavigatedFrom()

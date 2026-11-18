@@ -16,7 +16,7 @@ public sealed partial class DashboardPage : Page
 		ViewModel.Confirm = DestructiveConfirm.AskInMainWindow;
 	}
 
-	public static bool IsClosable(ServerNotice? notice) => notice is { Busy: false };
+	public static bool IsClosable(ServerNotice? notice) => notice is { Busy: false, State: not ServerPowerState.ShutDown };
 
 	public static InfoBarSeverity Severity(ServerNotice? notice) => notice?.Kind switch
 	{

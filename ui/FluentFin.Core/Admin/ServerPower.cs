@@ -75,10 +75,10 @@ public partial class ServerPower(IJellyfinClient jellyfinClient) : ObservableObj
 			: new ServerNotice(ServerPowerState.Failed, $"{serverName} didn't shut down", "The server didn't accept the request. Nothing changed.", NoticeKind.Error);
 	}
 
-	/// <summary>Clears the notice (its bar was closed); not while a restart is under way.</summary>
+	/// <summary>Clears the notice (its bar was closed); not while a restart is under way, nor once the server is shut down.</summary>
 	public void Dismiss()
 	{
-		if (Notice is { Busy: false })
+		if (Notice is { Busy: false, State: not ServerPowerState.ShutDown })
 		{
 			Notice = null;
 		}

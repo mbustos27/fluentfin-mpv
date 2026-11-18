@@ -91,7 +91,10 @@ if ($script:page -eq 'movie') {
     $imgDeletes = @(Adm-Requests | Where-Object { $_.method -eq 'DELETE' -and $_.path -match $imgDelete })
     Check 'Edit images: two deletes in a row each remove the first backdrop shown (index 0 after the renumbering)' ($imgDeletes.Count -eq 2 -and @($imgDeletes | Where-Object { $_.path -notmatch '/Backdrop/0$' }).Count -eq 0) (($imgDeletes | ForEach-Object { $_.path }) -join ', ')
     Adm-Shot 'edit-images-after-two-deletes'
-    Adm-Invoke 'Close'; Adm-Settle 800
+    # the dialog's own Close (its template part), never the window's caption button of the same name
+    $dialogClose = Wait-Ui -Id 'CloseButton' -Type 'Button' -Seconds 5
+    if (-not $dialogClose) { throw 'no Close button of the dialog (automation id CloseButton)' }
+    Say "dialog close ($(Invoke-Element $dialogClose))"; Adm-Settle 800
 }
 
 # --- the server administration: tabs along the top ------------------------------------------------------------------------
