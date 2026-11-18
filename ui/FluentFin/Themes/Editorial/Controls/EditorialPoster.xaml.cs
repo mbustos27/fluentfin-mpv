@@ -213,6 +213,9 @@ public sealed partial class EditorialPoster : UserControl
 			return;
 		}
 
+		// the item's page, first in its menu (a click opens the details in place; this is the way past them)
+		EditorialMenus.WithPageEntry(flyout, "Full details", dto);
+
 		if (args.TryGetPosition(this, out var point))
 		{
 			flyout.ShowAt(this, new FlyoutShowOptions { Position = point });
@@ -317,5 +320,37 @@ internal sealed partial class EditorialPosterAutomationPeer(EditorialPoster owne
 		{
 			owner.Open();
 		}
+	}
+}
+
+/// <summary>Editorial: the shared item menu, with the item's own page as its first entry.</summary>
+internal static class EditorialMenus
+{
+	/// <summary>
+	/// Puts "<paramref name="text"/>" (the item's page) first in <paramref name="flyout"/>, each time it opens: the shared
+	/// menu makes its entries again as it opens (from the item as it is then), after which this one goes in.
+	/// </summary>
+	public static void WithPageEntry(Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase flyout, string text, Jellyfin.Sdk.Generated.Models.BaseItemDto dto)
+	{
+		if (flyout is not MenuFlyout menu)
+		{
+			return;
+		}
+
+		void Add()
+		{
+			if (menu.Items.FirstOrDefault() is MenuFlyoutItem { Tag: "EditorialPage" })
+			{
+				return;
+			}
+
+			var entry = new MenuFlyoutItem { Text = text, Tag = "EditorialPage", Icon = new FontIcon { Glyph = "" } };
+			entry.Click += (_, _) => App.Commands.DisplayDto(dto);
+			menu.Items.Insert(0, new MenuFlyoutSeparator());
+			menu.Items.Insert(0, entry);
+		}
+
+		Add();
+		menu.Opening += (_, _) => Add();
 	}
 }

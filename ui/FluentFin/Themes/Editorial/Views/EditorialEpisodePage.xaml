@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Nixie 1.3.0, the Editorial theme's episode page: the spread for the episode (its show and number over its own name),
+    Play or Resume (its one Primary) and "Play from start"; then the tracks and the facts, the next episode as a still
+    (Enter plays it), the cast and the guest stars.
+-->
+<Page
+    x:Class="FluentFin.Themes.Editorial.Views.EditorialEpisodePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls"
+    xmlns:core="using:FluentFin.Core"
+    xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
+    xmlns:ec="using:FluentFin.Themes.Editorial.Controls"
+    xmlns:local="using:FluentFin.Themes.Editorial.Views"
+    x:Name="Page"
+    Background="{ThemeResource EditorialGroundBrush}">
+
+    <Grid>
+        <ScrollViewer x:Name="PageContent">
+            <StackPanel>
+                <ec:EditorialItemHeader
+                    x:Name="Header"
+                    CastRequested="Header_CastRequested"
+                    Dto="{x:Bind ViewModel.Dto, Mode=OneWay}"
+                    Kicker="{x:Bind local:EditorialEpisodePage.Kicker(ViewModel.Dto), Mode=OneWay}"
+                    PlayNote="{x:Bind local:EditorialEpisodePage.Left(ViewModel.Dto), Mode=OneWay}">
+                    <ec:EditorialItemHeader.PrimaryActions>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <!--  the view's one Primary: "Resume at 12:34" or "Play"  -->
+                            <Button
+                                x:Name="PlayButton"
+                                AutomationProperties.Name="{x:Bind ViewModel.PlayLabel, Mode=OneWay}"
+                                Command="{x:Bind ViewModel.PlayCommand}"
+                                Style="{StaticResource NixiePrimaryButtonStyle}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon FontSize="16" Glyph="&#xE768;" />
+                                    <TextBlock Text="{x:Bind ViewModel.PlayLabel, Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                AutomationProperties.Name="{x:Bind core:ItemLabels.PlayFromBeginningAction(ViewModel.Dto), Mode=OneWay, FallbackValue='Play from start'}"
+                                Command="{x:Bind ViewModel.PlayFromBeginningCommand}"
+                                Style="{StaticResource NixieButtonStyle}"
+                                Visibility="{x:Bind ViewModel.HasResumePoint, Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon FontSize="14" Glyph="&#xE777;" />
+                                    <TextBlock Text="Play from start" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </ec:EditorialItemHeader.PrimaryActions>
+                </ec:EditorialItemHeader>
+
+                <StackPanel
+                    x:Name="Body"
+                    Margin="56,8,56,56"
+                    Spacing="44">
+                    <!--  the tracks it plays with, and the facts, side by side (one column in a narrow window)  -->
+                    <Grid x:Name="DetailsGrid" ColumnSpacing="56" RowSpacing="32">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition x:Name="TracksColumn" Width="*" />
+                            <ColumnDefinition x:Name="FactsColumn" Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Spacing="14">
+                            <TextBlock
+                                AutomationProperties.HeadingLevel="Level2"
+                                Style="{StaticResource EditorialShelfTitleTextBlockStyle}"
+                                Text="Play with" />
+                            <Grid ColumnSpacing="16" RowSpacing="12">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                    <RowDefinition />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="88" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource EditorialCaptionTextBlockStyle}"
+                                    Text="Video" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                                    Text="{x:Bind ViewModel.VideoTitle, Mode=OneWay}"
+                                    TextWrapping="Wrap" />
+                                <TextBlock
+                                    Grid.Row="1"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource EditorialCaptionTextBlockStyle}"
+                                    Text="Audio" />
+                                <ctk:SwitchPresenter
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    TargetType="x:Int32"
+                                    Value="{x:Bind ViewModel.AudioStreams.Count, Mode=OneWay}">
+                                    <ctk:Case Value="0" />
+                                    <ctk:Case Value="1">
+                                        <TextBlock Foreground="{ThemeResource GlassTextPrimaryBrush}" Text="{x:Bind ViewModel.SelectedAudioLabel, Mode=OneWay}" />
+                                    </ctk:Case>
+                                    <ctk:Case IsDefault="True">
+                                        <ComboBox
+                                            MinWidth="320"
+                                            MaxWidth="560"
+                                            HorizontalAlignment="Left"
+                                            AutomationProperties.Name="Audio"
+                                            ItemsSource="{x:Bind ViewModel.AudioLabels, Mode=OneWay}"
+                                            SelectedIndex="{x:Bind ViewModel.SelectedAudioIndex, Mode=TwoWay}" />
+                                    </ctk:Case>
+                                </ctk:SwitchPresenter>
+                                <TextBlock
+                                    Grid.Row="2"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource EditorialCaptionTextBlockStyle}"
+                                    Text="Subtitle"
+                                    Visibility="{x:Bind ViewModel.HasSubtitles, Mode=OneWay}" />
+                                <ComboBox
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    MinWidth="320"
+                                    MaxWidth="560"
+                                    HorizontalAlignment="Left"
+                                    AutomationProperties.Name="Subtitle"
+                                    ItemsSource="{x:Bind ViewModel.SubtitleLabels, Mode=OneWay}"
+                                    SelectedIndex="{x:Bind ViewModel.SelectedSubtitleIndex, Mode=TwoWay}"
+                                    Visibility="{x:Bind ViewModel.HasSubtitles, Mode=OneWay}" />
+                            </Grid>
+                        </StackPanel>
+                        <controls:ItemMetaRows
+                            x:Name="Facts"
+                            Grid.Column="1"
+                            Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
+                    </Grid>
+                    <!--  the next episode: one still, Enter or a click plays it  -->
+                    <StackPanel Spacing="14" Visibility="{x:Bind ViewModel.HasNextEpisode, Mode=OneWay}">
+                        <TextBlock
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource EditorialShelfTitleTextBlockStyle}"
+                            Text="Next up" />
+                        <ec:EditorialStill
+                            Width="420"
+                            HorizontalAlignment="Left"
+                            Episode="{x:Bind ViewModel.NextEpisode, Mode=OneWay}" />
+                    </StackPanel>
+                    <controls:CastRow
+                        x:Name="Cast"
+                        Heading="Cast &amp; crew"
+                        People="{x:Bind ViewModel.CastAndCrew, Mode=OneWay}" />
+                    <controls:CastRow Heading="Guest stars" People="{x:Bind ViewModel.GuestStars, Mode=OneWay}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <controls:LoadStateView State="{x:Bind ViewModel.State}" VerticalContentAlignment="Center" />
+    </Grid>
+</Page>

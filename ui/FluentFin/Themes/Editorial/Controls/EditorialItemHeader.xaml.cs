@@ -145,11 +145,13 @@ public sealed partial class EditorialItemHeader : UserControl
 		BackdropImage.Source = ItemArtworkConverters.Backdrop(dto, 1920);
 		PosterImage.Source = BaseItemDtoConverters.GetImage(dto, ImageType.Primary, 486);
 		PosterFrame.Visibility = dto is null ? Visibility.Collapsed : Visibility.Visible;
-		var title = ItemMeta.HeroTitle(dto);
+		// an episode's page is the episode's: its own name is the title (its show and number are the kicker)
+		var episode = dto?.Type == BaseItemDto_Type.Episode;
+		var title = episode ? dto!.Name?.Trim() ?? "" : ItemMeta.HeroTitle(dto);
 		TitleText.Text = title;
 		TitleText.Visibility = string.IsNullOrWhiteSpace(title) ? Visibility.Collapsed : Visibility.Visible;
 		ApplyTitleSize();
-		var subtitle = ItemMeta.HeroSubtitle(dto);
+		var subtitle = episode ? "" : ItemMeta.HeroSubtitle(dto);
 		SubtitleText.Text = subtitle;
 		SubtitleText.Visibility = subtitle.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		MetaText.Text = EditorialItemTitle.Meta(dto);

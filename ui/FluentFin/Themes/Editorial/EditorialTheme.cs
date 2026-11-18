@@ -24,6 +24,8 @@ public sealed class EditorialTheme : ILayoutTheme
 		[typeof(HomeViewModel)] = typeof(EditorialHomePage),
 		[typeof(SeriesViewModel)] = typeof(EditorialSeriesPage),
 		[typeof(SeasonViewModel)] = typeof(EditorialSeasonPage),
+		[typeof(MovieViewModel)] = typeof(EditorialMoviePage),
+		[typeof(EpisodeViewModel)] = typeof(EditorialEpisodePage),
 		[typeof(LibraryViewModel)] = typeof(EditorialLibraryPage),
 	};
 

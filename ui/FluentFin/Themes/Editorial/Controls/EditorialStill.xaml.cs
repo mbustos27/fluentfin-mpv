@@ -44,6 +44,13 @@ public sealed partial class EditorialStill : UserControl
 		RootGrid.Tapped += (_, e) =>
 		{
 			e.Handled = true;
+			// the title opens the episode's page (as the shared episode row's does); anywhere else plays it
+			if (IsIn(e.OriginalSource as DependencyObject, TitleText) && Episode is { } dto)
+			{
+				App.Commands.DisplayDto(dto);
+				return;
+			}
+
 			Play();
 		};
 		ContextRequested += OnContextRequested;
@@ -150,6 +157,9 @@ public sealed partial class EditorialStill : UserControl
 			return;
 		}
 
+		// the episode's own page, first in its menu (the keyboard's way there; a click on the title is the pointer's)
+		EditorialMenus.WithPageEntry(flyout, "Episode details", dto);
+
 		if (args.TryGetPosition(this, out var point))
 		{
 			flyout.ShowAt(this, new FlyoutShowOptions { Position = point });
@@ -166,6 +176,19 @@ public sealed partial class EditorialStill : UserControl
 	{
 		FocusRing.Visibility = FocusGlow.Visibility = _keyboardFocus ? Visibility.Visible : Visibility.Collapsed;
 		PlayGlyph.Opacity = _keyboardFocus || _pointerOver ? 1 : 0;
+	}
+
+	private static bool IsIn(DependencyObject? element, DependencyObject ancestor)
+	{
+		for (var node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, ancestor))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new EditorialStillAutomationPeer(this);
