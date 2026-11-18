@@ -1088,8 +1088,9 @@ class PhotoDisplayDurationTest(unittest.TestCase):
         from jellyfin_mpv_shim import player as player_mod
 
         src = inspect.getsource(player_mod.PlayerManager._play_media)
+        # FluentFin MPV: the load is _load_url (the tracks go with it)
         self.assertLess(src.index("image_display_duration"),
-                        src.index("self._player.play(self.url)"))
+                        src.index("self._load_url(self.url"))
 
     def test_the_setting_is_typed_and_documented(self):
         """settings_base only coerces the types in object_types, so an

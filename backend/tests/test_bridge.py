@@ -2724,7 +2724,8 @@ class PlayerNamesTest(unittest.TestCase):
         body = found["_play_media"]
         notify = body.index("self._notify_load_start(video)")
         self.assertLess(notify, body.index("if self._load_cancelled:"))
-        self.assertLess(notify, body.index("self._player.play(self.url)"))
+        # FluentFin MPV 1.2.0: the load carries the tracks (_load_url)
+        self.assertLess(notify, body.index("self._load_url(self.url"))
         self.assertLess(notify, body.index("self._abort_load()"))
 
 

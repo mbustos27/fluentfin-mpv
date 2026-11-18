@@ -214,3 +214,38 @@ by then:
 `command_async` needs python-mpv-jsonipc 1.5.0, which also fixed async commands
 killing the connection on Windows (mpv answers them with a zero-length pipe
 message).
+
+## 8. The tracks go into the loadfile (FluentFin MPV, 1.2.0)
+
+Step 4 used to be the only write: mpv opened every file on **its own** default
+tracks and `configure_streams` switched them once the duration arrived. Measured
+off-screen against the UI harness's fake server (three episodes, Japanese ac3
+picked over the default English aac, the French sidecar): every episode opened
+the aac decoder, then "Uninit decoder", "dropping frame due to pin disconnect",
+ac3 -- another audio decoder, and an audio output reconfigured whenever the two
+formats differ. mpv also prints its whole track list at **every** track write,
+re-selecting the track already selected included, which is what a user's log
+read as "audio re-selected after it started" and "subtitles flapping".
+
+So `_play_media` hands the same decision to the load, as per-file options
+(`track_choice` -> `_track_load_options` -> `_load_url`: `loadfile <url> replace
+-1 aid=…,sid=…`, the index argument only from mpv 0.38, a plain load when the
+version is unknown or the options are refused), and `configure_streams` writes a
+track property only when mpv does not already hold it (`_select_track`; a name in
+the object's `__dict__` is a refused write's shadow, section 1 of
+docs/mpv-backends.md, and is always written). Per-file options end with the file,
+so nothing leaks to the next item. `configure_streams` stays the authority: it
+runs after every load as before.
+
+Two things the load cannot do, both measured on mpv 0.41 (external backend):
+
+- **A sidecar is never a per-file `sid`.** It is added after the load (section 7),
+  so the load says nothing about subtitles for such an item. A per-file `sid` on a
+  file whose sidecar is then selected made mpv drop the next file's per-file `aid`.
+- **After a sidecar was selected on a streamed (http) file, mpv ignores the next
+  file's `aid` once** -- per-file, global, `options/aid`, even after a `stop` --
+  and opens the default track; the file after that is honoured again. A local file
+  is not affected, and neither is an embedded subtitle. That next episode still
+  gets its track from `configure_streams`, during the start's hold pause (nothing
+  is heard yet), exactly as before 1.2.0. Not worked around: nothing tried
+  (`sub-remove`, `sid=no`, `stop` before the load) changed it.
