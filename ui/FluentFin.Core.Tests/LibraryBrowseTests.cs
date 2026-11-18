@@ -264,3 +264,32 @@ public sealed class LibraryBrowseTests
 		Assert.Null(again.ReturnOffset);
 	}
 }
+
+/// <summary>Seaglass 1.1.4 (interaction audit, item 5): Back to a row's "See all" grid puts the user where they were.</summary>
+public sealed class ItemGridPlaceTests
+{
+	private static ItemGridViewModel Grid(Guid user, string title, IReadOnlyList<BaseItemViewModel> items)
+	{
+		var client = new Mock<IJellyfinClient>();
+		client.SetupGet(x => x.UserId).Returns(user);
+		var vm = new ItemGridViewModel(client.Object);
+		vm.OnNavigatedTo(new ItemGridRequest(title, items));
+		return vm;
+	}
+
+	[Fact]
+	public void BackToTheGrid_FindsTheCardThatWasLeft_AndHowFarDown()
+	{
+		var user = Guid.NewGuid();
+		var items = Enumerable.Range(0, 30).Select(i => BaseItemViewModel.FromDto(new BaseItemDto { Id = Guid.NewGuid(), Name = $"Item {i}" })).ToList();
+		var grid = Grid(user, "Continue Watching", items);
+		Assert.Null(grid.ReturnPlace()); // never left
+
+		grid.LeftAt(items[17], 940);
+
+		Assert.Equal((17, 940.0), Grid(user, "Continue Watching", items).ReturnPlace());
+		Assert.Null(Grid(user, "Next Up", items).ReturnPlace());             // another row's grid
+		Assert.Null(Grid(Guid.NewGuid(), "Continue Watching", items).ReturnPlace()); // another user
+		Assert.Equal((-1, 940.0), Grid(user, "Continue Watching", items.Take(10).ToList()).ReturnPlace()); // the card is gone: just the scroll
+	}
+}

@@ -324,6 +324,37 @@ internal sealed class CardGrid
 		return FocusElement(element);
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.4: Back to a grid, or an A-Z jump: focuses card <paramref name="index"/>, and again for about a second until
+	/// it has the focus (the page that was left leaves the window, and the focus it had lands on the title bar about when the
+	/// grid is shown; a far card is made only once the grid has scrolled to it). A move to another card is left alone.
+	/// </summary>
+	internal void FocusAndHold(int index, FocusState state)
+	{
+		FocusIndex(index, state);
+		var tries = 0;
+		var timer = _repeater.DispatcherQueue.CreateTimer();
+		timer.Interval = TimeSpan.FromMilliseconds(100);
+		timer.Tick += (t, _) =>
+		{
+			if (_repeater.XamlRoot is not { } root || ++tries > 10)
+			{
+				t.Stop();
+				return;
+			}
+
+			var focused = FocusManager.GetFocusedElement(root) as DependencyObject;
+			if (IndexOf(focused) >= 0)
+			{
+				t.Stop(); // on the card, or the user moved on in the grid
+				return;
+			}
+
+			FocusIndex(index, state);
+		};
+		timer.Start();
+	}
+
 	private bool FocusElement(UIElement element)
 	{
 		_directed = true;

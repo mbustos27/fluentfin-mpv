@@ -60,3 +60,27 @@ $libBack = Bk-Info; $libAgain = (Bk-Page).V
 Shot 'back-4-library-after'
 Check 'back: the same card of the Library has the focus' ($libBack -and $libLeft -and $libBack.Name -eq $libLeft.Name -and $libBack.Pos -eq $libLeft.Pos) ("left {0}; back on {1}" -f (Bk-Describe $libLeft), (Bk-Describe $libBack))
 Check 'back: ... and the grid is as far down as it was' ([math]::Abs($libAgain - $libAt) -lt 3) ("{0:0.0} % -> {1:0.0} %" -f $libAt, $libAgain)
+
+# --- a row's "See all" grid (Continue Watching's): a card opened, Back: that card has the focus
+Open-Nav 'Home'
+Start-Sleep -Milliseconds 2500
+[void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
+Start-Sleep -Milliseconds 800
+$seeAll = Find-Ui -Name 'See all Continue Watching' -Type 'Button'
+if ($seeAll) {
+    [void](Invoke-Element $seeAll)
+    [void](Wait-Ui -Name 'Continue Watching' -Type 'List' -Seconds 10)
+    Start-Sleep -Milliseconds 1500
+    $gridFirst = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, 'BaseItemDtoCard'))) | Where-Object { -not $_.Cached.IsOffscreen }) | Select-Object -First 1
+    if ($gridFirst) { [void][OffscreenUi]::SetFocus($gridFirst); Start-Sleep -Milliseconds 600 }
+    Bk-Press 0x28 900; Bk-Press 0x27 900
+    $gridLeft = Bk-Info
+    Shot 'back-5-grid-before'
+    Check 'back: a card down the See all grid has the focus' ($gridLeft -and $gridLeft.Class -eq 'BaseItemDtoCard' -and $gridLeft.Pos -gt 1) (Bk-Describe $gridLeft)
+    Bk-OpenAndBack $gridLeft
+    $gridBack = Bk-Info
+    Shot 'back-6-grid-after'
+    Check 'back: the See all grid comes back with the same card focused' ($gridBack -and $gridLeft -and $gridBack.Name -eq $gridLeft.Name -and $gridBack.Pos -eq $gridLeft.Pos) ("left {0}; back on {1}" -f (Bk-Describe $gridLeft), (Bk-Describe $gridBack))
+} else {
+    Check 'back: Continue Watching has its See all' $false
+}

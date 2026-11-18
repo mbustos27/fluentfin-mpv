@@ -37,4 +37,33 @@ public partial class ItemGridViewModel(IJellyfinClient jellyfinClient) : Observa
 	}
 
 	public Task OnNavigatedFrom() => Task.CompletedTask;
+
+	// ---- Seaglass 1.1.4 (interaction audit, item 5): Back to the grid puts the user where they were ------------------
+
+	private static readonly Lock s_lock = new();
+	private static readonly Dictionary<(Guid User, string Title), (Guid? Item, double Offset)> s_places = [];
+
+	/// <summary>The user leaves the grid for an item: the card they were on and how far down the grid was, kept for Back.</summary>
+	public void LeftAt(BaseItemViewModel? item, double offset)
+	{
+		lock (s_lock)
+		{
+			s_places[(JellyfinClient.UserId, Title)] = (item?.Id, offset);
+		}
+	}
+
+	/// <summary>Back: the card to focus (its index here, or -1 when it is no longer in the grid) and how far down to scroll; null when this grid was never left.</summary>
+	public (int Index, double Offset)? ReturnPlace()
+	{
+		lock (s_lock)
+		{
+			if (!s_places.TryGetValue((JellyfinClient.UserId, Title), out var place))
+			{
+				return null;
+			}
+
+			var index = place.Item is { } id ? Items.ToList().FindIndex(x => x.Id == id) : -1;
+			return (index, place.Offset);
+		}
+	}
 }

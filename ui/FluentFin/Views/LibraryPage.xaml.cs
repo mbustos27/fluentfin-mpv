@@ -42,6 +42,14 @@ public sealed partial class LibraryPage : Page
 
 		_grid = new CardGrid(GridScroller, GridList, GridRepeater);
 		GridScroller.ScrollCompleted += GridScroller_ScrollCompleted;
+		Loaded += (_, _) =>
+		{
+			if (_focusOnLoad)
+			{
+				_focusOnLoad = false;
+				FocusRequested();
+			}
+		};
 		_grid.ForwardWheel(LibraryRoot);
 		_grid.SetPlace(0, ViewModel.TotalCount);
 		ViewModel.PropertyChanged += (_, e) =>
@@ -109,14 +117,21 @@ public sealed partial class LibraryPage : Page
 
 		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
 		{
-			if (ViewModel.IsLoading || XamlRoot is null)
+			if (ViewModel.IsLoading)
 			{
+				return;
+			}
+
+			// a library that answers at once (Back: 100 ms) can be in before the page is in the window: done once it is
+			if (XamlRoot is null || !IsLoaded)
+			{
+				_focusOnLoad = true;
 				return;
 			}
 
 			// Back: how far down the grid was (so the card is where it was on screen), then the card. A ScrollView scrolls
 			// on its next tick: the card is focused when that scroll is done, or it would be brought into view from the top
-			GridRepeater.UpdateLayout();
+			UpdateLayout();
 			var index = ViewModel.FocusRequest;
 			ViewModel.FocusRequest = -1; // done: a Retry later does not take the focus again
 			var state = _jumpFocus;
@@ -133,11 +148,12 @@ public sealed partial class LibraryPage : Page
 			ViewModel.ReturnOffset = null;
 			if (index >= 0)
 			{
-				FocusCard(index, state);
+				_grid.FocusAndHold(index, state);
 			}
 		});
 	}
 
+	private bool _focusOnLoad;
 	private int _returnScroll = -1;
 	private (int Index, FocusState State) _returnFocus = (-1, FocusState.Keyboard);
 
@@ -152,46 +168,9 @@ public sealed partial class LibraryPage : Page
 		if (_returnFocus.Index >= 0)
 		{
 			GridRepeater.UpdateLayout();
-			FocusCard(_returnFocus.Index, _returnFocus.State);
+			_grid.FocusAndHold(_returnFocus.Index, _returnFocus.State);
 		}
 
 		_returnFocus = (-1, FocusState.Keyboard);
-	}
-
-	/// <summary>
-	/// Focuses card <paramref name="index"/>, and again for a moment if something else took the focus meanwhile: on Back, the
-	/// page the user left leaves the window, and the focus it had goes to the title bar about when the grid is shown.
-	/// </summary>
-	private void FocusCard(int index, FocusState state)
-	{
-		_grid.FocusIndex(index, state);
-		var tries = 0;
-		var timer = DispatcherQueue.CreateTimer();
-		timer.Interval = TimeSpan.FromMilliseconds(100);
-		timer.Tick += (t, _) =>
-		{
-			if (XamlRoot is null || ++tries > 10)
-			{
-				t.Stop();
-				return;
-			}
-
-			var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as DependencyObject;
-			if (_grid.IndexOfElement(focused) == index)
-			{
-				t.Stop();
-				return;
-			}
-
-			if (_grid.IndexOfElement(focused) < 0)
-			{
-				_grid.FocusIndex(index, state);
-			}
-			else
-			{
-				t.Stop(); // the user moved on in the grid
-			}
-		};
-		timer.Start();
 	}
 }
