@@ -1,12 +1,15 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
+using Windows.UI;
 
 namespace FluentFin.Services;
 
 /// <summary>
 /// Seaglass: makes the glass brushes follow <see cref="GlassMode"/>. In Solid, <c>GlassPanelBrush</c> and
-/// <c>GlassPanelStrongBrush</c> in both theme dictionaries of Glass.xaml become the opaque brushes of the same colours
-/// (<c>GlassPanelSolidBrush</c>, <c>GlassPanelStrongSolidBrush</c>); in Full and Reduced they are the acrylic ones again.
+/// <c>GlassPanelStrongBrush</c> in both theme dictionaries of Glass.xaml draw opaque, in the colours of their stand-ins
+/// (<c>GlassPanelSolidBrush</c>, <c>GlassPanelStrongSolidBrush</c>; the acrylic draws its FallbackColor); in Full and Reduced
+/// they are acrylic again.
 /// Pages keep using the two keys. UI thread only (<see cref="Attach"/> marshals GlassMode.Changed to it).
 /// </summary>
 public static class GlassTheme
@@ -14,7 +17,8 @@ public static class GlassTheme
 	private static readonly string[] _themes = ["Dark", "Light"];
 	// each key's Solid stand-in is the key with "Brush" replaced by "SolidBrush" (GlassOverlayBrush: the menus' and tooltips' tint)
 	internal static readonly string[] Keys = ["GlassPanelBrush", "GlassPanelStrongBrush", "GlassOverlayBrush", "GlassTitleBarBrush"];
-	private static readonly Dictionary<(string Theme, string Key), object> _acrylic = [];
+	// each brush's own look before Solid (an acrylic one's AlwaysUseFallback and FallbackColor, a solid one's Color)
+	private static readonly Dictionary<(string Theme, string Key), (bool Fallback, Color Color)> _acrylic = [];
 	private static bool _solid;
 	private static FrameworkElement? _root;
 	private static DispatcherQueue? _queue;
@@ -127,29 +131,41 @@ public static class GlassTheme
 
 			foreach (var key in Keys)
 			{
-				if (solid)
+				if (!dictionary.TryGetValue(key, out var brush))
 				{
-					if (!_acrylic.ContainsKey((theme, key)) && dictionary.TryGetValue(key, out var original))
-					{
-						_acrylic[(theme, key)] = original;
-					}
-
-					var solidKey = key.Replace("Brush", "SolidBrush");
-					if (dictionary.TryGetValue(solidKey, out var opaque))
-					{
-						dictionary[key] = opaque;
-					}
+					continue;
 				}
-				else if (_acrylic.TryGetValue((theme, key), out var original))
+
+				// Nixie 1.3.0: the brush under the key changes in place and is never replaced. Writing the stand-in under the key
+				// (dictionary[key] = opaque) made every RequestedTheme="Dark" part of a light window (the heroes, Drive-in's
+				// screen and sign) look its brushes up in the Light dictionary from then on: dark labels on dark buttons in Light
+				// + Solid, in every layout theme.
+				Color? standIn = dictionary.TryGetValue(key.Replace("Brush", "SolidBrush"), out var found2) && found2 is SolidColorBrush opaque ? opaque.Color : null;
+				switch (brush)
 				{
-					dictionary[key] = original;
+					case AcrylicBrush acrylic when solid:
+						_acrylic.TryAdd((theme, key), (acrylic.AlwaysUseFallback, acrylic.FallbackColor));
+						acrylic.FallbackColor = standIn ?? Opaque(acrylic.FallbackColor);
+						acrylic.AlwaysUseFallback = true;
+						break;
+					case AcrylicBrush acrylic when _acrylic.Remove((theme, key), out var was):
+						acrylic.AlwaysUseFallback = was.Fallback;
+						acrylic.FallbackColor = was.Color;
+						break;
+					case SolidColorBrush plain when solid:
+						_acrylic.TryAdd((theme, key), (false, plain.Color));
+						plain.Color = standIn ?? Opaque(plain.Color);
+						break;
+					case SolidColorBrush plain when _acrylic.Remove((theme, key), out var was):
+						plain.Color = was.Color;
+						break;
 				}
 			}
 		}
 
 		_solid = solid;
 
-		// ThemeResource lookups are only redone when the theme changes: flip the root's theme and back in one tick
+		// the brushes changed in place; flip the root's theme and back in one tick so every part draws them again
 		if (_root is { } root)
 		{
 			var requested = root.RequestedTheme;
@@ -157,6 +173,8 @@ public static class GlassTheme
 			root.RequestedTheme = requested;
 		}
 	}
+
+	private static Color Opaque(Color color) => Color.FromArgb(255, color.R, color.G, color.B);
 
 	private static ResourceDictionary? FindGlassDictionary(ResourceDictionary resources)
 	{

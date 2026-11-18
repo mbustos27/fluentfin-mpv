@@ -115,6 +115,12 @@ public static class NixieTheme
 	/// </summary>
 	public static Color OverlayColor(NixiePalette p) => C(p.ContainerHigh, p.Solid ? (byte)255 : OverlayAlpha);
 
+	/// <summary>
+	/// An acrylic panel's FallbackColor: nearly opaque glass, and fully opaque in Solid, where the acrylic draws only this
+	/// colour (GlassTheme sets AlwaysUseFallback: Nixie 1.3.0, the brush changed in place rather than replaced).
+	/// </summary>
+	internal static Color FallbackFor(Color color, byte glassAlpha, bool solid) => Color.FromArgb(solid ? (byte)255 : glassAlpha, color.R, color.G, color.B);
+
 	private static Color C(Rgb c, byte alpha = 255) => Color.FromArgb(alpha, c.R, c.G, c.B);
 
 	private static void Apply(NixiePalette p)
@@ -149,7 +155,7 @@ public static class NixieTheme
 		{
 			acrylic.TintColor = tint;
 			acrylic.TintOpacity = Math.Clamp(p.TintAlpha - 0.2, 0.2, 0.9);
-			acrylic.FallbackColor = Color.FromArgb(0xF0, tint.R, tint.G, tint.B);
+			acrylic.FallbackColor = FallbackFor(tint, 0xF0, p.Solid);
 		}
 
 		if (d.TryGetValue("GlassPanelStrongBrush", out var strong) && strong is AcrylicBrush strongAcrylic)
@@ -157,7 +163,7 @@ public static class NixieTheme
 			var high = C(p.ContainerHigh);
 			strongAcrylic.TintColor = high;
 			strongAcrylic.TintOpacity = Math.Clamp(p.TintAlpha - 0.05, 0.4, 0.95);
-			strongAcrylic.FallbackColor = Color.FromArgb(0xF5, high.R, high.G, high.B);
+			strongAcrylic.FallbackColor = FallbackFor(high, 0xF5, p.Solid);
 		}
 
 		if (d.TryGetValue("GlassImageScrimBrush", out var scrim) && scrim is LinearGradientBrush gradient && gradient.GradientStops.Count >= 3)
