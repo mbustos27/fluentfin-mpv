@@ -51,7 +51,7 @@ public sealed class ThemeSwitcher(ThemeService themes, INavigationService naviga
 
 		themes.Choose(id);
 		var reload = nav?.ReloadForTheme() ?? ThemeReload.None;
-		log?.LogInformation("Layout theme {Theme}: {Reload}", themes.ActiveId, reload);
+		log?.LogInformation("Layout theme {Theme}: {Reload}, crossfade {Crossfade} ms", themes.ActiveId, reload, faded ? (int)fade.TotalMilliseconds : 0);
 
 		if (reload == ThemeReload.Reloaded && frame?.Content is Page fresh && anchors is not null)
 		{
