@@ -288,29 +288,46 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		}
 	}
 
-	public async Task Restart()
+	// Nixie 1.2.0 (admin): Restart, Shutdown and ScanAllLibraries say whether the server took the request (the dashboard shows it)
+	public async Task<bool> Restart()
 	{
 		try
 		{
 			await _jellyfinApiClient.System.Restart.PostAsync();
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
 
-	public async Task Shutdown()
+	public async Task<bool> Shutdown()
 	{
 		try
 		{
 			await _jellyfinApiClient.System.Shutdown.PostAsync();
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
+		}
+	}
+
+	public async Task<bool> ScanAllLibraries()
+	{
+		try
+		{
+			await _jellyfinApiClient.Library.Refresh.PostAsync();
+			return true;
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, @"Unhandled exception");
+			return false;
 		}
 	}
 

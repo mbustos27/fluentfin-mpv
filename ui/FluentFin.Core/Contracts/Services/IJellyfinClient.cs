@@ -179,9 +179,14 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task RunTask(string? taskId);
 
-		Task Restart();
+		/// <summary>Nixie 1.2.0 (admin): <c>POST /System/Restart</c>; false when the server did not take it (logged).</summary>
+		Task<bool> Restart();
 
-		Task Shutdown();
+		/// <summary>Nixie 1.2.0 (admin): <c>POST /System/Shutdown</c>; false when the server did not take it (logged).</summary>
+		Task<bool> Shutdown();
+
+		/// <summary>Nixie 1.2.0 (admin): scans every library for new and changed files (<c>POST /Library/Refresh</c>, the web dashboard's "Scan all libraries"); false when it failed (logged).</summary>
+		Task<bool> ScanAllLibraries();
 
 		Task<ServerConfiguration?> GetConfiguration();
 

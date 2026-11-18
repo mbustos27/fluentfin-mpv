@@ -99,7 +99,8 @@ internal sealed class AdminFakeServer : IDisposable
 			}
 
 			var method = context.Request.HttpMethod.ToUpperInvariant();
-			_requests.Enqueue(new AdminRequest(method, url.AbsolutePath, url.ToString(), System.Web.HttpUtility.ParseQueryString(url.Query), body));
+			var signedIn = (context.Request.Headers["Authorization"] ?? "").Contains($"Token=\"{FakeToken}\"", StringComparison.Ordinal);
+			_requests.Enqueue(new AdminRequest(method, url.AbsolutePath, url.ToString(), System.Web.HttpUtility.ParseQueryString(url.Query), body, signedIn));
 			var (status, answer) = _responses.TryGetValue($"{method} {url.AbsolutePath}", out var response) ? response : (404, "");
 			try
 			{
@@ -135,7 +136,8 @@ internal sealed class AdminFakeServer : IDisposable
 	}
 }
 
-internal sealed record AdminRequest(string Method, string Path, string Url, NameValueCollection Query, string Body)
+/// <param name="SignedIn">It carried the signed-in user's token (in the Authorization header).</param>
+internal sealed record AdminRequest(string Method, string Path, string Url, NameValueCollection Query, string Body, bool SignedIn)
 {
 	public JsonElement Json => JsonDocument.Parse(Body).RootElement;
 

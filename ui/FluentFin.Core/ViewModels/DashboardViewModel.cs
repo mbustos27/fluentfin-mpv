@@ -4,6 +4,7 @@ using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluentFin.Contracts.ViewModels;
+using FluentFin.Core.Admin;
 using FluentFin.Core.Contracts.Services;
 using Jellyfin.Sdk.Generated.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,13 +12,38 @@ using ReactiveUI;
 
 namespace FluentFin.Core.ViewModels;
 
+/// <remarks>
+/// Nixie 1.2.0 (admin, button review A75-A77): Restart and Shut down ask first, naming the server (<see cref="Confirm"/>), send
+/// the request while still signed in (they used to sign out first, so the server refused it), then say what is happening
+/// (<see cref="Notice"/>); a restart is followed until the server answers again. "Scan all libraries" scans whether or not a
+/// scheduled task of that name exists, and says it started.
+/// </remarks>
 public partial class DashboardViewModel(IJellyfinClient jellyfinClient,
-										ITitleBarViewModel titleBarViewModel,
 										[FromKeyedServices(UserInputs.MessageToSession)]IUserInput<string> stringUserInput,
 										IContentDialogServiceCore contentDialogService) : ObservableObject, INavigationAware
 {
-	private string? _scanMediaLibraryTask;
+	/// <summary>How often a restarting server is asked whether it is back, and for how long.</summary>
+	internal static readonly TimeSpan PollEvery = TimeSpan.FromSeconds(2);
+	internal const int PollsBeforeGivingUp = 90;
+	/// <summary>Answers this many polls in a row without ever being seen down: it restarted between two polls.</summary>
+	internal const int PollsUpCountAsBack = 10;
+
 	private IDisposable? _sessionsSubscription;
+
+	/// <summary>Asks before a destructive action; true only when the user confirmed. Unset (nobody to ask), nothing happens.</summary>
+	public Func<ConfirmPrompt, Task<bool>>? Confirm { get; set; }
+
+	/// <summary>The wait between polls of a restarting server (tests make it instant).</summary>
+	public Func<TimeSpan, Task> Delay { get; set; } = Task.Delay;
+
+	/// <summary>What the server is doing after a restart, shut down or scan from here; null when there is nothing to say.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsBusy))]
+	[NotifyCanExecuteChangedFor(nameof(RestartCommand), nameof(ShutdownCommand), nameof(StartScanCommand))]
+	public partial ServerNotice? Notice { get; set; }
+
+	/// <summary>A restart is under way, or the server is shutting down: the buttons wait.</summary>
+	public bool IsBusy => Notice is { Busy: true } or { State: ServerPowerState.ShutDown };
 
 	[ObservableProperty]
 	public partial SystemInfo? SystemInfo { get; set; }
@@ -72,10 +98,6 @@ public partial class DashboardViewModel(IJellyfinClient jellyfinClient,
 			OtherActivities = otherActivityResult.Items;
 		}
 
-		var tasks = await jellyfinClient.GetScheduledTasks(true);
-
-		_scanMediaLibraryTask = tasks.FirstOrDefault(x => x.Name == "Scan Media Library")?.Id;
-
 		_sessionsSubscription?.Dispose();
 		_sessionsSubscription = jellyfinClient.ObserveWebSocket<SessionsMessage>()
 			.ObserveOn(RxSchedulers.MainThreadScheduler)
@@ -101,33 +123,105 @@ public partial class DashboardViewModel(IJellyfinClient jellyfinClient,
 			});
 	}
 
-	[RelayCommand]
+	private bool CanAct() => !IsBusy;
+
+	private string ServerName => SystemInfo?.ServerName is { } name && !string.IsNullOrWhiteSpace(name) ? name.Trim() : "The server";
+
+	[RelayCommand(CanExecute = nameof(CanAct))]
 	private async Task Shutdown()
 	{
-		await titleBarViewModel.Logout();
-		await jellyfinClient.Shutdown();
-	}
-
-	[RelayCommand]
-	private async Task Restart()
-	{
-		await titleBarViewModel.Logout();
-		await jellyfinClient.Restart();
-	}
-
-	[RelayCommand]
-	private async Task StartScan()
-	{
-		if (string.IsNullOrEmpty(_scanMediaLibraryTask))
+		if (!await Asked(AdminPrompts.ShutDown(SystemInfo?.ServerName)))
 		{
 			return;
 		}
 
-		await jellyfinClient.RunTask(_scanMediaLibraryTask);
+		Notice = await jellyfinClient.Shutdown()
+			? new ServerNotice(ServerPowerState.ShutDown, $"{ServerName} is shutting down", "It stays off until someone starts it again on its computer.", NoticeKind.Warning)
+			: new ServerNotice(ServerPowerState.Failed, $"{ServerName} didn't shut down", "The server didn't accept the request. Nothing changed.", NoticeKind.Error);
 	}
+
+	[RelayCommand(CanExecute = nameof(CanAct))]
+	private async Task Restart()
+	{
+		if (!await Asked(AdminPrompts.Restart(SystemInfo?.ServerName)))
+		{
+			return;
+		}
+
+		if (!await jellyfinClient.Restart())
+		{
+			Notice = new ServerNotice(ServerPowerState.Failed, $"{ServerName} didn't restart", "The server didn't accept the request. Nothing changed.", NoticeKind.Error);
+			return;
+		}
+
+		Notice = new ServerNotice(ServerPowerState.Restarting, $"Restarting {ServerName}…", "Playback on every device stops. This page goes on once the server answers again.", NoticeKind.Info, Busy: true);
+		Notice = await WaitUntilBack()
+			? new ServerNotice(ServerPowerState.Back, $"{ServerName} restarted", "It is answering again.", NoticeKind.Success)
+			: new ServerNotice(ServerPowerState.NotBack, $"{ServerName} hasn't come back yet", "It may still be starting. If it doesn't, start it again on its computer.", NoticeKind.Warning);
+	}
+
+	/// <summary>
+	/// After a restart was accepted: true once the server answers again having been seen down (or answering for a while, when it
+	/// restarted between two polls), false after <see cref="PollsBeforeGivingUp"/> polls.
+	/// </summary>
+	private async Task<bool> WaitUntilBack()
+	{
+		var sawDown = false;
+		for (var poll = 1; poll <= PollsBeforeGivingUp; poll++)
+		{
+			await Delay(PollEvery);
+			var info = await jellyfinClient.GetSystemInfo();
+			if (info is null || info.IsShuttingDown == true)
+			{
+				sawDown = true;
+				continue;
+			}
+
+			if (sawDown || poll >= PollsUpCountAsBack)
+			{
+				SystemInfo = info;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	[RelayCommand(CanExecute = nameof(CanAct))]
+	private async Task StartScan()
+	{
+		Notice = await jellyfinClient.ScanAllLibraries()
+			? new ServerNotice(ServerPowerState.None, "Scan started", "The server is looking for new and changed files in every library. Scheduled tasks shows its progress.", NoticeKind.Success)
+			: new ServerNotice(ServerPowerState.Failed, "The scan didn't start", "The server didn't accept the request.", NoticeKind.Error);
+	}
+
+	private async Task<bool> Asked(ConfirmPrompt prompt) => Confirm is { } confirm && await confirm(prompt);
 
 	private SessionInfoDtoViewModel CreateViewModel(SessionInfoDto dto)
 	{
 		return new SessionInfoDtoViewModel(dto, jellyfinClient, contentDialogService, stringUserInput);
 	}
 }
+
+/// <summary>Nixie 1.2.0 (admin): what the dashboard says the server is doing after a restart, shut down or scan.</summary>
+public enum ServerPowerState
+{
+	None,
+	Restarting,
+	Back,
+	NotBack,
+	ShutDown,
+	Failed,
+}
+
+/// <summary>Nixie 1.2.0 (admin): how a notice reads (the page shows it as an InfoBar of that severity).</summary>
+public enum NoticeKind
+{
+	Info,
+	Success,
+	Warning,
+	Error,
+}
+
+/// <param name="Busy">Under way: the page shows a progress ring and the buttons wait.</param>
+public sealed record ServerNotice(ServerPowerState State, string Title, string Message, NoticeKind Kind, bool Busy = false);
