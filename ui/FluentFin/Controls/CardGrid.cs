@@ -50,6 +50,9 @@ internal sealed class CardGrid
 			}
 		};
 		list.GotFocus += List_GotFocus;
+		// Seaglass 1.1.4: a card clicked (which does not take the focus) is the card the user was on too: Back from its page
+		// comes back to it. Handled events too: the card handles its own taps.
+		list.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(List_PointerPressed), true);
 		list.BringIntoViewRequested += List_BringIntoViewRequested;
 		scroller.ScrollCompleted += Scroller_ScrollCompleted;
 		repeater.ElementPrepared += (_, e) => SetPlace(e.Element, e.Index);
@@ -60,6 +63,12 @@ internal sealed class CardGrid
 
 	/// <summary>The cards in the grid now.</summary>
 	internal int Count => _repeater.ItemsSourceView?.Count ?? 0;
+
+	/// <summary>Seaglass 1.1.4: the item of the card that last had the focus (the one the user left the grid from), or null.</summary>
+	internal object? LastItem => _lastItem;
+
+	// Seaglass 1.1.4: how the card asked for gets the focus (a jump by a click: the program's, no ring until the keyboard is used)
+	private FocusState _focusState = FocusState.Keyboard;
 
 	/// <summary>Where the grid's cards are in a larger set (a library page): the first card's place and the set's size.</summary>
 	public void SetPlace(int firstIndex, int total)
@@ -158,6 +167,9 @@ internal sealed class CardGrid
 	}
 
 	// ---- the keyboard ------------------------------------------------------------------------------------------------
+
+	/// <summary>The index of the card <paramref name="element"/> is in, or -1.</summary>
+	internal int IndexOfElement(DependencyObject? element) => IndexOf(element);
 
 	private int IndexOf(DependencyObject? element)
 	{
@@ -282,12 +294,14 @@ internal sealed class CardGrid
 	/// the view (GetOrCreateElement) was given to another index by the time it took the focus (Home from the end of a page
 	/// focused the 8th card).
 	/// </summary>
-	internal bool FocusIndex(int index)
+	internal bool FocusIndex(int index, FocusState state = FocusState.Keyboard)
 	{
 		if (index < 0 || index >= Count)
 		{
 			return false;
 		}
+
+		_focusState = state;
 
 		if (_repeater.TryGetElement(index) is { } shown)
 		{
@@ -315,7 +329,7 @@ internal sealed class CardGrid
 		_directed = true;
 		try
 		{
-			return CardOf(element) is Control card && card.Focus(FocusState.Keyboard);
+			return CardOf(element) is Control card && card.Focus(_focusState);
 		}
 		finally
 		{
@@ -445,6 +459,16 @@ internal sealed class CardGrid
 		}
 
 		return card;
+	}
+
+	private void List_PointerPressed(object sender, PointerRoutedEventArgs e) => Remember(IndexOf(e.OriginalSource as DependencyObject));
+
+	private void Remember(int index)
+	{
+		if (index >= 0 && _repeater.ItemsSourceView is { } source && index < source.Count)
+		{
+			_lastItem = source.GetAt(index);
+		}
 	}
 
 	private void List_GotFocus(object sender, RoutedEventArgs e)
