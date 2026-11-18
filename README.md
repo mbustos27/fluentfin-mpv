@@ -19,11 +19,13 @@ Everything below the feature list is for building from source.
 
 ## What Nixie adds to FluentFin
 
-- **The glass look.** Frosted glass on the navigation, title bar, search, menus, tooltips, dialogs and page sections, with the current title's artwork softly tinting the whole window. Posters and artwork stay solid. Settings → Appearance → Glass: **Automatic** (follows Windows' transparency, animation and high-contrast settings), **Full**, **Reduced** (no motion) or **Solid** (no translucency). The design and the research behind it: [docs/design/DESIGN.md](docs/design/DESIGN.md).
+- **The desert-sunset look.** Deep plum glass with a hot-pink accent (pale peach and crimson in the light theme) on the top bar, search, menus, tooltips, dialogs and page sections, over a dusk scene of a striped sun and desert hills; the app's name glows like a nixie tube on the sign-in card. Posters and artwork stay solid. Settings → Appearance → Glass: **Automatic** (follows Windows' transparency, animation and high-contrast settings), **Full**, **Reduced** (no motion) or **Solid** (no translucency). One set of buttons (six kinds, two sizes) everywhere. The design and the research behind it: [docs/design/DESIGN.md](docs/design/DESIGN.md).
+- **A top bar, no side rail.** Home, your libraries, Diary and the libraries you add are tabs in the window's one bar, with search and the Account menu (where Settings is). A narrow window folds the tabs into one menu.
 - **Home, item pages and the player, redesigned.**
-  - **Home:** a hero of up to five items that never autoplays trailers, and poster rows whose cards lift on hover.
+  - **Home:** a hero of up to five items new to you that never autoplays trailers, poster rows whose cards lift on hover, and a Continue Watching row you can clean up (remove an item with Undo, or hide what you have not played for a month or more).
+  - **Libraries:** one scrolling grid with Sort, Filter (check boxes with counts) and an A–Z jump.
   - **Item pages:** a full-width backdrop with the title's logo, info chips (year, rating, runtime, resolution, HDR, audio), and Play as the one highlighted action.
-  - **The player's own controls:** on a dark gradient, with Skip intro/credits and Next as buttons, and a subtitle **Text size** slider (50–200 %, remembered).
+  - **The player's own controls:** on a dark gradient, with Skip intro/credits, Previous and Next, a Next episode countdown near the end, speed (0.5–2×), subtitle delay, and a subtitle **Text size** slider (50–200 %, remembered).
 - **Mouse and keyboard.**
   - Mouse buttons 4 and 5, Alt+←/→ and the keyboard's Back and Forward keys go back and forward between pages.
   - Shortcuts everywhere: search (Ctrl+F or /), Settings (Ctrl+,), and the usual player keys (Space/K, J/L, ←/→, M, C, V, B, F, 0–9 and more).
@@ -39,13 +41,13 @@ Everything below the feature list is for building from source.
 - **Faster Home.** The libraries list is cached per session, rows are requested in parallel with a placeholder each, and the last Home page is saved and shown instantly on the next start. In a test with a 150 ms network delay, the first row appeared in about 0.18 s instead of 1.75 s.
 - **Clearer states.** A loading screen with Cancel, plus error and empty states with Try again on Home, libraries, item pages, Search and the server page.
 - **Settings in titled groups.** Appearance, Playback, Audio and subtitles, Servers and accounts, Integrations, Advanced and About. Audio and subtitle language are your Jellyfin user settings; the skip prompt and wheel volume are kept on this PC. **Settings → About** has the version and the licence, Check for updates, Keyboard shortcuts, Report a problem and Contribute; **Settings → Integrations** opens Jellyseerr.
-- **The navigation rail** holds only places: Home, Libraries, Diary and Settings.
+- **Server administration that asks first.** Restart, Shut down and every delete ask by name before they act.
 - **Item menus that only offer what works.** The More menu lists only entries that do something; the editing tools (metadata, images, identify, refresh) are shown to server administrators only. **Delete** asks first and names the item, and removing a server or a saved sign-in names it too; Cancel is the default.
 - **Keyboard and screen-reader work.**
   - Rows, season pages' episode lists and library grids are one Tab stop each, and Tab comes back to the card or episode you left; the arrow keys, Home/End (and PageUp/PageDown in a grid) move inside them, and Up/Down leave them for what is above or below.
   - An episode is one stop: Enter plays it, and the Menu key or Shift+F10 opens its menu.
-  - Narrator reads each card by name with its place ("12 of 320"), each episode as "S1E4 Title, watched", every icon button has a name, and an item page's title logo is read as its heading.
-  - Item pages offer "Resume at…" and "Play from beginning".
+  - Narrator reads each card by name with its place ("12 of 320"), each episode as "S1 E4 Title, watched", every icon button has a name, and an item page's title logo is read as its heading.
+  - Item pages offer "Resume at…" and "Play from start".
   - Long text wraps, with Show more.
   - Colours follow high-contrast themes.
 - **Sign-out feedback.** Signing out shows progress, playback stops cleanly first, and nothing can start playing during a sign-out.

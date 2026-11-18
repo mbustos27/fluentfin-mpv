@@ -102,9 +102,40 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   covered for the journal (a SQLite backup) but its other files are copied as they are at that moment.
 - **Pinned shortcuts**: a taskbar or Start pin of Seaglass points at `Programs\Seaglass\app\Seaglass.exe`, which the
   upgrade removes; the pin is left broken until it is pinned again (Windows does not move pins between programs).
-- **Internal names keep "Seaglass"** where they are not shown: `NixiePalette`, `NixieTheme`, `Seaglass*` brushes
-  and some code comments; the package identity (`Package.appxmanifest`'s `FluentFinMpv`) and the release marker
-  (`FluentFinMpvRelease`) did not change either. Renaming them is a separate, mechanical change.
+- **Internal names that still say Seaglass or FluentFin** are compatibility names only: the `SEAGLASS_*` variables, the
+  old data folder and registry key the copy reads, the Seaglass-named MSI the 1.1.x updater looks for, and the package
+  identity (`Package.appxmanifest`'s `FluentFinMpv`) and release marker (`FluentFinMpvRelease`), which did not change.
+
+## Nixie 1.2.0: the top bar, the desert look, the button system, the player, the administration
+- **Checked off-screen only; still to see on a real screen and by hand:**
+  - the glass and the dusk scene in a real, active window (the harness's window is never the active one, so it forces
+    the active look), the scene's 20 s of motion and its rest, and the wordmark's glow at real sizes and DPIs;
+  - the top bar on a real desktop: dragging the window by its empty middle, the caption buttons, the tabs folding as
+    the window narrows (the drag regions are checked with WM_NCHITTEST off-screen);
+  - Narrator by ear: the tabs ("Home, tab item, 1 of 6"), "Remove {server}", "Show more" expanded or collapsed, the
+    states' announcements;
+  - Windows' real high-contrast themes (the HighContrast dictionaries are checked by tests, never seen);
+  - the player between episodes with sound (the harness plays digital silence), the Next countdown, and the speed and
+    subtitle delay against a real file.
+- **The harness ran at 2560 x 1440 and 1920 x 1080** (the display changed during the integration). Four scripts assumed
+  the larger screen and were made size-proof (then-continue, then-wheel, then-rows, then-admin's hero menu); a real 4K
+  or 125-150 % scaled screen was not tried.
+- **The server administration never ran against a real server.** Restart, Shut down and every delete were tried against
+  the fake server (each asks first and sends exactly one request), not against Jellyfin.
+- **The Windows Media Player bar** (the legacy player's controls) is not driven by any harness script; its new labels
+  and Tab stops are checked by tests only.
+- **The player's audio and subtitle menus keep the server's track titles** ("English - Dolby Digital - 5.1"): the item
+  pages' plain words ("English (5.1)") need the channel count, which the bridge's track list does not carry yet.
+- **There is no in-app theme setting:** the app follows Windows' light or dark choice (`NIXIE_THEME` forces one for
+  screenshots).
+- **Button review verdicts left for a later release:** an off switch for Home's N and C keys (L1, L2) and Ctrl+Z in the
+  shortcuts sheet (L3); sentence case for the row names ("Continue watching", L6: the harness finds rows by name); the
+  Filter button's name as "Filter (2 on)" (L25); an Undo after Reset watch progress (L38); a visible hint on the
+  disabled Sign in (S2, Narrator has it); "Refresh" for an empty folder in the picker (S19); Select and Save disabled
+  while loading or unchanged (S20, S22).
+- **Tests that can fail under load and pass alone:** `ItemUndoTests` can take an Undo offer from `ItemToggleTests` running
+  at the same time (the offer is a static event); `JobProcessTests.ExitedAt` and a few bridge timing tests. The release
+  build runs a failed test once more on its own.
 
 ## Seaglass 1.1.3: rail, Settings, item menus, keyboard, glass, player
 - **Checks only a real screen and real hands can settle.** The off-screen harness posts keys to the window and reads UI

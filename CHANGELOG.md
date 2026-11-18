@@ -27,6 +27,60 @@ its name (`fluentfin-mpv`).
   vector shapes (`tools\icon\make-icon.ps1`) for every size from 16 to 256 px. The installer's pictures match.
 - **For scripts:** the environment variables are `NIXIE_THEME`, `NIXIE_FULLSCREEN` and `NIXIE_TESTS_ON_DESKTOP`; the
   `SEAGLASS_*` names still work. The design notes moved to `docs\design\DESIGN.md` and `DESIGN-RESEARCH.md`.
+- **A top bar instead of the side rail.** Home, your libraries (each its own tab while they fit, else in a Libraries
+  menu), Diary and the libraries you add to the top bar are tabs in the window's one bar, with search and the Account
+  menu beside them. The tab you are on is underlined; Left and Right move between tabs, and a narrow window folds the
+  tabs into one menu and search into a button. Settings is in the Account menu (and Ctrl+,). Home and the item pages run
+  their artwork up under the bar, which darkens to keep its text readable. The server administration and the Playback
+  reports page have their sections as tabs along the top too: no side pane is left anywhere.
+- **The desert-sunset look.** Deep plum glass with a hot-pink accent in the dark theme, pale peach glass with crimson in
+  the light one. Sign-in, the server page and empty or failed pages sit on a dusk scene (a striped sun over desert
+  hills, which moves for 20 seconds and then rests); the rest of the app has a strip of hills at the bottom. The app's
+  name glows like a nixie tube on the sign-in card and stands in the top bar. Solid mode and high contrast still have no
+  glass and no motion.
+- **One set of buttons.** Every button is one of six kinds (Primary, Secondary, Subtle, Destructive, Link and Tab) in
+  two sizes, 44 and 32 px, with 8 px corners and the same hover, pressed, focus and disabled looks everywhere. A
+  destructive confirmation draws its confirm in the danger colour and keeps Cancel the default.
+- **Sign-in and server pages.** Errors are said on the page in plain words (a wrong password, a server that is off, an
+  HTTPS certificate problem), with progress while the app waits. The server page's button says Connect; Quick Connect
+  says when its code expires or was refused; "Change" waits while you sign in. Narrator hears each state.
+- **Empty and failed pages** say what happened and what to do, with Try again or Refresh, and Narrator hears them.
+- **Home.**
+  - **Continue Watching stays clean:** "Remove from Continue Watching" in a card's menu takes it out at once, with Undo
+    (and Ctrl+Z) for a few seconds; Settings > Appearance can hide items not played for 30, 60 or 90 days (on this PC only).
+  - The hero features what is new to you (the latest unwatched items, then Next Up), not what Continue Watching already
+    shows, edge to edge under the top bar.
+  - N goes to the Next Up row and C to Continue Watching; a row's arrows, shown when it has more than fits, are
+    larger and at full strength.
+- **Libraries.** One scrolling grid instead of pages. The bar says the sort ("Sort: Name"); the Sort menu also holds
+  Ascending and Descending. Filter is lists of check boxes with counts (genres, years, ratings, tags) and says how many
+  are on; an A–Z jump goes to a letter; Back from an item returns to its card. The Libraries page has tiles that fill the
+  row with the name under the art.
+- **Item pages and cards.**
+  - Buttons are named for what they act on ("Mark Inception as watched"), Play says what it plays ("Resume S1 E4",
+    "Play from start"), and "Your rating" sits in the action row.
+  - Watched and Favourite show the server's state everywhere and stay in step; marking a whole series or season
+    watched offers Undo. The "…" menu on an item page leaves out Watched and Favourite, which are the buttons beside it.
+  - Episode numbers are written one way everywhere, "S1 E4" (and "S2 E5–E6" for a double episode): cards, rows, the
+    hero, Continue Watching, the player.
+  - Audio and subtitle choices are plain words ("English (5.1)", "Spanish (Forced)").
+  - The series page lists the episodes with a season picker, and a link opens the season's own page.
+- **Search.** The arrows only move through the suggestions; Enter opens a results page grouped by type.
+- **The player** (Nixie's controls).
+  - **Previous and Next** buttons, **speed** from 0.5× to 2× ([ and ], Backspace for normal), and **subtitle delay**
+    (Z and X).
+  - Near the end, a **Next episode** countdown with "Watch credits" and "Keep watching"; turning auto-play off in
+    Settings stops it. Leaving with Next 10 seconds into the credits still counts the episode as watched.
+  - Trickplay thumbnails over the seek bar; one Audio and subtitles panel; the timecode easier to read.
+  - **Esc only leaves full screen** (it never stops the video); a click pauses at once; Alt+Enter toggles full screen.
+  - **Between episodes** the volume you set carries over, and the next episode keeps your audio and subtitle choice.
+- **Server administration** asks before anything that cannot be undone, by name: Restart and Shut down, deleting a
+  library, a user, a user's password, an image, a subtitle or a segment. Add library creates one, Scan all libraries
+  scans, Edit metadata's Revert puts back what was loaded and Save sends only what changed.
+- **Smaller things.** Jellyseerr's address can be changed once connected; "Show more" on an overview tells Narrator
+  whether the text is open; a card focused by Narrator stays the card it is on (it could jump to the row's remembered
+  card, so its menu acted on another item); the Windows Media Player bar says what each button does and stops playback
+  here only after you pick another device to play on.
 
 ## 1.1.3
 
