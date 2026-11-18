@@ -53,8 +53,10 @@ function Adm-Destructive([string]$Label, [scriptblock]$Open, [string]$Confirm, [
 
 # --- Edit metadata (the worst offender): Revert puts the loaded values back, Save sends only what changed -------------------
 if ($script:page -eq 'movie') {
-    Adm-Invoke 'More options'
-    Adm-Invoke 'Edit Metadata' 'MenuItem'
+    # 1.2.0 merge: the hero's button is named after the item (the items stream), the entries end in an ellipsis (library)
+    [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0); Adm-Settle 800   # the hero (the movie step's Tab walk left the page low)
+    Adm-Invoke "More options for $($fixture.movie.name)"
+    Adm-Invoke 'Edit metadata…' 'MenuItem'
     $title = Wait-Ui -Name 'Title' -Type 'Edit' -Seconds 15
     Adm-Settle 1500
     Adm-Shot 'edit-metadata'
@@ -81,8 +83,9 @@ if ($script:page -eq 'movie') {
 
     # Edit images: Delete asks in a flyout at the button (ConfirmFlyout: Cancel has the focus); two deletes in a row each
     # remove the image picked, on a server that renumbers (the fake server does, as Jellyfin)
-    Adm-Invoke 'More options'
-    Adm-Invoke 'Edit Images' 'MenuItem'
+    [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0); Adm-Settle 800   # the hero (the movie step's Tab walk left the page low)
+    Adm-Invoke "More options for $($fixture.movie.name)"
+    Adm-Invoke 'Edit images…' 'MenuItem'
     Adm-Settle 2000
     Adm-Shot 'edit-images'
     $imgDelete = '^/Items/[0-9a-fA-F-]+/Images/Backdrop/\d+$'
@@ -98,10 +101,12 @@ if ($script:page -eq 'movie') {
 }
 
 # --- the server administration: tabs along the top ------------------------------------------------------------------------
-$account = Wait-Until { Find-Ui -Name 'Account' -Type 'Button' -Contains } -Seconds 15
-if (-not $account) { throw 'no account button' }
-Say "account ($(Invoke-Element $account))"
-Adm-Invoke 'Dashboard'
+# 1.2.0 merge: the account stream moved the account menu's Dashboard into Settings ("Server administration", Open);
+# Settings is in the Account menu (drive.ps1's Open-Nav)
+Open-Nav 'Settings'
+$admOpen = Wait-Ui -Name 'Open server administration' -Type 'Button' -OffscreenToo -Seconds 15
+if (-not $admOpen) { throw 'no Server administration in Settings' }
+Say "server administration ($(Invoke-Element $admOpen))"
 Adm-Settle 3000
 Check 'admin: the sections are tabs along the top' ([bool](Wait-Ui -Name 'Server administration sections' -Seconds 10))
 Capture-Page "$admTag-admin-dashboard"
