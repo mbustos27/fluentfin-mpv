@@ -43,6 +43,17 @@ public sealed partial class MarqueeSign : Control
 	public static readonly DependencyProperty TextProperty =
 		DependencyProperty.Register(nameof(Text), typeof(string), typeof(MarqueeSign), new PropertyMetadata("", (d, e) => ((MarqueeSign)d).DisplayText = Upper(e.NewValue as string)));
 
+	public static readonly DependencyProperty LevelProperty =
+		DependencyProperty.Register(nameof(Level), typeof(Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel), typeof(MarqueeSign),
+			new PropertyMetadata(Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2));
+
+	/// <summary>The heading's level: 2 for a row, 1 for a page's own name (the Library's).</summary>
+	public Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel Level
+	{
+		get => (Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel)GetValue(LevelProperty);
+		set => SetValue(LevelProperty, value);
+	}
+
 	public static readonly DependencyProperty DisplayTextProperty =
 		DependencyProperty.Register(nameof(DisplayText), typeof(string), typeof(MarqueeSign), new PropertyMetadata(""));
 

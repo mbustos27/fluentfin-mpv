@@ -282,4 +282,14 @@ public sealed class DriveInThemeTests
 		Assert.Equal(96, ItemStage.MarginFor(1920));
 		Assert.Equal(40, ItemStage.MarginFor(1100));
 	}
+
+	[Fact]
+	public void AHeadersStrip_IsSkyAndHills_WithNoScreenSignOrCars()
+	{
+		var strip = DriveInLayout.Strip(1920, 300);
+		Assert.Equal(300, strip.SceneHeight);
+		Assert.False(strip.HasScreen || strip.HasSign);
+		Assert.Empty(strip.Cars);
+		Assert.True(strip.Sun.X > 1920 / 2);
+	}
 }

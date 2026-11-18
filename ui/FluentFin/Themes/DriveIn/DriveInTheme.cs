@@ -24,6 +24,9 @@ public sealed class DriveInTheme : ILayoutTheme
 		[typeof(HomeViewModel)] = typeof(DriveInHomePage),
 		[typeof(SeriesViewModel)] = typeof(DriveInSeriesPage),
 		[typeof(SeasonViewModel)] = typeof(DriveInSeasonPage),
+		[typeof(LibraryViewModel)] = typeof(DriveInLibraryPage),
+		[typeof(MovieViewModel)] = typeof(DriveInMoviePage),
+		[typeof(EpisodeViewModel)] = typeof(DriveInEpisodePage),
 	};
 
 	public Type? ViewFor(Type viewModelType) => Views.TryGetValue(viewModelType, out var view) ? view : null;

@@ -218,7 +218,7 @@ public sealed class DriveInThemeTests
 		Assert.Equal(("Created by", "Lena Duarte"), DriveInItems.MadeBy(series));
 		Assert.Equal(("", ""), DriveInItems.MadeBy(new BaseItemDto { Type = BaseItemDto_Type.Movie }));
 		Assert.Equal("NOW SHOWING", DriveInItems.Kicker(series));
-		Assert.Equal("THE IRON CIRCUS", DriveInItems.Kicker(new BaseItemDto { Type = BaseItemDto_Type.Season, SeriesName = "The Iron Circus" }));
+		Assert.Equal("NOW SHOWING", DriveInItems.Kicker(new BaseItemDto { Type = BaseItemDto_Type.Season, SeriesName = "The Iron Circus" }));
 	}
 
 	[Fact]
@@ -228,5 +228,36 @@ public sealed class DriveInThemeTests
 		episode.PremiereDate = new DateTimeOffset(2022, 3, 28, 0, 0, 0, TimeSpan.Zero);
 		Assert.Equal("52 MIN · 28 MAR 2022", DriveInItems.ShowtimeFacts(episode));
 		Assert.Equal("", DriveInItems.ShowtimeFacts(null));
+	}
+
+	// ---- the Library's letter board -------------------------------------------------------------------------------------
+
+	[Fact]
+	public void TheLetterBoard_HasEveryLetter_ThoseWithNoTitlesResting()
+	{
+		var b = new LetterJump("B", 0);
+		var m = new LetterJump("M", 40);
+		var accented = new LetterJump("É", 90);
+		var tiles = DriveInLibrary.Tiles([b, m, accented]);
+
+		Assert.Equal(28, tiles.Count);
+		Assert.Equal("#", tiles[0].Letter);
+		Assert.False(tiles[0].HasTitles);
+		Assert.Same(b, tiles.Single(t => t.Letter == "B").Jump);
+		Assert.Equal("Jump to M", tiles.Single(t => t.Letter == "M").Name);
+		Assert.Equal("No titles start with Q", tiles.Single(t => t.Letter == "Q").Name);
+		Assert.Same(accented, tiles[^1].Jump);
+		Assert.Equal(3, tiles.Count(t => t.HasTitles));
+	}
+
+	[Fact]
+	public void TheCount_InTubes_WithTheLotsWords()
+	{
+		Assert.Equal("FEATURES ON THE LOT", DriveInLibrary.CountLabel(BaseItemDto_CollectionType.Movies));
+		Assert.Equal("SHOWS ON THE LOT", DriveInLibrary.CountLabel(BaseItemDto_CollectionType.Tvshows));
+		Assert.Equal("TITLES ON THE LOT", DriveInLibrary.CountLabel(null));
+		Assert.Equal("312", DriveInLibrary.CountTubes(312));
+		Assert.Equal("99999", DriveInLibrary.CountTubes(250_000));
+		Assert.Equal("", DriveInLibrary.CountTubes(0));
 	}
 }

@@ -95,12 +95,11 @@ public static class DriveInItems
 		return ("", "");
 	}
 
-	/// <summary>The board's kicker over the title: "NOW SHOWING" for a series or a movie, the series' name for a season or an episode.</summary>
-	public static string Kicker(BaseItemDto? dto) => dto?.Type switch
-	{
-		BaseItemDto_Type.Season or BaseItemDto_Type.Episode when !string.IsNullOrWhiteSpace(dto.SeriesName) => dto.SeriesName.Trim().ToUpperInvariant(),
-		_ => "NOW SHOWING",
-	};
+	/// <summary>
+	/// The board's kicker over the title: "NOW SHOWING" on every item page (a season's and an episode's title is already the
+	/// series', their own name under it), "FEATURE PRESENTATION" with nothing to show.
+	/// </summary>
+	public static string Kicker(BaseItemDto? dto) => dto is null ? "FEATURE PRESENTATION" : "NOW SHOWING";
 
 	/// <summary>A showtime's facts line: "52 MIN · 28 MAR 2022".</summary>
 	public static string ShowtimeFacts(BaseItemDto? episode) =>

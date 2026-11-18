@@ -44,10 +44,15 @@ public sealed partial class ItemStage : Grid
 	private readonly Border _sideScrim = new() { IsHitTestVisible = false };
 	private readonly Border _bottomScrim = new() { IsHitTestVisible = false, VerticalAlignment = VerticalAlignment.Bottom, Height = 140 };
 	private readonly ItemBoard _board = new() { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
-	private readonly TextBlock _credits = new()
+	private readonly Border _creditsPlate = new()
 	{
 		HorizontalAlignment = HorizontalAlignment.Right,
 		VerticalAlignment = VerticalAlignment.Bottom,
+		CornerRadius = new CornerRadius(8),
+		Padding = new Thickness(14, 8, 14, 8),
+	};
+	private readonly TextBlock _credits = new()
+	{
 		TextAlignment = TextAlignment.Right,
 		FontSize = 14,
 		LineHeight = 24,
@@ -66,7 +71,9 @@ public sealed partial class ItemStage : Grid
 		_art.Children.Add(_sideScrim);
 		_art.Children.Add(_bottomScrim);
 		Children.Add(_art);
-		Children.Add(_credits);
+		// the credits on the art keep 4.5:1 whatever the picture: a dark plate under them (a sign's card, not glass)
+		_creditsPlate.Child = _credits;
+		Children.Add(_creditsPlate);
 		Children.Add(_board);
 		Loaded += (_, _) =>
 		{
@@ -80,7 +87,7 @@ public sealed partial class ItemStage : Grid
 	}
 
 	/// <summary>The page's side margin at a width: 40 at 1100, 96 at 1920 (the concept's), as the lot's.</summary>
-	public static double MarginFor(double width) => Math.Clamp(Math.Round(40 + (width - 1100) * 56 / 820), 24, 96);
+	public static double MarginFor(double width) => DriveInLayout.MarginFor(width);
 
 	private void ApplyWidth(double width)
 	{
@@ -94,8 +101,8 @@ public sealed partial class ItemStage : Grid
 		_board.Compact = compact;
 		_board.Width = Math.Min(compact ? width - 2 * margin : 820, width - 2 * margin);
 		_board.Margin = new Thickness(margin, compact ? 20 : 40, margin, 28);
-		_credits.Margin = new Thickness(0, 0, margin, 36);
-		_credits.Visibility = width - _board.Width - 2 * margin > 320 ? Visibility.Visible : Visibility.Collapsed;
+		_creditsPlate.Margin = new Thickness(0, 0, margin, 36);
+		_creditsPlate.Visibility = _credits.Inlines.Count == 0 ? Visibility.Collapsed : width - _board.Width - 2 * margin > 320 ? Visibility.Visible : Visibility.Collapsed;
 		_art.Width = Math.Max(0, width * (compact ? 1 : 0.64));
 		if (_backdrop.Source is null && Dto is { } dto)
 		{
@@ -128,6 +135,7 @@ public sealed partial class ItemStage : Grid
 		Line("Starring", DriveInItems.Starring(dto));
 		var (made, by) = DriveInItems.MadeBy(dto);
 		Line(made, by);
+		ApplyWidth(ActualWidth);
 	}
 
 	/// <summary>The scrims fade the art into the page's ground (its colour in the theme), so the board's edge and the page meet.</summary>
@@ -145,8 +153,8 @@ public sealed partial class ItemStage : Grid
 		bottom.GradientStops.Add(new GradientStop { Offset = 0, Color = A(0) });
 		bottom.GradientStops.Add(new GradientStop { Offset = 1, Color = A(1) });
 		_bottomScrim.Background = bottom;
-		// the credits on the art: dark-theme text with a shadowed ground under it (the bottom scrim)
-		_credits.Foreground = new SolidColorBrush(ActualTheme == ElementTheme.Light ? Color.FromArgb(255, 0x2D, 0x0F, 0x16) : Color.FromArgb(255, 0xF8, 0xEF, 0xF0));
+		_credits.Foreground = BulbFrame.HighContrast() ? (Brush)Application.Current.Resources["DriveInPageTextBrush"] : new SolidColorBrush(Color.FromArgb(255, 0xF8, 0xEF, 0xF0));
+		_creditsPlate.Background = BulbFrame.HighContrast() ? null : new SolidColorBrush(Color.FromArgb(0xD9, 0x10, 0x04, 0x09));
 		_art.Visibility = BulbFrame.HighContrast() ? Visibility.Collapsed : Visibility.Visible;
 	}
 }

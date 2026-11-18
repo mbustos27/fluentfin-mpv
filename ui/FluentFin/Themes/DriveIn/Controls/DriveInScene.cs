@@ -103,6 +103,8 @@ public sealed partial class DriveInScene : Canvas
 
 		Width = layout.Width;
 		Height = layout.SceneHeight;
+		// the sun's halo and rings never spill out of the scene (a header's strip: onto the posters)
+		Clip = new RectangleGeometry { Rect = new Rect(0, 0, layout.Width, layout.SceneHeight) };
 		var light = ActualTheme == ElementTheme.Light;
 		if (Layer == SceneLayer.Back)
 		{

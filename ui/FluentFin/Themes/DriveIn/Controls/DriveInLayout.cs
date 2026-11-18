@@ -51,7 +51,7 @@ public sealed record DriveInLayout(
 	{
 		width = Math.Max(320, width);
 		// the concept's margins: 40 at 1100, 96 at 1920, in between in proportion
-		var margin = Math.Clamp(Math.Round(40 + (width - 1100) * 56 / 820), 24, 96);
+		var margin = MarginFor(width);
 		if (compact)
 		{
 			var ground = CompactHeight - 34;
@@ -97,6 +97,23 @@ public sealed record DriveInLayout(
 
 		return new DriveInLayout(width, false, wide, margin, sceneHeight, groundY, screen, board, arrow, sun, sunRadius, cars, sceneHeight + (wide ? 20 : 14));
 	}
+
+	/// <summary>
+	/// A page header's strip of the lot (the Library's letter board sits on it, never the posters): the sky and the hills,
+	/// the sun low at the right, no screen, sign or cars.
+	/// </summary>
+	public static DriveInLayout Strip(double width, double height)
+	{
+		width = Math.Max(320, width);
+		height = Math.Max(120, height);
+		var ground = height - 30;
+		var radius = Math.Round(Math.Clamp(height * 0.28, 48, 96));
+		return new DriveInLayout(width, false, width >= WideFrom, MarginFor(width), height, ground, Rect.Empty, Rect.Empty, Rect.Empty,
+			new Point(Math.Round(width * 0.78), ground - radius * 0.45), radius, [], height);
+	}
+
+	/// <summary>A page's side margin at a width: 40 at 1100, 96 at 1920 (the concept's), in proportion between.</summary>
+	public static double MarginFor(double width) => Math.Clamp(Math.Round(40 + (width - 1100) * 56 / 820), 24, 96);
 
 	/// <summary>The sign-in page's lot: the screen in the middle (the form is on it), the sun to the right, two rows of cars.</summary>
 	public static DriveInLayout SignIn(double width, double height)

@@ -16,6 +16,10 @@
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
             <SolidColorBrush x:Key="DriveInGroundBrush" Color="#1A0710" />
+            <SolidColorBrush x:Key="DriveInHeaderTextBrush" Color="#FFF4EE" />
+            <SolidColorBrush x:Key="DriveInTileBrush" Color="#2A0814" />
+            <SolidColorBrush x:Key="DriveInTileEdgeBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="DriveInTileRestBrush" Color="#C7A9AC" />
             <SolidColorBrush x:Key="DriveInFocusRingBrush" Color="#FFF4EE" />
             <SolidColorBrush x:Key="DriveInFocusGlowBrush" Color="#F96985" />
             <LinearGradientBrush x:Key="DriveInSkyBarBrush" StartPoint="0.5,0" EndPoint="0.5,1">
@@ -54,6 +58,10 @@
         <ResourceDictionary x:Key="Light">
             <!--  noon: the ground under the rows is pale, the page's text dark; the lit objects stay dark  -->
             <SolidColorBrush x:Key="DriveInGroundBrush" Color="#FBEFEA" />
+            <SolidColorBrush x:Key="DriveInHeaderTextBrush" Color="#2D0F16" />
+            <SolidColorBrush x:Key="DriveInTileBrush" Color="#2A0814" />
+            <SolidColorBrush x:Key="DriveInTileEdgeBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="DriveInTileRestBrush" Color="#7A2A3E" />
             <SolidColorBrush x:Key="DriveInFocusRingBrush" Color="#FFF4EE" />
             <SolidColorBrush x:Key="DriveInFocusGlowBrush" Color="#F96985" />
             <LinearGradientBrush x:Key="DriveInSkyBarBrush" StartPoint="0.5,0" EndPoint="0.5,1">
@@ -91,6 +99,10 @@
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="DriveInGroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="DriveInHeaderTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="DriveInTileBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="DriveInTileEdgeBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+            <SolidColorBrush x:Key="DriveInTileRestBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="DriveInFocusRingBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="DriveInFocusGlowBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="DriveInSkyBarBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -242,7 +254,7 @@
                         <TextBlock
                             Margin="{TemplateBinding Padding}"
                             VerticalAlignment="Center"
-                            AutomationProperties.HeadingLevel="Level2"
+                            AutomationProperties.HeadingLevel="{TemplateBinding Level}"
                             AutomationProperties.Name="{TemplateBinding Text}"
                             CharacterSpacing="170"
                             FontFamily="{StaticResource DriveInDisplayFontFamily}"
@@ -258,6 +270,16 @@
         </Setter>
     </Style>
     <Style BasedOn="{StaticResource DriveInMarqueeStyle}" TargetType="dc:MarqueeSign" />
+
+    <!--  a page's own marquee (the Library's name): larger, a level-1 heading set on it by the page  -->
+    <Style
+        x:Key="DriveInLargeMarqueeStyle"
+        BasedOn="{StaticResource DriveInMarqueeStyle}"
+        TargetType="dc:MarqueeSign">
+        <Setter Property="Height" Value="70" />
+        <Setter Property="FontSize" Value="34" />
+        <Setter Property="Padding" Value="30,0" />
+    </Style>
 
     <!--  a compact marquee (narrow windows)  -->
     <Style
