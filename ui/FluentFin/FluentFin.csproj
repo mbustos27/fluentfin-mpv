@@ -20,7 +20,7 @@
 		<LangVersion>preview</LangVersion>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<!-- fluentfin-mpv: the release version (shown, and sent to Jellyfin through Core\AppVersion); docs\RELEASE.md -->
-		<Version Condition=" '$(BuildVersion)' == '' ">1.2.0</Version>
+		<Version Condition=" '$(BuildVersion)' == '' ">1.3.0</Version>
 		<Version Condition=" '$(BuildVersion)' != '' ">$(BuildVersion)</Version>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 		<!-- Nixie: what Properties > Details shows for Nixie.exe (the launcher and the backend say the same: tools/release) -->
