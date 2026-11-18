@@ -212,6 +212,14 @@ public sealed class SelectServerViewModelTests
 		Assert.False(vm.HasServers);
 	}
 
+	[Theory]
+	[InlineData(0, 2, 0)]   // the first of three went: the next one, now first
+	[InlineData(1, 2, 1)]   // the middle one: the one after it
+	[InlineData(2, 2, 1)]   // the last one: the one before it
+	[InlineData(0, 0, null)] // the only one: the address box
+	public void AfterRemove_TheKeyboardGoesToTheNextRow_OrTheAddressBox(int removed, int remaining, int? row) =>
+		Assert.Equal(row, SelectServerViewModel.FocusAfterRemove(removed, remaining));
+
 	[Fact]
 	public async Task RemoveWithoutAPrompt_RemovesNothing()
 	{

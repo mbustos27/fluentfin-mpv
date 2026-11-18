@@ -52,6 +52,18 @@ public class StatesXamlTests
 	}
 
 	[Fact]
+	public void ASavedServersMoreOptions_IsNamed_AndReachableWithTheKeyboard()
+	{
+		// review of wip/114-states: it was IsTabStop="False"; the row's context menu (Shift+F10) has Remove too
+		var row = Assert.Single(Load("FluentFin/Views/SelectServerPage.xaml").Descendants(Presentation + "ItemContainer"));
+		var more = Assert.Single(row.Descendants(Presentation + "Button"));
+		Assert.Equal("{x:Bind local:SelectServerPage.MoreOptionsName(DisplayName)}", (string?)more.Attribute("AutomationProperties.Name"));
+		Assert.NotEqual("False", (string?)more.Attribute("IsTabStop"));
+		Assert.NotNull(row.Element(Presentation + "ItemContainer.ContextFlyout"));
+		Assert.Contains("SavedServersView.ScrollView", Code("FluentFin/Views/SelectServerPage.xaml.cs"));
+	}
+
+	[Fact]
 	public void ServerFolderPicker_NamesEachFolder_HasAHeading_AndSaysWhyAFolderIsEmpty()
 	{
 		var doc = Load("FluentFin/Controls/ServerFolderPicker.xaml");
@@ -100,24 +112,111 @@ public class StatesXamlTests
 		Assert.True(missing.Count == 0, $"{file}: no HighContrast value for {string.Join(", ", missing)}");
 	}
 
-	/// <summary>High contrast uses the user's colours: a brush there is a system colour (or transparent), never a fixed one.</summary>
-	[Theory]
-	[MemberData(nameof(ThemedFiles))]
-	public void HighContrastBrushes_UseSystemColours(string file)
+	/// <summary>
+	/// High contrast uses the user's colours: every colour a HighContrast dictionary under Styles gives (a Color, a brush of
+	/// any kind with its colours, gradient stops, an acrylic's tint and fallback, a StaticResource alias) is transparent, a
+	/// system colour, or a key that has a HighContrast value of its own (checked in turn).
+	/// </summary>
+	[Fact]
+	public void HighContrastDictionaries_UseOnlySystemColours()
 	{
-		var fixedColours = Themes(Load(file)).GetValueOrDefault("HighContrast", [])
-			.Where(e => e.Value.Name.LocalName is "SolidColorBrush" or "Color")
-			.Where(e => !IsSystemColour(e.Value))
-			.Select(e => $"{e.Key} = {(string?)e.Value.Attribute("Color") ?? e.Value.Value}")
-			.ToList();
+		var files = Directory.GetFiles(Path.Combine(RepoRoot, "FluentFin", "Styles"), "*.xaml").Select(f => (Path.GetFileName(f), XDocument.Load(f))).ToList();
 
-		Assert.True(fixedColours.Count == 0, $"{file}: fixed colours in high contrast: {string.Join("; ", fixedColours)}");
+		var problems = HighContrastProblems(files);
+
+		Assert.True(problems.Count == 0, "Not the user's colours in high contrast:\n" + string.Join("\n", problems));
 	}
 
-	private static bool IsSystemColour(XElement e)
+	/// <summary>The check above finds each kind of fixed colour (review of wip/114-states: a fixed Color and an acrylic passed).</summary>
+	[Theory]
+	[InlineData("""<Color x:Key="AccentColor">#FFFFFF00</Color>""", "AccentColor")]
+	[InlineData("""<Color x:Key="AccentColor">Yellow</Color>""", "AccentColor")]
+	[InlineData("""<SolidColorBrush x:Key="B" Color="#FF000000" />""", "B")]
+	[InlineData("""<SolidColorBrush x:Key="B" Color="Black" />""", "B")]
+	[InlineData("""<SolidColorBrush x:Key="B">#FF000000</SolidColorBrush>""", "B")]
+	[InlineData("""<AcrylicBrush x:Key="B" TintColor="#FF202020" FallbackColor="{ThemeResource SystemColorWindowColor}" />""", "B")]
+	[InlineData("""<AcrylicBrush x:Key="B" TintColor="{ThemeResource SystemColorWindowColor}" FallbackColor="#FF202020" />""", "B")]
+	[InlineData("""<LinearGradientBrush x:Key="B"><GradientStop Offset="0" Color="#FF5CCFC1" /></LinearGradientBrush>""", "B")]
+	[InlineData("""<SolidColorBrush x:Key="B" Color="{ThemeResource OnlyDarkColor}" />""", "OnlyDarkColor")]
+	[InlineData("""<StaticResource x:Key="B" ResourceKey="OnlyDarkBrush" />""", "OnlyDarkBrush")]
+	[InlineData("""<Color x:Key="KeyedColor">#FFFFFF00</Color><SolidColorBrush x:Key="B" Color="{ThemeResource KeyedColor}" />""", "KeyedColor")]
+	public void TheHighContrastCheck_FindsAFixedColour(string entries, string reported)
 	{
-		var colour = (string?)e.Attribute("Color") ?? e.Value.Trim();
-		return colour == "Transparent" || colour.StartsWith("{ThemeResource SystemColor", StringComparison.Ordinal) || colour.StartsWith("{StaticResource SystemColor", StringComparison.Ordinal);
+		var problems = HighContrastProblems([("Sample.xaml", Sample(entries))]);
+
+		Assert.Contains(problems, p => p.Contains(reported, StringComparison.Ordinal));
+	}
+
+	[Theory]
+	[InlineData("""<SolidColorBrush x:Key="B" Color="{ThemeResource SystemColorWindowColor}" />""")]
+	[InlineData("""<SolidColorBrush x:Key="B" Color="Transparent" />""")]
+	[InlineData("""<StaticResource x:Key="B" ResourceKey="SystemControlForegroundBaseHighBrush" />""")]
+	[InlineData("""<StaticResource x:Key="B" ResourceKey="SubtleFillColorTransparentBrush" />""")]
+	[InlineData("""<StaticResource x:Key="AccentColor" ResourceKey="SystemColorHighlightColor" /><SolidColorBrush x:Key="B" Color="{ThemeResource AccentColor}" />""")]
+	[InlineData("""<AcrylicBrush x:Key="B" TintColor="{ThemeResource SystemColorWindowColor}" FallbackColor="{ThemeResource SystemColorWindowColor}" TintOpacity="0.5" />""")]
+	[InlineData("""<x:Double x:Key="ShadowOpacity">0</x:Double>""")]
+	public void TheHighContrastCheck_AcceptsTheUsersColours(string entries) =>
+		Assert.Empty(HighContrastProblems([("Sample.xaml", Sample(entries))]));
+
+	private static XDocument Sample(string entries) => XDocument.Parse($"""
+		<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+		    <ResourceDictionary.ThemeDictionaries>
+		        <ResourceDictionary x:Key="Dark"><Color x:Key="OnlyDarkColor">#FF101010</Color><SolidColorBrush x:Key="OnlyDarkBrush" Color="#FF101010" /></ResourceDictionary>
+		        <ResourceDictionary x:Key="HighContrast">{entries}</ResourceDictionary>
+		    </ResourceDictionary.ThemeDictionaries>
+		</ResourceDictionary>
+		""");
+
+	/// <summary>Attributes that hold a colour or a brush (others, such as Opacity, are numbers).</summary>
+	private static bool IsColourAttribute(string name) =>
+		name.Contains("Color", StringComparison.Ordinal) || name.EndsWith("Brush", StringComparison.Ordinal)
+		|| name is "Foreground" or "Background" or "Fill" or "Stroke" or "ResourceKey";
+
+	/// <summary>A key whose value is the user's colour in high contrast without a HighContrast entry of ours.</summary>
+	private static bool IsSystemKey(string key) =>
+		key.StartsWith("SystemColor", StringComparison.Ordinal)        // the contrast theme's own colours
+		|| key.StartsWith("SystemControl", StringComparison.Ordinal)   // WinUI's brushes made of them in high contrast
+		|| key.EndsWith("TransparentBrush", StringComparison.Ordinal); // WinUI's transparent fills
+
+	/// <summary>
+	/// Every colour the HighContrast dictionaries of <paramref name="files"/> give that is not the user's: "file: key: value".
+	/// A reference (ThemeResource, StaticResource, an alias's ResourceKey) must name a system key or a key with a HighContrast
+	/// value in one of the files (whose own colours are checked as entries).
+	/// </summary>
+	private static List<string> HighContrastProblems(IEnumerable<(string Name, XDocument Doc)> files)
+	{
+		var contrast = files.SelectMany(f => Themes(f.Doc).GetValueOrDefault("HighContrast", []).Select(e => (File: f.Name, e.Key, Entry: e.Value))).ToList();
+		var contrastKeys = contrast.Select(c => c.Key).ToHashSet(StringComparer.Ordinal);
+		var problems = new List<string>();
+
+		foreach (var (file, key, entry) in contrast)
+		{
+			foreach (var element in entry.DescendantsAndSelf())
+			{
+				var values = element.Attributes().Where(a => a.Name.Namespace == XNamespace.None && IsColourAttribute(a.Name.LocalName)).Select(a => a.Value).ToList();
+				if (element.Name.LocalName is "Color" || element.Name.LocalName.EndsWith("Brush", StringComparison.Ordinal))
+				{
+					values.AddRange(element.Nodes().OfType<XText>().Select(t => t.Value.Trim()).Where(t => t.Length > 0));
+				}
+
+				foreach (var value in values)
+				{
+					var reference = System.Text.RegularExpressions.Regex.Match(value, @"^\{(?:ThemeResource|StaticResource)\s+(\w+)\}$");
+					var named = reference.Success ? reference.Groups[1].Value : element.Name.LocalName == "StaticResource" ? value : null;
+					var fine = named is not null
+						? IsSystemKey(named) || contrastKeys.Contains(named)
+						: value == "Transparent";
+					if (!fine)
+					{
+						problems.Add(named is not null
+							? $"{file}: {key}: {value} ({named} has no HighContrast value and is not a system colour)"
+							: $"{file}: {key}: {value}");
+					}
+				}
+			}
+		}
+
+		return problems;
 	}
 
 	private static Dictionary<string, Dictionary<string, XElement>> Themes(XDocument doc) =>

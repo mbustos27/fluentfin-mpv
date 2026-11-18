@@ -132,6 +132,27 @@ function Find-OtherWindow([string]$Title) {
     @(Get-OtherWindows | Where-Object { -not $Title -or $_.Current.Name -like "*$Title*" }) | Select-Object -First 1
 }
 
+function Under-Name($Root, [string]$Name) {
+    @([OffscreenUi]::Under($Root, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $Name)))) | Select-Object -First 1
+}
+# an element by name in any of FluentFin's windows (a menu or a suggestion list is a popup window of its own)
+function Find-Anywhere([string]$Name) {
+    $hit = Find-Ui -Name $Name
+    if ($hit) { return $hit }
+    foreach ($w in @(Get-OtherWindows)) { $hit = Under-Name $w $Name; if ($hit) { return $hit } }
+    $null
+}
+
+# the element with the keyboard focus in FluentFin's main window: @{ name; type }, or $null
+function Focused-Element {
+    foreach ($r in @([StatesUia]::Walk($script:hwnd))) {
+        if ($r[6] -and $r[1] -ne 50032) {
+            return [pscustomobject]@{ name = $r[0]; type = $(if ($script:uiaTypes.ContainsKey([int]$r[1])) { $script:uiaTypes[[int]$r[1]] } else { [string]$r[1] }) }
+        }
+    }
+    $null
+}
+
 # each popup window open now, as shots\NN-<name>-popup<i>.png (PrintWindow of the main window leaves them out)
 function Shot-Popups([string]$Name) {
     $i = 0

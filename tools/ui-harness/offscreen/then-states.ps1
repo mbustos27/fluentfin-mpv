@@ -26,16 +26,6 @@ function Search-For([string]$Term) {
     Set-ElementValue $box $Term
     Say "searched for '$Term'"
 }
-function Under-Name($Root, [string]$Name) {
-    @([OffscreenUi]::Under($Root, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, $Name)))) | Select-Object -First 1
-}
-# an element by name in any of FluentFin's windows (a menu or a suggestion list is a popup window of its own)
-function Find-Anywhere([string]$Name) {
-    $hit = Find-Ui -Name $Name
-    if ($hit) { return $hit }
-    foreach ($w in @(Get-OtherWindows)) { $hit = Under-Name $w $Name; if ($hit) { return $hit } }
-    $null
-}
 
 if ($skip -notcontains 'home') {
     # 1. Home: nothing could be loaded

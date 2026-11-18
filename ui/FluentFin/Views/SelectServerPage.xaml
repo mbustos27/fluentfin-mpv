@@ -62,6 +62,7 @@
                     80 px icon tile with the name cut off and no address.
                 -->
                 <ItemsView
+                    x:Name="SavedServersView"
                     AutomationProperties.Name="Saved servers"
                     IsItemInvokedEnabled="True"
                     ItemInvoked="ServerSelected"
@@ -110,7 +111,6 @@
                                         Grid.Column="2"
                                         AutomationProperties.Name="{x:Bind local:SelectServerPage.MoreOptionsName(DisplayName)}"
                                         Content="{ui:FontIcon Glyph=&#xE712;, FontSize=16}"
-                                        IsTabStop="False"
                                         Style="{StaticResource GlassIconButtonStyle}"
                                         ToolTipService.ToolTip="More options">
                                         <Button.Flyout>

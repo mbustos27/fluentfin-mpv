@@ -1,9 +1,11 @@
-﻿using System.Reflection;
+﻿using System.Net.Security;
+using System.Reflection;
 using System.Security.Authentication;
 using DeviceId;
 using FluentFin.Contracts.Services;
 using FluentFin.Core;
 using FluentFin.Core.Contracts.Services;
+using FluentFin.Core.Mpv;
 using FluentFin.Core.Services;
 using FluentFin.Core.Settings;
 using FluentFin.Core.ViewModels;
@@ -45,20 +47,106 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		}
 		catch (Exception ex)
 		{
-			// 1.1.4 (states): the technical detail goes to the log; the page says what happened and what to do
-			Serilog.Log.Warning(ex, "The server page's address {Url} did not answer as a Jellyfin server", url);
-			return (null, DescribeFailure(ex, url));
+			// 1.1.4 (states): the technical detail goes to the log (the address without what a pasted user:password@ or
+			// ?api_key= would add); the page says what happened and what to do
+			Serilog.Log.Warning(ex, "The server page's address {Url} did not answer as a Jellyfin server", BridgeRedaction.ServerForLog(url));
+			var https = IsSecureConnectionFailure(ex) ? await DiagnoseHttps(url, cancellationToken) : HttpsProblem.None;
+			return (null, DescribeFailure(ex, url, https, serverPage: true));
 		}
 	}
+
+	/// <summary>What a failed HTTPS connection was (<see cref="DiagnoseHttps"/>).</summary>
+	internal enum HttpsProblem
+	{
+		/// <summary>Not looked into (not an HTTPS failure, or not an https:// address).</summary>
+		None,
+
+		/// <summary>The server sent a certificate that Windows does not trust (self-signed, wrong name, expired).</summary>
+		Certificate,
+
+		/// <summary>The port answers plain HTTP: https:// was typed for an http:// port.</summary>
+		PlainHttp,
+
+		/// <summary>Something else ended the secure connection (a hang-up, no common protocol, something in between).</summary>
+		Other,
+	}
+
+	internal static bool IsSecureConnectionFailure(Exception ex) =>
+		ex is HttpRequestException { HttpRequestError: HttpRequestError.SecureConnectionError } or HttpRequestException { InnerException: AuthenticationException };
+
+	/// <summary>
+	/// 1.1.4 (states): why an https:// address failed. The exception alone does not say: a certificate Windows rejects and a
+	/// port that speaks plain HTTP both end in an AuthenticationException, told apart only by its English message. So the
+	/// address is asked again, twice at most, a few seconds each: over HTTPS with a certificate check that records whether a
+	/// certificate was presented and rejected, then over plain HTTP on the same port. Never throws.
+	/// </summary>
+	internal static async Task<HttpsProblem> DiagnoseHttps(string url, CancellationToken cancellationToken = default)
+	{
+		if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || string.IsNullOrEmpty(uri.Host))
+		{
+			return HttpsProblem.None;
+		}
+
+		var rejected = false;
+		try
+		{
+			using var handler = new SocketsHttpHandler
+			{
+				ConnectTimeout = TimeSpan.FromSeconds(4),
+				SslOptions = new SslClientAuthenticationOptions
+				{
+					RemoteCertificateValidationCallback = (_, _, _, errors) =>
+					{
+						rejected |= errors != SslPolicyErrors.None;
+						return false;
+					},
+				},
+			};
+			using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
+			using var _ = await client.GetAsync(new Uri($"https://{uri.Authority}/"), HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+		}
+		catch (Exception)
+		{
+			// expected: the certificate check above always says no
+		}
+
+		if (rejected)
+		{
+			return HttpsProblem.Certificate;
+		}
+
+		try
+		{
+			using var handler = new SocketsHttpHandler { ConnectTimeout = TimeSpan.FromSeconds(4), AllowAutoRedirect = false };
+			using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
+			using var _ = await client.GetAsync(new Uri($"http://{uri.Authority}/"), HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+			return HttpsProblem.PlainHttp;
+		}
+		catch (Exception)
+		{
+			return HttpsProblem.Other;
+		}
+	}
+
+	/// <summary>The address with http:// in place of https:// (same host, port and path), for "use this instead".</summary>
+	internal static string PlainHttpAddress(string url) =>
+		Uri.TryCreate(url, UriKind.Absolute, out var uri)
+			? new UriBuilder(uri) { Scheme = Uri.UriSchemeHttp, Port = uri.Port, UserName = "", Password = "", Query = "", Fragment = "" }.Uri.ToString().TrimEnd('/')
+			: url;
 
 	/// <summary>
 	/// Why a request to the server page's address or a sign-in failed, and what to do, in words the page shows.
 	/// 1.1.4 (states; layout audit #11): a refused password, an account the server will not sign in, a server error and an
 	/// unreachable address each say what to do next, in plain words; the exception's own text (Kiota's "unexpected status
-	/// code", Windows' "actively refused it") is never shown: the callers log it.
+	/// code", Windows' "actively refused it") is never shown: the callers log it. On the server page (<paramref name="serverPage"/>)
+	/// nothing has asked for a password yet: a 401 or 403 there comes from something in front of the server. An HTTPS failure
+	/// says what <paramref name="https"/> found.
 	/// </summary>
-	internal static string DescribeFailure(Exception ex, string url) => ex switch
+	internal static string DescribeFailure(Exception ex, string url, HttpsProblem https = HttpsProblem.None, bool serverPage = false) => ex switch
 	{
+		ApiException { ResponseStatusCode: 401 or 403 } refused when serverPage =>
+			$"The server at {url} refused the connection ({refused.ResponseStatusCode}). Something in front of Jellyfin, such as a reverse proxy " +
+			"or a sign-in gateway, may want a sign-in of its own, which this app can't give. Use an address that reaches Jellyfin directly, or ask the server's administrator.",
 		ApiException { ResponseStatusCode: 401 } => "Wrong username or password. Check both (the password is case-sensitive) and try again, or sign in with Quick Connect.",
 		ApiException { ResponseStatusCode: 403 } =>
 			$"{url} doesn't let this account sign in (it may be disabled, or not allowed on this device). Ask the server's administrator.",
@@ -66,9 +154,17 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 			$"{url} answered with an error ({api.ResponseStatusCode}): it may be starting up or have a problem. Wait a moment and try again; if it keeps happening, check the server's logs.",
 		ApiException api =>
 			$"{url} answered with an error ({api.ResponseStatusCode}). Check that this is your Jellyfin server's address, then try again.",
-		HttpRequestException { InnerException: AuthenticationException } =>
-			$"The HTTPS certificate of {url} isn't trusted by Windows (for example a self-signed certificate). " +
-			"Use the server's http:// address, or add its certificate to the Windows certificate store.",
+		HttpRequestException secure when IsSecureConnectionFailure(secure) => (https, secure.InnerException) switch
+		{
+			(HttpsProblem.PlainHttp, _) =>
+				$"{url} answers plain HTTP on this port, not HTTPS. Use {PlainHttpAddress(url)} instead, or the server's HTTPS port.",
+			(HttpsProblem.Certificate, _) or (HttpsProblem.None, AuthenticationException) =>
+				$"The HTTPS certificate of {url} isn't trusted by Windows (for example a self-signed certificate). " +
+				"Use the server's http:// address, or add its certificate to the Windows certificate store.",
+			_ =>
+				$"Couldn't set up a secure (HTTPS) connection to {url}. Check that this is the server's HTTPS address and port, " +
+				"or use its http:// address, then try again.",
+		},
 		HttpRequestException => $"Can't reach {url}. Check that the server is running, that the address and port are right, and that this PC can reach it (VPN, firewall), then try again.",
 		// fluentfin-mpv: the server page's timeout (or the HTTP client's own)
 		OperationCanceledException => $"{url} didn't answer in time. Check the address and port, and that this PC can reach the server (VPN, firewall), then try again.",
@@ -124,8 +220,9 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 
 			return auth is not null;
 		}
-		catch
+		catch (Exception ex)
 		{
+			logger.LogWarning(ex, "Quick Connect sign-in to {Url} failed", BridgeRedaction.ServerForLog(url));
 			return false;
 		}
 	}
@@ -200,8 +297,15 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		}
 		catch (Exception ex)
 		{
-			logger.LogError(ex, "Sign-in to {Url} failed", url);
-			return DescribeFailure(ex, url);
+			// 1.1.4 (states): the address as a log may show it (no user info, no query)
+			logger.LogError(ex, "Sign-in to {Url} failed", BridgeRedaction.ServerForLog(url));
+			HttpsProblem https;
+			using (var diagnosis = new CancellationTokenSource(TimeSpan.FromSeconds(10)))
+			{
+				https = IsSecureConnectionFailure(ex) ? await DiagnoseHttps(url, diagnosis.Token) : HttpsProblem.None;
+			}
+
+			return DescribeFailure(ex, url, https);
 		}
 	}
 

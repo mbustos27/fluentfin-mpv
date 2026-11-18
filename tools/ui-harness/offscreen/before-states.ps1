@@ -116,6 +116,38 @@ if (-not $change) { throw 'no Change server link' }
 Start-Sleep -Milliseconds 600
 Capture-State 'server-saved'
 
+# 13. a saved server's More options (review of wip/114-states): Tab from the row reaches it; Remove asks first and Cancel
+# keeps the server; a yes removes it and the keyboard goes to the address box (the driver's sign-in types the address)
+$serverName = 'Harness Jellyfin (fake)' # the fake server's name (fakeserver\server.py)
+$moreName = "More options for $serverName"
+$row = Wait-Until { Find-Ui -Name $serverName -Type 'ListItem' } -Seconds 5
+if (-not $row) { Check 'saved server: a row named after the server' $false 'no ListItem' }
+else {
+    [void][OffscreenUi]::SetFocus($row); Start-Sleep -Milliseconds 400
+    Key 0x09; Start-Sleep -Milliseconds 600
+    $f = Focused-Element
+    Check 'saved server: Tab from the row reaches More options' ($f -and $f.name -eq $moreName) "focus: $($f.type) '$($f.name)'"
+    foreach ($answer in @('Cancel', 'Remove')) {
+        $more = Wait-Until { Find-Ui -Name $moreName -Type 'Button' } -Seconds 5
+        if (-not $more) { Check "saved server: More options before $answer" $false 'gone'; break }
+        [void](Invoke-Element $more); Start-Sleep -Milliseconds 800
+        $item = Wait-Until { Find-Ui -Name 'Remove' -Type 'MenuItem' } -Seconds 5
+        if (-not $item) { Check 'saved server: More options opens a menu with Remove' $false 'no Remove item'; Key 0x1B; break }
+        [void](Invoke-Element $item); Start-Sleep -Milliseconds 900
+        if ($answer -eq 'Cancel') { Capture-State 'server-remove-asks' }
+        $button = Wait-Until { Find-Ui -Name $answer -Type 'Button' } -Seconds 5
+        if (-not $button) { Check "saved server: the question has $answer" $false 'no button'; Key 0x1B; break }
+        [void](Invoke-Element $button); Start-Sleep -Milliseconds 1200
+        if ($answer -eq 'Cancel') {
+            Check 'saved server: Cancel keeps it' ([bool](Find-Ui -Name $moreName -Type 'Button'))
+        }
+    }
+    $f = Focused-Element
+    $gone = -not (Find-Ui -Name $moreName -Type 'Button')
+    Check 'saved server: Remove removes it, the keyboard goes to the address box' ($gone -and $f -and $f.name -eq 'Server address') "removed: $gone; focus: $($f.type) '$($f.name)'"
+    Capture-State 'server-removed'
+}
+
 }
 
 # Home's rows fail from now on (then-states.ps1 starts with the failed Home; the sign-in itself is not affected)

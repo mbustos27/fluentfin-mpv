@@ -212,6 +212,13 @@ public partial class SelectServerViewModel(ISettings settings,
 		}
 	}
 
+	/// <summary>
+	/// Which row takes the keyboard after the row at <paramref name="removedIndex"/> went: the one now in its place, the
+	/// last one when it was the last, none (the address box) when no server is left.
+	/// </summary>
+	public static int? FocusAfterRemove(int removedIndex, int remaining) =>
+		remaining <= 0 ? null : Math.Clamp(removedIndex, 0, remaining - 1);
+
 	private void ServerDiscovered(DiscoveryInfo info)
 	{
 		Interlocked.Increment(ref _found);

@@ -1,7 +1,4 @@
-﻿using System.Reactive.Disposables;
-using System.Reactive.Disposables.Fluent;
-using System.Reactive.Linq;
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FluentFin.Contracts.Services;
 using FluentFin.Contracts.ViewModels;
@@ -17,7 +14,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using ReactiveUI;
 
 namespace FluentFin.ViewModels;
 
@@ -25,8 +21,6 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 									[FromKeyedServices(NavigationRegions.InitialSetup)] INavigationService navigationService,
 									ILocalSettingsService settingsService) : ObservableObject, INavigationAware
 {
-	private CompositeDisposable? _disposable;
-
 	[ObservableProperty]
 	public partial string Username { get; set; } = "";
 
@@ -52,9 +46,13 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 	[NotifyPropertyChangedFor(nameof(HasError))]
 	public partial string ErrorMessage { get; set; } = "";
 
-	/// <summary>A sign-in is on its way to the server: the button shows progress, the fields wait.</summary>
+	/// <summary>
+	/// A sign-in is on its way to the server (a password, or a Quick Connect code just approved): the button shows progress,
+	/// the fields and Use Quick Connect wait.
+	/// </summary>
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(IsIdle), nameof(StatusText))]
+	[NotifyCanExecuteChangedFor(nameof(QuickConnectCommand))]
 	public partial bool IsSigningIn { get; set; }
 
 	public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
@@ -143,16 +141,45 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 		}
 	}
 
-	[RelayCommand]
+	/// <summary>
+	/// How long a Quick Connect code is waited for: Jellyfin forgets a code after 10 minutes, and then only answers "not
+	/// found", which looked like "not yet" (the dialog waited for ever).
+	/// </summary>
+	public static readonly TimeSpan QuickConnectLifetime = TimeSpan.FromMinutes(10);
+
+	/// <summary>Status checks that fail in a row before the code is given up on (the server forgot it, or is gone).</summary>
+	public const int QuickConnectFailuresAllowed = 4;
+
+	public const string QuickConnectExpired = "This code expired. Try again.";
+
+	/// <summary>Between two status checks (the tests make it short).</summary>
+	internal TimeSpan QuickConnectPollInterval { get; set; } = TimeSpan.FromSeconds(5);
+
+	/// <summary>The clock the code's lifetime is measured on (the tests move it).</summary>
+	internal TimeProvider Time { get; set; } = TimeProvider.System;
+
+	/// <summary>
+	/// Shows the code until the token closes it or the user does (Cancel, Escape); the task ends when the dialog is closed.
+	/// The tests replace the dialog.
+	/// </summary>
+	internal Func<string, string, CancellationToken, Task> ShowQuickConnectCode { get; set; } = ShowQuickConnectDialog;
+
+	/// <summary>
+	/// 1.1.4 (states): Use Quick Connect. The code is shown while the server is asked, every few seconds, whether it was
+	/// approved. Approved: the dialog closes and the sign-in runs like a password one (progress, the page waits; a failure is
+	/// said on the page). Expired (10 minutes, or the server stopped knowing the code): the dialog closes and the page says
+	/// so. Cancel: the asking stops, and a code approved later signs nobody in.
+	/// </summary>
+	[RelayCommand(CanExecute = nameof(IsIdle))]
 	private async Task QuickConnect()
 	{
-		if (Server is null)
+		if (Server is not { } server || IsSigningIn)
 		{
 			return;
 		}
 
 		ErrorMessage = "";
-		var response = await jellyfinAuthenticator.GetQuickConnectCode(Server);
+		var response = await jellyfinAuthenticator.GetQuickConnectCode(server);
 
 		if (response is null)
 		{
@@ -162,43 +189,128 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 			return;
 		}
 
-		_disposable?.Dispose();
-		_disposable = [];
-		var approved = false;
+		using var stop = new CancellationTokenSource();
+		var shown = ShowQuickConnectCode(response.Code ?? "", ServerName, stop.Token);
+		var waiting = WaitForQuickConnect(server, response, stop.Token);
+		var first = await Task.WhenAny(shown, waiting);
+		stop.Cancel();
+		if (first == shown)
+		{
+			// Cancel or Escape: the asking stops at its next step (WaitForQuickConnect never throws; a check already on its
+			// way to a slow server is not waited for, so Use Quick Connect is back at once)
+			return;
+		}
+
+		await shown;
+		var approved = await waiting;
+		if (approved is null)
+		{
+			ErrorMessage = QuickConnectExpired;
+			SignInFailed?.Invoke(this, EventArgs.Empty);
+			return;
+		}
+
+		IsSigningIn = true;
+		bool signedIn;
+		try
+		{
+			signedIn = await jellyfinAuthenticator.Authenticate(server, approved);
+		}
+		catch (Exception ex)
+		{
+			Serilog.Log.Warning(ex, "Quick Connect sign-in to {Server} failed", ServerName);
+			signedIn = false;
+		}
+		finally
+		{
+			IsSigningIn = false;
+		}
+
+		if (!signedIn)
+		{
+			ErrorMessage = $"The code was approved, but signing in to {ServerName} didn't work. Try again, or sign in with your username and password.";
+			SignInFailed?.Invoke(this, EventArgs.Empty);
+		}
+	}
+
+	/// <summary>
+	/// Asks the server whether the code was approved, every <see cref="QuickConnectPollInterval"/>: the approved result, or
+	/// null when the code expired (<see cref="QuickConnectLifetime"/>, or <see cref="QuickConnectFailuresAllowed"/> failed
+	/// checks in a row) or the token stopped the asking. Never throws.
+	/// </summary>
+	internal async Task<QuickConnectResult?> WaitForQuickConnect(SavedServer server, QuickConnectResult code, CancellationToken cancellationToken)
+	{
+		var started = Time.GetUtcNow();
+		var failures = 0;
+		try
+		{
+			await Task.Delay(TimeSpan.FromSeconds(Math.Min(1, QuickConnectPollInterval.TotalSeconds)), cancellationToken);
+			while (!cancellationToken.IsCancellationRequested)
+			{
+				QuickConnectResult? status;
+				try
+				{
+					status = await jellyfinAuthenticator.CheckQuickConnectStatus(server, code);
+				}
+				catch (Exception)
+				{
+					status = null;
+				}
+
+				if (cancellationToken.IsCancellationRequested)
+				{
+					return null;
+				}
+
+				if (status is null)
+				{
+					if (++failures >= QuickConnectFailuresAllowed)
+					{
+						return null;
+					}
+				}
+				else
+				{
+					failures = 0;
+					if (status.Authenticated == true)
+					{
+						return status;
+					}
+				}
+
+				if (Time.GetUtcNow() - started >= QuickConnectLifetime)
+				{
+					return null;
+				}
+
+				await Task.Delay(QuickConnectPollInterval, cancellationToken);
+			}
+		}
+		catch (OperationCanceledException)
+		{
+		}
+
+		return null;
+	}
+
+	private static async Task ShowQuickConnectDialog(string code, string serverName, CancellationToken close)
+	{
 		var dialog = new ContentDialog
 		{
 			XamlRoot = App.MainWindow.Content.XamlRoot,
 			Title = "Sign in with Quick Connect",
-			Content = QuickConnectContent(response.Code ?? "", ServerName),
+			Content = QuickConnectContent(code, serverName),
 			CloseButtonText = "Cancel",
 			DefaultButton = ContentDialogButton.None,
 		};
-
-		Observable.Timer(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5))
-			.Where(_ => Server is not null)
-			.SelectMany(_ => jellyfinAuthenticator.CheckQuickConnectStatus(Server, response))
-			.WhereNotNull()
-			.ObserveOn(RxSchedulers.MainThreadScheduler)
-			.Subscribe(result =>
-			{
-				if (result.Authenticated == true)
-				{
-					approved = true;
-					_disposable?.Dispose();
-					dialog.Hide();
-					var isAuthenticated = jellyfinAuthenticator.Authenticate(Server, result);
-				}
-			})
-			.DisposeWith(_disposable);
-
-		await dialog.ShowAsync();
-
-		// Cancel (or Escape): stop asking the server; a code approved later signs nobody in
-		if (!approved)
+		if (App.MainWindow.Content is FrameworkElement content)
 		{
-			_disposable?.Dispose();
-			_disposable = null;
+			dialog.RequestedTheme = content.ActualTheme;
 		}
+
+		// the token is cancelled on the UI thread (QuickConnect runs there), so Hide is called there too
+		using var closing = close.Register(dialog.Hide);
+		await dialog.ShowAsync();
 	}
 
 	private static StackPanel QuickConnectContent(string code, string serverName)

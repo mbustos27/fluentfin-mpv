@@ -13,10 +13,11 @@ public sealed partial class SelectServerPage : Page
 	{
 		InitializeComponent();
 
+		// 1.1.4 (states): asks before a saved server goes (Cancel is the default)
+		ViewModel.Confirm = prompt => Dialogs.ConfirmDialog.AskAsync(XamlRoot, prompt);
+
 		// fluentfin-mpv: with no saved server, look for one on this network straight away (docs/research/ux-review.md F2)
 		// 1.1.4 (states): the keyboard starts in the address box (the saved servers are one Shift+Tab away)
-		// asks before a saved server goes (Cancel is the default)
-		ViewModel.Confirm = prompt => Dialogs.ConfirmDialog.AskAsync(XamlRoot, prompt);
 		Loaded += async (_, _) =>
 		{
 			TxtUrl.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
@@ -45,12 +46,37 @@ public sealed partial class SelectServerPage : Page
 	public static string MoreOptionsName(string displayName) =>
 		string.IsNullOrWhiteSpace(displayName) ? "More options" : $"More options for {displayName.Trim()}";
 
+	/// <summary>
+	/// Remove on a row (its More options menu, or its context menu). The row that had the keyboard is gone with the server:
+	/// the keyboard goes to the row now in its place (or the last one), else to the address box.
+	/// </summary>
 	private async void RemoveServer_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
 	{
-		if (sender is Microsoft.UI.Xaml.FrameworkElement { Tag: SavedServer server })
+		if (sender is not Microsoft.UI.Xaml.FrameworkElement { Tag: SavedServer server })
 		{
-			await ViewModel.RemoveServerCommand.ExecuteAsync(server);
+			return;
 		}
+
+		var index = ViewModel.Servers.IndexOf(server);
+		await ViewModel.RemoveServerCommand.ExecuteAsync(server);
+		if (ViewModel.Servers.Contains(server))
+		{
+			return; // Cancel: the dialog gives the keyboard back to the More options button
+		}
+
+		var next = SelectServerViewModel.FocusAfterRemove(index, ViewModel.Servers.Count);
+		// after the list has laid itself out again without the row
+		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+		{
+			if (next is int row && SavedServersView.ScrollView?.Content is ItemsRepeater repeater && repeater.TryGetElement(row) is Microsoft.UI.Xaml.Controls.Control container)
+			{
+				container.Focus(Microsoft.UI.Xaml.FocusState.Keyboard);
+			}
+			else
+			{
+				TxtUrl.Focus(Microsoft.UI.Xaml.FocusState.Keyboard);
+			}
+		});
 	}
 
 	private void ServerSelected(ItemsView sender, ItemsViewItemInvokedEventArgs args)
