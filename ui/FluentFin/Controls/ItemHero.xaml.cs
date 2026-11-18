@@ -172,7 +172,8 @@ public sealed partial class ItemHero : UserControl
 		var dto = Dto;
 		WatchedButton.IsChecked = dto?.UserData?.Played;
 		FavoriteButton.IsChecked = dto?.UserData?.IsFavorite;
-		MoreButton.Flyout = dto is null ? null : new JellyfinFlyoutConverter().Convert(dto, typeof(object), null!, "") as FlyoutBase;
+		// 1.2.0 (Nixie button review, I26): Watched and Favourite are buttons beside it, so the "…" leaves them out
+		MoreButton.Flyout = dto is null ? null : new JellyfinFlyoutConverter { IncludeToggles = false }.Convert(dto, typeof(object), null!, "") as FlyoutBase;
 		UpdateActionNames();
 	}
 

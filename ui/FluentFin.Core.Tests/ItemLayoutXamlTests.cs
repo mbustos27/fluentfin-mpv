@@ -172,6 +172,13 @@ public sealed class ItemLayoutXamlTests
 		Assert.Contains("return ItemLabels.EpisodeCode(dto);", converters);
 	}
 
+	[Fact]
+	public void TheHerosMoreMenu_LeavesOutWatchedAndFavorite_WhichAreButtonsBesideIt()
+	{
+		// 1.2.0 merge (items x library): the menu itself without the toggles is the library's ItemMenu test of includeToggles
+		Assert.Contains("new JellyfinFlyoutConverter { IncludeToggles = false }.Convert(dto", Code("FluentFin/Controls/ItemHero.xaml.cs"));
+	}
+
 	private static string Code(string repoRelativePath) => File.ReadAllText(Path.Combine(RepoRoot, repoRelativePath));
 
 	private static XElement FindByName(XDocument doc, string name) =>
