@@ -92,9 +92,18 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
 ## Nixie 1.3.0: the layout themes
 - **Editorial's paused side column comes in a later release**, with its segmented chapter scrubber: both need a slot in
   the shared player that 1.3.0 does not have, so Editorial's player has its two bars only.
-- **Checked off-screen only; still to check by hand:**
+- **Back after a switch lands at a page's start.** A switch keeps the place on the page it happens on (Settings, or Home
+  under "Choose a look"). The pages behind it are rebuilt in the new layout when Back reaches them, so Home comes back
+  with the focus on the Home tab and its rows at their start, as Classic's Home always does after Back (seen off-screen:
+  Drive-in without a switch returns to the focused card). Keeping each page's place in the history is for a later release.
+- **Drive-in's scrubber has no chapter bulbs yet**: the player's view model has no chapters for it.
+- **Checked off-screen only (Dark, Full; the switch Drive-in, Cinematic, Editorial, Classic and back on Home and a series
+  page: the search text kept, the 200 ms crossfade logged, none with motion reduced); still to check by hand:**
   - high contrast in each theme (the harness cannot force a high-contrast theme; the dictionaries' HighContrast values
-    are checked by tests, never seen).
+    are checked by tests, never seen);
+  - the crossfade and Narrator's "Theme changed to ..." on a real screen, by eye and by ear;
+  - Light + Solid after changing Glass while the app runs (the fix for dark parts of a light window was seen at start-up
+    only), and each theme at 125 to 150 % scaling (Drive-in's small nixie digits).
 
 ## Nixie 1.2.0: the rename from Seaglass
 - **The MSI upgrade from Seaglass to Nixie was not installed for real** on this PC: `upgrade-test.ps1` installs into the

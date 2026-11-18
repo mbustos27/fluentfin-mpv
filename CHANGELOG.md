@@ -48,10 +48,10 @@ the movie and episode pages, Library, the player's controls and the sign-in scre
 
   Search results, people, collections, Diary, Settings, the server administration, dialogs and menus are the same in
   every theme, and so are the desert-sunset colours, Dark, Light, Solid mode and high contrast.
-- **Switch at any time, without a restart.** The page you are on comes back in the new layout with your place kept: the
-  item that had focus and each row's position, and Back still goes where it went. A video playing keeps playing, its
-  controls taking the new layout. The change fades across in a fifth of a second (at once with reduced motion), and
-  Narrator says "Theme changed to <name>".
+- **Switch at any time, without a restart.** The page you are on comes back in the new layout with your place kept (the
+  item that had focus and each row's position) and the top bar as it was, search text included. Back still goes where it
+  went: the pages behind take the new layout as you reach them. The change fades across in a fifth of a second (at once
+  with reduced motion), and Narrator says "Theme changed to <name>".
 - **Settings > Appearance** shows the four themes as small previews, with the chosen theme's own options below them.
   After the first sign-in, a one-time **"Choose a look"** step offers the same previews.
 - **Upgrades start on Classic**, so nothing moves under you until you choose; **new installs start on Drive-in**.
