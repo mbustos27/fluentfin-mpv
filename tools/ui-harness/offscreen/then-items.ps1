@@ -89,10 +89,12 @@ if ($itWOff) {
     $itMenuText = $null
     if ($itMore) {
         [void](Invoke-Element $itMore)
-        $itMenuText = Wait-Until { if (Find-Ui -Name 'Mark as unwatched' -Type 'MenuItem') { 'Mark as unwatched' } elseif (Find-Ui -Name 'Mark as watched' -Type 'MenuItem') { 'Mark as watched' } } -Seconds 5 -PollMs 200
+        # 1.2.0 (button review I26, the merge's IncludeToggles = false): the menu leaves Watched and Favourite out, they are
+        # the buttons beside it; "Media info" (every movie's) says the menu is open
+        $itMenuText = Wait-Until { if (Find-Ui -Name 'Media info' -Type 'MenuItem') { (@('Media info') + @(@('Mark as unwatched', 'Mark as watched') | Where-Object { Find-Ui -Name $_ -Type 'MenuItem' })) -join ', ' } } -Seconds 5 -PollMs 200
         Key 0x1B; It-Settle 600
     }
-    Check 'items: after Watched, the movie''s More menu says "Mark as unwatched"' ($itMenuText -eq 'Mark as unwatched') "menu: $itMenuText"
+    Check 'items: after Watched, the movie''s More menu leaves Watched out (the button beside it says it)' ($itMenuText -eq 'Media info') "menu: $itMenuText"
     if ($itWOn) { It-Toggle $itWOn }
     $itWBack = Wait-Ui -Name "Mark $($fixture.movie.name) as watched" -Type 'Button' -Seconds 10
     It-Settle 1000

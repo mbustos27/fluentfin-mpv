@@ -535,16 +535,17 @@ function Step-FullScreen([bool]$On) {
 
 function Step-Leave {
     $at = Get-Epoch
-    # mpv's stop key q in mpv's window / Esc posted to FluentFin with its controls; Esc doing nothing FAILs, and their Back
-    # button (when shown) still leaves so the steps after it can run
-    $how = if ($PlayerControls -eq 'Mpv') { 'q' } else { 'Esc' }
+    # mpv's stop key q in mpv's window / the Back key (VK_BROWSER_BACK, as Alt+Left and Mouse 4) posted to FluentFin with its
+    # controls: since 1.2.0 Esc only leaves full screen and never the player (docs\SHORTCUTS.md). The key doing nothing
+    # FAILs, and their Back button (when shown) still leaves so the steps after it can run
+    $how = if ($PlayerControls -eq 'Mpv') { 'q' } else { 'the Back key' }
     $keyWorked = $true
-    if ($PlayerControls -eq 'Mpv') { Send-PlayerKey 0x51 'q' } else { Key 0x1B }
+    if ($PlayerControls -eq 'Mpv') { Send-PlayerKey 0x51 'q' } else { Key 0xA6 }
     $back = Wait-Until { Find-EpisodeRow } -Seconds $(if ($PlayerControls -eq 'Mpv') { 20 } else { 5 }) -PollMs 150
     if (-not $back -and $PlayerControls -eq 'FluentFin') {
         $keyWorked = $false
         $btn = Find-Ui -Id 'BackButton'
-        if ($btn) { [void](Invoke-Element $btn); $how = 'Esc did nothing; the Back button left' } else { $how = 'Esc did nothing and the controls are hidden' }
+        if ($btn) { [void](Invoke-Element $btn); $how = 'the Back key did nothing; the Back button left' } else { $how = 'the Back key did nothing and the controls are hidden' }
         $back = Wait-Until { Find-EpisodeRow } -Seconds 15 -PollMs 150
     }
     $timings.leave_player_ms = Ms $at (Get-Epoch)
