@@ -465,7 +465,7 @@ foreach ($needed in 'Nixie.exe', 'app\Nixie.exe', 'app\libmpv\libmpv-2.dll', 'ap
 }
 # the top of the folder: the launcher, the three texts and app\, nothing else to look through
 $top = @(Get-ChildItem $package -Force | ForEach-Object { $_.Name } | Sort-Object)
-if (($top -join ',') -ne 'app,LICENSE,README.txt,Nixie.exe,THIRD-PARTY-NOTICES.txt') { throw "the top of the package holds $($top -join ', ')" }
+if (($top -join ',') -ne 'app,LICENSE,Nixie.exe,README.txt,THIRD-PARTY-NOTICES.txt') { throw "the top of the package holds $($top -join ', ')" }
 $devFiles = @(Get-ChildItem $package -Recurse -File -Include '*.runtimeconfig.dev.json', 'LocalSettings.json')
 if ($devFiles) { throw "dev-only files in the package: $($devFiles.FullName -join ', ')" }
 

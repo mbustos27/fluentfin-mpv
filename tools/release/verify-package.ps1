@@ -83,7 +83,7 @@ $launcherExe = Join-Path $pkg 'Nixie.exe'
 $app = Join-Path $pkg 'app'
 $exe = Join-Path $app 'Nixie.exe'
 $top = @(Get-ChildItem $pkg -Force | ForEach-Object { $_.Name } | Sort-Object)
-Check 'the folder''s top holds only Nixie.exe (the launcher), README.txt, LICENSE, THIRD-PARTY-NOTICES.txt and app\' (($top -join ',') -eq 'app,LICENSE,README.txt,Nixie.exe,THIRD-PARTY-NOTICES.txt') ($top -join ', ')
+Check 'the folder''s top holds only Nixie.exe (the launcher), README.txt, LICENSE, THIRD-PARTY-NOTICES.txt and app\' (($top -join ',') -eq 'app,LICENSE,Nixie.exe,README.txt,THIRD-PARTY-NOTICES.txt') ($top -join ', ')
 Check 'unzipped: one folder with the launcher, and app\ with Nixie.exe, the bundled backend and libmpv' ((Test-Path $launcherExe) -and (Test-Path $exe) -and (Test-Path (Join-Path $app 'backend\fluentfin-mpv-backend.exe')) -and (Test-Path (Join-Path $app 'libmpv\libmpv-2.dll'))) $pkg
 $languageDirs = @(Get-ChildItem $app -Directory | Where-Object { $_.Name -match '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' -and $_.Name -notmatch '^en(-|$)' })
 # Properties > Details on every program the package ships: company, product, description and copyright filled in, the product
