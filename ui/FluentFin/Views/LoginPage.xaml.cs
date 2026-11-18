@@ -26,7 +26,26 @@ public sealed partial class LoginPage
 		ViewModel.PropertyChanged -= ViewModel_PropertyChanged;
 		ViewModel.SignInFailed -= ViewModel_SignInFailed;
 		AmbientBackdrop.Set(null);
+		ThemeResources.Applied -= OnThemeApplied;
+		GlassMode.Changed -= OnThemeApplied;
 	}
+
+	private void OnThemeApplied(object? sender, EventArgs e) => DispatcherQueue.TryEnqueue(ShowThemeBackdrop);
+
+	/// <summary>
+	/// Nixie 1.3.0: the layout theme's SignInBackdropTemplate behind the form, given this page's view model; none (or high
+	/// contrast, which keeps the system's plain colours) leaves the dusk scene behind the window showing.
+	/// </summary>
+	private void ShowThemeBackdrop()
+	{
+		var template = ShowsThemeBackdrop(ThemeResources.SignInBackdrop is not null, GlassMode.IsHighContrast) ? ThemeResources.SignInBackdrop : null;
+		ThemeBackdrop.ContentTemplate = template;
+		ThemeBackdrop.Content = template is null ? null : ViewModel;
+		ThemeBackdrop.Visibility = template is null ? Visibility.Collapsed : Visibility.Visible;
+	}
+
+	/// <summary>Whether the theme's sign-in backdrop is shown: the theme has one and high contrast is off.</summary>
+	public static bool ShowsThemeBackdrop(bool themeHasOne, bool highContrast) => themeHasOne && !highContrast;
 
 	private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
@@ -42,6 +61,9 @@ public sealed partial class LoginPage
 		ViewModel.PropertyChanged += ViewModel_PropertyChanged;
 		ViewModel.SignInFailed += ViewModel_SignInFailed;
 		AmbientBackdrop.Set(ViewModel.SplashScreen);
+		ShowThemeBackdrop();
+		ThemeResources.Applied += OnThemeApplied;
+		GlassMode.Changed += OnThemeApplied;
 
 		// 1.1.4 (states): the keyboard starts where there is something to type
 		FieldToFocus(ViewModel.Username).Focus(FocusState.Programmatic);

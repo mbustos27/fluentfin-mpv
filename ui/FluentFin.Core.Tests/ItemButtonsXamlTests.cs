@@ -179,8 +179,9 @@ public sealed class ItemButtonsXamlTests
 	{
 		var code = Code("FluentFin/Services/NavigationService.cs");
 
-		// the rule itself (a season of the same series only): ItemNavigationTests
-		Assert.Contains("DropSwitchedSeasonPage(frame.BackStack, x => x.SourcePageType, x => x.Parameter, e.SourcePageType, e.Parameter, e.NavigationMode);", code);
+		// the rule itself (a season of the same series only): ItemNavigationTests; Nixie 1.3.0: a layout theme's season page
+		// counts as the shared one (PageService.SharedPageType)
+		Assert.Contains("DropSwitchedSeasonPage(frame.BackStack, x => Shared(x.SourcePageType), x => x.Parameter, Shared(e.SourcePageType), e.Parameter, e.NavigationMode);", code);
 	}
 
 	/// <summary>1.2.0 (1.1.3 UX audit, interaction item 13): the hero's artwork and words open the item; previous and next.</summary>

@@ -13,6 +13,8 @@
 
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/Styles/MenuFlyoutButton.xaml" />
+        <!--  Nixie 1.3.0: the top bar's chrome as 1.2.0 drew it (a theme's TopBarStyle goes over it)  -->
+        <ResourceDictionary Source="/Styles/TopBarChrome.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls">
+
+    <!--
+        Nixie 1.3.0: the top bar's chrome as 1.2.0 drew it (TitleBarControl, before the themes): one glass layer behind the
+        bar with a hairline under it; over a page whose artwork runs under the bar, a dark scrim instead. The default style of
+        TopBarChrome, so the bar is drawn before any theme's dictionary is in and whatever a theme's TopBarStyle leaves out;
+        Classic's TopBarStyle sets nothing over it. A theme's TopBarStyle replaces the Template and keeps the states
+        (TopBarChrome: "BarStates", OverContent and OverHero) and one ContentPresenter for the bar.
+    -->
+    <Style TargetType="controls:TopBarChrome">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:TopBarChrome">
+                    <Grid>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="BarStates">
+                                <VisualState x:Name="OverContent" />
+                                <VisualState x:Name="OverHero">
+                                    <VisualState.Setters>
+                                        <Setter Target="BarGlass.Visibility" Value="Collapsed" />
+                                        <Setter Target="BarScrim.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Border
+                            x:Name="BarGlass"
+                            Background="{ThemeResource GlassTitleBarBrush}"
+                            BorderBrush="{ThemeResource GlassTitleBarStrokeBrush}"
+                            BorderThickness="0,0,0,1"
+                            IsHitTestVisible="False" />
+                        <Rectangle
+                            x:Name="BarScrim"
+                            IsHitTestVisible="False"
+                            Visibility="Collapsed">
+                            <Rectangle.Fill>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Offset="0" Color="#B0000000" />
+                                    <GradientStop Offset="0.6" Color="#5A000000" />
+                                    <GradientStop Offset="1" Color="#00000000" />
+                                </LinearGradientBrush>
+                            </Rectangle.Fill>
+                        </Rectangle>
+                        <ContentPresenter
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
