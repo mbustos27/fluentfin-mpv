@@ -314,6 +314,22 @@ def loadfile_takes_index(version):
     return (int(m.group(1)), int(m.group(2))) >= (0, 38)
 
 
+def past_credits(position, duration, segments):
+    """FluentFin MPV: whether ``position`` (seconds) is past the start of
+    the end credits: an ``Outro`` segment starting in the second half of an
+    item ``duration`` seconds long. Any value missing: False."""
+    if not isinstance(position, (int, float)) or not isinstance(
+            duration, (int, float)) or duration <= 0:
+        return False
+    for segment in segments or ():
+        start = getattr(segment, "start", None)
+        if (getattr(segment, "type", None) == "Outro"
+                and isinstance(start, (int, float))
+                and duration / 2 <= start < duration and position >= start):
+            return True
+    return False
+
+
 def same_track(current, wanted):
     """FluentFin MPV: whether mpv's track property already holds
     ``wanted`` (an mpv track id, or "no"). mpv answers "no" (python-mpv
@@ -4581,7 +4597,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         # than merely intended.
         video = self._video
         try:
-            self.play_next()
+            # FluentFin MPV: the mark is this method's own (play_next would
+            # make a second one past the credits)
+            self._play_next(mark_played=False)
         finally:
             self.queue_played_mark(video)
 
@@ -4599,16 +4617,46 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
 
     @synchronous("_lock")
     def play_next(self):
+        return self._play_next()
+
+    def _play_next(self, mark_played=None):
+        """`play_next`, under the player lock. FluentFin MPV (1.2.0):
+        ``mark_played`` None marks the item left played when it is past
+        its credits (`_past_credits`), behind its stop report as
+        `watched_skip` does. Jellyfin marks an item played only from 90 %,
+        and Next during the credits -- the app's countdown ends 10 s into
+        them, the button any time -- left a 23:40 episode with credits from
+        20:40 at 88 %, in Continue Watching."""
         video = self._video
         if video and video.parent.has_next:
+            if mark_played is None:
+                mark_played = self._past_credits(video)
             new_video = video.parent.get_next().video
             self.send_timeline_stopped(True)
-            if self.syncplay.is_enabled():
-                self.syncplay.request_next(video.get_playlist_id())
-            else:
-                self.play(new_video)
+            try:
+                if self.syncplay.is_enabled():
+                    self.syncplay.request_next(video.get_playlist_id())
+                else:
+                    self.play(new_video)
+            finally:
+                if mark_played:
+                    self.queue_played_mark(video)
             return True
         return False
+
+    def _past_credits(self, video):
+        """FluentFin MPV: whether the position is in ``video``'s end
+        credits: past the start of an Outro segment in the second half of
+        the item (an earlier "Outro" is not the end credits; the app's
+        controls use the same rule for their Next prompt). False when the
+        position, the length or the segments cannot be had."""
+        try:
+            position = self._player.playback_time
+            duration = self._player.duration
+        except Exception:
+            return False
+        return past_credits(position, duration,
+                            getattr(video, "intros", None))
 
     @synchronous("_lock")
     def skip_to(self, key: str):
@@ -4642,40 +4690,90 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         convenience on a keypress, and the worst honest outcome is the button
         doing nothing.
         """
-        from .utils import get_seq
+        earlier = self._earlier_episodes(video)
+        if not earlier:
+            return False
+        self._prepend_to_queue(video, earlier)
+        return True
 
+    def _earlier_episodes(self, video):
+        """The ids of the episodes before ``video`` in its series, in order,
+        from the server; None when there are none or they cannot be had.
+        Changes nothing (FluentFin MPV: split out of
+        `_widen_queue_backwards` so `widen_queue_soon` can ask without the
+        player lock)."""
         if self.syncplay.is_enabled():
             # The group owns the queue. Inventing entries it has never
             # heard of is not ours to do -- request_prev is the whole
             # protocol for this, and play_prev already routes there.
-            return False
+            return None
         client = getattr(video, "client", None)
         if client is None:
-            return False        # offline: nothing to ask
+            return None         # offline: nothing to ask
         item = getattr(video, "item", None) or {}
         if item.get("Type") != "Episode" or not item.get("SeriesId"):
-            return False
+            return None
         try:
             result = client.jellyfin.get_episodes(item["SeriesId"]) or {}
         except Exception:
             log.debug("could not read the series for a backwards step",
                       exc_info=True)
-            return False
+            return None
         ids = [e.get("Id") for e in (result.get("Items") or []) if e.get("Id")]
         try:
             index = ids.index(video.item_id)
         except ValueError:
             # The playing episode is not in its own series listing. A
             # mixed-in special, or a library that changed underneath us.
-            return False
+            return None
         if index <= 0:
-            return False        # already the first episode
+            return None         # already the first episode
+        return ids[:index]
+
+    def _prepend_to_queue(self, video, earlier):
+        """Put ``earlier`` (item ids) before everything in ``video``'s
+        queue. Under the player lock."""
+        from .utils import get_seq
+
         media = video.parent
         prefix = [{"PlaylistItemId": "playlistItem{0}".format(get_seq()),
-                   "Id": eid} for eid in ids[:index]]
+                   "Id": eid} for eid in earlier]
         media.replace_queue(prefix + list(media.queue), len(prefix) + media.seq)
         log.info("Queue widened backwards by %d episode(s).", len(prefix))
-        return True
+
+    def widen_queue_soon(self, video, run=None):
+        """FluentFin MPV (1.2.0): the episodes before ``video`` into its
+        queue now, in the background, when nothing is behind it -- an
+        episode started from Next Up or Continue Watching, whose queue
+        starts with it (#650). The app's Previous button is enabled by what
+        is behind it in the queue (the ``next`` event's ``previousItemId``),
+        and was never enabled there: `play_prev` widened the queue only once
+        pressed. One series listing per such start; the request is made
+        without the player lock (a slow server must not hold the player),
+        the queue changed under it, only if ``video`` is still playing and
+        nothing has filled the gap meanwhile. ``run`` runs the work (tests);
+        a thread otherwise."""
+        parent = getattr(video, "parent", None)
+        if parent is None or parent.has_prev:
+            return
+
+        def work():
+            try:
+                earlier = self._earlier_episodes(video)
+                if not earlier:
+                    return
+                with self._lock:
+                    if self._video is video and not parent.has_prev:
+                        self._prepend_to_queue(video, earlier)
+            except Exception:
+                log.debug("could not widen the queue backwards",
+                          exc_info=True)
+
+        if run is not None:
+            run(work)
+        else:
+            threading.Thread(target=work, name="earlier-episodes",
+                             daemon=True).start()
 
     @synchronous("_lock")
     def play_prev(self):

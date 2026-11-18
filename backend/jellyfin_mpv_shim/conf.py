@@ -22,6 +22,14 @@ object_types[Optional[List[LanguageRule]]] = parse_language_config
 log = logging.getLogger("conf")
 config_path = None
 
+#: FluentFin MPV (1.2.0): settings changed for this session only, by name ->
+#: the value `Settings.save` keeps writing (the one on disk when the session
+#: first changed it). The bridge's `set_auto_play` lives here: the UI sends
+#: its choice before every play, and a cancelled countdown's ``False`` must
+#: not reach conf.json -- every other save (the volume, at each item start)
+#: wrote it there, past the bridge's own life.
+SESSION_ONLY = {}
+
 # Bump when a default changes in a way existing installs must pick up, and add
 # the corresponding step to Settings._migrate().
 #   1: transcode_dolby_vision defaults off (mpv plays Dolby Vision natively).
@@ -1221,9 +1229,12 @@ class Settings(SettingsBase):
         # instead of a truncated one.
         with _save_lock:
             try:
+                data = self.dict()
+                # FluentFin MPV: what this session only holds in memory
+                data.update(SESSION_ONLY)
                 durable.replace_file(
                     config_path,
-                    json.dumps(self.dict(), indent=4, sort_keys=True),
+                    json.dumps(data, indent=4, sort_keys=True),
                     encoding=self.WRITE_ENCODING)
             except Exception as e:
                 log.error("Error saving settings to json: %s" % e)

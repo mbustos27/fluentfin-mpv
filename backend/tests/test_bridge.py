@@ -812,6 +812,11 @@ class FakeRuntime:
     # fluentfin-mpv: the real ones (the shim's settings and labels).
     segments_of = staticmethod(bridge_mod.ShimRuntime.segments_of)
     auto_play = staticmethod(bridge_mod.ShimRuntime.auto_play)
+
+    def widen_queue_soon(self, video):
+        # fluentfin-mpv (1.2.0): not in the journal, which many tests read whole
+        self.__dict__.setdefault("widened", []).append(
+            getattr(video, "item_id", None))
     segment_label = staticmethod(bridge_mod.ShimRuntime.segment_label)
 
     def start_player(self, window, defer_surface=False):
@@ -1139,8 +1144,9 @@ class DispatchTest(BridgeCase):
         self.assertIs(self.runtime.auto_play_set, True)
         self.assertEqual(self.runtime.journal, [])
         # the real runtime's: the shim's own setting, which the next event reads
+        from jellyfin_mpv_shim import conf
         from jellyfin_mpv_shim.conf import settings
-        saved = settings.auto_play
+        saved = settings.auto_play, dict(conf.SESSION_ONLY)
         try:
             bridge_mod.ShimRuntime.set_auto_play(False)
             self.assertIs(settings.auto_play, False)
@@ -1148,7 +1154,39 @@ class DispatchTest(BridgeCase):
             bridge_mod.ShimRuntime.set_auto_play(True)
             self.assertIs(bridge_mod.ShimRuntime.auto_play(), True)
         finally:
-            settings.auto_play = saved
+            settings.auto_play = saved[0]
+            conf.SESSION_ONLY.clear()
+            conf.SESSION_ONLY.update(saved[1])
+
+    def test_auto_play_never_reaches_the_config_file(self):
+        """Review (1.2.0): every save writes every setting, and one comes
+        at each item start (the volume); a cancelled countdown's ``false``
+        reached conf.json and outlived the bridge. The file keeps the value
+        it had; the session's stays in memory."""
+        from jellyfin_mpv_shim import conf
+
+        saved = (conf.config_path, conf.settings.auto_play,
+                 dict(conf.SESSION_ONLY))
+
+        def restore():
+            conf.config_path, conf.settings.auto_play = saved[0], saved[1]
+            conf.SESSION_ONLY.clear()
+            conf.SESSION_ONLY.update(saved[2])
+        self.addCleanup(restore)
+        conf.SESSION_ONLY.clear()
+        conf.settings.auto_play = True
+        folder = _tmpdirs.tmpdir("jms-bridge-autoplay-")
+        conf.config_path = os.path.join(folder, "conf.json")
+        bridge_mod.ShimRuntime.set_auto_play(False)
+        self.assertTrue(conf.settings.save())
+        with open(conf.config_path, encoding="utf-8") as fh:
+            self.assertIs(json.load(fh)["auto_play"], True)
+        self.assertIs(bridge_mod.ShimRuntime.auto_play(), False)
+        bridge_mod.ShimRuntime.set_auto_play(True)
+        bridge_mod.ShimRuntime.set_auto_play(False)
+        self.assertTrue(conf.settings.save())
+        with open(conf.config_path, encoding="utf-8") as fh:
+            self.assertIs(json.load(fh)["auto_play"], True)
 
     def test_speed_and_subtitle_delay_are_written_to_mpv(self):
         """1.2.0: ``set_speed`` and ``set_subtitle_delay`` write
@@ -1190,6 +1228,9 @@ class DispatchTest(BridgeCase):
         self.send("set_audio", {"index": 2})
         self.send("set_subtitle", {"index": -1})
         self.send("next")
+        # fluentfin-mpv (1.2.0): one move at a time; the next one is taken
+        # once the first has run (test_a_second_move_while_the_first_opens)
+        self.run_plays()
         self.send("previous")
         self.run_plays()
         calls = [c for c in self.runtime.journal if c != ("run_action",)]
@@ -1489,6 +1530,16 @@ class SegmentsTest(BridgeCase):
     def skip_texts(self, pm):
         return [c[2] for c in pm._player.commands
                 if c[:2] == ("set", "user-data/fluentfin/skip")]
+
+    def test_a_new_item_has_its_earlier_episodes_put_in_once(self):
+        """fluentfin-mpv (1.2.0, review): as an item is announced, the
+        runtime puts the episodes before it into the queue (a Next Up start
+        has none), so the next ``next`` event names a previous one."""
+        self.playing(20.0)
+        self.bridge._emit_tick(self.bridge._observe())
+        self.assertEqual(self.runtime.__dict__.get("widened"), [A])
+        self.bridge._emit_tick(self.bridge._observe())
+        self.assertEqual(self.runtime.widened, [A], "once per item")
 
     def test_sampled_with_what_each_type_is_set_to(self):
         from jellyfin_mpv_shim.conf import settings
@@ -2805,6 +2856,39 @@ class ReplaceReportsTest(BridgeCase):
         self.send("stop")
         self.pm.run_deferred()          # the action thread runs the stop
         self.assertEqual(self.reports(), [A, B])
+
+    def test_a_second_move_while_the_first_opens_is_refused(self):
+        """fluentfin-mpv (1.2.0, review): until the next item plays,
+        ``pm._video`` is still the one being left, and a second ``next``
+        (the UI's Play now and its countdown a moment apart) moved on again
+        from it: an extra episode. It is ``no_playback`` now, also for a
+        ``previous``; once the item plays, a move is taken again."""
+        self.play(A)
+        self.pm.queue_next = FakeVideo(B)
+        self.assertTrue(self.send("next")["ok"])
+        self.assertEqual(self.code("next"), "no_playback")
+        self.assertEqual(self.code("previous"), "no_playback")
+        self.run_plays()
+        self.assertEqual([e for e in self.runtime.journal
+                          if e[0] in ("play_next", "play_prev")],
+                         [("play_next",)])
+        self.assertEqual(self.pm._video.item_id, B)
+        self.pm.queue_next = FakeVideo(C)
+        self.assertTrue(self.send("next")["ok"])
+        self.run_plays()
+        self.assertEqual(self.pm._video.item_id, C)
+
+    def test_a_move_while_the_players_own_advance_opens_is_refused(self):
+        """The same while the player's own start runs (an auto-advance at
+        the end of an item): its flag says so before ``_video`` changes."""
+        self.play(A)
+        self.pm._start_in_progress = True
+        try:
+            self.assertEqual(self.code("next"), "no_playback")
+        finally:
+            self.pm._start_in_progress = False
+        self.pm.queue_next = FakeVideo(B)
+        self.assertTrue(self.send("next")["ok"])
 
     def test_an_item_ending_on_its_own_is_reported_and_released_once(self):
         """The finished callback reports the item and *then* unloads it,
@@ -7011,6 +7095,31 @@ class VerifyAgainstTheApiclientTest(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(self.verify(response, error)[0],
                                  "server_unreachable")
+
+
+class MpvLogFileWarningTest(unittest.TestCase):
+    """fluentfin-mpv (1.2.0, review): a ``log-file`` in the backend's
+    ``mpv.conf`` gets the access token written to it by mpv (its verbose
+    log records the request headers): the backend says so at each start,
+    without the token."""
+
+    def write(self, text):
+        folder = _tmpdirs.tmpdir("jms-bridge-mpvconf-")
+        with open(os.path.join(folder, "mpv.conf"), "w",
+                  encoding="utf-8") as fh:
+            fh.write(text)
+        return folder
+
+    def test_a_log_file_is_warned_about(self):
+        folder = self.write("ao=null\nlog-file=C:/debug/mpv.log\n")
+        with self.assertLogs(bridge_mod.log.name, level="WARNING") as logs:
+            self.assertTrue(bridge_mod.warn_if_mpv_logs(folder))
+        self.assertIn("Don't share that log", logs.output[0])
+
+    def test_nothing_is_said_without_one(self):
+        for text in ("ao=null\n", "# log-file=C:/debug/mpv.log\n", ""):
+            with self.subTest(text=text):
+                self.assertFalse(bridge_mod.warn_if_mpv_logs(self.write(text)))
 
 
 class _RealClientCase(unittest.TestCase):

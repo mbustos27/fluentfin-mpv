@@ -255,14 +255,11 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   interrupted-stream branch** (`_end_held`): for a stream that failed mid-item while a `play`
   was pending, the position reported is right but the "server stopped sending it" notice is
   missing.
-- **A `log-file=` in the backend's `mpv.conf` writes the access token to that file**
-  (`%LOCALAPPDATA%\Seaglass\mpv-backend\mpv.conf`; found 2026-11-15 by the dev-harness review). A log file
-  makes mpv log verbosely, and mpv then logs `Set property: http-header-fields=["Authorization: MediaBrowser ...
-  Token=\"...\""]` when the shim sets the request headers (reproduced with the fake server's token). Anyone who
-  adds `log-file=` for debugging gets the real token in that log, against BRIDGE.md's rule that the token
-  stays out of logs. Not fixed (backend): e.g. hide that property from mpv's log, or refuse/strip `log-file`
-  from the config the bridge hands mpv. The off-screen harness no longer writes `log-file` and removes one it
-  finds in its own data folder's `mpv.conf`.
+- **If you add `log-file=` to the backend's `mpv.conf`, that log gets your access token.** (`%LOCALAPPDATA%\Seaglass\mpv-backend\mpv.conf`.)
+  mpv's log records the request headers the backend sets, and the token is one of them. Don't share that log, and
+  remove `log-file=` when you are done. Since 1.2.0 the backend's own log warns about it at every start (without the
+  token). Not fixed: hiding that line from mpv's log needs a change in mpv. The off-screen harness never writes
+  `log-file` and removes one it finds in its own data folder's `mpv.conf`.
 - **`play_file` (`--dev` only) does not end a held end** (`cmd_play_file`): a `play_file`
   that supersedes a `play` whose item's end is held (the last item at its end) calls only
   `stop()`, which returns early there, so that item stays current under the file with no

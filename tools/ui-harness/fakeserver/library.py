@@ -70,6 +70,8 @@ class Library:
         self.server_id = server_id
         self.user_id = user_id
         self.runtime = runtime_ticks
+        #: how long the end credits (the Outro segment) run, to the end; POST /__harness/segments changes it
+        self.outro_seconds = 40
         self.now = now or datetime.datetime(2026, 11, 14, 20, 0, 0)
         self.lock = threading.RLock()
         self.items = {}          # id -> item dict
@@ -466,7 +468,7 @@ class Library:
                         "StartTicks": 10 * TICKS, "EndTicks": 40 * TICKS})
         if item["kind"] in ("episode", "movie"):
             out.append({"Id": _id("seg", item["Id"], "outro"), "ItemId": item["Id"], "Type": "Outro",
-                        "StartTicks": max(0, rt - 40 * TICKS), "EndTicks": rt})
+                        "StartTicks": max(0, rt - int(self.outro_seconds * TICKS)), "EndTicks": rt})
         return out
 
     # ---------------------------------------------------------------- queries

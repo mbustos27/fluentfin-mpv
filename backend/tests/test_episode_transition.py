@@ -26,6 +26,7 @@ if __name__ == "__main__":
 import sys
 import threading
 import unittest
+from types import SimpleNamespace as NS
 from unittest import mock
 
 sys.argv = [sys.argv[0]]      # importing player reaches args.get_args()
@@ -34,7 +35,8 @@ from jellyfin_mpv_shim import player as player_module  # noqa: E402
 from jellyfin_mpv_shim.conf import settings  # noqa: E402
 from jellyfin_mpv_shim.media import Video  # noqa: E402
 from jellyfin_mpv_shim.player import (  # noqa: E402
-    PlayerManager, loadfile_takes_index, same_track, track_choice)
+    PlayerManager, loadfile_takes_index, past_credits, same_track,
+    track_choice)
 
 
 class _Reached(Exception):
@@ -309,6 +311,98 @@ class TheStartTest(unittest.TestCase):
         pm = self.pm(volume=41)
         self.start(pm, _Item())
         self.assertEqual([v for k, v in pm._player.writes if k == "volume"], [63])
+
+
+class NextPastTheCreditsTest(unittest.TestCase):
+    """Review (1.2.0): the app's countdown moves on 10 s into the credits,
+    and Next can be pressed any time in them; Jellyfin marks played only
+    from 90 %, so a 23:40 episode whose credits start at 20:40 was left at
+    88 %, in Continue Watching (auto-play used to run to the end). Past the
+    credits start, the item left is marked played, behind its stop."""
+
+    CREDITS = [NS(type="Intro", start=30.0, end=90.0),
+               NS(type="Outro", start=1240.0, end=1420.0)]
+
+    def pm(self, position, intros=CREDITS):
+        pm = PlayerManager.__new__(PlayerManager)
+        pm._lock = threading.RLock()
+        pm._player = _Mpv(playback_time=position, duration=1420.0)
+        pm.syncplay = NS(is_enabled=lambda: False)
+        self.events = []
+        pm.send_timeline_stopped = lambda *a: self.events.append("stopped")
+        pm.play = lambda v, *a, **k: self.events.append(("play", v.name))
+        pm.queue_played_mark = lambda v, watched=True: self.events.append(
+            ("mark", v.name, watched))
+        following = NS(name="E2")
+        pm._video = NS(name="E1", intros=intros, parent=NS(
+            has_next=True, get_next=lambda: NS(video=following)))
+        return pm
+
+    def test_next_in_the_credits_marks_the_episode_played_after_its_stop(self):
+        self.pm(1250.0).play_next()      # 88 %, 10 s into the credits
+        self.assertEqual(self.events,
+                         ["stopped", ("play", "E2"), ("mark", "E1", True)])
+
+    def test_before_the_credits_or_without_them_nothing_is_marked(self):
+        for position, intros in ((1000.0, self.CREDITS), (1250.0, []),
+                                 (1250.0, [NS(type="Outro", start=300.0, end=360.0)])):
+            with self.subTest(position=position, intros=intros):
+                self.pm(position, intros).play_next()
+                self.assertEqual(self.events, ["stopped", ("play", "E2")])
+
+    def test_mark_watched_and_skip_marks_once(self):
+        self.pm(1250.0).watched_skip()
+        self.assertEqual([e for e in self.events if e[0] == "mark"],
+                         [("mark", "E1", True)])
+
+    def test_past_credits(self):
+        self.assertTrue(past_credits(1240.0, 1420.0, self.CREDITS))
+        self.assertFalse(past_credits(1239.0, 1420.0, self.CREDITS))
+        self.assertFalse(past_credits(None, 1420.0, self.CREDITS))
+        self.assertFalse(past_credits(1300.0, None, self.CREDITS))
+        self.assertFalse(past_credits(1300.0, 1420.0, None))
+
+
+class PreviousForANextUpStartTest(unittest.TestCase):
+    """Review (1.2.0): an episode started from Next Up or Continue Watching
+    has a queue that starts with it, so nothing told the app a Previous was
+    possible (`play_prev` widened the queue only once pressed, and the app's
+    button was disabled). The start puts the earlier episodes in, and the
+    ``next`` event the bridge builds from that queue names one."""
+
+    def setUp(self):
+        from tests.test_play_prev_lookup import _player
+
+        self.pm, self.video, self.media, self.api = _player(
+            playing="e4", queue=["e4", "e5"])
+        self.pm._lock = threading.RLock()
+
+    def event(self):
+        from jellyfin_mpv_shim import bridge_protocol as proto
+        from jellyfin_mpv_shim import bridge_state
+
+        return proto.next_payload("e4", bridge_state._queue(self.video), True)
+
+    def test_the_next_event_names_the_episode_before(self):
+        self.assertNotIn("previousItemId", self.event())
+        self.pm.widen_queue_soon(self.video, run=lambda work: work())
+        self.assertEqual([q["Id"] for q in self.media.queue],
+                         ["e1", "e2", "e3", "e4", "e5"])
+        self.assertEqual(self.event().get("previousItemId"), "e3")
+        self.assertEqual(self.event().get("nextItemId"), "e5")
+        self.assertEqual(self.api.calls, 1)
+
+    def test_nothing_is_asked_when_something_is_behind_it_already(self):
+        self.media.has_prev = True
+        self.pm.widen_queue_soon(self.video, run=lambda work: work())
+        self.assertEqual(self.api.calls, 0)
+
+    def test_an_item_that_has_gone_meanwhile_is_left_alone(self):
+        def later(work):
+            self.pm._video = None           # another item, or a stop
+            work()
+        self.pm.widen_queue_soon(self.video, run=later)
+        self.assertEqual([q["Id"] for q in self.media.queue], ["e4", "e5"])
 
 
 if __name__ == "__main__":

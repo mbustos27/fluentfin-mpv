@@ -389,15 +389,20 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_nextHasPrevious = false;
 		_creditsStarts = [];
 		NextItemTitle = null;
-		_nextAutoPlay = AutoPlay;
-		_countdownCancelled = false;
-		_advanceSent = false;
 		_backendPosition = 0;
-		if (_autoPlayHeldOff)
+		if (another)
 		{
-			// 1.2.0: the countdown cancelled for the last item held the backend's auto-play off; this item has the user's choice
-			_autoPlayHeldOff = false;
-			_ = _send(Bridge.Commands.SetAutoPlay, BridgeCommands.AutoPlay(AutoPlay));
+			// 1.2.0: another item: its own countdown. The same item again (a restart for a track change) keeps a cancel,
+			// and the backend's auto-play held off with it
+			_nextAutoPlay = AutoPlay;
+			_countdownCancelled = false;
+			_advanceSent = false;
+			if (_autoPlayHeldOff)
+			{
+				// the countdown cancelled for the last item held the backend's auto-play off; this item has the user's choice
+				_autoPlayHeldOff = false;
+				_ = _send(Bridge.Commands.SetAutoPlay, BridgeCommands.AutoPlay(AutoPlay));
+			}
 		}
 		NextToolTip = NextEpisode;
 		UpdateShowsNext();
@@ -567,13 +572,27 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public Task Next()
 	{
 		NotifyActivity();
-		return CanNext ? _send(Bridge.Commands.Next, null) : Task.CompletedTask;
+		if (!CanNext)
+		{
+			return Task.CompletedTask;
+		}
+
+		// 1.2.0 (review): this item moves on now; the countdown must not send its own next before the new item's
+		// `item` event (the backend still has this item until then, and would move on a second time)
+		_advanceSent = true;
+		return _send(Bridge.Commands.Next, null);
 	}
 
 	public Task Previous()
 	{
 		NotifyActivity();
-		return CanPrevious ? _send(Bridge.Commands.Previous, null) : Task.CompletedTask;
+		if (!CanPrevious)
+		{
+			return Task.CompletedTask;
+		}
+
+		_advanceSent = true;
+		return _send(Bridge.Commands.Previous, null);
 	}
 
 	public Task ToggleMute()

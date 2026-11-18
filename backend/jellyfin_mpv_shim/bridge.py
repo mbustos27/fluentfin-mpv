@@ -363,6 +363,22 @@ def describe_exception(error):
 # The shim behind the bridge
 
 
+def warn_if_mpv_logs(confdir=None):
+    """fluentfin-mpv (1.2.0): a ``log-file`` in the backend's ``mpv.conf``
+    makes mpv log verbosely, and mpv then writes the server request headers
+    the shim sets -- the access token with them -- into that file
+    (docs/KNOWN-ISSUES.md). Said once at each start, in the backend's log;
+    the token itself is never logged here. True when it was said."""
+    from . import fluentfin_osc
+
+    if not fluentfin_osc.user_sets("log-file", confdir):
+        return False
+    log.warning("The backend's mpv.conf sets log-file: mpv writes the "
+                "server's request headers, the access token with them, into "
+                "that file. Don't share that log; remove log-file when done.")
+    return True
+
+
 class ShimRuntime:
     """Everything that touches the shim's own modules, imported late.
 
@@ -539,6 +555,7 @@ class ShimRuntime:
         from . import fluentfin_bar, fluentfin_osc
         from .conf import settings
 
+        warn_if_mpv_logs()
         bar = fluentfin_bar.choose(settings.osc_style, window["mode"],
                                    fluentfin_osc.user_sets("osd-fonts-dir"))
         fluentfin_osc.configure(True, bar=bar)
@@ -617,6 +634,17 @@ class ShimRuntime:
                 log.debug("unreadable segment", exc_info=True)
         return out
 
+    def widen_queue_soon(self, video):
+        """fluentfin-mpv (1.2.0): `PlayerManager.widen_queue_soon` for an
+        item just announced; never raises (the monitor thread)."""
+        pm = self.pm
+        if pm is None or not hasattr(pm, "widen_queue_soon"):
+            return
+        try:
+            pm.widen_queue_soon(video)
+        except Exception:
+            log.debug("could not widen the queue", exc_info=True)
+
     @staticmethod
     def auto_play():
         """Whether the shim plays the next queue item at an item's end."""
@@ -629,10 +657,12 @@ class ShimRuntime:
         """1.2.0: the UI's choice for `auto_play` (BRIDGE.md section 4
         ``set_auto_play``), held in memory: `finished_callback` reads the
         setting at each item's end. Not saved: the UI sends it before every
-        play."""
-        from .conf import settings
+        play, and a save of any other setting writes the value on disk
+        (`conf.SESSION_ONLY`)."""
+        from . import conf
 
-        settings.auto_play = bool(value)
+        conf.SESSION_ONLY.setdefault("auto_play", bool(conf.settings.auto_play))
+        conf.settings.auto_play = bool(value)
 
     @staticmethod
     def segment_label(segment_type):
@@ -1004,6 +1034,9 @@ class Bridge:
         self._gen = 0
         self.pending = None
         self.opening = None
+        #: fluentfin-mpv (1.2.0): the generation of a ``next``/``previous``
+        #: still being carried out (`_move`), None when none is.
+        self._moving = None
         #: The video a play() hook has passed its last supersede check for
         #: and handed to the player, until the player returns. Between the
         #: two the player has not yet flagged the start, so a cancel would
@@ -2761,11 +2794,35 @@ class Bridge:
         return self._move(-1)
 
     def _move(self, direction):
+        """``next``/``previous``: one at a time. fluentfin-mpv (1.2.0,
+        review): while a move, a ``play`` or the player's own advance is
+        still opening its item, ``pm._video`` is the item being left, so a
+        second move used to be accepted and moved on again from there -- a
+        Play now and the UI's countdown a moment apart played an extra
+        episode (the one in between got a Playing and an immediate Stopped).
+        It is ``no_playback`` now, as for anything else that needs an item
+        playing (BRIDGE.md section 4)."""
         pm = self._require_player()
         if self._playing(pm) is None:
             raise BridgeError(NO_PLAYBACK, "nothing is playing")
-        self._queue_play("next" if direction > 0 else "previous",
-                         pm.play_next if direction > 0 else pm.play_prev)
+        if self._starting(pm):
+            raise BridgeError(NO_PLAYBACK, "the next item is still opening")
+        with self._state_lock:
+            if self._moving is not None and self._moving == self._gen:
+                raise BridgeError(NO_PLAYBACK,
+                                  "the next item is still opening")
+            gen = self._moving = self._gen
+        step = pm.play_next if direction > 0 else pm.play_prev
+
+        def move():
+            try:
+                step()
+            finally:
+                with self._state_lock:
+                    if self._moving == gen:
+                        self._moving = None
+
+        self._queue_play("next" if direction > 0 else "previous", move)
         return {}
 
     def cmd_set_audio(self, args):
@@ -3039,6 +3096,16 @@ class Bridge:
             except Exception:
                 log.exception("monitor tick failed")
                 events = []
+            if obs is not None and obs.video is not None and any(
+                    name == "item" for name, _data in events):
+                # fluentfin-mpv (1.2.0): an episode started from Next Up has
+                # nothing behind it in its queue; the earlier ones go in now,
+                # so the UI's Previous is enabled (the next ``next`` event
+                # names one) instead of only once pressed.
+                try:
+                    self.runtime.widen_queue_soon(obs.video)
+                except Exception:
+                    log.debug("could not widen the queue", exc_info=True)
             for name, data in events:
                 if self._monitor_stop.is_set():
                     break

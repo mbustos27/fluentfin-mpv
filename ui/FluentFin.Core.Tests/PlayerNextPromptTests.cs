@@ -154,8 +154,8 @@ public sealed class PlayerNextPromptTests
 		Assert.DoesNotContain(Bridge.Commands.Next, Commands());
 		Assert.Equal([false], _sent.Where(x => x.Command == Bridge.Commands.SetAutoPlay).Select(x => (bool)x.Args!["autoPlay"]!));
 
-		// another item: the user's choice again
-		PlayingEpisode(10);
+		// another item: the user's choice again (the same one again is a restart: PlayerNextPromptTests' restart test)
+		_vm.OnEvent(new BridgeEvent(Bridge.Events.Item, JsonNode.Parse($$"""{"itemId": "{{NextItem}}", "name": "Second", "type": "Episode"}""")));
 		Assert.Equal([false, true], _sent.Where(x => x.Command == Bridge.Commands.SetAutoPlay).Select(x => (bool)x.Args!["autoPlay"]!));
 	}
 
@@ -196,6 +196,49 @@ public sealed class PlayerNextPromptTests
 		_vm.OnPosition(new BridgePosition(Ticks(1240.2), Ticks(1320)));
 		_vm.Tick();
 		Assert.Contains(Bridge.Commands.Next, Commands());
+	}
+
+	/// <summary>
+	/// Review (1.2.0): Play now (or Previous) a moment before the countdown ends. The backend still has this item until the
+	/// new one's `item` event, so the countdown's own `next` would have moved on a second time: an extra episode played
+	/// (or, after Previous, the same one again).
+	/// </summary>
+	[Theory]
+	[InlineData("next")]
+	[InlineData("previous")]
+	public void A_next_or_previous_just_before_the_countdown_ends_is_the_only_move(string how)
+	{
+		PlayingEpisode(1231, queueIndex: 1);
+		Credits(1230, 1320);
+		Wait(8.5, 34);
+		Assert.True(_vm.IsCountingDown);
+		_ = how == "next" ? _vm.Next() : _vm.Previous();
+
+		// the item does not change yet: the countdown runs out meanwhile, with the backend's reports
+		Wait(3, 12);
+		var moves = Commands().Where(x => x is Bridge.Commands.Next or Bridge.Commands.Previous).ToList();
+		Assert.Equal([how == "next" ? Bridge.Commands.Next : Bridge.Commands.Previous], moves);
+	}
+
+	/// <summary>
+	/// Review (1.2.0): the same item again (the backend restarts it for a track change, and sends `item` again) keeps the
+	/// cancel: no countdown, and the backend's auto-play stays off. Another item has its own countdown again.
+	/// </summary>
+	[Fact]
+	public void A_cancel_holds_through_a_restart_of_the_same_item()
+	{
+		PlayingEpisode(1231);
+		Credits(1230, 1320);
+		_ = _vm.CancelNextCountdown();
+		Assert.False(_vm.IsCountingDown);
+
+		PlayingEpisode(1233);
+		Credits(1230, 1320);
+		Wait(2, 8);
+		Assert.False(_vm.IsCountingDown, "the restart brought the countdown back");
+		Assert.Equal([false], _sent.Where(x => x.Command == Bridge.Commands.SetAutoPlay).Select(x => (bool)x.Args!["autoPlay"]!));
+		Wait(15, 60);
+		Assert.DoesNotContain(Bridge.Commands.Next, Commands());
 	}
 
 	[Fact]
@@ -304,19 +347,31 @@ public sealed class PlayerNextPromptTests
 		Assert.False(film.IsNextPromptVisible);
 	}
 
+	/// <summary>
+	/// An episode started from Next Up or Continue Watching: its queue starts with it, so the first `state` and `next` say
+	/// nothing is behind it. Review (1.2.0): the backend now puts the earlier episodes in at the start
+	/// (`PlayerManager.widen_queue_soon`, a series listing in the background), and its next `state` and `next` say so,
+	/// as built by `bridge_state._queue` and `bridge_protocol.next_payload` (test_episode_transition's
+	/// PreviousForANextUpStartTest checks that side); before, it did so only once Previous was pressed, which the
+	/// disabled button never allowed.
+	/// </summary>
 	[Fact]
-	public void Previous_follows_the_queue_and_the_next_event()
+	public void Previous_comes_with_the_earlier_episodes_the_backend_puts_in()
 	{
+		const string Earlier = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0";
 		PlayingEpisode(10, queueIndex: 0);
-		Assert.False(_vm.CanPrevious, "the first of the queue");
+		Assert.False(_vm.CanPrevious, "nothing behind it yet");
 
-		// a remote play of one episode: the backend fills the queue with earlier episodes, and says so
+		_vm.OnState(new BridgeState
+		{
+			State = Bridge.States.Playing,
+			ItemId = Item,
+			DurationTicks = Ticks(1320),
+			Queue = new BridgeQueue { ItemIds = [Earlier, Item, NextItem], Index = 1 },
+		});
 		_vm.OnEvent(new BridgeEvent(Bridge.Events.Next, JsonNode.Parse($$"""
-			{"itemId": "{{Item}}", "nextItemId": "{{NextItem}}", "previousItemId": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0", "autoPlay": true}
+			{"itemId": "{{Item}}", "nextItemId": "{{NextItem}}", "previousItemId": "{{Earlier}}", "autoPlay": true}
 			""")));
 		Assert.True(_vm.CanPrevious);
-
-		PlayingEpisode(10, queueIndex: 1);
-		Assert.True(_vm.CanPrevious, "the second of the queue");
 	}
 }
