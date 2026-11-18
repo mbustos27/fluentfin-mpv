@@ -118,7 +118,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	public partial bool IsContentUnderBar { get; set; }
 
 	/// <summary>
-	/// The title bar's Back: signed in, and not on a player page that has a Back of its own (Seaglass's player controls do;
+	/// The title bar's Back: signed in, and not on a player page that has a Back of its own (Nixie's player controls do;
 	/// mpv's own controls and the other players have none, so there it stays).
 	/// </summary>
 	public bool IsBackButtonShown => User is not null && !(IsPlayerPageShown && PlayerHasItsOwnBack());
@@ -174,7 +174,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	internal Func<string?> LibmpvUnavailable { get; set; } = FluentFin.Mpv.Libmpv.Unavailable;
 
 	/// <summary>
-	/// The player page shows a Back of its own: the mpv player with Seaglass's controls (the same choice the page makes when
+	/// The player page shows a Back of its own: the mpv player with Nixie's controls (the same choice the page makes when
 	/// it opens, <see cref="FluentFin.Mpv.MpvVideoSurfaceChoice.UsesFluentFinControls(ISettings, out string?)"/>).
 	/// </summary>
 	private bool PlayerHasItsOwnBack() =>

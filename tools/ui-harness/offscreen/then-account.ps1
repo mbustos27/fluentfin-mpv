@@ -120,7 +120,7 @@ if ($sp) { Check 'settings: Sync Play is disabled with the mpv player, and says 
 Check 'settings: Play On left Settings (its dialog showed nothing)' (-not (Find-Ui -Id 'PlayOnButton' -OffscreenToo))
 
 if (-not $acShotsOnly -and $qcButton) {
-    # Quick Connect end to end: another device asks for a code (the fake server), Seaglass approves it from Settings
+    # Quick Connect end to end: another device asks for a code (the fake server), Nixie approves it from Settings
     $other = Invoke-Server '/QuickConnect/Initiate' 'POST'
     [void](Invoke-Element (Find-Ui -Id 'QuickConnectButton' -OffscreenToo))
     $codeBox = Wait-Ui -Id 'CodeBox' -Seconds 8

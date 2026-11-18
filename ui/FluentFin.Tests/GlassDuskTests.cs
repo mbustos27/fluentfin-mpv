@@ -141,11 +141,11 @@ public sealed class GlassDuskTests
 		Assert.Equal(1.0, GlassActivity.EdgeLevel(true));
 		Assert.InRange(GlassActivity.EdgeLevel(false), 0.3, 0.6);
 		var edge = Windows.UI.Color.FromArgb(0x59, 0xFF, 0xED, 0xE8);
-		var dim = SeaglassTheme.Scaled(edge, GlassActivity.EdgeLevel(false));
+		var dim = NixieTheme.Scaled(edge, GlassActivity.EdgeLevel(false));
 		Assert.Equal((edge.R, edge.G, edge.B), (dim.R, dim.G, dim.B));
 		Assert.True(dim.A < edge.A);
-		Assert.Equal(edge, SeaglassTheme.Scaled(edge, 1));
-		Assert.Equal(0, SeaglassTheme.Scaled(edge, -1).A);
+		Assert.Equal(edge, NixieTheme.Scaled(edge, 1));
+		Assert.Equal(0, NixieTheme.Scaled(edge, -1).A);
 
 		var raised = 0;
 		void OnChanged(object? s, EventArgs e) => raised++;

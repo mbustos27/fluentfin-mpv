@@ -94,7 +94,8 @@ REPORTED_WAIT = 1.0
 
 
 def default_config_dir():
-    """``%LOCALAPPDATA%\\FluentFinMpv\\mpv-backend`` -- separate from a
+    """``%LOCALAPPDATA%\\Nixie\\mpv-backend`` (the app's data folder, which FluentFin
+    passes as ``--config-dir``) -- separate from a
     standalone shim's config, and from an upstream FluentFin install's data
     folder, so none of them share a lock, credentials or settings."""
     if os.name == "nt":
@@ -103,7 +104,7 @@ def default_config_dir():
     else:
         base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
             os.path.expanduser("~"), ".config")
-    return os.path.join(base, "Seaglass", "mpv-backend")
+    return os.path.join(base, "Nixie", "mpv-backend")
 
 
 def find_mpv_binary():

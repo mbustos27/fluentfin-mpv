@@ -1,14 +1,14 @@
 namespace FluentFin.Core.Theming;
 
 /// <summary>
-/// The app's palette (1.1.4: a desert sunset, docs/design/SEAGLASS.md): the chrome's ladder is built from one hue, the deep
+/// The app's palette (1.1.4: a desert sunset, docs/design/DESIGN.md): the chrome's ladder is built from one hue, the deep
 /// maroon end of the sunset (<see cref="DefaultHue"/>) for the dark theme and the pale sun and peach end for the light one, with
 /// a hot-pink (dark) or crimson (light) accent. A title's artwork gives only a HUE (its BlurHash, decoded to 16x9 cells, scored
 /// the way Material's colour utilities score a source colour, pulled toward the sunset and clamped to its hues), and that hue
 /// only tints the backdrop (TitleTint). Lightness and chroma are the app's own, so contrast is a property of the ladder: it is
 /// checked against the worst case (the brightest the backdrop can be after its scrim) and adjusted until the text passes.
 /// </summary>
-public sealed class SeaglassPalette
+public sealed class NixiePalette
 {
 	/// <summary>The hue of the dark chrome and of an artwork with no colour (grey, no hash): the sunset's deep maroon (#500723 is OKLCH 4.9).</summary>
 	public const double DefaultHue = 8;
@@ -165,9 +165,9 @@ public sealed class SeaglassPalette
 		return (DefaultHue + Math.Clamp(offset, HueBelow, HueAbove) + 360) % 360;
 	}
 
-	public static SeaglassPalette FromBlurHash(string? hash, bool solid = false, bool light = false) => Build(HueFromBlurHash(hash), solid, light);
+	public static NixiePalette FromBlurHash(string? hash, bool solid = false, bool light = false) => Build(HueFromBlurHash(hash), solid, light);
 
-	public static SeaglassPalette Build(double hue, bool solid = false, bool light = false)
+	public static NixiePalette Build(double hue, bool solid = false, bool light = false)
 	{
 		if (light)
 		{
@@ -176,7 +176,7 @@ public sealed class SeaglassPalette
 
 		hue = (hue % 360 + 360) % 360;
 		var adjustments = new List<string>();
-		var palette = new SeaglassPalette { Hue = hue, Solid = solid };
+		var palette = new NixiePalette { Hue = hue, Solid = solid };
 		var tintL = solid ? 0.20 : 0.22;
 		var tintAlpha = solid ? 1.0 : 0.82;
 		var textL = 0.96;
@@ -240,13 +240,13 @@ public sealed class SeaglassPalette
 	/// a pale warm tint (L 0.95) with deep maroon text (L 0.22, the dark theme's hue), checked on the worst case, a dark backdrop under
 	/// the glass. The assertion raises the tint's lightness, then its alpha, then darkens the text.
 	/// </summary>
-	private static SeaglassPalette BuildLight(double hue, bool solid)
+	private static NixiePalette BuildLight(double hue, bool solid)
 	{
 		hue = (hue % 360 + 360) % 360;
 		var textHue = hue;
 		hue = (hue + LightHue - DefaultHue + 360) % 360;
 		var adjustments = new List<string>();
-		var palette = new SeaglassPalette { Hue = hue, Solid = solid, Light = true };
+		var palette = new NixiePalette { Hue = hue, Solid = solid, Light = true };
 		var tintL = 0.95;
 		var tintAlpha = solid ? 1.0 : 0.82;
 		var textL = 0.22;

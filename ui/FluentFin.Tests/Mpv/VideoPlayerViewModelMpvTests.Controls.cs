@@ -67,11 +67,11 @@ public sealed partial class VideoPlayerViewModelMpvTests
 	[InlineData(false, false)]
 	[InlineData(true, true)]
 	[InlineData(true, false)]
-	public async Task ThePlay_IsPrecededByTheAutoPlayChoice(bool seaglassControls, bool autoPlay)
+	public async Task ThePlay_IsPrecededByTheAutoPlayChoice(bool nixieControls, bool autoPlay)
 	{
 		var movie = Movie();
 		_client.Setup(x => x.GetItem(movie.Id!.Value)).ReturnsAsync(movie);
-		var vm = CreateViewModelWithControls(use: seaglassControls);
+		var vm = CreateViewModelWithControls(use: nixieControls);
 		vm.PlaysNextItem = () => autoPlay;
 
 		await vm.OnNavigatedTo(movie);
@@ -79,7 +79,7 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		var all = _backend.AllCommands.ToList();
 		Assert.True(all.IndexOf("set_auto_play") >= 0 && all.IndexOf("set_auto_play") < all.IndexOf("play"), string.Join(",", all));
 		Assert.True(JsonNode.DeepEquals(new JsonObject { ["autoPlay"] = autoPlay }, _backend.Args("set_auto_play")), _backend.Args("set_auto_play").ToJsonString());
-		Assert.Equal(seaglassControls ? autoPlay : null, vm.MpvControls?.AutoPlay);
+		Assert.Equal(nixieControls ? autoPlay : null, vm.MpvControls?.AutoPlay);
 	}
 
 	[Fact]

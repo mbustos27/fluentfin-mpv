@@ -5,7 +5,7 @@ namespace FluentFin.Services;
 
 /// <summary>
 /// Seaglass: for an item with no BlurHash, the artwork itself sampled down to 16x9 pixels (the browser-cached copy the window's
-/// backdrop already loads), as linear-sRGB cells for <c>SeaglassPalette.HueFromCells</c>. Null when it cannot be read.
+/// backdrop already loads), as linear-sRGB cells for <c>NixiePalette.HueFromCells</c>. Null when it cannot be read.
 /// </summary>
 public static class ArtworkSampler
 {

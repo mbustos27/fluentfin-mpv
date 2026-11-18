@@ -18,7 +18,7 @@
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <!--
-                        the app's accent, not Windows' (SEAGLASS.md, 1.1.4: the sunset's crimson): WinUI fills accent controls with
+                        the app's accent, not Windows' (docs/design/DESIGN.md, 1.1.4: the sunset's crimson): WinUI fills accent controls with
                         Dark1 under white text here (6.2:1) and writes accent text in Dark2; high contrast keeps the system colours
                     -->
                     <Color x:Key="SystemAccentColor">#D0294F</Color>
@@ -32,7 +32,7 @@
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <!--
-                        the app's accent, not Windows' (SEAGLASS.md, 1.1.4: the sunset's hot pink): WinUI fills accent controls with
+                        the app's accent, not Windows' (docs/design/DESIGN.md, 1.1.4: the sunset's hot pink): WinUI fills accent controls with
                         Light2 under dark text here and writes accent text in Light3; high contrast keeps the system colours
                     -->
                     <Color x:Key="SystemAccentColor">#E6385F</Color>

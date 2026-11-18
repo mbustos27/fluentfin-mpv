@@ -102,7 +102,7 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   covered for the journal (a SQLite backup) but its other files are copied as they are at that moment.
 - **Pinned shortcuts**: a taskbar or Start pin of Seaglass points at `Programs\Seaglass\app\Seaglass.exe`, which the
   upgrade removes; the pin is left broken until it is pinned again (Windows does not move pins between programs).
-- **Internal names keep "Seaglass"** where they are not shown: `SeaglassPalette`, `SeaglassTheme`, `Seaglass*` brushes
+- **Internal names keep "Seaglass"** where they are not shown: `NixiePalette`, `NixieTheme`, `Seaglass*` brushes
   and some code comments; the package identity (`Package.appxmanifest`'s `FluentFinMpv`) and the release marker
   (`FluentFinMpvRelease`) did not change either. Renaming them is a separate, mechanical change.
 
@@ -223,7 +223,7 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   shim's. The race it closes was seen once in about ten runs and cannot be forced in a test.
 
 ## Start-up and pre-warm (stream `startup-perf`)
-- **The window before the automatic sign-in was run, off-screen only**: the real Seaglass.exe
+- **The window before the automatic sign-in was run, off-screen only**: the real Nixie.exe
   (Release, private desktop, its own data folder, the dev-harness fake server; before = main with
   the same data-dir change, 5 runs each, interleaved, on a machine busy with other test runs)
   shows its window 910 ms after the process started against 1469 ms before (850 / 1438 ms at

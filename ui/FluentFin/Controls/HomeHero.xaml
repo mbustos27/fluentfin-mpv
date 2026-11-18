@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <!--
-        Seaglass: Home's hero (docs/design/SEAGLASS.md). The slide's backdrop fills the width, scrimmed at the left and the
+        Seaglass: Home's hero (docs/design/DESIGN.md). The slide's backdrop fills the width, scrimmed at the left and the
         bottom so the words read on any artwork; its logo (or its title), meta line, overview, the Play pill and the More
         info pill sit at the lower left; the dots at the lower right. 1.2.0: a click on the artwork or the words opens
         the slide's item, as More info does; previous and next slide flank the dots. Slides crossfade (600 ms); they advance by themselves
@@ -47,7 +47,7 @@
             Stretch="UniformToFill" />
 
         <!--  the item hero's scrims (ItemHero.xaml): a deep wash, dark at the left (the words) and at the bottom (the dots, the edge into the page)  -->
-        <Border Background="{ThemeResource SeaglassDeepBrush}" IsHitTestVisible="False" Opacity="0.35" />
+        <Border Background="{ThemeResource NixieDeepBrush}" IsHitTestVisible="False" Opacity="0.35" />
         <Border Background="{ThemeResource ItemHeroSideScrimBrush}" IsHitTestVisible="False" />
         <Border
             Height="260"

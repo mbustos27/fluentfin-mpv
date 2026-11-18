@@ -81,6 +81,16 @@ public sealed class AppIdentityTests
 		Assert.Equal(2, code.Split("AppIdentity.ReadEnvironment(\"THEME\")").Length - 1);
 	}
 
+	[Fact]
+	public void TheFullScreenVariable_IsReadThroughAppIdentity_SoNixieFullscreenAndSeaglassFullscreenBothWork()
+	{
+		// 1.2.0 merge: the player stream's cloak read SEAGLASS_FULLSCREEN itself, so NIXIE_FULLSCREEN did nothing
+		var code = File.ReadAllText(FindUp(Path.Combine("ui", "FluentFin.Core", "Mpv", "FullScreenCloak.cs")));
+
+		Assert.DoesNotContain("GetEnvironmentVariable(\"SEAGLASS_", code);
+		Assert.Contains("AppIdentity.ReadEnvironment(\"FULLSCREEN\")", code);
+	}
+
 	[Theory]
 	[InlineData(16)]
 	[InlineData(20)]

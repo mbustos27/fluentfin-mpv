@@ -17,7 +17,7 @@ namespace CompositionSpike;
 /// <summary>
 /// Phase 2a spike (docs/research/player-controls.md): libmpv in this process, rendering in composition mode into a XAML
 /// SwapChainPanel with XAML drawn over it, or (for comparison) into a child window with <c>wid</c>, the same libmpv build.
-/// Never Seaglass.exe. One scenario per run; CHECK lines and STAT lines to host.txt; pictures of its own window only.
+/// Never Nixie.exe. One scenario per run; CHECK lines and STAT lines to host.txt; pictures of its own window only.
 ///
 ///   CompositionSpike.exe --out DIR --mode composition|wid --scenario local|hdr|bridge|quit --clip FILE
 ///                        [--python PY --fakejf2 DIR --backend DIR]  (bridge: the backend folder to run the bridge from)

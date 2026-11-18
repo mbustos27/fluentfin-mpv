@@ -294,7 +294,7 @@ public sealed class ItemButtonsXamlTests
 		var bar = play.Descendants().Single(e => e.Name.LocalName == "ProgressBar");
 
 		Assert.Equal("{x:Bind ViewModel.PlayTarget.ProgressValue, Mode=OneWay}", (string?)bar.Attribute("Value"));
-		Assert.Equal("{ThemeResource SeaglassAccentForegroundBrush}", (string?)bar.Attribute("Foreground"));
+		Assert.Equal("{ThemeResource NixieAccentForegroundBrush}", (string?)bar.Attribute("Foreground"));
 		Assert.Equal("{x:Bind ViewModel.PlayTarget.HasProgress, Mode=OneWay}", (string?)bar.Parent!.Attribute("Visibility"));
 	}
 

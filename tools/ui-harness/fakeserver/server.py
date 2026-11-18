@@ -1,4 +1,4 @@
-"""A realistic fake Jellyfin server on 127.0.0.1 for running Seaglass against: FluentFin's pages (login, home,
+"""A realistic fake Jellyfin server on 127.0.0.1 for running Nixie against: FluentFin's pages (login, home,
 libraries, item pages, search) and the mpv backend's playback (PlaybackInfo, direct play with two audio and three
 subtitle tracks, media segments, trickplay, progress reports). Standard library only.
 
@@ -543,7 +543,7 @@ class Server:
                         return self._send(401, b"Error processing request.", "text/plain")
                     return self._signed_in(entry["user"])
                 if low == "/quickconnect/authorize" and method == "POST":
-                    # a signed-in user approves the code another device shows (Seaglass: Settings > Other devices >
+                    # a signed-in user approves the code another device shows (Nixie: Settings > Other devices >
                     # Quick Connect), as jellyfin does: true, or 404 for a code that is not waiting
                     self.route = "quickconnect"
                     if not self._need_auth():

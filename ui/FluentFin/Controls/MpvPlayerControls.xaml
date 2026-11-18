@@ -46,7 +46,7 @@
             </ResourceDictionary>
         </ResourceDictionary.ThemeDictionaries>
         <!--
-            Seaglass player (docs/design/SEAGLASS.md): no acrylic over the video (it cannot blur the swap chain), so the bars sit
+            Seaglass player (docs/design/DESIGN.md): no acrylic over the video (it cannot blur the swap chain), so the bars sit
             on gradient scrims, the buttons are light translucent fills with the glass edge, and the menus are on
             GlassPanelStrongBrush.
         -->
@@ -73,9 +73,9 @@
         <SolidColorBrush x:Key="SliderTrackFill" Color="#4DFFFFFF" />
         <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#66FFFFFF" />
         <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#66FFFFFF" />
-        <SolidColorBrush x:Key="SliderTrackValueFill" Color="{ThemeResource SeaglassAccentColor}" />
-        <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="{ThemeResource SeaglassAccentColor}" />
-        <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="{ThemeResource SeaglassAccentColor}" />
+        <SolidColorBrush x:Key="SliderTrackValueFill" Color="{ThemeResource NixieAccentColor}" />
+        <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="{ThemeResource NixieAccentColor}" />
+        <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="{ThemeResource NixieAccentColor}" />
         <SolidColorBrush x:Key="SliderThumbBackground" Color="#FFFFFFFF" />
         <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#FFFFFFFF" />
         <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#FFE0E0E0" />
@@ -127,8 +127,8 @@
             <Setter Property="Width" Value="60" />
             <Setter Property="Height" Value="60" />
             <Setter Property="CornerRadius" Value="30" />
-            <Setter Property="Background" Value="{ThemeResource SeaglassAccentBrush}" />
-            <Setter Property="Foreground" Value="{ThemeResource SeaglassDeepBrush}" />
+            <Setter Property="Background" Value="{ThemeResource NixieAccentBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource NixieDeepBrush}" />
         </Style>
 
         <!--
@@ -250,7 +250,7 @@
                             <Border
                                 x:Name="VolumeIndicatorFill"
                                 HorizontalAlignment="Left"
-                                Background="{ThemeResource SeaglassAccentBrush}"
+                                Background="{ThemeResource NixieAccentBrush}"
                                 CornerRadius="5"
                                 Width="240" />
                         </Grid>
@@ -442,12 +442,12 @@
                         Style="{StaticResource PlayerPlayButton}"
                         ToolTipService.ToolTip="{x:Bind PlayPauseToolTip(Controls.IsPaused), Mode=OneWay}">
                         <Button.Resources>
-                                <StaticResource x:Key="ButtonBackground" ResourceKey="SeaglassAccentBrush" />
-                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SeaglassAccentBrush" />
-                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SeaglassAccentBrush" />
-                                <StaticResource x:Key="ButtonForeground" ResourceKey="SeaglassDeepBrush" />
-                                <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="SeaglassDeepBrush" />
-                                <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="SeaglassDeepBrush" />
+                                <StaticResource x:Key="ButtonBackground" ResourceKey="NixieAccentBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="NixieAccentBrush" />
+                                <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="NixieAccentBrush" />
+                                <StaticResource x:Key="ButtonForeground" ResourceKey="NixieDeepBrush" />
+                                <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="NixieDeepBrush" />
+                                <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="NixieDeepBrush" />
                         </Button.Resources>
                         <FontIcon FontSize="26" Glyph="{x:Bind PlayPauseGlyph(Controls.IsPaused), Mode=OneWay}" />
                     </Button>

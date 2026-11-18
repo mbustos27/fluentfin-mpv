@@ -146,8 +146,8 @@ public sealed class ItemLayoutXamlTests
 		var badge = Load("FluentFin/Controls/BaseItemDtoCard.xaml").Descendants().Single(e => e.Name.LocalName == "InfoBadge");
 		var mark = FindByName(Load("FluentFin/Controls/EpisodeRow.xaml"), "WatchedMark");
 
-		Assert.Equal("{ThemeResource SeaglassAccentOnImageBrush}", (string?)badge.Attribute("Background"));
-		Assert.Equal("{ThemeResource SeaglassOnAccentOnImageBrush}", (string?)badge.Attribute("Foreground"));
+		Assert.Equal("{ThemeResource NixieAccentOnImageBrush}", (string?)badge.Attribute("Background"));
+		Assert.Equal("{ThemeResource NixieOnAccentOnImageBrush}", (string?)badge.Attribute("Foreground"));
 		Assert.Equal((string?)mark.Attribute("Background"), (string?)badge.Attribute("Background"));
 	}
 

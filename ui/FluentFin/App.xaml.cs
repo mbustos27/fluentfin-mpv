@@ -356,7 +356,7 @@ public partial class App : Application
 			}
 
 			GlassTheme.Attach((FrameworkElement)MainWindow.Content);
-			SeaglassTheme.Attach();
+			NixieTheme.Attach();
 			TitleTint.Attach();
 
 			// fluentfin-mpv (startup-perf, O5): no Flyleaf engine here; it starts with the first Flyleaf player (FlyleafEngine)

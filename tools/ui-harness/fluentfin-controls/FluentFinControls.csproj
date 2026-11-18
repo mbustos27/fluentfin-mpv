@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Phase 2b harness (docs/research/player-controls.md): FluentFin's own player controls (ui\FluentFin\Controls\
        MpvPlayerControls.xaml, MpvControlsViewModel) over the in-process mpv (ui\FluentFin\Mpv\MpvCompositionVideo.cs),
-       with the REAL backend attached to it (connect.window "attached"). A WinUI window of its own, never Seaglass.exe.
+       with the REAL backend attached to it (connect.window "attached"). A WinUI window of its own, never Nixie.exe.
        Compiles this repo's (or -p:UiDir=<copy>'s) sources, references FluentFin.Core, copies libmpv-2.dll and its DLLs into libmpv\ (where Libmpv.cs loads them). Built and run
        by run.ps1 from a copy under its -Out, never inside ui\. -->
   <PropertyGroup>

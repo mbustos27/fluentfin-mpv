@@ -134,9 +134,9 @@ public sealed class TitleBarAccountTests
 	}
 
 	[Theory]
-	// Seaglass's controls (and libmpv there): the player page has its own Back, the title bar's goes
+	// Nixie's controls (and libmpv there): the player page has its own Back, the title bar's goes
 	[InlineData(MediaPlayerType.Mpv, MpvPlayerControls.FluentFin, null, false)]
-	// mpv's own controls, or Seaglass's chosen but libmpv missing (the page falls back to mpv's): no Back on the page
+	// mpv's own controls, or Nixie's chosen but libmpv missing (the page falls back to mpv's): no Back on the page
 	[InlineData(MediaPlayerType.Mpv, MpvPlayerControls.Mpv, null, true)]
 	[InlineData(MediaPlayerType.Mpv, MpvPlayerControls.FluentFin, "libmpv-2.dll not found", true)]
 	// another player: its controls have no Back

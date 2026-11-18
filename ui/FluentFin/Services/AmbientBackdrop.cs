@@ -1,7 +1,7 @@
 namespace FluentFin.Services;
 
 /// <summary>
-/// The glass look (docs/design/SEAGLASS.md): the soft, dimmed artwork behind the whole window, which the glass panels frost
+/// The glass look (docs/design/DESIGN.md): the soft, dimmed artwork behind the whole window, which the glass panels frost
 /// (with none, the dusk scene: AmbientBackdropView). A page sets the image of what it shows (Home: the hero item's backdrop; an item page: the item's) and
 /// clears it (null) when it has none; the shell draws it and fades between images. UI thread only.
 /// </summary>
@@ -9,7 +9,7 @@ public static class AmbientBackdrop
 {
 	public static Uri? Current { get; private set; }
 
-	/// <summary>The BlurHash of the artwork now behind the window (null: none known): the title's palette comes from it (<see cref="SeaglassTheme"/>).</summary>
+	/// <summary>The BlurHash of the artwork now behind the window (null: none known): the title's palette comes from it (<see cref="NixieTheme"/>).</summary>
 	public static string? BlurHash { get; private set; }
 
 	public static event EventHandler<Uri?>? Changed;

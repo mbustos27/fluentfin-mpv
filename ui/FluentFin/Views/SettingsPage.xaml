@@ -74,7 +74,7 @@
                 </StackPanel>
                 <!--  fluentfin-mpv: Settings > Playback (docs/research/ux-review.md T1)  -->
                 <!--  kept on this PC; the bridge has no field for the skip and wheel settings yet (docs/BRIDGE.md v1), so mpv's own controls ignore them;
-                      Seaglass's player controls over the MPV player use the Skip button, the wheel and the step (MpvControlsViewModel)  -->
+                      Nixie's player controls over the MPV player use the Skip button, the wheel and the step (MpvControlsViewModel)  -->
                 <StackPanel Spacing="4">
                     <TextBlock
                         Margin="1,28,0,6"
@@ -107,7 +107,7 @@
                             SelectedItem="{x:Bind ViewModel.SelectedPlayerControls, Mode=TwoWay}" />
                     </ctk:SettingsCard>
                     <ctk:SettingsCard
-                        Description="With Seaglass's player controls and Windows Media Player. mpv's own controls have their own setting."
+                        Description="With Nixie's player controls and Windows Media Player. mpv's own controls have their own setting."
                         Header="Show Skip intro and Skip credits"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE893;}">
                         <ToggleSwitch AutomationProperties.Name="Show Skip intro and Skip credits" IsOn="{x:Bind ViewModel.ShowSkipPrompt, Mode=TwoWay}" />
@@ -142,13 +142,13 @@
                         </StackPanel>
                     </ctk:SettingsCard>
                     <ctk:SettingsCard
-                        Description="With Seaglass's player controls and Windows Media Player. mpv's own controls always change the volume with the wheel."
+                        Description="With Nixie's player controls and Windows Media Player. mpv's own controls always change the volume with the wheel."
                         Header="Change the volume with the mouse wheel"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE962;}">
                         <ToggleSwitch AutomationProperties.Name="Change the volume with the mouse wheel" IsOn="{x:Bind ViewModel.MouseWheelVolume, Mode=TwoWay}" />
                     </ctk:SettingsCard>
                     <ctk:SettingsCard
-                        Description="How much one wheel notch or arrow key changes the volume, in percent. With Seaglass's player controls and Windows Media Player."
+                        Description="How much one wheel notch or arrow key changes the volume, in percent. With Nixie's player controls and Windows Media Player."
                         Header="Volume step"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE767;}">
                         <!--
@@ -413,7 +413,7 @@
                     </ctk:SettingsCard>
                     <!--  Seaglass: the opt-in update notice. Off by default; nothing is sent until it is on  -->
                     <ctk:SettingsCard
-                        Description="Once a day Seaglass asks GitHub whether a newer version is out. Nothing else is sent. Off by default."
+                        Description="Once a day Nixie asks GitHub whether a newer version is out. Nothing else is sent. Off by default."
                         Header="Check for updates"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE895;}">
                         <ToggleSwitch AutomationProperties.Name="Check for updates" IsOn="{x:Bind ViewModel.CheckForUpdates, Mode=TwoWay}" />
@@ -430,7 +430,7 @@
                         ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
                         ActionIconToolTip="Opens in your browser"
                         Click="OnReportProblemClick"
-                        Description="Opens a new issue on GitHub. Say what you did, what happened, and your Seaglass version."
+                        Description="Opens a new issue on GitHub. Say what you did, what happened, and your Nixie version."
                         Header="Report a problem"
                         HeaderIcon="{ui:FontIcon Glyph=&#xEBE8;}"
                         IsClickEnabled="True" />
@@ -439,12 +439,12 @@
                         ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"
                         ActionIconToolTip="Opens in your browser"
                         Click="OnContributeClick"
-                        Description="Seaglass's code, ideas and fixes are on GitHub: github.com/mbustos27/fluentfin-mpv."
+                        Description="Nixie's code, ideas and fixes are on GitHub: github.com/mbustos27/fluentfin-mpv."
                         Header="Contribute"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE943;}"
                         IsClickEnabled="True" />
                     <ctk:SettingsCard
-                        Description="Seaglass's interface comes from FluentFin by insomniachi, and its playback from jellyfin-mpv-shim by the Jellyfin project and its contributors. Both are GPL-3.0. Seaglass is not affiliated with either, nor with Jellyfin or mpv."
+                        Description="Nixie's interface comes from FluentFin by insomniachi, and its playback from jellyfin-mpv-shim by the Jellyfin project and its contributors. Both are GPL-3.0. Seaglass is not affiliated with either, nor with Jellyfin or mpv."
                         Header="Built on FluentFin and jellyfin-mpv-shim"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE8F1;}">
                         <StackPanel Orientation="Horizontal" Spacing="12">

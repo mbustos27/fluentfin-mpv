@@ -1,7 +1,7 @@
 ﻿<#
 .SYNOPSIS
   The player controls' test host: FluentFin's controls window over the real backend's embedded mpv, in a window of its
-  own (never Seaglass.exe), off-screen.
+  own (never Nixie.exe), off-screen.
 
 .DESCRIPTION
   Builds ControlsHost.exe from a copy of this folder under -Out against -UiDir (default this repo's ui\; its

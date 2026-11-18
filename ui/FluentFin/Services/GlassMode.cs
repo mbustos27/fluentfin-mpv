@@ -13,7 +13,7 @@ public enum GlassModeKind
 }
 
 /// <summary>
-/// Seaglass (docs/design/SEAGLASS.md): how much glass and motion the app shows. Automatic from Windows' settings
+/// Seaglass (docs/design/DESIGN.md): how much glass and motion the app shows. Automatic from Windows' settings
 /// (Transparency effects, Animation effects, high contrast); Settings can force a mode (<see cref="Override"/>).
 /// <see cref="Changed"/> may be raised off the UI thread: marshal to it before touching XAML.
 /// </summary>

@@ -73,7 +73,7 @@
         <!--  casts the shadow the lift deepens; behind the artwork, which is opaque  -->
         <Border
             x:Name="ShadowHost"
-            Background="{ThemeResource SeaglassDeepBrush}"
+            Background="{ThemeResource NixieDeepBrush}"
             CornerRadius="{StaticResource GlassCardCornerRadius}">
             <ui:Effects.Shadow>
                 <media:AttachedCardShadow
@@ -180,8 +180,8 @@
                     Padding="5,0"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Top"
-                    Background="{ThemeResource SeaglassAccentOnImageBrush}"
-                    Foreground="{ThemeResource SeaglassOnAccentOnImageBrush}"
+                    Background="{ThemeResource NixieAccentOnImageBrush}"
+                    Foreground="{ThemeResource NixieOnAccentOnImageBrush}"
                     FontSize="25"
                     FontWeight="ExtraBold"
                     IconSource="{x:Bind c:BaseItemDtoConverters.CardBadgeSource(Model), Mode=OneWay}"
@@ -195,14 +195,14 @@
 
                 <!--
                     Seaglass 1.1.3: the accent on artwork, on a dark track as tall as the bar (WinUI's track is a 1 px line, so the
-                    bar sat on the poster itself: any poster near the accent's own lightness hid it). Glass.xaml, SeaglassAccentOnImageBrush.
+                    bar sat on the poster itself: any poster near the accent's own lightness hid it). Glass.xaml, NixieAccentOnImageBrush.
                 -->
                 <ProgressBar
                     Height="4"
                     MinHeight="4"
                     VerticalAlignment="Bottom"
                     Background="{StaticResource Black65O}"
-                    Foreground="{ThemeResource SeaglassAccentOnImageBrush}"
+                    Foreground="{ThemeResource NixieAccentOnImageBrush}"
                     Maximum="100"
                     Minimum="0"
                     Visibility="{x:Bind Model.UserData.PlayedPercentage, Converter={StaticResource MoreThanZeroToVisibilityConverter}, Mode=OneWay}"

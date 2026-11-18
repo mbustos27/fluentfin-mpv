@@ -64,8 +64,8 @@ public sealed class FullScreenTransitionTests
 	[InlineData("cover", "1", FullScreenHide.None)]   // 1.1.2's FLUENTFIN_NO_CLOAK=1 still turns hiding off
 	[InlineData("cloak", "1", FullScreenHide.None)]
 	[InlineData(null, "0", FullScreenHide.Cover)]
-	public void The_hide_comes_from_the_environment(string? seaglassFullscreen, string? noCloak, FullScreenHide expected) =>
-		Assert.Equal(expected, FullScreenCloak.ModeFrom(seaglassFullscreen, noCloak));
+	public void The_hide_comes_from_the_environment(string? fullscreen, string? noCloak, FullScreenHide expected) =>
+		Assert.Equal(expected, FullScreenCloak.ModeFrom(fullscreen, noCloak));
 
 	[Theory]
 	[InlineData(true, true, true)]

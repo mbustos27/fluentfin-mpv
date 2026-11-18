@@ -5,7 +5,7 @@ namespace FluentFin.Services;
 
 /// <summary>
 /// 1.1.4: the glass reacts to the window being active, as Windows' own materials do. While the main window is in the background
-/// the light edge and the inner glow of every glass surface dim (<see cref="SeaglassTheme"/>), the pointer highlights go out and
+/// the light edge and the inner glow of every glass surface dim (<see cref="NixieTheme"/>), the pointer highlights go out and
 /// the backdrop stops moving (no frames drawn for a window nobody is using). Raised on the UI thread.
 /// </summary>
 public static class GlassActivity

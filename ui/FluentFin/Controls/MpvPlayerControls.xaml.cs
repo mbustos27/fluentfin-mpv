@@ -607,7 +607,7 @@ public sealed partial class MpvPlayerControls : UserControl
 	}
 
 	/// <summary>Narrator says the new volume ("Volume 45 %" or "Muted"), without moving the focus.</summary>
-	private void AnnounceVolume(string text) => Announce(text, "SeaglassVolume");
+	private void AnnounceVolume(string text) => Announce(text, "NixieVolume");
 
 	/// <summary>Narrator says <paramref name="text"/> without moving the focus; a newer one of the same <paramref name="id"/> replaces it.</summary>
 	private void Announce(string text, string id)

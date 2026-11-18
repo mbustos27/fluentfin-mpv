@@ -2,7 +2,8 @@ namespace FluentFin.Core.Mpv;
 
 /// <summary>
 /// Seaglass 1.1.3: how the window is kept from showing a half-done layout while the player switches into or out of full
-/// screen (docs/research/fullscreen-smoothness.md). <c>SEAGLASS_FULLSCREEN</c> picks it, to compare on a real screen.
+/// screen (docs/research/fullscreen-smoothness.md). <c>NIXIE_FULLSCREEN</c> (or the older <c>SEAGLASS_FULLSCREEN</c>) picks it, to
+/// compare on a real screen.
 /// </summary>
 public enum FullScreenHide
 {
@@ -48,17 +49,17 @@ public static class FullScreenCloak
 	}
 
 	/// <summary>
-	/// The hide asked for: <c>SEAGLASS_FULLSCREEN</c> = <c>cover</c> (the default, also for anything unknown), <c>cloak</c>
+	/// The hide asked for: <c>NIXIE_FULLSCREEN</c> = <c>cover</c> (the default, also for anything unknown), <c>cloak</c>
 	/// or <c>none</c>; <c>FLUENTFIN_NO_CLOAK=1</c> (1.1.2's switch) means none whatever the other says.
 	/// </summary>
-	public static FullScreenHide ModeFrom(string? seaglassFullscreen, string? noCloak)
+	public static FullScreenHide ModeFrom(string? fullscreen, string? noCloak)
 	{
 		if (noCloak?.Trim() == "1")
 		{
 			return FullScreenHide.None;
 		}
 
-		return seaglassFullscreen?.Trim().ToLowerInvariant() switch
+		return fullscreen?.Trim().ToLowerInvariant() switch
 		{
 			"cloak" => FullScreenHide.Cloak,
 			"none" or "off" => FullScreenHide.None,
@@ -68,7 +69,7 @@ public static class FullScreenCloak
 
 	/// <summary>The hide from this process's environment.</summary>
 	public static FullScreenHide FromEnvironment() =>
-		ModeFrom(Environment.GetEnvironmentVariable("SEAGLASS_FULLSCREEN"), Environment.GetEnvironmentVariable("FLUENTFIN_NO_CLOAK"));
+		ModeFrom(AppIdentity.ReadEnvironment("FULLSCREEN"), Environment.GetEnvironmentVariable("FLUENTFIN_NO_CLOAK"));
 
 	/// <summary>
 	/// A switch waits for its new layout only while the page shows FluentFin's in-process video: then the panel takes the new

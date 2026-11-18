@@ -54,14 +54,14 @@
                                     AutomationProperties.AccessibilityView="Raw"
                                     Visibility="{x:Bind ViewModel.PlayTarget.HasProgress, Mode=OneWay}">
                                     <Border
-                                        Background="{ThemeResource SeaglassAccentForegroundBrush}"
+                                        Background="{ThemeResource NixieAccentForegroundBrush}"
                                         CornerRadius="1.5"
                                         Opacity="0.3" />
                                     <ProgressBar
                                         Height="3"
                                         MinHeight="3"
                                         Background="Transparent"
-                                        Foreground="{ThemeResource SeaglassAccentForegroundBrush}"
+                                        Foreground="{ThemeResource NixieAccentForegroundBrush}"
                                         Maximum="100"
                                         Value="{x:Bind ViewModel.PlayTarget.ProgressValue, Mode=OneWay}">
                                         <ProgressBar.Resources>
@@ -85,7 +85,7 @@
                                     Style="{StaticResource GlassPillButtonStyle}">
                                     <StackPanel Spacing="4">
                                         <TextBlock Text="{x:Bind Name}" />
-                                        <Border Height="3" CornerRadius="2" Background="{ThemeResource SeaglassAccentBrush}" Visibility="{x:Bind c:ItemRowConverters.Show(IsCurrent)}" />
+                                        <Border Height="3" CornerRadius="2" Background="{ThemeResource NixieAccentBrush}" Visibility="{x:Bind c:ItemRowConverters.Show(IsCurrent)}" />
                                     </StackPanel>
                                 </Button>
                             </DataTemplate>

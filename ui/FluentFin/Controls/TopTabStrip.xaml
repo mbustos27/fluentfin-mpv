@@ -48,7 +48,7 @@
                                         BlurRadius="10"
                                         CornerRadius="2"
                                         Opacity="{ThemeResource GlassShadowOpacity}"
-                                        Color="{ThemeResource SeaglassAccentColor}" />
+                                        Color="{ThemeResource NixieAccentColor}" />
                                 </ui:Effects.Shadow>
                             </Border>
                             <!--  hover: a faint neutral line where the marked tab's is  -->
@@ -70,7 +70,7 @@
                                 Margin="0,0,0,5"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Bottom"
-                                Background="{ThemeResource SeaglassAccentBrush}"
+                                Background="{ThemeResource NixieAccentBrush}"
                                 CornerRadius="1.5"
                                 IsHitTestVisible="False"
                                 Opacity="0" />

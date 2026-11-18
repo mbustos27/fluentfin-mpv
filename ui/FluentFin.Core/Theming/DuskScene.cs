@@ -21,7 +21,7 @@ public enum DuskHill
 
 /// <summary>
 /// 1.1.4: the colours, sizes and shapes of the flat dusk scene drawn behind the window when no artwork is shown
-/// (docs/design/SEAGLASS.md: atomic-age Americana, Googie starbursts, a striped sun over desert hills). Drawn in XAML shapes
+/// (docs/design/DESIGN.md: atomic-age Americana, Googie starbursts, a striped sun over desert hills). Drawn in XAML shapes
 /// and gradients by AmbientBackdropView; no image files. The full scene is for pages whose text all sits on a glass card
 /// (sign-in, the server page, empty states); elsewhere only a strip of hills, faint enough that text placed straight on the
 /// backdrop keeps 4.5:1 (no strip colour brighter than <see cref="DarkCeiling"/> in the dark theme, none darker than

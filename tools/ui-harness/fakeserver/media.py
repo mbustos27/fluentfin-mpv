@@ -294,7 +294,7 @@ def build(mpv, out, seconds=600):
                               (audio[1], 1, {"language": "jpn", "name": "Japanese"})],
                       [({"language": "eng", "name": "English"}, subtitle_cues("[English]", seconds)),
                        ({"language": "spa", "name": "Spanish"}, subtitle_cues("[Espanol]", seconds, every=5.0))],
-                      "Seaglass harness test video")
+                      "Nixie harness test video")
     with open(os.path.join(out, "test.fr.srt"), "w", encoding="utf-8", newline="\n") as f:
         f.write(srt(subtitle_cues("[Francais]", seconds, every=6.0)))
 

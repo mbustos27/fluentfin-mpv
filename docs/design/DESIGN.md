@@ -2,8 +2,8 @@
 
 The glass design, made for Seaglass (1.1.x; the app is **Nixie** since 1.2.0, formerly Seaglass and FluentFin MPV): a
 glassy, calm, Apple TV-like look on Windows. The evidence and the reasons are in `docs\design\DESIGN-RESEARCH.md` (the
-research report, 2026-11-16). This page is the contract. (It was `SEAGLASS.md`; the code's `Seaglass*` names, such as
-`SeaglassPalette`, `SeaglassTheme` and the `Seaglass*` brushes, are the design system's and keep that prefix for now.)
+research report, 2026-11-16). This page is the contract. (It was `SEAGLASS.md`; the design system's code names, such as
+`NixiePalette`, `NixieTheme` and the `Nixie*` brushes, were `Seaglass*` before the 1.2.0 release.)
 
 ## The rule: glass on chrome and on section panels, content opaque
 
@@ -44,7 +44,7 @@ High contrast always uses `SystemColor*` brushes (`Styles\Glass.xaml`'s HighCont
 Use the keys; never hard-code these values on a page.
 - Brushes: `GlassBevelBrush` (the inner top-edge stroke), `GlassMilkBrush` (6 % white over the tint), `GlassPanelBrush`, `GlassPanelStrongBrush`, `GlassStrokeBrush` (the light top edge), `GlassHoverOverlayBrush`,
   `GlassPressedOverlayBrush`, `GlassTextPrimaryBrush`, `GlassTextSecondaryBrush`, `GlassImageScrimBrush`,
-  `GlassAmbientDimBrush`, `SeaglassAccentBrush` (sea-glass aqua `#5CCFC1` dark / `#13877B` light).
+  `GlassAmbientDimBrush`, `NixieAccentBrush` (sea-glass aqua `#5CCFC1` dark / `#13877B` light).
 - Shapes (no capsules: the user does not like oblong ovals): `GlassPanelCornerRadius` 20, `GlassCardCornerRadius` 12,
   `GlassButtonCornerRadius` 12 (the buttons, "pills", the search box, the player's pills), `GlassChipCornerRadius` 8 (info chips,
   the hero's page dots), `GlassCircleCornerRadius` 999 (only for equal-sided round icon buttons), `GlassPillHeight` 44.
@@ -84,11 +84,11 @@ The user: "its not very glassy lets get reallllllll themed", "we can get niche".
 - **Per-title palette** (`FluentFin.Core\Theming`): the artwork's BlurHash (`ItemArtwork.BackdropBlurHash`, the hero slide's)
   is decoded to 16x9 cells (`BlurHash`), scored like Material's source colour (360 hue buckets, 30 degree window, chroma floor
   0.02), pulled 50 % toward teal and **clamped to the sea-glass hues** (seafoam -35 to cobalt +75 degrees around 175). Only the
-  hue comes from the art. `SeaglassPalette` then lays a fixed OKLCH ladder (glass tint L 0.22 C 0.045, container +0.03, text
+  hue comes from the art. `NixiePalette` then lays a fixed OKLCH ladder (glass tint L 0.22 C 0.045, container +0.03, text
   L 0.96, muted L 0.82, accent L 0.78 C 0.11, rim, a violet rim fringe) and **asserts contrast at runtime** against the worst
   case: the tint at 0.82 over a backdrop the scrim holds to relative luminance 0.38 (`BackdropCeiling`, `GlassAmbientDimBrush`
   alpha 0.62). Under 4.5:1 it lowers the tint L, raises the tint alpha, then the text L. No hash: hue 175.
-  Solid is the same hue with opaque surfaces at 7:1. `SeaglassTheme` recolours the shared dark-theme brushes in place and
+  Solid is the same hue with opaque surfaces at 7:1. `NixieTheme` recolours the shared dark-theme brushes in place and
   crossfades them in OKLab over 500 ms (at once without motion).
 - **Material kit** (`GlassSurfaceStyle` template, so every section panel): bottom to top the frosted brush, the milk, the
   **grain** (`GrainOverlay`: a 256 px zero-mean noise bitmap generated at run time by `Grain`, tiled, 4.5 % in Full, 2 % in
@@ -111,10 +111,10 @@ The user: "its not very glassy lets get reallllllll themed", "we can get niche".
   a glass panel, clipped to the panel's corners. Full mode with motion only; none for touch, Reduced, Solid.
 - **Page transitions** (`PageTransition`, from `NavigationService.OnNavigated`): Full: the page fades in, rises 14 px and grows from
   98 % in 350 ms on the curve (0.05, 0.9, 0.1, 1.0); Reduced: a 150 ms fade; Solid, animations off and the player page: none.
-- **No BlurHash**: `ArtworkSampler` decodes the artwork down to 16x9 pixels and `SeaglassPalette.HueFromCells` scores it as it
+- **No BlurHash**: `ArtworkSampler` decodes the artwork down to 16x9 pixels and `NixiePalette.HueFromCells` scores it as it
   scores a hash (the default hue until it is read).
-- **Light theme**: `SeaglassPalette.Build(hue, solid, light: true)`: a pale tint (L 0.95), dark text (L 0.22), a deeper accent (L 0.50)
-  with white text; checked at 4.5:1 over a backdrop at least 0.50 bright (7:1 in Solid). `SeaglassTheme` recolours both theme
+- **Light theme**: `NixiePalette.Build(hue, solid, light: true)`: a pale tint (L 0.95), dark text (L 0.22), a deeper accent (L 0.50)
+  with white text; checked at 4.5:1 over a backdrop at least 0.50 bright (7:1 in Solid). `NixieTheme` recolours both theme
   dictionaries. `NIXIE_THEME=Light|Dark` (or the older `SEAGLASS_THEME`) forces the theme (harness screenshots).
 - **Accessibility**: the grain, the panel highlight and the window's backdrop images are `AccessibilityView` Raw: outside the control
   view Narrator and the harness's scan use. The one image the scan still names is the item page's logo, which is the page heading.
@@ -131,7 +131,7 @@ boxes around every poster title). So:
 
 - **One fixed palette for all chrome**: neutral dark glass (a little chroma, hue 175; pale glass in the light theme) and the accent
   always sea-glass aqua (`#5CCFC1` dark, `#13877B` light; the light accent fill stays `#0F766B` so white text reaches 4.5:1).
-  `SeaglassTheme` applies it once (and for Solid); a title never recolours a panel or a button.
+  `NixieTheme` applies it once (and for Solid); a title never recolours a panel or a button.
 - **The title's hue is a faint tint on the backdrop only** (`TitleTint`, at most 10 %, a clean mid colour at that hue).
 - **The ambient backdrop is a smooth colour field**: the item's BlurHash drawn as a 32x18 picture (a handful of cosine terms: no shapes,
   no faces); with no hash, the artwork decoded 10 px wide. The dim is 78 % (`BackdropCeiling` 0.22).
@@ -155,16 +155,16 @@ too**: `MpvPlayerControls.xaml`'s `PlayerMenuPresenter` (the audio menu) and `Pl
   pages keep 1000 px); a dialog's title wraps.
 - **A window of its own** (MenuFlyout, ToolTip): in-app acrylic has nothing to blur there, and a menu already has Windows' acrylic
   under it (WinUI's default `SystemBackdrop`). So their background is the flat `GlassOverlayBrush`: the palette's container colour at
-  90 % (`SeaglassTheme.OverlayColor`), opaque in Solid (`GlassOverlaySolidBrush`, swapped by `GlassTheme` like the panels).
+  90 % (`NixieTheme.OverlayColor`), opaque in Solid (`GlassOverlaySolidBrush`, swapped by `GlassTheme` like the panels).
 - Keyed styles for other files: `GlassFlyoutPresenterStyle`, `GlassMenuFlyoutPresenterStyle`; a button on a glass panel uses
   `GlassInsetPillButtonStyle` (the flat `GlassInsetFillBrush` with `GlassInsetTextBrush`: ButtonFace with ButtonText in high
   contrast), not a second acrylic.
-- **The accent on artwork** (a progress bar on a poster's dark track, a watched badge) is `SeaglassAccentOnImageBrush`: the
+- **The accent on artwork** (a progress bar on a poster's dark track, a watched badge) is `NixieAccentOnImageBrush`: the
   light aqua in both themes (the light theme's deeper aqua has 1.6:1 on the track over a bright poster). `BaseItemDtoCard`'s and
   `EpisodeRow`'s progress bars use it on a `Black65O` track **as tall as the bar**: WinUI's ProgressBar draws its Background as a
   1 px line (`ProgressBarTrackHeight`), so each bar sets that resource to its own height; without it the bar sits on the poster
   itself, and the light aqua on a bright poster is about 1.6:1. `EpisodeRow`'s watched mark is the same aqua with its check in
-  `SeaglassOnAccentOnImageBrush` (dark in both themes; HighlightText on Highlight in high contrast). Tests:
+  `NixieOnAccentOnImageBrush` (dark in both themes; HighlightText on Highlight in high contrast). Tests:
   `OverlayContrastTests` (`ProgressOnArtwork_*`, `EpisodeWatchedMark_*`). Measured in light-theme screenshots over bright
   posters (#F0F0EA): before, the card's #13877B bar sat on the poster (3.8:1 against it, a 1 px track line) and the episode
   row's #0C5F56 the same way (6.5:1 there, about 2.8:1 on a black poster); now the bar has 4.0:1 on its track and the track
@@ -182,7 +182,7 @@ no thick rims). Then: "be inspired by these colours" (a flat desert-sunset illus
 **Nixie** (the glowing number tube). The theme guide is `docs\reports\Seaglass rename and retro desert theme.md`; the feature
 list with each feature's status is the glass stream's `shots\glass-features.md`.
 
-- **Palette** (`SeaglassPalette`, Glass.xaml's Dark and Light dictionaries, App.xaml's accent ramps). Dark: the glass is a calm
+- **Palette** (`NixiePalette`, Glass.xaml's Dark and Light dictionaries, App.xaml's accent ramps). Dark: the glass is a calm
   deep plum from the sunset's maroon end (OKLCH hue 8, tint L 0.22 C 0.04; deep `#170508`), text a warm white. Light ("noon"):
   pale peach glass (hue 26, L 0.95) with deep maroon text. **Accent**: hot pink `#F96985` with a dark label `#24060F` (6.7:1;
   white on hot pink is 2.8:1 and is never used), crimson `#BC1E47` with white (6.2:1) in light; on artwork the light pink

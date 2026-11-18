@@ -42,7 +42,7 @@
                     HorizontalAlignment="Center"
                     AutomationProperties.HeadingLevel="Level1"
                     Style="{StaticResource GlassPageTitleTextBlockStyle}"
-                    Text="Seaglass" />
+                    Text="Nixie" />
                 <TextBlock
                     HorizontalAlignment="Center"
                     Foreground="{ThemeResource GlassTextSecondaryBrush}"
@@ -181,7 +181,7 @@
                             Width="16"
                             Height="16"
                             AutomationProperties.AccessibilityView="Raw"
-                            Foreground="{ThemeResource SeaglassAccentForegroundBrush}"
+                            Foreground="{ThemeResource NixieAccentForegroundBrush}"
                             IsActive="{x:Bind ViewModel.IsConnecting, Mode=OneWay}"
                             Visibility="{x:Bind ViewModel.IsConnecting, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
                         <TextBlock Text="Next" />

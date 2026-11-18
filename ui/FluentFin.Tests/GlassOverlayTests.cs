@@ -177,7 +177,7 @@ public sealed class GlassOverlayTests
 		Assert.Equal(expected, GlassTheme.ForcedApplicationTheme(value));
 
 	/// <summary>
-	/// The colour menus and tooltips get at run time (SeaglassTheme.OverlayColor replaces the XAML's), with the palette's text on
+	/// The colour menus and tooltips get at run time (NixieTheme.OverlayColor replaces the XAML's), with the palette's text on
 	/// it, over the worst thing straight behind (a tooltip has no blur): white in the dark theme, black in the light one.
 	/// </summary>
 	[Theory]
@@ -187,8 +187,8 @@ public sealed class GlassOverlayTests
 	[InlineData(true, true)]
 	public void Menu_and_tooltip_text_is_readable_on_the_runtime_overlay_colour_over_anything(bool solid, bool light)
 	{
-		var palette = SeaglassPalette.Build(SeaglassPalette.DefaultHue, solid, light);
-		var overlay = SeaglassTheme.OverlayColor(palette);
+		var palette = NixiePalette.Build(NixiePalette.DefaultHue, solid, light);
+		var overlay = NixieTheme.OverlayColor(palette);
 		var behind = light ? new Rgb(0, 0, 0) : new Rgb(255, 255, 255);
 		Assert.True(TextContrast(palette, overlay.A, behind) >= 4.5, $"solid {solid}, light {light}: {TextContrast(palette, overlay.A, behind):0.00}:1");
 		// the check can fail: a see-through overlay (25 %) over the same worst case does
@@ -196,7 +196,7 @@ public sealed class GlassOverlayTests
 	}
 
 	// the lower of the primary and the muted text's contrast on the overlay tint (alpha) composited over 'behind'
-	private static double TextContrast(SeaglassPalette p, byte alpha, Rgb behind)
+	private static double TextContrast(NixiePalette p, byte alpha, Rgb behind)
 	{
 		var a = alpha / 255.0;
 		byte Mix(byte top, byte under) => (byte)Math.Round(top * a + under * (1 - a));
@@ -211,11 +211,11 @@ public sealed class GlassOverlayTests
 	[InlineData(true, true)]
 	public void The_overlay_tint_is_the_container_colour_translucent_outside_Solid_and_opaque_in_it(bool solid, bool light)
 	{
-		var palette = SeaglassPalette.Build(SeaglassPalette.DefaultHue, solid, light);
-		var color = SeaglassTheme.OverlayColor(palette);
+		var palette = NixiePalette.Build(NixiePalette.DefaultHue, solid, light);
+		var color = NixieTheme.OverlayColor(palette);
 		Assert.Equal((palette.ContainerHigh.R, palette.ContainerHigh.G, palette.ContainerHigh.B), (color.R, color.G, color.B));
-		Assert.Equal(solid ? (byte)255 : SeaglassTheme.OverlayAlpha, color.A);
-		Assert.InRange(SeaglassTheme.OverlayAlpha, 0xD9, 0xF2); // readable text over a sharp window behind a tooltip, and still a hint of glass
+		Assert.Equal(solid ? (byte)255 : NixieTheme.OverlayAlpha, color.A);
+		Assert.InRange(NixieTheme.OverlayAlpha, 0xD9, 0xF2); // readable text over a sharp window behind a tooltip, and still a hint of glass
 	}
 }
 

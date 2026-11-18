@@ -186,7 +186,7 @@ public class OverlayContrastTests
 	/// <summary>
 	/// Seaglass 1.1.3: menus and tooltips are windows of their own on the flat GlassOverlayBrush. A tooltip has no blur under
 	/// it at all, so the worst case is the brightest (dark theme) or darkest (light theme) pixel straight behind it, no dim.
-	/// This checks the XAML's colours (what shows before SeaglassTheme runs); the run-time colour, SeaglassTheme.OverlayColor,
+	/// This checks the XAML's colours (what shows before NixieTheme runs); the run-time colour, NixieTheme.OverlayColor,
 	/// is checked in FluentFin.Tests (GlassOverlayTests).
 	/// </summary>
 	[Theory]
@@ -208,7 +208,7 @@ public class OverlayContrastTests
 
 	/// <summary>
 	/// Seaglass 1.1.3: the accent on artwork (a card's progress bar on its Black65O track, a watched badge) keeps 3:1 over the
-	/// brightest and the darkest poster, in both themes. The light theme's SeaglassAccentBrush (#13877B) has 1.6:1 on the
+	/// brightest and the darkest poster, in both themes. The light theme's NixieAccentBrush (#13877B) has 1.6:1 on the
 	/// track over a white poster: that is why artwork gets its own token.
 	/// </summary>
 	[Theory]
@@ -218,7 +218,7 @@ public class OverlayContrastTests
 	{
 		var dictionary = Load("FluentFin/Styles/Glass.xaml").Descendants(Presentation + "ResourceDictionary")
 			.Single(d => (string?)d.Attribute(Xaml + "Key") == theme);
-		var accent = Argb((string)Brush(dictionary, "SeaglassAccentOnImageBrush").Attribute("Color")!);
+		var accent = Argb((string)Brush(dictionary, "NixieAccentOnImageBrush").Attribute("Color")!);
 		foreach (var poster in new[] { new Rgb(255, 255, 255), new Rgb(0, 0, 0) })
 		{
 			var track = Blend(new Rgb(0, 0, 0), 0.65, poster);
@@ -240,7 +240,7 @@ public class OverlayContrastTests
 	{
 		var bar = Load(file).Descendants(Presentation + "ProgressBar").Single();
 
-		Assert.Equal("{ThemeResource SeaglassAccentOnImageBrush}", (string?)bar.Attribute("Foreground"));
+		Assert.Equal("{ThemeResource NixieAccentOnImageBrush}", (string?)bar.Attribute("Foreground"));
 		Assert.Equal("{StaticResource Black65O}", (string?)bar.Attribute("Background"));
 		var height = (string?)bar.Attribute("Height");
 		Assert.NotNull(height);
@@ -254,7 +254,7 @@ public class OverlayContrastTests
 
 	/// <summary>
 	/// Seaglass 1.1.3 integration: an episode row's watched mark is the accent on artwork too, and its check reads on it: dark on the
-	/// light aqua in both themes (the light theme's SeaglassDeepBrush, the check's colour before, is light: 1.6:1 there).
+	/// light aqua in both themes (the light theme's NixieDeepBrush, the check's colour before, is light: 1.6:1 there).
 	/// </summary>
 	[Theory]
 	[InlineData("Dark")]
@@ -263,13 +263,13 @@ public class OverlayContrastTests
 	{
 		var mark = FindByName(Load("FluentFin/Controls/EpisodeRow.xaml"), "WatchedMark");
 		var check = mark.Descendants(Presentation + "FontIcon").Single();
-		Assert.Equal("{ThemeResource SeaglassAccentOnImageBrush}", (string?)mark.Attribute("Background"));
-		Assert.Equal("{ThemeResource SeaglassOnAccentOnImageBrush}", (string?)check.Attribute("Foreground"));
+		Assert.Equal("{ThemeResource NixieAccentOnImageBrush}", (string?)mark.Attribute("Background"));
+		Assert.Equal("{ThemeResource NixieOnAccentOnImageBrush}", (string?)check.Attribute("Foreground"));
 
 		var dictionary = Load("FluentFin/Styles/Glass.xaml").Descendants(Presentation + "ResourceDictionary")
 			.Single(d => (string?)d.Attribute(Xaml + "Key") == theme);
-		var fill = Argb((string)Brush(dictionary, "SeaglassAccentOnImageBrush").Attribute("Color")!);
-		var ink = Argb((string)Brush(dictionary, "SeaglassOnAccentOnImageBrush").Attribute("Color")!);
+		var fill = Argb((string)Brush(dictionary, "NixieAccentOnImageBrush").Attribute("Color")!);
+		var ink = Argb((string)Brush(dictionary, "NixieOnAccentOnImageBrush").Attribute("Color")!);
 		var ratio = Contrast(Blend(ink.Color, ink.Alpha, fill.Color), fill.Color);
 		Assert.True(ratio >= IconContrast, $"{theme}: the watched mark's check has {ratio:F2}:1 on the mark, needs {IconContrast}:1");
 	}
@@ -279,8 +279,8 @@ public class OverlayContrastTests
 	{
 		var dictionary = Load("FluentFin/Styles/Glass.xaml").Descendants(Presentation + "ResourceDictionary")
 			.Single(d => (string?)d.Attribute(Xaml + "Key") == "HighContrast");
-		Assert.Equal("{ThemeResource SystemColorHighlightColor}", (string?)Brush(dictionary, "SeaglassAccentOnImageBrush").Attribute("Color"));
-		Assert.Equal("{ThemeResource SystemColorHighlightTextColor}", (string?)Brush(dictionary, "SeaglassOnAccentOnImageBrush").Attribute("Color"));
+		Assert.Equal("{ThemeResource SystemColorHighlightColor}", (string?)Brush(dictionary, "NixieAccentOnImageBrush").Attribute("Color"));
+		Assert.Equal("{ThemeResource SystemColorHighlightTextColor}", (string?)Brush(dictionary, "NixieOnAccentOnImageBrush").Attribute("Color"));
 	}
 
 	private static XElement Brush(XElement dictionary, string key) =>

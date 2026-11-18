@@ -53,8 +53,8 @@
                         Stretch="UniformToFill" />
                     <!--
                         Seaglass 1.1.3: the progress and the watched mark are the accent on artwork (Glass.xaml,
-                        SeaglassAccentOnImageBrush), as on a card: the bar on a dark track as tall as the bar (WinUI's track is a
-                        1 px line), the mark's check in SeaglassOnAccentOnImageBrush (the light theme's deep colour is light).
+                        NixieAccentOnImageBrush), as on a card: the bar on a dark track as tall as the bar (WinUI's track is a
+                        1 px line), the mark's check in NixieOnAccentOnImageBrush (the light theme's deep colour is light).
                     -->
                     <ProgressBar
                         x:Name="Progress"
@@ -62,7 +62,7 @@
                         MinHeight="4"
                         VerticalAlignment="Bottom"
                         Background="{StaticResource Black65O}"
-                        Foreground="{ThemeResource SeaglassAccentOnImageBrush}"
+                        Foreground="{ThemeResource NixieAccentOnImageBrush}"
                         Maximum="100"
                         Visibility="Collapsed">
                         <ProgressBar.Resources>
@@ -98,12 +98,12 @@
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         AutomationProperties.Name="Watched"
-                        Background="{ThemeResource SeaglassAccentOnImageBrush}"
+                        Background="{ThemeResource NixieAccentOnImageBrush}"
                         CornerRadius="999"
                         Visibility="Collapsed">
                         <FontIcon
                             FontSize="12"
-                            Foreground="{ThemeResource SeaglassOnAccentOnImageBrush}"
+                            Foreground="{ThemeResource NixieOnAccentOnImageBrush}"
                             Glyph="&#xE73E;" />
                     </Border>
                 </Grid>

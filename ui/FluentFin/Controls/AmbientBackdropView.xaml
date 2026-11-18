@@ -15,7 +15,7 @@
         alone. Nothing here is an image file, and nothing here takes input or appears to Narrator.
     -->
     <Grid x:Name="Container">
-        <Rectangle x:Name="BaseFill" Fill="{ThemeResource SeaglassDeepBrush}" />
+        <Rectangle x:Name="BaseFill" Fill="{ThemeResource NixieDeepBrush}" />
 
         <Grid
             x:Name="Scene"

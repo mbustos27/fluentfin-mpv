@@ -182,7 +182,7 @@ public sealed class NixieButtonTests
 	{
 		var theme = light ? "Light" : "Dark";
 		var glass = Hex(glassHex);
-		var fill = light ? new Rgb(0xBC, 0x1E, 0x47) : SeaglassPalette.AccentDark;
+		var fill = light ? new Rgb(0xBC, 0x1E, 0x47) : NixiePalette.AccentDark;
 
 		// primary: the label on the accent, and on the accent with the hover overlay
 		var label = Hex(Colour(theme, "NixiePrimaryForegroundBrush"));

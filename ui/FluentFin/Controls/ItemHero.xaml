@@ -32,7 +32,7 @@
             VerticalAlignment="Top"
             AutomationProperties.AccessibilityView="Raw"
             Stretch="UniformToFill" />
-        <Border Background="{ThemeResource SeaglassDeepBrush}" Opacity="0.35" />
+        <Border Background="{ThemeResource NixieDeepBrush}" Opacity="0.35" />
         <Border Background="{ThemeResource ItemHeroSideScrimBrush}" />
         <Border
             Height="260"

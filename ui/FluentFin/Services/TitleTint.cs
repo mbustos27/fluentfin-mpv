@@ -12,7 +12,7 @@ public static class TitleTint
 	/// <summary>The most the title's colour covers the backdrop.</summary>
 	public const double MaxOpacity = 0.10;
 
-	public static double Hue { get; private set; } = SeaglassPalette.DefaultHue;
+	public static double Hue { get; private set; } = NixiePalette.DefaultHue;
 
 	public static event EventHandler? Changed;
 
@@ -26,18 +26,18 @@ public static class TitleTint
 		var uri = AmbientBackdrop.Current;
 		if (hash is not null)
 		{
-			Set(SeaglassPalette.HueFromBlurHash(hash));
+			Set(NixiePalette.HueFromBlurHash(hash));
 		}
 		else if (uri is not null && _sampledUri != uri)
 		{
 			// no BlurHash: the default hue now, the thumbnail's meanwhile
 			_sampledUri = uri;
-			Set(SeaglassPalette.DefaultHue);
+			Set(NixiePalette.DefaultHue);
 			_ = SampleAsync(uri);
 		}
 		else if (uri is null)
 		{
-			Set(SeaglassPalette.DefaultHue);
+			Set(NixiePalette.DefaultHue);
 		}
 	}
 
@@ -46,7 +46,7 @@ public static class TitleTint
 		var cells = await ArtworkSampler.SampleAsync(uri);
 		if (cells is not null && AmbientBackdrop.Current == uri && AmbientBackdrop.BlurHash is null)
 		{
-			Set(SeaglassPalette.HueFromCells(cells));
+			Set(NixiePalette.HueFromCells(cells));
 		}
 	}
 

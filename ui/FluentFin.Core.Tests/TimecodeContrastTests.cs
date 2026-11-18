@@ -6,7 +6,7 @@ namespace FluentFin.Core.Tests;
 /// <summary>
 /// 1.2.0 (Nixie): the player's time (elapsed, remaining) keeps 4.5:1 over a white frame, with its accent glow at its
 /// brightest: the bottom scrim at the time's row (MpvPlayerControls.xaml's BottomScrim), the glow's full opacity in the
-/// accent (Glass.xaml's dark SeaglassAccentColor) over it, white text. Conservative: the glow under a glyph's edge is
+/// accent (Glass.xaml's dark NixieAccentColor) over it, white text. Conservative: the glow under a glyph's edge is
 /// less than its full opacity. Read from the XAML, as OverlayContrastTests does.
 /// </summary>
 public sealed class TimecodeContrastTests
@@ -69,7 +69,7 @@ public sealed class TimecodeContrastTests
 	{
 		var glass = XDocument.Load(Find("ui", "FluentFin", "Styles", "Glass.xaml"));
 		var dark = glass.Descendants(Presentation + "ResourceDictionary").First(d => (string?)d.Attribute(Xaml + "Key") == "Dark");
-		var color = Argb(dark.Elements(Presentation + "Color").Single(c => (string?)c.Attribute(Xaml + "Key") == "SeaglassAccentColor").Value);
+		var color = Argb(dark.Elements(Presentation + "Color").Single(c => (string?)c.Attribute(Xaml + "Key") == "NixieAccentColor").Value);
 		return (color.R, color.G, color.B);
 	}
 

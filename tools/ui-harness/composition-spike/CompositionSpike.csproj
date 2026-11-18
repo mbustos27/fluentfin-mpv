@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Phase 2a spike (docs/research/player-controls.md): libmpv in this process, rendering in composition mode into a XAML
        SwapChainPanel (or, to compare, into a child window with wid), the shim attached over IPC in the bridge scenario.
-       A WinUI window of its own, never Seaglass.exe. It compiles this repo's (or -p:UiDir=<copy>'s) job launcher, links
+       A WinUI window of its own, never Nixie.exe. It compiles this repo's (or -p:UiDir=<copy>'s) job launcher, links
        the controls host's picture helper, references FluentFin.Core (the backend host) and copies libmpv-2.dll and the DLLs it loads (next to the exe: the spike loads it by name) from
        -p:LibmpvDir (vendor\libmpv\VENDORED.md). Built and run by run.ps1 from a copy under its -Out, never inside ui\. -->
   <PropertyGroup>

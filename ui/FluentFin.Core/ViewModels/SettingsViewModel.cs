@@ -180,7 +180,7 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	/// <summary>fluentfin-mpv: the choices for who draws the player controls (docs/research/player-controls.md).</summary>
 	public static IReadOnlyList<MpvPlayerControlsChoice> PlayerControlsChoices { get; } =
 	[
-		new(MpvPlayerControls.FluentFin, "Seaglass"),
+		new(MpvPlayerControls.FluentFin, AppIdentity.Name),
 		new(MpvPlayerControls.Mpv, "mpv"),
 	];
 
@@ -633,16 +633,16 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		$"Remove {Named(server)}?",
 		server.Users.Count switch
 		{
-			0 => "Seaglass forgets this server. Nothing changes on the server; sign in to add it again.",
-			1 => $"Seaglass forgets this server and the sign-in saved for {server.Users[0].Username}, with its saved home page. Nothing changes on the server; sign in to add it again.",
-			var n => $"Seaglass forgets this server and its {n} saved sign-ins, with their saved home pages. Nothing changes on the server; sign in to add it again.",
+			0 => $"{AppIdentity.Name} forgets this server. Nothing changes on the server; sign in to add it again.",
+			1 => $"{AppIdentity.Name} forgets this server and the sign-in saved for {server.Users[0].Username}, with its saved home page. Nothing changes on the server; sign in to add it again.",
+			var n => $"{AppIdentity.Name} forgets this server and its {n} saved sign-ins, with their saved home pages. Nothing changes on the server; sign in to add it again.",
 		},
 		"Remove");
 
 	/// <summary>What Remove asks for one saved sign-in: the user and the server are named.</summary>
 	public static ConfirmPrompt RemoveUserPrompt(SavedServer server, SavedUser user) => new(
 		$"Remove {user.Username} from {Named(server)}?",
-		$"Seaglass forgets the sign-in saved for {user.Username} on this PC, with its saved home page. The account on the server is not changed.",
+		$"{AppIdentity.Name} forgets the sign-in saved for {user.Username} on this PC, with its saved home page. The account on the server is not changed.",
 		"Remove");
 
 	/// <summary>What "Forget learned intros" asks.</summary>

@@ -9,14 +9,14 @@ namespace FluentFin.Services;
 /// The window's chrome is ONE fixed palette (1.1.4: the desert sunset): calm deep plum glass from the sunset's maroon end (pale
 /// peach glass in the light theme) with a hot-pink accent (crimson in the light theme). The title being shown does not recolour any
 /// panel or button; its hue only tints the ambient backdrop, faintly (<see cref="TitleTint"/>). This applies
-/// <see cref="SeaglassPalette"/> (default hue) to the shared brushes of Glass.xaml, in place, and again when <see cref="GlassMode"/>
+/// <see cref="NixiePalette"/> (default hue) to the shared brushes of Glass.xaml, in place, and again when <see cref="GlassMode"/>
 /// changes (Solid gets the opaque 7:1 ladder). While the window is in the background (<see cref="GlassActivity"/>) the light edge
 /// and the inner glow dim. UI thread only.
 /// </summary>
-public static class SeaglassTheme
+public static class NixieTheme
 {
 	/// <summary>The page backdrop's dim: what the scrim keeps of the artwork (1 - the ceiling the contrast check assumes).</summary>
-	public static double DimAlpha => 1 - SeaglassPalette.BackdropCeiling;
+	public static double DimAlpha => 1 - NixiePalette.BackdropCeiling;
 
 	private static ResourceDictionary? _dark;
 	private static ResourceDictionary? _light;
@@ -84,8 +84,8 @@ public static class SeaglassTheme
 	public static void Refresh()
 	{
 		var solid = GlassMode.Current == GlassModeKind.Solid;
-		Apply(SeaglassPalette.Build(SeaglassPalette.DefaultHue, solid));
-		Apply(SeaglassPalette.Build(SeaglassPalette.DefaultHue, solid, light: true));
+		Apply(NixiePalette.Build(NixiePalette.DefaultHue, solid));
+		Apply(NixiePalette.Build(NixiePalette.DefaultHue, solid, light: true));
 	}
 
 	private static ResourceDictionary? FindTheme(ResourceDictionary resources, string theme)
@@ -113,11 +113,11 @@ public static class SeaglassTheme
 	/// The overlay tint of menus and tooltips (GlassOverlayBrush): the palette's container colour, translucent over the menu's own
 	/// system backdrop, opaque in Solid. In Solid, GlassTheme has put GlassOverlaySolidBrush under that key, and it stays opaque.
 	/// </summary>
-	public static Color OverlayColor(SeaglassPalette p) => C(p.ContainerHigh, p.Solid ? (byte)255 : OverlayAlpha);
+	public static Color OverlayColor(NixiePalette p) => C(p.ContainerHigh, p.Solid ? (byte)255 : OverlayAlpha);
 
 	private static Color C(Rgb c, byte alpha = 255) => Color.FromArgb(alpha, c.R, c.G, c.B);
 
-	private static void Apply(SeaglassPalette p)
+	private static void Apply(NixiePalette p)
 	{
 		if ((p.Light ? _light : _dark) is not { } d)
 		{
@@ -136,10 +136,10 @@ public static class SeaglassTheme
 		Solid("GlassPanelStrongSolidBrush", C(p.ContainerHigh));
 		Solid("GlassOverlaySolidBrush", C(p.ContainerHigh));
 		Solid("GlassOverlayBrush", OverlayColor(p));
-		Solid("SeaglassAccentBrush", C(p.Accent));
-		Solid("SeaglassAccentFillBrush", C(p.AccentFill));
-		Solid("SeaglassAccentForegroundBrush", C(p.OnAccent));
-		Solid("SeaglassDeepBrush", C(p.Background));
+		Solid("NixieAccentBrush", C(p.Accent));
+		Solid("NixieAccentFillBrush", C(p.AccentFill));
+		Solid("NixieAccentForegroundBrush", C(p.OnAccent));
+		Solid("NixieDeepBrush", C(p.Background));
 		Solid("GlassTextPrimaryBrush", C(p.OnSurface));
 		Solid("GlassTextSecondaryBrush", C(p.Muted));
 		Solid("GlassAmbientDimBrush", C(p.Background, (byte)Math.Round(DimAlpha * 255)));

@@ -1,5 +1,5 @@
 # Seaglass GPU and CPU cost of the Home scroll, run with: run-offscreen.ps1 ... -Script home -Then offscreen\then-gpu.ps1
-# (dot-sourced by drive.ps1 after `home`). Samples the harness's own Seaglass.exe (found by its --data-dir, never another copy) with
+# (dot-sourced by drive.ps1 after `home`). Samples the harness's own Nixie.exe (found by its --data-dir, never another copy) with
 # the Windows "GPU Engine" counters (the sum over its engines) and its CPU time while Home scrolls to the bottom and back 8 times.
 # Compare a Full run with -Setting Glass=Solid. The result is written next to the shots as gpu.json and printed.
 $me = Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(Nixie|Seaglass|FluentFin)\.exe$' -and $_.CommandLine -like "*$DataDir*" } | Select-Object -First 1

@@ -5,19 +5,19 @@
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
-        The glass look (docs/design/SEAGLASS.md; 1.1.4: the desert-sunset palette, deep plum glass with a hot-pink accent in the
+        The glass look (docs/design/DESIGN.md; 1.1.4: the desert-sunset palette, deep plum glass with a hot-pink accent in the
         dark theme, pale peach glass with crimson in the light one): the materials, shapes and type that every page uses, so that
         the pages look like one app. Glass (in-app acrylic) is for panels, bars, pills and menus, never for each card in a
         row: every acrylic surface costs GPU time. High contrast: solid system colours, no glass.
     -->
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Dark">
-            <Color x:Key="SeaglassAccentColor">#F96985</Color>
-            <Color x:Key="SeaglassDeepColor">#170508</Color>
-            <SolidColorBrush x:Key="SeaglassAccentBrush" Color="#F96985" />
-            <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="#FF9EB1" />
-            <SolidColorBrush x:Key="SeaglassOnAccentOnImageBrush" Color="#24060F" />
-            <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#170508" />
+            <Color x:Key="NixieAccentColor">#F96985</Color>
+            <Color x:Key="NixieDeepColor">#170508</Color>
+            <SolidColorBrush x:Key="NixieAccentBrush" Color="#F96985" />
+            <SolidColorBrush x:Key="NixieAccentOnImageBrush" Color="#FF9EB1" />
+            <SolidColorBrush x:Key="NixieOnAccentOnImageBrush" Color="#24060F" />
+            <SolidColorBrush x:Key="NixieDeepBrush" Color="#170508" />
             <AcrylicBrush
                 x:Key="GlassPanelBrush"
                 FallbackColor="#F02A1217"
@@ -66,15 +66,15 @@
             <!--  the soft artwork behind the window (AmbientBackdrop) is dimmed by this  -->
             <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="#C7170508" />
             <SolidColorBrush x:Key="GlassSelectedOverlayBrush" Color="#2EFFFFFF" />
-            <SolidColorBrush x:Key="SeaglassAccentFillBrush" Color="#F96985" />
-            <SolidColorBrush x:Key="SeaglassAccentForegroundBrush" Color="#24060F" />
+            <SolidColorBrush x:Key="NixieAccentFillBrush" Color="#F96985" />
+            <SolidColorBrush x:Key="NixieAccentForegroundBrush" Color="#24060F" />
             <!--  what GlassPanelBrush and GlassPanelStrongBrush become in Solid mode (GlassTheme): the same colours, opaque  -->
             <SolidColorBrush x:Key="GlassPanelSolidBrush" Color="#2A1217" />
             <SolidColorBrush x:Key="GlassPanelStrongSolidBrush" Color="#34181D" />
             <!--
                 the overlays in windows of their own (menus, tooltips): a flat strong tint, never in-app acrylic. A menu's window
                 already has Windows' acrylic under it (its system backdrop), so this is the one blur; in Solid it is opaque.
-                SeaglassTheme sets both to the palette's container colour (OverlayColor).
+                NixieTheme sets both to the palette's container colour (OverlayColor).
             -->
             <SolidColorBrush x:Key="GlassOverlayBrush" Color="#E634181D" />
             <SolidColorBrush x:Key="GlassOverlaySolidBrush" Color="#34181D" />
@@ -107,7 +107,7 @@
             <SolidColorBrush x:Key="GlassTabUnderlineBrush" Color="#F96985" />
             <!--  1.2.0, the button system (Nixie button review, section 3): dusk; text on hot pink is dark (6.7:1)  -->
             <Color x:Key="GlassNeonGlowColor">#FF7A50</Color>
-            <StaticResource x:Key="NixiePrimaryFillBrush" ResourceKey="SeaglassAccentFillBrush" />
+            <StaticResource x:Key="NixiePrimaryFillBrush" ResourceKey="NixieAccentFillBrush" />
             <SolidColorBrush x:Key="NixiePrimaryForegroundBrush" Color="#24060F" />
             <SolidColorBrush x:Key="NixiePrimaryHoverOverlayBrush" Color="#24FFFFFF" />
             <SolidColorBrush x:Key="NixiePrimaryHoverForegroundBrush" Color="#24060F" />
@@ -136,19 +136,19 @@
             <StaticResource x:Key="NixieToggleOnFillBrush" ResourceKey="GlassInsetFillBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
-            <Color x:Key="SeaglassAccentColor">#BC1E47</Color>
-            <Color x:Key="SeaglassDeepColor">#FFF6F3</Color>
-            <SolidColorBrush x:Key="SeaglassAccentBrush" Color="#BC1E47" />
+            <Color x:Key="NixieAccentColor">#BC1E47</Color>
+            <Color x:Key="NixieDeepColor">#FFF6F3</Color>
+            <SolidColorBrush x:Key="NixieAccentBrush" Color="#BC1E47" />
             <!--
                 the accent ON ARTWORK (a progress bar on a poster's dark track, a watched badge): the light pink in both themes.
                 The light theme's crimson has 1.2:1 on the track over a bright poster (Black65O over white); this keeps 3.6:1.
                 Used by BaseItemDtoCard's and EpisodeRow's progress bars, whose Black65O track fills the whole bar
                 (ProgressBarTrackHeight: WinUI draws a 1 px track line otherwise, and the bar would sit on the poster itself),
-                and by EpisodeRow's watched mark, whose check takes SeaglassOnAccentOnImageBrush.
+                and by EpisodeRow's watched mark, whose check takes NixieOnAccentOnImageBrush.
             -->
-            <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="#FF9EB1" />
-            <SolidColorBrush x:Key="SeaglassOnAccentOnImageBrush" Color="#24060F" />
-            <SolidColorBrush x:Key="SeaglassDeepBrush" Color="#FFF6F3" />
+            <SolidColorBrush x:Key="NixieAccentOnImageBrush" Color="#FF9EB1" />
+            <SolidColorBrush x:Key="NixieOnAccentOnImageBrush" Color="#24060F" />
+            <SolidColorBrush x:Key="NixieDeepBrush" Color="#FFF6F3" />
             <AcrylicBrush
                 x:Key="GlassPanelBrush"
                 FallbackColor="#F0FCEAE8"
@@ -191,8 +191,8 @@
             <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="#85FFF6F3" />
             <SolidColorBrush x:Key="GlassSelectedOverlayBrush" Color="#1F000000" />
             <!--  light theme: the sunset's crimson, so white text on it reaches 4.5:1 (6.2:1)  -->
-            <SolidColorBrush x:Key="SeaglassAccentFillBrush" Color="#BC1E47" />
-            <SolidColorBrush x:Key="SeaglassAccentForegroundBrush" Color="#FFFFFFFF" />
+            <SolidColorBrush x:Key="NixieAccentFillBrush" Color="#BC1E47" />
+            <SolidColorBrush x:Key="NixieAccentForegroundBrush" Color="#FFFFFFFF" />
             <SolidColorBrush x:Key="GlassPanelSolidBrush" Color="#FCEAE8" />
             <SolidColorBrush x:Key="GlassPanelStrongSolidBrush" Color="#FFF3F1" />
             <SolidColorBrush x:Key="GlassOverlayBrush" Color="#E6FFF3F1" />
@@ -220,7 +220,7 @@
             <SolidColorBrush x:Key="GlassTabUnderlineBrush" Color="#BC1E47" />
             <!--  1.2.0, the button system (Nixie button review, section 3): noon  -->
             <Color x:Key="GlassNeonGlowColor">#BC1E47</Color>
-            <StaticResource x:Key="NixiePrimaryFillBrush" ResourceKey="SeaglassAccentFillBrush" />
+            <StaticResource x:Key="NixiePrimaryFillBrush" ResourceKey="NixieAccentFillBrush" />
             <SolidColorBrush x:Key="NixiePrimaryForegroundBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="NixiePrimaryHoverOverlayBrush" Color="#1FFFFFFF" />
             <SolidColorBrush x:Key="NixiePrimaryHoverForegroundBrush" Color="#FFFFFF" />
@@ -251,12 +251,12 @@
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <!--  1.1.4 (states): the user's contrast colours, not a fixed yellow and black (wrong in a light scheme)  -->
-            <StaticResource x:Key="SeaglassAccentColor" ResourceKey="SystemColorHighlightColor" />
-            <StaticResource x:Key="SeaglassDeepColor" ResourceKey="SystemColorWindowColor" />
-            <SolidColorBrush x:Key="SeaglassAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
-            <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="{ThemeResource SystemColorHighlightColor}" />
-            <SolidColorBrush x:Key="SeaglassOnAccentOnImageBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
-            <SolidColorBrush x:Key="SeaglassDeepBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <StaticResource x:Key="NixieAccentColor" ResourceKey="SystemColorHighlightColor" />
+            <StaticResource x:Key="NixieDeepColor" ResourceKey="SystemColorWindowColor" />
+            <SolidColorBrush x:Key="NixieAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieAccentOnImageBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieOnAccentOnImageBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="NixieDeepBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassPanelBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassPanelStrongBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
@@ -272,8 +272,8 @@
             <SolidColorBrush x:Key="GlassImageScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassAmbientDimBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassSelectedOverlayBrush" Color="{ThemeResource SystemColorHighlightColor}" />
-            <SolidColorBrush x:Key="SeaglassAccentFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
-            <SolidColorBrush x:Key="SeaglassAccentForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="NixieAccentFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieAccentForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="GlassPanelSolidBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassPanelStrongSolidBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassOverlayBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -506,7 +506,7 @@
                             BlurRadius="8"
                             CornerRadius="10"
                             Opacity="{ThemeResource GlassContactShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -536,7 +536,7 @@
                             BlurRadius="6"
                             CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -545,7 +545,7 @@
                             BlurRadius="12"
                             CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -642,7 +642,7 @@
                             BlurRadius="6"
                             CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -651,7 +651,7 @@
                             BlurRadius="12"
                             CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -747,7 +747,7 @@
                             BlurRadius="6"
                             CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -756,7 +756,7 @@
                             BlurRadius="12"
                             CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -851,7 +851,7 @@
                             BlurRadius="6"
                             CornerRadius="22"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -860,7 +860,7 @@
                             BlurRadius="12"
                             CornerRadius="22"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -955,7 +955,7 @@
                             BlurRadius="6"
                             CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -964,7 +964,7 @@
                             BlurRadius="12"
                             CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -1213,7 +1213,7 @@
                                 BlurRadius="10"
                                 CornerRadius="2"
                                 Opacity="{ThemeResource GlassShadowOpacity}"
-                                Color="{ThemeResource SeaglassAccentColor}" />
+                                Color="{ThemeResource NixieAccentColor}" />
                         </ui:Effects.Shadow>
                     </Border>
                     <Border Background="{ThemeResource GlassTabUnderlineBrush}" CornerRadius="1.5" />
@@ -1301,7 +1301,7 @@
                             BlurRadius="6"
                             CornerRadius="22"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
@@ -1310,7 +1310,7 @@
                             BlurRadius="12"
                             CornerRadius="22"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
+                            Color="{ThemeResource NixieAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
                 <Border CornerRadius="{TemplateBinding CornerRadius}">

@@ -10,7 +10,7 @@ public sealed class DuskSceneTests
 	[InlineData(true)]
 	public void The_strip_never_takes_text_on_the_backdrop_under_4_5_to_1(bool light)
 	{
-		var palette = SeaglassPalette.Build(SeaglassPalette.DefaultHue, light: light);
+		var palette = NixiePalette.Build(NixiePalette.DefaultHue, light: light);
 		foreach (var color in DuskScene.StripColors(light))
 		{
 			if (light)
@@ -33,7 +33,7 @@ public sealed class DuskSceneTests
 	[InlineData(true)]
 	public void The_full_scenes_top_band_keeps_the_title_bar_text_readable(bool light)
 	{
-		var palette = SeaglassPalette.Build(SeaglassPalette.DefaultHue, light: light);
+		var palette = NixiePalette.Build(NixiePalette.DefaultHue, light: light);
 		var top = DuskScene.SkyBands(light)[0];
 		Assert.Equal(0, top.From);
 		Assert.True(OkLab.Contrast(palette.OnSurface.Luminance, top.Color.Luminance) >= 4.5);
