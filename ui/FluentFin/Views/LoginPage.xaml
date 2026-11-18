@@ -18,6 +18,19 @@
         keyboard goes back to the password box), never in a dialog; progress on Sign in while the server answers. The
         server's splash image is the ambient backdrop behind the card.
     -->
+    <Grid>
+    <!--
+        Nixie 1.3.0: the layout theme's sign-in backdrop (its SignInBackdropTemplate, given this page's view model) behind the
+        form; without one, or in high contrast, nothing here and the dusk scene behind the window shows (ThemeResources).
+        Decorative: no clicks, no Narrator.
+    -->
+    <ContentPresenter
+        x:Name="ThemeBackdrop"
+        HorizontalContentAlignment="Stretch"
+        VerticalContentAlignment="Stretch"
+        AutomationProperties.AccessibilityView="Raw"
+        IsHitTestVisible="False"
+        Visibility="Collapsed" />
     <ScrollViewer HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
         <ContentControl
             Width="460"
@@ -133,4 +146,5 @@
             </StackPanel>
         </ContentControl>
     </ScrollViewer>
+    </Grid>
 </Page>
