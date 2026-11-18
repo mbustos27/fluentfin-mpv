@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Drive-in: one episode on the SHOWTIMES board: its number in two nixie tubes, its still (the progress under it, a Play
+    mark while pointed at or focused), its title, "52 MIN · 28 MAR 2022", two lines of its story, and at the end NEXT for the
+    one Play starts or the watched mark. One keyboard stop (Enter, a click and Narrator's Invoke play it), the menu key or a
+    right click opens its menu (Episode details, then the item's menu), a ring and a soft glow for the keyboard. Narrator: a
+    list item "S1 E3 Sawdust, 22% watched", "3 of 8" (as the shared episode rows).
+-->
+<UserControl
+    x:Class="FluentFin.Themes.DriveIn.Controls.Showtime"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dc="using:FluentFin.Themes.DriveIn.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    HorizontalContentAlignment="Stretch"
+    IsTabStop="True"
+    RequestedTheme="Dark"
+    UseSystemFocusVisuals="False"
+    mc:Ignorable="d">
+
+    <Grid>
+        <!--  the keyboard's glow, under the row (never colour alone: the ring is over it)  -->
+        <Border
+            x:Name="FocusGlow"
+            Margin="-5"
+            AutomationProperties.AccessibilityView="Raw"
+            BorderBrush="{ThemeResource DriveInFocusGlowBrush}"
+            BorderThickness="5"
+            CornerRadius="12"
+            IsHitTestVisible="False"
+            Opacity="0.55"
+            Visibility="Collapsed" />
+        <Border
+            x:Name="Body"
+            Padding="16,12,16,12"
+            Background="Transparent"
+            CornerRadius="8"
+            PointerCanceled="Body_PointerExited"
+            PointerEntered="Body_PointerEntered"
+            PointerExited="Body_PointerExited"
+            Tapped="Body_Tapped">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <dc:NixieReadout
+                    x:Name="Number"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    DigitHeight="40" />
+                <Grid
+                    x:Name="ThumbFrame"
+                    Grid.Column="1"
+                    Width="168"
+                    Height="94"
+                    VerticalAlignment="Center"
+                    Background="#2A1018"
+                    CornerRadius="6">
+                    <Image
+                        x:Name="Thumb"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Stretch="UniformToFill" />
+                    <Border
+                        AutomationProperties.AccessibilityView="Raw"
+                        BorderBrush="#26FFFFFF"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        IsHitTestVisible="False" />
+                    <Border
+                        x:Name="PlayMark"
+                        Width="40"
+                        Height="40"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Background="#99140610"
+                        BorderBrush="#59FFFFFF"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        IsHitTestVisible="False"
+                        Opacity="0">
+                        <FontIcon FontSize="16" Glyph="&#xE768;" />
+                    </Border>
+                    <Grid
+                        x:Name="ProgressTrack"
+                        Height="4"
+                        Margin="8,0,8,7"
+                        VerticalAlignment="Bottom"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Background="#A6000000"
+                        CornerRadius="2"
+                        Visibility="Collapsed">
+                        <Border
+                            x:Name="ProgressFill"
+                            HorizontalAlignment="Left"
+                            Background="{ThemeResource NixieAccentOnImageBrush}"
+                            CornerRadius="2" />
+                    </Grid>
+                </Grid>
+                <StackPanel
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    Spacing="4">
+                    <TextBlock
+                        x:Name="TitleText"
+                        FontSize="18"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource DriveInBoardTextBrush}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
+                    <TextBlock
+                        x:Name="FactsText"
+                        CharacterSpacing="40"
+                        FontSize="13"
+                        Foreground="{ThemeResource DriveInBoardTextSecondaryBrush}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        x:Name="OverviewText"
+                        Margin="0,4,0,0"
+                        FontSize="14"
+                        Foreground="{ThemeResource DriveInBoardTextSecondaryBrush}"
+                        LineHeight="20"
+                        MaxLines="2"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+                <Grid
+                    Grid.Column="3"
+                    MinWidth="44"
+                    VerticalAlignment="Center">
+                    <TextBlock
+                        x:Name="NextText"
+                        AutomationProperties.AccessibilityView="Raw"
+                        CharacterSpacing="140"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource DriveInKickerBrush}"
+                        Text="NEXT"
+                        Visibility="Collapsed" />
+                    <Border
+                        x:Name="WatchedMark"
+                        Width="26"
+                        Height="26"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.AccessibilityView="Raw"
+                        BorderBrush="{ThemeResource DriveInKickerBrush}"
+                        BorderThickness="1.5"
+                        CornerRadius="6"
+                        Visibility="Collapsed">
+                        <FontIcon
+                            FontSize="12"
+                            Foreground="{ThemeResource DriveInKickerBrush}"
+                            Glyph="&#xE73E;" />
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+        <Border
+            x:Name="HoverOverlay"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="{ThemeResource DriveInEntryHoverBrush}"
+            CornerRadius="8"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
+        <Border
+            x:Name="FocusRing"
+            AutomationProperties.AccessibilityView="Raw"
+            BorderBrush="{ThemeResource DriveInFocusRingBrush}"
+            BorderThickness="2"
+            CornerRadius="8"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
+    </Grid>
+</UserControl>
