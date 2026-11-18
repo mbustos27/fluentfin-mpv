@@ -17,7 +17,6 @@
     xmlns:services="using:FluentFin.Core.Contracts.Services"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
-    Margin="{StaticResource MediumLeftRightMargin}"
     KeyboardAcceleratorPlacementMode="Hidden"
     mc:Ignorable="d">
 
@@ -41,6 +40,11 @@
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator Key="N" Invoked="NextUpInvoked" />
         <KeyboardAccelerator Key="C" Invoked="ContinueInvoked" />
+        <!--  Seaglass 1.1.4: Undo of a removal from Continue Watching, while its notice shows  -->
+        <KeyboardAccelerator
+            Key="Z"
+            Invoked="UndoInvoked"
+            Modifiers="Control" />
     </Page.KeyboardAccelerators>
 
     <!--
@@ -49,12 +53,28 @@
         they stand in for (the cards draw at 90 % of their slot), until their own request answers. A section that
         turns out empty goes away. Upstream showed one shimmer page until every request had answered.
     -->
-    <ScrollViewer Margin="0,36" VerticalScrollBarVisibility="Hidden">
-        <StackPanel Spacing="20">
-            <!--  fluentfin-mpv: Home failed, is empty, or only partly loaded (docs/research/ux-review.md H6); no ring of its own, the placeholders are the loading state  -->
-            <lc:LoadStateView Margin="12,0" State="{x:Bind ViewModel.State}" />
+    <Grid>
+    <!--
+        1.1.4: the hero runs edge to edge (the page has no margin, the scroller none on top, the hero none): it sits right
+        under the title bar, and under the top bar the account stream adds. The rest keeps the old inset (RowsMargin: 24 a
+        side, and 36 on top while there is no hero).
+    -->
+    <ScrollViewer
+        x:Name="PageScroller"
+        Margin="0,0,0,36"
+        VerticalScrollBarVisibility="Hidden">
+        <StackPanel>
+            <!--
+                fluentfin-mpv: Home failed, is empty, or only partly loaded (docs/research/ux-review.md H6); no ring of its own,
+                the placeholders are the loading state. No height when it has nothing to say: the hero is the first thing then.
+            -->
+            <lc:LoadStateView Margin="36,0" State="{x:Bind ViewModel.State}" />
             <!--  Seaglass: the hero; absent until the rows have something with a backdrop to show, so the first paint is the rows' placeholders  -->
-            <lc:HomeHero Margin="12,0" Slides="{x:Bind ViewModel.Hero, Mode=OneWay}" />
+            <lc:HomeHero Margin="0" Slides="{x:Bind ViewModel.Hero, Mode=OneWay}" />
+            <StackPanel
+                x:Name="RowsPanel"
+                Margin="{x:Bind local:HomePage.RowsMargin(ViewModel.Hero), Mode=OneWay}"
+                Spacing="20">
             <StackPanel Padding="12,0,0,0" Visibility="{x:Bind local:HomePage.SectionVisibility(ViewModel.IsContinueLoading, ViewModel.HasContinueItems), Mode=OneWay}">
 
                 <!--  the loading state: the title and placeholder cards; the row below takes over (same slots, so nothing moves)  -->
@@ -74,6 +94,7 @@
                 </StackPanel>
 
                 <lc:ShelfRow
+                    x:Name="ContinueRow"
                     Header="Continue Watching"
                     HasSeeAll="True"
                     ItemsSource="{x:Bind ViewModel.ContinueItems, Mode=OneWay}"
@@ -112,6 +133,7 @@
                 </StackPanel>
 
                 <lc:ShelfRow
+                    x:Name="NextUpRow"
                     Header="Next Up"
                     HasSeeAll="True"
                     ItemsSource="{x:Bind ViewModel.NextUpItems, Mode=OneWay}"
@@ -138,7 +160,7 @@
                         <Grid>
                             <lc:ShelfRow
                                 Margin="{StaticResource SmallLeftRightMargin}"
-                                Header="{x:Bind Library.Name, Converter={StaticResource StringFormatConverter}, ConverterParameter='{}Recently Added In {0}'}"
+                                Header="{x:Bind Title}"
                                 HasSeeAll="True"
                                 ItemsSource="{x:Bind Items, Mode=OneWay}"
                                 SeeAll="RecentSeeAll"
@@ -163,7 +185,7 @@
                                 Spacing="16"
                                 Visibility="{x:Bind IsLoading, Mode=OneWay}">
                                 <Grid Height="40">
-                                    <TextBlock Style="{StaticResource GlassSectionTitleTextBlockStyle}" Text="{x:Bind Library.Name, Converter={StaticResource StringFormatConverter}, ConverterParameter='{}Recently Added In {0}'}" />
+                                    <TextBlock Style="{StaticResource GlassSectionTitleTextBlockStyle}" Text="{x:Bind Title}" />
                                 </Grid>
                                 <StackPanel Orientation="Horizontal">
                                     <ctkl:Shimmer Style="{StaticResource PosterCardPlaceholder}" />
@@ -187,7 +209,72 @@
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
+            </StackPanel>
 
         </StackPanel>
     </ScrollViewer>
+
+    <!--
+        Seaglass 1.1.4: the notice after a removal from Continue Watching: what happened and Undo (Ctrl+Z), for about ten
+        seconds (held while the pointer or the keyboard is on it). Chrome over the content, so glass: the overlay recipe
+        (GlassPanelStrongBrush, the light edge, 12 px corners). Narrator hears it as it appears (a polite live region).
+        Shown, worded and its Undo shown from code (HomePage.ShowNotice): an x:Bind function of the notice was not called
+        again when the notice went (null), and an empty panel with its Undo stayed on screen.
+    -->
+    <Border
+        x:Name="NoticePanel"
+        MinHeight="56"
+        MaxWidth="640"
+        Margin="24,0,24,32"
+        Padding="20,8,8,8"
+        HorizontalAlignment="Center"
+        VerticalAlignment="Bottom"
+        Background="{ThemeResource GlassPanelStrongBrush}"
+        BorderBrush="{ThemeResource GlassStrokeBrush}"
+        BorderThickness="1"
+        CornerRadius="{StaticResource GlassOverlayCornerRadius}"
+        PointerEntered="Notice_PointerEntered"
+        PointerExited="Notice_PointerExited"
+        GotFocus="Notice_GotFocus"
+        LostFocus="Notice_LostFocus"
+        Visibility="Collapsed">
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="NoticeText"
+                VerticalAlignment="Center"
+                AutomationProperties.LiveSetting="Polite"
+                Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                TextWrapping="Wrap" />
+            <Button
+                x:Name="UndoButton"
+                Grid.Column="1"
+                MinHeight="40"
+                Padding="18,0"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Undo"
+                Click="UndoButton_Click"
+                Content="Undo"
+                Style="{StaticResource GlassInsetPillButtonStyle}"
+                ToolTipService.ToolTip="Undo (Ctrl+Z)"
+                Visibility="Collapsed" />
+            <Button
+                x:Name="NoticeCloseButton"
+                Grid.Column="2"
+                Width="40"
+                Height="40"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Close the notice"
+                Click="NoticeCloseButton_Click"
+                Style="{StaticResource GlassIconButtonStyle}"
+                ToolTipService.ToolTip="Close">
+                <FontIcon FontSize="12" Glyph="&#xE711;" />
+            </Button>
+        </Grid>
+    </Border>
+    </Grid>
 </Page>

@@ -29,7 +29,8 @@ letter accelerators on Home had no explicit text-input rule.
 | Ctrl+, | Settings |
 | ? (Shift+/), F1 | The shortcut sheet |
 
-Home page only: N next up, C continue watching (they ignore typing too).
+Home page only: N goes to the Next Up row, C to the Continue Watching row (they ignore typing too). Since 1.1.4 they no
+longer play anything: a single letter must never start a video (Enter on the focused card does).
 
 ## Player keys (only while the video is shown)
 

@@ -52,19 +52,23 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task ResetProgress(Guid id)
+	// Seaglass 1.1.4: was a POST of the whole item to /Items/{id} (the administrators' metadata editor, which never reads the
+	// user data: nothing was reset, and anyone else got a 403); now the user-data endpoint, as SetResumePosition
+	public async Task ResetProgress(Guid id) => await SetResumePosition(id, 0);
+
+	public async Task<bool> SetResumePosition(Guid id, long positionTicks)
 	{
-		var dto = await GetItem(id);
-		if (dto is null or { UserData: null})
+		try
 		{
-			return;
+			await _jellyfinApiClient.UserItems[id].UserData.PostAsync(new UpdateUserItemDataDto { PlaybackPositionTicks = Math.Max(0, positionTicks) },
+				x => x.QueryParameters.UserId = UserId);
+			return true;
 		}
-
-		dto.UserData.PlayedPercentage = 0;
-		dto.UserData.PlaybackPositionTicks = 0;
-		dto.UserData.LastPlayedDate = null;
-
-		await _jellyfinApiClient.Items[id].PostAsync(dto);
+		catch (Exception ex)
+		{
+			logger.LogError(ex, @"Unhandled exception");
+			return false;
+		}
 	}
 
 	public async Task<BaseItemDtoQueryResult?> GetSimilarItems(BaseItemDto dto)

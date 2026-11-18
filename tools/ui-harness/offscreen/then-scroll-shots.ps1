@@ -22,8 +22,10 @@ Open-Library $fixture.movie.library
 Settle 2000
 Both-Widths 'library' $null
 Both-Widths 'library-focus' {
-    $filterBtn = Find-Ui -Name 'Filter' -Type 'Button'
-    if ($filterBtn) { [void][OffscreenUi]::SetFocus($filterBtn); Settle 300; Key 0x09; Settle 600; Key 0x28; Settle 900; Key 0x27; Settle 900 }
+    # 1.1.4: "Filter, none on"; the A-Z jump is the next stop, then the grid
+    $filterBtn = Find-Ui -Name 'Filter' -Type 'Button' -Contains
+    $tabs = if (Find-Ui -Name 'Jump to a letter' -Type 'List') { 2 } else { 1 }
+    if ($filterBtn) { [void][OffscreenUi]::SetFocus($filterBtn); Settle 300; for ($k = 0; $k -lt $tabs; $k++) { Key 0x09; Settle 600 }; Key 0x28; Settle 900; Key 0x27; Settle 900 }
 }
 
 # a season page: the episode rows, then a row with keyboard focus (Tab from the season pill, Down)

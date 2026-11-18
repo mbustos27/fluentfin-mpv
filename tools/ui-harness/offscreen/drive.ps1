@@ -344,7 +344,7 @@ function Step-Home {
     if ($script:page -ne 'home') { Open-Nav 'Home'; $script:page = 'home' }
     $since = $script:signedInAt
     $views = @($fixture.views)
-    $headers = @('Continue Watching', 'Next Up') + @($views | ForEach-Object { "Recently Added In $_" })
+    $headers = @('Continue Watching', 'Next Up') + @($views | ForEach-Object { "New in $_" })   # Seaglass 1.1.4: the rows are "New in <library>"
     # progressive home: the headers show at once with placeholder cards (Shimmer) that turn into cards
     # (BaseItemDtoCard) as each row's request answers; loaded = cards and no placeholder left
     $firstCards = $null; $loaded = $null; $last = $null

@@ -51,6 +51,51 @@ public sealed class JellyfinClientMpvRequestTests : IAsyncLifetime
 		});
 	}
 
+	// Seaglass 1.1.4: Remove from Continue Watching (and Reset Watch Progress, which used to post the whole item to the
+	// administrators' metadata endpoint, /Items/{id}, where the user data is never read) set the resume point through the
+	// user-data endpoint any user may call, and nothing else of the user's data
+	[Theory]
+	[InlineData(0L)]
+	[InlineData(4_200_000_000L)]
+	public async Task SetResumePosition_PostsTheResumePointAlone_ToTheUserDataEndpoint(long ticks)
+	{
+		var item = Guid.NewGuid();
+		_server.Respond($"/UserItems/{item}/UserData", 200, """{"PlaybackPositionTicks":0,"Played":false}""");
+		await LogIn();
+		var before = _server.ApiRequests.Count;
+
+		Assert.True(await _client.SetResumePosition(item, ticks));
+
+		var request = Assert.Single(_server.ApiRequests.Skip(before));
+		Assert.Equal("POST", request.Method);
+		Assert.Equal($"/UserItems/{item}/UserData", request.Path, ignoreCase: true);
+		Assert.Equal(UserId, Guid.Parse(request.Query["userId"]!));
+		using var body = System.Text.Json.JsonDocument.Parse(request.Body);
+		Assert.Equal(ticks, body.RootElement.GetProperty("PlaybackPositionTicks").GetInt64());
+		Assert.Equal(["PlaybackPositionTicks"], body.RootElement.EnumerateObject().Where(p => p.Value.ValueKind != System.Text.Json.JsonValueKind.Null).Select(p => p.Name));
+	}
+
+	[Fact]
+	public async Task ResetProgress_IsTheSameUserDataRequest_NotTheMetadataEditor()
+	{
+		var item = Guid.NewGuid();
+		_server.Respond($"/UserItems/{item}/UserData", 200, """{"PlaybackPositionTicks":0}""");
+		await LogIn();
+		var before = _server.ApiRequests.Count;
+
+		await _client.ResetProgress(item);
+
+		var request = Assert.Single(_server.ApiRequests.Skip(before));
+		Assert.Equal(("POST", $"/UserItems/{item}/UserData".ToLowerInvariant()), (request.Method, request.Path.ToLowerInvariant()));
+	}
+
+	[Fact]
+	public async Task SetResumePosition_TheServerRefusing_IsFalse()
+	{
+		await LogIn();
+		Assert.False(await _client.SetResumePosition(Guid.NewGuid(), 0)); // 404
+	}
+
 	[Fact]
 	public async Task SeriesEpisodes_IsOneRequest_WithTheUserAndUserData_AndNoImagesOrFields()
 	{
@@ -199,7 +244,14 @@ internal sealed class FakeJellyfin : IDisposable
 			}
 
 			var url = context.Request.Url!;
-			_requests.Enqueue(new FakeRequest(context.Request.HttpMethod, url.AbsolutePath, url.ToString(), System.Web.HttpUtility.ParseQueryString(url.Query),
+			var sent = "";
+			if (context.Request.HasEntityBody)
+			{
+				using var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8);
+				sent = await reader.ReadToEndAsync();
+			}
+
+			_requests.Enqueue(new FakeRequest(context.Request.HttpMethod, url.AbsolutePath, url.ToString(), System.Web.HttpUtility.ParseQueryString(url.Query), sent,
 				context.Request.Headers["Authorization"] ?? context.Request.Headers["X-Emby-Authorization"], context.Request.UserAgent));
 			var (status, body) = _responses.TryGetValue(url.AbsolutePath, out var response) ? response : (404, "");
 			try
@@ -236,8 +288,8 @@ internal sealed class FakeJellyfin : IDisposable
 	}
 }
 
-/// <summary>A request the fake server saw; <see cref="Authorization"/> and <see cref="UserAgent"/> are the client's headers (Nixie: the client name).</summary>
-internal sealed record FakeRequest(string Method, string Path, string Url, System.Collections.Specialized.NameValueCollection Query, string? Authorization = null, string? UserAgent = null);
+/// <summary>A request the fake server saw: <see cref="Body"/> what was sent; <see cref="Authorization"/> and <see cref="UserAgent"/> are the client's headers (Nixie: the client name).</summary>
+internal sealed record FakeRequest(string Method, string Path, string Url, System.Collections.Specialized.NameValueCollection Query, string Body = "", string? Authorization = null, string? UserAgent = null);
 
 internal sealed class CoreListLogger<T> : ILogger<T>
 {

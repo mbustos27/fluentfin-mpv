@@ -12,9 +12,240 @@ public sealed partial class HomePage : Page
 {
 	public HomeViewModel ViewModel { get; } = App.GetService<HomeViewModel>();
 
+	// Seaglass 1.1.4: the notice after a removal from Continue Watching stays as NoticeTiming says (at most 30 s, held or not)
+	private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _noticeTimer;
+	private bool _noticePointer;
+	private bool _noticeFocus;
+	private long _noticeShownAt;
+
+	private TimeSpan NoticeShownFor => System.Diagnostics.Stopwatch.GetElapsedTime(_noticeShownAt);
+
 	public HomePage()
 	{
 		InitializeComponent();
+		ShowNotice(ViewModel.Notice);
+
+		_noticeTimer = DispatcherQueue.CreateTimer();
+		_noticeTimer.IsRepeating = false;
+		_noticeTimer.Tick += (_, _) =>
+		{
+			if (ViewModel.Notice is not { } notice)
+			{
+				return;
+			}
+
+			var held = _noticePointer || _noticeFocus;
+			if (NoticeTiming.Closes(NoticeShownFor, held))
+			{
+				ViewModel.DismissNotice(notice);
+			}
+			else
+			{
+				StartNoticeTimer(held, afterHold: false);
+			}
+		};
+		ViewModel.PropertyChanged += (_, e) =>
+		{
+			if (e.PropertyName == nameof(HomeViewModel.Notice))
+			{
+				OnNoticeChanged();
+			}
+		};
+		Unloaded += (_, _) => _noticeTimer.Stop();
+		Loaded += (_, _) => RestorePlace();
+	}
+
+	// ---- Seaglass 1.1.4 (interaction audit, item 5): Back to Home puts the user where they were ------------------------
+
+	private HomePlace? _restore;
+
+	protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+	{
+		_restore = e.NavigationMode is Microsoft.UI.Xaml.Navigation.NavigationMode.Back or Microsoft.UI.Xaml.Navigation.NavigationMode.Forward
+			? HomePlace.Recall(ViewModel.JellyfinClient.UserId)
+			: null;
+		base.OnNavigatedTo(e);
+	}
+
+	/// <summary>Leaving Home: how far down it was and the card the user was on (focused or clicked), for Back.</summary>
+	protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+	{
+		var row = FluentFin.Controls.ShelfRow.LastUsed is { } used && IsMine(used) ? used : null;
+		var item = row?.LastItem as BaseItemViewModel;
+		HomePlace.Remember(ViewModel.JellyfinClient.UserId, new HomePlace(PageScroller.VerticalOffset, item is null ? null : row!.Header, item?.Id));
+		base.OnNavigatedFrom(e);
+	}
+
+	private bool IsMine(Microsoft.UI.Xaml.DependencyObject element)
+	{
+		for (var node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, this))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// Back: once the rows are there (the saved page shows at once; else when they load, at most a few seconds), the page goes
+	/// back to how far down it was and the card that was left gets the focus (not the title bar, where it used to land).
+	/// </summary>
+	private void RestorePlace()
+	{
+		if (_restore is not { } place)
+		{
+			return;
+		}
+
+		_restore = null;
+		var started = System.Diagnostics.Stopwatch.GetTimestamp();
+		var timer = DispatcherQueue.CreateTimer();
+		timer.Interval = TimeSpan.FromMilliseconds(50);
+		timer.Tick += (t, _) =>
+		{
+			var waited = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+			if (XamlRoot is null)
+			{
+				t.Stop();
+				return;
+			}
+
+			if (PageScroller.ScrollableHeight < place.Offset - 1 && ViewModel.IsLoading && waited < TimeSpan.FromSeconds(4))
+			{
+				return; // the rows are not all there yet
+			}
+
+			t.Stop();
+			PageScroller.ChangeView(null, Math.Min(place.Offset, PageScroller.ScrollableHeight), null, disableAnimation: true);
+			PageScroller.UpdateLayout();
+			if (place.Row is { } header && place.ItemId is { } id)
+			{
+				FluentFin.Controls.ShelfRow.Shown.FirstOrDefault(r => r.Header == header && IsMine(r))?
+					.FocusItem(x => x is BaseItemViewModel vm && vm.Id == id, Microsoft.UI.Xaml.FocusState.Programmatic);
+			}
+		};
+		timer.Start();
+	}
+
+	/// <summary>1.1.4: the rows' inset under an edge-to-edge hero: 24 a side, and 36 on top while there is no hero (as before).</summary>
+	public static Microsoft.UI.Xaml.Thickness RowsMargin(IReadOnlyList<HeroSlide>? hero) => new(24, hero is { Count: > 0 } ? 20 : 36, 24, 0);
+
+	public static Microsoft.UI.Xaml.Visibility NoticeVisibility(HomeNotice? notice) =>
+		notice is null ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+
+	public static Microsoft.UI.Xaml.Visibility UndoVisibility(HomeNotice? notice) =>
+		notice?.CanUndo == true ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+	private void OnNoticeChanged()
+	{
+		_noticeTimer.Stop();
+		ShowNotice(ViewModel.Notice);
+		if (ViewModel.Notice is null)
+		{
+			return;
+		}
+
+		_noticeShownAt = System.Diagnostics.Stopwatch.GetTimestamp();
+		StartNoticeTimer(_noticePointer || _noticeFocus, afterHold: false);
+		// the card that had the focus left with the row's last card: the keyboard goes on to the next row, not to the notice
+		// (the review, item 1: on the notice it held it, and its Undo, for good)
+		DispatcherQueue.TryEnqueue(() =>
+		{
+			if (XamlRoot is not null && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) is null && ViewModel.Notice?.CanUndo == true)
+			{
+				_ = NextUpRow.FocusRow() || FluentFin.Controls.ShelfRow.Shown.Where(IsMine).Any(r => r.FocusRow());
+			}
+		});
+	}
+
+	private void StartNoticeTimer(bool held, bool afterHold)
+	{
+		_noticeTimer.Stop();
+		_noticeTimer.Interval = NoticeTiming.Remaining(NoticeShownFor, held, afterHold);
+		_noticeTimer.Start();
+	}
+
+	/// <summary>The notice as the view model has it: shown with its words and its Undo, or gone (null).</summary>
+	private void ShowNotice(HomeNotice? notice)
+	{
+		NoticeText.Text = notice?.Message ?? "";
+		UndoButton.Visibility = UndoVisibility(notice);
+		NoticePanel.Visibility = NoticeVisibility(notice);
+	}
+
+	private void HoldNotice(bool pointer, bool focus)
+	{
+		_noticePointer = pointer;
+		_noticeFocus = focus;
+		if (ViewModel.Notice is not null)
+		{
+			// held: the timer runs on to the hard limit; let go: 5 s more (never past the hard limit)
+			StartNoticeTimer(pointer || focus, afterHold: !(pointer || focus));
+		}
+	}
+
+	private void Notice_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e) => HoldNotice(true, _noticeFocus);
+
+	private void Notice_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e) => HoldNotice(false, _noticeFocus);
+
+	private void Notice_GotFocus(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => HoldNotice(_noticePointer, true);
+
+	private void Notice_LostFocus(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => HoldNotice(_noticePointer, false);
+
+	private async void UndoButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => await Undo();
+
+	/// <summary>
+	/// Undo: the card goes back (at once, before the server answers), and the keyboard goes with it when it was on the notice,
+	/// which goes: it would be left nowhere.
+	/// </summary>
+	private async Task Undo()
+	{
+		var item = ViewModel.Notice?.Removal?.Item;
+		var focused = XamlRoot is null ? null : Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as Microsoft.UI.Xaml.DependencyObject;
+		var fromNotice = focused is not null && IsInside(focused, NoticePanel);
+		var undo = ViewModel.UndoRemoval();
+		if (item is not null && fromNotice)
+		{
+			ContinueRow.UpdateLayout();
+			ContinueRow.FocusItem(x => ReferenceEquals(x, item), Microsoft.UI.Xaml.FocusState.Keyboard);
+		}
+
+		await undo;
+	}
+
+	private static bool IsInside(Microsoft.UI.Xaml.DependencyObject element, Microsoft.UI.Xaml.DependencyObject ancestor)
+	{
+		for (var node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, ancestor))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private void NoticeCloseButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+	{
+		if (ViewModel.Notice is { } notice)
+		{
+			ViewModel.DismissNotice(notice);
+		}
+	}
+
+	private async void UndoInvoked(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args)
+	{
+		if (ViewModel.Notice?.CanUndo != true || FluentFin.Services.TextInput.IsTextInput(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot)))
+		{
+			return; // typing: Ctrl+Z is the text box's
+		}
+
+		args.Handled = true;
+		await Undo();
 	}
 
 	// fluentfin-mpv: a section is on screen while it loads (placeholder cards) and afterwards only if it has items
@@ -31,8 +262,8 @@ public sealed partial class HomePage : Page
 			return; // typing: N and C are letters then
 		}
 
-		args.Handled = true;
-		ViewModel.NextUpCommand.Execute(null);
+		// Seaglass 1.1.4: to the row, never playing (a single letter must not start a video)
+		args.Handled = NextUpRow.FocusRow();
     }
 
 	private void ContinueInvoked(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args)
@@ -42,8 +273,7 @@ public sealed partial class HomePage : Page
 			return;
 		}
 
-		args.Handled = true;
-		ViewModel.ContinueCommand.Execute(null);
+		args.Handled = ContinueRow.FocusRow();
     }
 
 	// Seaglass scrolling: "See all" on a row. Recently Added opens its library; Continue Watching and Next Up, which have no

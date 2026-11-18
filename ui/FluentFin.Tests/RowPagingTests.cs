@@ -110,6 +110,24 @@ public sealed class RowPagingTests
 		Assert.Equal("See all Next Up", RowPaging.SeeAllName("Next Up"));
 		Assert.Equal("Scroll left", RowPaging.ArrowName("", false));
 	}
+
+	// Seaglass 1.1.4: a card leaves the row (Remove from Continue Watching): the keyboard stays in the row
+	[Theory]
+	[InlineData(2, 2, 5, 2)] // the focused card left: the one that took its place
+	[InlineData(4, 4, 4, 3)] // the last one left: the new last one
+	[InlineData(3, 1, 4, 2)] // one before it left: the same card, one place earlier
+	[InlineData(1, 3, 4, 1)] // one after it left: where it was
+	[InlineData(0, 0, 0, -1)] // none left
+	public void AfterACardLeaves_TheFocusStaysInTheRow(int focused, int removed, int count, int expected) =>
+		Assert.Equal(expected, RowPaging.FocusAfterRemoval(focused, removed, count));
+
+	// Seaglass 1.1.4 (layout audit, item 2): quiet at rest, never hidden (hover-only arrows fail mouse users)
+	[Theory]
+	[InlineData(false, false, 0.5)]
+	[InlineData(true, false, 1.0)]
+	[InlineData(false, true, 1.0)]
+	public void TheArrows_AreQuietUntilThePointerOrTheKeyboardIsInTheRow(bool pointer, bool focus, double opacity) =>
+		Assert.Equal(opacity, RowPaging.ArrowOpacity(pointer, focus));
 }
 
 public sealed class HeroDotsTests
@@ -129,4 +147,90 @@ public sealed class HeroDotsTests
 
 	[Fact]
 	public void OtherKeys_AreNotTheDots() => Assert.Null(HeroDots.KeyTarget(Windows.System.VirtualKey.Up, 1, 5));
+}
+
+/// <summary>
+/// 1.1.4 (layout audit, item 22; the states stream's Narrator pass): an empty or failed library shows no Sort, direction,
+/// Filter, count or A-Z (and there is no pager: the grid scrolls on).
+/// </summary>
+public sealed class LibraryBarTests
+{
+	[Theory]
+	[InlineData(FluentFin.Core.ViewModels.LoadStatus.Loading, Microsoft.UI.Xaml.Visibility.Visible)]
+	[InlineData(FluentFin.Core.ViewModels.LoadStatus.Loaded, Microsoft.UI.Xaml.Visibility.Visible)]
+	[InlineData(FluentFin.Core.ViewModels.LoadStatus.Empty, Microsoft.UI.Xaml.Visibility.Collapsed)]
+	[InlineData(FluentFin.Core.ViewModels.LoadStatus.Failed, Microsoft.UI.Xaml.Visibility.Collapsed)]
+	public void TheBar_GoesOnAnEmptyOrFailedLibrary(FluentFin.Core.ViewModels.LoadStatus status, Microsoft.UI.Xaml.Visibility expected)
+	{
+		Assert.Equal(expected, FluentFin.Views.LibraryPage.BarVisibility(status));
+		Assert.Equal(expected, FluentFin.Views.LibraryPage.LettersVisibility([new("A", 0), new("B", 5)], status));
+	}
+
+	[Fact]
+	public void OneLetter_IsNoJump() =>
+		Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, FluentFin.Views.LibraryPage.LettersVisibility([new("A", 0)], FluentFin.Core.ViewModels.LoadStatus.Loaded));
+}
+
+/// <summary>1.1.4 (the items stream's request): Home's hero runs edge to edge; the rows keep their inset.</summary>
+public sealed class HomeInsetTests
+{
+	[Fact]
+	public void TheRows_Keep24ASide_And36OnTop_Or20UnderTheHero()
+	{
+		var slide = new FluentFin.Core.ViewModels.HeroSlide(new Jellyfin.Sdk.Generated.Models.BaseItemDto(), "T", "", "", false, Guid.NewGuid(), "tag", null, null);
+
+		Assert.Equal(new Microsoft.UI.Xaml.Thickness(24, 36, 24, 0), FluentFin.Views.HomePage.RowsMargin([]));
+		Assert.Equal(new Microsoft.UI.Xaml.Thickness(24, 36, 24, 0), FluentFin.Views.HomePage.RowsMargin(null));
+		Assert.Equal(new Microsoft.UI.Xaml.Thickness(24, 20, 24, 0), FluentFin.Views.HomePage.RowsMargin([slide]));
+	}
+}
+
+/// <summary>The review, item 7: the focus hold after Back or a jump gives way to anything the user does.</summary>
+public sealed class FocusHoldTests
+{
+	[Fact]
+	public void TheHold_FocusesAgainUntilACardHasIt()
+	{
+		var hold = new FluentFin.Controls.FocusHold();
+
+		Assert.True(hold.Tick(-1));  // the title bar took it: again
+		Assert.False(hold.Tick(62)); // on the card: done
+		Assert.True(hold.Done);
+		Assert.False(hold.Tick(-1));
+	}
+
+	[Fact]
+	public void TheHold_EndsOnAnyUserInput()
+	{
+		var hold = new FluentFin.Controls.FocusHold();
+		Assert.True(hold.Tick(-1));
+
+		hold.UserInput(); // a click in the search box
+
+		Assert.False(hold.Tick(-1));
+		Assert.True(hold.Done);
+	}
+
+	[Fact]
+	public void TheHold_GivesUpAfterItsTicks()
+	{
+		var hold = new FluentFin.Controls.FocusHold(maxTicks: 3);
+
+		Assert.Equal([true, true, true, false], Enumerable.Range(0, 4).Select(_ => hold.Tick(-1)));
+	}
+
+	[Fact]
+	public void CardGrid_EndsTheHold_OnAClickAKeyOrTheWheel()
+	{
+		var dir = AppContext.BaseDirectory;
+		while (!File.Exists(Path.Combine(dir, "FluentFin.sln")))
+		{
+			dir = Path.GetDirectoryName(dir)!;
+		}
+
+		var code = File.ReadAllText(Path.Combine(dir, "FluentFin", "Controls", "CardGrid.cs"));
+		Assert.Contains("content.AddHandler(UIElement.PointerPressedEvent, pointer, true);", code);
+		Assert.Contains("content.AddHandler(UIElement.KeyDownEvent, key, true);", code);
+		Assert.Contains("else if (hold.Tick(IndexOf(", code);
+	}
 }

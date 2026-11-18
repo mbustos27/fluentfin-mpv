@@ -140,6 +140,27 @@ internal static class RowPaging
 		return 0;
 	}
 
+	/// <summary>
+	/// Seaglass 1.1.4: where the focus goes when a card leaves the row (now <paramref name="count"/> cards): the focused one left,
+	/// the card that took its place (the next), or the new last one; another one left, the focused card where it is now.
+	/// </summary>
+	public static int FocusAfterRemoval(int focused, int removed, int count)
+	{
+		if (count <= 0)
+		{
+			return -1;
+		}
+
+		var index = focused > removed ? focused - 1 : focused;
+		return Math.Clamp(index, 0, count - 1);
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4 (layout audit, item 2): a row's arrows are quiet (half strength, still there: hover-only arrows fail mouse
+	/// users) until the pointer is over the row or the keyboard is in it.
+	/// </summary>
+	public static double ArrowOpacity(bool pointerOver, bool focusInside) => pointerOver || focusInside ? 1.0 : 0.5;
+
 	/// <summary>The accessible name of a row's header arrow ("Scroll Recently Added left").</summary>
 	public static string ArrowName(string header, bool forward) =>
 		string.IsNullOrWhiteSpace(header) ? (forward ? "Scroll right" : "Scroll left") : $"Scroll {header} {(forward ? "right" : "left")}";
@@ -175,5 +196,37 @@ internal static class RowScroll
 		}
 
 		return null;
+	}
+}
+
+/// <summary>
+/// 1.1.4: the hold after Back to a grid or an A-Z jump (CardGrid.FocusAndHold): the card is focused again on each tick until
+/// a card has the focus, for at most <paramref name="maxTicks"/> ticks, and never after the user did anything (the review,
+/// item 7: a click in the search box right after Back was pulled back to the card).
+/// </summary>
+internal sealed class FocusHold(int maxTicks = 10)
+{
+	private int _ticks;
+
+	public bool Done { get; private set; }
+
+	/// <summary>A click, a key or the wheel: the hold ends.</summary>
+	public void UserInput() => Done = true;
+
+	/// <summary>A tick with the focus on card <paramref name="focusedIndex"/> (-1: not on a card of the grid): true to focus the card again.</summary>
+	public bool Tick(int focusedIndex)
+	{
+		if (Done)
+		{
+			return false;
+		}
+
+		if (focusedIndex >= 0 || ++_ticks > maxTicks)
+		{
+			Done = true; // on the card, the user moved on in the grid, or the time is up
+			return false;
+		}
+
+		return true;
 	}
 }

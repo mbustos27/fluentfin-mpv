@@ -11,7 +11,7 @@ function Wheel-At([int]$X, [int]$Y, [int]$Delta, [bool]$Horizontal) {
 }
 [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
 Start-Sleep -Milliseconds 800
-$names = 'Continue Watching', 'Next Up', 'Recently Added'
+$names = 'Continue Watching', 'Next Up', 'New in Movies'
 for ($i = 0; $i -lt 3; $i++) {
     # the i-th row by its place on screen; re-read after every move: the page scrolls
     $rows = Rows-Now

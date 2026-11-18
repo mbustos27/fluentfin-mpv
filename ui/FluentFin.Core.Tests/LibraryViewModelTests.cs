@@ -10,8 +10,9 @@ public sealed class LibraryViewModelTests
 	static LibraryViewModelTests() => ReactiveUI.Builder.RxAppBuilder.CreateReactiveUIBuilder().BuildApp();
 
 	[Fact]
-	public async Task ChangingSort_ShowsCorrectlyOrderedPages()
+	public async Task ChangingSort_OrdersTheWholeLibrary()
 	{
+		// Seaglass 1.1.4 (layout audit, item 6): one continuously scrolling grid of every title, no pages of 100
 		var random = new Random(1);
 		var dtos = Enumerable.Range(0, 250)
 			.Select(i => new BaseItemDto { Id = Guid.NewGuid(), Name = $"Item {i:D3}", CommunityRating = random.Next(0, 4) })
@@ -21,17 +22,13 @@ public sealed class LibraryViewModelTests
 		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = dtos });
 		var vm = new LibraryViewModel(client.Object);
 		await vm.OnNavigatedTo(new BaseItemDto());
+		Assert.Equal(250, vm.Items.Count);
 
-		vm.SelectedPage = 2;
 		vm.UpdateSortBy(ItemSortBy.CommunityRating);
-		AssertPage(vm, dtos, 0);
-
-		vm.SelectedPage = 1;
-		AssertPage(vm, dtos, 1);
+		AssertOrder(vm, dtos);
 
 		vm.UpdateSortOrder(SortOrder.Descending);
-		AssertPage(vm, dtos, 0, descending: true);
-		Assert.Equal(3, vm.NumberOfPages);
+		AssertOrder(vm, dtos, descending: true);
 	}
 
 	[Fact]
@@ -47,32 +44,27 @@ public sealed class LibraryViewModelTests
 	}
 
 	[Fact]
-	public async Task EachPage_SaysWhereItsCardsAreInTheWholeLibrary()
+	public async Task TheCount_IsEveryTitle_AsFiltered()
 	{
-		// Seaglass scrolling: Narrator's "n of m" for a card is its place in the library, not on the page
-		var dtos = Enumerable.Range(0, 250).Select(i => new BaseItemDto { Id = Guid.NewGuid(), Name = $"Item {i:D3}" }).ToList();
+		// Seaglass scrolling: Narrator's "n of m" for a card is its place in the library
+		var dtos = Enumerable.Range(0, 250).Select(i => new BaseItemDto { Id = Guid.NewGuid(), Name = $"Item {i:D3}", Genres = i % 2 == 0 ? ["Drama"] : [] }).ToList();
 		var client = new Mock<IJellyfinClient>();
 		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = dtos });
 		var vm = new LibraryViewModel(client.Object);
 		await vm.OnNavigatedTo(new BaseItemDto());
 
-		Assert.Equal((250, 0), (vm.TotalCount, vm.FirstIndex));
+		Assert.Equal((250, 250), (vm.TotalCount, vm.Items.Count));
 
-		vm.SelectedPage = 2;
-		Assert.Equal((250, 200), (vm.TotalCount, vm.FirstIndex));
-		Assert.Equal(50, vm.Items.Count);
-
-		vm.UpdateSortBy(ItemSortBy.CommunityRating); // back to the first page
-		Assert.Equal((250, 0), (vm.TotalCount, vm.FirstIndex));
+		vm.Filter.Genres.Add("Drama");
+		Assert.Equal((125, 125), (vm.TotalCount, vm.Items.Count));
 	}
 
-	private static void AssertPage(LibraryViewModel vm, List<BaseItemDto> dtos, int page, bool descending = false)
+	private static void AssertOrder(LibraryViewModel vm, List<BaseItemDto> dtos, bool descending = false)
 	{
 		var sorted = descending
 			? dtos.OrderByDescending(x => x.CommunityRating).ThenBy(x => x.Name)
 			: dtos.OrderBy(x => x.CommunityRating).ThenBy(x => x.Name);
 
-		Assert.Equal(page, vm.SelectedPage);
-		Assert.Equal(sorted.Skip(page * 100).Take(100).Select(x => x.Name), vm.Items.Select(x => x.Name));
+		Assert.Equal(sorted.Select(x => x.Name), vm.Items.Select(x => x.Name));
 	}
 }

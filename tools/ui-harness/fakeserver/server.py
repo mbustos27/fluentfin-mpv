@@ -774,6 +774,8 @@ class Server:
                             item = lib.set_played(item["Id"], bool(body["Played"])) or item
                         if "IsFavorite" in body and body["IsFavorite"] is not None:
                             item = lib.set_favorite(item["Id"], bool(body["IsFavorite"])) or item
+                        if "PlaybackPositionTicks" in body and body["PlaybackPositionTicks"] is not None:
+                            item = lib.set_position(item["Id"], body["PlaybackPositionTicks"]) or item
                         outer.push_user_data(self.uid, [item])
                     return self._json(200, lib.user_data(item))
                 if low.startswith("/user_usage_stats/"):

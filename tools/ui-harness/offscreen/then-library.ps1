@@ -1,5 +1,5 @@
 # Seaglass scrolling, the Library grid (the report's acceptance tests 1, 4 and 5 for a grid): run with
-# -Script library -Then offscreen\then-library.ps1 (on the Movies library: 320 movies, 100 to a page).
+# -Script library -Then offscreen\then-library.ps1 (on the Movies library: 320 movies, one grid since 1.1.4).
 # One Tab stop into the grid, arrows in both directions, Home/End, PageUp/PageDown, Up out of the first line, the grid's
 # last-focused card coming back on Tab, the focused card never under the title bar or past the grid's edge, Narrator's
 # "n of m" and the list's name, and the wheel over the grid and over the rest of the page. Keys are posted to FluentFin's
@@ -28,14 +28,23 @@ function Card-Inside($f, $g) { $f -and $g -and $f.Y -ge $g.Rect[1] - 1 -and ($f.
 function Describe($f) { if ($f) { "{0} [{1} {2}] {3} of {4} at {5:0},{6:0}" -f $f.Name, $f.Type, $f.Class, $f.Pos, $f.Size, $f.X, $f.Y } else { 'no focus' } }
 
 $total = 320
-$filter = Wait-Ui -Name 'Filter' -Type 'Button' -Seconds 10
+# Seaglass 1.1.4: the Filter button says how many filters are on ("Filter, none on"), and the A-Z jump sits between the bar
+# and the grid (one Tab stop): one Tab into the grid is from it, not from Filter. $beforeGrid is that stop.
+$filter = Wait-Ui -Name 'Filter' -Type 'Button' -Contains -Seconds 10
 Check 'library: the Filter button is there' ([bool]$filter)
-[void][OffscreenUi]::SetFocus($filter); Start-Sleep -Milliseconds 400
+$azList = Find-Ui -Name 'Jump to a letter' -Type 'List'
+$beforeGrid = $filter
+if ($azList) {
+    $azCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+    $azFirst = $azList.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $azCond)
+    if ($azFirst) { $beforeGrid = $azFirst }
+}
+[void][OffscreenUi]::SetFocus($beforeGrid); Start-Sleep -Milliseconds 400
 
 # --- Tab into the grid: one stop, the first card in view, its place for Narrator
 Press 0x09
 $f = Info
-Check 'library: Tab from Filter goes into the grid (a card)' ($f -and $f.Class -eq 'BaseItemDtoCard') (Describe $f)
+Check 'library: Tab from the stop before the grid (the A-Z jump, else Filter) goes into the grid (a card)' ($f -and $f.Class -eq 'BaseItemDtoCard') (Describe $f)
 Check 'library: ... onto the first card' ($f -and $f.Pos -eq 1) (Describe $f)
 Check 'library: Narrator: a card says its place in the whole library ("1 of 320")' ($f -and $f.Pos -eq 1 -and $f.Size -eq $total) (Describe $f)
 Check 'library: Narrator: the grid is a list named after the library' ($f -and $f.ListType -eq 'List' -and $f.ListName -eq $fixture.movie.library) ("$($f.ListType) '$($f.ListName)'")
@@ -45,7 +54,7 @@ $leaving = Info
 Check 'library: the next Tab leaves the grid (one stop for 100 cards)' ($leaving -and $leaving.Class -ne 'BaseItemDtoCard') (Describe $leaving)
 
 # --- arrows in two directions
-[void][OffscreenUi]::SetFocus($filter); Start-Sleep -Milliseconds 300
+[void][OffscreenUi]::SetFocus($beforeGrid); Start-Sleep -Milliseconds 300
 Press 0x09
 $first = Info
 Press 0x27   # Right
@@ -72,7 +81,8 @@ Check 'library: Right at the end of a line goes to the next line''s first card' 
 # --- Home/End, PageDown/PageUp, the focused card always in view
 Press 0x23 1500  # End
 $end = Info; $g = Grid-State
-Check 'library: End goes to the last card of the page' ($end -and $end.Pos -eq 100) (Describe $end)
+# Seaglass 1.1.4: one continuously scrolling grid (no pages of 100): End is the library's last card
+Check 'library: End goes to the last card of the library' ($end -and $end.Pos -eq $total) (Describe $end)
 Check 'library: ... scrolled fully into view (not under the title bar, not past the grid''s edge)' (Card-Inside $end $g) ("card {0:0}..{1:0}, grid {2:0}..{3:0}" -f $end.Y, ($end.Y + $end.H), $g.Rect[1], ($g.Rect[1] + $g.Rect[3]))
 Shot 'library-3-end'
 Press 0x24 1500  # Home
@@ -100,21 +110,21 @@ Shot 'library-5-walked-down'
 Press 0x24 1500
 Press 0x26 700
 $up = Info
-Check 'library: Up from the first line leaves the grid upward (Sort/Filter)' ($up -and $up.Type -eq 'Button' -and $up.Class -ne 'BaseItemDtoCard') (Describe $up)
+Check 'library: Up from the first line leaves the grid upward (the A-Z jump, Sort/Filter)' ($up -and $up.Type -eq 'Button' -and $up.Class -ne 'BaseItemDtoCard') (Describe $up)
 
 # --- the grid remembers its last card: into the grid, to a card, out to Filter, Tab back in
-[void][OffscreenUi]::SetFocus($filter); Start-Sleep -Milliseconds 300
+[void][OffscreenUi]::SetFocus($beforeGrid); Start-Sleep -Milliseconds 300
 Press 0x09
 Press 0x28 900; Press 0x28 900; Press 0x27
 $mem = Info
-[void][OffscreenUi]::SetFocus($filter); Start-Sleep -Milliseconds 500
+[void][OffscreenUi]::SetFocus($beforeGrid); Start-Sleep -Milliseconds 500
 Press 0x09 900
 $back = Info
 Check 'library: Tab back into the grid lands on its last-focused card (not the first)' ($mem -and $back -and $back.Pos -eq $mem.Pos -and $mem.Pos -gt 1) ("$(Describe $mem) / $(Describe $back)")
 Shot 'library-6-remembered'
 
 # --- the wheel: over the grid, and over the page outside it (the sort bar, the pager)
-[void][OffscreenUi]::SetFocus($filter); Start-Sleep -Milliseconds 300
+[void][OffscreenUi]::SetFocus($beforeGrid); Start-Sleep -Milliseconds 300
 Press 0x09; Press 0x24 1500
 $g0 = Grid-State
 $gx = [int]($g0.Rect[0] + $g0.Rect[2] / 2); $gy = [int]($g0.Rect[1] + $g0.Rect[3] / 2)
@@ -147,7 +157,7 @@ function Burst([int[]]$Vks) {
         [void][OffscreenUi]::PostMessage($target, 0x0101, [IntPtr][long]$vk, [IntPtr]([long](1 -bor ($sc -shl 16) -bor (1 -shl 30)) -bor 0x80000000L))
     }
 }
-[void][OffscreenUi]::SetFocus($filter); Start-Sleep -Milliseconds 300
+[void][OffscreenUi]::SetFocus($beforeGrid); Start-Sleep -Milliseconds 300
 Press 0x09 900
 Burst @(0x23, 0x24)   # End, Home
 Start-Sleep -Milliseconds 1500

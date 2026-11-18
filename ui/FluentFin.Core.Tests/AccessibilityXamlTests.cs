@@ -238,10 +238,13 @@ public class AccessibilityXamlTests
 		});
 	}
 
+	// Seaglass 1.1.4: the Library's Sort and Filter show the sort in use and the filters on, and their names say it with more
+	// words ("Sort: Name, ascending", "Filter, 2 on"): the view model's (LibraryBrowseTests)
 	[Theory]
-	[InlineData("FluentFin/Views/SelectServerPage.xaml", "Find servers", "Next")]
-	[InlineData("FluentFin/Views/LibraryPage.xaml", "Sort", "Filter")]
-	public void ButtonsShowingAnIconAndAText_AreNamedAfterTheText(string page, string first, string second)
+	[InlineData("FluentFin/Views/SelectServerPage.xaml", "Find servers", "Find servers", "Next", "Next")]
+	[InlineData("FluentFin/Views/LibraryPage.xaml", "{x:Bind ViewModel.SortButtonName, Mode=OneWay}", "{x:Bind ViewModel.SortName, Mode=OneWay}",
+		"{x:Bind ViewModel.FilterButtonName, Mode=OneWay}", "{x:Bind ViewModel.FilterText, Mode=OneWay}")]
+	public void ButtonsShowingAnIconAndAText_AreNamedAfterTheText(string page, string firstName, string firstText, string secondName, string secondText)
 	{
 		// visual-check (UIA scan): a TextBlock inside a panel does not name its button, so Narrator read "button"
 		var named = Load(page).Descendants().Where(e => e.Name.Namespace == Presentation && ButtonTypes.Contains(e.Name.LocalName))
@@ -249,7 +252,7 @@ public class AccessibilityXamlTests
 			.Select(b => (Name: (string?)b.Attribute("AutomationProperties.Name"), Text: ContentElements(b).Where(e => e.Name.LocalName == "TextBlock").Select(t => (string?)t.Attribute("Text")).First()))
 			.ToList();
 
-		Assert.Equal(new (string?, string?)[] { (first, first), (second, second) }, named);
+		Assert.Equal(new (string?, string?)[] { (firstName, firstText), (secondName, secondText) }, named);
 	}
 
 	[Theory]

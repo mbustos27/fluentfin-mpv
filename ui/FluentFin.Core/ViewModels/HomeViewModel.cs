@@ -13,12 +13,33 @@ using ReactiveUI;
 
 namespace FluentFin.Core.ViewModels;
 
+/// <param name="localSettings">Seaglass 1.1.4: where Continue Watching's "hide after N days" is kept (none: nothing hidden).</param>
+/// <param name="time">Seaglass 1.1.4: the clock that says how long ago an item was played (the system's by default).</param>
 public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 								   IObservable<IOutboundWebSocketMessage> webSocketMessages,
 								   GlobalCommands commands,
-								   HomeCache homeCache) : ObservableObject, INavigationAware
+								   HomeCache homeCache,
+								   ILocalSettingsService? localSettings = null,
+								   TimeProvider? time = null) : ObservableObject, INavigationAware, IContinueWatchingRow
 {
 	private readonly CompositeDisposable _disposable = [];
+	private readonly TimeProvider _time = time ?? TimeProvider.System;
+
+	// Seaglass 1.1.4: the server's last answers for Continue Watching and Next Up, less what was taken out here: the rows
+	// show them less what is hidden (Continue Watching: items not played for the chosen number of days; Next Up: what
+	// Continue Watching shows), and the saved page keeps them whole, so a change of the setting shows at once
+	private IReadOnlyList<BaseItemDto> _continueAnswer = [];
+	private IReadOnlyList<BaseItemDto> _nextUpAnswer = [];
+
+	// Seaglass 1.1.4: an item put back by an Undo before the server's message about its removal came: that message (position
+	// 0), arriving after the Undo, is the state before and is not applied, so it cannot take the card out again. Only that
+	// one message, and only for OwnResumePointFor (a server whose websocket is not connected never sends it); anything else
+	// the server says about the item is applied at once, a "played" above all (the review, item 3: a merged "mark as
+	// watched" was ignored for 30 s).
+	private readonly Dictionary<Guid, (long Ticks, long SetAt)> _ownResumePoints = [];
+	internal static readonly TimeSpan OwnResumePointFor = TimeSpan.FromSeconds(30);
+
+	private bool _shown;
 
 
 	[ObservableProperty]
@@ -49,15 +70,17 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	public ObservableCollection<NamedQueryResult> RecentItems { get; } = [];
 
 	/// <summary>
-	/// Seaglass: the hero's slides (<see cref="HeroSlides.Pick"/>): Continue Watching, then the latest items. Replaced as a
-	/// whole, and only when what the hero would show has changed, so a refresh that changes nothing redraws nothing.
+	/// Seaglass: the hero's slides (<see cref="HeroSlides.Pick"/>): since 1.1.4 the latest items not yet watched, then Next
+	/// Up, never what Continue Watching shows. Replaced as a whole, and only when what the hero would show has changed, so a
+	/// refresh that changes nothing redraws nothing.
 	/// </summary>
 	[ObservableProperty]
 	public partial IReadOnlyList<HeroSlide> Hero { get; set; } = [];
 
 	private void RefreshHero()
 	{
-		var slides = HeroSlides.Pick(ContinueItems.Select(x => x.Dto), RecentItems.Where(r => !r.IsLoading).Select(r => (IReadOnlyList<BaseItemDto>)[.. r.Items.Select(i => i.Dto)]));
+		var slides = HeroSlides.Pick(ContinueItems.Select(x => x.Dto), RecentItems.Where(r => !r.IsLoading).Select(r => (IReadOnlyList<BaseItemDto>)[.. r.Items.Select(i => i.Dto)]),
+			NextUpItems.Select(x => x.Dto));
 		if (!Hero.SequenceEqual(slides, HeroSlideComparer.Instance))
 		{
 			Hero = slides;
@@ -93,12 +116,14 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 	public Task OnNavigatedFrom()
 	{
+		_shown = false;
 		_disposable.Dispose();
 		return Task.CompletedTask;
 	}
 
 	public async Task OnNavigatedTo(object parameter)
 	{
+		_shown = true;
 		// fluentfin-mpv: listen from the start, since rows can be used (mark watched...) while others still load
 		ListenToUserDataChanges();
 
@@ -185,9 +210,9 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	private HomeSnapshot? Snapshot()
 	{
 		var rows = RecentItems.Where(x => !x.IsLoading && x.Items.Count > 0).Select(x => new HomeSnapshotRow(x.Library, [.. x.Items.Select(i => i.Dto)])).ToList();
-		return ContinueItems.Count + NextUpItems.Count + rows.Count == 0
+		return _continueAnswer.Count + _nextUpAnswer.Count + rows.Count == 0
 			? null
-			: new HomeSnapshot([.. ContinueItems.Select(x => x.Dto)], [.. NextUpItems.Select(x => x.Dto)], rows, [.. _emptyLibraries]);
+			: new HomeSnapshot([.. _continueAnswer], [.. _nextUpAnswer], rows, [.. _emptyLibraries]);
 	}
 
 	// fluentfin-mpv: an answer that matches what the page shows (a cached page that has not changed) keeps its cards,
@@ -215,19 +240,59 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		a?.Played == b?.Played && a?.IsFavorite == b?.IsFavorite && a?.PlaybackPositionTicks == b?.PlaybackPositionTicks &&
 		a?.PlayedPercentage == b?.PlayedPercentage && a?.UnplayedItemCount == b?.UnplayedItemCount;
 
+	/// <summary>
+	/// Seaglass 1.1.4: Continue Watching hides items not played for this many days (0: never, the default; 30, 60 or 90). On
+	/// this PC only: nothing changes on the server. A change shows in the row at once. Settings' card is
+	/// <see cref="ContinueWatchingSettingViewModel"/>, over the same setting.
+	/// </summary>
+	public int HideContinueWatchingAfterDays
+	{
+		get => ContinueWatchingRules.ReadHideAfterDays(localSettings);
+		set
+		{
+			if (localSettings is null || ContinueWatchingRules.HideAfterDaysChoices.Contains(value) is false || value == HideContinueWatchingAfterDays)
+			{
+				return;
+			}
+
+			ContinueWatchingRules.SaveHideAfterDays(localSettings, value);
+			OnPropertyChanged();
+			SetContinueItems(_continueAnswer);
+		}
+	}
+
 	// the section's flag follows its list through OnContinueItemsChanged / OnNextUpItemsChanged
 	private void SetContinueItems(IReadOnlyList<BaseItemDto> items)
 	{
-		if (!KeepCards(ContinueItems, items))
+		_continueAnswer = items;
+		var visible = ContinueWatchingRules.Visible(items, _time.GetUtcNow(), HideContinueWatchingAfterDays);
+		// Seaglass 1.1.4: the row's item records, before their cards are made: a card's menu asks whose row it is in
+		foreach (var dto in visible)
 		{
-			ContinueItems = [.. items.Select(BaseItemViewModel.FromDto)];
+			ContinueWatchingRows.Register(dto, this);
+		}
+
+		if (!KeepCards(ContinueItems, visible))
+		{
+			ContinueItems = [.. visible.Select(BaseItemViewModel.FromDto)];
 		}
 		HasContinueItems = ContinueItems.Count > 0;
+		ShowNextUp();
 		RefreshHero();
 	}
 
 	private void SetNextUpItems(IReadOnlyList<BaseItemDto> items)
 	{
+		_nextUpAnswer = items;
+		ShowNextUp();
+		RefreshHero();
+	}
+
+	// Seaglass 1.1.4: Next Up without what Continue Watching shows (a server before Jellyfin 10.9 lists an episode in
+	// progress in both)
+	private void ShowNextUp()
+	{
+		var items = ContinueWatchingRules.NextUpWithout(_nextUpAnswer, ContinueItems.Select(x => x.Dto));
 		if (!KeepCards(NextUpItems, items))
 		{
 			NextUpItems = [.. items.Select(BaseItemViewModel.FromDto)];
@@ -262,7 +327,11 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		RefreshHero();
 	}
 
-	private void OnNextUpItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => HasNextUpItems = NextUpItems.Count > 0;
+	private void OnNextUpItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+	{
+		HasNextUpItems = NextUpItems.Count > 0;
+		RefreshHero();
+	}
 
 	private void ListenToUserDataChanges()
 	{
@@ -416,22 +485,83 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	{
 		foreach (var library in RecentItems)
 		{
-			if (library.Items.FirstOrDefault(x => x.Id == guid) is not BaseItemViewModel { UserData: not null } dto)
+			if (library.Items.FirstOrDefault(x => x.Id == guid) is not { } item)
 			{
 				continue;
 			}
 
-			dto.UserData.IsFavorite = userData.IsFavorite;
-			dto.UserData.Played = userData.Played;
-			dto.UserData.PlayedPercentage = userData.PlayedPercentage;
-			dto.UserData.UnplayedItemCount = userData.UnplayedItemCount;
+			ApplyUserData(item, userData);
 			library.Changes++; // fluentfin-mpv: an answer asked for before this is older than the row
 		}
-		;
+	}
+
+	/// <summary>
+	/// 1.1.4 (the items review): a change the server pushed, into the card's model (its badges, its progress) and into the
+	/// item record the card was made from, which the card's menu, Play and the shared Watched and Favorite toggles read:
+	/// only the model was updated, so after playback marked an item watched its menu still said "Mark as watched" and sent
+	/// the same state again.
+	/// </summary>
+	internal static void ApplyUserData(BaseItemViewModel item, UserItemDataDto changed)
+	{
+		var record = item.Dto.UserData ??= new UserItemDataDto { ItemId = item.Id };
+		record.IsFavorite = changed.IsFavorite;
+		record.Played = changed.Played;
+		record.PlayedPercentage = changed.PlayedPercentage;
+		record.UnplayedItemCount = changed.UnplayedItemCount;
+		record.PlaybackPositionTicks = changed.PlaybackPositionTicks;
+		record.PlayCount = changed.PlayCount ?? record.PlayCount;
+		record.LastPlayedDate = changed.LastPlayedDate ?? record.LastPlayedDate;
+
+		if (item.UserData is not { } model)
+		{
+			item.UserData = UserItemDataViewModel.FromDto(record);
+			return;
+		}
+
+		model.IsFavorite = changed.IsFavorite;
+		model.Played = changed.Played;
+		model.PlayedPercentage = changed.PlayedPercentage;
+		model.UnplayedItemCount = changed.UnplayedItemCount;
+		model.PlaybackPositionTicks = changed.PlaybackPositionTicks;
+		model.PlayCount = record.PlayCount;
+		model.LastPlayedDate = record.LastPlayedDate;
 	}
 
 	private void ProcessContinueWatchingItemChanged(UserItemDataDto userData, Guid guid)
 	{
+		var ticks = userData.PlaybackPositionTicks ?? 0;
+		var played = userData.Played == true;
+
+		// Seaglass 1.1.4 (the review, item 1): an item waiting on its Undo that the server says changed elsewhere (played on
+		// another device, marked watched): the Undo would put the old resume point back over the new one. The Undo goes;
+		// an item with progress again is back in the row, as the server has it.
+		if (Notice?.Removal is { Settled: false } pending && pending.Dto.Id == guid)
+		{
+			if (!played && ticks == 0)
+			{
+				pending.EchoSeen = true; // the removal's own message
+			}
+			else if (played || ticks != pending.PositionTicks)
+			{
+				pending.Settled = true;
+				Notice = null;
+				if (!played)
+				{
+					PutBack(pending);
+				}
+			}
+		}
+
+		// the removal's own message, after an Undo that came first (above): not applied, once
+		if (_ownResumePoints.TryGetValue(guid, out var own))
+		{
+			_ownResumePoints.Remove(guid);
+			if (!played && ticks == 0 && own.Ticks != 0 && _time.GetElapsedTime(own.SetAt) <= OwnResumePointFor)
+			{
+				return;
+			}
+		}
+
 		if (ContinueItems.FirstOrDefault(x => x.Id == guid) is not { } item)
 		{
 			return;
@@ -442,10 +572,11 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			userData.Played == true)
 		{
 			ContinueItems.Remove(item);
+			_continueAnswer = [.. _continueAnswer.Where(x => x.Id != guid)];
 		}
 		else
 		{
-			item.UserData!.PlayedPercentage = userData.PlayedPercentage;
+			ApplyUserData(item, userData);
 		}
 	}
 
@@ -456,6 +587,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			return;
 		}
 
+		ApplyUserData(item, userData);
 		if (userData.Played == true)
 		{
 			_nextUpChanges++; // fluentfin-mpv: this request's answer replaces any asked for before it
@@ -463,27 +595,155 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		}
 	}
 
-	[RelayCommand]
-	private async Task Continue() => await PlayFirstItem(ContinueItems);
+	// ---- Seaglass 1.1.4: Remove from Continue Watching, with an Undo -----------------------------------------------------
 
-	[RelayCommand]
-	private async Task NextUp() => await PlayFirstItem(NextUpItems);
+	/// <summary>The short notice under the rows after a removal (with its Undo), or null.</summary>
+	[ObservableProperty]
+	public partial HomeNotice? Notice { get; set; }
 
-	private Task PlayFirstItem(ObservableCollection<BaseItemViewModel> items)
+	bool IContinueWatchingRow.IsShown => _shown;
+
+	Task IContinueWatchingRow.Remove(BaseItemDto dto) => RemoveFromContinueWatching(dto);
+
+	/// <summary>
+	/// Takes the item out of the row at once and clears its resume point on the server (Jellyfin has no "hide from
+	/// Continue Watching": its list is the items with a resume point, so this is how jellyfin-web's own reset works), with
+	/// an Undo on the notice that puts both back. A server that does not take it gets the card back and a notice saying so.
+	/// </summary>
+	public async Task RemoveFromContinueWatching(BaseItemDto dto)
 	{
-		if (items.Count == 0)
+		if (dto.Id is not { } id || ContinueItems.FirstOrDefault(x => x.Id == id) is not { } item)
 		{
-			return Task.CompletedTask;
+			return;
 		}
 
-		return commands.PlayDto(items.First().Dto);
+		var index = ContinueItems.IndexOf(item);
+		var position = dto.UserData?.PlaybackPositionTicks ?? item.Dto.UserData?.PlaybackPositionTicks ?? 0;
+		var removal = new ContinueRemoval(item, item.Dto, index, position, JellyfinClient.UserId, JellyfinClient.BaseUrl ?? "");
+		_continueChanges++; // an answer asked for before this still has the item
+		ContinueItems.Remove(item);
+		_continueAnswer = [.. _continueAnswer.Where(x => x.Id != id)];
+		ShowNextUp();
+		Notice = new HomeNotice($"Removed {ContinueWatchingRules.NameOf(item.Dto)} from Continue Watching", removal);
+
+		removal.Done = JellyfinClient.SetResumePosition(id, 0);
+		var ok = await removal.Done;
+		_continueChanges++; // nor does an answer asked for while the server took it
+		if (ok)
+		{
+			await SaveShown();
+			return;
+		}
+
+		if (!removal.Settled)
+		{
+			removal.Settled = true;
+			PutBack(removal);
+			Notice = new HomeNotice($"Couldn't remove {ContinueWatchingRules.NameOf(item.Dto)}: {LoadMessages.ServerName()} didn't answer", null);
+		}
 	}
+
+	/// <summary>Undo on the notice: the card back where it was and its resume point back on the server.</summary>
+	[RelayCommand]
+	public async Task UndoRemoval()
+	{
+		if (Notice?.Removal is not { Settled: false } removal)
+		{
+			return;
+		}
+
+		removal.Settled = true;
+		Notice = null;
+		// the review, item 4: the resume point is the user's own data, set as whoever is signed in now
+		if (removal.User != JellyfinClient.UserId || removal.Server != (JellyfinClient.BaseUrl ?? ""))
+		{
+			return;
+		}
+
+		PutBack(removal);
+		if (!await removal.Done)
+		{
+			return; // the server never took the removal: nothing to put back there
+		}
+
+		var id = removal.Dto.Id!.Value;
+		if (!removal.EchoSeen)
+		{
+			_ownResumePoints[id] = (removal.PositionTicks, _time.GetTimestamp());
+		}
+
+		var ok = await JellyfinClient.SetResumePosition(id, removal.PositionTicks);
+		_continueChanges++;
+		if (!ok)
+		{
+			_ownResumePoints.Remove(id);
+			ContinueItems.Remove(removal.Item);
+			_continueAnswer = [.. _continueAnswer.Where(x => x.Id != id)];
+			ShowNextUp();
+			Notice = new HomeNotice($"Couldn't put {ContinueWatchingRules.NameOf(removal.Dto)} back: {LoadMessages.ServerName()} didn't answer", null);
+		}
+
+		await SaveShown();
+	}
+
+	/// <summary>The notice's time is up (or it was closed): it goes, and the removal stays.</summary>
+	public void DismissNotice(HomeNotice notice)
+	{
+		if (ReferenceEquals(Notice, notice))
+		{
+			Notice = null;
+		}
+	}
+
+	private void PutBack(ContinueRemoval removal)
+	{
+		_continueChanges++;
+		if (!ContinueItems.Contains(removal.Item))
+		{
+			ContinueItems.Insert(Math.Min(removal.Index, ContinueItems.Count), removal.Item);
+		}
+
+		if (!_continueAnswer.Any(x => x.Id == removal.Dto.Id))
+		{
+			var answer = _continueAnswer.ToList();
+			// where it was among the items shown: after the one shown before it
+			var before = ContinueItems.IndexOf(removal.Item) is > 0 and var at ? ContinueItems[at - 1].Dto.Id : null;
+			var place = before is null ? 0 : answer.FindIndex(x => x.Id == before) + 1;
+			answer.Insert(Math.Clamp(place, 0, answer.Count), removal.Dto);
+			_continueAnswer = answer;
+		}
+
+		ShowNextUp();
+	}
+
+	// what the page shows now is the saved page (Back to Home shows it at once; without this the removed card came back
+	// until the refresh)
+	private async Task SaveShown()
+	{
+		var serverUrl = JellyfinClient.BaseUrl;
+		var userId = JellyfinClient.UserId;
+		if (Snapshot() is { } shown)
+		{
+			var cached = await homeCache.Get(serverUrl, userId);
+			if (JellyfinClient.BaseUrl == serverUrl && JellyfinClient.UserId == userId)
+			{
+				await homeCache.Save(serverUrl, userId, shown, cached.ChangesSeen);
+			}
+		}
+	}
+
+	// Seaglass 1.1.4 (interaction audit, item 4): N and C no longer play the first Next Up or Continue Watching item (a stray
+	// letter started a film); they take the focus to those rows (HomePage), and Enter plays from there
+	internal GlobalCommands Commands => commands;
 }
 
 // fluentfin-mpv: was a record (Library, Items); a row now exists, showing a placeholder, before its items are in
 public partial class NamedQueryResult(BaseItemDto library) : ObservableObject
 {
 	public BaseItemDto Library { get; } = library;
+
+	/// <summary>Seaglass 1.1.4 (UX review, fix 9): the row's title, "New in Movies" (it was "Recently Added In Movies").</summary>
+	public string Title => HomeRowTitles.NewIn(Library.Name);
 
 	[ObservableProperty]
 	public partial ObservableCollection<BaseItemViewModel> Items { get; set; } = [];
@@ -493,4 +753,11 @@ public partial class NamedQueryResult(BaseItemDto library) : ObservableObject
 
 	/// <summary>Watch-state changes Home applied to this row's cards (an answer asked for before the latest is dropped).</summary>
 	internal int Changes { get; set; }
+}
+
+/// <summary>Seaglass 1.1.4: the names of Home's rows.</summary>
+public static class HomeRowTitles
+{
+	/// <summary>A library's row of its latest items: "New in Movies"; "New" for a library with no name.</summary>
+	public static string NewIn(string? library) => string.IsNullOrWhiteSpace(library) ? "New" : $"New in {library.Trim()}";
 }

@@ -338,6 +338,17 @@ class ServerTests(unittest.TestCase):
         self.assertEqual([], self.get("/Environment/DirectoryContents?path=/media/movies/A"))
         self.assertEqual(401, self.request("/Environment/DirectoryContents?path=/")[0])
 
+    def test_user_data_resume_point_takes_an_item_out_of_continue_watching_and_back(self):
+        # Seaglass 1.1.4: Remove from Continue Watching clears the resume point (POST UserData), Undo sets it again
+        resume = self.get("/UserItems/Resume?Limit=50")["Items"]
+        item = resume[0]
+        was = item["UserData"]["PlaybackPositionTicks"]
+        status, after, _ = self.request("/UserItems/%s/UserData" % item["Id"], "POST", {"PlaybackPositionTicks": 0}, token=self.token)
+        self.assertEqual((200, 0), (status, after["PlaybackPositionTicks"]))
+        self.assertNotIn(item["Id"], [i["Id"] for i in self.get("/UserItems/Resume?Limit=50")["Items"]])
+        self.request("/UserItems/%s/UserData" % item["Id"], "POST", {"PlaybackPositionTicks": was}, token=self.token)
+        self.assertIn(item["Id"], [i["Id"] for i in self.get("/UserItems/Resume?Limit=50")["Items"]])
+
     def test_unknown_endpoint_is_404_and_listed(self):
         self.assertEqual(404, self.request("/No/Such/Thing", token=self.token)[0])
         self.assertIn("GET /No/Such/Thing", self.get("/__harness/summary")["unhandled"])
