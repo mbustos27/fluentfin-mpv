@@ -341,6 +341,43 @@ public sealed class ContinueWatchingTests : IDisposable
 		Assert.Equal(["Next"], home.Hero.Select(x => x.Title));
 	}
 
+	// ---- the items review: a change the server pushes reaches the item record too (the menu and the toggles read it)
+
+	[Fact]
+	public async Task AServerPushedChange_ReachesTheItemRecord_InEveryRow_SoTheMenuSaysTheNewState()
+	{
+		var resume = Item("Resume", position: 4_000);
+		var next = new BaseItemDto { Id = Guid.NewGuid(), Name = "Next", Type = BaseItemDto_Type.Episode, UserData = new UserItemDataDto { Played = false } };
+		var movies = new BaseItemDto { Id = Guid.NewGuid(), Name = "Movies", CollectionType = BaseItemDto_CollectionType.Movies };
+		var recent = new BaseItemDto { Id = Guid.NewGuid(), Name = "Recent", Type = BaseItemDto_Type.Movie, UserData = new UserItemDataDto { Played = false } };
+		Answer([resume], [next]);
+		_client.Setup(x => x.GetUserViews()).ReturnsAsync([movies]);
+		_client.Setup(x => x.GetLatestItems(It.IsAny<BaseItemDto>())).ReturnsAsync([recent]);
+		var home = await Home();
+		Assert.True(SpinWait.SpinUntil(() => home.RecentItems.Any(r => r.Items.Count == 1), TimeSpan.FromSeconds(5)));
+
+		_socket.OnNext(new UserDataChangedMessage { Data = new UserDataChangeInfo { UserDataList =
+		[
+			new UserItemDataDto { ItemId = resume.Id, PlaybackPositionTicks = 9_000, PlayedPercentage = 30, IsFavorite = true },
+			new UserItemDataDto { ItemId = next.Id, IsFavorite = true },
+			new UserItemDataDto { ItemId = recent.Id, Played = true, PlayCount = 1 },
+		] } });
+
+		var cw = home.ContinueItems.Single();
+		Assert.True(SpinWait.SpinUntil(() => cw.Dto.UserData!.PlaybackPositionTicks == 9_000, TimeSpan.FromSeconds(5)), "the record kept the old position");
+		Assert.Equal((true, 30d), (cw.Dto.UserData!.IsFavorite, cw.Dto.UserData.PlayedPercentage));
+		Assert.Equal((true, 30d), (cw.UserData!.IsFavorite, cw.UserData.PlayedPercentage));
+
+		var nu = home.NextUpItems.Single();
+		Assert.True(nu.Dto.UserData!.IsFavorite);
+		Assert.Contains(ItemMenu.For(nu.Dto, null, true, false).SelectMany(g => g), e => e.Text == "Remove from favorites");
+
+		var ra = home.RecentItems.Single().Items.Single();
+		Assert.Equal((true, 1), (ra.Dto.UserData!.Played, ra.Dto.UserData.PlayCount));
+		Assert.True(ra.UserData!.Played);
+		Assert.Contains(ItemMenu.For(ra.Dto, null, true, false).SelectMany(g => g), e => e.Text == "Mark as unwatched");
+	}
+
 	private static UserDataChangedMessage Changed(Guid id, long ticks, bool played = false) => new()
 	{
 		Data = new UserDataChangeInfo { UserDataList = [new UserItemDataDto { ItemId = id, PlaybackPositionTicks = ticks, Played = played }] },

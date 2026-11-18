@@ -484,18 +484,46 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	{
 		foreach (var library in RecentItems)
 		{
-			if (library.Items.FirstOrDefault(x => x.Id == guid) is not BaseItemViewModel { UserData: not null } dto)
+			if (library.Items.FirstOrDefault(x => x.Id == guid) is not { } item)
 			{
 				continue;
 			}
 
-			dto.UserData.IsFavorite = userData.IsFavorite;
-			dto.UserData.Played = userData.Played;
-			dto.UserData.PlayedPercentage = userData.PlayedPercentage;
-			dto.UserData.UnplayedItemCount = userData.UnplayedItemCount;
+			ApplyUserData(item, userData);
 			library.Changes++; // fluentfin-mpv: an answer asked for before this is older than the row
 		}
-		;
+	}
+
+	/// <summary>
+	/// 1.1.4 (the items review): a change the server pushed, into the card's model (its badges, its progress) and into the
+	/// item record the card was made from, which the card's menu, Play and the shared Watched and Favorite toggles read:
+	/// only the model was updated, so after playback marked an item watched its menu still said "Mark as watched" and sent
+	/// the same state again.
+	/// </summary>
+	internal static void ApplyUserData(BaseItemViewModel item, UserItemDataDto changed)
+	{
+		var record = item.Dto.UserData ??= new UserItemDataDto { ItemId = item.Id };
+		record.IsFavorite = changed.IsFavorite;
+		record.Played = changed.Played;
+		record.PlayedPercentage = changed.PlayedPercentage;
+		record.UnplayedItemCount = changed.UnplayedItemCount;
+		record.PlaybackPositionTicks = changed.PlaybackPositionTicks;
+		record.PlayCount = changed.PlayCount ?? record.PlayCount;
+		record.LastPlayedDate = changed.LastPlayedDate ?? record.LastPlayedDate;
+
+		if (item.UserData is not { } model)
+		{
+			item.UserData = UserItemDataViewModel.FromDto(record);
+			return;
+		}
+
+		model.IsFavorite = changed.IsFavorite;
+		model.Played = changed.Played;
+		model.PlayedPercentage = changed.PlayedPercentage;
+		model.UnplayedItemCount = changed.UnplayedItemCount;
+		model.PlaybackPositionTicks = changed.PlaybackPositionTicks;
+		model.PlayCount = record.PlayCount;
+		model.LastPlayedDate = record.LastPlayedDate;
 	}
 
 	private void ProcessContinueWatchingItemChanged(UserItemDataDto userData, Guid guid)
@@ -532,7 +560,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		}
 		else
 		{
-			item.UserData!.PlayedPercentage = userData.PlayedPercentage;
+			ApplyUserData(item, userData);
 		}
 	}
 
@@ -543,6 +571,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			return;
 		}
 
+		ApplyUserData(item, userData);
 		if (userData.Played == true)
 		{
 			_nextUpChanges++; // fluentfin-mpv: this request's answer replaces any asked for before it
