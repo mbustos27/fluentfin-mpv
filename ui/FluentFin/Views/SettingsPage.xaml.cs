@@ -19,9 +19,22 @@ public sealed partial class SettingsPage : Page
 	/// <summary>1.2.0 merge (the library stream's setting, kept on this PC): Home leaves out Continue Watching items not played for a while.</summary>
 	public ContinueWatchingSettingViewModel ContinueWatching { get; } = new(App.GetService<Core.Contracts.Services.ILocalSettingsService>());
 
+	/// <summary>Nixie 1.3.0: Settings &gt; Appearance &gt; Theme: a choice applies at once (ThemeSwitcher) and is saved on this PC.</summary>
+	public FluentFin.ViewModels.ThemePickerViewModel ThemePicker { get; } =
+		new(App.GetService<FluentFin.Services.ThemeService>(), id => App.GetService<FluentFin.Services.ThemeSwitcher>().SwitchAsync(id));
+
 	public SettingsPage()
 	{
 		InitializeComponent();
+
+		// Nixie 1.3.0: the active theme's options block: an element as it is, anything else drawn by the theme's ThemeOptionsTemplate
+		ShowThemeOptions();
+		ThemePicker.PropertyChanged += OnThemePickerChanged;
+		Unloaded += (_, _) =>
+		{
+			ThemePicker.PropertyChanged -= OnThemePickerChanged;
+			ThemePicker.Detach();
+		};
 
 		// Seaglass: a Glass pick takes effect at once (it is saved by the view model)
 		ViewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -38,6 +51,17 @@ public sealed partial class SettingsPage : Page
 			FluentFin.Services.GlassSetting.Apply(ViewModel.Glass);
 		}
 	}
+
+	private void OnThemePickerChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(FluentFin.ViewModels.ThemePickerViewModel.OptionsBlock))
+		{
+			ShowThemeOptions();
+		}
+	}
+
+	private void ShowThemeOptions() =>
+		ThemeOptions.ContentTemplate = ThemePicker.OptionsBlock is UIElement or null ? null : FluentFin.Services.ThemeResources.Find(FluentFin.Themes.ThemeContract.OptionsTemplateKey) as DataTemplate;
 
 	private void OnKeyboardShortcutsClick(object sender, RoutedEventArgs e) => FluentFin.Services.WindowShortcuts.ShowHelp(XamlRoot);
 

@@ -42,6 +42,12 @@ public partial class App : Application
 	public static T GetService<T>()
 		where T : class
 	{
+		// Nixie 1.3.0: a theme switch hands the current page's view model to its new view (ViewModelHandoff)
+		if (ViewModelHandoff.TryTake(typeof(T), out var handed) && handed is T same)
+		{
+			return same;
+		}
+
 		if ((Current as App)!.Host.Services.GetService(typeof(T)) is not T service)
 		{
 			throw new ArgumentException($"{typeof(T)} needs to be registered in ConfigureServices within App.xaml.cs.");
@@ -159,6 +165,7 @@ public partial class App : Application
 			services.AddSingleton<IActivationService, ActivationService>();
 			// Nixie 1.3.0: the layout themes (Themes\<Id>\), found in this assembly; NIXIE_LAYOUT overrides the saved one for a run
 			services.AddSingleton(sp => new ThemeService(sp.GetRequiredService<ILocalSettingsService>(), LayoutThemes.Discover(typeof(App).Assembly), Core.AppIdentity.ReadEnvironment("LAYOUT")));
+			services.AddSingleton<ThemeSwitcher>(); // Nixie 1.3.0: a theme switch at run time (Settings, "Choose a look")
 			services.AddSingleton<IPageService, PageService>();
 			services.AddSingleton<INavigationViewService, NavigationViewService>();
 			// 1.2.0 (the top bar): the shell's sections are tabs; the plugins' sections and the pins go there (no rail)

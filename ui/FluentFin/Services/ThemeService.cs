@@ -76,7 +76,7 @@ public sealed class ThemeService
 
 	/// <summary>
 	/// The active theme's page for a view model, or null for the shared page: for a view model that is not themable
-	/// (<see cref="ThemeContract.IsThemable"/>), a theme with no view for it, or a view that is not a Page.
+	/// (<see cref="ThemeContract.IsThemable"/>), a theme with no view for it, or a view that is not a XAML Page.
 	/// </summary>
 	public Type? ViewFor(Type viewModelType) => ViewFor(Active, viewModelType);
 
@@ -90,7 +90,7 @@ public sealed class ThemeService
 
 		try
 		{
-			return theme.ViewFor(viewModelType) is { } view && typeof(Page).IsAssignableFrom(view) && !view.IsAbstract ? view : null;
+			return theme.ViewFor(viewModelType) is { } view && typeof(Page).IsAssignableFrom(view) && !view.IsAbstract && ThemeContract.IsXamlPage(view) ? view : null;
 		}
 		catch (Exception)
 		{
