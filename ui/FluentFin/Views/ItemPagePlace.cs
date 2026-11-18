@@ -43,6 +43,23 @@ internal sealed class ItemPagePlace
 		};
 	}
 
+	internal enum FocusStep
+	{
+		/// <summary>Put the focus back on what had it.</summary>
+		Restore,
+
+		/// <summary>The user is somewhere already: give up, leave the focus where it is.</summary>
+		Leave,
+	}
+
+	/// <summary>
+	/// 1.2.0: whether Back still gives the focus back, a moment after the page came: not once the user has put it in the page,
+	/// and not once anything opened over it (a dialog such as F1's shortcut sheet, a menu, a flyout), which has the focus and
+	/// would lose it (a harness run: Esc no longer reached the sheet).
+	/// </summary>
+	internal static FocusStep FocusRestore(bool focusInPage, int openPopups) =>
+		focusInPage || openPopups > 0 ? FocusStep.Leave : FocusStep.Restore;
+
 	/// <summary>
 	/// 1.2.0 (items review, item 5): how the focus comes back: as keyboard focus (its ring, a card's buttons and lift) only
 	/// when the keyboard put it there; focus a click gave comes back as the pointer's, which shows none of that, and Tab still
@@ -127,16 +144,17 @@ internal sealed class ItemPagePlace
 					scrolled = true;
 				}
 			}
-			else if (!focused)
+			else if (!focused && _page.XamlRoot is { } root)
 			{
-				// the user has already put the focus somewhere in the page: leave it there
-				if (_page.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject current && IsInPage(current) && !ReferenceEquals(current, _scroller))
+				var current = FocusManager.GetFocusedElement(root) as DependencyObject;
+				switch (FocusRestore(current is not null && IsInPage(current) && !ReferenceEquals(current, _scroller), VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count))
 				{
-					focused = true;
-				}
-				else if (Target(place) is Control control && control.Focus(RestoreAs(place.FocusFromKeyboard)))
-				{
-					focused = true;
+					case FocusStep.Leave:
+						focused = true;
+						break;
+					case FocusStep.Restore when Target(place) is Control control && control.Focus(RestoreAs(place.FocusFromKeyboard)):
+						focused = true;
+						break;
 				}
 			}
 

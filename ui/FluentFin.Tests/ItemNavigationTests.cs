@@ -81,6 +81,16 @@ public sealed class ItemNavigationTests
 		Assert.Equal(look, actions.Shown);
 	}
 
+	/// <summary>Back gives the focus back only while nothing else has it: not over a dialog or a menu opened meanwhile.</summary>
+	[Theory]
+	[InlineData(false, 0, true)]    // the focus is on the title bar (where WinUI leaves it)
+	[InlineData(true, 0, false)]    // the user has put it in the page
+	[InlineData(false, 1, false)]   // F1's sheet, a menu, a flyout is open and has it
+	public void TheFocusBack_NeverTakesItFromADialogOrAMenu(bool focusInPage, int openPopups, bool restores)
+	{
+		Assert.Equal(restores ? ItemPagePlace.FocusStep.Restore : ItemPagePlace.FocusStep.Leave, ItemPagePlace.FocusRestore(focusInPage, openPopups));
+	}
+
 	/// <summary>Items review, item 6: a row asks for its thumbnail within a screen of the view, not before it is laid out.</summary>
 	[Theory]
 	[InlineData(null, false)]                                  // not laid out yet
