@@ -118,13 +118,11 @@
             <StaticResource x:Key="NixieButtonForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
             <StaticResource x:Key="NixieButtonBorderBrush" ResourceKey="GlassStrokeBrush" />
             <StaticResource x:Key="NixieHoverOverlayBrush" ResourceKey="GlassHoverOverlayBrush" />
-            <StaticResource x:Key="NixieHoverForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <StaticResource x:Key="NixieHoverBorderBrush" ResourceKey="GlassStrokeBrush" />
             <StaticResource x:Key="NixiePressedOverlayBrush" ResourceKey="GlassPressedOverlayBrush" />
-            <SolidColorBrush x:Key="NixiePressedForegroundBrush" Color="#CCF8EFF0" />
             <StaticResource x:Key="NixieSubtleForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
-            <SolidColorBrush x:Key="NixieDangerForegroundBrush" Color="#FF8A80" />
-            <SolidColorBrush x:Key="NixieDangerHoverForegroundBrush" Color="#FF8A80" />
-            <SolidColorBrush x:Key="NixieDangerPressedForegroundBrush" Color="#CCFF8A80" />
+            <!--  danger: amber (OKLCH hue 72), 34 degrees from the nearest palette hue; 7.5:1 on the glass fill  -->
+            <SolidColorBrush x:Key="NixieDangerForegroundBrush" Color="#FFB347" />
             <SolidColorBrush x:Key="NixieDisabledFillBrush" Color="#0FFFFFFF" />
             <SolidColorBrush x:Key="NixieDisabledForegroundBrush" Color="#5CF8EFF0" />
             <SolidColorBrush x:Key="NixieDisabledBorderBrush" Color="#14FFFFFF" />
@@ -233,13 +231,11 @@
             <StaticResource x:Key="NixieButtonForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
             <StaticResource x:Key="NixieButtonBorderBrush" ResourceKey="GlassStrokeBrush" />
             <StaticResource x:Key="NixieHoverOverlayBrush" ResourceKey="GlassHoverOverlayBrush" />
-            <StaticResource x:Key="NixieHoverForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <StaticResource x:Key="NixieHoverBorderBrush" ResourceKey="GlassStrokeBrush" />
             <StaticResource x:Key="NixiePressedOverlayBrush" ResourceKey="GlassPressedOverlayBrush" />
-            <SolidColorBrush x:Key="NixiePressedForegroundBrush" Color="#CC2D0F16" />
             <StaticResource x:Key="NixieSubtleForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
-            <SolidColorBrush x:Key="NixieDangerForegroundBrush" Color="#B3261E" />
-            <SolidColorBrush x:Key="NixieDangerHoverForegroundBrush" Color="#B3261E" />
-            <SolidColorBrush x:Key="NixieDangerPressedForegroundBrush" Color="#CCB3261E" />
+            <!--  danger: dark amber (hue 70), as dusk's; 5.2:1 on the light glass fill (crimson-like reds were 1.1:1 from the accent)  -->
+            <SolidColorBrush x:Key="NixieDangerForegroundBrush" Color="#805000" />
             <SolidColorBrush x:Key="NixieDisabledFillBrush" Color="#0A000000" />
             <!--  48 %, not the review's 36 %: that is 2.2:1 on the light disabled fill (36 % keeps 3:1 only in dark)  -->
             <SolidColorBrush x:Key="NixieDisabledForegroundBrush" Color="#7A2D0F16" />
@@ -302,14 +298,12 @@
             <SolidColorBrush x:Key="NixieButtonFillBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="NixieButtonForegroundBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
             <SolidColorBrush x:Key="NixieButtonBorderBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
-            <SolidColorBrush x:Key="NixieHoverOverlayBrush" Color="{ThemeResource SystemColorHighlightColor}" />
-            <SolidColorBrush x:Key="NixieHoverForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
-            <SolidColorBrush x:Key="NixiePressedOverlayBrush" Color="{ThemeResource SystemColorHighlightColor}" />
-            <SolidColorBrush x:Key="NixiePressedForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <!--  hover and pressed: a highlight border; the label keeps its own colour (ButtonText on ButtonFace)  -->
+            <SolidColorBrush x:Key="NixieHoverOverlayBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="NixieHoverBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixiePressedOverlayBrush" Color="Transparent" />
             <SolidColorBrush x:Key="NixieSubtleForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="NixieDangerForegroundBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
-            <SolidColorBrush x:Key="NixieDangerHoverForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
-            <SolidColorBrush x:Key="NixieDangerPressedForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="NixieDisabledFillBrush" Color="Transparent" />
             <SolidColorBrush x:Key="NixieDisabledForegroundBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
             <SolidColorBrush x:Key="NixieDisabledBorderBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
@@ -476,6 +470,16 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Stretch" />
         <Setter Property="Template" Value="{StaticResource GlassSurfaceTemplate}" />
+    </Style>
+    <!--
+        1.2.0: an empty state's card over the full dusk scene (Controls\SceneCard): the strong glass, so its text keeps 4.5:1
+        over the scene's brightest sky band, where text straight on the bands does not
+    -->
+    <Style BasedOn="{StaticResource GlassSurfaceStyle}" TargetType="controls:SceneCard">
+        <Setter Property="Background" Value="{ThemeResource GlassPanelStrongBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="MaxWidth" Value="560" />
     </Style>
 
     <!--
@@ -796,13 +800,14 @@
                     <VisualState x:Name="PointerOver">
                         <VisualState.Setters>
                             <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieHoverForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Pressed">
                         <VisualState.Setters>
                             <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePressedForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
+                            <Setter Target="ContentPresenter.Opacity" Value="0.8" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Disabled">
@@ -899,13 +904,14 @@
                     <VisualState x:Name="PointerOver">
                         <VisualState.Setters>
                             <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieHoverForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Pressed">
                         <VisualState.Setters>
                             <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePressedForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
+                            <Setter Target="ContentPresenter.Opacity" Value="0.8" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Disabled">
@@ -1002,13 +1008,14 @@
                     <VisualState x:Name="PointerOver">
                         <VisualState.Setters>
                             <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieHoverForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Pressed">
                         <VisualState.Setters>
                             <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePressedForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
+                            <Setter Target="ContentPresenter.Opacity" Value="0.8" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Disabled">
@@ -1067,13 +1074,14 @@
                     <VisualState x:Name="PointerOver">
                         <VisualState.Setters>
                             <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDangerHoverForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Pressed">
                         <VisualState.Setters>
                             <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDangerPressedForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
+                            <Setter Target="ContentPresenter.Opacity" Value="0.8" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Disabled">
@@ -1114,15 +1122,15 @@
                         <BrushTransition Duration="0:0:0.12" />
                     </Border.BackgroundTransition>
                 </Border>
-                <TextBlock
+                <ContentPresenter
                     x:Name="ContentPresenter"
-                    Margin="{TemplateBinding Padding}"
+                    Padding="{TemplateBinding Padding}"
                     HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                     VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                    Foreground="{TemplateBinding Foreground}"
-                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
-                    TextDecorations="Underline"
-                    TextWrapping="Wrap" />
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    Foreground="{TemplateBinding Foreground}" />
             </Grid>
             <VisualStateManager.VisualStateGroups>
                 <VisualStateGroup x:Name="CommonStates">
@@ -1209,43 +1217,43 @@
                     </Border>
                     <Border Background="{ThemeResource GlassTabUnderlineBrush}" CornerRadius="1.5" />
                 </Grid>
-                <!--  two labels in one cell (the cell is the bold one's width): nothing moves when the selection moves  -->
+                <!--  the bold label's width, reserved by a hidden copy (text content): nothing moves when the selection moves  -->
                 <TextBlock
-                    x:Name="ContentPresenter"
+                    x:Name="SelectedWidth"
                     Margin="{TemplateBinding Padding}"
                     VerticalAlignment="Center"
-                    Foreground="{TemplateBinding Foreground}"
-                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
-                    TextTrimming="CharacterEllipsis" />
-                <TextBlock
-                    x:Name="SelectedLabel"
-                    Margin="{TemplateBinding Padding}"
-                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
                     FontWeight="SemiBold"
-                    Foreground="{ThemeResource NixieTabSelectedForegroundBrush}"
+                    IsHitTestVisible="False"
                     Opacity="0"
-                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
-                    TextTrimming="CharacterEllipsis" />
+                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" />
+                <ContentPresenter
+                    x:Name="ContentPresenter"
+                    Padding="{TemplateBinding Padding}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    Foreground="{TemplateBinding Foreground}" />
             </Grid>
             <VisualStateManager.VisualStateGroups>
                 <VisualStateGroup x:Name="CommonStates">
                     <VisualState x:Name="Normal" />
                     <VisualState x:Name="PointerOver">
                         <VisualState.Setters>
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieTabSelectedForegroundBrush}" />
                             <Setter Target="HoverLine.Opacity" Value="1" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Pressed">
                         <VisualState.Setters>
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieTabForegroundBrush}" />
+                            <Setter Target="ContentPresenter.Opacity" Value="0.8" />
                             <Setter Target="HoverLine.Opacity" Value="0.6" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Disabled">
                         <VisualState.Setters>
                             <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
-                            <Setter Target="SelectedLabel.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
                             <Setter Target="Underline.Visibility" Value="Collapsed" />
                         </VisualState.Setters>
                     </VisualState>
@@ -1262,8 +1270,8 @@
                     <VisualState x:Name="Unselected" />
                     <VisualState x:Name="Selected">
                         <VisualState.Setters>
-                            <Setter Target="ContentPresenter.Opacity" Value="0" />
-                            <Setter Target="SelectedLabel.Opacity" Value="1" />
+                            <Setter Target="ContentPresenter.FontWeight" Value="SemiBold" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieTabSelectedForegroundBrush}" />
                             <Setter Target="Underline.Opacity" Value="1" />
                             <Setter Target="HoverLine.Visibility" Value="Collapsed" />
                         </VisualState.Setters>
@@ -1346,13 +1354,14 @@
                     <VisualState x:Name="PointerOver">
                         <VisualState.Setters>
                             <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieHoverForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Pressed">
                         <VisualState.Setters>
                             <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
-                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePressedForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
+                            <Setter Target="ContentPresenter.Opacity" Value="0.8" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Disabled">
@@ -1646,6 +1655,17 @@
         <Setter Property="CornerRadius" Value="4" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <!--  text content is always underlined; other content (an element) is shown as it is  -->
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <TextBlock
+                        Text="{Binding}"
+                        TextDecorations="Underline"
+                        TextWrapping="Wrap" />
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Template" Value="{StaticResource NixieLinkButtonTemplate}" />
     </Style>
     <!--  Tab: the top bar sections and the seasons; one Tab stop for the strip, arrows inside (the strip's job)  -->

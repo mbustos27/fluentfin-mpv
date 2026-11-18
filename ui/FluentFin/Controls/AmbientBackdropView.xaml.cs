@@ -72,21 +72,11 @@ public sealed partial class AmbientBackdropView : UserControl
 	/// <summary>A starburst's glint: it shrinks to this scale and back, over 3 to 6 s, each at its own pace.</summary>
 	public const float TwinkleScale = 0.85f;
 
-	/// <summary>
-	/// How long the full scene moves after it appears (or the window comes back), before it settles still. Any continuous motion
-	/// makes the compositor redraw the whole window, acrylic included, every frame: measured, the strip's endless sway cost about
-	/// 0.6 of a core on an idle page (1.1.3 there: about 0.05). So the strip never moves, and the full scene only for a while.
-	/// </summary>
-	public static readonly TimeSpan SceneMotionDuration = TimeSpan.FromSeconds(20);
-
-	/// <summary>Whether the scene moves now: only the full scene, only where motion is allowed, only until it has settled.</summary>
-	public static bool MovesScene(DuskSceneKind scene, bool motionNow, bool settled) => motionNow && scene == DuskSceneKind.Full && !settled;
-
 	private Storyboard? _fade;
 	private Uri? _shown;
 	private DuskSceneKind _scene = DuskSceneKind.None;
-	private bool _sceneMoving;
-	private bool _sceneSettled;
+	// when the scene moves (FluentFin.Core.Theming.SceneMotion decides: the full scene only, for a while); this view only acts
+	private readonly SceneMotion _motion = new();
 	private DispatcherQueueTimer? _settle;
 	private Frame? _setupFrame;
 	private readonly List<FrameworkElement> _stars = [];
@@ -154,6 +144,7 @@ public sealed partial class AmbientBackdropView : UserControl
 		}
 
 		StopSceneMotion();
+		_motion.Stopped();
 		_fade?.Stop();
 		// Translation can be stopped (or animated) only once it is enabled on the element; otherwise it throws
 		ElementCompositionPreview.SetIsTranslationEnabled(Drift, true);
@@ -183,7 +174,7 @@ public sealed partial class AmbientBackdropView : UserControl
 		// back in front: the full scene may move again for a while
 		if (GlassActivity.IsActive)
 		{
-			_sceneSettled = false;
+			_motion.BackInFront();
 		}
 
 		UpdateMode();
@@ -254,7 +245,7 @@ public sealed partial class AmbientBackdropView : UserControl
 	private void BuildScene()
 	{
 		StopSceneMotion();
-		_sceneSettled = false;
+		_motion.Rebuilt();
 		SkyArt.Children.Clear();
 		_stars.Clear();
 		_sun = null;
@@ -464,25 +455,26 @@ public sealed partial class AmbientBackdropView : UserControl
 		return geometry;
 	}
 
-	/// <summary>The scene's slow life (Full mode, window active): starbursts glint, the sun's rings breathe, the hills sway.</summary>
+	/// <summary>Carries out SceneMotion's step for the scene shown now.</summary>
 	private void UpdateSceneMotion()
 	{
-		var want = MovesScene(_scene, MotionNow, _sceneSettled);
-		if (want == _sceneMoving)
+		switch (_motion.Update(_scene, MotionNow))
 		{
-			return;
+			case SceneMotionStep.Start:
+				StartSceneMotion();
+				break;
+			case SceneMotionStep.Stop:
+				StopSceneMotion();
+				break;
 		}
+	}
 
-		if (!want)
-		{
-			StopSceneMotion();
-			return;
-		}
-
-		_sceneMoving = true;
+	/// <summary>The scene's slow life (Full mode, window active): starbursts glint, the sun's rings breathe, the hills sway; settles after SceneMotion.Duration.</summary>
+	private void StartSceneMotion()
+	{
 		_settle ??= DispatcherQueue.CreateTimer();
 		_settle.Stop();
-		_settle.Interval = SceneMotionDuration;
+		_settle.Interval = SceneMotion.Duration;
 		_settle.IsRepeating = false;
 		_settle.Tick -= OnSettle;
 		_settle.Tick += OnSettle;
@@ -527,8 +519,11 @@ public sealed partial class AmbientBackdropView : UserControl
 	private void OnSettle(DispatcherQueueTimer sender, object args)
 	{
 		_settle?.Stop();
-		_sceneSettled = true;
-		_sceneMoving = false;
+		if (_motion.Settle() != SceneMotionStep.Ease)
+		{
+			return;
+		}
+
 		var compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
 		void Ease(Visual visual, string property, Vector3 rest)
 		{
@@ -557,7 +552,6 @@ public sealed partial class AmbientBackdropView : UserControl
 	private void StopSceneMotion()
 	{
 		_settle?.Stop();
-		_sceneMoving = false;
 		foreach (var hill in new UIElement[] { FarHill, MesaHill, NearHill })
 		{
 			ElementCompositionPreview.SetIsTranslationEnabled(hill, true);

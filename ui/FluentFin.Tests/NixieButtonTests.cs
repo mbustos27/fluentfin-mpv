@@ -135,7 +135,16 @@ public sealed class NixieButtonTests
 		Assert.DoesNotContain("RestGlow", template);
 		Assert.DoesNotContain("NixiePrimaryFillBrush", template);
 
-		Assert.Contains("TextDecorations=\"Underline\"", Top("NixieLinkButtonTemplate").ToString());
+		// a string is underlined (the style's ContentTemplate); any content is shown (a ContentPresenter, not a TextBlock that
+		// would print an element's type name)
+		var linkStyle = Top("NixieLinkButtonStyle").ToString();
+		Assert.Contains("TextDecorations=\"Underline\"", linkStyle);
+		foreach (var shown in new[] { "NixieLinkButtonTemplate", "NixieTabButtonTemplate" })
+		{
+			var presenter = Top(shown).Descendants().Single(e => (string?)e.Attribute(X + "Name") == "ContentPresenter");
+			Assert.Equal("ContentPresenter", presenter.Name.LocalName);
+			Assert.Equal("{TemplateBinding Content}", (string?)presenter.Attribute("Content"));
+		}
 		Assert.Equal("{ThemeResource NixieLinkForegroundBrush}", Setters("NixieLinkButtonStyle")["Foreground"]);
 
 		// only the Large primary glows at rest
@@ -231,16 +240,130 @@ public sealed class NixieButtonTests
 		Assert.All(stops, c => Assert.EndsWith("170508", c));
 	}
 
-	[Fact]
-	public void Dialogs_get_Compact_buttons_and_a_destructive_dialog_defaults_to_Cancel()
-	{
-		var plain = Top("NixieDialogStyle").Elements().ToDictionary(e => (string)e.Attribute("Property")!, e => (string?)e.Attribute("Value"));
-		Assert.Equal("{StaticResource NixiePrimaryCompactButtonStyle}", plain["PrimaryButtonStyle"]);
-		Assert.Equal("{StaticResource NixieCompactButtonStyle}", plain["CloseButtonStyle"]);
+	private static XElement TextBlockXaml() => XDocument.Load(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "Styles", "TextBlock.xaml"))).Root!;
 
-		var destructive = Top("NixieDestructiveDialogStyle").Elements().ToDictionary(e => (string)e.Attribute("Property")!, e => (string?)e.Attribute("Value"));
-		Assert.Equal("{StaticResource NixieDestructiveCompactButtonStyle}", destructive["PrimaryButtonStyle"]);
-		Assert.Equal("{StaticResource NixieCompactButtonStyle}", destructive["CloseButtonStyle"]);
-		Assert.Equal("Close", destructive["DefaultButton"]);
+	private static string Name(string? markup) => markup!.Replace("{StaticResource ", "").Replace("{ThemeResource ", "").TrimEnd('}').Trim();
+
+	/// <summary>
+	/// The style a dialog's button is drawn with, as it shows: the dialog style's button style (through BasedOn), unless the dialog
+	/// template's DefaultButtonStates replace it for the default button. (The template is the base dialog style's, TextBlock.xaml.)
+	/// </summary>
+	private static string Applied(XElement? dialog, string button, string defaultButton)
+	{
+		var styles = TextBlockXaml().Elements().Concat(Glass().Elements()).Where(e => e.Name.LocalName == "Style").ToList();
+		string? Setter(XElement? style, string property)
+		{
+			for (var s = style; s is not null;)
+			{
+				var value = (string?)s.Elements().FirstOrDefault(e => (string?)e.Attribute("Property") == property)?.Attribute("Value");
+				if (value is not null)
+				{
+					return value;
+				}
+
+				var based = (string?)s.Attribute("BasedOn");
+				s = based is null ? null : styles.FirstOrDefault(x => Key(x) == Name(based));
+			}
+
+			return null;
+		}
+
+		var template = styles.Single(s => Key(s) == "DefaultContentDialogStyleWithTitleBackground").Descendants().Single(e => e.Name.LocalName == "ControlTemplate");
+		var state = template.Descendants().SingleOrDefault(e => e.Name.LocalName == "VisualState" && (string?)e.Attribute(X + "Name") == $"{defaultButton}AsDefaultButton");
+		var swapped = (string?)state?.Descendants().SingleOrDefault(e => (string?)e.Attribute("Target") == $"{button}Button.Style")?.Attribute("Value");
+		return Name(swapped ?? Setter(dialog, $"{button}ButtonStyle"));
+	}
+
+	/// <summary>
+	/// What each dialog's buttons look like once its default button is applied (the review: the template's default-button states
+	/// swapped in WinUI's AccentButtonStyle, so a destructive dialog's default Cancel turned hot pink beside a glass Delete, and the
+	/// Nixie dialog's commit lost its radius 8 and glow).
+	/// </summary>
+	[Fact]
+	public void Dialogs_draw_their_buttons_in_the_Nixie_roles_once_the_default_button_is_applied()
+	{
+		var styles = TextBlockXaml().Elements().Concat(Glass().Elements()).Where(e => e.Name.LocalName == "Style").ToList();
+		XElement Dialog(string key) => styles.Single(s => Key(s) == key);
+
+		// the destructive dialog: Cancel (Close) is the default and stays Secondary; the confirm is Destructive
+		var destructive = Dialog("NixieDestructiveDialogStyle");
+		Assert.Equal("Close", (string?)destructive.Elements().Single(e => (string?)e.Attribute("Property") == "DefaultButton").Attribute("Value"));
+		Assert.Equal("NixieCompactButtonStyle", Applied(destructive, "Close", "Close"));
+		Assert.Equal("NixieDestructiveCompactButtonStyle", Applied(destructive, "Primary", "Close"));
+
+		// the plain Nixie dialog: the default commit is the Primary, with the system's radius and its focus glow
+		var plain = Dialog("NixieDialogStyle");
+		var primary = Applied(plain, "Primary", "Primary");
+		Assert.Equal("NixiePrimaryCompactButtonStyle", primary);
+		Assert.Equal("{StaticResource GlassButtonCornerRadius}", Setters(primary)["CornerRadius"]);
+		Assert.Contains("FocusGlow", Top(Name(Setters(primary)["Template"])).ToString());
+		Assert.Equal("NixieCompactButtonStyle", Applied(plain, "Close", "Primary"));
+
+		// every dialog (the keyed base and the implicit one for dialogs made in code), whatever its default: never WinUI's accent
+		var bases = new[] { Dialog("DefaultContentDialogStyleWithTitleBackground"), styles.Single(s => Key(s) is null && (string?)s.Attribute("TargetType") == "ContentDialog") };
+		foreach (var dialog in bases.Append(plain).Append(destructive))
+		{
+			foreach (var defaultButton in new[] { "No", "Primary", "Secondary", "Close" })
+			{
+				foreach (var button in new[] { "Primary", "Secondary", "Close" })
+				{
+					var applied = Applied(dialog, button, defaultButton);
+					Assert.StartsWith("Nixie", applied);
+					Assert.DoesNotContain("Accent", applied);
+				}
+			}
+
+			Assert.Equal(dialog == destructive ? "NixieDestructiveCompactButtonStyle" : "NixiePrimaryCompactButtonStyle", Applied(dialog, "Primary", dialog == destructive ? "Close" : "Primary"));
+		}
+	}
+
+	/// <summary>
+	/// Hover and pressed keep a button's own label colour (a local Foreground), as the 1.1.x pills did: no foreground setters there.
+	/// High contrast shows them with a highlight border instead of a fill, so ButtonText on ButtonFace stays the pair.
+	/// </summary>
+	[Theory]
+	[InlineData("NixieButtonTemplate")]
+	[InlineData("NixieIconButtonTemplate")]
+	[InlineData("NixieSubtleButtonTemplate")]
+	[InlineData("NixieDestructiveButtonTemplate")]
+	[InlineData("NixieIconToggleButtonTemplate")]
+	public void Hover_and_pressed_keep_a_local_label_colour(string key)
+	{
+		foreach (var state in new[] { "PointerOver", "Pressed" })
+		{
+			var setters = States(Top(key)).Single(s => (string?)s.Attribute(X + "Name") == state).Descendants().Select(e => (string?)e.Attribute("Target")).ToList();
+			Assert.DoesNotContain("ContentPresenter.Foreground", setters);
+			Assert.Contains("Backplate.BorderBrush", setters);
+		}
+
+		string HighContrast(string brush) => (string)Theme("HighContrast").Elements().Single(e => Key(e) == brush).Attribute("Color")!;
+		Assert.Equal("{ThemeResource SystemColorHighlightColor}", HighContrast("NixieHoverBorderBrush"));
+		Assert.Equal("Transparent", HighContrast("NixieHoverOverlayBrush"));
+		Assert.Equal("Transparent", HighContrast("NixiePressedOverlayBrush"));
+	}
+
+	/// <summary>
+	/// The danger ink is not the palette: at least 30 degrees of OKLCH hue from every swatch (coral, pale sun, peach, the pinks,
+	/// crimson, maroon, the nixie orange); the review's #FF8A80 sat 4 degrees from the pale sun. Still 4.5:1 on the glass fill.
+	/// </summary>
+	[Theory]
+	[InlineData("Dark")]
+	[InlineData("Light")]
+	public void The_danger_ink_is_its_own_hue(string theme)
+	{
+		static double Hue(Rgb c)
+		{
+			var (_, _, h) = OkLab.FromLinear(BlurHash.SrgbToLinear(c.R), BlurHash.SrgbToLinear(c.G), BlurHash.SrgbToLinear(c.B));
+			return (h + 360) % 360;
+		}
+
+		var danger = Hex(Colour(theme, "NixieDangerForegroundBrush"));
+		Rgb[] palette = [DuskScene.Coral, DuskScene.Sun, DuskScene.Peach, DuskScene.HotPink, DuskScene.Rose, DuskScene.Crimson, DuskScene.Maroon,
+			new(0xFF, 0x9E, 0xB1), new(0xFF, 0x7A, 0x50)];
+		foreach (var swatch in palette)
+		{
+			var d = Math.Abs(Hue(danger) - Hue(swatch));
+			Assert.True(Math.Min(d, 360 - d) >= 30, $"{danger.Hex} is {Math.Min(d, 360 - d):0} degrees from {swatch.Hex}");
+		}
 	}
 }

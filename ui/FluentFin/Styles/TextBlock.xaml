@@ -31,9 +31,10 @@
         <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
         <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
         <Setter Property="IsTabStop" Value="False" />
-        <Setter Property="PrimaryButtonStyle" Value="{ThemeResource DefaultButtonStyle}" />
-        <Setter Property="SecondaryButtonStyle" Value="{ThemeResource DefaultButtonStyle}" />
-        <Setter Property="CloseButtonStyle" Value="{ThemeResource DefaultButtonStyle}" />
+        <!--  1.2.0 (the button review): the Compact Secondary role; the default button turns Primary (DefaultButtonStates)  -->
+        <Setter Property="PrimaryButtonStyle" Value="{ThemeResource NixieCompactButtonStyle}" />
+        <Setter Property="SecondaryButtonStyle" Value="{ThemeResource NixieCompactButtonStyle}" />
+        <Setter Property="CloseButtonStyle" Value="{ThemeResource NixieCompactButtonStyle}" />
         <Setter Property="CornerRadius" Value="{StaticResource GlassOverlayCornerRadius}" />
         <Setter Property="services:GlassDialog.PanelMaxWidth" Value="1000" />
         <Setter Property="Template">
@@ -305,24 +306,18 @@
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="DefaultButtonStates">
                                 <VisualState x:Name="NoDefaultButton" />
+                                <!--
+                                    1.2.0 (the button review): a default Primary is the Nixie Primary (radius 8, the focus glow), not WinUI's
+                                    AccentButtonStyle. A default Secondary or Close keeps its own role: a destructive dialog's default
+                                    Cancel stays Secondary beside the Destructive confirm (NixieDestructiveDialogStyle).
+                                -->
                                 <VisualState x:Name="PrimaryAsDefaultButton">
                                     <VisualState.Setters>
-                                        <Setter Target="PrimaryButton.Style" Value="{StaticResource AccentButtonStyle}" />
-
+                                        <Setter Target="PrimaryButton.Style" Value="{ThemeResource NixiePrimaryCompactButtonStyle}" />
                                     </VisualState.Setters>
                                 </VisualState>
-                                <VisualState x:Name="SecondaryAsDefaultButton">
-                                    <VisualState.Setters>
-                                        <Setter Target="SecondaryButton.Style" Value="{StaticResource AccentButtonStyle}" />
-
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="CloseAsDefaultButton">
-                                    <VisualState.Setters>
-                                        <Setter Target="CloseButton.Style" Value="{StaticResource AccentButtonStyle}" />
-
-                                    </VisualState.Setters>
-                                </VisualState>
+                                <VisualState x:Name="SecondaryAsDefaultButton" />
+                                <VisualState x:Name="CloseAsDefaultButton" />
 
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="DialogBorderStates">

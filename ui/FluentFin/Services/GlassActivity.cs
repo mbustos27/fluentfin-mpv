@@ -28,7 +28,7 @@ public static class GlassActivity
 
 		_window = window;
 		_log = log;
-		if (!FollowsActivity(Environment.GetEnvironmentVariable(AlwaysActiveVariable)))
+		if (!FollowsActivity(Environment.GetEnvironmentVariable(AlwaysActiveVariable), Core.AppVersion.IsReleasePackage))
 		{
 			// the off-screen harness: other processes' windows take activation on its private desktop, which a real desktop's
 			// foreground lock prevents, so its shots and measurements would show the background state throughout
@@ -42,8 +42,11 @@ public static class GlassActivity
 	/// <summary>Set to 1 (the off-screen harness only): the glass keeps its active state whatever the window's activation.</summary>
 	public const string AlwaysActiveVariable = "FLUENTFIN_MPV_GLASS_ALWAYS_ACTIVE";
 
-	/// <summary>Whether the window's activation is followed: unless <see cref="AlwaysActiveVariable"/> is exactly 1.</summary>
-	public static bool FollowsActivity(string? alwaysActive) => alwaysActive != "1";
+	/// <summary>
+	/// Whether the window's activation is followed: always in a release package (the switch is for the harness's dev builds only),
+	/// otherwise unless <see cref="AlwaysActiveVariable"/> is exactly 1.
+	/// </summary>
+	public static bool FollowsActivity(string? alwaysActive, bool releasePackage) => releasePackage || alwaysActive != "1";
 
 	/// <summary>How much of the light edge and the glow a window keeps: all when active, about half in the background.</summary>
 	public static double EdgeLevel(bool active) => active ? 1.0 : 0.45;

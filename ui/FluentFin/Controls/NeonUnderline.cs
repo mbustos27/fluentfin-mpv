@@ -29,6 +29,22 @@ public sealed partial class NeonUnderline : Grid
 		: light ? [new(3, Crimson, 1)]
 		: [new(9, HotPink, 0.18), new(5, HotPink, 0.45), new(2, NeonCore, 1)];
 
+	/// <summary>
+	/// The user's highlight colour, as high contrast shows it: from Windows' UI settings. (Looking up SystemColorHighlightColor in
+	/// the app's resources misses it: it lives in WinUI's theme dictionaries, and the lookup fell back to crimson.)
+	/// </summary>
+	public static Color SystemHighlight()
+	{
+		try
+		{
+			return new Windows.UI.ViewManagement.UISettings().UIElementColor(Windows.UI.ViewManagement.UIElementType.Highlight);
+		}
+		catch (Exception)
+		{
+			return Crimson;
+		}
+	}
+
 	/// <summary>The space the stack takes: its widest layer.</summary>
 	public const double StackHeight = 9;
 
@@ -54,7 +70,7 @@ public sealed partial class NeonUnderline : Grid
 		try { highContrast = GlassMode.IsHighContrast; }
 		catch (Exception) { highContrast = false; }
 
-		var highlight = Application.Current.Resources.TryGetValue("SystemColorHighlightColor", out var value) && value is Color c ? c : Crimson;
+		var highlight = SystemHighlight();
 		Children.Clear();
 		foreach (var layer in Layers(ActualTheme == ElementTheme.Light, highContrast, highlight))
 		{

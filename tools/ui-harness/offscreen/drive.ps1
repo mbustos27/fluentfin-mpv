@@ -288,7 +288,8 @@ function Step-SignIn([bool]$Capture) {
     $url = Wait-Ui -Id 'TxtUrl' -Type 'Edit' -Seconds 30
     $timings.server_page_ms = Ms $script:launchedAt (Get-Epoch)
     if (-not $url) { throw "no server page (TxtUrl) within 30 s" }
-    if ($Capture) { Capture-Page 'server' }
+    # let the page's entrance and the backdrop's 600 ms fade finish first (a shot taken at once caught the title at 4.2:1)
+    if ($Capture) { Start-Sleep -Milliseconds 1200; Capture-Page 'server' }
     Set-ElementValue $url $script:serverUrl
     $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Next')
     $nextAt = Get-Epoch
@@ -297,7 +298,7 @@ function Step-SignIn([bool]$Capture) {
     if (-not $quick) { throw "no sign-in page (no Quick Connect button) within 20 s" }
     $timings.server_to_login_ms = Ms $nextAt (Get-Epoch)
     Start-Sleep -Milliseconds 300
-    if ($Capture) { Capture-Page 'login' }
+    if ($Capture) { Start-Sleep -Milliseconds 900; Capture-Page 'login' }
     $at = Get-Epoch
     if ($SignIn -eq 'quickconnect') {
         # as a user would: Quick Connect shows a code, approved on "another device" (the fake server's harness endpoint);

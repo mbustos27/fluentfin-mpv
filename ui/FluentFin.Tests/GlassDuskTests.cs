@@ -62,43 +62,76 @@ public sealed class GlassDuskTests
 	}
 
 	/// <summary>
-	/// Continuous motion redraws the whole window every frame (measured: the strip's endless sway, about 0.6 of a core idle). The
-	/// strip never moves; the full scene moves for a while, then settles; nothing moves where motion is not allowed.
+	/// The full scene is held per owner (an empty state's SceneCard): asking twice is one hold, a release by someone who holds
+	/// nothing changes nothing, and the scene goes when its last holder lets go. (A counter stayed up after a missed release or a
+	/// double request, leaving the full scene, and its unreadable sky bands, behind every page.)
 	/// </summary>
-	[Theory]
-	[InlineData(DuskSceneKind.Full, true, false, true)]
-	[InlineData(DuskSceneKind.Full, true, true, false)]
-	[InlineData(DuskSceneKind.Full, false, false, false)]
-	[InlineData(DuskSceneKind.Strip, true, false, false)]
-	[InlineData(DuskSceneKind.None, true, false, false)]
-	public void Only_the_full_scene_moves_and_only_until_it_settles(DuskSceneKind scene, bool motionNow, bool settled, bool moves)
-	{
-		Assert.Equal(moves, AmbientBackdropView.MovesScene(scene, motionNow, settled));
-		Assert.InRange(AmbientBackdropView.SceneMotionDuration, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30));
-	}
-
 	[Fact]
-	public void An_empty_states_request_for_the_full_scene_is_undone_once()
+	public void The_full_scene_is_held_per_owner_and_a_double_request_or_a_stray_release_cannot_leave_it_behind()
 	{
 		var changes = 0;
 		void OnChanged(object? s, EventArgs e) => changes++;
 		AmbientBackdrop.FullSceneChanged += OnChanged;
+		object first = new(), second = new(), stranger = new();
 		try
 		{
 			Assert.False(AmbientBackdrop.FullSceneRequested);
-			AmbientBackdrop.RequestFullScene(true);
-			AmbientBackdrop.RequestFullScene(true);
+			AmbientBackdrop.RequestFullScene(first);
+			AmbientBackdrop.RequestFullScene(first); // the same owner again (loaded twice): still one hold
 			Assert.True(AmbientBackdrop.FullSceneRequested);
-			AmbientBackdrop.RequestFullScene(false);
-			Assert.True(AmbientBackdrop.FullSceneRequested);
-			AmbientBackdrop.RequestFullScene(false);
-			AmbientBackdrop.RequestFullScene(false); // one too many: never below none
+			AmbientBackdrop.ReleaseFullScene(first);
+			Assert.False(AmbientBackdrop.FullSceneRequested); // one release ends it
+
+			AmbientBackdrop.RequestFullScene(first);
+			AmbientBackdrop.RequestFullScene(second);
+			AmbientBackdrop.ReleaseFullScene(stranger); // holds nothing: no effect
+			AmbientBackdrop.ReleaseFullScene(first);
+			Assert.True(AmbientBackdrop.FullSceneRequested); // the second still holds it
+			AmbientBackdrop.ReleaseFullScene(second);
+			AmbientBackdrop.ReleaseFullScene(second); // twice: no effect
 			Assert.False(AmbientBackdrop.FullSceneRequested);
-			Assert.Equal(2, changes);
+			Assert.Equal(4, changes);
 		}
 		finally
 		{
 			AmbientBackdrop.FullSceneChanged -= OnChanged;
+			AmbientBackdrop.ReleaseFullScene(first);
+			AmbientBackdrop.ReleaseFullScene(second);
+		}
+	}
+
+	/// <summary>
+	/// The SceneCard (the only way a page asks for the full scene) puts its text on the strong glass, which keeps the glass text at
+	/// 4.5:1 over the scene's worst band: the brightest in dark (light text), the darkest in light (dark text). Acrylic modelled as
+	/// OverlayContrastTests does: the tint at its luminosity opacity, then at its tint opacity, over what is behind.
+	/// </summary>
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void Text_on_a_scene_card_stays_readable_over_every_sky_band_and_hill(bool light)
+	{
+		var glass = Load("Styles", "Glass.xaml");
+		var card = glass.Elements().Single(e => e.Name.LocalName == "Style" && (string?)e.Attribute("TargetType") == "controls:SceneCard");
+		Assert.Contains(card.Elements(), e => (string?)e.Attribute("Property") == "Background" && (string?)e.Attribute("Value") == "{ThemeResource GlassPanelStrongBrush}");
+
+		var theme = Theme(light ? "Light" : "Dark");
+		var panel = theme.Elements().Single(e => Key(e) == "GlassPanelStrongBrush");
+		static Rgb Parse(string hex) => new(Convert.ToByte(hex[^6..^4], 16), Convert.ToByte(hex[^4..^2], 16), Convert.ToByte(hex[^2..], 16));
+		var tint = Parse((string)panel.Attribute("TintColor")!);
+		var luminosity = double.Parse((string)panel.Attribute("TintLuminosityOpacity")!, System.Globalization.CultureInfo.InvariantCulture);
+		var opacity = double.Parse((string)panel.Attribute("TintOpacity")!, System.Globalization.CultureInfo.InvariantCulture);
+		var behind = DuskScene.SkyBands(light).Select(b => b.Color)
+			.Concat(Enum.GetValues<DuskHill>().Select(h => DuskScene.Hill(h, light)))
+			.Concat([DuskScene.SunGradient(light).Top, DuskScene.SunGradient(light).Bottom]).ToList();
+		foreach (var colour in behind)
+		{
+			var surface = DuskScene.Blend(tint, opacity, DuskScene.Blend(tint, luminosity, colour));
+			foreach (var key in new[] { "GlassTextPrimaryBrush", "GlassTextSecondaryBrush" })
+			{
+				var text = Parse((string)theme.Elements().Single(e => Key(e) == key).Attribute("Color")!);
+				var ratio = OkLab.Contrast(text.Luminance, surface.Luminance);
+				Assert.True(ratio >= 4.5, $"{key} over {colour.Hex}: {ratio:0.00}");
+			}
 		}
 	}
 
@@ -266,13 +299,14 @@ public sealed class GlassDuskTests
 	}
 
 	[Theory]
-	[InlineData(null, true)]
-	[InlineData("", true)]
-	[InlineData("0", true)]
-	[InlineData("true", true)]
-	[InlineData("1", false)]
-	public void Only_the_harness_switch_set_to_1_stops_following_the_windows_activity(string? value, bool follows) =>
-		Assert.Equal(follows, GlassActivity.FollowsActivity(value));
+	[InlineData(null, false, true)]
+	[InlineData("", false, true)]
+	[InlineData("0", false, true)]
+	[InlineData("true", false, true)]
+	[InlineData("1", false, false)]
+	[InlineData("1", true, true)] // a release package ignores the harness's switch
+	public void Only_the_harness_switch_set_to_1_in_a_dev_build_stops_following_the_windows_activity(string? value, bool release, bool follows) =>
+		Assert.Equal(follows, GlassActivity.FollowsActivity(value, release));
 
 	/// <summary>1.1.4 (the layout audit's boxes in boxes): a section style that draws nothing, and 12 px panels.</summary>
 	[Fact]
@@ -356,6 +390,10 @@ public sealed class GlassDuskTests
 	[Fact]
 	public void The_tab_underline_is_the_system_highlight_alone_in_high_contrast()
 	{
+		// the colour is Windows' own highlight (UI settings), not a resource lookup that can miss and fall back to crimson
+		var system = new Windows.UI.ViewManagement.UISettings().UIElementColor(Windows.UI.ViewManagement.UIElementType.Highlight);
+		Assert.Equal(system, NeonUnderline.SystemHighlight());
+
 		var highlight = Windows.UI.Color.FromArgb(255, 1, 2, 3);
 		var layers = NeonUnderline.Layers(false, true, highlight);
 		Assert.Single(layers);
