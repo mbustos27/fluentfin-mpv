@@ -186,13 +186,13 @@ if ($vs) {
 $admin = Find-Ui -Id 'ServerAdministrationButton' -OffscreenToo
 Check 'settings: Server administration is there for an administrator' ([bool]$admin)
 if ($admin -and -not $acShotsOnly) {
-    $before = Get-Epoch
+    $acBefore = Get-Epoch
     [void](Invoke-Element $admin)
     $page = Wait-Ui -Name 'Scheduled Tasks' -Seconds 10
     AcSettle 2500
     Check 'server administration: its pages open' ([bool]$page)
     Shot "$acTag-server-administration"
-    $errs = @(Get-Requests $before | Where-Object { $_.status -ge 500 -or $_.route -eq 'unhandled' } | ForEach-Object { "$($_.method) $($_.path) $($_.status)" })
+    $errs = @(Get-Requests $acBefore | Where-Object { $_.status -ge 500 -or $_.route -eq 'unhandled' } | ForEach-Object { "$($_.method) $($_.path) $($_.status)" })
     Say ("server administration: {0} requests failed or unhandled{1}" -f $errs.Count, $(if ($errs) { ': ' + (($errs | Select-Object -First 6) -join '; ') }))
     Key 0xA6; AcSettle 1500
 }
