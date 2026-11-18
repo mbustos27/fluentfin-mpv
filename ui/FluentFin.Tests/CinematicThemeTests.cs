@@ -32,6 +32,7 @@ public sealed class CinematicThemeTests
 	[InlineData(typeof(SeasonViewModel), typeof(CinematicSeasonPage))]
 	[InlineData(typeof(MovieViewModel), typeof(CinematicMoviePage))]
 	[InlineData(typeof(EpisodeViewModel), typeof(CinematicEpisodePage))]
+	[InlineData(typeof(LibraryViewModel), typeof(CinematicLibraryPage))]
 	public void DrawsTheBrowsingPages_ItsOwnWay(Type viewModel, Type view)
 	{
 		Assert.Equal(view, Theme.ViewFor(viewModel));
@@ -75,6 +76,20 @@ public sealed class CinematicThemeTests
 
 		Assert.Equal(AutomationControlType.ListItem, CinematicStillAutomationPeer.ControlTypeFor(inList: true));
 		Assert.Equal(AutomationControlType.Button, CinematicStillAutomationPeer.ControlTypeFor(inList: false));
+	}
+
+	[Fact]
+	public void PlayerPanel_SubtitleSizes_AreStepsTheBackendTakes_MediumTheDefault()
+	{
+		Assert.Contains(CinematicPlayerPanel.Sizes, s => s.Label == "Medium" && s.Percent == FluentFin.Core.Mpv.SubtitleSizes.Default);
+		Assert.All(CinematicPlayerPanel.Sizes, s => Assert.Equal(FluentFin.Core.Mpv.SubtitleSizes.Clamp(s.Percent), s.Percent));
+	}
+
+	[Fact]
+	public void PreviewStage_WaitsForTheFocusToRest_TheConceptsWindow()
+	{
+		// the concept: wait 150 to 250 ms before swapping the backdrop, so arrowing along a row loads nothing on the way
+		Assert.InRange(CinematicPreviewStage.Settle.TotalMilliseconds, 150, 250);
 	}
 
 	[Fact]

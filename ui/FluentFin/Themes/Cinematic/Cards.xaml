@@ -52,16 +52,16 @@
             <!--  the hero: the words' side scrim, the foot into the page, the top under the island  -->
             <LinearGradientBrush x:Key="CinematicHeroSideScrimBrush" StartPoint="0,0" EndPoint="1,0">
                 <GradientStop Offset="0" Color="#EB12050B" />
-                <GradientStop Offset="0.3" Color="#B312050B" />
-                <GradientStop Offset="0.44" Color="#6612050B" />
-                <GradientStop Offset="0.6" Color="#1A12050B" />
-                <GradientStop Offset="0.72" Color="#0012050B" />
+                <GradientStop Offset="0.3" Color="#C712050B" />
+                <GradientStop Offset="0.4" Color="#9E12050B" />
+                <GradientStop Offset="0.52" Color="#4D12050B" />
+                <GradientStop Offset="0.66" Color="#1412050B" />
+                <GradientStop Offset="0.76" Color="#0012050B" />
             </LinearGradientBrush>
             <LinearGradientBrush x:Key="CinematicHeroFootScrimBrush" StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Offset="0.4" Color="#001A0710" />
-                <GradientStop Offset="0.64" Color="#B81A0710" />
-                <GradientStop Offset="0.84" Color="#FF1A0710" />
-                <GradientStop Offset="1" Color="#FF1A0710" />
+                <GradientStop Offset="0.42" Color="#001A0710" />
+                <GradientStop Offset="0.64" Color="#CC1A0710" />
+                <GradientStop Offset="0.9" Color="#FF1A0710" />
             </LinearGradientBrush>
             <!--  an item page: the foot starts higher (the tabs and the episodes sit on it)  -->
             <LinearGradientBrush x:Key="CinematicItemFootScrimBrush" StartPoint="0,0" EndPoint="0,1">
@@ -72,6 +72,19 @@
             </LinearGradientBrush>
             <!--  behind the credits at the right of an item page (they can fall on bright art)  -->
             <SolidColorBrush x:Key="CinematicCreditsBackingBrush" Color="#A612050B" />
+            <!--  the player: the tabs and their panel lie over the video on a dense fill (no blur over video); the top scrim  -->
+            <SolidColorBrush x:Key="CinematicPlayerPanelBrush" Color="#EB170508" />
+            <LinearGradientBrush x:Key="CinematicPlayerTopScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#D9000000" />
+                <GradientStop Offset="0.6" Color="#99000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </LinearGradientBrush>
+            <!--  the library's preview stage: its foot fades into the page, where the grid's header line sits  -->
+            <LinearGradientBrush x:Key="CinematicStageFootScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0.3" Color="#001A0710" />
+                <GradientStop Offset="0.7" Color="#CC1A0710" />
+                <GradientStop Offset="1" Color="#FF1A0710" />
+            </LinearGradientBrush>
             <LinearGradientBrush x:Key="CinematicHeroTopScrimBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#8C0A0306" />
                 <GradientStop Offset="1" Color="#000A0306" />
@@ -136,16 +149,16 @@
             <x:Double x:Key="CinematicGlowFarOpacity">0.25</x:Double>
             <LinearGradientBrush x:Key="CinematicHeroSideScrimBrush" StartPoint="0,0" EndPoint="1,0">
                 <GradientStop Offset="0" Color="#EB12050B" />
-                <GradientStop Offset="0.3" Color="#B312050B" />
-                <GradientStop Offset="0.44" Color="#6612050B" />
-                <GradientStop Offset="0.6" Color="#1A12050B" />
-                <GradientStop Offset="0.72" Color="#0012050B" />
+                <GradientStop Offset="0.3" Color="#C712050B" />
+                <GradientStop Offset="0.4" Color="#9E12050B" />
+                <GradientStop Offset="0.52" Color="#4D12050B" />
+                <GradientStop Offset="0.66" Color="#1412050B" />
+                <GradientStop Offset="0.76" Color="#0012050B" />
             </LinearGradientBrush>
             <LinearGradientBrush x:Key="CinematicHeroFootScrimBrush" StartPoint="0,0" EndPoint="0,1">
-                <GradientStop Offset="0.4" Color="#00FFF6F3" />
-                <GradientStop Offset="0.66" Color="#B8FFF6F3" />
-                <GradientStop Offset="0.84" Color="#FFFFF6F3" />
-                <GradientStop Offset="1" Color="#FFFFF6F3" />
+                <GradientStop Offset="0.42" Color="#00FFF6F3" />
+                <GradientStop Offset="0.64" Color="#CCFFF6F3" />
+                <GradientStop Offset="0.9" Color="#FFFFF6F3" />
             </LinearGradientBrush>
             <LinearGradientBrush x:Key="CinematicItemFootScrimBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0.36" Color="#00FFF6F3" />
@@ -154,6 +167,18 @@
                 <GradientStop Offset="1" Color="#FFFFF6F3" />
             </LinearGradientBrush>
             <SolidColorBrush x:Key="CinematicCreditsBackingBrush" Color="#A612050B" />
+            <!--  the player: the tabs and their panel lie over the video on a dense fill (no blur over video); the top scrim  -->
+            <SolidColorBrush x:Key="CinematicPlayerPanelBrush" Color="#EB170508" />
+            <LinearGradientBrush x:Key="CinematicPlayerTopScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#D9000000" />
+                <GradientStop Offset="0.6" Color="#99000000" />
+                <GradientStop Offset="1" Color="#00000000" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="CinematicStageFootScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0.32" Color="#00FFF6F3" />
+                <GradientStop Offset="0.72" Color="#CCFFF6F3" />
+                <GradientStop Offset="1" Color="#FFFFF6F3" />
+            </LinearGradientBrush>
             <LinearGradientBrush x:Key="CinematicHeroTopScrimBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#8C0A0306" />
                 <GradientStop Offset="1" Color="#000A0306" />
@@ -207,6 +232,9 @@
             <SolidColorBrush x:Key="CinematicHeroTopScrimBrush" Color="Transparent" />
             <SolidColorBrush x:Key="CinematicItemFootScrimBrush" Color="Transparent" />
             <SolidColorBrush x:Key="CinematicCreditsBackingBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CinematicPlayerPanelBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CinematicPlayerTopScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CinematicStageFootScrimBrush" Color="Transparent" />
             <SolidColorBrush x:Key="CinematicHorizonBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="CinematicIslandSheenBrush" Color="Transparent" />
             <SolidColorBrush x:Key="CinematicIslandBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -221,6 +249,15 @@
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="CharacterSpacing" Value="140" />
         <Setter Property="Foreground" Value="{ThemeResource CinematicKickerBrush}" />
+    </Style>
+    <!--  a page's own title (the library's name): Segoe UI Variable Display 28 SemiBold, a level-1 heading  -->
+    <Style x:Key="CinematicPageTitleTextBlockStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource GlassDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="28" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="AutomationProperties.HeadingLevel" Value="Level1" />
     </Style>
     <Style x:Key="CinematicShelfTitleTextBlockStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource GlassDisplayFontFamily}" />
@@ -249,9 +286,4 @@
             TitleArtSize="20"
             TitleSize="15" />
     </DataTemplate>
-    <!--  a poster (2:3), the shared card's picture  -->
-    <c:JellyfinImageConverter
-        x:Key="CinematicPosterImageConverter"
-        ImageHeight="300"
-        TypeRequest="Primary" />
 </ResourceDictionary>

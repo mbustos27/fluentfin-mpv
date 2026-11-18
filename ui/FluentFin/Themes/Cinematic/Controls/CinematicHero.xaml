@@ -43,8 +43,8 @@
             Opacity="0"
             Stretch="UniformToFill" />
 
-        <Border Background="{ThemeResource CinematicHeroSideScrimBrush}" IsHitTestVisible="False" />
         <Border Background="{ThemeResource CinematicHeroFootScrimBrush}" IsHitTestVisible="False" />
+        <Border Background="{ThemeResource CinematicHeroSideScrimBrush}" IsHitTestVisible="False" />
         <Border
             Height="200"
             VerticalAlignment="Top"

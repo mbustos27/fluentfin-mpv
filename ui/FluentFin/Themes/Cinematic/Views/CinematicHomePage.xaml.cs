@@ -129,7 +129,7 @@ public sealed partial class CinematicHomePage : Page
 		StillWidth = narrow ? 300 : 384;
 		StillHeight = narrow ? 169 : 216;
 		UpNextRow.Margin = new Thickness(side - still, 0, 0, 0);
-		UpNextRow.ItemTemplate = (DataTemplate)Resources[narrow ? "StillSmall" : "StillLarge"];
+		UpNextRow.ItemTemplate = (DataTemplate)Resources[narrow ? "UpNextSmall" : "UpNextLarge"];
 		UpNextPlaceholder.Margin = new Thickness(side, 0, 0, 0);
 		StateView.Margin = new Thickness(side, 0, side, 12);
 		RowMargin = new Thickness(side - 12, 0, 0, 0);

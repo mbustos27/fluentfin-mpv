@@ -25,6 +25,7 @@ public sealed class CinematicTheme : ILayoutTheme
 		[typeof(SeasonViewModel)] = typeof(CinematicSeasonPage),
 		[typeof(MovieViewModel)] = typeof(CinematicMoviePage),
 		[typeof(EpisodeViewModel)] = typeof(CinematicEpisodePage),
+		[typeof(LibraryViewModel)] = typeof(CinematicLibraryPage),
 	};
 
 	public Type? ViewFor(Type viewModelType) => Views.TryGetValue(viewModelType, out var view) ? view : null;

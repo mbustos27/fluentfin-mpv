@@ -20,9 +20,31 @@
     mc:Ignorable="d">
 
     <Page.Resources>
+        <!--  an episode still: 370 x 208 (300 x 169 narrow); Enter or a click plays it, its menu opens its page  -->
+        <DataTemplate x:Key="EpisodeLarge" x:DataType="vm:BaseItemViewModel">
+            <cc:CinematicStill
+                Margin="16,14,16,14"
+                ArtHeight="208"
+                ArtWidth="370"
+                DecodeWidth="600"
+                Kind="Episode"
+                Model="{x:Bind}"
+                ShowTitleArt="False" />
+        </DataTemplate>
+        <DataTemplate x:Key="EpisodeSmall" x:DataType="vm:BaseItemViewModel">
+            <cc:CinematicStill
+                Margin="12,12,12,12"
+                ArtHeight="169"
+                ArtWidth="300"
+                DecodeWidth="520"
+                Kind="Episode"
+                Model="{x:Bind}"
+                ShowTitleArt="False"
+                TitleSize="15" />
+        </DataTemplate>
         <DataTemplate x:Key="StillSmall" x:DataType="vm:BaseItemViewModel">
             <cc:CinematicStill
-                Margin="12,12,12,0"
+                Margin="12,12,12,12"
                 ArtHeight="169"
                 ArtWidth="300"
                 DecodeWidth="520"
@@ -120,20 +142,9 @@
                                 x:Name="EpisodeShelf"
                                 Margin="80,0,0,0"
                                 Header="Episodes"
+                                ItemTemplate="{StaticResource EpisodeLarge}"
                                 ItemsSource="{x:Bind local:CinematicSeriesSupport.Wrap(ViewModel.Episodes), Mode=OneWay}"
                                 Loaded="EpisodeShelf_Loaded">
-                                <lc:ShelfRow.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:BaseItemViewModel">
-                                        <cc:CinematicStill
-                                            Margin="16,14,16,0"
-                                            ArtHeight="208"
-                                            ArtWidth="370"
-                                            DecodeWidth="600"
-                                            Kind="Episode"
-                                            ShowTitleArt="False"
-                                            Model="{x:Bind}" />
-                                    </DataTemplate>
-                                </lc:ShelfRow.ItemTemplate>
                             </lc:ShelfRow>
                             <StackPanel
                                 Margin="96,8,48,0"

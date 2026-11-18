@@ -27,7 +27,9 @@ public sealed partial class CinematicSeriesPage : Page
 		{
 			var side = narrow ? 48 : 96;
 			TabsRow.Margin = new Thickness(side - 8, 0, 48, 6);
-			EpisodeShelf.Margin = new Thickness(side - 16, 0, 0, 0);
+			EpisodeShelf.Margin = new Thickness(side - (narrow ? 12 : 16), 0, 0, 0);
+			EpisodeShelf.ItemTemplate = (DataTemplate)Resources[narrow ? "EpisodeSmall" : "EpisodeLarge"];
+			CinematicShelf.HideHeader(EpisodeShelf);
 			Body.Margin = new Thickness(side, 24, 48, 56);
 		});
 		ViewModel.PropertyChanged += (_, e) =>

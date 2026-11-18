@@ -85,7 +85,9 @@ public sealed partial class CinematicStill : UserControl
 		PointerExited += (_, _) => { _pointerOver = false; Show(); };
 		PointerCanceled += (_, _) => { _pointerOver = false; Show(); };
 		Tapped += Still_Tapped;
-		ContextRequested += Still_ContextRequested;
+		// the menu (a right click, the menu key, Shift+F10), made as it opens so it says what is true now
+		_menu.Opening += (_, _) => FillMenu();
+		ContextFlyout = _menu;
 		RegisterPropertyChangedCallback(ModelProperty, (_, _) => Apply());
 		RegisterPropertyChangedCallback(LineProperty, (_, _) => Apply());
 		RegisterPropertyChangedCallback(TitleProperty, (_, _) => Apply());
@@ -337,30 +339,45 @@ public sealed partial class CinematicStill : UserControl
 		}
 	}
 
-	/// <summary>The menu key or Shift+F10: the shared card menu (Play, the toggles, details).</summary>
-	private void Still_ContextRequested(UIElement sender, ContextRequestedEventArgs args)
+
+	private readonly MenuBarItemFlyout _menu = new();
+
+	/// <summary>
+	/// The still's menu: an episode's starts with "Episode details" (Enter plays it, as the shared episode row), then the
+	/// shared card menu (Play, Watched, Favourite, the rest; JellyfinFlyoutConverter).
+	/// </summary>
+	private void FillMenu()
 	{
+		_menu.Items.Clear();
 		if (Model?.Dto is not { } dto)
 		{
 			return;
 		}
 
-		var flyout = new JellyfinFlyoutConverter { IncludePlay = true }.Convert(dto, typeof(object), null!, "") as FlyoutBase;
-		if (flyout is null)
+		if (Kind == StillKind.Episode)
 		{
-			return;
+			_menu.Items.Add(new MenuFlyoutItem
+			{
+				Text = "Episode details",
+				Icon = new FontIcon { Glyph = "" },
+				Command = App.Commands.DisplayDtoCommand,
+				CommandParameter = dto,
+			});
 		}
 
-		if (args.TryGetPosition(this, out var point))
+		if (new JellyfinFlyoutConverter { IncludePlay = Kind != StillKind.Episode }.Convert(dto, typeof(object), null!, "") is MenuFlyout more && more.Items.Count > 0)
 		{
-			flyout.ShowAt(this, new FlyoutShowOptions { Position = point });
-		}
-		else
-		{
-			flyout.ShowAt(this);
-		}
+			if (_menu.Items.Count > 0)
+			{
+				_menu.Items.Add(new MenuFlyoutSeparator());
+			}
 
-		args.Handled = true;
+			foreach (var item in more.Items.ToList())
+			{
+				more.Items.Remove(item);
+				_menu.Items.Add(item);
+			}
+		}
 	}
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new CinematicStillAutomationPeer(this);
@@ -389,7 +406,9 @@ internal sealed partial class CinematicStillAutomationPeer(CinematicStill owner)
 
 	internal static AutomationControlType ControlTypeFor(bool inList) => inList ? AutomationControlType.ListItem : AutomationControlType.Button;
 
-	protected override string GetClassNameCore() => nameof(CinematicStill);
+	// the shared card's class name: a still is the card of this theme, and the tools that find cards (the off-screen harness's
+	// FindCard, its card counts) find it as they find the shared one; Narrator reads the name, never the class
+	protected override string GetClassNameCore() => "BaseItemDtoCard";
 
 	protected override string GetNameCore()
 	{
@@ -409,6 +428,7 @@ internal sealed partial class CinematicStillAutomationPeer(CinematicStill owner)
 	protected override object GetPatternCore(PatternInterface patternInterface) =>
 		patternInterface == PatternInterface.Invoke ? this : base.GetPatternCore(patternInterface);
 
+	// as the shared card: the Play button under it while it shows
 	protected override IList<AutomationPeer> GetChildrenCore() =>
 		owner.VisiblePlay is { } play && FrameworkElementAutomationPeer.CreatePeerForElement(play) is { } peer ? [peer] : [];
 
