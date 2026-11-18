@@ -76,7 +76,8 @@ Keyboard reach and focus visuals, Narrator names on every card and icon button, 
 
 ## Pass 3: real sea glass (all-in, niche on purpose)
 
-The user: "its not very glassy lets get reallllllll themed", "we can get niche". Spec: `docseports\SeaGlass theme inspiration.md`
+The user: "its not very glassy lets get reallllllll themed", "we can get niche". Spec: `docs
+eports\SeaGlass theme inspiration.md`
 (its ideas only; nothing copied from the SeaGlass repo it studies, which has no licence). Solid and high contrast stay.
 
 - **Per-title palette** (`FluentFin.Core\Theming`): the artwork's BlurHash (`ItemArtwork.BackdropBlurHash`, the hero slide's)
@@ -199,8 +200,18 @@ list with each feature's status is the glass stream's `shots\glass-features.md`.
   none in Solid), the rail is lifted by the panels' two shadows, and the pointer lights the rim near it (`PanelSheen`'s edge
   light). In the background (`GlassActivity`) the light edge and glow dim to 45 %, the backdrop stops and the pointer light goes out.
 - **Neon**: keyboard focus on a glass pill glows (hot pink close in, the nixie orange `GlassNeonGlowColor` `#FF7A50` further out,
-  made on first focus) besides WinUI's two focus rings, which are now the accent around a deep (dark) or white (light) line;
-  the accent pill has a soft resting glow. Every glow's opacity is a shadow opacity, 0 in high contrast.
+  made on first focus) besides WinUI's two focus rings: in dark the neon core's near-white `#FFF4EE` around the deep colour (a
+  pink ring vanished on the hot-pink Play), in light crimson around white. The accent pill has a soft resting glow. Every glow's
+  opacity is `GlassShadowOpacity` or `GlassContactShadowOpacity` (0 in high contrast). Never give a glow a key of its own at the
+  top of Glass.xaml as a fallback: a top-level key wins over the theme dictionaries in every theme (that hid every glow once;
+  `GlassDuskTests` now forbids a key both at the top and in a theme dictionary).
+- **One glass layer per surface** (the 1.1.3 layout audit's "boxes in boxes"): panels have 12 px corners; `GlassSectionStyle` is a
+  section with the panel's spacing and nothing behind it, for shelves on item pages and Settings groups; keep `GlassSurfaceStyle`
+  for at most one form-like block a page and never nest it. The glassiness comes from the chrome, the backdrop and the overlays.
+- **The top bar** (the side rail is gone, account stream): `GlassTitleBarBrush` (acrylic; `GlassTitleBarSolidBrush` in Solid),
+  `GlassTitleBarStrokeBrush` for its bottom hairline, and the selected tab's `NeonUnderline` (a stroke-stack tube: hot-pink halo
+  and glow around a near-white core; light: a crimson line; high contrast: the system highlight) or `GlassTabUnderlineBrush`.
+  An in-app theme goes through `GlassTheme.SetAppTheme`, which themes the caption buttons too.
 - **The wordmark** (`AppWordmark`): the name as a lit tube, in Monoton (SIL OFL 1.1, `Assets\Fonts`, shipped unmodified beside
   its licence) from 36 px up, with two masked composition glows and one flicker on the first showing in Full; the plain display
   font in the tube's colour when small (the title bar). Body text stays Segoe UI Variable; no display font on server data.

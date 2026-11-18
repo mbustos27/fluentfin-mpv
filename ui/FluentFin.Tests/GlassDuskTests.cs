@@ -227,6 +227,37 @@ public sealed class GlassDuskTests
 	public void An_app_theme_also_themes_the_caption_buttons(Microsoft.UI.Xaml.ElementTheme theme, Microsoft.UI.Windowing.TitleBarTheme expected) =>
 		Assert.Equal(expected, GlassTheme.TitleBarThemeFor(theme));
 
+	/// <summary>
+	/// The caption buttons in an app-set theme: the glyphs read on the top of the window in both the dusk scene and the plain backdrop
+	/// (4.5:1 active, 3:1 in the background); Default leaves Windows' own colours.
+	/// </summary>
+	[Theory]
+	[InlineData(Microsoft.UI.Xaml.ElementTheme.Dark, new[] { "#500723", "#170508" })]
+	[InlineData(Microsoft.UI.Xaml.ElementTheme.Light, new[] { "#FFF4EE", "#FFF6F3" })]
+	public void An_app_theme_gives_the_caption_buttons_readable_glyphs(Microsoft.UI.Xaml.ElementTheme theme, string[] tops)
+	{
+		var colors = GlassTheme.CaptionColorsFor(theme);
+		Assert.NotNull(colors);
+		static Rgb Parse(string hex) => new(Convert.ToByte(hex[^6..^4], 16), Convert.ToByte(hex[^4..^2], 16), Convert.ToByte(hex[^2..], 16));
+		foreach (var top in tops.Select(Parse))
+		{
+			var c = colors.Value;
+			Assert.True(OkLab.Contrast(new Rgb(c.Foreground.R, c.Foreground.G, c.Foreground.B).Luminance, top.Luminance) >= 4.5, $"{top.Hex}");
+			Assert.True(OkLab.Contrast(new Rgb(c.Inactive.R, c.Inactive.G, c.Inactive.B).Luminance, top.Luminance) >= 3, $"{top.Hex} inactive");
+		}
+
+		Assert.Null(GlassTheme.CaptionColorsFor(Microsoft.UI.Xaml.ElementTheme.Default));
+	}
+
+	[Theory]
+	[InlineData(null, true)]
+	[InlineData("", true)]
+	[InlineData("0", true)]
+	[InlineData("true", true)]
+	[InlineData("1", false)]
+	public void Only_the_harness_switch_set_to_1_stops_following_the_windows_activity(string? value, bool follows) =>
+		Assert.Equal(follows, GlassActivity.FollowsActivity(value));
+
 	/// <summary>1.1.4 (the layout audit's boxes in boxes): a section style that draws nothing, and 12 px panels.</summary>
 	[Fact]
 	public void A_section_can_sit_on_the_page_without_a_panel_and_panels_are_12_px()
