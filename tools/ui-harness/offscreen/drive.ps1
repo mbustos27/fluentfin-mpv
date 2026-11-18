@@ -478,7 +478,8 @@ function Step-Season([bool]$Capture = $true) {
     $at = Get-Epoch
     # 1.2.0: the series page lists the episodes with a season picker, and its "<season> details" link opens the season's
     # page (a build with season cards on the series page: the card)
-    $link = Wait-Until { Find-Ui -Name "$($fixture.season.name) details" -Type 'Hyperlink' } -Seconds 10 -PollMs 200
+    # (scrolled out of view too: the series step's Tab walk leaves the page at its bottom, and Invoke needs no view)
+    $link = Wait-Until { Find-Ui -Name "$($fixture.season.name) details" -Type 'Hyperlink' -OffscreenToo } -Seconds 10 -PollMs 200
     if ($link) { Say "season link '$($fixture.season.name) details' ($(Invoke-Element $link))" } else { Open-Card $fixture.season.name }
     # the season page's own Watched ("Mark Season 1 of <series> as ..."), so the series page's rows do not count
     $play = Wait-Until {
