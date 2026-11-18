@@ -1,0 +1,553 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Nixie 1.3.0, the Editorial theme's Home: a magazine for a big library. The hero is a tile, not the window ("Tonight": what
+    you were watching, with Resume), beside a numbered "Up next" list (in progress, then next episodes: one click each); then
+    the genre strip in big type, which picks the shelf under it; then the dense "New in ..." shelves. Posters open in place.
+    At 1100 px the hero takes the width and Up next becomes three across under it. The page is opaque content on the night
+    ground, under the sunset rule; the top bar is the shared one.
+    Keyboard: Tab goes bar, hero, Up next (one stop, Up/Down), the genres (one stop, Left/Right), each shelf (one stop); N and
+    C go to Up next's next episode and what is in progress.
+-->
+<Page
+    x:Class="FluentFin.Themes.Editorial.Views.EditorialHomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:ctkl="using:CommunityToolkit.Labs.WinUI"
+    xmlns:ec="using:FluentFin.Themes.Editorial.Controls"
+    xmlns:local="using:FluentFin.Themes.Editorial.Views"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:media="using:CommunityToolkit.WinUI.Media"
+    xmlns:root="using:FluentFin"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Page"
+    Background="{ThemeResource EditorialGroundBrush}"
+    KeyboardAcceleratorPlacementMode="Hidden">
+
+    <Page.Resources>
+        <c:JellyfinFlyoutConverter x:Key="FlyoutConverter" IncludePlay="True" />
+
+        <!--  an Up next line: the whole line plays (one click); hover a faint fill, keyboard focus WinUI's two rings  -->
+        <Style x:Key="UpNextLineStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
+            <Setter Property="FocusVisualMargin" Value="-1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border
+                                x:Name="Fill"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{TemplateBinding CornerRadius}" />
+                            <ContentPresenter
+                                x:Name="ContentPresenter"
+                                Padding="{TemplateBinding Padding}"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Content="{TemplateBinding Content}"
+                                Foreground="{TemplateBinding Foreground}" />
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="PointerOver">
+                                        <VisualState.Setters>
+                                            <Setter Target="Fill.Background" Value="{ThemeResource EditorialRowHoverBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Pressed">
+                                        <VisualState.Setters>
+                                            <Setter Target="Fill.Background" Value="{ThemeResource EditorialRowSelectedBrush}" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="WideUpNextTemplate" x:DataType="vm:EditorialUpNextEntry">
+            <Button
+                Height="62"
+                AutomationProperties.Name="{x:Bind Name}"
+                Command="{x:Bind root:App.Commands.PlayDtoCommand}"
+                CommandParameter="{x:Bind Item.Dto}"
+                ContextFlyout="{x:Bind Item.Dto, Converter={StaticResource FlyoutConverter}}"
+                Style="{StaticResource UpNextLineStyle}"
+                ToolTipService.ToolTip="{x:Bind local:EditorialHomePage.PlayName(Item)}"
+                >
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="50" />
+                        <ColumnDefinition Width="96" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource EditorialNumberTextBlockStyle}"
+                        Text="{x:Bind Number}" />
+                    <Border
+                        Grid.Column="1"
+                        Width="96"
+                        Height="54"
+                        Background="{ThemeResource NixieDeepBrush}"
+                        BorderBrush="{ThemeResource EditorialArtStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6">
+                        <Image Source="{x:Bind local:EditorialHomePage.ThumbFor(Item, 192)}" Stretch="UniformToFill" />
+                    </Border>
+                    <StackPanel
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Spacing="2">
+                        <TextBlock
+                            FontSize="15"
+                            FontWeight="SemiBold"
+                            Text="{x:Bind Title}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                        <TextBlock
+                            FontSize="13"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Text="{x:Bind Detail}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                        <Grid
+                            Width="160"
+                            Height="3"
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Left"
+                            Background="{ThemeResource EditorialChipStrokeBrush}"
+                            CornerRadius="1.5"
+                            Visibility="{x:Bind HasProgress}">
+                            <Border
+                                Width="{x:Bind local:EditorialHomePage.ProgressWidth(Progress, 160)}"
+                                HorizontalAlignment="Left"
+                                Background="{ThemeResource NixieAccentBrush}"
+                                CornerRadius="1.5" />
+                        </Grid>
+                    </StackPanel>
+                    <FontIcon
+                        Grid.Column="3"
+                        Margin="0,0,6,0"
+                        FontSize="16"
+                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                        Glyph="&#xE768;" />
+                </Grid>
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="NarrowUpNextTemplate" x:DataType="vm:EditorialUpNextEntry">
+            <Button
+                Height="62"
+                Padding="8,0"
+                AutomationProperties.Name="{x:Bind Name}"
+                Command="{x:Bind root:App.Commands.PlayDtoCommand}"
+                CommandParameter="{x:Bind Item.Dto}"
+                ContextFlyout="{x:Bind Item.Dto, Converter={StaticResource FlyoutConverter}}"
+                Style="{StaticResource UpNextLineStyle}"
+                ToolTipService.ToolTip="{x:Bind local:EditorialHomePage.PlayName(Item)}"
+                >
+                <Grid ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="84" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="30"
+                        Style="{StaticResource EditorialNumberTextBlockStyle}"
+                        Text="{x:Bind Number}" />
+                    <Border
+                        Grid.Column="1"
+                        Width="84"
+                        Height="47"
+                        Background="{ThemeResource NixieDeepBrush}"
+                        BorderBrush="{ThemeResource EditorialArtStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="6">
+                        <Image Source="{x:Bind local:EditorialHomePage.ThumbFor(Item, 168)}" Stretch="UniformToFill" />
+                    </Border>
+                    <StackPanel
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Spacing="2">
+                        <TextBlock
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Text="{x:Bind Title}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                        <TextBlock
+                            FontSize="13"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Text="{x:Bind local:EditorialHomePage.ShortDetail(Item, IsResume)}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </DataTemplate>
+
+        <Style x:Key="PosterPlaceholder" TargetType="ctkl:Shimmer">
+            <Setter Property="Width" Value="144" />
+            <Setter Property="Height" Value="216" />
+            <Setter Property="Margin" Value="0,0,18,0" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+    </Page.Resources>
+
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator Key="N" Invoked="NextUpInvoked" />
+        <KeyboardAccelerator Key="C" Invoked="ContinueInvoked" />
+        <KeyboardAccelerator
+            Key="Z"
+            Invoked="UndoInvoked"
+            Modifiers="Control" />
+    </Page.KeyboardAccelerators>
+
+    <Grid>
+        <ScrollViewer x:Name="PageScroller" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="Body" Padding="56,24,56,56">
+                <lc:LoadStateView State="{x:Bind ViewModel.State}" />
+
+                <!--  the hero tile and Up next: side by side from 1400 px, Up next three across under the tile below that  -->
+                <Grid x:Name="TopGrid" ColumnSpacing="28" RowSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="HeroColumn" Width="*" />
+                        <ColumnDefinition x:Name="UpNextColumn" Width="640" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!--  the hero tile: always dark (artwork); its text on the left scrim  -->
+                    <Grid
+                        x:Name="HeroTile"
+                        Height="330"
+                        CornerRadius="8"
+                        RequestedTheme="Dark"
+                        Visibility="Collapsed">
+                        <Border Background="{ThemeResource NixieDeepBrush}" />
+                        <Image
+                            x:Name="HeroImage"
+                            AutomationProperties.AccessibilityView="Raw"
+                            HorizontalAlignment="Right"
+                            Stretch="UniformToFill" />
+                        <Border Background="{ThemeResource EditorialHeroScrimBrush}" />
+                        <Border Background="{ThemeResource EditorialHeroBottomScrimBrush}" />
+                        <Border
+                            BorderBrush="{ThemeResource EditorialArtStrokeBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            IsHitTestVisible="False" />
+                        <StackPanel
+                            x:Name="HeroWords"
+                            MaxWidth="620"
+                            Margin="40,30,40,28"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Top">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock
+                                    x:Name="TonightText"
+                                    VerticalAlignment="Center"
+                                    CharacterSpacing="120"
+                                    FontSize="30"
+                                    FontWeight="Normal"
+                                    Foreground="{ThemeResource EditorialKickerBrush}"
+                                    Style="{StaticResource EditorialBigTypeTextBlockStyle}"
+                                    Text="TONIGHT" />
+                                <TextBlock
+                                    x:Name="HeroKicker"
+                                    Margin="0,3,0,0"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                    Style="{StaticResource EditorialKickerTextBlockStyle}" />
+                            </StackPanel>
+                            <TextBlock
+                                x:Name="HeroTitle"
+                                Margin="0,12,0,0"
+                                AutomationProperties.HeadingLevel="Level1"
+                                Style="{StaticResource EditorialHeroTitleTextBlockStyle}" />
+                            <StackPanel
+                                x:Name="HeroMeta"
+                                Margin="0,8,0,0"
+                                Orientation="Horizontal">
+                                <TextBlock x:Name="HeroMetaRun" Style="{StaticResource EditorialMetaTextBlockStyle}" />
+                                <TextBlock x:Name="HeroLeftDot" Margin="7,0" Style="{StaticResource EditorialMetaTextBlockStyle}" />
+                                <TextBlock
+                                    x:Name="HeroLeftRun"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource EditorialHighlightTextBrush}"
+                                    Style="{StaticResource EditorialMetaTextBlockStyle}" />
+                            </StackPanel>
+                            <TextBlock
+                                x:Name="HeroOverview"
+                                MaxWidth="520"
+                                Margin="0,10,0,0"
+                                HorizontalAlignment="Left"
+                                MaxLines="2"
+                                Style="{StaticResource EditorialBodyTextBlockStyle}" />
+                            <StackPanel
+                                x:Name="HeroButtons"
+                                Margin="0,20,0,0"
+                                Orientation="Horizontal"
+                                Spacing="10">
+                                <!--  the view's one Primary  -->
+                                <Button
+                                    x:Name="HeroPlayButton"
+                                    Click="HeroPlayButton_Click"
+                                    Style="{StaticResource NixiePrimaryButtonStyle}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontSize="16" Glyph="&#xE768;" />
+                                        <TextBlock x:Name="HeroPlayText" Text="Resume" />
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    x:Name="HeroDetailsButton"
+                                    Click="HeroDetailsButton_Click"
+                                    Style="{StaticResource NixieButtonStyle}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="Details" />
+                                        <FontIcon
+                                            x:Name="HeroDetailsChevron"
+                                            FontSize="12"
+                                            Glyph="&#xE70D;" />
+                                    </StackPanel>
+                                </Button>
+                                <ToggleButton
+                                    x:Name="HeroFavoriteButton"
+                                    AutomationProperties.Name="Add to favorites"
+                                    ToolTipService.ToolTip="Add to favorites"
+                                    Click="HeroFavoriteButton_Click"
+                                    Style="{StaticResource EditorialIconToggleButtonStyle}">
+                                    <FontIcon x:Name="HeroFavoriteGlyph" Glyph="&#xEB51;" />
+                                </ToggleButton>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+
+                    <!--  Up next: in progress, then the next episodes, numbered; each line plays  -->
+                    <StackPanel
+                        x:Name="UpNextPanel"
+                        Grid.Column="1"
+                        Visibility="Collapsed">
+                        <Grid
+                            x:Name="UpNextHeader"
+                            Margin="12,0,12,6"
+                            ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                AutomationProperties.HeadingLevel="Level2"
+                                CharacterSpacing="100"
+                                FontSize="24"
+                                Style="{StaticResource EditorialBigTypeTextBlockStyle}"
+                                Text="UP NEXT" />
+                            <TextBlock
+                                x:Name="UpNextCount"
+                                Grid.Column="1"
+                                Margin="0,0,0,3"
+                                VerticalAlignment="Bottom"
+                                FontSize="13"
+                                Style="{StaticResource EditorialCaptionTextBlockStyle}" />
+                            <HyperlinkButton
+                                x:Name="UpNextSeeAll"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="See all of Up next"
+                                Click="UpNextSeeAll_Click"
+                                Content="See all"
+                                FontSize="13"
+                                Style="{StaticResource NixieLinkButtonStyle}" />
+                        </Grid>
+                        <lc:RowList
+                            x:Name="UpNextList"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.Name="Up next"
+                            TabFocusNavigation="Once"
+                            XYFocusKeyboardNavigation="Enabled">
+                            <ItemsRepeater x:Name="UpNextRepeater" ItemTemplate="{StaticResource WideUpNextTemplate}">
+                                <ItemsRepeater.Layout>
+                                    <StackLayout Spacing="0" />
+                                </ItemsRepeater.Layout>
+                            </ItemsRepeater>
+                        </lc:RowList>
+                    </StackPanel>
+                </Grid>
+
+                <!--  the hero's Details: the same panel as a poster's, under the tile  -->
+                <ec:InlineDetailsRow
+                    x:Name="HeroDetails"
+                    Margin="0,16,0,0"
+                    Visibility="Collapsed" />
+
+                <!--  the genre strip: big type; the lit genre picks the shelf below  -->
+                <Grid
+                    x:Name="GenreBar"
+                    Margin="0,30,0,0"
+                    ColumnSpacing="30"
+                    Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        Margin="0,0,0,2"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                        Style="{StaticResource EditorialKickerTextBlockStyle}"
+                        Text="BROWSE" />
+                    <ec:EditorialTabList
+                        x:Name="GenreTabs"
+                        Grid.Column="1"
+                        AutomationProperties.Name="Browse by genre">
+                        <StackPanel x:Name="GenreStack" Orientation="Horizontal" Spacing="30" />
+                    </ec:EditorialTabList>
+                    <HyperlinkButton
+                        x:Name="AllGenresButton"
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="All genres"
+                        Click="AllGenresButton_Click"
+                        Content="All genres"
+                        Style="{StaticResource NixieLinkButtonStyle}">
+                        <FlyoutBase.AttachedFlyout>
+                            <MenuFlyout x:Name="AllGenresMenu" Placement="BottomEdgeAlignedRight" />
+                        </FlyoutBase.AttachedFlyout>
+                    </HyperlinkButton>
+                </Grid>
+
+                <ec:EditorialShelf
+                    x:Name="GenreShelf"
+                    Margin="0,22,0,0"
+                    Caption="{x:Bind ViewModel.EditorialGenres.Caption, Mode=OneWay}"
+                    IsNarrow="{x:Bind IsNarrow, Mode=OneWay}"
+                    ItemsSource="{x:Bind ViewModel.EditorialGenres.Items, Mode=OneWay}"
+                    Title="{x:Bind local:EditorialHomePage.Text(ViewModel.EditorialGenres.Selected), Mode=OneWay}"
+                    Visibility="{x:Bind local:EditorialHomePage.Shown(ViewModel.EditorialGenres.Items.Count), Mode=OneWay}" />
+
+                <!--  the libraries' "New in ..." shelves, dense; a placeholder row while each loads  -->
+                <ItemsControl
+                    x:Name="RecentShelves"
+                    Margin="0,12,0,0"
+                    IsTabStop="False"
+                    ItemsSource="{x:Bind ViewModel.RecentItems}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NamedQueryResult">
+                            <Grid Margin="0,22,0,0">
+                                <ec:EditorialShelf
+                                    Caption="{x:Bind local:EditorialHomePage.RecentCaption(Items), Mode=OneWay}"
+                                    HasSeeAll="True"
+                                    IsNarrow="{Binding ElementName=Page, Path=IsNarrow}"
+                                    ItemsSource="{x:Bind Items, Mode=OneWay}"
+                                    SeeAll="RecentSeeAll"
+                                    Tag="{x:Bind Library}"
+                                    Title="{x:Bind Title}"
+                                    Visibility="{x:Bind local:EditorialHomePage.Hidden(IsLoading), Mode=OneWay}" />
+                                <StackPanel Spacing="12" Visibility="{x:Bind IsLoading, Mode=OneWay}">
+                                    <TextBlock Style="{StaticResource EditorialShelfTitleTextBlockStyle}" Text="{x:Bind Title}" />
+                                    <StackPanel Orientation="Horizontal">
+                                        <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                        <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                        <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                        <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                        <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                        <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                        <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                        <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--  the sunset rule along the top of the page, under the bar  -->
+        <Border
+            Height="3"
+            VerticalAlignment="Top"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="{ThemeResource EditorialSunsetRuleBrush}"
+            IsHitTestVisible="False" />
+
+        <!--  the notice after a removal from Up next (Continue Watching), with Undo (Ctrl+Z): the shared Home's  -->
+        <Border
+            x:Name="NoticePanel"
+            MinHeight="56"
+            MaxWidth="640"
+            Margin="24,0,24,32"
+            Padding="20,8,8,8"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource GlassPanelStrongBrush}"
+            BorderBrush="{ThemeResource GlassStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource GlassOverlayCornerRadius}"
+            GotFocus="Notice_GotFocus"
+            LostFocus="Notice_LostFocus"
+            PointerEntered="Notice_PointerEntered"
+            PointerExited="Notice_PointerExited"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="NoticeText"
+                    VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                    TextWrapping="Wrap" />
+                <Button
+                    x:Name="UndoButton"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Undo"
+                    Click="UndoButton_Click"
+                    Content="Undo"
+                    Style="{StaticResource NixieCompactButtonStyle}"
+                    ToolTipService.ToolTip="Undo (Ctrl+Z)"
+                    Visibility="Collapsed" />
+                <Button
+                    x:Name="NoticeCloseButton"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Close the notice"
+                    Click="NoticeCloseButton_Click"
+                    Style="{StaticResource NixieCompactIconButtonStyle}"
+                    ToolTipService.ToolTip="Close">
+                    <FontIcon FontSize="12" Glyph="&#xE711;" />
+                </Button>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

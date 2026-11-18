@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Editorial: a poster's details, opened in place under its row (the concept's "details in place"; the item page stays for
+    deep links: Full details). One opaque panel (content, not glass): the title and its facts, small badges (4K, HDR10, 5.1),
+    two lines of overview, the cast and director, then Play (Resume when it has a resume point; the panel's one Primary),
+    Trailer, Full details, Watched, Favourite and the item's menu, and Close (Esc). The item's backdrop fills the right side
+    and fades into the panel. Up from the buttons and Esc go back to the poster (the host: EditorialShelf, the Library grid).
+-->
+<UserControl
+    x:Class="FluentFin.Themes.Editorial.Controls.InlineDetailsRow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    IsTabStop="False">
+
+    <Grid
+        x:Name="Panel"
+        MinHeight="214"
+        Background="{ThemeResource EditorialPanelBrush}"
+        BorderBrush="{ThemeResource EditorialPanelStrokeBrush}"
+        BorderThickness="1"
+        CornerRadius="8">
+        <!--  the backdrop on the right, fading into the panel from the left  -->
+        <Grid
+            x:Name="ArtArea"
+            Height="212"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            AutomationProperties.AccessibilityView="Raw"
+            IsHitTestVisible="False">
+            <Image x:Name="Backdrop" Stretch="UniformToFill" />
+            <Border Background="{ThemeResource EditorialPanelArtFadeBrush}" />
+        </Grid>
+
+        <StackPanel
+            x:Name="Words"
+            MaxWidth="900"
+            Margin="32,22,64,24"
+            HorizontalAlignment="Left"
+            Spacing="8">
+            <!--  the title and its facts on one line; the badges after them  -->
+            <StackPanel Orientation="Horizontal" Spacing="14">
+                <TextBlock
+                    x:Name="TitleText"
+                    VerticalAlignment="Bottom"
+                    AutomationProperties.HeadingLevel="Level3"
+                    FontFamily="{StaticResource GlassDisplayFontFamily}"
+                    FontSize="32"
+                    FontWeight="Bold"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+                <TextBlock
+                    x:Name="MetaText"
+                    Margin="0,0,0,6"
+                    VerticalAlignment="Bottom"
+                    FontSize="14"
+                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                    TextWrapping="NoWrap" />
+                <ItemsControl
+                    x:Name="Badges"
+                    Margin="0,0,0,6"
+                    VerticalAlignment="Bottom"
+                    IsTabStop="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="6" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border
+                                Height="21"
+                                Padding="6,0"
+                                BorderBrush="{ThemeResource GlassTextSecondaryBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4">
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    CharacterSpacing="40"
+                                    FontSize="12"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                                    Text="{Binding}" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+            <TextBlock
+                x:Name="OverviewText"
+                MaxLines="2"
+                Style="{StaticResource EditorialBodyTextBlockStyle}" />
+            <TextBlock
+                x:Name="PeopleText"
+                FontSize="14"
+                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <StackPanel
+                x:Name="Buttons"
+                Margin="0,8,0,0"
+                Orientation="Horizontal"
+                Spacing="10">
+                <Button
+                    x:Name="PlayButton"
+                    Click="PlayButton_Click"
+                    Style="{StaticResource NixiePrimaryButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE768;" />
+                        <TextBlock x:Name="PlayText" Text="Play" />
+                    </StackPanel>
+                </Button>
+                <Button
+                    x:Name="TrailerButton"
+                    Click="TrailerButton_Click"
+                    Style="{StaticResource NixieButtonStyle}"
+                    ToolTipService.ToolTip="Watch the trailer (opens in your browser)"
+                    Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE714;" />
+                        <TextBlock Text="Trailer" />
+                    </StackPanel>
+                </Button>
+                <Button
+                    x:Name="FullDetailsButton"
+                    Click="FullDetailsButton_Click"
+                    Content="Full details"
+                    Style="{StaticResource NixieButtonStyle}" />
+                <ToggleButton
+                    x:Name="WatchedButton"
+                    AutomationProperties.Name="Mark as watched"
+                    ToolTipService.ToolTip="Mark as watched"
+                    Click="WatchedButton_Click"
+                    Content="{ui:FontIcon Glyph=&#xE73E;}"
+                    Style="{StaticResource EditorialIconToggleButtonStyle}" />
+                <ToggleButton
+                    x:Name="FavoriteButton"
+                    AutomationProperties.Name="Add to favorites"
+                    ToolTipService.ToolTip="Add to favorites"
+                    Click="FavoriteButton_Click"
+                    Style="{StaticResource EditorialIconToggleButtonStyle}">
+                    <FontIcon x:Name="FavoriteGlyph" Glyph="&#xEB51;" />
+                </ToggleButton>
+                <Button
+                    x:Name="MoreButton"
+                    AutomationProperties.Name="More options"
+                    ToolTipService.ToolTip="More options"
+                    Content="{ui:FontIcon Glyph=&#xE712;}"
+                    Style="{StaticResource EditorialIconButtonStyle}" />
+            </StackPanel>
+        </StackPanel>
+
+        <Button
+            x:Name="CloseButton"
+            AutomationProperties.Name="Close the details"
+            Margin="0,12,12,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Click="CloseButton_Click"
+            Style="{StaticResource NixieCompactIconButtonStyle}"
+            ToolTipService.ToolTip="Close (Esc)">
+            <FontIcon FontSize="14" Glyph="&#xE711;" />
+        </Button>
+    </Grid>
+</UserControl>
