@@ -3,7 +3,7 @@ using Jellyfin.Sdk.Generated.Models;
 namespace FluentFin.Core;
 
 /// <summary>
-/// Seaglass 1.1.4: what an item page's Play button says. <see cref="Label"/> is the visible text, <see cref="Name"/> what
+/// 1.2.0: what an item page's Play button says. <see cref="Label"/> is the visible text, <see cref="Name"/> what
 /// Narrator reads and the tooltip shows (it starts with the label), <see cref="Progress"/> the resume bar (0-100) or null.
 /// </summary>
 public sealed record PlayTarget(string Label, string Name, double? Progress)
@@ -17,8 +17,8 @@ public sealed record PlayTarget(string Label, string Name, double? Progress)
 }
 
 /// <summary>
-/// Seaglass 1.1.4: Play on a series or a season names what it starts (Seaglass UX review, fix 12): "Resume S1E4" with its
-/// progress, "Play S2E1" for the next episode not watched, "Play from the start" once all are watched. It starts what both
+/// 1.2.0: Play on a series or a season names what it starts (Seaglass UX review, fix 12): "Resume S1 E4" with its
+/// progress, "Play S2 E1" for the next episode not watched, "Play from the start" once all are watched. It starts what both
 /// players start: <see cref="Mpv.MpvQueue"/> and FluentFin's playlist (PlaylistViewModel.AutoSelect) begin a season or a
 /// series at the series' first episode not played, at its resume point, and at the first episode when all are played
 /// (a season's Play too, so it can name an episode of another season). ItemPlayTests holds the two to the same episode.
@@ -59,7 +59,7 @@ public static class ItemPlay
 
 		var start = StartIndex(episodes);
 		var episode = episodes[start];
-		var title = ItemLabels.EpisodeTitle(episode);
+		var title = ItemLabels.EpisodeSpoken(episode);
 		var code = ItemLabels.EpisodeCode(episode);
 		// an episode without a number is named by its title
 		var which = code.Length > 0 ? code : episode.Name?.Trim() ?? "";

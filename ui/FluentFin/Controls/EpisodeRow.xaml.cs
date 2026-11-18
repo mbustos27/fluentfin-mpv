@@ -36,10 +36,6 @@ public sealed partial class EpisodeRow : UserControl
 			ItemUserData.Changed += OnUserDataChanged;
 		};
 		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
-		// Seaglass 1.1.4: the toggle's name follows what it shows (a click flips it before the server hears it)
-		WatchedButton.Checked += (_, _) => UpdateWatchedName();
-		WatchedButton.Unchecked += (_, _) => UpdateWatchedName();
-		WatchedButton.Indeterminate += (_, _) => UpdateWatchedName();
 		Apply();
 	}
 
@@ -74,25 +70,28 @@ public sealed partial class EpisodeRow : UserControl
 		var dto = Dto;
 		Thumb.Source = ItemArtworkConverters.Thumb(dto, 352);
 		TitleText.Text = ItemRowConverters.EpisodeTitle(dto);
+		// 1.2.0: the runtime on the title's line: "S1 E1 · The Archive Problem · 10m"
 		var runtime = ItemRowConverters.Runtime(dto);
-		RuntimeText.Text = runtime;
+		RuntimeText.Text = runtime.Length > 0 ? "· " + runtime : "";
 		RuntimeText.Visibility = runtime.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		OverviewText.Text = dto?.Overview ?? "";
 		PlayButton.CommandParameter = dto;
 		Label(PlayButton, ItemLabels.EpisodeAction("Play", dto));
+		Label(MoreButton, ItemLabels.EpisodeAction("More options", dto));
 		ApplyUserData();
 		UpdatePlace();
 	}
 
-	/// <summary>Seaglass 1.1.4: the progress, the watched mark and the Watched toggle, as the server has them (<see cref="ItemUserData"/>).</summary>
+	/// <summary>
+	/// 1.2.0: the progress and the watched mark, as the server has them (<see cref="ItemUserData"/>): one mark for
+	/// watched (the thumbnail's), not a second check button at the row's end; "Mark as watched" is in the row's menu.
+	/// </summary>
 	private void ApplyUserData()
 	{
 		var dto = Dto;
 		Progress.Value = ItemRowConverters.Progress(dto);
 		Progress.Visibility = ItemRowConverters.InProgress(dto);
 		WatchedMark.Visibility = ItemRowConverters.Watched(dto);
-		WatchedButton.IsChecked = dto?.UserData?.Played;
-		UpdateWatchedName();
 	}
 
 	private void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
@@ -106,20 +105,8 @@ public sealed partial class EpisodeRow : UserControl
 		ApplyUserData();
 	}
 
-	// Seaglass 1.1.4: the toggle sends the state it shows after the click (ItemUserData; a failure springs it back)
-	private async void WatchedButton_Click(object sender, RoutedEventArgs e)
-	{
-		if (Dto is { } dto)
-		{
-			await App.Commands.SetWatched(dto, WatchedButton.IsChecked == true);
-		}
-	}
-
-	/// <summary>
-	/// Seaglass 1.1.4: "Mark as watched, episode 3, Pilot", or "Mark as unwatched, ..." while it shows watched: what a click does
-	/// now, the tooltip the same words (Seaglass UX review, fix 4; the name was "Watched" and the tooltip "Mark watched").
-	/// </summary>
-	private void UpdateWatchedName() => Label(WatchedButton, ItemLabels.EpisodeWatchedAction(Dto, WatchedButton.IsChecked));
+	/// <summary>1.2.0: the row's "…": the same menu as a right click or the menu key (the episode's page, watched, favourite, the rest).</summary>
+	private void MoreButton_Click(object sender, RoutedEventArgs e) => _menu.ShowAt(MoreButton);
 
 	private static void Label(FrameworkElement button, string name)
 	{
@@ -195,9 +182,10 @@ public sealed partial class EpisodeRow : UserControl
 		UpdatePlayDisc();
 	}
 
-	// Seaglass 1.1.4: the play disc says what a click or Enter does: shown while the pointer is on the row or the keyboard on it
+	// 1.2.0: the play disc on the thumbnail says what a click or Enter does: shown while the pointer is on the row or the
+	// keyboard on it; never collapsed, so Narrator and UI Automation always find Play (its opacity hides it)
 	private void UpdatePlayDisc() =>
-		PlayDisc.Visibility = _pointerOver || FocusRing.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
+		PlayButton.Opacity = _pointerOver || FocusRing.Visibility == Visibility.Visible ? 1 : 0;
 
 	private void Body_PointerEntered(object sender, PointerRoutedEventArgs e)
 	{
@@ -214,7 +202,7 @@ public sealed partial class EpisodeRow : UserControl
 	}
 
 	/// <summary>
-	/// Seaglass 1.1.4 (1.1.3 UX audit, interaction item 6): a click on the row plays the episode, as Enter does; Play and Watched
+	/// 1.2.0 (1.1.3 UX audit, interaction item 6): a click on the row plays the episode, as Enter does; Play and the "…"
 	/// do their own thing, and the title opens the episode's page (<see cref="Title_Tapped"/>).
 	/// </summary>
 	private void Body_Tapped(object sender, TappedRoutedEventArgs e)
@@ -237,7 +225,7 @@ public sealed partial class EpisodeRow : UserControl
 	private void Title_PointerExited(object sender, PointerRoutedEventArgs e) => TitleText.TextDecorations = Windows.UI.Text.TextDecorations.None;
 }
 
-/// <summary>Seaglass 1.1.4: what a click on an episode row does.</summary>
+/// <summary>1.2.0: what a click on an episode row does.</summary>
 internal enum RowClickAction
 {
 	/// <summary>The row's own action: play the episode (Enter's).</summary>
@@ -247,7 +235,7 @@ internal enum RowClickAction
 	None,
 }
 
-/// <summary>Seaglass 1.1.4: a click on the row plays, unless it was on one of the row's buttons or on the title (the link to the page).</summary>
+/// <summary>1.2.0: a click on the row plays, unless it was on one of the row's buttons or on the title (the link to the page).</summary>
 internal static class RowClick
 {
 	public static RowClickAction For(DependencyObject? source, DependencyObject row, DependencyObject title)
@@ -265,8 +253,8 @@ internal static class RowClick
 }
 
 /// <summary>
-/// Seaglass scrolling: Narrator reads an episode row as a list item named "S1E4 Title, watched" (<see cref="ItemLabels.EpisodeRowName"/>),
-/// "4 of 8" from its place; Invoke plays it, as Enter does. Play and Watched are under it. A row on its own (the episode
+/// Seaglass scrolling: Narrator reads an episode row as a list item named "S1 E4 Title, watched" (<see cref="ItemLabels.EpisodeRowName"/>),
+/// "4 of 8" from its place; Invoke plays it, as Enter does. Play and the "…" are under it. A row on its own (the episode
 /// page's "Up next") is a button: a list item with no list around it would say "1 of 1" or nothing at all.
 /// </summary>
 internal sealed partial class EpisodeRowAutomationPeer(EpisodeRow owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider

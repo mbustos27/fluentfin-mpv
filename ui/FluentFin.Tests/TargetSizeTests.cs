@@ -4,7 +4,7 @@ using FluentFin.Plugins.Journal.Controls;
 namespace FluentFin.Tests;
 
 /// <summary>
-/// Seaglass 1.1.4 (Seaglass UX review, fix 7): the Home hero's dots and the item pages' rating stars are targets of at least
+/// 1.2.0 (Seaglass UX review, fix 7): the Home hero's dots and the item pages' rating stars are targets of at least
 /// 24 px (WCAG 2.5.8). Their XAML and code use these values (FluentFin.Core.Tests, ItemButtonsXamlTests).
 /// </summary>
 public sealed class TargetSizeTests

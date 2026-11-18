@@ -20,24 +20,11 @@ public static class ItemMeta
 	public static string HeroSubtitle(BaseItemDto? dto) =>
 		dto is { Type: BaseItemDto_Type.Season or BaseItemDto_Type.Episode } ? dto.Name ?? "" : "";
 
-	/// <summary>"S2 · E3" above an episode's title; "" for anything else.</summary>
-	public static string Eyebrow(BaseItemDto? dto) => dto is { Type: BaseItemDto_Type.Episode } ? (dto.ParentIndexNumber, dto.IndexNumber) switch
-	{
-		({ } s, { } e) => $"S{Number(s)} \u00B7 E{Number(e)}",
-		(null, { } e) => $"E{Number(e)}",
-		_ => "",
-	} : "";
-
-	/// <summary>Narrator's reading of <see cref="Eyebrow"/>: "Season 2, episode 3".</summary>
-	public static string EyebrowName(BaseItemDto? dto) => dto is { Type: BaseItemDto_Type.Episode } ? (dto.ParentIndexNumber, dto.IndexNumber) switch
-	{
-		({ } s, { } e) => $"Season {Number(s)}, episode {Number(e)}",
-		(null, { } e) => $"Episode {Number(e)}",
-		_ => "",
-	} : "";
-
-	/// <summary>"3. The Fight" for an episode row.</summary>
-	public static string EpisodeTitle(BaseItemDto? episode) => episode is null ? "" : episode.IndexNumber is { } n ? $"{Number(n)}. {episode.Name}" : episode.Name ?? "";
+	/// <summary>
+	/// An episode row's title: "S1 E3 · The Fight" (1.2.0: the one format, <see cref="ItemLabels.EpisodeTitle"/>; it was
+	/// "3. The Fight", and the hero's teal "S1 · E3" overline is gone: the code leads the hero's meta line instead).
+	/// </summary>
+	public static string EpisodeTitle(BaseItemDto? episode) => ItemLabels.EpisodeTitle(episode);
 
 	/// <summary>Under a cast photo: the role ("Tony Stark") or, for the crew, what they did ("Director"); "" when neither is known.</summary>
 	public static string PersonRole(BaseItemPerson? person) =>

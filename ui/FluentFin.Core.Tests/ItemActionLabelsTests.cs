@@ -3,7 +3,7 @@ using Jellyfin.Sdk.Generated.Models;
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// Seaglass 1.1.4: the names and tooltips of a card's hover buttons and an item page's icon buttons say which item they act on
+/// 1.2.0: the names and tooltips of a card's hover buttons and an item page's icon buttons say which item they act on
 /// and what a click does now (Seaglass UX review, fix 4). The XAML side (bound to the item and the toggle's state) is in
 /// AccessibilityXamlTests.
 /// </summary>
@@ -67,8 +67,8 @@ public sealed class ItemActionLabelsTests
 	[InlineData(BaseItemDto_Type.Series, " Lost ", null, null, null, "Lost")]
 	[InlineData(BaseItemDto_Type.Season, "Season 2", "Lost", 2, null, "Season 2 of Lost")]
 	[InlineData(BaseItemDto_Type.Season, "Season 2", null, 2, null, "Season 2")]
-	[InlineData(BaseItemDto_Type.Episode, "The Fight", "The Office", 2, 3, "The Office S2E3 The Fight")]
-	[InlineData(BaseItemDto_Type.Episode, "sunny", "Sunny", 6, 4, "Sunny S6E4")]          // a name that only repeats the series
+	[InlineData(BaseItemDto_Type.Episode, "The Fight", "The Office", 2, 3, "The Office S2 E3 The Fight")]
+	[InlineData(BaseItemDto_Type.Episode, "sunny", "Sunny", 6, 4, "Sunny S6 E4")]          // a name that only repeats the series
 	[InlineData(BaseItemDto_Type.Episode, "Special", "Lost", null, null, "Lost Special")]  // no number
 	public void TheTarget_SaysWhichItem_AnEpisodeWithItsSeries(BaseItemDto_Type type, string name, string? series, int? season, int? episode, string expected)
 	{
@@ -99,12 +99,24 @@ public sealed class ItemActionLabelsTests
 	}
 
 	[Theory]
-	[InlineData(1, 4, null, "S1E4")]
-	[InlineData(2, 5, 6, "S2E5-E6")]
+	[InlineData(1, 4, null, "S1 E4")]
+	[InlineData(2, 5, 6, "S2 E5–E6")]
 	[InlineData(null, 7, null, "E7")]
 	[InlineData(1, null, null, "")]
-	public void EpisodeCode_IsTheRowsCode(int? season, int? number, int? end, string expected)
+	public void EpisodeCode_IsTheOneFormat(int? season, int? number, int? end, string expected)
 	{
+		// 1.2.0 (layout audit item 7): "S1 E4" everywhere; "S1 E4 · Title" where the title follows
 		Assert.Equal(expected, ItemLabels.EpisodeCode(new BaseItemDto { ParentIndexNumber = season, IndexNumber = number, IndexNumberEnd = end }));
+		Assert.Equal(expected, ItemLabels.EpisodeCode(season, number, end));
+	}
+
+	[Theory]
+	[InlineData(1, 4, "Pilot", "S1 E4 · Pilot")]
+	[InlineData(1, 4, null, "S1 E4")]
+	[InlineData(null, null, "Pilot", "Pilot")]
+	[InlineData(null, 7, " Special ", "E7 · Special")]
+	public void EpisodeTitle_IsTheCodeADotAndTheTitle(int? season, int? number, string? name, string expected)
+	{
+		Assert.Equal(expected, ItemLabels.EpisodeTitle(new BaseItemDto { ParentIndexNumber = season, IndexNumber = number, Name = name }));
 	}
 }

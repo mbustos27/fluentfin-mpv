@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Navigation;
 namespace FluentFin.Tests;
 
 /// <summary>
-/// Seaglass 1.1.4 (1.1.3 UX audit, interaction items 10 and 13): switching seasons with the pills replaces the season in the
+/// 1.2.0 (1.1.3 UX audit, interaction items 10 and 13): switching seasons with the pills replaces the season in the
 /// Back history; the Home hero's previous and next buttons go round.
 /// </summary>
 public sealed class ItemNavigationTests

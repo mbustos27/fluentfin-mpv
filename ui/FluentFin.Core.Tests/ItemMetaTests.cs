@@ -12,7 +12,6 @@ public sealed class ItemMetaTests
 
 		Assert.Equal("Heat", ItemMeta.HeroTitle(movie));
 		Assert.Equal("", ItemMeta.HeroSubtitle(movie));
-		Assert.Equal("", ItemMeta.Eyebrow(movie));
 	}
 
 	[Fact]
@@ -22,9 +21,8 @@ public sealed class ItemMetaTests
 
 		Assert.Equal("The Office", ItemMeta.HeroTitle(episode));
 		Assert.Equal("The Fight", ItemMeta.HeroSubtitle(episode));
-		Assert.Equal("S2 \u00B7 E3", ItemMeta.Eyebrow(episode));
-		Assert.Equal("Season 2, episode 3", ItemMeta.EyebrowName(episode));
-		Assert.Equal("3. The Fight", ItemMeta.EpisodeTitle(episode));
+		// 1.2.0: the one episode format (layout audit item 7); the teal overline went (item 21)
+		Assert.Equal("S2 E3 · The Fight", ItemMeta.EpisodeTitle(episode));
 	}
 
 	[Fact]

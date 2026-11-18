@@ -26,6 +26,10 @@ public sealed partial class ItemHero : UserControl
 	public static readonly DependencyProperty OverviewProperty =
 		DependencyProperty.Register(nameof(Overview), typeof(string), typeof(ItemHero), new PropertyMetadata("", (d, e) => ((ItemHero)d).OverviewText.Text = e.NewValue as string ?? ""));
 
+	/// <summary>1.2.0: the share of the window's height the hero takes (HeroLayout; the series and season pages give less).</summary>
+	public static readonly DependencyProperty HeightShareProperty =
+		DependencyProperty.Register(nameof(HeightShare), typeof(double), typeof(ItemHero), new PropertyMetadata(HeroLayout.ItemShare, (d, _) => ((ItemHero)d).Resize()));
+
 	public static readonly DependencyProperty PrimaryActionsProperty =
 		DependencyProperty.Register(nameof(PrimaryActions), typeof(object), typeof(ItemHero), new PropertyMetadata(null, (d, e) => ((ItemHero)d).PrimaryPresenter.Content = e.NewValue));
 
@@ -35,7 +39,7 @@ public sealed partial class ItemHero : UserControl
 	public ItemHero()
 	{
 		InitializeComponent();
-		// Seaglass 1.1.4: the toggles' names follow what they show (a click flips them before the server hears it)
+		// 1.2.0: the toggles' names follow what they show (a click flips them before the server hears it)
 		foreach (var toggle in new[] { WatchedButton, FavoriteButton })
 		{
 			toggle.Checked += (_, _) => UpdateActionNames();
@@ -46,8 +50,21 @@ public sealed partial class ItemHero : UserControl
 		{
 			AmbientBackdrop.Set(_ambient, _ambientHash);
 			ItemUserData.Changed += OnUserDataChanged;
+			if (XamlRoot is { } root)
+			{
+				root.Changed += OnRootChanged;
+			}
+
+			Resize();
 		};
-		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
+		Unloaded += (_, _) =>
+		{
+			ItemUserData.Changed -= OnUserDataChanged;
+			if (XamlRoot is { } root)
+			{
+				root.Changed -= OnRootChanged;
+			}
+		};
 		// a page that opens before this one is closed has already set its own; only take down what is ours
 		Unloaded += (_, _) =>
 		{
@@ -71,6 +88,30 @@ public sealed partial class ItemHero : UserControl
 		set => SetValue(OverviewProperty, value);
 	}
 
+	public double HeightShare
+	{
+		get => (double)GetValue(HeightShareProperty);
+		set => SetValue(HeightShareProperty, value);
+	}
+
+	private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => Resize();
+
+	/// <summary>
+	/// 1.2.0 (1.1.3 UX audit, layout item 8): the hero is a share of the window's height (HeroLayout), so the page's
+	/// first content shows on a short window; a short hero is compact: a smaller logo and two lines of overview.
+	/// </summary>
+	private void Resize()
+	{
+		var height = HeroLayout.Height(XamlRoot?.Size.Height ?? 0, HeightShare);
+		HeroGrid.Height = height;
+		var compact = HeroLayout.IsCompact(height);
+		var episode = Dto?.Type == BaseItemDto_Type.Episode;
+		// an episode's logo is its series': small, under the episode's own title in importance (layout audit item 21)
+		LogoImage.MaxHeight = episode ? (compact ? 64 : 88) : compact ? 96 : 160;
+		OverviewText.CollapsedLines = compact ? 2 : 4;
+		Words.Spacing = compact ? 10 : 14;
+	}
+
 	public object? PrimaryActions
 	{
 		get => GetValue(PrimaryActionsProperty);
@@ -91,15 +132,15 @@ public sealed partial class ItemHero : UserControl
 		TitleText.Visibility = logo is null ? Visibility.Visible : Visibility.Collapsed;
 		AutomationProperties.SetName(LogoImage, title);
 
-		var eyebrow = ItemMeta.Eyebrow(dto);
-		Eyebrow.Text = eyebrow;
-		AutomationProperties.SetName(Eyebrow, ItemMeta.EyebrowName(dto));
-		Eyebrow.Visibility = eyebrow.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		var subtitle = ItemMeta.HeroSubtitle(dto);
 		SubtitleText.Text = subtitle;
 		SubtitleText.Visibility = subtitle.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-		ChipRow.ItemsSource = ItemChips.For(dto);
+		// 1.2.0: one line of plain text, not chips; an episode's number leads it
+		MetaText.Text = ItemChips.MetaLine(dto);
+		AutomationProperties.SetName(MetaText, ItemChips.MetaName(dto));
+		MetaText.Visibility = MetaText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+		Resize();
 
 		TrailerButton.Visibility = ItemMeta.TrailerUrl(dto) is null ? Visibility.Collapsed : Visibility.Visible;
 		ApplyUserData();
@@ -114,7 +155,7 @@ public sealed partial class ItemHero : UserControl
 	}
 
 	/// <summary>
-	/// Seaglass 1.1.4: the toggles and the More menu (built from the item, so its "Mark as watched" text is the item's state)
+	/// 1.2.0: the toggles and the More menu (built from the item, so its "Mark as watched" text is the item's state)
 	/// show the item's user data as the server has it: on load and after every change (<see cref="ItemUserData"/>).
 	/// </summary>
 	private void ApplyUserData()
@@ -137,7 +178,7 @@ public sealed partial class ItemHero : UserControl
 		ApplyUserData();
 	}
 
-	// Seaglass 1.1.4: a toggle sends the state it shows after the click (ItemUserData; a failure springs it back)
+	// 1.2.0: a toggle sends the state it shows after the click (ItemUserData; a failure springs it back)
 	private async void WatchedButton_Click(object sender, RoutedEventArgs e)
 	{
 		if (Dto is { } dto)
@@ -155,7 +196,7 @@ public sealed partial class ItemHero : UserControl
 	}
 
 	/// <summary>
-	/// Seaglass 1.1.4: "Mark Inception as watched" / "... as unwatched", "Add Inception to favorites" / "Remove ...", "More options
+	/// 1.2.0: "Mark Inception as watched" / "... as unwatched", "Add Inception to favorites" / "Remove ...", "More options
 	/// for Inception": named for the item and for what a click does now, the tooltip the same words (Seaglass UX review, fix 4).
 	/// </summary>
 	private void UpdateActionNames()

@@ -29,7 +29,8 @@ public sealed partial class VideoPlayerViewModelMpvTests
 
 		Assert.True(vm.IsMpvStarting);
 		Assert.Equal("A show", vm.MpvStartingTitle);
-		Assert.Equal("S1:E2 - S01E02", vm.MpvStartingSubtitle);
+		// 1.2.0: the one episode format (ItemLabels.EpisodeTitle, through GetCardSubtitle)
+		Assert.Equal("S1 E2 · S01E02", vm.MpvStartingSubtitle);
 		Assert.Same(episode, vm.MpvStartingItem);
 		Assert.Equal("Starting the player…", vm.MpvStatusText);
 		Assert.Equal("Cancel", vm.MpvLeaveText);

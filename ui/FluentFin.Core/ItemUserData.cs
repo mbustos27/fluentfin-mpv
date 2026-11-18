@@ -16,7 +16,7 @@ public sealed class ItemUserDataChangedEventArgs(Guid itemId, UserItemDataDto us
 }
 
 /// <summary>
-/// Seaglass 1.1.4 (1.1.3 UX audit, interaction item 3): the one way the app marks an item watched or a favourite, from a
+/// 1.2.0 (1.1.3 UX audit, interaction item 3): the one way the app marks an item watched or a favourite, from a
 /// card's toggles, the item page's, an episode row's and the More menu's. The server's answer (the item's user data after the
 /// change) replaces the item's copy, so the next click goes the other way and a menu built afterwards says the right thing;
 /// then <see cref="Changed"/> tells every card, hero and row showing that item, which show it as the server has it. When the

@@ -69,7 +69,7 @@ public class AccessibilityXamlTests
 		Assert.Equal("{StaticResource GlassAccentPillButtonStyle}", (string?)play.Attribute("Style"));
 
 		var fromBeginning = Assert.Single(buttons, b => (string?)b.Attribute("Command") == "{x:Bind ViewModel.PlayFromBeginningCommand}");
-		// Seaglass 1.1.4: "Play Inception from the beginning", the tooltip the same words
+		// 1.2.0: "Play Inception from the beginning", the tooltip the same words
 		Assert.StartsWith("{x:Bind core:ItemLabels.PlayFromBeginningAction(ViewModel.Dto), Mode=OneWay", (string?)fromBeginning.Attribute("AutomationProperties.Name"));
 		Assert.Equal((string?)fromBeginning.Attribute("AutomationProperties.Name"), (string?)fromBeginning.Attribute("ToolTipService.ToolTip"));
 		Assert.Equal("{x:Bind ViewModel.HasResumePoint, Mode=OneWay}", (string?)fromBeginning.Attribute("Visibility"));
@@ -83,7 +83,7 @@ public class AccessibilityXamlTests
 		var hero = Assert.Single(Load(page).Descendants(), e => e.Name.LocalName == "ItemHero");
 		var play = Assert.Single(hero.Descendants(Presentation + "Button"), b => (string?)b.Attribute("Command") == "{x:Bind root:App.Commands.PlayDtoCommand}");
 
-		// Seaglass 1.1.4: it says what it starts ("Resume S1E4", "Play S2E1", "Play from the start"; ItemPlayTests)
+		// 1.2.0: it says what it starts ("Resume S1 E4", "Play S2 E1", "Play from the start"; ItemPlayTests)
 		Assert.Contains(play.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.PlayTarget.Label, Mode=OneWay}");
 		Assert.Equal("{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}", (string?)play.Attribute("AutomationProperties.Name"));
 		Assert.Equal("{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}", (string?)play.Attribute("ToolTipService.ToolTip"));
@@ -220,7 +220,7 @@ public class AccessibilityXamlTests
 		var collapsing = doc.Descendants().Where(e => e.Name.LocalName == "ChangePropertyAction" && (string?)e.Attribute("PropertyName") == "Visibility").ToList();
 
 		Assert.Empty(collapsing);
-		// Seaglass 1.1.4: on the whole card (the title too), no longer the image alone
+		// 1.2.0: on the whole card (the title too), no longer the image alone
 		var card = FindByName(doc, "RootGrid");
 		Assert.Equal("Card_PointerEntered", (string?)card.Attribute("PointerEntered"));
 		Assert.Equal("Card_PointerExited", (string?)card.Attribute("PointerExited"));
@@ -357,15 +357,15 @@ public class AccessibilityXamlTests
 		Assert.Equal("False", (string?)row.Root!.Attribute("UseSystemFocusVisuals"));
 		Assert.Equal("Collapsed", (string?)FindByName(row, "FocusRing").Attribute("Visibility"));
 
-		// Play and Watched stay for the pointer, without a Tab stop of their own, each named for its episode
+		// 1.2.0: Play (a disc on the thumbnail) and the row's "…" stay for the pointer, without a Tab stop of their own,
+		// each named for its episode; Watched is the thumbnail's mark, and "Mark as watched" is in the menu (layout audit item 14)
 		var buttons = row.Descendants().Where(e => e.Name.LocalName is "Button" or "ToggleButton").ToList();
-		Assert.Equal(new[] { "PlayButton", "WatchedButton" }, buttons.Select(b => (string?)b.Attribute(Xaml + "Name")));
+		Assert.Equal(new[] { "PlayButton", "MoreButton" }, buttons.Select(b => (string?)b.Attribute(Xaml + "Name")));
 		Assert.All(buttons, b => Assert.Equal("False", (string?)b.Attribute("IsTabStop")));
 		Assert.All(buttons, b => Assert.False(string.IsNullOrWhiteSpace((string?)b.Attribute("AutomationProperties.Name"))));
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/EpisodeRow.xaml.cs"));
 		Assert.Single(System.Text.RegularExpressions.Regex.Matches(code, @"ItemLabels\.EpisodeAction\(""Play"", dto\)"));
-		// Seaglass 1.1.4: Watched says what a click does now ("Mark as unwatched, episode 1, ..."), from the toggle's state
-		Assert.Contains("ItemLabels.EpisodeWatchedAction(Dto, WatchedButton.IsChecked)", code);
+		Assert.Single(System.Text.RegularExpressions.Regex.Matches(code, @"ItemLabels\.EpisodeAction\(""More options"", dto\)"));
 		// favourite and the rest: in the row's menu, which holds the More menu's own items
 		Assert.Contains("ContextFlyout = _menu", code);
 		Assert.Contains("new JellyfinFlyoutConverter().Convert(dto", code);

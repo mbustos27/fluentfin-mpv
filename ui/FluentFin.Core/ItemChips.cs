@@ -70,6 +70,40 @@ public static class ItemChips
 		return chips;
 	}
 
+	/// <summary>
+	/// 1.2.0 (1.1.3 UX audit, layout items 8 and 21): the hero's facts as one line of plain text, "2008 · R · ★ 8.3 ·
+	/// 1h 52m · 4K", not a row of bordered chips; an episode's starts with its number, "S1 E1 · Sep 1, 1991 · TV-Y7 · 10m".
+	/// Plain stereo or mono sound is left out (only surround and spatial sound tell anything).
+	/// </summary>
+	public static string MetaLine(BaseItemDto? dto) => string.Join(" · ", MetaParts(dto).Select(p => p.Text));
+
+	/// <summary>What Narrator reads for <see cref="MetaLine"/>: "Season 1, episode 1, Aired Sep 1, 1991, Rated TV-Y7, Runtime 10m".</summary>
+	public static string MetaName(BaseItemDto? dto) => string.Join(", ", MetaParts(dto).Select(p => p.Name));
+
+	private static IEnumerable<ItemChip> MetaParts(BaseItemDto? dto)
+	{
+		if (dto?.Type == BaseItemDto_Type.Episode && ItemLabels.EpisodeCode(dto) is { Length: > 0 } code)
+		{
+			var spoken = (dto.ParentIndexNumber, dto.IndexNumber) switch
+			{
+				({ } s, { } e) => $"Season {s}, episode {e}",
+				(null, { } e) => $"Episode {e}",
+				_ => code,
+			};
+			yield return new ItemChip(code, spoken);
+		}
+
+		foreach (var chip in For(dto))
+		{
+			if (chip.Name.StartsWith("Audio ", StringComparison.Ordinal) && (chip.Text.EndsWith(" Stereo", StringComparison.Ordinal) || chip.Text.EndsWith(" Mono", StringComparison.Ordinal)))
+			{
+				continue;
+			}
+
+			yield return chip;
+		}
+	}
+
 	/// <summary>"1h 32m", "45m" (the server counts in ticks of 100 ns).</summary>
 	public static string Runtime(long ticks)
 	{

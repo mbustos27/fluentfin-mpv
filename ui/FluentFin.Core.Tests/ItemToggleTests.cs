@@ -8,7 +8,7 @@ using Moq;
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// Seaglass 1.1.4 (1.1.3 UX audit, interaction item 3): marking an item watched or a favourite, from a card, the item page,
+/// 1.2.0 (1.1.3 UX audit, interaction item 3): marking an item watched or a favourite, from a card, the item page,
 /// an episode row or the More menu, goes through ItemUserData: the server's answer replaces the item's copy and every
 /// surface showing the item is told. Before, each surface sent "the opposite of its copy", which nothing updated: Watched
 /// on then off sent "mark watched" twice, and the menu kept saying "Mark as watched".
@@ -168,11 +168,11 @@ public sealed class ItemToggleTests
 		_client.Setup(x => x.GetSeriesEpisodes(seriesId)).ReturnsAsync(() => new BaseItemDtoQueryResult { Items = episodes });
 		var vm = new SeasonViewModel(_client.Object);
 		await vm.OnNavigatedTo(season);
-		Assert.Equal("Play S1E1", vm.PlayTarget.Label);
+		Assert.Equal("Play S1 E1", vm.PlayTarget.Label);
 
 		// the first episode's row: Watched (the server's answer goes into the episode, which the next request lists)
 		await Commands().SetWatched(episodes[0], true);
-		await WaitUntil(() => vm.PlayTarget.Label == "Play S1E2");
+		await WaitUntil(() => vm.PlayTarget.Label == "Play S1 E2");
 
 		// the season itself: every episode is listed again (their rows show the server's state)
 		_client.Invocations.Clear();
@@ -197,11 +197,11 @@ public sealed class ItemToggleTests
 		_client.Setup(x => x.GetSeriesEpisodes(series.Id!.Value)).ReturnsAsync(() => new BaseItemDtoQueryResult { Items = [next, after] });
 		var vm = new SeriesViewModel(_client.Object);
 		await vm.OnNavigatedTo(series);
-		Assert.Equal("Play S1E1", vm.PlayTarget.Label);
+		Assert.Equal("Play S1 E1", vm.PlayTarget.Label);
 
 		await Commands().SetWatched(next, true);
 
-		await WaitUntil(() => vm.PlayTarget.Label == "Play S1E2" && vm.NextUp.Dto.Id == after.Id);
+		await WaitUntil(() => vm.PlayTarget.Label == "Play S1 E2" && vm.NextUp.Dto.Id == after.Id);
 		await vm.OnNavigatedFrom();
 	}
 

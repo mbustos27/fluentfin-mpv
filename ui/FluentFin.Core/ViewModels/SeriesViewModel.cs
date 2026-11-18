@@ -1,4 +1,5 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using FluentFin.Contracts.ViewModels;
 using FluentFin.Core.Contracts.Services;
 using Jellyfin.Sdk.Generated.Models;
@@ -17,7 +18,7 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 	}
 
 	/// <summary>
-	/// Seaglass 1.1.4: the series, one of its seasons or its next episode was marked watched (or not) here or on a card: Play's
+	/// 1.2.0: the series, one of its seasons or its next episode was marked watched (or not) here or on a card: Play's
 	/// target and Next Up follow the server, and the season cards too when the series itself changed (all its episodes did).
 	/// </summary>
 	internal async void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
@@ -30,7 +31,8 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 			}
 
 			var series = e.ItemId == id;
-			if (!series && Seasons?.Any(x => x.Dto.Id == e.ItemId) != true && NextUp?.Dto.Id != e.ItemId)
+			var season = Seasons?.Any(x => x.Dto.Id == e.ItemId) == true;
+			if (!series && !season && NextUp?.Dto.Id != e.ItemId && Episodes?.Any(x => x.Id == e.ItemId) != true)
 			{
 				return;
 			}
@@ -39,6 +41,12 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 			if (series)
 			{
 				await UpdateSeasons(dto);
+			}
+
+			// the series or the season shown: all of its episodes changed
+			if ((series || e.ItemId == SelectedSeason?.Id) && SelectedSeason is { } shown)
+			{
+				await ShowSeason(shown);
 			}
 
 			await UpdateNextUp(dto);
@@ -77,10 +85,11 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 				return LoadMessages.CouldNotLoad("this series");
 			}
 
-			// Seaglass 1.1.4: asked alongside the rows, so the page does not wait for it
+			// 1.2.0: asked alongside the rows, so the page does not wait for it
 			var play = UpdatePlayTarget(id);
 			await UpdateNextUp(dto);
 			await UpdateSeasons(dto);
+			await ShowSeason(FirstSeason());
 			await UpdateSimilar(dto);
 			await play;
 			return LoadOutcome.Loaded;
@@ -99,7 +108,7 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 	[ObservableProperty]
 	public partial BaseItemViewModel NextUp { get; set; }
 
-	/// <summary>Seaglass 1.1.4: what Play starts, on the button ("Resume S1E4", "Play S2E1", "Play from the start"; <see cref="ItemPlay"/>).</summary>
+	/// <summary>1.2.0: what Play starts, on the button ("Resume S1E4", "Play S2E1", "Play from the start"; <see cref="ItemPlay"/>).</summary>
 	[ObservableProperty]
 	public partial PlayTarget PlayTarget { get; set; } = PlayTarget.Plain;
 
@@ -129,6 +138,50 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 		if (Dto?.Id == seriesId)
 		{
 			PlayTarget = ItemPlay.For(Dto, episodes?.Items);
+		}
+	}
+
+	/// <summary>
+	/// 1.2.0 (1.1.3 UX audit, layout item 9): the series page lists episodes, as Netflix and Apple TV do: one season's,
+	/// with the season picker above them (<see cref="SeasonPills"/>, empty for a series of one season), opened on the season
+	/// of the next episode to watch. A pill switches the list in place (no page, no history entry).
+	/// </summary>
+	[ObservableProperty]
+	public partial List<SeasonPill> SeasonPills { get; set; } = [];
+
+	[ObservableProperty]
+	public partial BaseItemDto? SelectedSeason { get; set; }
+
+	[ObservableProperty]
+	public partial List<BaseItemDto> Episodes { get; set; } = [];
+
+	/// <summary>The season of the next episode to watch (Next Up), else the first.</summary>
+	internal BaseItemDto? FirstSeason()
+	{
+		var seasons = Seasons?.Select(x => x.Dto).ToList() ?? [];
+		return seasons.FirstOrDefault(s => s.Id is not null && s.Id == NextUp?.Dto.SeasonId)
+			?? seasons.FirstOrDefault(s => s.IndexNumber == NextUp?.Dto.ParentIndexNumber && NextUp?.Dto.ParentIndexNumber is not null)
+			?? seasons.OrderBy(s => s.IndexNumber is 0 ? int.MaxValue : s.IndexNumber ?? int.MaxValue).FirstOrDefault();
+	}
+
+	[RelayCommand]
+	private Task SelectSeason(BaseItemDto? season) => season is null ? Task.CompletedTask : ShowSeason(season);
+
+	private async Task ShowSeason(BaseItemDto? season)
+	{
+		if (season?.Id is not { } id)
+		{
+			SeasonPills = [];
+			Episodes = [];
+			return;
+		}
+
+		SelectedSeason = season;
+		SeasonPills = ItemSiblings.SeasonPills(Seasons?.Select(x => x.Dto), id);
+		var response = await JellyfinClient.GetItems(season);
+		if (SelectedSeason?.Id == id)
+		{
+			Episodes = response?.Items ?? [];
 		}
 	}
 

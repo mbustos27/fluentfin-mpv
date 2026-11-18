@@ -13,7 +13,7 @@ public sealed partial class SeriesPage : Page
 		InitializeComponent();
 	}
 
-	// Seaglass 1.1.4: Back (or Forward) to this page gives its scroll position and focus back (ItemPagePlace)
+	// 1.2.0: Back (or Forward) to this page gives its scroll position and focus back (ItemPagePlace)
 	private ItemPagePlace? _place;
 
 	protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
@@ -32,7 +32,4 @@ public sealed partial class SeriesPage : Page
 	// Seaglass scrolling: a row's "See all" opens its items as a grid
 	private void SimilarSeeAll(object sender, EventArgs e) =>
 		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("More Like This", [.. ViewModel.Similar]));
-
-	private void SeasonsSeeAll(object sender, EventArgs e) =>
-		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Seasons", [.. ViewModel.Seasons]));
 }

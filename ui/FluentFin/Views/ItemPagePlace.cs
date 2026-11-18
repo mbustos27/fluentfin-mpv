@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml.Navigation;
 namespace FluentFin.Views;
 
 /// <summary>
-/// Seaglass 1.1.4 (1.1.3 UX audit, interaction item 5): an item page keeps its place. Leaving it saves how far down it was and
+/// 1.2.0 (1.1.3 UX audit, interaction item 5): an item page keeps its place. Leaving it saves how far down it was and
 /// what had the focus (<see cref="PagePlaces"/>); coming back with Back or Forward scrolls there and focuses that again (a card
 /// or an episode row by its item, a button by its place in the page) once the page's content has arrived. The movie, series,
 /// season and episode pages each make one (their OnNavigatedTo and OnNavigatedFrom call it).

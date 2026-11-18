@@ -4,7 +4,7 @@ using System.Xml.Linq;
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// Seaglass 1.1.4 (Seaglass UX review, fixes 4, 7 and 12), read from the XAML and the code behind it: a card's hover buttons
+/// 1.2.0 (Seaglass UX review, fixes 4, 7 and 12), read from the XAML and the code behind it: a card's hover buttons
 /// and an item page's icon buttons are named after their item and the toggle's state, their tooltips the same words;
 /// "Your rating" sits in the hero's action row on every item page; the hero's dots and the rating's stars are 24 px targets.
 /// The words themselves: ItemActionLabelsTests and ItemPlayTests.
@@ -38,11 +38,10 @@ public sealed class ItemButtonsXamlTests
 		Assert.Contains("App.Commands.SetFavorite(Model.Dto, AddToFavoriteButton.IsChecked == true)", code);
 	}
 
-	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 3): every surface sends the state its toggle shows, through ItemUserData.</summary>
+	/// <summary>1.2.0 (1.1.3 UX audit, interaction item 3): every surface sends the state its toggle shows, through ItemUserData.</summary>
 	[Theory]
 	[InlineData("FluentFin/Controls/ItemHero.xaml.cs", "App.Commands.SetWatched(dto, WatchedButton.IsChecked == true)")]
 	[InlineData("FluentFin/Controls/ItemHero.xaml.cs", "App.Commands.SetFavorite(dto, FavoriteButton.IsChecked == true)")]
-	[InlineData("FluentFin/Controls/EpisodeRow.xaml.cs", "App.Commands.SetWatched(dto, WatchedButton.IsChecked == true)")]
 	public void ItemPageAndRowToggles_SetTheStateTheyShow(string file, string call)
 	{
 		Assert.Contains(call, Code(file));
@@ -59,7 +58,7 @@ public sealed class ItemButtonsXamlTests
 		}
 	}
 
-	/// <summary>Seaglass 1.1.4: every card, hero and row follows the item's user data as the server has it, whoever changed it.</summary>
+	/// <summary>1.2.0: every card, hero and row follows the item's user data as the server has it, whoever changed it.</summary>
 	[Theory]
 	[InlineData("FluentFin/Controls/BaseItemDtoCard.xaml.cs", "Bindings.Update();")]
 	[InlineData("FluentFin/Controls/ItemHero.xaml.cs", "ApplyUserData();")]
@@ -83,7 +82,7 @@ public sealed class ItemButtonsXamlTests
 		Assert.Contains("WatchedButton.IsChecked = dto?.UserData?.Played;", apply);
 	}
 
-	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 11): the whole card is one target, the title too; no tilt.</summary>
+	/// <summary>1.2.0 (1.1.3 UX audit, interaction item 11): the whole card is one target, the title too; no tilt.</summary>
 	[Fact]
 	public void Card_IsOneTarget_TitleIncluded_AndDoesNotTilt()
 	{
@@ -105,7 +104,7 @@ public sealed class ItemButtonsXamlTests
 		Assert.False(File.Exists(Path.Combine(RepoRoot, "FluentFin/Controls/PosterTilt.cs")));
 	}
 
-	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 6): a click on an episode row plays, as Enter does.</summary>
+	/// <summary>1.2.0 (1.1.3 UX audit, interaction item 6): a click on an episode row plays, as Enter does.</summary>
 	[Fact]
 	public void EpisodeRow_AClickPlays_WithAPlayDisc_AndTheTitleOpensTheEpisode()
 	{
@@ -119,17 +118,23 @@ public sealed class ItemButtonsXamlTests
 		Assert.Contains("if (node is ButtonBase || ReferenceEquals(node, title))", code);
 		Assert.Equal("Title_Tapped", (string?)FindByName(row, "TitleText").Attribute("Tapped"));
 		Assert.Matches(new Regex(@"private void Title_Tapped\([\s\S]*?OpenDetails\(\);"), code);
-		// the play disc over the thumbnail: decorative (the row is named for Narrator), never takes the click
-		var disc = FindByName(row, "PlayDisc");
-		Assert.Equal("Raw", (string?)disc.Attribute("AutomationProperties.AccessibilityView"));
-		Assert.Equal("False", (string?)disc.Attribute("IsHitTestVisible"));
-		Assert.Equal("Collapsed", (string?)disc.Attribute("Visibility"));
-		Assert.Contains("PlayDisc.Visibility = _pointerOver || FocusRing.Visibility == Visibility.Visible", code);
+		// 1.2.0 (layout item 14): Play is the disc on the thumbnail, shown on hover and keyboard focus by its opacity, so
+		// Narrator and UI Automation always find it; the row's "…" sits right after the title, opening the row's menu
+		var play = FindByName(row, "PlayButton");
+		Assert.Equal("0", (string?)play.Attribute("Opacity"));
+		Assert.Equal("False", (string?)play.Attribute("IsTabStop"));
+		Assert.Same(FindByName(row, "Thumb").Parent, play.Parent);
+		Assert.Contains("PlayButton.Opacity = _pointerOver || FocusRing.Visibility == Visibility.Visible ? 1 : 0;", code);
+		var more = FindByName(row, "MoreButton");
+		Assert.Same(FindByName(row, "TitleText").Parent, more.Parent);
+		Assert.Contains("_menu.ShowAt(MoreButton)", code);
+		// one watched mark: no check button at the row's end
+		Assert.DoesNotContain(row.Descendants(), e => e.Name.LocalName == "ToggleButton");
 		// details stay in the row's menu for the keyboard
 		Assert.Contains("Text = \"Episode details\"", code);
 	}
 
-	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 5): Back to an item page gives its place back.</summary>
+	/// <summary>1.2.0 (1.1.3 UX audit, interaction item 5): Back to an item page gives its place back.</summary>
 	[Theory]
 	[InlineData("MoviePage")]
 	[InlineData("SeriesPage")]
@@ -156,7 +161,7 @@ public sealed class ItemButtonsXamlTests
 		Assert.Contains("control.Focus(FocusState.Programmatic)", code);
 	}
 
-	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 10): switching seasons replaces the history entry.</summary>
+	/// <summary>1.2.0 (1.1.3 UX audit, interaction item 10): switching seasons replaces the history entry.</summary>
 	[Fact]
 	public void SeasonPills_ReplaceTheSeasonInTheHistory()
 	{
@@ -165,7 +170,7 @@ public sealed class ItemButtonsXamlTests
 		Assert.Contains("DropSwitchedSeasonPage(frame.BackStack, x => x.SourcePageType, e.SourcePageType, e.NavigationMode);", code);
 	}
 
-	/// <summary>Seaglass 1.1.4 (1.1.3 UX audit, interaction item 13): the hero's artwork and words open the item; previous and next.</summary>
+	/// <summary>1.2.0 (1.1.3 UX audit, interaction item 13): the hero's artwork and words open the item; previous and next.</summary>
 	[Fact]
 	public void HomeHero_TheArtworkOpensTheItem_AndHasPreviousAndNext()
 	{
@@ -211,8 +216,8 @@ public sealed class ItemButtonsXamlTests
 		var code = Code("FluentFin/Controls/EpisodeRow.xaml.cs");
 
 		Assert.Contains("Label(PlayButton, ItemLabels.EpisodeAction(\"Play\", dto))", code);
+		Assert.Contains("Label(MoreButton, ItemLabels.EpisodeAction(\"More options\", dto))", code);
 		Assert.Matches(new Regex(@"AutomationProperties\.SetName\(button, name\);\s*ToolTipService\.SetToolTip\(button, name\);"), code);
-		Assert.Matches(new Regex(@"WatchedButton\.Checked \+= \(_, _\) => UpdateWatchedName\(\);\s*WatchedButton\.Unchecked \+= \(_, _\) => UpdateWatchedName\(\);"), code);
 	}
 
 	[Fact]

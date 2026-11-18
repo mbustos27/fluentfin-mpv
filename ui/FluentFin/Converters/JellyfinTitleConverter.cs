@@ -34,20 +34,8 @@ public partial class JellyfinSubtitleConverter : IValueConverter
 			return "";
 		}
 
-		if (bid.Type == BaseItemDto_Type.Episode)
-		{
-			return $"S{bid.ParentIndexNumber}:E{bid.IndexNumber} - {bid.Name}";
-		}
-		if (bid.Type == BaseItemDto_Type.Movie)
-		{
-			return $"{bid.ProductionYear}";
-		}
-		if (bid.Type == BaseItemDto_Type.Series)
-		{
-			return $"{bid.ProductionYear} - {(string.Equals(bid.Status, "Continuing", StringComparison.OrdinalIgnoreCase) ? "Present" : bid.EndDate?.Year)}";
-		}
-
-		return "";
+		// 1.2.0: the card's line, as BaseItemDtoConverters.GetCardSubtitle writes it (one episode format, en-dash years)
+		return BaseItemDtoConverters.GetCardSubtitle(bid);
 	}
 
 	public object ConvertBack(object value, Type targetType, object parameter, string language)

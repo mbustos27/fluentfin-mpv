@@ -58,7 +58,7 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 		await jellyfinClient.ResetProgress(id);
 	}
 
-	// Seaglass 1.1.4: through ItemUserData, which puts the server's answer into the item's copy (so the next toggle goes the
+	// 1.2.0: through ItemUserData, which puts the server's answer into the item's copy (so the next toggle goes the
 	// other way and the menu says the right thing) and tells every card, hero and row; before, a second click sent the first
 	// one's request again. The More menu uses these; a toggle button sends the state it shows (SetWatched, SetFavorite).
 	[RelayCommand]
@@ -67,10 +67,10 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 	[RelayCommand]
 	public Task ToggleFavorite(BaseItemDto dto) => SetFavorite(dto, !(dto.UserData?.IsFavorite ?? false));
 
-	/// <summary>Seaglass 1.1.4: a Watched toggle: the state it shows after the click (two quick clicks end where the second one left it).</summary>
+	/// <summary>1.2.0: a Watched toggle: the state it shows after the click (two quick clicks end where the second one left it).</summary>
 	public Task<bool> SetWatched(BaseItemDto dto, bool played) => ItemUserData.SetPlayedAsync(jellyfinClient, dto, played);
 
-	/// <summary>Seaglass 1.1.4: a Favourite toggle: the state it shows after the click.</summary>
+	/// <summary>1.2.0: a Favourite toggle: the state it shows after the click.</summary>
 	public Task<bool> SetFavorite(BaseItemDto dto, bool favorite) => ItemUserData.SetFavoriteAsync(jellyfinClient, dto, favorite);
 
 	[RelayCommand]

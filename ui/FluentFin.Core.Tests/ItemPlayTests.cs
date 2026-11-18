@@ -8,8 +8,8 @@ using Moq;
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// Seaglass 1.1.4: Play on a series or a season says what it starts (Seaglass UX review, fix 12): "Resume S1E4" with its
-/// progress, "Play S2E1", "Play from the start"; a movie keeps "Resume at 12:34" / "Play". The label must name the episode the
+/// 1.2.0: Play on a series or a season says what it starts (Seaglass UX review, fix 12): "Resume S1 E4" with its
+/// progress, "Play S2 E1", "Play from the start"; a movie keeps "Resume at 12:34" / "Play". The label must name the episode the
 /// players start (MpvQueue, PlaylistViewModel.AutoSelect), so the two are checked against each other.
 /// </summary>
 public sealed class ItemPlayTests
@@ -41,8 +41,8 @@ public sealed class ItemPlayTests
 
 		var target = ItemPlay.For(Series, episodes);
 
-		Assert.Equal("Resume S1E4", target.Label);
-		Assert.Equal("Resume S1E4 The Archive Problem, 45% watched", target.Name);
+		Assert.Equal("Resume S1 E4", target.Label);
+		Assert.Equal("Resume S1 E4 The Archive Problem, 45% watched", target.Name);
 		Assert.Equal(45.2, target.Progress);
 		Assert.True(target.HasProgress);
 	}
@@ -52,7 +52,7 @@ public sealed class ItemPlayTests
 	{
 		var target = ItemPlay.For(Series, [Episode(1, 1, position: 10 * Minute)]);
 
-		Assert.Equal("Resume S1E1", target.Label);
+		Assert.Equal("Resume S1 E1", target.Label);
 		Assert.Equal(25.0, target.Progress);
 	}
 
@@ -63,8 +63,8 @@ public sealed class ItemPlayTests
 
 		var target = ItemPlay.For(Season(1), episodes);
 
-		Assert.Equal("Play S2E1", target.Label);
-		Assert.Equal("Play S2E1 Homecoming", target.Name);
+		Assert.Equal("Play S2 E1", target.Label);
+		Assert.Equal("Play S2 E1 Homecoming", target.Name);
 		Assert.Null(target.Progress);
 		Assert.False(target.HasProgress);
 	}
@@ -77,7 +77,7 @@ public sealed class ItemPlayTests
 		var target = ItemPlay.For(Series, episodes);
 
 		Assert.Equal("Play from the start", target.Label);
-		Assert.Equal("Play from the start, S1E1 Pilot", target.Name);
+		Assert.Equal("Play from the start, S1 E1 Pilot", target.Name);
 		Assert.Null(target.Progress);
 	}
 
@@ -162,7 +162,7 @@ public sealed class ItemPlayTests
 
 		var (vm, target) = await Open(page, client, season);
 
-		Assert.Equal("Resume S1E2", target().Label);
+		Assert.Equal("Resume S1 E2", target().Label);
 		Assert.Equal(45, target().Progress);
 		client.Verify(x => x.GetSeriesEpisodes(SeriesId), Times.Once);
 		Assert.NotNull(vm);

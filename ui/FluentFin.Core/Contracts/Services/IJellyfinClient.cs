@@ -70,10 +70,10 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<QueryFiltersLegacy?> GetFilters(BaseItemDto library);
 
-		/// <returns>Seaglass 1.1.4: the item's user data as the server has it now; null when the request failed.</returns>
+		/// <returns>1.2.0: the item's user data as the server has it now; null when the request failed.</returns>
 		Task<UserItemDataDto?> SetIsFavorite(BaseItemDto dto, bool isFavorite);
 
-		/// <returns>Seaglass 1.1.4: the item's user data as the server has it now; null when the request failed.</returns>
+		/// <returns>1.2.0: the item's user data as the server has it now; null when the request failed.</returns>
 		Task<UserItemDataDto?> SetPlayed(BaseItemDto dto, bool played);
 
 		Task<bool> Authenticate(string code);

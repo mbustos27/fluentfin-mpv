@@ -42,7 +42,7 @@ public sealed partial class BaseItemDtoCard : UserControl
 	public BaseItemDtoCard()
 	{
 		InitializeComponent();
-		// Seaglass 1.1.4: the card shows its item's watched and favourite state as the server has it, whichever surface changed it
+		// 1.2.0: the card shows its item's watched and favourite state as the server has it, whichever surface changed it
 		Loaded += (_, _) => ItemUserData.Changed += OnUserDataChanged;
 		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
 
@@ -85,7 +85,7 @@ public sealed partial class BaseItemDtoCard : UserControl
 	protected override AutomationPeer OnCreateAutomationPeer() => new BaseItemDtoCardAutomationPeer(this);
 
 	/// <summary>
-	/// Seaglass 1.1.4: a click anywhere on the card opens its item (the artwork and, now, the title under it), except on one of
+	/// 1.2.0: a click anywhere on the card opens its item (the artwork and, now, the title under it), except on one of
 	/// its buttons, which do their own thing.
 	/// </summary>
 	private void Card_Tapped(object sender, TappedRoutedEventArgs e)
@@ -117,7 +117,7 @@ public sealed partial class BaseItemDtoCard : UserControl
 	private void Card_PointerExited(object sender, PointerRoutedEventArgs e) => ShowActions(_actions.PointerExited());
 
 	/// <summary>
-	/// Seaglass 1.1.4: the item's user data changed (a toggle here or anywhere else, or a request that failed): the card takes
+	/// 1.2.0: the item's user data changed (a toggle here or anywhere else, or a request that failed): the card takes
 	/// the server's state and re-reads every binding, so the toggles, the watched badge, the progress bar, the names and the
 	/// menus (built from the item) say what the server has.
 	/// </summary>
@@ -287,7 +287,7 @@ public sealed partial class BaseItemDtoCard : UserControl
 		return null;
 	}
 
-	// Seaglass 1.1.4: a toggle sets the state it now shows, which its name says (ItemLabels.WatchedAction), through the one
+	// 1.2.0: a toggle sets the state it now shows, which its name says (ItemLabels.WatchedAction), through the one
 	// path every surface uses (ItemUserData: the server's answer comes back to this card and every other one of the item; a
 	// failure springs the toggle back). The model's copy, which only Home refreshed, made a second click send the first again.
 	private async void MarkWatchedButton_Clicked(object sender, RoutedEventArgs e)

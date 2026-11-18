@@ -19,7 +19,8 @@
     mc:Ignorable="d">
 
     <!--  Seaglass: the item page. The hero (backdrop, logo, chips, actions, overview) is always dark; the body below it is
-          opaque content on the window's ambient backdrop: cast and episodes as cards, the journal as one glass card.  -->
+          opaque content on the window's ambient backdrop, in plain sections (1.2.0, 1.1.3 UX audit layout item 3: no glass
+          panel per section; a section with nothing in it is not drawn).  -->
     <Page.Resources>
         <cc:BoolToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Page.Resources>
@@ -51,78 +52,70 @@
                     </controls:ItemHero.PrimaryActions>
                 </controls:ItemHero>
                 <StackPanel Margin="48,28,48,56" Spacing="32">
-                    <!--  fluentfin-mpv: the TV journal's rating (docs/JOURNAL.md) is in the hero's action row since Seaglass 1.1.4 (ItemHero)  -->
+                    <!--  fluentfin-mpv: the TV journal's rating (docs/JOURNAL.md) is in the hero's action row since 1.2.0 (ItemHero)  -->
                     <!--  the lists are named after their labels for Narrator (fluentfin-mpv)  -->
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <StackPanel Spacing="20"><Grid ColumnSpacing="16" RowSpacing="12">
-                            <Grid.RowDefinitions>
-                                <RowDefinition />
-                                <RowDefinition />
-                                <RowDefinition />
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="88" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource GlassMetaTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Text="Video" />
-                            <TextBlock Grid.Column="1" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind ViewModel.VideoTitle, Mode=OneWay}" TextWrapping="Wrap" />
+                    <StackPanel Spacing="20"><Grid ColumnSpacing="16" RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition />
+                            <RowDefinition />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="88" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource GlassMetaTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Text="Video" />
+                        <TextBlock Grid.Column="1" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind ViewModel.VideoTitle, Mode=OneWay}" TextWrapping="Wrap" />
 
-                            <TextBlock Grid.Row="1" Style="{StaticResource GlassMetaTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Text="Audio" />
-                            <ctk:SwitchPresenter
-                                Grid.Row="1"
-                                Grid.Column="1"
-                                TargetType="x:Int32"
-                                Value="{x:Bind ViewModel.AudioStreams.Count, Mode=OneWay}">
-                                <ctk:Case Value="0" />
-                                <ctk:Case Value="1">
-                                    <TextBlock Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind ViewModel.SelectedAudio.DisplayTitle, Mode=OneWay}" />
-                                </ctk:Case>
-                                <ctk:Case IsDefault="True">
-                                    <ComboBox
-                                        MaxWidth="720"
-                                        HorizontalAlignment="Left"
-                                        MinWidth="360"
-                                        AutomationProperties.Name="Audio"
-                                        DisplayMemberPath="DisplayTitle"
-                                        ItemsSource="{x:Bind ViewModel.AudioStreams, Mode=OneWay}"
-                                        SelectedItem="{x:Bind ViewModel.SelectedAudio, Mode=TwoWay}" />
-                                </ctk:Case>
-                            </ctk:SwitchPresenter>
+                        <TextBlock Grid.Row="1" Style="{StaticResource GlassMetaTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Text="Audio" />
+                        <ctk:SwitchPresenter
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            TargetType="x:Int32"
+                            Value="{x:Bind ViewModel.AudioStreams.Count, Mode=OneWay}">
+                            <ctk:Case Value="0" />
+                            <ctk:Case Value="1">
+                                <TextBlock Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind ViewModel.SelectedAudio.DisplayTitle, Mode=OneWay}" />
+                            </ctk:Case>
+                            <ctk:Case IsDefault="True">
+                                <ComboBox
+                                    MaxWidth="720"
+                                    HorizontalAlignment="Left"
+                                    MinWidth="360"
+                                    AutomationProperties.Name="Audio"
+                                    DisplayMemberPath="DisplayTitle"
+                                    ItemsSource="{x:Bind ViewModel.AudioStreams, Mode=OneWay}"
+                                    SelectedItem="{x:Bind ViewModel.SelectedAudio, Mode=TwoWay}" />
+                            </ctk:Case>
+                        </ctk:SwitchPresenter>
 
-                            <TextBlock
-                                Grid.Row="2"
-                                VerticalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Style="{StaticResource GlassMetaTextBlockStyle}"
-                                Text="Subtitle"
-                                Visibility="{x:Bind ViewModel.HasSubtitles, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
-                            <ComboBox
-                                Grid.Row="2"
-                                Grid.Column="1"
-                                MaxWidth="720"
-                                HorizontalAlignment="Left"
-                                        MinWidth="360"
-                                AutomationProperties.Name="Subtitle"
-                                DisplayMemberPath="DisplayTitle"
-                                ItemsSource="{x:Bind ViewModel.SubtitleStreams, Mode=OneWay, TargetNullValue='None'}"
-                                SelectedItem="{x:Bind ViewModel.SelectedSubtitle, Mode=TwoWay}"
-                                SelectedValuePath="DisplayTitle"
-                                Visibility="{x:Bind ViewModel.HasSubtitles, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
-                        </Grid>
-                        <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" /></StackPanel>
-                    </ContentControl>
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.HasNextEpisode, Mode=OneWay}">
-                            <TextBlock AutomationProperties.HeadingLevel="Level2" Style="{StaticResource GlassSectionTitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="Up next" />
-                            <controls:EpisodeRow Dto="{x:Bind ViewModel.NextEpisode, Mode=OneWay}" />
-                        </StackPanel>
-                    </ContentControl>
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <controls:CastRow Heading="Cast &amp; Crew" People="{x:Bind ViewModel.CastAndCrew, Mode=OneWay}" />
-                    </ContentControl>
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <controls:CastRow Heading="Guest Stars" People="{x:Bind ViewModel.GuestStars, Mode=OneWay}" />
-                    </ContentControl>
+                        <TextBlock
+                            Grid.Row="2"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{StaticResource GlassMetaTextBlockStyle}"
+                            Text="Subtitle"
+                            Visibility="{x:Bind ViewModel.HasSubtitles, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
+                        <ComboBox
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            MaxWidth="720"
+                            HorizontalAlignment="Left"
+                                    MinWidth="360"
+                            AutomationProperties.Name="Subtitle"
+                            DisplayMemberPath="DisplayTitle"
+                            ItemsSource="{x:Bind ViewModel.SubtitleStreams, Mode=OneWay, TargetNullValue='None'}"
+                            SelectedItem="{x:Bind ViewModel.SelectedSubtitle, Mode=TwoWay}"
+                            SelectedValuePath="DisplayTitle"
+                            Visibility="{x:Bind ViewModel.HasSubtitles, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
+                    </Grid>
+                    <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" /></StackPanel>
+                    <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.HasNextEpisode, Mode=OneWay}">
+                        <TextBlock AutomationProperties.HeadingLevel="Level2" Style="{StaticResource GlassSectionTitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="Next Up" />
+                        <controls:EpisodeRow Dto="{x:Bind ViewModel.NextEpisode, Mode=OneWay}" />
+                    </StackPanel>
+                    <controls:CastRow Heading="Cast &amp; Crew" People="{x:Bind ViewModel.CastAndCrew, Mode=OneWay}" />
+                    <controls:CastRow Heading="Guest Stars" People="{x:Bind ViewModel.GuestStars, Mode=OneWay}" />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

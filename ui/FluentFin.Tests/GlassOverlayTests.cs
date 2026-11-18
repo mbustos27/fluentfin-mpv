@@ -219,16 +219,16 @@ public sealed class GlassOverlayTests
 	}
 }
 
-/// <summary>Seaglass 1.1.3: the Home hero's words panel is glass; what sits on it must not draw a second acrylic.</summary>
+/// <summary>The Home hero's words and buttons, on the artwork's scrims (1.1.3: on a glass panel; 1.2.0: full-bleed, no panel).</summary>
 public sealed class HomeHeroGlassTests
 {
 	private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
 
-	private static XElement Panel()
-	{
-		var root = XDocument.Load(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "Controls", "HomeHero.xaml"))).Root!;
-		return root.Descendants().Single(e => e.Name.LocalName == "ContentControl" && (string?)e.Attribute("Style") == "{StaticResource GlassSurfaceStyle}");
-	}
+	// 1.2.0 (1.1.3 UX audit, layout item 1): the hero is full-bleed and its words sit straight on the artwork's scrims, in the
+	// Words panel; there is no frosted panel behind them any more
+	private static XElement Hero() => XDocument.Load(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "Controls", "HomeHero.xaml"))).Root!;
+
+	private static XElement Panel() => Hero().Descendants().Single(e => e.Name.LocalName == "StackPanel" && (string?)e.Attribute(Xaml + "Name") == "Words");
 
 	[Fact]
 	public void Play_or_Resume_is_the_accent_pill()
@@ -262,16 +262,17 @@ public sealed class HomeHeroGlassTests
 		Assert.Equal("{ThemeResource GlassInsetFillBrush}", setters["Background"]);
 		Assert.Equal("{ThemeResource GlassInsetTextBrush}", setters["Foreground"]);
 
-		// and the hero's More info takes the style's label colour, not one of its own
+		// and the hero's More info takes its style's label colour, not one of its own
 		var moreInfo = Panel().Descendants().Single(e => e.Name.LocalName == "Button" && (string?)e.Attribute(Xaml + "Name") == "MoreInfoButton");
 		Assert.Null(moreInfo.Attribute("Foreground"));
 	}
 
 	[Fact]
-	public void The_buttons_on_the_glass_panel_are_flat_or_the_accent_never_a_second_acrylic()
+	public void The_buttons_are_the_accent_or_one_glass_pill_on_the_artwork_with_no_frosted_panel_behind_them()
 	{
+		// one glass layer at most: More info is the item hero's glass pill (ItemHero.xaml), straight on the scrim
+		Assert.DoesNotContain(Hero().Descendants(), e => ((string?)e.Attribute("Style"))?.Contains("GlassSurfaceStyle") == true);
 		var styles = Panel().Descendants().Where(e => e.Name.LocalName == "Button").Select(e => (string?)e.Attribute("Style")).ToList();
-		Assert.NotEmpty(styles);
-		Assert.All(styles, s => Assert.Contains(s, new[] { "{StaticResource GlassAccentPillButtonStyle}", "{StaticResource GlassInsetPillButtonStyle}" }));
+		Assert.Equal(["{StaticResource GlassAccentPillButtonStyle}", "{StaticResource GlassPillButtonStyle}"], styles);
 	}
 }

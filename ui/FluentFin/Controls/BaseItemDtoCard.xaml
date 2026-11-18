@@ -52,7 +52,7 @@
     </UserControl.Resources>
 
     <!--
-        Seaglass 1.1.4 (1.1.3 UX audit, interaction item 11): the whole tile is one target, the title under the artwork too: the
+        1.2.0 (1.1.3 UX audit, interaction item 11): the whole tile is one target, the title under the artwork too: the
         pointer over any of it lifts the card and shows its buttons, a click anywhere but on a button opens the item. No tilt
         toward the pointer and no sheen any more (a tvOS focus effect, odd with a mouse); the lift and the shadow stay.
     -->
@@ -169,6 +169,10 @@
                     </FontIcon>
                 </Button>
 
+                <!--
+                    1.2.0 (1.1.3 UX audit, layout item 23): one badge everywhere, the accent on artwork with its dark check or
+                    count, as the episode rows' watched mark (it was a saturated green pill, and the count Windows' own accent)
+                -->
                 <InfoBadge
                     Width="50"
                     Height="25"
@@ -176,7 +180,8 @@
                     Padding="5,0"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Top"
-                    Background="{x:Bind c:BaseItemDtoConverters.CardBadgeBackground(Model), Mode=OneWay}"
+                    Background="{ThemeResource SeaglassAccentOnImageBrush}"
+                    Foreground="{ThemeResource SeaglassOnAccentOnImageBrush}"
                     FontSize="25"
                     FontWeight="ExtraBold"
                     IconSource="{x:Bind c:BaseItemDtoConverters.CardBadgeSource(Model), Mode=OneWay}"
@@ -218,7 +223,7 @@
                     Visibility="Collapsed">
 
                     <!--
-                        Seaglass 1.1.4: each button is named for its item and says what a click does now, its tooltip the same
+                        1.2.0: each button is named for its item and says what a click does now, its tooltip the same
                         words (Seaglass UX review, fix 4): "Mark Inception as watched", "Remove Inception from favorites"
                     -->
                     <ToggleButton

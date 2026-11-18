@@ -140,7 +140,7 @@ public partial class JellyfinClient
 		}
 	}
 
-	// Seaglass 1.1.4: both return the server's answer (the item's user data after the change), so the app shows what the
+	// 1.2.0: both return the server's answer (the item's user data after the change), so the app shows what the
 	// server has (ItemUserData); null when the request failed
 	public async Task<UserItemDataDto?> SetIsFavorite(BaseItemDto dto, bool isFavorite)
 	{

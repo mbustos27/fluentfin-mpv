@@ -14,7 +14,7 @@ public sealed partial class MoviePage : Page
 		InitializeComponent();
 	}
 
-	// Seaglass 1.1.4: Back (or Forward) to this page gives its scroll position and focus back (ItemPagePlace)
+	// 1.2.0: Back (or Forward) to this page gives its scroll position and focus back (ItemPagePlace)
 	private ItemPagePlace? _place;
 
 	protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)

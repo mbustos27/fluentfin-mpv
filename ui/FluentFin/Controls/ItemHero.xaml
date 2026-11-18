@@ -3,6 +3,9 @@
     Seaglass: the top of the movie, series, season and episode pages. The backdrop fills the width (decoded at the width it is
     drawn at) with a scrim at the bottom and one behind the text on the left; the logo (the title as text when there is none),
     the chip row, the actions and the overview sit on it. Always dark, so the text reads on any backdrop in both themes.
+    1.2.0 (1.1.3 UX audit, layout items 8 and 21): the facts are one line of plain text with dots ("2008 · R · 1h 52m ·
+    4K"; an episode's starts with "S1 E1"), not bordered chips, and the teal "S1 · E1" overline is gone; the hero's height is a
+    share of the window's (HeroLayout: 360 to 640 px; HeightShare), compact (a smaller logo, two lines of overview) when short.
 -->
 <UserControl
     x:Class="FluentFin.Controls.ItemHero"
@@ -19,7 +22,10 @@
     HorizontalContentAlignment="Stretch"
     mc:Ignorable="d">
 
-    <Grid Height="{StaticResource ItemHeroHeight}" RequestedTheme="Dark">
+    <Grid
+        x:Name="HeroGrid"
+        Height="640"
+        RequestedTheme="Dark">
         <Image
             x:Name="BackdropImage"
             HorizontalAlignment="Center"
@@ -34,16 +40,12 @@
             Background="{ThemeResource GlassImageScrimBrush}" />
 
         <StackPanel
-            Margin="48,96,48,40"
+            x:Name="Words"
+            Margin="48,24,48,36"
             MaxWidth="{StaticResource ItemHeroTextMaxWidth}"
             HorizontalAlignment="Left"
             VerticalAlignment="Bottom"
             Spacing="14">
-            <TextBlock
-                x:Name="Eyebrow"
-                Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                Foreground="{ThemeResource SeaglassAccentBrush}"
-                Visibility="Collapsed" />
             <Image
                 x:Name="LogoImage"
                 MaxWidth="480"
@@ -63,27 +65,16 @@
                 Style="{StaticResource GlassPageTitleTextBlockStyle}"
                 Visibility="Collapsed" />
 
-            <ItemsRepeater x:Name="ChipRow">
-                <ItemsRepeater.ItemTemplate>
-                    <DataTemplate x:DataType="core:ItemChip">
-                        <Border
-                            Padding="12,4"
-                            AutomationProperties.Name="{x:Bind Name}"
-                            Background="{ThemeResource GlassPanelBrush}"
-                            BorderBrush="{ThemeResource GlassStrokeBrush}"
-                            BorderThickness="{StaticResource GlassStrokeThickness}"
-                            CornerRadius="{StaticResource GlassChipCornerRadius}">
-                            <TextBlock Style="{StaticResource ItemChipTextBlockStyle}" Text="{x:Bind Text}" />
-                        </Border>
-                    </DataTemplate>
-                </ItemsRepeater.ItemTemplate>
-                <ItemsRepeater.Layout>
-                    <ctk:WrapLayout HorizontalSpacing="8" VerticalSpacing="8" />
-                </ItemsRepeater.Layout>
-            </ItemsRepeater>
+            <!--  the facts, plain text with dots (ItemChips.MetaLine); Narrator reads them as words (ItemChips.MetaName)  -->
+            <TextBlock
+                x:Name="MetaText"
+                FontSize="14"
+                FontWeight="SemiBold"
+                Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                TextWrapping="Wrap" />
 
             <!--
-                the page's own play buttons, then trailer, watched, favourite, more and "Your rating". Seaglass 1.1.4: the icon
+                the page's own play buttons, then trailer, watched, favourite, more and "Your rating". 1.2.0: the icon
                 buttons are named for the item and say what a click does now, their tooltips the same words (set in code,
                 UpdateActionNames); the rating sits in the row as a pill on every item page (Seaglass UX review, fix 12)
             -->

@@ -17,7 +17,7 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 	}
 
 	/// <summary>
-	/// Seaglass 1.1.4: the season or one of its episodes was marked watched (or not), here or elsewhere: Play's target follows
+	/// 1.2.0: the season or one of its episodes was marked watched (or not), here or elsewhere: Play's target follows
 	/// the server, and the episode list too when the season itself changed (all its episodes did).
 	/// </summary>
 	internal async void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
@@ -75,7 +75,7 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 				return LoadMessages.CouldNotLoad("this season");
 			}
 
-			// Seaglass 1.1.4: asked alongside the episodes, so the page does not wait for it
+			// 1.2.0: asked alongside the episodes, so the page does not wait for it
 			var play = UpdatePlayTarget(id);
 			await UpdateEpisodes(dto);
 			await UpdateSeasonPills();
@@ -91,7 +91,7 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 	public partial List<BaseItemDto> Episodes { get; set; }
 
 	/// <summary>
-	/// Seaglass 1.1.4: what Play starts, on the button (<see cref="ItemPlay"/>): the series' first episode not watched, which
+	/// 1.2.0: what Play starts, on the button (<see cref="ItemPlay"/>): the series' first episode not watched, which
 	/// can be in another season, as both players start it.
 	/// </summary>
 	[ObservableProperty]

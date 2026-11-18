@@ -38,6 +38,13 @@ public sealed partial class HomeHero : UserControl
 		_timer.Tick += (_, _) => Advance();
 		Loaded += (_, _) =>
 		{
+			// 1.2.0: a share of the window's height, as the item pages' hero (HeroLayout)
+			if (XamlRoot is { } root)
+			{
+				root.Changed += OnRootChanged;
+			}
+
+			Resize();
 			SafeMotion.Subscribe(OnGlassModeChanged);
 			UpdateTimer();
 			// the backdrop is set only while the hero is on screen (Show), so coming back to Home puts its slide behind it again
@@ -48,6 +55,11 @@ public sealed partial class HomeHero : UserControl
 		};
 		Unloaded += (_, _) =>
 		{
+			if (XamlRoot is { } root)
+			{
+				root.Changed -= OnRootChanged;
+			}
+
 			SafeMotion.Unsubscribe(OnGlassModeChanged);
 			_timer.Stop();
 			if (AmbientBackdrop.Current is { } current && current == _shown)
@@ -78,6 +90,17 @@ public sealed partial class HomeHero : UserControl
 
 	private void OnGlassModeChanged(object? sender, EventArgs e) => DispatcherQueue.TryEnqueue(UpdateTimer);
 
+	private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => Resize();
+
+	private void Resize()
+	{
+		var height = HeroLayout.Height(XamlRoot?.Size.Height ?? 0, HeroLayout.HomeShare);
+		Root.Height = height;
+		var compact = HeroLayout.IsCompact(height);
+		Logo.MaxHeight = compact ? 88 : 120;
+		Words.Spacing = compact ? 8 : 12;
+	}
+
 	/// <summary>Auto-advance runs only with several slides, motion allowed, and no pointer or focus in the hero.</summary>
 	private void UpdateTimer()
 	{
@@ -104,7 +127,7 @@ public sealed partial class HomeHero : UserControl
 		for (var i = 0; i < _slides.Count; i++)
 		{
 			var at = i;
-			// Seaglass 1.1.4: a 24 px target (WCAG 2.5.8; it was 22) with no gap between dots, so they sit as far apart as before
+			// 1.2.0: a 24 px target (WCAG 2.5.8; it was 22) with no gap between dots, so they sit as far apart as before
 			var dot = new Button
 			{
 				Width = HeroDots.TargetSize, Height = HeroDots.TargetSize, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
@@ -227,7 +250,7 @@ public sealed partial class HomeHero : UserControl
 	}
 
 	/// <summary>
-	/// Seaglass 1.1.4 (1.1.3 UX audit, interaction item 13): a click on the artwork, the title or the words opens the slide's
+	/// 1.2.0 (1.1.3 UX audit, interaction item 13): a click on the artwork, the title or the words opens the slide's
 	/// item, as More info does (and as a streaming app's billboard does); the buttons and the dots do their own thing.
 	/// </summary>
 	private void Root_Tapped(object sender, TappedRoutedEventArgs e)
@@ -310,7 +333,7 @@ public sealed partial class HomeHero : UserControl
 	}
 }
 
-/// <summary>Seaglass 1.1.4: whether a click on the hero landed on one of its controls (a button: Play, More info, the dots, pause, the arrows).</summary>
+/// <summary>1.2.0: whether a click on the hero landed on one of its controls (a button: Play, More info, the dots, pause, the arrows).</summary>
 internal static class HeroClick
 {
 	public static bool OnAControl(DependencyObject? source, DependencyObject hero)
@@ -330,11 +353,11 @@ internal static class HeroClick
 /// <summary>Seaglass scrolling: which slide a key picks on the hero's dots (Left/Right by one, no wrap; Home/End).</summary>
 internal static class HeroDots
 {
-	/// <summary>Seaglass 1.1.4: the previous or next slide's index for the arrow buttons, round from the last to the first and back.</summary>
+	/// <summary>1.2.0: the previous or next slide's index for the arrow buttons, round from the last to the first and back.</summary>
 	public static int Step(int current, int count, int delta) =>
 		count <= 0 ? -1 : (((current + delta) % count) + count) % count;
 
-	/// <summary>Seaglass 1.1.4: each dot's target, the WCAG 2.5.8 minimum (the dot drawn in it stays 8 px, 10 for the slide shown);
+	/// <summary>1.2.0: each dot's target, the WCAG 2.5.8 minimum (the dot drawn in it stays 8 px, 10 for the slide shown);
 	/// the dots have no gap (HomeHero.xaml), so their centres stay 24 px apart as before (22 + 2).</summary>
 	public const double TargetSize = 24;
 

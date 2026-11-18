@@ -1,13 +1,13 @@
 namespace FluentFin.Core;
 
 /// <summary>
-/// Seaglass 1.1.4: where the user was on a page when they left it: how far down it was scrolled and what had the keyboard
+/// 1.2.0: where the user was on a page when they left it: how far down it was scrolled and what had the keyboard
 /// focus (a card or an episode row by its item, anything else by its place in the page's element tree).
 /// </summary>
 public sealed record PagePlace(double VerticalOffset, Guid? FocusedItemId, IReadOnlyList<int>? FocusedPath);
 
 /// <summary>
-/// Seaglass 1.1.4 (1.1.3 UX audit, interaction item 5): the item pages give their place back when the user returns to them
+/// 1.2.0 (1.1.3 UX audit, interaction item 5): the item pages give their place back when the user returns to them
 /// with Back (or Forward): the scroll position and the focus, which went to the top and to the title bar because every Back
 /// makes the page again. One place per page and item, the latest kept; a new visit (not Back or Forward) starts at the top.
 /// </summary>

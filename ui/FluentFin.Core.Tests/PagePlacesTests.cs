@@ -1,7 +1,7 @@
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// Seaglass 1.1.4 (1.1.3 UX audit, interaction item 5): Back to an item page gives its scroll position and focus back; a new
+/// 1.2.0 (1.1.3 UX audit, interaction item 5): Back to an item page gives its scroll position and focus back; a new
 /// visit starts at the top. The pages' side (saving on leave, restoring once the content is in): ItemButtonsXamlTests.
 /// </summary>
 public sealed class PagePlacesTests
