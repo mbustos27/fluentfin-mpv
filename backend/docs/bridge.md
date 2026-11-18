@@ -912,7 +912,8 @@ points at the checkout it was made from -- a git worktree shares the main
 checkout's venv. Run it through `tools\backend-bench\hidden_run.py` to keep
 its windows off the desktop: started on the desktop, it stops at once with
 exit status 3, as the unit tests do (`jellyfin_mpv_shim/offscreen_guard.py`;
-`SEAGLASS_TESTS_ON_DESKTOP=1` runs it there anyway).)
+`NIXIE_TESTS_ON_DESKTOP=1`, or the older `SEAGLASS_TESTS_ON_DESKTOP=1`, runs it there
+anyway).)
 
 It checks the server-less protocol, stdin EOF, `play_file` of
 `av://lavfi:testsrc` standalone (state, advancing `position`, pause, volume,

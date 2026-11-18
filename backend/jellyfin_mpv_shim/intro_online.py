@@ -7,8 +7,8 @@ notice restricts the data to its Jellyfin plugin.
 What leaves the PC, and only when the user turned lookups on: one GET with
 the show's public provider id (TheIntroDB: TVDB, else TMDB, else IMDb;
 AniSkip: MAL), the season, the episode and the runtime, and a plain
-``Seaglass/<version>`` User-Agent. Never the server address, user, token,
-file path or any title.
+``Nixie/<version>`` User-Agent (``Seaglass/<version>`` before 1.2.0). Never
+the server address, user, token, file path or any title.
 
 TheIntroDB's terms (https://theintrodb.org/docs/terms, 4.3 and 6.2) shape
 this module:
@@ -75,7 +75,7 @@ class Rejected(Exception):
 
 
 def user_agent(version):
-    return "Seaglass/%s" % (version or "1")
+    return "Nixie/%s" % (version or "1")
 
 
 def http_get(url, headers, timeout=TIMEOUT):

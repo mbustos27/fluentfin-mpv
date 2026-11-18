@@ -1,6 +1,6 @@
-// Seaglass's launcher: the Seaglass.exe at the top of the release folder, the one program there to run. The app
-// itself (its Seaglass.exe and hundreds of runtime files) is in app\, so people don't have to find it among them.
-// This starts app\Seaglass.exe with the same arguments, working folder and environment, then ends; it shows nothing
+// Nixie's launcher: the Nixie.exe at the top of the release folder, the one program there to run. The app
+// itself (its Nixie.exe and hundreds of runtime files) is in app\, so people don't have to find it among them.
+// This starts app\Nixie.exe with the same arguments, working folder and environment, then ends; it shows nothing
 // unless it can't. Built by tools\release\build-release.ps1 with Windows' own C# compiler (.NET Framework 4, part of
 // Windows 10 and 11), so it needs nothing that the app doesn't, and ships no third-party code.
 using System;
@@ -11,7 +11,7 @@ using System.Runtime.InteropServices;
 
 static class Launcher
 {
-    const string Title = "Seaglass";
+    const string Title = "Nixie";
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     static extern int MessageBoxW(IntPtr owner, string text, string caption, uint type);
@@ -22,12 +22,12 @@ static class Launcher
     static int Main()
     {
         string here = AppDomain.CurrentDomain.BaseDirectory;
-        string app = Path.Combine(Path.Combine(here, "app"), "Seaglass.exe");
+        string app = Path.Combine(Path.Combine(here, "app"), "Nixie.exe");
         if (!File.Exists(app))
         {
-            Show("Seaglass can't start: there is no app\\Seaglass.exe beside this Seaglass.exe (in " + here + ").\n\n" +
-                 "Unzip the whole folder and keep its files together. To start Seaglass from somewhere else, " +
-                 "make a shortcut to this Seaglass.exe.");
+            Show("Nixie can't start: there is no app\\Nixie.exe beside this Nixie.exe (in " + here + ").\n\n" +
+                 "Unzip the whole folder and keep its files together. To start Nixie from somewhere else, " +
+                 "make a shortcut to this Nixie.exe.");
             return 2;
         }
         var start = new ProcessStartInfo(app, ArgumentsAfterProgram(Environment.CommandLine));
@@ -43,7 +43,7 @@ static class Launcher
         }
         catch (Win32Exception e)
         {
-            Show("Seaglass can't start " + app + ":\n\n" + e.Message);
+            Show("Nixie can't start " + app + ":\n\n" + e.Message);
             return 3;
         }
     }

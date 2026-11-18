@@ -23,7 +23,7 @@ public class LocalSettingsService : ILocalSettingsService
 			NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals
 		};
 
-		_file = Path.Combine(knownFolders.ApplicationData, "LocalSettings.json");
+		_file = Path.Combine(knownFolders.ApplicationData, KnownFolders.SettingsFileName);
 		try
 		{
 			if (File.Exists(_file) && JsonNode.Parse(File.ReadAllText(_file)) is { } jsonNode)

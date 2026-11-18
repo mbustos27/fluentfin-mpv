@@ -3,7 +3,7 @@
   survives the watchdog kill and shows the "stopped responding" message. Closes FluentFin afterwards and checks that
   none of the processes this run created survive. Each run closes what it started in a finally, whatever fails; only
   processes this script started (checked by start time) are touched.
-  Usage: repro-hang.ps1 -Out <dir> [-Runs 12] [-Exe <Seaglass.exe>] [-WatchSeconds 14]
+  Usage: repro-hang.ps1 -Out <dir> [-Runs 12] [-Exe <Nixie.exe>] [-WatchSeconds 14]
 #>
 param([int]$Runs = 1, [Parameter(Mandatory)][string]$Out, [string]$Exe = '', [int]$WatchSeconds = 14)
 

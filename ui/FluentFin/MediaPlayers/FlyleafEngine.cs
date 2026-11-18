@@ -41,7 +41,7 @@ public static class FlyleafEngine
 
 			if (FFmpegLoadedElsewhere() is [var (name, path), ..])
 			{
-				throw new InvalidOperationException($"another FFmpeg's {name} is already loaded in Seaglass (from {Path.GetDirectoryName(path)}): restart Seaglass to use this player");
+				throw new InvalidOperationException($"another FFmpeg's {name} is already loaded in {Core.AppIdentity.Name} (from {Path.GetDirectoryName(path)}): restart {Core.AppIdentity.Name} to use this player");
 			}
 
 			Start();

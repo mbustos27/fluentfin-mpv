@@ -1,4 +1,4 @@
-# Seaglass keyboard and mouse shortcuts
+# Nixie keyboard and mouse shortcuts
 
 The map below is what the app does (`ui/FluentFin.Core/Shortcuts/AppShortcuts.cs` for the global keys,
 `MpvControlsViewModel.ActionFor` for the player's); `ShortcutCatalog` is the list the "?" sheet shows, and
@@ -73,4 +73,4 @@ The mouse: a click on the video pauses, a double click is full screen, the wheel
 - Backspace as Back: too close to text editing and it would add nothing to Alt+Left and Mouse 4.
 - F11 outside the player: a full-screen window without the title bar has no use on the browsing pages.
 - The built-in player's own global key hook keeps its keys as they are (Space, arrows, S, F, Up/Down); it is not the player
-  Seaglass ships with.
+  Nixie ships with.

@@ -1,7 +1,9 @@
-# Seaglass: the design every stream follows
+# The design every stream follows
 
-FluentFin MPV becomes **Seaglass**: the same app with a glassy, calm, Apple TV-like look on Windows. The evidence and
-the reasons are in `docs\design\SEAGLASS-RESEARCH.md` (the research report, 2026-11-16). This page is the contract.
+The glass design, made for Seaglass (1.1.x; the app is **Nixie** since 1.2.0, formerly Seaglass and FluentFin MPV): a
+glassy, calm, Apple TV-like look on Windows. The evidence and the reasons are in `docs\design\DESIGN-RESEARCH.md` (the
+research report, 2026-11-16). This page is the contract. (It was `SEAGLASS.md`; the code's `Seaglass*` names, such as
+`SeaglassPalette`, `SeaglassTheme` and the `Seaglass*` brushes, are the design system's and keep that prefix for now.)
 
 ## The rule: glass on chrome and on section panels, content opaque
 
@@ -76,7 +78,7 @@ Keyboard reach and focus visuals, Narrator names on every card and icon button, 
 
 ## Pass 3: real sea glass (all-in, niche on purpose)
 
-The user: "its not very glassy lets get reallllllll themed", "we can get niche". Spec: `docseports\SeaGlass theme inspiration.md`
+The user: "its not very glassy lets get reallllllll themed", "we can get niche". Spec: `docs\reports\SeaGlass theme inspiration.md`
 (its ideas only; nothing copied from the SeaGlass repo it studies, which has no licence). Solid and high contrast stay.
 
 - **Per-title palette** (`FluentFin.Core\Theming`): the artwork's BlurHash (`ItemArtwork.BackdropBlurHash`, the hero slide's)
@@ -113,7 +115,7 @@ The user: "its not very glassy lets get reallllllll themed", "we can get niche".
   scores a hash (the default hue until it is read).
 - **Light theme**: `SeaglassPalette.Build(hue, solid, light: true)`: a pale tint (L 0.95), dark text (L 0.22), a deeper accent (L 0.50)
   with white text; checked at 4.5:1 over a backdrop at least 0.50 bright (7:1 in Solid). `SeaglassTheme` recolours both theme
-  dictionaries. `SEAGLASS_THEME=Light|Dark` forces the theme (harness screenshots).
+  dictionaries. `NIXIE_THEME=Light|Dark` (or the older `SEAGLASS_THEME`) forces the theme (harness screenshots).
 - **Accessibility**: the grain, the panel highlight and the window's backdrop images are `AccessibilityView` Raw: outside the control
   view Narrator and the harness's scan use. The one image the scan still names is the item page's logo, which is the page heading.
 - **Cost** (`tools/ui-harness/offscreen/then-gpu.ps1`, Home scrolled to the bottom and back 8 times, off-screen): the app's CPU

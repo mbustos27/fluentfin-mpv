@@ -131,8 +131,8 @@ public sealed class SettingsAndRailXamlTests
 			credits.Descendants(Presentation + "HyperlinkButton").Select(h => (string?)h.Attribute("NavigateUri")));
 
 		// the title is the app's name and a release version (AppVersion, as the title bar and the server get it)
-		Assert.Equal("Seaglass 1.1.3", SettingsViewModel.AboutTitleFor("1.1.3"));
-		Assert.Matches(@"^Seaglass \d+\.\d+\.\d+", SettingsViewModel.AboutTitle);
+		Assert.Equal("Nixie 1.2.0", SettingsViewModel.AboutTitleFor("1.2.0"));
+		Assert.Matches(@"^Nixie \d+\.\d+\.\d+", SettingsViewModel.AboutTitle);
 	}
 
 	[Theory]

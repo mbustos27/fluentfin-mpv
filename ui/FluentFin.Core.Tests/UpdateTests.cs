@@ -11,7 +11,7 @@ namespace FluentFin.Core.Tests;
 public sealed class UpdateTests : IDisposable
 {
 	private const string Repo = "https://github.com/mbustos27/fluentfin-mpv";
-	private readonly string _folder = Path.Combine(Path.GetTempPath(), "seaglass-update-tests-" + Guid.NewGuid().ToString("N"));
+	private readonly string _folder = Path.Combine(Path.GetTempPath(), "nixie-update-tests-" + Guid.NewGuid().ToString("N"));
 
 	public void Dispose()
 	{
@@ -26,15 +26,15 @@ public sealed class UpdateTests : IDisposable
 		string? page = null, bool assets = true)
 	{
 		var v = tag.TrimStart('v');
-		msiUrl ??= $"{Repo}/releases/download/{tag}/Seaglass-{v}-win-x64.msi";
+		msiUrl ??= $"{Repo}/releases/download/{tag}/Nixie-{v}-win-x64.msi";
 		shaUrl ??= msiUrl + ".sha256";
 		return $$"""
 			{ "tag_name": "{{tag}}", "draft": {{draft.ToString().ToLowerInvariant()}}, "prerelease": {{prerelease.ToString().ToLowerInvariant()}},
 			  "html_url": "{{page ?? $"{Repo}/releases/tag/{tag}"}}", "body": "Notes for {{tag}}",
 			  "assets": [ {{(assets ? $$"""
-			    { "name": "Seaglass-{{v}}-win-x64.zip", "browser_download_url": "{{Repo}}/releases/download/{{tag}}/Seaglass-{{v}}-win-x64.zip" },
-			    { "name": "Seaglass-{{v}}-win-x64.msi", "browser_download_url": "{{msiUrl}}" },
-			    { "name": "Seaglass-{{v}}-win-x64.msi.sha256", "browser_download_url": "{{shaUrl}}" }
+			    { "name": "Nixie-{{v}}-win-x64.zip", "browser_download_url": "{{Repo}}/releases/download/{{tag}}/Nixie-{{v}}-win-x64.zip" },
+			    { "name": "Nixie-{{v}}-win-x64.msi", "browser_download_url": "{{msiUrl}}" },
+			    { "name": "Nixie-{{v}}-win-x64.msi.sha256", "browser_download_url": "{{shaUrl}}" }
 			    """ : "")}} ] }
 			""";
 	}
@@ -110,16 +110,44 @@ public sealed class UpdateTests : IDisposable
 
 		Assert.Equal("1.2.0", release.Version);
 		Assert.Equal("Notes for v1.2.0", release.Notes);
-		Assert.Equal("Seaglass-1.2.0-win-x64.msi", release.MsiName);
-		Assert.EndsWith("/Seaglass-1.2.0-win-x64.msi", release.MsiUrl);
-		Assert.EndsWith("/Seaglass-1.2.0-win-x64.msi.sha256", release.Sha256Url);
+		Assert.Equal("Nixie-1.2.0-win-x64.msi", release.MsiName);
+		Assert.EndsWith("/Nixie-1.2.0-win-x64.msi", release.MsiUrl);
+		Assert.EndsWith("/Nixie-1.2.0-win-x64.msi.sha256", release.Sha256Url);
 		Assert.True(release.HasInstaller);
+	}
+
+	[Fact]
+	public void TheInstallerAndTheRegistryKey_CarryTheAppsName()
+	{
+		Assert.Equal("Nixie-1.2.0-win-x64.msi", UpdateSource.InstallerName("1.2.0"));
+		Assert.Equal(@"Software\Nixie", UpdateSource.RegistryKey);
+	}
+
+	[Fact]
+	public void Parse_TakesOnlyTheNixieInstaller_NotOneUnderTheOldName()
+	{
+		// Nixie 1.2.0's releases may also carry the same MSI as Seaglass-<version>-win-x64.msi for Seaglass 1.1.x's updater
+		// (docs\RELEASE.md); Nixie itself only ever takes its own name
+		var json = $$"""
+			{ "tag_name": "v1.3.0", "draft": false, "prerelease": false, "html_url": "{{Repo}}/releases/tag/v1.3.0", "body": "",
+			  "assets": [
+			    { "name": "Seaglass-1.3.0-win-x64.msi", "browser_download_url": "{{Repo}}/releases/download/v1.3.0/Seaglass-1.3.0-win-x64.msi" },
+			    { "name": "Seaglass-1.3.0-win-x64.msi.sha256", "browser_download_url": "{{Repo}}/releases/download/v1.3.0/Seaglass-1.3.0-win-x64.msi.sha256" } ] }
+			""";
+
+		var release = ReleaseInfo.Parse(json)!;
+
+		Assert.Equal("1.3.0", release.Version);
+		Assert.False(release.HasInstaller);
+		var stored = new ReleaseInfo("1.3.0", $"{Repo}/releases/tag/v1.3.0", "", "Seaglass-1.3.0-win-x64.msi",
+			$"{Repo}/releases/download/v1.3.0/Seaglass-1.3.0-win-x64.msi", $"{Repo}/releases/download/v1.3.0/Seaglass-1.3.0-win-x64.msi.sha256");
+		Assert.False(stored.Validated().HasInstaller);
 	}
 
 	[Fact]
 	public void Parse_RefusesAnInstallerFromAnotherRepository_SoUpstreamFluentFinIsNeverOffered()
 	{
-		var upstream = "https://github.com/insomniachi/fluentfin/releases/download/v1.2.0/Seaglass-1.2.0-win-x64.msi";
+		var upstream = "https://github.com/insomniachi/fluentfin/releases/download/v1.2.0/Nixie-1.2.0-win-x64.msi";
 		var release = ReleaseInfo.Parse(Release(msiUrl: upstream))!;
 
 		Assert.False(release.HasInstaller);
@@ -158,7 +186,7 @@ public sealed class UpdateTests : IDisposable
 		Assert.Equal("1.2.0", result.Release!.Version);
 		var request = Assert.Single(handler.Requests);
 		Assert.Equal("https://api.github.com/repos/mbustos27/fluentfin-mpv/releases/latest", request.RequestUri!.ToString());
-		Assert.Equal("Seaglass/1.1.1", request.Headers.UserAgent.ToString());
+		Assert.Equal("Nixie/1.1.1", request.Headers.UserAgent.ToString());
 		Assert.Empty(request.Headers.Authorization is null ? [] : new[] { "auth" });
 		Assert.False(request.Headers.Contains("Cookie"));
 	}
@@ -294,7 +322,7 @@ public sealed class UpdateTests : IDisposable
 	}
 
 	[Theory]
-	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/Seaglass-1.2.0-win-x64.msi", true)]
+	[InlineData("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/Nixie-1.2.0-win-x64.msi", true)]
 	[InlineData("http://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/a.msi", false)]
 	[InlineData("https://github.com.evil.example/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", false)]
 	[InlineData("https://evil.example/mbustos27/fluentfin-mpv/releases/download/v1/a.msi", false)]
@@ -326,9 +354,9 @@ public sealed class UpdateTests : IDisposable
 	[Fact]
 	public async Task Coordinator_AStoredReleaseIsCheckedAgain_BeforeItIsOffered()
 	{
-		var stored = new UpdateState(DateTimeOffset.UtcNow, new ReleaseInfo("1.2.0", "https://evil.example/page", "n", "Seaglass-1.2.0-win-x64.msi",
+		var stored = new UpdateState(DateTimeOffset.UtcNow, new ReleaseInfo("1.2.0", "https://evil.example/page", "n", "Nixie-1.2.0-win-x64.msi",
 			"https://github.com/mbustos27/fluentfin-mpv/releases/download/%2e%2e/%2e%2e/evil/a.msi",
-			"https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/Seaglass-1.2.0-win-x64.msi.sha256"), null).ToJson();
+			"https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/Nixie-1.2.0-win-x64.msi.sha256"), null).ToJson();
 		var (settings, _) = FakeSettings(enabled: true, stored);
 		var coordinator = new UpdateCoordinator(settings.Object, new UpdateChecker(new HttpClient(new Fake(_ => Ok(Release()))), "1.1.1"), () => DateTimeOffset.UtcNow, "1.1.1");
 
@@ -382,12 +410,12 @@ public sealed class UpdateTests : IDisposable
 
 	// --- the hash check
 	[Theory]
-	[InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef *Seaglass-1.2.0-win-x64.msi\n", "Seaglass-1.2.0-win-x64.msi", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
-	[InlineData("0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF  Seaglass-1.2.0-win-x64.msi\r\n", "Seaglass-1.2.0-win-x64.msi", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
-	[InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n", "Seaglass-1.2.0-win-x64.msi", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
-	[InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef *Other.msi\n", "Seaglass-1.2.0-win-x64.msi", null)]
-	[InlineData("tooshort *Seaglass-1.2.0-win-x64.msi\n", "Seaglass-1.2.0-win-x64.msi", null)]
-	[InlineData("", "Seaglass-1.2.0-win-x64.msi", null)]
+	[InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef *Nixie-1.2.0-win-x64.msi\n", "Nixie-1.2.0-win-x64.msi", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
+	[InlineData("0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF  Nixie-1.2.0-win-x64.msi\r\n", "Nixie-1.2.0-win-x64.msi", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
+	[InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\n", "Nixie-1.2.0-win-x64.msi", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")]
+	[InlineData("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef *Other.msi\n", "Nixie-1.2.0-win-x64.msi", null)]
+	[InlineData("tooshort *Nixie-1.2.0-win-x64.msi\n", "Nixie-1.2.0-win-x64.msi", null)]
+	[InlineData("", "Nixie-1.2.0-win-x64.msi", null)]
 	public void Sha256File_ReadsTheHashFileTheBuildWrites(string text, string name, string? expected) => Assert.Equal(expected, Sha256File.Parse(text, name));
 
 	private static string Sha(byte[] data) => Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
@@ -406,7 +434,7 @@ public sealed class UpdateTests : IDisposable
 
 		var path = await downloader.DownloadAsync(release);
 
-		Assert.Equal(Path.Combine(_folder, "Seaglass-1.2.0-win-x64.msi"), path);
+		Assert.Equal(Path.Combine(_folder, "Nixie-1.2.0-win-x64.msi"), path);
 		Assert.Equal(msi, await File.ReadAllBytesAsync(path));
 		Assert.Empty(Directory.GetFiles(_folder, "*.part"));
 	}
@@ -445,8 +473,8 @@ public sealed class UpdateTests : IDisposable
 	[Fact]
 	public async Task Download_RefusesAReleaseWithoutThisRepositorysInstaller()
 	{
-		var release = new ReleaseInfo("1.2.0", $"{Repo}/releases/tag/v1.2.0", "", "Seaglass-1.2.0-win-x64.msi",
-			"https://github.com/insomniachi/fluentfin/releases/download/v1.2.0/Seaglass-1.2.0-win-x64.msi", "https://example.com/x.sha256");
+		var release = new ReleaseInfo("1.2.0", $"{Repo}/releases/tag/v1.2.0", "", "Nixie-1.2.0-win-x64.msi",
+			"https://github.com/insomniachi/fluentfin/releases/download/v1.2.0/Nixie-1.2.0-win-x64.msi", "https://example.com/x.sha256");
 		var handler = new Fake(_ => new HttpResponseMessage(HttpStatusCode.OK));
 
 		await Assert.ThrowsAsync<UpdateException>(() => new UpdateDownloader(new HttpClient(handler), _folder).DownloadAsync(release));
@@ -473,13 +501,13 @@ public sealed class UpdateTests : IDisposable
 		string? opened = null;
 		System.Diagnostics.ProcessStartInfo? started = null;
 
-		var outcome = await UpdateFlow.InstallAsync(release, isMsiInstall: true, (_, _) => Task.FromResult(@"C:\temp\Seaglass-1.2.0-win-x64.msi"),
+		var outcome = await UpdateFlow.InstallAsync(release, isMsiInstall: true, (_, _) => Task.FromResult(@"C:\temp\Nixie-1.2.0-win-x64.msi"),
 			i => started = i, url => opened = url);
 
 		Assert.Equal(UpdateOutcome.StartedInstaller, outcome);
 		Assert.Null(opened);
 		Assert.Equal("msiexec.exe", started!.FileName);
-		Assert.Equal(["/i", @"C:\temp\Seaglass-1.2.0-win-x64.msi"], started.ArgumentList);
+		Assert.Equal(["/i", @"C:\temp\Nixie-1.2.0-win-x64.msi"], started.ArgumentList);
 	}
 
 	[Fact]
@@ -488,7 +516,7 @@ public sealed class UpdateTests : IDisposable
 		var release = ReleaseInfo.Parse(Release())!;
 		var steps = new List<string>();
 
-		await UpdateFlow.InstallAsync(release, isMsiInstall: true, (_, _) => Task.FromResult(@"C:	emp\Seaglass-1.2.0-win-x64.msi"),
+		await UpdateFlow.InstallAsync(release, isMsiInstall: true, (_, _) => Task.FromResult(@"C:	emp\Nixie-1.2.0-win-x64.msi"),
 			_ => steps.Add("start"), _ => steps.Add("page"), closeApp: () => steps.Add("close"));
 		Assert.Equal(["start", "close"], steps);
 

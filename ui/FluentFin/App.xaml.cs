@@ -71,7 +71,7 @@ public partial class App : Application
 	public App()
 	{
 		// Seaglass: a crash here comes before the log exists and WinUI ends the process without a word; leave a note in
-		// %TEMP%\Seaglass-startup-crash.txt so it can be told what happened
+		// %TEMP%\Nixie-startup-crash.txt (StartupCrashFile) so it can be told what happened
 		try
 		{
 			Construct();
@@ -83,11 +83,17 @@ public partial class App : Application
 		}
 	}
 
+	/// <summary>Nixie: the title of the error box a failed start shows.</summary>
+	internal const string CouldNotStart = Core.AppIdentity.Name + " could not start";
+
+	/// <summary>Nixie: the start-up crash note's name in %TEMP% (it was Seaglass-startup-crash.txt).</summary>
+	internal static string StartupCrashFile => $"{Core.AppIdentity.Name}-startup-crash.txt";
+
 	internal static void WriteStartupCrash(Exception ex)
 	{
 		try
 		{
-			File.WriteAllText(Path.Combine(Path.GetTempPath(), "Seaglass-startup-crash.txt"), $"{DateTime.Now:O}{Environment.NewLine}{ex}");
+			File.WriteAllText(Path.Combine(Path.GetTempPath(), StartupCrashFile), $"{DateTime.Now:O}{Environment.NewLine}{ex}");
 		}
 		catch (Exception)
 		{
@@ -100,19 +106,19 @@ public partial class App : Application
 		// ReactiveUI 23+ must be initialized explicitly before any Rx/ReactiveUI type is touched
 		RxAppBuilder.CreateReactiveUIBuilder().WithWinUI().BuildApp();
 		InitializeComponent();
-		// Seaglass: SEAGLASS_THEME (harness screenshots) for the popups too; settable only here, in the constructor
-		if (GlassTheme.ForcedApplicationTheme(Environment.GetEnvironmentVariable("SEAGLASS_THEME")) is { } forced)
+		// Seaglass: NIXIE_THEME (SEAGLASS_THEME before 1.2.0; harness screenshots) for the popups too; settable only here, in the constructor
+		if (GlassTheme.ForcedApplicationTheme(Core.AppIdentity.ReadEnvironment("THEME")) is { } forced)
 		{
 			RequestedTheme = forced;
 		}
 
 		// fluentfin-mpv: --data-dir <folder> / FLUENTFIN_MPV_DATA_DIR put everything this run writes there (dev and test runs)
-		// Seaglass: the data folder was %LOCALAPPDATA%\FluentFinMpv; copied (never moved) to %LOCALAPPDATA%\Seaglass on the first start
-		// A failed copy leaves no Seaglass folder: this run uses the old folder in place, the copy is tried again at the next start,
-		// and the user is told once the window is up (_legacyCopyFailed)
+		// Nixie: the data folder was %LOCALAPPDATA%\Seaglass (and before that %LOCALAPPDATA%\FluentFinMpv); the newest one is
+		// copied (never moved) to %LOCALAPPDATA%\Nixie on the first start. A failed copy leaves no Nixie folder: this run uses the
+		// old folder in place, the copy is tried again at the next start, and the user is told once the window is up (_legacyCopyFailed)
 		var legacyCopy = Core.KnownFolders.CopyLegacyForStartup([.. Environment.GetCommandLineArgs().Skip(1)], Environment.GetEnvironmentVariable);
 		var migrationNote = legacyCopy.Note;
-		_legacyCopyFailed = legacyCopy.Failed;
+		_legacyCopyFailed = legacyCopy.Failed ? legacyCopy.LegacyApp ?? "the old version" : null;
 		var knownFolders = StartupFolders(legacyCopy.Failed ? legacyCopy.LegacyRoot : null);
 
 		Host = Microsoft.Extensions.Hosting.Host
@@ -271,7 +277,7 @@ public partial class App : Application
 
 			// Configuration
 			// fluentfin-mpv: no WindowsUpdateService (deleted). It downloaded upstream FluentFin's latest installer from GitHub on
-			// start and offered to run it, which would replace this build (and its mpv player) with upstream's. Seaglass's own,
+			// start and offered to run it, which would replace this build (and its mpv player) with upstream's. The app's own,
 			// opt-in notice (Settings > Check for updates) only ever names this repository's releases: Core/Updates.
 			services.AddSingleton<UpdateNoticeService>();
 			services.AddHostedService(sp => sp.GetRequiredService<UpdateNoticeService>());
@@ -287,7 +293,13 @@ public partial class App : Application
 	// data), and so does a data folder that cannot be made, with a message instead of a crash before any window
 	// an instance field: setting a static one in the constructor ran App's static initializer (which creates MainWindow, which asks
 	// for services) before the host existed, and every start crashed (1.1.0 verify)
-	private bool _legacyCopyFailed;
+	// Nixie: the app whose data folder could not be copied ("Seaglass", "FluentFin MPV"), null when nothing failed
+	private string? _legacyCopyFailed;
+
+	/// <summary>Nixie: the message shown once the window is up when the old data folder could not be copied (title, text).</summary>
+	internal static (string Title, string Text) LegacyCopyFailedMessage(string oldApp) =>
+		($"{Core.AppIdentity.Name} could not copy your data",
+		 $"{Core.AppIdentity.Name} couldn't copy the data from {oldApp}, so it is using that folder in place for now. Nothing is lost; it will try the copy again the next time it starts.");
 
 	private static Core.KnownFolders StartupFolders(string? useInstead)
 	{
@@ -297,7 +309,7 @@ public partial class App : Application
 			return folders;
 		}
 
-		NativeMethods.ShowError("Seaglass could not start", error ?? "The data folder could not be used.");
+		NativeMethods.ShowError(CouldNotStart, error ?? "The data folder could not be used.");
 		Environment.Exit(2);
 		throw new InvalidOperationException(error);
 	}
@@ -332,8 +344,8 @@ public partial class App : Application
 
 			// Seaglass: the saved Glass choice, and the glass brushes following GlassMode
 			GlassSetting.Apply(GetService<ISettings>());
-			// the harness's light-theme screenshots (SEAGLASS_THEME=Light|Dark); unset, the app follows Windows
-			if (Enum.TryParse<ElementTheme>(Environment.GetEnvironmentVariable("SEAGLASS_THEME"), true, out var forcedTheme) && forcedTheme != ElementTheme.Default)
+			// the harness's light-theme screenshots (NIXIE_THEME=Light|Dark, or SEAGLASS_THEME); unset, the app follows Windows
+			if (Enum.TryParse<ElementTheme>(Core.AppIdentity.ReadEnvironment("THEME"), true, out var forcedTheme) && forcedTheme != ElementTheme.Default)
 			{
 				((FrameworkElement)MainWindow.Content).RequestedTheme = forcedTheme;
 			}
@@ -345,17 +357,17 @@ public partial class App : Application
 			// fluentfin-mpv (startup-perf, O5): no Flyleaf engine here; it starts with the first Flyleaf player (FlyleafEngine)
 			await GetService<IActivationService>().ActivateAsync(args);
 
-			if (_legacyCopyFailed)
+			if (_legacyCopyFailed is { } oldApp)
 			{
-				_ = GetService<IContentDialogService>().ShowMessage("Seaglass could not copy your data",
-					"Seaglass couldn't copy the data from FluentFin MPV, so it is using that folder in place for now. Nothing is lost; it will try the copy again the next time it starts.");
+				var (title, text) = LegacyCopyFailedMessage(oldApp);
+				_ = GetService<IContentDialogService>().ShowMessage(title, text);
 			}
 		}
 		catch (Exception ex)
 		{
 			// App_UnhandledException marks errors handled, so a failed launch would otherwise leave a process with no window
 			GetService<ILogger<App>>().LogCritical(ex, "Startup failed");
-			NativeMethods.ShowError("Seaglass could not start", ex.Message);
+			NativeMethods.ShowError(CouldNotStart, ex.Message);
 			Exit();
 		}
 	}
@@ -395,7 +407,7 @@ public partial class App : Application
 		try
 		{
 			// fluentfin-mpv (startup-perf): no pre-warm of the mpv backend from now on; one in flight gives way to the close
-			GetService<MpvPrewarm>().Cancel("Seaglass is closing");
+			GetService<MpvPrewarm>().Cancel($"{Core.AppIdentity.Name} is closing");
 
 			// fluentfin-mpv: upstream's stop report (bounded: a hung server must not keep a hidden FluentFin alive) and, side by
 			// side, the mpv backend's shutdown and any crash report FluentFin is sending for it. Before the window goes, so the

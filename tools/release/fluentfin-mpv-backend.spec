@@ -1,5 +1,5 @@
 # -*- mode: python -*-
-# PyInstaller spec of the bundled backend: backend\fluentfin-mpv-backend.exe beside Seaglass.exe, one folder (the
+# PyInstaller spec of the bundled backend: backend\fluentfin-mpv-backend.exe beside Nixie.exe, one folder (the
 # interpreter runs inside that exe, no child process, so FluentFin's kill-on-close job holds it from its first
 # instruction), a console-subsystem exe like the venv's python.exe (FluentFin starts it with no console window and its
 # stdio on pipes; docs/BRIDGE.md section 1). Run by tools\release\build-release.ps1, which passes the version in
@@ -30,7 +30,7 @@ def package_data(root, prefix, skip_ext=(".py", ".pyc", ".po")):
 # the shim's own files (lua scripts, themes, icons, base.pot), found through utils.get_resource under _MEIPASS. The .po
 # catalogs are left out: gettext reads compiled .mo files, which are not in git (gen_pkg.sh), so the bridge is English.
 datas = package_data(PACKAGE, "jellyfin_mpv_shim")
-# Seaglass's mpv assets (the uosc bar, its fonts and licence) when this checkout has them: fluentfin_bar finds them
+# Nixie's mpv assets (the uosc bar, its fonts and licence) when this checkout has them: fluentfin_bar finds them
 # two folders above its module, which frozen is _MEIPASS\fluentfin\mpv
 FLUENTFIN_ASSETS = os.path.join(BACKEND, "fluentfin")
 if os.path.isdir(FLUENTFIN_ASSETS):
@@ -61,13 +61,13 @@ version_info = vi.VSVersionInfo(
     ffi=vi.FixedFileInfo(filevers=tuple(parts[:4]), prodvers=tuple(parts[:4])),
     kids=[
         vi.StringFileInfo([vi.StringTable("040904B0", [
-            vi.StringStruct("CompanyName", "Seaglass"),
-            vi.StringStruct("FileDescription", "Seaglass playback backend (jellyfin-mpv-shim)"),
+            vi.StringStruct("CompanyName", "Nixie"),
+            vi.StringStruct("FileDescription", "Nixie playback backend (jellyfin-mpv-shim)"),
             vi.StringStruct("FileVersion", VERSION),
             vi.StringStruct("InternalName", "fluentfin-mpv-backend"),
-            vi.StringStruct("LegalCopyright", "Copyright (c) Seaglass contributors and the jellyfin-mpv-shim authors. GPL-3.0-or-later"),
+            vi.StringStruct("LegalCopyright", "Copyright (c) Nixie contributors and the jellyfin-mpv-shim authors. GPL-3.0-or-later"),
             vi.StringStruct("OriginalFilename", "fluentfin-mpv-backend.exe"),
-            vi.StringStruct("ProductName", "Seaglass"),
+            vi.StringStruct("ProductName", "Nixie"),
             vi.StringStruct("ProductVersion", VERSION),
         ])]),
         vi.VarFileInfo([vi.VarStruct("Translation", [1033, 1200])]),
@@ -82,7 +82,7 @@ exe = EXE(
     name="fluentfin-mpv-backend",
     console=True,
     upx=False,
-    icon=os.path.join(REPO, "ui", "FluentFin", "Assets", "Seaglass.ico"),
+    icon=os.path.join(REPO, "ui", "FluentFin", "Assets", "Nixie.ico"),
     version=version_info,
 )
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="backend")

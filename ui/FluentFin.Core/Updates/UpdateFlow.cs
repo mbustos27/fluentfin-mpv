@@ -7,7 +7,8 @@ namespace FluentFin.Core.Updates;
 public static class InstallDetector
 {
 	/// <summary>
-	/// The MSI writes <c>HKCU\Software\Seaglass\InstallFolder</c> ([INSTALLFOLDER]); the app runs from that folder's <c>app\</c>.
+	/// The MSI writes <c>HKCU\Software\Nixie\InstallFolder</c> ([INSTALLFOLDER], <see cref="UpdateSource.RegistryKey"/>;
+	/// Software\Seaglass before 1.2.0); the app runs from that folder's <c>app\</c>.
 	/// A copy running from anywhere else (an unzipped portable folder, a dev build) is not an installed one, even when the
 	/// registry says an MSI install exists elsewhere on this PC.
 	/// </summary>

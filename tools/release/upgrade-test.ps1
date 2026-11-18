@@ -1,17 +1,22 @@
 <#
 .SYNOPSIS
-  The upgrade test: install the published Seaglass MSI, run the new MSI over it (per user, silent), check the result, uninstall.
+  The upgrade test: install the published Seaglass MSI, run the new Nixie MSI over it (per user, silent), check the result,
+  uninstall. INSTALLS INTO THE ACCOUNT IT RUNS IN: run it only where that is wanted (a test account, a VM).
 
 .DESCRIPTION
+  Nixie (1.2.0) was Seaglass (1.1.x), and before that FluentFin MPV (1.0.x): the same upgrade code, another product name,
+  install folder (%LOCALAPPDATA%\Programs\<name>) and Start menu shortcut (<name>.lnk). The old MSI's names are read from
+  it (ProductName, Manufacturer), the new one's from it, so any old version can be the old one.
   Checks, in order:
-    - before anything is installed: no Seaglass or FluentFin MPV is installed for this user or the machine (Windows Installer
-      COM API by upgrade code, and the Settings > Apps list by name). If one is, NOTHING is touched: the test is SKIPPED
-      (exit 2) and says why;
-    - the old MSI installs, per user, with /qn: one Apps entry, the old version;
-    - the new MSI over it: still one Apps entry, now the new version; every file of the new package in place with its
-      hash, every file only the old one had gone; the Start menu shortcut there and pointing at the new install;
-    - the user's data folders (%LOCALAPPDATA%\Seaglass and %LOCALAPPDATA%\FluentFinMpv) are only read, never written: the
-      listing of each (if it exists) is the same before and after; with -Launch the shortcut's program is started with
+    - before anything is installed: no Nixie, Seaglass or FluentFin MPV is installed for this user or the machine (Windows
+      Installer COM API by upgrade code, and the Settings > Apps list by name). If one is, NOTHING is touched: the test is
+      SKIPPED (exit 2) and says why;
+    - the old MSI installs, per user, with /qn: one Apps entry, the old version, the old name;
+    - the new MSI over it: still one Apps entry, now the new version and name; every file of the new package in place with
+      its hash, every file only the old one had gone (with the rename: the whole old install folder); the old shortcut
+      gone, the new one there and pointing at the new install;
+    - the user's data folders (%LOCALAPPDATA%\Nixie, \Seaglass and \FluentFinMpv) are only read, never written: the listing
+      of each (if it exists) is the same before and after; with -Launch the shortcut's program is started with
       --data-dir in the scratch folder, never the user's data, and ended through the process it started;
     - an older MSI over the newer one is refused (non-zero exit) and the new version stays;
     - uninstall: no Apps entry, no install folder, no shortcut, data untouched.
@@ -20,19 +25,20 @@
 
   Exit code: 0 all checks passed, 1 a check failed, 2 skipped (something is installed already).
 
-  -OldMsi  default: the published 1.1.0 (dist\Seaglass-1.1.0-win-x64.msi here, else downloaded from the GitHub release and
-           checked against its .sha256 into -Out).
-  -NewMsi  default: dist\Seaglass-<-Version>-win-x64.msi, the one build-release.ps1 made.
-  -SelfCheck  proves this script on a throwaway product instead: builds two tiny isolated MSIs from installer\Seaglass.wxs
-           (another name, upgrade code, folder, shortcut and registry key, so they can never touch an installed Seaglass),
-           runs the whole test on them, and does not need the published MSI. The safety check still runs, for that product.
+  -OldMsi  default: the published Seaglass 1.1.3 (dist\Seaglass-1.1.3-win-x64.msi here, else downloaded from the GitHub
+           release and checked against its .sha256 into -Out). Any older one (Seaglass 1.1.0, FluentFin MPV) works too.
+  -NewMsi  default: dist\Nixie-<-Version>-win-x64.msi, the one build-release.ps1 made.
+  -SelfCheck  proves this script on a throwaway product instead: builds two tiny isolated MSIs from installer\Nixie.wxs
+           named like a rename (SeaglassUpgradeCheck, then NixieUpgradeCheck: other names, upgrade code, folders,
+           shortcuts and registry keys, so they can never touch an installed Nixie or Seaglass), runs the whole test on
+           them, and does not need the published MSI. The safety check still runs, for those products.
 
-  Usage: upgrade-test.ps1 -Out <scratch folder> [-Version 1.1.2] [-OldMsi <msi>] [-NewMsi <msi>] [-Launch] [-SelfCheck]
+  Usage: upgrade-test.ps1 -Out <scratch folder> [-Version 1.2.0] [-OldMsi <msi>] [-NewMsi <msi>] [-Launch] [-SelfCheck]
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Out,
-    [string]$Version = '1.1.1',
+    [string]$Version = '1.2.0',
     [string]$OldMsi,
     [string]$NewMsi,
     [switch]$Launch,
@@ -71,17 +77,18 @@ if ($SelfCheck) {
         return $dir
     }
     $upgradeCode = '{7B0F4F6E-3C6B-4F44-9B52-6D5B7A0E2A11}'.Trim('{}')
-    $pkgOld = New-FakePackage 'pkg-old' @('Seaglass.exe', 'app\Seaglass.exe', 'app\old-only.dll', 'app\both.dll')
-    $pkgNew = New-FakePackage 'pkg-new' @('Seaglass.exe', 'app\Seaglass.exe', 'app\both.dll', 'app\new-only.dll')
+    $pkgOld = New-FakePackage 'pkg-old' @('Nixie.exe', 'app\Nixie.exe', 'app\old-only.dll', 'app\both.dll')
+    $pkgNew = New-FakePackage 'pkg-new' @('Nixie.exe', 'app\Nixie.exe', 'app\both.dll', 'app\new-only.dll')
     Set-Content (Join-Path $pkgNew 'app\both.dll') 'changed in the new one'
     $wixDir = Join-Path $PSScriptRoot 'installer'
     Push-Location $repo
     try {
-        foreach ($spec in @(@('old', '1.0.0', $pkgOld), @('new', '1.0.1', $pkgNew))) {
+        # the old one under another name, as Seaglass was: the rename's paths (folder, shortcut, Apps name) are exercised
+        foreach ($spec in @(@('old', '1.0.0', $pkgOld, 'SeaglassUpgradeCheck'), @('new', '1.0.1', $pkgNew, 'NixieUpgradeCheck'))) {
             $msi = Join-Path $work "check-$($spec[0]).msi"
-            & $dotnet tool run wix build (Join-Path $wixDir 'Seaglass.wxs') (Join-Path $wixDir 'SeaglassUI.wxs') -arch x64 -ext $ext `
-                -loc (Join-Path $wixDir 'Seaglass.en-us.wxl') -d "Version=$($spec[1])" -d "PackageDir=$($spec[2])" `
-                -d "IconFile=$(Join-Path $repo 'ui\FluentFin\Assets\Seaglass.ico')" -d "ArtDir=$artDir" -d 'AppName=SeaglassUpgradeCheck' `
+            & $dotnet tool run wix build (Join-Path $wixDir 'Nixie.wxs') (Join-Path $wixDir 'NixieUI.wxs') -arch x64 -ext $ext `
+                -loc (Join-Path $wixDir 'Nixie.en-us.wxl') -d "Version=$($spec[1])" -d "PackageDir=$($spec[2])" `
+                -d "IconFile=$(Join-Path $repo 'ui\FluentFin\Assets\Nixie.ico')" -d "ArtDir=$artDir" -d "AppName=$($spec[3])" `
                 -d "UpgradeCode=$upgradeCode" -pdbtype none -o $msi
             if ($LASTEXITCODE -ne 0) { throw "wix build failed for the self-check $($spec[0]) MSI" }
         }
@@ -90,36 +97,42 @@ if ($SelfCheck) {
     $OldMsi = Join-Path $work 'check-old.msi'
     $NewMsi = Join-Path $work 'check-new.msi'
 }
-if (-not $NewMsi) { $NewMsi = Join-Path $dist "Seaglass-$Version-win-x64.msi" }
+if (-not $NewMsi) { $NewMsi = Join-Path $dist "Nixie-$Version-win-x64.msi" }
 if (-not $OldMsi) {
-    $OldMsi = Join-Path $dist 'Seaglass-1.1.0-win-x64.msi'
+    $published = 'Seaglass-1.1.3-win-x64.msi'
+    $OldMsi = Join-Path $dist $published
     if (-not (Test-Path $OldMsi)) {
-        $base = 'https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.1.0'
-        $OldMsi = Join-Path $Out 'Seaglass-1.1.0-win-x64.msi'
-        Invoke-WebRequest "$base/Seaglass-1.1.0-win-x64.msi" -OutFile $OldMsi -UseBasicParsing
-        $shaFile = Join-Path $Out 'Seaglass-1.1.0-win-x64.msi.sha256'
-        Invoke-WebRequest "$base/Seaglass-1.1.0-win-x64.msi.sha256" -OutFile $shaFile -UseBasicParsing
+        $base = 'https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.1.3'
+        $OldMsi = Join-Path $Out $published
+        Invoke-WebRequest "$base/$published" -OutFile $OldMsi -UseBasicParsing
+        $shaFile = Join-Path $Out "$published.sha256"
+        Invoke-WebRequest "$base/$published.sha256" -OutFile $shaFile -UseBasicParsing
         $want = ((Get-Content $shaFile -Raw).Trim() -split '\s+')[0]
-        if ((Get-FileHash -Algorithm SHA256 $OldMsi).Hash -ne $want.ToUpperInvariant()) { throw 'the downloaded 1.1.0 MSI does not match its .sha256' }
+        if ((Get-FileHash -Algorithm SHA256 $OldMsi).Hash -ne $want.ToUpperInvariant()) { throw "the downloaded $published does not match its .sha256" }
     }
 }
 foreach ($m in $OldMsi, $NewMsi) { if (-not (Test-Path $m)) { throw "no MSI at $m (build it with build-release.ps1, or pass -OldMsi / -NewMsi)" } }
 $OldMsi = [IO.Path]::GetFullPath($OldMsi); $NewMsi = [IO.Path]::GetFullPath($NewMsi)
 
 $upgradeCodeOld = Get-MsiProperty $OldMsi 'UpgradeCode'; $upgradeCodeNew = Get-MsiProperty $NewMsi 'UpgradeCode'
+# the names: the new one's (Nixie), the old one's (Seaglass, FluentFin MPV, or the same when both are Nixie)
 $name = Get-MsiProperty $NewMsi 'ProductName'
+$nameOld = Get-MsiProperty $OldMsi 'ProductName'
+$publisherOld = Get-MsiProperty $OldMsi 'Manufacturer'; $publisherNew = Get-MsiProperty $NewMsi 'Manufacturer'
+$renamed = $nameOld -ne $name
 $verOld = [version](Get-MsiProperty $OldMsi 'ProductVersion'); $verNew = [version](Get-MsiProperty $NewMsi 'ProductVersion')
 $codeOld = Get-MsiProperty $OldMsi 'ProductCode'; $codeNew = Get-MsiProperty $NewMsi 'ProductCode'
-Say "upgrade test: $name $verOld -> $verNew"
+Say "upgrade test: $nameOld $verOld -> $name $verNew$(if ($renamed) { ' (a rename)' })"
 Say "  old $OldMsi`n  new $NewMsi"
 if ($upgradeCodeOld -ne $upgradeCodeNew) { throw "the two MSIs have different upgrade codes ($upgradeCodeOld, $upgradeCodeNew)" }
 if ($verNew -le $verOld) { throw "the new MSI ($verNew) is not newer than the old one ($verOld)" }
 
 # --- safety: nothing of ours may be installed already -------------------------------------------------------------------
 $reasons = $null
-$names = if ($SelfCheck) { @($name) } else { @('Seaglass', 'FluentFin MPV', $name) | Select-Object -Unique }   # the self-check's product is isolated from the real ones
+# the self-check's products are isolated from the real ones
+$names = if ($SelfCheck) { @($nameOld, $name) | Select-Object -Unique } else { @('Nixie', 'Seaglass', 'FluentFin MPV', $nameOld, $name) | Select-Object -Unique }
 if (-not (Test-NothingInstalled $upgradeCodeNew $names ([ref]$reasons))) {
-    Say "SKIPPED: $name is already installed here, and this test must not touch an installed copy:"
+    Say "SKIPPED: $($names -join ' or ') is already installed here, and this test must not touch an installed copy:"
     foreach ($r in $reasons) { Say "  $r" }
     exit 2
 }
@@ -128,7 +141,9 @@ Say '  nothing of it is installed: safe to go on'
 # --- the places the test looks at ----------------------------------------------------------------------------------------
 $programs = Join-Path $env:LOCALAPPDATA "Programs\$name"
 $shortcut = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$name.lnk"
-$dataFolders = @((Join-Path $env:LOCALAPPDATA 'Seaglass'), (Join-Path $env:LOCALAPPDATA 'FluentFinMpv'))
+$programsOld = Join-Path $env:LOCALAPPDATA "Programs\$nameOld"
+$shortcutOld = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$nameOld.lnk"
+$dataFolders = @((Join-Path $env:LOCALAPPDATA 'Nixie'), (Join-Path $env:LOCALAPPDATA 'Seaglass'), (Join-Path $env:LOCALAPPDATA 'FluentFinMpv'))
 $dataBefore = @{}; foreach ($d in $dataFolders) { $dataBefore[$d] = Get-FolderSnapshot $d }
 $scratchData = Join-Path $Out 'data'; New-Item -ItemType Directory -Force $scratchData | Out-Null
 $startedAt = Get-Date
@@ -139,29 +154,35 @@ function Invoke-Msi([string]$what, [string[]]$arguments) {
     Say "  msiexec $what -> exit $($p.ExitCode)"
     return $p.ExitCode
 }
-function Get-Entries { return @(Get-AppsEntries @($name)) }
+function Get-Entries { return @(Get-AppsEntries @(@($nameOld, $name) | Select-Object -Unique)) }
 
 $installedCode = $null
 try {
     # --- install the old one ---------------------------------------------------------------------------------------------
-    Say "`n== install $verOld"
+    Say "`n== install $nameOld $verOld"
     $installedCode = $codeOld
     $exit = Invoke-Msi "install-$verOld" @('/i', "`"$OldMsi`"")
     Check "the old MSI installs (exit 0)" ($exit -eq 0) "exit $exit"
     $entries = @(Get-Entries)
-    Check "one Apps entry, version $verOld" ($entries.Count -eq 1 -and [version]$entries[0].Version -eq $verOld) "found $($entries | ForEach-Object { $_.Version })"
-    Check 'its publisher is set' ($entries.Count -eq 1 -and $entries[0].Publisher -eq 'Seaglass') "publisher '$($entries | ForEach-Object { $_.Publisher })'"
-    $oldHashes = Get-FileHashes $programs
-    Check "files installed in $programs" ($oldHashes.Count -gt 0) 'none'
-    Check 'the Start menu shortcut exists' (Test-Path $shortcut)
+    Check "one Apps entry, $nameOld $verOld" ($entries.Count -eq 1 -and [version]$entries[0].Version -eq $verOld -and $entries[0].Name -eq $nameOld) "found $($entries | ForEach-Object { "$($_.Name) $($_.Version)" })"
+    Check 'its publisher is set' ($entries.Count -eq 1 -and $publisherOld -and $entries[0].Publisher -eq $publisherOld) "publisher '$($entries | ForEach-Object { $_.Publisher })'"
+    $oldHashes = Get-FileHashes $programsOld
+    Check "files installed in $programsOld" ($oldHashes.Count -gt 0) 'none'
+    Check 'the Start menu shortcut exists' (Test-Path $shortcutOld)
 
     # --- the new one over it -----------------------------------------------------------------------------------------------
-    Say "`n== install $verNew over it"
+    Say "`n== install $name $verNew over it"
     $installedCode = $codeNew
     $exit = Invoke-Msi "upgrade-$verNew" @('/i', "`"$NewMsi`"")
     Check 'the new MSI installs over it (exit 0)' ($exit -eq 0) "exit $exit"
     $entries = @(Get-Entries)
-    Check "exactly one Apps entry, version $verNew" ($entries.Count -eq 1 -and [version]$entries[0].Version -eq $verNew) "found $($entries | ForEach-Object { $_.Version })"
+    Check "exactly one Apps entry, $name $verNew" ($entries.Count -eq 1 -and [version]$entries[0].Version -eq $verNew -and $entries[0].Name -eq $name) "found $($entries | ForEach-Object { "$($_.Name) $($_.Version)" })"
+    Check "its publisher is $publisherNew" ($entries.Count -eq 1 -and $entries[0].Publisher -eq $publisherNew) "publisher '$($entries | ForEach-Object { $_.Publisher })'"
+    if ($renamed) {
+        # the rename: the old install folder and the old Start menu entry go with the old product
+        Check "the old install folder $programsOld is gone" (-not (Test-Path $programsOld))
+        Check "the old Start menu shortcut ($nameOld) is gone" (-not (Test-Path $shortcutOld))
+    }
     $codes = @(Get-InstalledByUpgradeCode $upgradeCodeNew)
     Check 'one installed product of that upgrade code, the new one' ($codes.Count -eq 1 -and $codes[0] -eq $codeNew) "found $($codes -join ', ')"
     # what the new MSI holds: an administrative extract (installs nothing)

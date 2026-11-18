@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.2.0
+
+Seaglass is now **Nixie**, after the 1950s nixie tube, whose digits glow neon orange-pink. The GitHub repository keeps
+its name (`fluentfin-mpv`).
+
+- **The new name.** The app is `Nixie.exe` (the launcher at the top of the folder, and `app\Nixie.exe`). Release files
+  are `Nixie-1.2.0-win-x64.zip`, `.msi`, `-sources.zip` and `.txt`. The window and title bar, About, the Start menu
+  shortcut, Settings > Apps (publisher Nixie) and the installer say Nixie.
+- **Updating from Seaglass or FluentFin MPV.** Installing the `.msi` replaces an installed Seaglass or FluentFin MPV
+  (same upgrade code), into `%LOCALAPPDATA%\Programs\Nixie`; the old Start menu entry goes, so pin Nixie to the taskbar
+  again if you had pinned the old app. Seaglass 1.1.x's own "Download and install" finds this release too: it also
+  carries the installer as `Seaglass-1.2.0-win-x64.msi`.
+- **Your data comes along.** The first start copies `%LOCALAPPDATA%\Seaglass` (or `%LOCALAPPDATA%\FluentFinMpv` when
+  Seaglass holds no settings) to `%LOCALAPPDATA%\Nixie` and leaves the old folder as it was: saved servers and
+  sign-ins, settings, the journal (a consistent copy even while the old app runs) and the mpv backend's configuration;
+  old logs and downloaded updates are left behind. If the copy fails, Nixie says so, uses the old folder for that
+  session and tries again at the next start.
+- **The server sees Nixie, on the same device.** A saved sign-in is your user name and a password protected for your
+  Windows account (no access token is saved), and the app signs in again with them at every start. The copied
+  `LocalSettings.json` keeps the key that password needs, so it still works, and nobody has to type it again. The sign-in
+  and the mpv backend send the client name Nixie with this PC's device id, the same one Seaglass sent: the server sees the
+  same device sign in as Nixie and gives it a new token. What the server keeps per user, such as Continue Watching and
+  played state, is untouched.
+- **A new icon:** a nixie tube whose glowing digit is a play triangle, hot pink to orange on deep maroon, drawn from
+  vector shapes (`tools\icon\make-icon.ps1`) for every size from 16 to 256 px. The installer's pictures match.
+- **For scripts:** the environment variables are `NIXIE_THEME`, `NIXIE_FULLSCREEN` and `NIXIE_TESTS_ON_DESKTOP`; the
+  `SEAGLASS_*` names still work. The design notes moved to `docs\design\DESIGN.md` and `DESIGN-RESEARCH.md`.
+
 ## 1.1.3
 
 - **Copy Download URL is gone: it put your access token on the clipboard.** The link it copied carried your Jellyfin
@@ -109,8 +137,8 @@
 
 ## 1.1.0
 
-FluentFin MPV is now **Seaglass**, with a new glassy look inspired by the Apple TV app (`docs\design\SEAGLASS.md`;
-the research behind it: `docs\design\SEAGLASS-RESEARCH.md`).
+FluentFin MPV is now **Seaglass**, with a new glassy look inspired by the Apple TV app (`docs\design\DESIGN.md`, then `SEAGLASS.md`;
+the research behind it: `docs\design\DESIGN-RESEARCH.md`).
 
 - **Glass.** The navigation rail, title bar, search, menus, dialogs, the hero's text, page sections and Settings sit on
   frosted glass with a lit edge; the current page's artwork, softened, tints the whole window and drifts slowly. Posters

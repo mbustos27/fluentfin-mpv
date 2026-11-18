@@ -1,9 +1,11 @@
 # Cutting a release
 
 A release is an installer and a portable zip of the same files for Windows 10/11 x64,
-`Seaglass-<version>-win-x64.msi` and `Seaglass-<version>-win-x64.zip`, each with its `.sha256`, built by
+`Nixie-<version>-win-x64.msi` and `Nixie-<version>-win-x64.zip`, each with its `.sha256`, built by
 `tools\release\build-release.ps1` and attached to a GitHub release on the tag `v<version>`. What it contains and
-where each third-party file comes from: `tools\release\VENDORED.md`.
+where each third-party file comes from: `tools\release\VENDORED.md`. The app was called Seaglass in 1.1.x and FluentFin
+MPV in 1.0.x (the release files had those names); the MSI's upgrade code never changes, so each installer replaces the
+ones before it.
 
 ## 1. The version
 
@@ -45,7 +47,7 @@ and the tests pass: both UI suites and the backend's bridge tests (off-screen); 
 on its own, and the build stops if it fails again. It downloads and checks the Python runtime, makes a build venv from
 hash-pinned PyPI wheels, freezes the backend with
 PyInstaller, publishes FluentFin (Release, x64, self-contained, Windows App SDK self-contained, unpackaged), and writes
-`dist\Seaglass-<version>-win-x64\`, the `.zip` and the `.sha256`, and collects the corresponding source of the GPL,
+`dist\Nixie-<version>-win-x64\`, the `.zip` and the `.sha256`, and collects the corresponding source of the GPL,
 LGPL and MPL code it ships into `dist\sources\` with `SOURCES.txt` (`tools\release\sources.py`, `sources.json`: official
 hosts only, PyPI hashes checked; what cannot be established exactly is listed, not guessed). Everything stays under
 `dist\` (`dist\.work\` for
@@ -54,14 +56,14 @@ compiler server is left running.
 
 ### The installer
 
-`installer\Seaglass.wxs` and `installer\SeaglassUI.wxs` (WiX 5, with `WixToolset.UI.wixext` 5.0.2, a build-time NuGet
+`installer\Nixie.wxs` and `installer\NixieUI.wxs` (WiX 5, with `WixToolset.UI.wixext` 5.0.2, a build-time NuGet
 package the build keeps in `dist\.work\wix-ext`; nothing of it is in the installed app) make a per-user MSI with a welcome
 page (Install / Cancel, no licence to accept: it says where the GPL and the source are), the progress page and a finish page
-with "Launch Seaglass" ticked; `installer\Seaglass.en-us.wxl` has the texts and `installer\make-installer-art.ps1` draws
-the banner and the side picture (System.Drawing, from the icon's pebble). Settings > Apps shows the publisher "Seaglass"
+with "Launch Nixie" ticked; `installer\Nixie.en-us.wxl` has the texts and `installer\make-installer-art.ps1` draws
+the banner and the side picture (System.Drawing: a dusk panel with the icon's nixie tube). Settings > Apps shows the publisher "Nixie"
 (the name of the program: there is no company), the version, the icon, the website (the repository), help (Issues),
 update info (Releases) and a one-line comment. Every shipped .exe has company, product, description and copyright
-(`Seaglass.exe` from FluentFin.csproj, the launcher from `build-release.ps1`, the backend from the PyInstaller spec;
+(`Nixie.exe` from FluentFin.csproj, the launcher from `build-release.ps1`, the backend from the PyInstaller spec;
 `verify-package.ps1` checks all three). There is no code signing, so SmartScreen still says "Unknown publisher".
 
 `installer\installer-shots.ps1` takes screenshots of each installer page, on a private desktop, and only of an isolated
@@ -76,13 +78,13 @@ with the result before freezing; the build checks the frozen backend carries gcc
 UPX-packed (the spec says `upx=False`; the build fails on a `UPX!` header). `tools\release\VENDORED.md` has the pins.
 Check a package locally with Microsoft Defender, which uploads nothing:
 
-    & "$env:ProgramData\Microsoft\Windows Defender\Platform\CurrentVersion\MpCmdRun.exe" -Scan -ScanType 3 -File dist\Seaglass-<version>-win-x64 -DisableRemediation
+    & "$env:ProgramData\Microsoft\Windows Defender\Platform\CurrentVersion\MpCmdRun.exe" -Scan -ScanType 3 -File dist\Nixie-<version>-win-x64 -DisableRemediation
 
 Do not upload the files to VirusTotal or any other online scanner without the owner's OK.
 
 ## 4. Verify the zip
 
-    .\tools\release\verify-package.ps1 -Zip dist\Seaglass-<version>-win-x64.zip -Out <scratch folder outside the repo>
+    .\tools\release\verify-package.ps1 -Zip dist\Nixie-<version>-win-x64.zip -Out <scratch folder outside the repo>
 
 It unzips the package fresh, then runs it off-screen (a private desktop, a kill-on-close job, scratch data folders,
 APPDATA/LOCALAPPDATA redirected, test media that is digital silence) against the fake Jellyfin server, with no backend
@@ -98,9 +100,9 @@ command set and a PATH of Windows' own folders only:
   leave the saved choice as it is;
 - the self-test (`--mpv-selftest`, no server), and once more with FluentFin killed instead of closed (its job must end the
   backend);
-- the launcher: the folder's top holds only `Seaglass.exe` (the launcher, `tools\release\launcher\Launcher.cs`),
-  `README.txt`, `LICENSE`, `THIRD-PARTY-NOTICES.txt` and `app\`; the self-test started through that `Seaglass.exe`,
-  with a data folder whose name has a space, must start `app\Seaglass.exe` with the arguments unchanged and pass.
+- the launcher: the folder's top holds only `Nixie.exe` (the launcher, `tools\release\launcher\Launcher.cs`),
+  `README.txt`, `LICENSE`, `THIRD-PARTY-NOTICES.txt` and `app\`; the self-test started through that `Nixie.exe`,
+  with a data folder whose name has a space, must start `app\Nixie.exe` with the arguments unchanged and pass.
 
 Each run records every process FluentFin starts and every DLL they load (`tools\release\proc_audit.py`) and fails on
 anything from a dev checkout, a Python install or the build folder, on a token in a command line, or on a file written
@@ -113,24 +115,33 @@ the first sign-in, a playback.
 
     .\tools\release\upgrade-test.ps1 -Out <scratch folder outside the repo> [-Version <x.y.z>] [-Launch]
 
-Installs the published 1.1.0 MSI (`dist\` or downloaded from its release and checked against its `.sha256`), runs the new
-MSI over it, both per user and silent, and checks: one Apps entry with the new version, the new files in place and the
-old-only ones gone, the Start menu shortcut, the user's data folders untouched (listed before and after, only read),
-and that an older MSI over the newer one is refused; then it uninstalls. **Safety:** before installing anything it asks
-the Windows Installer COM API and the Apps list whether Seaglass or FluentFin MPV is already installed; if so it
-installs nothing and exits 2 ("skipped"). `-SelfCheck` runs the whole test on two tiny isolated MSIs (another name,
-upgrade code, folder and registry key) so the script itself can be checked on a PC that has Seaglass installed. Exit
-0 passed, 1 failed, 2 skipped.
+**It installs into the Windows account it runs in**: run it only where that is wanted (a test account or a VM), never on
+the account of someone who uses the app.
+
+Installs the published Seaglass 1.1.3 MSI (`dist\` or downloaded from its release and checked against its `.sha256`;
+`-OldMsi` takes any older one, Seaglass 1.1.0 or FluentFin MPV), runs the new MSI over it, both per user and silent,
+and checks: one Apps entry with the new version and name, the new files in place and the old-only ones gone (with the
+rename, the old `Programs\Seaglass` folder and its Start menu entry gone), the new Start menu shortcut, the user's data
+folders (`Nixie`, `Seaglass`, `FluentFinMpv`) untouched (listed before and after, only read), and that an older MSI
+over the newer one is refused; then it uninstalls. **Safety:** before installing anything it asks the Windows
+Installer COM API and the Apps list whether Nixie, Seaglass or FluentFin MPV is already installed; if so it installs
+nothing and exits 2 ("skipped"). `-SelfCheck` runs the whole test on two tiny isolated MSIs (other names, upgrade
+code, folders and registry keys; the old one named SeaglassUpgradeCheck and the new one NixieUpgradeCheck, so the
+rename's paths are exercised) so the script itself can be checked on a PC that has Nixie installed. Exit 0 passed,
+1 failed, 2 skipped.
 
 ## 5. Publish (the coordinating session, after review)
 
-1. Tag the commit the zip was built from: `git tag -a v<version> -m "Seaglass <version>"`, push the tag.
-2. Create the GitHub release on that tag: title `Seaglass <version>`, the notes from `CHANGELOG.md`'s section
+1. Tag the commit the zip was built from: `git tag -a v<version> -m "Nixie <version>"`, push the tag.
+2. Create the GitHub release on that tag: title `Nixie <version>`, the notes from `CHANGELOG.md`'s section
    (what it is, what is verified, the known limits), the installer (`.msi`) and the `.zip`, each with its `.sha256`, as
    assets (every release has an installer; the zip is the portable copy of the same files), and every file of
-   `dist\Seaglass-<version>-sources.zip` (or its numbered parts, each under GitHub's 2 GiB limit) with
-   `dist\Seaglass-<version>-sources.txt` (SOURCES.txt with the parts and their SHA-256): the source of what the
+   `dist\Nixie-<version>-sources.zip` (or its numbered parts, each under GitHub's 2 GiB limit) with
+   `dist\Nixie-<version>-sources.txt` (SOURCES.txt with the parts and their SHA-256): the source of what the
    zip ships.
+   For the 1.2.x releases also `dist\Seaglass-<version>-win-x64.msi` and its `.sha256` (the same MSI, a hard link the
+   build makes): Seaglass 1.1.x's "Download and install" only takes an asset of that name, so with it Seaglass users
+   update to Nixie from the app. Without it they are told about the release and download it from its page.
 3. The package's README.txt links the source at `https://github.com/mbustos27/fluentfin-mpv/tree/v<version>`: the tag
    must exist under that name.
 

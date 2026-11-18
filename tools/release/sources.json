@@ -2,7 +2,7 @@
   "_comment": "The corresponding source of the GPL, LGPL and MPL code a release ships besides libmpv, downloaded by tools/release/sources.py into dist/sources with SOURCES.txt (GitHub, code.videolan.org, PyPI). libmpv's folder brings its own sources (vendor/libmpv/sources: MSYS2 source packages and mpv's tarball), which sources.py copies and checks against the folder's BUILD-MANIFEST.txt.",
   "items": [
     {
-      "name": "uosc 5.13.0 (upstream, unpatched; Seaglass's patched copy is in its own source, backend/fluentfin)",
+      "name": "uosc 5.13.0 (upstream, unpatched; Nixie's patched copy is in its own source, backend/fluentfin)",
       "revision": "5.13.0 (d124c2c930d69446448022851373e00ae592390d)",
       "licence": "LGPL-2.1 (the scripts and uosc_textures.ttf); its icon font is Material Symbols, Apache-2.0",
       "shippedAs": "backend\\_internal\\fluentfin\\mpv",

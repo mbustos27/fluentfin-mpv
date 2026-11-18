@@ -19,7 +19,26 @@ import os
 import sys
 
 #: Set to 1 to run on the desktop anyway (watching a window test by eye).
-OVERRIDE = "SEAGLASS_TESTS_ON_DESKTOP"
+OVERRIDE = "NIXIE_TESTS_ON_DESKTOP"
+
+#: The same switch under the app's earlier name (Seaglass 1.1.x), still read
+#: when `OVERRIDE` is not set.
+FORMER_OVERRIDES = ("SEAGLASS_TESTS_ON_DESKTOP",)
+
+
+def overridden(environ=None):
+    """Whether the user asked to run on the desktop anyway.
+
+    `OVERRIDE`, else the first of `FORMER_OVERRIDES` that is set, must be
+    ``1``; an empty value counts as not set (as the app reads its NIXIE_*
+    variables), so ``NIXIE_TESTS_ON_DESKTOP=0`` wins over an old ``=1``.
+    """
+    environ = os.environ if environ is None else environ
+    for name in (OVERRIDE,) + FORMER_OVERRIDES:
+        value = environ.get(name)
+        if value:
+            return value == "1"
+    return False
 
 #: The exit status of a refused run.
 EXIT_CODE = 3
@@ -84,7 +103,7 @@ def check(what, desktop=interactive_desktop, exit=os._exit, stream=None):
     module raises on import and goes on to the next module, which would
     import the player.
     """
-    if os.environ.get(OVERRIDE) == "1" or not desktop():
+    if overridden() or not desktop():
         return
     stream = stream or sys.stderr
     try:

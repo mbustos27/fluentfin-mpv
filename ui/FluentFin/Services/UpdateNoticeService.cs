@@ -18,7 +18,7 @@ public sealed class UpdateNoticeService : IHostedService, IDisposable
 {
 	private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(10) };
 	private readonly ILogger<UpdateNoticeService> _logger;
-	private readonly string _downloadFolder = Path.Combine(Path.GetTempPath(), "Seaglass-update");
+	private readonly string _downloadFolder = Path.Combine(Path.GetTempPath(), $"{AppIdentity.Name}-update");
 	private CancellationTokenSource? _stop;
 	private Task? _loop;
 
@@ -35,7 +35,7 @@ public sealed class UpdateNoticeService : IHostedService, IDisposable
 	{
 		try
 		{
-			using var key = Registry.CurrentUser.OpenSubKey(@"Software\Seaglass");
+			using var key = Registry.CurrentUser.OpenSubKey(UpdateSource.RegistryKey);
 			return InstallDetector.IsMsiInstall(AppContext.BaseDirectory, key?.GetValue("InstallFolder") as string);
 		}
 		catch (Exception)

@@ -1,9 +1,9 @@
-"""Collects the corresponding source a Seaglass release ships, into dist/sources, with SOURCES.txt.
+"""Collects the corresponding source a Nixie release ships, into dist/sources, with SOURCES.txt.
 
     python -I sources.py --manifest sources.json --out <dist>/sources --cache <dist>/.work/sources-cache
         --repo <checkout> --version 1.0.0 --libmpv-dir <libmpv DLL folder> [--libmpv-sources <dir>] [--status-out <json>]
 
-- Seaglass's own source: ``git archive`` of HEAD (FluentFin, jellyfin-mpv-shim, the libmpv build recipe
+- Nixie's own source: ``git archive`` of HEAD (FluentFin, jellyfin-mpv-shim, the libmpv build recipe
   tools/release/libmpv and everything else in the repository, the patched uosc included). A working tree with changes or
   untracked files is refused (exit 1).
 - libmpv: the DLL folder (--libmpv-dir) is checked against its BUILD-MANIFEST.txt (every DLL listed, its size and
@@ -13,7 +13,7 @@
   here mpv's tarball and the packages the manifest names). A SOURCES.txt that comes with them is copied, and every file
   it names with a sha256 is checked. A stub (BUILD-MANIFEST.txt's owner says "stub": a stand-in for a library the
   release leaves out, libdvdcss) takes its source and licence from its line in that SOURCES.txt (a file of the sources,
-  or of Seaglass's repository). Nothing of a library left out (--excluded: its MSYS2 source package, signature,
+  or of Nixie's repository). Nothing of a library left out (--excluded: its MSYS2 source package, signature,
   licence folder) may be copied.
 - Every item of sources.json (uosc, LibVLCSharp, Flyleaf, the GPL/MPL Python sdists): downloaded from its official host
   only (GitHub, code.videolan.org, PyPI), checked against the sha256 its host publishes where there is one (PyPI).
@@ -64,7 +64,7 @@ def sources_rows(text):
         cols = [c.strip() for c in line.split("|")]
         if len(cols) < 5 or line.lstrip().startswith("#"):
             continue
-        # the licence: its SPDX expression, without a note after it ("GPL-3.0-or-later: Seaglass's own stub ...")
+        # the licence: its SPDX expression, without a note after it ("GPL-3.0-or-later: Nixie's own stub ...")
         rows.append({"component": cols[0], "version": cols[1], "licence": cols[2].replace("spdx:", "").split(": ", 1)[0].strip(),
                      "dlls": {d.strip().lower() for d in cols[3].split(",") if d.strip()},
                      "file": cols[4].replace("\\", "/").strip("/")})
@@ -148,7 +148,7 @@ def read_manifest(libmpv_dir):
 
 def libmpv_sources(libmpv_dir, sources_dir, out, lines, repo_files=frozenset(), excluded=()):
     """Copies and checks libmpv's sources: only what the folder's DLLs need (their source packages with signatures, the
-    licence folders of their packages, mpv's tarball, other files as they are). repo_files: the paths of Seaglass's
+    licence folders of their packages, mpv's tarball, other files as they are). repo_files: the paths of Nixie's
     own source (HEAD), where a stub's source may be; excluded: the DLLs the release leaves out. Returns (status for
     notices, problems)."""
     path, header, entries, problems = read_manifest(libmpv_dir)
@@ -216,7 +216,7 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines, repo_files=frozenset(), 
                 problems.append(f"{name} is a stub ({owner}); libmpv's SOURCES.txt has no line for it (its source and licence)")
             elif not item["sources"] and not item["repoSources"]:
                 problems.append(f"{name} is a stub ({owner}); its source {rows[0]['file']} is neither in the libmpv sources"
-                                " nor in Seaglass's repository")
+                                " nor in Nixie's repository")
             if rows and not item["licence"]:
                 problems.append(f"{name} is a stub ({owner}); its line in SOURCES.txt gives no licence")
             owners.add(item["package"])
@@ -284,7 +284,7 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines, repo_files=frozenset(), 
                     if col in by_name and col.endswith(".src.tar.zst"):
                         declared[by_name[col][0]] = cols[2].replace("spdx:", "")
         if dropped:
-            kept_lines.insert(0, "# Seaglass's release leaves out: " + ", ".join(sorted(dropped | left_out_names(left_out)))
+            kept_lines.insert(0, "# Nixie's release leaves out: " + ", ".join(sorted(dropped | left_out_names(left_out)))
                               + " (and their lines below)")
         with open(os.path.join(dest, "SOURCES-libmpv.txt"), "w", encoding="utf-8", newline="\n") as fh:
             fh.write("\n".join(kept_lines) + "\n")
@@ -293,7 +293,7 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines, repo_files=frozenset(), 
     lines += ["2. libmpv (the libmpv folder: libmpv-2.dll and every DLL it loads)", "-" * 100,
               "Each DLL of the libmpv folder (BUILD-MANIFEST.txt in libmpv/ has their sizes and sha256), the package it comes",
               "from and its source in libmpv/ (SOURCES-libmpv.txt there is the folder's own record; vendor/libmpv/VENDORED.md",
-              "and tools/release/libmpv in Seaglass's source say how it was made):", ""]
+              "and tools/release/libmpv in Nixie's source say how it was made):", ""]
     for item in dlls:
         lines.append(f"  {item['name']}  ({item['owner']})")
         if item.get("stub"):
@@ -301,7 +301,7 @@ def libmpv_sources(libmpv_dir, sources_dir, out, lines, repo_files=frozenset(), 
         for rel in item["sources"]:
             lines.append(f"    libmpv/{rel}  sha256 {copied.get(rel, '(not copied)')}")
         for path in item.get("repoSources", []):
-            lines.append(f"    {path}  in Seaglass's source (1. above)")
+            lines.append(f"    {path}  in Nixie's source (1. above)")
     if left_out:
         lines += ["", "  Not in this release, nor their sources: " + ", ".join(sorted(left_out_names(left_out)))]
     lines += ["", "  Every file in libmpv/:"]
@@ -332,7 +332,7 @@ def main():
     os.makedirs(args.out)
     os.makedirs(args.cache, exist_ok=True)
 
-    lines = [f"Seaglass {args.version}: the corresponding source of what the release ships", "=" * 100, ""]
+    lines = [f"Nixie {args.version}: the corresponding source of what the release ships", "=" * 100, ""]
 
     # 1. our own source (the libmpv recipe included)
     head = subprocess.run(["git", "-C", args.repo, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
@@ -345,7 +345,7 @@ def main():
     own = f"fluentfin-mpv-{args.version}-source.zip"
     subprocess.run(["git", "-C", args.repo, "archive", "--format=zip", f"--prefix=fluentfin-mpv-{args.version}/",
                     "-o", os.path.join(args.out, own), "HEAD"], check=True)
-    lines += ["1. Seaglass (Seaglass.exe and its libraries, the backend, the mpv bar, the libmpv build recipe), GPL-3.0",
+    lines += ["1. Nixie (Nixie.exe and its libraries, the backend, the mpv bar, the libmpv build recipe), GPL-3.0",
               "-" * 100,
               f"{own}  sha256 {sha256(os.path.join(args.out, own))}",
               f"  git archive of commit {head} (https://github.com/mbustos27/fluentfin-mpv/tree/v{args.version})", ""]

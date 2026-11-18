@@ -75,7 +75,7 @@ class Online(unittest.TestCase):
         self.assertEqual(dict(urllib.parse.parse_qsl(parts.query)),
                          {"tvdb_id": "71663", "season": "1", "episode": "3",
                           "duration_ms": "1400000"})
-        self.assertEqual(headers["User-Agent"], "Seaglass/1.2")
+        self.assertEqual(headers["User-Agent"], "Nixie/1.2")
         self.assertLessEqual(timeout, 3.0)
         everything = url + json.dumps(headers)
         for private in (TOKEN, SERVER, "secret", "A Title", "show.mkv",

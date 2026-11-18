@@ -17,7 +17,7 @@ public sealed partial class MainWindow : WindowEx
 	{
 		InitializeComponent();
 		ExtendsContentIntoTitleBar = true;
-		AppWindow.SetIcon("Assets/Seaglass.ico");
+		AppWindow.SetIcon("Assets/Nixie.ico");
 
 		App.GetKeyedService<INavigationService>(NavigationRegions.InitialSetup).Frame = RootFrame;
 

@@ -128,14 +128,14 @@ function Get-Requests([double]$Since = 0) {
 }
 # when a request finished (its start + its duration), epoch seconds
 function Get-Done($Request) { $Request.t + $Request.ms / 1000.0 }
-# Who sent a request, by its User-Agent (FluentFin and its backend both say Client="Seaglass", and FluentFin's
+# Who sent a request, by its User-Agent (FluentFin and its backend both say Client="Nixie", and FluentFin's
 # signed-in SDK requests carry no Client at all): 'ui' = FluentFin (the Jellyfin SDK's kiota-dotnet, WinUI's image
 # loader), 'backend' = the mpv backend (python, "<client name>/<version>"), 'mpv' = mpv's own HTTP (the stream),
 # 'harness' = this script.
 function Get-Origin($Request) {
     $ua = [string]$Request.ua
     if ($ua -like 'kiota-dotnet/*' -or $ua -match 'Trident/|MSIE ') { return 'ui' }
-    if ($ua -match '^(Seaglass|FluentFin|Jellyfin-MPV-Shim)/') { return 'backend' }
+    if ($ua -match '^(Nixie|Seaglass|FluentFin|Jellyfin-MPV-Shim)/') { return 'backend' }
     if ($ua -match '^(Lavf|libmpv|mpv)') { return 'mpv' }
     if ($ua -match 'WindowsPowerShell') { return 'harness' }
     'other'

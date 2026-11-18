@@ -57,8 +57,8 @@ public static class UiHarnessNative {
 [UiHarnessNative]::SetProcessDPIAware() | Out-Null
 
 $script:RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$script:DefaultExe = Join-Path $script:RepoRoot 'ui\FluentFin\bin\x64\Debug\net10.0-windows10.0.19041.0\Seaglass.exe'
-$script:LogDir = Join-Path $env:LOCALAPPDATA 'Seaglass\Logs'
+$script:DefaultExe = Join-Path $script:RepoRoot 'ui\FluentFin\bin\x64\Debug\net10.0-windows10.0.19041.0\Nixie.exe'
+$script:LogDir = Join-Path $env:LOCALAPPDATA 'Nixie\Logs'
 
 # pid -> [pscustomobject]@{ Process = the Process object whose handle is held; Created = its creation time; Name }
 $script:Tracked = @{}

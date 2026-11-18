@@ -1,6 +1,6 @@
 """Packs dist/sources into the archive(s) attached to the GitHub release, each under GitHub's 2 GiB file limit.
 
-    python -I bundle_sources.py --dir <dist>/sources --out <dist> --name Seaglass-1.0.0-sources [--max-bytes N]
+    python -I bundle_sources.py --dir <dist>/sources --out <dist> --name Nixie-1.0.0-sources [--max-bytes N]
 
 One zip (``<name>.zip``) when everything fits in --max-bytes (default 1,900,000,000), else numbered parts
 (``<name>.part1.zip`` ...), files never split, each part with SOURCES.txt. The archives store the files as they are

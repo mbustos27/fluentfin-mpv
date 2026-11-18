@@ -32,12 +32,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class CheckTests(unittest.TestCase):
 
-    def run_check(self, on_user_desktop, override=None):
+    def run_check(self, on_user_desktop, override=None, name=None, **more):
         exits, out = [], io.StringIO()
         env = dict(os.environ)
-        env.pop(guard.OVERRIDE, None)
+        for known in (guard.OVERRIDE,) + guard.FORMER_OVERRIDES:
+            env.pop(known, None)
         if override is not None:
-            env[guard.OVERRIDE] = override
+            env[name or guard.OVERRIDE] = override
+        env.update(more)
         with mock.patch.dict(os.environ, env, clear=True):
             guard.check("The tests", desktop=lambda: on_user_desktop,
                         exit=exits.append, stream=out)
@@ -60,6 +62,30 @@ class CheckTests(unittest.TestCase):
     def test_only_1_is_an_override(self):
         exits, _ = self.run_check(True, override="0")
         self.assertEqual(exits, [guard.EXIT_CODE])
+
+    def test_the_override_is_nixies_and_the_message_names_it(self):
+        self.assertEqual(guard.OVERRIDE, "NIXIE_TESTS_ON_DESKTOP")
+        self.assertIn("NIXIE_TESTS_ON_DESKTOP=1", guard.message("The tests"))
+
+    def test_the_seaglass_name_still_lets_a_desktop_run_through(self):
+        self.assertEqual(guard.FORMER_OVERRIDES, ("SEAGLASS_TESTS_ON_DESKTOP",))
+        self.assertEqual(
+            self.run_check(True, override="1",
+                           name="SEAGLASS_TESTS_ON_DESKTOP"), ([], ""))
+
+    def test_the_new_name_wins_over_the_old_one(self):
+        exits, _ = self.run_check(True, override="0",
+                                  SEAGLASS_TESTS_ON_DESKTOP="1")
+        self.assertEqual(exits, [guard.EXIT_CODE])
+        self.assertEqual(
+            self.run_check(True, override="1",
+                           SEAGLASS_TESTS_ON_DESKTOP="0"), ([], ""))
+
+    def test_an_empty_new_name_falls_back_to_the_old_one(self):
+        self.assertTrue(guard.overridden(
+            {"NIXIE_TESTS_ON_DESKTOP": "", "SEAGLASS_TESTS_ON_DESKTOP": "1"}))
+        self.assertFalse(guard.overridden({}))
+        self.assertFalse(guard.overridden({"SEAGLASS_TESTS_ON_DESKTOP": "0"}))
 
 
 #: Imports the package in a fresh interpreter with a stand-in guard that
@@ -97,8 +123,7 @@ class WiringTests(unittest.TestCase):
 
 class DesktopTests(unittest.TestCase):
 
-    @unittest.skipIf(os.environ.get(guard.OVERRIDE) == "1",
-                     "running on the desktop on purpose")
+    @unittest.skipIf(guard.overridden(), "running on the desktop on purpose")
     def test_this_run_is_off_the_users_desktop(self):
         # Reaching this line at all means the guard let the run through.
         self.assertFalse(guard.interactive_desktop())
