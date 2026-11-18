@@ -25,7 +25,8 @@ public partial class DialogCommands(IContentDialogService dialogService)
 				}
 			};
 			x.CloseButtonClick += (_, _) => { vm.CanClose = true; };
-			x.PrimaryButtonClick += (_, _) => { vm.CanClose = vm.ViewState == IdentifyViewModelState.Result; };
+			// Nixie 1.2.0 (admin, D65): closes on Apply only with a match picked
+			x.PrimaryButtonClick += (_, _) => { vm.CanClose = vm.ViewState == IdentifyViewModelState.Result && vm.SelectedResult is not null; };
 		});
 	}
 
@@ -34,7 +35,7 @@ public partial class DialogCommands(IContentDialogService dialogService)
 	{
 		var vm = App.GetService<EditMetadataViewModel>();
 		await vm.Initialize(dto);
-		await dialogService.ShowDialog(vm, dialog => CloseOnlyOnCloseAndPrimaryButtonClick(dialog, vm));
+		await dialogService.ShowDialog(vm, dialog => CloseOnCancelOrSaved(dialog, vm, vm.Save));
 	}
 
 	[RelayCommand]
@@ -42,29 +43,12 @@ public partial class DialogCommands(IContentDialogService dialogService)
 	{
 		var vm = App.GetService<AddUserViewModel>();
 		await vm.Initialize();
-		await dialogService.ShowDialog(vm, dialog => CloseOnlyOnCloseAndPrimaryButtonClick(dialog, vm));
+		// Nixie 1.2.0 (admin, D46): closes only once the user was created (it closed on an empty form and created nothing)
+		await dialogService.ShowDialog(vm, dialog => CloseOnCancelOrSaved(dialog, vm, vm.AddUser));
 	}
 
-	[RelayCommand]
-	private static async Task DeleteUser(UserDto user)
-	{
-		var dialog = new ContentDialog
-		{
-			XamlRoot = App.MainWindow.Content.XamlRoot,
-			Title = "Delete User",
-			Content = $"Are you sure you wan to delete the user : {user.Name}?",
-			CloseButtonText = "No",
-			PrimaryButtonText = "Yes",
-			DefaultButton = ContentDialogButton.Primary
-		};
-
-		var response = await dialog.ShowAsync();
-
-		if (response == ContentDialogResult.Primary)
-		{
-			await App.GetService<IJellyfinClient>().DeleteUser(user);
-		}
-	}
+	// Nixie 1.2.0 (admin, D81): Delete user asks in UsersViewModel.DeleteUser (DestructiveConfirm: "Delete user", Cancel the
+	// default; it was an accent "Yes" as the Enter key, "Are you sure you wan to delete the user : {name}?")
 
 	[RelayCommand]
 	private async Task MediaInfoDialog(BaseItemDto dto) => await ShowBaseItemDialog<MediaInfoViewModel>(dto);
@@ -88,19 +72,25 @@ public partial class DialogCommands(IContentDialogService dialogService)
 	// clipboard is readable by every app (Core\ItemMenu)
 
 	[RelayCommand]
-	private async Task ManageLibraryDialog(VirtualFolderInfo info)
+	private async Task ManageLibraryDialog(VirtualFolderInfo info) => await ManageLibrary(info);
+
+	/// <summary>Nixie 1.2.0 (admin): the library's options; true when they were saved (the dialog closes only then).</summary>
+	public async Task<bool> ManageLibrary(VirtualFolderInfo info)
 	{
 		var vm = App.GetService<ManageLibraryViewModel>();
 		await vm.Initialize(info);
-		await dialogService.ShowDialog(vm, dialog => CloseOnlyOnCloseAndPrimaryButtonClick(dialog, vm));
+		return await dialogService.ShowDialog(vm, dialog => CloseOnCancelOrSaved(dialog, vm, vm.Save)) == ContentDialogResult.Primary;
 	}
 
 	[RelayCommand]
-	private async Task CreateLibraryDialog()
+	private async Task CreateLibraryDialog() => await CreateLibrary();
+
+	/// <summary>Nixie 1.2.0 (admin, D18 / D69): Add library; true when the server created it (it never could: Save returned at once).</summary>
+	public async Task<bool> CreateLibrary()
 	{
 		var vm = App.GetService<ManageLibraryViewModel>();
 		await vm.Initialize();
-		await dialogService.ShowDialog(vm, dialog => CloseOnlyOnCloseAndPrimaryButtonClick(dialog, vm));
+		return await dialogService.ShowDialog(vm, dialog => CloseOnCancelOrSaved(dialog, vm, vm.Save)) == ContentDialogResult.Primary;
 	}
 
 	[RelayCommand]
@@ -141,28 +131,8 @@ public partial class DialogCommands(IContentDialogService dialogService)
 	}
 
 
-	public static async Task<bool> DeleteLibraryDialog(string name)
-	{
-		var dialog = new ContentDialog
-		{
-			XamlRoot = App.MainWindow.Content.XamlRoot,
-			Title = "Delete Library",
-			Content = $"Are you sure you wan to delete the Library : {name}?",
-			CloseButtonText = "No",
-			PrimaryButtonText = "Yes",
-			DefaultButton = ContentDialogButton.Primary
-		};
-
-		var response = await dialog.ShowAsync();
-
-		if (response == ContentDialogResult.Primary)
-		{
-			await App.GetService<IJellyfinClient>().DeleteLibrary(name);
-			return true;
-		}
-
-		return false;
-	}
+	// Nixie 1.2.0 (admin, D83): the library's Delete asks in LibrariesSettingsViewModel.DeleteLibrary (DestructiveConfirm:
+	// "Delete library", Cancel the default; it was an accent "Yes" as the Enter key)
 
 
 	private async Task ShowBaseItemDialog<TViewModel>(BaseItemDto dto)
@@ -203,6 +173,35 @@ public partial class DialogCommands(IContentDialogService dialogService)
 		};
 		dialog.CloseButtonClick += (_, _) => { vm.CanClose = true; };
 		dialog.PrimaryButtonClick += (_, _) => { vm.CanClose = true; };
+	}
+
+	/// <summary>
+	/// Nixie 1.2.0 (admin): the dialog closes on Cancel, and on its primary (Save) only once <paramref name="save"/> says the
+	/// server took it; otherwise it stays open with the edits, and the view model says why. Escape does not close it.
+	/// </summary>
+	private static void CloseOnCancelOrSaved(ContentDialog dialog, IHandleClose vm, Func<Task<bool>> save)
+	{
+		dialog.Closing += (_, e) =>
+		{
+			if (!vm.CanClose)
+			{
+				e.Cancel = true;
+			}
+		};
+		dialog.CloseButtonClick += (_, _) => { vm.CanClose = true; };
+		dialog.PrimaryButtonClick += async (_, e) =>
+		{
+			var deferral = e.GetDeferral();
+			try
+			{
+				vm.CanClose = await save();
+				e.Cancel = !vm.CanClose;
+			}
+			finally
+			{
+				deferral.Complete();
+			}
+		};
 	}
 
 	private static void CloseOnAllButtonClick(ContentDialog dialog, IHandleClose vm)

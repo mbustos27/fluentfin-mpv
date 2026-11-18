@@ -111,11 +111,49 @@
 
                 </Grid>
 
-                <StackPanel Orientation="Horizontal" Spacing="16">
-                    <Button Command="{x:Bind ViewModel.StartScanCommand}" Content="Scan All Libraries" />
-                    <Button Command="{x:Bind ViewModel.RestartCommand}" Content="Restart" />
-                    <Button Command="{x:Bind ViewModel.ShutdownCommand}" Content="Shutdown" />
+                <!--
+                    Nixie 1.2.0 (admin, A75-A77): Scan all libraries (role: Secondary Compact) says it started; Restart server… and
+                    Shut down server… (role: Destructive Compact, stock style until the glass stream's keys) ask first, naming the
+                    server, with Cancel the default, send the request while still signed in, and the notice says what happens next
+                -->
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button
+                        x:Name="ScanAllButton"
+                        Command="{x:Bind ViewModel.StartScanCommand}"
+                        Content="Scan all libraries" />
+                    <Button AutomationProperties.Name="Restart server…"
+                        x:Name="RestartButton"
+                        Margin="16,0,0,0"
+                        Command="{x:Bind ViewModel.RestartCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="16" Glyph="&#xE72C;" />
+                            <TextBlock Text="Restart server…" />
+                        </StackPanel>
+                    </Button>
+                    <Button AutomationProperties.Name="Shut down server…" x:Name="ShutdownButton" Command="{x:Bind ViewModel.ShutdownCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="16" Glyph="&#xE7E8;" />
+                            <TextBlock Text="Shut down server…" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
+
+                <InfoBar
+                    x:Name="ServerNoticeBar"
+                    Closed="ServerNoticeBar_Closed"
+                    IsClosable="{x:Bind local:DashboardPage.IsClosable(ViewModel.Notice), Mode=OneWay}"
+                    IsOpen="{x:Bind ViewModel.HasNotice, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.Notice.Message, Mode=OneWay}"
+                    Severity="{x:Bind local:DashboardPage.Severity(ViewModel.Notice), Mode=OneWay}"
+                    Title="{x:Bind ViewModel.Notice.Title, Mode=OneWay}">
+                    <InfoBar.Content>
+                        <ProgressBar
+                            Margin="0,0,0,12"
+                            AutomationProperties.Name="Waiting for the server"
+                            IsIndeterminate="True"
+                            Visibility="{x:Bind ViewModel.IsWaiting, Mode=OneWay}" />
+                    </InfoBar.Content>
+                </InfoBar>
             </StackPanel>
 
             <Grid Grid.Row="1" RowSpacing="16">
@@ -126,7 +164,7 @@
                 <TextBlock
                     Grid.Row="0"
                     Style="{ThemeResource SubheaderTextBlockStyle}"
-                    Text="Active Devices" />
+                    Text="Active devices" />
                 <ScrollViewer Grid.Row="1">
                     <ItemsRepeater ItemsSource="{x:Bind ViewModel.ActiveSessions, Mode=OneWay}">
                         <ItemsRepeater.ItemTemplate>
@@ -215,29 +253,30 @@
                                                 Orientation="Horizontal"
                                                 Spacing="4">
                                                 <!--  fluentfin-mpv: names and tooltips (ux-review I3)  -->
+                                                <!--  Nixie 1.2.0 (admin, A78-A81): the names say whose session  -->
                                                 <Button
-                                                    AutomationProperties.Name="Play or pause"
+                                                    AutomationProperties.Name="{x:Bind local:DashboardPage.PlayPauseName(UserName, DeviceName)}"
                                                     Command="{x:Bind TogglePlayPauseCommand}"
                                                     Content="{x:Bind c:Converters.IsPausedToSymbol(PlayState.IsPaused), Mode=OneWay}"
                                                     Style="{StaticResource IconButtonStyle}"
                                                     ToolTipService.ToolTip="Play or pause"
                                                     Visibility="{x:Bind c:Converters.BooleanToVisibility(MediaControlsVisible), Mode=OneWay}" />
                                                 <Button
-                                                    AutomationProperties.Name="Stop"
+                                                    AutomationProperties.Name="{x:Bind local:DashboardPage.StopName(UserName)}"
                                                     Command="{x:Bind StopCommand}"
                                                     Content="{ui:SymbolIcon Symbol=Stop}"
                                                     Style="{StaticResource IconButtonStyle}"
-                                                    ToolTipService.ToolTip="Stop"
+                                                    ToolTipService.ToolTip="{x:Bind local:DashboardPage.StopName(UserName)}"
                                                     Visibility="{x:Bind c:Converters.BooleanToVisibility(MediaControlsVisible), Mode=OneWay}" />
                                                 <Button
-                                                    AutomationProperties.Name="Playback information"
+                                                    AutomationProperties.Name="{x:Bind local:DashboardPage.InfoName(UserName, DeviceName)}"
                                                     Command="{x:Bind InfoCommand}"
                                                     Content="{ui:FontIcon Glyph=&#xE946;}"
                                                     Style="{StaticResource IconButtonStyle}"
                                                     ToolTipService.ToolTip="Playback information"
                                                     Visibility="{x:Bind NowPlayingItem, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}" />
                                                 <Button
-                                                    AutomationProperties.Name="Send message"
+                                                    AutomationProperties.Name="{x:Bind local:DashboardPage.MessageName(UserName, DeviceName)}"
                                                     Command="{x:Bind SendMessageCommand}"
                                                     Content="{ui:FontIcon Glyph=&#xE8BD;}"
                                                     Style="{StaticResource IconButtonStyle}"

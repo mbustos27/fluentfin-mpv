@@ -3,18 +3,43 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DevWinUI;
+using FluentFin.Core.Admin;
 using FluentFin.Core.Contracts.Services;
+using Jellyfin.Sdk.Generated.Library.VirtualFolders;
 using Jellyfin.Sdk.Generated.Models;
 using ReactiveUI;
 
 namespace FluentFin.Dialogs.ViewModels;
 
+/// <remarks>
+/// Nixie 1.2.0 (admin, button review D18 / D69): "Add library" could never create one: Save returned at once in create mode.
+/// Now it sends <c>POST /Library/VirtualFolders</c> (name, content type, the folders and the options shown), and says why
+/// when it can't; the dialog closes only once the server took it (<see cref="Save"/>).
+/// </remarks>
 public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : ObservableObject, IHandleClose
 {
 	private VirtualFolderInfo? _info;
 
+	/// <summary>Why the last Save did not go through; empty otherwise.</summary>
 	[ObservableProperty]
-	public partial string Name { get; set; }
+	[NotifyPropertyChangedFor(nameof(HasError))]
+	public partial string Error { get; set; } = "";
+
+	/// <summary>The error bar opens from this bool (no x:Bind function on IsOpen).</summary>
+	public bool HasError => !string.IsNullOrEmpty(Error);
+
+	/// <summary>The dialog's title: "Add library", or the library's name.</summary>
+	public string DialogTitle => IsCreateMode ? "Add library" : Name;
+
+	/// <summary>D69: "Create library" in create mode.</summary>
+	public string SaveText => IsCreateMode ? "Create library" : "Save";
+
+	/// <summary>D70: "Undo changes", only when editing (empty hides the button).</summary>
+	public string UndoText => IsCreateMode ? "" : "Undo changes";
+
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(DialogTitle))]
+	public partial string Name { get; set; } = "";
 
 	[ObservableProperty]
 	public partial bool IsEnabled { get; set; }
@@ -40,8 +65,13 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 	[ObservableProperty]
 	public partial int AutomaticRefreshIntervalDays { get; set; }
 
+	/// <summary>Movies sharing a collection name are added to that collection (movie libraries).</summary>
 	[ObservableProperty]
 	public partial bool AutomaticallyAddToCollection { get; set; }
+
+	/// <summary>Review fix: "Automatically merge series that are spread across multiple folders" (series libraries); its toggle wrote AutomaticallyAddToCollection.</summary>
+	[ObservableProperty]
+	public partial bool EnableAutomaticSeriesGrouping { get; set; }
 
 	[ObservableProperty]
 	public partial bool EnableTrickplayImageExtraction { get; set; }
@@ -99,11 +129,28 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 	public partial List<CountryInfo?> Countries { get; set; } = [];
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(DialogTitle), nameof(SaveText), nameof(UndoText), nameof(ShowsOptions))]
 	public partial bool IsCreateMode { get; set; }
 
 
 	[ObservableProperty]
 	public partial Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType? FolderCollectionType { get; set; }
+
+	/// <summary>
+	/// Review fix: the content types a new library can have (what the server's create accepts, CollectionTypeOptions, in the web
+	/// dashboard's words); the box listed every value of another enum, some of which the server cannot create, and no Mixed.
+	/// </summary>
+	public IReadOnlyList<LibraryContentType> ContentTypes { get; } = LibraryContentType.All;
+
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(ShowsOptions))]
+	public partial LibraryContentType? SelectedContentType { get; set; }
+
+	/// <summary>The library's options show once there is a content type (always when editing).</summary>
+	public bool ShowsOptions => !IsCreateMode || SelectedContentType is not null;
+
+	partial void OnSelectedContentTypeChanged(LibraryContentType? value) =>
+		FolderCollectionType = value is not null && Enum.TryParse<Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType>(value.Value.ToString(), true, out var type) ? type : null;
 
 	public ObservableCollection<MetadataFetcher> SeriesMetadataFetchers { get; } = [];
 	public ObservableCollection<MetadataFetcher> SeasonMetadataFetchers { get; } = [];
@@ -122,6 +169,15 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 	{
 		IsCreateMode = true;
 		_info = new VirtualFolderInfo { LibraryOptions = new LibraryOptions() };
+		// a new library is on, watched for changes and keeps subtitles with the media, as the web dashboard makes it (all off,
+		// it was created hidden from every user)
+		IsEnabled = true;
+		EnableRealtimeMonitor = true;
+		SaveSubtitlesWithMedia = true;
+		RequirePerfectSubtitleMatch = true;
+		AllowEmbeddedSubtitles = LibraryOptions_AllowEmbeddedSubtitles.AllowAll;
+		SeasonZeroDisplayName = "Specials";
+		SubtitleLanguages = [];
 
 		Cultures = [null, .. await jellyfinClient.GetCultures()];
 		Countries = [null, .. await jellyfinClient.GetCountries()];
@@ -133,6 +189,8 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 			.ObserveOn(RxSchedulers.MainThreadScheduler)
 			.Subscribe(value =>
 			{
+				PopulateSubtitleFetchers(value, SubtitleFetchers);
+
 				if (FolderCollectionType == Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType.Tvshows)
 				{
 					PopulateMetadataFetcher("Series", value, SeriesMetadataFetchers);
@@ -168,7 +226,8 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 		Countries = [null, .. await jellyfinClient.GetCountries()];
 
 		_info = virtualFolder;
-		FolderCollectionType = (Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType)(int)_info.CollectionType!;
+		// by name: the two enums are not numbered alike, and a mixed library has no collection type
+		FolderCollectionType = Enum.TryParse<Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType>($"{_info.CollectionType}", true, out var folderType) ? folderType : null;
 		IsMovieFolder = _info.CollectionType == VirtualFolderInfo_CollectionType.Movies;
 		IsSeriesFolder = _info.CollectionType == VirtualFolderInfo_CollectionType.Tvshows;
 
@@ -183,6 +242,7 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 		EnableRealtimeMonitor = options.EnableRealtimeMonitor ?? false;
 		AutomaticRefreshIntervalDays = options.AutomaticRefreshIntervalDays ?? 0;
 		AutomaticallyAddToCollection = options.AutomaticallyAddToCollection ?? false;
+		EnableAutomaticSeriesGrouping = options.EnableAutomaticSeriesGrouping ?? false;
 		EnableTrickplayImageExtraction = options.EnableTrickplayImageExtraction ?? false;
 		ExtractTrickplayImagesDuringLibraryScan = options.ExtractTrickplayImagesDuringLibraryScan ?? false;
 		SaveTrickplayWithMedia = options.SaveTrickplayWithMedia ?? false;
@@ -214,10 +274,12 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 			PopulateImageFetcher("Movie", options, MovieImageFetcher);
 		}
 
-		IEnumerable<MetadataFetcher> subtitleFetchers = options.SubtitleFetcherOrder?.Select(x => new MetadataFetcher(x, SubtitleFetchers) { IsSelected = true, CanMoveDown = true, CanMoveUp = true }) ?? [];
-		SubtitleFetchers.AddRange(subtitleFetchers);
-		SubtitleFetchers[0].CanMoveUp = false;
-		SubtitleFetchers[^1].CanMoveDown = false;
+		SubtitleFetchers.Clear();
+		SubtitleFetchers.AddRange(options.SubtitleFetcherOrder?.Select(x => new MetadataFetcher(x, SubtitleFetchers)
+		{
+			IsSelected = options.DisabledSubtitleFetchers?.Contains(x) != true,
+		}) ?? []);
+		MetadataFetcher.UpdateMoves(SubtitleFetchers);
 
 		var selectedSubtitleLanguages = new List<CultureDto>();
 		foreach (var item in options.SubtitleDownloadLanguages ?? [])
@@ -232,19 +294,63 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 		return;
 	}
 
-	[RelayCommand]
-	private async Task Save()
+	/// <summary>
+	/// Creates the library (create mode) or saves its options. True when the server took it; false, with <see cref="Error"/>,
+	/// when something is missing or the server refused, and the dialog keeps what was entered.
+	/// </summary>
+	public async Task<bool> Save()
 	{
-		if (_info is not { ItemId: not null })
+		Error = "";
+		if (_info?.LibraryOptions is not { } options)
 		{
-			return;
+			return false;
 		}
 
-		if (_info.LibraryOptions is not { } options)
+		if (IsCreateMode)
 		{
-			return;
+			if (string.IsNullOrWhiteSpace(Name))
+			{
+				Error = "Give the library a name.";
+				return false;
+			}
+
+			if (SelectedContentType is not { Value: var collectionType })
+			{
+				Error = "Choose what the library holds.";
+				return false;
+			}
+
+			FillOptions(options);
+			if (!await jellyfinClient.CreateLibrary(Name.Trim(), collectionType, options))
+			{
+				Error = "The server didn't create the library. Check the name isn't already used, then try again.";
+				return false;
+			}
+
+			return true;
 		}
 
+		if (_info.ItemId is not { } itemId || !Guid.TryParse(itemId, out var folderId))
+		{
+			return false;
+		}
+
+		// Review fix: the edits go into a copy; the library's own options (the Libraries list's, and what "Undo changes" reads)
+		// change only once the server took them (a failed Save left them changed, and Undo restored the unsaved edit)
+		var edited = KiotaCopy.Clone(options, LibraryOptions.CreateFromDiscriminatorValue);
+		FillOptions(edited);
+		if (!await jellyfinClient.SaveLibraryOptions(folderId, edited))
+		{
+			Error = "The server didn't save the changes. Try again, or Cancel to leave the library as it was.";
+			return false;
+		}
+
+		_info.LibraryOptions = edited;
+		return true;
+	}
+
+	private void FillOptions(LibraryOptions options)
+	{
 		options.PathInfos = [.. Locations.Select(x => new MediaPathInfo { Path = x })];
 		options.Enabled = IsEnabled;
 		options.SeasonZeroDisplayName = SeasonZeroDisplayName;
@@ -255,6 +361,7 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 		options.EnableRealtimeMonitor = EnableRealtimeMonitor;
 		options.AutomaticRefreshIntervalDays = AutomaticRefreshIntervalDays;
 		options.AutomaticallyAddToCollection = AutomaticallyAddToCollection;
+		options.EnableAutomaticSeriesGrouping = EnableAutomaticSeriesGrouping;
 		options.EnableTrickplayImageExtraction = EnableTrickplayImageExtraction;
 		options.ExtractTrickplayImagesDuringLibraryScan = ExtractTrickplayImagesDuringLibraryScan;
 		options.SaveTrickplayWithMedia = SaveTrickplayWithMedia;
@@ -285,19 +392,18 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 
 		options.SubtitleFetcherOrder = [.. SubtitleFetchers.Select(x => x.Name)];
 		options.DisabledSubtitleFetchers = [.. SubtitleFetchers.Where(x => !x.IsSelected).Select(x => x.Name)];
-		options.SubtitleDownloadLanguages = [.. SubtitleLanguages.Select(x => x.ThreeLetterISOLanguageName).OfType<string>()];
-
-		await jellyfinClient.SaveLibraryOptions(Guid.Parse(_info.ItemId), options);
+		options.SubtitleDownloadLanguages = [.. (SubtitleLanguages ?? []).Select(x => x.ThreeLetterISOLanguageName).OfType<string>()];
 	}
 
 	[RelayCommand]
 	private async Task Reset()
 	{
-		if (_info is null)
+		if (_info is null || IsCreateMode)
 		{
 			return;
 		}
 
+		Locations.Clear();
 		await Initialize(_info);
 	}
 
@@ -318,8 +424,7 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 				});
 			}
 
-			target[0].CanMoveUp = false;
-			target[^1].CanMoveDown = false;
+			MetadataFetcher.UpdateMoves(target);
 		}
 	}
 
@@ -337,19 +442,39 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 				});
 			}
 
-			target[0].CanMoveUp = false;
-			target[^1].CanMoveDown = false;
+			MetadataFetcher.UpdateMoves(target);
 		}
+	}
+
+	private static void PopulateSubtitleFetchers(LibraryOptionsResultDto options, ObservableCollection<MetadataFetcher> target)
+	{
+		target.Clear();
+		target.AddRange((options.SubtitleFetchers ?? []).Select(x => new MetadataFetcher(x.Name ?? "", target) { IsSelected = x.DefaultEnabled ?? false }));
+		MetadataFetcher.UpdateMoves(target);
+	}
+
+	/// <summary>The type's options, added when the library has none for it yet (a new library has none at all).</summary>
+	private static TypeOptions TypeOptionsFor(string type, LibraryOptions options)
+	{
+		options.TypeOptions ??= [];
+		if (options.TypeOptions.FirstOrDefault(x => x.Type == type) is { } existing)
+		{
+			return existing;
+		}
+
+		var added = new TypeOptions { Type = type };
+		options.TypeOptions.Add(added);
+		return added;
 	}
 
 	private static void UpdateMetadataFetcher(string type, LibraryOptions options, IList<MetadataFetcher> fetcher)
 	{
-		var typeOption = options.TypeOptions?.FirstOrDefault(x => x.Type == type);
-		if (typeOption is null)
+		if (fetcher.Count == 0 && options.TypeOptions?.Any(x => x.Type == type) != true)
 		{
 			return;
 		}
 
+		var typeOption = TypeOptionsFor(type, options);
 		typeOption.MetadataFetcherOrder = [.. fetcher.Select(x => x.Name)];
 		typeOption.MetadataFetchers = [.. fetcher.Where(x => x.IsSelected).Select(x => x.Name)];
 	}
@@ -368,8 +493,7 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 				});
 			}
 
-			target[0].CanMoveUp = false;
-			target[^1].CanMoveDown = false;
+			MetadataFetcher.UpdateMoves(target);
 		}
 	}
 
@@ -387,19 +511,18 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 				});
 			}
 
-			target[0].CanMoveUp = false;
-			target[^1].CanMoveDown = false;
+			MetadataFetcher.UpdateMoves(target);
 		}
 	}
 
 	private static void UpdateImageFetcher(string type, LibraryOptions options, IList<MetadataFetcher> fetcher)
 	{
-		var typeOption = options.TypeOptions?.FirstOrDefault(x => x.Type == type);
-		if (typeOption is null)
+		if (fetcher.Count == 0 && options.TypeOptions?.Any(x => x.Type == type) != true)
 		{
 			return;
 		}
 
+		var typeOption = TypeOptionsFor(type, options);
 		typeOption.ImageFetcherOrder = [.. fetcher.Select(x => x.Name)];
 		typeOption.ImageFetchers = [.. fetcher.Where(x => x.IsSelected).Select(x => x.Name)];
 	}
@@ -426,10 +549,8 @@ public partial class MetadataFetcher(string name, ObservableCollection<MetadataF
 	private void MoveUp()
 	{
 		var index = _parentCollection.IndexOf(this);
-		_parentCollection.Remove(this);
-		var newIndex = index - 1;
-		_parentCollection.Insert(newIndex, this);
-		CanMoveUp = newIndex > 0;
+		_parentCollection.Move(index, index - 1);
+		UpdateMoves(_parentCollection);
 	}
 
 
@@ -437,9 +558,37 @@ public partial class MetadataFetcher(string name, ObservableCollection<MetadataF
 	private void MoveDown()
 	{
 		var index = _parentCollection.IndexOf(this);
-		_parentCollection.Remove(this);
-		var newIndex = index + 1;
-		_parentCollection.Insert(newIndex, this);
-		CanMoveDown = newIndex < _parentCollection.Count - 1;
+		_parentCollection.Move(index, index + 1);
+		UpdateMoves(_parentCollection);
 	}
+
+	/// <summary>
+	/// Nixie 1.2.0 (admin, D74 / D75): after a move every row's Move up / Move down is worked out again (only the moved row's
+	/// was, so its neighbour kept a stale one), and a list of one or none moves nowhere.
+	/// </summary>
+	public static void UpdateMoves(IList<MetadataFetcher> fetchers)
+	{
+		for (var i = 0; i < fetchers.Count; i++)
+		{
+			fetchers[i].CanMoveUp = i > 0;
+			fetchers[i].CanMoveDown = i < fetchers.Count - 1;
+		}
+	}
+}
+
+/// <summary>Review fix: a content type a new library can have, in the web dashboard's words.</summary>
+public sealed record LibraryContentType(string Name, CollectionTypeOptions Value)
+{
+	public static IReadOnlyList<LibraryContentType> All { get; } =
+	[
+		new("Movies", CollectionTypeOptions.Movies),
+		new("Shows", CollectionTypeOptions.Tvshows),
+		new("Music", CollectionTypeOptions.Music),
+		new("Music videos", CollectionTypeOptions.Musicvideos),
+		new("Home videos and photos", CollectionTypeOptions.Homevideos),
+		new("Books", CollectionTypeOptions.Books),
+		new("Mixed movies and shows", CollectionTypeOptions.Mixed),
+	];
+
+	public override string ToString() => Name;
 }

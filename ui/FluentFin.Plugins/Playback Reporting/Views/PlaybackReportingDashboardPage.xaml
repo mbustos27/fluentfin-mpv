@@ -4,53 +4,35 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:helpers="using:FluentFin.UI.Core"
     xmlns:local="using:FluentFin.Plugins.Playback_Reporting.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:ui="using:CommunityToolkit.WinUI"
     mc:Ignorable="d">
 
-    <NavigationView
-        x:Name="NavView"
-        BackRequested="NavView_BackRequested"
-        CompactModeThresholdWidth="0"
-        ExpandedModeThresholdWidth="0"
-        IsBackButtonVisible="Visible"
-        IsBackEnabled="{x:Bind NavFrame.CanGoBack, Mode=OneWay}"
-        IsPaneOpen="True"
-        IsPaneToggleButtonVisible="False"
-        IsPaneVisible="True"
-        IsSettingsVisible="False"
-        OpenPaneLength="248"
-        SelectedItem="{x:Bind ViewModel.Selected, Mode=OneWay}">
-        <NavigationView.Resources>
-            <Thickness x:Key="NavigationViewContentGridBorderThickness">1,0,0,0</Thickness>
-            <CornerRadius x:Key="NavigationViewContentGridCornerRadius">0,0,0,0</CornerRadius>
-        </NavigationView.Resources>
-        <NavigationView.Content>
-            <Frame x:Name="NavFrame" />
-        </NavigationView.Content>
-        <NavigationView.MenuItems>
-            <NavigationViewItem
-                helpers:NavigationHelper.NavigateTo="FluentFin.Plugins.Playback_Reporting.ViewModels.UsersReportViewModel"
-                Content="Users"
-                Icon="{ui:FontIcon Glyph=&#xE902;}" />
-            <NavigationViewItem
-                helpers:NavigationHelper.NavigateTo="FluentFin.Plugins.Playback_Reporting.ViewModels.PlaybackReportViewModel"
-                Content="Playback"
-                Icon="{ui:FontIcon Glyph=&#xEF3B;}" />
-            <NavigationViewItem
-                helpers:NavigationHelper.NavigateTo="FluentFin.Plugins.Playback_Reporting.ViewModels.BreakdownReportViewModel"
-                Content="Breakdown"
-                Icon="{ui:FontIcon Glyph=&#xEC26;}" />
-            <NavigationViewItem
-                helpers:NavigationHelper.NavigateTo="FluentFin.Plugins.Playback_Reporting.ViewModels.UsageReportViewModel"
-                Content="Usage"
-                Icon="{ui:SymbolIcon Symbol=Calendar}" />
-            <NavigationViewItem
-                helpers:NavigationHelper.NavigateTo="FluentFin.Plugins.Playback_Reporting.ViewModels.SessionDurationReportViewModel"
-                Content="Duration"
-                Icon="{ui:FontIcon Glyph=&#xE823;}" />
-        </NavigationView.MenuItems>
-    </NavigationView>
+    <!--
+        Nixie 1.2.0 (admin): no side pane. The reports are text tabs along the top (SelectorBar: one Tab stop, the arrows move
+        between them, Narrator reads "Usage, 4 of 5"); the tabs follow the frame however a report was opened.
+    -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel
+            Padding="36,16,36,0"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            Spacing="4">
+            <TextBlock
+                AutomationProperties.HeadingLevel="Level1"
+                Style="{ThemeResource SubtitleTextBlockStyle}"
+                Text="Playback reports" />
+            <SelectorBar
+                x:Name="ReportBar"
+                AutomationProperties.Name="Reports"
+                SelectionChanged="ReportBar_SelectionChanged" />
+        </StackPanel>
+
+        <Frame x:Name="NavFrame" Grid.Row="1" />
+    </Grid>
 </Page>

@@ -33,11 +33,13 @@
 
         <ScrollView Grid.Row="1">
             <StackPanel Spacing="10">
-                <Button
-                    Margin="{StaticResource MediumBottomMargin}"
-                    Command="{x:Bind ViewModel.AddSegmentCommand}"
-                    Content="Add New Segment"
-                    Style="{ThemeResource AccentButtonStyle}" />
+                <!--  D85: "Add segment", role Secondary Compact (the accent belongs to each segment's Save)  -->
+                <Button AutomationProperties.Name="Add segment" Margin="{StaticResource MediumBottomMargin}" Command="{x:Bind ViewModel.AddSegmentCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE710;" />
+                        <TextBlock Text="Add segment" />
+                    </StackPanel>
+                </Button>
                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.Segments}">
                     <ItemsRepeater.ItemTemplate>
                         <DataTemplate x:DataType="viewmodels:MediaSegmentViewModel">
@@ -49,6 +51,7 @@
                                 Tag="{x:Bind}">
                                 <ComboBox
                                     HorizontalAlignment="Stretch"
+                                    AutomationProperties.Name="Segment type"
                                     ItemsSource="{ui:EnumValues Type=jm:MediaSegmentDto_Type}"
                                     SelectedItem="{x:Bind Type, Mode=TwoWay}" />
                                 <Grid ColumnSpacing="10">
@@ -57,14 +60,17 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBox
+                                        Header="Start"
                                         IsReadOnly="True"
-                                        PlaceholderText="Start ticks"
                                         Text="{x:Bind c:Converters.TicksToSecondsString(StartTicks), Mode=OneWay}" />
-                                    <RepeatButton
+                                    <!--  D86: a Button, not a RepeatButton; hidden with mpv, where it wrote 0  -->
+                                    <Button
                                         Grid.Column="1"
+                                        VerticalAlignment="Bottom"
                                         Click="UpdateTime"
-                                        Content="Use Current Time"
-                                        Tag="Start" />
+                                        Content="Set start to now"
+                                        Tag="Start"
+                                        Visibility="{Binding ElementName=Page, Path=ViewModel.PlayerButtonsVisibility}" />
                                 </Grid>
                                 <Grid ColumnSpacing="10">
                                     <Grid.ColumnDefinitions>
@@ -72,31 +78,42 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBox
+                                        Header="End"
                                         IsReadOnly="True"
-                                        PlaceholderText="End ticks"
                                         Text="{x:Bind c:Converters.TicksToSecondsString(EndTicks), Mode=OneWay}" />
-                                    <RepeatButton
+                                    <!--  D87  -->
+                                    <Button
                                         Grid.Column="1"
+                                        VerticalAlignment="Bottom"
                                         Click="UpdateTime"
-                                        Content="Use Current Time"
-                                        Tag="End" />
+                                        Content="Set end to now"
+                                        Tag="End"
+                                        Visibility="{Binding ElementName=Page, Path=ViewModel.PlayerButtonsVisibility}" />
                                 </Grid>
                                 <StackPanel
                                     HorizontalAlignment="Center"
                                     Orientation="Horizontal"
                                     Spacing="10">
+                                    <!--  D88: hidden with mpv; D89: "Save segment", role Primary Compact; D90: role Destructive Compact, asks first  -->
                                     <Button
                                         Command="{Binding ElementName=Page, Path=ViewModel.PlaySegmentCommand}"
                                         CommandParameter="{x:Bind}"
-                                        Content="Play" />
+                                        Content="Play"
+                                        Visibility="{Binding ElementName=Page, Path=ViewModel.PlayerButtonsVisibility}" />
                                     <Button
                                         Command="{Binding ElementName=Page, Path=ViewModel.SubmitSegmentCommand}"
                                         CommandParameter="{x:Bind}"
-                                        Content="Submit" />
-                                    <Button
+                                        Content="Save segment"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                                    <Button AutomationProperties.Name="Delete segment…"
+                                        Margin="16,0,0,0"
                                         Command="{Binding ElementName=Page, Path=ViewModel.DeleteSegmentCommand}"
-                                        CommandParameter="{x:Bind}"
-                                        Content="Delete" />
+                                        CommandParameter="{x:Bind}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon FontSize="16" Glyph="&#xE74D;" />
+                                            <TextBlock Text="Delete segment…" />
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
                             </StackPanel>
                         </DataTemplate>

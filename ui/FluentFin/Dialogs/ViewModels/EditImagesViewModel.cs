@@ -3,14 +3,32 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DynamicData;
+using FluentFin.Core;
+using FluentFin.Core.Admin;
 using FluentFin.Core.Contracts.Services;
 using Jellyfin.Sdk.Generated.Models;
 using ReactiveUI;
 
 namespace FluentFin.Dialogs.ViewModels;
 
+/// <remarks>
+/// Nixie 1.2.0 (admin, button review D50 / D53): Delete image deleted on the server at once; it now asks first (<see cref="Confirm"/>,
+/// a flyout at the button: Cancel has the focus) and the tile goes only when the server deleted it. Back returns to the image
+/// list (it searched again and stayed in the results).
+/// </remarks>
 public partial class EditImagesViewModel(IJellyfinClient jellyfinClient) : ObservableObject, IHandleClose, IBaseItemDialogViewModel
 {
+	/// <summary>Asks before a destructive action; true only when the user confirmed. Unset (nobody to ask), nothing happens.</summary>
+	public Func<ConfirmPrompt, Task<bool>>? Confirm { get; set; }
+
+	/// <summary>Why the last change did not go through; empty otherwise.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasError))]
+	public partial string Error { get; set; } = "";
+
+	/// <summary>The error bar opens from this bool (no x:Bind function on IsOpen).</summary>
+	public bool HasError => !string.IsNullOrEmpty(Error);
+
 	[ObservableProperty]
 	public partial ObservableCollection<ImageInfoEx> Images { get; set; } = [];
 
@@ -53,18 +71,7 @@ public partial class EditImagesViewModel(IJellyfinClient jellyfinClient) : Obser
 
 		Item = item;
 
-		var images = (await jellyfinClient.GetImages(item)).Select(info => new ImageInfoEx
-		{
-			ImageIndex = info.ImageIndex,
-			ImageTag = info.ImageTag,
-			Size = info.Size,
-			ImageType = info.ImageType,
-			Height = info.Height,
-			Width = info.Width,
-			Uri = jellyfinClient.GetImage(item, info)
-		});
-
-		Images = [.. images];
+		Images = [.. await LoadImages(item)];
 
 
 		var providers = await jellyfinClient.GetImageProviders(item);
@@ -130,7 +137,11 @@ public partial class EditImagesViewModel(IJellyfinClient jellyfinClient) : Obser
 	private async Task SwitchView(EditImagesViewModelState state)
 	{
 		State = state;
-		await SearchImages();
+		// D50: only the search view searches (Back to the list searched again, and the search put the results back)
+		if (state == EditImagesViewModelState.Search)
+		{
+			await SearchImages();
+		}
 	}
 
 	[RelayCommand]
@@ -155,16 +166,43 @@ public partial class EditImagesViewModel(IJellyfinClient jellyfinClient) : Obser
 		await Initialize(Item);
 	}
 
-	[RelayCommand]
-	private async Task DeleteImage(ImageInfoEx info)
+	/// <summary>The item's images as the server has them now (their indexes are the server's current ones).</summary>
+	private async Task<List<ImageInfoEx>> LoadImages(BaseItemDto item) => [.. (await jellyfinClient.GetImages(item)).Select(info => new ImageInfoEx
 	{
-		if (Item is null || info is null)
+		ImageIndex = info.ImageIndex,
+		ImageTag = info.ImageTag,
+		Size = info.Size,
+		ImageType = info.ImageType,
+		Height = info.Height,
+		Width = info.Width,
+		Uri = jellyfinClient.GetImage(item, info)
+	})];
+
+	/// <summary>
+	/// Review fix: the server deletes by type and index, and renumbers the rest after a delete, so the tiles' indexes go stale
+	/// (with backdrops A, B and C, deleting A then B sent Backdrop/1: C). The image is found again by its tag (what identifies
+	/// it) in the server's list just before the delete, and the list is read again afterwards.
+	/// </summary>
+	[RelayCommand]
+	private async Task DeleteImage(ImageInfoEx? info)
+	{
+		if (Item is null || info is null || Confirm is not { } confirm || !await confirm(AdminPrompts.DeleteImage(Item.Name, info.ImageType?.ToString())))
 		{
 			return;
 		}
 
-		await jellyfinClient.DeleteImage(Item, info);
-		Images.Remove(info);
+		Error = "";
+		var current = (await LoadImages(Item)).FirstOrDefault(x => x.ImageType == info.ImageType && x.ImageTag == info.ImageTag);
+		if (current is null)
+		{
+			Error = "That image is no longer on the server. The list shows what is there now.";
+		}
+		else if (!await jellyfinClient.DeleteImage(Item, current))
+		{
+			Error = "The server didn't delete the image. Nothing changed.";
+		}
+
+		Images = [.. await LoadImages(Item)];
 	}
 
 	private static List<ImageType?> GetAllSupportedImages(IEnumerable<ImageProviderInfo> providers)

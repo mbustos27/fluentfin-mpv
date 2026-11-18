@@ -36,17 +36,17 @@
         <ctk:SettingsCard Header="Allow this user to edit subtitles">
             <ToggleSwitch IsOn="{x:Bind ViewModel.AllowSubtitleEdits, Mode=TwoWay}" />
         </ctk:SettingsCard>
-        <ctk:SettingsExpander Header="Feature Access">
+        <ctk:SettingsExpander Header="Feature access">
             <ctk:SettingsExpander.Items>
                 <ctk:SettingsCard Header="Allow Live TV access">
                     <ToggleSwitch IsOn="{x:Bind ViewModel.AllowLiveTvAccess, Mode=TwoWay}" />
                 </ctk:SettingsCard>
-                <ctk:SettingsCard Header="Allow Live TV access">
+                <ctk:SettingsCard Header="Allow Live TV recording management">
                     <ToggleSwitch IsOn="{x:Bind ViewModel.AllowLiveTvRecordingManagement, Mode=TwoWay}" />
                 </ctk:SettingsCard>
             </ctk:SettingsExpander.Items>
         </ctk:SettingsExpander>
-        <ctk:SettingsExpander Description="Restricting access to transcoding may cause playback failures in clients due to unsupported media formats." Header="Media Playback">
+        <ctk:SettingsExpander Description="Restricting access to transcoding may cause playback failures in clients due to unsupported media formats." Header="Media playback">
             <ctk:SettingsExpander.Items>
                 <ctk:SettingsCard Header="Allow media playback">
                     <ToggleSwitch IsOn="{x:Bind ViewModel.AllowMediaPlayback, Mode=TwoWay}" />
@@ -71,7 +71,7 @@
         <ctk:SettingsCard Description="The SyncPlay feature enables to sync playback with other devices. Select the level of access this user has to the SyncPlay." Header="SyncPlay access">
             <ComboBox ItemsSource="{ui:EnumValues Type=jm:UserPolicy_SyncPlayAccess}" SelectedItem="{x:Bind ViewModel.SyncPlayAccess, Mode=TwoWay}" />
         </ctk:SettingsCard>
-        <ctk:SettingsExpander Header="Remote Control">
+        <ctk:SettingsExpander Header="Remote control">
             <ctk:SettingsExpander.Items>
                 <ctk:SettingsCard Header="Allow remote control of other users">
                     <ToggleSwitch IsOn="{x:Bind ViewModel.AllowRemoteControlOfOtherUsers, Mode=TwoWay}" />

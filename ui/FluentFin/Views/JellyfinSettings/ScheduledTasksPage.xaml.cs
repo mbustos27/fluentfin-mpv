@@ -11,4 +11,9 @@ public sealed partial class ScheduledTasksPage : Page
 	{
 		InitializeComponent();
 	}
+
+	/// <summary>The card runs its task: Narrator says so ("Run Scan Media Library now").</summary>
+	public static string RunName(string? task) => $"Run {task} now";
+
+	private void NoticeBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.Notice = null;
 }

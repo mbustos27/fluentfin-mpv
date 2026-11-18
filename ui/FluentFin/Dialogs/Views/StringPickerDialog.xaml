@@ -13,14 +13,18 @@
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
     Title="{x:Bind ViewModel.Title, Mode=OneWay}"
-    CloseButtonText="Close"
+    CloseButtonText="Cancel"
     DefaultButton="Primary"
-    PrimaryButtonText="OK"
+    IsPrimaryButtonEnabled="{x:Bind ViewModel.CanConfirm, Mode=OneWay}"
+    PrimaryButtonText="{x:Bind ViewModel.ConfirmText, Mode=OneWay}"
     Style="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
     mc:Ignorable="d">
 
     <StackPanel Spacing="20">
-        <TextBox PlaceholderText="{x:Bind ViewModel.PlaceholderText, Mode=OneWay}" Text="{x:Bind ViewModel.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+        <TextBox
+            AutomationProperties.Name="{x:Bind ViewModel.PlaceholderText, Mode=OneWay}"
+            PlaceholderText="{x:Bind ViewModel.PlaceholderText, Mode=OneWay}"
+            Text="{x:Bind ViewModel.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
         <InfoBar
             IsClosable="False"
             IsIconVisible="True"

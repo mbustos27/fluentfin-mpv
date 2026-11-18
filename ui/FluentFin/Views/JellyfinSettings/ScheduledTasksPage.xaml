@@ -17,7 +17,14 @@
     mc:Ignorable="d">
 
     <ScrollView Margin="0,36">
-        <ItemsRepeater Width="1000" ItemsSource="{x:Bind ViewModel.Tasks, Mode=OneWay}">
+        <StackPanel Width="1000" Spacing="16">
+        <InfoBar
+            Closed="NoticeBar_Closed"
+            IsOpen="{x:Bind ViewModel.HasNotice, Mode=OneWay}"
+            Message="{x:Bind ViewModel.Notice.Message, Mode=OneWay}"
+            Severity="{x:Bind local:DashboardPage.Severity(ViewModel.Notice), Mode=OneWay}"
+            Title="{x:Bind ViewModel.Notice.Title, Mode=OneWay}" />
+        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Tasks, Mode=OneWay}">
             <ItemsRepeater.ItemTemplate>
                 <DataTemplate x:DataType="vm:CategoryTaskPair">
                     <StackPanel Spacing="16">
@@ -25,11 +32,14 @@
                         <ItemsRepeater ItemsSource="{x:Bind Tasks}">
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="jm:TaskInfo">
+                                    <!--  D43: the task's own description (every card said "Update the anime list…"); the action is "Run now" (E768), and the page says it started  -->
                                     <ctk:SettingsCard
-                                        ActionIcon="{ui:FontIcon Glyph=&#xF5B0;}"
+                                        ActionIcon="{ui:FontIcon Glyph=&#xE768;}"
+                                        ActionIconToolTip="Run now"
+                                        AutomationProperties.Name="{x:Bind local:ScheduledTasksPage.RunName(Name)}"
                                         Command="{Binding ElementName=Page, Path=ViewModel.RunCommand}"
                                         CommandParameter="{x:Bind}"
-                                        Description="Update the anime list to the latest version."
+                                        Description="{x:Bind Description}"
                                         Header="{x:Bind Name}"
                                         IsClickEnabled="True"
                                         IsTapEnabled="True" />
@@ -46,5 +56,6 @@
                 <StackLayout Spacing="16" />
             </ItemsRepeater.Layout>
         </ItemsRepeater>
+        </StackPanel>
     </ScrollView>
 </Page>

@@ -3,14 +3,31 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DevWinUI;
+using FluentFin.Core;
+using FluentFin.Core.Admin;
 using FluentFin.Core.Contracts.Services;
 using Jellyfin.Sdk.Generated.Models;
 
 namespace FluentFin.Dialogs.ViewModels;
 
+/// <remarks>
+/// Nixie 1.2.0 (admin, button review D62): Delete subtitle removed the row and deleted on the server at once; it now asks first
+/// (<see cref="Confirm"/>, a flyout at the button: Cancel has the focus), and the row goes only when the server deleted it.
+/// </remarks>
 public partial class EditSubtitlesViewModel(IJellyfinClient jellyfinClient) : ObservableObject, IHandleClose, IBaseItemDialogViewModel
 {
 	public bool CanClose { get; set; }
+
+	/// <summary>Asks before a destructive action; true only when the user confirmed. Unset (nobody to ask), nothing happens.</summary>
+	public Func<ConfirmPrompt, Task<bool>>? Confirm { get; set; }
+
+	/// <summary>Why the last change did not go through; empty otherwise.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasError))]
+	public partial string Error { get; set; } = "";
+
+	/// <summary>The error bar opens from this bool (no x:Bind function on IsOpen).</summary>
+	public bool HasError => !string.IsNullOrEmpty(Error);
 
 	[ObservableProperty]
 	public partial BaseItemDto? Item { get; set; }
@@ -66,20 +83,50 @@ public partial class EditSubtitlesViewModel(IJellyfinClient jellyfinClient) : Ob
 	}
 
 	[RelayCommand]
-	public async Task DeleteSubtitle(MediaStream info)
+	public async Task DeleteSubtitle(MediaStream? info)
 	{
-		if (Item is null)
+		if (Item is null || info is null || info.IsExternal != true)
 		{
 			return;
 		}
 
-		if (info.IsExternal == false)
+		if (Confirm is not { } confirm || !await confirm(AdminPrompts.DeleteSubtitle(Item.Name, info.DisplayTitle)))
 		{
 			return;
 		}
 
-		Subtitles.Remove(info);
+		// Review fix: the server deletes by stream index and renumbers the streams after a delete, so the rows' indexes go stale
+		// (a second delete removed another file from disk). The subtitle is found again by its file (what identifies an external
+		// one) in the item as the server has it now, and the list is read again afterwards.
+		Error = "";
+		if (Item.Id is not { } id || await jellyfinClient.GetItem(id) is not { } fresh)
+		{
+			Error = "The item couldn't be read from the server, so nothing was deleted. Try again.";
+			return;
+		}
 
-		await jellyfinClient.DeleteSubtitle(Item, info);
+		var current = SubtitlesOf(fresh).FirstOrDefault(x => x.IsExternal == true && SameSubtitle(x, info));
+		if (current is null)
+		{
+			Error = "That subtitle is no longer on the server. The list shows what is there now.";
+		}
+		else if (!await jellyfinClient.DeleteSubtitle(fresh, current))
+		{
+			Error = "The server didn't delete the subtitle. Nothing changed.";
+		}
+
+		if (await jellyfinClient.GetItem(id) is { } after)
+		{
+			Item = after;
+			Subtitles.Clear();
+			Subtitles.AddRange(SubtitlesOf(after));
+		}
 	}
+
+	private static List<MediaStream> SubtitlesOf(BaseItemDto item) => [.. item.MediaStreams?.Where(x => x.Type == MediaStream_Type.Subtitle) ?? []];
+
+	/// <summary>The same external subtitle: its file when the server says it, else its title, language and codec.</summary>
+	private static bool SameSubtitle(MediaStream a, MediaStream b) => !string.IsNullOrEmpty(a.Path) || !string.IsNullOrEmpty(b.Path)
+		? string.Equals(a.Path, b.Path, StringComparison.OrdinalIgnoreCase)
+		: a.DisplayTitle == b.DisplayTitle && a.Language == b.Language && a.Codec == b.Codec;
 }

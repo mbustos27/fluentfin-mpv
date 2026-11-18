@@ -25,6 +25,14 @@ public partial class UserEditorViewModel([FromKeyedServices(NavigationRegions.Us
 	[ObservableProperty]
 	public partial UserSectionEditorViewModel? SelectedSectionViewModel { get; set; }
 
+	/// <summary>Nixie 1.2.0 (admin, D36): how the last Save went; null when there is nothing to say.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasNotice))]
+	public partial ServerNotice? Notice { get; set; }
+
+	/// <summary>The notice bar opens from this bool (x:Bind does not call a function whose argument is null, so a bar opened through one never closed).</summary>
+	public bool HasNotice => Notice is not null;
+
 	public Task OnNavigatedFrom()
 	{
 		return Task.CompletedTask;
@@ -65,7 +73,9 @@ public partial class UserEditorViewModel([FromKeyedServices(NavigationRegions.Us
 			return;
 		}
 
-		await jellyfinClient.UpdatePolicy(User, User.Policy);
+		Notice = await jellyfinClient.UpdatePolicy(User, User.Policy)
+			? new ServerNotice(ServerPowerState.None, "Saved", $"{User.Name}'s settings are saved on the server.", NoticeKind.Success)
+			: new ServerNotice(ServerPowerState.Failed, "Not saved", "The server didn't accept the changes. Try again, or Undo changes.", NoticeKind.Error);
 	}
 
 	[RelayCommand]
@@ -84,6 +94,7 @@ public partial class UserEditorViewModel([FromKeyedServices(NavigationRegions.Us
 		}
 
 		User = user;
+		Notice = null;
 		SelectedSectionViewModel?.OnNavigatedTo(user);
 	}
 }

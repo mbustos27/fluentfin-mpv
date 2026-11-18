@@ -12,30 +12,40 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
-    Title="Play On"
-    CloseButtonText="Close"
+    Title="Play on another device"
+    CloseButtonText="Cancel"
     DefaultButton="Primary"
+    IsPrimaryButtonEnabled="{x:Bind ViewModel.CanPick, Mode=OneWay}"
     PrimaryButtonCommand="{x:Bind ViewModel.PlayOnSessionCommand}"
-    PrimaryButtonCommandParameter="{x:Bind ItemsView.SelectedItem, Mode=OneWay}"
-    PrimaryButtonText="Select"
+    PrimaryButtonText="{x:Bind ViewModel.PickText, Mode=OneWay}"
     Style="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
     mc:Ignorable="d">
 
-    <ListView
-        x:Name="ItemsView"
-        ItemsSource="{x:Bind ViewModel.Sessions, Mode=OneWay}"
-        SelectedItem="{x:Bind ViewModel.SelectedSesion, Mode=TwoWay}"
-        SelectionMode="Single">
-        <ListView.ItemTemplate>
-            <DataTemplate x:DataType="jm:SessionInfoDto">
-                <Border Margin="0,5" Background="{ThemeResource ContentDialogSmokeFill}">
-                    <StackPanel Padding="10" Spacing="5">
-                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="{x:Bind Client}" />
-                        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="{x:Bind UserName}" />
+    <!--  Nixie 1.2.0 (admin, A71 / A72): the primary waits for a pick (it threw with none); an empty list says so  -->
+    <Grid MinWidth="360">
+        <TextBlock
+            Style="{ThemeResource BodyTextBlockStyle}"
+            Text="No other devices are signed in right now."
+            TextWrapping="Wrap"
+            Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}" />
+        <ListView
+            x:Name="ItemsView"
+            AutomationProperties.Name="Devices"
+            ContainerContentChanging="ItemsView_ContainerContentChanging"
+            ItemsSource="{x:Bind ViewModel.Sessions, Mode=OneWay}"
+            SelectedItem="{x:Bind ViewModel.SelectedSesion, Mode=TwoWay}"
+            SelectionMode="Single">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="jm:SessionInfoDto">
+                    <StackPanel Padding="0,8" Spacing="2">
+                        <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind Client}" />
+                        <TextBlock Style="{ThemeResource CaptionTextBlockStyle}">
+                            <Run Text="{x:Bind DeviceName}" /><Run Text=" · " /><Run Text="{x:Bind UserName}" />
+                        </TextBlock>
                     </StackPanel>
-                </Border>
-            </DataTemplate>
-        </ListView.ItemTemplate>
-    </ListView>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
 
 </ContentDialog>

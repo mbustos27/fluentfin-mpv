@@ -61,20 +61,22 @@ public partial class JellyfinClient
 
 	}
 
-	public async Task UpdateMetadata(BaseItemDto dto)
+	public async Task<bool> UpdateMetadata(BaseItemDto dto)
 	{
 		if (dto.Id is not { } id)
 		{
-			return;
+			return false;
 		}
 
 		try
 		{
 			await _jellyfinApiClient.Items[id].PostAsync(dto);
+			return true; // Nixie 1.2.0 (admin): the caller says whether it was saved
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
+			return false;
 		}
 	}
 
@@ -163,26 +165,28 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task DeleteSubtitle(BaseItemDto dto, MediaStream stream)
+	// Nixie 1.2.0 (admin): the deletes say whether the server did it (the dialogs drop the row only then)
+	public async Task<bool> DeleteSubtitle(BaseItemDto dto, MediaStream stream)
 	{
 		if (dto.Id is not { } id)
 		{
-			return;
+			return false;
 		}
 
 		if (stream.Index is null)
 		{
-			return;
+			return false;
 		}
 
 		try
 		{
 			await _jellyfinApiClient.Videos[id].Subtitles[stream.Index.Value].DeleteAsync();
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
 
@@ -298,20 +302,22 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task DeleteImage(BaseItemDto dto, ImageInfo info)
+	public async Task<bool> DeleteImage(BaseItemDto dto, ImageInfo info)
 	{
 		if (dto.Id is not { } id || info.ImageType is not { } type || info.ImageIndex is not { } index)
 		{
-			return;
+			return false;
 		}
 
 		try
 		{
 			await _jellyfinApiClient.Items[id].Images[type.ToString()][index].DeleteAsync();
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
+			return false;
 		}
 	}
 
@@ -390,38 +396,47 @@ public partial class JellyfinClient
 		}
 	}
 
+	// Nixie 1.2.0 (admin, review fix): these calls went with ?ApiKey=<token> in the URL, and a failed one logged that URL. They
+	// send the token in the Authorization header (Signed), and a failure is logged redacted (LogFailure).
+	private IFlurlRequest Signed(Uri uri) => Signed(new Url(uri));
+
+	private IFlurlRequest Signed(Url url) => new FlurlRequest(url).WithHeader("Authorization", $"MediaBrowser Token=\"{_token}\"");
+
+	/// <summary>A failure, logged with any token in its text (the URL, a header) masked.</summary>
+	private void LogFailure(Exception ex, string what) =>
+		logger.LogError("{What} failed: {Error}", what, Mpv.BridgeRedaction.Redact(ex.ToString()));
+
 	public async Task<XbmcMetadata> GetXbmcMetadata()
 	{
 		var response = _jellyfinApiClient.System.Configuration["xbmcmetadata"].ToGetRequestInformation();
-		return await AddApiKey(response.URI).GetJsonAsync<XbmcMetadata>();
+		return await Signed(response.URI).GetJsonAsync<XbmcMetadata>();
 	}
 
 	public async Task SaveXbmcMetadata(XbmcMetadata metadata)
 	{
 		var response = _jellyfinApiClient.System.Configuration["xbmcmetadata"].ToGetRequestInformation();
-		await AddApiKey(response.URI).PostJsonAsync(metadata);
+		await Signed(response.URI).PostJsonAsync(metadata);
 	}
 
 	public async Task<Metadata> GetMetadata()
 	{
 		var response = _jellyfinApiClient.System.Configuration["metadata"].ToGetRequestInformation();
-		return await AddApiKey(response.URI).GetJsonAsync<Metadata>();
+		return await Signed(response.URI).GetJsonAsync<Metadata>();
 	}
 
 	public async Task SaveMetadata(Metadata metadata)
 	{
 		var response = _jellyfinApiClient.System.Configuration["metadata"].ToGetRequestInformation();
-		await AddApiKey(response.URI).PostJsonAsync(metadata);
+		await Signed(response.URI).PostJsonAsync(metadata);
 	}
 
-	public async Task CreateMediaSegment(MediaSegmentDto segmentDto)
+	public async Task<bool> CreateMediaSegment(MediaSegmentDto segmentDto)
 	{
 		try
 		{
-			var response = await BaseUrl
+			await Signed(BaseUrl
 				.AppendPathSegment($"/MediaSegmentsApi/{segmentDto.ItemId:N}")
-				.SetQueryParam("providerId", "Intro Skipper")
-				.SetQueryParam("ApiKey", _token)
+				.SetQueryParam("providerId", "Intro Skipper"))
 				.PostJsonAsync(new
 				{
 					Id = segmentDto.Id?.ToString("N"),
@@ -430,27 +445,26 @@ public partial class JellyfinClient
 					segmentDto.StartTicks,
 					segmentDto.EndTicks,
 				});
+			return true;
 		}
 		catch (Exception ex)
 		{
-			logger.LogError(ex, @"Unhandled exception");
-			return;
+			LogFailure(ex, "Creating a media segment");
+			return false;
 		}
 	}
 
-	public async Task DeleteMediaSegment(Guid segmentId)
+	public async Task<bool> DeleteMediaSegment(Guid segmentId)
 	{
 		try
 		{
-			await BaseUrl
-				.AppendPathSegment($"/MediaSegmentsApi/{segmentId:N}")
-				.SetQueryParam("ApiKey", _token)
-				.DeleteAsync();
+			await Signed(BaseUrl.AppendPathSegment($"/MediaSegmentsApi/{segmentId:N}")).DeleteAsync();
+			return true;
 		}
 		catch (Exception ex)
 		{
-			logger.LogError(ex, @"Unhandled exception");
-			return;
+			LogFailure(ex, "Deleting a media segment");
+			return false;
 		}
 	}
 
@@ -459,11 +473,11 @@ public partial class JellyfinClient
 		try
 		{
 			var builder = _jellyfinApiClient.System.Configuration["encoding"].ToGetRequestInformation();
-			return await AddApiKey(builder.URI).GetJsonAsync<TranscodingSettings>();
+			return await Signed(builder.URI).GetJsonAsync<TranscodingSettings>();
 		}
 		catch (Exception ex)
 		{
-			logger.LogError(ex, @"Unhandled exception");
+			LogFailure(ex, "Reading the transcoding options");
 			return null;
 		}
 	}
@@ -473,11 +487,11 @@ public partial class JellyfinClient
 		try
 		{
 			var builder = _jellyfinApiClient.System.Configuration["encoding"].ToGetRequestInformation();
-			await AddApiKey(builder.URI).PostJsonAsync(options);
+			await Signed(builder.URI).PostJsonAsync(options);
 		}
 		catch (Exception ex)
 		{
-			logger.LogError(ex, @"Unhandled exception");
+			LogFailure(ex, "Saving the transcoding options");
 			return;
 		}
 	}

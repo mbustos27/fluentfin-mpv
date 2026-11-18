@@ -12,7 +12,7 @@
     xmlns:local="using:FluentFin.Dialogs.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
-    Title="Media Info"
+    Title="Media info"
     CloseButtonText="Close"
     DefaultButton="Close"
     IsPrimaryButtonEnabled="False"

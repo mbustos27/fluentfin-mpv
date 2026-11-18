@@ -14,20 +14,20 @@
     xmlns:root="using:FluentFin"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
     x:Name="Page"
-    Title="Edit Metadata"
-    CloseButtonText="Close"
+    Title="Edit metadata"
+    CloseButtonText="Cancel"
     DefaultButton="Primary"
-    IsPrimaryButtonEnabled="True"
-    IsSecondaryButtonEnabled="True"
-    PrimaryButtonCommand="{x:Bind ViewModel.SaveCommand}"
+    IsPrimaryButtonEnabled="{x:Bind ViewModel.CanSave, Mode=OneWay}"
+    IsSecondaryButtonEnabled="{x:Bind ViewModel.HasChanges, Mode=OneWay}"
     PrimaryButtonText="Save"
-    SecondaryButtonCommand="{x:Bind ViewModel.ResetCommand}"
-    SecondaryButtonText="Reset"
+    SecondaryButtonCommand="{x:Bind ViewModel.RevertCommand}"
+    SecondaryButtonText="Revert"
     Style="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
     mc:Ignorable="d">
 
     <ContentDialog.Resources>
-        <c:NullableDoubleToValueOrDefaultConverter x:Key="NullableDoubleConverter" />
+        <!--  an empty number box is NaN, which goes back as no value (it showed 0, and a Save sent 0)  -->
+        <c:NullableDoubleToNaNConverter x:Key="NullableDoubleConverter" />
         <Style x:Key="SectionCardStyle" TargetType="Border">
             <Setter Property="Padding" Value="16" />
             <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
@@ -56,6 +56,18 @@
                     <Setter Property="SpinButtonPlacementMode" Value="Compact" />
                 </Style>
             </StackPanel.Resources>
+
+            <!--  Nixie 1.2.0 (admin): Save is enabled once something changed and sends only the changed fields; Revert puts back the loaded values (D56); a Save the server refused keeps the dialog open and says so  -->
+            <InfoBar
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                Message="{x:Bind ViewModel.Error, Mode=OneWay}"
+                Severity="Error" />
+            <InfoBar
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.TitleIsBlank, Mode=OneWay}"
+                Message="An item needs a title. Type one to save."
+                Severity="Warning" />
 
             <StackPanel>
                 <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="General" />
@@ -121,17 +133,22 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <DatePicker Header="Release date" SelectedDate="{x:Bind ViewModel.ReleaseDate, Mode=TwoWay}" />
+                        <DatePicker
+                            x:Name="ReleaseDatePicker"
+                            Header="Release date"
+                            SelectedDate="{x:Bind ViewModel.ReleaseDate, Mode=TwoWay}" />
                         <NumberBox
                             Grid.Column="1"
                             Header="Year"
                             SmallChange="1"
                             Value="{x:Bind ViewModel.Year, Mode=TwoWay, Converter={StaticResource NullableDoubleConverter}}" />
                         <DatePicker
+                            x:Name="DateAddedPicker"
                             Grid.Row="1"
                             Header="Date added"
                             SelectedDate="{x:Bind ViewModel.DateAdded, Mode=TwoWay}" />
                         <DatePicker
+                            x:Name="EndDatePicker"
                             Grid.Row="1"
                             Grid.Column="1"
                             Header="End date"
@@ -217,13 +234,11 @@
                         VerticalAlignment="Center"
                         Style="{StaticResource BodyStrongTextBlockStyle}"
                         Text="Genres" />
-                    <Button
-                        HorizontalAlignment="Right"
-                        AutomationProperties.Name="Add genre"
-                        ToolTipService.ToolTip="Add genre">
+                    <!--  role: Secondary Compact (D58: the visible label says what it adds)  -->
+                    <Button AutomationProperties.Name="Add genre" HorizontalAlignment="Right">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <SymbolIcon Symbol="Add" />
-                            <TextBlock Text="Add" />
+                            <FontIcon FontSize="16" Glyph="&#xE710;" />
+                            <TextBlock Text="Add genre" />
                         </StackPanel>
                         <Button.Flyout>
                             <Flyout>
@@ -231,12 +246,14 @@
                                     <TextBox
                                         x:Name="AddGenreTextBox"
                                         MinWidth="200"
+                                        AutomationProperties.Name="New genre"
+                                        KeyDown="AddGenreTextBox_KeyDown"
                                         PlaceholderText="Genre" />
+                                    <!--  role: Secondary Compact (D59: no accent; disabled until there is a genre; the box clears after adding)  -->
                                     <Button
-                                        Command="{x:Bind ViewModel.AddGenreCommand}"
-                                        CommandParameter="{x:Bind AddGenreTextBox.Text, Mode=OneWay}"
+                                        Click="AddGenre_Click"
                                         Content="Add"
-                                        Style="{StaticResource AccentButtonStyle}" />
+                                        IsEnabled="{x:Bind local:EditMetadataDialog.HasText(AddGenreTextBox.Text), Mode=OneWay}" />
                                 </StackPanel>
                             </Flyout>
                         </Button.Flyout>
@@ -246,26 +263,27 @@
                     <ItemsControl ItemsSource="{x:Bind ViewModel.Genres, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="x:String">
+                                <!--  D60: a 32 px target (Subtle/icon Compact) named for its genre; chip radius 8  -->
                                 <Border
-                                    Padding="12,2,2,2"
+                                    Padding="12,0,0,0"
                                     Background="{ThemeResource ControlFillColorSecondaryBrush}"
                                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                                     BorderThickness="1"
-                                    CornerRadius="14">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                    CornerRadius="8">
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
                                         <TextBlock VerticalAlignment="Center" Text="{x:Bind}" />
                                         <Button
-                                            Width="24"
-                                            Height="24"
+                                            Width="32"
+                                            Height="32"
                                             Padding="0"
-                                            AutomationProperties.Name="Remove genre"
-                                            ToolTipService.ToolTip="Remove genre"
+                                            AutomationProperties.Name="{x:Bind local:EditMetadataDialog.RemoveGenreName((x:String))}"
+                                            ToolTipService.ToolTip="{x:Bind local:EditMetadataDialog.RemoveGenreName((x:String))}"
                                             Background="Transparent"
                                             BorderThickness="0"
                                             Command="{Binding ElementName=Page, Path=ViewModel.DeleteGenreCommand}"
                                             CommandParameter="{x:Bind}"
-                                            CornerRadius="12">
-                                            <FontIcon FontSize="10" Glyph="&#xE711;" />
+                                            CornerRadius="8">
+                                            <FontIcon FontSize="12" Glyph="&#xE711;" />
                                         </Button>
                                     </StackPanel>
                                 </Border>

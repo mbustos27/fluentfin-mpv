@@ -13,6 +13,6 @@
         Items="{x:Bind ViewModel.Items, Mode=OneWay}"
         ResetCommand="{x:Bind ViewModel.ResetCommand}"
         SaveCommand="{x:Bind ViewModel.SaveCommand}"
-        SectionName="NFO Settings" />
+        SectionName="NFO settings" />
 
 </Page>

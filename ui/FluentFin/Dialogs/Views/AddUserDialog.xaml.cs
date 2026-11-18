@@ -32,9 +32,7 @@ public sealed partial class AddUserDialog : IViewFor<AddUserViewModel>
 			return;
 		}
 
-		if (ListView.SelectedItems is IEnumerable<BaseItemDto> selected)
-		{
-			ViewModel.SelectedItems = selected.ToList();
-		}
+		// Nixie 1.2.0 (admin): SelectedItems is a list of objects, never an IEnumerable<BaseItemDto>: the picked libraries were never kept
+		ViewModel.SelectedItems = [.. ListView.SelectedItems.OfType<BaseItemDto>()];
 	}
 }

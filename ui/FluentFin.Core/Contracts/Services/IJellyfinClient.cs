@@ -42,9 +42,11 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task DeleteItem(BaseItemDto dto);
 
-		Task CreateLibrary(string name, CollectionTypeOptions collectionType, LibraryOptions options);
+		/// <summary>Nixie 1.2.0 (admin): <c>POST /Library/VirtualFolders</c> (the folders in <c>options.PathInfos</c>); false when it failed (logged).</summary>
+		Task<bool> CreateLibrary(string name, CollectionTypeOptions collectionType, LibraryOptions options);
 
-		Task DeleteLibrary(string name);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> DeleteLibrary(string name);
 
 		Task RenameLibrary(string name, string newName);
 
@@ -132,7 +134,8 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task ApplyRemoteResult(BaseItemDto dto, RemoteSearchResult remoteResult);
 
-		Task UpdateMetadata(BaseItemDto dto);
+		/// <summary>Nixie 1.2.0 (admin): <c>POST /Items/{id}</c>, which replaces every field it reads with the one sent. False when it failed (logged).</summary>
+		Task<bool> UpdateMetadata(BaseItemDto dto);
 
 		Uri? GetStreamUrl(BaseItemDto dto);
 
@@ -144,7 +147,8 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<List<ImageInfo>> GetImages(BaseItemDto dto);
 
-		Task DeleteImage(BaseItemDto dto, ImageInfo info);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> DeleteImage(BaseItemDto dto, ImageInfo info);
 
 		Task<List<ImageProviderInfo>> GetImageProviders(BaseItemDto dto);
 
@@ -156,7 +160,8 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task DownloadSubtitle(BaseItemDto dto, RemoteSubtitleInfo info);
 
-		Task DeleteSubtitle(BaseItemDto dto, MediaStream stream);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> DeleteSubtitle(BaseItemDto dto, MediaStream stream);
 
 		Task RefreshMetadata(Guid id, RefreshMetadataInfo info);
 
@@ -166,9 +171,11 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<MediaSegmentDtoQueryResult?> GetMediaSegments(BaseItemDto dto, MediaSegmentType[]? types = null);
 
-		Task CreateMediaSegment(MediaSegmentDto segmentDto);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> CreateMediaSegment(MediaSegmentDto segmentDto);
 
-		Task DeleteMediaSegment(Guid segmentId);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> DeleteMediaSegment(Guid segmentId);
 
 		Task<SystemInfo?> GetSystemInfo();
 
@@ -196,21 +203,30 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<UserDto?> CreateUser(string username, string password);
 
-		Task DeleteUser(UserDto user);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> DeleteUser(UserDto user);
 
-		Task UpdatePolicy(UserDto user, UserPolicy policy);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> UpdatePolicy(UserDto user, UserPolicy policy);
 
-		Task ChangePassword(UserDto user, string currentPassword, string newPassword);
+		/// <summary>Nixie 1.2.0 (admin): false when the server did not take it (logged).</summary>
+		Task<bool> ChangePassword(UserDto user, string currentPassword, string newPassword);
 
-		Task ResetPassword(UserDto user);
+		/// <summary>Nixie 1.2.0 (admin): removes the user's password (<c>ResetPassword</c>: they sign in with none); false when it failed (logged).</summary>
+		Task<bool> ResetPassword(UserDto user);
 
 		Task<List<TaskInfo>> GetScheduledTasks(bool? isEnabled);
 
 		Task RunTask(string? taskId);
 
-		Task Restart();
+		/// <summary>Nixie 1.2.0 (admin): <c>POST /System/Restart</c>; false when the server did not take it (logged).</summary>
+		Task<bool> Restart();
 
-		Task Shutdown();
+		/// <summary>Nixie 1.2.0 (admin): <c>POST /System/Shutdown</c>; false when the server did not take it (logged).</summary>
+		Task<bool> Shutdown();
+
+		/// <summary>Nixie 1.2.0 (admin): scans every library for new and changed files (<c>POST /Library/Refresh</c>, the web dashboard's "Scan all libraries"); false when it failed (logged).</summary>
+		Task<bool> ScanAllLibraries();
 
 		Task<ServerConfiguration?> GetConfiguration();
 
@@ -230,13 +246,16 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<LibraryOptionsResultDto?> GetAvailableInfo(Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType libraryContentType, bool isNewLibrary);
 
-		Task SaveLibraryOptions(Guid folderId, LibraryOptions options);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> SaveLibraryOptions(Guid folderId, LibraryOptions options);
 
 		Task<List<TaskInfo>> GetScheduledTasks();
 
-		Task RunScheduledTask(string id);
+		/// <summary>Nixie 1.2.0 (admin): false when the server did not take it (logged).</summary>
+		Task<bool> RunScheduledTask(string id);
 
-		Task PlayOnSession(string sessionId, params IEnumerable<Guid?> itemIds);
+		/// <summary>Nixie 1.2.0 (admin): false when the server did not take it (logged).</summary>
+		Task<bool> PlayOnSession(string sessionId, params IEnumerable<Guid?> itemIds);
 
 		Task TogglePlayPause(string sessionId);
 

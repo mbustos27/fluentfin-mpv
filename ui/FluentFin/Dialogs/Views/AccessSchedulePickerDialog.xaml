@@ -13,10 +13,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
-    Title="Configure Access Schedule"
-    CloseButtonText="Close"
+    Title="Add access schedule"
+    CloseButtonText="Cancel"
     DefaultButton="Primary"
-    PrimaryButtonText="OK"
+    PrimaryButtonText="Add"
     Style="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
     mc:Ignorable="d">
 
@@ -24,6 +24,7 @@
         <ComboBox
             Margin="{StaticResource LargeLeftRightMargin}"
             HorizontalAlignment="Stretch"
+            Header="Day"
             ItemsSource="{ui:EnumValues Type=jm:AccessSchedule_DayOfWeek}"
             SelectedItem="{x:Bind ViewModel.DayOfWeek, Mode=TwoWay}" />
         <Grid ColumnSpacing="8">
@@ -36,7 +37,7 @@
                 <TextBlock
                     HorizontalAlignment="Center"
                     Style="{ThemeResource BodyStrongTextBlockStyle}"
-                    Text="Start Time" />
+                    Text="Start time" />
                 <dw:Clock SelectedTime="{x:Bind ViewModel.StartTime, Mode=TwoWay}" TimeFormat="HH:mm" />
             </StackPanel>
 
@@ -44,7 +45,7 @@
                 <TextBlock
                     HorizontalAlignment="Center"
                     Style="{ThemeResource BodyStrongTextBlockStyle}"
-                    Text="End Time" />
+                    Text="End time" />
                 <dw:Clock SelectedTime="{x:Bind ViewModel.EndTime, Mode=TwoWay}" TimeFormat="HH:mm" />
             </StackPanel>
         </Grid>
