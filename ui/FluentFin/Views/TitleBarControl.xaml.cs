@@ -1,3 +1,4 @@
+using FluentFin.Controls;
 using FluentFin.Core.ViewModels;
 using FluentFin.Services;
 using FluentFin.ViewModels;
@@ -36,17 +37,22 @@ public sealed partial class TitleBarControl : UserControl
 		Loaded += (_, _) => RegisterAsWindowTitleBar();
 
 		// 1.2.0 (the top bar): narrow windows fold the tabs and search; a hero under the bar gets the scrim
-		SizeChanged += (_, e) =>
+		SizeChanged += (_, _) =>
 		{
-			ApplyWidth(e.NewSize.Width);
+			Relayout();
 			QueuePassthrough();
 		};
+		Tabs.TabsChanged += (_, _) => QueueRelayout();
 		ViewModel.PropertyChanged += (_, e) =>
 		{
 			if (e.PropertyName is nameof(TitleBarViewModel.IsSearchShown))
 			{
 				_searchOpen = false;
-				ShowSearch();
+				QueueRelayout();
+			}
+			else if (e.PropertyName is nameof(TitleBarViewModel.IsAccountShown) or nameof(TitleBarViewModel.IsNavigationShown))
+			{
+				QueueRelayout();
 			}
 			else if (e.PropertyName is nameof(TitleBarViewModel.IsContentUnderBar))
 			{
@@ -55,7 +61,7 @@ public sealed partial class TitleBarControl : UserControl
 			else if (e.PropertyName is nameof(TitleBarViewModel.IsBackButtonShown) or nameof(TitleBarViewModel.IsVisible))
 			{
 				// Back coming or going moves the headers without changing their size
-				QueuePassthrough();
+				QueueRelayout();
 			}
 		};
 		ShowSearch();
@@ -157,23 +163,133 @@ public sealed partial class TitleBarControl : UserControl
 		return null;
 	}
 
-	/// <summary>1.2.0: at and below this width (the window's) the tabs are one menu button and search one icon.</summary>
-	public const double CompactWidth = 1100;
-
-	/// <summary>The search box's width: narrower in a middling window, so the tabs keep their room.</summary>
-	public static double SearchWidthFor(double width) => width >= 1500 ? 360 : 260;
-
 	private bool _compact;
 
 	/// <summary>Narrow windows: the search box was opened from its button (it folds back when left empty).</summary>
 	private bool _searchOpen;
 
-	private void ApplyWidth(double width)
+	private bool _layoutQueued;
+
+	/// <summary>The wordmark's width, kept from when it last showed (it hides in the narrowest windows).</summary>
+	private double _wordmarkWidth;
+
+	private void QueueRelayout()
 	{
-		_compact = width <= CompactWidth;
-		Tabs.IsCompact = _compact;
-		SearchBox.Width = SearchWidthFor(width);
+		if (_layoutQueued)
+		{
+			return;
+		}
+
+		_layoutQueued = true;
+		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+		{
+			_layoutQueued = false;
+			Relayout();
+		});
+	}
+
+	/// <summary>
+	/// Review of 590eaf6: the bar folds when what it holds does not fit (TopBar.Fit), from the widths measured now: Back, the
+	/// wordmark, the tabs laid out in a row, the account, the caption buttons' inset (a fixed 1100 px let a long library name
+	/// push the account under Minimize). The search box takes the room left.
+	/// </summary>
+	private void Relayout()
+	{
+		var width = ActualWidth;
+		if (width <= 0)
+		{
+			return;
+		}
+
+		var scale = XamlRoot?.RasterizationScale ?? 1;
+		double inset;
+		try
+		{
+			inset = App.MainWindow.AppWindow.TitleBar.RightInset / scale;
+		}
+		catch (Exception)
+		{
+			inset = 0;
+		}
+
+		if (inset <= 0)
+		{
+			// not known yet: three caption buttons
+			inset = 3 * 46;
+		}
+
+		// the TitleBar's own room around its headers, as laid out (the sums of the parts ran about 32 px short): where the left
+		// header starts (after Back and the TitleBar's padding), and how far the right header ends from the window's edge
+		var leftStart = 0.0;
+		try
+		{
+			leftStart = LeftHeaderPanel.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).X;
+			if (RightHeaderPanel.ActualWidth > 0)
+			{
+				var rightEnd = RightHeaderPanel.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(RightHeaderPanel.ActualWidth, 0)).X;
+				inset = Math.Max(inset, width - rightEnd);
+			}
+		}
+		catch (Exception)
+		{
+			// not laid out yet: the parts' sum
+		}
+
+		if (Wordmark.Visibility == Visibility.Visible && Wordmark.ActualWidth > 0)
+		{
+			_wordmarkWidth = Wordmark.ActualWidth + Wordmark.Margin.Left + Wordmark.Margin.Right;
+		}
+
+		var navigation = ViewModel.IsNavigationShown;
+		var fit = TopBar.Fit(
+			width,
+			inset + _slack,
+			back: Math.Max(leftStart, ViewModel.IsBackButtonShown ? Math.Max(BackButton()?.ActualWidth ?? 0, 48) : 0),
+			wordmark: _wordmarkWidth > 0 ? _wordmarkWidth : 120,
+			tabs: navigation ? Tabs.FullWidth() : 0,
+			menuButton: navigation ? Tabs.MenuButtonWidth() : 0,
+			account: ViewModel.IsAccountShown ? AccountButton.Width : 0,
+			search: ViewModel.IsSearchShown,
+			searchOpen: _searchOpen);
+
+		_compact = fit.Compact;
+		Tabs.IsCompact = fit.Compact;
+		Tabs.IsMenuHidden = !fit.ShowSections;
+		Tabs.IsMenuLabelHidden = !fit.ShowSectionsLabel;
+		Wordmark.Visibility = fit.ShowWordmark ? Visibility.Visible : Visibility.Collapsed;
+		SearchBox.Width = fit.Compact ? (fit.SearchWidth > 0 ? fit.SearchWidth : TopBar.MaxOpenSearchWidth) : Math.Max(TopBar.MinSearchWidth, fit.SearchWidth);
 		ShowSearch();
+		QueuePassthrough();
+
+		// then the gap really left, once laid out: short of the minimum, keep more room and lay out again (TopBar.Slack)
+		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, CheckGap);
+	}
+
+	/// <summary>Room kept beyond the measured parts (TopBar.Slack).</summary>
+	private double _slack;
+
+	private void CheckGap()
+	{
+		try
+		{
+			if (RightHeaderPanel.ActualWidth <= 0 || LeftHeaderPanel.ActualWidth <= 0)
+			{
+				return;
+			}
+
+			var leftEnd = LeftHeaderPanel.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(LeftHeaderPanel.ActualWidth, 0)).X;
+			var rightStart = RightHeaderPanel.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).X;
+			var slack = TopBar.Slack(_slack, rightStart - leftEnd);
+			if (slack > _slack)
+			{
+				_slack = slack;
+				Relayout();
+			}
+		}
+		catch (Exception)
+		{
+			// not laid out
+		}
 	}
 
 	private void ShowSearch()
@@ -194,7 +310,7 @@ public sealed partial class TitleBarControl : UserControl
 		if (_compact && !_searchOpen)
 		{
 			_searchOpen = true;
-			ShowSearch();
+			Relayout();
 			SearchBox.UpdateLayout();
 		}
 
@@ -223,7 +339,7 @@ public sealed partial class TitleBarControl : UserControl
 			}
 
 			_searchOpen = false;
-			ShowSearch();
+			Relayout();
 		});
 	}
 

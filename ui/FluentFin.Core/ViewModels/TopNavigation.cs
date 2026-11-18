@@ -41,6 +41,9 @@ public sealed record TopTab(string Title, string Key, object? Parameter = null, 
 	};
 
 	public bool HasMenu => Kind == TopTabKind.Libraries && Menu.Count > 0;
+
+	/// <summary>The pin this tab shows (a library pinned to the top bar): its menu offers Unpin. Null for any other tab.</summary>
+	public CustomNavigationViewItem? Pin { get; init; }
 }
 
 /// <summary>1.2.0: the top bar's tabs, and which one a page marks.</summary>
@@ -88,7 +91,7 @@ public static class TopTabs
 			foreach (var pin in sections.Where(IsLibraryPin))
 			{
 				var library = libraries.FirstOrDefault(x => x.Id == pin.Parameter);
-				tabs.Add(library is null ? new TopTab(pin.Name, pin.Key, pin.Parameter, TopTabKind.Library) : Library(library));
+				tabs.Add((library is null ? new TopTab(pin.Name, pin.Key, pin.Parameter, TopTabKind.Library) : Library(library)) with { Pin = pin });
 			}
 
 			tabs.Add(new TopTab("Libraries", LibrariesKey, Kind: TopTabKind.Libraries)
@@ -191,9 +194,18 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 		_sections.Clear();
 		_libraries = [];
 		_shown = null;
-		foreach (var pin in localSettings.ReadSetting<List<CustomNavigationViewItem>>(PinsSetting, []))
+		_marks.Clear();
+		try
 		{
-			_sections.Add(pin);
+			foreach (var pin in localSettings.ReadSetting<List<CustomNavigationViewItem>>(PinsSetting, []) ?? [])
+			{
+				_sections.Add(pin);
+			}
+		}
+		catch (Exception ex)
+		{
+			// a pins setting that cannot be read costs the pins, never the tabs (it threw out of the shell: no Diary, no libraries)
+			logger.LogWarning("Top bar: the pinned libraries could not be read, so none show: {Error}", ex.Message);
 		}
 
 		Rebuild();
@@ -206,11 +218,55 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 		Rebuild();
 	}
 
-	/// <summary>The shell's frame shows this page now (its view model's key and parameter): the tab it marks.</summary>
-	public void OnPageShown(string pageKey, object? parameter)
+	/// <summary>The tab marked when the page at each depth of the frame's history was shown (key and library).</summary>
+	private readonly Dictionary<int, (string Key, Guid? Library)?> _marks = [];
+
+	/// <summary>
+	/// The shell's frame shows this page now (its view model's key and parameter): the tab it marks. With its depth in the
+	/// frame's history, the mark is kept with the page; a page returned to (<paramref name="returning"/>: Back, Forward) gets
+	/// the mark it had (review: Home, an item, the Movies tab, Back left Movies marked on the item).
+	/// </summary>
+	public void OnPageShown(string pageKey, object? parameter, int depth = -1, bool returning = false)
 	{
 		_shown = (pageKey, parameter);
-		SelectedIndex = TopTabs.SelectionFor(Tabs, pageKey, parameter, SelectedIndex);
+		SelectedIndex = returning && depth >= 0 && _marks.TryGetValue(depth, out var mark)
+			? IndexOfMark(mark)
+			: TopTabs.SelectionFor(Tabs, pageKey, parameter, SelectedIndex);
+
+		if (depth < 0)
+		{
+			return;
+		}
+
+		if (!returning)
+		{
+			// a new page drops the marks of the pages the history no longer goes forward to
+			foreach (var deeper in _marks.Keys.Where(d => d > depth).ToList())
+			{
+				_marks.Remove(deeper);
+			}
+		}
+
+		_marks[depth] = SelectedTab is { } tab ? (tab.Key, tab.LibraryId) : null;
+	}
+
+	private int IndexOfMark((string Key, Guid? Library)? mark)
+	{
+		if (mark is not { } m)
+		{
+			return -1;
+		}
+
+		for (var i = 0; i < Tabs.Count; i++)
+		{
+			if (Tabs[i].Key == m.Key && Tabs[i].LibraryId == m.Library)
+			{
+				return i;
+			}
+		}
+
+		// the tab went (a library removed): the page's own, as a new page would
+		return _shown is { } shown ? TopTabs.SelectionFor(Tabs, shown.Key, shown.Parameter, -1) : -1;
 	}
 
 	/// <summary>Opens a tab's page (a tab with a menu opens its menu instead: the view does that).</summary>

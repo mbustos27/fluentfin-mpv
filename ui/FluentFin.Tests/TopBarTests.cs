@@ -54,12 +54,92 @@ public sealed class TopBarTests
 		Assert.Equal(0, TopBar.TopInset(barVisible: false, extendsUnder: false));
 	}
 
-	[Fact]
-	public void TheBar_FoldsAt1100PxAndBelow()
+	// ---- review of 590eaf6: the bar folds when its contents do not fit, not at a fixed 1100 px
+
+	private const double Caption = 138, Back = 48, Wordmark = 120, Account = 32;
+
+	/// <summary>Home, Movies, Television Shows, Documentaries, Anime, Diary at 15 px SemiBold, with padding: the review's case.</summary>
+	private const double LongTabs = 12 + 66 + 76 + 152 + 132 + 72 + 66;
+
+	private const double LongMenu = 46 + 150;
+
+	/// <summary>What the bar takes at a width: every part shown, the drag gap, the caption buttons.</summary>
+	private static double Taken(TopBarFit fit, bool search, bool searchOpen) =>
+		Back + (fit.ShowWordmark ? Wordmark : 0) + (fit.Compact ? (!fit.ShowSections ? 0 : fit.ShowSectionsLabel ? LongMenu : TopBar.MenuGlyphWidth) : LongTabs)
+		+ (!search ? 0 : !fit.Compact ? fit.SearchWidth + TopBar.Spacing : searchOpen ? fit.SearchWidth + TopBar.Spacing : TopBar.SearchIconWidth + TopBar.Spacing)
+		+ Account + TopBar.Spacing + TopBar.MinDragGap + Caption;
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void AtEveryWidth_NothingSlidesUnderTheCaptionButtons_AndTheBarStillDrags(bool searchOpen)
 	{
-		Assert.Equal(1100, TitleBarControl.CompactWidth);
-		Assert.Equal(360, TitleBarControl.SearchWidthFor(1920));
-		Assert.Equal(260, TitleBarControl.SearchWidthFor(1280));
+		// the window's minimum is 500 px
+		for (var width = 500; width <= 2560; width += 10)
+		{
+			var fit = TopBar.Fit(width, Caption, Back, Wordmark, LongTabs, LongMenu, Account, search: true, searchOpen: searchOpen);
+
+			Assert.True(Taken(fit, true, searchOpen) <= width, $"{width} px (search open: {searchOpen}): {Taken(fit, true, searchOpen)} px taken, {fit}");
+		}
+	}
+
+	[Theory]
+	// the review's widths: 1120 with a long library name (the account was under Minimize), 600 and 520 with search open
+	[InlineData(1120, false, true, true, true)]
+	[InlineData(1920, false, false, true, true)]
+	[InlineData(600, true, true, false, false)]
+	[InlineData(520, true, true, false, false)]
+	public void TheReviewsWidths(double width, bool searchOpen, bool compact, bool wordmark, bool sectionsLabel)
+	{
+		var fit = TopBar.Fit(width, Caption, Back, Wordmark, LongTabs, LongMenu, Account, search: true, searchOpen);
+
+		Assert.Equal(compact, fit.Compact);
+		Assert.Equal(wordmark, fit.ShowWordmark);
+		// the sections stay reachable: the menu button with its label, or its glyph alone
+		Assert.True(fit.ShowSections);
+		Assert.Equal(sectionsLabel, fit.ShowSectionsLabel);
+		Assert.True(Taken(fit, true, searchOpen) <= width);
+		if (searchOpen)
+		{
+			Assert.InRange(fit.SearchWidth, TopBar.MinOpenSearchWidth, TopBar.MaxOpenSearchWidth);
+		}
+	}
+
+	[Fact]
+	public void AWideWindow_GivesTheSearchBoxTheRoomLeft()
+	{
+		var wide = TopBar.Fit(2560, Caption, Back, Wordmark, LongTabs, LongMenu, Account, search: true, searchOpen: false);
+		var middle = TopBar.Fit(1300, Caption, Back, Wordmark, LongTabs, LongMenu, Account, search: true, searchOpen: false);
+
+		Assert.Equal(TopBar.MaxSearchWidth, wide.SearchWidth);
+		Assert.False(middle.Compact);
+		Assert.InRange(middle.SearchWidth, TopBar.MinSearchWidth, TopBar.MaxSearchWidth - 1);
+		// short names fit where long ones fold
+		Assert.False(TopBar.Fit(1120, Caption, Back, Wordmark, 12 + 6 * 80, LongMenu, Account, search: true, searchOpen: false).Compact);
+	}
+
+	[Fact]
+	public void AGapMeasuredShort_KeepsMoreRoom_UpToALimit_AndNeverLess()
+	{
+		// live at 520 px, search open: the parts measured 8 px short, the gap left was 40 px
+		Assert.Equal(8, TopBar.Slack(0, 40));
+		Assert.Equal(8, TopBar.Slack(8, 48));
+		Assert.Equal(8, TopBar.Slack(8, 300));
+		Assert.Equal(TopBar.MaxSlack, TopBar.Slack(60, 0));
+		// with it, the bar folds sooner (the reserved room counts as the caption buttons')
+		var tight = TopBar.Fit(520, Caption, Back, Wordmark, LongTabs, LongMenu, Account, search: true, searchOpen: true);
+		var kept = TopBar.Fit(520, Caption + 8, Back, Wordmark, LongTabs, LongMenu, Account, search: true, searchOpen: true);
+		Assert.True(kept.SearchWidth <= tight.SearchWidth - 8 || !kept.ShowSections || kept.SearchWidth == TopBar.MinOpenSearchWidth);
+	}
+
+	[Theory]
+	[InlineData(true, true, 0)]
+	[InlineData(false, true, TopBar.Height)]
+	[InlineData(false, false, 0)]
+	public void APageBeforeSignIn_StartsBelowTheBar_UnlessTheBarIsHidden(bool shell, bool barVisible, double inset)
+	{
+		// review: the self-test player in full screen kept a 48 px band
+		Assert.Equal(inset, MainWindow.RootTopInset(shell, barVisible));
 	}
 
 	[Fact]
@@ -119,6 +199,30 @@ public sealed class TopBarTests
 		var settings = keys[keys.IndexOf("case AppShortcut.OpenSettings:", StringComparison.Ordinal)..];
 		Assert.StartsWith("case AppShortcut.OpenSettings:", settings);
 		Assert.Contains("NavigateTo<SettingsViewModel>()", settings[..settings.IndexOf("case AppShortcut.GoHome", StringComparison.Ordinal)]);
+	}
+
+	[Fact]
+	public void TheShell_RereadsTheLibraries_AndKeepsEachPagesTab_AndAPinnedTabUnpins()
+	{
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var shell = File.ReadAllText(Path.Combine(root, "Views", "ShellPage.xaml.cs"));
+		// review 3: read again when the client drops its list (the server's LibraryChanged: TopNavigationTests, ClientRefusalTests)
+		Assert.Contains("_client.UserViewsChanged += OnUserViewsChanged;", shell);
+		Assert.Contains("Unloaded += (_, _) => _client.UserViewsChanged -= OnUserViewsChanged;", shell);
+		// review 4: the page's place in the history, and whether it is returned to
+		Assert.Contains("_top.OnPageShown(KeyOf(e.SourcePageType), e.Parameter, NavigationFrame.BackStackDepth,", shell);
+		Assert.Contains("returning: e.NavigationMode is Microsoft.UI.Xaml.Navigation.NavigationMode.Back or Microsoft.UI.Xaml.Navigation.NavigationMode.Forward);", shell);
+
+		var strip = File.ReadAllText(Path.Combine(root, "Controls", "TopTabStrip.xaml.cs"));
+		// review 2: a pinned tab's menu (right-click, the menu key) has Unpin
+		Assert.Contains("button.ContextFlyout = UnpinMenu(pin);", strip);
+		Assert.Contains("unpin.Click += (_, _) => _navigation?.RemoveNavigationItem(pin);", strip);
+		// review 6: a second load listens again
+		Assert.Contains("if (_attached && ReferenceEquals(_navigation, navigation))", strip);
+		// and the Libraries page's wording
+		var landing = File.ReadAllText(Path.Combine(root, "Views", "LibrariesLandingPage.xaml"));
+		Assert.Contains("Text=\"Pin to top bar\"", landing);
+		Assert.DoesNotContain("side bar", landing, StringComparison.OrdinalIgnoreCase);
 	}
 
 	[Fact]

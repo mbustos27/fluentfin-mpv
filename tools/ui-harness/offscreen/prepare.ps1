@@ -53,6 +53,8 @@ function Initialize-HarnessSettings([string]$DataDir, [string]$BackendCommand, [
         if ($name -in $HarnessOwnedSettings) { throw "-Setting $($name): the harness sets it (the backend command, the mpv player; servers come from signing in)" }
         $parsed = try { $value | ConvertFrom-Json } catch { $value }
         if ($null -eq $parsed) { $parsed = $value }
+        # a JSON array: a plain array again (Windows PowerShell wrote ConvertFrom-Json's as {"value": [...], "Count": n})
+        if ($parsed -is [array]) { $parsed = [object[]]@($parsed | ForEach-Object { $_ }) }
         $parsedSettings[$name] = $parsed
     }
     $file = Join-Path $DataDir 'LocalSettings.json'

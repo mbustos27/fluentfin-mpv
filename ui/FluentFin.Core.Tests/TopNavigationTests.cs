@@ -176,6 +176,80 @@ public sealed class TopNavigationTests
 	}
 
 	[Fact]
+	public void Back_RestoresTheTabThePageHadWhenItWasShown()
+	{
+		// review: Home, an item, the Movies tab, Back: the item page kept Movies marked
+		var top = Create();
+		var movies = Library("Movies");
+		top.SetLibraries([movies, Library("Shows")]);
+
+		top.OnPageShown(TopTabs.HomeKey, null, depth: 0);
+		top.OnPageShown(Movie, null, depth: 1);
+		Assert.Equal("Home", top.SelectedTab?.Title);
+		top.OnPageShown(TopTabs.LibraryKey, movies, depth: 2);
+		Assert.Equal("Movies", top.SelectedTab?.Title);
+
+		top.OnPageShown(Movie, null, depth: 1, returning: true);
+		Assert.Equal("Home", top.SelectedTab?.Title);
+
+		// Forward again: Movies
+		top.OnPageShown(TopTabs.LibraryKey, movies, depth: 2, returning: true);
+		Assert.Equal("Movies", top.SelectedTab?.Title);
+
+		// a new page from the item drops what was forward of it
+		top.OnPageShown(Movie, null, depth: 1, returning: true);
+		top.OnPageShown(Settings, null, depth: 2);
+		top.OnPageShown(Movie, null, depth: 1, returning: true);
+		Assert.Equal("Home", top.SelectedTab?.Title);
+	}
+
+	[Fact]
+	public void APinnedTab_CarriesItsPin_AndUnpinRemovesIt()
+	{
+		var libraries = Enumerable.Range(1, 6).Select(i => Library($"Library {i}")).ToList();
+		var pin = new CustomNavigationViewItem { Key = TopTabs.LibraryKey, Name = "Library 3", Parameter = libraries[2].Id, Persistent = true };
+		var top = Create([pin]);
+		top.SetLibraries(libraries);
+
+		var pinned = Assert.Single(top.Tabs, t => t.Pin is not null);
+		Assert.Equal("Library 3", pinned.Title);
+		Assert.Null(top.Tabs.Single(t => t.Title == "Home").Pin);
+
+		top.RemoveNavigationItem(pinned.Pin!);
+
+		Assert.DoesNotContain(top.Tabs, t => t.Pin is not null);
+		Assert.Equal(["Home", "Libraries"], top.Tabs.Select(t => t.Title));
+	}
+
+	[Fact]
+	public void AFifthLibrary_AddedAtRuntime_IsInTheLibrariesMenu()
+	{
+		var top = Create();
+		var four = Enumerable.Range(1, 4).Select(i => Library($"Library {i}")).ToList();
+		top.SetLibraries(four);
+		Assert.DoesNotContain(top.Tabs, t => t.Kind == TopTabKind.Libraries);
+
+		top.SetLibraries([.. four, Library("Concerts")]);
+
+		var menu = Assert.Single(top.Tabs, t => t.Kind == TopTabKind.Libraries);
+		Assert.Contains(menu.Menu, t => t.Title == "Concerts");
+	}
+
+	[Fact]
+	public void AnUnreadablePinsSetting_CostsThePins_NotTheTabs()
+	{
+		// seen: a pins setting written in the wrong shape threw out of the shell, which then had no Diary and no libraries
+		_settings.Setup(x => x.ReadSetting(TopNavigation.PinsSetting, It.IsAny<List<CustomNavigationViewItem>>())).Throws(new System.Text.Json.JsonException("not a list"));
+		var top = new TopNavigation(_navigation.Object, _settings.Object, NullLogger<TopNavigation>.Instance);
+
+		top.Reset();
+		top.AddNavigationItem(Diary);
+		top.SetLibraries([Library("Movies")]);
+
+		Assert.Equal(["Home", "Movies", "Diary"], top.Tabs.Select(t => t.Title));
+	}
+
+	[Fact]
 	public void OpeningATab_NavigatesToItsPage()
 	{
 		var top = Create();

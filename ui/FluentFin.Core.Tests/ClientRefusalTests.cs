@@ -32,21 +32,39 @@ public sealed class ClientRefusalTests : IAsyncLifetime
 
 	public Task DisposeAsync()
 	{
+		// first: a client left connected kept reconnecting, and could reach the next test's fake server on the same port
+		_client.StopWebSocket();
 		_server.Dispose();
 		return Task.CompletedTask;
 	}
 
 	[Theory]
-	[InlineData(200, "true", QuickConnectApproval.Approved)]
-	[InlineData(200, "false", QuickConnectApproval.NoSuchCode)]
-	[InlineData(404, "", QuickConnectApproval.NoSuchCode)]
-	[InlineData(403, "", QuickConnectApproval.Disabled)]
-	[InlineData(500, "", QuickConnectApproval.Failed)]
-	public async Task ApprovingAQuickConnectCode_SaysWhyItDidNotWork(int status, string body, QuickConnectApproval expected)
+	[InlineData(200, "true", "true", QuickConnectApproval.Approved)]
+	[InlineData(200, "false", "true", QuickConnectApproval.NoSuchCode)]
+	[InlineData(404, "", "true", QuickConnectApproval.NoSuchCode)]
+	// review: Quick Connect off answers 401 (as the harness's server does), not only 403: the server says whether it is on
+	[InlineData(401, "", "false", QuickConnectApproval.Disabled)]
+	[InlineData(403, "", "false", QuickConnectApproval.Disabled)]
+	[InlineData(401, "", "true", QuickConnectApproval.Failed)]
+	[InlineData(500, "", "true", QuickConnectApproval.Failed)]
+	public async Task ApprovingAQuickConnectCode_SaysWhyItDidNotWork(int status, string body, string enabled, QuickConnectApproval expected)
 	{
 		_server.Respond("/QuickConnect/Authorize", status, body);
+		_server.Respond("/QuickConnect/Enabled", 200, enabled);
 
 		Assert.Equal(expected, await _client.ApproveQuickConnect("123456"));
+	}
+
+	[Fact]
+	public void TheServersLibraryChange_TellsTheTopBarToReadTheLibrariesAgain()
+	{
+		// review: the library tabs were read once per sign-in
+		var told = 0;
+		_client.UserViewsChanged += (_, _) => told++;
+
+		_client.OnLibraryChanged(new Jellyfin.Sdk.Generated.Models.LibraryChangedMessage());
+
+		Assert.Equal(1, told);
 	}
 
 	[Theory]

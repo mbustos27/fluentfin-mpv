@@ -331,6 +331,17 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertEqual(CREDS["username"], auth["User"]["Name"])
 
+    def test_harness_renames_a_library_and_the_views_say_so(self):
+        # the top bar's tabs follow the libraries: a long name, then back (the class shares one server)
+        def names():
+            return [v["Name"] for v in self.get("/UserViews")["Items"]]
+        status, body, _ = self.request("/__harness/libraries", "POST", {"rename": {"Shows": "Television Shows"}})
+        self.assertEqual(200, status)
+        self.assertIn("Television Shows", body["views"])
+        self.assertEqual(["Movies", "Television Shows", "Documentaries", "Anime"], names())
+        self.request("/__harness/libraries", "POST", {"rename": {"Television Shows": "Shows"}})
+        self.assertEqual(["Movies", "Shows", "Documentaries", "Anime"], names())
+
     def test_user_data_endpoint_and_absent_plugin(self):
         movie = self.get("/__harness/fixture")["movie"]["id"]
         data = self.get("/UserItems/%s/UserData" % movie)
@@ -360,6 +371,16 @@ class ServerTests(unittest.TestCase):
         with open(os.path.join(self.srv.out, "summary.json"), encoding="utf-8") as f:
             summary = f.read()
         self.assertNotIn(self.token, summary)
+
+
+class LibraryViewsTests(unittest.TestCase):
+    def test_a_library_added_is_a_fifth_view_once(self):
+        lib = library.Library("server", "user", 600, seed=3)
+        added = lib.add_views(["Concerts", "Concerts"])
+        self.assertEqual(1, len(added))
+        self.assertEqual("Concerts", lib.items[lib.views[-1]]["Name"])
+        self.assertEqual(5, len(lib.views))
+        self.assertEqual(5, len(lib.query({})["Items"]))
 
 
 class MuxTests(unittest.TestCase):

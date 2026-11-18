@@ -116,7 +116,11 @@ public partial class JellyfinClient
 		{
 			_userViews = null;
 		}
+
+		UserViewsChanged?.Invoke(this, EventArgs.Empty);
 	}
+
+	public event EventHandler? UserViewsChanged;
 
 	private async Task<IReadOnlyList<BaseItemDto>?> ReadUserViews()
 	{
@@ -324,6 +328,19 @@ public partial class JellyfinClient
 
 	public async Task<bool> Authenticate(string code) => await ApproveQuickConnect(code) == QuickConnectApproval.Approved;
 
+	/// <summary>Whether Quick Connect is on at the server (GET /QuickConnect/Enabled); null when it did not say.</summary>
+	private async Task<bool?> IsQuickConnectEnabled()
+	{
+		try
+		{
+			return await _jellyfinApiClient.QuickConnect.Enabled.GetAsync();
+		}
+		catch (Exception)
+		{
+			return null;
+		}
+	}
+
 	/// <summary>
 	/// Seaglass 1.1.4 (review): approves another device's Quick Connect code, and how it went: a code the server has no request
 	/// for (404: mistyped, expired), Quick Connect turned off on the server (403: it read as "That code didn't work"), or no
@@ -347,10 +364,12 @@ public partial class JellyfinClient
 			logger.LogInformation("Quick Connect: the server has no request waiting with that code");
 			return QuickConnectApproval.NoSuchCode;
 		}
-		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode == 403)
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode is 401 or 403)
 		{
-			logger.LogInformation("Quick Connect: the server refuses it (turned off there)");
-			return QuickConnectApproval.Disabled;
+			// review: a server with Quick Connect off answers 401 (not only 403): ask it whether Quick Connect is on
+			var enabled = await IsQuickConnectEnabled();
+			logger.LogInformation("Quick Connect: the server refused the code ({Status}); Quick Connect on: {Enabled}", ex.ResponseStatusCode, enabled?.ToString() ?? "unknown");
+			return enabled == true ? QuickConnectApproval.Failed : QuickConnectApproval.Disabled;
 		}
 		catch (Exception ex)
 		{

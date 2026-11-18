@@ -162,7 +162,7 @@ public sealed class AccountMenuXamlTests
 		// review: with the page's parameter, so a results page puts its own query back in the box
 		Assert.Contains("_titleBar.OnPageShown(e.SourcePageType, e.Parameter);", handler);
 		// 1.2.0: the tab the page marks, and where it starts (under the bar for a hero)
-		Assert.Contains("_top.OnPageShown(KeyOf(e.SourcePageType), e.Parameter);", handler);
+		Assert.Contains("_top.OnPageShown(KeyOf(e.SourcePageType), e.Parameter, NavigationFrame.BackStackDepth,", handler);
 		Assert.Contains("UpdateInsets();", handler);
 		// the shell going (Log out, Switch user) shows them again; a shell back in the window looks again
 		Assert.Contains("Unloaded += (_, _) => _titleBar.OnPageShown(null);", shell);

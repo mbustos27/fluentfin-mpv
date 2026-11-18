@@ -39,6 +39,11 @@ public sealed partial class ShellPage : Page
 		_titleBar.PropertyChanged += OnTitleBarChanged;
 		Unloaded += (_, _) => _titleBar.PropertyChanged -= OnTitleBarChanged;
 
+		// review: the library tabs follow the server: read again whenever the client drops its list (a library added, removed
+		// or renamed, here or on the server: LibraryChanged); a fifth library moves them into the Libraries menu
+		_client.UserViewsChanged += OnUserViewsChanged;
+		Unloaded += (_, _) => _client.UserViewsChanged -= OnUserViewsChanged;
+
 		// Seaglass 1.1.4 (UX review, prioritised fix 5): the title bar's Back and Account follow the page this frame shows, by
 		// its type, as soon as the frame shows it (the navigation service's own Navigated waits for the page's view model:
 		// the player's waits for the playback to start). The shell going (Log out, Switch user) shows them again.
@@ -53,11 +58,15 @@ public sealed partial class ShellPage : Page
 	// 1.2.0: the top bar's tabs
 	private readonly TopNavigation _top = App.GetService<TopNavigation>();
 
+	private readonly FluentFin.Core.Contracts.Services.IJellyfinClient _client = App.GetService<FluentFin.Core.Contracts.Services.IJellyfinClient>();
+
+	private void OnUserViewsChanged(object? sender, EventArgs e) => DispatcherQueue.TryEnqueue(() => _ = LoadLibrariesAsync());
+
 	private async Task LoadLibrariesAsync()
 	{
 		try
 		{
-			var libraries = await App.GetService<FluentFin.Core.Contracts.Services.IJellyfinClient>().GetUserViews();
+			var libraries = await _client.GetUserViews();
 			_top.SetLibraries(libraries);
 		}
 		catch (Exception)
@@ -119,7 +128,9 @@ public sealed partial class ShellPage : Page
 	{
 		_titleBar.OnPageShown(e.SourcePageType, e.Parameter);
 		// 1.2.0: the tab this page marks, and where it starts
-		_top.OnPageShown(KeyOf(e.SourcePageType), e.Parameter);
+		// review: with the page's place in the history, so Back gives a page back the tab it had
+		_top.OnPageShown(KeyOf(e.SourcePageType), e.Parameter, NavigationFrame.BackStackDepth,
+			returning: e.NavigationMode is Microsoft.UI.Xaml.Navigation.NavigationMode.Back or Microsoft.UI.Xaml.Navigation.NavigationMode.Forward);
 		UpdateInsets();
 	}
 

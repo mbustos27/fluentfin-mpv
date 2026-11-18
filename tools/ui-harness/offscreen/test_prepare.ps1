@@ -39,6 +39,13 @@ Check 'the user''s old FluentFinMpv folder is refused' (Throws { Resolve-Harness
 Check 'a folder holding it too' (Throws { Resolve-HarnessDataDir $fakeLocal $repo $fakeLocal } '*real FluentFin data folder*')
 Check 'a folder in the repository is refused' (Throws { Resolve-HarnessDataDir (Join-Path $repo 'scratch') $repo $fakeLocal } '*outside the repository*')
 
+# --- Initialize-HarnessSettings: a JSON array value is written as an array ------------------------------------------------
+$case = New-Case 'settings-array'
+[void](Initialize-HarnessSettings $case 'backend-cmd' @('_Items=[{"Name":"Anime","Persistent":true,"Commands":[]}]'))
+$raw = Get-Content (Join-Path $case 'LocalSettings.json') -Raw
+$items = ($raw | ConvertFrom-Json)._Items
+Check 'a JSON array setting is written as an array (not {"value": ..., "Count": ...})' ($raw -notmatch '"Count"' -and $raw -match '"_Items":\s*\[' -and @($items).Count -eq 1 -and @($items)[0].Name -eq 'Anime') ($raw -replace '\s+', ' ')
+
 # --- Initialize-HarnessSettings ----------------------------------------------------------------------------------------
 $case = New-Case 'settings'
 @'

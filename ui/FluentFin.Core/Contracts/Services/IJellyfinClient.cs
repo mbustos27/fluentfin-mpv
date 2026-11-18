@@ -69,6 +69,12 @@ namespace FluentFin.Core.Contracts.Services
 		/// </summary>
 		Task<IReadOnlyList<BaseItemDto>> GetUserViews();
 
+		/// <summary>
+		/// 1.2.0 (review): the views read before are out of date (a library added, removed or renamed here, or the server's
+		/// LibraryChanged or UserUpdated): the top bar reads them again. Raised on any thread.
+		/// </summary>
+		event EventHandler? UserViewsChanged;
+
 		/// <summary>fluentfin-mpv: one library's "Recently added" row (Home asks for every row at once). Null when the request failed (logged).</summary>
 		Task<List<BaseItemDto>?> GetLatestItems(BaseItemDto library);
 

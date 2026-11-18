@@ -40,7 +40,7 @@
                                     Command="{x:Bind root:App.Commands.PinToSideBarCommand}"
                                     CommandParameter="{x:Bind}"
                                     Icon="{ui:FontIcon Glyph=&#xE718;}"
-                                    Text="Pin to side bar" />
+                                    Text="Pin to top bar" />
                             </MenuFlyout>
                         </Grid.ContextFlyout>
                         <Grid.RowDefinitions>

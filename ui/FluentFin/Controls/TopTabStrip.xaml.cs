@@ -42,12 +42,86 @@ public sealed partial class TopTabStrip : UserControl
 	public static readonly DependencyProperty IsCompactProperty =
 		DependencyProperty.Register(nameof(IsCompact), typeof(bool), typeof(TopTabStrip), new PropertyMetadata(false, (d, _) => ((TopTabStrip)d).ShowMode()));
 
+	/// <summary>
+	/// The search box opened in a very narrow window (TopBar.Fit): the sections' menu button steps aside while it is open.
+	/// </summary>
+	public bool IsMenuHidden
+	{
+		get => _menuHidden;
+		set
+		{
+			_menuHidden = value;
+			ShowMode();
+		}
+	}
+
+	private bool _menuHidden;
+
+	/// <summary>The narrowest windows: the sections' menu button shows its glyph only (Narrator still reads the section).</summary>
+	public bool IsMenuLabelHidden
+	{
+		get => CompactLabel.Visibility == Visibility.Collapsed;
+		set => CompactLabel.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+	}
+
+	/// <summary>The tabs changed (the libraries arrived or changed, a pin): the bar measures again.</summary>
+	public event EventHandler? TabsChanged;
+
+	/// <summary>
+	/// The tabs' width laid out in a row, margin included: measured off the tree (so it is known while they are folded), and
+	/// corrected by what the row really took the last time it showed (the estimate ran short in the running app).
+	/// </summary>
+	public double FullWidth()
+	{
+		var estimate = EstimatedWidth();
+		if (!IsCompact && TabsPanel.ActualWidth > 0)
+		{
+			_correction = Math.Max(0, TabsPanel.ActualWidth + Margin.Left + Margin.Right - estimate);
+		}
+
+		return estimate + _correction;
+	}
+
+	private double _correction;
+
+	private double EstimatedWidth()
+	{
+		var tabs = _navigation?.Tabs ?? [];
+		var width = Margin.Left + Margin.Right;
+		foreach (var tab in tabs)
+		{
+			width += Math.Min(200, TextWidth(tab.Title) + 24) + 2;
+		}
+
+		return width;
+	}
+
+	/// <summary>The sections' menu button's width (its glyph, the marked section's name up to 150, its padding), margin included.</summary>
+	public double MenuButtonWidth() => Margin.Left + Margin.Right + 20 + 16 + 10 + Math.Min(150, TextWidth(_navigation?.SelectedTab?.Title ?? "Menu"));
+
+	private readonly Dictionary<string, double> _textWidths = [];
+
+	private double TextWidth(string text)
+	{
+		if (!_textWidths.TryGetValue(text, out var width))
+		{
+			var probe = new TextBlock { Text = text, FontSize = 15, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+			probe.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+			_textWidths[text] = width = Math.Ceiling(probe.DesiredSize.Width);
+		}
+
+		return width;
+	}
+
 	/// <summary>The tab buttons, in order (tests, the harness through UI Automation).</summary>
 	internal IReadOnlyList<TopTabButton> Buttons => _buttons;
 
+	/// <summary>Listening to the tabs (review: a second load, after Unloaded, did not listen again: the tabs stopped following).</summary>
+	private bool _attached;
+
 	private void Attach(TopNavigation navigation)
 	{
-		if (ReferenceEquals(_navigation, navigation) && _buttons.Count > 0)
+		if (_attached && ReferenceEquals(_navigation, navigation))
 		{
 			return;
 		}
@@ -55,15 +129,18 @@ public sealed partial class TopTabStrip : UserControl
 		Detach();
 		_navigation = navigation;
 		_navigation.PropertyChanged += OnNavigationChanged;
+		_attached = true;
 		Build();
 	}
 
 	private void Detach()
 	{
-		if (_navigation is not null)
+		if (_navigation is not null && _attached)
 		{
 			_navigation.PropertyChanged -= OnNavigationChanged;
 		}
+
+		_attached = false;
 	}
 
 	private void OnNavigationChanged(object? sender, PropertyChangedEventArgs e)
@@ -110,6 +187,13 @@ public sealed partial class TopTabStrip : UserControl
 				AutomationProperties.SetHelpText(button, "Opens a menu of the libraries");
 			}
 
+			// review: a pinned library's tab can be unpinned (right-click, or the menu key / Shift+F10)
+			if (tabs[i].Pin is { } pin)
+			{
+				button.ContextFlyout = UnpinMenu(pin);
+				AutomationProperties.SetHelpText(button, "Pinned. Its menu has Unpin");
+			}
+
 			button.Click += OnTabClick;
 			TabsPanel.Children.Add(button);
 			_buttons.Add(button);
@@ -120,6 +204,8 @@ public sealed partial class TopTabStrip : UserControl
 		{
 			(Marked() ?? _buttons.FirstOrDefault())?.Focus(FocusState.Keyboard);
 		}
+
+		TabsChanged?.Invoke(this, EventArgs.Empty);
 	}
 
 	private void Mark()
@@ -132,6 +218,8 @@ public sealed partial class TopTabStrip : UserControl
 
 		CompactLabel.Text = _navigation?.SelectedTab?.Title ?? "Menu";
 		AutomationProperties.SetName(CompactButton, $"Sections, {CompactLabel.Text}");
+		// the menu button's width follows the marked section's name
+		TabsChanged?.Invoke(this, EventArgs.Empty);
 	}
 
 	private TopTabButton? Marked() => _buttons.FirstOrDefault(b => b.IsSelected);
@@ -139,7 +227,7 @@ public sealed partial class TopTabStrip : UserControl
 	private void ShowMode()
 	{
 		TabsPanel.Visibility = IsCompact ? Visibility.Collapsed : Visibility.Visible;
-		CompactButton.Visibility = IsCompact ? Visibility.Visible : Visibility.Collapsed;
+		CompactButton.Visibility = IsCompact && !_menuHidden ? Visibility.Visible : Visibility.Collapsed;
 	}
 
 	private void OnTabClick(object sender, RoutedEventArgs e)
@@ -171,6 +259,16 @@ public sealed partial class TopTabStrip : UserControl
 		}
 
 		_navigation.Open(tab);
+	}
+
+	/// <summary>A pinned tab's menu: Unpin (the tab goes; the library stays in the Libraries menu).</summary>
+	private MenuFlyout UnpinMenu(Core.Settings.CustomNavigationViewItem pin)
+	{
+		var unpin = new MenuFlyoutItem { Text = "Unpin", Icon = new FontIcon { Glyph = "\uE77A" } };
+		unpin.Click += (_, _) => _navigation?.RemoveNavigationItem(pin);
+		var menu = new MenuFlyout();
+		menu.Items.Add(unpin);
+		return menu;
 	}
 
 	private IEnumerable<MenuFlyoutItemBase> MenuItems(TopTab tab)

@@ -1,9 +1,11 @@
 ﻿# 1.2.0 (the top bar, replacing the left rail), live: run with -Script wait:1 -Then offscreen\then-topbar.ps1 (signed in, on
 # Home). Checks: no rail; the tab list (Narrator: a tab list "Sections", tab items "n of m", the marked one selected); one Tab
 # stop and Left/Right between the tabs (the arrows open nothing); a tab opens its page and is marked; Settings from the Account
-# menu and Ctrl+, (no tab, nothing marked); the window's drag region and caption buttons (WM_NCHITTEST); 1100 px: the tabs in
+# menu and Ctrl+, (no tab, nothing marked); the window's drag region and caption buttons (WM_NCHITTEST); 800 px: the tabs in
 # one menu button, search behind an icon; the player page hides the tabs. Shots: Home, a library, an item, Settings and the player at
-# 1920 and 1100 (SEAGLASS_THEME, -Setting Glass, SG_SHOT_TAG as the other -Then scripts). Dot-sourced by drive.ps1: every
+# 1920 and 1100 (SEAGLASS_THEME, -Setting Glass, SG_SHOT_TAG as the other -Then scripts). The review's checks at the end want
+# the fake server's Anime library pinned: -Setting '_Items=[{"Name":"Anime","Key":"FluentFin.Core.ViewModels.LibraryViewModel",
+# "Parameter":"6a3880d4-0b68-37e6-8647-c1edfe4762c4","Persistent":true,"Commands":[]}]'. Dot-sourced by drive.ps1: every
 # variable here starts with $tb so none clashes with the driver's.
 $tbTag = if ($env:SG_SHOT_TAG) { $env:SG_SHOT_TAG } else { 'run' }
 function TbSettle([int]$Ms = 1000) { Start-Sleep -Milliseconds $Ms }
@@ -176,32 +178,33 @@ Check 'top bar: Settings opens from the Account menu, and marks no tab' ([bool]$
 TbShots 'settings'
 Open-Nav 'Home'; [void](Wait-Until { if ((TbMarked) -eq 'Home') { $true } } -Seconds 10); TbSettle 800
 
-# ---- 1100 px: the tabs in one menu button, search behind an icon
-TbSize 1100 900
+# ---- a narrow window (800 px; the bar folds when its parts do not fit, no longer at a fixed 1100): the tabs in one menu
+# button, search behind an icon
+TbSize 800 700
 $tbMenu = Find-Ui -Id 'TopTabsMenu'
-Check 'top bar (1100 px): the tabs fold into one menu button' ([bool]$tbMenu -and (TbItems).Count -eq 0) "menu: $([bool]$tbMenu), tabs shown: $((TbItems).Count)"
+Check 'top bar (800 px): the tabs fold into one menu button' ([bool]$tbMenu -and (TbItems).Count -eq 0) "menu: $([bool]$tbMenu), tabs shown: $((TbItems).Count)"
 $tbIcon = Find-Ui -Name 'Search' -Type 'Button'
-Check 'top bar (1100 px): search is an icon' ([bool]$tbIcon -and -not (Find-Ui -Name 'Search' -Type 'Edit' -Contains))
+Check 'top bar (800 px): search is an icon' ([bool]$tbIcon -and -not (Find-Ui -Name 'Search' -Type 'Edit' -Contains))
 if ($tbMenu) {
     Open-Nav 'Shows'
     $tbShows = Wait-Ui -Name 'Shows' -Type 'Text' -Seconds 10
     TbSettle 1200
-    Check 'top bar (1100 px): the menu opens a section' ([bool]$tbShows)
+    Check 'top bar (800 px): the menu opens a section' ([bool]$tbShows)
     [void](Invoke-Element (Find-Ui -Id 'TopTabsMenu')); TbSettle 800
-    Shot "$tbTag-topbar-menu-1100"
+    Shot "$tbTag-topbar-menu-800"
     Key 0x1B; TbSettle 500
 }
 if ($tbIcon) {
     [void](Invoke-Element $tbIcon); TbSettle 800
     $tbBox = Find-Ui -Name 'Search' -Type 'Edit' -Contains
-    Check 'top bar (1100 px): the icon opens the search box' ([bool]$tbBox)
+    Check 'top bar (800 px): the icon opens the search box' ([bool]$tbBox)
     if ($tbBox) {
         TbSettle 600
         $tbBr = [OffscreenUi]::RectOf($tbBox)
         $tbBoxHit = [SgTabsUia]::HitTest($script:hwnd, $script:ui.Id, [int]($tbBr.X + 20), [int]($tbBr.Y + $tbBr.Height / 2))
-        Check 'top bar (1100 px): the opened box takes clicks (not drag)' ($tbBoxHit -eq 1) "hit: $tbBoxHit"
+        Check 'top bar (800 px): the opened box takes clicks (not drag)' ($tbBoxHit -eq 1) "hit: $tbBoxHit"
     }
-    Shot "$tbTag-topbar-search-1100"
+    Shot "$tbTag-topbar-search-800"
     Key 0x1B; TbSettle 300; Key 0x09; TbSettle 600
 }
 TbSize 1920 1080
@@ -221,3 +224,81 @@ TbShots 'player'
 Step-Leave
 [void](Wait-Until { if ((TbItems).Count -ge 2) { $true } } -Seconds 10)
 Check 'top bar: the tabs come back after the player, the section still marked' ((TbItems).Count -ge 2 -and (TbMarked)) "marked: $(TbMarked)"
+
+# ---- review of 590eaf6
+function TbBack {
+    $b = @(Find-Ui -Name 'Back' -Type 'Button') | Where-Object { ([OffscreenUi]::RectOf($_).Top - (TbWindow).Top) -lt 48 } | Select-Object -First 1
+    if ($b) { [void](Invoke-Element $b) }
+}
+# 4: a page returned to gets the tab it had: Shows, its series, the Movies tab, Back: Shows (Movies stayed marked)
+TbSize 1920 1080
+Open-Library 'Shows'
+Open-Card $fixture.series.name
+[void](Wait-ItemPage $fixture.series.name)
+TbSettle 800
+Open-Nav 'Movies'
+[void](Wait-Until { if ((TbMarked) -eq 'Movies') { $true } } -Seconds 10)
+TbBack
+$tbAfterBack = Wait-ItemPage $fixture.series.name
+TbSettle 800
+Check 'top bar: Back to the series marks Shows again (not the Movies tab left)' ([bool]$tbAfterBack -and (TbMarked) -eq 'Shows') "marked: $(TbMarked)"
+
+# 3 and 1: a library renamed on the server (LibraryChanged): its tab follows; the long name at several widths
+Open-Nav 'Home'; TbSettle 600
+[void](Invoke-Server '/__harness/libraries' 'POST' @{ rename = @{ Shows = 'Television Shows' } })
+$tbRenamed = Wait-Until { if ((TbItems | ForEach-Object Name) -contains 'Television Shows') { $true } } -Seconds 15 -PollMs 250
+Check 'top bar: a library renamed on the server renames its tab' ([bool]$tbRenamed) ((TbItems | ForEach-Object Name) -join ',')
+function TbRight([string]$What) {
+    # the right header's clickable part and the left header's end, and what a click hits there
+    $win = TbWindow
+    $acct = Find-Ui -Name 'Account, ' -Type 'Button' -Contains
+    $box = Find-Ui -Name 'Search' -Type 'Edit' -Contains
+    $icon = Find-Ui -Name 'Search' -Type 'Button'
+    $rights = @()
+    foreach ($n in (TbItems | ForEach-Object Name)) { $t = TbTab $n; if ($t) { $rights += [OffscreenUi]::RectOf($t).Right } }
+    $menu = Find-Ui -Id 'TopTabsMenu'; if ($menu) { $rights += [OffscreenUi]::RectOf($menu).Right }
+    # nothing of the left header shown (search open in the narrowest window): the title bar's Back, else the window's edge
+    $back = @(Find-Ui -Name 'Back' -Type 'Button') | Where-Object { ([OffscreenUi]::RectOf($_).Top - $win.Top) -lt 48 } | Select-Object -First 1
+    if ($back) { $rights += [OffscreenUi]::RectOf($back).Right }
+    $leftEnd = if ($rights.Count) { ($rights | Measure-Object -Maximum).Maximum } else { $win.Left + 8 }
+    $rightStart = @(@($box, $icon, $acct) | Where-Object { $_ } | ForEach-Object { [OffscreenUi]::RectOf($_).Left }) | Measure-Object -Minimum
+    $ar = [OffscreenUi]::RectOf($acct)
+    $acctHit = [SgTabsUia]::HitTest($script:hwnd, $script:ui.Id, [int]($ar.X + $ar.Width / 2), [int]($ar.Y + $ar.Height / 2))
+    $gap = $rightStart.Minimum - $leftEnd
+    $gapHit = [SgTabsUia]::HitTest($script:hwnd, $script:ui.Id, [int](($leftEnd + $rightStart.Minimum) / 2), [int]($win.Top + 24))
+    $boxHit = if ($box) { $r = [OffscreenUi]::RectOf($box); [SgTabsUia]::HitTest($script:hwnd, $script:ui.Id, [int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)) } else { 1 }
+    Check "top bar ($What): the account and search take clicks, and a drag gap of 48 px or more is left" ($acctHit -eq 1 -and $boxHit -eq 1 -and $gap -ge 47 -and $gapHit -eq 2) ("account: {0}, search: {1}, gap: {2:0} px (hit {3}), compact: {4}, sections: {5}" -f $acctHit, $boxHit, $gap, $gapHit, [bool](Find-Ui -Id 'TopTabsMenu'), (@(TbItems).Count + [int][bool](Find-Ui -Id 'TopTabsMenu')))
+}
+foreach ($w in 1920, 1300, 1120) { TbSize $w 900; TbRight "$w px, a long library name" }
+Shot "$tbTag-topbar-long-name-1120"
+foreach ($w in 600, 520) {
+    TbSize $w 800
+    $i = Find-Ui -Name 'Search' -Type 'Button'
+    if ($i) { [void](Invoke-Element $i); TbSettle 900 }
+    TbRight "$w px, search open"
+    Shot "$tbTag-topbar-search-open-$w"
+    Key 0x1B; TbSettle 300
+}
+TbSize 1920 1080
+[void](Invoke-Server '/__harness/libraries' 'POST' @{ rename = @{ 'Television Shows' = 'Shows' } })
+[void](Wait-Until { if ((TbItems | ForEach-Object Name) -contains 'Shows') { $true } } -Seconds 15 -PollMs 250)
+
+# 3: a fifth library added on the server: the libraries move into the Libraries menu, the new one in it
+[void](Invoke-Server '/__harness/libraries' 'POST' @{ add = @('Concerts') })
+$tbFifth = Wait-Until { if ((TbItems | ForEach-Object Name) -contains 'Libraries') { $true } } -Seconds 15 -PollMs 250
+Check 'top bar: a fifth library moves the libraries into one Libraries tab' ([bool]$tbFifth) ((TbItems | ForEach-Object Name) -join ',')
+Open-Nav 'Concerts'
+$tbConcerts = Wait-Ui -Name 'Concerts' -Type 'Text' -Seconds 10
+Check 'top bar: the new library opens from the Libraries menu' ([bool]$tbConcerts -and (TbMarked) -eq 'Libraries') "marked: $(TbMarked)"
+
+# 2: a pinned library (the run is given one: -Setting _Items=[Anime], see the header) is a tab of its own once the libraries
+# are in the menu; its menu (the menu key) has Unpin, which removes the tab
+$tbPinned = Wait-Until { if ((TbItems | ForEach-Object Name) -contains 'Anime') { $true } } -Seconds 10 -PollMs 200
+Check 'top bar: a pinned library is a tab of its own beside the Libraries menu' ([bool]$tbPinned) ((TbItems | ForEach-Object Name) -join ',')
+if ($tbPinned) {
+    [void][OffscreenUi]::SetFocus((TbTab 'Anime')); TbSettle 400; Key 0x5D; TbSettle 800
+    $tbUnpin = Find-Ui -Name 'Unpin' -Type 'MenuItem'
+    if ($tbUnpin) { [void](Invoke-Element $tbUnpin) }
+    $tbGone = Wait-Until { if (-not ((TbItems | ForEach-Object Name) -contains 'Anime')) { $true } } -Seconds 10 -PollMs 200
+    Check 'top bar: the menu key on a pinned tab offers Unpin, which removes the tab' ([bool]$tbUnpin -and [bool]$tbGone) ((TbItems | ForEach-Object Name) -join ',')
+}

@@ -135,6 +135,30 @@ class Library:
                     ["Some doors stay open.", "Nothing stays buried.", "Every road ends somewhere.",
                      "The tide always returns.", "Listen closely.", ""])}
 
+    def rename_views(self, renames):
+        """The harness renames libraries (POST /__harness/libraries): the ids of the views renamed."""
+        changed = []
+        for vid in self.views:
+            new = renames.get(self.items[vid]["Name"])
+            if new:
+                self.items[vid]["Name"] = str(new)
+                changed.append(vid)
+        return changed
+
+    def add_views(self, names):
+        """The harness adds empty libraries of movies (POST /__harness/libraries): their ids."""
+        added = []
+        for name in names:
+            vid = _id("view", name)
+            if vid in self.items:
+                continue
+            self.items[vid] = {"Id": vid, "kind": "view", "Name": name, "collection": "movies", "parent": None,
+                               "view": vid, "created": self.now}
+            self.views.append(vid)
+            self.children[vid] = []
+            added.append(vid)
+        return added
+
     def _build(self):
         rng = self.rng
         start = self.now - datetime.timedelta(days=3 * 365)

@@ -196,10 +196,12 @@
                     Glyph="&#xE700;" />
                 <TextBlock
                     x:Name="CompactLabel"
+                    MaxWidth="150"
                     VerticalAlignment="Center"
                     FontSize="15"
                     FontWeight="SemiBold"
-                    TextLineBounds="Tight" />
+                    TextLineBounds="Tight"
+                    TextTrimming="CharacterEllipsis" />
             </StackPanel>
         </Button>
     </Grid>

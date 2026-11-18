@@ -25,7 +25,8 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   Unknown endpoints answer 404 and are listed there as unhandled.
 - Control (127.0.0.1 only, no auth): GET /__harness/fixture (the showcase items the UI harness navigates to),
   GET /__harness/summary, POST /__harness/latency, POST /__harness/streams, POST /__harness/shutdown,
-  GET /__harness/quickconnect (the codes waiting, never their secrets), POST /__harness/quickconnect/approve.
+  GET /__harness/quickconnect (the codes waiting, never their secrets), POST /__harness/quickconnect/approve,
+  POST /__harness/libraries {"rename": {"old": "new"}, "add": ["name"]} (the views change; clients hear LibraryChanged).
 """
 
 import argparse
@@ -883,6 +884,24 @@ class Server:
                     if not entry or not uid:
                         return self._json(404, {"error": "no such code waiting" if not entry else "no such user"})
                     return self._json(200, {"code": code, "user": outer.users[uid]["name"]})
+                if low == "/__harness/libraries" and method == "POST":
+                    # the libraries change on the server: {"rename": {"Shows": "Television Shows"}, "add": ["Concerts"]};
+                    # every connected client hears LibraryChanged, as from Jellyfin, so it reads its views again
+                    body = self._body()
+                    with outer.lock:
+                        renamed = outer.lib.rename_views(body.get("rename") or {})
+                        added = outer.lib.add_views([str(n) for n in body.get("add") or []])
+                        sockets = list(outer.sockets)
+                    message = {"MessageType": "LibraryChanged", "MessageId": uuid.uuid4().hex,
+                               "Data": {"FoldersAddedTo": [], "FoldersRemovedFrom": [], "ItemsAdded": added,
+                                        "ItemsRemoved": [], "ItemsUpdated": renamed, "CollectionFolders": added + renamed}}
+                    for ws in sockets:
+                        try:
+                            ws.send_json(message)
+                        except (ConnectionError, OSError):
+                            pass
+                    return self._json(200, {"views": [outer.lib.items[v]["Name"] for v in outer.lib.views],
+                                            "told": len(sockets)})
                 return self._json(404, None)
 
             def _quick_dto(self, entry):
