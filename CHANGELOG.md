@@ -20,7 +20,19 @@ the movie and episode pages, Library, the player's controls and the sign-in scre
       the seek bar a lit neon tube), and the top bar shows when the film ends.
     - **Sign-in:** the form on the screen of a drive-in **lot**.
     - **Compact Home** (below) folds the scene into a short strip.
-  - **Cinematic:** THEME-DETAILS-CINEMATIC
+  - **Cinematic:** the artwork first, as in a cinema: dark around the pictures in Light too, with the top
+    bar a **floating glass island**.
+    - **Home:** one title **fills the window** under the island (its art, title, facts and Resume with the time left), a
+      thumbnail pager, and the **Up next** shelf (Continue Watching, then Next Up) over the foot of the art; the
+      libraries' "New in" shelves follow.
+    - **16:9 stills everywhere,** with the title's art on each and a **focus zoom** with a neon rim (no zoom with reduced
+      motion).
+    - **Series, seasons, films and episodes** on one **full-bleed** stage: the series with season tabs and its episodes
+      as a shelf of stills under the actions.
+    - **Library:** the focused title fills a **preview stage** with its own Play; the library's sections (All,
+      Unwatched, Favorites, Recently added) are tabs, with the A–Z jump on the grid's header line.
+    - **The player:** a **tabs panel** drops from the top bar (Info, Episodes, Chapters, Audio and subtitles).
+    - **Sign-in:** a dusk scene drawn around the form: the road, a saguaro and the sky.
   - **Editorial:** a magazine for a big library: big type, a smaller hero and more titles per screen,
     with a sunset rule along the foot of the top bar.
     - **Home** pairs a hero tile ("Tonight": what you watched last, with Resume) with a numbered **Up next** list (in
