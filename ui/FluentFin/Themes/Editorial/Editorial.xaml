@@ -487,6 +487,88 @@
         </Setter>
     </Style>
 
+    <!--  a chip that is a switch (Unwatched, Favourites): the same chip, its on state the picked chip's  -->
+    <Style x:Key="EditorialToggleChipStyle" TargetType="ToggleButton">
+        <Setter Property="Background" Value="{ThemeResource EditorialChipFillBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource EditorialChipStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid>
+                        <Border
+                            x:Name="Backplate"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+                        <Border x:Name="Overlay" Background="Transparent" CornerRadius="{TemplateBinding CornerRadius}" />
+                        <ContentPresenter
+                            x:Name="Label"
+                            Padding="{TemplateBinding Padding}"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            Foreground="{TemplateBinding Foreground}" />
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="Label.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Checked">
+                                    <VisualState.Setters>
+                                        <Setter Target="Backplate.Background" Value="{ThemeResource EditorialChipSelectedFillBrush}" />
+                                        <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieAccentBrush}" />
+                                        <Setter Target="Backplate.BorderThickness" Value="1.5" />
+                                        <Setter Target="Label.Foreground" Value="{ThemeResource EditorialChipSelectedTextBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="CheckedPointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Backplate.Background" Value="{ThemeResource EditorialChipSelectedFillBrush}" />
+                                        <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieAccentBrush}" />
+                                        <Setter Target="Backplate.BorderThickness" Value="1.5" />
+                                        <Setter Target="Label.Foreground" Value="{ThemeResource EditorialChipSelectedTextBrush}" />
+                                        <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="CheckedPressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Backplate.Background" Value="{ThemeResource EditorialChipSelectedFillBrush}" />
+                                        <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieAccentBrush}" />
+                                        <Setter Target="Backplate.BorderThickness" Value="1.5" />
+                                        <Setter Target="Label.Foreground" Value="{ThemeResource EditorialChipSelectedTextBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!--
         the required keys. TopBarStyle: the shared top bar (TopBarChrome), denser than the shared glass (a night tint over
         it), with the sunset rule along its foot: the theme's mark on every page, shared ones too. Over a page whose

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Editorial: the Googie arc, its one ornament: a coral swash that rises gently left to right and ends in a four-point
+    sparkle, under a big heading (the Library's "MOVIES", the sign-in's "NIXIE"). Vector, scales with Width; decoration
+    only (Narrator skips it). High contrast: the window text colour, no glow.
+-->
+<UserControl
+    x:Class="FluentFin.Themes.Editorial.Controls.EditorialArc"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AccessibilityView="Raw"
+    IsHitTestVisible="False"
+    IsTabStop="False">
+    <Viewbox Stretch="Uniform">
+        <Canvas Width="560" Height="40">
+            <!--  the swash: a thin line that thickens toward the middle, then thins into the sparkle  -->
+            <Path
+                Data="M 2,34 C 120,18 300,10 520,15 C 300,14 120,22 2,36 Z"
+                Fill="{ThemeResource EditorialArcBrush}"
+                Opacity="0.9" />
+            <!--  a fainter echo under it, the arc's afterglow  -->
+            <Path
+                Data="M 40,36 C 160,25 320,19 500,21"
+                Opacity="0.35"
+                Stroke="{ThemeResource EditorialArcBrush}"
+                StrokeEndLineCap="Round"
+                StrokeStartLineCap="Round"
+                StrokeThickness="1.2" />
+            <!--  the sparkle: four points with curved sides, at the swash's end  -->
+            <Path
+                Canvas.Left="507"
+                Canvas.Top="2"
+                Data="M 13,0 C 14.2,9 17,11.8 26,13 C 17,14.2 14.2,17 13,26 C 11.8,17 9,14.2 0,13 C 9,11.8 11.8,9 13,0 Z"
+                Fill="{ThemeResource EditorialSparkBrush}" />
+            <Ellipse
+                Canvas.Left="516"
+                Canvas.Top="11"
+                Width="8"
+                Height="8"
+                Fill="{ThemeResource EditorialArcBrush}"
+                Opacity="0.55" />
+        </Canvas>
+    </Viewbox>
+</UserControl>

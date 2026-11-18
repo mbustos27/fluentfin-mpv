@@ -24,6 +24,7 @@ public sealed class EditorialTheme : ILayoutTheme
 		[typeof(HomeViewModel)] = typeof(EditorialHomePage),
 		[typeof(SeriesViewModel)] = typeof(EditorialSeriesPage),
 		[typeof(SeasonViewModel)] = typeof(EditorialSeasonPage),
+		[typeof(LibraryViewModel)] = typeof(EditorialLibraryPage),
 	};
 
 	public Type? ViewFor(Type viewModelType) => Views.TryGetValue(viewModelType, out var view) ? view : null;

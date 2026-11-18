@@ -477,3 +477,88 @@ public sealed class EditorialSeriesTests
 		Assert.Equal("28 Mar 2022 · TV-14 · 52m", EditorialItemTitle.Meta(episode));
 	}
 }
+
+/// <summary>Nixie 1.3.0, the Editorial theme's Library: the grid split by letter, details in place, the keyboard and the words.</summary>
+public sealed class EditorialLibraryTests
+{
+	private static BaseItemViewModel Title(string name, bool played = false, DateTimeOffset? added = null) =>
+		BaseItemViewModel.FromDto(new BaseItemDto { Id = Guid.NewGuid(), Name = name, Type = BaseItemDto_Type.Movie, DateCreated = added, UserData = new UserItemDataDto { Played = played } });
+
+	private static readonly BaseItemViewModel[] Titles =
+	[
+		Title("Alpha"), Title("Blue Mesa"), Title("Bluebird"), Title("Borrowed Light"), Title("Bridge"), Title("Bright"), Title("Cinder"),
+	];
+
+	[Fact]
+	public void ByLetter_EachLetterIsASection_ItsRowsCut()
+	{
+		var lines = EditorialLibrary.Lines(Titles, columns: 3, byLetter: true, opened: null, BaseItemDto_CollectionType.Movies);
+
+		Assert.Equal(
+			["A 1 film", "row 0:1", "B 5 films", "row 1:3", "row 4:2", "C 1 film", "row 6:1"],
+			lines.Select(l => l switch
+			{
+				EditorialSectionLine s => $"{s.Letter} {s.Caption}",
+				EditorialRowLine r => $"row {r.FirstIndex}:{r.Items.Count}",
+				_ => "details",
+			}));
+		Assert.Equal("B, 5 films", ((EditorialSectionLine)lines[2]).AutomationName);
+		Assert.Equal([(2, 7), (3, 7), (4, 7)], ((EditorialRowLine)lines[3]).Cells.Select(c => (c.Position, c.Size)));
+	}
+
+	[Fact]
+	public void TheOpenedTitlesDetails_FollowItsRow()
+	{
+		var lines = EditorialLibrary.Lines(Titles, columns: 3, byLetter: true, opened: Titles[2].Id, BaseItemDto_CollectionType.Movies);
+
+		Assert.IsType<EditorialRowLine>(lines[3]);
+		Assert.Same(Titles[2], Assert.IsType<EditorialDetailsLine>(lines[4]).Item);
+	}
+
+	[Fact]
+	public void NotByLetter_JustRows()
+	{
+		var lines = EditorialLibrary.Lines(Titles, columns: 4, byLetter: false, opened: null, null);
+
+		Assert.All(lines, l => Assert.IsType<EditorialRowLine>(l));
+		Assert.Equal(2, lines.Count);
+	}
+
+	[Fact]
+	public void TheKeys_MoveAlongTheLibrary_AndByColumnAcrossSections()
+	{
+		var lines = EditorialLibrary.Lines(Titles, columns: 3, byLetter: true, opened: Titles[3].Id, BaseItemDto_CollectionType.Movies);
+		int? Move(int from, string key) => EditorialLibrary.Move(lines, from, Titles.Length, key);
+
+		Assert.Equal(3, Move(2, "Right"));      // across a row's end
+		Assert.Null(Move(6, "Right"));          // the library's end
+		Assert.Equal(1, Move(0, "Down"));       // Alpha down to Blue Mesa, over the B heading
+		Assert.Equal(5, Move(3, "Down"));       // Borrowed Light (column 2) down over its open details to Bright, the shorter row's last
+		Assert.Equal(4, Move(1, "Down"));       // Blue Mesa (column 0) down to Bridge
+		Assert.Equal(6, Move(5, "Down"));       // Bright (column 1) to Cinder, the shorter row's last
+		Assert.Equal(4, Move(6, "Up"));         // Cinder (column 0) up to Bridge, over the C heading
+		Assert.Null(Move(0, "Up"));             // out of the grid
+		Assert.Equal((3, 1), EditorialLibrary.Find(lines, 2));
+		Assert.Equal(2, EditorialLibrary.SectionOf(lines, "B"));
+	}
+
+	[Fact]
+	public void TheColumns_TwelveAcrossAt1920()
+	{
+		Assert.Equal(12, EditorialLibrary.Columns(1808));
+		Assert.Equal(7, EditorialLibrary.Columns(1020, 122));
+		Assert.Equal(2, EditorialLibrary.Columns(100));
+	}
+
+	[Fact]
+	public void TheLibrarysWords()
+	{
+		var now = DateTimeOffset.Parse("2026-11-17T20:00:00Z");
+		BaseItemViewModel[] titles = [Title("a", played: true), Title("b", added: now.AddDays(-3)), Title("c")];
+
+		Assert.Equal("3 films · 2 unwatched · 1 added this month", EditorialLibrary.Summary(titles, BaseItemDto_CollectionType.Movies, now));
+		Assert.Equal("1 show", EditorialLibrary.Count(1, BaseItemDto_CollectionType.Tvshows));
+		Assert.Equal("A to Z", EditorialLibrary.SortWords(ItemSortBy.Name, SortOrder.Ascending));
+		Assert.Equal("Z to A", EditorialLibrary.SortWords(ItemSortBy.Name, SortOrder.Descending));
+	}
+}
