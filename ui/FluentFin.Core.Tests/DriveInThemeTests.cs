@@ -156,4 +156,77 @@ public sealed class DriveInThemeTests
 		Assert.Equal("1 hour 1 second", DriveInText.CounterSpoken(new TimeSpan(1, 0, 1)));
 		Assert.Equal("03", DriveInText.EpisodeNumber(3));
 	}
+
+	// ---- the item pages: the marquee board and the SHOWTIMES board ------------------------------------------------------
+
+	private static BaseItemDto Ep(int number, bool played = false, long position = 0, long runMinutes = 50) => new()
+	{
+		Id = Guid.NewGuid(), Name = $"Ep {number}", Type = BaseItemDto_Type.Episode, ParentIndexNumber = 1, IndexNumber = number,
+		RunTimeTicks = runMinutes * TimeSpan.TicksPerMinute,
+		UserData = new UserItemDataDto { Played = played, PlaybackPositionTicks = position },
+	};
+
+	[Fact]
+	public void TheNextShowtime_IsTheOneInProgress_ThenNextUp_ThenTheFirstNotWatched()
+	{
+		var e1 = Ep(1, played: true);
+		var e2 = Ep(2);
+		var e3 = Ep(3, position: 5 * TimeSpan.TicksPerMinute);
+		Assert.Same(e3, DriveInItems.NextEpisode([e1, e2, e3], null));
+		Assert.Same(e2, DriveInItems.NextEpisode([e1, e2, Ep(3)], null));
+		var e4 = Ep(4);
+		Assert.Same(e4, DriveInItems.NextEpisode([e1, e2, e4], e4));
+		Assert.Null(DriveInItems.NextEpisode([e1], null));
+		Assert.Null(DriveInItems.NextEpisode([], null));
+	}
+
+	[Fact]
+	public void TheSeasonSummary_CountsEpisodesTimeAndWatched()
+	{
+		var episodes = new[] { Ep(1, played: true, runMinutes: 49), Ep(2, played: true, runMinutes: 49), Ep(3, runMinutes: 52), Ep(4, runMinutes: 51),
+			Ep(5, runMinutes: 51), Ep(6, runMinutes: 53), Ep(7, runMinutes: 50), Ep(8, runMinutes: 57) };
+		Assert.Equal("8 episodes · 6 h 52 m · 2 watched", DriveInItems.SeasonSummary(episodes));
+		Assert.Equal("1 episode · 50 m", DriveInItems.SeasonSummary([Ep(1)]));
+		Assert.Equal("", DriveInItems.SeasonSummary([]));
+	}
+
+	[Fact]
+	public void ASeasonsTube_IsItsNumber_SpecialsAreExtras()
+	{
+		Assert.Equal("2", DriveInItems.SeasonTube(new BaseItemDto { IndexNumber = 2, Name = "Season 2" }));
+		Assert.Null(DriveInItems.SeasonTube(new BaseItemDto { IndexNumber = 0, Name = "Specials" }));
+		Assert.Equal("Extras", DriveInItems.SeasonLabel(new BaseItemDto { IndexNumber = 0, Name = "Specials" }));
+		Assert.Equal("Bonus", DriveInItems.SeasonLabel(new BaseItemDto { Name = "Bonus" }));
+	}
+
+	[Fact]
+	public void TheBoard_NamesItsCast_AndWhoMadeIt()
+	{
+		var series = new BaseItemDto
+		{
+			Type = BaseItemDto_Type.Series, Name = "The Iron Circus",
+			People =
+			[
+				new BaseItemPerson { Name = "Odile Marchetti", Type = BaseItemPerson_Type.Actor },
+				new BaseItemPerson { Name = "Teo Vance", Type = BaseItemPerson_Type.Actor },
+				new BaseItemPerson { Name = "Ruth Okafor", Type = BaseItemPerson_Type.GuestStar },
+				new BaseItemPerson { Name = "Fourth Actor", Type = BaseItemPerson_Type.Actor },
+				new BaseItemPerson { Name = "Lena Duarte", Type = BaseItemPerson_Type.Creator },
+			],
+		};
+		Assert.Equal("Odile Marchetti, Teo Vance, Ruth Okafor", DriveInItems.Starring(series));
+		Assert.Equal(("Created by", "Lena Duarte"), DriveInItems.MadeBy(series));
+		Assert.Equal(("", ""), DriveInItems.MadeBy(new BaseItemDto { Type = BaseItemDto_Type.Movie }));
+		Assert.Equal("NOW SHOWING", DriveInItems.Kicker(series));
+		Assert.Equal("THE IRON CIRCUS", DriveInItems.Kicker(new BaseItemDto { Type = BaseItemDto_Type.Season, SeriesName = "The Iron Circus" }));
+	}
+
+	[Fact]
+	public void AShowtimesFacts_AreItsRuntimeAndAirDate()
+	{
+		var episode = Ep(3, runMinutes: 52);
+		episode.PremiereDate = new DateTimeOffset(2022, 3, 28, 0, 0, 0, TimeSpan.Zero);
+		Assert.Equal("52 MIN · 28 MAR 2022", DriveInItems.ShowtimeFacts(episode));
+		Assert.Equal("", DriveInItems.ShowtimeFacts(null));
+	}
 }

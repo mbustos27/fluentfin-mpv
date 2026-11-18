@@ -125,14 +125,13 @@
     <!--  ===== the keys every theme defines ===================================================================================  -->
 
     <!--
-        the shared top bar's chrome (TopBarChrome): over a page that starts below it, the shared glass; over Home's sky (a
+        the shared top bar's chrome (TopBarChrome, drawn behind the bar's parts): over a page that starts below it, the shared glass; over Home's sky (a
         page whose art runs under the bar), a translucent maroon bar with its hairline instead of the black scrim: the sky
         shows through it, its text keeps 4.5:1 on the darkest band behind (the concept's "translucent bar over the sky")
     -->
     <Style x:Key="TopBarStyle" TargetType="lc:TopBarChrome">
         <Setter Property="IsTabStop" Value="False" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="lc:TopBarChrome">
@@ -161,11 +160,6 @@
                             BorderThickness="0,0,0,1"
                             IsHitTestVisible="False"
                             Visibility="Collapsed" />
-                        <ContentPresenter
-                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                            Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>

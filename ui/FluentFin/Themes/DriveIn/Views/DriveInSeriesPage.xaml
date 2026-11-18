@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Drive-in: a series. The title and its actions sit on an opaque marquee board over the backdrop (the art shows to its
+    right, the credits on it); under it the SHOWTIMES marquee with the seasons as nixie tubes (lit: the season shown) and a
+    board listing the whole season, two columns on a wide window. Then the details, the cast and More like this, as the
+    shared page has them. Every action and name is the shared series page's (SeriesViewModel): Play names what it starts,
+    the tubes are "Season 2, current season", "Season 1 details" opens the season's page.
+-->
+<Page
+    x:Class="FluentFin.Themes.DriveIn.Views.DriveInSeriesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:controls="using:FluentFin.Controls"
+    xmlns:core="using:FluentFin.Core"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dc="using:FluentFin.Themes.DriveIn.Controls"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:local="using:FluentFin.Themes.DriveIn.Views"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:root="using:FluentFin"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Page"
+    controls:TopBar.ExtendsUnder="True"
+    Background="{ThemeResource DriveInGroundBrush}"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <DataTemplate x:Key="DriveInPoster" x:DataType="vm:BaseItemViewModel">
+            <controls:BaseItemDtoCard
+                Width="200"
+                dc:DriveInRows.Nixie="True"
+                BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 300)}"
+                ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 300)}"
+                Model="{x:Bind}" />
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid>
+        <ScrollViewer x:Name="PageContent">
+            <StackPanel>
+                <!--  the marquee board over the backdrop  -->
+                <dc:ItemStage
+                    x:Name="Stage"
+                    Dto="{x:Bind ViewModel.Dto, Mode=OneWay}"
+                    LeftOf="{x:Bind local:DriveInSeriesPage.NextOf(ViewModel.Episodes, ViewModel.NextUp), Mode=OneWay}">
+                    <dc:ItemStage.PrimaryActions>
+                        <Button
+                            x:Name="PlayButton"
+                            AutomationProperties.Name="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}"
+                            Command="{x:Bind root:App.Commands.PlayDtoCommand}"
+                            CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"
+                            Style="{StaticResource NixiePrimaryButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontSize="16" Glyph="&#xE768;" />
+                                <TextBlock Text="{x:Bind ViewModel.PlayTarget.Label, Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                    </dc:ItemStage.PrimaryActions>
+                </dc:ItemStage>
+
+                <StackPanel x:Name="Body" Padding="96,8,96,56" Spacing="24">
+                    <!--  SHOWTIMES: the marquee, the season tubes, the season's summary and its details link  -->
+                    <StackPanel Spacing="16" Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.HasEpisodeSection), Mode=OneWay, FallbackValue=Collapsed}">
+                        <Grid ColumnSpacing="28">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <dc:MarqueeSign VerticalAlignment="Center" Text="Showtimes" />
+                            <StackPanel
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="14"
+                                Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.SeasonPills.Count), Mode=OneWay}">
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    CharacterSpacing="140"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource DriveInPageTextSecondaryBrush}"
+                                    Text="SEASON" />
+                                <ItemsControl
+                                    x:Name="SeasonTubes"
+                                    AutomationProperties.Name="Seasons"
+                                    IsTabStop="False"
+                                    ItemsSource="{x:Bind ViewModel.SeasonPills, Mode=OneWay}"
+                                    TabFocusNavigation="Once"
+                                    XYFocusKeyboardNavigation="Enabled">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="core:SeasonPill">
+                                            <Button
+                                                Padding="4,4,4,2"
+                                                AutomationProperties.Name="{x:Bind AutomationName}"
+                                                Command="{Binding ElementName=Page, Path=ViewModel.SelectSeasonCommand}"
+                                                CommandParameter="{x:Bind Dto}"
+                                                Style="{StaticResource DriveInEntryButtonStyle}"
+                                                ToolTipService.ToolTip="{x:Bind Name}">
+                                                <dc:SeasonTube Pill="{x:Bind}" />
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" Spacing="6" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                            <TextBlock
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                FontSize="14"
+                                Foreground="{ThemeResource DriveInPageTextSecondaryBrush}"
+                                Text="{x:Bind vm:DriveInItems.SeasonSummary(ViewModel.Episodes), Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <HyperlinkButton
+                                x:Name="SeasonDetailsLink"
+                                Grid.Column="3"
+                                MinHeight="44"
+                                VerticalAlignment="Center"
+                                Command="{x:Bind root:App.Commands.DisplayDtoCommand}"
+                                CommandParameter="{x:Bind ViewModel.SelectedSeason, Mode=OneWay}"
+                                Content="{x:Bind ViewModel.SeasonDetailsText, Mode=OneWay}"
+                                Style="{StaticResource NixieLinkButtonStyle}" />
+                        </Grid>
+
+                        <!--  the board: the whole season, one Tab stop per episode  -->
+                        <dc:LetterBoard
+                            Padding="18,30,18,26"
+                            HasSideBulbs="False"
+                            RequestedTheme="Dark">
+                            <StackPanel>
+                                <dc:ShowtimesList
+                                    x:Name="Showtimes"
+                                    AutomationProperties.Name="Episodes"
+                                    ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}"
+                                    Next="{x:Bind local:DriveInSeriesPage.NextOf(ViewModel.Episodes, ViewModel.NextUp), Mode=OneWay}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="jm:BaseItemDto">
+                                            <dc:Showtime Dto="{x:Bind}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <dc:ShowtimesPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </dc:ShowtimesList>
+                                <StackPanel
+                                    x:Name="EpisodesMessagePanel"
+                                    Margin="16,8"
+                                    Orientation="Horizontal"
+                                    Spacing="16"
+                                    Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.HasEpisodesMessage), Mode=OneWay}">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource DriveInBoardTextSecondaryBrush}"
+                                        Text="{x:Bind ViewModel.EpisodesMessage, Mode=OneWay}"
+                                        TextWrapping="Wrap" />
+                                    <Button
+                                        Command="{x:Bind ViewModel.RetrySeasonCommand}"
+                                        Content="Try again"
+                                        Style="{StaticResource NixieButtonStyle}"
+                                        Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.EpisodesFailed), Mode=OneWay}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </dc:LetterBoard>
+                    </StackPanel>
+
+                    <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
+                    <controls:CastRow Heading="Cast &amp; crew" People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />
+                    <controls:ShelfRow
+                        dc:DriveInRows.Marquee="True"
+                        Header="More like this"
+                        HasSeeAll="True"
+                        ItemTemplate="{StaticResource DriveInPoster}"
+                        ItemsSource="{x:Bind ViewModel.Similar, Mode=OneWay}"
+                        SeeAll="SimilarSeeAll"
+                        Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.Similar.Count), Mode=OneWay, FallbackValue=Collapsed}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <controls:LoadStateView
+            State="{x:Bind ViewModel.State}"
+            VerticalContentAlignment="Center" />
+    </Grid>
+</Page>

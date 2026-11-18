@@ -22,7 +22,12 @@ public sealed class DriveInTheme : ILayoutTheme
 	public static IReadOnlyDictionary<Type, Type> Views { get; } = new Dictionary<Type, Type>
 	{
 		[typeof(HomeViewModel)] = typeof(DriveInHomePage),
+		[typeof(SeriesViewModel)] = typeof(DriveInSeriesPage),
+		[typeof(SeasonViewModel)] = typeof(DriveInSeasonPage),
 	};
 
 	public Type? ViewFor(Type viewModelType) => Views.TryGetValue(viewModelType, out var view) ? view : null;
+
+	/// <summary>Settings &gt; Appearance: Compact Home (<see cref="DriveInOptions"/>).</summary>
+	public object? CreateOptions() => DriveInOptions.Create();
 }

@@ -242,4 +242,44 @@ public sealed class DriveInThemeTests
 		Assert.Null(DriveInImageConverter.Parse("Nothing,1"));
 		Assert.Null(DriveInImageConverter.Parse("Primary"));
 	}
+
+	// ---- the SHOWTIMES board -------------------------------------------------------------------------------------------
+
+	[Fact]
+	public void TheBoard_ReadsDownTheFirstColumn_ThenTheSecond()
+	{
+		Assert.Equal((0, 0), ShowtimesPanel.CellOf(0, 8, 2));
+		Assert.Equal((0, 3), ShowtimesPanel.CellOf(3, 8, 2));
+		Assert.Equal((1, 0), ShowtimesPanel.CellOf(4, 8, 2));
+		Assert.Equal((1, 2), ShowtimesPanel.CellOf(7, 9, 2)); // 9 in two columns: 5 rows
+		Assert.Equal((0, 6), ShowtimesPanel.CellOf(6, 8, 1));
+	}
+
+	[Theory]
+	[InlineData(Windows.System.VirtualKey.Down, 2, 3)]
+	[InlineData(Windows.System.VirtualKey.Down, 3, 4)] // down out of the first column's last row: the next episode
+	[InlineData(Windows.System.VirtualKey.Up, 4, 3)]
+	[InlineData(Windows.System.VirtualKey.Right, 1, 5)]
+	[InlineData(Windows.System.VirtualKey.Left, 6, 2)]
+	[InlineData(Windows.System.VirtualKey.Home, 6, 0)]
+	[InlineData(Windows.System.VirtualKey.End, 1, 7)]
+	public void TheBoardsKeys_MoveAlongTheSeason(Windows.System.VirtualKey key, int from, int to) =>
+		Assert.Equal(to, ShowtimesList.KeyTarget(key, from, 8, 2));
+
+	[Fact]
+	public void TheBoardsKeys_LeaveTheBoardAtItsEnds()
+	{
+		Assert.Null(ShowtimesList.KeyTarget(Windows.System.VirtualKey.Up, 0, 8, 2));
+		Assert.Null(ShowtimesList.KeyTarget(Windows.System.VirtualKey.Down, 7, 8, 2));
+		Assert.Null(ShowtimesList.KeyTarget(Windows.System.VirtualKey.Left, 2, 8, 2));
+		Assert.Null(ShowtimesList.KeyTarget(Windows.System.VirtualKey.Right, 5, 8, 2));
+		Assert.Null(ShowtimesList.KeyTarget(Windows.System.VirtualKey.Right, 1, 8, 1));
+	}
+
+	[Fact]
+	public void ThePagesMargin_IsTheConcepts() 
+	{
+		Assert.Equal(96, ItemStage.MarginFor(1920));
+		Assert.Equal(40, ItemStage.MarginFor(1100));
+	}
 }
