@@ -66,7 +66,8 @@ public sealed class DriveInThemeTests
 			Assert.Contains(key, keys);
 		}
 
-		var shared = new[] { "TopBarStyle", "RowHeaderTemplate", "PosterTemplate", "StillTemplate", "PageHeaderStyle", "SignInBackdropTemplate", "Default", "Light", "HighContrast" };
+		var shared = new[] { "TopBarStyle", "RowHeaderTemplate", "PosterTemplate", "StillTemplate", "PageHeaderStyle", "SignInBackdropTemplate",
+			"ThemeOptionsTemplate", "PlayerTopBarStyle", "PlayerBottomBarStyle", "Default", "Light", "HighContrast" };
 		Assert.All(keys.Except(shared), key => Assert.StartsWith("DriveIn", key));
 	}
 
@@ -139,7 +140,7 @@ public sealed class DriveInThemeTests
 		Assert.Equal(new Windows.Foundation.Rect(96, 84, 1000, 563), lot.Screen);
 		Assert.Equal(444, lot.Board.Width);
 		Assert.Equal(1832, lot.Board.Right);
-		Assert.Equal(440, lot.Board.Height); // four entries
+		Assert.Equal(464, lot.Board.Height); // four entries and the link
 		Assert.InRange(lot.Sun.X, lot.Screen.Right, lot.Board.Left);
 		Assert.True(lot.Ground > lot.Screen.Bottom && lot.SceneHeight > lot.Ground);
 	}
@@ -154,7 +155,7 @@ public sealed class DriveInThemeTests
 		Assert.Equal(640, lot.Screen.Width);
 		Assert.Equal(360, lot.Screen.Height);
 		Assert.Equal(352, lot.Board.Width);
-		Assert.Equal(316, lot.Board.Height); // three entries
+		Assert.Equal(330, lot.Board.Height); // three entries and the link
 		Assert.True(lot.Screen.Right < lot.Board.Left);
 		Assert.True(lot.Board.Right <= 1100);
 	}
@@ -220,6 +221,9 @@ public sealed class DriveInThemeTests
 	{
 		static HashSet<string> Names(XDocument doc) => doc.Descendants()
 			.Select(e => (string?)e.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml"))).OfType<string>().ToHashSet();
+
+		var player = Names(Xaml("Controls", "MpvPlayerControls.xaml"));
+		Assert.All(DriveInPlayer.Parts, part => Assert.Contains(part, player));
 
 		var row = Names(Xaml("Controls", "ShelfRow.xaml"));
 		Assert.All(DriveInRows.RowParts, part => Assert.Contains(part, row));
@@ -291,5 +295,87 @@ public sealed class DriveInThemeTests
 		Assert.False(strip.HasScreen || strip.HasSign);
 		Assert.Empty(strip.Cars);
 		Assert.True(strip.Sun.X > 1920 / 2);
+	}
+
+	[Theory]
+	[InlineData(1920, 1080)]
+	[InlineData(1100, 900)]
+	[InlineData(2560, 1440)]
+	public void TheSignInLot_FramesTheCentredForm_OnItsLegs(double width, double height)
+	{
+		var lot = DriveInLayout.SignIn(width, height);
+		Assert.InRange(lot.Screen.X + lot.Screen.Width / 2 - width / 2, -1, 1);
+		Assert.True(lot.Screen.Height >= 540, "tall enough for the sign-in form");
+		Assert.True(lot.Screen.Bottom <= lot.Ground - 24, "its legs show above the ground");
+		Assert.InRange(lot.Screen.Y + lot.Screen.Height / 2, height / 2 - 60, height / 2 + 1);
+		Assert.All(lot.Cars, row => Assert.True(row.Base - 64 * row.Scale > lot.Screen.Bottom, "the cars park below the screen"));
+	}
+
+	// ---- the gates: one Primary per view, contrast -------------------------------------------------------------------
+
+	[Fact]
+	public void EveryView_HasOnePrimaryAtMost()
+	{
+		var folder = Path.GetDirectoryName(FindUp(Path.Combine("ui", "FluentFin", "Themes", "DriveIn", "DriveIn.xaml")))!;
+		var primaries = new Dictionary<string, int>();
+		foreach (var file in Directory.GetFiles(folder, "*.xaml", SearchOption.AllDirectories))
+		{
+			var text = File.ReadAllText(file);
+			primaries[Path.GetFileName(file)] = text.Split("NixiePrimaryButtonStyle").Length - 1 + (text.Split("NixiePrimaryCompactButtonStyle").Length - 1);
+		}
+
+		// the screen's Resume (Home), each item page's Play (on its board); the sign, the boards and the rows have none
+		Assert.Equal(1, primaries["OutdoorScreen.xaml"]);
+		Assert.Equal(0, primaries["ComingUpSign.xaml"]);
+		Assert.Equal(0, primaries["ItemBoard.xaml"]);
+		Assert.Equal(0, primaries["Showtime.xaml"]);
+		Assert.Equal(0, primaries["DriveInHomePage.xaml"]);
+		Assert.All(primaries.Where(p => p.Key.StartsWith("DriveIn", StringComparison.Ordinal) && p.Key.EndsWith("Page.xaml", StringComparison.Ordinal)),
+			p => Assert.InRange(p.Value, 0, 1));
+	}
+
+	private static double Luminance(Windows.UI.Color c)
+	{
+		static double Channel(byte v) { var x = v / 255.0; return x <= 0.04045 ? x / 12.92 : Math.Pow((x + 0.055) / 1.055, 2.4); }
+		return 0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
+	}
+
+	private static double Contrast(string a, string b)
+	{
+		var (la, lb) = (Luminance(DriveInScene.C(a)), Luminance(DriveInScene.C(b)));
+		return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+	}
+
+	[Theory]
+	[InlineData("#FFF4EE", "#130409", "the boards' text")]
+	[InlineData("#D9C6C8", "#130409", "the boards' second line")]
+	[InlineData("#F7AA9C", "#130409", "NEXT and the watched mark on a board")]
+	[InlineData("#FFC9A8", "#4A1A14", "a lit small tube's digit on the tube's brightest glass")]
+	[InlineData("#B39890", "#4A1A14", "a resting season tube's digit on the tube's brightest glass")]
+	[InlineData("#A88F92", "#2A0814", "a letter tile with no titles")]
+	[InlineData("#FFF4EE", "#2A0814", "a letter tile")]
+	[InlineData("#FFF4EE", "#A51A43", "the Library's count words on the dusk sky's brightest band behind them")]
+	[InlineData("#2D0F16", "#F7B4A8", "the same at noon")]
+	[InlineData("#F8EFF0", "#1A0710", "the rows' titles on the ground")]
+	[InlineData("#2D0F16", "#FBEFEA", "the rows' titles on the noon ground")]
+	[InlineData("#F8EFF0", "#1C0512", "the top bar's text on the sky's top band")]
+	[InlineData("#6A1E32", "#FBEFEA", "a code's letters outside the tubes on the noon ground")]
+	public void ThemeText_KeepsFourAndAHalfToOne(string text, string ground, string where) =>
+		Assert.True(Contrast(text, ground) >= 4.5, $"{where}: {Contrast(text, ground):0.00}:1");
+
+	[Fact]
+	public void TheScreensWords_KeepContrast_OverAWhiteFrame()
+	{
+		// the screen's left scrim at the words (#B3100409 over white) and its bottom one (#C2100409): the worst case is the lighter
+		static string Over(string scrim, double alpha)
+		{
+			var s = DriveInScene.C(scrim);
+			byte Mix(byte v) => (byte)Math.Round(v * alpha + 255 * (1 - alpha));
+			return $"#{Mix(s.R):X2}{Mix(s.G):X2}{Mix(s.B):X2}";
+		}
+
+		var ground = Over("#100409", 0.70);
+		Assert.True(Contrast("#F3E6E7", ground) >= 4.5, $"overview {Contrast("#F3E6E7", ground):0.00}");
+		Assert.True(Contrast("#D9C6C8", ground) >= 4.5, $"meta {Contrast("#D9C6C8", ground):0.00}");
 	}
 }

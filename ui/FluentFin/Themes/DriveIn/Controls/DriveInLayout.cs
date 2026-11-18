@@ -79,12 +79,14 @@ public sealed record DriveInLayout(
 		var arrowHeight = wide ? 74 : 58;
 		var arrow = sign ? new Rect(boardX - (wide ? 24 : 20), screenTop, boardWidth + (wide ? 24 : 20), arrowHeight) : Rect.Empty;
 		var boardTop = arrow.IsEmpty ? 0 : arrow.Bottom + (wide ? 10 : 16);
-		var board = sign ? new Rect(boardX, boardTop, boardWidth, entries * (wide ? 76 : 60) + 136) : Rect.Empty;
+		// the art pass: the concept's 136 left the link "All of Up next" on the last entry; room for it below the entries
+		var board = sign ? new Rect(boardX, boardTop, boardWidth, entries * (wide ? 76 : 60) + (wide ? 160 : 150)) : Rect.Empty;
 
 		var s = screenWidth / 1000;
 		var sunRadius = Math.Round(Math.Clamp(60 + (screenWidth - 640) / 360 * 56, 52, 150));
 		var sunX = sign ? (screen.Right + boardX) / 2 : width - margin - sunRadius * 1.4;
-		var sun = new Point(Math.Round(sunX), groundY - sunRadius - 18);
+		// high enough that four of its five slices clear the hills (the concept's art pass B)
+		var sun = new Point(Math.Round(sunX), Math.Round(groundY - sunRadius * 1.3 - 18));
 
 		var farK = 0.56 * s;
 		var nearK = 0.84 * s;
@@ -121,9 +123,12 @@ public sealed record DriveInLayout(
 		width = Math.Max(320, width);
 		height = Math.Max(320, height);
 		var ground = Math.Round(height * 0.815);
-		var screenWidth = Math.Min(720, width - 80);
-		var screenHeight = Math.Min(540, ground - 190);
-		var screen = new Rect(Math.Round((width - screenWidth) / 2), Math.Round(Math.Max(150, (ground - screenHeight) / 2 - 20)), screenWidth, screenHeight);
+		// the shared sign-in form is centred in the window: the screen frames it, centred too, its legs down to the ground
+		var screenHeight = Math.Round(Math.Clamp(height * 0.5, 560, 720));
+		var screenWidth = Math.Round(Math.Min(screenHeight * 1.32, width - 80));
+		var top = Math.Round((height - screenHeight) / 2);
+		top = Math.Max(40, Math.Min(top, ground - 24 - screenHeight));
+		var screen = new Rect(Math.Round((width - screenWidth) / 2), top, screenWidth, screenHeight);
 		var radius = Math.Round(Math.Clamp(height * 0.14, 70, 170));
 		var sun = new Point(Math.Round(width * 0.81), ground - radius * 0.22);
 		var k = Math.Clamp(height / 1080, 0.6, 1.3);

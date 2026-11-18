@@ -60,19 +60,25 @@ public sealed partial class DriveInHomePage : Page
 			}
 		};
 
-		ViewModel.PropertyChanged += OnViewModelChanged;
-		Watch(null, ViewModel.ContinueItems);
-		Watch(null, ViewModel.NextUpItems);
 		SizeChanged += (_, e) => ApplyLayout(e.NewSize.Width);
 		Loaded += (_, _) =>
 		{
+			// the view model outlives the page (a theme switch makes a new one): listen only while shown
+			ViewModel.PropertyChanged -= OnViewModelChanged;
+			ViewModel.PropertyChanged += OnViewModelChanged;
+			Watch(null, null);
 			// the lot is opaque: nothing of the window's soft artwork shows behind Home
 			AmbientBackdrop.Set(null);
 			ApplyLayout(ActualWidth);
 			Refresh();
 			RestorePlace();
 		};
-		Unloaded += (_, _) => _noticeTimer.Stop();
+		Unloaded += (_, _) =>
+		{
+			_noticeTimer.Stop();
+			ViewModel.PropertyChanged -= OnViewModelChanged;
+			Unwatch();
+		};
 	}
 
 	// ---- the view model's changes ------------------------------------------------------------------------------------------
@@ -100,7 +106,7 @@ public sealed partial class DriveInHomePage : Page
 	private System.Collections.Specialized.INotifyCollectionChanged? _continueWatched;
 	private System.Collections.Specialized.INotifyCollectionChanged? _nextUpWatched;
 
-	private void Watch(object? _, object? __)
+	private void Unwatch()
 	{
 		if (_continueWatched is not null)
 		{
@@ -111,6 +117,14 @@ public sealed partial class DriveInHomePage : Page
 		{
 			_nextUpWatched.CollectionChanged -= OnItemsChanged;
 		}
+
+		_continueWatched = null;
+		_nextUpWatched = null;
+	}
+
+	private void Watch(object? _, object? __)
+	{
+		Unwatch();
 
 		_continueWatched = ViewModel.ContinueItems;
 		_nextUpWatched = ViewModel.NextUpItems;
@@ -123,7 +137,7 @@ public sealed partial class DriveInHomePage : Page
 	/// <summary>The screen's features, the Continue watching row and the sign, from what the view model shows now.</summary>
 	private void Refresh()
 	{
-		if (!ReferenceEquals(_continueWatched, ViewModel.ContinueItems) || !ReferenceEquals(_nextUpWatched, ViewModel.NextUpItems))
+		if (IsLoaded && (!ReferenceEquals(_continueWatched, ViewModel.ContinueItems) || !ReferenceEquals(_nextUpWatched, ViewModel.NextUpItems)))
 		{
 			Watch(null, null);
 		}
@@ -233,7 +247,8 @@ public sealed partial class DriveInHomePage : Page
 			return;
 		}
 
-		var done = _layout?.HasScreen == true ? Screen.FocusPrimary() : ContinueRow.FocusRow();
+		// no screen (Compact Home): the first card of Continue watching, Enter resumes it
+		var done = _layout?.HasScreen == true ? Screen.FocusPrimary() : ContinueRow.FocusItem(_ => true, FocusState.Programmatic);
 		if (done)
 		{
 			_arrivalFocus = false;

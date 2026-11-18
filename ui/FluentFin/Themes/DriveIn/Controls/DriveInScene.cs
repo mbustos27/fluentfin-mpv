@@ -228,13 +228,17 @@ public sealed partial class DriveInScene : Canvas
 
 		// the hills: far rose, the crimson mesa, the near maroon; then the ground
 		var sx = w / 1000;
-		double Y(double v) => g - 110 + v * 1.1;
+		// the hills keep their height on a tall lot and shrink on a short strip (Compact Home, a header), so the sky still reads
+		var hs = Math.Clamp(g / 600, 0.45, 1);
+		double Y(double v) => g - 110 * hs + v * 1.1 * hs;
 		string P(double x, double v) => string.Create(CultureInfo.InvariantCulture, $"{x * sx:0.#},{Y(v):0.#}");
 		var bottom = string.Create(CultureInfo.InvariantCulture, $"L{w:0.#},{h:0.#} L0,{h:0.#} Z");
 		var far = $"M{P(0, 20)} C{P(120, -18)} {P(220, -10)} {P(320, 6)} C{P(420, 22)} {P(520, -28)} {P(640, -14)} C{P(760, 0)} {P(860, 16)} {P(1000, -8)} {bottom}";
 		var mesa = $"M{P(0, 42)} L{P(150, 42)} L{P(172, 14)} L{P(318, 14)} L{P(338, 34)} L{P(520, 34)} C{P(600, 32)} {P(680, 46)} {P(760, 42)} L{P(790, 20)} L{P(920, 20)} L{P(946, 44)} L{P(1000, 44)} {bottom}";
 		var near = $"M{P(0, 70)} C{P(160, 58)} {P(300, 78)} {P(470, 70)} C{P(640, 62)} {P(820, 76)} {P(1000, 68)} {bottom}";
-		Add(new Path { Data = Geo(far), Fill = new SolidColorBrush(light ? C("#F08A98") : C("#E6385F")), Opacity = light ? 0.9 : 0.75 });
+		// the far hills are opaque (the art pass: a translucent hill showed the sun's lower edge through it): the rose blended
+		// into the horizon band once, here
+		Add(new Path { Data = Geo(far), Fill = new SolidColorBrush(light ? C("#F1919C") : C("#EA5771")) });
 		Add(new Path { Data = Geo(mesa), Fill = new SolidColorBrush(light ? C("#D9506E") : C("#BC1E47")) });
 		Add(new Path { Data = Geo(near), Fill = new SolidColorBrush(light ? C("#A8324F") : C("#500723")) });
 
@@ -385,6 +389,9 @@ public sealed partial class DriveInScene : Canvas
 		double X(double v) => x + v * k;
 		double Y(double v) => baseline - 64 * k + v * k;
 		string Pt(double vx, double vy) => string.Create(CultureInfo.InvariantCulture, $"{X(vx):0.##},{Y(vy):0.##}");
+
+		// a contact shadow under the car, so it sits on the lot
+		Add(new Ellipse { Width = 236 * k, Height = 12 * k, Fill = new SolidColorBrush(A(C("#000000"), 0.35)) }, X(-8), Y(60));
 
 		// the speaker post and its speaker
 		Add(new Rectangle { Width = 3 * k, Height = 70 * k, Fill = new SolidColorBrush(body) }, x - 15 * k, baseline - 70 * k);

@@ -70,6 +70,9 @@ public sealed partial class NixieReadout : StackPanel
 	internal static readonly Color Ghost = Color.FromArgb(28, 0xFF, 0xC8, 0xAA);
 	internal static readonly Color Glass = Color.FromArgb(255, 0x14, 0x05, 0x0A);
 
+	/// <summary>The letters and separators outside the tubes at noon, on the pale page: a deep maroon ink (7:1 on the noon ground).</summary>
+	internal static readonly Color Ink = Color.FromArgb(255, 0x6A, 0x1E, 0x32);
+
 	/// <summary>The cell's width and the glyph's height, as shares of the tube's height (measured on the concept's tubes).</summary>
 	public const double CellWidthShare = 0.66, GlyphShare = 0.58;
 
@@ -82,6 +85,7 @@ public sealed partial class NixieReadout : StackPanel
 		IsHitTestVisible = false;
 		VerticalAlignment = VerticalAlignment.Center;
 		Loaded += (_, _) => Rebuild();
+		ActualThemeChanged += (_, _) => Rebuild();
 	}
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new NixieReadoutAutomationPeer(this);
@@ -92,72 +96,101 @@ public sealed partial class NixieReadout : StackPanel
 	public static (double Core, double Glow, double Halo) Strokes(double height) =>
 		height < SmallBelow
 			? (Math.Max(1.25, height * 0.068), Math.Max(1.25, height * 0.068) + 2.2, 0)
-			: (height * 0.062, height * 0.062 * 2.6, height * 0.062 * 5);
+			: (height * 0.07, height * 0.07 * 2.4, height * 0.07 * 3.8);
 
 	/// <summary>The gap between two cells.</summary>
 	public static double Gap(double height) => Math.Round(Math.Max(2, height * 0.11));
 
+	// the cells drawn, by character, and what they were drawn for: a new text redraws only the characters that changed (the
+	// player's counters change a digit a second)
+	private readonly List<(char Char, Grid Cell)> _cells = [];
+	private (double Height, bool Lit, bool HighContrast, bool Light) _drawnFor;
+
 	private void Rebuild()
 	{
-		Children.Clear();
 		var text = Text ?? "";
 		var h = Math.Max(8, DigitHeight);
 		Spacing = Gap(h);
 		var highContrast = IsHighContrast();
-		var glyphHeight = h * GlyphShare;
-		var (core, glow, halo) = Strokes(h);
 		var lit = IsLit;
-
-		foreach (var c in text)
+		// at noon, on the pale page (not on a board or the screen, which stay dark), the letters and separators outside the
+		// tubes are printed in a dark ink: a lit glyph with no tube behind it has no contrast on a pale ground
+		var light = ActualTheme == ElementTheme.Light;
+		var signature = (h, lit, highContrast, light);
+		if (signature != _drawnFor)
 		{
-			if (NixieGlyphs.For(c) is not { } glyph)
-			{
-				continue;
-			}
+			_cells.Clear();
+			_drawnFor = signature;
+		}
 
-			var glyphWidth = glyph.Advance / NixieGlyphs.BoxHeight * glyphHeight;
-			var cellWidth = glyph.InTube ? Math.Round(h * CellWidthShare) : Math.Ceiling(glyphWidth + core);
-			var cell = new Grid { Width = cellWidth, Height = h };
-			AutomationProperties.SetAccessibilityView(cell, AccessibilityView.Raw);
-			var x = (cellWidth - glyphWidth) / 2;
-			var y = (h - glyphHeight) / 2;
+		var shown = text.Where(c => NixieGlyphs.For(c) is not null).ToList();
+		var cells = new List<(char, Grid)>(shown.Count);
+		for (var i = 0; i < shown.Count; i++)
+		{
+			cells.Add(i < _cells.Count && _cells[i].Char == shown[i] ? _cells[i] : (shown[i], Cell(NixieGlyphs.For(shown[i])!, h, lit, highContrast, light)));
+		}
 
-			if (glyph.InTube)
-			{
-				cell.Children.Add(Tube(h, cellWidth, highContrast));
-				if (!highContrast && h >= SmallBelow)
-				{
-					cell.Children.Add(Mesh(cellWidth, h));
-				}
-
-				if (!highContrast && NixieGlyphs.For('8') is { } eight)
-				{
-					var ghostX = (cellWidth - eight.Advance / NixieGlyphs.BoxHeight * glyphHeight) / 2;
-					cell.Children.Add(Wire(NixieGlyphs.Geometry(eight, glyphHeight, ghostX, y), Ghost, core, 1));
-				}
-			}
-
-			if (highContrast)
-			{
-				cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), SystemColor("SystemColorWindowTextColor", Core), core, 1));
-			}
-			else if (!lit)
-			{
-				cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Rest, core, 1));
-			}
-			else
-			{
-				if (halo > 0)
-				{
-					cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Halo, halo, 0.16));
-				}
-
-				cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Glow, glow, h < SmallBelow ? 0.5 : 0.42));
-				cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), h < SmallBelow ? Lit : Core, core, 1));
-			}
-
+		_cells.Clear();
+		_cells.AddRange(cells);
+		Children.Clear();
+		foreach (var (_, cell) in _cells)
+		{
 			Children.Add(cell);
 		}
+	}
+
+	private static Grid Cell(NixieGlyphs.Glyph glyph, double h, bool lit, bool highContrast, bool light)
+	{
+		var glyphHeight = h * GlyphShare;
+		var (core, glow, halo) = Strokes(h);
+		var glyphWidth = glyph.Advance / NixieGlyphs.BoxHeight * glyphHeight;
+		var cellWidth = glyph.InTube ? Math.Round(h * CellWidthShare) : Math.Ceiling(glyphWidth + core);
+		var cell = new Grid { Width = cellWidth, Height = h };
+		AutomationProperties.SetAccessibilityView(cell, AccessibilityView.Raw);
+		var x = (cellWidth - glyphWidth) / 2;
+		var y = (h - glyphHeight) / 2;
+
+		if (glyph.InTube)
+		{
+			cell.Children.Add(Tube(h, cellWidth, highContrast));
+			// the anode's mesh only on the large tubes (the art pass: on the 40 px tubes it read as hatching)
+			if (!highContrast && h >= 48)
+			{
+				cell.Children.Add(Mesh(cellWidth, h));
+			}
+
+			// the unlit cathodes behind: fainter behind a resting digit, which they would muddle (the art pass)
+			if (!highContrast && NixieGlyphs.For('8') is { } eight)
+			{
+				var ghostX = (cellWidth - eight.Advance / NixieGlyphs.BoxHeight * glyphHeight) / 2;
+				cell.Children.Add(Wire(NixieGlyphs.Geometry(eight, glyphHeight, ghostX, y), Ghost, core, lit ? 1 : 0.45));
+			}
+		}
+
+		if (highContrast)
+		{
+			cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), SystemColor("SystemColorWindowTextColor", Core), core, 1));
+		}
+		else if (light && !glyph.InTube)
+		{
+			cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Ink, core, 1));
+		}
+		else if (!lit)
+		{
+			cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Rest, core, 1));
+		}
+		else
+		{
+			if (halo > 0)
+			{
+				cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Halo, halo, 0.12));
+			}
+
+			cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Glow, glow, h < SmallBelow ? 0.5 : 0.42));
+			cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), h < SmallBelow ? Lit : Core, core, 1));
+		}
+
+		return cell;
 	}
 
 	private static Path Wire(Geometry geometry, Color color, double thickness, double opacity) => new()
@@ -221,7 +254,7 @@ public sealed partial class NixieReadout : StackPanel
 			Data = lines,
 			Stroke = new SolidColorBrush(Color.FromArgb(255, 0xFF, 0xBE, 0x96)),
 			StrokeThickness = 0.6,
-			Opacity = 0.09,
+			Opacity = 0.06,
 			Margin = new Thickness(3),
 			Clip = new RectangleGeometry { Rect = new(0, 0, Math.Max(0, w - 6), Math.Max(0, h - 6)) },
 			IsHitTestVisible = false,

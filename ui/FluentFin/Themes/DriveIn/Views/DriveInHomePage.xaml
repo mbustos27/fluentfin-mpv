@@ -33,7 +33,7 @@
         <DataTemplate x:Key="DriveInStill" x:DataType="vm:BaseItemViewModel">
             <lc:BaseItemDtoCard
                 Width="390"
-                Height="240"
+                Height="252"
                 dc:DriveInRows.Nixie="True"
                 BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Thumb, 192)}"
                 ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Thumb, 192)}"
@@ -42,7 +42,7 @@
         <DataTemplate x:Key="DriveInPoster" x:DataType="vm:BaseItemViewModel">
             <lc:BaseItemDtoCard
                 Width="225"
-                Height="385"
+                Height="397"
                 dc:DriveInRows.Nixie="True"
                 BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 302)}"
                 ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 302)}"

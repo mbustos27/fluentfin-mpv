@@ -99,7 +99,8 @@ public sealed partial class ItemStage : Grid
 		var margin = MarginFor(width);
 		var compact = width < 1400;
 		_board.Compact = compact;
-		_board.Width = Math.Min(compact ? width - 2 * margin : 820, width - 2 * margin);
+		// the board takes about three fifths of a narrow window, so the art still shows beside it
+		_board.Width = Math.Min(compact ? Math.Max(560, Math.Round(width * 0.6)) : 820, width - 2 * margin);
 		_board.Margin = new Thickness(margin, compact ? 20 : 40, margin, 28);
 		_creditsPlate.Margin = new Thickness(0, 0, margin, 36);
 		_creditsPlate.Visibility = _credits.Inlines.Count == 0 ? Visibility.Collapsed : width - _board.Width - 2 * margin > 320 ? Visibility.Visible : Visibility.Collapsed;

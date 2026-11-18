@@ -16,10 +16,14 @@
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
             <SolidColorBrush x:Key="DriveInGroundBrush" Color="#1A0710" />
+            <LinearGradientBrush x:Key="DriveInConsoleBrush" StartPoint="0.5,0" EndPoint="0.5,1">
+                <GradientStop Offset="0" Color="#F2180710" />
+                <GradientStop Offset="1" Color="#F70E0306" />
+            </LinearGradientBrush>
             <SolidColorBrush x:Key="DriveInHeaderTextBrush" Color="#FFF4EE" />
             <SolidColorBrush x:Key="DriveInTileBrush" Color="#2A0814" />
             <SolidColorBrush x:Key="DriveInTileEdgeBrush" Color="#33FFFFFF" />
-            <SolidColorBrush x:Key="DriveInTileRestBrush" Color="#C7A9AC" />
+            <SolidColorBrush x:Key="DriveInTileRestBrush" Color="#A88F92" />
             <SolidColorBrush x:Key="DriveInFocusRingBrush" Color="#FFF4EE" />
             <SolidColorBrush x:Key="DriveInFocusGlowBrush" Color="#F96985" />
             <LinearGradientBrush x:Key="DriveInSkyBarBrush" StartPoint="0.5,0" EndPoint="0.5,1">
@@ -58,17 +62,22 @@
         <ResourceDictionary x:Key="Light">
             <!--  noon: the ground under the rows is pale, the page's text dark; the lit objects stay dark  -->
             <SolidColorBrush x:Key="DriveInGroundBrush" Color="#FBEFEA" />
+            <LinearGradientBrush x:Key="DriveInConsoleBrush" StartPoint="0.5,0" EndPoint="0.5,1">
+                <GradientStop Offset="0" Color="#F2180710" />
+                <GradientStop Offset="1" Color="#F70E0306" />
+            </LinearGradientBrush>
             <SolidColorBrush x:Key="DriveInHeaderTextBrush" Color="#2D0F16" />
             <SolidColorBrush x:Key="DriveInTileBrush" Color="#2A0814" />
             <SolidColorBrush x:Key="DriveInTileEdgeBrush" Color="#33FFFFFF" />
-            <SolidColorBrush x:Key="DriveInTileRestBrush" Color="#7A2A3E" />
+            <SolidColorBrush x:Key="DriveInTileRestBrush" Color="#A88F92" />
             <SolidColorBrush x:Key="DriveInFocusRingBrush" Color="#FFF4EE" />
             <SolidColorBrush x:Key="DriveInFocusGlowBrush" Color="#F96985" />
+            <!--  over a hero the bar's text is the dark theme's (TopBarChrome): a dense dusk bar over the noon sky, so it keeps 4.5:1  -->
             <LinearGradientBrush x:Key="DriveInSkyBarBrush" StartPoint="0.5,0" EndPoint="0.5,1">
-                <GradientStop Offset="0" Color="#B8FFF6F3" />
-                <GradientStop Offset="1" Color="#8CFFF6F3" />
+                <GradientStop Offset="0" Color="#D91C0512" />
+                <GradientStop Offset="1" Color="#C21C0512" />
             </LinearGradientBrush>
-            <SolidColorBrush x:Key="DriveInSkyBarStrokeBrush" Color="#1F2D0F16" />
+            <SolidColorBrush x:Key="DriveInSkyBarStrokeBrush" Color="#1FFFFFFF" />
             <SolidColorBrush x:Key="DriveInPageTextBrush" Color="#2D0F16" />
             <SolidColorBrush x:Key="DriveInPageTextSecondaryBrush" Color="#633A41" />
             <LinearGradientBrush x:Key="DriveInScreenFrameBrush" StartPoint="0.5,0" EndPoint="0.5,1">
@@ -99,6 +108,7 @@
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="DriveInGroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="DriveInConsoleBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="DriveInHeaderTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="DriveInTileBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="DriveInTileEdgeBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
@@ -187,7 +197,7 @@
     <DataTemplate x:Key="PosterTemplate">
         <lc:BaseItemDtoCard
             Width="225"
-            Height="385"
+            Height="397"
             dc:DriveInRows.Nixie="True"
             dc:DriveInCards.Image="Primary,302"
             dc:DriveInCards.Item="{Binding}" />
@@ -197,7 +207,7 @@
     <DataTemplate x:Key="StillTemplate">
         <lc:BaseItemDtoCard
             Width="390"
-            Height="240"
+            Height="252"
             dc:DriveInRows.Nixie="True"
             dc:DriveInCards.Image="Thumb,192"
             dc:DriveInCards.Item="{Binding}" />
@@ -218,6 +228,25 @@
     <DataTemplate x:Key="SignInBackdropTemplate">
         <dc:SignInLot />
     </DataTemplate>
+
+    <!--
+        the player's overlay (optional keys, over the shared bars' own styles, during playback too): the bottom bar becomes the
+        nixie console, a dark board with its rim floating over the video (no blur over video: a dense fill), elapsed, remaining
+        and the volume in tubes, the seek bar a neon tube (DriveInPlayer.Console); the top bar keeps its scrim and shows when
+        the film ends in tubes (DriveInPlayer.Clock). Every part and its logic stays the shared player's.
+    -->
+    <Style x:Key="PlayerBottomBarStyle" TargetType="Grid">
+        <Setter Property="Margin" Value="40,0,40,28" />
+        <Setter Property="Padding" Value="26,18,26,14" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{ThemeResource DriveInBoardRimBrush}" />
+        <Setter Property="Background" Value="{ThemeResource DriveInConsoleBrush}" />
+        <Setter Property="dc:DriveInPlayer.Console" Value="True" />
+    </Style>
+    <Style x:Key="PlayerTopBarStyle" TargetType="Grid">
+        <Setter Property="dc:DriveInPlayer.Clock" Value="True" />
+    </Style>
 
     <!--  ===== Drive-in's own =================================================================================================  -->
 

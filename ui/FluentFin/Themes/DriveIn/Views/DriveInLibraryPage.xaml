@@ -100,7 +100,7 @@
                                     <VisualState x:Name="Disabled">
                                         <VisualState.Setters>
                                             <Setter Target="Letter.Foreground" Value="{ThemeResource DriveInTileRestBrush}" />
-                                            <Setter Target="Tile.Background" Value="Transparent" />
+                                            <Setter Target="Tile.BorderBrush" Value="Transparent" />
                                         </VisualState.Setters>
                                     </VisualState>
                                 </VisualStateGroup>
