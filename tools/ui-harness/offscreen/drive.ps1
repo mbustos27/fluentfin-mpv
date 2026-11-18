@@ -332,7 +332,8 @@ function Step-SignIn([bool]$Capture) {
     # let the page's entrance and the backdrop's 600 ms fade finish first (a shot taken at once caught the title at 4.2:1)
     if ($Capture) { Start-Sleep -Milliseconds 1200; Capture-Page 'server' }
     Set-ElementValue $url $script:serverUrl
-    $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Next')
+    # the server page's "Connect" (1.2.0, the button review's S13; "Next" before)
+    $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Connect'); if (-not $next) { $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Next') }
     $nextAt = Get-Epoch
     [void](Invoke-Element $next)
     # the sign-in page: "Use Quick Connect" (1.1.4; "Quick Connect" before)

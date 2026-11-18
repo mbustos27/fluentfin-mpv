@@ -96,20 +96,27 @@ $returned = Jf-Info
 Check 'return: Back to the library puts the focus on the card that was opened' ($returned -and $left -and $returned.Name -eq $left.Name -and $returned.Pos -eq $left.Pos) ("left {0}; back on {1}" -f (Jf-Describe $left), (Jf-Describe $returned))
 Shot 'library-return-1-focused'
 
-# --- the direction: one click on its own button (the Sort menu holds the keys only)
-$orderBtn = Find-Ui -Name 'Ascending, switch to descending' -Type 'Button'
-Check 'library bar: the direction is its own button ("Ascending, switch to descending")' ([bool]$orderBtn)
+# --- the direction: Ascending / Descending, a second group in the Sort menu (1.2.0, the button review's L24; it was a round
+# button beside Sort)
+function Jf-SortMenu([string]$Order) {
+    $sb = Find-Ui -Name 'Sort: ' -Type 'Button' -Contains
+    if (-not $sb) { return $false }
+    [void](Invoke-Element $sb); Start-Sleep -Milliseconds 700
+    $mi = Wait-Ui -Name $Order -Type 'MenuItem' -Seconds 4
+    if ($mi) { [void](Invoke-Element $mi) } else { Key 0x1B }
+    Start-Sleep -Milliseconds 1200
+    [bool]$mi
+}
+$orderBtn = Jf-SortMenu 'Descending'
+Check 'library bar: the direction is in the Sort menu ("Descending")' $orderBtn
 if ($orderBtn) {
-    [void](Invoke-Element $orderBtn); Start-Sleep -Milliseconds 1200
     $sortBtn = Find-Ui -Name 'Sort: ' -Type 'Button' -Contains
-    Check 'library bar: one click: the Sort button says descending ("Sort: Name, descending")' ($sortBtn -and $sortBtn.Current.Name -eq 'Sort: Name, descending') $(if ($sortBtn) { $sortBtn.Current.Name })
-    Check 'library bar: ... and the direction button says what the next click does' ([bool](Find-Ui -Name 'Descending, switch to ascending' -Type 'Button'))
+    Check 'library bar: the Sort button says descending ("Sort: Name, descending")' ($sortBtn -and $sortBtn.Current.Name -eq 'Sort: Name, descending') $(if ($sortBtn) { $sortBtn.Current.Name })
     $firstLetter = Find-Ui -Name 'Jump to a letter' -Type 'List'
     $firstBtn = if ($firstLetter) { @($firstLetter.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btnCond))[0] }
     Check 'a-z: ... and the letters run the other way (the first is not the ascending first)' ($firstBtn -and $firstBtn.Current.Name -ne $letterNames[0]) $(if ($firstBtn) { $firstBtn.Current.Name })
     Shot 'library-az-3-descending'
-    $orderBtn = Find-Ui -Name 'Descending, switch to ascending' -Type 'Button'
-    if ($orderBtn) { [void](Invoke-Element $orderBtn); Start-Sleep -Milliseconds 800 }
+    [void](Jf-SortMenu 'Ascending')
 }
 
 # --- the Filter menu: lists of check boxes with counts, Clear filters; the button counts them

@@ -52,7 +52,7 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 	/// </summary>
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(IsIdle), nameof(StatusText))]
-	[NotifyCanExecuteChangedFor(nameof(QuickConnectCommand))]
+	[NotifyCanExecuteChangedFor(nameof(QuickConnectCommand), nameof(SwitchServerCommand))]
 	public partial bool IsSigningIn { get; set; }
 
 	public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
@@ -340,7 +340,8 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 		return panel;
 	}
 
-	[RelayCommand]
+	// 1.2.0 (the button review, S1): not while a sign-in is under way
+	[RelayCommand(CanExecute = nameof(IsIdle))]
 	private void SwitchServer()
 	{
 		navigationService.NavigateTo<SelectServerViewModel>();

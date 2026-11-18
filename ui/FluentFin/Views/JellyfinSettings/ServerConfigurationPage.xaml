@@ -43,20 +43,20 @@
                 <Button
                     AutomationProperties.Name="Save"
                     Command="{x:Bind SaveCommand, Mode=OneWay}"
-                    Style="{StaticResource GlassAccentPillButtonStyle}">
+                    Style="{StaticResource NixiePrimaryCompactButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <SymbolIcon Symbol="Save" />
                         <TextBlock Text="Save" />
                     </StackPanel>
                 </Button>
                 <Button
-                    AutomationProperties.Name="Reset"
+                    AutomationProperties.Name="Undo changes"
                     Command="{x:Bind ResetCommand, Mode=OneWay}"
-                    Style="{StaticResource GlassPillButtonStyle}"
+                    Style="{StaticResource NixieCompactButtonStyle}"
                     ToolTipService.ToolTip="Put back the server's saved values">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <SymbolIcon Symbol="Refresh" />
-                        <TextBlock Text="Reset" />
+                        <TextBlock Text="Undo changes" />
                     </StackPanel>
                 </Button>
             </StackPanel>

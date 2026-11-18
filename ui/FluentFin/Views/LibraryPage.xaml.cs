@@ -78,6 +78,11 @@ public sealed partial class LibraryPage : Page
 	// Seaglass 1.1.4: the sort menu shows the sort in use (also the one a Back put back)
 	public static bool IsSort(ItemSortBy current, ItemSortBy item) => current == item;
 
+	public static bool IsOrder(SortOrder current, SortOrder item) => current == item;
+
+	/// <summary>1.2.0 (the button review, L15): the Sort button shows the sort in use, "Sort: Name".</summary>
+	public static string SortLabel(string sortName) => $"Sort: {sortName}";
+
 	public static bool AnyOn(int activeFilters) => activeFilters > 0;
 
 	public static Visibility LettersVisibility(IReadOnlyList<LetterJump> letters, LoadStatus status) =>

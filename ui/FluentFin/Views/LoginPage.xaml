@@ -52,11 +52,11 @@
                         <HyperlinkButton
                             x:Name="ChangeServerLink"
                             Grid.Column="1"
-                            Padding="6,2"
                             VerticalAlignment="Center"
                             AutomationProperties.Name="Change server"
                             Command="{x:Bind ViewModel.SwitchServerCommand}"
                             Content="Change"
+                            Style="{StaticResource NixieLinkButtonStyle}"
                             ToolTipService.ToolTip="Choose another server" />
                     </Grid>
                 </StackPanel>
@@ -98,6 +98,7 @@
                         x:Name="SignInButton"
                         HorizontalAlignment="Stretch"
                         AutomationProperties.Name="Sign in"
+                        AutomationProperties.HelpText="Type a username to sign in"
                         Command="{x:Bind ViewModel.LoginCommand}"
                         Style="{StaticResource GlassAccentPillButtonStyle}">
                         <StackPanel Orientation="Horizontal" Spacing="10">

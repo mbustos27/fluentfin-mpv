@@ -80,7 +80,9 @@
                                 <ItemContainer.ContextFlyout>
                                     <MenuFlyout>
                                         <MenuFlyoutItem
+                                            AutomationProperties.Name="{x:Bind local:SelectServerPage.RemoveName(DisplayName)}"
                                             Click="RemoveServer_Click"
+                                            Foreground="{ThemeResource NixieDangerForegroundBrush}"
                                             Icon="{ui:FontIcon Glyph=&#xE74D;}"
                                             Tag="{x:Bind}"
                                             Text="Remove" />
@@ -117,7 +119,9 @@
                                         <Button.Flyout>
                                             <MenuFlyout>
                                                 <MenuFlyoutItem
+                                                    AutomationProperties.Name="{x:Bind local:SelectServerPage.RemoveName(DisplayName)}"
                                                     Click="RemoveServer_Click"
+                                                    Foreground="{ThemeResource NixieDangerForegroundBrush}"
                                                     Icon="{ui:FontIcon Glyph=&#xE74D;}"
                                                     Tag="{x:Bind}"
                                                     Text="Remove" />
@@ -172,7 +176,7 @@
                     </StackPanel>
                 </Button>
                 <Button
-                    AutomationProperties.Name="Next"
+                    AutomationProperties.Name="Connect"
                     Command="{x:Bind ViewModel.CheckConnectivityAndGoToLoginCommand}"
                     CommandParameter="{x:Bind TxtUrl.Text, Mode=OneWay}"
                     Style="{StaticResource GlassAccentPillButtonStyle}">
@@ -185,7 +189,8 @@
                             Foreground="{ThemeResource NixieAccentForegroundBrush}"
                             IsActive="{x:Bind ViewModel.IsConnecting, Mode=OneWay}"
                             Visibility="{x:Bind ViewModel.IsConnecting, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
-                        <TextBlock Text="Next" />
+                        <!--  1.2.0 (the button review, S13): it connects to the server; "Next" said nothing  -->
+                        <TextBlock Text="Connect" />
                     </StackPanel>
                 </Button>
             </StackPanel>

@@ -172,7 +172,7 @@ public sealed class ItemMenuTests
 		var texts = ItemMenu.For(item, Admin, includePlay: true, canEditSegments: true).SelectMany(x => x).Select(x => x.Text).ToList();
 
 		Assert.Equal(["Play", "Mark as watched", "Add to favorites", "Reset watch progress", "Media info", "Edit metadata…", "Edit images…",
-			"Edit segments…", "Edit subtitles…", "Identify…", "Refresh metadata…", "Delete movie…"], texts);
+			"Edit segments", "Edit subtitles…", "Identify…", "Refresh metadata…", "Delete movie…"], texts);
 		Assert.Contains("Remove from Continue Watching", ItemMenu.For(item, Admin, true, true, inContinueWatching: true).SelectMany(x => x).Select(x => x.Text));
 
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Converters/JellyfinFlyoutConverter.cs"));

@@ -129,7 +129,7 @@
                         ToolTipService.ToolTip="Sort">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon FontSize="15" Glyph="&#xE8CB;" />
-                            <TextBlock Text="{x:Bind ViewModel.SortName, Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind local:LibraryPage.SortLabel(ViewModel.SortName), Mode=OneWay}" />
                         </StackPanel>
                         <Button.Flyout>
                             <MenuBarItemFlyout>
@@ -181,16 +181,22 @@
                                     GroupName="Library_SortItem"
                                     IsChecked="{x:Bind local:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.Runtime), Mode=OneWay}"
                                     Text="Runtime" />
+                                <!--  1.2.0 (the button review, L24): the direction in the same menu, a second group (it was a round button beside Sort)  -->
+                                <MenuFlyoutSeparator />
+                                <RadioMenuFlyoutItem
+                                    Command="{x:Bind ViewModel.UpdateSortOrderCommand}"
+                                    CommandParameter="{x:Bind jm:SortOrder.Ascending}"
+                                    GroupName="Library_SortOrder"
+                                    IsChecked="{x:Bind local:LibraryPage.IsOrder(ViewModel.Order, jm:SortOrder.Ascending), Mode=OneWay}"
+                                    Text="Ascending" />
+                                <RadioMenuFlyoutItem
+                                    Command="{x:Bind ViewModel.UpdateSortOrderCommand}"
+                                    CommandParameter="{x:Bind jm:SortOrder.Descending}"
+                                    GroupName="Library_SortOrder"
+                                    IsChecked="{x:Bind local:LibraryPage.IsOrder(ViewModel.Order, jm:SortOrder.Descending), Mode=OneWay}"
+                                    Text="Descending" />
                             </MenuBarItemFlyout>
                         </Button.Flyout>
-                    </Button>
-                    <Button
-                        x:Name="SortOrderButton"
-                        AutomationProperties.Name="{x:Bind ViewModel.SortOrderButtonName, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.ToggleSortOrderCommand}"
-                        Style="{StaticResource GlassIconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.SortOrderButtonName, Mode=OneWay}">
-                        <FontIcon FontSize="15" Glyph="{x:Bind ViewModel.SortGlyph, Mode=OneWay}" />
                     </Button>
 
                     <!--
@@ -234,7 +240,7 @@
                                             Command="{x:Bind ViewModel.ClearFiltersCommand}"
                                             Content="Clear filters"
                                             IsEnabled="{x:Bind local:LibraryPage.AnyOn(ViewModel.ActiveFilters), Mode=OneWay}"
-                                            Style="{StaticResource GlassInsetPillButtonStyle}" />
+                                            Style="{StaticResource NixieCompactButtonStyle}" />
                                     </Grid>
                                     <ScrollViewer Grid.Row="1" Padding="0,0,12,0">
                                         <StackPanel>
@@ -310,8 +316,7 @@
                                 Click="Letter_Click"
                                 Content="{x:Bind Letter}"
                                 Style="{StaticResource LetterButtonStyle}"
-                                Tag="{x:Bind}"
-                                ToolTipService.ToolTip="{x:Bind Name}" />
+                                Tag="{x:Bind}" />
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
                 </ItemsRepeater>

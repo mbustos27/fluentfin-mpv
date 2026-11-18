@@ -166,10 +166,10 @@ internal static class RowPaging
 	}
 
 	/// <summary>
-	/// Seaglass 1.1.4 (layout audit, item 2): a row's arrows are quiet (half strength, still there: hover-only arrows fail mouse
-	/// users) until the pointer is over the row or the keyboard is in it.
+	/// A row's arrows are always there (hover-only arrows fail mouse users; the 1.1.4 layout audit, item 2). 1.2.0 (the button
+	/// review, L7 and L8): at full strength, not half until the pointer or the keyboard is in the row; disabled at the ends.
 	/// </summary>
-	public static double ArrowOpacity(bool pointerOver, bool focusInside) => pointerOver || focusInside ? 1.0 : 0.5;
+	public static double ArrowOpacity(bool pointerOver, bool focusInside) => 1.0;
 
 	/// <summary>The accessible name of a row's header arrow ("Scroll Recently Added left").</summary>
 	public static string ArrowName(string header, bool forward) =>

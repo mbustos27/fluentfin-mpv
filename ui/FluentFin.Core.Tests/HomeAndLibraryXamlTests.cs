@@ -79,22 +79,26 @@ public sealed class HomeAndLibraryXamlTests
 		var library = Load("FluentFin/Views/LibraryPage.xaml");
 
 		Assert.Equal("{x:Bind ViewModel.SortButtonName, Mode=OneWay}", (string?)FindByName(library, "SortButton").Attribute("AutomationProperties.Name"));
-		Assert.Contains(FindByName(library, "SortButton").Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.SortName, Mode=OneWay}");
+		Assert.Contains(FindByName(library, "SortButton").Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind local:LibraryPage.SortLabel(ViewModel.SortName), Mode=OneWay}"); // the button review, L15: "Sort: Name"
 		Assert.Equal("{x:Bind ViewModel.FilterButtonName, Mode=OneWay}", (string?)FindByName(library, "FilterButton").Attribute("AutomationProperties.Name"));
 		Assert.Contains(FindByName(library, "FilterButton").Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.FilterText, Mode=OneWay}");
 		Assert.Equal("{x:Bind ViewModel.CountText, Mode=OneWay}", (string?)FindByName(library, "CountText").Attribute("Text"));
 
-		// the sort menu shows the sort in use (a Back puts another one back), never a fixed "Name"; it holds the keys only
+		// the sort menu shows the sort in use (a Back puts another one back), never a fixed "Name": the eight keys, then (the
+		// button review, L24) the direction as a second group
 		var radios = library.Descendants(Presentation + "RadioMenuFlyoutItem").ToList();
-		Assert.Equal(8, radios.Count);
-		Assert.All(radios, r => Assert.StartsWith("{x:Bind local:LibraryPage.IsSort(", (string?)r.Attribute("IsChecked")));
+		Assert.Equal(10, radios.Count);
+		Assert.All(radios.Take(8), r => Assert.StartsWith("{x:Bind local:LibraryPage.IsSort(", (string?)r.Attribute("IsChecked")));
+		Assert.All(radios.Skip(8), r => Assert.StartsWith("{x:Bind local:LibraryPage.IsOrder(", (string?)r.Attribute("IsChecked")));
 	}
 
 	// layout audit, item 13: the sort menu in sentence case, the same words as the Sort button ("Sort: Date added, ...")
 	[Fact]
 	public void TheSortMenu_SaysWhatTheButtonSays_InSentenceCase()
 	{
-		var radios = Load("FluentFin/Views/LibraryPage.xaml").Descendants(Presentation + "RadioMenuFlyoutItem").ToList();
+		// the sort keys (the direction is its own group since the button review's L24)
+		var radios = Load("FluentFin/Views/LibraryPage.xaml").Descendants(Presentation + "RadioMenuFlyoutItem")
+			.Where(r => ((string?)r.Attribute("CommandParameter"))?.StartsWith("{x:Bind jm:ItemSortBy.", StringComparison.Ordinal) == true).ToList();
 
 		foreach (var radio in radios)
 		{
@@ -111,10 +115,10 @@ public sealed class HomeAndLibraryXamlTests
 	{
 		var library = Load("FluentFin/Views/LibraryPage.xaml");
 
-		var order = FindByName(library, "SortOrderButton");
-		Assert.Equal("{x:Bind ViewModel.ToggleSortOrderCommand}", (string?)order.Attribute("Command"));
-		Assert.Equal("{x:Bind ViewModel.SortOrderButtonName, Mode=OneWay}", (string?)order.Attribute("AutomationProperties.Name"));
-		Assert.DoesNotContain(library.Descendants(Presentation + "RadioMenuFlyoutItem"), r => ((string?)r.Attribute("Command"))?.Contains("UpdateSortOrder") == true);
+		// 1.2.0 (the button review, L24): the direction is a second group in the Sort menu again, the round button gone
+		Assert.DoesNotContain(library.Descendants(), e => (string?)e.Attribute(Xaml + "Name") == "SortOrderButton");
+		Assert.Equal(new[] { "Ascending", "Descending" }, library.Descendants(Presentation + "RadioMenuFlyoutItem")
+			.Where(r => (string?)r.Attribute("Command") == "{x:Bind ViewModel.UpdateSortOrderCommand}").Select(r => (string?)r.Attribute("Text")));
 
 		var filter = FindByName(library, "FilterButton");
 		Assert.Empty(filter.Descendants().Where(e => e.Name.LocalName == "TokenizingTextBox"));

@@ -40,6 +40,7 @@
             <InfoBar.ActionButton>
                 <Button
                     x:Name="ProblemRetryButton"
+                    Style="{StaticResource NixieCompactButtonStyle}"
                     Command="{x:Bind State.RetryCommand, Mode=OneWay}"
                     Content="{x:Bind State.RetryText, Mode=OneWay}" />
             </InfoBar.ActionButton>

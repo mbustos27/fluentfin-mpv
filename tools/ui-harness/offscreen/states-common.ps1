@@ -179,10 +179,10 @@ function Press([string]$Name, [double]$Seconds = 10) {
     Say "pressed '$Name'"
 }
 
-# the server page's address box and Next: type an address and go on
+# the server page's address box and Connect ("Next" before 1.2.0): type an address and go on
 function Submit-Address([string]$Address) {
     $url = Wait-Ui -Id 'TxtUrl' -Type 'Edit' -Seconds 20
     if (-not $url) { throw "no server address box" }
     Set-ElementValue $url $Address
-    Press 'Next'
+    if ([OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Connect')) { Press 'Connect' } else { Press 'Next' }
 }

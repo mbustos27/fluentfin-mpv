@@ -96,7 +96,12 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 
 	private static MenuFlyoutItem Make(ItemMenuEntry entry, BaseItemDto dto)
 	{
-		var item = new MenuFlyoutItem { Text = entry.Text, Icon = IconFor(entry.Command) };
+		var item = new MenuFlyoutItem { Text = entry.Text, Icon = IconFor(entry.Command, dto) };
+		// 1.2.0 (the button review, L46): Delete in the danger ink (it is the last entry, after a separator)
+		if (entry.Command is ItemMenuCommand.Delete && Application.Current?.Resources.TryGetValue("NixieDangerForegroundBrush", out var danger) == true && danger is Microsoft.UI.Xaml.Media.Brush ink)
+		{
+			item.Foreground = ink;
+		}
 		item.Click += async (sender, _) =>
 		{
 			var root = (sender as UIElement)?.XamlRoot;
@@ -106,14 +111,20 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 		return item;
 	}
 
-	private static IconElement IconFor(ItemMenuCommand command) => command switch
+	internal static string? GlyphFor(ItemMenuCommand command, BaseItemDto? dto) => command switch
+	{
+		// 1.2.0 (the button review): favourites add / remove by state (L36), Reset is "play from start" (L38), Media info's own (L39)
+		ItemMenuCommand.ToggleFavorite => dto?.UserData?.IsFavorite == true ? "" : "",
+		ItemMenuCommand.ResetWatchProgress => "",
+		ItemMenuCommand.MediaInfo => "",
+		_ => null,
+	};
+
+	private static IconElement IconFor(ItemMenuCommand command, BaseItemDto dto) => GlyphFor(command, dto) is { } glyph ? new FontIcon { Glyph = glyph } : command switch
 	{
 		ItemMenuCommand.Play => new SymbolIcon { Symbol = Symbol.Play },
 		ItemMenuCommand.ToggleWatched => new FontIcon { Glyph = "" },
-		ItemMenuCommand.ToggleFavorite => new FontIcon { Glyph = "" },
-		ItemMenuCommand.ResetWatchProgress => new FontIcon { Glyph = "" },
 		ItemMenuCommand.RemoveFromContinueWatching => new FontIcon { Glyph = "" },
-		ItemMenuCommand.MediaInfo => new SymbolIcon { Symbol = Symbol.MusicInfo },
 		ItemMenuCommand.EditMetadata => new SymbolIcon { Symbol = Symbol.Edit },
 		ItemMenuCommand.EditImages => new FontIcon { Glyph = "" },
 		ItemMenuCommand.EditSegments => new FontIcon { Glyph = "" },

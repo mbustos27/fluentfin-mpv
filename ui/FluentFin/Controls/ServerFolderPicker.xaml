@@ -38,7 +38,7 @@
                 AutomationProperties.Name="Parent folder"
                 Click="Button_Click"
                 IsEnabled="{x:Bind CanGoUp(CurrentFolder), Mode=OneWay}"
-                Style="{StaticResource GlassIconButtonStyle}"
+                Style="{StaticResource NixieCompactIconButtonStyle}"
                 ToolTipService.ToolTip="Parent folder">
                 <FontIcon FontSize="16" Glyph="&#xE74A;" />
             </Button>
@@ -134,7 +134,7 @@
                 Click="OnCloseWindow"
                 Content="Select this folder"
                 IsEnabled="{x:Bind CanSelect(CurrentFolder), Mode=OneWay}"
-                Style="{StaticResource GlassAccentPillButtonStyle}" />
+                Style="{StaticResource NixiePrimaryCompactButtonStyle}" />
             <Button
                 Click="OnCancel"
                 Content="Cancel"

@@ -85,8 +85,8 @@
             <Button
                 x:Name="ScrollLeftBtn"
                 Grid.Column="2"
-                Width="32"
-                Height="32"
+                Width="44"
+                Height="44"
                 VerticalAlignment="Center"
                 AutomationProperties.Name="Scroll left"
                 Click="ScrollLeftBtn_Click"
@@ -95,13 +95,13 @@
                 Style="{StaticResource GlassIconButtonStyle}"
                 ToolTipService.ToolTip="Scroll left"
                 Visibility="Collapsed">
-                <FontIcon FontSize="14" Glyph="&#xE76B;" />
+                <FontIcon FontSize="20" Glyph="&#xE76B;" />
             </Button>
             <Button
                 x:Name="ScrollRightBtn"
                 Grid.Column="3"
-                Width="32"
-                Height="32"
+                Width="44"
+                Height="44"
                 VerticalAlignment="Center"
                 AutomationProperties.Name="Scroll right"
                 Click="ScrollRightBtn_Click"
@@ -109,7 +109,7 @@
                 Style="{StaticResource GlassIconButtonStyle}"
                 ToolTipService.ToolTip="Scroll right"
                 Visibility="Collapsed">
-                <FontIcon FontSize="14" Glyph="&#xE76C;" />
+                <FontIcon FontSize="20" Glyph="&#xE76C;" />
             </Button>
         </Grid>
 

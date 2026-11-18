@@ -254,24 +254,20 @@
             <Button
                 x:Name="UndoButton"
                 Grid.Column="1"
-                MinHeight="40"
-                Padding="18,0"
                 VerticalAlignment="Center"
                 AutomationProperties.Name="Undo"
                 Click="UndoButton_Click"
                 Content="Undo"
-                Style="{StaticResource GlassInsetPillButtonStyle}"
+                Style="{StaticResource NixieCompactButtonStyle}"
                 ToolTipService.ToolTip="Undo (Ctrl+Z)"
                 Visibility="Collapsed" />
             <Button
                 x:Name="NoticeCloseButton"
                 Grid.Column="2"
-                Width="40"
-                Height="40"
                 VerticalAlignment="Center"
                 AutomationProperties.Name="Close the notice"
                 Click="NoticeCloseButton_Click"
-                Style="{StaticResource GlassIconButtonStyle}"
+                Style="{StaticResource NixieCompactIconButtonStyle}"
                 ToolTipService.ToolTip="Close">
                 <FontIcon FontSize="12" Glyph="&#xE711;" />
             </Button>

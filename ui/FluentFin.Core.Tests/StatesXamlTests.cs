@@ -85,7 +85,7 @@ public class StatesXamlTests
 	{
 		var doc = Load("FluentFin/Views/JellyfinSettings/ServerConfigurationPage.xaml");
 		var buttons = doc.Descendants(Presentation + "Button").Select(b => (string?)b.Attribute("AutomationProperties.Name")).ToList();
-		Assert.Equal(new string?[] { "Save", "Reset" }, buttons);
+		Assert.Equal(new string?[] { "Save", "Undo changes" }, buttons); // 1.2.0 (the button review, S23)
 		Assert.Equal("Level1", (string?)doc.Descendants(Presentation + "TextBlock").First().Attribute("AutomationProperties.HeadingLevel"));
 		Assert.DoesNotContain(doc.Descendants(), e => (string?)e.Attribute("Width") == "1000");
 	}

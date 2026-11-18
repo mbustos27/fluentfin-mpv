@@ -42,6 +42,10 @@ public sealed partial class SelectServerPage : Page
 	public static string AddressOf(string localUrl, string publicUrl) =>
 		!string.IsNullOrWhiteSpace(localUrl) ? localUrl.Trim() : publicUrl?.Trim() ?? "";
 
+	/// <summary>1.2.0 (the button review, S9 and S11): a row's Remove, named after the server ("Remove Living room").</summary>
+	public static string RemoveName(string displayName) =>
+		string.IsNullOrWhiteSpace(displayName) ? "Remove" : $"Remove {displayName.Trim()}";
+
 	/// <summary>The More options button of a saved server's row, named after it ("More options for Living room").</summary>
 	public static string MoreOptionsName(string displayName) =>
 		string.IsNullOrWhiteSpace(displayName) ? "More options" : $"More options for {displayName.Trim()}";

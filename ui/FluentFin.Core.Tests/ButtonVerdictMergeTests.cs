@@ -66,6 +66,44 @@ public sealed class ButtonVerdictMergeTests
 		Assert.Contains("Name = \"Playback reports\"", Code("FluentFin.Plugins/Playback Reporting/PlaybackReportingPlugin.cs"));
 	}
 
+	[Fact]
+	public void TheLibraryStreamsVerdicts()
+	{
+		var library = Load("FluentFin/Views/LibraryPage.xaml");
+		Assert.Contains(library.Descendants(), e => (string?)e.Attribute("Text") == "{x:Bind local:LibraryPage.SortLabel(ViewModel.SortName), Mode=OneWay}"); // L15
+		Assert.Contains(library.Descendants(), e => (string?)e.Attribute("Text") == "Descending"); // L24
+		Assert.Equal("{StaticResource NixieCompactButtonStyle}", (string?)library.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "ClearFiltersButton").Attribute("Style")); // L26
+		Assert.DoesNotContain(library.Descendants(), e => (string?)e.Attribute("Style") == "{StaticResource LetterButtonStyle}" && e.Attribute("ToolTipService.ToolTip") is not null); // L30
+		var menu = Code("FluentFin/Converters/JellyfinFlyoutConverter.cs");
+		Assert.Contains("\"\uEB51\"", menu); // L36: add to favourites (the file writes glyphs as the characters themselves)
+		Assert.Contains("\"\uE777\"", menu); // L38
+		Assert.Contains("\"\uE946\"", menu); // L39
+		Assert.Contains("NixieDangerForegroundBrush", menu); // L46
+		Assert.Contains("\"Edit segments\")", Code("FluentFin.Core/ItemMenu.cs")); // L42: no ellipsis, it opens a page
+		var home = Load("FluentFin/Views/HomePage.xaml");
+		Assert.Equal("{StaticResource NixieCompactButtonStyle}", (string?)home.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "UndoButton").Attribute("Style")); // L4
+		Assert.Equal("{StaticResource NixieCompactIconButtonStyle}", (string?)home.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "NoticeCloseButton").Attribute("Style")); // L5
+		var arrow = Load("FluentFin/Controls/ShelfRow.xaml").Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "ScrollLeftBtn"); // L7
+		Assert.Equal(("44", "44"), ((string?)arrow.Attribute("Width"), (string?)arrow.Attribute("Height")));
+	}
+
+	[Fact]
+	public void TheStatesStreamsVerdicts()
+	{
+		var login = Load("FluentFin/Views/LoginPage.xaml");
+		Assert.Equal("{StaticResource NixieLinkButtonStyle}", (string?)login.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "ChangeServerLink").Attribute("Style")); // S1
+		Assert.Matches(@"\[RelayCommand\(CanExecute = nameof\(IsIdle\)\)\]\s+private void SwitchServer\(\)", Code("FluentFin/ViewModels/LoginViewModel.cs")); // S1
+		Assert.Contains(login.Descendants(), e => (string?)e.Attribute("AutomationProperties.HelpText") == "Type a username to sign in"); // S2
+		var server = Load("FluentFin/Views/SelectServerPage.xaml");
+		Assert.Contains(server.Descendants(), e => (string?)e.Attribute("Text") == "Connect"); // S13
+		Assert.Equal(2, server.Descendants().Count(e => e.Name.LocalName == "MenuFlyoutItem" && (string?)e.Attribute("Foreground") == "{ThemeResource NixieDangerForegroundBrush}")); // S9, S11
+		Assert.Contains("NixieCompactButtonStyle", Code("FluentFin/Controls/LoadStateView.xaml")); // S15
+		var picker = Code("FluentFin/Controls/ServerFolderPicker.xaml");
+		Assert.Contains("NixieCompactIconButtonStyle", picker); // S17
+		Assert.Contains("NixiePrimaryCompactButtonStyle", picker); // S20
+		Assert.Contains("Undo changes", Code("FluentFin/Views/JellyfinSettings/ServerConfigurationPage.xaml")); // S23
+	}
+
 	private static XDocument Load(string file) => XDocument.Load(Path.Combine(RepoRoot, file));
 
 	private static string Code(string file) => File.ReadAllText(Path.Combine(RepoRoot, file));

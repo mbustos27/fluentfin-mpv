@@ -131,12 +131,12 @@ public sealed class RowPagingTests
 	public void AfterACardLeaves_TheFocusStaysInTheRow(int focused, int removed, int count, int expected) =>
 		Assert.Equal(expected, RowPaging.FocusAfterRemoval(focused, removed, count));
 
-	// Seaglass 1.1.4 (layout audit, item 2): quiet at rest, never hidden (hover-only arrows fail mouse users)
+	// never hidden (the 1.1.4 layout audit, item 2); 1.2.0 (the button review, L7 and L8): at full strength at rest too
 	[Theory]
-	[InlineData(false, false, 0.5)]
+	[InlineData(false, false, 1.0)]
 	[InlineData(true, false, 1.0)]
 	[InlineData(false, true, 1.0)]
-	public void TheArrows_AreQuietUntilThePointerOrTheKeyboardIsInTheRow(bool pointer, bool focus, double opacity) =>
+	public void TheArrows_AreAtFullStrength_WhereverThePointerOrTheKeyboardIs(bool pointer, bool focus, double opacity) =>
 		Assert.Equal(opacity, RowPaging.ArrowOpacity(pointer, focus));
 }
 

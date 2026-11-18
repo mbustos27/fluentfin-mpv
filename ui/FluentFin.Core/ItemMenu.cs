@@ -96,7 +96,7 @@ public static class ItemMenu
 
 		if (admin && canEditSegments)
 		{
-			metadata.Add(new(ItemMenuCommand.EditSegments, "Edit segments…"));
+			metadata.Add(new(ItemMenuCommand.EditSegments, "Edit segments"));
 		}
 
 		// jellyfin-web: subtitle management is its own permission, which administrators always have
