@@ -495,8 +495,7 @@
     -->
     <Style x:Key="TopBarStyle" TargetType="lc:TopBarChrome">
         <Setter Property="IsTabStop" Value="False" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="lc:TopBarChrome">
@@ -540,11 +539,6 @@
                             VerticalAlignment="Bottom"
                             Background="{ThemeResource EditorialSunsetRuleBrush}"
                             IsHitTestVisible="False" />
-                        <ContentPresenter
-                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                            Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>
