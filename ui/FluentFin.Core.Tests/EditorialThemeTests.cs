@@ -270,7 +270,8 @@ public sealed class EditorialXamlTests
 		}
 
 		// keys only this theme uses carry its prefix
-		Assert.All(keys.Where(k => k is not ("TopBarStyle" or "RowHeaderTemplate" or "PosterTemplate" or "StillTemplate" or "PageHeaderStyle" or "SignInBackdropTemplate")),
+		Assert.All(keys.Where(k => k is not ("TopBarStyle" or "RowHeaderTemplate" or "PosterTemplate" or "StillTemplate" or "PageHeaderStyle" or "SignInBackdropTemplate"
+			or "ThemeOptionsTemplate" or "PlayerTopBarStyle" or "PlayerBottomBarStyle")),
 			k => Assert.StartsWith("Editorial", k));
 	}
 
@@ -560,5 +561,29 @@ public sealed class EditorialLibraryTests
 		Assert.Equal("1 show", EditorialLibrary.Count(1, BaseItemDto_CollectionType.Tvshows));
 		Assert.Equal("A to Z", EditorialLibrary.SortWords(ItemSortBy.Name, SortOrder.Ascending));
 		Assert.Equal("Z to A", EditorialLibrary.SortWords(ItemSortBy.Name, SortOrder.Descending));
+	}
+}
+
+/// <summary>Nixie 1.3.0, Editorial's Up next: the next episodes keep their places on screen.</summary>
+public sealed class EditorialUpNextTests
+{
+	private static BaseItemViewModel Ep(string series, bool resume) => BaseItemViewModel.FromDto(new BaseItemDto
+	{
+		Id = Guid.NewGuid(), Name = "Ep", Type = BaseItemDto_Type.Episode, SeriesName = series, ParentIndexNumber = 1, IndexNumber = 1,
+		RunTimeTicks = 50 * TimeSpan.TicksPerMinute, UserData = new UserItemDataDto { PlaybackPositionTicks = resume ? 10 * TimeSpan.TicksPerMinute : 0 },
+	});
+
+	[Fact]
+	public void ALongContinueWatching_StillLeavesNextEpisodesOnScreen()
+	{
+		var resuming = Enumerable.Range(0, 9).Select(i => Ep($"R{i}", true)).ToList();
+		var next = Enumerable.Range(0, 4).Select(i => Ep($"N{i}", false)).ToList();
+
+		var wide = EditorialHome.UpNext(resuming, next, hero: null);
+		Assert.Equal(["R0", "R1", "R2", "N0", "N1"], wide.Take(5).Select(l => l.Title));
+		Assert.Equal(13, wide.Count);
+
+		var narrow = EditorialHome.UpNext(resuming, next, hero: null, lines: 3);
+		Assert.Equal(["R0", "N0", "N1"], narrow.Take(3).Select(l => l.Title));
 	}
 }

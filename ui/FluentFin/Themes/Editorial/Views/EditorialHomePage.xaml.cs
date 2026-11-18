@@ -145,7 +145,7 @@ public sealed partial class EditorialHomePage : Page
 			ShowHero();
 		}
 
-		_upNext = EditorialHome.UpNext(ViewModel.ContinueItems, ViewModel.NextUpItems, _heroIsResume ? hero : null);
+		_upNext = EditorialHome.UpNext(ViewModel.ContinueItems, ViewModel.NextUpItems, _heroIsResume ? hero : null, IsNarrow ? 3 : EditorialHome.UpNextLines);
 		var shown = _upNext.Take(IsNarrow ? 3 : EditorialHome.UpNextLines).ToList();
 		UpNextRepeater.ItemsSource = shown;
 		UpNextCount.Text = $"Continue watching · {_upNext.Count + (_heroIsResume ? 1 : 0)}";

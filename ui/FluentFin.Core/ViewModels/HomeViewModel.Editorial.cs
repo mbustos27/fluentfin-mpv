@@ -71,6 +71,9 @@ public static class EditorialHome
 	/// <summary>The most lines "Up next" shows beside the hero (1920 px); a narrow window shows three across.</summary>
 	public const int UpNextLines = 5;
 
+	/// <summary>How many next episodes the lines on screen keep a place for (the task "next episode, one click").</summary>
+	public const int NextShown = 2;
+
 	/// <summary>
 	/// The hero tile's item: what the user was watching last (the first of Continue Watching: "Tonight", with Resume), else the
 	/// shared hero's first slide (new to the user), else the first of Next Up. Null when Home has nothing yet.
@@ -94,7 +97,7 @@ public static class EditorialHome
 	/// "Up next": what is in progress, then the next episodes (Continue Watching, then Next Up, as the server orders them),
 	/// without the hero's item, numbered from 01. All of them (the page shows the first <see cref="UpNextLines"/>).
 	/// </summary>
-	public static IReadOnlyList<EditorialUpNextEntry> UpNext(IEnumerable<BaseItemViewModel> continueItems, IEnumerable<BaseItemViewModel> nextUp, BaseItemViewModel? hero)
+	public static IReadOnlyList<EditorialUpNextEntry> UpNext(IEnumerable<BaseItemViewModel> continueItems, IEnumerable<BaseItemViewModel> nextUp, BaseItemViewModel? hero, int lines = UpNextLines)
 	{
 		var heroId = hero?.Dto.Id;
 		var seen = new HashSet<Guid>();
@@ -119,12 +122,27 @@ public static class EditorialHome
 			entries.Add(new EditorialUpNextEntry(item, Number(entries.Count + 1), title, string.Join(" · ", parts.Where(p => p.Length > 0)), Math.Clamp(progress, 0, 100), resume));
 		}
 
-		foreach (var item in continueItems)
+		// the lines on screen always hold next episodes when there are any (a long Continue Watching would push them all
+		// off the list): the first of what is in progress, then up to NextShown next episodes, then the rest of both
+		var resuming = continueItems.ToList();
+		var next = nextUp.ToList();
+		var first = Math.Max(0, lines - Math.Min(NextShown, next.Count));
+		foreach (var item in resuming.Take(first))
 		{
 			Add(item, resume: true);
 		}
 
-		foreach (var item in nextUp)
+		foreach (var item in next.Take(NextShown))
+		{
+			Add(item, resume: false);
+		}
+
+		foreach (var item in resuming.Skip(first))
+		{
+			Add(item, resume: true);
+		}
+
+		foreach (var item in next.Skip(NextShown))
 		{
 			Add(item, resume: false);
 		}

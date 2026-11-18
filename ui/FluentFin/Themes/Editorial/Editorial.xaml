@@ -628,6 +628,41 @@
     </Style>
 
     <!--  (dictionary templates use {Binding}: x:Bind needs a dictionary with code behind, and the theme's is loaded by its address)  -->
+    <!--  the sign-in page's backdrop (its content: the LoginViewModel; nothing of it is read)  -->
+    <DataTemplate x:Key="SignInBackdropTemplate">
+        <ec:EditorialSignInBackdrop />
+    </DataTemplate>
+
+    <!--
+        the player's bars (optional keys, over MpvPlayerControls' own styles, in place during playback too): the page's
+        margins (48), and the night instead of black in the scrims, deeper behind the transport so the time reads like the
+        concept's. The bars' parts and logic are the shared ones.
+    -->
+    <Style x:Key="PlayerTopBarStyle" TargetType="Grid">
+        <Setter Property="Padding" Value="48,24,48,64" />
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Offset="0" Color="#D9160610" />
+                    <GradientStop Offset="0.6" Color="#73160610" />
+                    <GradientStop Offset="1" Color="#00160610" />
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="PlayerBottomBarStyle" TargetType="Grid">
+        <Setter Property="Padding" Value="48,80,48,28" />
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0,1" EndPoint="0,0">
+                    <GradientStop Offset="0" Color="#F2160610" />
+                    <GradientStop Offset="0.55" Color="#B3160610" />
+                    <GradientStop Offset="1" Color="#00160610" />
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <DataTemplate x:Key="RowHeaderTemplate">
         <TextBlock
             AutomationProperties.HeadingLevel="Level2"

@@ -13,30 +13,22 @@
     IsTabStop="False">
     <Viewbox Stretch="Uniform">
         <Canvas Width="560" Height="40">
-            <!--  the swash: a thin line that thickens toward the middle, then thins into the sparkle  -->
+            <!--  the swash: pointed at the left, fullest a third of the way, thinning into the sparkle (art pass 2: the echo line under it read as a scratch and went)  -->
             <Path
-                Data="M 2,34 C 120,18 300,10 520,15 C 300,14 120,22 2,36 Z"
+                Data="M 2,35 C 110,24 300,11 512,14 C 300,17.5 130,30 2,35 Z"
                 Fill="{ThemeResource EditorialArcBrush}"
                 Opacity="0.9" />
-            <!--  a fainter echo under it, the arc's afterglow  -->
-            <Path
-                Data="M 40,36 C 160,25 320,19 500,21"
-                Opacity="0.35"
-                Stroke="{ThemeResource EditorialArcBrush}"
-                StrokeEndLineCap="Round"
-                StrokeStartLineCap="Round"
-                StrokeThickness="1.2" />
             <!--  the sparkle: four points with curved sides, at the swash's end  -->
             <Path
-                Canvas.Left="507"
-                Canvas.Top="2"
-                Data="M 13,0 C 14.2,9 17,11.8 26,13 C 17,14.2 14.2,17 13,26 C 11.8,17 9,14.2 0,13 C 9,11.8 11.8,9 13,0 Z"
+                Canvas.Left="499"
+                Canvas.Top="-1"
+                Data="M 15,0 C 16.3,10.5 19.5,13.7 30,15 C 19.5,16.3 16.3,19.5 15,30 C 13.7,19.5 10.5,16.3 0,15 C 10.5,13.7 13.7,10.5 15,0 Z"
                 Fill="{ThemeResource EditorialSparkBrush}" />
             <Ellipse
-                Canvas.Left="516"
+                Canvas.Left="511"
                 Canvas.Top="11"
-                Width="8"
-                Height="8"
+                Width="6"
+                Height="6"
                 Fill="{ThemeResource EditorialArcBrush}"
                 Opacity="0.55" />
         </Canvas>
