@@ -148,3 +148,25 @@ public sealed class HeroDotsTests
 	[Fact]
 	public void OtherKeys_AreNotTheDots() => Assert.Null(HeroDots.KeyTarget(Windows.System.VirtualKey.Up, 1, 5));
 }
+
+/// <summary>
+/// 1.1.4 (layout audit, item 22; the states stream's Narrator pass): an empty or failed library shows no Sort, direction,
+/// Filter, count or A-Z (and there is no pager: the grid scrolls on).
+/// </summary>
+public sealed class LibraryBarTests
+{
+	[Theory]
+	[InlineData(FluentFin.Core.ViewModels.LoadStatus.Loading, Microsoft.UI.Xaml.Visibility.Visible)]
+	[InlineData(FluentFin.Core.ViewModels.LoadStatus.Loaded, Microsoft.UI.Xaml.Visibility.Visible)]
+	[InlineData(FluentFin.Core.ViewModels.LoadStatus.Empty, Microsoft.UI.Xaml.Visibility.Collapsed)]
+	[InlineData(FluentFin.Core.ViewModels.LoadStatus.Failed, Microsoft.UI.Xaml.Visibility.Collapsed)]
+	public void TheBar_GoesOnAnEmptyOrFailedLibrary(FluentFin.Core.ViewModels.LoadStatus status, Microsoft.UI.Xaml.Visibility expected)
+	{
+		Assert.Equal(expected, FluentFin.Views.LibraryPage.BarVisibility(status));
+		Assert.Equal(expected, FluentFin.Views.LibraryPage.LettersVisibility([new("A", 0), new("B", 5)], status));
+	}
+
+	[Fact]
+	public void OneLetter_IsNoJump() =>
+		Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, FluentFin.Views.LibraryPage.LettersVisibility([new("A", 0)], FluentFin.Core.ViewModels.LoadStatus.Loaded));
+}
