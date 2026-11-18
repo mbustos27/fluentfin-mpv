@@ -12,22 +12,25 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
-    Title="Play On"
+    Title="SyncPlay"
     CloseButtonText="Close"
     DefaultButton="Primary"
+    IsPrimaryButtonEnabled="{x:Bind ViewModel.CanJoin, Mode=OneWay}"
     PrimaryButtonCommand="{x:Bind ViewModel.JoinGroupCommand}"
-    PrimaryButtonCommandParameter="{x:Bind ItemsView.SelectedItem, Mode=OneWay}"
-    PrimaryButtonText="Select"
+    PrimaryButtonCommandParameter="{x:Bind ViewModel.SelectedGroup, Mode=OneWay}"
+    PrimaryButtonText="Join"
     SecondaryButtonCommand="{x:Bind ViewModel.CreateOrExitGroupCommand}"
     SecondaryButtonText="{x:Bind ViewModel.SecondaryButtonText, Mode=OneWay}"
     Style="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
     mc:Ignorable="d">
 
+    <!--  Seaglass 1.1.4 (layout audit, item 18): titled SyncPlay (it said "Play On"), "Join" only once a group is chosen, plain words when there is none  -->
 
     <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.HasActiveGroups, Mode=OneWay}">
         <ctk:Case Value="True">
             <ListView
                 x:Name="ItemsView"
+                AutomationProperties.Name="SyncPlay groups"
                 ItemsSource="{x:Bind ViewModel.Groups, Mode=OneWay}"
                 SelectedItem="{x:Bind ViewModel.SelectedGroup, Mode=TwoWay}"
                 SelectionMode="Single">
@@ -43,12 +46,10 @@
             </ListView>
         </ctk:Case>
         <ctk:Case Value="False">
-            <InfoBar
-                IsClosable="False"
-                IsIconVisible="True"
-                IsOpen="True"
-                Message="No Active Sync Play groups, create a new one."
-                Severity="Informational" />
+            <TextBlock
+                x:Name="NoGroupsText"
+                Text="No groups yet. Start one with New group, and others on this server can join it."
+                TextWrapping="WrapWholeWords" />
         </ctk:Case>
     </ctk:SwitchPresenter>
 

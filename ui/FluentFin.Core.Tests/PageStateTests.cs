@@ -297,7 +297,8 @@ public sealed class PageStateTests : IDisposable
 		Assert.Equal("No results for “zzz”. Check the spelling, or try fewer words.", none.ToString());
 
 		var failed = Assert.IsType<SearchMessage>(Assert.Single(SearchSuggestions.For("matrix", null)));
-		Assert.Equal("Couldn't search Home server", failed.Title);
+		// Seaglass 1.1.4 (layout audit, item 10): plain words, not the server's address
+		Assert.Equal("Can't search right now", failed.Title);
 		Assert.True(failed.CanRetry);
 	}
 

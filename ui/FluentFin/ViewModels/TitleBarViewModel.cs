@@ -55,7 +55,16 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(IsBackButtonShown))]
 	[NotifyPropertyChangedFor(nameof(IsAccountShown))]
+	[NotifyPropertyChangedFor(nameof(IsSearchShown))]
 	public partial UserDto? User { get; set; }
+
+	/// <summary>
+	/// Seaglass 1.1.4 (layout audit, item 20): the title bar's subtitle: nothing on a release (the version is in Settings >
+	/// About), "Preview" on a test build (a version with a pre-release part, "1.1.4-beta.1").
+	/// </summary>
+	public string Subtitle { get; } = SubtitleFor(Core.AppVersion.Current);
+
+	public static string SubtitleFor(string version) => version.Contains('-', StringComparison.Ordinal) ? "Preview" : "";
 
 	/// <summary>
 	/// The whole title bar: hidden in full screen (the player page sets it), whatever page is shown. Independent of
@@ -84,7 +93,14 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	[ObservableProperty]
 	[NotifyPropertyChangedFor(nameof(IsBackButtonShown))]
 	[NotifyPropertyChangedFor(nameof(IsAccountShown))]
+	[NotifyPropertyChangedFor(nameof(IsSearchShown))]
 	public partial bool IsPlayerPageShown { get; private set; }
+
+	/// <summary>
+	/// The search box: signed in and not on the player page. Seaglass 1.1.4 (layout audit, item 12): a property, so signing out
+	/// hides it (x:Bind does not call a function again when its argument becomes null: the box stayed after a sign-out).
+	/// </summary>
+	public bool IsSearchShown => User is not null && !IsPlayerPageShown;
 
 	/// <summary>
 	/// The title bar's Back: signed in, and not on a player page that has a Back of its own (Seaglass's player controls do;
@@ -96,7 +112,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	public bool IsAccountShown => User is not null && !IsPlayerPageShown;
 
 	/// <summary>
-	/// The shell's frame now shows a page of <paramref name="pageType"/> (null: none, the shell went: Log out and Switch user
+	/// The shell's frame now shows a page of <paramref name="pageType"/> (null: none, the shell went: Sign out and Switch user
 	/// take it away with whatever page it showed). A navigation that fails never gets here, so nothing stays hidden.
 	/// </summary>
 	public void OnPageShown(Type? pageType)
@@ -137,7 +153,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 		_navigationService.GoBack();
 	}
 
-	// fluentfin-mpv: a sign-out in progress (Log out or Switch user), shown in the title bar; both commands wait for it
+	// fluentfin-mpv: a sign-out in progress (Sign out or Switch user), shown in the title bar; both commands wait for it
 	[ObservableProperty]
 	[NotifyCanExecuteChangedFor(nameof(LogoutCommand))]
 	[NotifyCanExecuteChangedFor(nameof(SwitchUserCommand))]
@@ -156,7 +172,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	public Task SwitchUser() => SignOut(() => _setupNavigationService.NavigateTo<LoginViewModel>(CurrentServer));
 
 	/// <summary>
-	/// fluentfin-mpv: Log out and Switch user. The mpv playback stops and is reported before the page goes and the token is
+	/// fluentfin-mpv: Sign out and Switch user. The mpv playback stops and is reported before the page goes and the token is
 	/// revoked (bounded, <see cref="MpvPlaybackService.StopForSignOutAsync"/>), which is shown meanwhile. One at a time: both
 	/// commands are disabled until it is done, and one invoked anyway (back to back, before the first got that far) does nothing.
 	/// </summary>

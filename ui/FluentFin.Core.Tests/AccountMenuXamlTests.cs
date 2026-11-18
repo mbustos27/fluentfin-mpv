@@ -28,17 +28,20 @@ public sealed class AccountMenuXamlTests
 	private static XElement AccountButton() => Load(TitleBar).Descendants(Presentation + "Button").Single(b => (string?)b.Attribute(Xaml + "Name") == "AccountButton");
 
 	[Fact]
-	public void TheAccountMenu_HoldsSwitchUserSignOutAndSettings_InThatOrder()
+	public void TheAccountMenu_HoldsSwitchUserAndSettings_ThenSignOutLast()
 	{
 		var flyout = AccountButton().Descendants(Presentation + "Flyout").Single();
 		var items = flyout.Descendants(Local + "MenuFlyoutButton").Select(b => ((string?)b.Attribute("Content"), (string?)b.Attribute("Command"))).ToList();
 
+		// layout audit item 18: account flyouts end with Sign out, after a separator
 		Assert.Equal(
 		[
 			("Switch user", "{x:Bind ViewModel.SwitchUserCommand}"),
-			("Sign out", "{x:Bind ViewModel.LogoutCommand}"),
 			("Settings", "{x:Bind ViewModel.GoToSettingsCommand}"),
+			("Sign out", "{x:Bind ViewModel.LogoutCommand}"),
 		], items);
+		var signOut = flyout.Descendants(Local + "MenuFlyoutButton").Last();
+		Assert.Equal(Presentation + "MenuFlyoutSeparator", ((XElement)signOut.PreviousNode!).Name);
 
 		// each closes the menu as it runs
 		Assert.All(flyout.Descendants(Local + "MenuFlyoutButton"), b => Assert.Equal("CloseAccountFlyout", (string?)b.Attribute("Click")));
@@ -71,6 +74,39 @@ public sealed class AccountMenuXamlTests
 		var presenter = button.Descendants(Presentation + "Style").Single(s => (string?)s.Attribute("TargetType") == "FlyoutPresenter");
 		Assert.Equal("{StaticResource GlassFlyoutPresenterStyle}", (string?)presenter.Attribute("BasedOn"));
 		Assert.Contains(presenter.Elements(Presentation + "Setter"), s => (string?)s.Attribute("Property") == "AutomationProperties.Name" && (string?)s.Attribute("Value") == "Account");
+	}
+
+	[Fact]
+	public void TheAccountMenu_DimsNothing()
+	{
+		// layout audit item 18: LightDismissOverlayMode="On" washed the whole window white (light) or dimmed it (dark)
+		Assert.Equal("Off", (string?)AccountButton().Descendants(Presentation + "Flyout").Single().Attribute("LightDismissOverlayMode"));
+	}
+
+	[Fact]
+	public void TheTitleBar_HidesSearchWhenSignedOut_AndHasNoVersionSubtitle()
+	{
+		var doc = Load(TitleBar);
+		var box = doc.Descendants(Presentation + "AutoSuggestBox").Single();
+
+		// a property, so signing out hides it: x:Bind does not call SearchVisibility(User, ...) again once User is null
+		Assert.Equal("{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsSearchShown), Mode=OneWay}", (string?)box.Attribute("Visibility"));
+		Assert.Equal("Hidden", (string?)box.Attribute("KeyboardAcceleratorPlacementMode"));
+		// layout audit item 20: the version is in Settings > About; the subtitle says "Preview" on a test build only
+		Assert.Equal("{x:Bind ViewModel.Subtitle}", (string?)doc.Descendants(Presentation + "TitleBar").Single().Attribute("Subtitle"));
+		// layout audit item 10: a friendly kind under a suggestion, not the raw "Series"
+		Assert.Contains(doc.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind cvm:SearchLabels.KindTitle(Item.Type)}");
+	}
+
+	[Fact]
+	public void TheCaptionButtons_FollowTheAppsTheme()
+	{
+		var code = Code("FluentFin/Views/TitleBarControl.xaml.cs");
+
+		Assert.Contains("ActualThemeChanged += (_, _) => ApplyCaptionTheme();", code);
+		Assert.Contains("bar.PreferredTheme = CaptionThemeFor(ActualTheme, highContrast);", code);
+		Assert.Contains("bar.ButtonForegroundColor = colors?.Foreground;", code);
+		Assert.Contains("bar.ButtonHoverBackgroundColor = colors?.HoverBackground;", code);
 	}
 
 	[Fact]
@@ -112,6 +148,30 @@ public sealed class AccountMenuXamlTests
 	// ---- Settings > Other devices
 
 	[Fact]
+	public void Settings_HasNoPanelAroundAGroup_AndItsColumnIsLeftAligned()
+	{
+		var doc = Load(Settings);
+
+		// layout audit items 3 and 17: no boxes in boxes; headers outside the cards
+		Assert.DoesNotContain(doc.Descendants(), e => ((string?)e.Attribute("Style"))?.Contains("GlassSurfaceStyle", StringComparison.Ordinal) == true);
+		Assert.All(Groups(), g => Assert.Equal("{StaticResource BodyStrongTextBlockStyle}", (string?)g.Elements().First().Attribute("Style")));
+		// one star column up to 1000 px, the rest of a wide window empty on the right (a centred column sat 435 px from the rail)
+		var column = doc.Descendants(Presentation + "ColumnDefinition").First();
+		Assert.Equal(("*", "1000"), ((string?)column.Attribute("Width"), (string?)column.Attribute("MaxWidth")));
+	}
+
+	[Fact]
+	public void RemoveServer_IsInsideTheExpandedCard()
+	{
+		var expander = Group("Servers and accounts").Descendants(Toolkit + "SettingsExpander").Single();
+		var footer = expander.Element(Toolkit + "SettingsExpander.ItemsFooter");
+
+		Assert.NotNull(footer);
+		Assert.Contains(footer!.Descendants(Presentation + "Button"), b => (string?)b.Attribute("Content") == "Remove server");
+		Assert.DoesNotContain(expander.Elements(Presentation + "Button"), _ => true);
+	}
+
+	[Fact]
 	public void OtherDevices_ComesAfterServersAndAccounts()
 	{
 		var titles = Groups().Select(Title).ToList();
@@ -121,8 +181,7 @@ public sealed class AccountMenuXamlTests
 
 	[Theory]
 	[InlineData("Quick Connect", "QuickConnectButton", "Enter a code", "Enter a code for Quick Connect", "{x:Bind root:App.Dialogs.QuickConnectAuthCommand}")]
-	[InlineData("Sync Play", "SyncPlayButton", "Choose a group", "Choose a group for Sync Play", "{x:Bind root:App.Dialogs.SelectSyncPlayGroupCommand}")]
-	[InlineData("Play On", "PlayOnButton", "Choose a device", "Choose a device for Play On", "{x:Bind root:App.Dialogs.ChangeDefaultSessionCommand}")]
+	[InlineData("SyncPlay", "SyncPlayButton", "Choose a group", "Choose a group for SyncPlay", "{x:Bind root:App.Dialogs.SelectSyncPlayGroupCommand}")]
 	public void OtherDevices_OpensTheSameDialogsTheProfileFlyoutDid(string header, string name, string content, string automationName, string command)
 	{
 		var card = Assert.Single(Group("Other devices").Descendants(Toolkit + "SettingsCard"), c => (string?)c.Attribute("Header") == header);
@@ -138,12 +197,36 @@ public sealed class AccountMenuXamlTests
 	}
 
 	[Fact]
+	public void PlayOn_LeftSettings()
+	{
+		// layout audit item 18: its dialog showed nothing with no other device; a cast target belongs by what you play
+		Assert.DoesNotContain(Load(Settings).Descendants(), e => (string?)e.Attribute(Xaml + "Name") is "PlayOnCard" or "PlayOnButton");
+		Assert.DoesNotContain("ChangeDefaultSession", Code(Settings), StringComparison.Ordinal);
+	}
+
+	[Fact]
 	public void SyncPlay_IsDisabledWithTheMpvPlayer_AndSaysWhy()
 	{
-		var card = Assert.Single(Group("Other devices").Descendants(Toolkit + "SettingsCard"), c => (string?)c.Attribute("Header") == "Sync Play");
+		var card = Assert.Single(Group("Other devices").Descendants(Toolkit + "SettingsCard"), c => (string?)c.Attribute("Header") == "SyncPlay");
 
 		Assert.Equal("{x:Bind ViewModel.SyncPlayDescription, Mode=OneWay}", (string?)card.Attribute("Description"));
 		Assert.Equal("{x:Bind ViewModel.IsSyncPlayAvailable, Mode=OneWay}", (string?)card.Descendants(Presentation + "Button").Single().Attribute("IsEnabled"));
+	}
+
+	[Theory]
+	[InlineData(UserPolicy_SyncPlayAccess.None, false, "Not available on this server")]
+	[InlineData(UserPolicy_SyncPlayAccess.JoinGroups, true, "join a group")]
+	[InlineData(UserPolicy_SyncPlayAccess.CreateAndJoinGroups, true, "join a group")]
+	public void SyncPlay_FollowsWhatTheServerAllowsThisAccount(UserPolicy_SyncPlayAccess access, bool available, string says)
+	{
+		var vm = new SettingsViewModel(Mock.Of<ISettings>(), Mock.Of<FluentFin.Core.Mpv.IMpvBackend>(), Mock.Of<IJellyfinClient>(), null!)
+		{
+			CurrentUser = () => new UserDto { Policy = new UserPolicy { SyncPlayAccess = access } },
+		};
+		vm.MediaPlayerType = MediaPlayerType.WindowsMediaPlayer;
+
+		Assert.Equal(available, vm.IsSyncPlayAvailable);
+		Assert.Contains(says, vm.SyncPlayDescription, StringComparison.Ordinal);
 	}
 
 	[Theory]
@@ -191,8 +274,9 @@ public sealed class AccountMenuXamlTests
 		Assert.False(SettingsViewModel.ShowsServerAdministration(null));
 	}
 
-	private static IEnumerable<XElement> Groups() => Load(Settings).Descendants(Presentation + "ContentControl")
-		.Where(x => (string?)x.Attribute("Style") == "{StaticResource GlassSurfaceStyle}");
+	/// <summary>Settings' groups: a StackPanel whose first element is its level-2 heading (no panel around them since 1.1.4).</summary>
+	internal static IEnumerable<XElement> Groups() => Load(Settings).Descendants(Presentation + "StackPanel")
+		.Where(x => x.Elements().FirstOrDefault() is { } first && first.Name == Presentation + "TextBlock" && (string?)first.Attribute("AutomationProperties.HeadingLevel") == "Level2");
 
 	private static string? Title(XElement group) => (string?)group.Descendants(Presentation + "TextBlock").First().Attribute("Text");
 

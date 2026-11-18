@@ -39,7 +39,7 @@
         IsBackButtonEnabled="{x:Bind ViewModel.CanGoBack, Mode=OneWay}"
         IsBackButtonVisible="{x:Bind ViewModel.IsBackButtonShown, Mode=OneWay}"
         IsPaneToggleButtonVisible="False"
-        Subtitle="{x:Bind ViewModel.Version}"
+        Subtitle="{x:Bind ViewModel.Subtitle}"
         Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsVisible), Mode=OneWay}">
         <TitleBar.IconSource>
             <ImageIconSource ImageSource="/Assets/Seaglass-32.png" />
@@ -51,11 +51,12 @@
                 Margin="{StaticResource XSmallTopBottomMargin}"
                 CornerRadius="{StaticResource GlassButtonCornerRadius}"
                 AutomationProperties.Name="Search"
+                KeyboardAcceleratorPlacementMode="Hidden"
                 PlaceholderText="Search movies, shows and episodes"
                 QueryIcon="Find"
                 Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                 TextMemberPath="Name"
-                Visibility="{x:Bind SearchVisibility(ViewModel.User, Chrome.IsPlayerOpen), Mode=OneWay}">
+                Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsSearchShown), Mode=OneWay}">
                 <!--
                     Seaglass 1.1.4 (interaction audit, item 2): the arrows only move through the rows, the box showing the row's name
                     (TextMemberPath: every row has a Name); Enter on a row opens it, Enter on the text opens the results page
@@ -106,7 +107,7 @@
                                     <StackPanel Grid.Column="1">
                                         <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="{x:Bind Name}" />
                                         <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind c:BaseItemDtoConverters.GetCardSubtitle(Item)}" />
-                                        <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="{x:Bind Item.Type}" />
+                                        <TextBlock Style="{ThemeResource CaptionTextBlockStyle}" Text="{x:Bind cvm:SearchLabels.KindTitle(Item.Type)}" />
                                     </StackPanel>
                                 </Grid>
                             </DataTemplate>
@@ -152,7 +153,7 @@
                 HorizontalAlignment="Right"
                 Orientation="Horizontal"
                 Spacing="10">
-                <!--  fluentfin-mpv: a sign-out in progress (the mpv playback's stop and report, up to ~2 s, then the logout)  -->
+                <!--  fluentfin-mpv: a sign-out in progress (the mpv playback's stop and report, up to ~2 s, then the sign-out request)  -->
                 <StackPanel
                     VerticalAlignment="Center"
                     Orientation="Horizontal"
@@ -170,7 +171,7 @@
                 </StackPanel>
                 <!--
                     Seaglass 1.1.4 (UX review, prioritised fix 15): the Account menu: who is signed in and to which server, Switch user,
-                    Sign out and Settings. Sync Play, Quick Connect and Play On moved to Settings > Other devices; the admin Dashboard
+                    Settings and, last after a separator, Sign out (layout audit, item 18); it dims nothing (no light-dismiss overlay). Sync Play, Quick Connect and Play On moved to Settings > Other devices; the admin Dashboard
                     went (administrators open the server's administration from Settings > Servers and accounts). Hidden while the player
                     page is shown (fix 5: a Sign out over a playing video is a hazard), from the navigation (TitleBarViewModel).
                 -->
@@ -194,7 +195,7 @@
                         <Flyout
                             x:Name="AccountFlyout"
                             AreOpenCloseAnimationsEnabled="True"
-                            LightDismissOverlayMode="On"
+                            LightDismissOverlayMode="Off"
                             Placement="BottomEdgeAlignedRight">
                             <!--  the menu's pane is named for Narrator ("Account"); the glass is the shared presenter's  -->
                             <Flyout.FlyoutPresenterStyle>
@@ -245,22 +246,22 @@
                                     Content="Switch user"
                                     Icon="{ui:FontIcon Glyph=&#xE748;}" />
                                 <lc:MenuFlyoutButton
-                                    x:Name="SignOutItem"
-                                    HorizontalAlignment="Stretch"
-                                    Click="CloseAccountFlyout"
-                                    Command="{x:Bind ViewModel.LogoutCommand}"
-                                    Content="Sign out"
-                                    Icon="{ui:FontIcon Glyph=&#xF3B1;}" />
-
-                                <MenuFlyoutSeparator Margin="{StaticResource XSmallTopBottomMargin}" />
-
-                                <lc:MenuFlyoutButton
                                     x:Name="SettingsItem"
                                     HorizontalAlignment="Stretch"
                                     Click="CloseAccountFlyout"
                                     Command="{x:Bind ViewModel.GoToSettingsCommand}"
                                     Content="Settings"
                                     Icon="{ui:FontIcon Glyph=&#xE713;}" />
+
+                                <MenuFlyoutSeparator Margin="{StaticResource XSmallTopBottomMargin}" />
+
+                                <lc:MenuFlyoutButton
+                                    x:Name="SignOutItem"
+                                    HorizontalAlignment="Stretch"
+                                    Click="CloseAccountFlyout"
+                                    Command="{x:Bind ViewModel.LogoutCommand}"
+                                    Content="Sign out"
+                                    Icon="{ui:FontIcon Glyph=&#xF3B1;}" />
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>

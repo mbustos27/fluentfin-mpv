@@ -66,29 +66,8 @@ public sealed class SettingsPagePlayerTests : IDisposable
 		Assert.Equal(MediaPlayerType.WindowsMediaPlayer, _service.ReadSetting(SettingKeys.MediaPlayerType));
 	}
 
-	/// <summary>
-	/// Seaglass 1.1.3 (review): "Play the next episode automatically" shows only for a player that follows it, and the page
-	/// hears the change when the Player list changes (the card's Visibility is bound one way to FollowsAutoPlay).
-	/// </summary>
-	[Fact]
-	public async Task TheAutoplayCard_FollowsThePlayerPick()
-	{
-		var vm = await OpenSettings();
-		Assert.False(vm.FollowsAutoPlay);
-		List<string?> changed = [];
-		vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
-
-		vm.SelectedMediaPlayer = SettingsViewModel.OfferedPlayers(_release).Single(x => x.Type == MediaPlayerType.WindowsMediaPlayer);
-
-		Assert.True(vm.FollowsAutoPlay);
-		Assert.Contains(nameof(SettingsViewModel.FollowsAutoPlay), changed);
-
-		changed.Clear();
-		vm.SelectedMediaPlayer = SettingsViewModel.OfferedPlayers(_release).Single(x => x.Type == MediaPlayerType.Mpv);
-
-		Assert.False(vm.FollowsAutoPlay);
-		Assert.Contains(nameof(SettingsViewModel.FollowsAutoPlay), changed);
-	}
+	// Seaglass 1.1.4: "Play the next episode automatically" is shown for every player (SettingsAndRailXamlTests); the 1.1.3
+	// test that it followed the player pick (FollowsAutoPlay) went with it.
 
 	/// <summary>Seaglass 1.1.3 (review): the Player list hides for a copy that can run one player only; the release has two.</summary>
 	[Fact]

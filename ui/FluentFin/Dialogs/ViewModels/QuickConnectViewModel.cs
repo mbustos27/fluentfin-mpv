@@ -15,7 +15,15 @@ public partial class QuickConnectViewModel(IJellyfinClient jellyfinClient) : Obs
 	/// (it closes with Close), so the answer is said here; it used to say nothing either way.
 	/// </summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(CloseText))]
+	[NotifyPropertyChangedFor(nameof(CanApprove))]
 	public partial string Status { get; private set; } = "";
+
+	/// <summary>Approve is offered until a code is approved (a second press would approve nothing).</summary>
+	public bool CanApprove => Status != ApprovedStatus;
+
+	/// <summary>The dialog's close button: Cancel until a code is approved, then Close.</summary>
+	public string CloseText => Status == ApprovedStatus ? "Close" : "Cancel";
 
 	public const string ApprovedStatus = "Approved. The other device signs in now; you can close this.";
 

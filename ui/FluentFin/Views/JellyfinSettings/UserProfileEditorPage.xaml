@@ -89,11 +89,11 @@
                 <ctk:SettingsCard Description="The server will not allow any connections from this user. Existing connections will be abruptly ended." Header="Disable this user">
                     <ToggleSwitch IsOn="{x:Bind ViewModel.IsDisabled, Mode=TwoWay}" />
                 </ctk:SettingsCard>
-                <ctk:SettingsCard Description="Useful for private or hidden administrator accounts. The user will need to sign in manually by entering their username and password." Header="Hide this user from login screens">
+                <ctk:SettingsCard Description="Useful for private or hidden administrator accounts. The user will need to sign in manually by entering their username and password." Header="Hide this user from sign-in screens">
                     <ToggleSwitch IsOn="{x:Bind ViewModel.HideFromLogin, Mode=TwoWay}" />
                 </ctk:SettingsCard>
-                <ctk:SettingsCard Description="Determine how many incorrect login tries can be made before lockout occurs. A value of zero means inheriting the default of three tries for normal users and five for administrators. Setting this to -1 will disable the feature." Header="Failed login tries before user is locked out">
-                    <NumberBox AutomationProperties.Name="Failed login tries before user is locked out" Value="{x:Bind ViewModel.FailedLoginTriesBeforeLockout, Mode=TwoWay}" />
+                <ctk:SettingsCard Description="How many wrong sign-in attempts are allowed before the account is locked. A value of zero means inheriting the default of three tries for normal users and five for administrators. Setting this to -1 will disable the feature." Header="Failed sign-in attempts before the account is locked">
+                    <NumberBox AutomationProperties.Name="Failed sign-in attempts before the account is locked" Value="{x:Bind ViewModel.FailedLoginTriesBeforeLockout, Mode=TwoWay}" />
                 </ctk:SettingsCard>
                 <ctk:SettingsCard Description="Set the maximum number of simultaneous user sessions. A value of 0 will disable the feature." Header="Maximum number of simultaneous user sessions">
                     <NumberBox AutomationProperties.Name="Maximum number of simultaneous user sessions" Value="{x:Bind ViewModel.MaximumNumberOfSimultaneousSessions, Mode=TwoWay}" />

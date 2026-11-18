@@ -1,4 +1,4 @@
-# Seaglass 1.1.4 (account stream): the title bar while playing, the Account menu, Settings > Other devices and the Volume
+﻿# Seaglass 1.1.4 (account stream): the title bar while playing, the Account menu, Settings > Other devices and the Volume
 # step. Run with -Script series,season -Then offscreen\then-account.ps1 (FluentFin's controls, the default), once per theme
 # and glass mode for the shots: SEAGLASS_THEME=Light|Dark, -Setting Glass=Full|Solid, SG_SHOT_TAG naming them (e.g.
 # dark-full); SG_ACCOUNT_SHOTS_ONLY=1 skips the checks that change state (Quick Connect, the keys, administration).
@@ -41,7 +41,8 @@ function AcReveal([string]$Name) {
     for ($p = 0; $p -le 100; $p += 5) {
         [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, $p); AcSettle 250
         $t = Find-Ui -Name $Name -Type 'Text'
-        if ($t -and ([OffscreenUi]::RectOf($t).Top - (AcWindowTop)) -gt 60) { AcSettle 500; return $true }
+        # in the upper part of the window, so the group's cards show under it
+        if ($t -and ([OffscreenUi]::RectOf($t).Top - (AcWindowTop)) -gt 60 -and ([OffscreenUi]::RectOf($t).Top - (AcWindowTop)) -lt 420) { AcSettle 500; return $true }
     }
     $false
 }
@@ -116,7 +117,7 @@ AcSize 1920 1080
 $sp = Find-Ui -Id 'SyncPlayButton' -OffscreenToo
 Check 'settings: Sync Play is in Settings' ([bool]$sp)
 if ($sp) { Check 'settings: Sync Play is disabled with the mpv player, and says why' ((-not $sp.Current.IsEnabled) -and [bool](Find-Ui -Name 'Not available with the mpv player' -Type 'Text' -Contains -OffscreenToo)) "enabled: $($sp.Current.IsEnabled)" }
-Check 'settings: Play On is in Settings' ([bool](Find-Ui -Id 'PlayOnButton' -OffscreenToo))
+Check 'settings: Play On left Settings (its dialog showed nothing)' (-not (Find-Ui -Id 'PlayOnButton' -OffscreenToo))
 
 if (-not $acShotsOnly -and $qcButton) {
     # Quick Connect end to end: another device asks for a code (the fake server), Seaglass approves it from Settings
@@ -126,12 +127,15 @@ if (-not $acShotsOnly -and $qcButton) {
     Check 'quick connect: the dialog opens from Settings' ([bool]$codeBox)
     if ($codeBox) {
         AcSetText $codeBox '000000'; AcSettle 300
-        [void](Invoke-Element (Find-Ui -Name 'OK' -Type 'Button'))
+        [void](Invoke-Element (Find-Ui -Name 'Approve' -Type 'Button'))
         $bad = Wait-Ui -Name "didn't work" -Type 'Text' -Contains -Seconds 8
         Check 'quick connect: a wrong code is said' ([bool]$bad)
         AcSetText $codeBox $other.Code; AcSettle 300
-        [void](Invoke-Element (Find-Ui -Name 'OK' -Type 'Button'))
+        [void](Invoke-Element (Find-Ui -Name 'Approve' -Type 'Button'))
         $ok = Wait-Ui -Name 'Approved' -Type 'Text' -Contains -Seconds 8
+        AcSettle 400
+        $approve = Find-Ui -Name 'Approve' -Type 'Button'
+        Check 'quick connect: Approve is off once approved, and Cancel became Close' ($approve -and -not $approve.Current.IsEnabled -and (Find-Ui -Name 'Close' -Type 'Button')) "Approve enabled: $(if ($approve) { $approve.Current.IsEnabled })"
         AcSettle 600
         Shot "$acTag-quick-connect-approved"
         $state = Wait-Until { $w = @(Invoke-Server '/__harness/quickconnect') | Where-Object { $_.code -eq $other.Code -and $_.approved }; if ($w) { $w } } -Seconds 5 -PollMs 200
@@ -148,13 +152,14 @@ if (-not $acShotsOnly -and $qcButton) {
 $vs = Find-Ui -Name 'Volume step, in percent' -OffscreenToo
 Check 'volume step: found' ([bool]$vs)
 if ($vs) {
+    [void](AcReveal 'Volume step')
     [void][OffscreenUi]::SetFocus($vs); AcSettle 900
     $vs = Find-Ui -Name 'Volume step, in percent'
+    if (-not $vs) { $vs = Find-Ui -Name 'Volume step, in percent' -OffscreenToo }
     $spins = @([OffscreenUi]::Under($vs, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Button })
     $sizes = @($spins | ForEach-Object { $r = [OffscreenUi]::RectOf($_); '{0}x{1}' -f [int]$r.Width, [int]$r.Height })
     $small = @($spins | Where-Object { $r = [OffscreenUi]::RectOf($_); $r.Width -lt 24 -or $r.Height -lt 24 })
     Check 'volume step: spin buttons at least 24 x 24' ($spins.Count -ge 2 -and $small.Count -eq 0) ("{0} buttons: {1}" -f $spins.Count, ($sizes -join ', '))
-    [void](AcReveal 'Volume step')
     Shot "$acTag-volume-step-1920"
     $edit = @([OffscreenUi]::Under($vs, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit }) | Select-Object -First 1
     $target = if ($edit) { $edit } else { $vs }
@@ -190,4 +195,16 @@ if ($admin -and -not $acShotsOnly) {
     $errs = @(Get-Requests $before | Where-Object { $_.status -ge 500 -or $_.route -eq 'unhandled' } | ForEach-Object { "$($_.method) $($_.path) $($_.status)" })
     Say ("server administration: {0} requests failed or unhandled{1}" -f $errs.Count, $(if ($errs) { ': ' + (($errs | Select-Object -First 6) -join '; ') }))
     Key 0xA6; AcSettle 1500
+}
+
+# ---- Sign out (last): the server page shows no search box (layout audit, item 12: it stayed after a sign-out)
+AcSize 1920 1080
+if (AcOpenAccount) {
+    [void](Invoke-Element (Find-Ui -Name 'Sign out' -Type 'Button'))
+    $serverPage = Wait-Ui -Id 'TxtUrl' -Seconds 20
+    AcSettle 1500
+    Check 'sign out: the server page opens' ([bool]$serverPage)
+    Check 'sign out: no search box once signed out' (-not (Find-Ui -Name 'Search' -Type 'Edit' -Contains))
+    Check 'sign out: no Account button once signed out' (-not (AcAccount))
+    Shot "$acTag-signed-out-1920"
 }

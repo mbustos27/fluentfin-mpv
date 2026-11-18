@@ -56,9 +56,8 @@ public sealed class SettingsAndRailXamlTests
 	[Fact]
 	public void EverySettingsGroup_HasATitle_AndAboutIsLast()
 	{
-		var groups = Load(Settings).Descendants(Presentation + "ContentControl")
-			.Where(x => (string?)x.Attribute("Style") == "{StaticResource GlassSurfaceStyle}")
-			.ToList();
+		// Seaglass 1.1.4: a group is its heading and its cards, no panel around them (AccountMenuXamlTests.Groups)
+		var groups = AccountMenuXamlTests.Groups().ToList();
 
 		var titles = groups.Select(g =>
 		{
@@ -67,7 +66,7 @@ public sealed class SettingsAndRailXamlTests
 			return (string?)heading.Attribute("Text");
 		}).ToList();
 
-		// Seaglass 1.1.4: Other devices (Quick Connect, Sync Play, Play On, from the old profile flyout)
+		// Seaglass 1.1.4: Other devices (Quick Connect, SyncPlay, from the old profile flyout)
 		Assert.Equal(["Appearance", "Playback", "Audio and subtitles", "Servers and accounts", "Other devices", "Integrations", "Advanced", "About"], titles);
 
 		// nothing after About
@@ -204,7 +203,10 @@ public sealed class SettingsAndRailXamlTests
 		Assert.Contains("public bool HasPlayerChoice => SettingsViewModel.HasPlayerChoice;", Code("FluentFin/Views/SettingsPage.xaml.cs"));
 
 		var autoplay = Assert.Single(Load(Settings).Descendants(Toolkit + "SettingsCard"), c => (string?)c.Attribute("Header") == "Play the next episode automatically");
-		Assert.Equal("{x:Bind c:Converters.BooleanToVisibility(ViewModel.FollowsAutoPlay), Mode=OneWay}", (string?)autoplay.Attribute("Visibility"));
+		// Seaglass 1.1.4 (interaction audit, item 7): for every player, the mpv player too (it was hidden with mpv: no way to turn
+		// auto-play off with the only shipped player); bound to the user's EnableNextEpisodeAutoPlay, which the player sends on
+		Assert.Null(autoplay.Attribute("Visibility"));
+		Assert.Equal("{x:Bind ViewModel.AutoPlayNextEpisode, Mode=TwoWay}", (string?)autoplay.Descendants(Presentation + "ToggleSwitch").Single().Attribute("IsOn"));
 	}
 
 	// ---- Settings: Integrations
@@ -220,8 +222,8 @@ public sealed class SettingsAndRailXamlTests
 		Assert.Contains("NavigateTo(JellyseerrEntry.PageKey)", Code("FluentFin/Views/SettingsPage.xaml.cs"));
 	}
 
-	private static XElement Group(string title) => Load(Settings).Descendants(Presentation + "ContentControl")
-		.Single(x => (string?)x.Attribute("Style") == "{StaticResource GlassSurfaceStyle}" && (string?)x.Descendants(Presentation + "TextBlock").First().Attribute("Text") == title);
+	private static XElement Group(string title) => AccountMenuXamlTests.Groups()
+		.Single(x => (string?)x.Elements().First().Attribute("Text") == title);
 
 	private static XDocument Load(string repoRelativePath) => XDocument.Load(Path.Combine(RepoRoot, repoRelativePath), LoadOptions.SetLineInfo);
 

@@ -5,6 +5,60 @@
 # as then-scroll-shots.ps1. Dot-sourced by drive.ps1: no variable here may reuse one of its names.
 Add-Type -Namespace SgSearch -Name W -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool PostMessage(System.IntPtr h, uint m, System.IntPtr w, System.IntPtr l);'
 $srTag = if ($env:SG_SHOT_TAG) { $env:SG_SHOT_TAG } else { 'run' }
+# The search list is a popup window of its own, which a PrintWindow of the main window leaves out: SrShot prints each visible
+# window of the app's own process (checked by process id) and draws it over the main window where it sits (as the layout
+# audit's walk did).
+if (-not ('SgPopShot' -as [type])) {
+    Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
+using System; using System.Collections.Generic; using System.Drawing; using System.Drawing.Imaging; using System.Runtime.InteropServices; using System.Text;
+public static class SgPopShot {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc p, IntPtr l);
+  [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumProc p, IntPtr l);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+  static uint Pid(IntPtr h) { uint p; GetWindowThreadProcessId(h, out p); return p; }
+  static string Cls(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, 256); return s.ToString(); }
+  static Bitmap Print(IntPtr h, int w, int hh) {
+    var b = new Bitmap(w, hh, PixelFormat.Format32bppArgb);
+    using (var g = Graphics.FromImage(b)) { var dc = g.GetHdc(); try { PrintWindow(h, dc, 2); } finally { g.ReleaseHdc(dc); } }
+    return b;
+  }
+  public static string Shot(IntPtr main, int pid, string file) {
+    if (Pid(main) != (uint)pid) throw new InvalidOperationException("not FluentFin's window");
+    RECT r; GetWindowRect(main, out r);
+    int w = r.R - r.L, h = r.B - r.T;
+    var pops = new List<IntPtr>();
+    EnumWindows((x, l) => { if (x != main && Pid(x) == (uint)pid && IsWindowVisible(x)) pops.Add(x); return true; }, IntPtr.Zero);
+    EnumChildWindows(main, (x, l) => { if (Pid(x) == (uint)pid && IsWindowVisible(x) && Cls(x).Contains("Popup") && !pops.Contains(x)) pops.Add(x); return true; }, IntPtr.Zero);
+    var drawn = new List<string>();
+    using (var bmp = Print(main, w, h)) using (var g = Graphics.FromImage(bmp)) {
+      foreach (var p in pops) {
+        RECT pr; if (!GetWindowRect(p, out pr)) continue;
+        int pw = pr.R - pr.L, ph = pr.B - pr.T;
+        if (pw < 8 || ph < 8 || pw > 4 * w || ph > 4 * h) continue;
+        if (pr.R <= r.L || pr.L >= r.R || pr.B <= r.T || pr.T >= r.B) continue;
+        using (var pb = Print(p, pw, ph)) g.DrawImage(pb, pr.L - r.L, pr.T - r.T, pw, ph);
+        drawn.Add(string.Format("{0} {1}x{2}", Cls(p), pw, ph));
+      }
+      bmp.Save(file, ImageFormat.Png);
+    }
+    return string.Format("{0}x{1}, popups: {2}", w, h, drawn.Count == 0 ? "none" : string.Join("; ", drawn));
+  }
+}
+'@
+}
+function SrShot([string]$Name) {
+    $script:shotN++
+    $srFile = Join-Path $Out ("shots\{0:00}-{1}.png" -f $script:shotN, $Name)
+    $srInfo = [SgPopShot]::Shot($script:hwnd, $script:ui.Id, $srFile)
+    $shots[$Name] = $srFile
+    Say "shot $Name -> $srFile ($srInfo)"
+}
 function SrSettle([int]$Ms = 1000) { Start-Sleep -Milliseconds $Ms }
 function SrBox { Find-Ui -Name 'Search' -Type 'Edit' -Contains }
 function SrText { $b = SrBox; if ($b) { try { ($b.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)).Current.Value } catch { $null } } }
@@ -29,15 +83,15 @@ Check 'search: the typed text is in the box' ((SrText) -eq 'Quiet') "text: '$(Sr
 $rows = Wait-Until { $l = SrRows; if ($l.Count) { , $l } } -Seconds 8 -PollMs 150
 $names = @($rows | ForEach-Object { $_.Current.Name })
 Say "search rows: $($names.Count): $($names -join ' | ')"
-Check 'search: Narrator reads each row as name, year, type (never a class name)' ($names.Count -gt 0 -and -not ($names | Where-Object { $_ -match 'Jellyfin\.Sdk|BaseItemDto' }) -and ($names | Where-Object { $_ -match ', (movie|series|episode)$' })) (($names | Select-Object -First 3) -join ' | ')
-Shot "$srTag-search-rows"
+Check 'search: Narrator reads each row as name, year, type (never a class name)' ($names.Count -gt 0 -and -not ($names | Where-Object { $_ -match 'Jellyfin\.Sdk|BaseItemDto' }) -and ($names | Where-Object { $_ -match ', (movie|show|episode)$' })) (($names | Select-Object -First 3) -join ' | ')
+SrShot "$srTag-search-rows"
 Key 0x28; SrSettle 1500
 $first = SrText
 Check 'search: Down moves to the first row and opens nothing' ((SrHome) -and $names.Count -and $names[0].StartsWith($first) -and $first -ne 'Quiet') "page home: $(SrHome), box: '$first', row: '$($names[0])'"
 Key 0x28; SrSettle 1500
 $second = SrText
 Check 'search: a second Down moves on, still on Home, the box showing the row''s name' ((SrHome) -and $second -and $second -notmatch 'Jellyfin' -and ($names.Count -lt 2 -or $names[1].StartsWith($second))) "box: '$second'"
-Shot "$srTag-search-after-downs"
+SrShot "$srTag-search-after-downs"
 # Enter on the row: it opens, the box clears
 Key 0x0D
 $page = Wait-ItemPage $second -Seconds 15

@@ -194,7 +194,85 @@ public sealed class TitleBarAccountTests
 		Assert.Equal("", vm.SearchText);
 	}
 
-	// ---- Settings > Other devices > Quick Connect: the dialog says what OK did
+	// ---- Seaglass 1.1.4 (layout audit): the title bar
+
+	[Fact]
+	public void SigningOut_HidesTheSearch()
+	{
+		// item 12: the box stayed on the server and sign-in pages after a sign-out
+		var vm = Create();
+		vm.OnPageShown(typeof(HomePage));
+		Assert.True(vm.IsSearchShown);
+		var changed = new List<string?>();
+		vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+		vm.User = null;
+
+		Assert.False(vm.IsSearchShown);
+		Assert.Contains(nameof(TitleBarViewModel.IsSearchShown), changed);
+	}
+
+	[Fact]
+	public void ThePlayerPage_HidesTheSearchToo()
+	{
+		var vm = Create();
+		vm.OnPageShown(typeof(VideoPlayerPage));
+
+		Assert.False(vm.IsSearchShown);
+	}
+
+	[Theory]
+	[InlineData("1.1.4", "")]
+	[InlineData("1.1.4-beta.1", "Preview")]
+	public void TheSubtitle_IsEmptyOnARelease_AndPreviewOnATestBuild(string version, string subtitle)
+	{
+		// item 20: "Seaglass 1.1.3" on every page; the version is in Settings > About
+		Assert.Equal(subtitle, TitleBarViewModel.SubtitleFor(version));
+	}
+
+	[Theory]
+	[InlineData(Microsoft.UI.Xaml.ElementTheme.Light, false, Microsoft.UI.Windowing.TitleBarTheme.Light)]
+	[InlineData(Microsoft.UI.Xaml.ElementTheme.Dark, false, Microsoft.UI.Windowing.TitleBarTheme.Dark)]
+	[InlineData(Microsoft.UI.Xaml.ElementTheme.Light, true, Microsoft.UI.Windowing.TitleBarTheme.UseDefaultAppMode)]
+	public void TheCaptionButtons_TakeTheAppsTheme(Microsoft.UI.Xaml.ElementTheme theme, bool highContrast, Microsoft.UI.Windowing.TitleBarTheme expected)
+	{
+		// item 17: pale grey caption buttons on the light title bar (Seaglass light, Windows dark)
+		Assert.Equal(expected, TitleBarControl.CaptionThemeFor(theme, highContrast));
+	}
+
+	[Fact]
+	public void TheCaptionButtons_HaveTheThemesForegroundAndHoverColours()
+	{
+		var light = TitleBarControl.CaptionColorsFor(Microsoft.UI.Xaml.ElementTheme.Light, false)!;
+		var dark = TitleBarControl.CaptionColorsFor(Microsoft.UI.Xaml.ElementTheme.Dark, false)!;
+
+		// dark glyphs on the light title bar, white on the dark one (WinUI's TextFillColorPrimary in each)
+		Assert.Equal(Windows.UI.Color.FromArgb(0xE4, 0, 0, 0), light.Foreground);
+		Assert.Equal(Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF), dark.Foreground);
+		// a hover fill of the glyph's own colour, faint (SubtleFillColorSecondary)
+		Assert.Equal((byte)0, light.HoverBackground.R);
+		Assert.Equal((byte)0xFF, dark.HoverBackground.R);
+		Assert.InRange(light.HoverBackground.A, (byte)1, (byte)0x20);
+		// high contrast: Windows' own colours
+		Assert.Null(TitleBarControl.CaptionColorsFor(Microsoft.UI.Xaml.ElementTheme.Light, true));
+	}
+
+	// ---- SyncPlay's dialog (layout audit, item 18)
+
+	[Fact]
+	public void SyncPlaysDialog_JoinsOnlyAChosenGroup_InSentenceCase()
+	{
+		var vm = new SyncPlayGroupPickerViewModel(Mock.Of<IJellyfinClient>());
+		Assert.False(vm.CanJoin);
+
+		vm.SelectedGroup = new GroupInfoDto { GroupId = Guid.NewGuid(), GroupName = "Friday" };
+		Assert.True(vm.CanJoin);
+
+		Assert.Equal("New group", SyncPlayGroupPickerViewModel.SecondaryText(null));
+		Assert.Equal("Leave group", SyncPlayGroupPickerViewModel.SecondaryText(new GroupInfoDto()));
+	}
+
+	// ---- Settings > Other devices > Quick Connect: the dialog says what Approve did
 
 	[Theory]
 	[InlineData("123456", true, QuickConnectViewModel.ApprovedStatus)]
@@ -209,6 +287,9 @@ public sealed class TitleBarAccountTests
 		await vm.VerifyQuickConnectCommand.ExecuteAsync(null);
 
 		Assert.Equal(status, vm.Status);
+		// Cancel until approved, then Close
+		Assert.Equal(approved ? "Close" : "Cancel", vm.CloseText);
+		Assert.Equal(!approved, vm.CanApprove);
 		client.Verify(x => x.Authenticate(It.IsAny<string>()), string.IsNullOrWhiteSpace(code) ? Times.Never() : Times.Once());
 	}
 }

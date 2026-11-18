@@ -13,7 +13,11 @@ public partial class SyncPlayGroupPickerViewModel(IJellyfinClient jellyfinClient
 	public partial List<GroupInfoDto> Groups { get; set; }
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(CanJoin))]
 	public partial GroupInfoDto? SelectedGroup { get; set; }
+
+	/// <summary>Seaglass 1.1.4: Join is enabled once a group is chosen (it was an enabled "Select" over an empty list).</summary>
+	public bool CanJoin => SelectedGroup?.GroupId is not null;
 
 	[ObservableProperty]
 	public partial bool HasActiveGroups { get; set; }
@@ -29,8 +33,11 @@ public partial class SyncPlayGroupPickerViewModel(IJellyfinClient jellyfinClient
 		Groups = await jellyfinClient.GetSyncPlayGroups();
 		SelectedGroup = Groups.FirstOrDefault(x => x.GroupId == SessionInfo.GroupId);
 		HasActiveGroups = Groups is { Count: > 0 };
-		SecondaryButtonText = SelectedGroup is not null ? "Exit Group" : "Create Group";
+		SecondaryButtonText = SecondaryText(SelectedGroup);
 	}
+
+	/// <summary>Seaglass 1.1.4: sentence case, as every other button ("Leave group" while in one, else "New group").</summary>
+	public static string SecondaryText(GroupInfoDto? current) => current is not null ? "Leave group" : "New group";
 
 	[RelayCommand]
 	private async Task JoinGroup(GroupInfoDto group)

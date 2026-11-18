@@ -29,21 +29,33 @@ public sealed class SearchTests
 		// the AutoSuggestBox's TextMemberPath is "Name": what the box shows while the arrows are on the row
 		Assert.Equal("Quiet Brightwater", row.Name);
 		// the list names its rows from ToString: it was "Jellyfin.Sdk.Generated.Models.BaseItemDto" for every row
-		Assert.Equal("Quiet Brightwater, 2019, series", row.ToString());
+		Assert.Equal("Quiet Brightwater, 2019, show", row.ToString());
 		Assert.DoesNotContain("Jellyfin.Sdk", row.ToString(), StringComparison.Ordinal);
 	}
 
 	[Theory]
 	[InlineData(BaseItemDto_Type.Movie, 2010, null, "Inception, 2010, movie")]
 	[InlineData(BaseItemDto_Type.Episode, null, "Quiet Brightwater", "Quiet Brightwater: Inception, episode")]
-	[InlineData(BaseItemDto_Type.Series, null, null, "Inception, series")]
+	[InlineData(BaseItemDto_Type.Series, null, null, "Inception, show")]
 	public void SearchLabels_NameYearAndType(BaseItemDto_Type type, int? year, string? series, string label)
 	{
 		Assert.Equal(label, SearchLabels.For(Item("Inception", type, year, series)));
 	}
 
+	[Theory]
+	[InlineData(BaseItemDto_Type.Series, "Show")]
+	[InlineData(BaseItemDto_Type.Movie, "Movie")]
+	[InlineData(BaseItemDto_Type.Episode, "Episode")]
+	[InlineData(BaseItemDto_Type.BoxSet, "Collection")]
+	[InlineData(BaseItemDto_Type.Folder, "")]
+	public void TheKindUnderARow_IsAFriendlyName(BaseItemDto_Type type, string name)
+	{
+		// layout audit item 10: the raw kind was shown ("Series", "BoxSet")
+		Assert.Equal(name, SearchLabels.KindTitle(type));
+	}
+
 	[Fact]
-	public void ManyMatches_ShowEight_AndASeeAllRow()
+	public void ManyMatches_ShowSix_AndASeeAllRow()
 	{
 		var items = Enumerable.Range(1, 12).Select(i => Item($"Movie {i}", BaseItemDto_Type.Movie)).ToArray();
 

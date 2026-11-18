@@ -67,8 +67,8 @@ public abstract record SearchAction
 /// </summary>
 public static class SearchSuggestions
 {
-	/// <summary>How many items the list shows; more matches add a "See all" row (the results page has them all).</summary>
-	public const int Shown = 8;
+	/// <summary>How many items the list shows (layout audit: 5-6); more matches add a "See all" row (the results page has them all).</summary>
+	public const int Shown = 6;
 
 	/// <summary>
 	/// Typed queries are searched once the typing pauses for <paramref name="quiet"/>; queries in <paramref name="now"/>
@@ -91,7 +91,7 @@ public static class SearchSuggestions
 	{
 		if (result is null)
 		{
-			return [new SearchMessage(query, $"Couldn't search {LoadMessages.ServerName()}", "Choose this to try again.", CanRetry: true)];
+			return [new SearchMessage(query, FailedTitle, "Choose this to try again.", CanRetry: true)];
 		}
 
 		if (result.Items is not { Count: > 0 } items)
@@ -107,6 +107,9 @@ public static class SearchSuggestions
 
 		return rows;
 	}
+
+	/// <summary>Seaglass 1.1.4 (layout audit, item 10): a failed search, in plain words (it named the server by its address).</summary>
+	public const string FailedTitle = "Can't search right now";
 
 	/// <summary>
 	/// The query was submitted: with a row chosen (Enter on it, or a click), that row's action; with none, the results page
@@ -143,15 +146,22 @@ public static class SearchLabels
 		return string.Join(", ", parts);
 	}
 
-	/// <summary>The type in words ("movie", "series"); null for a type the search does not return.</summary>
+	/// <summary>The type in words ("movie", "show"), as Narrator reads it; null for a type the search does not return.</summary>
 	public static string? Kind(BaseItemDto_Type? type) => type switch
 	{
 		BaseItemDto_Type.Movie => "movie",
-		BaseItemDto_Type.Series => "series",
+		BaseItemDto_Type.Series => "show",
 		BaseItemDto_Type.Episode => "episode",
 		BaseItemDto_Type.Person => "person",
+		BaseItemDto_Type.BoxSet => "collection",
 		_ => null,
 	};
+
+	/// <summary>
+	/// Seaglass 1.1.4 (layout audit, item 10): the type under a suggestion ("Show", "Movie"); it showed the raw kind
+	/// ("Series", and a collection would read "BoxSet").
+	/// </summary>
+	public static string KindTitle(BaseItemDto_Type? type) => Kind(type) is { Length: > 0 } kind ? char.ToUpperInvariant(kind[0]) + kind[1..] : "";
 }
 
 /// <summary>Seaglass 1.1.4: one group of the search results page ("Movies" and its items).</summary>

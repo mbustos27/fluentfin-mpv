@@ -91,7 +91,6 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 				}
 				OnPropertyChanged(nameof(SelectedMediaPlayer));
 				OnPropertyChanged(nameof(IsMpvSelected));
-				OnPropertyChanged(nameof(FollowsAutoPlay));
 				OnPropertyChanged(nameof(IsSyncPlayAvailable));
 				OnPropertyChanged(nameof(SyncPlayDescription));
 			}
@@ -112,23 +111,28 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 
 	public bool IsMpvSelected => MediaPlayerType == MediaPlayerType.Mpv;
 
-	/// <summary>
-	/// Seaglass 1.1.3: "Play the next episode automatically" is shown only for a player that follows it (Windows Media Player,
-	/// PlaybackPreferences.PlaysNextItem); the mpv backend has its own auto_play, so with mpv the toggle did nothing.
-	/// </summary>
-	public bool FollowsAutoPlay => !IsMpvSelected;
+	// Seaglass 1.1.4 (interaction audit, item 7): "Play the next episode automatically" is shown for every player again (it was
+	// hidden with mpv, FollowsAutoPlay): the mpv player sends the user's choice to the backend before every play (set_auto_play)
 
 	// ---- Seaglass 1.1.4 (UX review, prioritised fix 15): Settings > Other devices, from the old profile flyout
 
 	/// <summary>
-	/// Sync Play plays in the other players only (the mpv player has no group playback; DialogCommands says so too), so with
-	/// mpv its button is disabled and the card says why rather than vanishing.
+	/// SyncPlay plays in the other players only (the mpv player has no group playback; DialogCommands says so too), and only
+	/// for an account the server allows it (its policy's SyncPlayAccess). Otherwise its button is disabled and the card says
+	/// why rather than vanishing (layout audit, item 18: choosing it used to do nothing at all).
 	/// </summary>
-	public bool IsSyncPlayAvailable => !IsMpvSelected;
+	public bool IsSyncPlayAvailable => !IsMpvSelected && SyncPlayAllowed(CurrentUser());
 
-	public string SyncPlayDescription => IsSyncPlayAvailable
-		? "Watch in step with other people on this server: join a group or start one."
-		: "Watch in step with other people on this server. Not available with the mpv player: choose another player under Playback to use it.";
+	/// <summary>The signed-in user, whose policy says whether SyncPlay is allowed (tests set it).</summary>
+	internal Func<UserDto?> CurrentUser { get; set; } = () => SessionInfo.CurrentUser;
+
+	/// <summary>Whether the server lets this account use SyncPlay (no policy known: assume it does, the server decides).</summary>
+	public static bool SyncPlayAllowed(UserDto? user) => user?.Policy?.SyncPlayAccess is not UserPolicy_SyncPlayAccess.None;
+
+	public string SyncPlayDescription =>
+		IsMpvSelected ? "Watch in step with other people on this server. Not available with the mpv player: choose another player under Playback to use it."
+		: !SyncPlayAllowed(CurrentUser()) ? "Watch in step with other people on this server. Not available on this server: it doesn't allow SyncPlay for your account."
+		: "Watch in step with other people on this server: join a group or start one.";
 
 	/// <summary>
 	/// The server's administration (the old Dashboard: users, libraries, playback, activity, scheduled tasks) for an
