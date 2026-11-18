@@ -150,7 +150,14 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient) : Observabl
 	public partial List<SeasonPill> SeasonPills { get; set; } = [];
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(SeasonDetailsText))]
 	public partial BaseItemDto? SelectedSeason { get; set; }
+
+	/// <summary>
+	/// 1.2.0: the link to the shown season's own page (its overview, marking the whole season watched), next to the picker:
+	/// "Season 2 details". The pills switch the list in place, so this is the series page's way to a season page.
+	/// </summary>
+	public string SeasonDetailsText => SelectedSeason?.Name is { Length: > 0 } name ? $"{name.Trim()} details" : "Season details";
 
 	[ObservableProperty]
 	public partial List<BaseItemDto> Episodes { get; set; } = [];

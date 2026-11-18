@@ -136,6 +136,22 @@ public sealed class ItemLayoutTests
 	}
 
 	[Fact]
+	public async Task TheLinkToTheSeasonsPage_NamesTheSeasonShown_AndFollowsThePicker()
+	{
+		var (vm, _, seasons, _) = Series(nextUp: null);
+		Assert.Equal("Season details", vm.SeasonDetailsText);
+		await vm.OnNavigatedTo(new BaseItemDto { Id = SeriesId, Type = BaseItemDto_Type.Series });
+		Assert.Equal("Season 1 details", vm.SeasonDetailsText);
+
+		var changed = new List<string?>();
+		vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+		await vm.SelectSeasonCommand.ExecuteAsync(seasons[1]);
+
+		Assert.Equal("Season 2 details", vm.SeasonDetailsText);
+		Assert.Contains(nameof(SeriesViewModel.SeasonDetailsText), changed);
+	}
+
+	[Fact]
 	public async Task OneSeason_NeedsNoPicker_ButItsEpisodesAreListed()
 	{
 		var (vm, _, seasons, episodes) = Series(nextUp: null, seasons: 1);

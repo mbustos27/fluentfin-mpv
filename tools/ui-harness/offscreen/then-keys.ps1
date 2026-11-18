@@ -14,7 +14,8 @@ Check 'keys: Forward after leaving the player stays on the season page (the play
 
 # Back goes up to the series page, Forward returns to the season page
 Key 0xA6
-$series = Wait-Until { [OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $fixture.season.name) } -Seconds 10 -PollMs 200
+# the series page: its own Watched ("Mark <series> as ..."); 1.2.0 lists episodes there, so the rows tell nothing
+$series = Wait-Until { [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, "Mark $($fixture.series.name) as ", '') } -Seconds 10 -PollMs 200
 Check 'keys: the Back key goes back to the series page' ([bool]$series -and -not (Season-Shown))
 Key 0xA7
 $again = Wait-Until { if (Season-Shown) { $true } } -Seconds 10 -PollMs 200

@@ -91,26 +91,43 @@
                             Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                             Style="{StaticResource GlassSectionTitleTextBlockStyle}"
                             Text="Episodes" />
-                        <!--  the series' seasons; empty (so hidden) for a series of one season  -->
-                        <ItemsRepeater x:Name="SeasonPicker" ItemsSource="{x:Bind ViewModel.SeasonPills, Mode=OneWay}" Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.SeasonPills.Count), Mode=OneWay}">
-                            <ItemsRepeater.ItemTemplate>
-                                <DataTemplate x:DataType="core:SeasonPill">
-                                    <Button
-                                        AutomationProperties.Name="{x:Bind AutomationName}"
-                                        Command="{Binding ElementName=Page, Path=ViewModel.SelectSeasonCommand}"
-                                        CommandParameter="{x:Bind Dto}"
-                                        Style="{StaticResource GlassPillButtonStyle}">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="{x:Bind Name}" />
-                                            <Border Height="3" CornerRadius="2" Background="{ThemeResource SeaglassAccentBrush}" Visibility="{x:Bind c:ItemRowConverters.Show(IsCurrent)}" />
-                                        </StackPanel>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsRepeater.ItemTemplate>
-                            <ItemsRepeater.Layout>
-                                <ctk:WrapLayout HorizontalSpacing="8" VerticalSpacing="8" />
-                            </ItemsRepeater.Layout>
-                        </ItemsRepeater>
+                        <!--
+                            the series' seasons (empty, so hidden, for a series of one season), and the link to the shown season's
+                            own page ("Season 2 details": its overview, marking the whole season watched)
+                        -->
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ItemsRepeater x:Name="SeasonPicker" ItemsSource="{x:Bind ViewModel.SeasonPills, Mode=OneWay}" Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.SeasonPills.Count), Mode=OneWay}">
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="core:SeasonPill">
+                                        <Button
+                                            AutomationProperties.Name="{x:Bind AutomationName}"
+                                            Command="{Binding ElementName=Page, Path=ViewModel.SelectSeasonCommand}"
+                                            CommandParameter="{x:Bind Dto}"
+                                            Style="{StaticResource GlassPillButtonStyle}">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="{x:Bind Name}" />
+                                                <Border Height="3" CornerRadius="2" Background="{ThemeResource SeaglassAccentBrush}" Visibility="{x:Bind c:ItemRowConverters.Show(IsCurrent)}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                                <ItemsRepeater.Layout>
+                                    <ctk:WrapLayout HorizontalSpacing="8" VerticalSpacing="8" />
+                                </ItemsRepeater.Layout>
+                            </ItemsRepeater>
+                            <HyperlinkButton
+                                x:Name="SeasonDetailsLink"
+                                Grid.Column="1"
+                                MinHeight="44"
+                                VerticalAlignment="Center"
+                                Command="{x:Bind root:App.Commands.DisplayDtoCommand}"
+                                CommandParameter="{x:Bind ViewModel.SelectedSeason, Mode=OneWay}"
+                                Content="{x:Bind ViewModel.SeasonDetailsText, Mode=OneWay}" />
+                        </Grid>
                         <!--  the season page's list: one Tab stop per episode, Up/Down between them, a list for Narrator  -->
                         <controls:EpisodeList
                             AutomationProperties.Name="Episodes"

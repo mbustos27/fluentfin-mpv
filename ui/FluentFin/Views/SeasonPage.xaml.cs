@@ -22,9 +22,10 @@ public sealed partial class SeasonPage : Page
 		_place.Arrived(e);
 	}
 
-	protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+	// before the page goes: by OnNavigatedFrom it is unloaded and the focus has already left it (for the title bar)
+	protected override void OnNavigatingFrom(Microsoft.UI.Xaml.Navigation.NavigatingCancelEventArgs e)
 	{
 		_place?.Left();
-		base.OnNavigatedFrom(e);
+		base.OnNavigatingFrom(e);
 	}
 }

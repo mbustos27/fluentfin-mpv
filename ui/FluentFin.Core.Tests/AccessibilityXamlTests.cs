@@ -118,7 +118,11 @@ public class AccessibilityXamlTests
 		var doc = Load(page);
 
 		Assert.Contains(doc.Descendants(), e => e.Name.LocalName == "ItemMetaRows" && (string?)e.Attribute("Dto") == "{x:Bind ViewModel.Dto, Mode=OneWay}");
-		Assert.DoesNotContain(doc.Descendants(Presentation + "HyperlinkButton"), _ => true);
+		// 1.2.0: the one link left goes somewhere (the series page's "Season 2 details"); the metadata has none
+		Assert.All(doc.Descendants(Presentation + "HyperlinkButton"), link =>
+			Assert.True(link.Attribute("Command") is not null || link.Attribute("Click") is not null || link.Attribute("NavigateUri") is not null, "a link that goes nowhere"));
+		Assert.DoesNotContain(doc.Descendants(), e => e.Name.LocalName == "ItemMetaRows" && e.Descendants(Presentation + "HyperlinkButton").Any());
+		Assert.DoesNotContain("HyperlinkButton", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/ItemMetaRows.xaml")));
 	}
 
 	[Theory]
@@ -267,8 +271,15 @@ public class AccessibilityXamlTests
 		var lists = Load(page).Descendants(Presentation + "ComboBox").ToList();
 
 		Assert.Equal(new string?[] { "Audio", "Subtitle" }, lists.Select(c => (string?)c.Attribute("AutomationProperties.Name")));
-		Assert.Equal("{x:Bind ViewModel.AudioStreams, Mode=OneWay}", (string?)lists[0].Attribute("ItemsSource"));
-		Assert.StartsWith("{x:Bind ViewModel.SubtitleStreams,", (string?)lists[1].Attribute("ItemsSource"));
+		// 1.2.0 (layout audit item 16): plain labels (TrackLabels), strings Narrator reads, chosen by place; no codecs
+		Assert.Equal("{x:Bind ViewModel.AudioLabels, Mode=OneWay}", (string?)lists[0].Attribute("ItemsSource"));
+		Assert.Equal("{x:Bind ViewModel.SelectedAudioIndex, Mode=TwoWay}", (string?)lists[0].Attribute("SelectedIndex"));
+		Assert.Equal("{x:Bind ViewModel.SubtitleLabels, Mode=OneWay}", (string?)lists[1].Attribute("ItemsSource"));
+		Assert.Equal("{x:Bind ViewModel.SelectedSubtitleIndex, Mode=TwoWay}", (string?)lists[1].Attribute("SelectedIndex"));
+		Assert.All(lists, c => Assert.Null(c.Attribute("DisplayMemberPath")));
+		// the items before the place, so a new list is in before the place it is set to
+		Assert.All(lists, c => Assert.True(c.Attributes().ToList().FindIndex(a => a.Name.LocalName == "ItemsSource") < c.Attributes().ToList().FindIndex(a => a.Name.LocalName == "SelectedIndex")));
+		Assert.Contains(Load(page).Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.SelectedAudioLabel, Mode=OneWay}");
 	}
 
 	[Fact]

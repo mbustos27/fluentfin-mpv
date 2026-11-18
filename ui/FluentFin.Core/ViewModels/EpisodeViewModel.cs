@@ -22,13 +22,43 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 	public partial IList<MediaStream> AudioStreams { get; set; }
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(SelectedAudioIndex), nameof(SelectedAudioLabel))]
 	public partial MediaStream? SelectedAudio { get; set; }
 
 	[ObservableProperty]
 	public partial IList<MediaStream> SubtitleStreams { get; set; } = [];
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(SelectedSubtitleIndex))]
 	public partial MediaStream? SelectedSubtitle { get; set; }
+
+	// 1.2.0 (1.1.3 UX audit, layout item 16): the pickers show plain labels ("English (5.1)", "English (CC)", "Off";
+	// TrackLabels), strings so Narrator reads them, chosen by their place; the streams stay what Play sends
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(SelectedAudioLabel))]
+	public partial IReadOnlyList<string> AudioLabels { get; set; } = [];
+
+	[ObservableProperty]
+	public partial IReadOnlyList<string> SubtitleLabels { get; set; } = [];
+
+	public int SelectedAudioIndex
+	{
+		get => AudioStreams?.IndexOf(SelectedAudio!) ?? -1;
+		set => SelectedAudio = Pick(AudioStreams, value, SelectedAudio);
+	}
+
+	public int SelectedSubtitleIndex
+	{
+		get => SubtitleStreams?.IndexOf(SelectedSubtitle!) ?? -1;
+		set => SelectedSubtitle = Pick(SubtitleStreams, value, SelectedSubtitle);
+	}
+
+	/// <summary>The one audio track's label, when there is no choice to make.</summary>
+	public string SelectedAudioLabel => SelectedAudioIndex is >= 0 and var i && i < AudioLabels.Count ? AudioLabels[i] : "";
+
+	// a picker that lost its items (-1) keeps the choice
+	private static MediaStream? Pick(IList<MediaStream>? streams, int index, MediaStream? current) =>
+		streams is not null && index >= 0 && index < streams.Count ? streams[index] : current;
 
 	[ObservableProperty]
 	public partial IEnumerable<BaseItemPerson> GuestStars { get; set; }
@@ -129,12 +159,14 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 			VideoTitle = streams.FirstOrDefault(x => x.Type == MediaStream_Type.Video)?.DisplayTitle ?? string.Empty;
 
 			AudioStreams = streams.Where(x => x.Type == MediaStream_Type.Audio).ToList();
+			AudioLabels = TrackLabels.Labels(AudioStreams);
 			SelectedAudio = AudioStreams.FirstOrDefault(x => x.IsDefault == true) ?? AudioStreams.FirstOrDefault();
 
 			var defaultItem = new MediaStream();
 			typeof(MediaStream).GetProperty(nameof(MediaStream.DisplayTitle))!.SetValue(defaultItem, "None");
 
 			SubtitleStreams = [defaultItem, .. streams.Where(x => x.Type == MediaStream_Type.Subtitle).ToList()];
+			SubtitleLabels = TrackLabels.Labels(SubtitleStreams);
 			HasSubtitles = SubtitleStreams.Count > 1;
 		}
 

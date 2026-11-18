@@ -92,6 +92,13 @@ public sealed class ItemLayoutXamlTests
 		Assert.Equal("{x:Bind ViewModel.SeasonPills, Mode=OneWay}", (string?)picker.Attribute("ItemsSource"));
 		var pill = picker.Descendants().Single(e => e.Name.LocalName == "Button");
 		Assert.Equal("{Binding ElementName=Page, Path=ViewModel.SelectSeasonCommand}", (string?)pill.Attribute("Command"));
+		// the pills switch in place, so the series page's way to a season's own page is the link beside them
+		var link = FindByName(doc, "SeasonDetailsLink");
+		Assert.Equal("HyperlinkButton", link.Name.LocalName);
+		Assert.Same(picker.Parent, link.Parent);
+		Assert.Equal("{x:Bind root:App.Commands.DisplayDtoCommand}", (string?)link.Attribute("Command"));
+		Assert.Equal("{x:Bind ViewModel.SelectedSeason, Mode=OneWay}", (string?)link.Attribute("CommandParameter"));
+		Assert.Equal("{x:Bind ViewModel.SeasonDetailsText, Mode=OneWay}", (string?)link.Attribute("Content"));
 		// no small season posters and no lone Next Up card any more
 		Assert.DoesNotContain(doc.Descendants(), e => e.Name.LocalName == "ShelfRow" && (string?)e.Attribute("Header") == "Seasons");
 		Assert.DoesNotContain(doc.Descendants(), e => (string?)e.Attribute("Model") == "{x:Bind ViewModel.NextUp, Mode=OneWay}");

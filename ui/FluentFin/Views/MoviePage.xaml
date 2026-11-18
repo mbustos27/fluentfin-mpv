@@ -75,17 +75,17 @@
                             Value="{x:Bind ViewModel.AudioStreams.Count, Mode=OneWay}">
                             <ctk:Case Value="0" />
                             <ctk:Case Value="1">
-                                <TextBlock Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind ViewModel.SelectedAudio.DisplayTitle, Mode=OneWay}" />
+                                <TextBlock Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind ViewModel.SelectedAudioLabel, Mode=OneWay}" />
                             </ctk:Case>
                             <ctk:Case IsDefault="True">
+                                <!--  1.2.0: plain labels (TrackLabels: "English (5.1)"), chosen by place; Media info keeps the codecs  -->
                                 <ComboBox
+                                    MinWidth="360"
                                     MaxWidth="720"
                                     HorizontalAlignment="Left"
-                                    MinWidth="360"
                                     AutomationProperties.Name="Audio"
-                                    DisplayMemberPath="DisplayTitle"
-                                    ItemsSource="{x:Bind ViewModel.AudioStreams, Mode=OneWay}"
-                                    SelectedItem="{x:Bind ViewModel.SelectedAudio, Mode=TwoWay}" />
+                                    ItemsSource="{x:Bind ViewModel.AudioLabels, Mode=OneWay}"
+                                    SelectedIndex="{x:Bind ViewModel.SelectedAudioIndex, Mode=TwoWay}" />
                             </ctk:Case>
                         </ctk:SwitchPresenter>
 
@@ -99,14 +99,12 @@
                         <ComboBox
                             Grid.Row="2"
                             Grid.Column="1"
+                            MinWidth="360"
                             MaxWidth="720"
                             HorizontalAlignment="Left"
-                                    MinWidth="360"
                             AutomationProperties.Name="Subtitle"
-                            DisplayMemberPath="DisplayTitle"
-                            ItemsSource="{x:Bind ViewModel.SubtitleStreams, Mode=OneWay, TargetNullValue='None'}"
-                            SelectedItem="{x:Bind ViewModel.SelectedSubtitle, Mode=TwoWay}"
-                            SelectedValuePath="DisplayTitle"
+                            ItemsSource="{x:Bind ViewModel.SubtitleLabels, Mode=OneWay}"
+                            SelectedIndex="{x:Bind ViewModel.SelectedSubtitleIndex, Mode=TwoWay}"
                             Visibility="{x:Bind ViewModel.HasSubtitles, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
                     </Grid>
                     <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" /></StackPanel>

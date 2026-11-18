@@ -421,8 +421,16 @@ function Step-Series([bool]$Capture = $true) {
 function Step-Season([bool]$Capture = $true) {
     if ($script:page -ne 'series') { Step-Series $false }
     $at = Get-Epoch
-    Open-Card $fixture.season.name
-    $play = Wait-Until { [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Play, ', $fixture.episode.name) } -Seconds 20 -PollMs 150
+    # 1.2.0: the series page lists the episodes with a season picker, and its "<season> details" link opens the season's
+    # page (a build with season cards on the series page: the card)
+    $link = Wait-Until { Find-Ui -Name "$($fixture.season.name) details" -Type 'Hyperlink' } -Seconds 10 -PollMs 200
+    if ($link) { Say "season link '$($fixture.season.name) details' ($(Invoke-Element $link))" } else { Open-Card $fixture.season.name }
+    # the season page's own Watched ("Mark Season 1 of <series> as ..."), so the series page's rows do not count
+    $play = Wait-Until {
+        if ([OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, "Mark $($fixture.season.name) of ", '')) {
+            [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Play, ', $fixture.episode.name)
+        }
+    } -Seconds 20 -PollMs 150
     $timings.season_page_ms = Ms $at (Get-Epoch)
     Check 'season page opened (its episodes listed)' ([bool]$play) "$($fixture.season.name): $($fixture.episode.name)"
     $script:page = 'season'

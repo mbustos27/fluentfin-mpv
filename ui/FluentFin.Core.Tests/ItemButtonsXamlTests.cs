@@ -146,7 +146,10 @@ public sealed class ItemButtonsXamlTests
 
 		Assert.Contains("new ItemPagePlace(this, PageContent,", code);
 		Assert.Matches(new Regex(@"override void OnNavigatedTo\(Microsoft\.UI\.Xaml\.Navigation\.NavigationEventArgs e\)[\s\S]*?_place\.Arrived\(e\);"), code);
-		Assert.Matches(new Regex(@"override void OnNavigatedFrom\(Microsoft\.UI\.Xaml\.Navigation\.NavigationEventArgs e\)[\s\S]*?_place\?\.Left\(\);"), code);
+		// saved while the page and its focus are still there: by OnNavigatedFrom the focus has left for the title bar (a run
+		// found the focus never restored)
+		Assert.Matches(new Regex(@"override void OnNavigatingFrom\(Microsoft\.UI\.Xaml\.Navigation\.NavigatingCancelEventArgs e\)\s*\{\s*_place\?\.Left\(\);"), code);
+		Assert.DoesNotContain("override void OnNavigatedFrom(", code);
 		Assert.Equal("PageContent", (string?)Load($"FluentFin/Views/{page}.xaml").Descendants().First(e => e.Name.LocalName == "ScrollViewer").Attribute(Xaml + "Name"));
 	}
 
