@@ -21,10 +21,15 @@ public enum LayoutThemeId
 /// Views bind to the same view models as the shared pages (FluentFin.Core.ViewModels), so switching a theme never
 /// refetches anything.
 /// Every theme dictionary (<see cref="Dictionary"/>) defines at least the keys in <see cref="ThemeContract.RequiredKeys"/>:
-/// TopBarStyle (a Style for <see cref="Controls.TopBarChrome"/>), RowHeaderTemplate, PosterTemplate, StillTemplate
-/// (DataTemplates) and PageHeaderStyle (a Style); optionally SignInBackdropTemplate (a DataTemplate the shared LoginPage
-/// hosts behind its form, given the LoginViewModel). Keys only one theme uses carry the theme's prefix
-/// (DriveInMarqueeStyle, CinematicPreviewStageStyle, EditorialGenreStripStyle).
+/// TopBarStyle (a Style for <see cref="Controls.TopBarChrome"/>: its Template is drawn behind the bar's parts, with the
+/// states OverContent and OverHero, and its Padding insets them), RowHeaderTemplate, PosterTemplate, StillTemplate
+/// (DataTemplates) and PageHeaderStyle (a Style). Optionally (<see cref="ThemeContract.OptionalKeys"/>):
+/// SignInBackdropTemplate (a DataTemplate the shared LoginPage hosts behind its form, given the LoginViewModel; not in high
+/// contrast), ThemeOptionsTemplate (draws <see cref="CreateOptions"/>'s object when it is not an element), and
+/// PlayerTopBarStyle / PlayerBottomBarStyle (Styles for the player's two bars, a Grid each, laid over their own style in
+/// place: set only what changes). Keys only one theme uses carry the theme's prefix (DriveInMarqueeStyle,
+/// CinematicPreviewStageStyle, EditorialGenreStripStyle). Brushes in a theme's templates are ThemeResources, so Light and
+/// high contrast follow.
 /// The app finds every non-abstract ILayoutTheme with a public parameterless constructor in its assembly
 /// (<see cref="Services.ThemeService"/>): a theme registers itself by existing.
 /// </summary>
@@ -40,7 +45,9 @@ public interface ILayoutTheme
 
 	/// <summary>
 	/// The page type this theme shows for a view model, or null to use the shared page. Asked only for the view models in
-	/// <see cref="ThemeContract.ThemableViewModels"/>; every other page is shared whatever this returns.
+	/// <see cref="ThemeContract.ThemableViewModels"/>; every other page is shared whatever this returns. A view is a XAML page
+	/// (a .xaml with x:Class) with a public parameterless constructor that gets its view model as the shared page does
+	/// (<c>App.GetService&lt;HomeViewModel&gt;()</c>, exposed as <c>ViewModel</c>): a theme switch hands the current one over.
 	/// </summary>
 	Type? ViewFor(Type viewModelType);
 

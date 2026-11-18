@@ -12,6 +12,7 @@
     xmlns:controls="using:FluentFin.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:themes="using:FluentFin.Themes"
     x:Name="Self"
     RequestedTheme="Dark"
     mc:Ignorable="d">
@@ -65,6 +66,21 @@
             <GradientStop Offset="0.62" Color="#B3000000" />
             <GradientStop Offset="1" Color="#00000000" />
         </LinearGradientBrush>
+        <!--
+            Nixie 1.3.0: the bars' own look, which the layout theme's PlayerTopBarStyle and PlayerBottomBarStyle (optional keys)
+            go over in place, during playback too (themes:ThemeStyle): a theme sets what it changes (padding, margin, background,
+            corner radius, alignment, width); the bars' parts and their logic stay these.
+        -->
+        <Style x:Key="PlayerTopBarBaseStyle" TargetType="Grid">
+            <Setter Property="Padding" Value="24,16,32,56" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Background" Value="{StaticResource TopScrim}" />
+        </Style>
+        <Style x:Key="PlayerBottomBarBaseStyle" TargetType="Grid">
+            <Setter Property="Padding" Value="32,64,32,20" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Setter Property="Background" Value="{StaticResource BottomScrim}" />
+        </Style>
         <!--  the timecode's glow (ConfigureTimecodeGlow): its strength and spread  -->
         <x:Double x:Key="TimecodeGlowOpacity">0.35</x:Double>
         <x:Double x:Key="TimecodeGlowBlur">10</x:Double>
@@ -165,13 +181,12 @@
         <!--  top: back and the title, on a scrim  -->
         <Grid
             x:Name="TopBar"
-            Padding="24,16,32,56"
-            VerticalAlignment="Top"
-            Background="{StaticResource TopScrim}"
+            themes:ThemeStyle.Key="PlayerTopBarStyle"
             GotFocus="OnBarFocusChanged"
             LostFocus="OnBarFocusChanged"
             PointerEntered="OnBarPointerEntered"
             PointerExited="OnBarPointerExited"
+            Style="{StaticResource PlayerTopBarBaseStyle}"
             Visibility="{x:Bind VisibleIf(Controls.ControlsVisible), Mode=OneWay}">
             <StackPanel Orientation="Horizontal" Spacing="16">
                 <Button
@@ -292,14 +307,13 @@
         <!--  bottom: the seek bar and the transport, on a scrim  -->
         <Grid
             x:Name="BottomBar"
-            Padding="32,64,32,20"
-            VerticalAlignment="Bottom"
-            Background="{StaticResource BottomScrim}"
+            themes:ThemeStyle.Key="PlayerBottomBarStyle"
             GotFocus="OnBarFocusChanged"
             LostFocus="OnBarFocusChanged"
             PointerEntered="OnBarPointerEntered"
             PointerExited="OnBarPointerExited"
             SizeChanged="OnBottomBarSizeChanged"
+            Style="{StaticResource PlayerBottomBarBaseStyle}"
             Visibility="{x:Bind VisibleIf(Controls.ControlsVisible), Mode=OneWay}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
