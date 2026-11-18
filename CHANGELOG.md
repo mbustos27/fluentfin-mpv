@@ -8,7 +8,17 @@ the movie and episode pages, Library, the player's controls and the sign-in scre
 - **Four layout themes.**
   - **Drive-in** (the default for new installs): THEME-DETAILS-DRIVEIN
   - **Cinematic:** THEME-DETAILS-CINEMATIC
-  - **Editorial:** THEME-DETAILS-EDITORIAL
+  - **Editorial:** a magazine for a big library: big type, a smaller hero and more titles per screen,
+    with a sunset rule along the foot of the top bar.
+    - **Home** pairs a hero tile ("Tonight": what you watched last, with Resume) with a numbered **Up next** list (in
+      progress, then next episodes, each one click), then a big-type **genre strip** that picks the shelf below it.
+    - **Details in place:** a poster opens its details under its row (Down goes in, Up and Esc come back); "Full
+      details" in its menu opens the item's page.
+    - **Series and seasons:** a **Seasons panel** with each season's progress ("2 of 8 watched", "New"), and the whole
+      season as a **grid of stills with synopses**, four across at 1920 px, with Hide watched.
+    - **Library:** the library's name in big type, **genre chips** with counts, Unwatched and Favorites chips, and the
+      grid in **letter sections** with the A–Z jump on the section bar.
+    - **The player:** its two bars in the page's margins over the night scrims.
   - **Classic:** the 1.2 layout, exactly as it was.
 
   Search results, people, collections, Diary, Settings, the server administration, dialogs and menus are the same in

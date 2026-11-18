@@ -89,6 +89,13 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `InputSiteWindowClass` child (the thread's focus window), not its `DesktopChildSiteBridge`; the
   fluentfin-controls harness posts there (Space, F, Escape through the page's key path).
 
+## Nixie 1.3.0: the layout themes
+- **Editorial's paused side column comes in a later release**, with its segmented chapter scrubber: both need a slot in
+  the shared player that 1.3.0 does not have, so Editorial's player has its two bars only.
+- **Checked off-screen only; still to check by hand:**
+  - high contrast in each theme (the harness cannot force a high-contrast theme; the dictionaries' HighContrast values
+    are checked by tests, never seen).
+
 ## Nixie 1.2.0: the rename from Seaglass
 - **The MSI upgrade from Seaglass to Nixie was not installed for real** on this PC: `upgrade-test.ps1` installs into the
   account it runs in, so it was not run (also not `-SelfCheck`). What is checked: the MSI keeps the upgrade code, builds,
