@@ -29,6 +29,8 @@
         <Setter Property="IsTabStop" Value="False" />
         <!--  the bar's parts sit in from the island's left edge  -->
         <Setter Property="Padding" Value="14,0,0,0" />
+        <!--  the island's glass follows the bar: dark over a hero (CinematicIsland)  -->
+        <Setter Property="cin:CinematicIsland.Follows" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="lc:TopBarChrome">
@@ -36,13 +38,8 @@
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="BarStates">
                                 <VisualState x:Name="OverContent" />
-                                <!--  over a hero the bar's text is the dark theme's: the island's glass is too, in every theme  -->
-                                <VisualState x:Name="OverHero">
-                                    <VisualState.Setters>
-                                        <Setter Target="ContentGlass.Visibility" Value="Collapsed" />
-                                        <Setter Target="HeroGlass.Visibility" Value="Visible" />
-                                    </VisualState.Setters>
-                                </VisualState>
+                                <!--  over a hero the bar's text is the dark theme's: the island's glass is too, in every theme (CinematicIsland switches the glass)  -->
+                                <VisualState x:Name="OverHero" />
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                         <Grid

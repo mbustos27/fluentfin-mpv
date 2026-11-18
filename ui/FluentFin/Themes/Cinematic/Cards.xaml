@@ -72,13 +72,13 @@
             </LinearGradientBrush>
             <!--  behind the credits at the right of an item page (they can fall on bright art)  -->
             <SolidColorBrush x:Key="CinematicCreditsBackingBrush" Color="#A612050B" />
-            <!--  the island over a hero: dark glass in every theme (the bar's text is the dark theme's there)  -->
+            <!--  the island over a hero: dark glass in every theme (the bar's text is the dark theme's there), tinted enough to stay dark over a light ground  -->
             <AcrylicBrush
                 x:Key="CinematicIslandHeroBrush"
                 FallbackColor="#F21E0812"
                 TintColor="#1E0812"
-                TintLuminosityOpacity="0.32"
-                TintOpacity="0.52" />
+                TintLuminosityOpacity="0.9"
+                TintOpacity="0.8" />
             <LinearGradientBrush x:Key="CinematicIslandHeroRimBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#61FFFFFF" />
                 <GradientStop Offset="0.3" Color="#1AFFFFFF" />
@@ -186,13 +186,13 @@
                 <GradientStop Offset="1" Color="#FFFFF6F3" />
             </LinearGradientBrush>
             <SolidColorBrush x:Key="CinematicCreditsBackingBrush" Color="#A612050B" />
-            <!--  the island over a hero: dark glass in every theme (the bar's text is the dark theme's there)  -->
+            <!--  the island over a hero: dark glass in every theme (the bar's text is the dark theme's there), tinted enough to stay dark over a light ground  -->
             <AcrylicBrush
                 x:Key="CinematicIslandHeroBrush"
                 FallbackColor="#F21E0812"
                 TintColor="#1E0812"
-                TintLuminosityOpacity="0.32"
-                TintOpacity="0.52" />
+                TintLuminosityOpacity="0.9"
+                TintOpacity="0.8" />
             <LinearGradientBrush x:Key="CinematicIslandHeroRimBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#61FFFFFF" />
                 <GradientStop Offset="0.3" Color="#1AFFFFFF" />

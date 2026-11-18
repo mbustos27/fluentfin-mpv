@@ -93,6 +93,13 @@ public sealed class CinematicThemeTests
 	}
 
 	[Fact]
+	public void TheIsland_IsDarkGlassOverAHero_TheThemesGlassElsewhere()
+	{
+		Assert.Equal((Microsoft.UI.Xaml.Visibility.Collapsed, Microsoft.UI.Xaml.Visibility.Visible), CinematicIsland.GlassFor(overHero: true));
+		Assert.Equal((Microsoft.UI.Xaml.Visibility.Visible, Microsoft.UI.Xaml.Visibility.Collapsed), CinematicIsland.GlassFor(overHero: false));
+	}
+
+	[Fact]
 	public void Tabs_AreATabList_WhoseTabsCanBeSelected()
 	{
 		Assert.True(typeof(ISelectionProvider).IsAssignableFrom(typeof(CinematicTabStripAutomationPeer)));

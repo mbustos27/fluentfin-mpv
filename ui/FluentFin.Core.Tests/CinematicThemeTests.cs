@@ -462,6 +462,26 @@ public sealed class CinematicThemeXamlTests
 		Assert.True(ratio >= 4.5, $"{theme} on {plate}: {ratio:0.00}:1");
 	}
 
+	/// <summary>
+	/// Over a hero the bar's text is the dark theme's (its tabs #D3BFC1, Glass.xaml's GlassTextSecondaryBrush) on the island's
+	/// dark glass, in every theme: the glass keeps them at 4.5:1 over the worst ground, white (a light theme's page showed
+	/// through a thin tint). The acrylic as its tint over white, its luminosity layer left out (it only darkens), the sheen at
+	/// the text's height on top.
+	/// </summary>
+	[Theory]
+	[InlineData("Default")]
+	[InlineData("Light")]
+	public void TheIslandOverAHero_KeepsTheBarsText45_OverAWhiteGround(string theme)
+	{
+		var glass = Brush(theme, "CinematicIslandHeroBrush");
+		var tint = Parse((string)glass.Attribute("TintColor")!);
+		var opacity = double.Parse((string)glass.Attribute("TintOpacity")!, System.Globalization.CultureInfo.InvariantCulture);
+		var ground = Over(At(Brush(theme, "CinematicIslandHeroSheenBrush"), 0.5), Over((tint.R, tint.G, tint.B, opacity), White));
+		var text = Parse("#D3BFC1");
+		var ratio = Contrast((text.R, text.G, text.B), ground);
+		Assert.True(ratio >= 4.5, $"{theme}: the bar's tabs on the island over a hero: {ratio:0.00}:1");
+	}
+
 	[Theory]
 	[InlineData("Views/CinematicHomePage.xaml", "Controls/CinematicHero.xaml")]
 	[InlineData("Views/CinematicSeriesPage.xaml", "Controls/CinematicItemStage.xaml")]
