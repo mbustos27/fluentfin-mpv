@@ -146,14 +146,17 @@ public class NavigationService : INavigationService
 				frame.ForwardStack.Clear();
 			}
 
+			// Nixie 1.3.0: the rules below name the shared pages; a layout theme's page counts as the shared page it stands for
+			Type Shared(Type page) => _pageService.SharedPageType(page);
+
 			// Seaglass: Forward never leads into the player (it would start playing again)
-			PruneForwardStack(frame.ForwardStack, x => x.SourcePageType);
+			PruneForwardStack(frame.ForwardStack, x => Shared(x.SourcePageType));
 
 			// fluentfin-mpv: a player page replacing a player page (a remote Play while playing) takes over its history entry
-			DropReplacedPlayerPage(frame.BackStack, x => x.SourcePageType, e.SourcePageType, e.NavigationMode);
+			DropReplacedPlayerPage(frame.BackStack, x => Shared(x.SourcePageType), Shared(e.SourcePageType), e.NavigationMode);
 
 			// 1.2.0: a season pill switches seasons in place in the history: Back goes to the page before the seasons
-			DropSwitchedSeasonPage(frame.BackStack, x => x.SourcePageType, x => x.Parameter, e.SourcePageType, e.Parameter, e.NavigationMode);
+			DropSwitchedSeasonPage(frame.BackStack, x => Shared(x.SourcePageType), x => x.Parameter, Shared(e.SourcePageType), e.Parameter, e.NavigationMode);
 
 			if (frame.GetPageViewModel() is INavigationAware navigationAware)
 			{

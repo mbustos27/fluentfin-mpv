@@ -20,8 +20,28 @@ public class PageService : IPageService, IPageRegistration
 	private readonly Dictionary<Type, Type> _parents = [];
 	private readonly Lock _lock = new();
 
-	public PageService(IPluginManager pluginManager)
+	// Nixie 1.3.0: the layout themes' own pages for the browsing view models (ThemeService), each mapped back to its view model
+	private readonly ThemeService? _themes;
+	private readonly Dictionary<string, Type> _keyViewModels = [];
+	private readonly Dictionary<Type, Type> _themedViews = [];
+
+	public PageService(IPluginManager pluginManager, ThemeService? themes = null)
 	{
+		_themes = themes;
+		if (themes is not null)
+		{
+			foreach (var theme in themes.Themes)
+			{
+				foreach (var vm in Themes.ThemeContract.ThemableViewModels)
+				{
+					if (ThemeService.ViewFor(theme, vm) is { } view)
+					{
+						_themedViews.TryAdd(view, vm);
+					}
+				}
+			}
+		}
+
 		// Setup Section
 		Configure<ShellViewModel, ShellPage>();
 		Configure<SelectServerViewModel, SelectServerPage>();
@@ -68,18 +88,44 @@ public class PageService : IPageService, IPageRegistration
 		pluginManager.ConfigurePages(this);
 	}
 
+	/// <summary>
+	/// The page for a view model's key: the active layout theme's own page for it when it has one (Nixie 1.3.0), else the
+	/// shared page.
+	/// </summary>
 	public Type GetPageType(string key)
 	{
 		Type? pageType;
+		Type? vmType;
 		lock (_pages)
 		{
 			if (!_pages.TryGetValue(key, out pageType))
 			{
 				throw new ArgumentException($"Page not found: {key}. Did you forget to call PageService.Configure?");
 			}
+
+			_keyViewModels.TryGetValue(key, out vmType);
+		}
+
+		if (vmType is not null && _themes?.ViewFor(vmType) is { } themed)
+		{
+			lock (_pages)
+			{
+				_themedViews.TryAdd(themed, vmType);
+			}
+
+			return themed;
 		}
 
 		return pageType;
+	}
+
+	/// <summary>Nixie 1.3.0: the shared page a page stands for (a theme's page: the shared page of its view model; any other: itself).</summary>
+	public Type SharedPageType(Type pageType)
+	{
+		lock (_pages)
+		{
+			return _themedViews.TryGetValue(pageType, out var vm) && _pages.TryGetValue(vm.FullName!, out var shared) ? shared : pageType;
+		}
 	}
 
 	public Type GetViewModelType(Type type)
@@ -87,7 +133,7 @@ public class PageService : IPageService, IPageRegistration
 		Type? vmType;
 		lock (_pages)
 		{
-			if (!_viewModels.TryGetValue(type, out vmType))
+			if (!_viewModels.TryGetValue(type, out vmType) && !_themedViews.TryGetValue(type, out vmType))
 			{
 				throw new ArgumentException($"VM not found: {type.FullName}. Did you forget to call PageService.Configure?");
 			}
@@ -126,6 +172,7 @@ public class PageService : IPageService, IPageRegistration
 
 			_pages.Add(key, type);
 			_viewModels.Add(type, typeof(VM));
+			_keyViewModels.Add(key, typeof(VM));
 		}
 	}
 

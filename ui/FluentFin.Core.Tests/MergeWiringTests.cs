@@ -16,7 +16,11 @@ public sealed class MergeWiringTests
 	public void TheTopBar_IsGlassTitleBarGlass_WithTheWordmark_AndGlassTabBrushes()
 	{
 		var bar = Load("FluentFin/Views/TitleBarControl.xaml");
-		var glass = bar.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "BarGlass");
+		// Nixie 1.3.0: the glass is the bar's chrome's (TopBarChrome), 1.2.0's in its default style, which Classic keeps
+		Assert.Single(bar.Descendants(), e => e.Name.LocalName == "TopBarChrome" && (string?)e.Attribute(Xaml + "Name") == "BarChrome" && e.Elements().Any(c => c.Name.LocalName == "TitleBar"));
+		Assert.Contains("<ResourceDictionary Source=\"/Styles/TopBarChrome.xaml\" />", Code("FluentFin/Themes/Generic.xaml"));
+		var chrome = Load("FluentFin/Styles/TopBarChrome.xaml");
+		var glass = chrome.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "BarGlass");
 		Assert.Equal("{ThemeResource GlassTitleBarBrush}", (string?)glass.Attribute("Background"));
 		Assert.Equal("{ThemeResource GlassTitleBarStrokeBrush}", (string?)glass.Attribute("BorderBrush"));
 		Assert.Contains(bar.Descendants(), e => e.Name.LocalName == "AppWordmark" && (string?)e.Attribute("Size") == "15");

@@ -157,6 +157,8 @@ public partial class App : Application
 
 			// Services
 			services.AddSingleton<IActivationService, ActivationService>();
+			// Nixie 1.3.0: the layout themes (Themes\<Id>\), found in this assembly; NIXIE_LAYOUT overrides the saved one for a run
+			services.AddSingleton(sp => new ThemeService(sp.GetRequiredService<ILocalSettingsService>(), LayoutThemes.Discover(typeof(App).Assembly), Core.AppIdentity.ReadEnvironment("LAYOUT")));
 			services.AddSingleton<IPageService, PageService>();
 			services.AddSingleton<INavigationViewService, NavigationViewService>();
 			// 1.2.0 (the top bar): the shell's sections are tabs; the plugins' sections and the pins go there (no rail)
@@ -349,6 +351,8 @@ public partial class App : Application
 
 			// Seaglass: the saved Glass choice, and the glass brushes following GlassMode
 			GlassSetting.Apply(GetService<ISettings>());
+			// Nixie 1.3.0: the layout theme's dictionary in App.xaml's slot, before the first page (the sign-in's backdrop is the theme's)
+			ThemeResources.Attach(GetService<ThemeService>(), GetService<ILogger<App>>());
 			// the harness's light-theme screenshots (NIXIE_THEME=Light|Dark, or SEAGLASS_THEME); unset, the app follows Windows
 			if (Enum.TryParse<ElementTheme>(Core.AppIdentity.ReadEnvironment("THEME"), true, out var forcedTheme) && forcedTheme != ElementTheme.Default)
 			{

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Nixie 1.3.0: Classic, 1.2.0's layout as a theme (ClassicTheme). The shared keys every theme defines (ThemeContract), with
+    1.2.0's look. Classic's pages are the shared ones, which do not read these keys: they are here for the contract, for the
+    shared parts that do read them (the top bar's chrome), and as the reference for what each key is.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:themes="using:FluentFin.Themes">
+
+    <!--
+        The top bar: 1.2.0's glass bar, which is TopBarChrome's default style (Styles/TopBarChrome.xaml). An empty style over it,
+        so Classic's bar is that one exactly.
+    -->
+    <Style x:Key="TopBarStyle" TargetType="lc:TopBarChrome" />
+
+    <!--  a row's title (its content: the title): 1.2.0's ShelfRow title, a level-2 heading  -->
+    <DataTemplate x:Key="RowHeaderTemplate">
+        <TextBlock
+            VerticalAlignment="Center"
+            AutomationProperties.HeadingLevel="Level2"
+            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+            Text="{Binding}" />
+    </DataTemplate>
+
+    <themes:CardImageConverter x:Key="ClassicPosterImage" Height="302" ImageType="Primary" />
+    <themes:CardImageConverter
+        x:Key="ClassicPosterBlurHash"
+        BlurHash="True"
+        Height="302"
+        ImageType="Thumb" />
+    <themes:CardImageConverter x:Key="ClassicStillImage" Height="192" ImageType="Thumb" />
+    <themes:CardImageConverter
+        x:Key="ClassicStillBlurHash"
+        BlurHash="True"
+        Height="192"
+        ImageType="Thumb" />
+
+    <!--  a poster (its content: a BaseItemViewModel): 1.2.0's Home library-row card, 225 x 385  -->
+    <DataTemplate x:Key="PosterTemplate">
+        <lc:BaseItemDtoCard
+            Width="225"
+            Height="385"
+            BlurHashImageSource="{Binding Converter={StaticResource ClassicPosterBlurHash}}"
+            ImageSource="{Binding Converter={StaticResource ClassicPosterImage}}"
+            Model="{Binding}" />
+    </DataTemplate>
+
+    <!--  a still (its content: a BaseItemViewModel): 1.2.0's Continue Watching and Next Up card, 390 x 240  -->
+    <DataTemplate x:Key="StillTemplate">
+        <lc:BaseItemDtoCard
+            Width="390"
+            Height="240"
+            BlurHashImageSource="{Binding Converter={StaticResource ClassicStillBlurHash}}"
+            ImageSource="{Binding Converter={StaticResource ClassicStillImage}}"
+            Model="{Binding}" />
+    </DataTemplate>
+
+    <!--  a page's title: 1.2.0's page title  -->
+    <Style
+        x:Key="PageHeaderStyle"
+        BasedOn="{StaticResource GlassPageTitleTextBlockStyle}"
+        TargetType="TextBlock" />
+
+</ResourceDictionary>
