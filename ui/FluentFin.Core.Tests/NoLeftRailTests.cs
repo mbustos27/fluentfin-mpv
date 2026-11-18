@@ -31,6 +31,22 @@ public sealed class NoLeftRailTests
 		Assert.DoesNotContain(doc.Descendants().Attributes(), a => a.Name.LocalName is "IsPaneVisible" or "PaneDisplayMode" or "OpenPaneLength" or "CompactPaneLength");
 	}
 
+	[Theory]
+	[InlineData("FluentFin/Views/ShellPage.xaml")]
+	[InlineData("FluentFin/MainWindow.xaml")]
+	public void TheShellAndTheWindow_LeaveNoLeftGutter(string file)
+	{
+		// the 1.2.0 release's gate: no column beside the pages, and nothing pushed in from the left edge only (a rail's room)
+		var doc = XDocument.Load(Path.Combine(RepoRoot, file));
+		Assert.DoesNotContain(doc.Descendants(), e => e.Name.LocalName == "ColumnDefinition");
+		foreach (var a in doc.Descendants().Attributes().Where(a => a.Name.LocalName is "Margin" or "Padding" && !a.Value.StartsWith('{')))
+		{
+			var parts = a.Value.Split(',').Select(p => double.Parse(p, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+			var (left, right) = parts.Length switch { 1 => (parts[0], parts[0]), 2 => (parts[0], parts[0]), _ => (parts[0], parts[2]) };
+			Assert.True(left <= right, $"{file}: {a.Name.LocalName}=\"{a.Value}\" pushes the content in from the left");
+		}
+	}
+
 	[Fact]
 	public void NoStyle_IsARailOrALeftPane()
 	{
