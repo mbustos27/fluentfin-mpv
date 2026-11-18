@@ -49,6 +49,8 @@ public sealed partial class UserEditorPage : Page
 		}
 	}
 
+	private void NoticeBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.Notice = null;
+
 	protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
 	{
 		_navigationService.Navigated -= NavigationService_Navigated;

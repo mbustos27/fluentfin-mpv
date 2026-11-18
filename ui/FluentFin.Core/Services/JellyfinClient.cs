@@ -401,16 +401,17 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		}
 	}
 
-	public async Task RunScheduledTask(string id)
+	public async Task<bool> RunScheduledTask(string id)
 	{
 		try
 		{
 			await _jellyfinApiClient.ScheduledTasks.Running[id].PostAsync();
+			return true; // Nixie 1.2.0 (admin, D43): the page says "Started" only then
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
 

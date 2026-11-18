@@ -12,7 +12,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
     Title="Refresh metadata"
-    CloseButtonText="Close"
+    CloseButtonText="Cancel"
     DefaultButton="Primary"
     PrimaryButtonCommand="{x:Bind ViewModel.RefreshCommand}"
     PrimaryButtonText="Refresh"
@@ -30,10 +30,10 @@
         </cc:SwitchConverter>
     </ContentDialog.Resources>
 
-    <StackPanel Height="150" Spacing="10">
-        <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Refresh mdoe" />
+    <StackPanel MinHeight="150" Spacing="10">
         <ComboBox
             Width="300"
+            Header="Refresh mode"
             ItemsSource="{x:Bind ViewModel.RefreshModes, Mode=OneWay}"
             SelectedItem="{x:Bind ViewModel.SelectedRefreshMode, Mode=TwoWay}" />
         <CheckBox
@@ -44,5 +44,12 @@
             Content="Replace existing trickplay images"
             IsChecked="{x:Bind ViewModel.ReplaceExistingTrickplayImages, Mode=TwoWay}"
             Visibility="{x:Bind ViewModel.SelectedRefreshMode, Mode=OneWay, Converter={StaticResource ReplaceMetadataVisibilityConverter}}" />
+        <!--  Nixie 1.2.0 (admin, D77): what a replace-all choice overwrites, before Refresh  -->
+        <InfoBar
+            MaxWidth="460"
+            IsClosable="False"
+            IsOpen="{x:Bind local:RefreshMetadataDialog.HasText(ViewModel.ReplaceWarning), Mode=OneWay}"
+            Message="{x:Bind ViewModel.ReplaceWarning, Mode=OneWay}"
+            Severity="Warning" />
     </StackPanel>
 </ContentDialog>

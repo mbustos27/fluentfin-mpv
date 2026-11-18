@@ -11,6 +11,7 @@
     xmlns:local="using:FluentFin.Dialogs.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="using:CommunityToolkit.WinUI"
+    xmlns:views="using:FluentFin.Views"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
     mc:Ignorable="d">
@@ -64,20 +65,29 @@
 
         <ctk:SettingsExpander
             Description="Create an access schedule to limit access to certain hours."
-            Header="Access Schedule"
+            Header="Access schedule"
             ItemsSource="{x:Bind ViewModel.AccessSchedules}">
-            <Button
-                Command="{x:Bind ViewModel.PickAccessScheduleCommand}"
-                Content="Add"
-                Style="{ThemeResource AccentButtonStyle}" />
+            <!--  D41: "Add schedule", role Secondary Compact (no accent beside the page's Save)  -->
+            <Button Command="{x:Bind ViewModel.PickAccessScheduleCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon FontSize="16" Glyph="&#xE710;" />
+                    <TextBlock Text="Add schedule" />
+                </StackPanel>
+            </Button>
             <ctk:SettingsExpander.ItemTemplate>
                 <DataTemplate x:DataType="jm:AccessSchedule">
                     <ctk:SettingsCard Description="{x:Bind c:Converters.AccessScheduleToString((jm:AccessSchedule))}" Header="{x:Bind DayOfWeek}">
+                        <!--  D42: role Subtle/icon Compact (32), named for its schedule; removed on Save  -->
                         <Button
-                            AutomationProperties.Name="Delete schedule"
+                            Width="32"
+                            Height="32"
+                            Padding="0"
+                            AutomationProperties.Name="{x:Bind views:UserParentalControlEditorPage.DeleteScheduleName((jm:AccessSchedule))}"
+                            Background="Transparent"
+                            BorderThickness="0"
                             Command="{Binding ElementName=Page, Path=ViewModel.DeleteScheduleCommand}"
                             CommandParameter="{x:Bind}"
-                            Content="{ui:SymbolIcon Symbol=Delete}"
+                            Content="{ui:FontIcon Glyph=&#xE74D;, FontSize=16}"
                             ToolTipService.ToolTip="Delete schedule" />
                     </ctk:SettingsCard>
                 </DataTemplate>

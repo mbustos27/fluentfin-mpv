@@ -25,7 +25,8 @@ public partial class DialogCommands(IContentDialogService dialogService)
 				}
 			};
 			x.CloseButtonClick += (_, _) => { vm.CanClose = true; };
-			x.PrimaryButtonClick += (_, _) => { vm.CanClose = vm.ViewState == IdentifyViewModelState.Result; };
+			// Nixie 1.2.0 (admin, D65): closes on Apply only with a match picked
+			x.PrimaryButtonClick += (_, _) => { vm.CanClose = vm.ViewState == IdentifyViewModelState.Result && vm.SelectedResult is not null; };
 		});
 	}
 

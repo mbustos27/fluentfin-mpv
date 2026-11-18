@@ -19,7 +19,8 @@ public partial class IdentifyViewModel : ObservableObject, IBaseItemDialogViewMo
 		this.WhenAnyValue(x => x.ViewState)
 			.Select(value => value switch
 			{
-				IdentifyViewModelState.Result => "Submit",
+				// Nixie 1.2.0 (admin, D65): the second step applies the picked match (it said "Submit")
+				IdentifyViewModelState.Result => "Apply",
 				_ => "Search"
 			})
 			.Subscribe(text => PrimaryButtonText = text);
@@ -45,12 +46,22 @@ public partial class IdentifyViewModel : ObservableObject, IBaseItemDialogViewMo
 	public partial List<RemoteSearchResult> Results { get; set; } = [];
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(CanUsePrimary))]
 	public partial IdentifyViewModelState ViewState { get; set; } = IdentifyViewModelState.Input;
+
+	/// <summary>Nixie 1.2.0 (admin, D65): Search works any time but while searching; Apply waits for a picked match (it closed with none).</summary>
+	public bool CanUsePrimary => ViewState switch
+	{
+		IdentifyViewModelState.Loading => false,
+		IdentifyViewModelState.Result => SelectedResult is not null,
+		_ => true,
+	};
 
 	[ObservableProperty]
 	public partial string PrimaryButtonText { get; set; } = "Search";
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(CanUsePrimary))]
 	public partial RemoteSearchResult? SelectedResult { get; set; }
 
 	[ObservableProperty]

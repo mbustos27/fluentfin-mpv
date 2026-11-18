@@ -176,7 +176,8 @@ namespace FluentFin.Core.Contracts.Services
 		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
 		Task<bool> DeleteUser(UserDto user);
 
-		Task UpdatePolicy(UserDto user, UserPolicy policy);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> UpdatePolicy(UserDto user, UserPolicy policy);
 
 		/// <summary>Nixie 1.2.0 (admin): false when the server did not take it (logged).</summary>
 		Task<bool> ChangePassword(UserDto user, string currentPassword, string newPassword);
@@ -220,7 +221,8 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<List<TaskInfo>> GetScheduledTasks();
 
-		Task RunScheduledTask(string id);
+		/// <summary>Nixie 1.2.0 (admin): false when the server did not take it (logged).</summary>
+		Task<bool> RunScheduledTask(string id);
 
 		/// <summary>Nixie 1.2.0 (admin): false when the server did not take it (logged).</summary>
 		Task<bool> PlayOnSession(string sessionId, params IEnumerable<Guid?> itemIds);

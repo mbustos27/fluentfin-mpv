@@ -57,10 +57,10 @@
                 Icon="{ui:FontIcon Glyph=&#xE8F1;}"
                 SelectsOnInvoked="False">
                 <NavigationViewItem.MenuItems>
-                    <NavigationViewItem helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.LibrariesSettingsViewModel" Content="Libraries" />
+                    <NavigationViewItem helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.LibrariesSettingsViewModel" Content="Library folders" />
                     <NavigationViewItem helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.LibrariesDisplayViewModel" Content="Display" />
                     <NavigationViewItem helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.LibrariesMetadataViewModel" Content="Metadata" />
-                    <NavigationViewItem helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.LibrariesNfoSettingsViewModel" Content="NFO Settings" />
+                    <NavigationViewItem helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.LibrariesNfoSettingsViewModel" Content="NFO settings" />
                 </NavigationViewItem.MenuItems>
             </NavigationViewItem>
             <NavigationViewItem
@@ -69,7 +69,7 @@
                 SelectsOnInvoked="False">
                 <NavigationViewItem.MenuItems>
                     <NavigationViewItem helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.PlaybackTranscodingViewModel" Content="Transcoding" />
-                    <NavigationViewItem helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.PlaybackResumeViewModel" Content="Resume &amp; Streaming" />
+                    <NavigationViewItem helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.PlaybackResumeViewModel" Content="Resume and streaming" />
                     <NavigationViewItem helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.PlaybackTrickplayViewModel" Content="Trickplay" />
                 </NavigationViewItem.MenuItems>
             </NavigationViewItem>
@@ -79,7 +79,7 @@
                 Icon="{ui:FontIcon Glyph=&#xE81C;}" />
             <NavigationViewItem
                 helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.ScheduledTasksViewModel"
-                Content="Scheduled Tasks"
+                Content="Scheduled tasks"
                 Icon="{ui:FontIcon Glyph=&#xE8EE;}" />
         </NavigationView.MenuItems>
     </NavigationView>

@@ -262,21 +262,22 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task UpdatePolicy(UserDto user, UserPolicy policy)
+	public async Task<bool> UpdatePolicy(UserDto user, UserPolicy policy)
 	{
 		if (user.Id is not { } id)
 		{
-			return;
+			return false;
 		}
 
 		try
 		{
 			await _jellyfinApiClient.Users[id].Policy.PostAsync(policy);
+			return true; // Nixie 1.2.0 (admin): the user editor says "Saved" only then
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
 
