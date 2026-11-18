@@ -117,7 +117,11 @@ public sealed partial class ShelfRow : UserControl
 			}
 		}), true);
 
-		Repeater.ElementPrepared += (_, e) => SetPosition(e.Element, e.Index);
+		Repeater.ElementPrepared += (_, e) =>
+		{
+			GiveItem(e.Element, e.Index);
+			SetPosition(e.Element, e.Index);
+		};
 		Repeater.ElementIndexChanged += (_, e) => SetPosition(e.Element, e.NewIndex);
 		Repeater.Loaded += (_, _) => UpdateNames();
 		RegisterPropertyChangedCallback(HeaderProperty, (_, _) => UpdateNames());
@@ -197,6 +201,23 @@ public sealed partial class ShelfRow : UserControl
 	internal int Count => Repeater.ItemsSourceView?.Count ?? 0;
 
 	internal bool IsShown => IsLoaded && ActualHeight > 0 && Count > 0 && Visibility == Visibility.Visible;
+
+	/// <summary>
+	/// Nixie 1.3.0: the card is its item's DataContext. ItemsRepeater left it unset for a template whose bindings are
+	/// {Binding} (the layout themes' PosterTemplate and StillTemplate), whose cards then came out empty; x:Bind templates
+	/// take their item the same way.
+	/// </summary>
+	private void GiveItem(UIElement element, int index)
+	{
+		if (element is FrameworkElement card && Repeater.ItemsSourceView is { } view && index >= 0 && index < view.Count
+			&& NeedsItem(card.DataContext, view.GetAt(index)) is { } item)
+		{
+			card.DataContext = item;
+		}
+	}
+
+	/// <summary>The item a card must take as its DataContext, or null when it already has it (no second binding pass).</summary>
+	internal static object? NeedsItem(object? current, object? item) => item is null || ReferenceEquals(current, item) ? null : item;
 
 	private void SetPosition(UIElement element, int index)
 	{
