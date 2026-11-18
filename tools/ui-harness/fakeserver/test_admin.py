@@ -119,6 +119,19 @@ class AdminTests(unittest.TestCase):
         self.assertEqual(self.call("/Items/%s" % item, "POST", {"Name": "x"})[0], 204)
         self.assertEqual(self.logged()[-1]["body"], {"Name": "x"})
 
+    def test_images_renumber_after_a_delete_as_jellyfin_does(self):
+        item = next(i for i in self.srv.lib.items.values() if i["kind"] == "movie")["Id"]
+        backdrops = [e for e in self.call("/Items/%s/Images" % item)[1] if e["ImageType"] == "Backdrop"]
+        self.assertEqual([0, 1, 2], [e["ImageIndex"] for e in backdrops])
+        a, b, c = (e["ImageTag"] for e in backdrops)
+        self.assertEqual(self.call("/Items/%s/Images/Backdrop/0" % item, "DELETE")[0], 204)   # A
+        after = [e for e in self.call("/Items/%s/Images" % item)[1] if e["ImageType"] == "Backdrop"]
+        self.assertEqual([(b, 0), (c, 1)], [(e["ImageTag"], e["ImageIndex"]) for e in after])
+        # a client that kept B's old index (1) would now delete C
+        self.assertEqual(self.call("/Items/%s/Images/Backdrop/0" % item, "DELETE")[0], 204)   # B, by its new index
+        self.assertEqual([c], [e["ImageTag"] for e in self.call("/Items/%s/Images" % item)[1] if e["ImageType"] == "Backdrop"])
+        self.assertEqual(self.call("/Items/%s/Images/Backdrop/1" % item, "DELETE")[0], 404)
+
 
 if __name__ == "__main__":
     unittest.main()

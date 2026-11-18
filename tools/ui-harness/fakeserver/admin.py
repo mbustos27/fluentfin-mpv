@@ -19,8 +19,9 @@ reads to check that a confirmed button sent exactly one request and a cancelled 
 - Plugins: with FAKESERVER_PLAYBACK_REPORTING=1 in the environment, GET /Plugins lists the Playback Reporting plugin (its
   reports page shows; its own endpoints still answer 404, as for a plugin with no data).
 - Items: GET /Items/{id}/MetadataEditor, POST /Items/{id} (the metadata editor's save: its body is logged),
-  GET /Items/{id}/RemoteImages/Providers, DELETE /Items/{id}/Images/{type}/{index},
-  DELETE /Videos/{id}/Subtitles/{index}.
+  GET /Items/{id}/RemoteImages/Providers, DELETE /Videos/{id}/Subtitles/{index}; GET /Items/{id}/Images lists the
+  item's images with three backdrops, and DELETE /Items/{id}/Images/{type}/{index} removes that one and renumbers the
+  rest of its type, as Jellyfin does (a client that deletes by a stale index removes the wrong image).
 """
 
 import hashlib
@@ -76,6 +77,7 @@ class AdminState:
         self.deleted = set()        # names
         self.renamed = {}           # old name -> new name
         self.down_until = 0.0
+        self.images = {}            # item id -> [{"ImageType", "ImageTag", "Width", "Height"}] once listed or deleted from
         self.log = os.path.join(outer.out, "admin.jsonl")
 
 
@@ -129,6 +131,36 @@ def _folders(outer, st):
         if name in st.deleted:
             continue
         out.append(dict(f, Name=name))
+    return out
+
+
+SIZES = {"Primary": (1000, 1500), "Backdrop": (1920, 1080), "Logo": (800, 310), "Thumb": (1280, 720), "Banner": (1000, 185)}
+
+
+def _images(outer, st, item_id):
+    """The item's images, kept here once asked for: its own types plus three backdrops (deletes change this list)."""
+    with st.lock:
+        if item_id not in st.images:
+            item = outer.lib.get(item_id)
+            if not item:
+                return None
+            tags = dict(outer.lib.image_tags(item))
+            entries = [{"ImageType": k, "ImageTag": v} for k, v in tags.items()]
+            entries += [{"ImageType": "Backdrop", "ImageTag": hashlib.md5(("%s:backdrop:%d" % (item_id, i)).encode()).hexdigest()}
+                        for i in range(3)]
+            for e in entries:
+                e["Width"], e["Height"] = SIZES.get(e["ImageType"], (1000, 1000))
+            st.images[item_id] = entries
+        return st.images[item_id]
+
+
+def _numbered(entries):
+    """ImageIndex per type, 0 up, in list order (what Jellyfin reports, and renumbers after a delete)."""
+    seen, out = {}, []
+    for e in entries:
+        i = seen.get(e["ImageType"], 0)
+        seen[e["ImageType"]] = i + 1
+        out.append(dict(e, ImageIndex=i))
     return out
 
 
@@ -268,8 +300,20 @@ def route(handler, outer, method, path, low):
     if method == "POST" and match(r"(?:/users/" + ID + r")?/items/" + ID):
         done("item-update")
         return True
-    if method == "DELETE" and match(r"/items/" + ID + r"/images/[a-z]+/\d+"):
-        done("image-delete")
+    mm = match(r"/items/" + ID + r"/images")
+    if mm and method == "GET":
+        entries = _images(outer, st, _norm(mm.group(1)))
+        return answer("image-list", _numbered(entries) if entries is not None else [])
+    mm = match(r"/items/" + ID + r"/images/([a-z]+)/(\d+)")
+    if mm and method == "DELETE":
+        entries = _images(outer, st, _norm(mm.group(1))) or []
+        kind, index = mm.group(2).lower(), int(mm.group(3))
+        with st.lock:
+            of_kind = [e for e in entries if e["ImageType"].lower() == kind]
+            found = index < len(of_kind)
+            if found:
+                entries.remove(of_kind[index])      # the rest of its type move up one
+        done("image-delete" if found else "image-delete-missing", 204 if found else 404)
         return True
     if method == "DELETE" and match(r"/videos/" + ID + r"/subtitles/\d+"):
         done("subtitle-delete")

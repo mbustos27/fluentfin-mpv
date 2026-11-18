@@ -78,6 +78,20 @@ if ($script:page -eq 'movie') {
         }
     }
     if (Find-Ui -Name 'Cancel' -Type 'Button') { Adm-Invoke 'Cancel'; Adm-Settle 800 }
+
+    # Edit images: Delete asks in a flyout at the button (ConfirmFlyout: Cancel has the focus); two deletes in a row each
+    # remove the image picked, on a server that renumbers (the fake server does, as Jellyfin)
+    Adm-Invoke 'More options'
+    Adm-Invoke 'Edit Images' 'MenuItem'
+    Adm-Settle 2000
+    Adm-Shot 'edit-images'
+    $imgDelete = '^/Items/[0-9a-fA-F-]+/Images/Backdrop/\d+$'
+    Adm-Destructive 'Delete image (flyout)' { Adm-Invoke 'Delete backdrop image' } 'Delete image' 'DELETE' $imgDelete 'delete-image'
+    Adm-Invoke 'Delete backdrop image'; Adm-Invoke 'Delete image'; Adm-Settle 2000
+    $imgDeletes = @(Adm-Requests | Where-Object { $_.method -eq 'DELETE' -and $_.path -match $imgDelete })
+    Check 'Edit images: two deletes in a row each remove the first backdrop shown (index 0 after the renumbering)' ($imgDeletes.Count -eq 2 -and @($imgDeletes | Where-Object { $_.path -notmatch '/Backdrop/0$' }).Count -eq 0) (($imgDeletes | ForEach-Object { $_.path }) -join ', ')
+    Adm-Shot 'edit-images-after-two-deletes'
+    Adm-Invoke 'Close'; Adm-Settle 800
 }
 
 # --- the server administration: tabs along the top ------------------------------------------------------------------------
@@ -108,6 +122,12 @@ Adm-Invoke 'Scan all libraries'; Adm-Settle 1500
 Check 'Scan all libraries sends one refresh' ((Adm-Count 'POST' '^/Library/Refresh$') -eq $scans + 1)
 Check 'Scan all libraries says it started' ([bool](Find-Ui -Name 'Scan started' -Contains))
 
+# Shut down server: asks by name, Cancel the default; confirmed, one POST /System/Shutdown, then the buttons wait
+Adm-Destructive 'Shut down server' { Adm-Invoke 'Shut down server…' } 'Shut down server' 'POST' '^/System/Shutdown$' 'shutdown'
+$restartButton = Find-Ui -Name 'Restart server…' -Type 'Button'
+Check 'Shut down: the dashboard says so and Restart waits' ([bool](Find-Ui -Name 'Harness Jellyfin (fake) is shutting down' -Contains) -and $restartButton -and -not $restartButton.Current.IsEnabled)
+Adm-Shot 'admin-shut-down'
+
 # Users: Delete user asks; Remove password asks
 Adm-Tab 'Users'
 Capture-Page "$admTag-admin-users"
@@ -131,6 +151,8 @@ Capture-Page "$admTag-admin-libraries"
 Adm-Invoke 'Add library'; Adm-Settle 1500
 Adm-Shot 'admin-add-library'
 Adm-Invoke 'Cancel'; Adm-Settle 800
+Adm-Destructive 'Delete library' { Adm-Invoke 'More options for Anime'; Adm-Invoke 'Delete library…' 'MenuItem' } 'Delete library' 'DELETE' '^/Library/VirtualFolders$' 'delete-library'
+Check 'Delete library: the card goes' (-not (Find-Ui -Name 'More options for Anime' -Type 'Button'))
 Adm-Tab 'Display'
 Adm-Shot 'admin-libraries-display'
 
