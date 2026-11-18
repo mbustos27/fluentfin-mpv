@@ -4,7 +4,10 @@ namespace FluentFin.Core;
 /// 1.2.0: where the user was on a page when they left it: how far down it was scrolled and what had the keyboard
 /// focus (a card or an episode row by its item, anything else by its place in the page's element tree).
 /// </summary>
-public sealed record PagePlace(double VerticalOffset, Guid? FocusedItemId, IReadOnlyList<int>? FocusedPath);
+/// <param name="FocusFromKeyboard">The focus got there by the keyboard (Tab, the arrows): it comes back as keyboard focus,
+/// with its ring and a card's buttons; focus a click gave comes back without them (items review, item 5).</param>
+/// <param name="SelectedSeasonId">The series page's shown season (items review, item 1).</param>
+public sealed record PagePlace(double VerticalOffset, Guid? FocusedItemId, IReadOnlyList<int>? FocusedPath, bool FocusFromKeyboard = false, Guid? SelectedSeasonId = null);
 
 /// <summary>
 /// 1.2.0 (1.1.3 UX audit, interaction item 5): the item pages give their place back when the user returns to them

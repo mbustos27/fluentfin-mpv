@@ -185,6 +185,61 @@ if ($itSimilar) {
 }
 else { Check 'items: a More Like This card on the series page' $false 'none' }
 
+# --- Back to the series page shows the season that was picked, the focus on the row that was opened (items review, item 1)
+if ($script:page -ne 'series') { Step-Series $false }
+[OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080); It-Settle 1200
+[void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0); It-Settle 600
+$itP2 = Wait-Ui -Name 'Season 2' -Type 'Button' -Seconds 10
+if ($itP2) {
+    [void](Invoke-Element $itP2)
+    [void](Wait-Ui -Name 'Season 2 details' -Type 'Hyperlink' -Seconds 15)
+    $itS2E2 = Wait-Until { Find-Ui -Name 'S2 E2 ' -Type 'ListItem' -Contains -OffscreenToo } -Seconds 10 -PollMs 200
+    if ($itS2E2) {
+        [void][OffscreenUi]::SetFocus($itS2E2); It-Settle 600
+        Key 0x5D; It-Settle 1200   # the menu key: the row's menu, then its "Episode details"
+        $itDetails = Wait-Ui -Name 'Episode details' -Type 'MenuItem' -Seconds 5
+        if ($itDetails) { [void](Invoke-Element $itDetails) }
+        [void](Wait-Until { if (-not (It-OnSeries)) { $true } } -Seconds 15 -PollMs 200)
+        It-Settle 2000
+        Key 0xA6
+        [void](Wait-Until { if (It-OnSeries) { $true } } -Seconds 15 -PollMs 200)
+        It-Settle 3500
+        $itS2Back = Find-Ui -Name 'Season 2 details' -Type 'Hyperlink'
+        $itFocus2 = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id)
+        Check 'items: Back to the series page shows the season that was picked (Season 2), not Next Up''s' ([bool]$itS2Back)
+        Check 'items: ... and the S2 E2 row that was opened has the focus again' ($itFocus2 -and $itFocus2 -like '*"name":"S2 E2 *') $itFocus2
+        Shot "$itTag-series-back-season2"
+    }
+    else { Check 'items: an S2 E2 row on the series page' $false 'none' }
+
+    # --- a watched season with one episode unmarked is not shown watched any more (items review, item 2): Season 2's page
+    $itLink2 = Find-Ui -Name 'Season 2 details' -Type 'Hyperlink'
+    if ($itLink2) {
+        [void](Invoke-Element $itLink2)
+        $itS2Off = "Mark Season 2 of $($fixture.series.name) as watched"
+        $itS2On = "Mark Season 2 of $($fixture.series.name) as unwatched"
+        $itT2 = Wait-Ui -Name $itS2Off -Type 'Button' -Seconds 15
+        if ($itT2) {
+            It-Toggle $itT2
+            [void](Wait-Ui -Name $itS2On -Type 'Button' -Seconds 10); It-Settle 2000
+            $itE2 = Wait-Until { Find-Ui -Name 'S2 E2 ' -Type 'ListItem' -Contains -OffscreenToo } -Seconds 10 -PollMs 200
+            if ($itE2) {
+                [void][OffscreenUi]::SetFocus($itE2); It-Settle 600
+                Key 0x5D; It-Settle 1200
+                $itUnmark = Wait-Ui -Name 'Mark as unwatched' -Type 'MenuItem' -Seconds 5
+                if ($itUnmark) { [void](Invoke-Element $itUnmark) }
+                $itNowOff = Wait-Ui -Name $itS2Off -Type 'Button' -Seconds 10
+                Check 'items: a watched season with one episode unmarked offers "Mark ... as watched" again' ([bool]$itNowOff -and -not (Find-Ui -Name $itS2On -Type 'Button')) "menu item: $([bool]$itUnmark)"
+                Shot "$itTag-season2-after-unmark"
+            }
+            else { Check 'items: an S2 E2 row on Season 2''s page' $false 'none' }
+        }
+        else { Check 'items: Season 2''s Watched toggle' $false 'not found' }
+        $script:page = 'season2'
+    }
+}
+else { Check 'items: a Season 2 pill on the series page' $false 'none' }
+
 # --- optional: a resume point on S1 E4 (Play on the series page, a minute or two in, back), then "Resume S1 E4"
 if ($env:SG_ITEMS_RESUME) {
     Step-Series $false

@@ -201,7 +201,8 @@ public sealed class ItemToggleTests
 
 		await Commands().SetWatched(next, true);
 
-		await WaitUntil(() => vm.PlayTarget.Label == "Play S1 E2" && vm.NextUp.Dto.Id == after.Id);
+		// Play's label follows; Next Up only picks the season the page opens on, so it is not asked again (items review, item 6)
+		await WaitUntil(() => vm.PlayTarget.Label == "Play S1 E2");
 		await vm.OnNavigatedFrom();
 	}
 

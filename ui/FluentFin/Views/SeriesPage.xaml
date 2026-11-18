@@ -85,7 +85,8 @@
                     names the next episode and the list shows it.
                 -->
                 <StackPanel Margin="48,28,48,56" Spacing="32">
-                    <StackPanel Spacing="16" Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.Episodes.Count), Mode=OneWay, FallbackValue=Collapsed}">
+                    <!--  1.2.0 (items review, item 4): shown while there is a season to show, its picker too, even when its episodes could not be loaded  -->
+                    <StackPanel Spacing="16" Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.HasEpisodeSection), Mode=OneWay, FallbackValue=Collapsed}">
                         <TextBlock
                             AutomationProperties.HeadingLevel="Level2"
                             Foreground="{ThemeResource TextFillColorPrimaryBrush}"
@@ -144,6 +145,22 @@
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                         </controls:EpisodeList>
+                        <!--  the list area's words when the season's episodes could not be loaded (with Try again) or it has none  -->
+                        <StackPanel
+                            x:Name="EpisodesMessagePanel"
+                            Orientation="Horizontal"
+                            Spacing="16"
+                            Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.HasEpisodesMessage), Mode=OneWay}">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.EpisodesMessage, Mode=OneWay}"
+                                TextWrapping="Wrap" />
+                            <Button
+                                Command="{x:Bind ViewModel.RetrySeasonCommand}"
+                                Content="Try again"
+                                Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.EpisodesFailed), Mode=OneWay}" />
+                        </StackPanel>
                     </StackPanel>
                     <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
                     <controls:CastRow Heading="Cast &amp; Crew" People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />

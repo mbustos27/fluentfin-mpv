@@ -192,6 +192,7 @@ public partial class App : Application
 			services.AddSingleton<DialogCommands>();
 
 			services.AddSingleton<HomeCache>(); // fluentfin-mpv: the last home page, shown at once (HomeViewModel)
+			services.AddSingleton<SeriesEpisodes>(); // 1.2.0: a series' episodes for Play's label, kept (series and season pages)
 
 			// Views and ViewModels
 			services.AddTransient<ShellViewModel>();

@@ -19,14 +19,16 @@ public sealed partial class SeriesPage : Page
 	protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
 	{
 		base.OnNavigatedTo(e);
-		_place ??= new ItemPagePlace(this, PageContent, () => ViewModel.State.Status is not (LoadStatus.Idle or LoadStatus.Loading));
-		_place.Arrived(e);
+		// the place waits for the shown season's episodes too, so the scroll lands in the right list
+		_place ??= new ItemPagePlace(this, PageContent, () => ViewModel.State.Status is not (LoadStatus.Idle or LoadStatus.Loading) && !ViewModel.IsLoadingEpisodes);
+		// 1.2.0 (items review, item 1): Back shows the season the page showed when it was left, not Next Up's
+		ViewModel.ReturnTo(_place.Arrived(e)?.SelectedSeasonId);
 	}
 
 	// before the page goes: by OnNavigatedFrom it is unloaded and the focus has already left it (for the title bar)
 	protected override void OnNavigatingFrom(Microsoft.UI.Xaml.Navigation.NavigatingCancelEventArgs e)
 	{
-		_place?.Left();
+		_place?.Left(ViewModel.SelectedSeason?.Id);
 		base.OnNavigatingFrom(e);
 	}
 

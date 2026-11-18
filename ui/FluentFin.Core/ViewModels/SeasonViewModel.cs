@@ -1,12 +1,22 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using FluentFin.Contracts.ViewModels;
 using FluentFin.Core.Contracts.Services;
+using FluentFin.Core.Services;
 using Jellyfin.Sdk.Generated.Models;
 
 namespace FluentFin.Core.ViewModels;
 
-public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : ObservableObject, INavigationAware
+/// <param name="seriesEpisodes">1.2.0: the app's kept episodes for Play's label (SeriesEpisodes); a page of its own when
+/// none is given.</param>
+public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpisodes? seriesEpisodes = null) : ObservableObject, INavigationAware
 {
+	private readonly SeriesEpisodes _seriesEpisodes = seriesEpisodes ?? SeriesEpisodes.ForOnePage(jellyfinClient);
+
+	// 1.2.0 (items review, item 3): only the newest of overlapping refreshes applies (Latest)
+	private readonly Latest _item = new();
+	private readonly Latest _list = new();
+	private readonly Latest _play = new();
+
 	/// <summary>fluentfin-mpv: this season could not be loaded: said on the page, with Retry (docs/research/ux-review.md §3.11).</summary>
 	public LoadState State { get; } = new("this season");
 
@@ -17,8 +27,10 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 	}
 
 	/// <summary>
-	/// 1.2.0: the season or one of its episodes was marked watched (or not), here or elsewhere: Play's target follows
-	/// the server, and the episode list too when the season itself changed (all its episodes did).
+	/// 1.2.0: the season, its series or one of its episodes was marked watched (or not), here or elsewhere. The page shows the
+	/// server's state again: the season itself (its Watched toggle: unmarking one episode of a watched season unmarks the
+	/// season, so a second click must not unmark them all; items review, item 2), the episode list when the whole season
+	/// changed, and Play's label, from the kept episodes changed in place (no new download; item 6).
 	/// </summary>
 	internal async void OnUserDataChanged(object? sender, ItemUserDataChangedEventArgs e)
 	{
@@ -30,17 +42,22 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 			}
 
 			var season = e.ItemId == id;
-			if (!season && Episodes?.Any(x => x.Id == e.ItemId) != true)
+			var series = Dto.SeriesId is { } seriesId && e.ItemId == seriesId;
+			if (!season && !series && Episodes?.Any(x => x.Id == e.ItemId) != true)
 			{
 				return;
 			}
 
-			if (season)
+			_seriesEpisodes.Apply(e);
+			await Task.Yield();
+			var play = UpdatePlayTarget(id, reset: false);
+			await UpdateSeason(id);
+			if (season || series)
 			{
 				await UpdateEpisodes(Dto);
 			}
 
-			await UpdatePlayTarget(id, reset: false);
+			await play;
 		}
 		catch (Exception)
 		{
@@ -115,9 +132,10 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 	}
 
 
-	// the series' episodes as Play reads them (MpvQueue): one request without images; "Play" alone when it fails
+	// the series' episodes as Play reads them (MpvQueue), kept (SeriesEpisodes); "Play" alone when they cannot be loaded
 	private async Task UpdatePlayTarget(Guid seasonId, bool reset = true)
 	{
+		var ticket = _play.Next();
 		if (reset)
 		{
 			PlayTarget = PlayTarget.Plain;
@@ -128,29 +146,31 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient) : Observabl
 			return;
 		}
 
-		var episodes = await jellyfinClient.GetSeriesEpisodes(seriesId);
-		if (Dto?.Id == seasonId)
+		var episodes = await _seriesEpisodes.Get(seriesId);
+		if (_play.Is(ticket) && Dto?.Id == seasonId)
 		{
-			PlayTarget = ItemPlay.For(Dto, episodes?.Items);
+			PlayTarget = ItemPlay.For(Dto, episodes);
 		}
 	}
 
 	private async Task UpdateSeason(Guid id)
 	{
-		var series = await jellyfinClient.GetItem(id);
-		if (series is null)
+		var ticket = _item.Next();
+		var season = await jellyfinClient.GetItem(id);
+		if (season is null || !_item.Is(ticket))
 		{
 			return;
 		}
 
-		Dto = series;
+		Dto = season;
 	}
 
 	private async Task UpdateEpisodes(BaseItemDto dto)
 	{
+		var ticket = _list.Next();
 		var response = await jellyfinClient.GetItems(dto);
 
-		if (response is null or { Items: null })
+		if (response is null or { Items: null } || !_list.Is(ticket))
 		{
 			return;
 		}

@@ -136,11 +136,14 @@ public sealed partial class BaseItemDtoCard : UserControl
 	private void Card_GotFocus(object sender, RoutedEventArgs e)
 	{
 		// the ring is for the keyboard (and a gamepad), never for a click
-		FocusRing.Visibility = ReferenceEquals(e.OriginalSource, this) && FocusState is FocusState.Keyboard or FocusState.Programmatic
+		FocusRing.Visibility = ReferenceEquals(e.OriginalSource, this) && ShowsFocusRing(FocusState)
 			? Visibility.Visible
 			: Visibility.Collapsed;
 		ShowActions(_actions.GotFocus(byPointer: e.OriginalSource is Control { FocusState: FocusState.Pointer }));
 	}
+
+	/// <summary>Whether focus given this way shows the card's ring (and its buttons and lift: <see cref="CardActions"/>): not for a click.</summary>
+	internal static bool ShowsFocusRing(FocusState state) => state is FocusState.Keyboard or FocusState.Programmatic;
 
 	private void Card_LostFocus(object sender, RoutedEventArgs e)
 	{

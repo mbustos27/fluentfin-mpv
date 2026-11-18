@@ -36,6 +36,11 @@ public sealed partial class EpisodeRow : UserControl
 			ItemUserData.Changed += OnUserDataChanged;
 		};
 		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
+		EffectiveViewportChanged += (_, e) =>
+		{
+			_viewport = e.EffectiveViewport;
+			LoadThumbWhenNear();
+		};
 		Apply();
 	}
 
@@ -68,7 +73,10 @@ public sealed partial class EpisodeRow : UserControl
 	private void Apply()
 	{
 		var dto = Dto;
-		Thumb.Source = ItemArtworkConverters.Thumb(dto, 352);
+		// 1.2.0 (items review, item 6): the thumbnail comes when the row nears the screen, not for every row of a long season at once
+		Thumb.Source = null;
+		_thumbFor = dto;
+		LoadThumbWhenNear();
 		TitleText.Text = ItemRowConverters.EpisodeTitle(dto);
 		// 1.2.0: the runtime on the title's line: "S1 E1 · The Archive Problem · 10m"
 		var runtime = ItemRowConverters.Runtime(dto);
@@ -86,6 +94,18 @@ public sealed partial class EpisodeRow : UserControl
 	/// 1.2.0: the progress and the watched mark, as the server has them (<see cref="ItemUserData"/>): one mark for
 	/// watched (the thumbnail's), not a second check button at the row's end; "Mark as watched" is in the row's menu.
 	/// </summary>
+	private BaseItemDto? _thumbFor;
+	private Windows.Foundation.Rect? _viewport;
+
+	private void LoadThumbWhenNear()
+	{
+		if (_thumbFor is { } dto && EpisodeThumbs.IsNear(_viewport, ActualHeight))
+		{
+			_thumbFor = null;
+			Thumb.Source = ItemArtworkConverters.Thumb(dto, 352);
+		}
+	}
+
 	private void ApplyUserData()
 	{
 		var dto = Dto;
@@ -223,6 +243,34 @@ public sealed partial class EpisodeRow : UserControl
 	private void Title_PointerEntered(object sender, PointerRoutedEventArgs e) => TitleText.TextDecorations = Windows.UI.Text.TextDecorations.Underline;
 
 	private void Title_PointerExited(object sender, PointerRoutedEventArgs e) => TitleText.TextDecorations = Windows.UI.Text.TextDecorations.None;
+}
+
+/// <summary>
+/// 1.2.0 (items review, item 6): an episode row asks for its thumbnail when it is within a screen of the page's view, so a
+/// season of hundreds of episodes does not download and decode hundreds of pictures at once. The rows themselves stay (one
+/// Tab stop each, Home/End, Narrator's "n of m" and Back's focus need them; EpisodeList).
+/// </summary>
+internal static class EpisodeThumbs
+{
+	/// <summary>How far outside the view a row already asks for its picture.</summary>
+	public const double Margin = 1000;
+
+	/// <param name="viewport">The view's rectangle in the row's own coordinates (EffectiveViewportChanged): null before the
+	/// first one (the row is not laid out yet: it waits); empty or endless outside any scroller (then it is shown: it asks).</param>
+	public static bool IsNear(Windows.Foundation.Rect? viewport, double rowHeight)
+	{
+		if (viewport is not { } view)
+		{
+			return false;
+		}
+
+		if (view.IsEmpty || double.IsInfinity(view.Width) || double.IsInfinity(view.Height))
+		{
+			return true;
+		}
+
+		return view.Bottom >= -Margin && view.Top <= Math.Max(0, rowHeight) + Margin;
+	}
 }
 
 /// <summary>1.2.0: what a click on an episode row does.</summary>

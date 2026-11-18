@@ -152,7 +152,7 @@ public class NavigationService : INavigationService
 			DropReplacedPlayerPage(frame.BackStack, x => x.SourcePageType, e.SourcePageType, e.NavigationMode);
 
 			// 1.2.0: a season pill switches seasons in place in the history: Back goes to the page before the seasons
-			DropSwitchedSeasonPage(frame.BackStack, x => x.SourcePageType, e.SourcePageType, e.NavigationMode);
+			DropSwitchedSeasonPage(frame.BackStack, x => x.SourcePageType, x => x.Parameter, e.SourcePageType, e.Parameter, e.NavigationMode);
 
 			if (frame.GetPageViewModel() is INavigationAware navigationAware)
 			{
@@ -185,11 +185,18 @@ public class NavigationService : INavigationService
 	/// <summary>
 	/// 1.2.0 (1.1.3 UX audit, interaction item 10): a season page opened from a season page (its season pills) takes
 	/// over that page's history entry, so looking at seasons 2, 3 and 4 does not put three pages before the series in Back's
-	/// way (Microsoft's navigation history: moving between peers in place is not added to the history).
+	/// way (Microsoft's navigation history: moving between peers in place is not added to the history). Only a season of the
+	/// same series (items review, item 7): a season of another show opened from a season page (a search) is a new place.
 	/// </summary>
-	internal static bool DropSwitchedSeasonPage<T>(IList<T> backStack, Func<T, Type> pageType, Type incoming, NavigationMode mode)
+	internal static bool DropSwitchedSeasonPage<T>(IList<T> backStack, Func<T, Type> pageType, Func<T, object?> parameter, Type incoming, object? incomingParameter, NavigationMode mode)
 	{
 		if (mode != NavigationMode.New || incoming != typeof(Views.SeasonPage) || backStack.Count == 0 || pageType(backStack[^1]) != incoming)
+		{
+			return false;
+		}
+
+		if (parameter(backStack[^1]) is not Jellyfin.Sdk.Generated.Models.BaseItemDto { SeriesId: { } left }
+			|| incomingParameter is not Jellyfin.Sdk.Generated.Models.BaseItemDto { SeriesId: { } right } || left != right)
 		{
 			return false;
 		}

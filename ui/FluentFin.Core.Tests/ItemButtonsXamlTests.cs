@@ -145,10 +145,10 @@ public sealed class ItemButtonsXamlTests
 		var code = Code($"FluentFin/Views/{page}.xaml.cs");
 
 		Assert.Contains("new ItemPagePlace(this, PageContent,", code);
-		Assert.Matches(new Regex(@"override void OnNavigatedTo\(Microsoft\.UI\.Xaml\.Navigation\.NavigationEventArgs e\)[\s\S]*?_place\.Arrived\(e\);"), code);
+		Assert.Matches(new Regex(@"override void OnNavigatedTo\(Microsoft\.UI\.Xaml\.Navigation\.NavigationEventArgs e\)[\s\S]*?_place\.Arrived\(e\)"), code);
 		// saved while the page and its focus are still there: by OnNavigatedFrom the focus has left for the title bar (a run
 		// found the focus never restored)
-		Assert.Matches(new Regex(@"override void OnNavigatingFrom\(Microsoft\.UI\.Xaml\.Navigation\.NavigatingCancelEventArgs e\)\s*\{\s*_place\?\.Left\(\);"), code);
+		Assert.Matches(new Regex(@"override void OnNavigatingFrom\(Microsoft\.UI\.Xaml\.Navigation\.NavigatingCancelEventArgs e\)\s*\{\s*_place\?\.Left\("), code);
 		Assert.DoesNotContain("override void OnNavigatedFrom(", code);
 		Assert.Equal("PageContent", (string?)Load($"FluentFin/Views/{page}.xaml").Descendants().First(e => e.Name.LocalName == "ScrollViewer").Attribute(Xaml + "Name"));
 	}
@@ -159,9 +159,10 @@ public sealed class ItemButtonsXamlTests
 		var code = Code("FluentFin/Views/ItemPagePlace.cs");
 
 		Assert.Contains("PagePlaces.ForReturn(_key, e.NavigationMode is NavigationMode.Back or NavigationMode.Forward)", code);
-		Assert.Contains("PagePlaces.Save(_key, new PagePlace(scroller.VerticalOffset, item, path));", code);
-		Assert.Contains("scroller.ChangeView(null, offset, null, disableAnimation: true);", code);
-		Assert.Contains("control.Focus(FocusState.Programmatic)", code);
+		Assert.Contains("PagePlaces.Save(_key, new PagePlace(_scroller.VerticalOffset, item, path, fromKeyboard, selectedSeasonId));", code);
+		Assert.Contains("_scroller.ChangeView(null, offset, null, disableAnimation: true);", code);
+		// as it was given (items review, item 5: ItemNavigationTests)
+		Assert.Contains("control.Focus(RestoreAs(place.FocusFromKeyboard))", code);
 	}
 
 	/// <summary>1.2.0 (1.1.3 UX audit, interaction item 10): switching seasons replaces the history entry.</summary>
@@ -170,7 +171,8 @@ public sealed class ItemButtonsXamlTests
 	{
 		var code = Code("FluentFin/Services/NavigationService.cs");
 
-		Assert.Contains("DropSwitchedSeasonPage(frame.BackStack, x => x.SourcePageType, e.SourcePageType, e.NavigationMode);", code);
+		// the rule itself (a season of the same series only): ItemNavigationTests
+		Assert.Contains("DropSwitchedSeasonPage(frame.BackStack, x => x.SourcePageType, x => x.Parameter, e.SourcePageType, e.Parameter, e.NavigationMode);", code);
 	}
 
 	/// <summary>1.2.0 (1.1.3 UX audit, interaction item 13): the hero's artwork and words open the item; previous and next.</summary>

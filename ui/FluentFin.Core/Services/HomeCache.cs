@@ -77,6 +77,21 @@ public sealed class HomeCache : IDisposable
 		});
 	}
 
+	/// <summary>
+	/// 1.2.0 (items stream): how many times something may have changed what the server has (a watch-state or library change, a
+	/// sign-in, a player page opened or left). Another cache (SeriesEpisodes) keeps what it read only while this stays put.
+	/// </summary>
+	public int ChangeCount
+	{
+		get
+		{
+			lock (_lock)
+			{
+				return _changes;
+			}
+		}
+	}
+
 	/// <summary>Something may have changed the page (a player page opened or left): the next visit asks the server again.</summary>
 	public void MarkStale()
 	{
