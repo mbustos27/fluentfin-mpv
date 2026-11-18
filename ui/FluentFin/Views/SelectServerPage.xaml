@@ -9,42 +9,61 @@
     xmlns:local="using:FluentFin.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:settings="using:FluentFin.Core.Settings"
+    xmlns:ui="using:CommunityToolkit.WinUI"
     mc:Ignorable="d">
 
     <Page.Resources>
         <cc:BoolToVisibilityConverter x:Name="BooleanToVisibilityConverter" />
     </Page.Resources>
 
-    <Grid>
-        <StackPanel
-            MinWidth="500"
-            Padding="50"
+    <!--
+        1.1.4 (states): one glass card, as the sign-in page: the app's name is the page's heading, the saved servers a
+        second-level one; a labelled address box with an example, where the keyboard starts; what is going on under the
+        buttons (a polite live region) and why the last attempt did not work in a warning on the page (it announces itself).
+    -->
+    <ScrollViewer HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
+        <ContentControl
+            Width="560"
+            Margin="24"
+            Padding="44,40"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             Background="{ThemeResource GlassPanelStrongBrush}"
-            BorderBrush="{ThemeResource GlassStrokeBrush}"
-            BorderThickness="{StaticResource GlassStrokeThickness}"
-            CornerRadius="{StaticResource GlassPanelCornerRadius}"
-            Spacing="20">
+            Style="{StaticResource GlassSurfaceStyle}">
+        <StackPanel Spacing="20">
             <StackPanel.Resources>
                 <Style TargetType="StackPanel">
                     <Setter Property="Spacing" Value="5" />
                 </Style>
-                <Style TargetType="TextBlock">
-                    <Setter Property="FontWeight" Value="Bold" />
-                </Style>
             </StackPanel.Resources>
 
-            <!--  Seaglass: the app's name on the card (the rename stream changes it)  -->
-            <TextBlock
-                HorizontalAlignment="Center"
-                FontWeight="SemiBold"
-                Style="{StaticResource GlassPageTitleTextBlockStyle}"
-                Text="Seaglass" />
+            <StackPanel Spacing="4">
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    AutomationProperties.HeadingLevel="Level1"
+                    Style="{StaticResource GlassPageTitleTextBlockStyle}"
+                    Text="Seaglass" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                    Style="{ThemeResource BodyTextBlockStyle}"
+                    Text="Choose your Jellyfin server"
+                    TextAlignment="Center" />
+            </StackPanel>
 
             <StackPanel Margin="{StaticResource MediumBottomMargin}" Visibility="{x:Bind ViewModel.HasServers, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}">
-                <TextBlock Text="Saved Servers" />
+                <TextBlock
+                    AutomationProperties.HeadingLevel="Level2"
+                    FontWeight="SemiBold"
+                    Text="Saved servers" />
+                <!--
+                    1.1.4 (states; layout audit #12): a saved server is a row: its name (whole: the row is the card's
+                    width), its address under it, and More options with Remove (also the row's context menu). It was an
+                    80 px icon tile with the name cut off and no address.
+                -->
                 <ItemsView
+                    x:Name="SavedServersView"
+                    AutomationProperties.Name="Saved servers"
                     IsItemInvokedEnabled="True"
                     ItemInvoked="ServerSelected"
                     ItemsSource="{x:Bind ViewModel.Servers}"
@@ -53,43 +72,73 @@
                         <DataTemplate x:DataType="settings:SavedServer">
                             <!--  fluentfin-mpv: named after the server (Narrator read "ItemContainer"); a long name is trimmed, whole in the tooltip  -->
                             <ItemContainer
-                                Width="100"
-                                Height="100"
                                 AutomationProperties.Name="{x:Bind DisplayName}"
-                                Background="{ThemeResource GlassPanelBrush}"
+                                Background="{ThemeResource GlassInsetFillBrush}"
                                 CornerRadius="{StaticResource GlassCardCornerRadius}"
                                 ToolTipService.ToolTip="{x:Bind DisplayName}">
-                                <Grid Padding="8">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <Viewbox Width="50">
-                                        <FontIcon Glyph="&#xED47;" />
-                                    </Viewbox>
-
-                                    <TextBlock
-                                        Grid.Row="1"
-                                        HorizontalAlignment="Center"
-                                        Text="{x:Bind DisplayName}"
-                                        TextTrimming="CharacterEllipsis" />
+                                <ItemContainer.ContextFlyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem
+                                            Click="RemoveServer_Click"
+                                            Icon="{ui:FontIcon Glyph=&#xE74D;}"
+                                            Tag="{x:Bind}"
+                                            Text="Remove" />
+                                    </MenuFlyout>
+                                </ItemContainer.ContextFlyout>
+                                <Grid Padding="14,10,6,10" ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AccessibilityView="Raw"
+                                        FontSize="20"
+                                        Glyph="&#xE968;" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="0">
+                                        <TextBlock
+                                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                            Text="{x:Bind DisplayName}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                            Style="{ThemeResource CaptionTextBlockStyle}"
+                                            Text="{x:Bind local:SelectServerPage.AddressOf(LocalUrl, PublicUrl)}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="2"
+                                        AutomationProperties.Name="{x:Bind local:SelectServerPage.MoreOptionsName(DisplayName)}"
+                                        Content="{ui:FontIcon Glyph=&#xE712;, FontSize=16}"
+                                        Style="{StaticResource GlassIconButtonStyle}"
+                                        ToolTipService.ToolTip="More options">
+                                        <Button.Flyout>
+                                            <MenuFlyout>
+                                                <MenuFlyoutItem
+                                                    Click="RemoveServer_Click"
+                                                    Icon="{ui:FontIcon Glyph=&#xE74D;}"
+                                                    Tag="{x:Bind}"
+                                                    Text="Remove" />
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
                                 </Grid>
                             </ItemContainer>
                         </DataTemplate>
                     </ItemsView.ItemTemplate>
                     <ItemsView.Layout>
-                        <StackLayout Orientation="Horizontal" Spacing="10" />
+                        <StackLayout Orientation="Vertical" Spacing="6" />
                     </ItemsView.Layout>
                 </ItemsView>
             </StackPanel>
 
             <!--  fluentfin-mpv: a labelled address box with an example (docs/research/ux-review.md F2)  -->
             <StackPanel>
-                <TextBlock Text="Server address" />
                 <TextBox
                     x:Name="TxtUrl"
                     AutomationProperties.Name="Server address"
+                    Header="Server address"
                     InputScope="Url"
                     IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
                     KeyDown="InputFieldKeyDown"
@@ -100,7 +149,12 @@
                 Orientation="Horizontal"
                 Spacing="10">
                 <!--  fluentfin-mpv: named (a text in a panel does not name its button for Narrator)  -->
-                <Button AutomationProperties.Name="Detect" Style="{StaticResource GlassPillButtonStyle}" Command="{x:Bind ViewModel.DetectServersCommand}">
+                <!--  1.1.4 (states): "Find servers" (it was "Detect": what it finds was not said)  -->
+                <Button
+                    AutomationProperties.Name="Find servers"
+                    Command="{x:Bind ViewModel.DetectServersCommand}"
+                    Style="{StaticResource GlassPillButtonStyle}"
+                    ToolTipService.ToolTip="Look for Jellyfin servers on this network">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsDetecting, Mode=OneWay}">
                             <ctk:Case IsDefault="true" Value="False">
@@ -113,7 +167,7 @@
                                     IsIndeterminate="True" />
                             </ctk:Case>
                         </ctk:SwitchPresenter>
-                        <TextBlock Text="Detect" />
+                        <TextBlock Text="Find servers" />
                     </StackPanel>
                 </Button>
                 <Button
@@ -122,18 +176,14 @@
                     CommandParameter="{x:Bind TxtUrl.Text, Mode=OneWay}"
                     Style="{StaticResource GlassAccentPillButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <!--  fluentfin-mpv: progress while the address is checked  -->
-                        <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsConnecting, Mode=OneWay}">
-                            <ctk:Case IsDefault="true" Value="False">
-                                <FontIcon Glyph="&#xE725;" />
-                            </ctk:Case>
-                            <ctk:Case Value="True">
-                                <ProgressRing
-                                    Width="16"
-                                    Height="16"
-                                    IsIndeterminate="True" />
-                            </ctk:Case>
-                        </ctk:SwitchPresenter>
+                        <!--  fluentfin-mpv: progress while the address is checked; 1.1.4: no "Send" glyph (layout audit #4)  -->
+                        <ProgressRing
+                            Width="16"
+                            Height="16"
+                            AutomationProperties.AccessibilityView="Raw"
+                            Foreground="{ThemeResource SeaglassAccentForegroundBrush}"
+                            IsActive="{x:Bind ViewModel.IsConnecting, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.IsConnecting, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
                         <TextBlock Text="Next" />
                     </StackPanel>
                 </Button>
@@ -143,17 +193,17 @@
             <TextBlock
                 HorizontalAlignment="Center"
                 AutomationProperties.LiveSetting="Polite"
-                FontWeight="Normal"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Foreground="{ThemeResource GlassTextSecondaryBrush}"
                 Text="{x:Bind ViewModel.StatusText, Mode=OneWay}"
                 Visibility="{x:Bind ViewModel.IsBusy, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}" />
             <InfoBar
                 x:Name="ErrorBar"
-                MaxWidth="500"
+                CornerRadius="{StaticResource GlassCardCornerRadius}"
                 IsClosable="False"
                 IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                 Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
                 Severity="Warning" />
         </StackPanel>
-    </Grid>
+        </ContentControl>
+    </ScrollViewer>
 </Page>

@@ -16,7 +16,8 @@ using ReactiveUI;
 namespace FluentFin.Core.ViewModels;
 
 public partial class SelectServerViewModel(ISettings settings,
-										   [FromKeyedServices(NavigationRegions.InitialSetup)] INavigationService navigationService) : ObservableObject
+										   [FromKeyedServices(NavigationRegions.InitialSetup)] INavigationService navigationService,
+										   HomeCache homeCache) : ObservableObject
 {
 	private int _found;
 
@@ -105,7 +106,9 @@ public partial class SelectServerViewModel(ISettings settings,
 		catch (Exception ex)
 		{
 			// no network, or broadcasts refused: the button must not spin for ever
-			Finish($"Couldn't look for servers on this network ({ex.Message}). Enter the server's address above instead.");
+			// 1.1.4 (states; layout audit #11): the exception's words go to the log, not onto the page
+			Serilog.Log.Warning(ex, "Looking for servers on this network failed");
+			Finish("Couldn't look for servers on this network (it may be blocked by a firewall or a VPN). Enter the server's address above instead.");
 		}
 
 		await done.Task;
@@ -146,7 +149,7 @@ public partial class SelectServerViewModel(ISettings settings,
 
 		if (info is null)
 		{
-			ErrorMessage = error ?? $"Unable to find a jellyfin server at {url}";
+			ErrorMessage = error ?? $"No Jellyfin server answered at {url}. Check the address and port, then try again.";
 			return;
 		}
 
@@ -185,6 +188,36 @@ public partial class SelectServerViewModel(ISettings settings,
 
 		navigationService.NavigateTo<LoginViewModel>(server);
 	}
+
+	/// <summary>1.1.4 (states): asks before a saved server goes; set by the page. Without it nothing is removed.</summary>
+	public Func<ConfirmPrompt, Task<bool>>? Confirm { get; set; }
+
+	/// <summary>
+	/// 1.1.4 (states; layout audit #12): Remove on a saved server's row: after a yes to the same prompt as Settings' Remove
+	/// server, the server goes from the list with its saved sign-ins and their saved home pages. Nothing changes on the server.
+	/// </summary>
+	[RelayCommand]
+	private async Task RemoveServer(SavedServer server)
+	{
+		if (Confirm is not { } confirm || !await confirm(SettingsViewModel.RemoveServerPrompt(server)))
+		{
+			return;
+		}
+
+		Servers.Remove(server);
+		HasServers = Servers.Count > 0;
+		foreach (var user in server.Users.ToList())
+		{
+			await homeCache.ForgetLogin(server.Id, user.Username);
+		}
+	}
+
+	/// <summary>
+	/// Which row takes the keyboard after the row at <paramref name="removedIndex"/> went: the one now in its place, the
+	/// last one when it was the last, none (the address box) when no server is left.
+	/// </summary>
+	public static int? FocusAfterRemove(int removedIndex, int remaining) =>
+		remaining <= 0 ? null : Math.Clamp(removedIndex, 0, remaining - 1);
 
 	private void ServerDiscovered(DiscoveryInfo info)
 	{

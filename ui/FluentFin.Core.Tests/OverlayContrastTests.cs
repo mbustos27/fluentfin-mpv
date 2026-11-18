@@ -80,8 +80,9 @@ public class OverlayContrastTests
 	[Fact]
 	public void LoginPage_PanelFollowsSystemTheme()
 	{
-		var panel = Load("FluentFin/Views/LoginPage.xaml").Descendants(Presentation + "StackPanel")
-			.Single(e => (string?)e.Attribute("MinWidth") == "500");
+		// 1.1.4 (states): the card is a glass section panel (GlassSurfaceStyle) on the strong brush
+		var panel = Load("FluentFin/Views/LoginPage.xaml").Descendants(Presentation + "ContentControl")
+			.Single(e => (string?)e.Attribute("Style") == "{StaticResource GlassSurfaceStyle}");
 
 		// no forced theme, and the strong glass brush (Solid mode swaps it for an opaque one) so text stays readable over the backdrop
 		Assert.Null(panel.Attribute("RequestedTheme"));

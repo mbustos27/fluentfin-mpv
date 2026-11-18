@@ -36,7 +36,8 @@
   'all' (default) = login..close. Not in 'all': relaunch (close, start again: the automatic sign-in with the saved
   server) and steady (after play: playback running, nothing may move over the middle of the video; with relaunch first
   it catches the 1.0 test build's stuck startup ring: -Script relaunch,play,steady,close). -Then <script.ps1> runs after the steps on the private desktop with the driver's
-  helpers (see offscreen\drive.ps1). -Setting Name=Value (repeatable) is written into the run's LocalSettings.json
+  helpers (see offscreen\drive.ps1); -Before <script.ps1> the same way on the server page, before the sign-in (the
+  server page's and sign-in page's states: offscreen\before-states.ps1). -Setting Name=Value (repeatable) is written into the run's LocalSettings.json
   first (a JSON value, else a string), e.g. -Setting MpvPlayerControls=Mpv for mpv's own controls (FluentFin's are the
   default, with libmpv\libmpv-2.dll next to the exe); MpvBackendCommand, Servers and MediaPlayerType are the harness's and
   refused (the run plays with the mpv player only).
@@ -57,6 +58,7 @@ param(
     [ValidateSet('quickconnect', 'password')][string]$SignIn = 'quickconnect',
     [string[]]$Setting = @(),
     [string]$Then,
+    [string]$Before,
     [string]$Exe,
     [switch]$Build,
     [string]$BuildDir,
@@ -82,6 +84,7 @@ foreach ($pair in @(@('-Out', $Out), @('-Cache', $Cache), @('-BuildDir', $BuildD
 # steps are comma-separated (a navigation item's name may have spaces: nav:Media Library)
 $Script = @($Script | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 if ($Then) { $Then = [IO.Path]::GetFullPath($Then); if (-not (Test-Path $Then)) { throw "-Then: no script at $Then" } }
+if ($Before) { $Before = [IO.Path]::GetFullPath($Before); if (-not (Test-Path $Before)) { throw "-Before: no script at $Before" } }
 $Exe = Resolve-HarnessExe $Exe $BuildDir ([bool]$Build)
 if (-not $Python) { $Python = Join-Path $repo 'backend\.venv\Scripts\python.exe' }
 if (-not (Test-Path $Python)) { throw "no backend venv python at $Python; pass -Python <a venv with the backend's dependencies>\Scripts\python.exe (absolute)" }
@@ -155,6 +158,7 @@ if ($LatencyRule.Count) {
     $driveArgs += @('-LatencyRulesFile', $rulesFile)
 }
 if ($Then) { $driveArgs += @('-Then', $Then) }
+if ($Before) { $driveArgs += @('-Before', $Before) }
 if ($NoA11y) { $driveArgs += '-NoA11y' }
 Write-Host "running off-screen (desktop ffh-ui-$PID; log $Out\drive.log)"
 & $Python -B -I $hidden --log (Join-Path $Out 'hidden_run.log') --timeout $TimeoutSeconds --desktop "ffh-ui-$PID" `

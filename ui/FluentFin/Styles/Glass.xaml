@@ -150,8 +150,9 @@
             <StaticResource x:Key="GlassInsetTextBrush" ResourceKey="GlassTextPrimaryBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
-            <Color x:Key="SeaglassAccentColor">#FFFFFF00</Color>
-            <Color x:Key="SeaglassDeepColor">#FF000000</Color>
+            <!--  1.1.4 (states): the user's contrast colours, not a fixed yellow and black (wrong in a light scheme)  -->
+            <StaticResource x:Key="SeaglassAccentColor" ResourceKey="SystemColorHighlightColor" />
+            <StaticResource x:Key="SeaglassDeepColor" ResourceKey="SystemColorWindowColor" />
             <SolidColorBrush x:Key="SeaglassAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="SeaglassAccentOnImageBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="SeaglassOnAccentOnImageBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />

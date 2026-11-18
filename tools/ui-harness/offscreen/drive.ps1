@@ -34,6 +34,8 @@
   'all' = login,home,library,movie,series,season,play,fullscreen,windowed,leave,close (relaunch and steady are extra).
   -Then <script.ps1> is dot-sourced after the steps (before close): it can use this script's helpers (Capture-Page,
   Open-Nav, Open-Card, Open-Library, Find-Ui, Wait-Ui, Invoke-Element, Key, Check, Say, Invoke-Server; $fixture).
+  -Before <script.ps1> is dot-sourced the same way before the sign-in, on the server page; it must leave FluentFin on
+  the server page (TxtUrl) with no rule in force that stops the sign-in that follows.
 #>
 param(
     [Parameter(Mandatory)][string]$Exe,
@@ -48,6 +50,7 @@ param(
     [ValidateSet('quickconnect', 'password')][string]$SignIn = 'quickconnect',
     [ValidateSet('Mpv', 'FluentFin')][string]$PlayerControls = 'Mpv',
     [string]$Then,
+    [string]$Before,
     [switch]$NoA11y,
     [int]$TabStops = 60,
     [int]$CloseSeconds = 20
@@ -75,6 +78,7 @@ foreach ($s in $wanted) {
     }
 }
 if ($Then) { $Then = [IO.Path]::GetFullPath($Then); if (-not (Test-Path $Then)) { throw "-Then: no script at $Then" } }
+if ($Before) { $Before = [IO.Path]::GetFullPath($Before); if (-not (Test-Path $Before)) { throw "-Before: no script at $Before" } }
 
 New-Item -ItemType Directory -Force $Out, (Join-Path $Out 'shots'), (Join-Path $Out 'uia'), (Join-Path $Out 'a11y'), (Join-Path $Out 'server') | Out-Null
 $log = Join-Path $Out 'drive.log'
@@ -293,7 +297,8 @@ function Step-SignIn([bool]$Capture) {
     $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Next')
     $nextAt = Get-Epoch
     [void](Invoke-Element $next)
-    $quick = Wait-Until { [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Quick Connect') } -Seconds 20 -PollMs 150
+    # the sign-in page: "Use Quick Connect" (1.1.4; "Quick Connect" before)
+    $quick = Wait-Until { $q = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Use Quick Connect'); if (-not $q) { $q = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Quick Connect') }; $q } -Seconds 20 -PollMs 150
     if (-not $quick) { throw "no sign-in page (no Quick Connect button) within 20 s" }
     $timings.server_to_login_ms = Ms $nextAt (Get-Epoch)
     Start-Sleep -Milliseconds 300
@@ -303,7 +308,12 @@ function Step-SignIn([bool]$Capture) {
         # as a user would: Quick Connect shows a code, approved on "another device" (the fake server's harness endpoint);
         # FluentFin's next poll signs in with the fresh token the server issues. No password anywhere.
         [void](Invoke-Element $quick)
-        $code = Wait-Until { $t = Find-Ui -Name 'Enter code' -Contains -Type 'Text'; if ($t -and $t.Current.Name -match '(\d{6})') { $Matches[1] } } -Seconds 20 -PollMs 100
+        # the code: the dialog's QuickConnectCode text (1.1.4: named digit by digit, "1 2 3 4 5 6"), or an older build's
+        # "Enter code 123456" line
+        $code = Wait-Until {
+            $t = Find-Ui -Id 'QuickConnectCode' -Type 'Text'
+            if ($t -and ($t.Current.Name -replace '\s', '') -match '^(\d{6})$') { return $Matches[1] }
+            $t = Find-Ui -Name 'Enter code' -Contains -Type 'Text'; if ($t -and $t.Current.Name -match '(\d{6})') { $Matches[1] } } -Seconds 20 -PollMs 100
         if (-not $code) { throw "Quick Connect showed no code within 20 s" }
         if ($Capture) { Shot 'quickconnect' }
         [void](Invoke-Server '/__harness/quickconnect/approve' 'POST' @{ code = $code })
@@ -649,7 +659,8 @@ try {
     $keyClass = Wait-Until { Key 0x10; $c = [OffscreenUi]::ClassOf($script:lastKeyWindow); if ($c -eq 'InputSiteWindowClass') { $c } } -Seconds 10 -PollMs 100
     Check 'keys: posted to the window WinUI reads them from (InputSiteWindowClass)' ([bool]$keyClass) $(if ($keyClass) { $keyClass } else { [OffscreenUi]::ClassOf($script:lastKeyWindow) })
 
-    # 3. sign in, then the steps in order
+    # 3. -Before (on the server page, before the sign-in: its states, the sign-in page's), sign in, then the steps in order
+    if ($Before) { Say "-Before $Before"; . $Before }
     Step-SignIn ($wanted -contains 'login')
     foreach ($step in $wanted) {
         switch -Regex ($step) {

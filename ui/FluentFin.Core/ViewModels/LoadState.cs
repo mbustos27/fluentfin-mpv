@@ -153,9 +153,12 @@ public static class LoadMessages
 			: "the server";
 	}
 
-	/// <summary>What to do when the server did not give FluentFin what it asked for.</summary>
+	/// <summary>
+	/// What to do when the server did not give the app what it asked for. 1.1.4 (states): the app's own name (it said
+	/// "FluentFin"), and the button's words ("Try again" below it).
+	/// </summary>
 	public static string CheckServer() =>
-		$"FluentFin couldn't get it from {ServerName()}. Check that the server is running and that this PC can reach it, then try again.";
+		$"{AppIdentity.Name} couldn't get it from {ServerName()}. Check that the server is running and that this PC can reach it, then select Try again.";
 
 	public static LoadOutcome CouldNotLoad(string what) => LoadOutcome.Failed($"Couldn't load {what}", CheckServer());
 }
