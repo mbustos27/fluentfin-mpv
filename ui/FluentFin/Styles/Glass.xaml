@@ -91,6 +91,20 @@
             <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#170508" />
             <!--  behind a dialog: a dusk smoke, not WinUI's grey (high contrast keeps WinUI's own)  -->
             <SolidColorBrush x:Key="ContentDialogSmokeFill" Color="#A61A0710" />
+            <!--
+                1.2.0, the top bar (the account stream's title bar with text tabs): the title bar's glass, a little more open than
+                a panel (hero art runs under it, with the page's scrim), its Solid stand-in (GlassTheme), the hairline along its
+                bottom, and the accent of the selected tab's underline (NeonUnderline draws the lit tube; this is the plain colour)
+            -->
+            <AcrylicBrush
+                x:Key="GlassTitleBarBrush"
+                FallbackColor="#F02A1217"
+                TintColor="#2A1217"
+                TintLuminosityOpacity="0.34"
+                TintOpacity="0.62" />
+            <SolidColorBrush x:Key="GlassTitleBarSolidBrush" Color="#2A1217" />
+            <SolidColorBrush x:Key="GlassTitleBarStrokeBrush" Color="#26FFEDE8" />
+            <SolidColorBrush x:Key="GlassTabUnderlineBrush" Color="#F96985" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
             <Color x:Key="SeaglassAccentColor">#BC1E47</Color>
@@ -162,6 +176,16 @@
             <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#FFFFFF" />
             <!--  behind a dialog: a dusk smoke, not WinUI's grey (high contrast keeps WinUI's own)  -->
             <SolidColorBrush x:Key="ContentDialogSmokeFill" Color="#59500723" />
+            <!--  the top bar (see Dark)  -->
+            <AcrylicBrush
+                x:Key="GlassTitleBarBrush"
+                FallbackColor="#F0FCEAE8"
+                TintColor="#FCEAE8"
+                TintLuminosityOpacity="0.45"
+                TintOpacity="0.28" />
+            <SolidColorBrush x:Key="GlassTitleBarSolidBrush" Color="#FCEAE8" />
+            <SolidColorBrush x:Key="GlassTitleBarStrokeBrush" Color="#1F500723" />
+            <SolidColorBrush x:Key="GlassTabUnderlineBrush" Color="#BC1E47" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <Color x:Key="SeaglassAccentColor">#FFFFFF00</Color>
@@ -195,6 +219,11 @@
             <!--  a ButtonFace fill always carries ButtonText: a custom contrast scheme may make ButtonFace differ from Window  -->
             <SolidColorBrush x:Key="GlassInsetFillBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
             <SolidColorBrush x:Key="GlassInsetTextBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+            <!--  1.2.0, the top bar (glass stream): the system's window colour, its text colour for the hairline, the highlight for the tab  -->
+            <SolidColorBrush x:Key="GlassTitleBarBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="GlassTitleBarSolidBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="GlassTitleBarStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="GlassTabUnderlineBrush" Color="{ThemeResource SystemColorHighlightColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 

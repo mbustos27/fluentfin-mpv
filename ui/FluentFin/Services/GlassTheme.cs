@@ -13,7 +13,7 @@ public static class GlassTheme
 {
 	private static readonly string[] _themes = ["Dark", "Light"];
 	// each key's Solid stand-in is the key with "Brush" replaced by "SolidBrush" (GlassOverlayBrush: the menus' and tooltips' tint)
-	internal static readonly string[] Keys = ["GlassPanelBrush", "GlassPanelStrongBrush", "GlassOverlayBrush"];
+	internal static readonly string[] Keys = ["GlassPanelBrush", "GlassPanelStrongBrush", "GlassOverlayBrush", "GlassTitleBarBrush"];
 	private static readonly Dictionary<(string Theme, string Key), object> _acrylic = [];
 	private static bool _solid;
 	private static FrameworkElement? _root;

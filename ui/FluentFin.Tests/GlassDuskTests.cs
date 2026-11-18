@@ -241,6 +241,78 @@ public sealed class GlassDuskTests
 		Assert.DoesNotContain("CornerRadius=\"20\"", Load("Styles", "NavigationView.xaml").ToString());
 	}
 
+	/// <summary>
+	/// The rail's selected icon is a mark (3:1) on the selected backplate: the white selection overlay over the rail's glass as
+	/// measured in the dark Full shots (#3E282E). Hot pink fails there (2.7:1), so the dark rail uses the light pink.
+	/// </summary>
+	[Fact]
+	public void The_rails_selected_icon_reads_on_the_selected_backplate()
+	{
+		var rail = Load("Styles", "NavigationView.xaml").Descendants()
+			.Single(e => e.Name.LocalName == "ResourceDictionary" && Key(e) == "Default");
+		var selected = (string)rail.Elements().Single(e => Key(e) == "NavigationViewSelectionIndicatorForeground").Attribute("Color")!;
+		var overlay = (string)Theme("Dark").Elements().Single(e => Key(e) == "GlassSelectedOverlayBrush").Attribute("Color")!;
+		static Rgb Parse(string hex) => new(Convert.ToByte(hex[^6..^4], 16), Convert.ToByte(hex[^4..^2], 16), Convert.ToByte(hex[^2..], 16));
+		var backplate = DuskScene.Blend(new Rgb(255, 255, 255), Convert.ToByte(overlay[1..3], 16) / 255.0, new Rgb(0x3E, 0x28, 0x2E));
+		Assert.True(OkLab.Contrast(Parse(selected).Luminance, backplate.Luminance) >= 3, $"{selected} on {backplate.Hex}");
+		Assert.True(OkLab.Contrast(SeaglassPalette.AccentDark.Luminance, backplate.Luminance) < 3, "the hot pink would not read here");
+		// and never in the light dictionary or high contrast: WinUI's own there
+		Assert.DoesNotContain(Load("Styles", "NavigationView.xaml").Descendants().Where(e => e.Name.LocalName == "ResourceDictionary" && Key(e) != "Default")
+			.SelectMany(d => d.Elements()), e => Key(e) == "NavigationViewSelectionIndicatorForeground");
+	}
+
+	/// <summary>1.2.0, the top bar: its glass, Solid stand-in, hairline and tab accent exist in every theme; the glass swaps in Solid.</summary>
+	[Fact]
+	public void The_top_bar_resources_exist_in_every_theme_and_the_title_bar_glass_turns_solid()
+	{
+		foreach (var theme in new[] { "Dark", "Light", "HighContrast" })
+		{
+			var keys = Theme(theme).Elements().Select(Key).ToHashSet();
+			foreach (var key in new[] { "GlassTitleBarBrush", "GlassTitleBarSolidBrush", "GlassTitleBarStrokeBrush", "GlassTabUnderlineBrush" })
+			{
+				Assert.True(keys.Contains(key), $"{theme}: {key}");
+			}
+		}
+
+		Assert.Contains("GlassTitleBarBrush", GlassTheme.Keys);
+		foreach (var theme in new[] { "Dark", "Light" })
+		{
+			Assert.Equal("AcrylicBrush", Theme(theme).Elements().Single(e => Key(e) == "GlassTitleBarBrush").Name.LocalName);
+		}
+	}
+
+	/// <summary>The lit underline: a mark (3:1) on the title bar's glass, its core never the hot pink alone (it must read on pink art too).</summary>
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void The_tab_underline_reads_on_the_title_bar(bool light)
+	{
+		static Rgb Parse(string hex) => new(Convert.ToByte(hex[^6..^4], 16), Convert.ToByte(hex[^4..^2], 16), Convert.ToByte(hex[^2..], 16));
+		var bar = Parse((string)Theme(light ? "Light" : "Dark").Elements().Single(e => Key(e) == "GlassTitleBarSolidBrush").Attribute("Color")!);
+		var layers = NeonUnderline.Layers(light, false, default);
+		var core = layers[^1];
+		Assert.Equal(1, core.Opacity);
+		Assert.True(OkLab.Contrast(new Rgb(core.Color.R, core.Color.G, core.Color.B).Luminance, bar.Luminance) >= 3);
+		Assert.All(layers, l => Assert.InRange(l.Height, 1, NeonUnderline.StackHeight));
+		// the brush the account stream may use without the control: the same accent
+		var brush = Parse((string)Theme(light ? "Light" : "Dark").Elements().Single(e => Key(e) == "GlassTabUnderlineBrush").Attribute("Color")!);
+		Assert.True(OkLab.Contrast(brush.Luminance, bar.Luminance) >= 3);
+		if (!light)
+		{
+			Assert.Equal(3, layers.Count);
+			Assert.Equal(NeonUnderline.NeonCore, core.Color);
+		}
+	}
+
+	[Fact]
+	public void The_tab_underline_is_the_system_highlight_alone_in_high_contrast()
+	{
+		var highlight = Windows.UI.Color.FromArgb(255, 1, 2, 3);
+		var layers = NeonUnderline.Layers(false, true, highlight);
+		Assert.Single(layers);
+		Assert.Equal(highlight, layers[0].Color);
+	}
+
 	[Fact]
 	public void The_glow_colour_is_one_static_colour_and_the_glows_go_out_in_high_contrast()
 	{
