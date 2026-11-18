@@ -25,6 +25,8 @@ public sealed partial class ShellPage : Page
 	{
 		ViewModel = App.GetService<ShellViewModel>();
 		InitializeComponent();
+		// 1.3.0: the update bar's room comes and goes with it (UpdateBarTop)
+		UpdateBar.RegisterPropertyChangedCallback(InfoBar.IsOpenProperty, (_, _) => UpdateInsets());
 		_updates.Coordinator.NoticeChanged += OnUpdateNoticeChanged;
 		Unloaded += (_, _) => _updates.Coordinator.NoticeChanged -= OnUpdateNoticeChanged;
 		ShowUpdateNotice();
@@ -109,9 +111,17 @@ public sealed partial class ShellPage : Page
 		var extendsUnder = NavigationFrame.Content is DependencyObject page && TopBar.GetExtendsUnder(page);
 		var top = TopBar.TopInset(_titleBar.IsVisible, extendsUnder);
 		ContentRoot.Padding = new Thickness(0, top, 0, 0);
-		UpdateBar.Margin = new Thickness(16, 8 + (_titleBar.IsVisible && extendsUnder ? TopBar.Height : 0), 16, 0);
+		UpdateBar.Margin = UpdateBarTop(UpdateBar.IsOpen, _titleBar.IsVisible, extendsUnder) is { } barTop ? new Thickness(16, barTop, 16, 0) : new Thickness(0);
 		_titleBar.IsContentUnderBar = _titleBar.IsVisible && extendsUnder;
 	}
+
+	/// <summary>
+	/// The update bar's top margin: 8 below the top bar, or below where the bar sits over a page that runs under it; none while
+	/// it is closed. 1.3.0: a closed bar kept its margin, so every page meant to run under the top bar (the heroes) started
+	/// that much lower and never reached under the bar.
+	/// </summary>
+	internal static double? UpdateBarTop(bool open, bool barVisible, bool extendsUnder) =>
+		open ? 8 + (barVisible && extendsUnder ? TopBar.Height : 0) : null;
 
 	private void OnTitleBarChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
