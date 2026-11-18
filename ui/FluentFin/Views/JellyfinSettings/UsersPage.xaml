@@ -33,13 +33,13 @@
                     Style="{ThemeResource SubheaderTextBlockStyle}"
                     Text="Users" />
                 <!--  D25: a text button "Add user" (role: Secondary Compact); Help is a link that leaves the app (D26)  -->
-                <Button x:Name="AddUserButton" Command="{x:Bind root:App.Dialogs.AddUserDialogCommand}">
+                <Button AutomationProperties.Name="Add user" x:Name="AddUserButton" Command="{x:Bind root:App.Dialogs.AddUserDialogCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon FontSize="16" Glyph="&#xE710;" />
                         <TextBlock Text="Add user" />
                     </StackPanel>
                 </Button>
-                <HyperlinkButton NavigateUri="https://jellyfin.org/docs/general/server/users/adding-managing-users/" ToolTipService.ToolTip="Opens jellyfin.org in your browser">
+                <HyperlinkButton AutomationProperties.Name="Help" NavigateUri="https://jellyfin.org/docs/general/server/users/adding-managing-users/" ToolTipService.ToolTip="Opens jellyfin.org in your browser">
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <TextBlock Text="Help" />
                         <FontIcon FontSize="12" Glyph="&#xE8A7;" />

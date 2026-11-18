@@ -16,6 +16,8 @@ reads to check that a confirmed button sent exactly one request and a cancelled 
   POST /Library/VirtualFolders (?name, collectionType; the body's LibraryOptions.PathInfos), DELETE ?name,
   POST /Library/VirtualFolders/Name (?name, newName), POST /Library/VirtualFolders/LibraryOptions,
   GET /Libraries/AvailableOptions, GET /Localization/Cultures and /Localization/Countries (a few each).
+- Plugins: with FAKESERVER_PLAYBACK_REPORTING=1 in the environment, GET /Plugins lists the Playback Reporting plugin (its
+  reports page shows; its own endpoints still answer 404, as for a plugin with no data).
 - Items: GET /Items/{id}/MetadataEditor, POST /Items/{id} (the metadata editor's save: its body is logged),
   GET /Items/{id}/RemoteImages/Providers, DELETE /Items/{id}/Images/{type}/{index},
   DELETE /Videos/{id}/Subtitles/{index}.
@@ -154,6 +156,9 @@ def route(handler, outer, method, path, low):
         handler._json(500, {"error": "restarting (fake)"})
         return True
 
+    if method == "GET" and low == "/plugins" and os.environ.get("FAKESERVER_PLAYBACK_REPORTING"):
+        return answer("plugins", [{"Name": "Playback Reporting", "Version": "16.0.0.0", "Id": "5c534381-91a3-43cb-907a-35aa02eb9d2c",
+                                   "CanUninstall": True, "HasImage": False, "Status": "Active"}])
     if method == "POST" and low == "/system/restart":
         st.down_until = time.time() + RESTART_SECONDS
         done("restart")

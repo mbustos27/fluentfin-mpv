@@ -81,7 +81,7 @@
                         VerticalAlignment="Center"
                         Style="{ThemeResource BodyStrongTextBlockStyle}"
                         Text="Current images" />
-                    <Button
+                    <Button AutomationProperties.Name="Search online"
                         HorizontalAlignment="Right"
                         Command="{x:Bind ViewModel.SwitchViewCommand}"
                         CommandParameter="{x:Bind vm:EditImagesViewModelState.Search}">
@@ -217,7 +217,7 @@
                                             <Run Text="★" /><Run Text="{x:Bind CommunityRating}" /><Run Text=" · " /><Run Text="{x:Bind VoteCount}" /><Run Text=" votes" />
                                         </TextBlock>
                                     </StackPanel>
-                                    <Button
+                                    <Button AutomationProperties.Name="Use image"
                                         Grid.Row="2"
                                         HorizontalAlignment="Stretch"
                                         Command="{Binding ElementName=Page, Path=ViewModel.UpdateImageCommand}"

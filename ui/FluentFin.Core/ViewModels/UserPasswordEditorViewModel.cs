@@ -40,7 +40,7 @@ public partial class UserPasswordEditorViewModel(IJellyfinClient jellyfinClient)
 
 	public async Task RemovePassword()
 	{
-		if (Confirm is not { } confirm || !await confirm(AdminPrompts.RemovePassword(User?.Name)))
+		if (User is null || Confirm is not { } confirm || !await confirm(AdminPrompts.RemovePassword(User.Name)))
 		{
 			return;
 		}

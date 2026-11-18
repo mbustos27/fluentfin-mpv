@@ -99,7 +99,7 @@
                     IsExpanded="True"
                     ItemsSource="{x:Bind ViewModel.Locations, Mode=OneWay}">
                     <!--  role: Secondary Compact (D72: no accent, says what it adds)  -->
-                    <Button Click="Button_Click">
+                    <Button AutomationProperties.Name="Add folder" Click="Button_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon FontSize="16" Glyph="&#xE710;" />
                             <TextBlock Text="Add folder" />

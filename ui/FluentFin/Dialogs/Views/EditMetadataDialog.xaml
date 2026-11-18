@@ -229,7 +229,7 @@
                         Style="{StaticResource BodyStrongTextBlockStyle}"
                         Text="Genres" />
                     <!--  role: Secondary Compact (D58: the visible label says what it adds)  -->
-                    <Button HorizontalAlignment="Right">
+                    <Button AutomationProperties.Name="Add genre" HorizontalAlignment="Right">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon FontSize="16" Glyph="&#xE710;" />
                             <TextBlock Text="Add genre" />

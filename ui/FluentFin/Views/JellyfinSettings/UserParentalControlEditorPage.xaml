@@ -68,7 +68,7 @@
             Header="Access schedule"
             ItemsSource="{x:Bind ViewModel.AccessSchedules}">
             <!--  D41: "Add schedule", role Secondary Compact (no accent beside the page's Save)  -->
-            <Button Command="{x:Bind ViewModel.PickAccessScheduleCommand}">
+            <Button AutomationProperties.Name="Add schedule" Command="{x:Bind ViewModel.PickAccessScheduleCommand}">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon FontSize="16" Glyph="&#xE710;" />
                     <TextBlock Text="Add schedule" />

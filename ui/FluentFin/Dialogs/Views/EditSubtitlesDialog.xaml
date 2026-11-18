@@ -116,7 +116,7 @@
                     PlaceholderText="Language"
                     SelectedItem="{x:Bind ViewModel.SelectedCulture, Mode=TwoWay}" />
                 <!--  D63: role Secondary Compact (no accent in a dialog whose close is the only commit)  -->
-                <Button Grid.Column="1" Command="{x:Bind ViewModel.SearchSubtitlesCommand}">
+                <Button AutomationProperties.Name="Search" Grid.Column="1" Command="{x:Bind ViewModel.SearchSubtitlesCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <SymbolIcon Symbol="Find" />
                         <TextBlock Text="Search" />
