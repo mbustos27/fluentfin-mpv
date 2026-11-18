@@ -14,7 +14,7 @@
         title art, facts, two lines of overview and its own Play (the library's one Primary), More info and Favourite. The
         words sit on the art in every theme; the foot fades into the page, where the grid's header line and the grid start.
     -->
-    <Grid x:Name="Root">
+    <Grid x:Name="Root" RequestedTheme="Dark">
         <Grid x:Name="Art" VerticalAlignment="Top">
             <Image
                 x:Name="BackdropBottom"

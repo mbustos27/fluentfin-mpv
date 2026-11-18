@@ -35,6 +35,8 @@
                         </LinearGradientBrush>
                     </Rectangle.Fill>
                 </Rectangle>
+                <!--  three dusk sparkles (the starburst motif, four points at this size), clear of the form and the sun  -->
+                <Path Data="M300,150 Q302,162 314,164 Q302,166 300,178 Q298,166 286,164 Q298,162 300,150 Z M1640,118 Q1641.5,127 1650,128.5 Q1641.5,130 1640,139 Q1638.5,130 1630,128.5 Q1638.5,127 1640,118 Z M1080,86 Q1081,92 1087,93 Q1081,94 1080,100 Q1079,94 1073,93 Q1079,92 1080,86 Z" Fill="#B3F5A8A5" />
                 <!--  the sun's glow: wide and soft, warmest just over the horizon  -->
                 <Ellipse
                     Canvas.Left="840"
@@ -92,7 +94,7 @@
                 <Path
                     Data="M1374,722 L620,1080 M1390,722 L2160,1080"
                     Stroke="#7E3648"
-                    StrokeThickness="3" />
+                    StrokeThickness="2.5" />
                 <!--  the centre line: dashes that grow toward the viewer  -->
                 <Path Data="M1381,736 L1383,736 L1383.5,748 L1380.5,748 Z M1380,766 L1384,766 L1384.6,784 L1379.4,784 Z M1379,818 L1385,818 L1385.8,846 L1378.2,846 Z M1377.5,888 L1386.5,888 L1387.5,930 L1376.5,930 Z M1375.5,976 L1388.5,976 L1390,1032 L1374,1032 Z">
                     <Path.Fill>
@@ -102,9 +104,22 @@
                         </LinearGradientBrush>
                     </Path.Fill>
                 </Path>
+                <!--  the saguaro's shadow on the ground, so it stands  -->
+                <Ellipse
+                    Canvas.Left="440"
+                    Canvas.Top="994"
+                    Width="170"
+                    Height="30">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Offset="0" Color="#66080206" />
+                            <GradientStop Offset="1" Color="#00080206" />
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
                 <!--  the saguaro, near the viewer at the left: one stroke family, rounded elbows (the nearest tone)  -->
                 <Path
-                    Data="M520,940 L520,640 M520,808 C520,820 512,824 496,824 L476,824 C462,824 456,816 456,802 L456,742 M520,760 C520,772 528,776 544,776 L564,776 C578,776 584,768 584,754 L584,694"
+                    Data="M520,1010 L520,640 M520,808 C520,820 512,824 496,824 L476,824 C462,824 456,816 456,802 L456,742 M520,760 C520,772 528,776 544,776 L564,776 C578,776 584,768 584,754 L584,694"
                     Stroke="#250815"
                     StrokeEndLineCap="Round"
                     StrokeLineJoin="Round"

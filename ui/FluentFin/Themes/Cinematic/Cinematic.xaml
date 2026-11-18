@@ -36,7 +36,13 @@
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="BarStates">
                                 <VisualState x:Name="OverContent" />
-                                <VisualState x:Name="OverHero" />
+                                <!--  over a hero the bar's text is the dark theme's: the island's glass is too, in every theme  -->
+                                <VisualState x:Name="OverHero">
+                                    <VisualState.Setters>
+                                        <Setter Target="ContentGlass.Visibility" Value="Collapsed" />
+                                        <Setter Target="HeroGlass.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                         <Grid
@@ -54,12 +60,25 @@
                                 </ui:Effects.Shadow>
                             </Border>
                             <!--  the shared title-bar glass (Solid makes it opaque, high contrast the window colour)  -->
-                            <Border Background="{ThemeResource GlassTitleBarBrush}" CornerRadius="8" />
-                            <Border Background="{ThemeResource CinematicIslandSheenBrush}" CornerRadius="8" />
-                            <Border
-                                BorderBrush="{ThemeResource CinematicIslandRimBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8" />
+                            <Grid x:Name="ContentGlass">
+                                <Border Background="{ThemeResource GlassTitleBarBrush}" CornerRadius="8" />
+                                <Border Background="{ThemeResource CinematicIslandSheenBrush}" CornerRadius="8" />
+                                <Border
+                                    BorderBrush="{ThemeResource CinematicIslandRimBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8" />
+                            </Grid>
+                            <Grid
+                                x:Name="HeroGlass"
+                                RequestedTheme="Dark"
+                                Visibility="Collapsed">
+                                <Border Background="{ThemeResource CinematicIslandHeroBrush}" CornerRadius="8" />
+                                <Border Background="{ThemeResource CinematicIslandHeroSheenBrush}" CornerRadius="8" />
+                                <Border
+                                    BorderBrush="{ThemeResource CinematicIslandHeroRimBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8" />
+                            </Grid>
                         </Grid>
                     </Grid>
                 </ControlTemplate>

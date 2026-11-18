@@ -94,6 +94,18 @@
                     </cc:CinematicItemStage.BottomContent>
                 </cc:CinematicItemStage>
 
+                <!--  the light theme: the stage's dusk fades into the page's ground  -->
+
+                <Border
+
+                    Height="72"
+
+                    AutomationProperties.AccessibilityView="Raw"
+
+                    Background="{ThemeResource CinematicFirstScreenFadeBrush}"
+
+                    IsHitTestVisible="False" />
+
                 <StackPanel
                     x:Name="Body"
                     Margin="96,24,48,56"

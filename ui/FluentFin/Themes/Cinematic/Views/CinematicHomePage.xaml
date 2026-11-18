@@ -71,7 +71,8 @@
             x:Name="PageScroller"
             VerticalScrollBarVisibility="Hidden">
             <StackPanel>
-                <Grid x:Name="FirstScreen">
+                <!--  the first screen is dusk in every theme (the art, the island over it, Up next on its foot); below it, the theme  -->
+                <Grid x:Name="FirstScreen" RequestedTheme="Dark">
                     <cc:CinematicHero x:Name="Hero" Slides="{x:Bind ViewModel.Hero, Mode=OneWay}" />
 
                     <StackPanel
@@ -116,6 +117,12 @@
                     </StackPanel>
                 </Grid>
 
+                <!--  the light theme: the dusk of the first screen fades into the page's ground  -->
+                <Border
+                    Height="96"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Background="{ThemeResource CinematicFirstScreenFadeBrush}"
+                    IsHitTestVisible="False" />
                 <!--  the libraries' newest, as smaller stills; an ItemsControl so Tab reaches every row  -->
                 <ItemsControl
                     x:Name="RecentRows"

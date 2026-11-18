@@ -161,6 +161,13 @@ public sealed partial class CinematicStill : UserControl
 	private void Apply()
 	{
 		var dto = Model?.Dto;
+		// the still's DataContext is its item, whatever set it: the theme switch keeps the place by the item an element's
+		// DataContext names (Helpers\ThemeAnchors), and a list here does not give its elements their item themselves
+		if (Model is { } model && !ReferenceEquals(DataContext, model))
+		{
+			DataContext = model;
+		}
+
 		// the picture: only when the item (or its artwork) changed, not for a change of its watched state
 		var picture = CinematicArtwork.StillPath(dto, DecodeWidth, episodeOwnFirst: Kind == StillKind.Episode);
 		if (picture != _picture)

@@ -272,6 +272,7 @@
         <Grid
             x:Name="HeaderLine"
             Grid.Row="1"
+            RequestedTheme="Dark"
             Margin="96,0,84,6"
             ColumnSpacing="16"
             Visibility="{x:Bind shared:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}">
@@ -323,6 +324,12 @@
         </Grid>
 
         <!--  the grid: 16:9 stills, the shared grid's keys and names (CardGrid)  -->
+        <!--  the grid on the page's ground (the light theme's too), the stage's dusk fading into it  -->
+        <Border
+            Grid.Row="2"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="{ThemeResource CinematicNightBrush}"
+            IsHitTestVisible="False" />
         <ScrollView x:Name="GridScroller" Grid.Row="2">
             <lc:RowList
                 x:Name="GridList"
@@ -350,6 +357,14 @@
                 </ItemsRepeater>
             </lc:RowList>
         </ScrollView>
+
+        <Border
+            Grid.Row="2"
+            Height="36"
+            VerticalAlignment="Top"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="{ThemeResource CinematicFirstScreenFadeBrush}"
+            IsHitTestVisible="False" />
 
         <!--  while the library loads: the stills' slots  -->
         <ItemsRepeater

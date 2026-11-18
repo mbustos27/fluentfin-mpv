@@ -19,7 +19,10 @@
         content along the foot (BottomContent: the season tabs and the episode shelf, or More like this). The words sit on
         the art in every theme (dark), the foot follows the theme.
     -->
-    <Grid x:Name="Stage" Background="{ThemeResource CinematicNightBrush}">
+    <Grid
+        x:Name="Stage"
+        Background="{ThemeResource CinematicNightBrush}"
+        RequestedTheme="Dark">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />

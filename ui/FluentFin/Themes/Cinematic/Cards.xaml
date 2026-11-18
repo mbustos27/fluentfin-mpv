@@ -72,6 +72,25 @@
             </LinearGradientBrush>
             <!--  behind the credits at the right of an item page (they can fall on bright art)  -->
             <SolidColorBrush x:Key="CinematicCreditsBackingBrush" Color="#A612050B" />
+            <!--  the island over a hero: dark glass in every theme (the bar's text is the dark theme's there)  -->
+            <AcrylicBrush
+                x:Key="CinematicIslandHeroBrush"
+                FallbackColor="#F21E0812"
+                TintColor="#1E0812"
+                TintLuminosityOpacity="0.32"
+                TintOpacity="0.52" />
+            <LinearGradientBrush x:Key="CinematicIslandHeroRimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#61FFFFFF" />
+                <GradientStop Offset="0.3" Color="#1AFFFFFF" />
+                <GradientStop Offset="1" Color="#0FFFFFFF" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="CinematicIslandHeroSheenBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#29FFFFFF" />
+                <GradientStop Offset="0.6" Color="#0AFFFFFF" />
+                <GradientStop Offset="1" Color="#00FFFFFF" />
+            </LinearGradientBrush>
+            <!--  the first screen is dusk in every theme; under it the page's own ground (nothing to fade in the dark theme)  -->
+            <SolidColorBrush x:Key="CinematicFirstScreenFadeBrush" Color="Transparent" />
             <!--  the player: the tabs and their panel lie over the video on a dense fill (no blur over video); the top scrim  -->
             <SolidColorBrush x:Key="CinematicPlayerPanelBrush" Color="#EB170508" />
             <LinearGradientBrush x:Key="CinematicPlayerTopScrimBrush" StartPoint="0,0" EndPoint="0,1">
@@ -167,6 +186,27 @@
                 <GradientStop Offset="1" Color="#FFFFF6F3" />
             </LinearGradientBrush>
             <SolidColorBrush x:Key="CinematicCreditsBackingBrush" Color="#A612050B" />
+            <!--  the island over a hero: dark glass in every theme (the bar's text is the dark theme's there)  -->
+            <AcrylicBrush
+                x:Key="CinematicIslandHeroBrush"
+                FallbackColor="#F21E0812"
+                TintColor="#1E0812"
+                TintLuminosityOpacity="0.32"
+                TintOpacity="0.52" />
+            <LinearGradientBrush x:Key="CinematicIslandHeroRimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#61FFFFFF" />
+                <GradientStop Offset="0.3" Color="#1AFFFFFF" />
+                <GradientStop Offset="1" Color="#0FFFFFFF" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="CinematicIslandHeroSheenBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#29FFFFFF" />
+                <GradientStop Offset="0.6" Color="#0AFFFFFF" />
+                <GradientStop Offset="1" Color="#00FFFFFF" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="CinematicFirstScreenFadeBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#FF1A0710" />
+                <GradientStop Offset="1" Color="#001A0710" />
+            </LinearGradientBrush>
             <!--  the player: the tabs and their panel lie over the video on a dense fill (no blur over video); the top scrim  -->
             <SolidColorBrush x:Key="CinematicPlayerPanelBrush" Color="#EB170508" />
             <LinearGradientBrush x:Key="CinematicPlayerTopScrimBrush" StartPoint="0,0" EndPoint="0,1">
@@ -232,6 +272,10 @@
             <SolidColorBrush x:Key="CinematicHeroTopScrimBrush" Color="Transparent" />
             <SolidColorBrush x:Key="CinematicItemFootScrimBrush" Color="Transparent" />
             <SolidColorBrush x:Key="CinematicCreditsBackingBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CinematicIslandHeroBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="CinematicIslandHeroRimBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="CinematicIslandHeroSheenBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="CinematicFirstScreenFadeBrush" Color="Transparent" />
             <SolidColorBrush x:Key="CinematicPlayerPanelBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="CinematicPlayerTopScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="CinematicStageFootScrimBrush" Color="Transparent" />
