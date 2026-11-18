@@ -34,7 +34,7 @@ public partial class DialogCommands(IContentDialogService dialogService)
 	{
 		var vm = App.GetService<EditMetadataViewModel>();
 		await vm.Initialize(dto);
-		await dialogService.ShowDialog(vm, dialog => CloseOnlyOnCloseAndPrimaryButtonClick(dialog, vm));
+		await dialogService.ShowDialog(vm, dialog => CloseOnCancelOrSaved(dialog, vm, vm.Save));
 	}
 
 	[RelayCommand]
@@ -203,6 +203,35 @@ public partial class DialogCommands(IContentDialogService dialogService)
 		};
 		dialog.CloseButtonClick += (_, _) => { vm.CanClose = true; };
 		dialog.PrimaryButtonClick += (_, _) => { vm.CanClose = true; };
+	}
+
+	/// <summary>
+	/// Nixie 1.2.0 (admin): the dialog closes on Cancel, and on its primary (Save) only once <paramref name="save"/> says the
+	/// server took it; otherwise it stays open with the edits, and the view model says why. Escape does not close it.
+	/// </summary>
+	private static void CloseOnCancelOrSaved(ContentDialog dialog, IHandleClose vm, Func<Task<bool>> save)
+	{
+		dialog.Closing += (_, e) =>
+		{
+			if (!vm.CanClose)
+			{
+				e.Cancel = true;
+			}
+		};
+		dialog.CloseButtonClick += (_, _) => { vm.CanClose = true; };
+		dialog.PrimaryButtonClick += async (_, e) =>
+		{
+			var deferral = e.GetDeferral();
+			try
+			{
+				vm.CanClose = await save();
+				e.Cancel = !vm.CanClose;
+			}
+			finally
+			{
+				deferral.Complete();
+			}
+		};
 	}
 
 	private static void CloseOnAllButtonClick(ContentDialog dialog, IHandleClose vm)

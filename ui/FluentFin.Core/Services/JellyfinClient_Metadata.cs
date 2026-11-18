@@ -61,20 +61,22 @@ public partial class JellyfinClient
 
 	}
 
-	public async Task UpdateMetadata(BaseItemDto dto)
+	public async Task<bool> UpdateMetadata(BaseItemDto dto)
 	{
 		if (dto.Id is not { } id)
 		{
-			return;
+			return false;
 		}
 
 		try
 		{
 			await _jellyfinApiClient.Items[id].PostAsync(dto);
+			return true; // Nixie 1.2.0 (admin): the caller says whether it was saved
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
+			return false;
 		}
 	}
 

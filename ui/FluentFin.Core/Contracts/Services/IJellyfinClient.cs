@@ -102,7 +102,8 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task ApplyRemoteResult(BaseItemDto dto, RemoteSearchResult remoteResult);
 
-		Task UpdateMetadata(BaseItemDto dto);
+		/// <summary>Nixie 1.2.0 (admin): <c>POST /Items/{id}</c>, which replaces every field it reads with the one sent. False when it failed (logged).</summary>
+		Task<bool> UpdateMetadata(BaseItemDto dto);
 
 		Uri? GetStreamUrl(BaseItemDto dto);
 
