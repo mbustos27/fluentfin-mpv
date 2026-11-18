@@ -31,6 +31,9 @@ public sealed partial class MediaPlayerHost : UserControl
 	[GeneratedDependencyProperty]
 	public partial ICommand? SkipCommand { get; set; }
 
+	[GeneratedDependencyProperty(DefaultValue = "Skip intro")]
+	public partial string SkipText { get; set; }
+
 	[GeneratedDependencyProperty]
 	public partial TrickplayViewModel? Trickplay { get; set; }
 
@@ -203,6 +206,8 @@ public sealed partial class MediaPlayerHost : UserControl
 		var presenterKind = current == AppWindowPresenterKind.Overlapped ? AppWindowPresenterKind.FullScreen : AppWindowPresenterKind.Overlapped;
 
 		TransportControls.FullWindowSymbol.Symbol = presenterKind == AppWindowPresenterKind.FullScreen ? Symbol.BackToWindow : Symbol.FullScreen;
+		// 1.2.0 (the button review, P37): the button says which way it goes
+		TransportControls.FullWindowButton.Label = presenterKind == AppWindowPresenterKind.FullScreen ? "Exit full screen" : "Full screen";
 
 		if (App.GetService<ITitleBarViewModel>() is { } vm)
 		{

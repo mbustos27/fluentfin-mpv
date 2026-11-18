@@ -117,6 +117,21 @@ public sealed class JellyseerrSetUpTests : IDisposable
 	}
 
 	[Fact]
+	public void ChangeAddress_ShowsTheFormAgain_WithTheAddressInIt()
+	{
+		// 1.2.0 (the button review, D92): once connected there was no way to change the address
+		JellyseerOptions.Current.ServerMapping[Server] = "https://requests.example";
+		var vm = Dashboard(() => Task.FromResult(true));
+		vm.HasServer = true;
+
+		vm.ChangeAddressCommand.Execute(null);
+
+		Assert.False(vm.HasServer);
+		Assert.Equal("https://requests.example", vm.CurrentAddress);
+		Assert.Equal("https://requests.example", JellyseerrEntry.Address(JellyseerOptions.Current, Server));
+	}
+
+	[Fact]
 	public async Task ALoginThatWorks_KeepsAndSavesTheAddress()
 	{
 		var vm = Dashboard(() => Task.FromResult(true));

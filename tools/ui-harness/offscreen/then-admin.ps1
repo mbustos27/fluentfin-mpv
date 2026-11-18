@@ -172,7 +172,7 @@ foreach ($section in @('General', 'Playback', 'Activity', 'Scheduled tasks')) {
 # Playback reports (the plugin, when the fake server lists it)
 if ($env:FAKESERVER_PLAYBACK_REPORTING) {
     try {
-        Open-Nav 'Reporting'
+        Open-Nav 'Playback reports'   # 1.2.0 (the button review, D93): the tab said "Reporting"
         Adm-Settle 3000
         Check 'Playback reports: tabs along the top' ([bool](Wait-Until { [OffscreenUi]::FindByNameAndClass($script:hwnd, $script:ui.Id, 'Usage', 'Microsoft.UI.Xaml.Controls.SelectorBarItem') } -Seconds 10))
         Capture-Page "$admTag-reports"

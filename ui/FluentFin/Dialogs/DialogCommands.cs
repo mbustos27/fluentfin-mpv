@@ -101,11 +101,17 @@ public partial class DialogCommands(IContentDialogService dialogService)
 	}
 
 	[RelayCommand]
-	private async Task PlayOnSession(BaseItemDto dto)
+	private async Task PlayOnSession(BaseItemDto dto) => await PlayOnAnotherDeviceAsync(dto);
+
+	/// <summary>
+	/// The Play On picker for <paramref name="dto"/>: true when the user picked a device and it was asked to play it there
+	/// (1.2.0, the button review, P39: the legacy player's bar stops its own playback only then).
+	/// </summary>
+	public async Task<bool> PlayOnAnotherDeviceAsync(BaseItemDto dto)
 	{
 		var vm = App.GetService<SessionPickerViewModel>();
 		await vm.Initialize(dto);
-		await dialogService.ShowDialog(vm, dialog => CloseOnlyOnCloseAndPrimaryButtonClick(dialog, vm));
+		return await dialogService.ShowDialog(vm, dialog => CloseOnlyOnCloseAndPrimaryButtonClick(dialog, vm)) == ContentDialogResult.Primary;
 	}
 
 	[RelayCommand]

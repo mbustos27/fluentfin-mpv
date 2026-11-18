@@ -10,14 +10,25 @@ namespace FluentFin.Dialogs;
 /// </summary>
 public static class ConfirmDialog
 {
-	public static ContentDialog Create(ConfirmPrompt prompt) => new()
+	public static ContentDialog Create(ConfirmPrompt prompt)
 	{
-		Title = prompt.Title,
-		Content = new TextBlock { Text = prompt.Message, TextWrapping = TextWrapping.Wrap },
-		PrimaryButtonText = prompt.ConfirmText,
-		CloseButtonText = "Cancel",
-		DefaultButton = ContentDialogButton.Close,
-	};
+		var dialog = new ContentDialog
+		{
+			Title = prompt.Title,
+			Content = new TextBlock { Text = prompt.Message, TextWrapping = TextWrapping.Wrap },
+			PrimaryButtonText = prompt.ConfirmText,
+			CloseButtonText = "Cancel",
+			DefaultButton = ContentDialogButton.Close,
+		};
+		// 1.2.0 (the button review, L47 and L48): the confirm is Destructive (danger ink, never the accent) and Cancel, the
+		// default, is drawn Secondary: the button system's dialog style, when the app has it
+		if (ButtonRoles.Find(ButtonRoles.DestructiveDialog) is { } style)
+		{
+			dialog.Style = style;
+		}
+
+		return dialog;
+	}
 
 	/// <summary>True only when the user picked the prompt's confirm button.</summary>
 	public static async Task<bool> AskAsync(XamlRoot? root, ConfirmPrompt prompt)

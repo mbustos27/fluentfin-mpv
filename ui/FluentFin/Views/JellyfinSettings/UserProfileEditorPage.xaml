@@ -3,6 +3,7 @@
     x:Class="FluentFin.Views.UserProfileEditorPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:lc="using:FluentFin.Controls"
     xmlns:c="using:FluentFin.Converters"
     xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -66,7 +67,7 @@
             </ctk:SettingsExpander.Items>
         </ctk:SettingsExpander>
         <ctk:SettingsCard Description="An optional per-stream bitrate limit for all out of network devices. This is useful to prevent devices from requesting a higher bitrate than your internet connection can handle. This may result in increased CPU load on your server in order to transcode videos on the fly to a lower bitrate. Override the default global value set in server settings, see Dashboard &gt; Playback &gt; Streaming." Header="Internet streaming bitrate limit (Mbps)">
-            <NumberBox AutomationProperties.Name="Internet streaming bitrate limit, in megabits per second" Value="{x:Bind ViewModel.InternetStreamingBitrateLimit, Mode=TwoWay}" />
+            <NumberBox lc:NumberBoxTargets.MinTargetSize="32" AutomationProperties.Name="Internet streaming bitrate limit, in megabits per second" Value="{x:Bind ViewModel.InternetStreamingBitrateLimit, Mode=TwoWay}" />
         </ctk:SettingsCard>
         <ctk:SettingsCard Description="The SyncPlay feature enables to sync playback with other devices. Select the level of access this user has to the SyncPlay." Header="SyncPlay access">
             <ComboBox ItemsSource="{ui:EnumValues Type=jm:UserPolicy_SyncPlayAccess}" SelectedItem="{x:Bind ViewModel.SyncPlayAccess, Mode=TwoWay}" />
@@ -93,10 +94,10 @@
                     <ToggleSwitch IsOn="{x:Bind ViewModel.HideFromLogin, Mode=TwoWay}" />
                 </ctk:SettingsCard>
                 <ctk:SettingsCard Description="How many wrong sign-in attempts are allowed before the account is locked. A value of zero means inheriting the default of three tries for normal users and five for administrators. Setting this to -1 will disable the feature." Header="Failed sign-in attempts before the account is locked">
-                    <NumberBox AutomationProperties.Name="Failed sign-in attempts before the account is locked" Value="{x:Bind ViewModel.FailedLoginTriesBeforeLockout, Mode=TwoWay}" />
+                    <NumberBox lc:NumberBoxTargets.MinTargetSize="32" AutomationProperties.Name="Failed sign-in attempts before the account is locked" Value="{x:Bind ViewModel.FailedLoginTriesBeforeLockout, Mode=TwoWay}" />
                 </ctk:SettingsCard>
                 <ctk:SettingsCard Description="Set the maximum number of simultaneous user sessions. A value of 0 will disable the feature." Header="Maximum number of simultaneous user sessions">
-                    <NumberBox AutomationProperties.Name="Maximum number of simultaneous user sessions" Value="{x:Bind ViewModel.MaximumNumberOfSimultaneousSessions, Mode=TwoWay}" />
+                    <NumberBox lc:NumberBoxTargets.MinTargetSize="32" AutomationProperties.Name="Maximum number of simultaneous user sessions" Value="{x:Bind ViewModel.MaximumNumberOfSimultaneousSessions, Mode=TwoWay}" />
                 </ctk:SettingsCard>
             </ctk:SettingsExpander.Items>
         </ctk:SettingsExpander>

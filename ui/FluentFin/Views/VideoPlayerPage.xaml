@@ -32,6 +32,7 @@
             Player="{x:Bind ViewModel.MediaPlayer, Mode=TwoWay}"
             Playlist="{x:Bind ViewModel.Playlist, Mode=OneWay}"
             SkipCommand="{x:Bind ViewModel.SkipCommand, Mode=OneWay}"
+            SkipText="{x:Bind ViewModel.SkipText, Mode=OneWay}"
             Trickplay="{x:Bind ViewModel.TrickplayViewModel}"
             Visibility="{x:Bind CollapsedIf(ViewModel.IsMpv), Mode=OneWay}" />
 

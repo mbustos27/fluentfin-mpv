@@ -15,7 +15,15 @@
         <ctk:Case Value="True">
             <Grid Margin="36">
                 <StackPanel Spacing="10">
-                    <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="Requests" />
+                    <Grid>
+                        <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="Requests" />
+                        <!--  1.2.0 (the button review, D92): the address can be changed once connected  -->
+                        <Button
+                            HorizontalAlignment="Right"
+                            Command="{x:Bind ViewModel.ChangeAddressCommand}"
+                            Content="Change address"
+                            Style="{StaticResource NixieCompactButtonStyle}" />
+                    </Grid>
                     <ScrollViewer
                         HorizontalScrollBarVisibility="Hidden"
                         HorizontalScrollMode="Enabled"
@@ -62,7 +70,7 @@
                     </StackPanel.Resources>
                     <StackPanel>
                         <TextBlock Text="Jellyseerr address" />
-                        <TextBox x:Name="UrlTextBox" />
+                        <TextBox x:Name="UrlTextBox" Text="{x:Bind ViewModel.CurrentAddress, Mode=OneWay}" />
                     </StackPanel>
                     <StackPanel
                         HorizontalAlignment="Center"
@@ -73,7 +81,7 @@
                             CommandParameter="{x:Bind UrlTextBox.Text, Mode=OneWay}"
                             Style="{ThemeResource AccentButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <FontIcon Glyph="&#xE8AB;" />
+                                <FontIcon Glyph="&#xE71B;" />
                                 <TextBlock Text="Connect" />
                             </StackPanel>
                         </Button>

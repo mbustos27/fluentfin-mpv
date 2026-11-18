@@ -47,6 +47,20 @@ public partial class JellyseerDashboardViewModel(IJellyseerClient jellyseerClien
 		return JellyseerOptions.Current.ServerMapping.ContainsKey(SessionInfo.ServerId);
 	}
 
+	/// <summary>The address set up for this server (the form shows it when the address is changed), or empty.</summary>
+	public string CurrentAddress => JellyseerOptions.Current.ServerMapping is { } mapping && mapping.TryGetValue(SessionInfo.ServerId, out var url) ? url : "";
+
+	/// <summary>
+	/// 1.2.0 (the button review, D92): once connected there was no way to change the address. The form comes back with the
+	/// address in it; the requests stay until a new address is connected (SetServerUrl keeps the old one when the new fails).
+	/// </summary>
+	[RelayCommand]
+	private void ChangeAddress()
+	{
+		OnPropertyChanged(nameof(CurrentAddress));
+		HasServer = false;
+	}
+
 	[RelayCommand]
 	private async Task SetServerUrl(string url)
 	{

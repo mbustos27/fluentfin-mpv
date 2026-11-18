@@ -58,15 +58,13 @@
             <!--  Skip  -->
             <Button
                 x:Name="DynamicSkipIntroButton"
-                Width="150"
-                Height="50"
+                MinWidth="150"
                 Margin="10,30"
+                Style="{StaticResource NixieButtonStyle}"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
                 VerticalContentAlignment="Center"
                 Command="{x:Bind SkipCommand, Mode=OneWay}"
-                FontSize="20"
-                FontWeight="Bold"
                 Background="{StaticResource PlayerControlsScrimBrush}"
                 Foreground="White"
                 Visibility="{x:Bind IsSkipButtonVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -75,7 +73,7 @@
                     Orientation="Horizontal"
                     Spacing="10">
                     <FontIcon VerticalAlignment="Center" Glyph="&#xEB9D;" />
-                    <TextBlock VerticalAlignment="Center" Text="Skip" />
+                    <TextBlock VerticalAlignment="Center" Text="{x:Bind SkipText, Mode=OneWay}" />
                 </StackPanel>
             </Button>
 
@@ -244,35 +242,32 @@
                         Click="SkipForwardButton_Click"
                         Icon="{ui:FontIcon Glyph=&#xED3D;}"
                         IsTapEnabled="False"
-                        Label="Seek forward" />
+                        Label="Forward 30 seconds" />
 
                     <AppBarButton
                         x:Name="NextTrackButton"
                         Command="{x:Bind Playlist.SelectNextCommand, Mode=OneWay}"
                         Icon="Next"
-                        IsTabStop="False"
-                        Label="Next Episode" />
+                        Label="Next episode" />
 
                     <AppBarButton
                         x:Name="PlayPauseButton"
                         Click="PlayPauseButton_Click"
                         Content="{ui:SymbolIcon Symbol=Play}"
-                        IsTabStop="False"
-                        Label="Play/Pause" />
+                        Label="Play" />
 
                     <AppBarButton
                         x:Name="PreviousTrackButton"
                         Command="{x:Bind Playlist.SelectPrevCommand, Mode=OneWay}"
                         Icon="Previous"
-                        IsTabStop="False"
-                        Label="Previous Episode" />
+                        Label="Previous episode" />
 
                     <AppBarButton
                         x:Name="SkipBackwardButton"
                         Click="SkipBackwardButton_Click"
                         Icon="{ui:FontIcon Glyph=&#xED3C;}"
                         IsTapEnabled="False"
-                        Label="Seek backward" />
+                        Label="Back 10 seconds" />
 
 
                 </CommandBar>
@@ -287,7 +282,6 @@
 
                     <AppBarButton
                         Icon="{ui:FontIcon Glyph=&#xE8FD;}"
-                        IsTabStop="False"
                         Label="Playlist"
                         Visibility="{x:Bind c:Converters.VisibleIfMoreThanOne(Playlist.Items), Mode=OneWay}">
                         <AppBarButton.Flyout>
@@ -330,8 +324,7 @@
                     <AppBarButton
                         x:Name="FullWindowButton"
                         x:FieldModifier="Public"
-                        IsTabStop="False"
-                        Label="Toggle Fullscreen">
+                        Label="Full screen">
                         <AppBarButton.Icon>
                             <SymbolIcon
                                 x:Name="FullWindowSymbol"
@@ -361,14 +354,12 @@
                         x:Name="CastButton"
                         Click="CastButton_Click"
                         Icon="{ui:FontIcon Glyph=&#xEC16;}"
-                        IsTabStop="False"
-                        Label="Cast" />
+                        Label="Play on another device…" />
 
                     <AppBarButton
                         x:Name="CCSelectionButton"
                         Flyout="{x:Bind c:Converters.GetSubtitlesFlyout(Player, Playlist.SelectedItem.Media), Mode=OneWay}"
                         Icon="{ui:FontIcon Glyph=&#xED1E;}"
-                        IsTabStop="False"
                         Label="Subtitles"
                         Visibility="{x:Bind CCSelectionButton.Flyout, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}" />
 
@@ -376,7 +367,6 @@
                         x:Name="AudioSelectionButton"
                         x:FieldModifier="Public"
                         Icon="{ui:FontIcon Glyph=&#xED1F;}"
-                        IsTabStop="False"
                         Label="Audio"
                         Visibility="{x:Bind AudioSelectionButton.Flyout, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}" />
 

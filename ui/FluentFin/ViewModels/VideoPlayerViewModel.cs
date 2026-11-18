@@ -63,6 +63,10 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 	[ObservableProperty]
 	public partial bool IsSkipButtonVisible { get; set; }
 
+	/// <summary>1.2.0 (the button review, P29): the legacy bar's Skip says what it skips, as mpv's controls do ("Skip credits").</summary>
+	[ObservableProperty]
+	public partial string SkipText { get; set; } = "Skip intro";
+
 	[ObservableProperty]
 	public partial PlaylistViewModel Playlist { get; set; } = new PlaylistViewModel();
 
@@ -511,11 +515,19 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 		mp.PositionChanged
 			.Where(_ => MediaPlayer?.State == MediaPlayerState.Playing)
 			.Select(x => x.Ticks)
-			.Select(ticks => Segments.Any(segment => ticks > segment.StartTicks && ticks < segment.EndTicks))
+			.Select(ticks => Segments.FirstOrDefault(segment => ticks > segment.StartTicks && ticks < segment.EndTicks))
 			.DistinctUntilChanged()
 			.ObserveOn(RxSchedulers.MainThreadScheduler)
 			// fluentfin-mpv: unless Settings > Playback turned the skip button off
-			.Subscribe(isVisible => IsSkipButtonVisible = isVisible && settings.ShowSkipPrompt);
+			.Subscribe(segment =>
+			{
+				if (segment is not null)
+				{
+					SkipText = FluentFin.Core.Mpv.MpvControlsViewModel.SkipTextFor(segment.Type?.ToString());
+				}
+
+				IsSkipButtonVisible = segment is not null && settings.ShowSkipPrompt;
+			});
 		mp.DurationChanged.Subscribe(d => _duration = d);
 
 		mp.MediaLoaded

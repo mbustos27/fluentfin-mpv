@@ -61,6 +61,7 @@ public sealed partial class ExpandableText : UserControl
 		var (maxLines, showToggle, toggleText) = ExpandableTextLayout.For(_expanded, Body.IsTextTrimmed, CollapsedLines);
 		Body.MaxLines = maxLines;
 		MoreButton.Content = toggleText;
+		MoreButton.SetExpanded(_expanded);
 		MoreButton.Visibility = showToggle ? Visibility.Visible : Visibility.Collapsed;
 	}
 }

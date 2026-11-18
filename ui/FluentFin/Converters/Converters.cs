@@ -200,7 +200,7 @@ public static class Converters
 		var flyout = new MenuBarItemFlyout();
 		flyout.Items.Add(new RadioMenuFlyoutItem
 		{
-			Text = "None",
+			Text = "Off", // 1.2.0 (the button review, P40): as every other subtitles list says
 			GroupName = groupName,
 			Command = disableSubtitles,
 			IsChecked = response?.MediaSourceInfo.DefaultSubtitleStreamIndex is null

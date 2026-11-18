@@ -31,6 +31,10 @@ public sealed partial class TransportControls : UserControl
 	[GeneratedDependencyProperty]
 	public partial ICommand SkipCommand { get; set; }
 
+	/// <summary>1.2.0 (the button review, P29): "Skip intro", "Skip credits".</summary>
+	[GeneratedDependencyProperty(DefaultValue = "Skip intro")]
+	public partial string SkipText { get; set; }
+
 	[GeneratedDependencyProperty]
 	public partial TrickplayViewModel Trickplay { get; set; }
 
@@ -80,8 +84,9 @@ public sealed partial class TransportControls : UserControl
 			}
 			catch { }
 		});
-		controller.Playing.ObserveOn(RxSchedulers.MainThreadScheduler).Subscribe(_ => tc.PlayPauseButton.Content = tc._pauseSymbol);
-		controller.Paused.ObserveOn(RxSchedulers.MainThreadScheduler).Subscribe(_ => tc.PlayPauseButton.Content = tc._playSymbol);
+		// 1.2.0 (the button review, P32): the button says what it does now, "Pause" while playing, "Play" while paused
+		controller.Playing.ObserveOn(RxSchedulers.MainThreadScheduler).Subscribe(_ => { tc.PlayPauseButton.Content = tc._pauseSymbol; tc.PlayPauseButton.Label = "Pause"; });
+		controller.Paused.ObserveOn(RxSchedulers.MainThreadScheduler).Subscribe(_ => { tc.PlayPauseButton.Content = tc._playSymbol; tc.PlayPauseButton.Label = "Play"; });
 		controller.VolumeChanged
 			.Where(e => e >= 0)
 			.Throttle(TimeSpan.FromSeconds(200))
@@ -163,8 +168,12 @@ public sealed partial class TransportControls : UserControl
 
 		if (sessions.FirstOrDefault(x => x.Id == SessionInfo.SessionId) is { } session && session.NowPlayingItem is { } dto)
 		{
-			Player.Stop();
-			App.Dialogs.PlayOnSessionCommand.Execute(dto);
+			// 1.2.0 (the button review, P39): the playback here stops only once the item plays on the device the user picked
+			// (it stopped before the picker even opened, so Cancel left nothing playing)
+			if (await App.Dialogs.PlayOnAnotherDeviceAsync(dto))
+			{
+				Player.Stop();
+			}
 		}
 	}
 

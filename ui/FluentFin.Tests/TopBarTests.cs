@@ -221,7 +221,7 @@ public sealed class TopBarTests
 		Assert.Contains("if (_attached && ReferenceEquals(_navigation, navigation))", strip);
 		// and the Libraries page's wording
 		var landing = File.ReadAllText(Path.Combine(root, "Views", "LibrariesLandingPage.xaml"));
-		Assert.Contains("Text=\"Pin to top bar\"", landing);
+		Assert.Contains("Text=\"Add to the top bar\"", landing);
 		Assert.DoesNotContain("side bar", landing, StringComparison.OrdinalIgnoreCase);
 	}
 

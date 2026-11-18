@@ -27,7 +27,7 @@ public class PlaybackReportingPlugin : IPlugin
 		navigationViewService.AddNavigationItem(new Core.Settings.CustomNavigationViewItem
 		{
 			Key = typeof(PlaybackReportingDashboardViewModel).FullName!,
-			Name = "Reporting",
+			Name = "Playback reports", // 1.2.0 (the button review, D93): it said "Reporting"
 			Glyph = "\uE9F9",
 		});
 	}
