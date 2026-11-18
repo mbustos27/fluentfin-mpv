@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Drive-in: Home is a drive-in at dusk. The lot (the scene, the outdoor screen with the featured title, the motel sign of
+    what is coming up, the parked cars) scrolls away with the page; under it, on the plain dark ground, the rows with marquee
+    headers. Resume (or Play) on the screen has the keyboard when Home opens. Compact Home (a per-PC setting) folds the lot
+    into a strip and the sign's entries into a Coming up row. The data, the loading, the removal notice and Back's place are
+    the shared Home's (HomeViewModel), as is every card (BaseItemDtoCard) and row (ShelfRow).
+-->
+<Page
+    x:Class="FluentFin.Themes.DriveIn.Views.DriveInHomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:ctkl="using:CommunityToolkit.Labs.WinUI"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dc="using:FluentFin.Themes.DriveIn.Controls"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:local="using:FluentFin.Themes.DriveIn.Views"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Page"
+    lc:TopBar.ExtendsUnder="True"
+    Background="{ThemeResource DriveInGroundBrush}"
+    KeyboardAcceleratorPlacementMode="Hidden"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <!--
+            the theme's still and poster cards (DriveIn.xaml's StillTemplate and PosterTemplate) with x:Bind: a row's
+            ItemsRepeater gives an x:Bind template its item, not a DataContext a binding could read
+        -->
+        <DataTemplate x:Key="DriveInStill" x:DataType="vm:BaseItemViewModel">
+            <lc:BaseItemDtoCard
+                Width="390"
+                Height="240"
+                dc:DriveInRows.Nixie="True"
+                BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Thumb, 192)}"
+                ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Thumb, 192)}"
+                Model="{x:Bind}" />
+        </DataTemplate>
+        <DataTemplate x:Key="DriveInPoster" x:DataType="vm:BaseItemViewModel">
+            <lc:BaseItemDtoCard
+                Width="225"
+                Height="385"
+                dc:DriveInRows.Nixie="True"
+                BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 302)}"
+                ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 302)}"
+                Model="{x:Bind}" />
+        </DataTemplate>
+        <Style x:Key="StillPlaceholder" TargetType="ctkl:Shimmer">
+            <Setter Property="Width" Value="351" />
+            <Setter Property="Height" Value="216" />
+            <Setter Property="Margin" Value="19.5,12" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <Style x:Key="PosterPlaceholder" TargetType="ctkl:Shimmer">
+            <Setter Property="Width" Value="202.5" />
+            <Setter Property="Height" Value="346.5" />
+            <Setter Property="Margin" Value="11.25,19.25" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+    </Page.Resources>
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator Key="N" Invoked="NextUpInvoked" />
+        <KeyboardAccelerator Key="C" Invoked="ContinueInvoked" />
+        <KeyboardAccelerator
+            Key="Z"
+            Invoked="UndoInvoked"
+            Modifiers="Control" />
+    </Page.KeyboardAccelerators>
+
+    <Grid>
+        <ScrollViewer
+            x:Name="PageScroller"
+            Margin="0,0,0,24"
+            VerticalScrollBarVisibility="Hidden">
+            <StackPanel>
+                <!--  the lot: the back of the scene, the screen and the sign, then the cars in front  -->
+                <Grid x:Name="Lot" HorizontalAlignment="Stretch">
+                    <dc:DriveInScene x:Name="SceneBack" Layer="Back" />
+                    <dc:OutdoorScreen
+                        x:Name="Screen"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Visibility="Collapsed" />
+                    <dc:ComingUpSign
+                        x:Name="Sign"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        AllRequested="Sign_AllRequested"
+                        NextFeatureRequested="Sign_NextFeatureRequested" />
+                    <dc:DriveInScene x:Name="SceneFront" Layer="Front" />
+                </Grid>
+
+                <lc:LoadStateView Margin="36,0" State="{x:Bind ViewModel.State}" />
+
+                <StackPanel
+                    x:Name="RowsPanel"
+                    Margin="96,0,0,0"
+                    Spacing="24">
+
+                    <!--  Continue watching: the marquee, "5 in progress", the stills with their time left in tubes  -->
+                    <StackPanel x:Name="ContinueSection" Visibility="{x:Bind local:DriveInHomePage.SectionVisibility(ViewModel.IsContinueLoading, ViewModel.HasContinueItems), Mode=OneWay}">
+                        <StackPanel Visibility="{x:Bind ViewModel.IsContinueLoading, Mode=OneWay}">
+                            <dc:MarqueeSign Margin="0,0,0,8" Text="Continue Watching" />
+                            <StackPanel Orientation="Horizontal">
+                                <ctkl:Shimmer Style="{StaticResource StillPlaceholder}" />
+                                <ctkl:Shimmer Style="{StaticResource StillPlaceholder}" />
+                                <ctkl:Shimmer Style="{StaticResource StillPlaceholder}" />
+                                <ctkl:Shimmer Style="{StaticResource StillPlaceholder}" />
+                                <ctkl:Shimmer Style="{StaticResource StillPlaceholder}" />
+                            </StackPanel>
+                        </StackPanel>
+                        <lc:ShelfRow
+                            x:Name="ContinueRow"
+                            dc:DriveInRows.Marquee="True"
+                            Header="Continue Watching"
+                            HasSeeAll="True"
+                            ItemTemplate="{StaticResource DriveInStill}"
+                            ItemsSource="{x:Bind ContinueShown}"
+                            SeeAll="ContinueSeeAll"
+                            Visibility="Collapsed" />
+                    </StackPanel>
+
+                    <!--  Coming up as a row: when there is no sign (Compact Home, a narrow window)  -->
+                    <lc:ShelfRow
+                        x:Name="ComingUpRow"
+                        dc:DriveInRows.Marquee="True"
+                        Header="Coming Up"
+                        HasSeeAll="True"
+                        ItemTemplate="{StaticResource DriveInStill}"
+                        ItemsSource="{x:Bind ViewModel.NextUpItems, Mode=OneWay}"
+                        SeeAll="NextUpSeeAll"
+                        Visibility="Collapsed" />
+
+                    <!--  "New in <library>": marquee rows of posters  -->
+                    <ItemsControl IsTabStop="False" ItemsSource="{x:Bind ViewModel.RecentItems, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NamedQueryResult">
+                                <Grid>
+                                    <lc:ShelfRow
+                                        dc:DriveInRows.Marquee="True"
+                                        dc:DriveInRows.Subtitle="{x:Bind local:DriveInHomePage.NewCount(Items.Count), Mode=OneWay}"
+                                        Header="{x:Bind Title}"
+                                        HasSeeAll="True"
+                                        ItemTemplate="{StaticResource DriveInPoster}"
+                                        ItemsSource="{x:Bind Items, Mode=OneWay}"
+                                        SeeAll="RecentSeeAll"
+                                        Tag="{x:Bind Library}"
+                                        Visibility="{x:Bind local:DriveInHomePage.LoadedVisibility(IsLoading), Mode=OneWay}" />
+                                    <StackPanel Spacing="8" Visibility="{x:Bind IsLoading, Mode=OneWay}">
+                                        <dc:MarqueeSign Text="{x:Bind Title}" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                            <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                            <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                            <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                            <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                            <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                            <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                            <ctkl:Shimmer Style="{StaticResource PosterPlaceholder}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="24" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--  the notice after a removal from Continue Watching, with Undo (Ctrl+Z): the shared Home's, the same words and timing  -->
+        <Border
+            x:Name="NoticePanel"
+            MinHeight="56"
+            MaxWidth="640"
+            Margin="24,0,24,32"
+            Padding="20,8,8,8"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource GlassPanelStrongBrush}"
+            BorderBrush="{ThemeResource GlassStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="{StaticResource GlassOverlayCornerRadius}"
+            GotFocus="Notice_GotFocus"
+            LostFocus="Notice_LostFocus"
+            PointerEntered="Notice_PointerEntered"
+            PointerExited="Notice_PointerExited"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="NoticeText"
+                    VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                    TextWrapping="Wrap" />
+                <Button
+                    x:Name="UndoButton"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Undo"
+                    Click="UndoButton_Click"
+                    Content="Undo"
+                    Style="{StaticResource NixieCompactButtonStyle}"
+                    ToolTipService.ToolTip="Undo (Ctrl+Z)"
+                    Visibility="Collapsed" />
+                <Button
+                    x:Name="NoticeCloseButton"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Close the notice"
+                    Click="NoticeCloseButton_Click"
+                    Style="{StaticResource NixieCompactIconButtonStyle}"
+                    ToolTipService.ToolTip="Close">
+                    <FontIcon FontSize="12" Glyph="&#xE711;" />
+                </Button>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

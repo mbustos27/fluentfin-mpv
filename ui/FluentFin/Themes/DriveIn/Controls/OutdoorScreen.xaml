@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Drive-in: the outdoor screen. The featured title is projected on it: its backdrop under a left-to-right and a bottom scrim
+    and a soft projector light, "FEATURE PRESENTATION", the title (its logo, else the display face in capitals), the facts,
+    the overview (wide windows), Resume or Play (the view's one Primary, focused when Home opens) with the time left in nixie
+    tubes, More info, and the favourite toggle (wide). The rotation's pause and dots sit at the lower right. Always dark: it is
+    a lit screen in both themes. High contrast: a plain bordered panel, the artwork kept, no glow.
+-->
+<UserControl
+    x:Class="FluentFin.Themes.DriveIn.Controls.OutdoorScreen"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dc="using:FluentFin.Themes.DriveIn.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    RequestedTheme="Dark"
+    mc:Ignorable="d">
+
+    <Grid
+        x:Name="Root"
+        AutomationProperties.LandmarkType="Custom"
+        AutomationProperties.LocalizedLandmarkType="Featured"
+        AutomationProperties.Name="Featured"
+        GotFocus="Root_GotFocus"
+        LostFocus="Root_LostFocus"
+        PointerEntered="Root_PointerEntered"
+        PointerExited="Root_PointerExited">
+        <!--  the screen's warm spill on the sky around it  -->
+        <Border
+            x:Name="Spill"
+            Margin="-60"
+            AutomationProperties.AccessibilityView="Raw"
+            IsHitTestVisible="False">
+            <Border.Background>
+                <RadialGradientBrush>
+                    <GradientStop Offset="0.55" Color="#2EF7AA9C" />
+                    <GradientStop Offset="1" Color="#00F7AA9C" />
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+        <!--  the frame: a dark painted steel edge, 7 DIP  -->
+        <Border
+            x:Name="Frame"
+            Padding="7"
+            Background="{ThemeResource DriveInScreenFrameBrush}"
+            BorderBrush="{ThemeResource DriveInScreenFrameEdgeBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
+            <Grid
+                x:Name="Surface"
+                Background="#100308"
+                CornerRadius="4"
+                Tapped="Surface_Tapped">
+                <Image
+                    x:Name="BackdropBottom"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Stretch="UniformToFill" />
+                <Image
+                    x:Name="BackdropTop"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Opacity="0"
+                    Stretch="UniformToFill" />
+                <!--  the scrims under the words: dark at the left and at the bottom (text keeps 4.5:1 over a white frame)  -->
+                <Border AutomationProperties.AccessibilityView="Raw" IsHitTestVisible="False">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                            <GradientStop Offset="0" Color="#E6100409" />
+                            <GradientStop Offset="0.42" Color="#B3100409" />
+                            <GradientStop Offset="0.68" Color="#00100409" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+                <Border AutomationProperties.AccessibilityView="Raw" IsHitTestVisible="False">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                            <GradientStop Offset="0.4" Color="#00100409" />
+                            <GradientStop Offset="1" Color="#C2100409" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+                <!--  the projector's light and the screen's vignette  -->
+                <Border x:Name="Projector" AutomationProperties.AccessibilityView="Raw" IsHitTestVisible="False">
+                    <Border.Background>
+                        <RadialGradientBrush Center="0.55,0.42" GradientOrigin="0.55,0.42" RadiusX="0.6" RadiusY="0.7">
+                            <GradientStop Offset="0" Color="#1AFFF4EE" />
+                            <GradientStop Offset="1" Color="#00FFF4EE" />
+                        </RadialGradientBrush>
+                    </Border.Background>
+                </Border>
+                <Border AutomationProperties.AccessibilityView="Raw" IsHitTestVisible="False">
+                    <Border.Background>
+                        <RadialGradientBrush>
+                            <GradientStop Offset="0.6" Color="#00000000" />
+                            <GradientStop Offset="1" Color="#59000000" />
+                        </RadialGradientBrush>
+                    </Border.Background>
+                </Border>
+                <!--  the screen's lit edge  -->
+                <Border
+                    AutomationProperties.AccessibilityView="Raw"
+                    BorderBrush="{ThemeResource DriveInScreenEdgeBrush}"
+                    BorderThickness="2"
+                    CornerRadius="4"
+                    IsHitTestVisible="False" />
+
+                <StackPanel
+                    x:Name="Words"
+                    Margin="44,24,24,40"
+                    MaxWidth="640"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Spacing="0">
+                    <TextBlock
+                        x:Name="Kicker"
+                        Margin="0,0,0,12"
+                        CharacterSpacing="140"
+                        FontSize="13"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource DriveInKickerBrush}"
+                        Text="FEATURE PRESENTATION" />
+                    <Image
+                        x:Name="Logo"
+                        MaxHeight="110"
+                        MaxWidth="520"
+                        HorizontalAlignment="Left"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Stretch="Uniform"
+                        Visibility="Collapsed" />
+                    <TextBlock
+                        x:Name="TitleText"
+                        AutomationProperties.HeadingLevel="Level1"
+                        CharacterSpacing="90"
+                        FontFamily="{StaticResource DriveInDisplayFontFamily}"
+                        FontSize="54"
+                        FontWeight="SemiBold"
+                        Foreground="#FFFFFF"
+                        LineHeight="56"
+                        LineStackingStrategy="BlockLineHeight"
+                        MaxLines="2"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="MetaText"
+                        Margin="0,14,0,0"
+                        FontSize="15"
+                        Foreground="{ThemeResource DriveInScreenTextSecondaryBrush}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        x:Name="OverviewText"
+                        MaxWidth="540"
+                        Margin="0,10,0,0"
+                        HorizontalAlignment="Left"
+                        FontSize="16"
+                        Foreground="{ThemeResource DriveInScreenTextBrush}"
+                        LineHeight="24"
+                        MaxLines="2"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap" />
+                    <StackPanel
+                        x:Name="Actions"
+                        Margin="0,22,0,0"
+                        Orientation="Horizontal"
+                        Spacing="12">
+                        <Button
+                            x:Name="PlayButton"
+                            Click="Play_Click"
+                            Style="{StaticResource NixiePrimaryButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontSize="16" Glyph="&#xE768;" />
+                                <TextBlock x:Name="PlayText" Text="Play" />
+                            </StackPanel>
+                        </Button>
+                        <StackPanel
+                            x:Name="LeftPanel"
+                            Margin="6,0"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <dc:NixieReadout x:Name="LeftTubes" DigitHeight="22" />
+                            <TextBlock
+                                x:Name="LeftUnit"
+                                VerticalAlignment="Center"
+                                AutomationProperties.AccessibilityView="Raw"
+                                CharacterSpacing="100"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource DriveInScreenTextSecondaryBrush}"
+                                Text="LEFT" />
+                        </StackPanel>
+                        <Button
+                            x:Name="MoreInfoButton"
+                            Click="MoreInfo_Click"
+                            Content="More info"
+                            Style="{StaticResource NixieButtonStyle}" />
+                        <ToggleButton
+                            x:Name="FavoriteButton"
+                            AutomationProperties.Name="Add to favorites"
+                            Click="Favorite_Click"
+                            Style="{StaticResource NixieIconToggleButtonStyle}"
+                            ToolTipService.ToolTip="Add to favorites">
+                            <FontIcon x:Name="FavoriteGlyph" FontSize="18" Glyph="&#xEB51;" />
+                        </ToggleButton>
+                    </StackPanel>
+                </StackPanel>
+
+                <!--  the rotation: pause (WCAG 2.2.2) and the dots (one Tab stop, Left/Right/Home/End)  -->
+                <StackPanel
+                    x:Name="SlideControls"
+                    Margin="0,0,20,22"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Bottom"
+                    Orientation="Horizontal"
+                    Spacing="6"
+                    Tapped="SlideControls_Tapped">
+                    <Button
+                        x:Name="PauseButton"
+                        AutomationProperties.Name="Pause the feature rotation"
+                        Click="Pause_Click"
+                        Style="{StaticResource NixieCompactIconButtonStyle}"
+                        ToolTipService.ToolTip="Pause the feature rotation">
+                        <FontIcon x:Name="PauseIcon" FontSize="14" Glyph="&#xE769;" />
+                    </Button>
+                    <StackPanel
+                        x:Name="Dots"
+                        AutomationProperties.Name="Features"
+                        Orientation="Horizontal"
+                        Spacing="0"
+                        TabFocusNavigation="Once" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
