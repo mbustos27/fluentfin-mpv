@@ -4,7 +4,7 @@
     you were watching, with Resume), beside a numbered "Up next" list (in progress, then next episodes: one click each); then
     the genre strip in big type, which picks the shelf under it; then the dense "New in ..." shelves. Posters open in place.
     At 1100 px the hero takes the width and Up next becomes three across under it. The page is opaque content on the night
-    ground, under the sunset rule; the top bar is the shared one.
+    ground, under the sunset rule the theme draws along the shared top bar (TopBarStyle).
     Keyboard: Tab goes bar, hero, Up next (one stop, Up/Down), the genres (one stop, Left/Right), each shelf (one stop); N and
     C go to Up next's next episode and what is in progress.
 -->
@@ -488,14 +488,6 @@
                 </ItemsControl>
             </StackPanel>
         </ScrollViewer>
-
-        <!--  the sunset rule along the top of the page, under the bar  -->
-        <Border
-            Height="3"
-            VerticalAlignment="Top"
-            AutomationProperties.AccessibilityView="Raw"
-            Background="{ThemeResource EditorialSunsetRuleBrush}"
-            IsHitTestVisible="False" />
 
         <!--  the notice after a removal from Up next (Continue Watching), with Undo (Ctrl+Z): the shared Home's  -->
         <Border

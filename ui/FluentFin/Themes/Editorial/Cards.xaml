@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
     Editorial's card templates (merged by Editorial.xaml): PosterTemplate, a dense 2:3 poster whose details open in place;
-    StillTemplate, a 16:9 episode still with its big number, title, facts and synopsis. {Binding}: the dictionary is loaded by
+    StillTemplate (its content: a BaseItemViewModel), a wide episode still with its big number, title, facts and synopsis. {Binding}: the dictionary is loaded by
     its address, so it has no code behind for x:Bind.
 -->
 <ResourceDictionary
@@ -21,6 +21,6 @@
     </DataTemplate>
 
     <DataTemplate x:Key="StillTemplate">
-        <ec:EditorialStill Episode="{Binding}" />
+        <ec:EditorialStill Episode="{Binding Dto}" />
     </DataTemplate>
 </ResourceDictionary>

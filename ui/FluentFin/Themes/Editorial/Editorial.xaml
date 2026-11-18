@@ -11,6 +11,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ec="using:FluentFin.Themes.Editorial.Controls"
+    xmlns:lc="using:FluentFin.Controls"
     xmlns:media="using:CommunityToolkit.WinUI.Media"
     xmlns:ui="using:CommunityToolkit.WinUI">
 
@@ -23,6 +24,19 @@
             <!--  the page's ground: the concept's night (#160610), opaque (content; the window's backdrop does not show through)  -->
             <SolidColorBrush x:Key="EditorialGroundBrush" Color="#160610" />
             <Color x:Key="EditorialGroundColor">#160610</Color>
+            <!--  the top bar's night tint over the shared glass: the concept's denser bar  -->
+            <SolidColorBrush x:Key="EditorialTopBarTintBrush" Color="#8C160610" />
+            <!--  an item page's backdrop: held back from the left (the words sit on 82 % to 95 % night) and faded into the ground  -->
+            <LinearGradientBrush x:Key="EditorialItemScrimBrush" StartPoint="0,0" EndPoint="1,0">
+                <GradientStop Offset="0" Color="#F2160610" />
+                <GradientStop Offset="0.4" Color="#D1160610" />
+                <GradientStop Offset="0.7" Color="#4D160610" />
+                <GradientStop Offset="1" Color="#33160610" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="EditorialItemFadeBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0.55" Color="#00160610" />
+                <GradientStop Offset="1" Color="#FF160610" />
+            </LinearGradientBrush>
             <!--  an opaque panel on the ground: the details in place, the Seasons panel, the paused column  -->
             <SolidColorBrush x:Key="EditorialPanelBrush" Color="#2A0C18" />
             <Color x:Key="EditorialPanelColor">#2A0C18</Color>
@@ -101,6 +115,17 @@
             <!--  "noon": a pale peach ground, deep maroon text; numbers and kickers in deep sunset colours (4.5:1 or more)  -->
             <SolidColorBrush x:Key="EditorialGroundBrush" Color="#FFF6F3" />
             <Color x:Key="EditorialGroundColor">#FFF6F3</Color>
+            <SolidColorBrush x:Key="EditorialTopBarTintBrush" Color="#8CFFF6F3" />
+            <LinearGradientBrush x:Key="EditorialItemScrimBrush" StartPoint="0,0" EndPoint="1,0">
+                <GradientStop Offset="0" Color="#F5FFF6F3" />
+                <GradientStop Offset="0.4" Color="#E0FFF6F3" />
+                <GradientStop Offset="0.7" Color="#66FFF6F3" />
+                <GradientStop Offset="1" Color="#4DFFF6F3" />
+            </LinearGradientBrush>
+            <LinearGradientBrush x:Key="EditorialItemFadeBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0.55" Color="#00FFF6F3" />
+                <GradientStop Offset="1" Color="#FFFFF6F3" />
+            </LinearGradientBrush>
             <SolidColorBrush x:Key="EditorialPanelBrush" Color="#FCE8E4" />
             <Color x:Key="EditorialPanelColor">#FCE8E4</Color>
             <Color x:Key="EditorialPanelClearColor">#00FCE8E4</Color>
@@ -165,6 +190,9 @@
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="EditorialGroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <StaticResource x:Key="EditorialGroundColor" ResourceKey="SystemColorWindowColor" />
+            <SolidColorBrush x:Key="EditorialTopBarTintBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="EditorialItemScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="EditorialItemFadeBrush" Color="Transparent" />
             <SolidColorBrush x:Key="EditorialPanelBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <StaticResource x:Key="EditorialPanelColor" ResourceKey="SystemColorWindowColor" />
             <StaticResource x:Key="EditorialPanelClearColor" ResourceKey="SystemColorWindowColor" />
@@ -460,10 +488,68 @@
     </Style>
 
     <!--
-        the required keys the foundation applies. TopBarStyle: the shared top bar, denser, with the sunset rule under it (the
-        Editorial views draw the rule themselves until the bar's template slot is in: EditorialSunsetRule).
+        the required keys. TopBarStyle: the shared top bar (TopBarChrome), denser than the shared glass (a night tint over
+        it), with the sunset rule along its foot: the theme's mark on every page, shared ones too. Over a page whose
+        artwork runs under the bar (OverHero) the shared dark scrim, and the rule stays. High contrast: no tint, the rule
+        the system highlight.
     -->
-    <Style x:Key="TopBarStyle" TargetType="UserControl" />
+    <Style x:Key="TopBarStyle" TargetType="lc:TopBarChrome">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="lc:TopBarChrome">
+                    <Grid>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="BarStates">
+                                <VisualState x:Name="OverContent" />
+                                <VisualState x:Name="OverHero">
+                                    <VisualState.Setters>
+                                        <Setter Target="BarGlass.Visibility" Value="Collapsed" />
+                                        <Setter Target="BarTint.Visibility" Value="Collapsed" />
+                                        <Setter Target="BarScrim.Visibility" Value="Visible" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Border
+                            x:Name="BarGlass"
+                            Background="{ThemeResource GlassTitleBarBrush}"
+                            IsHitTestVisible="False" />
+                        <Border
+                            x:Name="BarTint"
+                            Background="{ThemeResource EditorialTopBarTintBrush}"
+                            IsHitTestVisible="False" />
+                        <Rectangle
+                            x:Name="BarScrim"
+                            IsHitTestVisible="False"
+                            Visibility="Collapsed">
+                            <Rectangle.Fill>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Offset="0" Color="#B0000000" />
+                                    <GradientStop Offset="0.6" Color="#5A000000" />
+                                    <GradientStop Offset="1" Color="#00000000" />
+                                </LinearGradientBrush>
+                            </Rectangle.Fill>
+                        </Rectangle>
+                        <Border
+                            x:Name="SunsetRule"
+                            Height="3"
+                            Margin="0,0,0,-3"
+                            VerticalAlignment="Bottom"
+                            Background="{ThemeResource EditorialSunsetRuleBrush}"
+                            IsHitTestVisible="False" />
+                        <ContentPresenter
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
     <!--  (dictionary templates use {Binding}: x:Bind needs a dictionary with code behind, and the theme's is loaded by its address)  -->
     <DataTemplate x:Key="RowHeaderTemplate">
