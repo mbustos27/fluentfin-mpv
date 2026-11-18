@@ -608,9 +608,9 @@ public sealed class MpvControlsViewModelTests
 	}
 
 	[Theory]
-	[InlineData("Episode", "Pilot", "Show", 6, 4, "Show", "S6E4 · Pilot")]
-	[InlineData("Episode", "Show", "Show", 6, 4, "Show", "S6E4")]
-	[InlineData("Episode", "", "Show", 6, 4, "Show", "S6E4")]
+	[InlineData("Episode", "Pilot", "Show", 6, 4, "Show", "S6 E4 · Pilot")]
+	[InlineData("Episode", "Show", "Show", 6, 4, "Show", "S6 E4")]
+	[InlineData("Episode", "", "Show", 6, 4, "Show", "S6 E4")]
 	[InlineData("Episode", "Pilot", "Show", null, 4, "Show", "E4 · Pilot")]
 	[InlineData("Episode", "Pilot", "Show", null, null, "Show", "Pilot")]
 	[InlineData("Episode", "Pilot", null, 1, 1, "Pilot", "")]
@@ -638,7 +638,7 @@ public sealed class MpvControlsViewModelTests
 		Assert.Equal(0, _vm.PositionTicks);
 		Assert.Equal(Ticks(1200), _vm.DurationTicks);
 		Assert.True(_vm.ControlsVisible);
-		Assert.Equal(("Show", "S1E2 · Next one"), (_vm.Title, _vm.Subtitle));
+		Assert.Equal(("Show", "S1 E2 · Next one"), (_vm.Title, _vm.Subtitle));
 	}
 
 	[Fact]

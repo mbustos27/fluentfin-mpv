@@ -40,7 +40,8 @@ public class StatesXamlTests
 	{
 		var doc = Load("FluentFin/Views/SelectServerPage.xaml");
 		// the app's name (whatever it is called: the rename sweeps the text) is the page's one first-level heading
-		Assert.Equal("Level1", (string?)Assert.Single(doc.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Style") == "{StaticResource GlassPageTitleTextBlockStyle}").Attribute("AutomationProperties.HeadingLevel"));
+		// (the 1.2.0 merge: the glass stream's lit wordmark, AppWordmark, which gives its heading level to its text)
+		Assert.Equal("Level1", (string?)Assert.Single(doc.Descendants(), t => t.Name.LocalName == "AppWordmark").Attribute("AutomationProperties.HeadingLevel"));
 		Assert.Equal("Level2", (string?)Text(doc, "Saved servers").Attribute("AutomationProperties.HeadingLevel"));
 		Assert.Equal("Saved servers", (string?)doc.Descendants(Presentation + "ItemsView").Single().Attribute("AutomationProperties.Name"));
 		var status = doc.Descendants(Presentation + "TextBlock").Single(t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.StatusText, Mode=OneWay}");

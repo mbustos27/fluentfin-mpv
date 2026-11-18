@@ -102,7 +102,8 @@ public sealed class AccountMenuXamlTests
 		// layout audit item 20: the version is in Settings > About; the subtitle says "Preview" on a test build only
 		// 1.2.0: the wordmark's own subtitle line, in the bar's left header with the tabs (the TitleBar's own Title and Subtitle unused)
 		Assert.Contains(doc.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute(Xaml + "Name") == "SubtitleText" && (string?)t.Attribute("Text") == "{x:Bind ViewModel.Subtitle}");
-		Assert.Contains(doc.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute(Xaml + "Name") == "WordmarkText" && (string?)t.Attribute("Text") == "{x:Bind ViewModel.AppName}");
+		// the 1.2.0 merge: the glass stream's wordmark at title-bar size in the placeholder's place
+		Assert.Contains(doc.Descendants(), t => t.Name.LocalName == "AppWordmark" && (string?)t.Attribute(Xaml + "Name") == "WordmarkText" && (string?)t.Attribute("Text") == "{x:Bind ViewModel.AppName}" && (string?)t.Attribute("Size") == "15");
 		Assert.Null(doc.Descendants(Presentation + "TitleBar").Single().Attribute("Subtitle"));
 		// layout audit item 10: a friendly kind under a suggestion, not the raw "Series"
 		Assert.Contains(doc.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind cvm:SearchLabels.KindTitle(Item.Type)}");

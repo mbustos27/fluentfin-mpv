@@ -150,15 +150,14 @@ public static class HeroSlides
 
 	/// <summary>
 	/// "S2 E3 · 2019 · TV-14 · 45m": the episode's place, the year, the rating and the runtime, those the item has. The episode's
-	/// place is written as the items stream's shared ItemLabels.EpisodeCode writes it ("S2 E3"; the layout audit's item 7):
-	/// the call replaces this line once that is merged.
+	/// place is ItemLabels.EpisodeCode's ("S2 E3", "S2 E5–E6"; the layout audit's item 7).
 	/// </summary>
 	public static string Meta(BaseItemDto dto)
 	{
 		var parts = new List<string>();
-		if (dto.Type == BaseItemDto_Type.Episode && dto.ParentIndexNumber is { } season && dto.IndexNumber is { } episode)
+		if (dto.Type == BaseItemDto_Type.Episode && dto.ParentIndexNumber is not null && ItemLabels.EpisodeCode(dto) is { Length: > 0 } code)
 		{
-			parts.Add($"S{season} E{episode}");
+			parts.Add(code);
 		}
 		if (dto.ProductionYear is { } year and > 0)
 		{

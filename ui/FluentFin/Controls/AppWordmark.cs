@@ -111,6 +111,8 @@ public sealed partial class AppWordmark : Grid
 		var light = ActualTheme == ElementTheme.Light;
 		_text.Text = Text;
 		_text.FontSize = Size;
+		// 1.2.0 merge: a page's heading (the sign-in and server pages) is this text; the Grid itself has no automation peer
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetHeadingLevel(_text, Microsoft.UI.Xaml.Automation.AutomationProperties.GetHeadingLevel(this));
 		var neon = Size >= NeonFontFrom;
 		_text.FontFamily = neon ? new FontFamily(NeonFont) : new FontFamily("Segoe UI Variable Display, Segoe UI");
 		_text.FontWeight = neon ? FontWeights.Normal : FontWeights.SemiBold;

@@ -270,7 +270,7 @@ public sealed class MpvControlsSkipTests
 		_vm.NameItem = id =>
 		{
 			asked.Add(id);
-			return Task.FromResult<string?>("S1E2 · Second");
+			return Task.FromResult<string?>("S1 E2 · Second");
 		};
 		_vm.OnEvent(new BridgeEvent(Bridge.Events.Item, JsonNode.Parse($$"""{"itemId": "{{Item}}", "name": "Pilot", "type": "Episode"}""")));
 		Assert.False(_vm.CanNext, "nothing known yet");
@@ -280,7 +280,7 @@ public sealed class MpvControlsSkipTests
 		Assert.True(_vm.CanNext, "the next event alone enables it");
 		Assert.True(_vm.ShowsNext);
 		Assert.Equal([NextItem], asked);
-		Assert.Equal("Next: S1E2 · Second", _vm.NextToolTip);
+		Assert.Equal("Next: S1 E2 · Second", _vm.NextToolTip);
 
 		await _vm.Next();
 		Assert.Equal([Bridge.Commands.Next], Commands());
@@ -314,7 +314,7 @@ public sealed class MpvControlsSkipTests
 
 		Next(NextItem);
 		Next("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee3");
-		answers[NextItem].SetResult("S1E2 · Second");
+		answers[NextItem].SetResult("S1 E2 · Second");
 		Assert.Equal("Next episode", _vm.NextToolTip);
 
 		answers["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee3"].SetResult("S1E3 · Third");
@@ -350,7 +350,7 @@ public sealed class MpvControlsSkipTests
 	[Fact]
 	public void Next_title_is_the_episodes_line_or_the_name()
 	{
-		Assert.Equal("S1E2 · Second", MpvControlsViewModel.NextTitle(new BridgeItem(NextItem, "Second", "Episode", "Spike Show", 1, 2)));
+		Assert.Equal("S1 E2 · Second", MpvControlsViewModel.NextTitle(new BridgeItem(NextItem, "Second", "Episode", "Spike Show", 1, 2)));
 		Assert.Equal("A film", MpvControlsViewModel.NextTitle(new BridgeItem("m", "A film", "Movie")));
 	}
 }

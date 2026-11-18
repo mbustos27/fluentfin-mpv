@@ -47,6 +47,26 @@ public sealed partial class LoadStateView : UserControl
 	{
 		InitializeComponent();
 		Loaded += OnLoaded;
+		Unloaded += (_, _) => FluentFin.Services.AmbientBackdrop.ReleaseFullScene(this);
+	}
+
+	/// <summary>
+	/// 1.2.0 (the glass stream's hook, wired at the merge): while the view shows an empty page or a failure in place of the
+	/// content, the window's backdrop is the full dusk scene (the sign-in's), not the hill strip; it is given back when the
+	/// message goes or the view unloads. The message already sits on a glass panel, so its text is not on the sky bands.
+	/// </summary>
+	internal static bool WantsFullScene(bool loaded, LoadStatus? status) => loaded && status is LoadStatus.Empty or LoadStatus.Failed;
+
+	private void UpdateScene()
+	{
+		if (WantsFullScene(IsLoaded, State?.Status))
+		{
+			FluentFin.Services.AmbientBackdrop.RequestFullScene(this);
+		}
+		else
+		{
+			FluentFin.Services.AmbientBackdrop.ReleaseFullScene(this);
+		}
 	}
 
 	private LoadState? _watched;
@@ -63,6 +83,8 @@ public sealed partial class LoadStateView : UserControl
 		{
 			newValue.PropertyChanged += OnStatePropertyChanged;
 		}
+
+		UpdateScene();
 	}
 
 	/// <summary>
@@ -71,6 +93,7 @@ public sealed partial class LoadStateView : UserControl
 	/// </summary>
 	private void OnLoaded(object sender, RoutedEventArgs e)
 	{
+		UpdateScene();
 		if (IsInsideGlassSurface(this))
 		{
 			MessageSurface.Style = (Style)Resources["FlatSurfaceStyle"];
@@ -104,6 +127,8 @@ public sealed partial class LoadStateView : UserControl
 		{
 			return;
 		}
+
+		DispatcherQueue.TryEnqueue(UpdateScene);
 
 		DispatcherQueue.TryEnqueue(() =>
 		{

@@ -43,8 +43,8 @@
     <Grid x:Name="BarRoot" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsVisible), Mode=OneWay}">
         <Border
             x:Name="BarGlass"
-            Background="{ThemeResource GlassPanelBrush}"
-            BorderBrush="{ThemeResource GlassDividerBrush}"
+            Background="{ThemeResource GlassTitleBarBrush}"
+            BorderBrush="{ThemeResource GlassTitleBarStrokeBrush}"
             BorderThickness="0,0,0,1"
             IsHitTestVisible="False" />
         <Rectangle
@@ -73,7 +73,7 @@
                 VerticalAlignment="Stretch"
                 Orientation="Horizontal"
                 SizeChanged="OnHeaderSizeChanged">
-                <!--  the wordmark: a text placeholder for the glass stream's AppWordmark (wired at the merge); "Preview" on a test build  -->
+                <!--  the wordmark: the glass stream's AppWordmark at title-bar size (plain, no glow); "Preview" on a test build  -->
                 <StackPanel
                     x:Name="Wordmark"
                     Margin="12,0,8,0"
@@ -81,11 +81,10 @@
                     IsHitTestVisible="False"
                     Orientation="Horizontal"
                     Spacing="8">
-                    <TextBlock
+                    <lc:AppWordmark
                         x:Name="WordmarkText"
                         VerticalAlignment="Center"
-                        FontSize="15"
-                        FontWeight="SemiBold"
+                        Size="15"
                         Text="{x:Bind ViewModel.AppName}" />
                     <TextBlock
                         x:Name="SubtitleText"

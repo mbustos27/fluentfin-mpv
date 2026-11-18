@@ -683,6 +683,8 @@ public partial class VideoPlayerViewModel
 			return null;
 		}
 
+		// the next item's name in the app's one episode format, "Series · S1 E2 · Second" (MpvControlsViewModel.FormatTitle, whose
+		// number is ItemLabels.EpisodeCode's; the 1.2.0 merge: it wrote "S1E2")
 		try
 		{
 			return await JellyfinClient.GetItem(id) is { } dto

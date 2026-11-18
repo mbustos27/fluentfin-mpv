@@ -1809,8 +1809,9 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	}
 
 	/// <summary>
-	/// The title line: an episode is its series, then "S6E4 · Episode title" (the episode's name left out when it is empty
-	/// or only repeats the series); anything else is its own name.
+	/// The title line: an episode is its series, then "S6 E4 · Episode title" (the episode's name left out when it is empty
+	/// or only repeats the series); anything else is its own name. 1.2.0 merge: the number is ItemLabels.EpisodeCode's, the
+	/// one format the app writes ("S6 E4"; it was "S6E4" here).
 	/// </summary>
 	public static (string Title, string Subtitle) FormatTitle(BridgeItem item)
 	{
@@ -1821,12 +1822,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		}
 
 		var series = item.SeriesName.Trim();
-		var number = (item.SeasonNumber, item.EpisodeNumber) switch
-		{
-			({ } season, { } episode) => string.Create(CultureInfo.InvariantCulture, $"S{season}E{episode}"),
-			(null, { } episode) => string.Create(CultureInfo.InvariantCulture, $"E{episode}"),
-			_ => "",
-		};
+		var number = ItemLabels.EpisodeCode(item.SeasonNumber, item.EpisodeNumber);
 		var episodeName = name.Length == 0 || string.Equals(name, series, StringComparison.OrdinalIgnoreCase) ? "" : name;
 		var subtitle = (number, episodeName) switch
 		{

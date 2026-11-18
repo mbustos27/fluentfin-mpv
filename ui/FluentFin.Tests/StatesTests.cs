@@ -19,6 +19,17 @@ namespace FluentFin.Tests;
 /// </summary>
 public sealed class StatesTests
 {
+	[Theory]
+	[InlineData(true, LoadStatus.Empty, true)]     // an empty page: the full dusk scene behind its message
+	[InlineData(true, LoadStatus.Failed, true)]    // a failure: the same
+	[InlineData(true, LoadStatus.Loading, false)]  // loading: the page's own backdrop (the hill strip)
+	[InlineData(true, LoadStatus.Loaded, false)]
+	[InlineData(true, null, false)]
+	[InlineData(false, LoadStatus.Failed, false)]  // unloaded: given back
+	public void ALoadStateMessage_HoldsTheFullDuskScene_WhileItShows(bool loaded, LoadStatus? status, bool full) =>
+		// the 1.2.0 merge: the glass stream's hook (AmbientBackdrop.RequestFullScene) in the states stream's view
+		Assert.Equal(full, LoadStateView.WantsFullScene(loaded, status));
+
 	private readonly Mock<IJellyfinAuthenticationService> _auth = new();
 	private readonly SavedServer _server = new() { Id = "s1", DisplayName = "Harness Jellyfin", LocalUrl = "https://jf.example:8920", PublicUrl = "https://jf.example:8920" };
 

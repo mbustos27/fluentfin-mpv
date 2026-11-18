@@ -70,6 +70,18 @@
                             ItemsSource="{x:Bind vm:SettingsViewModel.GlassChoices}"
                             SelectedItem="{x:Bind ViewModel.SelectedGlass, Mode=TwoWay}" />
                     </ctk:SettingsCard>
+                    <!--  1.2.0 merge: the library stream's Continue Watching cleanup (ContinueWatchingSettingViewModel), on this PC only  -->
+                    <ctk:SettingsCard
+                        Description="{x:Bind ContinueWatching.Description}"
+                        Header="{x:Bind ContinueWatching.Header}"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE81C;}">
+                        <ComboBox
+                            MinWidth="160"
+                            AutomationProperties.Name="{x:Bind ContinueWatching.Header}"
+                            DisplayMemberPath="Label"
+                            ItemsSource="{x:Bind ContinueWatching.Choices}"
+                            SelectedItem="{x:Bind ContinueWatching.Selected, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
 
                 </StackPanel>
                 <!--  fluentfin-mpv: Settings > Playback (docs/research/ux-review.md T1)  -->

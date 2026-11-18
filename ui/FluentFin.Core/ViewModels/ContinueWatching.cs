@@ -66,8 +66,9 @@ public static class ContinueWatchingRules
 	{
 		if (dto.Type == BaseItemDto_Type.Episode && !string.IsNullOrWhiteSpace(dto.SeriesName))
 		{
-			return dto.ParentIndexNumber is { } season && dto.IndexNumber is { } episode
-				? $"{dto.SeriesName.Trim()} S{season} E{episode}"
+			// the one episode format (ItemLabels.EpisodeCode: "S1 E4")
+			return dto.ParentIndexNumber is not null && ItemLabels.EpisodeCode(dto) is { Length: > 0 } code
+				? $"{dto.SeriesName.Trim()} {code}"
 				: dto.SeriesName.Trim();
 		}
 

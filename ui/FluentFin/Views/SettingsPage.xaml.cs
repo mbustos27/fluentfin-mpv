@@ -16,6 +16,9 @@ public sealed partial class SettingsPage : Page
 {
 	public SettingsViewModel ViewModel { get; } = App.GetService<SettingsViewModel>();
 
+	/// <summary>1.2.0 merge (the library stream's setting, kept on this PC): Home leaves out Continue Watching items not played for a while.</summary>
+	public ContinueWatchingSettingViewModel ContinueWatching { get; } = new(App.GetService<Core.Contracts.Services.ILocalSettingsService>());
+
 	public SettingsPage()
 	{
 		InitializeComponent();

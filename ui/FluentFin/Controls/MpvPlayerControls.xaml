@@ -24,7 +24,7 @@
                 <SolidColorBrush x:Key="PlayerGlassFillHover" Color="#4DFFFFFF" />
                 <SolidColorBrush x:Key="PlayerGlassFillPressed" Color="#26FFFFFF" />
                 <SolidColorBrush x:Key="PlayerGlassForeground" Color="#FFFFFFFF" />
-                <SolidColorBrush x:Key="PlayerHoverTimeFill" Color="#E6101C20" />
+                <SolidColorBrush x:Key="PlayerHoverTimeFill" Color="#E6170508" />
                 <!--
                     1.2.0: the backing of the pills over the video (Next, Skip): dense, so their text keeps 4.5:1 over
                     any picture (PlayerPromptContrastTests: over a white frame and a black one). The bars' light fill

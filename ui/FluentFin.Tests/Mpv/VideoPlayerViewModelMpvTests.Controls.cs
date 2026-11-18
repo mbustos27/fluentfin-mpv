@@ -220,7 +220,7 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		Assert.True(controls.IsSkipVisible);
 		Assert.Equal("Skip credits", controls.SkipText);
 		Assert.True(controls.CanNext);
-		Assert.Equal("Next: S1E2 · Second", controls.NextToolTip);
+		Assert.Equal("Next: S1 E2 · Second", controls.NextToolTip);
 
 		await controls.SkipSegment();
 		Assert.Equal("skip_segment", _backend.Commands[^1]);

@@ -83,8 +83,10 @@ public class LoginPageAccessibilityTests
 		Assert.Equal("{x:Bind ViewModel.ErrorMessage, Mode=OneWay}", (string?)bar.Attribute("Message"));
 		var status = doc.Descendants(Presentation + "TextBlock").Single(t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.StatusText, Mode=OneWay}");
 		Assert.Equal("Polite", (string?)status.Attribute("AutomationProperties.LiveSetting"));
-		var title = doc.Descendants(Presentation + "TextBlock").Single(t => (string?)t.Attribute("Style") == "{StaticResource GlassPageTitleTextBlockStyle}");
+		// (the 1.2.0 merge: the glass stream's lit wordmark at 64, which gives its heading level to its text)
+		var title = doc.Descendants().Single(t => t.Name.LocalName == "AppWordmark");
 		Assert.Equal("Level1", (string?)title.Attribute("AutomationProperties.HeadingLevel"));
+		Assert.Equal("64", (string?)title.Attribute("Size"));
 		// the fields are labelled by their headers, and wait while the server answers
 		Assert.All(new[] { "AutoSuggestBox", "PasswordBox" }.Select(n => Assert.Single(doc.Descendants(Presentation + n))), f =>
 		{
