@@ -4,7 +4,7 @@
     <Out>\Banner.bmp  493x58   the strip across the top of the middle pages (black text goes over its left side, so that
                                side stays light)
     <Out>\Dialog.bmp  493x312  the welcome and finish pages: a dusk panel on the left 164 px (deep maroon at the top to
-                               crimson at the horizon, a striped half sun, thin scanlines), the page on the right
+                               crimson at the horizon, a striped half sun on a low hill line), the page on the right
   Usage: make-installer-art.ps1 -Out <folder>
 #>
 param([Parameter(Mandatory)][string]$Out)
@@ -32,8 +32,9 @@ function Add-Sun($g, [single]$cx, [single]$horizon, [single]$r) {
     $fill = New-Object System.Drawing.Drawing2D.LinearGradientBrush $rect, (C 255 0xF5 0xA8 0xA5), (C 255 0xF9 0x69 0x85), 90.0
     $g.FillPath($fill, $sun)
     $gap = New-Object System.Drawing.SolidBrush (C 255 0x8E 0x14 0x3A)
-    $y = $horizon - $r * 0.42; $h = 2.0
-    while ($y -lt $horizon) { $g.FillRectangle($gap, $cx - $r - 1, $y, 2 * $r + 2, $h); $y += 9; $h += 1.2 }
+    # four gaps on a regular step, each a pixel thicker than the one above (whole pixels: no soft half-lines)
+    $y = [Math]::Round($horizon - $r * 0.5); $h = 2
+    for ($i = 0; $i -lt 4; $i++) { $g.FillRectangle($gap, [single]($cx - $r - 1), [single]$y, [single](2 * $r + 2), [single]$h); $y += 8; $h += 1 }
 }
 
 # --- Dialog.bmp
@@ -52,10 +53,13 @@ $hill = New-Object System.Drawing.Drawing2D.GraphicsPath
 $hill.AddLines([System.Drawing.PointF[]]@((New-Object System.Drawing.PointF 0, 270), (New-Object System.Drawing.PointF 40, 262), (New-Object System.Drawing.PointF 70, 268),
     (New-Object System.Drawing.PointF 120, 258), (New-Object System.Drawing.PointF 164, 266), (New-Object System.Drawing.PointF 164, 312), (New-Object System.Drawing.PointF 0, 312)))
 $g.FillPath((New-Object System.Drawing.SolidBrush (C 255 0x24 0x02 0x10)), $hill)
-# faint scanlines over the sky (3 px apart, peach, never green)
-$scan = New-Object System.Drawing.Pen (C 18 0xF7 0xAA 0x9C), 1
-for ($y = 1; $y -lt 258; $y += 3) { $g.DrawLine($scan, 0, $y, 164, $y) }
-$g.DrawImage($tube, 22, 52, 120, 120)
+# the icon in the upper sky, a soft shadow under it so the tile stands off the dark panel
+$shadow = New-Object System.Drawing.Drawing2D.GraphicsPath
+$shadow.AddEllipse(30, 150, 104, 22)
+$sb = New-Object System.Drawing.Drawing2D.PathGradientBrush $shadow
+$sb.CenterColor = C 120 0 0 0; $sb.SurroundColors = @((C 0 0 0 0))
+$g.FillPath($sb, $shadow)
+$g.DrawImage($tube, 26, 48, 112, 112)
 # a quiet hairline between the panel and the page
 $g.DrawLine((New-Object System.Drawing.Pen $Hairline, 1), 164, 0, 164, 312)
 $g.Dispose(); $bmp.Save((Join-Path $Out 'Dialog.bmp'), [System.Drawing.Imaging.ImageFormat]::Bmp); $bmp.Dispose()
@@ -66,9 +70,8 @@ $g.Clear($Page)
 $strip = New-Object System.Drawing.Rectangle 0, 0, 493, 58
 $gr2 = New-Object System.Drawing.Drawing2D.LinearGradientBrush $strip, $Page, (C 255 0xF9 0xD9 0xD2), 0.0
 $g.FillRectangle($gr2, $strip)
-# a small sun behind the tube, then the tube
-Add-Sun $g 452 58 34
-$g.DrawImage($tube, 428, 5, 48, 48)
+# the tube, centred on the strip's height (no sun here: at this size it read as a blob behind the tile)
+$g.DrawImage($tube, 429, 5, 48, 48)
 $g.DrawLine((New-Object System.Drawing.Pen $Hairline, 1), 0, 57, 493, 57)
 $g.Dispose(); $bmp.Save((Join-Path $Out 'Banner.bmp'), [System.Drawing.Imaging.ImageFormat]::Bmp); $bmp.Dispose()
 $tube.Dispose()
