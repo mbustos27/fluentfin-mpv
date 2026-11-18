@@ -99,37 +99,70 @@ public static class ThemeStyle
 
 	private static bool Fits(Style style, FrameworkElement element) => style.TargetType is null || style.TargetType.IsInstanceOfType(element);
 
-	/// <summary>A style that is <paramref name="own"/> with <paramref name="theme"/>'s setters (its BasedOn chain's too) over it.</summary>
+	/// <summary>
+	/// A style that is <paramref name="own"/> with <paramref name="theme"/> over it: the theme's style itself is the base (its
+	/// setters, {ThemeResource} values included, stay the theme's, and follow Light, Dark and high contrast), and the
+	/// element's own setters for properties the theme leaves out are copied on top. Nixie 1.3.0: copying the theme's setters
+	/// instead lost their {ThemeResource} values (Drive-in's console came out with no fill or rim). The element's own
+	/// styles take {StaticResource} values only.
+	/// </summary>
 	public static Style Layer(Style? own, Style theme)
 	{
-		var layered = new Style(own?.TargetType ?? theme.TargetType ?? typeof(FrameworkElement)) { BasedOn = own };
+		if (own is null)
+		{
+			return theme;
+		}
+
+		var type = own.TargetType is { } ownType && theme.TargetType is { } themeType && themeType.IsAssignableFrom(ownType) ? ownType : theme.TargetType ?? own.TargetType ?? typeof(FrameworkElement);
+		var layered = new Style(type) { BasedOn = theme };
+		var themed = Chain(theme).SelectMany(s => s.Setters.OfType<Setter>()).Select(s => s.Property).Where(p => p is not null).ToHashSet();
+		foreach (var (property, value) in Kept(Chain(own).Select(s => s.Setters.OfType<Setter>().Where(x => x.Property is not null).Select(x => (x.Property, x.Value))), themed))
+		{
+			layered.Setters.Add(new Setter(property, value));
+		}
+
+		return layered;
+	}
+
+	/// <summary>A style's BasedOn chain, the base first.</summary>
+	private static IEnumerable<Style> Chain(Style style)
+	{
 		var chain = new Stack<Style>();
-		for (var s = theme; s is not null; s = s.BasedOn)
+		for (var s = style; s is not null; s = s.BasedOn)
 		{
 			chain.Push(s);
 		}
 
-		// the most derived setter of a property wins, as in the theme's own chain
-		var values = new Dictionary<DependencyProperty, object?>();
-		var order = new List<DependencyProperty>();
-		foreach (var style in chain)
+		return chain;
+	}
+
+	/// <summary>
+	/// The element's own setters that stay over the theme's style: its chain's (the base first, the most derived setter of a
+	/// property winning, in first-set order), less every property the theme sets.
+	/// </summary>
+	public static List<(TProperty Property, TValue Value)> Kept<TProperty, TValue>(IEnumerable<IEnumerable<(TProperty Property, TValue Value)>> ownChain, ISet<TProperty> themed)
+		where TProperty : notnull
+	{
+		var values = new Dictionary<TProperty, TValue>();
+		var order = new List<TProperty>();
+		foreach (var style in ownChain)
 		{
-			foreach (var setter in style.Setters.OfType<Setter>().Where(s => s.Property is not null))
+			foreach (var (property, value) in style)
 			{
-				if (!values.ContainsKey(setter.Property))
+				if (themed.Contains(property))
 				{
-					order.Add(setter.Property);
+					continue;
 				}
 
-				values[setter.Property] = setter.Value;
+				if (!values.ContainsKey(property))
+				{
+					order.Add(property);
+				}
+
+				values[property] = value;
 			}
 		}
 
-		foreach (var property in order)
-		{
-			layered.Setters.Add(new Setter(property, values[property]));
-		}
-
-		return layered;
+		return [.. order.Select(p => (p, values[p]))];
 	}
 }
