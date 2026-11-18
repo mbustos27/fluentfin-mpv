@@ -193,8 +193,11 @@ list with each feature's status is the glass stream's `shots\glass-features.md`.
   and a vignette. **In full** outside the shell (the server page and sign-in, even over the server's splash image) and for an
   empty state that asks (`AmbientBackdrop.RequestFullScene`); **a strip** of hills (34 % / 22 %) along the bottom inside the shell
   where there is no artwork; **nothing** over artwork. Text straight on the strip keeps 4.5:1 (no strip colour above luminance
-  0.08 in dark, none below 0.50 in light; `DuskSceneTests`). Motion (Full, window active): the stars glint, the sun's rings
-  breathe, the hills sway; Reduced is still; Solid keeps the shapes but drops the scanlines; high contrast shows none of it.
+  0.08 in dark, none below 0.50 in light; `DuskSceneTests`). Motion (Full, window active, the full scene only): the stars
+  glint, the sun's rings breathe, the hills sway for 20 s after the scene appears or the window comes back, then everything
+  eases still. The strip never moves: any continuous motion makes the compositor redraw the whole window, acrylic included,
+  every frame (measured: the strip's endless sway cost about 0.6 of a core on an idle page, against about 0.05 in 1.1.3).
+  Reduced is still; Solid keeps the shapes but drops the scanlines; high contrast shows none of it.
   Desktop acrylic is no longer used: the scene covers the window wherever there is no artwork.
 - **Glass**: every glass surface (and the rail) has a body (`GlassVolume`: a frosted rim, clear in the middle, and a bottom shade;
   none in Solid), the rail is lifted by the panels' two shadows, and the pointer lights the rim near it (`PanelSheen`'s edge

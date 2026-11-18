@@ -61,6 +61,22 @@ public sealed class GlassDuskTests
 		Assert.InRange(AmbientBackdropView.TwinkleScale, 0.8f, 0.95f);
 	}
 
+	/// <summary>
+	/// Continuous motion redraws the whole window every frame (measured: the strip's endless sway, about 0.6 of a core idle). The
+	/// strip never moves; the full scene moves for a while, then settles; nothing moves where motion is not allowed.
+	/// </summary>
+	[Theory]
+	[InlineData(DuskSceneKind.Full, true, false, true)]
+	[InlineData(DuskSceneKind.Full, true, true, false)]
+	[InlineData(DuskSceneKind.Full, false, false, false)]
+	[InlineData(DuskSceneKind.Strip, true, false, false)]
+	[InlineData(DuskSceneKind.None, true, false, false)]
+	public void Only_the_full_scene_moves_and_only_until_it_settles(DuskSceneKind scene, bool motionNow, bool settled, bool moves)
+	{
+		Assert.Equal(moves, AmbientBackdropView.MovesScene(scene, motionNow, settled));
+		Assert.InRange(AmbientBackdropView.SceneMotionDuration, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(30));
+	}
+
 	[Fact]
 	public void An_empty_states_request_for_the_full_scene_is_undone_once()
 	{

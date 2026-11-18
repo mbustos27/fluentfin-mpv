@@ -1,6 +1,7 @@
 using FluentFin.Core.Theming;
 using FluentFin.Services;
 using Microsoft.UI.Composition;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
@@ -71,10 +72,22 @@ public sealed partial class AmbientBackdropView : UserControl
 	/// <summary>A starburst's glint: it shrinks to this scale and back, over 3 to 6 s, each at its own pace.</summary>
 	public const float TwinkleScale = 0.85f;
 
+	/// <summary>
+	/// How long the full scene moves after it appears (or the window comes back), before it settles still. Any continuous motion
+	/// makes the compositor redraw the whole window, acrylic included, every frame: measured, the strip's endless sway cost about
+	/// 0.6 of a core on an idle page (1.1.3 there: about 0.05). So the strip never moves, and the full scene only for a while.
+	/// </summary>
+	public static readonly TimeSpan SceneMotionDuration = TimeSpan.FromSeconds(20);
+
+	/// <summary>Whether the scene moves now: only the full scene, only where motion is allowed, only until it has settled.</summary>
+	public static bool MovesScene(DuskSceneKind scene, bool motionNow, bool settled) => motionNow && scene == DuskSceneKind.Full && !settled;
+
 	private Storyboard? _fade;
 	private Uri? _shown;
 	private DuskSceneKind _scene = DuskSceneKind.None;
 	private bool _sceneMoving;
+	private bool _sceneSettled;
+	private DispatcherQueueTimer? _settle;
 	private Frame? _setupFrame;
 	private readonly List<FrameworkElement> _stars = [];
 	private FrameworkElement? _sun;
@@ -165,7 +178,16 @@ public sealed partial class AmbientBackdropView : UserControl
 
 	private void OnSetupNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e) => UpdateMode();
 
-	private void OnActivityChanged(object? sender, EventArgs e) => OnUi(UpdateMode);
+	private void OnActivityChanged(object? sender, EventArgs e) => OnUi(() =>
+	{
+		// back in front: the full scene may move again for a while
+		if (GlassActivity.IsActive)
+		{
+			_sceneSettled = false;
+		}
+
+		UpdateMode();
+	});
 
 	private void OnThemeChanged(FrameworkElement sender, object args) => BuildScene();
 
@@ -232,6 +254,7 @@ public sealed partial class AmbientBackdropView : UserControl
 	private void BuildScene()
 	{
 		StopSceneMotion();
+		_sceneSettled = false;
 		SkyArt.Children.Clear();
 		_stars.Clear();
 		_sun = null;
@@ -444,7 +467,7 @@ public sealed partial class AmbientBackdropView : UserControl
 	/// <summary>The scene's slow life (Full mode, window active): starbursts glint, the sun's rings breathe, the hills sway.</summary>
 	private void UpdateSceneMotion()
 	{
-		var want = MotionNow && _scene != DuskSceneKind.None;
+		var want = MovesScene(_scene, MotionNow, _sceneSettled);
 		if (want == _sceneMoving)
 		{
 			return;
@@ -457,6 +480,13 @@ public sealed partial class AmbientBackdropView : UserControl
 		}
 
 		_sceneMoving = true;
+		_settle ??= DispatcherQueue.CreateTimer();
+		_settle.Stop();
+		_settle.Interval = SceneMotionDuration;
+		_settle.IsRepeating = false;
+		_settle.Tick -= OnSettle;
+		_settle.Tick += OnSettle;
+		_settle.Start();
 		var compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
 		var ease = compositor.CreateCubicBezierEasingFunction(new Vector2(0.45f, 0f), new Vector2(0.55f, 1f));
 		Vector3KeyFrameAnimation Loop(Vector3 from, Vector3 to, double seconds)
@@ -493,8 +523,40 @@ public sealed partial class AmbientBackdropView : UserControl
 		}
 	}
 
+	/// <summary>The full scene's time is up: each moving part eases to its rest pose (no jump mid-cycle), then nothing moves.</summary>
+	private void OnSettle(DispatcherQueueTimer sender, object args)
+	{
+		_settle?.Stop();
+		_sceneSettled = true;
+		_sceneMoving = false;
+		var compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
+		void Ease(Visual visual, string property, Vector3 rest)
+		{
+			var home = compositor.CreateVector3KeyFrameAnimation();
+			home.InsertKeyFrame(1, rest);
+			home.Duration = TimeSpan.FromMilliseconds(1200);
+			visual.StartAnimation(property, home);
+		}
+
+		foreach (var hill in new UIElement[] { FarHill, MesaHill, NearHill })
+		{
+			Ease(ElementCompositionPreview.GetElementVisual(hill), "Translation", Vector3.Zero);
+		}
+
+		if (_sun is not null)
+		{
+			Ease(ElementCompositionPreview.GetElementVisual(_sun), "Scale", Vector3.One);
+		}
+
+		foreach (var star in _stars)
+		{
+			Ease(ElementCompositionPreview.GetElementVisual(star), "Scale", Vector3.One);
+		}
+	}
+
 	private void StopSceneMotion()
 	{
+		_settle?.Stop();
 		_sceneMoving = false;
 		foreach (var hill in new UIElement[] { FarHill, MesaHill, NearHill })
 		{
