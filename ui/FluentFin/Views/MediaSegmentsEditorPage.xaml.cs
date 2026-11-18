@@ -1,7 +1,7 @@
 using CommunityToolkit.WinUI;
+using FluentFin.Dialogs;
 using FluentFin.ViewModels;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 
 
 namespace FluentFin.Views;
@@ -13,11 +13,13 @@ public sealed partial class MediaSegmentsEditorPage : Page
 	public MediaSegmentsEditorPage()
 	{
 		InitializeComponent();
+		// Nixie 1.2.0 (admin, D90): Delete segment asks here, Cancel the default
+		ViewModel.Confirm = DestructiveConfirm.AskInMainWindow;
 	}
 
 	private void UpdateTime(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
 	{
-		if (sender is not RepeatButton b)
+		if (sender is not Button b)
 		{
 			return;
 		}

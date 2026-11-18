@@ -165,26 +165,28 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task DeleteSubtitle(BaseItemDto dto, MediaStream stream)
+	// Nixie 1.2.0 (admin): the deletes say whether the server did it (the dialogs drop the row only then)
+	public async Task<bool> DeleteSubtitle(BaseItemDto dto, MediaStream stream)
 	{
 		if (dto.Id is not { } id)
 		{
-			return;
+			return false;
 		}
 
 		if (stream.Index is null)
 		{
-			return;
+			return false;
 		}
 
 		try
 		{
 			await _jellyfinApiClient.Videos[id].Subtitles[stream.Index.Value].DeleteAsync();
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
 
@@ -300,20 +302,22 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task DeleteImage(BaseItemDto dto, ImageInfo info)
+	public async Task<bool> DeleteImage(BaseItemDto dto, ImageInfo info)
 	{
 		if (dto.Id is not { } id || info.ImageType is not { } type || info.ImageIndex is not { } index)
 		{
-			return;
+			return false;
 		}
 
 		try
 		{
 			await _jellyfinApiClient.Items[id].Images[type.ToString()][index].DeleteAsync();
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
+			return false;
 		}
 	}
 
@@ -416,7 +420,7 @@ public partial class JellyfinClient
 		await AddApiKey(response.URI).PostJsonAsync(metadata);
 	}
 
-	public async Task CreateMediaSegment(MediaSegmentDto segmentDto)
+	public async Task<bool> CreateMediaSegment(MediaSegmentDto segmentDto)
 	{
 		try
 		{
@@ -432,15 +436,16 @@ public partial class JellyfinClient
 					segmentDto.StartTicks,
 					segmentDto.EndTicks,
 				});
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
 
-	public async Task DeleteMediaSegment(Guid segmentId)
+	public async Task<bool> DeleteMediaSegment(Guid segmentId)
 	{
 		try
 		{
@@ -448,11 +453,12 @@ public partial class JellyfinClient
 				.AppendPathSegment($"/MediaSegmentsApi/{segmentId:N}")
 				.SetQueryParam("ApiKey", _token)
 				.DeleteAsync();
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
 

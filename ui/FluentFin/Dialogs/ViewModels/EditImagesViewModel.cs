@@ -3,14 +3,28 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DynamicData;
+using FluentFin.Core;
+using FluentFin.Core.Admin;
 using FluentFin.Core.Contracts.Services;
 using Jellyfin.Sdk.Generated.Models;
 using ReactiveUI;
 
 namespace FluentFin.Dialogs.ViewModels;
 
+/// <remarks>
+/// Nixie 1.2.0 (admin, button review D50 / D53): Delete image deleted on the server at once; it now asks first (<see cref="Confirm"/>,
+/// a flyout at the button: Cancel has the focus) and the tile goes only when the server deleted it. Back returns to the image
+/// list (it searched again and stayed in the results).
+/// </remarks>
 public partial class EditImagesViewModel(IJellyfinClient jellyfinClient) : ObservableObject, IHandleClose, IBaseItemDialogViewModel
 {
+	/// <summary>Asks before a destructive action; true only when the user confirmed. Unset (nobody to ask), nothing happens.</summary>
+	public Func<ConfirmPrompt, Task<bool>>? Confirm { get; set; }
+
+	/// <summary>Why the last change did not go through; empty otherwise.</summary>
+	[ObservableProperty]
+	public partial string Error { get; set; } = "";
+
 	[ObservableProperty]
 	public partial ObservableCollection<ImageInfoEx> Images { get; set; } = [];
 
@@ -130,7 +144,11 @@ public partial class EditImagesViewModel(IJellyfinClient jellyfinClient) : Obser
 	private async Task SwitchView(EditImagesViewModelState state)
 	{
 		State = state;
-		await SearchImages();
+		// D50: only the search view searches (Back to the list searched again, and the search put the results back)
+		if (state == EditImagesViewModelState.Search)
+		{
+			await SearchImages();
+		}
 	}
 
 	[RelayCommand]
@@ -156,15 +174,22 @@ public partial class EditImagesViewModel(IJellyfinClient jellyfinClient) : Obser
 	}
 
 	[RelayCommand]
-	private async Task DeleteImage(ImageInfoEx info)
+	private async Task DeleteImage(ImageInfoEx? info)
 	{
-		if (Item is null || info is null)
+		if (Item is null || info is null || Confirm is not { } confirm || !await confirm(AdminPrompts.DeleteImage(Item.Name, info.ImageType?.ToString())))
 		{
 			return;
 		}
 
-		await jellyfinClient.DeleteImage(Item, info);
-		Images.Remove(info);
+		Error = "";
+		if (await jellyfinClient.DeleteImage(Item, info))
+		{
+			Images.Remove(info);
+		}
+		else
+		{
+			Error = "The server didn't delete the image. Nothing changed.";
+		}
 	}
 
 	private static List<ImageType?> GetAllSupportedImages(IEnumerable<ImageProviderInfo> providers)

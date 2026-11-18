@@ -117,7 +117,8 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<List<ImageInfo>> GetImages(BaseItemDto dto);
 
-		Task DeleteImage(BaseItemDto dto, ImageInfo info);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> DeleteImage(BaseItemDto dto, ImageInfo info);
 
 		Task<List<ImageProviderInfo>> GetImageProviders(BaseItemDto dto);
 
@@ -129,7 +130,8 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task DownloadSubtitle(BaseItemDto dto, RemoteSubtitleInfo info);
 
-		Task DeleteSubtitle(BaseItemDto dto, MediaStream stream);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> DeleteSubtitle(BaseItemDto dto, MediaStream stream);
 
 		Task RefreshMetadata(Guid id, RefreshMetadataInfo info);
 
@@ -139,9 +141,11 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<MediaSegmentDtoQueryResult?> GetMediaSegments(BaseItemDto dto, MediaSegmentType[]? types = null);
 
-		Task CreateMediaSegment(MediaSegmentDto segmentDto);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> CreateMediaSegment(MediaSegmentDto segmentDto);
 
-		Task DeleteMediaSegment(Guid segmentId);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> DeleteMediaSegment(Guid segmentId);
 
 		Task<SystemInfo?> GetSystemInfo();
 

@@ -4,6 +4,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DynamicData;
 using FluentFin.Contracts.ViewModels;
+using FluentFin.Core;
+using FluentFin.Core.Admin;
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.Settings;
 using Jellyfin.Sdk.Generated.Models;
@@ -11,8 +13,16 @@ using ReactiveUI;
 
 namespace FluentFin.ViewModels;
 
+/// <remarks>
+/// Nixie 1.2.0 (admin, button review D85-D90): Delete asks first, naming the segment (Cancel the default), and the card goes
+/// only when the server deleted it; "Save segment" keeps the segment's id after creating it, so a second save replaces it
+/// instead of adding a copy. The buttons that read or drive the player here (Play, Set start / end to now) are hidden with the
+/// mpv player, where they did nothing or wrote 0.
+/// </remarks>
 public partial class MediaSegmentsEditorViewModel(IJellyfinClient jellyfinClient, ISettings settings) : ObservableObject, INavigationAware
 {
+	/// <summary>Asks before a destructive action; true only when the user confirmed. Unset (nobody to ask), nothing happens.</summary>
+	public Func<ConfirmPrompt, Task<bool>>? Confirm { get; set; }
 
 	[ObservableProperty]
 	public partial PlaylistViewModel Playlist { get; set; } = new();
@@ -21,7 +31,14 @@ public partial class MediaSegmentsEditorViewModel(IJellyfinClient jellyfinClient
 	public partial IMediaPlayerController? MediaPlayer { get; set; }
 
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(PlayerButtonsWork), nameof(PlayerButtonsVisibility))]
 	public partial MediaPlayerType MediaPlayerType { get; set; }
+
+	/// <summary>D86-D88: the page's player answers Play and its position (not with mpv, which plays in its own window).</summary>
+	public bool PlayerButtonsWork => MediaPlayerType != MediaPlayerType.Mpv;
+
+	/// <summary>For the segment cards' {Binding} (a template bound to each segment cannot x:Bind the page).</summary>
+	public Microsoft.UI.Xaml.Visibility PlayerButtonsVisibility => PlayerButtonsWork ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
 	public ObservableCollection<MediaSegmentViewModel> Segments { get; } = [];
 	public long CurrentTimeTicks { get; set; }
@@ -145,25 +162,42 @@ public partial class MediaSegmentsEditorViewModel(IJellyfinClient jellyfinClient
 	}
 
 	[RelayCommand]
-	private async Task DeleteSegment(MediaSegmentViewModel vm)
+	private async Task DeleteSegment(MediaSegmentViewModel? vm)
 	{
-		Segments.Remove(vm);
-
-		if (vm.Id is { } id)
+		if (vm is null)
 		{
-			await jellyfinClient.DeleteMediaSegment(id);
+			return;
+		}
+
+		// a segment never saved is only on this page: it goes without a question
+		if (vm.Id is not { } id)
+		{
+			Segments.Remove(vm);
+			return;
+		}
+
+		if (Confirm is not { } confirm || !await confirm(AdminPrompts.DeleteSegment(vm.Type?.ToString(), Playlist.SelectedItem?.Dto?.Name)))
+		{
+			return;
+		}
+
+		if (await jellyfinClient.DeleteMediaSegment(id))
+		{
+			Segments.Remove(vm);
 		}
 	}
 
 	[RelayCommand]
 	private async Task SubmitSegment(MediaSegmentViewModel vm)
 	{
-		if (vm.Id is { } id)
+		if (vm.Id is { } id && !await jellyfinClient.DeleteMediaSegment(id))
 		{
-			await jellyfinClient.DeleteMediaSegment(id);
+			return;
 		}
 
-		await jellyfinClient.CreateMediaSegment(vm.ToDto());
+		var dto = vm.ToDto();
+		// D89: the id it was created with, so the next save replaces this segment instead of adding a copy
+		vm.Id = await jellyfinClient.CreateMediaSegment(dto) ? dto.Id : null;
 	}
 
 	[RelayCommand]

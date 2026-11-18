@@ -14,7 +14,7 @@
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
     x:Name="Page"
-    Title="Edit Images"
+    Title="Edit images"
     CloseButtonText="Close"
     IsSecondaryButtonEnabled="True"
     SecondaryButtonCommand="{x:Bind ViewModel.SwitchViewCommand}"
@@ -55,8 +55,18 @@
         </Style>
     </ContentDialog.Resources>
 
+    <Grid Width="720" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <InfoBar
+            IsClosable="False"
+            IsOpen="{x:Bind local:EditImagesDialog.HasText(ViewModel.Error), Mode=OneWay}"
+            Message="{x:Bind ViewModel.Error, Mode=OneWay}"
+            Severity="Error" />
     <ctk:SwitchPresenter
-        Width="720"
+        Grid.Row="1"
         MinHeight="300"
         TargetType="vm:EditImagesViewModelState"
         Value="{x:Bind ViewModel.State, Mode=OneWay}">
@@ -112,22 +122,23 @@
                                                 <Run Text="{x:Bind Width}" /><Run Text=" × " /><Run Text="{x:Bind Height}" />
                                             </TextBlock>
                                         </StackPanel>
+                                        <!--  named for the image they act on; Delete (role: Destructive Compact) asks first, in a flyout where Cancel has the focus (D53)  -->
                                         <Button
                                             Grid.Column="1"
-                                            AutomationProperties.Name="Search for replacement"
+                                            AutomationProperties.Name="{x:Bind local:EditImagesDialog.SearchName(ImageType)}"
                                             Command="{Binding ElementName=Page, Path=ViewModel.SearchCommand}"
                                             CommandParameter="{x:Bind}"
-                                            Content="{ui:FontIcon Glyph=&#xE721;, FontSize=14}"
+                                            Content="{ui:FontIcon Glyph=&#xE721;, FontSize=16}"
                                             Style="{StaticResource TileIconButtonStyle}"
-                                            ToolTipService.ToolTip="Search for replacement" />
+                                            ToolTipService.ToolTip="Search for a replacement" />
                                         <Button
                                             Grid.Column="2"
-                                            AutomationProperties.Name="Delete image"
+                                            AutomationProperties.Name="{x:Bind local:EditImagesDialog.DeleteName(ImageType)}"
                                             Command="{Binding ElementName=Page, Path=ViewModel.DeleteImageCommand}"
                                             CommandParameter="{x:Bind}"
-                                            Content="{ui:FontIcon Glyph=&#xE74D;, FontSize=14}"
+                                            Content="{ui:FontIcon Glyph=&#xE74D;, FontSize=16}"
                                             Style="{StaticResource TileIconButtonStyle}"
-                                            ToolTipService.ToolTip="Delete image" />
+                                            ToolTipService.ToolTip="Delete image…" />
                                     </Grid>
                                 </Grid>
                             </DataTemplate>
@@ -240,4 +251,5 @@
             </Grid>
         </ctk:Case>
     </ctk:SwitchPresenter>
+    </Grid>
 </ContentDialog>

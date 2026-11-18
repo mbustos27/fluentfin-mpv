@@ -3,14 +3,27 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DevWinUI;
+using FluentFin.Core;
+using FluentFin.Core.Admin;
 using FluentFin.Core.Contracts.Services;
 using Jellyfin.Sdk.Generated.Models;
 
 namespace FluentFin.Dialogs.ViewModels;
 
+/// <remarks>
+/// Nixie 1.2.0 (admin, button review D62): Delete subtitle removed the row and deleted on the server at once; it now asks first
+/// (<see cref="Confirm"/>, a flyout at the button: Cancel has the focus), and the row goes only when the server deleted it.
+/// </remarks>
 public partial class EditSubtitlesViewModel(IJellyfinClient jellyfinClient) : ObservableObject, IHandleClose, IBaseItemDialogViewModel
 {
 	public bool CanClose { get; set; }
+
+	/// <summary>Asks before a destructive action; true only when the user confirmed. Unset (nobody to ask), nothing happens.</summary>
+	public Func<ConfirmPrompt, Task<bool>>? Confirm { get; set; }
+
+	/// <summary>Why the last change did not go through; empty otherwise.</summary>
+	[ObservableProperty]
+	public partial string Error { get; set; } = "";
 
 	[ObservableProperty]
 	public partial BaseItemDto? Item { get; set; }
@@ -66,20 +79,26 @@ public partial class EditSubtitlesViewModel(IJellyfinClient jellyfinClient) : Ob
 	}
 
 	[RelayCommand]
-	public async Task DeleteSubtitle(MediaStream info)
+	public async Task DeleteSubtitle(MediaStream? info)
 	{
-		if (Item is null)
+		if (Item is null || info is null || info.IsExternal != true)
 		{
 			return;
 		}
 
-		if (info.IsExternal == false)
+		if (Confirm is not { } confirm || !await confirm(AdminPrompts.DeleteSubtitle(Item.Name, info.DisplayTitle)))
 		{
 			return;
 		}
 
-		Subtitles.Remove(info);
-
-		await jellyfinClient.DeleteSubtitle(Item, info);
+		Error = "";
+		if (await jellyfinClient.DeleteSubtitle(Item, info))
+		{
+			Subtitles.Remove(info);
+		}
+		else
+		{
+			Error = "The server didn't delete the subtitle. Nothing changed.";
+		}
 	}
 }
