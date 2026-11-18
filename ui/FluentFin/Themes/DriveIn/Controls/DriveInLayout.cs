@@ -122,13 +122,13 @@ public sealed record DriveInLayout(
 	{
 		width = Math.Max(320, width);
 		height = Math.Max(320, height);
-		var ground = Math.Round(height * 0.815);
-		// the shared sign-in form is centred in the window: the screen frames it, centred too, its legs down to the ground
-		var screenHeight = Math.Round(Math.Clamp(height * 0.5, 560, 720));
-		var screenWidth = Math.Round(Math.Min(screenHeight * 1.32, width - 80));
-		var top = Math.Round((height - screenHeight) / 2);
-		top = Math.Max(40, Math.Min(top, ground - 24 - screenHeight));
+		// the shared sign-in form is centred in the window: the screen frames it, centred too (tall enough for the form), and
+		// the ground goes down below the screen's legs on a short window
+		var screenHeight = Math.Round(Math.Clamp(height * 0.55, 600, 720));
+		var screenWidth = Math.Round(Math.Min(screenHeight * 1.3, width - 80));
+		var top = Math.Max(40, Math.Round((height - screenHeight) / 2));
 		var screen = new Rect(Math.Round((width - screenWidth) / 2), top, screenWidth, screenHeight);
+		var ground = Math.Max(Math.Round(height * 0.815), screen.Bottom + 24);
 		var radius = Math.Round(Math.Clamp(height * 0.14, 70, 170));
 		var sun = new Point(Math.Round(width * 0.81), ground - radius * 0.22);
 		var k = Math.Clamp(height / 1080, 0.6, 1.3);

@@ -193,7 +193,11 @@
         <dc:MarqueeSign Text="{Binding}" />
     </DataTemplate>
 
-    <!--  a poster card (the Library, "New in" rows): the shared card, its Narrator name and menu unchanged  -->
+    <!--
+        a poster card: the shared card, its Narrator name and menu unchanged. These two templates read their item from the
+        DataContext (dc:DriveInCards.Item), which a ListView or GridView gives; a row's ItemsRepeater gives none, so the
+        theme's own rows use x:Bind copies of them (DriveInHomePage's DriveInStill and DriveInPoster)
+    -->
     <DataTemplate x:Key="PosterTemplate">
         <lc:BaseItemDtoCard
             Width="225"
