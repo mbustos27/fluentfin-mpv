@@ -6,7 +6,20 @@ Nixie now has **four layouts to choose from**: not new colours on the same pages
 the movie and episode pages, Library, the player's controls and the sign-in screen laid out anew for each.
 
 - **Four layout themes.**
-  - **Drive-in** (the default for new installs): THEME-DETAILS-DRIVEIN
+  - **Drive-in** (the default for new installs): a drive-in at dusk, drawn in vector shapes: a banded sky, the striped sun,
+    hills, 1950s cars and a motel sign.
+    - **Home:** the featured title on the **outdoor screen**, Resume focused as you arrive and the time left in
+      **nixie tubes**; the motel sign's neon **Now showing** and the **Coming up** board of your next episodes, one
+      button each; **marquee** row headers.
+    - **Series and seasons:** the title and actions on a marquee board over the backdrop, the **SHOWTIMES** board of the
+      whole season (Enter plays an episode) and the seasons as **nixie tubes**, the one shown lit. Films and episodes
+      sit under the same board, Play with the time left in tubes.
+    - **Library:** a **letter board** with the library's name on a marquee, its count in tubes and the A to Z as letter
+      tiles (letters no title starts with stay dimmed).
+    - **The player:** the bottom bar is a **nixie console** over the video (elapsed, remaining and the volume in tubes,
+      the seek bar a lit neon tube), and the top bar shows when the film ends.
+    - **Sign-in:** the form on the screen of a drive-in **lot**.
+    - **Compact Home** (below) folds the scene into a short strip.
   - **Cinematic:** THEME-DETAILS-CINEMATIC
   - **Editorial:** a magazine for a big library: big type, a smaller hero and more titles per screen,
     with a sunset rule along the foot of the top bar.
