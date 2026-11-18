@@ -34,6 +34,12 @@
             <!--  selected pressed  -->
             <StaticResource x:Key="RailNavigationViewItemForegroundSelectedPressed" ResourceKey="TextFillColorPrimaryBrush" />
             <StaticResource x:Key="RailNavigationViewItemBackgroundSelectedPressed" ResourceKey="GlassSelectedOverlayBrush" />
+            <!--
+                1.2.0: the selected item's icon and indicator. WinUI draws them in the accent fill, hot pink, which has only 2.7:1 on the
+                selected backplate (the white selection overlay on the rail's glass); the light pink of the accent on artwork has
+                4.0:1 (measured on the shots). Light keeps WinUI's crimson (4.3:1), high contrast its own.
+            -->
+            <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#FF9EB1" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">

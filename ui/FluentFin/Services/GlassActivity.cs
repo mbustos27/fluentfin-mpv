@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
 namespace FluentFin.Services;
@@ -10,14 +11,15 @@ namespace FluentFin.Services;
 public static class GlassActivity
 {
 	private static Window? _window;
+	private static ILogger? _log;
 
 	/// <summary>Whether the main window is the active window (true until told otherwise).</summary>
 	public static bool IsActive { get; private set; } = true;
 
 	public static event EventHandler? Changed;
 
-	/// <summary>Follow <paramref name="window"/>'s activation. Once; later calls are ignored.</summary>
-	public static void Attach(Window window)
+	/// <summary>Follow <paramref name="window"/>'s activation (logged on each change). Once; later calls are ignored.</summary>
+	public static void Attach(Window window, ILogger? log = null)
 	{
 		if (_window is not null)
 		{
@@ -25,6 +27,7 @@ public static class GlassActivity
 		}
 
 		_window = window;
+		_log = log;
 		window.Activated += (_, e) => Set(e.WindowActivationState != WindowActivationState.Deactivated);
 	}
 
@@ -39,6 +42,7 @@ public static class GlassActivity
 		}
 
 		IsActive = active;
+		_log?.LogInformation("[glass] window {State}: the light edge, the glow and the backdrop's motion follow", active ? "active" : "in the background");
 		Changed?.Invoke(null, EventArgs.Empty);
 	}
 }

@@ -115,7 +115,7 @@ public sealed partial class AmbientBackdropView : UserControl
 		TitleTint.Changed += OnTintChanged;
 		GlassActivity.Changed += OnActivityChanged;
 		ActualThemeChanged += OnThemeChanged;
-		GlassActivity.Attach(App.MainWindow);
+		GlassActivity.Attach(App.MainWindow, App.GetService<Microsoft.Extensions.Logging.ILogger<AmbientBackdropView>>());
 		// the window's setup frame (the server page, sign-in, then the shell): the full scene until the shell is in it
 		_setupFrame = (Parent as Panel)?.Children.OfType<Frame>().FirstOrDefault();
 		if (_setupFrame is not null)

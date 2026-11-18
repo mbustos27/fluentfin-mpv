@@ -118,6 +118,12 @@ public sealed class PanelSheen : Grid
 		var point = e.GetCurrentPoint(this).Position;
 		_sprite!.Offset = new Vector3((float)point.X - Diameter / 2, (float)point.Y - Diameter / 2, 0);
 		_edgeBrush!.EllipseCenter = new Vector2((float)point.X, (float)point.Y);
+		// the theme can change while the app runs (Settings' theme choice): the edge's colour follows it
+		var edge = EdgeColor(ActualTheme == ElementTheme.Light);
+		if (_edgeBrush.ColorStops[0].Color != edge)
+		{
+			_edgeBrush.ColorStops[0].Color = edge;
+		}
 		if (_container.Opacity < 1)
 		{
 			Fade(1, 160);
