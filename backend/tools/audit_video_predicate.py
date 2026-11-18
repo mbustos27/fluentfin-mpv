@@ -62,6 +62,9 @@ DECLARED = {
     ("player.py", "update"): "playback; the item being polled",
     ("player.py", "watched_skip"): "playback; acts on the current item",
     ("player.py", "unwatched_quit"): "playback; acts on the current item",
+    # FluentFin MPV (1.2.0): widen_queue_soon's background work
+    ("player.py", "widen"): (
+        "playback; the queue is changed only while its item still plays"),
     ("player.py", "get_video_attr"): "playback; reads the current item",
     ("player.py", "playback_started"): (
         "playback; a start that failed owes no stop_cmd. Audio counts"),

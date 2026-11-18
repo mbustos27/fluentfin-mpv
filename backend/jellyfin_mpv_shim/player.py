@@ -4757,7 +4757,7 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         if parent is None or parent.has_prev:
             return
 
-        def work():
+        def widen():
             try:
                 earlier = self._earlier_episodes(video)
                 if not earlier:
@@ -4770,9 +4770,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
                           exc_info=True)
 
         if run is not None:
-            run(work)
+            run(widen)
         else:
-            threading.Thread(target=work, name="earlier-episodes",
+            threading.Thread(target=widen, name="earlier-episodes",
                              daemon=True).start()
 
     @synchronous("_lock")

@@ -367,7 +367,7 @@ def warn_if_mpv_logs(confdir=None):
     """fluentfin-mpv (1.2.0): a ``log-file`` in the backend's ``mpv.conf``
     makes mpv log verbosely, and mpv then writes the server request headers
     the shim sets -- the access token with them -- into that file
-    (docs/KNOWN-ISSUES.md). Said once at each start, in the backend's log;
+    (the app's known issues). Said once at each start, in the backend's log;
     the token itself is never logged here. True when it was said."""
     from . import fluentfin_osc
 
