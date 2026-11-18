@@ -64,7 +64,15 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public const int SmallSeekSeconds = 5;
 	public const int LargeSeekSeconds = 10;
 	public const int SkipBackSeconds = 10;
+
+	/// <summary>Shift+Left and Shift+Right, 30 s.</summary>
 	public const int SkipForwardSeconds = 30;
+
+	/// <summary>
+	/// 1.2.0 (button review P8): the bar's forward button, 10 s, as its back button and as L and J (Netflix's 10 / 10); it
+	/// was +30 s, matching no plain key.
+	/// </summary>
+	public const int ForwardButtonSeconds = 10;
 	/// <summary>The default of <see cref="Step"/>.</summary>
 	public const int VolumeStep = 5;
 
@@ -384,6 +392,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_skipped = null;
 		UpdateSkip();
 		_isEpisode = item.Type == "Episode";
+		OnPropertyChanged(nameof(PreviousName));
+		OnPropertyChanged(nameof(NextButtonName));
 		_nextKnown = false;
 		_nextItemId = null;
 		_nextHasPrevious = false;
@@ -1063,17 +1073,48 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		? string.Create(CultureInfo.InvariantCulture, $"Next episode in {seconds}")
 		: NextEpisode;
 
-	/// <summary>The prompt's accessible name: what it does, and what plays (not the seconds: a name that changes every second is read again).</summary>
-	public string NextPromptName => NextItemTitle is { } title ? $"Play the next episode now: {title}" : "Play the next episode now";
+	/// <summary>
+	/// The prompt's accessible name (button review P21): its visible text first, as WCAG 2.5.3 asks, so voice control finds
+	/// it by what it says ("Next episode in 8: S1E2 · Title").
+	/// </summary>
+	public string NextPromptName => NextItemTitle is { } title ? $"{NextPromptText}: {title}" : NextPromptText;
+
+	/// <summary>
+	/// The countdown's other button (button review P20, 1.2.0): it does not cancel anything the viewer asked for, it keeps
+	/// this item on. "Watch credits" while the countdown runs in marked end credits, else "Keep watching".
+	/// </summary>
+	public string CancelNextText => CreditsStart(DurationTicks, _creditsStarts) is long credits && PositionTicks >= credits
+		? "Watch credits"
+		: "Keep watching";
+
+	/// <summary>Its name and tooltip: the label, then what it does.</summary>
+	public string CancelNextName => $"{CancelNextText}: the next episode won't start by itself";
 
 	partial void OnNextCountdownChanged(int? value)
 	{
 		// the view announces the start once (IsCountingDown), not each second
 		IsCountingDown = value is not null;
 		OnPropertyChanged(nameof(NextPromptText));
+		OnPropertyChanged(nameof(NextPromptName));
 	}
 
-	partial void OnNextItemTitleChanged(string? value) => OnPropertyChanged(nameof(NextPromptName));
+	partial void OnIsCountingDownChanged(bool value)
+	{
+		OnPropertyChanged(nameof(CancelNextText));
+		OnPropertyChanged(nameof(CancelNextName));
+	}
+
+	partial void OnNextItemTitleChanged(string? value)
+	{
+		OnPropertyChanged(nameof(NextPromptName));
+		OnPropertyChanged(nameof(NextButtonName));
+	}
+
+	/// <summary>The transport's Previous (button review P5): "Previous episode" in a run of episodes, else "Previous".</summary>
+	public string PreviousName => _isEpisode ? "Previous episode" : "Previous";
+
+	/// <summary>The transport's Next (button review P9): "Next episode: S1E2 · Title" once the next is named.</summary>
+	public string NextButtonName => (_isEpisode ? "Next episode" : "Next") + (NextItemTitle is { } title ? $": {title}" : "");
 
 	/// <summary>
 	/// The countdown's span in ticks: when an Outro marks the credits, from their start for <see cref="CountdownSeconds"/>
@@ -1717,7 +1758,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		return virtualKey switch
 		{
 			Keys.Space or Keys.K or Keys.MediaPlayPause when !control && !shift => MpvControlsAction.TogglePause,
-			// the bar's -10 s is J and Ctrl+Left, its +30 s is Shift+Right (Shift+Left the same far, the other way)
+			// the bar's -10 s is J and Ctrl+Left, its +10 s L and Ctrl+Right; Shift+Left and Shift+Right are 30 s
 			Keys.Left when shift => control ? null : MpvControlsAction.SeekBackFar,
 			Keys.Right when shift => control ? null : MpvControlsAction.SeekForwardFar,
 			Keys.Left => control ? MpvControlsAction.SeekBackLong : MpvControlsAction.SeekBack,

@@ -772,11 +772,11 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnPlayPauseClick(object sender, RoutedEventArgs e) => _ = Controls?.TogglePause();
 
-	private void OnShortcutsClick(object sender, RoutedEventArgs e) => FluentFin.Services.WindowShortcuts.ShowHelp(XamlRoot);
 
 	private void OnSkipBackClick(object sender, RoutedEventArgs e) => _ = Controls?.SeekBy(-MpvControlsViewModel.SkipBackSeconds);
 
-	private void OnSkipForwardClick(object sender, RoutedEventArgs e) => _ = Controls?.SeekBy(MpvControlsViewModel.SkipForwardSeconds);
+	// 1.2.0 (button review P8): +10 s, as L (it was +30 s)
+	private void OnSkipForwardClick(object sender, RoutedEventArgs e) => _ = Controls?.SeekBy(MpvControlsViewModel.ForwardButtonSeconds);
 
 	private void OnNextClick(object sender, RoutedEventArgs e) => _ = Controls?.Next();
 
@@ -825,6 +825,32 @@ public sealed partial class MpvPlayerControls : UserControl
 		{
 			_fillingSubtitles = false;
 		}
+	}
+
+	/// <summary>
+	/// 1.2.0 (seen at 1100 px): the selections set while the panel opened did not show (its radio buttons are made only
+	/// once it is open), so neither list said what plays; they are set again now, still without choosing anything.
+	/// </summary>
+	private void OnTracksMenuOpened(object? sender, object e)
+	{
+		OnMenuOpened(sender, e);
+		_fillingSubtitles = true;
+		try
+		{
+			Reselect(AudioTracks, _audioChoices);
+			Reselect(SubtitleTracks, _subtitleChoices);
+		}
+		finally
+		{
+			_fillingSubtitles = false;
+		}
+	}
+
+	private static void Reselect(RadioButtons list, IReadOnlyList<MpvTrackChoice> choices)
+	{
+		var at = choices.ToList().FindIndex(c => c.IsSelected);
+		list.SelectedIndex = -1;
+		list.SelectedIndex = at;
 	}
 
 	private static void Fill(RadioButtons list, IReadOnlyList<MpvTrackChoice> choices)
@@ -909,8 +935,20 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	public Visibility CollapsedIf(bool value) => value ? Visibility.Collapsed : Visibility.Visible;
 
-	/// <summary>The Next button's and pill's tooltip: what plays next, and its key.</summary>
+	/// <summary>The Next pill's tooltip: what plays next, and its key.</summary>
 	public string NextHint(string next) => $"{next} (Shift+N)";
+
+	/// <summary>A button's tooltip with its key, the key only while it does something (button review P9).</summary>
+	public string KeyHint(string text, string key, bool enabled) => enabled ? $"{text} ({key})" : text;
+
+	/// <summary>The volume button's name (button review P3): the level is the point of it.</summary>
+	public string VolumeName(int volume, bool muted) =>
+		muted ? "Volume, muted" : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Volume, {volume} %");
+
+	/// <summary>The tracks button's tooltip (button review P12): why it does nothing when it is disabled.</summary>
+	public string TracksToolTip(bool hasChoice) => hasChoice ? "Audio and subtitles" : "No other audio or subtitles";
+
+	public bool NotZero(double value) => value != 0;
 
 	/// <summary>The speed button's name: "Playback speed", and the speed when it is not normal.</summary>
 	public string SpeedName(double speed) => PlaybackSpeeds.IsNormal(speed) ? "Playback speed" : $"Playback speed, {PlaybackSpeeds.Text(speed)}";
@@ -946,7 +984,8 @@ public sealed partial class MpvPlayerControls : UserControl
 	// 1.2.0 (the interaction audit, item 14): every button's tooltip names its key
 	public string PlayPauseToolTip(bool paused) => $"{PlayPauseName(paused)} (Space)";
 
-	public string FullScreenToolTip(bool fullScreen) => $"{FullScreenName(fullScreen)} (F)";
+	// button review P19: both keys
+	public string FullScreenToolTip(bool fullScreen) => $"{FullScreenName(fullScreen)} (F, F11)";
 
 	public string MuteToolTip(bool muted) => $"{MuteName(muted)} (M)";
 

@@ -102,7 +102,7 @@ public sealed partial class VideoPlayerPage : Page
 			root.AddHandler(PreviewKeyDownEvent, _rootPreviewKeyDown, handledEventsToo: true);
 		}
 
-		// the loading screen's only control: Enter (its Cancel) leaves before the start goes on; Escape does not (1.2.0)
+		// the loading screen's only control: Enter (its Cancel) or Escape leaves before the start goes on
 		if (ViewModel.IsMpvStarting)
 		{
 			MpvLeaveButton.Focus(FocusState.Programmatic);
@@ -563,8 +563,16 @@ public sealed partial class VideoPlayerPage : Page
 			return;
 		}
 
-		switch (PlayerEscape.For(_mpvFullScreen))
+		switch (PlayerEscape.For(_mpvFullScreen, ViewModel.IsMpvStarting))
 		{
+			case PlayerEscape.Action.CancelStart:
+				// button review P27: on the loading screen Escape is its Cancel again (nothing plays yet)
+				if (ViewModel.LeaveMpvCommand.CanExecute(null))
+				{
+					ViewModel.LeaveMpvCommand.Execute(null);
+				}
+
+				break;
 			case PlayerEscape.Action.LeaveFullScreen:
 				SetMpvFullScreen(false);
 				await ViewModel.OnFullScreenChanged(false);

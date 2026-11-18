@@ -16,8 +16,15 @@ public static class PlayerEscape
 
 		/// <summary>In a window: the controls show; playback goes on.</summary>
 		ShowControls,
+
+		/// <summary>
+		/// While the loading screen shows (nothing plays yet): what its Cancel does, the start abandoned and the page left.
+		/// Button review P27: Escape is the conventional cancel of a wait.
+		/// </summary>
+		CancelStart,
 	}
 
-	/// <summary>Escape's action: there is no "leave" among them.</summary>
-	public static Action For(bool fullScreen) => fullScreen ? Action.LeaveFullScreen : Action.ShowControls;
+	/// <summary>Escape's action: playback is never stopped by it; a start not yet playing is cancelled.</summary>
+	public static Action For(bool fullScreen, bool starting = false) =>
+		starting ? Action.CancelStart : fullScreen ? Action.LeaveFullScreen : Action.ShowControls;
 }

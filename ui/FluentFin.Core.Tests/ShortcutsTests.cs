@@ -136,7 +136,10 @@ public sealed class ShortcutsTests
 	{
 		Assert.Equal(PlayerEscape.Action.LeaveFullScreen, PlayerEscape.For(fullScreen: true));
 		Assert.Equal(PlayerEscape.Action.ShowControls, PlayerEscape.For(fullScreen: false));
-		Assert.Equal([PlayerEscape.Action.LeaveFullScreen, PlayerEscape.Action.ShowControls], Enum.GetValues<PlayerEscape.Action>());
+		// button review P27: on the loading screen (nothing plays yet) it is the Cancel again
+		Assert.Equal(PlayerEscape.Action.CancelStart, PlayerEscape.For(fullScreen: false, starting: true));
+		Assert.Equal(PlayerEscape.Action.CancelStart, PlayerEscape.For(fullScreen: true, starting: true));
+		Assert.Equal([PlayerEscape.Action.LeaveFullScreen, PlayerEscape.Action.ShowControls, PlayerEscape.Action.CancelStart], Enum.GetValues<PlayerEscape.Action>());
 		var sheet = ShortcutCatalog.Sections.SelectMany(s => s.Entries).Single(e => e.Keys == "Esc");
 		Assert.DoesNotContain("leave the player", sheet.Description, StringComparison.OrdinalIgnoreCase);
 	}

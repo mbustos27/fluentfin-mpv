@@ -13,6 +13,16 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <!--  1.2.0 (button review P25, P26): each close button says what it closes  -->
+        <Style x:Key="MpvMessageCloseButtonStyle" BasedOn="{StaticResource InfoBarCloseButtonStyle}" TargetType="Button">
+            <Setter Property="AutomationProperties.Name" Value="Close the error" />
+        </Style>
+        <Style x:Key="MpvNoticeCloseButtonStyle" BasedOn="{StaticResource InfoBarCloseButtonStyle}" TargetType="Button">
+            <Setter Property="AutomationProperties.Name" Value="Close the notice" />
+        </Style>
+    </Page.Resources>
+
     <Grid>
         <controls:MediaPlayerHost
             x:Name="MediaPlayerHost"
@@ -43,6 +53,7 @@
                 <InfoBar
                     x:Name="MpvMessageBar"
                     CloseButtonClick="OnMpvMessageCloseButtonClick"
+                    CloseButtonStyle="{StaticResource MpvMessageCloseButtonStyle}"
                     IsClosable="True"
                     IsOpen="{x:Bind ViewModel.HasMpvMessage, Mode=OneWay}"
                     Message="{x:Bind ViewModel.MpvMessage, Mode=OneWay}"
@@ -52,6 +63,7 @@
                 <InfoBar
                     x:Name="MpvNoticeBar"
                     CloseButtonClick="OnMpvNoticeCloseButtonClick"
+                    CloseButtonStyle="{StaticResource MpvNoticeCloseButtonStyle}"
                     IsClosable="True"
                     IsOpen="{x:Bind ViewModel.HasMpvNotice, Mode=OneWay}"
                     Message="{x:Bind ViewModel.MpvNotice, Mode=OneWay}"

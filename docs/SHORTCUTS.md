@@ -38,8 +38,8 @@ Home page only: N next up, C continue watching (they ignore typing too).
 | Space, K | Play / pause |
 | Left, Right | 5 s back / forward |
 | J, Ctrl+Left | 10 s back (the bar's -10 s button) |
-| L, Ctrl+Right | 10 s forward |
-| Shift+Right | 30 s forward (the bar's +30 s button) |
+| L, Ctrl+Right | 10 s forward (the bar's +10 s button; it was +30 s until 1.2.0) |
+| Shift+Right | 30 s forward |
 | Shift+Left | 30 s back |
 | 0 to 9 (also the number pad) | Jump to that tenth of the video; 0 is the start |
 | Home | Start |
@@ -54,7 +54,7 @@ Home page only: N next up, C continue watching (they ignore typing too).
 | B | Next audio track |
 | Z, X | Subtitles 0.1 s earlier / later (the subtitles menu has the same, with a reset) |
 | F, F11, Alt+Enter | Full screen (Alt+Enter since 1.2.0, the classic Windows players' key) |
-| Esc | Leave full screen. In a window it only shows the controls: it never stops the video or leaves the player (1.2.0; Back, Alt+Left, the Back key and Mouse 4 leave) |
+| Esc | Leave full screen. In a window it only shows the controls: it never stops the video or leaves the player (1.2.0; Back, Alt+Left, the Back key and Mouse 4 leave). On the loading screen it cancels the start, as its Cancel does. |
 
 The mouse: a click on the video pauses or plays at once (1.2.0; 1.1.3 waited the double-click time), a double click is full
 screen and puts the play state back to what it was before its first click, the wheel is volume, Mouse 4 / 5 are back /
