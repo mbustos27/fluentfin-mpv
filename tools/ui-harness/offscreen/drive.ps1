@@ -385,7 +385,7 @@ function Step-Home {
     $views = @($fixture.views)
     # Nixie 1.3.0: a row counts under any of its names in the layout themes (Drive-in's sign says "Coming up", Cinematic's
     # and Editorial's list "Up next", which Editorial also gives Continue Watching's items)
-    $groups = @(, @('Continue Watching', 'Continue watching', 'Up next')) + @(, @('Next Up', 'Coming up', 'Coming Up', 'COMING UP', 'Up next')) +
+    $groups = @(, @('Continue Watching', 'Continue watching', 'Up next', 'UP NEXT')) + @(, @('Next Up', 'Coming up', 'Coming Up', 'COMING UP', 'Up next', 'UP NEXT')) +
         @($views | ForEach-Object { , @("New in $_") })   # Seaglass 1.1.4: the rows are "New in <library>"
     $headers = @($groups | ForEach-Object { $_[0] })
     $names = [string[]]@($groups | ForEach-Object { $_ } | Select-Object -Unique)
@@ -394,7 +394,9 @@ function Step-Home {
     $firstCards = $null; $loaded = $null; $last = $null
     $deadline = [DateTime]::UtcNow.AddSeconds(45)
     while ([DateTime]::UtcNow -lt $deadline) {
-        $n = [OffscreenUi]::CountByClass($script:hwnd, $script:ui.Id, @('BaseItemDtoCard', 'Shimmer'))
+        # 1.3.0: Editorial's posters and stills are cards of their own (the shared card's names, their own classes)
+        $n = [OffscreenUi]::CountByClass($script:hwnd, $script:ui.Id, @('BaseItemDtoCard', 'EditorialPoster', 'EditorialStill', 'Shimmer'))
+        $n['BaseItemDtoCard'] = $n['BaseItemDtoCard'] + $n['EditorialPoster'] + $n['EditorialStill']
         $now = Get-Epoch
         if (-not $firstCards -and $n['BaseItemDtoCard'] -gt 0) { $firstCards = $now }
         $last = $n
