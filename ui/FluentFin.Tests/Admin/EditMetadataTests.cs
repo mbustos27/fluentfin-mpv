@@ -199,4 +199,54 @@ public sealed class EditMetadataTests : IAsyncLifetime
 		_vm.Year = 2004;
 		Assert.False(_vm.HasChanges);
 	}
+
+	/// <summary>Review fix: a failed Save wrote its edits into the loaded item, so after Revert the next Save sent them anyway.</summary>
+	[Fact]
+	public async Task AFailedSave_ThenRevert_ThenAnotherEdit_SendsTheLoadedTitle()
+	{
+		_server.Respond("POST", ItemPath, 500);
+		_vm.Title = "Changed";
+		Assert.False(await _vm.Save());
+		_vm.RevertCommand.Execute(null);
+		_server.Respond("POST", ItemPath, 204);
+		_vm.Overview = "A shorter night.";
+
+		Assert.True(await _vm.Save());
+
+		var sent = _server.Changes[^1].Json;
+		Assert.Equal("Night Train", sent.GetProperty("Name").GetString());
+		Assert.Equal("A shorter night.", sent.GetProperty("Overview").GetString());
+	}
+
+	/// <summary>Review fix: Save sent the item as loaded, overwriting what the server changed while the dialog was open.</summary>
+	[Fact]
+	public async Task Save_KeepsWhatTheServerChanged_WhileTheDialogWasOpen()
+	{
+		_server.Respond("GET", ItemPath, 200, ItemJson.Replace("\"Tags\":[\"festival\"]", "\"Tags\":[\"festival\",\"restored\"]").Replace("\"OfficialRating\":\"PG-13\"", "\"OfficialRating\":\"R\""));
+		_vm.Overview = "A shorter night.";
+
+		Assert.True(await _vm.Save());
+
+		var sent = _server.Changes.Single().Json;
+		Assert.Equal(["festival", "restored"], sent.GetProperty("Tags").EnumerateArray().Select(x => x.GetString()));
+		Assert.Equal("R", sent.GetProperty("OfficialRating").GetString());
+		Assert.Equal("A shorter night.", sent.GetProperty("Overview").GetString());
+	}
+
+	/// <summary>Review fix: clearing the title and saving sent Name: null.</summary>
+	[Fact]
+	public async Task ABlankTitle_CannotBeSaved_AndTheDialogSaysWhy()
+	{
+		_vm.Title = "  ";
+
+		Assert.True(_vm.HasChanges);
+		Assert.True(_vm.TitleIsBlank);
+		Assert.False(_vm.CanSave);
+		Assert.False(await _vm.Save());
+		Assert.Equal(EditMetadataViewModel.BlankTitleMessage, _vm.Error);
+		Assert.Empty(_server.Changes);
+
+		_vm.Title = "Night Train";
+		Assert.False(_vm.TitleIsBlank);
+	}
 }

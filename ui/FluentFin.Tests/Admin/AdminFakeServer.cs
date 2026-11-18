@@ -30,6 +30,7 @@ internal sealed class AdminFakeServer : IDisposable
 	private readonly HttpListener _listener = new();
 	private readonly ConcurrentDictionary<string, (int Status, string Body)> _responses = new(StringComparer.OrdinalIgnoreCase);
 	private readonly ConcurrentQueue<AdminRequest> _requests = new();
+	private readonly ConcurrentQueue<(string Method, string Prefix, Func<AdminRequest, (int Status, string Body)> Handle)> _handlers = new();
 	private Task? _loop;
 
 	public string BaseUrl { get; private set; } = "";
@@ -41,6 +42,13 @@ internal sealed class AdminFakeServer : IDisposable
 
 	/// <summary>The answer to <paramref name="method"/> on <paramref name="path"/> (exact path, no query).</summary>
 	public void Respond(string method, string path, int status, string body = "") => _responses[$"{method.ToUpperInvariant()} {path}"] = (status, body);
+
+	/// <summary>
+	/// An answer worked out per request, for every path starting with <paramref name="pathPrefix"/> (a server with state, such as
+	/// one that renumbers images after a delete, as Jellyfin does). The latest handler that matches wins over Respond.
+	/// </summary>
+	public void Handle(string method, string pathPrefix, Func<AdminRequest, (int Status, string Body)> handle) =>
+		_handlers.Enqueue((method.ToUpperInvariant(), pathPrefix, handle));
 
 	public void Start()
 	{
@@ -100,8 +108,11 @@ internal sealed class AdminFakeServer : IDisposable
 
 			var method = context.Request.HttpMethod.ToUpperInvariant();
 			var signedIn = (context.Request.Headers["Authorization"] ?? "").Contains($"Token=\"{FakeToken}\"", StringComparison.Ordinal);
-			_requests.Enqueue(new AdminRequest(method, url.AbsolutePath, url.ToString(), System.Web.HttpUtility.ParseQueryString(url.Query), body, signedIn));
-			var (status, answer) = _responses.TryGetValue($"{method} {url.AbsolutePath}", out var response) ? response : (404, "");
+			var request = new AdminRequest(method, url.AbsolutePath, url.ToString(), System.Web.HttpUtility.ParseQueryString(url.Query), body, signedIn);
+			_requests.Enqueue(request);
+			var handler = _handlers.Reverse().FirstOrDefault(x => x.Method == method && url.AbsolutePath.StartsWith(x.Prefix, StringComparison.OrdinalIgnoreCase));
+			var (status, answer) = handler.Handle is { } handle ? handle(request)
+				: _responses.TryGetValue($"{method} {url.AbsolutePath}", out var response) ? response : (404, "");
 			try
 			{
 				context.Response.StatusCode = status;

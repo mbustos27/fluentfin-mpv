@@ -13,19 +13,25 @@ public static class DestructiveConfirm
 {
 	public const string CancelText = "Cancel";
 
-	/// <summary>Enter presses Cancel.</summary>
-	public const ContentDialogButton DefaultButton = ContentDialogButton.Close;
-
 	public static ContentDialog Create(ConfirmPrompt prompt)
 	{
-		var dialog = new ContentDialog
-		{
-			Title = prompt.Title,
-			Content = new TextBlock { Text = prompt.Message, TextWrapping = TextWrapping.Wrap },
-			PrimaryButtonText = prompt.ConfirmText,
-			CloseButtonText = CancelText,
-			DefaultButton = DefaultButton,
-		};
+		var dialog = new ContentDialog();
+		Build(new ContentDialogTarget(dialog), prompt);
+		return dialog;
+	}
+
+	/// <summary>
+	/// Everything the confirmation is given: its title, message, the verb, Cancel as the default button (Enter presses it) and
+	/// the Destructive role's styles once they exist. Separate from the ContentDialog so a test can read what a built dialog
+	/// gets without the WinUI runtime.
+	/// </summary>
+	internal static void Build(IConfirmDialogTarget dialog, ConfirmPrompt prompt)
+	{
+		dialog.Title = prompt.Title;
+		dialog.Message = prompt.Message;
+		dialog.PrimaryButtonText = prompt.ConfirmText;
+		dialog.CloseButtonText = CancelText;
+		dialog.DefaultButton = ContentDialogButton.Close;
 
 		if (ButtonRoles.Find(ButtonRoles.DestructiveDialog) is { } dialogStyle)
 		{
@@ -36,8 +42,6 @@ public static class DestructiveConfirm
 		{
 			dialog.PrimaryButtonStyle = confirmStyle;
 		}
-
-		return dialog;
 	}
 
 	/// <summary>Escape and Cancel close with None, Enter presses Cancel: only the confirm button (Primary) confirms.</summary>
@@ -72,4 +76,27 @@ public static class DestructiveConfirm
 
 	/// <summary>For a view model's Confirm hook: asks in the main window.</summary>
 	public static Task<bool> AskInMainWindow(ConfirmPrompt prompt) => AskAsync(App.MainWindow?.Content?.XamlRoot, prompt);
+}
+
+/// <summary>What <see cref="DestructiveConfirm.Build"/> sets on a confirmation.</summary>
+internal interface IConfirmDialogTarget
+{
+	string Title { set; }
+	string Message { set; }
+	string PrimaryButtonText { set; }
+	string CloseButtonText { set; }
+	ContentDialogButton DefaultButton { set; }
+	Style Style { set; }
+	Style PrimaryButtonStyle { set; }
+}
+
+internal sealed class ContentDialogTarget(ContentDialog dialog) : IConfirmDialogTarget
+{
+	public string Title { set => dialog.Title = value; }
+	public string Message { set => dialog.Content = new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap }; }
+	public string PrimaryButtonText { set => dialog.PrimaryButtonText = value; }
+	public string CloseButtonText { set => dialog.CloseButtonText = value; }
+	public ContentDialogButton DefaultButton { set => dialog.DefaultButton = value; }
+	public Style Style { set => dialog.Style = value; }
+	public Style PrimaryButtonStyle { set => dialog.PrimaryButtonStyle = value; }
 }

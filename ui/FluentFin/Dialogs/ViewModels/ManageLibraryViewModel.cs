@@ -3,6 +3,7 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DevWinUI;
+using FluentFin.Core.Admin;
 using FluentFin.Core.Contracts.Services;
 using Jellyfin.Sdk.Generated.Library.VirtualFolders;
 using Jellyfin.Sdk.Generated.Models;
@@ -64,8 +65,13 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 	[ObservableProperty]
 	public partial int AutomaticRefreshIntervalDays { get; set; }
 
+	/// <summary>Movies sharing a collection name are added to that collection (movie libraries).</summary>
 	[ObservableProperty]
 	public partial bool AutomaticallyAddToCollection { get; set; }
+
+	/// <summary>Review fix: "Automatically merge series that are spread across multiple folders" (series libraries); its toggle wrote AutomaticallyAddToCollection.</summary>
+	[ObservableProperty]
+	public partial bool EnableAutomaticSeriesGrouping { get; set; }
 
 	[ObservableProperty]
 	public partial bool EnableTrickplayImageExtraction { get; set; }
@@ -123,12 +129,28 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 	public partial List<CountryInfo?> Countries { get; set; } = [];
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(DialogTitle), nameof(SaveText), nameof(UndoText))]
+	[NotifyPropertyChangedFor(nameof(DialogTitle), nameof(SaveText), nameof(UndoText), nameof(ShowsOptions))]
 	public partial bool IsCreateMode { get; set; }
 
 
 	[ObservableProperty]
 	public partial Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType? FolderCollectionType { get; set; }
+
+	/// <summary>
+	/// Review fix: the content types a new library can have (what the server's create accepts, CollectionTypeOptions, in the web
+	/// dashboard's words); the box listed every value of another enum, some of which the server cannot create, and no Mixed.
+	/// </summary>
+	public IReadOnlyList<LibraryContentType> ContentTypes { get; } = LibraryContentType.All;
+
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(ShowsOptions))]
+	public partial LibraryContentType? SelectedContentType { get; set; }
+
+	/// <summary>The library's options show once there is a content type (always when editing).</summary>
+	public bool ShowsOptions => !IsCreateMode || SelectedContentType is not null;
+
+	partial void OnSelectedContentTypeChanged(LibraryContentType? value) =>
+		FolderCollectionType = value is not null && Enum.TryParse<Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType>(value.Value.ToString(), true, out var type) ? type : null;
 
 	public ObservableCollection<MetadataFetcher> SeriesMetadataFetchers { get; } = [];
 	public ObservableCollection<MetadataFetcher> SeasonMetadataFetchers { get; } = [];
@@ -204,7 +226,8 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 		Countries = [null, .. await jellyfinClient.GetCountries()];
 
 		_info = virtualFolder;
-		FolderCollectionType = (Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType)(int)_info.CollectionType!;
+		// by name: the two enums are not numbered alike, and a mixed library has no collection type
+		FolderCollectionType = Enum.TryParse<Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType>($"{_info.CollectionType}", true, out var folderType) ? folderType : null;
 		IsMovieFolder = _info.CollectionType == VirtualFolderInfo_CollectionType.Movies;
 		IsSeriesFolder = _info.CollectionType == VirtualFolderInfo_CollectionType.Tvshows;
 
@@ -219,6 +242,7 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 		EnableRealtimeMonitor = options.EnableRealtimeMonitor ?? false;
 		AutomaticRefreshIntervalDays = options.AutomaticRefreshIntervalDays ?? 0;
 		AutomaticallyAddToCollection = options.AutomaticallyAddToCollection ?? false;
+		EnableAutomaticSeriesGrouping = options.EnableAutomaticSeriesGrouping ?? false;
 		EnableTrickplayImageExtraction = options.EnableTrickplayImageExtraction ?? false;
 		ExtractTrickplayImagesDuringLibraryScan = options.ExtractTrickplayImagesDuringLibraryScan ?? false;
 		SaveTrickplayWithMedia = options.SaveTrickplayWithMedia ?? false;
@@ -290,7 +314,7 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 				return false;
 			}
 
-			if (FolderCollectionType is not { } type || !Enum.TryParse<CollectionTypeOptions>(type.ToString(), out var collectionType))
+			if (SelectedContentType is not { Value: var collectionType })
 			{
 				Error = "Choose what the library holds.";
 				return false;
@@ -311,13 +335,17 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 			return false;
 		}
 
-		FillOptions(options);
-		if (!await jellyfinClient.SaveLibraryOptions(folderId, options))
+		// Review fix: the edits go into a copy; the library's own options (the Libraries list's, and what "Undo changes" reads)
+		// change only once the server took them (a failed Save left them changed, and Undo restored the unsaved edit)
+		var edited = KiotaCopy.Clone(options, LibraryOptions.CreateFromDiscriminatorValue);
+		FillOptions(edited);
+		if (!await jellyfinClient.SaveLibraryOptions(folderId, edited))
 		{
 			Error = "The server didn't save the changes. Try again, or Cancel to leave the library as it was.";
 			return false;
 		}
 
+		_info.LibraryOptions = edited;
 		return true;
 	}
 
@@ -333,6 +361,7 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 		options.EnableRealtimeMonitor = EnableRealtimeMonitor;
 		options.AutomaticRefreshIntervalDays = AutomaticRefreshIntervalDays;
 		options.AutomaticallyAddToCollection = AutomaticallyAddToCollection;
+		options.EnableAutomaticSeriesGrouping = EnableAutomaticSeriesGrouping;
 		options.EnableTrickplayImageExtraction = EnableTrickplayImageExtraction;
 		options.ExtractTrickplayImagesDuringLibraryScan = ExtractTrickplayImagesDuringLibraryScan;
 		options.SaveTrickplayWithMedia = SaveTrickplayWithMedia;
@@ -545,4 +574,21 @@ public partial class MetadataFetcher(string name, ObservableCollection<MetadataF
 			fetchers[i].CanMoveDown = i < fetchers.Count - 1;
 		}
 	}
+}
+
+/// <summary>Review fix: a content type a new library can have, in the web dashboard's words.</summary>
+public sealed record LibraryContentType(string Name, CollectionTypeOptions Value)
+{
+	public static IReadOnlyList<LibraryContentType> All { get; } =
+	[
+		new("Movies", CollectionTypeOptions.Movies),
+		new("Shows", CollectionTypeOptions.Tvshows),
+		new("Music", CollectionTypeOptions.Music),
+		new("Music videos", CollectionTypeOptions.Musicvideos),
+		new("Home videos and photos", CollectionTypeOptions.Homevideos),
+		new("Books", CollectionTypeOptions.Books),
+		new("Mixed movies and shows", CollectionTypeOptions.Mixed),
+	];
+
+	public override string ToString() => Name;
 }

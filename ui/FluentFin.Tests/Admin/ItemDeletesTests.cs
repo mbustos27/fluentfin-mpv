@@ -89,6 +89,12 @@ public sealed class ItemDeletesTests : IAsyncLifetime
 	[Fact]
 	public async Task DeleteImage_AYes_SendsOneDelete_ForThatImage_AndTheTileGoes()
 	{
+		// the server forgets the backdrop once deleted; the tiles are read again from it
+		_server.Handle("DELETE", $"/Items/{ItemId}/Images/Backdrop/0", _ =>
+		{
+			_server.Respond("GET", $"/Items/{ItemId}/Images", 200, """[{"ImageType":"Primary","ImageIndex":0,"ImageTag":"p1"}]""");
+			return (204, "");
+		});
 		var dialog = await Images(yes: true);
 
 		await dialog.DeleteImageCommand.ExecuteAsync(dialog.Images.Single(x => x.ImageType == ImageInfo_ImageType.Backdrop));
@@ -142,6 +148,11 @@ public sealed class ItemDeletesTests : IAsyncLifetime
 	[Fact]
 	public async Task DeleteSubtitle_AYes_SendsOneDelete_ForThatSubtitle_AndTheRowGoes()
 	{
+		_server.Handle("DELETE", $"/Videos/{ItemId}/Subtitles/3", _ =>
+		{
+			_server.Respond("GET", $"/Items/{ItemId}", 200, $$$"""{"Id":"{{{ItemId:N}}}","Name":"Night Train","Type":"Movie","MediaStreams":[{"Type":"Subtitle","Index":2,"IsExternal":false,"DisplayTitle":"English - SUBRIP"}]}""");
+			return (204, "");
+		});
 		var dialog = await Subtitles(yes: true);
 		var spanish = dialog.Subtitles.Single(x => x.IsExternal == true);
 
@@ -149,7 +160,7 @@ public sealed class ItemDeletesTests : IAsyncLifetime
 
 		var delete = Assert.Single(_server.Changes);
 		Assert.Equal($"DELETE /Videos/{ItemId}/Subtitles/3", $"{delete.Method} {delete.Path}");
-		Assert.DoesNotContain(spanish, dialog.Subtitles);
+		Assert.Equal(["English - SUBRIP"], dialog.Subtitles.Select(x => x.DisplayTitle));
 	}
 
 	[Fact]
@@ -162,7 +173,7 @@ public sealed class ItemDeletesTests : IAsyncLifetime
 		await dialog.DeleteSubtitleCommand.ExecuteAsync(spanish);
 
 		Assert.Single(_server.Changes);
-		Assert.Contains(spanish, dialog.Subtitles);
+		Assert.Contains(dialog.Subtitles, x => x.DisplayTitle == spanish.DisplayTitle);
 		Assert.NotEmpty(dialog.Error);
 	}
 
@@ -240,5 +251,95 @@ public sealed class ItemDeletesTests : IAsyncLifetime
 			[$"POST /MediaSegmentsApi/{ItemId:N}", $"DELETE /MediaSegmentsApi/{draft.Id:N}", $"POST /MediaSegmentsApi/{ItemId:N}"],
 			_server.Changes.Select(x => $"{x.Method} {x.Path}"));
 		Assert.Equal(draft.Id!.Value.ToString("N"), created.Json.GetProperty("Id").GetString());
+	}
+
+	/// <summary>
+	/// Review fix: Jellyfin deletes an image by type and index and renumbers the rest. With backdrops A, B and C, deleting A then
+	/// B sent Backdrop/1 (C, after the renumbering). This fake server renumbers too: the second delete must remove B.
+	/// </summary>
+	[Fact]
+	public async Task TwoImageDeletesInARow_RemoveTheTwoPicked_OnAServerThatRenumbers()
+	{
+		var backdrops = new List<string> { "a", "b", "c" };
+		string ImagesJson() => "[" + string.Join(",", backdrops.Select((tag, i) => $$$"""{"ImageType":"Backdrop","ImageIndex":{{{i}}},"ImageTag":"{{{tag}}}"}""")) + "]";
+		_server.Handle("GET", $"/Items/{ItemId}/Images", _ => (200, ImagesJson()));
+		_server.Handle("DELETE", $"/Items/{ItemId}/Images/Backdrop/", request =>
+		{
+			var index = int.Parse(request.Path[(request.Path.LastIndexOf('/') + 1)..]);
+			if (index >= backdrops.Count)
+			{
+				return (404, "");
+			}
+
+			backdrops.RemoveAt(index); // the server renumbers the rest
+			return (204, "");
+		});
+		var dialog = await Images(yes: true);
+
+		await dialog.DeleteImageCommand.ExecuteAsync(dialog.Images.Single(x => x.ImageTag == "a"));
+		await dialog.DeleteImageCommand.ExecuteAsync(dialog.Images.Single(x => x.ImageTag == "b"));
+
+		Assert.Equal(["c"], backdrops);
+		Assert.Equal(["c"], dialog.Images.Select(x => x.ImageTag));
+		Assert.Equal(0, dialog.Images.Single().ImageIndex);
+		Assert.Equal(2, _server.Changes.Count);
+	}
+
+	/// <summary>Review fix: the same for external subtitles, whose stream indexes the server renumbers (a delete removes a file).</summary>
+	[Fact]
+	public async Task TwoSubtitleDeletesInARow_RemoveTheTwoPicked_OnAServerThatRenumbers()
+	{
+		var files = new List<string> { "/media/Night Train.en.srt", "/media/Night Train.es.srt", "/media/Night Train.fr.srt" };
+		string ItemWithSubtitles() => $$$"""{"Id":"{{{ItemId:N}}}","Name":"Night Train","Type":"Movie","MediaStreams":[{"Type":"Video","Index":0},""" +
+			string.Join(",", files.Select((path, i) => $$$"""{"Type":"Subtitle","Index":{{{i + 1}}},"IsExternal":true,"Path":"{{{path}}}","DisplayTitle":"{{{Path.GetFileName(path)}}}"}""")) + "]}";
+		_server.Handle("GET", $"/Items/{ItemId}", request => request.Path.Equals($"/Items/{ItemId}", StringComparison.OrdinalIgnoreCase) ? (200, ItemWithSubtitles()) : (404, ""));
+		_server.Handle("DELETE", $"/Videos/{ItemId}/Subtitles/", request =>
+		{
+			var index = int.Parse(request.Path[(request.Path.LastIndexOf('/') + 1)..]);
+			if (index < 1 || index > files.Count)
+			{
+				return (404, "");
+			}
+
+			files.RemoveAt(index - 1);
+			return (204, "");
+		});
+		var dialog = await Subtitles(yes: true);
+
+		await dialog.DeleteSubtitleCommand.ExecuteAsync(dialog.Subtitles.Single(x => x.Path!.EndsWith(".en.srt")));
+		await dialog.DeleteSubtitleCommand.ExecuteAsync(dialog.Subtitles.Single(x => x.Path!.EndsWith(".es.srt")));
+
+		Assert.Equal(["/media/Night Train.fr.srt"], files);
+		Assert.Equal(["/media/Night Train.fr.srt"], dialog.Subtitles.Select(x => x.Path));
+		Assert.Equal(2, _server.Changes.Count);
+	}
+
+	/// <summary>Review fix: picking another episode left the last one's segments on the page when the new one had none.</summary>
+	[Fact]
+	public async Task Segments_AnotherEpisode_NeverKeepsTheLastOnesSegments()
+	{
+		var editor = Segments(yes: true);
+		await editor.OnNavigatedTo(Movie);
+		editor.Segments.Add(new MediaSegmentViewModel { Id = Guid.NewGuid(), ItemId = Guid.NewGuid(), Type = MediaSegmentDto_Type.Intro });
+
+		editor.Playlist.SelectedItem = editor.Playlist.Items[0];
+
+		Assert.Empty(editor.Segments);
+	}
+
+	/// <summary>Review fix: the delete question named the selected episode, not the one the segment belongs to.</summary>
+	[Fact]
+	public async Task DeleteSegment_NamesTheEpisodeTheSegmentBelongsTo()
+	{
+		var one = new BaseItemDto { Id = Guid.NewGuid(), Name = "Episode One", Type = BaseItemDto_Type.Episode };
+		var two = new BaseItemDto { Id = Guid.NewGuid(), Name = "Episode Two", Type = BaseItemDto_Type.Episode };
+		var editor = Segments(yes: false);
+		editor.Playlist = new PlaylistViewModel { Items = { new PlaylistItem { Title = "1", Dto = one }, new PlaylistItem { Title = "2", Dto = two } } };
+		editor.Playlist.SelectedItem = editor.Playlist.Items[0];
+		var segment = new MediaSegmentViewModel { Id = Guid.NewGuid(), ItemId = two.Id, Type = MediaSegmentDto_Type.Outro };
+
+		await editor.DeleteSegmentCommand.ExecuteAsync(segment);
+
+		Assert.Contains("Episode Two", Assert.Single(_asked).Message);
 	}
 }

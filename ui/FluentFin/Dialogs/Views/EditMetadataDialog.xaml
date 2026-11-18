@@ -17,7 +17,7 @@
     Title="Edit metadata"
     CloseButtonText="Cancel"
     DefaultButton="Primary"
-    IsPrimaryButtonEnabled="{x:Bind ViewModel.HasChanges, Mode=OneWay}"
+    IsPrimaryButtonEnabled="{x:Bind ViewModel.CanSave, Mode=OneWay}"
     IsSecondaryButtonEnabled="{x:Bind ViewModel.HasChanges, Mode=OneWay}"
     PrimaryButtonText="Save"
     SecondaryButtonCommand="{x:Bind ViewModel.RevertCommand}"
@@ -63,6 +63,11 @@
                 IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                 Message="{x:Bind ViewModel.Error, Mode=OneWay}"
                 Severity="Error" />
+            <InfoBar
+                IsClosable="False"
+                IsOpen="{x:Bind ViewModel.TitleIsBlank, Mode=OneWay}"
+                Message="An item needs a title. Type one to save."
+                Severity="Warning" />
 
             <StackPanel>
                 <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="General" />

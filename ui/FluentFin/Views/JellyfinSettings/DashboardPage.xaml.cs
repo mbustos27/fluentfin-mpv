@@ -26,7 +26,7 @@ public sealed partial class DashboardPage : Page
 		_ => InfoBarSeverity.Informational,
 	};
 
-	private void ServerNoticeBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.Notice = null;
+	private void ServerNoticeBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.DismissNotice();
 
 	public static string PlayPauseName(string? userName, string? deviceName) => SessionName("Play or pause", userName, deviceName);
 

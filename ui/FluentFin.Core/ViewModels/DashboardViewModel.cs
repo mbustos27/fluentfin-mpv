@@ -15,26 +15,33 @@ namespace FluentFin.Core.ViewModels;
 /// <remarks>
 /// Nixie 1.2.0 (admin, button review A75-A77): Restart and Shut down ask first, naming the server (<see cref="Confirm"/>), send
 /// the request while still signed in (they used to sign out first, so the server refused it), then say what is happening
-/// (<see cref="Notice"/>); a restart is followed until the server answers again. "Scan all libraries" scans whether or not a
-/// scheduled task of that name exists, and says it started.
+/// (<see cref="Notice"/>); a restart is followed until the server answers again. The restart and shut down live in
+/// <see cref="ServerPower"/>, which outlives this page: coming back during "Restarting…" shows it, and Restart waits.
+/// "Scan all libraries" scans whether or not a scheduled task of that name exists, and says it started.
 /// </remarks>
-public partial class DashboardViewModel(IJellyfinClient jellyfinClient,
-										[FromKeyedServices(UserInputs.MessageToSession)]IUserInput<string> stringUserInput,
-										IContentDialogServiceCore contentDialogService) : ObservableObject, INavigationAware
+public partial class DashboardViewModel : ObservableObject, INavigationAware
 {
-	/// <summary>How often a restarting server is asked whether it is back, and for how long.</summary>
-	internal static readonly TimeSpan PollEvery = TimeSpan.FromSeconds(2);
-	internal const int PollsBeforeGivingUp = 90;
-	/// <summary>Answers this many polls in a row without ever being seen down: it restarted between two polls.</summary>
-	internal const int PollsUpCountAsBack = 10;
-
+	private readonly IJellyfinClient jellyfinClient;
+	private readonly ServerPower _power;
+	private readonly IUserInput<string> stringUserInput;
+	private readonly IContentDialogServiceCore contentDialogService;
 	private IDisposable? _sessionsSubscription;
+
+	public DashboardViewModel(IJellyfinClient jellyfinClient,
+							  ServerPower power,
+							  [FromKeyedServices(UserInputs.MessageToSession)] IUserInput<string> stringUserInput,
+							  IContentDialogServiceCore contentDialogService)
+	{
+		this.jellyfinClient = jellyfinClient;
+		_power = power;
+		this.stringUserInput = stringUserInput;
+		this.contentDialogService = contentDialogService;
+		_power.PropertyChanged += OnPowerChanged;
+		Notice = _power.NoticeFor(SessionInfo.ServerId);
+	}
 
 	/// <summary>Asks before a destructive action; true only when the user confirmed. Unset (nobody to ask), nothing happens.</summary>
 	public Func<ConfirmPrompt, Task<bool>>? Confirm { get; set; }
-
-	/// <summary>The wait between polls of a restarting server (tests make it instant).</summary>
-	public Func<TimeSpan, Task> Delay { get; set; } = Task.Delay;
 
 	/// <summary>What the server is doing after a restart, shut down or scan from here; null when there is nothing to say.</summary>
 	[ObservableProperty]
@@ -42,8 +49,8 @@ public partial class DashboardViewModel(IJellyfinClient jellyfinClient,
 	[NotifyCanExecuteChangedFor(nameof(RestartCommand), nameof(ShutdownCommand), nameof(StartScanCommand))]
 	public partial ServerNotice? Notice { get; set; }
 
-	/// <summary>A restart is under way, or the server is shutting down: the buttons wait.</summary>
-	public bool IsBusy => Notice is { Busy: true } or { State: ServerPowerState.ShutDown };
+	/// <summary>A restart is under way, or the server is shutting down (from this page or an earlier visit): the buttons wait.</summary>
+	public bool IsBusy => _power.IsBusyFor(SessionInfo.ServerId) || Notice is { Busy: true } or { State: ServerPowerState.ShutDown };
 
 	/// <summary>The notice bar opens from this bool (x:Bind does not call a function whose argument is null, so a bar opened through one never closed).</summary>
 	public bool HasNotice => Notice is not null;
@@ -70,8 +77,24 @@ public partial class DashboardViewModel(IJellyfinClient jellyfinClient,
 	public partial string Version { get; set; } = AppVersion.Current;
 
 
+	private void OnPowerChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(ServerPower.Notice))
+		{
+			Notice = _power.NoticeFor(SessionInfo.ServerId);
+		}
+	}
+
+	/// <summary>The notice bar was closed.</summary>
+	public void DismissNotice()
+	{
+		_power.Dismiss();
+		Notice = _power.NoticeFor(SessionInfo.ServerId) is { Busy: true } busy ? busy : null;
+	}
+
 	public Task OnNavigatedFrom()
 	{
+		_power.PropertyChanged -= OnPowerChanged;
 		// disposing the SDK subscription sends SessionsStop
 		_sessionsSubscription?.Dispose();
 		_sessionsSubscription = null;
@@ -136,61 +159,27 @@ public partial class DashboardViewModel(IJellyfinClient jellyfinClient,
 	[RelayCommand(CanExecute = nameof(CanAct))]
 	private async Task Shutdown()
 	{
-		if (!await Asked(AdminPrompts.ShutDown(SystemInfo?.ServerName)))
+		if (!await Asked(AdminPrompts.ShutDown(SystemInfo?.ServerName)) || IsBusy)
 		{
 			return;
 		}
 
-		Notice = await jellyfinClient.Shutdown()
-			? new ServerNotice(ServerPowerState.ShutDown, $"{ServerName} is shutting down", "It stays off until someone starts it again on its computer.", NoticeKind.Warning)
-			: new ServerNotice(ServerPowerState.Failed, $"{ServerName} didn't shut down", "The server didn't accept the request. Nothing changed.", NoticeKind.Error);
+		await _power.ShutDown(SessionInfo.ServerId, ServerName);
 	}
 
 	[RelayCommand(CanExecute = nameof(CanAct))]
 	private async Task Restart()
 	{
-		if (!await Asked(AdminPrompts.Restart(SystemInfo?.ServerName)))
+		if (!await Asked(AdminPrompts.Restart(SystemInfo?.ServerName)) || IsBusy)
 		{
 			return;
 		}
 
-		if (!await jellyfinClient.Restart())
+		await _power.Restart(SessionInfo.ServerId, ServerName);
+		if (_power.NoticeFor(SessionInfo.ServerId) is { State: ServerPowerState.Back } && await jellyfinClient.GetSystemInfo() is { } info)
 		{
-			Notice = new ServerNotice(ServerPowerState.Failed, $"{ServerName} didn't restart", "The server didn't accept the request. Nothing changed.", NoticeKind.Error);
-			return;
+			SystemInfo = info;
 		}
-
-		Notice = new ServerNotice(ServerPowerState.Restarting, $"Restarting {ServerName}…", "Playback on every device stops. This page goes on once the server answers again.", NoticeKind.Info, Busy: true);
-		Notice = await WaitUntilBack()
-			? new ServerNotice(ServerPowerState.Back, $"{ServerName} restarted", "It is answering again.", NoticeKind.Success)
-			: new ServerNotice(ServerPowerState.NotBack, $"{ServerName} hasn't come back yet", "It may still be starting. If it doesn't, start it again on its computer.", NoticeKind.Warning);
-	}
-
-	/// <summary>
-	/// After a restart was accepted: true once the server answers again having been seen down (or answering for a while, when it
-	/// restarted between two polls), false after <see cref="PollsBeforeGivingUp"/> polls.
-	/// </summary>
-	private async Task<bool> WaitUntilBack()
-	{
-		var sawDown = false;
-		for (var poll = 1; poll <= PollsBeforeGivingUp; poll++)
-		{
-			await Delay(PollEvery);
-			var info = await jellyfinClient.GetSystemInfo();
-			if (info is null || info.IsShuttingDown == true)
-			{
-				sawDown = true;
-				continue;
-			}
-
-			if (sawDown || poll >= PollsUpCountAsBack)
-			{
-				SystemInfo = info;
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	[RelayCommand(CanExecute = nameof(CanAct))]

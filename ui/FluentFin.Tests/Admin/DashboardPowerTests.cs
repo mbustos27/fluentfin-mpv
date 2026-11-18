@@ -1,4 +1,5 @@
 using FluentFin.Core;
+using FluentFin.Core.Admin;
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.ViewModels;
 using Moq;
@@ -20,6 +21,8 @@ public sealed class DashboardPowerTests : IAsyncLifetime
 	private readonly List<ConfirmPrompt> _asked = [];
 	private readonly List<ServerNotice?> _notices = [];
 	private DashboardViewModel _vm = null!;
+	private ServerPower _power = null!;
+	private Core.Services.JellyfinClient _client = null!;
 	private int _waits;
 
 	static DashboardPowerTests() => ReactiveUI.Builder.RxAppBuilder.CreateReactiveUIBuilder().BuildApp();
@@ -31,11 +34,9 @@ public sealed class DashboardPowerTests : IAsyncLifetime
 		_server.Respond("POST", "/System/Restart", 204);
 		_server.Respond("POST", "/System/Shutdown", 204);
 		_server.Respond("POST", "/Library/Refresh", 204);
-		var client = await _server.SignIn();
-		_vm = new DashboardViewModel(client, Mock.Of<IUserInput<string>>(), Mock.Of<IContentDialogServiceCore>())
-		{
-			SystemInfo = new Jellyfin.Sdk.Generated.Models.SystemInfo { ServerName = "Harness" },
-		};
+		_client = await _server.SignIn();
+		_power = new ServerPower(_client);
+		_vm = Dashboard();
 		_vm.PropertyChanged += (_, e) =>
 		{
 			if (e.PropertyName == nameof(DashboardViewModel.Notice))
@@ -44,6 +45,11 @@ public sealed class DashboardPowerTests : IAsyncLifetime
 			}
 		};
 	}
+
+	private DashboardViewModel Dashboard() => new(_client, _power, Mock.Of<IUserInput<string>>(), Mock.Of<IContentDialogServiceCore>())
+	{
+		SystemInfo = new Jellyfin.Sdk.Generated.Models.SystemInfo { ServerName = "Harness" },
+	};
 
 	public Task DisposeAsync()
 	{
@@ -88,7 +94,7 @@ public sealed class DashboardPowerTests : IAsyncLifetime
 	{
 		Answer(yes: true);
 		var busyWhileWaiting = new List<bool>();
-		_vm.Delay = _ =>
+		_power.Delay = _ =>
 		{
 			_waits++;
 			busyWhileWaiting.Add(_vm.IsBusy && !_vm.RestartCommand.CanExecute(null) && !_vm.ShutdownCommand.CanExecute(null));
@@ -117,7 +123,7 @@ public sealed class DashboardPowerTests : IAsyncLifetime
 	public async Task Restart_TheServerNeverComesBack_SaysSo_AfterAFewMinutes()
 	{
 		Answer(yes: true);
-		_vm.Delay = _ =>
+		_power.Delay = _ =>
 		{
 			_waits++;
 			_server.Respond("GET", "/System/Info", 500);
@@ -127,7 +133,7 @@ public sealed class DashboardPowerTests : IAsyncLifetime
 		await _vm.RestartCommand.ExecuteAsync(null);
 
 		Assert.Single(_server.Changes);
-		Assert.Equal(DashboardViewModel.PollsBeforeGivingUp, _waits);
+		Assert.Equal(ServerPower.PollsBeforeGivingUp, _waits);
 		Assert.Equal(ServerPowerState.NotBack, _vm.Notice!.State);
 		Assert.False(_vm.IsBusy);
 	}
@@ -139,7 +145,7 @@ public sealed class DashboardPowerTests : IAsyncLifetime
 	{
 		Answer(yes: true);
 		_server.Respond("POST", path, 500);
-		_vm.Delay = _ => { _waits++; return Task.CompletedTask; };
+		_power.Delay = _ => { _waits++; return Task.CompletedTask; };
 
 		await (action == "restart" ? _vm.RestartCommand.ExecuteAsync(null) : _vm.ShutdownCommand.ExecuteAsync(null));
 
@@ -177,5 +183,43 @@ public sealed class DashboardPowerTests : IAsyncLifetime
 		Assert.Equal("POST", scan.Method);
 		Assert.Equal("/Library/Refresh", scan.Path);
 		Assert.Equal("Scan started", _vm.Notice!.Title);
+	}
+
+	/// <summary>
+	/// Review fix: the dashboard's view model is new on each visit; leaving during "Restarting…" and coming back enabled Restart
+	/// again while the first wait ran, and a second restart could be sent. The restart lives in ServerPower, which outlives it.
+	/// </summary>
+	[Fact]
+	public async Task ComingBackDuringARestart_ShowsIt_AndCannotSendAnother()
+	{
+		Answer(yes: true);
+		var held = new TaskCompletionSource();
+		var waits = 0;
+		_power.Delay = async _ =>
+		{
+			if (++waits == 1)
+			{
+				await held.Task; // the first wait holds: the restart is under way
+			}
+		};
+		var first = _vm.RestartCommand.ExecuteAsync(null);
+		await Task.Delay(200);
+		_vm.OnNavigatedFrom().Wait();
+
+		var again = Dashboard();
+		again.Confirm = _vm.Confirm;
+
+		Assert.Equal(ServerPowerState.Restarting, again.Notice!.State);
+		Assert.True(again.IsBusy);
+		Assert.False(again.RestartCommand.CanExecute(null));
+		Assert.False(again.ShutdownCommand.CanExecute(null));
+		await again.RestartCommand.ExecuteAsync(null);
+		Assert.Single(_server.Changes);
+
+		held.SetResult();
+		await first;
+		Assert.Equal(ServerPowerState.Back, _power.Notice!.State);
+		Assert.Equal(ServerPowerState.Back, again.Notice!.State);
+		Assert.Single(_server.Changes);
 	}
 }

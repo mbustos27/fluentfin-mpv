@@ -15,7 +15,16 @@ public static class ButtonRoles
 	/// <summary>A confirmation of a destructive action: Compact buttons, the default (Cancel) drawn Secondary, the confirm Destructive.</summary>
 	public const string DestructiveDialog = "NixieDestructiveDialogStyle";
 
-	/// <summary>The style with that key in the app's resources, or null when there is none (yet).</summary>
-	public static Style? Find(string key) =>
-		Application.Current?.Resources is { } resources && resources.TryGetValue(key, out var value) ? value as Style : null;
+	/// <summary>The style with that key in the app's resources, or null when there is none (yet), or no running app to ask.</summary>
+	public static Style? Find(string key)
+	{
+		try
+		{
+			return Application.Current?.Resources is { } resources && resources.TryGetValue(key, out var value) ? value as Style : null;
+		}
+		catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException or TypeInitializationException)
+		{
+			return null;
+		}
+	}
 }

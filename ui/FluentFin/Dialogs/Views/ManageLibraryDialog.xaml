@@ -86,14 +86,18 @@
                 Spacing="5"
                 Visibility="{x:Bind ViewModel.IsCreateMode, Converter={StaticResource BooleanToVisibilityConverter}, Mode=OneWay}">
                 <ctk:SettingsCard Header="Content type">
-                    <ComboBox ItemsSource="{ui:EnumValues Type=jmlo:CollectionType}" SelectedItem="{x:Bind ViewModel.FolderCollectionType, Mode=TwoWay}" />
+                    <ComboBox
+                        AutomationProperties.Name="Content type"
+                        DisplayMemberPath="Name"
+                        ItemsSource="{x:Bind ViewModel.ContentTypes}"
+                        SelectedItem="{x:Bind ViewModel.SelectedContentType, Mode=TwoWay}" />
                 </ctk:SettingsCard>
                 <ctk:SettingsCard Header="Display name">
                     <TextBox Text="{x:Bind ViewModel.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </ctk:SettingsCard>
             </StackPanel>
 
-            <StackPanel Spacing="5" Visibility="{x:Bind ViewModel.FolderCollectionType, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}">
+            <StackPanel Spacing="5" Visibility="{x:Bind ViewModel.ShowsOptions, Mode=OneWay}">
                 <ctk:SettingsExpander
                     Header="Folder"
                     IsExpanded="True"
@@ -221,7 +225,17 @@
                 <ctk:SettingsCard Description="Saving artwork into media folders will put them in a place where they can be easily edited." Header="Save artwork into media folders">
                     <ToggleSwitch IsOn="{x:Bind ViewModel.SaveLocalMetadata, Mode=TwoWay}" />
                 </ctk:SettingsCard>
-                <ctk:SettingsCard Description="Series that are spread across multiple folders within this library will be automatically merged into a single series." Header="Automatically merge series that are spread across multiple folders">
+                <!--  review fix: this toggle wrote AutomaticallyAddToCollection; each option has its own toggle now  -->
+                <ctk:SettingsCard
+                    Description="Series that are spread across multiple folders within this library will be automatically merged into a single series."
+                    Header="Automatically merge series that are spread across multiple folders"
+                    Visibility="{x:Bind ViewModel.IsSeriesFolder, Mode=OneWay}">
+                    <ToggleSwitch IsOn="{x:Bind ViewModel.EnableAutomaticSeriesGrouping, Mode=TwoWay}" />
+                </ctk:SettingsCard>
+                <ctk:SettingsCard
+                    Description="Movies that share a collection name are added to that collection."
+                    Header="Automatically add movies to their collection"
+                    Visibility="{x:Bind ViewModel.IsMovieFolder, Mode=OneWay}">
                     <ToggleSwitch IsOn="{x:Bind ViewModel.AutomaticallyAddToCollection, Mode=TwoWay}" />
                 </ctk:SettingsCard>
                 <ctk:SettingsExpander Header="Trickplay" IsExpanded="True">

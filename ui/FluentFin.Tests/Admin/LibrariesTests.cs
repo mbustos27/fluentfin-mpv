@@ -1,7 +1,7 @@
 using FluentFin.Core;
 using FluentFin.Core.ViewModels;
 using FluentFin.Dialogs.ViewModels;
-using CollectionType = Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType;
+using Jellyfin.Sdk.Generated.Library.VirtualFolders;
 
 namespace FluentFin.Tests.Admin;
 
@@ -59,11 +59,11 @@ public sealed class LibrariesTests : IAsyncLifetime
 		return Task.FromResult(yes);
 	};
 
-	private async Task<ManageLibraryViewModel> NewLibraryDialog(CollectionType type)
+	private async Task<ManageLibraryViewModel> NewLibraryDialog(CollectionTypeOptions type)
 	{
 		var dialog = new ManageLibraryViewModel(_client);
 		await dialog.Initialize();
-		dialog.FolderCollectionType = type;
+		dialog.SelectedContentType = dialog.ContentTypes.Single(x => x.Value == type);
 		var deadline = DateTime.UtcNow.AddSeconds(10);
 		while (dialog.MovieMetadataFetchers.Count == 0 && DateTime.UtcNow < deadline)
 		{
@@ -87,7 +87,7 @@ public sealed class LibrariesTests : IAsyncLifetime
 	[Fact]
 	public async Task AddLibrary_CreatesIt_WithTheNameTypeFoldersAndOptionsShown()
 	{
-		var dialog = await NewLibraryDialog(CollectionType.Movies);
+		var dialog = await NewLibraryDialog(CollectionTypeOptions.Movies);
 		Assert.Equal("Add library", dialog.DialogTitle);
 		Assert.Equal("Create library", dialog.SaveText);
 		dialog.Name = " Documentaries ";
@@ -117,7 +117,7 @@ public sealed class LibrariesTests : IAsyncLifetime
 	[Fact]
 	public async Task AddLibrary_WithoutAName_SaysSo_AndSendsNothing()
 	{
-		var dialog = await NewLibraryDialog(CollectionType.Movies);
+		var dialog = await NewLibraryDialog(CollectionTypeOptions.Movies);
 
 		Assert.False(await dialog.Save());
 
@@ -142,7 +142,7 @@ public sealed class LibrariesTests : IAsyncLifetime
 	public async Task AddLibrary_TheServerRefuses_KeepsTheDialog_AndSaysSo()
 	{
 		_server.Respond("POST", "/Library/VirtualFolders", 400);
-		var dialog = await NewLibraryDialog(CollectionType.Movies);
+		var dialog = await NewLibraryDialog(CollectionTypeOptions.Movies);
 		dialog.Name = "Movies";
 
 		Assert.False(await dialog.Save());
@@ -225,5 +225,92 @@ public sealed class LibrariesTests : IAsyncLifetime
 		Assert.Equal([true, true, false], list.Select(x => x.CanMoveDown));
 		Assert.False(list[0].MoveUpCommand.CanExecute(null));
 		Assert.True(list[1].MoveUpCommand.CanExecute(null));
+	}
+
+	/// <summary>
+	/// Review fix: a failed Save changed the Libraries list's own copy of the library's options, and "Undo changes" (which reads
+	/// it) then showed the unsaved edit as if it were the server's.
+	/// </summary>
+	[Fact]
+	public async Task ManageLibrary_AFailedSave_LeavesTheLibraryAsItWas_AndUndoRestoresIt()
+	{
+		var movies = _page.VirtualFolders[0];
+		var dialog = new ManageLibraryViewModel(_client);
+		await dialog.Initialize(movies);
+		Assert.False(dialog.IsEnabled);
+		dialog.IsEnabled = true;
+
+		Assert.False(await dialog.Save()); // the fake server has no /Library/VirtualFolders/LibraryOptions: 404
+
+		Assert.Null(movies.LibraryOptions!.Enabled);
+		await dialog.ResetCommand.ExecuteAsync(null);
+		Assert.False(dialog.IsEnabled);
+	}
+
+	[Fact]
+	public async Task ManageLibrary_ASave_ChangesTheLibrarysCopy_OnlyWhenTheServerTookIt()
+	{
+		_server.Respond("POST", "/Library/VirtualFolders/LibraryOptions", 204);
+		var movies = _page.VirtualFolders[0];
+		var dialog = new ManageLibraryViewModel(_client);
+		await dialog.Initialize(movies);
+		dialog.IsEnabled = true;
+
+		Assert.True(await dialog.Save());
+
+		Assert.True(movies.LibraryOptions!.Enabled);
+		Assert.True(_server.Changes.Single().Json.GetProperty("LibraryOptions").GetProperty("Enabled").GetBoolean());
+	}
+
+	/// <summary>Review fix: the content type box offered types the server can't create, and no Mixed.</summary>
+	[Fact]
+	public async Task AddLibrary_OffersTheTypesTheServerCreates_IncludingMixed()
+	{
+		var dialog = new ManageLibraryViewModel(_client);
+		await dialog.Initialize();
+		Assert.Equal(["Movies", "Shows", "Music", "Music videos", "Home videos and photos", "Books", "Mixed movies and shows"], dialog.ContentTypes.Select(x => x.Name));
+		Assert.False(dialog.ShowsOptions);
+
+		dialog.SelectedContentType = dialog.ContentTypes.Single(x => x.Value == CollectionTypeOptions.Mixed);
+		dialog.Name = "Everything";
+		Assert.True(dialog.ShowsOptions);
+		Assert.True(await dialog.Save());
+
+		Assert.Equal("mixed", _server.Changes.Single().Query["collectionType"]);
+	}
+
+	/// <summary>Review fix: "Automatically merge series…" wrote AutomaticallyAddToCollection; it is EnableAutomaticSeriesGrouping.</summary>
+	[Fact]
+	public async Task MergeSeries_IsItsOwnOption()
+	{
+		_server.Respond("POST", "/Library/VirtualFolders/LibraryOptions", 204);
+		var kids = _page.VirtualFolders[1];
+		kids.LibraryOptions = new Jellyfin.Sdk.Generated.Models.LibraryOptions { AutomaticallyAddToCollection = false, EnableAutomaticSeriesGrouping = false };
+		var dialog = new ManageLibraryViewModel(_client);
+		await dialog.Initialize(kids);
+		dialog.EnableAutomaticSeriesGrouping = true;
+
+		Assert.True(await dialog.Save());
+
+		var sent = _server.Changes.Single().Json.GetProperty("LibraryOptions");
+		Assert.True(sent.GetProperty("EnableAutomaticSeriesGrouping").GetBoolean());
+		Assert.False(sent.GetProperty("AutomaticallyAddToCollection").GetBoolean());
+		var xaml = File.ReadAllText(Path.Combine(RepoRoot(), "FluentFin", "Dialogs", "Views", "ManageLibraryDialog.xaml"));
+		var merge = xaml.IndexOf("Header=\"Automatically merge series", StringComparison.Ordinal);
+		Assert.True(merge > 0);
+		var card = xaml[merge..xaml.IndexOf("</ctk:SettingsCard>", merge, StringComparison.Ordinal)];
+		Assert.Contains("ViewModel.EnableAutomaticSeriesGrouping", card);
+		Assert.DoesNotContain("AutomaticallyAddToCollection", card);
+	}
+
+	private static string RepoRoot()
+	{
+		var dir = new DirectoryInfo(AppContext.BaseDirectory);
+		while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "FluentFin.sln")))
+		{
+			dir = dir.Parent;
+		}
+
+		return dir!.FullName;
 	}
 }

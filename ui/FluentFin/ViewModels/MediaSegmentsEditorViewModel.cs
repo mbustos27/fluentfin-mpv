@@ -112,6 +112,10 @@ public partial class MediaSegmentsEditorViewModel(IJellyfinClient jellyfinClient
 			return;
 		}
 
+		// Review fix: another episode's segments never stay on the page (an episode without any kept the last one's, and a
+		// delete then named this episode for another's segment)
+		Segments.Clear();
+
 		if (Playlist.SelectedItem is not { } selectedItem)
 		{
 			return;
@@ -148,9 +152,8 @@ public partial class MediaSegmentsEditorViewModel(IJellyfinClient jellyfinClient
 
 		MediaPlayer.Pause();
 
-		if (await jellyfinClient.GetMediaSegments(selectedItem.Dto) is { Items.Count: > 0 } segmentsResults)
+		if (await jellyfinClient.GetMediaSegments(selectedItem.Dto) is { Items.Count: > 0 } segmentsResults && Playlist.SelectedItem == selectedItem)
 		{
-			Segments.Clear();
 			Segments.AddRange(segmentsResults.Items.Select(MediaSegmentViewModel.FromDto));
 		}
 	}
@@ -176,7 +179,9 @@ public partial class MediaSegmentsEditorViewModel(IJellyfinClient jellyfinClient
 			return;
 		}
 
-		if (Confirm is not { } confirm || !await confirm(AdminPrompts.DeleteSegment(vm.Type?.ToString(), Playlist.SelectedItem?.Dto?.Name)))
+		// the question names the episode the segment belongs to (its ItemId), not whichever is selected
+		var episode = Playlist.Items.FirstOrDefault(x => x.Dto.Id is { } itemId && itemId == vm.ItemId)?.Dto;
+		if (Confirm is not { } confirm || !await confirm(AdminPrompts.DeleteSegment(vm.Type?.ToString(), episode?.Name)))
 		{
 			return;
 		}

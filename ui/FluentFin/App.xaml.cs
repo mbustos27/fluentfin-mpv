@@ -122,7 +122,7 @@ public partial class App : Application
 		{
 			Log.Logger = new LoggerConfiguration()
 				.Enrich.FromLogContext()
-				.WriteTo.File(knownFolders.LogFile, Serilog.Events.LogEventLevel.Debug, rollingInterval: RollingInterval.Day)
+				.WriteTo.File(new RedactingLogFormatter(), knownFolders.LogFile, Serilog.Events.LogEventLevel.Debug, rollingInterval: RollingInterval.Day) // Nixie 1.2.0: no token in the log
 				.CreateLogger();
 			if (migrationNote is not null)
 			{
@@ -250,6 +250,7 @@ public partial class App : Application
 			services.AddTransient<IUserInput<AccessSchedule>, AccessScheduleUserInput>();
 			services.AddKeyedTransient<IUserInput<string>, LibraryNewNameInput>(UserInputs.LibraryNewName);
 			services.AddKeyedTransient<IUserInput<string>, SendMessageToSessionInput>(UserInputs.MessageToSession);
+			services.AddSingleton<Core.Admin.ServerPower>(); // Nixie 1.2.0 (admin): a restart outlives the dashboard page
 			services.AddTransient<IServerFolderPicker, ServerFolderInput>();
 
 			services.AddTransient<ShellPage>();

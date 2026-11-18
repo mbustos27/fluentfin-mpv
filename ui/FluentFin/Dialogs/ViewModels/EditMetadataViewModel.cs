@@ -93,6 +93,16 @@ public partial class EditMetadataViewModel : ObservableObject, IHandleClose, IBa
 	/// <summary>The error bar opens from this bool (no x:Bind function on IsOpen).</summary>
 	public bool HasError => !string.IsNullOrEmpty(Error);
 
+	/// <summary>Nixie 1.2.0 (admin): an item needs a title; Save waits, and the dialog says why (a blank one sent Name: null).</summary>
+	[ObservableProperty]
+	public partial bool TitleIsBlank { get; set; }
+
+	/// <summary>Something changed and it can be saved.</summary>
+	[ObservableProperty]
+	public partial bool CanSave { get; set; }
+
+	public const string BlankTitleMessage = "An item needs a title. Type one to save.";
+
 	public ObservableCollection<string> Genres { get; } = [];
 
 	/// <summary>The server's series statuses (SeriesStatus), and the item's own if it is another one, so the box can show it.</summary>
@@ -198,37 +208,53 @@ public partial class EditMetadataViewModel : ObservableObject, IHandleClose, IBa
 	}
 
 	/// <summary>
-	/// Sends the changed fields (<see cref="BuildUpdate"/>); nothing when nothing changed. True when there was nothing to send
-	/// or the server took it; false (and <see cref="Error"/>) when it did not, and the form keeps the edits.
+	/// Sends the changed fields; nothing when nothing changed. Each Save reads the item from the server again and replaces only
+	/// the changed fields on that fresh copy (<see cref="ApplyChanges"/>), so a failed Save leaves nothing behind for the next
+	/// one, and what the server changed meanwhile is kept. True when there was nothing to send or the server took it; false
+	/// (and <see cref="Error"/>) when it did not, and the form keeps the edits.
 	/// </summary>
 	public async Task<bool> Save()
 	{
 		Error = "";
-		if (BuildUpdate() is not { } update)
+		if (Blank(Title) is null)
+		{
+			Error = BlankTitleMessage;
+			return false;
+		}
+
+		if (_loaded is not { } loaded || Item?.Id is not { } id || Capture().SameAs(loaded))
 		{
 			return true;
 		}
 
-		if (!await _jellyfinClient.UpdateMetadata(update))
+		if (await _jellyfinClient.GetItem(id) is not { } fresh)
+		{
+			Error = "The item couldn't be read from the server, so nothing was saved. Try again.";
+			return false;
+		}
+
+		ApplyChanges(fresh);
+		if (!await _jellyfinClient.UpdateMetadata(fresh))
 		{
 			Error = "The server didn't save the changes. Try again, or Cancel to leave the item as it was.";
 			return false;
 		}
 
+		Item = fresh;
 		_loaded = Capture();
 		UpdateHasChanges();
 		return true;
 	}
 
 	/// <summary>
-	/// The item to send: the one the server gave, with each field that differs from its loaded value replaced; null when none
-	/// does. A blank text clears its field; dates compare by the calendar day the date picker shows.
+	/// Replaces, on <paramref name="target"/> (the item as the server has it now), each field that differs from its loaded
+	/// value; true when there was one. A blank text clears its field; dates compare by the calendar day the date picker shows.
 	/// </summary>
-	internal BaseItemDto? BuildUpdate()
+	internal bool ApplyChanges(BaseItemDto target)
 	{
-		if (Item is null || _loaded is not { } loaded)
+		if (_loaded is not { } loaded)
 		{
-			return null;
+			return false;
 		}
 
 		var now = Capture();
@@ -242,42 +268,42 @@ public partial class EditMetadataViewModel : ObservableObject, IHandleClose, IBa
 			}
 		}
 
-		Set(!SameText(now.Title, loaded.Title), () => Item.Name = Blank(now.Title));
-		Set(!SameText(now.OriginalTitle, loaded.OriginalTitle), () => Item.OriginalTitle = Blank(now.OriginalTitle));
+		Set(!SameText(now.Title, loaded.Title), () => target.Name = Blank(now.Title));
+		Set(!SameText(now.OriginalTitle, loaded.OriginalTitle), () => target.OriginalTitle = Blank(now.OriginalTitle));
 		// the server reads ForcedSortName (SortName is the one it works out)
-		Set(!SameText(now.SortTitle, loaded.SortTitle), () => Item.ForcedSortName = Blank(now.SortTitle));
-		Set(!SameDay(now.DateAdded, loaded.DateAdded), () => Item.DateCreated = now.DateAdded);
-		Set(!SameText(now.Status, loaded.Status), () => Item.Status = Blank(now.Status));
-		Set(!SameNumber(now.CommunityRating, loaded.CommunityRating), () => Item.CommunityRating = (float?)Number(now.CommunityRating));
-		Set(!SameText(now.Overview, loaded.Overview), () => Item.Overview = Blank(now.Overview));
+		Set(!SameText(now.SortTitle, loaded.SortTitle), () => target.ForcedSortName = Blank(now.SortTitle));
+		Set(!SameDay(now.DateAdded, loaded.DateAdded), () => target.DateCreated = now.DateAdded);
+		Set(!SameText(now.Status, loaded.Status), () => target.Status = Blank(now.Status));
+		Set(!SameNumber(now.CommunityRating, loaded.CommunityRating), () => target.CommunityRating = (float?)Number(now.CommunityRating));
+		Set(!SameText(now.Overview, loaded.Overview), () => target.Overview = Blank(now.Overview));
 		// the release date used to be shown and never sent
-		Set(!SameDay(now.ReleaseDate, loaded.ReleaseDate), () => Item.PremiereDate = now.ReleaseDate);
-		Set(Whole(now.Year) != Whole(loaded.Year), () => Item.ProductionYear = Whole(now.Year));
-		Set(!SameDay(now.EndDate, loaded.EndDate), () => Item.EndDate = now.EndDate);
-		Set(!SameText(now.ParentalRating, loaded.ParentalRating), () => Item.OfficialRating = Blank(now.ParentalRating));
-		Set(!SameText(now.CustomRating, loaded.CustomRating), () => Item.CustomRating = Blank(now.CustomRating));
-		Set(!SameText(now.OriginalAspectRatio, loaded.OriginalAspectRatio), () => Item.AspectRatio = Blank(now.OriginalAspectRatio));
-		Set(now.Video3DFormat != loaded.Video3DFormat, () => Item.Video3DFormat = now.Video3DFormat);
-		Set(!now.Genres.SequenceEqual(loaded.Genres), () => Item.Genres = [.. now.Genres]);
+		Set(!SameDay(now.ReleaseDate, loaded.ReleaseDate), () => target.PremiereDate = now.ReleaseDate);
+		Set(Whole(now.Year) != Whole(loaded.Year), () => target.ProductionYear = Whole(now.Year));
+		Set(!SameDay(now.EndDate, loaded.EndDate), () => target.EndDate = now.EndDate);
+		Set(!SameText(now.ParentalRating, loaded.ParentalRating), () => target.OfficialRating = Blank(now.ParentalRating));
+		Set(!SameText(now.CustomRating, loaded.CustomRating), () => target.CustomRating = Blank(now.CustomRating));
+		Set(!SameText(now.OriginalAspectRatio, loaded.OriginalAspectRatio), () => target.AspectRatio = Blank(now.OriginalAspectRatio));
+		Set(now.Video3DFormat != loaded.Video3DFormat, () => target.Video3DFormat = now.Video3DFormat);
+		Set(!now.Genres.SequenceEqual(loaded.Genres), () => target.Genres = [.. now.Genres]);
 
 		foreach (var (key, value) in now.ExternalIds)
 		{
 			loaded.ExternalIds.TryGetValue(key, out var before);
 			Set(!SameText(value, before), () =>
 			{
-				Item.ProviderIds ??= new BaseItemDto_ProviderIds();
+				target.ProviderIds ??= new BaseItemDto_ProviderIds();
 				if (Blank(value) is { } id)
 				{
-					Item.ProviderIds.AdditionalData[key] = id;
+					target.ProviderIds.AdditionalData[key] = id;
 				}
 				else
 				{
-					Item.ProviderIds.AdditionalData.Remove(key);
+					target.ProviderIds.AdditionalData.Remove(key);
 				}
 			});
 		}
 
-		return changed ? Item : null;
+		return changed;
 	}
 
 	private MetadataForm Capture() => new(Title, OriginalTitle, SortTitle, DateAdded, Status, CommunityRating, Overview, ReleaseDate, Year,
@@ -325,7 +351,7 @@ public partial class EditMetadataViewModel : ObservableObject, IHandleClose, IBa
 	protected override void OnPropertyChanged(PropertyChangedEventArgs e)
 	{
 		base.OnPropertyChanged(e);
-		if (e.PropertyName is nameof(HasChanges) or nameof(Error) or nameof(RatingValues) or nameof(Video3DFormatValues) or nameof(StatusValues) or nameof(Path))
+		if (e.PropertyName is nameof(HasChanges) or nameof(TitleIsBlank) or nameof(CanSave) or nameof(Error) or nameof(RatingValues) or nameof(Video3DFormatValues) or nameof(StatusValues) or nameof(Path))
 		{
 			return;
 		}
@@ -343,6 +369,8 @@ public partial class EditMetadataViewModel : ObservableObject, IHandleClose, IBa
 		}
 
 		HasChanges = _loaded is { } loaded && !Capture().SameAs(loaded);
+		TitleIsBlank = _loaded is not null && Blank(Title) is null;
+		CanSave = HasChanges && !TitleIsBlank;
 	}
 
 	private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;

@@ -12,13 +12,46 @@ namespace FluentFin.Tests.Admin;
 public sealed class DestructiveConfirmTests
 {
 	[Fact]
-	public void CancelIsTheDefault_AndOnlyTheConfirmButtonConfirms()
+	public void OnlyTheConfirmButtonConfirms()
 	{
-		Assert.Equal(ContentDialogButton.Close, DestructiveConfirm.DefaultButton);
 		Assert.Equal("Cancel", DestructiveConfirm.CancelText);
 		Assert.True(DestructiveConfirm.Confirmed(ContentDialogResult.Primary));
 		Assert.False(DestructiveConfirm.Confirmed(ContentDialogResult.None));
 		Assert.False(DestructiveConfirm.Confirmed(ContentDialogResult.Secondary));
+	}
+
+	/// <summary>
+	/// What DestructiveConfirm.Create gives the ContentDialog it builds (through the same Build): Cancel is the default button,
+	/// the confirm the verb. (The off-screen run presses Enter on the real dialog: nothing is sent.)
+	/// </summary>
+	[Fact]
+	public void TheBuiltDialog_HasCancelAsItsDefault_AndTheVerbAsItsConfirm()
+	{
+		var dialog = new RecordingDialog();
+
+		DestructiveConfirm.Build(dialog, AdminPrompts.Restart("Harness"));
+
+		Assert.Equal(ContentDialogButton.Close, dialog.DefaultButton);
+		Assert.Equal("Cancel", dialog.CloseButtonText);
+		Assert.Equal("Restart server", dialog.PrimaryButtonText);
+		Assert.Equal("Restart Harness?", dialog.Title);
+		Assert.Contains("Everyone watching", dialog.Message);
+	}
+
+	private sealed class RecordingDialog : IConfirmDialogTarget
+	{
+		public string? Title { get; set; }
+		public string? Message { get; set; }
+		public string? PrimaryButtonText { get; set; }
+		public string? CloseButtonText { get; set; }
+		public ContentDialogButton? DefaultButton { get; set; }
+		string IConfirmDialogTarget.Title { set => Title = value; }
+		string IConfirmDialogTarget.Message { set => Message = value; }
+		string IConfirmDialogTarget.PrimaryButtonText { set => PrimaryButtonText = value; }
+		string IConfirmDialogTarget.CloseButtonText { set => CloseButtonText = value; }
+		ContentDialogButton IConfirmDialogTarget.DefaultButton { set => DefaultButton = value; }
+		Microsoft.UI.Xaml.Style IConfirmDialogTarget.Style { set { } }
+		Microsoft.UI.Xaml.Style IConfirmDialogTarget.PrimaryButtonStyle { set { } }
 	}
 
 	[Fact]

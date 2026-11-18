@@ -95,14 +95,38 @@ public partial class EditSubtitlesViewModel(IJellyfinClient jellyfinClient) : Ob
 			return;
 		}
 
+		// Review fix: the server deletes by stream index and renumbers the streams after a delete, so the rows' indexes go stale
+		// (a second delete removed another file from disk). The subtitle is found again by its file (what identifies an external
+		// one) in the item as the server has it now, and the list is read again afterwards.
 		Error = "";
-		if (await jellyfinClient.DeleteSubtitle(Item, info))
+		if (Item.Id is not { } id || await jellyfinClient.GetItem(id) is not { } fresh)
 		{
-			Subtitles.Remove(info);
+			Error = "The item couldn't be read from the server, so nothing was deleted. Try again.";
+			return;
 		}
-		else
+
+		var current = SubtitlesOf(fresh).FirstOrDefault(x => x.IsExternal == true && SameSubtitle(x, info));
+		if (current is null)
+		{
+			Error = "That subtitle is no longer on the server. The list shows what is there now.";
+		}
+		else if (!await jellyfinClient.DeleteSubtitle(fresh, current))
 		{
 			Error = "The server didn't delete the subtitle. Nothing changed.";
 		}
+
+		if (await jellyfinClient.GetItem(id) is { } after)
+		{
+			Item = after;
+			Subtitles.Clear();
+			Subtitles.AddRange(SubtitlesOf(after));
+		}
 	}
+
+	private static List<MediaStream> SubtitlesOf(BaseItemDto item) => [.. item.MediaStreams?.Where(x => x.Type == MediaStream_Type.Subtitle) ?? []];
+
+	/// <summary>The same external subtitle: its file when the server says it, else its title, language and codec.</summary>
+	private static bool SameSubtitle(MediaStream a, MediaStream b) => !string.IsNullOrEmpty(a.Path) || !string.IsNullOrEmpty(b.Path)
+		? string.Equals(a.Path, b.Path, StringComparison.OrdinalIgnoreCase)
+		: a.DisplayTitle == b.DisplayTitle && a.Language == b.Language && a.Codec == b.Codec;
 }
