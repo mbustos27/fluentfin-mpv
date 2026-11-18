@@ -9,36 +9,48 @@ function Wheel-At([int]$X, [int]$Y, [int]$Delta, [bool]$Horizontal) {
     [OffscreenUi]::Wheel($script:hwnd, $script:ui.Id, $X, $Y, $Delta, $Horizontal, $false)
     Start-Sleep -Milliseconds 900
 }
-[void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
-Start-Sleep -Milliseconds 800
+# 1.2.0: a row by its name (the RowList inside its scroller is named after it), the page scrolled until the row is wholly in
+# view: a clipped row's edge is the page's edge, so strictly inside means all of it. The rows were picked by their place on
+# screen after scrolling to the top, which in a 1080-pixel window (two rows under the hero) never found the third.
+function Row-Named([string]$Name) {
+    foreach ($pct in 0..20) {
+        [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, $pct * 5); Start-Sleep -Milliseconds 450
+        $list = Find-Ui -Name $Name -Type 'List'
+        $page = Page-State
+        if (-not $list -or -not $page) { continue }
+        $lr = [OffscreenUi]::RectOf($list)
+        if ($lr.Y -le $page.Rect[1] + 1 -or $lr.Y + $lr.Height -ge $page.Rect[1] + $page.Rect[3] - 1) { continue }
+        $row = Rows-Now | Where-Object { [math]::Abs($_.Rect[1] - $lr.Y) -lt 3 } | Select-Object -First 1
+        if ($row) { return $row }
+    }
+}
 $names = 'Continue Watching', 'Next Up', 'New in Movies'
-for ($i = 0; $i -lt 3; $i++) {
-    # the i-th row by its place on screen; re-read after every move: the page scrolls
-    $rows = Rows-Now
-    if ($rows.Count -le $i) { Check "wheel: row $i found" $false; continue }
-    $r = $rows[$i]; $x = [int]($r.Rect[0] + $r.Rect[2] / 2); $y = [int]($r.Rect[1] + $r.Rect[3] / 2)
+foreach ($rowName in $names) {
+    $r = Row-Named $rowName
+    if (-not $r) { Check "wheel: row $rowName found" $false; continue }
+    $x = [int]($r.Rect[0] + $r.Rect[2] / 2); $y = [int]($r.Rect[1] + $r.Rect[3] / 2)
     $page0 = (Page-State).V; $rowSum0 = (@(Rows-Now) | ForEach-Object { $_.H } | Measure-Object -Sum).Sum
     Wheel-At $x $y -120 $false
     $page1 = (Page-State).V
     $rowsNow = Rows-Now
     $rowSame = ((@($rowsNow) | ForEach-Object { $_.H } | Measure-Object -Sum).Sum) -le $rowSum0 + 0.5   # no row moved further (rows may scroll out of the list)
-    Check "wheel: the vertical wheel over $($names[$i]) scrolls the page" ($page1 -gt $page0 + 1) "page $page0 -> $page1"
+    Check "wheel: the vertical wheel over $rowName scrolls the page" ($page1 -gt $page0 + 1) "page $page0 -> $page1"
     Check "wheel: ... and not the row" $rowSame (($rowsNow | ForEach-Object { "{0:0.0}" -f $_.H }) -join ", ")
-    # tilt right over the same place (the page moved: find the row again)
-    $r = (Rows-Now)[$i]; if (-not $r) { $r = (Rows-Now)[0] }
+    # tilt right over the same row (the page moved: bring it back into view)
+    $r = Row-Named $rowName
+    if (-not $r) { Check "wheel: row $rowName found again" $false; continue }
     $x = [int]($r.Rect[0] + $r.Rect[2] / 2); $y = [int]($r.Rect[1] + $r.Rect[3] / 2)
     $rowBefore = $r.H; $pageB = (Page-State).V
     Wheel-At $x $y 120 $true
     $after = (Rows-Now | Where-Object { [math]::Abs($_.Rect[1] - $r.Rect[1]) -lt 2 } | Select-Object -First 1).H
-    Check "wheel: the tilt wheel over $($names[$i]) moves the row" ($after -gt $rowBefore + 0.5) "row $rowBefore -> $after"
+    Check "wheel: the tilt wheel over $rowName moves the row" ($after -gt $rowBefore + 0.5) "row $rowBefore -> $after"
     Check "wheel: ... and not the page" ([math]::Abs((Page-State).V - $pageB) -lt 0.5)
     # the row's end: scroll it all the way, then the vertical wheel must still reach the page
     for ($k = 0; $k -lt 14; $k++) { Wheel-At $x $y 120 $true }
     $end = (Rows-Now | Where-Object { [math]::Abs($_.Rect[1] - $r.Rect[1]) -lt 2 } | Select-Object -First 1).H
     $pageE = (Page-State).V
     Wheel-At $x $y -120 $false
-    Check "wheel: at the end of $($names[$i]) the vertical wheel still scrolls the page" ((Page-State).V -gt $pageE + 0.5) "row at $end %, page $pageE -> $((Page-State).V)"
-    # and back to the top of the page for the next row
-    [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
-    Start-Sleep -Milliseconds 700
+    Check "wheel: at the end of $rowName the vertical wheel still scrolls the page" ((Page-State).V -gt $pageE + 0.5) "row at $end %, page $pageE -> $((Page-State).V)"
 }
+[void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
+Start-Sleep -Milliseconds 700

@@ -3,7 +3,18 @@
 # for modifiers, so Shift+Tab is checked in the unit tests and by hand).
 function Focus-Info { $f = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id); if ($f) { $f | ConvertFrom-Json } }
 function Press([int]$Vk, [int]$Ms = 700) { Key $Vk; Start-Sleep -Milliseconds $Ms }
-function Card-Focus([string]$Prefix) { $c = Find-Ui -Name $Prefix -Type 'ListItem' -Contains; if ($c) { [void][OffscreenUi]::SetFocus($c); Start-Sleep -Milliseconds 500 }; Focus-Info }
+# a card by the start of its name, also when its row is below the fold (focusing it brings it into view; 1.2.0: a
+# 1080-pixel window shows Next Up only in part, and the card was not found)
+function Card-Focus([string]$Prefix) { $c = Find-Ui -Name $Prefix -Type 'ListItem' -Contains -OffscreenToo; if ($c) { [void][OffscreenUi]::SetFocus($c); Start-Sleep -Milliseconds 500 }; Focus-Info }
+# the names of a row's cards (its list is named after the row): which row the focus is in, at any window size (1.2.0:
+# the checks compared heights on screen, which a 1080-pixel window's page scroll upsets)
+function Row-Cards([string]$RowName) {
+    $rowList = Find-Ui -Name $RowName -Type 'List' -OffscreenToo
+    if (-not $rowList) { return @() }
+    $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
+    @($rowList.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond) | ForEach-Object { $_.Current.Name })
+}
+$winBottom = [System.Windows.Automation.AutomationElement]::FromHandle($script:hwnd).Current.BoundingRectangle.Bottom
 
 [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
 Start-Sleep -Milliseconds 700
@@ -33,13 +44,13 @@ Press 0x27; Press 0x27
 $col = Focus-Info
 Press 0x28 1000  # Down
 $down = Focus-Info
-Check 'rows: Down moves to the Next Up row' ($down -and $down.type -eq 'ListItem' -and $down.rect[1] -gt $col.rect[1] + 100 -and $down.name -ne $col.name) ($down.name)
+Check 'rows: Down moves to the Next Up row' ($down -and $down.type -eq 'ListItem' -and (Row-Cards 'Next Up') -contains $down.name -and $down.name -ne $col.name) ($down.name)
 Check 'rows: ... in the same column (centres within one card)' ($down -and [math]::Abs(($down.rect[0] + $down.rect[2] / 2) - ($col.rect[0] + $col.rect[2] / 2)) -lt 400) ("{0} vs {1}" -f $down.rect[0], $col.rect[0])
 Shot 'rows-3-down'
 Press 0x28 1500
 $d2 = Focus-Info
 Check 'rows: Down again reaches Recently Added (the row below the fold)' ($d2 -and $d2.type -eq 'ListItem' -and $d2.rect[1] -gt $down.rect[1] - 400 -and $d2.name -ne $down.name) ($d2.name)
-Check 'rows: the focused card is fully inside the window (not under the title bar or the edge)' ($d2 -and $d2.rect[1] -ge 90 -and ($d2.rect[1] + $d2.rect[3]) -le 1400) ($d2.rect -join ',')
+Check 'rows: the focused card is fully inside the window (not under the title bar or the edge)' ($d2 -and $d2.rect[1] -ge 90 -and ($d2.rect[1] + $d2.rect[3]) -le $winBottom) (($d2.rect -join ',') + " (window bottom $winBottom)")
 Shot 'rows-4-lower-row'
 Press 0x26 1200
 $up = Focus-Info
