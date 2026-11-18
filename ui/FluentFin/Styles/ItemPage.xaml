@@ -7,11 +7,11 @@
     -->
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
-            <!--  left to right: a deep wash behind the text that fades to the open backdrop on the right  -->
+            <!--  left to right: a deep wash behind the text that fades to the open backdrop on the right (1.2.0: dusk, not the old teal)  -->
             <LinearGradientBrush x:Key="ItemHeroSideScrimBrush" StartPoint="0,0" EndPoint="1,0">
-                <GradientStop Offset="0" Color="#E60A1418" />
-                <GradientStop Offset="0.6" Color="#BF0A1418" />
-                <GradientStop Offset="1" Color="#000A1418" />
+                <GradientStop Offset="0" Color="#E6170508" />
+                <GradientStop Offset="0.6" Color="#BF170508" />
+                <GradientStop Offset="1" Color="#00170508" />
             </LinearGradientBrush>
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
@@ -30,13 +30,6 @@
         <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
     </Style>
 
-    <Style x:Key="ItemGlassToggleButtonStyle" BasedOn="{StaticResource IconToggleButtonStyle}" TargetType="ToggleButton">
-        <Setter Property="Background" Value="{ThemeResource GlassPanelBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
-        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
-        <Setter Property="CornerRadius" Value="{StaticResource GlassCircleCornerRadius}" />
-        <Setter Property="Width" Value="{StaticResource GlassPillHeight}" />
-        <Setter Property="Height" Value="{StaticResource GlassPillHeight}" />
-        <Setter Property="Padding" Value="0" />
-    </Style>
+    <!--  1.2.0 (the button review): the hero's Watched and Favorite are the button system's icon toggle (Glass.xaml)  -->
+    <StaticResource x:Key="ItemGlassToggleButtonStyle" ResourceKey="NixieIconToggleButtonStyle" />
 </ResourceDictionary>

@@ -6,10 +6,12 @@ using Windows.UI;
 namespace FluentFin.Services;
 
 /// <summary>
-/// Seaglass: the window's chrome is ONE fixed sea-glass palette: clean neutral dark glass (pale glass in the light theme) with the
-/// accent always sea-glass aqua. The title being shown does not recolour any panel or button; its hue only tints the ambient
-/// backdrop, faintly (<see cref="TitleTint"/>). This applies <see cref="SeaglassPalette"/> (default hue) to the shared brushes of
-/// Glass.xaml, in place, and again when <see cref="GlassMode"/> changes (Solid gets the opaque 7:1 ladder). UI thread only.
+/// The window's chrome is ONE fixed palette (1.1.4: the desert sunset): calm deep plum glass from the sunset's maroon end (pale
+/// peach glass in the light theme) with a hot-pink accent (crimson in the light theme). The title being shown does not recolour any
+/// panel or button; its hue only tints the ambient backdrop, faintly (<see cref="TitleTint"/>). This applies
+/// <see cref="SeaglassPalette"/> (default hue) to the shared brushes of Glass.xaml, in place, and again when <see cref="GlassMode"/>
+/// changes (Solid gets the opaque 7:1 ladder). While the window is in the background (<see cref="GlassActivity"/>) the light edge
+/// and the inner glow dim. UI thread only.
 /// </summary>
 public static class SeaglassTheme
 {
@@ -35,8 +37,49 @@ public static class SeaglassTheme
 				queue.TryEnqueue(Refresh);
 			}
 		};
+		GlassActivity.Changed += (_, _) => ApplyEdge(GlassActivity.EdgeLevel(GlassActivity.IsActive));
 		Refresh();
 	}
+
+	/// <summary>The brushes that dim with the window: the light edge and the inner glow (their stops' colours as Glass.xaml has them).</summary>
+	internal static readonly string[] EdgeKeys = ["GlassStrokeBrush", "GlassGlowBrush"];
+
+	private static readonly Dictionary<GradientStop, Color> _edgeStops = [];
+
+	/// <summary>Scale the alpha of the light edge and the glow, in both themes (1: as designed).</summary>
+	public static void ApplyEdge(double level)
+	{
+		foreach (var d in new[] { _dark, _light })
+		{
+			if (d is null)
+			{
+				continue;
+			}
+
+			foreach (var key in EdgeKeys)
+			{
+				if (!d.TryGetValue(key, out var found) || found is not LinearGradientBrush brush)
+				{
+					continue;
+				}
+
+				foreach (var stop in brush.GradientStops)
+				{
+					if (!_edgeStops.TryGetValue(stop, out var original))
+					{
+						original = stop.Color;
+						_edgeStops[stop] = original;
+					}
+
+					stop.Color = Scaled(original, level);
+				}
+			}
+		}
+	}
+
+	/// <summary>A colour with its alpha scaled by <paramref name="level"/> (0..1).</summary>
+	public static Color Scaled(Color color, double level) =>
+		Color.FromArgb((byte)Math.Round(color.A * Math.Clamp(level, 0, 1)), color.R, color.G, color.B);
 
 	public static void Refresh()
 	{

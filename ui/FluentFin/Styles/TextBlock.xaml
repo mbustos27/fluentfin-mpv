@@ -1,6 +1,7 @@
 ﻿<ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls"
     xmlns:services="using:FluentFin.Services">
 
     <Style x:Key="PageTitleStyle" TargetType="TextBlock">
@@ -30,9 +31,10 @@
         <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
         <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
         <Setter Property="IsTabStop" Value="False" />
-        <Setter Property="PrimaryButtonStyle" Value="{ThemeResource DefaultButtonStyle}" />
-        <Setter Property="SecondaryButtonStyle" Value="{ThemeResource DefaultButtonStyle}" />
-        <Setter Property="CloseButtonStyle" Value="{ThemeResource DefaultButtonStyle}" />
+        <!--  1.2.0 (the button review): the Compact Secondary role; the default button turns Primary (DefaultButtonStates)  -->
+        <Setter Property="PrimaryButtonStyle" Value="{ThemeResource NixieCompactButtonStyle}" />
+        <Setter Property="SecondaryButtonStyle" Value="{ThemeResource NixieCompactButtonStyle}" />
+        <Setter Property="CloseButtonStyle" Value="{ThemeResource NixieCompactButtonStyle}" />
         <Setter Property="CornerRadius" Value="{StaticResource GlassOverlayCornerRadius}" />
         <Setter Property="services:GlassDialog.PanelMaxWidth" Value="1000" />
         <Setter Property="Template">
@@ -65,6 +67,8 @@
                                         <RowDefinition Height="*" />
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
+                                    <!--  1.1.4: the one surface's glass body (frosted rim, bottom shade; none in Solid)  -->
+                                    <controls:GlassVolume Grid.RowSpan="3" CornerRadius="{TemplateBinding CornerRadius}" />
 
                                     <Grid
                                         x:Name="TitleSpace"
@@ -302,24 +306,18 @@
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="DefaultButtonStates">
                                 <VisualState x:Name="NoDefaultButton" />
+                                <!--
+                                    1.2.0 (the button review): a default Primary is the Nixie Primary (radius 8, the focus glow), not WinUI's
+                                    AccentButtonStyle. A default Secondary or Close keeps its own role: a destructive dialog's default
+                                    Cancel stays Secondary beside the Destructive confirm (NixieDestructiveDialogStyle).
+                                -->
                                 <VisualState x:Name="PrimaryAsDefaultButton">
                                     <VisualState.Setters>
-                                        <Setter Target="PrimaryButton.Style" Value="{StaticResource AccentButtonStyle}" />
-
+                                        <Setter Target="PrimaryButton.Style" Value="{ThemeResource NixiePrimaryCompactButtonStyle}" />
                                     </VisualState.Setters>
                                 </VisualState>
-                                <VisualState x:Name="SecondaryAsDefaultButton">
-                                    <VisualState.Setters>
-                                        <Setter Target="SecondaryButton.Style" Value="{StaticResource AccentButtonStyle}" />
-
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="CloseAsDefaultButton">
-                                    <VisualState.Setters>
-                                        <Setter Target="CloseButton.Style" Value="{StaticResource AccentButtonStyle}" />
-
-                                    </VisualState.Setters>
-                                </VisualState>
+                                <VisualState x:Name="SecondaryAsDefaultButton" />
+                                <VisualState x:Name="CloseAsDefaultButton" />
 
                             </VisualStateGroup>
                             <VisualStateGroup x:Name="DialogBorderStates">

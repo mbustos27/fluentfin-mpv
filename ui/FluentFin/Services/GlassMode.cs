@@ -82,6 +82,9 @@ public static class GlassMode
 		}
 	}
 
+	/// <summary>Whether Windows' high contrast is on: every decorative layer (the dusk scene, glows) is then removed, not just made opaque.</summary>
+	public static bool IsHighContrast => HighContrast;
+
 	/// <summary>Whether Windows' animation effects are on (the page transition and the fades honour it).</summary>
 	public static bool AnimationsOn => Animations;
 

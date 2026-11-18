@@ -66,6 +66,10 @@ param(
     [string]$Backend,
     [string]$Cache = (Join-Path $env:TEMP 'fluentfin-mpv-harness'),
     [switch]$NoA11y,
+    # the private desktop has no foreground lock: other processes' windows take activation, and the app would draw and measure
+    # its background state throughout. By default the glass keeps its active state (FLUENTFIN_MPV_GLASS_ALWAYS_ACTIVE=1, honoured
+    # by dev builds only); -GlassFollowsActivity leaves the window's real activation in charge.
+    [switch]$GlassFollowsActivity,
     [int]$TabStops = 60,
     [int]$TimeoutSeconds = 900
 )
@@ -161,8 +165,9 @@ if ($Then) { $driveArgs += @('-Then', $Then) }
 if ($Before) { $driveArgs += @('-Before', $Before) }
 if ($NoA11y) { $driveArgs += '-NoA11y' }
 Write-Host "running off-screen (desktop ffh-ui-$PID; log $Out\drive.log)"
+$glassEnv = if ($GlassFollowsActivity) { @() } else { @('--env', 'FLUENTFIN_MPV_GLASS_ALWAYS_ACTIVE=1') }
 & $Python -B -I $hidden --log (Join-Path $Out 'hidden_run.log') --timeout $TimeoutSeconds --desktop "ffh-ui-$PID" `
-    --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" `
+    --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" @glassEnv `
     --env "PATH=$mpvDir;$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0" `
     -- $ps @driveArgs | Out-Host
 $code = $LASTEXITCODE

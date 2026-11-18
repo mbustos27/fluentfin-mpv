@@ -257,10 +257,15 @@ public sealed class HomeHeroGlassTests
 		Assert.Equal("{ThemeResource SystemColorButtonFaceColor}", Color("GlassInsetFillBrush"));
 		Assert.Equal("{ThemeResource SystemColorButtonTextColor}", Color("GlassInsetTextBrush"));
 
-		var style = glass.Elements().Single(e => (string?)e.Attribute(Xaml + "Key") == "GlassInsetPillButtonStyle");
+		// 1.2.0: the inset pill is an alias of the Secondary button, whose fill and label are ButtonFace and ButtonText there
+		var alias = glass.Elements().Single(e => (string?)e.Attribute(Xaml + "Key") == "GlassInsetPillButtonStyle");
+		Assert.Equal("NixieButtonStyle", (string?)alias.Attribute("ResourceKey"));
+		var style = glass.Elements().Single(e => (string?)e.Attribute(Xaml + "Key") == "NixieButtonStyle");
 		var setters = style.Elements().Where(e => e.Name.LocalName == "Setter").ToDictionary(e => (string)e.Attribute("Property")!, e => (string?)e.Attribute("Value"));
-		Assert.Equal("{ThemeResource GlassInsetFillBrush}", setters["Background"]);
-		Assert.Equal("{ThemeResource GlassInsetTextBrush}", setters["Foreground"]);
+		Assert.Equal("{ThemeResource NixieButtonFillBrush}", setters["Background"]);
+		Assert.Equal("{ThemeResource NixieButtonForegroundBrush}", setters["Foreground"]);
+		Assert.Equal("{ThemeResource SystemColorButtonFaceColor}", Color("NixieButtonFillBrush"));
+		Assert.Equal("{ThemeResource SystemColorButtonTextColor}", Color("NixieButtonForegroundBrush"));
 
 		// and the hero's More info takes its style's label colour, not one of its own
 		var moreInfo = Panel().Descendants().Single(e => e.Name.LocalName == "Button" && (string?)e.Attribute(Xaml + "Name") == "MoreInfoButton");

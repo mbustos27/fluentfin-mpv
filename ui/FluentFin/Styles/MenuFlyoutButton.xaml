@@ -25,6 +25,8 @@
         <Setter Property="FontSize" Value="{ThemeResource ControlContentThemeFontSize}" />
         <Setter Property="UseSystemFocusVisuals" Value="{StaticResource UseSystemFocusVisuals}" />
         <Setter Property="FocusVisualMargin" Value="-3" />
+        <!--  1.2.0 (the button review): WinUI's menu item radius  -->
+        <Setter Property="CornerRadius" Value="4" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="controls:MenuFlyoutButton">

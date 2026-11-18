@@ -351,7 +351,7 @@ public partial class App : Application
 			// the harness's light-theme screenshots (NIXIE_THEME=Light|Dark, or SEAGLASS_THEME); unset, the app follows Windows
 			if (Enum.TryParse<ElementTheme>(Core.AppIdentity.ReadEnvironment("THEME"), true, out var forcedTheme) && forcedTheme != ElementTheme.Default)
 			{
-				((FrameworkElement)MainWindow.Content).RequestedTheme = forcedTheme;
+				GlassTheme.SetAppTheme(MainWindow, forcedTheme); // 1.2.0: the caption buttons too (the layout audit's #17)
 			}
 
 			GlassTheme.Attach((FrameworkElement)MainWindow.Content);

@@ -172,3 +172,65 @@ too**: `MpvPlayerControls.xaml`'s `PlayerMenuPresenter` (the audio menu) and `Pl
   check on #13877B), the aqua itself about 1.8:1 against a bright thumbnail (4.2:1 before).
 - `SEAGLASS_THEME` now sets the application's theme, so the harness's light screenshots show light dialogs, menus and tooltips too.
 - Measured contrast (screenshots' pixels): `shots\contrast.md` of the 1.1.3 glass stream.
+
+## 1.2.0 (Nixie): dusk, really glassy by default (supersedes the palette, accent and no-artwork lines above)
+
+The user: "really themed", "niche is fine", "all the glass features", glassy **by default** (GlassMode Full; Reduced and Solid
+keep their purpose), "no oblong ovals", and not ugly (pass 4's lesson holds: no colour on the chrome per title, no heavy grain,
+no thick rims). Then: "be inspired by these colours" (a flat desert-sunset illustration), retro-futurist desert motifs
+(atomic-age Americana, Googie starbursts, neon motel signs, drive-ins, a faint CRT glow; nothing from Fallout), and the name
+**Nixie** (the glowing number tube). The theme guide is `docs\reports\Seaglass rename and retro desert theme.md`; the feature
+list with each feature's status is the glass stream's `shots\glass-features.md`.
+
+- **Palette** (`SeaglassPalette`, Glass.xaml's Dark and Light dictionaries, App.xaml's accent ramps). Dark: the glass is a calm
+  deep plum from the sunset's maroon end (OKLCH hue 8, tint L 0.22 C 0.04; deep `#170508`), text a warm white. Light ("noon"):
+  pale peach glass (hue 26, L 0.95) with deep maroon text. **Accent**: hot pink `#F96985` with a dark label `#24060F` (6.7:1;
+  white on hot pink is 2.8:1 and is never used), crimson `#BC1E47` with white (6.2:1) in light; on artwork the light pink
+  `#FF9EB1` on its dark track. Hot pink means "you can act on this" (Play, progress, focus); decoration is coral and pale sun.
+  No aqua is left. A title's hue (at most 10 %, on the backdrop only) is clamped to the sunset's hues, 343 to 43.
+- **The dusk scene** (`FluentFin.Core.Theming.DuskScene`, drawn by `AmbientBackdropView`; vector shapes and gradients, no image
+  files): a banded sky (maroon, crimson, rose, coral, hot pink, peach; light: neon-core white to coral), a striped sun with three
+  thin rings, six four-point sparkles with curved sides (none where a page title can fall), rolling hills and buttes with curved
+  slopes, one saguaro with rounded elbows, faint scanlines at dusk only (every 3 DIP, 3.5 %) and a vignette; the bands meet over
+  a short soft edge (the art pass: `shots\art\README.md`). **In full** outside the shell (the server page and sign-in, even over
+  the server's splash image) and behind an empty state's `SceneCard` (which holds the scene while it is loaded and puts its text
+  on the strong glass); **a strip** of rolling hills (28 % / 20 %, no butte) along the bottom inside the shell
+  where there is no artwork; **nothing** over artwork. Text straight on the strip keeps 4.5:1 (no strip colour above luminance
+  0.08 in dark, none below 0.50 in light; `DuskSceneTests`). Motion (Full, window active, the full scene only): the stars
+  glint, the sun's rings breathe, the hills sway for 20 s after the scene appears or the window comes back, then everything
+  eases still. The strip never moves: any continuous motion makes the compositor redraw the whole window, acrylic included,
+  every frame (measured: the strip's endless sway cost about 0.6 of a core on an idle page, against about 0.05 in 1.1.3).
+  Reduced is still; Solid keeps the shapes but drops the scanlines; high contrast shows none of it.
+  Desktop acrylic is no longer used: the scene covers the window wherever there is no artwork.
+- **Glass**: every glass surface (and the rail) has a body (`GlassVolume`: a frosted rim, clear in the middle, and a bottom shade;
+  none in Solid), the rail is lifted by the panels' two shadows, and the pointer lights the rim near it (`PanelSheen`'s edge
+  light). In the background (`GlassActivity`) the light edge and glow dim to 45 %, the backdrop stops and the pointer light goes out.
+- **Neon**: keyboard focus on a glass pill glows (hot pink close in, the nixie orange `GlassNeonGlowColor` `#FF7A50` further out,
+  made on first focus) besides WinUI's two focus rings: in dark the neon core's near-white `#FFF4EE` around the deep colour (a
+  pink ring vanished on the hot-pink Play), in light crimson around white. The accent pill has a soft resting glow. Every glow's
+  opacity is `GlassShadowOpacity` or `GlassContactShadowOpacity` (0 in high contrast). Never give a glow a key of its own at the
+  top of Glass.xaml as a fallback: a top-level key wins over the theme dictionaries in every theme (that hid every glow once;
+  `GlassDuskTests` now forbids a key both at the top and in a theme dictionary).
+- **One glass layer per surface** (the 1.1.3 layout audit's "boxes in boxes"): panels have 12 px corners; `GlassSectionStyle` is a
+  section with the panel's spacing and nothing behind it, for shelves on item pages and Settings groups; keep `GlassSurfaceStyle`
+  for at most one form-like block a page and never nest it. The glassiness comes from the chrome, the backdrop and the overlays.
+- **Buttons** (`docs\reports\Nixie button review.md`, section 3; keys in Glass.xaml): six roles in two sizes, Large 44 on
+  media surfaces and Compact 32 in forms, one radius of 8, no pills. `NixiePrimaryButtonStyle` / `...Compact...` (the accent,
+  one per view; the Large one glows softly at rest), `NixieButtonStyle` / `NixieCompactButtonStyle` (glass: the flat inset fill
+  and the lit edge), `NixieSubtleButtonStyle`, `NixieIconButtonStyle` (44 circle), `NixieIconToggleButtonStyle` (on: the accent
+  glyph and a 1.5 px rim, never a filled disc), `NixieCompactIconButtonStyle` (32 rounded square), `NixieDestructiveButtonStyle`
+  / `...Compact...` (the danger ink #FF8A80 / #B3261E, never filled, never glowing), `NixieLinkButtonStyle` (neutral,
+  underlined), `NixieTabButtonStyle` (a neon underline; SelectionStates), and `NixieDialogStyle` / `NixieDestructiveDialogStyle`
+  (Cancel is the default there). Every state: hover and pressed are overlays (the weight never changes), focus is WinUI's two
+  rings 3 px outside plus the glow (not on Destructive or Link), disabled is a neutral fill and text, never a fade. The 1.1.x
+  keys (`GlassPillButtonStyle`, `GlassAccentPillButtonStyle`, `GlassInsetPillButtonStyle`, `GlassIconButtonStyle`,
+  `ItemGlassToggleButtonStyle`) are aliases of these. Every Nixie* colour has a high-contrast system colour.
+- **The top bar** (the side rail is gone, account stream): `GlassTitleBarBrush` (acrylic; `GlassTitleBarSolidBrush` in Solid),
+  `GlassTitleBarStrokeBrush` for its bottom hairline, and the selected tab's `NeonUnderline` (a stroke-stack tube: hot-pink halo
+  and glow around a near-white core; light: a crimson line; high contrast: the system highlight) or `GlassTabUnderlineBrush`.
+  An in-app theme goes through `GlassTheme.SetAppTheme`, which themes the caption buttons too. No layer sits between the backdrop
+  and the shell's pages (`NavigationViewContentBackground` is transparent; WinUI's default greyed the scene into mud).
+- **The wordmark** (`AppWordmark`): the name as a lit tube, in Monoton (SIL OFL 1.1, `Assets\Fonts`, shipped unmodified beside
+  its licence) from 36 px up (64 by default: Monoton's lines render unevenly at 56), letter-spaced, with two restrained masked
+  glows (one faint crimson glow at noon) and one flicker on the first showing in Full; the plain display
+  font in the tube's colour when small (the title bar). Body text stays Segoe UI Variable; no display font on server data.

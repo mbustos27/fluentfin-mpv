@@ -8,8 +8,9 @@
     -->
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
-            <SolidColorBrush x:Key="FavoriteCheckedBrush" Color="Red" />
-            <SolidColorBrush x:Key="RatingStarBrush" Color="Yellow" />
+            <!--  1.2.0 (the button review): the palette's, not Red and Yellow: the accent-on-image pink, the pale sun  -->
+            <SolidColorBrush x:Key="FavoriteCheckedBrush" Color="#FF9EB1" />
+            <SolidColorBrush x:Key="RatingStarBrush" Color="#F7AFA9" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="FavoriteCheckedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
