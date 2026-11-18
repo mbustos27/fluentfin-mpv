@@ -509,13 +509,10 @@ public sealed partial class ShelfRow : UserControl
 	/// <summary>The row remembers the card that had the focus: coming back to the row (Tab, Shift+Tab) lands on it.</summary>
 	private void Scroller_GettingFocus(UIElement sender, GettingFocusEventArgs e)
 	{
-		if (_directed || e.FocusState == FocusState.Pointer || _lastIndex < 0 || _lastIndex >= Count)
-		{
-			return;
-		}
-
-		// only the focus coming in from outside the row is redirected; one moving along it is the row's own keys
-		if (IndexOf(e.NewFocusedElement) < 0 || IndexOf(e.OldFocusedElement) >= 0)
+		// only the keyboard's focus coming in from outside the row is redirected; one moving along it is the row's own keys,
+		// and a programmatic one (UI Automation, Narrator) keeps the card it names (RowPaging.RedirectsToRemembered)
+		var fromOutside = IndexOf(e.NewFocusedElement) >= 0 && IndexOf(e.OldFocusedElement) < 0;
+		if (!RowPaging.RedirectsToRemembered(e.FocusState == FocusState.Keyboard, _directed, _lastIndex, Count, fromOutside))
 		{
 			return;
 		}

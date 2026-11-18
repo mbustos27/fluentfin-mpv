@@ -97,6 +97,16 @@ internal static class RowPaging
 		};
 	}
 
+	/// <summary>
+	/// Whether the focus coming into a row goes to the row's remembered card (<paramref name="remembered"/>) instead of the
+	/// card it is going to: only the keyboard's way in from outside the row (Tab, Shift+Tab), and not when the row moves it
+	/// itself (<paramref name="directed"/>). A pointer lands where it pressed; programmatic focus (UI Automation's SetFocus,
+	/// which Narrator uses, or the app naming a card) lands on the card it names. 1.2.0: programmatic focus went to the
+	/// remembered card, so the menu key then opened that card's menu and "Remove from Continue Watching" took out another item.
+	/// </summary>
+	public static bool RedirectsToRemembered(bool keyboard, bool directed, int remembered, int count, bool comesFromOutside) =>
+		keyboard && !directed && remembered >= 0 && remembered < count && comesFromOutside;
+
 	/// <summary>The card whose centre is nearest to <paramref name="x"/> (keeps the column when moving to another row); -1 for none.</summary>
 	public static int NearestByCenter(IReadOnlyList<double> centers, double x)
 	{

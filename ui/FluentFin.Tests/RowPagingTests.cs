@@ -86,6 +86,16 @@ public sealed class RowPagingTests
 	}
 
 	[Theory]
+	[InlineData(true, false, 0, 5, true, true)]    // Tab into the row: its remembered card
+	[InlineData(false, false, 0, 5, true, false)]  // UI Automation's SetFocus (Narrator), the app naming a card: that card
+	[InlineData(true, true, 0, 5, true, false)]    // the row moving the focus itself
+	[InlineData(true, false, -1, 5, true, false)]  // nothing remembered
+	[InlineData(true, false, 5, 5, true, false)]   // the remembered card is gone
+	[InlineData(true, false, 0, 5, false, false)]  // moving along the row
+	public void OnlyTheKeyboardComingIn_GoesToTheRememberedCard(bool keyboard, bool directed, int remembered, int count, bool fromOutside, bool expected) =>
+		Assert.Equal(expected, RowPaging.RedirectsToRemembered(keyboard, directed, remembered, count, fromOutside));
+
+	[Theory]
 	[InlineData(100, 400, 800, 24, 0)]        // in view
 	[InlineData(-10, 300, 800, 24, -34)]       // under the title bar: up to the margin
 	[InlineData(500, 790, 800, 24, 14)]        // past the bottom edge
