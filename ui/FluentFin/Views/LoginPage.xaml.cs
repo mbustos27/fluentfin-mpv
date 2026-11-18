@@ -15,7 +15,6 @@ public sealed partial class LoginPage
 	public LoginPage()
 	{
 		ViewModel = App.GetService<LoginViewModel>();
-		HighContrastPreview.ApplyFromEnvironment(); // the harness's contrast preview (see SelectServerPage)
 		InitializeComponent();
 		Loaded += LoginView_Loaded;
 		Unloaded += LoginView_Unloaded;

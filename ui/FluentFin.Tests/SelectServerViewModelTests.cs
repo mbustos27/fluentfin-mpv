@@ -181,7 +181,7 @@ public sealed class SelectServerViewModelTests
 		Assert.Equal(1, looked);
 
 		_servers.Add(new SavedServer { Id = "server-1" });
-		var withServers = new SelectServerViewModel(_settings.Object, _navigation.Object);
+		var withServers = new SelectServerViewModel(_settings.Object, _navigation.Object, TestHomeCache.Unused());
 		withServers.Discover = (_, _) =>
 		{
 			looked++;
@@ -191,9 +191,41 @@ public sealed class SelectServerViewModelTests
 		Assert.Equal(1, looked);
 	}
 
+	[Fact]
+	public async Task RemoveOnASavedServer_AsksNamingIt_AndOnlyAYesRemovesIt()
+	{
+		// 1.1.4 (states; layout audit #12): the server page's Remove asks Settings' question
+		var server = new SavedServer { Id = "s1", DisplayName = "Living room" };
+		_servers.Add(server);
+		var vm = Create();
+		var asked = new List<Core.ConfirmPrompt>();
+		var answer = false;
+		vm.Confirm = prompt => { asked.Add(prompt); return Task.FromResult(answer); };
+
+		await vm.RemoveServerCommand.ExecuteAsync(server);
+		Assert.Equal("Remove Living room?", Assert.Single(asked).Title);
+		Assert.Equal([server], _servers);
+
+		answer = true;
+		await vm.RemoveServerCommand.ExecuteAsync(server);
+		Assert.Empty(_servers);
+		Assert.False(vm.HasServers);
+	}
+
+	[Fact]
+	public async Task RemoveWithoutAPrompt_RemovesNothing()
+	{
+		var server = new SavedServer { Id = "s1", DisplayName = "Living room" };
+		_servers.Add(server);
+
+		await Create().RemoveServerCommand.ExecuteAsync(server);
+
+		Assert.Equal([server], _servers);
+	}
+
 	private SelectServerViewModel Create(Func<string, CancellationToken, Task<(PublicSystemInfo?, string?)>>? publicInfo = null)
 	{
-		var vm = new SelectServerViewModel(_settings.Object, _navigation.Object)
+		var vm = new SelectServerViewModel(_settings.Object, _navigation.Object, TestHomeCache.Unused())
 		{
 			NetworkNames = () => [],
 		};

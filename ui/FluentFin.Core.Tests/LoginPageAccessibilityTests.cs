@@ -29,8 +29,7 @@ public class LoginPageAccessibilityTests
 	}
 
 	[Theory]
-	[InlineData("{x:Bind ViewModel.SwitchServerCommand}", "Switch server")]
-	[InlineData("{x:Bind ViewModel.QuickConnectCommand}", "Quick Connect")]
+	[InlineData("{x:Bind ViewModel.QuickConnectCommand}", "Use Quick Connect")]
 	[InlineData("{x:Bind ViewModel.LoginCommand}", "Sign in")]
 	public void EachButton_IsNamedAsItReads(string command, string name)
 	{
@@ -39,6 +38,23 @@ public class LoginPageAccessibilityTests
 		Assert.Equal(name, (string?)button.Attribute("AutomationProperties.Name"));
 		// the name is the text on the button (speech input matches what is shown)
 		Assert.Contains(button.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == name);
+	}
+
+	[Fact]
+	public void OnePrimaryButton_SignIn_WithoutAnIcon_AndTheServerChangeIsALink()
+	{
+		// 1.1.4 (layout audit #4): one accent button (Sign in, no Send glyph); Use Quick Connect is a standard button; the
+		// server is changed from a "Change" link next to its name ("Change server" for Narrator: the visible word is in it)
+		var doc = Load();
+		var accent = doc.Descendants(Presentation + "Button").Where(b => ((string?)b.Attribute("Style"))?.Contains("Accent") == true).ToList();
+		var signIn = Assert.Single(accent);
+		Assert.Equal("Sign in", (string?)signIn.Attribute("AutomationProperties.Name"));
+		Assert.Empty(signIn.Descendants(Presentation + "FontIcon"));
+		Assert.DoesNotContain(doc.Descendants(), e => ((string?)e.Attribute("Glyph"))?.Contains('\uE725') == true); // Send
+		var change = Assert.Single(doc.Descendants(Presentation + "HyperlinkButton"));
+		Assert.Equal("{x:Bind ViewModel.SwitchServerCommand}", (string?)change.Attribute("Command"));
+		Assert.Equal("Change", (string?)change.Attribute("Content"));
+		Assert.StartsWith("Change", (string?)change.Attribute("AutomationProperties.Name"));
 	}
 
 	[Fact]

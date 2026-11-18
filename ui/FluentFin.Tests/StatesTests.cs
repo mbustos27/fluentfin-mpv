@@ -9,14 +9,13 @@ using FluentFin.Services;
 using FluentFin.ViewModels;
 using Microsoft.Kiota.Abstractions;
 using Moq;
-using Windows.UI;
 
 namespace FluentFin.Tests;
 
 /// <summary>
 /// 1.1.4 (states): the sign-in page says on the page why a sign-in failed and what to do, shows progress while the
 /// server answers and gives the keyboard back; the words of a failed request; what Narrator is told when a load state
-/// appears; the server folder picker's paths and words; the harness's contrast-theme preview.
+/// appears; the server folder picker's paths and words.
 /// </summary>
 public sealed class StatesTests
 {
@@ -77,6 +76,19 @@ public sealed class StatesTests
 	}
 
 	[Fact]
+	public async Task EnterWithNoUsername_SendsNothing()
+	{
+		// the Enter key runs the command past CanExecute (LoginPage.InputFieldKeyDown)
+		var vm = await SignInPage();
+		vm.Password = "secret";
+
+		await vm.LoginCommand.ExecuteAsync(null);
+
+		_auth.Verify(x => x.Authenticate(It.IsAny<SavedServer>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
+		Assert.False(vm.IsSigningIn);
+	}
+
+	[Fact]
 	public async Task SignIn_NeedsAUsername()
 	{
 		var vm = await SignInPage();
@@ -111,14 +123,16 @@ public sealed class StatesTests
 	}
 
 	[Fact]
-	public void QuickConnect_ShowsTheCodeLarge_AndSaysWhereToEnterIt()
+	public void QuickConnect_ShowsTheCodeLarge_ReadsItDigitByDigit_AndSaysWhereToEnterIt()
 	{
 		Assert.Equal("123 456", LoginViewModel.SpacedCode("123456"));
 		Assert.Equal("12345", LoginViewModel.SpacedCode("12345"));
-		var words = LoginViewModel.QuickConnectInstructions("123456", "Harness Jellyfin");
-		// the harness finds the code by "Enter code NNNNNN" (tools/ui-harness/offscreen/drive.ps1)
-		Assert.Contains("Enter code 123456", words, StringComparison.Ordinal);
+		// Narrator, and the harness (drive.ps1 reads the QuickConnectCode text's name)
+		Assert.Equal("1 2 3 4 5 6", LoginViewModel.SpokenCode("123 456"));
+		var words = LoginViewModel.QuickConnectInstructions("Harness Jellyfin");
 		Assert.Contains("already signed in to Harness Jellyfin", words, StringComparison.Ordinal);
+		Assert.Contains("Settings > Quick Connect", words, StringComparison.Ordinal);
+		Assert.DoesNotContain("login", words, StringComparison.OrdinalIgnoreCase);
 	}
 
 	[Theory]
@@ -141,8 +155,18 @@ public sealed class StatesTests
 		var refused = JellyfinAuthenticationService.DescribeFailure(new HttpRequestException("No connection could be made (127.0.0.1:9)."), "http://127.0.0.1:9");
 		var certificate = JellyfinAuthenticationService.DescribeFailure(new HttpRequestException("ssl", new AuthenticationException()), "https://jf.example");
 
-		Assert.Equal("Couldn't reach http://127.0.0.1:9: No connection could be made (127.0.0.1:9). Check the address and port, and that the server is running, then try again.", refused);
+		// the exception's own words stay in the log (layout audit #11)
+		Assert.Equal("Can't reach http://127.0.0.1:9. Check that the server is running, that the address and port are right, and that this PC can reach it (VPN, firewall), then try again.", refused);
 		Assert.Contains("isn't trusted by Windows", certificate, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public void AnUnexpectedFailure_IsSaidInPlainWords_NotItsExceptionText()
+	{
+		var text = JellyfinAuthenticationService.DescribeFailure(new InvalidOperationException("Object reference not set to an instance"), "https://jf.example");
+
+		Assert.DoesNotContain("Object reference", text, StringComparison.Ordinal);
+		Assert.Contains("Try again", text, StringComparison.Ordinal);
 	}
 
 	[Theory]
@@ -173,37 +197,4 @@ public sealed class StatesTests
 		Assert.Equal("", ServerFolders.Title(ServerFolderStatus.Loaded));
 		Assert.Equal("Current folder: /media", ServerFolders.PathLabel("/media"));
 	}
-
-	[Theory]
-	[InlineData("HighContrast", "Aquatic")]
-	[InlineData("highcontrast:desert", "Desert")]
-	[InlineData("HighContrast:Dusk", "Dusk")]
-	[InlineData("HighContrast:NightSky", "NightSky")]
-	[InlineData("HighContrast:Unknown", null)]
-	[InlineData("Dark", null)]
-	[InlineData("Light", null)]
-	[InlineData(null, null)]
-	public void TheContrastPreview_IsAskedForOnlyByName(string? value, string? scheme) =>
-		Assert.Equal(scheme, HighContrastPreview.Parse(value)?.Name);
-
-	[Fact]
-	public void TheContrastPreview_MapsTheOrdinarySystemColours_ToTheScheme_KeepingAlphaAndOtherColours()
-	{
-		// this PC's ordinary colours (Window and HighlightText both white, WindowText and ButtonText both black)
-		var ordinary = new Dictionary<int, Color>
-		{
-			[5] = Rgb(0xFFFFFF), [8] = Rgb(0x000000), [13] = Rgb(0x0078D7), [14] = Rgb(0xFFFFFF),
-			[15] = Rgb(0xF0F0F0), [18] = Rgb(0x000000), [17] = Rgb(0x6D6D6D), [26] = Rgb(0x0066CC),
-		};
-		var map = HighContrastPreview.ColorMap(HighContrastPreview.NightSky, i => ordinary[i]);
-
-		Assert.Equal(Rgb(0x000000), HighContrastPreview.Map(Rgb(0xFFFFFF), map));   // Window (first of the two whites)
-		Assert.Equal(Rgb(0xFFFFFF), HighContrastPreview.Map(Rgb(0x000000), map));   // WindowText
-		Assert.Equal(Rgb(0xFFFF00), HighContrastPreview.Map(Rgb(0x0078D7), map));   // Highlight
-		Assert.Equal(Rgb(0xD6B4FD), HighContrastPreview.Map(Rgb(0x6D6D6D), map));   // GrayText
-		Assert.Equal(Color.FromArgb(0x80, 0, 0, 0), HighContrastPreview.Map(Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF), map));
-		Assert.Equal(Rgb(0x123456), HighContrastPreview.Map(Rgb(0x123456), map));
-	}
-
-	private static Color Rgb(uint rgb) => Color.FromArgb(255, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
 }

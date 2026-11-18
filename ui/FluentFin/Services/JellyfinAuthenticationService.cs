@@ -45,14 +45,17 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		}
 		catch (Exception ex)
 		{
+			// 1.1.4 (states): the technical detail goes to the log; the page says what happened and what to do
+			Serilog.Log.Warning(ex, "The server page's address {Url} did not answer as a Jellyfin server", url);
 			return (null, DescribeFailure(ex, url));
 		}
 	}
 
 	/// <summary>
 	/// Why a request to the server page's address or a sign-in failed, and what to do, in words the page shows.
-	/// 1.1.4 (states): a refused password, an account the server will not sign in, a server error and an
-	/// unreachable address each say what to do next (an error status used to show the HTTP library's own sentence).
+	/// 1.1.4 (states; layout audit #11): a refused password, an account the server will not sign in, a server error and an
+	/// unreachable address each say what to do next, in plain words; the exception's own text (Kiota's "unexpected status
+	/// code", Windows' "actively refused it") is never shown: the callers log it.
 	/// </summary>
 	internal static string DescribeFailure(Exception ex, string url) => ex switch
 	{
@@ -66,10 +69,10 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 		HttpRequestException { InnerException: AuthenticationException } =>
 			$"The HTTPS certificate of {url} isn't trusted by Windows (for example a self-signed certificate). " +
 			"Use the server's http:// address, or add its certificate to the Windows certificate store.",
-		HttpRequestException => $"Couldn't reach {url}: {ex.Message.TrimEnd('.')}. Check the address and port, and that the server is running, then try again.",
+		HttpRequestException => $"Can't reach {url}. Check that the server is running, that the address and port are right, and that this PC can reach it (VPN, firewall), then try again.",
 		// fluentfin-mpv: the server page's timeout (or the HTTP client's own)
 		OperationCanceledException => $"{url} didn't answer in time. Check the address and port, and that this PC can reach the server (VPN, firewall), then try again.",
-		_ => ex.Message
+		_ => $"Something went wrong talking to {url}. Try again; if it keeps happening, the app's log has the details.",
 	};
 
 	public async Task<QuickConnectResult?> GetQuickConnectCode(SavedServer server)

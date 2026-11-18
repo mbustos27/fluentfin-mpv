@@ -90,14 +90,17 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 		return Uri.TryCreate(url, UriKind.Absolute, out var address) ? address.Authority : url;
 	}
 
-	/// <summary>1.1.4 (states): the Quick Connect instructions, with the code (the harness reads "Enter code NNNNNN").</summary>
-	public static string QuickConnectInstructions(string code, string serverName) =>
-		$"Enter code {code} in Quick Connect on a device that is already signed in to {(string.IsNullOrEmpty(serverName) ? "this server" : serverName)}: " +
-		"in Jellyfin's web app, open your profile, then Quick Connect. This app signs in as soon as the code is approved.";
+	/// <summary>1.1.4 (states; layout audit #5): where to enter the Quick Connect code, under the code.</summary>
+	public static string QuickConnectInstructions(string serverName) =>
+		$"On a device that's already signed in to {(string.IsNullOrEmpty(serverName) ? "this server" : serverName)}, open Settings > Quick Connect " +
+		"and enter this code. You're signed in here as soon as it's approved.";
 
 	/// <summary>The code as shown in large type: two groups of three ("123 456"), easier to read across a room.</summary>
 	public static string SpacedCode(string? code) =>
 		code is { Length: 6 } && code.All(char.IsAsciiDigit) ? $"{code[..3]} {code[3..]}" : code ?? "";
+
+	/// <summary>What Narrator reads for the code: digit by digit ("1 2 3 4 5 6"), not as a number.</summary>
+	public static string SpokenCode(string? code) => string.Join(' ', (code ?? "").Where(c => !char.IsWhiteSpace(c)));
 
 	partial void OnUsernameChanged(string value) => UpdateCanLogin();
 
@@ -110,7 +113,8 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 	[RelayCommand(CanExecute = nameof(CanLogin))]
 	public async Task Login()
 	{
-		if (Server is null || IsSigningIn)
+		// 1.1.4 (states): Enter in either field calls this directly, past CanExecute: no username, no request
+		if (!CanLogin)
 		{
 			return;
 		}
@@ -124,7 +128,8 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 		}
 		catch (Exception ex)
 		{
-			error = $"Couldn't sign in to {ServerName} ({ex.Message}). Try again.";
+			Serilog.Log.Warning(ex, "Sign-in to {Server} failed", ServerName);
+			error = $"Couldn't sign in to {ServerName}. Try again; if it keeps happening, the app's log has the details.";
 		}
 		finally
 		{
@@ -198,23 +203,27 @@ public partial class LoginViewModel(IJellyfinAuthenticationService jellyfinAuthe
 
 	private static StackPanel QuickConnectContent(string code, string serverName)
 	{
-		var panel = new StackPanel { Spacing = 14, MaxWidth = 460 };
+		var panel = new StackPanel { Spacing = 14, MaxWidth = 440 };
+		// the code first, large and monospaced; Narrator reads it digit by digit
 		var big = new TextBlock
 		{
 			Text = SpacedCode(code),
-			FontSize = 40,
+			FontSize = 28,
+			FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Cascadia Mono, Consolas"),
 			FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-			CharacterSpacing = 120,
+			CharacterSpacing = 80,
 			HorizontalAlignment = HorizontalAlignment.Center,
 			IsTextSelectionEnabled = true,
 		};
-		// the instructions below say the code once; Narrator does not read it twice
-		AutomationProperties.SetAccessibilityView(big, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+		AutomationProperties.SetAutomationId(big, "QuickConnectCode");
+		AutomationProperties.SetName(big, SpokenCode(code));
 		panel.Children.Add(big);
-		panel.Children.Add(new TextBlock { Text = QuickConnectInstructions(code, serverName), TextWrapping = TextWrapping.WrapWholeWords });
+		panel.Children.Add(new TextBlock { Text = QuickConnectInstructions(serverName), TextWrapping = TextWrapping.WrapWholeWords });
 		var waiting = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
 		waiting.Children.Add(new ProgressRing { Width = 16, Height = 16, IsActive = true, IsIndeterminate = true });
-		waiting.Children.Add(new TextBlock { Text = "Waiting for the code to be approved…", Opacity = 0.85 });
+		var status = new TextBlock { Text = "Waiting for approval…", Opacity = 0.85 };
+		AutomationProperties.SetLiveSetting(status, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+		waiting.Children.Add(status);
 		panel.Children.Add(waiting);
 		return panel;
 	}

@@ -4,44 +4,60 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:c="using:FluentFin.Converters"
-    xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:FluentFin.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
     <!--
-        1.1.4 (states): one glass card, as the server page. The app's name is the page's heading and the server it
-        signs in to is said under it; labelled fields; Enter in the username goes on to the password, Enter there signs in;
-        a sign-in that fails says why ON the page (a live region, the keyboard back in the password box), not in a dialog;
-        progress on Sign in while the server answers. The server's splash image is the ambient backdrop behind the card.
+        1.1.4 (states; layout audit #4 and #11): one glass card, as the server page. The app's name is the page's heading;
+        under it, the server it signs in to with a Change link; labelled fields; ONE primary button, Sign in (full width,
+        accent, no icon), and Use Quick Connect as a standard button under it. Enter in the username goes on to the
+        password, Enter there signs in. A sign-in that fails says why ON the page (the InfoBar announces itself; the
+        keyboard goes back to the password box), never in a dialog; progress on Sign in while the server answers. The
+        server's splash image is the ambient backdrop behind the card.
     -->
     <ScrollViewer HorizontalScrollMode="Disabled" VerticalScrollBarVisibility="Auto">
         <ContentControl
-            Width="560"
+            Width="460"
             Margin="24"
-            Padding="44,40"
+            Padding="40,36"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
             Background="{ThemeResource GlassPanelStrongBrush}"
             Style="{StaticResource GlassSurfaceStyle}">
-            <StackPanel Spacing="20">
-                <StackPanel Spacing="4">
+            <StackPanel Spacing="18">
+                <StackPanel Spacing="2">
                     <TextBlock
                         HorizontalAlignment="Center"
                         AutomationProperties.HeadingLevel="Level1"
                         Style="{StaticResource GlassPageTitleTextBlockStyle}"
                         Text="Seaglass" />
-                    <TextBlock
-                        x:Name="ServerLine"
-                        HorizontalAlignment="Center"
-                        AutomationProperties.HeadingLevel="Level2"
-                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
-                        Style="{ThemeResource BodyTextBlockStyle}"
-                        Text="{x:Bind ViewModel.Heading, Mode=OneWay}"
-                        TextAlignment="Center"
-                        TextTrimming="CharacterEllipsis"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.Heading, Mode=OneWay}" />
+                    <Grid HorizontalAlignment="Center" ColumnSpacing="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="ServerLine"
+                            MaxWidth="300"
+                            VerticalAlignment="Center"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Style="{ThemeResource BodyTextBlockStyle}"
+                            Text="{x:Bind ViewModel.Heading, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.Heading, Mode=OneWay}" />
+                        <HyperlinkButton
+                            x:Name="ChangeServerLink"
+                            Grid.Column="1"
+                            Padding="6,2"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Change server"
+                            Command="{x:Bind ViewModel.SwitchServerCommand}"
+                            Content="Change"
+                            ToolTipService.ToolTip="Choose another server" />
+                    </Grid>
                 </StackPanel>
 
                 <AutoSuggestBox
@@ -75,48 +91,32 @@
                     Severity="Error"
                     Title="Couldn't sign in" />
 
-                <StackPanel
-                    HorizontalAlignment="Center"
-                    Orientation="Horizontal"
-                    Spacing="10">
-                    <Button
-                        AutomationProperties.Name="Switch server"
-                        Command="{x:Bind ViewModel.SwitchServerCommand}"
-                        Style="{StaticResource GlassPillButtonStyle}">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon Glyph="&#xE8AB;" />
-                            <TextBlock Text="Switch server" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        AutomationProperties.Name="Quick Connect"
-                        Command="{x:Bind ViewModel.QuickConnectCommand}"
-                        Style="{StaticResource GlassPillButtonStyle}">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <FontIcon Glyph="&#xE703;" />
-                            <TextBlock Text="Quick Connect" />
-                        </StackPanel>
-                    </Button>
+                <StackPanel Spacing="10">
+                    <!--  the one primary action  -->
                     <Button
                         x:Name="SignInButton"
+                        HorizontalAlignment="Stretch"
                         AutomationProperties.Name="Sign in"
                         Command="{x:Bind ViewModel.LoginCommand}"
                         Style="{StaticResource GlassAccentPillButtonStyle}">
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsSigningIn, Mode=OneWay}">
-                                <ctk:Case IsDefault="True" Value="False">
-                                    <FontIcon Glyph="&#xE725;" />
-                                </ctk:Case>
-                                <ctk:Case Value="True">
-                                    <ProgressRing
-                                        Width="16"
-                                        Height="16"
-                                        Foreground="{ThemeResource SeaglassAccentForegroundBrush}"
-                                        IsIndeterminate="True" />
-                                </ctk:Case>
-                            </ctk:SwitchPresenter>
+                            <ProgressRing
+                                Width="16"
+                                Height="16"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Foreground="{ThemeResource SeaglassAccentForegroundBrush}"
+                                IsActive="{x:Bind ViewModel.IsSigningIn, Mode=OneWay}"
+                                Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsSigningIn), Mode=OneWay}" />
                             <TextBlock Text="Sign in" />
                         </StackPanel>
+                    </Button>
+                    <Button
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Use Quick Connect"
+                        Command="{x:Bind ViewModel.QuickConnectCommand}"
+                        Style="{StaticResource GlassPillButtonStyle}"
+                        ToolTipService.ToolTip="Sign in by approving a code on a device that is already signed in">
+                        <TextBlock Text="Use Quick Connect" />
                     </Button>
                 </StackPanel>
 

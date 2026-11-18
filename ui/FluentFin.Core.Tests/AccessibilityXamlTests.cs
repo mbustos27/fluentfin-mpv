@@ -291,8 +291,11 @@ public class AccessibilityXamlTests
 
 		Assert.Equal("{x:Bind DisplayName}", (string?)container.Attribute("AutomationProperties.Name"));
 		Assert.Equal("{x:Bind DisplayName}", (string?)container.Attribute("ToolTipService.ToolTip"));
-		var name = Assert.Single(container.Descendants(Presentation + "TextBlock"));
-		Assert.Equal("CharacterEllipsis", (string?)name.Attribute("TextTrimming"));
+		// 1.1.4 (layout audit #12): a row, the name then the address, each trimmed only at the row's width
+		var texts = container.Descendants(Presentation + "TextBlock").ToList();
+		Assert.Equal(["{x:Bind DisplayName}", "{x:Bind local:SelectServerPage.AddressOf(LocalUrl, PublicUrl)}"], texts.Select(t => (string?)t.Attribute("Text")));
+		Assert.All(texts, t => Assert.Equal("CharacterEllipsis", (string?)t.Attribute("TextTrimming")));
+		Assert.DoesNotContain(container.Attributes(), a => a.Name.LocalName is "Width" or "Height");
 	}
 
 	[Fact]
