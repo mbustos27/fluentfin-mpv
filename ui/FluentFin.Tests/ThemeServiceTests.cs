@@ -267,6 +267,10 @@ public sealed class ThemeServiceTests
 		Assert.Contains(twice, p => p.Contains("both", StringComparison.Ordinal));
 
 		Assert.Contains(ThemeContract.ViewProblems(new ThrowingViewsTheme()), p => p.Contains("threw", StringComparison.Ordinal));
+
+		var codeOnly = new FakeTheme(LayoutThemeId.DriveIn, (typeof(HomeViewModel), typeof(FakeCodeOnlyView)));
+		Assert.Contains(ThemeContract.ViewProblems(codeOnly), p => p.Contains("not a XAML page", StringComparison.Ordinal));
+		Assert.Null(ThemeService.ViewFor(codeOnly, typeof(HomeViewModel))); // never navigated to: it would end the process
 	}
 
 	[Fact]
@@ -488,12 +492,19 @@ public sealed class BrokenEditorialTheme : ILayoutTheme
 	public Type? ViewFor(Type viewModelType) => null;
 }
 
+/// <summary>A theme's view for the tests: a XAML page has InitializeComponent (ThemeContract.IsXamlPage).</summary>
 public sealed partial class FakeHomeView : Page
 {
+	public void InitializeComponent()
+	{
+	}
 }
 
 public sealed partial class FakeSeasonView : Page
 {
+	public void InitializeComponent()
+	{
+	}
 }
 
 public sealed partial class FakeViewWithArgument : Page
@@ -501,4 +512,9 @@ public sealed partial class FakeViewWithArgument : Page
 	public FakeViewWithArgument(int value) => Value = value;
 
 	public int Value { get; }
+}
+
+/// <summary>A page written in code only: the frame cannot create it.</summary>
+public sealed partial class FakeCodeOnlyView : Page
+{
 }

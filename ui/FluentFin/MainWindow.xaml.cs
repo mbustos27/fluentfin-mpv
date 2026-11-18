@@ -40,6 +40,9 @@ public sealed partial class MainWindow : WindowEx
 		if (Content is UIElement root)
 		{
 			WindowShortcuts.Attach(root);
+			// Nixie 1.3.0: the layout theme switch's crossfade
+			ThemeSwitcher.FadeSource = root;
+			ThemeSwitcher.FadeLayer = ThemeFade;
 		}
 	}
 

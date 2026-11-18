@@ -121,12 +121,30 @@ public sealed partial class ShellPage : Page
 		}
 	}
 
+	private bool _lookChecked;
+
 	// Seaglass 1.1.4: the title bar (TitleBarViewModel.OnPageShown)
 	private readonly TitleBarViewModel _titleBar = (TitleBarViewModel)App.GetService<ITitleBarViewModel>();
 
 	private void OnFrameNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
 	{
+		// Nixie 1.3.0: a theme switch showing the same page in the new theme's view: the bar keeps its search text and its
+		// tab; only where the page starts can change (the new view may run under the bar)
+		if (ViewModel.NavigationService is NavigationService { LastNavigationWasThemeReload: true })
+		{
+			UpdateInsets();
+			return;
+		}
+
 		_titleBar.OnPageShown(e.SourcePageType, e.Parameter);
+
+		// Nixie 1.3.0: the one-time "Choose a look" step, once the first page after the sign-in is up
+		if (!_lookChecked)
+		{
+			_lookChecked = true;
+			DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () => await ChooseLookStep.OfferAsync(XamlRoot));
+		}
+
 		// 1.2.0: the tab this page marks, and where it starts
 		// review: with the page's place in the history, so Back gives a page back the tab it had
 		_top.OnPageShown(KeyOf(e.SourcePageType), e.Parameter, NavigationFrame.BackStackDepth,

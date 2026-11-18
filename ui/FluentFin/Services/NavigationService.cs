@@ -4,6 +4,7 @@ using FluentFin.Contracts.ViewModels;
 using FluentFin.Helpers;
 using FluentFin.UI.Core.Contracts.Services;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace FluentFin.Services;
@@ -133,10 +134,145 @@ public class NavigationService : INavigationService
 
 	}
 
+	/// <summary>Nixie 1.3.0: the parameter of the page the frame shows (the theme switch shows it again with it).</summary>
+	private object? _currentParameter;
+
+	/// <summary>Nixie 1.3.0: the page type a theme switch is navigating to, until its Navigated (<see cref="ReloadForTheme"/>).</summary>
+	private Type? _pendingThemeReload;
+
+	/// <summary>
+	/// Nixie 1.3.0: whether the frame's last navigation was a theme switch's (the same page in the new theme's view, same view
+	/// model): the shell leaves the top bar as it was (search text, tab) and the page its view model's state. Set before the
+	/// frame's other Navigated handlers run.
+	/// </summary>
+	public bool LastNavigationWasThemeReload { get; private set; }
+
+	/// <summary>
+	/// Nixie 1.3.0: after the layout theme changed (ThemeService). The history's entries become the new theme's pages for the
+	/// same view models (pages behind the current one are rebuilt when Back reaches them), the frame's page cache is cleared,
+	/// and the current page is shown in the new theme's view with the same view model and parameter, its own history entry
+	/// replaced, no transition (the switch crossfades). The player page is never reloaded: the overlay restyles in place and the
+	/// pages behind it switch when it closes.
+	/// </summary>
+	public ThemeReload ReloadForTheme()
+	{
+		if (_frame is not { } frame)
+		{
+			return ThemeReload.None;
+		}
+
+		// no cached page of the old theme comes back
+		var cacheSize = frame.CacheSize;
+		frame.CacheSize = 0;
+		frame.CacheSize = cacheSize;
+
+		RemapStack(frame.BackStack, x => x.SourcePageType, ThemedPageFor, (x, page) => new PageStackEntry(page, x.Parameter, x.NavigationTransitionInfo));
+		RemapStack(frame.ForwardStack, x => x.SourcePageType, ThemedPageFor, (x, page) => new PageStackEntry(page, x.Parameter, x.NavigationTransitionInfo));
+
+		if (frame.Content is not { } content)
+		{
+			return ThemeReload.None;
+		}
+
+		var current = content.GetType();
+		var next = ThemedPageFor(current);
+		var plan = PlanReload(_pageService.SharedPageType(current), current, next);
+		if (plan != ThemeReload.Reloaded)
+		{
+			return plan;
+		}
+
+		_pendingThemeReload = next;
+		frame.Tag = false;
+		using (ViewModelHandoff.Offer(frame.GetPageViewModel()))
+		{
+			try
+			{
+				if (!frame.Navigate(next!, _currentParameter, new SuppressNavigationTransitionInfo()))
+				{
+					_pendingThemeReload = null;
+					return ThemeReload.None;
+				}
+			}
+			catch (Exception)
+			{
+				_pendingThemeReload = null;
+				return ThemeReload.None;
+			}
+		}
+
+		return ThemeReload.Reloaded;
+	}
+
+	/// <summary>The page the active theme shows for <paramref name="page"/>'s view model (the shared page when it has none), null for a page the service does not know.</summary>
+	private Type? ThemedPageFor(Type page)
+	{
+		try
+		{
+			return _pageService.GetPageType(_pageService.GetViewModelType(page).FullName!);
+		}
+		catch (ArgumentException)
+		{
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// What a theme switch does with the page shown: the player stays (<see cref="ThemeReload.Deferred"/>), a page the theme
+	/// shows the same way stays (<see cref="ThemeReload.SamePage"/>), any other is shown again in the new view.
+	/// </summary>
+	internal static ThemeReload PlanReload(Type sharedCurrent, Type current, Type? next) =>
+		sharedCurrent == typeof(Views.VideoPlayerPage) ? ThemeReload.Deferred
+		: next is null ? ThemeReload.None
+		: next == current ? ThemeReload.SamePage
+		: ThemeReload.Reloaded;
+
+	/// <summary>
+	/// Nixie 1.3.0: the history keeps view models, not views: each entry whose page the active theme shows differently is
+	/// replaced by the theme's page for the same view model, with the same parameter. The number replaced.
+	/// </summary>
+	internal static int RemapStack<T>(IList<T> stack, Func<T, Type> pageType, Func<Type, Type?> pageFor, Func<T, Type, T> withPage)
+	{
+		var replaced = 0;
+		for (var i = 0; i < stack.Count; i++)
+		{
+			var page = pageType(stack[i]);
+			if (pageFor(page) is { } themed && themed != page)
+			{
+				var entry = withPage(stack[i], themed);
+				stack.RemoveAt(i);
+				stack.Insert(i, entry);
+				replaced++;
+			}
+		}
+
+		return replaced;
+	}
+
 	private async void OnNavigated(object sender, NavigationEventArgs e)
 	{
 		if (sender is Frame frame)
 		{
+			_currentParameter = e.Parameter;
+
+			// Nixie 1.3.0: a theme switch's navigation: the same page in the new view, its view model kept as it was (no
+			// OnNavigatedTo: nothing is fetched again), the old view's history entry gone, no page transition
+			if (_pendingThemeReload is { } reload && e.SourcePageType == reload && e.NavigationMode == NavigationMode.New)
+			{
+				_pendingThemeReload = null;
+				ViewModelHandoff.Clear();
+				LastNavigationWasThemeReload = true;
+				if (frame.BackStack.Count > 0)
+				{
+					frame.BackStack.RemoveAt(frame.BackStack.Count - 1);
+				}
+
+				Navigated?.Invoke(sender, e);
+				return;
+			}
+
+			LastNavigationWasThemeReload = false;
+
 			// Seaglass 1.1.4: the motion follows the direction (a tab, in, Back out)
 			PageTransition.Play(e.Content, e.NavigationMode);
 			var clearNavigation = (bool)frame.Tag;
@@ -223,4 +359,20 @@ public class NavigationService : INavigationService
 		backStack.RemoveAt(backStack.Count - 1);
 		return true;
 	}
+}
+
+/// <summary>Nixie 1.3.0: what a theme switch did with the page shown (<see cref="NavigationService.ReloadForTheme"/>).</summary>
+public enum ThemeReload
+{
+	/// <summary>No page, or one the page service does not know: nothing to show again.</summary>
+	None,
+
+	/// <summary>The page looks the same in the new theme (a shared page): it stays.</summary>
+	SamePage,
+
+	/// <summary>The player: it stays; the pages behind it switch when it closes.</summary>
+	Deferred,
+
+	/// <summary>The page was shown again in the new theme's view, with the same view model.</summary>
+	Reloaded,
 }

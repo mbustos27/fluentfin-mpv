@@ -69,6 +69,9 @@ function Initialize-HarnessSettings([string]$DataDir, [string]$BackendCommand, [
     }
     $settings | Add-Member -NotePropertyName MpvBackendCommand -NotePropertyValue $BackendCommand -Force
     $settings | Add-Member -NotePropertyName MediaPlayerType -NotePropertyValue 'Mpv' -Force
+    # Nixie 1.3.0: the one-time "Choose a look" dialog would stop every script after the sign-in; the runs that look at it
+    # say -Setting ChooseLookOffered=false
+    if (-not $settings.PSObject.Properties['ChooseLookOffered']) { $settings | Add-Member -NotePropertyName ChooseLookOffered -NotePropertyValue $true -Force }
     foreach ($name in $parsedSettings.Keys) { $settings | Add-Member -NotePropertyName $name -NotePropertyValue $parsedSettings[$name] -Force }
     [IO.File]::WriteAllText($file, ($settings | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
     $chosen = if ($settings.PSObject.Properties['MpvPlayerControls'] -and "$($settings.MpvPlayerControls)" -in @('Mpv', '0')) { 'Mpv' } else { 'FluentFin' }
