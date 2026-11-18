@@ -383,7 +383,12 @@ function Step-Home {
     if ($script:page -ne 'home') { Open-Nav 'Home'; $script:page = 'home' }
     $since = $script:signedInAt
     $views = @($fixture.views)
-    $headers = @('Continue Watching', 'Next Up') + @($views | ForEach-Object { "New in $_" })   # Seaglass 1.1.4: the rows are "New in <library>"
+    # Nixie 1.3.0: a row counts under any of its names in the layout themes (Drive-in's sign says "Coming up", Cinematic's
+    # and Editorial's list "Up next", which Editorial also gives Continue Watching's items)
+    $groups = @(, @('Continue Watching', 'Continue watching', 'Up next')) + @(, @('Next Up', 'Coming up', 'Coming Up', 'COMING UP', 'Up next')) +
+        @($views | ForEach-Object { , @("New in $_") })   # Seaglass 1.1.4: the rows are "New in <library>"
+    $headers = @($groups | ForEach-Object { $_[0] })
+    $names = [string[]]@($groups | ForEach-Object { $_ } | Select-Object -Unique)
     # progressive home: the headers show at once with placeholder cards (Shimmer) that turn into cards
     # (BaseItemDtoCard) as each row's request answers; loaded = cards and no placeholder left
     $firstCards = $null; $loaded = $null; $last = $null
@@ -406,7 +411,8 @@ function Step-Home {
     while ([DateTime]::UtcNow -lt $deadline) {
         [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 100)
         Start-Sleep -Milliseconds 150
-        $present = @([OffscreenUi]::PresentTexts($script:hwnd, $script:ui.Id, [string[]]$headers))
+        $shown = @([OffscreenUi]::PresentTexts($script:hwnd, $script:ui.Id, $names))
+        $present = @($groups | Where-Object { $g = $_; @($g | Where-Object { $shown -contains $_ }).Count -gt 0 } | ForEach-Object { $_[0] })
         $n = [OffscreenUi]::CountByClass($script:hwnd, $script:ui.Id, @('Shimmer'))
         if ($present.Count -eq $headers.Count -and $n['Shimmer'] -eq 0) { $allAt = Get-Epoch; break }
     }
