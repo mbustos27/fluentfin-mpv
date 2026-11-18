@@ -55,6 +55,21 @@ public sealed class ItemLayoutXamlTests
 	}
 
 	[Fact]
+	public void ItemHero_HasNoEmptyHeading_WhenThePageFailedToLoad()
+	{
+		// the logo and the title (both Level 1 headings) show only with a title (ItemHeroHeadingTests has the rule)
+		var hero = Load("FluentFin/Controls/ItemHero.xaml");
+		var code = Code("FluentFin/Controls/ItemHero.xaml.cs");
+
+		Assert.Equal("Level1", (string?)FindByName(hero, "LogoImage").Attribute("AutomationProperties.HeadingLevel"));
+		Assert.Equal("Level1", (string?)FindByName(hero, "TitleText").Attribute("AutomationProperties.HeadingLevel"));
+		Assert.Contains("LogoImage.Visibility = HeadingVisibility(hasLogo: logo is not null, title, forLogo: true);", code);
+		Assert.Contains("TitleText.Visibility = HeadingVisibility(hasLogo: logo is not null, title, forLogo: false);", code);
+		Assert.Single(System.Text.RegularExpressions.Regex.Matches(code, @"(LogoImage|TitleText)\.Visibility = "), m => m.Value.StartsWith("LogoImage"));
+		Assert.Single(System.Text.RegularExpressions.Regex.Matches(code, @"(LogoImage|TitleText)\.Visibility = "), m => m.Value.StartsWith("TitleText"));
+	}
+
+	[Fact]
 	public void ItemHero_HeightIsAShareOfTheWindow()
 	{
 		var hero = Load("FluentFin/Controls/ItemHero.xaml");

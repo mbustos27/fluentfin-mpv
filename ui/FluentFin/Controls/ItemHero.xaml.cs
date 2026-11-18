@@ -118,6 +118,14 @@ public sealed partial class ItemHero : UserControl
 		set => SetValue(PrimaryActionsProperty, value);
 	}
 
+	/// <summary>
+	/// The page's top heading: the logo (named for the item) when there is one, else the title as text. 1.2.0 (the states
+	/// stream's Narrator pass): with no title (a page that failed to load, the item still unknown) there is no heading at all,
+	/// not an empty one; the page's load message says what happened.
+	/// </summary>
+	internal static Visibility HeadingVisibility(bool hasLogo, string title, bool forLogo) =>
+		!string.IsNullOrWhiteSpace(title) && hasLogo == forLogo ? Visibility.Visible : Visibility.Collapsed;
+
 	private void Apply()
 	{
 		var dto = Dto;
@@ -125,11 +133,11 @@ public sealed partial class ItemHero : UserControl
 
 		var logo = ItemArtworkConverters.Logo(dto, 480);
 		LogoImage.Source = logo;
-		LogoImage.Visibility = logo is null ? Visibility.Collapsed : Visibility.Visible;
 		var title = ItemMeta.HeroTitle(dto);
+		LogoImage.Visibility = HeadingVisibility(hasLogo: logo is not null, title, forLogo: true);
 		TitleText.Text = title;
 		// the logo is the title for the eye; the heading stays for Narrator
-		TitleText.Visibility = logo is null ? Visibility.Visible : Visibility.Collapsed;
+		TitleText.Visibility = HeadingVisibility(hasLogo: logo is not null, title, forLogo: false);
 		AutomationProperties.SetName(LogoImage, title);
 
 		var subtitle = ItemMeta.HeroSubtitle(dto);
