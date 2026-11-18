@@ -40,25 +40,14 @@
         the window's drag regions and caption buttons: the tabs, search and account are its interactive areas.
         Narrow windows (1100 px and below): the tabs fold into one menu button, search into a button that opens the box.
     -->
-    <Grid x:Name="BarRoot" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsVisible), Mode=OneWay}">
-        <Border
-            x:Name="BarGlass"
-            Background="{ThemeResource GlassTitleBarBrush}"
-            BorderBrush="{ThemeResource GlassTitleBarStrokeBrush}"
-            BorderThickness="0,0,0,1"
-            IsHitTestVisible="False" />
-        <Rectangle
-            x:Name="BarScrim"
-            IsHitTestVisible="False"
-            Visibility="Collapsed">
-            <Rectangle.Fill>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Offset="0" Color="#B0000000" />
-                    <GradientStop Offset="0.6" Color="#5A000000" />
-                    <GradientStop Offset="1" Color="#00000000" />
-                </LinearGradientBrush>
-            </Rectangle.Fill>
-        </Rectangle>
+    <!--
+        Nixie 1.3.0: the glass and the scrim are the chrome's (TopBarChrome, its default style in Styles/TopBarChrome.xaml):
+        the active layout theme's TopBarStyle restyles them (ThemeResources), the bar inside stays this one element.
+    -->
+    <lc:TopBarChrome
+        x:Name="BarChrome"
+        AutomationProperties.AccessibilityView="Raw"
+        Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsVisible), Mode=OneWay}">
     <!--  the wordmark and the tabs in the left header, after Back: the TitleBar centres its Content; the middle stays the drag area  -->
     <TitleBar
         x:Name="TitleBar"
@@ -348,6 +337,6 @@
             </StackPanel>
         </TitleBar.RightHeader>
     </TitleBar>
-    </Grid>
+    </lc:TopBarChrome>
 
 </UserControl>

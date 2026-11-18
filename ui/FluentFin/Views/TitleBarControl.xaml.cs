@@ -66,7 +66,13 @@ public sealed partial class TitleBarControl : UserControl
 		};
 		ShowSearch();
 		ShowBackground();
+
+		// Nixie 1.3.0: the active layout theme's TopBarStyle on the chrome, now and on every switch (the bar itself is kept)
+		ThemeResources.StyleTopBar(BarChrome);
+		ThemeResources.Applied += OnThemeApplied;
 	}
+
+	private void OnThemeApplied(object? sender, EventArgs e) => ThemeResources.StyleTopBar(BarChrome);
 
 	private void RegisterAsWindowTitleBar()
 	{
@@ -350,8 +356,7 @@ public sealed partial class TitleBarControl : UserControl
 	private void ShowBackground()
 	{
 		var under = ViewModel.IsContentUnderBar;
-		BarGlass.Visibility = under ? Visibility.Collapsed : Visibility.Visible;
-		BarScrim.Visibility = under ? Visibility.Visible : Visibility.Collapsed;
+		BarChrome.IsOverHero = under; // Nixie 1.3.0: the chrome's state (TopBarChrome: OverContent or OverHero), in the theme's look
 		RequestedTheme = under ? ElementTheme.Dark : ElementTheme.Default;
 	}
 

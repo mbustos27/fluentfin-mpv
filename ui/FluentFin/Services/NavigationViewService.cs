@@ -132,6 +132,7 @@ public class NavigationViewService(INavigationService navigationService,
 			return null;
 		}
 
+		pageType = pageService.SharedPageType(pageType); // Nixie 1.3.0: a layout theme's page stands for the shared one
 		if (pageType == typeof(LibraryPage) && GetSelectedItem() is { } nav && nav.Tag is CustomNavigationViewItem)
 		{
 			return nav;
@@ -196,7 +197,7 @@ public class NavigationViewService(INavigationService navigationService,
 	{
 		if (menuItem.GetValue(NavigationHelper.NavigateToProperty) is string pageKey)
 		{
-			var pageType = pageService.GetPageType(pageKey);
+			var pageType = pageService.SharedPageType(pageService.GetPageType(pageKey));
 			var vmTYpe = pageService.GetViewModelType(pageType);
 			return pageType == sourcePageType || IsParent(vmTYpe, sourcePageType);
 		}
