@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="FluentFin.Themes.Cinematic.Controls.CinematicSignInScene"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    AutomationProperties.AccessibilityView="Raw"
+    IsHitTestVisible="False"
+    IsTabStop="False"
+    mc:Ignorable="d">
+
+    <!--
+        Nixie 1.3.0, Cinematic's sign-in backdrop (SignInBackdropTemplate): a full-window dusk still, drawn as vectors (no image
+        file), composed around the shared form in the middle: a sky from deep plum to a rose horizon, a low sun on the right cut
+        by three gaps that widen toward the ground, a mesa and a saguaro on the left, a far butte on the right, and the road
+        running out to the sun. One light (the sun), three silhouette tones, one stroke family (the art passes' rules). Decoration
+        only: Narrator never reaches it. High contrast: the window colour alone (the shared page keeps its own then).
+    -->
+    <Grid x:Name="Root" Background="#1A0710">
+        <Viewbox
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Stretch="UniformToFill">
+            <Canvas Width="1920" Height="1080">
+                <!--  the sky: deep plum overhead to a rose band at the horizon  -->
+                <Rectangle Width="1920" Height="730">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#1D0611" />
+                            <GradientStop Offset="0.34" Color="#360B21" />
+                            <GradientStop Offset="0.62" Color="#651B3A" />
+                            <GradientStop Offset="0.86" Color="#9C4259" />
+                            <GradientStop Offset="1" Color="#B85A66" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <!--  three dusk sparkles (the starburst motif, four points at this size), clear of the form and the sun  -->
+                <Path Data="M300,150 Q302,162 314,164 Q302,166 300,178 Q298,166 286,164 Q298,162 300,150 Z M1640,118 Q1641.5,127 1650,128.5 Q1641.5,130 1640,139 Q1638.5,130 1630,128.5 Q1638.5,127 1640,118 Z M1080,86 Q1081,92 1087,93 Q1081,94 1080,100 Q1079,94 1073,93 Q1079,92 1080,86 Z" Fill="#B3F5A8A5" />
+                <!--  the sun's glow: wide and soft, warmest just over the horizon  -->
+                <Ellipse
+                    Canvas.Left="840"
+                    Canvas.Top="220"
+                    Width="1080"
+                    Height="860">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Offset="0" Color="#8CF7AA9C" />
+                            <GradientStop Offset="0.35" Color="#40EC6A79" />
+                            <GradientStop Offset="1" Color="#00EC6A79" />
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+                <!--  a haze along the horizon  -->
+                <Rectangle
+                    Canvas.Top="660"
+                    Width="1920"
+                    Height="70">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#00F7AA9C" />
+                            <GradientStop Offset="1" Color="#33F7AA9C" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <!--  the sun: bands below its middle, the gaps widening toward the ground (the sky shows through)  -->
+                <Path Data="M1236,640 A146,146 0 1 1 1528,640 L1528,646 L1236,646 Z M1237,654 L1527,654 L1525,668 L1239,668 Z M1242,678 L1522,678 L1518,689 L1246,689 Z M1251,701 L1513,701 L1507,710 L1257,710 Z">
+                    <Path.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#FFE6BE" />
+                            <GradientStop Offset="0.55" Color="#FCC89A" />
+                            <GradientStop Offset="1" Color="#F5A88E" />
+                        </LinearGradientBrush>
+                    </Path.Fill>
+                </Path>
+                <!--  the far butte on the right, the mesa on the left (the far tone)  -->
+                <Path Data="M1700,722 C1716,694 1730,664 1744,652 L1858,652 C1872,664 1890,694 1906,722 Z" Fill="#4E1529" />
+                <Path Data="M150,722 C176,690 200,640 218,612 L470,612 C486,626 520,668 548,694 C584,708 640,716 700,722 Z" Fill="#3E1022" />
+                <!--  the ground  -->
+                <Rectangle
+                    Canvas.Top="718"
+                    Width="1920"
+                    Height="362">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#5A1A30" />
+                            <GradientStop Offset="0.07" Color="#3A0F22" />
+                            <GradientStop Offset="1" Color="#170510" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <!--  the road out to the sun, and its lit edges  -->
+                <Path Data="M1374,722 L1390,722 L2160,1080 L620,1080 Z" Fill="#210913" />
+                <Path
+                    Data="M1374,722 L620,1080 M1390,722 L2160,1080"
+                    Stroke="#7E3648"
+                    StrokeThickness="2.5" />
+                <!--  the centre line: dashes that grow toward the viewer  -->
+                <Path Data="M1381,736 L1383,736 L1383.5,748 L1380.5,748 Z M1380,766 L1384,766 L1384.6,784 L1379.4,784 Z M1379,818 L1385,818 L1385.8,846 L1378.2,846 Z M1377.5,888 L1386.5,888 L1387.5,930 L1376.5,930 Z M1375.5,976 L1388.5,976 L1390,1032 L1374,1032 Z">
+                    <Path.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#B7826E" />
+                            <GradientStop Offset="1" Color="#E0B49A" />
+                        </LinearGradientBrush>
+                    </Path.Fill>
+                </Path>
+                <!--  the saguaro's shadow on the ground, so it stands  -->
+                <Ellipse
+                    Canvas.Left="440"
+                    Canvas.Top="994"
+                    Width="170"
+                    Height="30">
+                    <Ellipse.Fill>
+                        <RadialGradientBrush>
+                            <GradientStop Offset="0" Color="#66080206" />
+                            <GradientStop Offset="1" Color="#00080206" />
+                        </RadialGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+                <!--  the saguaro, near the viewer at the left: one stroke family, rounded elbows (the nearest tone)  -->
+                <Path
+                    Data="M520,1010 L520,640 M520,808 C520,820 512,824 496,824 L476,824 C462,824 456,816 456,802 L456,742 M520,760 C520,772 528,776 544,776 L564,776 C578,776 584,768 584,754 L584,694"
+                    Stroke="#250815"
+                    StrokeEndLineCap="Round"
+                    StrokeLineJoin="Round"
+                    StrokeStartLineCap="Round"
+                    StrokeThickness="34" />
+            </Canvas>
+        </Viewbox>
+        <!--  a soft vignette at the edges, so the form in the middle reads as the light's centre  -->
+        <Border IsHitTestVisible="False">
+            <Border.Background>
+                <RadialGradientBrush Center="0.5,0.45" GradientOrigin="0.5,0.45" RadiusX="0.85" RadiusY="0.85">
+                    <GradientStop Offset="0.55" Color="#0012050B" />
+                    <GradientStop Offset="1" Color="#6612050B" />
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="FluentFin.Themes.Cinematic.Controls.CinematicPreviewStage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cc="using:FluentFin.Themes.Cinematic.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        Nixie 1.3.0, Cinematic's library preview stage: the title the grid's focus is on fills the top of the page (its
+        backdrop, crossfaded when the focus rests on another title for 200 ms; decoded at the window's width), with its kicker,
+        title art, facts, two lines of overview and its own Play (the library's one Primary), More info and Favourite. The
+        words sit on the art in every theme; the foot fades into the page, where the grid's header line and the grid start.
+    -->
+    <Grid x:Name="Root" RequestedTheme="Dark">
+        <Grid x:Name="Art" VerticalAlignment="Top">
+            <Image
+                x:Name="BackdropBottom"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                Stretch="UniformToFill" />
+            <Image
+                x:Name="BackdropTop"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                Opacity="0"
+                Stretch="UniformToFill" />
+            <Border Background="{ThemeResource CinematicStageFootScrimBrush}" IsHitTestVisible="False" />
+            <Border Background="{ThemeResource CinematicHeroSideScrimBrush}" IsHitTestVisible="False" />
+            <Border
+                Height="200"
+                VerticalAlignment="Top"
+                Background="{ThemeResource CinematicHeroTopScrimBrush}"
+                IsHitTestVisible="False" />
+        </Grid>
+
+        <StackPanel
+            x:Name="Words"
+            MaxWidth="1040"
+            Margin="96,0,48,0"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            AutomationProperties.LandmarkType="Custom"
+            AutomationProperties.LocalizedLandmarkType="Preview"
+            AutomationProperties.Name="Preview"
+            RequestedTheme="Dark">
+            <TextBlock x:Name="KickerText" Style="{StaticResource CinematicKickerTextBlockStyle}" />
+            <cc:CinematicTitleArt
+                x:Name="TitleArt"
+                MaxWidth="900"
+                Margin="0,10,0,0"
+                HorizontalAlignment="Left"
+                Foreground="{ThemeResource CinematicOnArtTextBrush}"
+                LogoDecodeWidth="720"
+                LogoMaxHeight="128"
+                Size="88" />
+            <StackPanel
+                Margin="0,16,0,0"
+                Orientation="Horizontal"
+                Spacing="14">
+                <TextBlock
+                    x:Name="MetaText"
+                    VerticalAlignment="Center"
+                    FontSize="16"
+                    Foreground="{ThemeResource CinematicOnArtSecondaryBrush}"
+                    TextTrimming="CharacterEllipsis" />
+                <StackPanel
+                    x:Name="Badges"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Orientation="Horizontal"
+                    Spacing="6" />
+            </StackPanel>
+            <TextBlock
+                x:Name="OverviewText"
+                MaxWidth="640"
+                Margin="0,12,0,0"
+                HorizontalAlignment="Left"
+                FontSize="17"
+                Foreground="{ThemeResource CinematicOnArtTextBrush}"
+                LineHeight="25"
+                MaxLines="2"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="Wrap" />
+            <StackPanel
+                Margin="0,22,0,0"
+                Orientation="Horizontal"
+                Spacing="12">
+                <Button
+                    x:Name="PlayButton"
+                    Click="Play_Click"
+                    Style="{StaticResource NixiePrimaryButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE768;" />
+                        <TextBlock x:Name="PlayText" Text="Play" />
+                    </StackPanel>
+                </Button>
+                <Button
+                    x:Name="MoreInfoButton"
+                    Click="MoreInfo_Click"
+                    Content="More info"
+                    Style="{StaticResource NixieButtonStyle}" />
+                <ToggleButton
+                    x:Name="FavoriteButton"
+                    AutomationProperties.Name="Add to favorites"
+                    Click="FavoriteButton_Click"
+                    Style="{StaticResource NixieIconToggleButtonStyle}"
+                    ToolTipService.ToolTip="Add to favorites">
+                    <ToggleButton.Resources>
+                        <StaticResource x:Key="SystemAccentColor" ResourceKey="FavoriteCheckedBrush" />
+                    </ToggleButton.Resources>
+                    <FontIcon x:Name="FavoriteGlyph" FontSize="18" Glyph="&#xEB51;" />
+                </ToggleButton>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</UserControl>

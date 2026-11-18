@@ -1,0 +1,133 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:cc="using:FluentFin.Themes.Cinematic.Controls"
+    xmlns:cin="using:FluentFin.Themes.Cinematic"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:media="using:CommunityToolkit.WinUI.Media"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    xmlns:themes="using:FluentFin.Themes"
+    xmlns:vm="using:FluentFin.Core.ViewModels">
+    <!--
+        Nixie 1.3.0: the Cinematic theme dictionary (ILayoutTheme.Dictionary). ThemeService merges it while Cinematic is the
+        theme. It holds the keys every theme defines (TopBarStyle, RowHeaderTemplate, PosterTemplate, StillTemplate,
+        PageHeaderStyle, SignInBackdropTemplate) over Cinematic's own resources (Cards.xaml).
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///Themes/Cinematic/Cards.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!--
+        The shared top bar as a floating glass island (TopBarChrome): one rounded glass surface (8 px corners), inset from the
+        window's left and top edges and ending before the caption buttons, its own clearer acrylic with a lit top edge and a soft
+        shadow under it, over content and over a hero alike (the art shows round it). The bar itself (Back, the wordmark, the
+        tabs, search, the account) is the shared one, moved in by the island's inset.
+    -->
+    <Style x:Key="TopBarStyle" TargetType="lc:TopBarChrome">
+        <Setter Property="IsTabStop" Value="False" />
+        <!--  the bar's parts sit in from the island's left edge  -->
+        <Setter Property="Padding" Value="14,0,0,0" />
+        <!--  the island's glass follows the bar: dark over a hero (CinematicIsland)  -->
+        <Setter Property="cin:CinematicIsland.Follows" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="lc:TopBarChrome">
+                    <Grid>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="BarStates">
+                                <VisualState x:Name="OverContent" />
+                                <!--  over a hero the bar's text is the dark theme's: the island's glass is too, in every theme (CinematicIsland switches the glass)  -->
+                                <VisualState x:Name="OverHero" />
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Grid
+                            x:Name="Island"
+                            Margin="10,4,142,-6"
+                            IsHitTestVisible="False">
+                            <Border CornerRadius="8">
+                                <ui:Effects.Shadow>
+                                    <media:AttachedCardShadow
+                                        BlurRadius="28"
+                                        CornerRadius="8"
+                                        Offset="0,10"
+                                        Opacity="{ThemeResource CinematicRestShadowOpacity}"
+                                        Color="Black" />
+                                </ui:Effects.Shadow>
+                            </Border>
+                            <!--  the shared title-bar glass (Solid makes it opaque, high contrast the window colour)  -->
+                            <Grid x:Name="ContentGlass">
+                                <Border Background="{ThemeResource GlassTitleBarBrush}" CornerRadius="8" />
+                                <Border Background="{ThemeResource CinematicIslandSheenBrush}" CornerRadius="8" />
+                                <Border
+                                    BorderBrush="{ThemeResource CinematicIslandRimBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8" />
+                            </Grid>
+                            <Grid
+                                x:Name="HeroGlass"
+                                RequestedTheme="Dark"
+                                Visibility="Collapsed">
+                                <Border Background="{ThemeResource CinematicIslandHeroBrush}" CornerRadius="8" />
+                                <Border Background="{ThemeResource CinematicIslandHeroSheenBrush}" CornerRadius="8" />
+                                <Border
+                                    BorderBrush="{ThemeResource CinematicIslandHeroRimBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8" />
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--  a shelf's title: 24 px SemiBold, Segoe UI Variable Display (a heading for Narrator: ShelfRow makes it level 2)  -->
+    <DataTemplate x:Key="RowHeaderTemplate">
+        <TextBlock
+            AutomationProperties.HeadingLevel="Level2"
+            Style="{StaticResource CinematicShelfTitleTextBlockStyle}"
+            Text="{Binding}" />
+    </DataTemplate>
+
+    <!--  posters stay the shared card (Cinematic draws stills; a poster appears only where a page shows people's or a collection's art)  -->
+    <themes:CardImageConverter x:Key="CinematicPosterImage" Height="300" ImageType="Primary" />
+    <DataTemplate x:Key="PosterTemplate">
+        <lc:BaseItemDtoCard
+            Width="200"
+            Height="352"
+            ImageSource="{Binding Converter={StaticResource CinematicPosterImage}}"
+            Model="{Binding}" />
+    </DataTemplate>
+
+    <!--  the 16:9 still with title art (Controls\CinematicStill; its content: a BaseItemViewModel, its DataContext)  -->
+    <DataTemplate x:Key="StillTemplate">
+        <cc:CinematicStill Margin="16,14,16,0" UseDataContext="True" />
+    </DataTemplate>
+
+    <!--  a page's own title (the library's): Segoe UI Variable Display 28 SemiBold, a level-1 heading  -->
+    <Style
+        x:Key="PageHeaderStyle"
+        BasedOn="{StaticResource CinematicPageTitleTextBlockStyle}"
+        TargetType="TextBlock" />
+
+    <!--  behind the shared sign-in form: a full-window dusk still (Controls\CinematicSignInScene)  -->
+    <DataTemplate x:Key="SignInBackdropTemplate">
+        <cc:CinematicSignInScene />
+    </DataTemplate>
+
+    <!--
+        The player's overlay (04-player): the top bar holds the tabs panel (Info, Episodes, Chapters, Audio and subtitles;
+        Controls\CinematicPlayerPanel, laid in by CinematicPlayer.TopTabs) over a deeper scrim; the bottom bar keeps its parts
+        and logic and takes the page's 96 px margins.
+    -->
+    <Style x:Key="PlayerTopBarStyle" TargetType="Grid">
+        <Setter Property="Padding" Value="40,28,40,64" />
+        <Setter Property="Background" Value="{ThemeResource CinematicPlayerTopScrimBrush}" />
+        <Setter Property="cc:CinematicPlayer.TopTabs" Value="True" />
+    </Style>
+    <Style x:Key="PlayerBottomBarStyle" TargetType="Grid">
+        <Setter Property="Padding" Value="96,72,96,24" />
+    </Style>
+</ResourceDictionary>

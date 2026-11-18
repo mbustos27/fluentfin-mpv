@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="FluentFin.Themes.Cinematic.Controls.CinematicPlayerPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cc="using:FluentFin.Themes.Cinematic.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    RequestedTheme="Dark"
+    mc:Ignorable="d">
+
+    <!--
+        Nixie 1.3.0, Cinematic's player panel (04-player): tabs at the top of the overlay (Info, Episodes, Chapters, Audio and
+        subtitles) that drop one dense panel under them; Esc or the open tab closes it. It is laid into the shared overlay's top
+        bar by the theme's PlayerTopBarStyle (CinematicPlayer.TopTabs) and works through the same MpvControlsViewModel as the
+        shared menus (SetAudio, SetSubtitle, SetSubtitleSize, StepSubtitleDelay, SeekTo): the track and volume code is not
+        touched. While it is open the overlay stays up (MenuOpened). On a dense fill, never a blur: it lies over the video.
+    -->
+    <Grid x:Name="Root" KeyDown="Root_KeyDown">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border
+            x:Name="TabsPlate"
+            Padding="10,2"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            Background="{ThemeResource CinematicPlayerPanelBrush}"
+            BorderBrush="{ThemeResource GlassStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
+            <cc:CinematicTabStrip
+                x:Name="Tabs"
+                AutomationProperties.Name="Player panels"
+                TabFontSize="15"
+                TabInvoked="Tabs_TabInvoked" />
+        </Border>
+
+        <!--  when the item ends: a time you read (nixie orange)  -->
+        <TextBlock
+            x:Name="EndsText"
+            Margin="0,12,0,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            FontSize="14"
+            Foreground="{ThemeResource CinematicNumberBrush}" />
+
+        <Border
+            x:Name="Panel"
+            Grid.Row="1"
+            MaxWidth="980"
+            Margin="0,14,0,0"
+            Padding="24,20"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            Background="{ThemeResource CinematicPlayerPanelBrush}"
+            BorderBrush="{ThemeResource GlassStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Visibility="Collapsed">
+            <Grid>
+                <!--  Info  -->
+                <StackPanel x:Name="InfoPart" Spacing="8" Visibility="Collapsed">
+                    <TextBlock x:Name="InfoKicker" Style="{StaticResource CinematicKickerTextBlockStyle}" />
+                    <TextBlock
+                        x:Name="InfoTitle"
+                        AutomationProperties.HeadingLevel="Level2"
+                        FontFamily="{StaticResource GlassDisplayFontFamily}"
+                        FontSize="24"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="InfoMeta"
+                        FontSize="14"
+                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        x:Name="InfoOverview"
+                        MaxWidth="860"
+                        FontSize="15"
+                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                        LineHeight="22"
+                        MaxLines="6"
+                        TextTrimming="WordEllipsis"
+                        TextWrapping="WrapWholeWords" />
+                </StackPanel>
+
+                <!--  Episodes: the season's, the one playing marked; a click plays one  -->
+                <ScrollViewer
+                    x:Name="EpisodesPart"
+                    HorizontalScrollBarVisibility="Auto"
+                    HorizontalScrollMode="Enabled"
+                    VerticalScrollBarVisibility="Disabled"
+                    VerticalScrollMode="Disabled"
+                    Visibility="Collapsed">
+                    <StackPanel
+                        x:Name="EpisodesList"
+                        AutomationProperties.Name="Episodes"
+                        Orientation="Horizontal"
+                        Spacing="12" />
+                </ScrollViewer>
+
+                <!--  Chapters: a click goes there  -->
+                <ScrollViewer
+                    x:Name="ChaptersPart"
+                    MaxHeight="360"
+                    Visibility="Collapsed">
+                    <StackPanel
+                        x:Name="ChaptersList"
+                        AutomationProperties.Name="Chapters"
+                        Spacing="2" />
+                </ScrollViewer>
+
+                <!--  Audio and subtitles: the same choices as the shared menu, laid out in columns  -->
+                <Grid
+                    x:Name="TracksPart"
+                    ColumnSpacing="28"
+                    Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="300" />
+                        <ColumnDefinition Width="300" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="6">
+                        <TextBlock Style="{StaticResource CinematicKickerTextBlockStyle}" Text="AUDIO" />
+                        <StackPanel
+                            x:Name="AudioList"
+                            AutomationProperties.Name="Audio"
+                            Spacing="2" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="6">
+                        <TextBlock Style="{StaticResource CinematicKickerTextBlockStyle}" Text="SUBTITLES" />
+                        <StackPanel
+                            x:Name="SubtitleList"
+                            AutomationProperties.Name="Subtitles"
+                            Spacing="2" />
+                    </StackPanel>
+                    <StackPanel
+                        x:Name="SubtitleTools"
+                        Grid.Column="2"
+                        Spacing="8">
+                        <TextBlock Style="{StaticResource CinematicKickerTextBlockStyle}" Text="SUBTITLE SIZE" />
+                        <StackPanel
+                            x:Name="SizeList"
+                            AutomationProperties.Name="Subtitle size"
+                            Orientation="Horizontal"
+                            Spacing="8" />
+                        <TextBlock
+                            Margin="0,10,0,0"
+                            Style="{StaticResource CinematicKickerTextBlockStyle}"
+                            Text="SUBTITLE TIMING" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button
+                                x:Name="EarlierButton"
+                                AutomationProperties.Name="Subtitles earlier"
+                                Click="EarlierButton_Click"
+                                Content="Earlier"
+                                Style="{StaticResource NixieCompactButtonStyle}"
+                                ToolTipService.ToolTip="Show the subtitles earlier" />
+                            <TextBlock
+                                x:Name="DelayText"
+                                MinWidth="48"
+                                VerticalAlignment="Center"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource CinematicNumberBrush}"
+                                TextAlignment="Center" />
+                            <Button
+                                x:Name="LaterButton"
+                                AutomationProperties.Name="Subtitles later"
+                                Click="LaterButton_Click"
+                                Content="Later"
+                                Style="{StaticResource NixieCompactButtonStyle}"
+                                ToolTipService.ToolTip="Show the subtitles later" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock
+                    x:Name="EmptyText"
+                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                    Visibility="Collapsed" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

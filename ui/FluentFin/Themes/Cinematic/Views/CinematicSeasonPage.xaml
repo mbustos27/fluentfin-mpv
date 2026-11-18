@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="FluentFin.Themes.Cinematic.Views.CinematicSeasonPage"
+    lc:TopBar.ExtendsUnder="True"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:cc="using:FluentFin.Themes.Cinematic.Controls"
+    xmlns:controls="using:FluentFin.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:local="using:FluentFin.Themes.Cinematic.Views"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:root="using:FluentFin"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Page"
+    Background="{ThemeResource CinematicNightBrush}"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <!--  an episode still: 370 x 208 (300 x 169 narrow); Enter or a click plays it, its menu opens its page  -->
+        <DataTemplate x:Key="EpisodeLarge" x:DataType="vm:BaseItemViewModel">
+            <cc:CinematicStill
+                Margin="16,14,16,14"
+                ArtHeight="208"
+                ArtWidth="370"
+                DecodeWidth="600"
+                Kind="Episode"
+                Model="{x:Bind}"
+                ShowTitleArt="False" />
+        </DataTemplate>
+        <DataTemplate x:Key="EpisodeSmall" x:DataType="vm:BaseItemViewModel">
+            <cc:CinematicStill
+                Margin="12,12,12,12"
+                ArtHeight="169"
+                ArtWidth="300"
+                DecodeWidth="520"
+                Kind="Episode"
+                Model="{x:Bind}"
+                ShowTitleArt="False"
+                TitleSize="15" />
+        </DataTemplate>
+    </Page.Resources>
+
+    <!--
+        Nixie 1.3.0, Cinematic Season: the series page's picture for one season. The show's backdrop fills the first screen
+        with the season's details (CinematicItemStage); along its foot the season tabs (each opens that season's page, as the
+        shared season pills do) and the season's episodes as stills (Enter or a click plays one). Below: the details and cast.
+    -->
+    <Grid>
+        <ScrollViewer x:Name="PageContent">
+            <StackPanel>
+                <cc:CinematicItemStage x:Name="Stage" Dto="{x:Bind ViewModel.Dto, Mode=OneWay}">
+                    <cc:CinematicItemStage.PrimaryActions>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button
+                                x:Name="PlayButton"
+                                AutomationProperties.Name="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}"
+                                Command="{x:Bind root:App.Commands.PlayDtoCommand}"
+                                CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"
+                                Style="{StaticResource NixiePrimaryButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon FontSize="16" Glyph="&#xE768;" />
+                                    <TextBlock Text="{x:Bind ViewModel.PlayTarget.Label, Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                            <StackPanel
+                                Margin="2,0,8,0"
+                                VerticalAlignment="Center"
+                                Spacing="6"
+                                Visibility="{x:Bind ViewModel.PlayTarget.HasProgress, Mode=OneWay}">
+                                <TextBlock
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource CinematicNumberBrush}"
+                                    Text="{x:Bind local:CinematicSeriesPage.LeftFor(ViewModel.Episodes), Mode=OneWay}" />
+                                <ProgressBar
+                                    Width="110"
+                                    Height="4"
+                                    MinHeight="4"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Background="{ThemeResource CinematicProgressTrackBrush}"
+                                    Foreground="{ThemeResource CinematicProgressBrush}"
+                                    Maximum="100"
+                                    Value="{x:Bind ViewModel.PlayTarget.ProgressValue, Mode=OneWay}">
+                                    <ProgressBar.Resources>
+                                        <x:Double x:Key="ProgressBarTrackHeight">4</x:Double>
+                                    </ProgressBar.Resources>
+                                </ProgressBar>
+                            </StackPanel>
+                        </StackPanel>
+                    </cc:CinematicItemStage.PrimaryActions>
+                    <cc:CinematicItemStage.BottomContent>
+                        <StackPanel x:Name="EpisodesBlock" Padding="0,0,0,24">
+                            <StackPanel
+                                x:Name="TabsRow"
+                                Margin="88,0,48,6"
+                                Orientation="Horizontal"
+                                Spacing="18">
+                                <cc:CinematicTabStrip x:Name="SeasonTabs" AutomationProperties.Name="Seasons" TabInvoked="SeasonTabs_TabInvoked" />
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource CinematicShelfCountTextBlockStyle}"
+                                    Text="{x:Bind local:CinematicSeriesSupport.Summary(ViewModel.Episodes), Mode=OneWay}" />
+                            </StackPanel>
+                            <lc:ShelfRow
+                                x:Name="EpisodeShelf"
+                                Margin="80,0,0,0"
+                                Header="Episodes"
+                                ItemTemplate="{StaticResource EpisodeLarge}"
+                                ItemsSource="{x:Bind local:CinematicSeriesSupport.Wrap(ViewModel.Episodes), Mode=OneWay}"
+                                Loaded="EpisodeShelf_Loaded">
+                            </lc:ShelfRow>
+                        </StackPanel>
+                    </cc:CinematicItemStage.BottomContent>
+                </cc:CinematicItemStage>
+
+                <!--  the light theme: the stage's dusk fades into the page's ground  -->
+
+                <Border
+
+                    Height="72"
+
+                    AutomationProperties.AccessibilityView="Raw"
+
+                    Background="{ThemeResource CinematicFirstScreenFadeBrush}"
+
+                    IsHitTestVisible="False" />
+
+                <StackPanel
+                    x:Name="Body"
+                    Margin="96,24,48,56"
+                    Spacing="32">
+                    <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
+                    <controls:CastRow Heading="Cast &amp; crew" People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <controls:LoadStateView
+            State="{x:Bind ViewModel.State}"
+            VerticalContentAlignment="Center" />
+    </Grid>
+</Page>

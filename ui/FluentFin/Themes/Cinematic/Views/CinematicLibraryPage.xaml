@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="FluentFin.Themes.Cinematic.Views.CinematicLibraryPage"
+    lc:TopBar.ExtendsUnder="True"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cc="using:FluentFin.Themes.Cinematic.Controls"
+    xmlns:ctkl="using:CommunityToolkit.Labs.WinUI"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:local="using:FluentFin.Themes.Cinematic.Views"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:shared="using:FluentFin.Views"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Page"
+    Background="{ThemeResource CinematicNightBrush}"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <!--  the grid's stills: 264 x 149 (224 x 126 in a narrow window); the slot holds the rim and the zoom's room  -->
+        <DataTemplate x:Key="GridLarge" x:DataType="vm:BaseItemViewModel">
+            <cc:CinematicStill
+                Margin="12,14,12,14"
+                ArtHeight="149"
+                ArtWidth="264"
+                DecodeWidth="440"
+                Line="{x:Bind local:CinematicLibraryPage.LineFor(Dto)}"
+                Model="{x:Bind}"
+                ShowTitleArt="False"
+                TitleSize="15" />
+        </DataTemplate>
+        <DataTemplate x:Key="GridSmall" x:DataType="vm:BaseItemViewModel">
+            <cc:CinematicStill
+                Margin="12,12,12,12"
+                ArtHeight="126"
+                ArtWidth="224"
+                DecodeWidth="380"
+                Line="{x:Bind local:CinematicLibraryPage.LineFor(Dto)}"
+                Model="{x:Bind}"
+                ShowTitleArt="False"
+                TitleSize="14" />
+        </DataTemplate>
+        <!--  the Filter menu's rows (the shared library's)  -->
+        <DataTemplate x:Key="FilterHeaderTemplate" x:DataType="vm:FilterFacet">
+            <TextBlock
+                Margin="0,16,0,4"
+                AutomationProperties.HeadingLevel="Level3"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Text="{x:Bind Title}" />
+        </DataTemplate>
+        <DataTemplate x:Key="FilterOptionTemplate" x:DataType="vm:FilterOption">
+            <CheckBox
+                MinHeight="32"
+                AutomationProperties.Name="{x:Bind Name}"
+                Content="{x:Bind Label}"
+                IsChecked="{x:Bind IsChecked, Mode=TwoWay}" />
+        </DataTemplate>
+        <shared:FilterRowTemplateSelector
+            x:Key="FilterRowTemplates"
+            Header="{StaticResource FilterHeaderTemplate}"
+            Option="{StaticResource FilterOptionTemplate}" />
+        <!--  the A-Z letters: flat, 26 x 32 (WCAG 2.5.8), the letter shown underlined in the accent  -->
+        <Style x:Key="CinematicLetterButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </Page.Resources>
+
+    <!--
+        Nixie 1.3.0, Cinematic Library (03-library): the title the grid's focus is on fills a preview stage at the top with its own
+        Play (the library's one Primary; CinematicPreviewStage); above it the library's name, its sections as tabs (All,
+        Unwatched, Favorites, Recently added) and Sort and Filter; under it the grid's header line, the count and the A-Z jump
+        (one click to a letter), then a grid of 16:9 stills. The grid, the jump, the sort and the filter are the shared
+        library's (LibraryViewModel, CardGrid: one Tab stop, arrows both ways, "n of m"); only the layout is the theme's.
+    -->
+    <Grid x:Name="LibraryRoot" Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition x:Name="StageRow" Height="540" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <cc:CinematicPreviewStage
+            x:Name="Stage"
+            Grid.RowSpan="3"
+            VerticalAlignment="Top" />
+
+        <!--  the library's name, its sections, Sort and Filter (on the stage's dark top scrim)  -->
+        <Grid
+            x:Name="TopLine"
+            Margin="96,72,96,0"
+            VerticalAlignment="Top"
+            ColumnSpacing="20"
+            RequestedTheme="Dark">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="TitleText"
+                VerticalAlignment="Center"
+                Style="{StaticResource CinematicPageTitleTextBlockStyle}"
+                Text="{x:Bind ViewModel.Title, Mode=OneWay}" />
+            <cc:CinematicTabStrip
+                x:Name="SectionTabs"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Sections"
+                TabFontSize="16"
+                TabInvoked="SectionTabs_TabInvoked" />
+            <StackPanel
+                x:Name="SortFilterBar"
+                Grid.Column="2"
+                Orientation="Horizontal"
+                Spacing="8"
+                Visibility="{x:Bind shared:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}">
+                <Button
+                    x:Name="SortButton"
+                    AutomationProperties.Name="{x:Bind ViewModel.SortButtonName, Mode=OneWay}"
+                    Style="{StaticResource NixieCompactButtonStyle}"
+                    ToolTipService.ToolTip="Sort">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE8CB;" />
+                        <TextBlock Text="{x:Bind shared:LibraryPage.SortLabel(ViewModel.SortName), Mode=OneWay}" />
+                    </StackPanel>
+                    <Button.Flyout>
+                        <MenuBarItemFlyout>
+                            <RadioMenuFlyoutItem
+                                Command="{x:Bind ViewModel.UpdateSortByCommand}"
+                                CommandParameter="{x:Bind jm:ItemSortBy.Name}"
+                                GroupName="Cinematic_SortItem"
+                                IsChecked="{x:Bind shared:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.Name), Mode=OneWay}"
+                                Text="Name" />
+                            <RadioMenuFlyoutItem
+                                Command="{x:Bind ViewModel.UpdateSortByCommand}"
+                                CommandParameter="{x:Bind jm:ItemSortBy.CommunityRating}"
+                                GroupName="Cinematic_SortItem"
+                                IsChecked="{x:Bind shared:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.CommunityRating), Mode=OneWay}"
+                                Text="Community rating" />
+                            <RadioMenuFlyoutItem
+                                Command="{x:Bind ViewModel.UpdateSortByCommand}"
+                                CommandParameter="{x:Bind jm:ItemSortBy.CriticRating}"
+                                GroupName="Cinematic_SortItem"
+                                IsChecked="{x:Bind shared:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.CriticRating), Mode=OneWay}"
+                                Text="Critic rating" />
+                            <RadioMenuFlyoutItem
+                                Command="{x:Bind ViewModel.UpdateSortByCommand}"
+                                CommandParameter="{x:Bind jm:ItemSortBy.DateCreated}"
+                                GroupName="Cinematic_SortItem"
+                                IsChecked="{x:Bind shared:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.DateCreated), Mode=OneWay}"
+                                Text="Date added" />
+                            <RadioMenuFlyoutItem
+                                Command="{x:Bind ViewModel.UpdateSortByCommand}"
+                                CommandParameter="{x:Bind jm:ItemSortBy.DatePlayed}"
+                                GroupName="Cinematic_SortItem"
+                                IsChecked="{x:Bind shared:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.DatePlayed), Mode=OneWay}"
+                                Text="Date played" />
+                            <RadioMenuFlyoutItem
+                                Command="{x:Bind ViewModel.UpdateSortByCommand}"
+                                CommandParameter="{x:Bind jm:ItemSortBy.PlayCount}"
+                                GroupName="Cinematic_SortItem"
+                                IsChecked="{x:Bind shared:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.PlayCount), Mode=OneWay}"
+                                Text="Play count" />
+                            <RadioMenuFlyoutItem
+                                Command="{x:Bind ViewModel.UpdateSortByCommand}"
+                                CommandParameter="{x:Bind jm:ItemSortBy.PremiereDate}"
+                                GroupName="Cinematic_SortItem"
+                                IsChecked="{x:Bind shared:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.PremiereDate), Mode=OneWay}"
+                                Text="Release date" />
+                            <RadioMenuFlyoutItem
+                                Command="{x:Bind ViewModel.UpdateSortByCommand}"
+                                CommandParameter="{x:Bind jm:ItemSortBy.Runtime}"
+                                GroupName="Cinematic_SortItem"
+                                IsChecked="{x:Bind shared:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.Runtime), Mode=OneWay}"
+                                Text="Runtime" />
+                            <MenuFlyoutSeparator />
+                            <RadioMenuFlyoutItem
+                                Command="{x:Bind ViewModel.UpdateSortOrderCommand}"
+                                CommandParameter="{x:Bind jm:SortOrder.Ascending}"
+                                GroupName="Cinematic_SortOrder"
+                                IsChecked="{x:Bind shared:LibraryPage.IsOrder(ViewModel.Order, jm:SortOrder.Ascending), Mode=OneWay}"
+                                Text="Ascending" />
+                            <RadioMenuFlyoutItem
+                                Command="{x:Bind ViewModel.UpdateSortOrderCommand}"
+                                CommandParameter="{x:Bind jm:SortOrder.Descending}"
+                                GroupName="Cinematic_SortOrder"
+                                IsChecked="{x:Bind shared:LibraryPage.IsOrder(ViewModel.Order, jm:SortOrder.Descending), Mode=OneWay}"
+                                Text="Descending" />
+                        </MenuBarItemFlyout>
+                    </Button.Flyout>
+                </Button>
+                <Button
+                    x:Name="FilterButton"
+                    AutomationProperties.Name="{x:Bind ViewModel.FilterButtonName, Mode=OneWay}"
+                    Style="{StaticResource NixieCompactButtonStyle}"
+                    ToolTipService.ToolTip="Filter">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE71C;" />
+                        <TextBlock Text="{x:Bind ViewModel.FilterText, Mode=OneWay}" />
+                    </StackPanel>
+                    <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedRight">
+                            <Grid
+                                Width="340"
+                                MaxHeight="560"
+                                RowSpacing="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.HeadingLevel="Level2"
+                                        Style="{StaticResource SubtitleTextBlockStyle}"
+                                        Text="Filter" />
+                                    <Button
+                                        Grid.Column="1"
+                                        Command="{x:Bind ViewModel.ClearFiltersCommand}"
+                                        Content="Clear filters"
+                                        IsEnabled="{x:Bind shared:LibraryPage.AnyOn(ViewModel.ActiveFilters), Mode=OneWay}"
+                                        Style="{StaticResource NixieCompactButtonStyle}" />
+                                </Grid>
+                                <ScrollViewer Grid.Row="1" Padding="0,0,12,0">
+                                    <StackPanel>
+                                        <TextBlock
+                                            Margin="0,4,0,4"
+                                            AutomationProperties.HeadingLevel="Level3"
+                                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                                            Text="Show" />
+                                        <CheckBox
+                                            MinHeight="32"
+                                            Content="Unwatched only"
+                                            IsChecked="{x:Bind ViewModel.Filter.Unwatched, Mode=TwoWay}" />
+                                        <CheckBox
+                                            MinHeight="32"
+                                            Margin="0,0,0,12"
+                                            Content="Favorites only"
+                                            IsChecked="{x:Bind ViewModel.Filter.Favorites, Mode=TwoWay}" />
+                                        <ItemsRepeater ItemTemplate="{StaticResource FilterRowTemplates}" ItemsSource="{x:Bind ViewModel.FilterRows, Mode=OneWay}">
+                                            <ItemsRepeater.Layout>
+                                                <StackLayout />
+                                            </ItemsRepeater.Layout>
+                                        </ItemsRepeater>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!--  the grid's header line: where the grid is ("B · 23 movies · Name, A to Z"), and the A-Z jump  -->
+        <Grid
+            x:Name="HeaderLine"
+            Grid.Row="1"
+            RequestedTheme="Dark"
+            Margin="96,0,84,6"
+            ColumnSpacing="16"
+            Visibility="{x:Bind shared:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="PlaceText"
+                VerticalAlignment="Center"
+                Style="{StaticResource CinematicShelfCountTextBlockStyle}"
+                TextTrimming="CharacterEllipsis" />
+            <lc:RowList
+                x:Name="LetterList"
+                Grid.Column="1"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.Name="Jump to a letter"
+                TabFocusNavigation="Once"
+                Visibility="{x:Bind shared:LibraryPage.LettersVisibility(ViewModel.Letters, ViewModel.State.Status), Mode=OneWay}"
+                XYFocusKeyboardNavigation="Enabled">
+                <ItemsRepeater x:Name="LetterRepeater" ItemsSource="{x:Bind ViewModel.Letters, Mode=OneWay}">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Orientation="Horizontal" Spacing="0" />
+                    </ItemsRepeater.Layout>
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LetterJump">
+                            <Button
+                                AutomationProperties.Name="{x:Bind Name}"
+                                Click="Letter_Click"
+                                Style="{StaticResource CinematicLetterButtonStyle}"
+                                Tag="{x:Bind}">
+                                <Grid>
+                                    <TextBlock HorizontalAlignment="Center" Text="{x:Bind Letter}" />
+                                    <Border
+                                        Width="14"
+                                        Height="3"
+                                        Margin="0,0,0,-8"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Bottom"
+                                        Background="{ThemeResource NixieAccentBrush}"
+                                        CornerRadius="2"
+                                        Opacity="0" />
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+            </lc:RowList>
+        </Grid>
+
+        <!--  the grid: 16:9 stills, the shared grid's keys and names (CardGrid)  -->
+        <!--  the grid on the page's ground (the light theme's too), the stage's dusk fading into it  -->
+        <Border
+            Grid.Row="2"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="{ThemeResource CinematicNightBrush}"
+            IsHitTestVisible="False" />
+        <ScrollView x:Name="GridScroller" Grid.Row="2">
+            <lc:RowList
+                x:Name="GridList"
+
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+                TabFocusNavigation="Once">
+                <ItemsRepeater
+                    x:Name="GridRepeater"
+                    Margin="84,0,36,32"
+                    ItemTemplate="{StaticResource GridLarge}"
+                    ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+                    <ItemsRepeater.Layout>
+                        <!--  a slot is the still with its rim and its room for the zoom: a smaller slot would clip it  -->
+                        <UniformGridLayout
+                            x:Name="GridLayout"
+                            ItemsJustification="Start"
+                            ItemsStretch="None"
+                            MinColumnSpacing="0"
+                            MinItemHeight="240"
+                            MinItemWidth="296"
+                            MinRowSpacing="0"
+                            Orientation="Horizontal" />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
+            </lc:RowList>
+        </ScrollView>
+
+        <Border
+            Grid.Row="2"
+            Height="36"
+            VerticalAlignment="Top"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="{ThemeResource CinematicFirstScreenFadeBrush}"
+            IsHitTestVisible="False" />
+
+        <!--  while the library loads: the stills' slots  -->
+        <ItemsRepeater
+            x:Name="Placeholders"
+            Grid.Row="2"
+            Margin="96,14,70,0"
+            ItemsSource="{x:Bind local:CinematicLibraryPage.Slots(12)}"
+            Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
+            <ItemsRepeater.ItemTemplate>
+                <DataTemplate x:DataType="x:Int32">
+                    <ctkl:Shimmer
+                        Width="264"
+                        Height="149"
+                        Margin="0,0,28,64"
+                        CornerRadius="8" />
+                </DataTemplate>
+            </ItemsRepeater.ItemTemplate>
+            <ItemsRepeater.Layout>
+                <UniformGridLayout MinItemHeight="213" MinItemWidth="292" Orientation="Horizontal" />
+            </ItemsRepeater.Layout>
+        </ItemsRepeater>
+
+        <lc:LoadStateView
+            Grid.Row="2"
+            State="{x:Bind ViewModel.State}"
+            VerticalContentAlignment="Center" />
+    </Grid>
+</Page>

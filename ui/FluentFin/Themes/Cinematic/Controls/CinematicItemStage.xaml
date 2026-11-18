@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="FluentFin.Themes.Cinematic.Controls.CinematicItemStage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cc="using:FluentFin.Themes.Cinematic.Controls"
+    xmlns:controls="using:FluentFin.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:journal="using:FluentFin.Plugins.Journal.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    mc:Ignorable="d">
+
+    <!--
+        Nixie 1.3.0, Cinematic's item pages (series, season, film, episode): the same picture as Home. The backdrop fills the
+        first screen under the island, a scrim darkens the left and one fades the foot into the page; the details sit at the
+        lower left (kicker, the title art as the page's heading, the facts and badges, the overview, then the page's Play
+        (its one Primary), Trailer, Watched, Favourite and More), the credits at the right on a dark backing, and the page's own
+        content along the foot (BottomContent: the season tabs and the episode shelf, or More like this). The words sit on
+        the art in every theme (dark), the foot follows the theme.
+    -->
+    <Grid
+        x:Name="Stage"
+        Background="{ThemeResource CinematicNightBrush}"
+        RequestedTheme="Dark">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Image
+            x:Name="BackdropImage"
+            Grid.RowSpan="2"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            AutomationProperties.AccessibilityView="Raw"
+            Stretch="UniformToFill" />
+        <Border
+            Grid.RowSpan="2"
+            Background="{ThemeResource CinematicItemFootScrimBrush}"
+            IsHitTestVisible="False" />
+        <Border
+            Grid.RowSpan="2"
+            Background="{ThemeResource CinematicHeroSideScrimBrush}"
+            IsHitTestVisible="False" />
+        <Border
+            Grid.RowSpan="2"
+            Height="200"
+            VerticalAlignment="Top"
+            Background="{ThemeResource CinematicHeroTopScrimBrush}"
+            IsHitTestVisible="False" />
+
+        <StackPanel
+            x:Name="Words"
+            MaxWidth="820"
+            Margin="96,96,48,36"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            RequestedTheme="Dark">
+            <TextBlock x:Name="KickerText" Style="{StaticResource CinematicKickerTextBlockStyle}" />
+            <cc:CinematicTitleArt
+                x:Name="TitleArt"
+                MaxWidth="820"
+                Margin="0,12,0,0"
+                HorizontalAlignment="Left"
+                Foreground="{ThemeResource CinematicOnArtTextBrush}"
+                IsHeading="True"
+                LogoDecodeWidth="820"
+                LogoMaxHeight="160"
+                Size="104" />
+            <!--  an episode's own title under its show's art (a level-2 heading)  -->
+            <TextBlock
+                x:Name="SubtitleText"
+                Margin="0,10,0,0"
+                AutomationProperties.HeadingLevel="Level2"
+                FontFamily="{StaticResource GlassDisplayFontFamily}"
+                FontSize="30"
+                FontWeight="SemiBold"
+                Foreground="{ThemeResource CinematicOnArtTextBrush}"
+                TextTrimming="CharacterEllipsis"
+                Visibility="Collapsed" />
+            <StackPanel
+                Margin="0,18,0,0"
+                Orientation="Horizontal"
+                Spacing="14">
+                <TextBlock
+                    x:Name="MetaText"
+                    VerticalAlignment="Center"
+                    FontSize="16"
+                    Foreground="{ThemeResource CinematicOnArtSecondaryBrush}"
+                    TextTrimming="CharacterEllipsis" />
+                <StackPanel
+                    x:Name="Badges"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Orientation="Horizontal"
+                    Spacing="6" />
+            </StackPanel>
+            <!--  the overview at the mockup's 18 px, three lines (two narrow) with the button system's Show more link  -->
+            <StackPanel x:Name="OverviewPanel" Margin="0,14,0,0">
+                <TextBlock
+                    x:Name="OverviewText"
+                    MaxWidth="660"
+                    HorizontalAlignment="Left"
+                    FontSize="18"
+                    Foreground="{ThemeResource CinematicOnArtTextBrush}"
+                    IsTextTrimmedChanged="OverviewText_IsTextTrimmedChanged"
+                    LineHeight="27"
+                    MaxLines="3"
+                    TextTrimming="WordEllipsis"
+                    TextWrapping="WrapWholeWords" />
+                <controls:ExpandToggleButton
+                    x:Name="OverviewMore"
+                    Click="OverviewMore_Click"
+                    Content="Show more"
+                    Style="{StaticResource NixieLinkButtonStyle}"
+                    Visibility="Collapsed" />
+            </StackPanel>
+            <ctk:WrapPanel
+                xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
+                x:Name="ButtonStrip"
+                Margin="0,24,0,0"
+                HorizontalSpacing="12"
+                VerticalSpacing="12">
+                <ContentPresenter x:Name="PrimaryPresenter" VerticalAlignment="Center" />
+                <Button
+                    x:Name="TrailerButton"
+                    AutomationProperties.Name="Watch trailer"
+                    Click="TrailerButton_Click"
+                    Style="{StaticResource NixieButtonStyle}"
+                    ToolTipService.ToolTip="Watch trailer (opens in your browser)"
+                    Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE714;" />
+                        <TextBlock Text="Trailer" />
+                    </StackPanel>
+                </Button>
+                <ToggleButton
+                    x:Name="WatchedButton"
+                    AutomationProperties.Name="Mark as watched"
+                    Click="WatchedButton_Click"
+                    Style="{StaticResource NixieIconToggleButtonStyle}"
+                    ToolTipService.ToolTip="Mark as watched">
+                    <FontIcon FontSize="18" Glyph="&#xE73E;" />
+                </ToggleButton>
+                <ToggleButton
+                    x:Name="FavoriteButton"
+                    AutomationProperties.Name="Add to favorites"
+                    Click="FavoriteButton_Click"
+                    Style="{StaticResource NixieIconToggleButtonStyle}"
+                    ToolTipService.ToolTip="Add to favorites">
+                    <ToggleButton.Resources>
+                        <StaticResource x:Key="SystemAccentColor" ResourceKey="FavoriteCheckedBrush" />
+                    </ToggleButton.Resources>
+                    <FontIcon x:Name="FavoriteGlyph" FontSize="18" Glyph="&#xEB51;" />
+                </ToggleButton>
+                <Button
+                    x:Name="MoreButton"
+                    AutomationProperties.Name="More options"
+                    Style="{StaticResource NixieIconButtonStyle}"
+                    ToolTipService.ToolTip="More options">
+                    <FontIcon FontSize="18" Glyph="&#xE712;" />
+                </Button>
+            </ctk:WrapPanel>
+        </StackPanel>
+
+        <!--  the credits and the user's rating, right-aligned on a dark backing (they sit on bright art too)  -->
+        <Border
+            x:Name="CreditsPanel"
+            Margin="0,0,72,40"
+            Padding="16,10"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource CinematicCreditsBackingBrush}"
+            CornerRadius="8"
+            RequestedTheme="Dark"
+            Visibility="Collapsed">
+            <StackPanel Spacing="4">
+                <StackPanel x:Name="CreditsList" Spacing="4" />
+                <StackPanel
+                    x:Name="RatingRow"
+                    HorizontalAlignment="Right"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    Visibility="{x:Bind RatingPanel.Visibility, Mode=OneWay}">
+                    <!--  the journal's own panel says "Your rating"  -->
+                    <journal:JournalRatingPanel x:Name="RatingPanel" VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <ContentPresenter
+            x:Name="BottomPresenter"
+            Grid.Row="1"
+            HorizontalContentAlignment="Stretch" />
+    </Grid>
+</UserControl>
