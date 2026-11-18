@@ -190,8 +190,6 @@ public sealed class GlassDuskTests
 	public void Every_glass_ThemeResource_the_styles_use_exists_in_high_contrast()
 	{
 		var highContrast = Theme("HighContrast").Elements().Select(Key).ToHashSet();
-		// a key with a value outside the theme dictionaries falls back to it in high contrast (the glows: 0 there)
-		highContrast.UnionWith(Load("Styles", "Glass.xaml").Elements().Where(e => e.Name.LocalName == "Double").Select(Key));
 		var dark = Theme("Dark").Elements().Select(Key).ToHashSet();
 		foreach (var file in new[] { "Glass.xaml", "NavigationView.xaml", "TextBlock.xaml", "Button.xaml" })
 		{
@@ -202,8 +200,8 @@ public sealed class GlassDuskTests
 			}
 		}
 
-		// what the Dark dictionary adds beyond high contrast is WinUI's own keys (focus visuals), which WinUI defines for it, and
-		// the glows, whose fallback outside the theme dictionaries is none
+		// what the Dark dictionary adds beyond high contrast is WinUI's own keys (focus visuals, the dialog's smoke), which WinUI
+		// defines for it
 		Assert.All(dark.Except(highContrast), k => Assert.Contains(k, new[] { "SystemControlFocusVisualPrimaryBrush", "SystemControlFocusVisualSecondaryBrush", "ContentDialogSmokeFill" }));
 	}
 
@@ -249,20 +247,22 @@ public sealed class GlassDuskTests
 		var glass = Load("Styles", "Glass.xaml");
 		Assert.Contains(glass.Elements(), e => e.Name.LocalName == "Color" && Key(e) == "GlassNeonGlowColor");
 		var text = glass.ToString();
-		// each shadow's opacity is a shadow or glow opacity, which is 0 in high contrast (its own value, or the fallback)
+		// each shadow's opacity is a shadow opacity, which high contrast sets to 0. (Not a value of the glows' own: a key with a
+		// value outside the theme dictionaries overrides the theme dictionaries' values, measured: no glow at all.)
 		foreach (Match m in Regex.Matches(text, @"<media:AttachedCardShadow[^>]*>", RegexOptions.Singleline))
 		{
-			Assert.Matches(@"Opacity=""\{ThemeResource Glass(Contact|Glow|RestGlow)?ShadowOpacity\}""|Opacity=""\{ThemeResource Glass(Rest)?GlowOpacity\}""", m.Value);
+			Assert.Matches(@"Opacity=""\{ThemeResource Glass(Contact)?ShadowOpacity\}""", m.Value);
+		}
+		// the trap itself: no key both at the top of Glass.xaml and in a theme dictionary (the top one would win in every theme)
+		var top = glass.Elements().Select(Key).Where(k => k is not null).ToHashSet();
+		foreach (var theme in new[] { "Dark", "Light", "HighContrast" })
+		{
+			Assert.Empty(top.Intersect(Theme(theme).Elements().Select(Key)));
 		}
 
 		var hc = Theme("HighContrast");
 		Assert.Equal("0", hc.Elements().Single(e => Key(e) == "GlassShadowOpacity").Value);
 		Assert.Equal("0", hc.Elements().Single(e => Key(e) == "GlassContactShadowOpacity").Value);
-		foreach (var key in new[] { "GlassGlowOpacity", "GlassRestGlowOpacity" })
-		{
-			Assert.DoesNotContain(hc.Elements(), e => Key(e) == key);
-			Assert.Equal("0", glass.Elements().Single(e => Key(e) == key).Value);
-			Assert.True(double.Parse(Theme("Dark").Elements().Single(e => Key(e) == key).Value, System.Globalization.CultureInfo.InvariantCulture) > 0);
-		}
+
 	}
 }

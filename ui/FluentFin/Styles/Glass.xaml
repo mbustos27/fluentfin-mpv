@@ -53,9 +53,6 @@
             <!--  the shadow under floating panels  -->
             <x:Double x:Key="GlassShadowOpacity">0.30</x:Double>
             <x:Double x:Key="GlassContactShadowOpacity">0.22</x:Double>
-            <!--  the nixie glows: around a focused glass button, and under the primary action at rest  -->
-            <x:Double x:Key="GlassGlowOpacity">0.7</x:Double>
-            <x:Double x:Key="GlassRestGlowOpacity">0.45</x:Double>
             <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="#1AFFFFFF" />
             <SolidColorBrush x:Key="GlassPressedOverlayBrush" Color="#0DFFFFFF" />
             <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="#F8EFF0" />
@@ -139,8 +136,6 @@
             </LinearGradientBrush>
             <x:Double x:Key="GlassShadowOpacity">0.22</x:Double>
             <x:Double x:Key="GlassContactShadowOpacity">0.20</x:Double>
-            <x:Double x:Key="GlassGlowOpacity">0.45</x:Double>
-            <x:Double x:Key="GlassRestGlowOpacity">0.3</x:Double>
             <SolidColorBrush x:Key="GlassHoverOverlayBrush" Color="#0F000000" />
             <SolidColorBrush x:Key="GlassPressedOverlayBrush" Color="#08000000" />
             <SolidColorBrush x:Key="GlassTextPrimaryBrush" Color="#2D0F16" />
@@ -205,15 +200,9 @@
 
     <!--
         the glow of a lit nixie tube: warm orange-pink, the outer halo of a focused or primary control around the accent's own
-        hot pink. One colour for both themes (it is only ever a soft shadow; GlassGlowOpacity makes it 0 in high contrast).
+        hot pink. One colour for both themes (it is only ever a soft shadow; the shadow opacities, 0 in high contrast, carry it).
     -->
     <Color x:Key="GlassNeonGlowColor">#FF7A50</Color>
-    <!--
-        The glows' strength outside the Dark and Light dictionaries: none. High contrast has no value of its own for these two
-        (its dictionary is the states stream's), so it falls back to these: no glow there.
-    -->
-    <x:Double x:Key="GlassGlowOpacity">0</x:Double>
-    <x:Double x:Key="GlassRestGlowOpacity">0</x:Double>
 
     <!--  shapes  -->
     <!--  1.1.4: panels 12 like the pills and overlays (the layout audit: 20 read as phone cards)  -->
@@ -384,9 +373,18 @@
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
                     <ui:Effects.Shadow>
                         <media:AttachedCardShadow
-                            BlurRadius="8"
-                            CornerRadius="16"
-                            Opacity="{ThemeResource GlassGlowOpacity}"
+                            BlurRadius="6"
+                            CornerRadius="14"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="12"
+                            CornerRadius="14"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
                             Color="{ThemeResource SeaglassAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
@@ -395,7 +393,7 @@
                         <media:AttachedCardShadow
                             BlurRadius="24"
                             CornerRadius="16"
-                            Opacity="{ThemeResource GlassGlowOpacity}"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
                             Color="{StaticResource GlassNeonGlowColor}" />
                     </ui:Effects.Shadow>
                 </Border>
@@ -465,10 +463,19 @@
         <Border CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False">
             <ui:Effects.Shadow>
                 <media:AttachedCardShadow
-                    BlurRadius="16"
+                    BlurRadius="8"
+                    CornerRadius="14"
+                    Opacity="{ThemeResource GlassContactShadowOpacity}"
+                    Color="{ThemeResource SeaglassAccentColor}" />
+            </ui:Effects.Shadow>
+        </Border>
+        <Border CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False">
+            <ui:Effects.Shadow>
+                <media:AttachedCardShadow
+                    BlurRadius="20"
                     CornerRadius="14"
                     Offset="0,2"
-                    Opacity="{ThemeResource GlassRestGlowOpacity}"
+                    Opacity="{ThemeResource GlassShadowOpacity}"
                     Color="{StaticResource GlassNeonGlowColor}" />
             </ui:Effects.Shadow>
         </Border>
@@ -485,9 +492,18 @@
                 <Border CornerRadius="{TemplateBinding CornerRadius}">
                     <ui:Effects.Shadow>
                         <media:AttachedCardShadow
-                            BlurRadius="8"
-                            CornerRadius="16"
-                            Opacity="{ThemeResource GlassGlowOpacity}"
+                            BlurRadius="6"
+                            CornerRadius="14"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="12"
+                            CornerRadius="14"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
                             Color="{ThemeResource SeaglassAccentColor}" />
                     </ui:Effects.Shadow>
                 </Border>
@@ -496,7 +512,7 @@
                         <media:AttachedCardShadow
                             BlurRadius="24"
                             CornerRadius="16"
-                            Opacity="{ThemeResource GlassGlowOpacity}"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
                             Color="{StaticResource GlassNeonGlowColor}" />
                     </ui:Effects.Shadow>
                 </Border>
