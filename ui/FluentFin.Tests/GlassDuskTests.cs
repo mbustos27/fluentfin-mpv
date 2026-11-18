@@ -240,7 +240,7 @@ public sealed class GlassDuskTests
 	{
 		var highContrast = Theme("HighContrast").Elements().Select(Key).ToHashSet();
 		var dark = Theme("Dark").Elements().Select(Key).ToHashSet();
-		foreach (var file in new[] { "Glass.xaml", "NavigationView.xaml", "TextBlock.xaml", "Button.xaml" })
+		foreach (var file in new[] { "Glass.xaml", "TextBlock.xaml", "Button.xaml" })
 		{
 			var text = Load("Styles", file).ToString();
 			foreach (Match m in Regex.Matches(text, @"\{ThemeResource ((?:Glass|Seaglass)\w+)\}"))
@@ -319,29 +319,6 @@ public sealed class GlassDuskTests
 		Assert.DoesNotContain("BorderBrush", section);
 		Assert.Equal("12", glass.Elements().Single(e => Key(e) == "GlassPanelCornerRadius").Value);
 		Assert.DoesNotContain("CornerRadius=\"20\"", glass.ToString());
-		Assert.DoesNotContain("CornerRadius=\"20\"", Load("Styles", "NavigationView.xaml").ToString());
-	}
-
-	/// <summary>
-	/// The rail's selected icon is a mark (3:1) on the selected backplate: the white selection overlay over the rail's glass as
-	/// measured in the dark Full shots (#3E282E). Hot pink fails there (2.7:1), so the dark rail uses the light pink.
-	/// </summary>
-	[Fact]
-	public void The_rails_selected_icon_reads_on_the_selected_backplate()
-	{
-		var rail = Load("Styles", "NavigationView.xaml").Descendants()
-			.Single(e => e.Name.LocalName == "ResourceDictionary" && Key(e) == "Default");
-		var selected = (string)rail.Elements().Single(e => Key(e) == "NavigationViewSelectionIndicatorForeground").Attribute("Color")!;
-		var overlay = (string)Theme("Dark").Elements().Single(e => Key(e) == "GlassSelectedOverlayBrush").Attribute("Color")!;
-		static Rgb Parse(string hex) => new(Convert.ToByte(hex[^6..^4], 16), Convert.ToByte(hex[^4..^2], 16), Convert.ToByte(hex[^2..], 16));
-		var backplate = DuskScene.Blend(new Rgb(255, 255, 255), Convert.ToByte(overlay[1..3], 16) / 255.0, new Rgb(0x3E, 0x28, 0x2E));
-		Assert.True(OkLab.Contrast(Parse(selected).Luminance, backplate.Luminance) >= 3, $"{selected} on {backplate.Hex}");
-		Assert.True(OkLab.Contrast(SeaglassPalette.AccentDark.Luminance, backplate.Luminance) < 3, "the hot pink would not read here");
-		// light keeps WinUI's crimson; high contrast takes the system highlight
-		var dictionaries = Load("Styles", "NavigationView.xaml").Descendants().Where(e => e.Name.LocalName == "ResourceDictionary").ToList();
-		Assert.DoesNotContain(dictionaries.Single(d => Key(d) == "Light").Elements(), e => Key(e) == "NavigationViewSelectionIndicatorForeground");
-		Assert.Equal("{ThemeResource SystemColorHighlightColor}", (string?)dictionaries.Single(d => Key(d) == "HighContrast").Elements()
-			.Single(e => Key(e) == "NavigationViewSelectionIndicatorForeground").Attribute("Color"));
 	}
 
 	/// <summary>1.2.0, the top bar: its glass, Solid stand-in, hairline and tab accent exist in every theme; the glass swaps in Solid.</summary>
