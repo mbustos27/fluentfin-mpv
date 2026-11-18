@@ -218,18 +218,26 @@ public sealed partial class ComingUpSign : UserControl
 			return;
 		}
 
+		// two glows of the letters' own shape (the theme guide allows four on a screen): a tight one and a wide one
 		var compositor = ElementCompositionPreview.GetElementVisual(ArrowGlowHost).Compositor;
-		var shadow = compositor.CreateDropShadow();
-		shadow.Mask = ArrowText.GetAlphaMask();
-		shadow.Color = Color.FromArgb(255, 0xEC, 0x6A, 0x79);
-		shadow.BlurRadius = (float)(ArrowText.FontSize * 0.42);
-		shadow.Opacity = 0.95f;
-		shadow.Offset = Vector3.Zero;
+		var mask = ArrowText.GetAlphaMask();
 		_glow?.Dispose();
 		_glow = compositor.CreateSpriteVisual();
-		_glow.Shadow = shadow;
-		// the host is the letters' own box: the glow covers it, whatever moves the letters
 		_glow.RelativeSizeAdjustment = Vector2.One;
+		foreach (var (blur, opacity) in new[] { (ArrowText.FontSize * 0.55, 0.85f), (ArrowText.FontSize * 0.16, 1f) })
+		{
+			var shadow = compositor.CreateDropShadow();
+			shadow.Mask = mask;
+			shadow.Color = Color.FromArgb(255, 0xF0, 0x6A, 0x7E);
+			shadow.BlurRadius = (float)blur;
+			shadow.Opacity = opacity;
+			shadow.Offset = Vector3.Zero;
+			var layer = compositor.CreateSpriteVisual();
+			layer.RelativeSizeAdjustment = Vector2.One;
+			layer.Shadow = shadow;
+			_glow.Children.InsertAtTop(layer);
+		}
+
 		ElementCompositionPreview.SetElementChildVisual(ArrowGlowHost, _glow);
 	}
 }
