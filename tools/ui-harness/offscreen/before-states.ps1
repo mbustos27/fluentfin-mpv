@@ -7,6 +7,9 @@
   no rule), for the driver's sign-in.
 #>
 . (Join-Path $PSScriptRoot 'states-common.ps1')
+# SG_STATES_SKIP=before: none of the states below (a quicker run of then-states.ps1 alone)
+$skipBefore = @(([string]$env:SG_STATES_SKIP) -split ',' | ForEach-Object { $_.Trim() }) -contains 'before'
+if (-not $skipBefore) {
 
 # an open ContentDialog's Close (Cancel) or Primary (OK) button, found by the dialog template's own automation ids, so
 # the window's Close caption button is never pressed
@@ -58,7 +61,7 @@ Set-Rules @()
 
 # 6. the sign-in page
 Submit-Address $script:serverUrl
-$quick = Wait-Until { [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Quick Connect') } -Seconds 20 -PollMs 150
+$quick = Wait-Until { $q = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Use Quick Connect'); if (-not $q) { $q = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Quick Connect') }; $q } -Seconds 20 -PollMs 150
 if (-not $quick) { throw 'no sign-in page' }
 Start-Sleep -Milliseconds 800
 Capture-State 'login'
@@ -91,24 +94,29 @@ Set-Rules @()
 
 # 10. Quick Connect switched off on the server
 Set-Rules @(, @('^/QuickConnect/Initiate$', 'status:401'))
-Press 'Quick Connect'
+[void](Invoke-Element $quick)
 Start-Sleep -Milliseconds 1500
 Capture-State 'login-quickconnect-off'
 Dismiss-Dialog
 Set-Rules @()
 
 # 11. Quick Connect's code
-Press 'Quick Connect'
-[void](Wait-Text 'Enter code' 15)
+[void](Invoke-Element $quick)
+[void](Wait-Until { Find-Ui -Id 'QuickConnectCode' -Type 'Text' } -Seconds 15)
 Start-Sleep -Milliseconds 600
 Capture-State 'login-quickconnect-code'
 Dismiss-Dialog
 
 # back to the server page for the driver's sign-in
-Press 'Switch server'
+# 1.1.4: the "Change" link next to the server's name (a Hyperlink in UI Automation); an older build's Switch server button
+$change = Wait-Until { $c = Find-Ui -Name 'Change server'; if (-not $c) { $c = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Switch server') }; $c } -Seconds 10
+if (-not $change) { throw 'no Change server link' }
+[void](Invoke-Element $change)
 [void](Wait-Ui -Id 'TxtUrl' -Type 'Edit' -Seconds 20)
 Start-Sleep -Milliseconds 600
 Capture-State 'server-saved'
+
+}
 
 # Home's rows fail from now on (then-states.ps1 starts with the failed Home; the sign-in itself is not affected)
 if ($env:SG_STATES_HOME_FAIL -ne '0') {

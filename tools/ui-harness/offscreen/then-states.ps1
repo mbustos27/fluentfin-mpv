@@ -156,51 +156,50 @@ if ($skip -notcontains 'picker' -and $skip -notcontains 'dashboard') {
         if ($sub.Count -gt 1) { [void](Invoke-Element $sub[-1]) }
         Start-Sleep -Seconds 2
         Capture-State 'dashboard-libraries'
-        # the library's More options menu (a MenuBarItemFlyout: UI Automation's Invoke does not open it; a posted click does)
-        $more = Wait-Until { [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'More options') } -Seconds 10
-        if (-not $more) { throw 'no More options button' }
-        $r = [OffscreenUi]::RectOf($more)
-        [OffscreenUi]::Click($script:hwnd, $script:ui.Id, [int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
-        Start-Sleep -Milliseconds 800
-        $manage = Wait-Until { Find-Anywhere 'Manage' } -Seconds 8
+        # the folder picker's way in: Add New Library > Content type (a ComboBox: expanded and its first type selected
+        # through UI Automation) > Folder: Add. (A library's More options menu, a MenuBarItemFlyout, opened neither for
+        # UI Automation's Invoke nor for a posted click.)
+        Press-First @('Add New Library')
+        Start-Sleep -Seconds 2
+        $combo = Wait-Until { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ComboBox)))) | Select-Object -First 1 } -Seconds 8
+        $manage = $null
+        if ($combo) {
+            $ec = $null
+            if ($combo.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$ec)) { $ec.Expand(); Start-Sleep -Milliseconds 800 }
+            $item = Wait-Until { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) |
+                    Where-Object { try { $_.Current.Name -match '^(movies|Movies)$' } catch { $false } }) | Select-Object -First 1 } -Seconds 5
+            if (-not $item) { $item = @(Get-OtherWindows | ForEach-Object { Under-Name $_ 'movies' } | Where-Object { $_ }) | Select-Object -First 1 }
+            if ($item) { [void](Invoke-Element $item); Say 'content type: movies'; Start-Sleep -Milliseconds 800 }
+            if ($ec) { try { $ec.Collapse() } catch { } }
+            $manage = $item
+        }
         if ($manage) {
-            [void](Invoke-Element $manage)
-            Start-Sleep -Seconds 2
-            Capture-State 'manage-library'
-            Press-First @('Add')
-            $picker = Wait-Until { Find-OtherWindow 'Choose a folder' } -Seconds 10
-            if ($picker) {
+            Start-Sleep -Seconds 1
+            Capture-State 'add-library'
+            # the picker twice: once listing the server's top folder, once with the server failing (the client answers a
+            # failure with no folders: the "No folders here" message), each closed with WM_CLOSE (posted: a UI
+            # Automation Invoke inside the picker's window hung a run for its whole time-out, 2026-11-17)
+            foreach ($round in @(@{ Name = 'picker'; Rule = $null }, @{ Name = 'picker-server-failing'; Rule = 'status:500' })) {
+                if ($round.Rule) { Set-Rules @(, @('^/Environment/DirectoryContents$', $round.Rule)) } else { Set-Rules @() }
+                Press-First @('Add')
+                $picker = Wait-Until { Find-OtherWindow 'Choose a folder' } -Seconds 10
+                if (-not $picker) { Say 'no folder picker window'; break }
                 $ph = [IntPtr]$picker.Current.NativeWindowHandle
                 Start-Sleep -Seconds 2
                 $main = $script:hwnd; $script:hwnd = $ph
-                try {
-                    Capture-State 'picker'
-                    $folderMedia = Wait-Until { Find-Ui -Name 'media' } -Seconds 5
-                    if ($folderMedia) {
-                        [void](Invoke-Element $folderMedia); Start-Sleep -Seconds 1
-                        $lib = Wait-Until { Find-Ui -Name 'movies' } -Seconds 5
-                        if ($lib) { [void](Invoke-Element $lib); Start-Sleep -Seconds 1; Capture-State 'picker-movies' }
-                        $a = Wait-Until { Find-Ui -Name 'A' } -Seconds 5
-                        if ($a) { [void](Invoke-Element $a); Start-Sleep -Seconds 1 }
-                        Capture-State 'picker-empty-folder'
-                    }
-                    Set-Rules @(, @('^/Environment/DirectoryContents$', 'status:500'))
-                    $up = Find-Ui -Name 'Parent folder'
-                    if (-not $up) { $up = Find-Ui -Name 'Up' -Contains }
-                    if ($up) { [void](Invoke-Element $up); Start-Sleep -Seconds 1 }
-                    Capture-State 'picker-failed'
-                    Set-Rules @()
-                    $cancel = Find-Ui -Name 'Cancel'
-                    if ($cancel) { [void](Invoke-Element $cancel); Start-Sleep -Seconds 1 }
-                }
+                try { Capture-State $round.Name }
                 finally { $script:hwnd = $main }
-                $still = Find-OtherWindow 'Choose a folder'
-                Check 'picker: Cancel closes its window' (-not $still) $(if ($still) { 'the picker window is still open' } else { 'closed' })
-                if ($still) { [void][OffscreenUi]::PostMessage([IntPtr]$still.Current.NativeWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero); Start-Sleep -Seconds 1 }
+                [void][OffscreenUi]::PostMessage($ph, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
+                $gone = Wait-Until { -not (Find-OtherWindow 'Choose a folder') } -Seconds 5
+                Check "$($round.Name): the window's close closes the picker" ([bool]$gone)
             }
-            else { Say 'no folder picker window' }
+            Set-Rules @()
+            # the window's close picks nothing: the new library's folder list is still empty
+            Capture-State 'add-library-after-picker'
+            $closeDialog = Find-Ui -Id 'CloseButton' -Type 'Button'
+            if ($closeDialog) { [void](Invoke-Element $closeDialog); Start-Sleep -Milliseconds 600 }
         }
-        else { Say 'no Manage item in the More options menu' }
+        else { Say 'no content type to choose in Add New Library' }
     }
 }
 Set-Rules @()

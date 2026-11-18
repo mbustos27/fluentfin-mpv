@@ -297,7 +297,8 @@ function Step-SignIn([bool]$Capture) {
     $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Next')
     $nextAt = Get-Epoch
     [void](Invoke-Element $next)
-    $quick = Wait-Until { [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Quick Connect') } -Seconds 20 -PollMs 150
+    # the sign-in page: "Use Quick Connect" (1.1.4; "Quick Connect" before)
+    $quick = Wait-Until { $q = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Use Quick Connect'); if (-not $q) { $q = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Quick Connect') }; $q } -Seconds 20 -PollMs 150
     if (-not $quick) { throw "no sign-in page (no Quick Connect button) within 20 s" }
     $timings.server_to_login_ms = Ms $nextAt (Get-Epoch)
     Start-Sleep -Milliseconds 300
@@ -307,7 +308,12 @@ function Step-SignIn([bool]$Capture) {
         # as a user would: Quick Connect shows a code, approved on "another device" (the fake server's harness endpoint);
         # FluentFin's next poll signs in with the fresh token the server issues. No password anywhere.
         [void](Invoke-Element $quick)
-        $code = Wait-Until { $t = Find-Ui -Name 'Enter code' -Contains -Type 'Text'; if ($t -and $t.Current.Name -match '(\d{6})') { $Matches[1] } } -Seconds 20 -PollMs 100
+        # the code: the dialog's QuickConnectCode text (1.1.4: named digit by digit, "1 2 3 4 5 6"), or an older build's
+        # "Enter code 123456" line
+        $code = Wait-Until {
+            $t = Find-Ui -Id 'QuickConnectCode' -Type 'Text'
+            if ($t -and ($t.Current.Name -replace '\s', '') -match '^(\d{6})$') { return $Matches[1] }
+            $t = Find-Ui -Name 'Enter code' -Contains -Type 'Text'; if ($t -and $t.Current.Name -match '(\d{6})') { $Matches[1] } } -Seconds 20 -PollMs 100
         if (-not $code) { throw "Quick Connect showed no code within 20 s" }
         if ($Capture) { Shot 'quickconnect' }
         [void](Invoke-Server '/__harness/quickconnect/approve' 'POST' @{ code = $code })
