@@ -30,8 +30,6 @@ public sealed partial class EditImagesDialog : IViewFor<EditImagesViewModel>
 		InitializeComponent();
 	}
 
-	public static bool HasText(string? text) => !string.IsNullOrWhiteSpace(text);
-
 	public static string SearchName(ImageInfo_ImageType? type) => $"Search for a replacement {Kind(type)} image";
 
 	public static string DeleteName(ImageInfo_ImageType? type) => $"Delete {Kind(type)} image";

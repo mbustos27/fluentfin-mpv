@@ -142,7 +142,7 @@
                     x:Name="ServerNoticeBar"
                     Closed="ServerNoticeBar_Closed"
                     IsClosable="{x:Bind local:DashboardPage.IsClosable(ViewModel.Notice), Mode=OneWay}"
-                    IsOpen="{x:Bind local:DashboardPage.IsOpen(ViewModel.Notice), Mode=OneWay}"
+                    IsOpen="{x:Bind ViewModel.HasNotice, Mode=OneWay}"
                     Message="{x:Bind ViewModel.Notice.Message, Mode=OneWay}"
                     Severity="{x:Bind local:DashboardPage.Severity(ViewModel.Notice), Mode=OneWay}"
                     Title="{x:Bind ViewModel.Notice.Title, Mode=OneWay}">
@@ -151,7 +151,7 @@
                             Margin="0,0,0,12"
                             AutomationProperties.Name="Waiting for the server"
                             IsIndeterminate="True"
-                            Visibility="{x:Bind local:DashboardPage.BusyVisibility(ViewModel.Notice), Mode=OneWay}" />
+                            Visibility="{x:Bind ViewModel.IsWaiting, Mode=OneWay}" />
                     </InfoBar.Content>
                 </InfoBar>
             </StackPanel>

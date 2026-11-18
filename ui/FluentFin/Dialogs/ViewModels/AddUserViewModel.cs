@@ -21,7 +21,11 @@ namespace FluentFin.Dialogs.ViewModels
 
 		/// <summary>Why the user wasn't created; empty otherwise.</summary>
 		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(HasError))]
 		public partial string Error { get; set; } = "";
+
+		/// <summary>The error bar opens from this bool (no x:Bind function on IsOpen).</summary>
+		public bool HasError => !string.IsNullOrEmpty(Error);
 
 		[ObservableProperty]
 		public partial string? Password { get; set; }

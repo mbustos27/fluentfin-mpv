@@ -24,7 +24,11 @@ public partial class UsersViewModel(IJellyfinClient jellyfinClient,
 
 	/// <summary>What the last action here did, when there is something to say.</summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasNotice))]
 	public partial ServerNotice? Notice { get; set; }
+
+	/// <summary>The notice bar opens from this bool (x:Bind does not call a function whose argument is null, so a bar opened through one never closed).</summary>
+	public bool HasNotice => Notice is not null;
 
 	[RelayCommand]
 	private async Task DeleteUser(UserDto? user)

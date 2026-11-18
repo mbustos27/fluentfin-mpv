@@ -16,7 +16,11 @@ public partial class UserPasswordEditorViewModel(IJellyfinClient jellyfinClient)
 
 	/// <summary>How the last change went; null when there is nothing to say.</summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasNotice))]
 	public partial ServerNotice? Notice { get; set; }
+
+	/// <summary>The notice bar opens from this bool (x:Bind does not call a function whose argument is null, so a bar opened through one never closed).</summary>
+	public bool HasNotice => Notice is not null;
 
 	/// <summary>True when the server took the new password; the passwords themselves are never kept or logged here.</summary>
 	public async Task<bool> ChangePassword(string currentPassword, string newPassword, string confirmPassword)

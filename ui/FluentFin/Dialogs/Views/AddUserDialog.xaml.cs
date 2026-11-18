@@ -35,6 +35,4 @@ public sealed partial class AddUserDialog : IViewFor<AddUserViewModel>
 		// Nixie 1.2.0 (admin): SelectedItems is a list of objects, never an IEnumerable<BaseItemDto>: the picked libraries were never kept
 		ViewModel.SelectedItems = [.. ListView.SelectedItems.OfType<BaseItemDto>()];
 	}
-
-	public static bool HasText(string? text) => !string.IsNullOrWhiteSpace(text);
 }

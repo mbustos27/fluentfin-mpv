@@ -27,7 +27,11 @@ public partial class UserEditorViewModel([FromKeyedServices(NavigationRegions.Us
 
 	/// <summary>Nixie 1.2.0 (admin, D36): how the last Save went; null when there is nothing to say.</summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasNotice))]
 	public partial ServerNotice? Notice { get; set; }
+
+	/// <summary>The notice bar opens from this bool (x:Bind does not call a function whose argument is null, so a bar opened through one never closed).</summary>
+	public bool HasNotice => Notice is not null;
 
 	public Task OnNavigatedFrom()
 	{

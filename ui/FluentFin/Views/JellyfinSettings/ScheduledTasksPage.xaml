@@ -20,7 +20,7 @@
         <StackPanel Width="1000" Spacing="16">
         <InfoBar
             Closed="NoticeBar_Closed"
-            IsOpen="{x:Bind local:LibrariesSettingsPage.IsOpen(ViewModel.Notice), Mode=OneWay}"
+            IsOpen="{x:Bind ViewModel.HasNotice, Mode=OneWay}"
             Message="{x:Bind ViewModel.Notice.Message, Mode=OneWay}"
             Severity="{x:Bind local:DashboardPage.Severity(ViewModel.Notice), Mode=OneWay}"
             Title="{x:Bind ViewModel.Notice.Title, Mode=OneWay}" />

@@ -44,7 +44,7 @@
         <StackPanel Width="720" Spacing="8">
             <InfoBar
                 IsClosable="False"
-                IsOpen="{x:Bind local:EditSubtitlesDialog.HasText(ViewModel.Error), Mode=OneWay}"
+                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                 Message="{x:Bind ViewModel.Error, Mode=OneWay}"
                 Severity="Error" />
             <TextBlock Style="{StaticResource SectionHeaderStyle}" Text="Current subtitles" />

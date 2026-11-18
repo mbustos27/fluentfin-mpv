@@ -52,6 +52,7 @@ sys.path.insert(0, HERE)
 import imagegen  # noqa: E402
 import library  # noqa: E402
 import media as media_mod  # noqa: E402
+import admin  # noqa: E402  (Nixie 1.2.0: the administration endpoints)
 
 TICKS = library.TICKS
 TOKEN_RE = re.compile(r'Token="([^"]*)"')
@@ -589,6 +590,8 @@ class Server:
                 # everything else needs a token
                 if not self._need_auth():
                     self.route = "unauthorized"
+                    return
+                if admin.route(self, outer, method, p, low):   # Nixie 1.2.0: admin.py (logged to <out>/admin.jsonl)
                     return
                 lib = outer.lib
                 if low == "/system/info":

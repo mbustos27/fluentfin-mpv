@@ -48,7 +48,7 @@
         <InfoBar
             MaxWidth="460"
             IsClosable="False"
-            IsOpen="{x:Bind local:RefreshMetadataDialog.HasText(ViewModel.ReplaceWarning), Mode=OneWay}"
+            IsOpen="{x:Bind ViewModel.HasReplaceWarning, Mode=OneWay}"
             Message="{x:Bind ViewModel.ReplaceWarning, Mode=OneWay}"
             Severity="Warning" />
     </StackPanel>

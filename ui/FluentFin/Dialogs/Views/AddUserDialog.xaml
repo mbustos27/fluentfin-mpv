@@ -30,7 +30,7 @@
         <StackPanel Spacing="20">
             <InfoBar
                 IsClosable="False"
-                IsOpen="{x:Bind local:AddUserDialog.HasText(ViewModel.Error), Mode=OneWay}"
+                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                 Message="{x:Bind ViewModel.Error, Mode=OneWay}"
                 Severity="Error" />
             <TextBox Header="Name" Text="{x:Bind ViewModel.Username, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />

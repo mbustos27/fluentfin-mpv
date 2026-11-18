@@ -21,8 +21,6 @@ public sealed partial class ManageLibraryDialog : IViewFor<ManageLibraryViewMode
 		int i => $"Every {i} days"
 	};
 
-	public static bool HasText(string? text) => !string.IsNullOrWhiteSpace(text);
-
 	public static string RemoveFolderName(string folder) => $"Remove folder {folder}";
 
 	public static string MoveUpName(string fetcher) => $"Move {fetcher} up";

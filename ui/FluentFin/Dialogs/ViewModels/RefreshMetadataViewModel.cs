@@ -12,21 +12,23 @@ public partial class RefreshMetadataViewModel(IJellyfinClient jellyfinClient) : 
 	public List<string> RefreshModes { get; } = ["Scan for new and updated files", "Search for missing metadata", "Replace all metadata"];
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(ReplaceWarning))]
+	[NotifyPropertyChangedFor(nameof(ReplaceWarning), nameof(HasReplaceWarning))]
 	public partial string SelectedRefreshMode { get; set; } = "";
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(ReplaceWarning))]
+	[NotifyPropertyChangedFor(nameof(ReplaceWarning), nameof(HasReplaceWarning))]
 	public partial bool ReplaceExistingImages { get; set; }
 
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(ReplaceWarning))]
+	[NotifyPropertyChangedFor(nameof(ReplaceWarning), nameof(HasReplaceWarning))]
 	public partial bool ReplaceExistingTrickplayImages { get; set; }
 
 	/// <summary>
 	/// Nixie 1.2.0 (admin, D77): what a replace-all choice overwrites, said before Refresh; empty when nothing is replaced. The
 	/// image boxes count only where they show (not with "Scan for new and updated files").
 	/// </summary>
+	public bool HasReplaceWarning => ReplaceWarning.Length > 0;
+
 	public string ReplaceWarning
 	{
 		get

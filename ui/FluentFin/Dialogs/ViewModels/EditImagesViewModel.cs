@@ -23,7 +23,11 @@ public partial class EditImagesViewModel(IJellyfinClient jellyfinClient) : Obser
 
 	/// <summary>Why the last change did not go through; empty otherwise.</summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasError))]
 	public partial string Error { get; set; } = "";
+
+	/// <summary>The error bar opens from this bool (no x:Bind function on IsOpen).</summary>
+	public bool HasError => !string.IsNullOrEmpty(Error);
 
 	[ObservableProperty]
 	public partial ObservableCollection<ImageInfoEx> Images { get; set; } = [];

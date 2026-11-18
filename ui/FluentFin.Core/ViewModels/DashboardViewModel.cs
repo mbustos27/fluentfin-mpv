@@ -38,12 +38,18 @@ public partial class DashboardViewModel(IJellyfinClient jellyfinClient,
 
 	/// <summary>What the server is doing after a restart, shut down or scan from here; null when there is nothing to say.</summary>
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(IsBusy))]
+	[NotifyPropertyChangedFor(nameof(IsBusy), nameof(HasNotice), nameof(IsWaiting))]
 	[NotifyCanExecuteChangedFor(nameof(RestartCommand), nameof(ShutdownCommand), nameof(StartScanCommand))]
 	public partial ServerNotice? Notice { get; set; }
 
 	/// <summary>A restart is under way, or the server is shutting down: the buttons wait.</summary>
 	public bool IsBusy => Notice is { Busy: true } or { State: ServerPowerState.ShutDown };
+
+	/// <summary>The notice bar opens from this bool (x:Bind does not call a function whose argument is null, so a bar opened through one never closed).</summary>
+	public bool HasNotice => Notice is not null;
+
+	/// <summary>Waiting for the server: the notice shows a progress bar.</summary>
+	public bool IsWaiting => Notice is { Busy: true };
 
 	[ObservableProperty]
 	public partial SystemInfo? SystemInfo { get; set; }

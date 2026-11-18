@@ -14,7 +14,11 @@ public partial class ScheduledTasksViewModel(IJellyfinClient jellyfinClient) : O
 
 	/// <summary>What the last Run now did.</summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasNotice))]
 	public partial ServerNotice? Notice { get; set; }
+
+	/// <summary>The notice bar opens from this bool (x:Bind does not call a function whose argument is null, so a bar opened through one never closed).</summary>
+	public bool HasNotice => Notice is not null;
 
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 

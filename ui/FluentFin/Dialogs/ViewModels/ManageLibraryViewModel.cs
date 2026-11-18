@@ -21,7 +21,11 @@ public partial class ManageLibraryViewModel(IJellyfinClient jellyfinClient) : Ob
 
 	/// <summary>Why the last Save did not go through; empty otherwise.</summary>
 	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasError))]
 	public partial string Error { get; set; } = "";
+
+	/// <summary>The error bar opens from this bool (no x:Bind function on IsOpen).</summary>
+	public bool HasError => !string.IsNullOrEmpty(Error);
 
 	/// <summary>The dialog's title: "Add library", or the library's name.</summary>
 	public string DialogTitle => IsCreateMode ? "Add library" : Name;

@@ -29,8 +29,6 @@ public sealed partial class EditSubtitlesDialog : IViewFor<EditSubtitlesViewMode
 		InitializeComponent();
 	}
 
-	public static bool HasText(string? text) => !string.IsNullOrWhiteSpace(text);
-
 	public static string DeleteName(string? subtitle) => string.IsNullOrWhiteSpace(subtitle) ? "Delete subtitle" : $"Delete subtitle {subtitle}";
 
 	public static string DownloadName(string? name, string? language, string? provider)

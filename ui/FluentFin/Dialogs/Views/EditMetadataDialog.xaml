@@ -59,7 +59,7 @@
             <!--  Nixie 1.2.0 (admin): Save is enabled once something changed and sends only the changed fields; Revert puts back the loaded values (D56); a Save the server refused keeps the dialog open and says so  -->
             <InfoBar
                 IsClosable="False"
-                IsOpen="{x:Bind local:EditMetadataDialog.HasText(ViewModel.Error), Mode=OneWay}"
+                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                 Message="{x:Bind ViewModel.Error, Mode=OneWay}"
                 Severity="Error" />
 

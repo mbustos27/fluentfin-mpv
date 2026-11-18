@@ -13,6 +13,4 @@ public sealed partial class RefreshMetadataDialog : IViewFor<RefreshMetadataView
 	{
 		InitializeComponent();
 	}
-
-	public static bool HasText(string? text) => !string.IsNullOrWhiteSpace(text);
 }

@@ -69,7 +69,7 @@
             <InfoBar
                 Margin="{StaticResource MediumBottomMargin}"
                 IsClosable="False"
-                IsOpen="{x:Bind local:ManageLibraryDialog.HasText(ViewModel.Error), Mode=OneWay}"
+                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                 Message="{x:Bind ViewModel.Error, Mode=OneWay}"
                 Severity="Error" />
             <InfoBar

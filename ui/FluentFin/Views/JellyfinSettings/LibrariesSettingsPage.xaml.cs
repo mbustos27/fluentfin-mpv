@@ -23,8 +23,6 @@ public sealed partial class LibrariesSettingsPage : Page
 		return values.Count == 1 ? values[0] : $"{values.Count} folders";
 	}
 
-	public static bool IsOpen(ServerNotice? notice) => notice is not null;
-
 	/// <summary>D20: the card's More button says which library.</summary>
 	public static string MoreName(string? library) => string.IsNullOrWhiteSpace(library) ? "More options" : $"More options for {library}";
 
