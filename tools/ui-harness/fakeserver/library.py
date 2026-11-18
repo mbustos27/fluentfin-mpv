@@ -347,6 +347,14 @@ class Library:
                               play_count=ud["play_count"] + 1 if played else ud["play_count"])
         return item
 
+    def set_position(self, item_id, ticks):
+        """The user's resume point, as Jellyfin's POST /UserItems/{id}/UserData sets it (0: out of Continue Watching)."""
+        item = self.get(item_id)
+        if item and item["kind"] in ("movie", "episode"):
+            with self.lock:
+                self._ud(item["Id"])["position"] = max(0, int(ticks))
+        return item
+
     def set_favorite(self, item_id, favorite):
         item = self.get(item_id)
         if item:

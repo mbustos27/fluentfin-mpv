@@ -27,6 +27,13 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task ResetProgress(Guid id);
 
+		/// <summary>
+		/// Seaglass 1.1.4: sets the user's resume point of an item (<c>POST /UserItems/{id}/UserData</c>, the user-data
+		/// endpoint any user may call; nothing else of the user's data changes). 0 takes the item out of Continue Watching,
+		/// which is the server's list of items with a resume point; the old value puts it back. False when it failed (logged).
+		/// </summary>
+		Task<bool> SetResumePosition(Guid id, long positionTicks);
+
 		Task<BaseItemDtoQueryResult?> GetMediaFolders();
 
 		Task<List<FileSystemEntryInfo>> GetDirectoryContents(string path);
