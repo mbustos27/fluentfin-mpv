@@ -1,4 +1,4 @@
-# Nixie 1.2.0 (admin stream): the server administration and the item dialogs against the fake server, off-screen: the tabs
+﻿# Nixie 1.2.0 (admin stream): the server administration and the item dialogs against the fake server, off-screen: the tabs
 # along the top (no side pane), and the dangerous buttons. Each destructive one is tried with Escape, Enter and Cancel, which
 # must send nothing, then confirmed, which must send exactly one request (the fake server's <out>\server\admin.jsonl).
 # Run with -Script login,movie -Then offscreen\then-admin.ps1; SEAGLASS_THEME=Light|Dark in the environment and

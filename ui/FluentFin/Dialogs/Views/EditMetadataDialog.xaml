@@ -18,6 +18,7 @@
     CloseButtonText="Cancel"
     DefaultButton="Primary"
     IsPrimaryButtonEnabled="{x:Bind ViewModel.HasChanges, Mode=OneWay}"
+    IsSecondaryButtonEnabled="{x:Bind ViewModel.HasChanges, Mode=OneWay}"
     PrimaryButtonText="Save"
     SecondaryButtonCommand="{x:Bind ViewModel.RevertCommand}"
     SecondaryButtonText="Revert"
