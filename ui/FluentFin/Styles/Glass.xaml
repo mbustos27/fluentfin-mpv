@@ -105,6 +105,37 @@
             <SolidColorBrush x:Key="GlassTitleBarSolidBrush" Color="#2A1217" />
             <SolidColorBrush x:Key="GlassTitleBarStrokeBrush" Color="#26FFEDE8" />
             <SolidColorBrush x:Key="GlassTabUnderlineBrush" Color="#F96985" />
+            <!--  1.2.0, the button system (Nixie button review, section 3): dusk; text on hot pink is dark (6.7:1)  -->
+            <Color x:Key="GlassNeonGlowColor">#FF7A50</Color>
+            <StaticResource x:Key="NixiePrimaryFillBrush" ResourceKey="SeaglassAccentFillBrush" />
+            <SolidColorBrush x:Key="NixiePrimaryForegroundBrush" Color="#24060F" />
+            <SolidColorBrush x:Key="NixiePrimaryHoverOverlayBrush" Color="#24FFFFFF" />
+            <SolidColorBrush x:Key="NixiePrimaryHoverForegroundBrush" Color="#24060F" />
+            <SolidColorBrush x:Key="NixiePrimaryPressedOverlayBrush" Color="#33000000" />
+            <SolidColorBrush x:Key="NixiePrimaryPressedForegroundBrush" Color="#D924060F" />
+            <StaticResource x:Key="NixiePrimaryHoverBorderBrush" ResourceKey="GlassStrokeBrush" />
+            <StaticResource x:Key="NixieButtonFillBrush" ResourceKey="GlassInsetFillBrush" />
+            <StaticResource x:Key="NixieButtonForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <StaticResource x:Key="NixieButtonBorderBrush" ResourceKey="GlassStrokeBrush" />
+            <StaticResource x:Key="NixieHoverOverlayBrush" ResourceKey="GlassHoverOverlayBrush" />
+            <StaticResource x:Key="NixieHoverForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <StaticResource x:Key="NixiePressedOverlayBrush" ResourceKey="GlassPressedOverlayBrush" />
+            <SolidColorBrush x:Key="NixiePressedForegroundBrush" Color="#CCF8EFF0" />
+            <StaticResource x:Key="NixieSubtleForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <SolidColorBrush x:Key="NixieDangerForegroundBrush" Color="#FF8A80" />
+            <SolidColorBrush x:Key="NixieDangerHoverForegroundBrush" Color="#FF8A80" />
+            <SolidColorBrush x:Key="NixieDangerPressedForegroundBrush" Color="#CCFF8A80" />
+            <SolidColorBrush x:Key="NixieDisabledFillBrush" Color="#0FFFFFFF" />
+            <SolidColorBrush x:Key="NixieDisabledForegroundBrush" Color="#5CF8EFF0" />
+            <SolidColorBrush x:Key="NixieDisabledBorderBrush" Color="#14FFFFFF" />
+            <StaticResource x:Key="NixieLinkForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <SolidColorBrush x:Key="NixieLinkHoverForegroundBrush" Color="#FF9EB1" />
+            <StaticResource x:Key="NixieTabForegroundBrush" ResourceKey="GlassTextSecondaryBrush" />
+            <StaticResource x:Key="NixieTabSelectedForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <SolidColorBrush x:Key="NixieTabHoverLineBrush" Color="#66F8EFF0" />
+            <SolidColorBrush x:Key="NixieToggleOnForegroundBrush" Color="#FF9EB1" />
+            <SolidColorBrush x:Key="NixieToggleOnBorderBrush" Color="#F96985" />
+            <StaticResource x:Key="NixieToggleOnFillBrush" ResourceKey="GlassInsetFillBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
             <Color x:Key="SeaglassAccentColor">#BC1E47</Color>
@@ -171,8 +202,11 @@
             <SolidColorBrush x:Key="GlassDividerBrush" Color="#1F000000" />
             <SolidColorBrush x:Key="GlassInsetFillBrush" Color="#0F000000" />
             <StaticResource x:Key="GlassInsetTextBrush" ResourceKey="GlassTextPrimaryBrush" />
-            <!--  keyboard focus: WinUI's two rings, the accent (outer) around white (inner); high contrast keeps WinUI's own  -->
-            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#BC1E47" />
+            <!--
+                keyboard focus: WinUI's two rings, deep maroon (outer) around white (inner). Not crimson: it vanished on the crimson
+                Play (the button review); the glow brings the colour.
+            -->
+            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="#2D0F16" />
             <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#FFFFFF" />
             <!--  behind a dialog: a dusk smoke, not WinUI's grey (high contrast keeps WinUI's own)  -->
             <SolidColorBrush x:Key="ContentDialogSmokeFill" Color="#59500723" />
@@ -186,6 +220,38 @@
             <SolidColorBrush x:Key="GlassTitleBarSolidBrush" Color="#FCEAE8" />
             <SolidColorBrush x:Key="GlassTitleBarStrokeBrush" Color="#1F500723" />
             <SolidColorBrush x:Key="GlassTabUnderlineBrush" Color="#BC1E47" />
+            <!--  1.2.0, the button system (Nixie button review, section 3): noon  -->
+            <Color x:Key="GlassNeonGlowColor">#BC1E47</Color>
+            <StaticResource x:Key="NixiePrimaryFillBrush" ResourceKey="SeaglassAccentFillBrush" />
+            <SolidColorBrush x:Key="NixiePrimaryForegroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="NixiePrimaryHoverOverlayBrush" Color="#1FFFFFFF" />
+            <SolidColorBrush x:Key="NixiePrimaryHoverForegroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="NixiePrimaryPressedOverlayBrush" Color="#33000000" />
+            <SolidColorBrush x:Key="NixiePrimaryPressedForegroundBrush" Color="#D9FFFFFF" />
+            <StaticResource x:Key="NixiePrimaryHoverBorderBrush" ResourceKey="GlassStrokeBrush" />
+            <StaticResource x:Key="NixieButtonFillBrush" ResourceKey="GlassInsetFillBrush" />
+            <StaticResource x:Key="NixieButtonForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <StaticResource x:Key="NixieButtonBorderBrush" ResourceKey="GlassStrokeBrush" />
+            <StaticResource x:Key="NixieHoverOverlayBrush" ResourceKey="GlassHoverOverlayBrush" />
+            <StaticResource x:Key="NixieHoverForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <StaticResource x:Key="NixiePressedOverlayBrush" ResourceKey="GlassPressedOverlayBrush" />
+            <SolidColorBrush x:Key="NixiePressedForegroundBrush" Color="#CC2D0F16" />
+            <StaticResource x:Key="NixieSubtleForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <SolidColorBrush x:Key="NixieDangerForegroundBrush" Color="#B3261E" />
+            <SolidColorBrush x:Key="NixieDangerHoverForegroundBrush" Color="#B3261E" />
+            <SolidColorBrush x:Key="NixieDangerPressedForegroundBrush" Color="#CCB3261E" />
+            <SolidColorBrush x:Key="NixieDisabledFillBrush" Color="#0A000000" />
+            <!--  48 %, not the review's 36 %: that is 2.2:1 on the light disabled fill (36 % keeps 3:1 only in dark)  -->
+            <SolidColorBrush x:Key="NixieDisabledForegroundBrush" Color="#7A2D0F16" />
+            <SolidColorBrush x:Key="NixieDisabledBorderBrush" Color="#14000000" />
+            <StaticResource x:Key="NixieLinkForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <SolidColorBrush x:Key="NixieLinkHoverForegroundBrush" Color="#BC1E47" />
+            <StaticResource x:Key="NixieTabForegroundBrush" ResourceKey="GlassTextSecondaryBrush" />
+            <StaticResource x:Key="NixieTabSelectedForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <SolidColorBrush x:Key="NixieTabHoverLineBrush" Color="#662D0F16" />
+            <SolidColorBrush x:Key="NixieToggleOnForegroundBrush" Color="#BC1E47" />
+            <SolidColorBrush x:Key="NixieToggleOnBorderBrush" Color="#BC1E47" />
+            <StaticResource x:Key="NixieToggleOnFillBrush" ResourceKey="GlassInsetFillBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <Color x:Key="SeaglassAccentColor">#FFFFFF00</Color>
@@ -224,20 +290,51 @@
             <SolidColorBrush x:Key="GlassTitleBarSolidBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="GlassTitleBarStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="GlassTabUnderlineBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <!--  1.2.0, the button system (Nixie button review, section 3): high contrast, the system colours  -->
+            <StaticResource x:Key="GlassNeonGlowColor" ResourceKey="SystemColorHighlightColor" />
+            <SolidColorBrush x:Key="NixiePrimaryFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixiePrimaryForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="NixiePrimaryHoverOverlayBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="NixiePrimaryHoverForegroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixiePrimaryPressedOverlayBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="NixiePrimaryPressedForegroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixiePrimaryHoverBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieButtonFillBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="NixieButtonForegroundBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+            <SolidColorBrush x:Key="NixieButtonBorderBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+            <SolidColorBrush x:Key="NixieHoverOverlayBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieHoverForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="NixiePressedOverlayBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixiePressedForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="NixieSubtleForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="NixieDangerForegroundBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+            <SolidColorBrush x:Key="NixieDangerHoverForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="NixieDangerPressedForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="NixieDisabledFillBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="NixieDisabledForegroundBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="NixieDisabledBorderBrush" Color="{ThemeResource SystemColorGrayTextColor}" />
+            <SolidColorBrush x:Key="NixieLinkForegroundBrush" Color="{ThemeResource SystemColorHotlightColor}" />
+            <SolidColorBrush x:Key="NixieLinkHoverForegroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieTabForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="NixieTabSelectedForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="NixieTabHoverLineBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieToggleOnForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="NixieToggleOnBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieToggleOnFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <!--  WinUI's keys that Dark and Light set: high contrast takes the system colours WinUI gives them  -->
+            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <StaticResource x:Key="ContentDialogSmokeFill" ResourceKey="SystemControlPageBackgroundMediumAltMediumBrush" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
-    <!--
-        the glow of a lit nixie tube: warm orange-pink, the outer halo of a focused or primary control around the accent's own
-        hot pink. One colour for both themes (it is only ever a soft shadow; the shadow opacities, 0 in high contrast, carry it).
-    -->
-    <Color x:Key="GlassNeonGlowColor">#FF7A50</Color>
 
     <!--  shapes  -->
     <!--  1.1.4: panels 12 like the pills and overlays (the layout audit: 20 read as phone cards)  -->
     <CornerRadius x:Key="GlassPanelCornerRadius">12</CornerRadius>
     <CornerRadius x:Key="GlassCardCornerRadius">12</CornerRadius>
-    <CornerRadius x:Key="GlassButtonCornerRadius">12</CornerRadius>
+    <!--  1.2.0: one radius for every button (the button review): 8, no pills; circles only for equal-sided icon buttons  -->
+    <CornerRadius x:Key="GlassButtonCornerRadius">8</CornerRadius>
     <CornerRadius x:Key="GlassChipCornerRadius">8</CornerRadius>
     <CornerRadius x:Key="GlassCircleCornerRadius">999</CornerRadius>
     <!--  every overlay: menus, context menus, flyouts, tooltips, dialogs  -->
@@ -382,17 +479,46 @@
     </Style>
 
     <!--
-        Buttons. Pointer-over and pressed stay glass: a light (dark theme) or dark (light theme) overlay over the same
-        material, never the default solid fill. Keyboard focus keeps the system focus visuals (in the accent, Dark and Light
-        dictionaries) and adds a soft glow of the accent; a disabled button fades. The accent pill is for the primary action
-        only, and glows softly at rest.
+        1.2.0: the button system (docs/reports/Nixie button review.md, section 3). Six roles: Primary (the accent; one per view),
+        Secondary (glass), Subtle and icon (circles at 44, rounded squares at 32), Destructive (the danger ink, never filled,
+        never glowing), Link (neutral, underlined), Tab (a neon underline). Two sizes: Large 44 (media surfaces), Compact 32 (forms
+        and chrome). One radius, 8. Every state: rest, hover (an overlay; the weight never changes), pressed (a darker overlay,
+        content at 80 to 85 %), keyboard focus (WinUI's two rings 3 px outside, plus the glow on Primary, Secondary, icons), and
+        disabled: a neutral fill and text, never a fade, no glow. High contrast: the system colours through the Nixie* keys.
+        The 1.1.x keys are aliases of these, so other XAML keeps compiling.
     -->
-    <ControlTemplate x:Key="GlassPillButtonTemplate" TargetType="Button">
+    <!--  1.2.0 button sizes: Large on media surfaces (and their dialogs), Compact in forms and chrome  -->
+    <x:Double x:Key="NixieButtonHeight">44</x:Double>
+    <x:Double x:Key="NixieCompactButtonHeight">32</x:Double>
+    <!--  Primary, Large: the accent fill, its resting glow; disabled turns neutral  -->
+    <ControlTemplate x:Key="NixiePrimaryButtonTemplate" TargetType="Button">
         <Grid>
+            <!--  the Large primary at rest: the same glow at half strength (none disabled, none in high contrast)  -->
+            <Grid x:Name="RestGlow" IsHitTestVisible="False">
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="8"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassContactShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="20"
+                            CornerRadius="10"
+                            Offset="0,2"
+                            Opacity="{ThemeResource GlassContactShadowOpacity}"
+                            Color="{ThemeResource GlassNeonGlowColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+            </Grid>
             <!--
-                keyboard focus: a nixie glow around the pill (two soft shadows, made on the first focus: the accent close in, a warm
-                orange halo further out), as well as the system's focus rings, which stay the focus mark (never colour alone).
-                High contrast: no glow (opacity 0).
+                keyboard focus: a nixie glow around the button (the accent close in, GlassNeonGlowColor further out; made on the first
+                focus; AttachedCardShadow cuts out its inside, so a translucent fill never turns pink) besides WinUI's two rings, which
+                carry the meaning. High contrast: the shadow opacities are 0.
             -->
             <Grid
                 x:Name="FocusGlow"
@@ -403,7 +529,7 @@
                     <ui:Effects.Shadow>
                         <media:AttachedCardShadow
                             BlurRadius="6"
-                            CornerRadius="14"
+                            CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
                             Color="{ThemeResource SeaglassAccentColor}" />
                     </ui:Effects.Shadow>
@@ -412,7 +538,7 @@
                     <ui:Effects.Shadow>
                         <media:AttachedCardShadow
                             BlurRadius="12"
-                            CornerRadius="14"
+                            CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
                             Color="{ThemeResource SeaglassAccentColor}" />
                     </ui:Effects.Shadow>
@@ -421,9 +547,9 @@
                     <ui:Effects.Shadow>
                         <media:AttachedCardShadow
                             BlurRadius="24"
-                            CornerRadius="16"
+                            CornerRadius="10"
                             Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{StaticResource GlassNeonGlowColor}" />
+                            Color="{ThemeResource GlassNeonGlowColor}" />
                     </ui:Effects.Shadow>
                 </Border>
             </Grid>
@@ -458,137 +584,24 @@
                     <VisualState x:Name="Normal" />
                     <VisualState x:Name="PointerOver">
                         <VisualState.Setters>
-                            <Setter Target="Overlay.Background" Value="{ThemeResource GlassHoverOverlayBrush}" />
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePrimaryHoverOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePrimaryHoverForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixiePrimaryHoverBorderBrush}" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Pressed">
                         <VisualState.Setters>
-                            <Setter Target="Overlay.Background" Value="{ThemeResource GlassPressedOverlayBrush}" />
-                            <Setter Target="RootGrid.Opacity" Value="0.9" />
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePrimaryPressedOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePrimaryPressedForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixiePrimaryHoverBorderBrush}" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Disabled">
                         <VisualState.Setters>
-                            <Setter Target="RootGrid.Opacity" Value="0.45" />
-                        </VisualState.Setters>
-                    </VisualState>
-                </VisualStateGroup>
-                <VisualStateGroup x:Name="FocusStates">
-                    <VisualState x:Name="Focused">
-                        <VisualState.Setters>
-                            <Setter Target="FocusGlow.Visibility" Value="Visible" />
-                        </VisualState.Setters>
-                    </VisualState>
-                    <VisualState x:Name="Unfocused" />
-                    <VisualState x:Name="PointerFocused" />
-                </VisualStateGroup>
-            </VisualStateManager.VisualStateGroups>
-        </Grid>
-    </ControlTemplate>
-    <!--  the accent pill: the same, with the accent's resting glow under it  -->
-    <ControlTemplate x:Key="GlassAccentPillButtonTemplate" TargetType="Button">
-        <Grid>
-        <!--  the primary action's resting glow: a soft halo of the accent, as a neon sign's (none in high contrast)  -->
-        <Border CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False">
-            <ui:Effects.Shadow>
-                <media:AttachedCardShadow
-                    BlurRadius="8"
-                    CornerRadius="14"
-                    Opacity="{ThemeResource GlassContactShadowOpacity}"
-                    Color="{ThemeResource SeaglassAccentColor}" />
-            </ui:Effects.Shadow>
-        </Border>
-        <Border CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False">
-            <ui:Effects.Shadow>
-                <media:AttachedCardShadow
-                    BlurRadius="20"
-                    CornerRadius="14"
-                    Offset="0,2"
-                    Opacity="{ThemeResource GlassShadowOpacity}"
-                    Color="{StaticResource GlassNeonGlowColor}" />
-            </ui:Effects.Shadow>
-        </Border>
-            <!--
-                keyboard focus: a nixie glow around the pill (two soft shadows, made on the first focus: the accent close in, a warm
-                orange halo further out), as well as the system's focus rings, which stay the focus mark (never colour alone).
-                High contrast: no glow (opacity 0).
-            -->
-            <Grid
-                x:Name="FocusGlow"
-                x:DeferLoadStrategy="Lazy"
-                IsHitTestVisible="False"
-                Visibility="Collapsed">
-                <Border CornerRadius="{TemplateBinding CornerRadius}">
-                    <ui:Effects.Shadow>
-                        <media:AttachedCardShadow
-                            BlurRadius="6"
-                            CornerRadius="14"
-                            Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
-                    </ui:Effects.Shadow>
-                </Border>
-                <Border CornerRadius="{TemplateBinding CornerRadius}">
-                    <ui:Effects.Shadow>
-                        <media:AttachedCardShadow
-                            BlurRadius="12"
-                            CornerRadius="14"
-                            Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{ThemeResource SeaglassAccentColor}" />
-                    </ui:Effects.Shadow>
-                </Border>
-                <Border CornerRadius="{TemplateBinding CornerRadius}">
-                    <ui:Effects.Shadow>
-                        <media:AttachedCardShadow
-                            BlurRadius="24"
-                            CornerRadius="16"
-                            Opacity="{ThemeResource GlassShadowOpacity}"
-                            Color="{StaticResource GlassNeonGlowColor}" />
-                    </ui:Effects.Shadow>
-                </Border>
-            </Grid>
-            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
-                <Border
-                    x:Name="Backplate"
-                    Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="{TemplateBinding CornerRadius}" />
-                <Border
-                    x:Name="Overlay"
-                    Background="Transparent"
-                    CornerRadius="{TemplateBinding CornerRadius}">
-                    <Border.BackgroundTransition>
-                        <BrushTransition Duration="0:0:0.12" />
-                    </Border.BackgroundTransition>
-                </Border>
-                <ContentPresenter
-                    x:Name="ContentPresenter"
-                    Padding="{TemplateBinding Padding}"
-                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                    AutomationProperties.AccessibilityView="Raw"
-                    Content="{TemplateBinding Content}"
-                    ContentTemplate="{TemplateBinding ContentTemplate}"
-                    ContentTransitions="{TemplateBinding ContentTransitions}"
-                    Foreground="{TemplateBinding Foreground}" />
-            </Grid>
-            <VisualStateManager.VisualStateGroups>
-                <VisualStateGroup x:Name="CommonStates">
-                    <VisualState x:Name="Normal" />
-                    <VisualState x:Name="PointerOver">
-                        <VisualState.Setters>
-                            <Setter Target="Overlay.Background" Value="{ThemeResource GlassHoverOverlayBrush}" />
-                        </VisualState.Setters>
-                    </VisualState>
-                    <VisualState x:Name="Pressed">
-                        <VisualState.Setters>
-                            <Setter Target="Overlay.Background" Value="{ThemeResource GlassPressedOverlayBrush}" />
-                            <Setter Target="RootGrid.Opacity" Value="0.9" />
-                        </VisualState.Setters>
-                    </VisualState>
-                    <VisualState x:Name="Disabled">
-                        <VisualState.Setters>
-                            <Setter Target="RootGrid.Opacity" Value="0.45" />
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieDisabledFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieDisabledBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                            <Setter Target="RestGlow.Visibility" Value="Collapsed" />
                         </VisualState.Setters>
                     </VisualState>
                 </VisualStateGroup>
@@ -605,57 +618,1080 @@
         </Grid>
     </ControlTemplate>
 
+    <!--  Primary, Compact: no resting glow (forms and dialogs)  -->
+    <ControlTemplate x:Key="NixiePrimaryCompactButtonTemplate" TargetType="Button">
+        <Grid>
+            <!--
+                keyboard focus: a nixie glow around the button (the accent close in, GlassNeonGlowColor further out; made on the first
+                focus; AttachedCardShadow cuts out its inside, so a translucent fill never turns pink) besides WinUI's two rings, which
+                carry the meaning. High contrast: the shadow opacities are 0.
+            -->
+            <Grid
+                x:Name="FocusGlow"
+                x:DeferLoadStrategy="Lazy"
+                IsHitTestVisible="False"
+                Visibility="Collapsed">
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="6"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="12"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="24"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource GlassNeonGlowColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+            </Grid>
+            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+                <Border
+                    x:Name="Backplate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+                <Border
+                    x:Name="Overlay"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.BackgroundTransition>
+                        <BrushTransition Duration="0:0:0.12" />
+                    </Border.BackgroundTransition>
+                </Border>
+                <ContentPresenter
+                    x:Name="ContentPresenter"
+                    Padding="{TemplateBinding Padding}"
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    ContentTransitions="{TemplateBinding ContentTransitions}"
+                    Foreground="{TemplateBinding Foreground}" />
+            </Grid>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePrimaryHoverOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePrimaryHoverForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixiePrimaryHoverBorderBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePrimaryPressedOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePrimaryPressedForegroundBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixiePrimaryHoverBorderBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieDisabledFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieDisabledBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused">
+                        <VisualState.Setters>
+                            <Setter Target="FocusGlow.Visibility" Value="Visible" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+
+    <!--  Secondary (glass) and the icon circles: the flat inset fill and the lit edge, the glass overlays  -->
+    <ControlTemplate x:Key="NixieButtonTemplate" TargetType="Button">
+        <Grid>
+            <!--
+                keyboard focus: a nixie glow around the button (the accent close in, GlassNeonGlowColor further out; made on the first
+                focus; AttachedCardShadow cuts out its inside, so a translucent fill never turns pink) besides WinUI's two rings, which
+                carry the meaning. High contrast: the shadow opacities are 0.
+            -->
+            <Grid
+                x:Name="FocusGlow"
+                x:DeferLoadStrategy="Lazy"
+                IsHitTestVisible="False"
+                Visibility="Collapsed">
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="6"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="12"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="24"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource GlassNeonGlowColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+            </Grid>
+            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+                <Border
+                    x:Name="Backplate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+                <Border
+                    x:Name="Overlay"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.BackgroundTransition>
+                        <BrushTransition Duration="0:0:0.12" />
+                    </Border.BackgroundTransition>
+                </Border>
+                <ContentPresenter
+                    x:Name="ContentPresenter"
+                    Padding="{TemplateBinding Padding}"
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    ContentTransitions="{TemplateBinding ContentTransitions}"
+                    Foreground="{TemplateBinding Foreground}" />
+            </Grid>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieHoverForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePressedForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieDisabledFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieDisabledBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused">
+                        <VisualState.Setters>
+                            <Setter Target="FocusGlow.Visibility" Value="Visible" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+
+    <!--  The 44 px icon circles: as Secondary, with a round glow  -->
+    <ControlTemplate x:Key="NixieIconButtonTemplate" TargetType="Button">
+        <Grid>
+            <!--
+                keyboard focus: a nixie glow around the button (the accent close in, GlassNeonGlowColor further out; made on the first
+                focus; AttachedCardShadow cuts out its inside, so a translucent fill never turns pink) besides WinUI's two rings, which
+                carry the meaning. High contrast: the shadow opacities are 0.
+            -->
+            <Grid
+                x:Name="FocusGlow"
+                x:DeferLoadStrategy="Lazy"
+                IsHitTestVisible="False"
+                Visibility="Collapsed">
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="6"
+                            CornerRadius="22"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="12"
+                            CornerRadius="22"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="24"
+                            CornerRadius="22"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource GlassNeonGlowColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+            </Grid>
+            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+                <Border
+                    x:Name="Backplate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+                <Border
+                    x:Name="Overlay"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.BackgroundTransition>
+                        <BrushTransition Duration="0:0:0.12" />
+                    </Border.BackgroundTransition>
+                </Border>
+                <ContentPresenter
+                    x:Name="ContentPresenter"
+                    Padding="{TemplateBinding Padding}"
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    ContentTransitions="{TemplateBinding ContentTransitions}"
+                    Foreground="{TemplateBinding Foreground}" />
+            </Grid>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieHoverForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePressedForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieDisabledFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieDisabledBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused">
+                        <VisualState.Setters>
+                            <Setter Target="FocusGlow.Visibility" Value="Visible" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+
+    <!--  Subtle (text or icon + text) and the 32 px icon squares: transparent at rest, the overlays on hover; no fill disabled  -->
+    <ControlTemplate x:Key="NixieSubtleButtonTemplate" TargetType="Button">
+        <Grid>
+            <!--
+                keyboard focus: a nixie glow around the button (the accent close in, GlassNeonGlowColor further out; made on the first
+                focus; AttachedCardShadow cuts out its inside, so a translucent fill never turns pink) besides WinUI's two rings, which
+                carry the meaning. High contrast: the shadow opacities are 0.
+            -->
+            <Grid
+                x:Name="FocusGlow"
+                x:DeferLoadStrategy="Lazy"
+                IsHitTestVisible="False"
+                Visibility="Collapsed">
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="6"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="12"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="24"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource GlassNeonGlowColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+            </Grid>
+            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+                <Border
+                    x:Name="Backplate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+                <Border
+                    x:Name="Overlay"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.BackgroundTransition>
+                        <BrushTransition Duration="0:0:0.12" />
+                    </Border.BackgroundTransition>
+                </Border>
+                <ContentPresenter
+                    x:Name="ContentPresenter"
+                    Padding="{TemplateBinding Padding}"
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    ContentTransitions="{TemplateBinding ContentTransitions}"
+                    Foreground="{TemplateBinding Foreground}" />
+            </Grid>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieHoverForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePressedForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="Transparent" />
+                            <Setter Target="Backplate.BorderBrush" Value="Transparent" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused">
+                        <VisualState.Setters>
+                            <Setter Target="FocusGlow.Visibility" Value="Visible" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+
+    <!--  Destructive: the danger ink on the glass fill, never filled, never glowing; a destructive verb and the trash glyph carry it too  -->
+    <ControlTemplate x:Key="NixieDestructiveButtonTemplate" TargetType="Button">
+        <Grid>
+            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+                <Border
+                    x:Name="Backplate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+                <Border
+                    x:Name="Overlay"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.BackgroundTransition>
+                        <BrushTransition Duration="0:0:0.12" />
+                    </Border.BackgroundTransition>
+                </Border>
+                <ContentPresenter
+                    x:Name="ContentPresenter"
+                    Padding="{TemplateBinding Padding}"
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    ContentTransitions="{TemplateBinding ContentTransitions}"
+                    Foreground="{TemplateBinding Foreground}" />
+            </Grid>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDangerHoverForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDangerPressedForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieDisabledFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieDisabledBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused">
+                        <VisualState.Setters>
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+
+    <!--  Link: text, always underlined, neutral; hover in the light pink (crimson in light); the focus ring only  -->
+    <ControlTemplate x:Key="NixieLinkButtonTemplate" TargetType="HyperlinkButton">
+        <Grid>
+            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+                <Border
+                    x:Name="Backplate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+                <Border
+                    x:Name="Overlay"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.BackgroundTransition>
+                        <BrushTransition Duration="0:0:0.12" />
+                    </Border.BackgroundTransition>
+                </Border>
+                <TextBlock
+                    x:Name="ContentPresenter"
+                    Margin="{TemplateBinding Padding}"
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    Foreground="{TemplateBinding Foreground}"
+                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                    TextDecorations="Underline"
+                    TextWrapping="Wrap" />
+            </Grid>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieLinkHoverForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieLinkHoverForegroundBrush}" />
+                            <Setter Target="ContentPresenter.Opacity" Value="0.85" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused">
+                        <VisualState.Setters>
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+
+    <!--
+        Tab: text, the selected one SemiBold with a 22 x 3 neon underline (a soft accent glow under GlassTabUnderlineBrush); the
+        hover a faint line where the underline goes. A control that is selected goes to "Selected" (SelectionStates), as the
+        account stream's TopTabButton does. Never a fill.
+    -->
+    <ControlTemplate x:Key="NixieTabButtonTemplate" TargetType="Button">
+        <Grid>
+            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+                <Border
+                    x:Name="Backplate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+                <Border
+                    x:Name="Overlay"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.BackgroundTransition>
+                        <BrushTransition Duration="0:0:0.12" />
+                    </Border.BackgroundTransition>
+                </Border>
+                <Border
+                    x:Name="HoverLine"
+                    Width="22"
+                    Height="2"
+                    Margin="0,0,0,5"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Background="{ThemeResource NixieTabHoverLineBrush}"
+                    CornerRadius="1"
+                    IsHitTestVisible="False"
+                    Opacity="0" />
+                <Grid
+                    x:Name="Underline"
+                    Width="22"
+                    Height="3"
+                    Margin="0,0,0,5"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    IsHitTestVisible="False"
+                    Opacity="0">
+                    <Border CornerRadius="1.5">
+                        <ui:Effects.Shadow>
+                            <media:AttachedCardShadow
+                                BlurRadius="10"
+                                CornerRadius="2"
+                                Opacity="{ThemeResource GlassShadowOpacity}"
+                                Color="{ThemeResource SeaglassAccentColor}" />
+                        </ui:Effects.Shadow>
+                    </Border>
+                    <Border Background="{ThemeResource GlassTabUnderlineBrush}" CornerRadius="1.5" />
+                </Grid>
+                <!--  two labels in one cell (the cell is the bold one's width): nothing moves when the selection moves  -->
+                <TextBlock
+                    x:Name="ContentPresenter"
+                    Margin="{TemplateBinding Padding}"
+                    VerticalAlignment="Center"
+                    Foreground="{TemplateBinding Foreground}"
+                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                    TextTrimming="CharacterEllipsis" />
+                <TextBlock
+                    x:Name="SelectedLabel"
+                    Margin="{TemplateBinding Padding}"
+                    VerticalAlignment="Center"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource NixieTabSelectedForegroundBrush}"
+                    Opacity="0"
+                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                    TextTrimming="CharacterEllipsis" />
+            </Grid>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieTabSelectedForegroundBrush}" />
+                            <Setter Target="HoverLine.Opacity" Value="1" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieTabForegroundBrush}" />
+                            <Setter Target="HoverLine.Opacity" Value="0.6" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                            <Setter Target="SelectedLabel.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                            <Setter Target="Underline.Visibility" Value="Collapsed" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused">
+                        <VisualState.Setters>
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="SelectionStates">
+                    <VisualState x:Name="Unselected" />
+                    <VisualState x:Name="Selected">
+                        <VisualState.Setters>
+                            <Setter Target="ContentPresenter.Opacity" Value="0" />
+                            <Setter Target="SelectedLabel.Opacity" Value="1" />
+                            <Setter Target="Underline.Opacity" Value="1" />
+                            <Setter Target="HoverLine.Visibility" Value="Collapsed" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+
+    <!--  Icon toggle (Watched, Favorite): a 44 circle; on = the accent glyph and a 1.5 px accent rim, never a filled disc  -->
+    <ControlTemplate x:Key="NixieIconToggleButtonTemplate" TargetType="ToggleButton">
+        <Grid>
+            <!--
+                keyboard focus: a nixie glow around the button (the accent close in, GlassNeonGlowColor further out; made on the first
+                focus; AttachedCardShadow cuts out its inside, so a translucent fill never turns pink) besides WinUI's two rings, which
+                carry the meaning. High contrast: the shadow opacities are 0.
+            -->
+            <Grid
+                x:Name="FocusGlow"
+                x:DeferLoadStrategy="Lazy"
+                IsHitTestVisible="False"
+                Visibility="Collapsed">
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="6"
+                            CornerRadius="22"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="12"
+                            CornerRadius="22"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource SeaglassAccentColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="24"
+                            CornerRadius="22"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource GlassNeonGlowColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+            </Grid>
+            <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+                <Border
+                    x:Name="Backplate"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+                <Border
+                    x:Name="Overlay"
+                    Background="Transparent"
+                    CornerRadius="{TemplateBinding CornerRadius}">
+                    <Border.BackgroundTransition>
+                        <BrushTransition Duration="0:0:0.12" />
+                    </Border.BackgroundTransition>
+                </Border>
+                <ContentPresenter
+                    x:Name="ContentPresenter"
+                    Padding="{TemplateBinding Padding}"
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    ContentTransitions="{TemplateBinding ContentTransitions}"
+                    Foreground="{TemplateBinding Foreground}" />
+            </Grid>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieHoverForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixiePressedForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieDisabledFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieDisabledBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Checked">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieToggleOnFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieToggleOnBorderBrush}" />
+                            <Setter Target="Backplate.BorderThickness" Value="1.5" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieToggleOnForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="CheckedPointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieToggleOnFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieToggleOnBorderBrush}" />
+                            <Setter Target="Backplate.BorderThickness" Value="1.5" />
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieToggleOnForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="CheckedPressed">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieToggleOnFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieToggleOnBorderBrush}" />
+                            <Setter Target="Backplate.BorderThickness" Value="1.5" />
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieToggleOnForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="CheckedDisabled">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieDisabledFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieDisabledBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused">
+                        <VisualState.Setters>
+                            <Setter Target="FocusGlow.Visibility" Value="Visible" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+
+    <!--  Primary: the one thing the view is for (one per view; never destructive)  -->
     <Style
-        x:Key="GlassPillButtonStyle"
+        x:Key="NixiePrimaryButtonStyle"
         BasedOn="{StaticResource DefaultButtonStyle}"
         TargetType="Button">
-        <Setter Property="Background" Value="{ThemeResource GlassPanelBrush}" />
-        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
-        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
-        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
-        <Setter Property="MinHeight" Value="{StaticResource GlassPillHeight}" />
-        <Setter Property="Padding" Value="20,10" />
-        <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
-        <Setter Property="Template" Value="{StaticResource GlassPillButtonTemplate}" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieButtonHeight}" />
+        <Setter Property="Padding" Value="20,0" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Background" Value="{ThemeResource NixiePrimaryFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixiePrimaryForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixiePrimaryButtonTemplate}" />
     </Style>
     <Style
-        x:Key="GlassAccentPillButtonStyle"
-        BasedOn="{StaticResource AccentButtonStyle}"
+        x:Key="NixiePrimaryCompactButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
         TargetType="Button">
-        <Setter Property="Background" Value="{ThemeResource SeaglassAccentFillBrush}" />
-        <Setter Property="Foreground" Value="{ThemeResource SeaglassAccentForegroundBrush}" />
-        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
-        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
-        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
-        <Setter Property="MinHeight" Value="{StaticResource GlassPillHeight}" />
-        <Setter Property="Padding" Value="22,10" />
-        <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
-        <Setter Property="Template" Value="{StaticResource GlassAccentPillButtonTemplate}" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Background" Value="{ThemeResource NixiePrimaryFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixiePrimaryForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixiePrimaryCompactButtonTemplate}" />
     </Style>
-    <!--  a pill that sits on a glass panel (the hero's More info): the flat inset fill, so the glass is not drawn twice  -->
+    <!--  Secondary (glass): every other text button  -->
     <Style
-        x:Key="GlassInsetPillButtonStyle"
-        BasedOn="{StaticResource GlassPillButtonStyle}"
+        x:Key="NixieButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
         TargetType="Button">
-        <Setter Property="Background" Value="{ThemeResource GlassInsetFillBrush}" />
-        <Setter Property="Foreground" Value="{ThemeResource GlassInsetTextBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieButtonHeight}" />
+        <Setter Property="Padding" Value="20,0" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Background" Value="{ThemeResource NixieButtonFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieButtonBorderBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixieButtonTemplate}" />
     </Style>
     <Style
-        x:Key="GlassIconButtonStyle"
-        BasedOn="{StaticResource GlassPillButtonStyle}"
+        x:Key="NixieCompactButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
         TargetType="Button">
-        <Setter Property="CornerRadius" Value="{StaticResource GlassCircleCornerRadius}" />
-        <Setter Property="Width" Value="{StaticResource GlassPillHeight}" />
-        <Setter Property="Height" Value="{StaticResource GlassPillHeight}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Background" Value="{ThemeResource NixieButtonFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieButtonBorderBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixieButtonTemplate}" />
+    </Style>
+    <!--  Subtle: text or icon + text toolbar actions (Sort, Filter), 32 high  -->
+    <Style
+        x:Key="NixieSubtleButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieSubtleForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Template" Value="{StaticResource NixieSubtleButtonTemplate}" />
+    </Style>
+    <!--  Icons on media surfaces: 44 circles, glyph 20 (MinHeight 0 and both sides fixed: never an ellipse)  -->
+    <Style
+        x:Key="NixieIconButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="Width" Value="{StaticResource NixieButtonHeight}" />
+        <Setter Property="Height" Value="{StaticResource NixieButtonHeight}" />
         <Setter Property="MinHeight" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
         <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassCircleCornerRadius}" />
+        <Setter Property="Background" Value="{ThemeResource NixieButtonFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieButtonBorderBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixieIconButtonTemplate}" />
+    </Style>
+    <Style
+        x:Key="NixieIconToggleButtonStyle"
+        BasedOn="{StaticResource DefaultToggleButtonStyle}"
+        TargetType="ToggleButton">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="Width" Value="{StaticResource NixieButtonHeight}" />
+        <Setter Property="Height" Value="{StaticResource NixieButtonHeight}" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassCircleCornerRadius}" />
+        <Setter Property="Background" Value="{ThemeResource NixieButtonFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieButtonBorderBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixieIconToggleButtonTemplate}" />
+    </Style>
+    <!--  Icons in forms and lists: 32 rounded squares, glyph 16  -->
+    <Style
+        x:Key="NixieCompactIconButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="Width" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="Height" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieSubtleForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Template" Value="{StaticResource NixieSubtleButtonTemplate}" />
+    </Style>
+    <!--  Destructive: deletes or overwrites server data, or leaves a group; always followed by a confirmation (or an Undo)  -->
+    <Style
+        x:Key="NixieDestructiveButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieButtonHeight}" />
+        <Setter Property="Padding" Value="20,0" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Background" Value="{ThemeResource NixieButtonFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieDangerForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieButtonBorderBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixieDestructiveButtonTemplate}" />
+    </Style>
+    <Style
+        x:Key="NixieDestructiveCompactButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Background" Value="{ThemeResource NixieButtonFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieDangerForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieButtonBorderBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixieDestructiveButtonTemplate}" />
+    </Style>
+    <!--  Link: navigation in text and to outside pages; HyperlinkButton  -->
+    <Style
+        x:Key="NixieLinkButtonStyle"
+        BasedOn="{StaticResource DefaultHyperlinkButtonStyle}"
+        TargetType="HyperlinkButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieLinkForegroundBrush}" />
+        <Setter Property="Padding" Value="4,6" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template" Value="{StaticResource NixieLinkButtonTemplate}" />
+    </Style>
+    <!--  Tab: the top bar sections and the seasons; one Tab stop for the strip, arrows inside (the strip's job)  -->
+    <Style
+        x:Key="NixieTabButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieTabForegroundBrush}" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="MinHeight" Value="40" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="2,4,2,4" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template" Value="{StaticResource NixieTabButtonTemplate}" />
+    </Style>
+    <!--  the 1.1.x keys, as aliases (the button review): the pages keep compiling and take the new look  -->
+    <StaticResource x:Key="GlassPillButtonStyle" ResourceKey="NixieButtonStyle" />
+    <StaticResource x:Key="GlassAccentPillButtonStyle" ResourceKey="NixiePrimaryButtonStyle" />
+    <StaticResource x:Key="GlassInsetPillButtonStyle" ResourceKey="NixieButtonStyle" />
+    <StaticResource x:Key="GlassIconButtonStyle" ResourceKey="NixieIconButtonStyle" />
+    <!--
+        Dialogs with the Compact buttons (the button review, section 3.6), on the dialog template of TextBlock.xaml (merged
+        earlier). NixieDialogStyle: the commit is the Primary. NixieDestructiveDialogStyle: the confirm is Destructive, and Cancel
+        (the close button) is the default, drawn Secondary.
+    -->
+    <Style
+        x:Key="NixieDialogStyle"
+        BasedOn="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
+        TargetType="ContentDialog">
+        <Setter Property="PrimaryButtonStyle" Value="{StaticResource NixiePrimaryCompactButtonStyle}" />
+        <Setter Property="SecondaryButtonStyle" Value="{StaticResource NixieCompactButtonStyle}" />
+        <Setter Property="CloseButtonStyle" Value="{StaticResource NixieCompactButtonStyle}" />
+        <Setter Property="DefaultButton" Value="Primary" />
+    </Style>
+    <Style
+        x:Key="NixieDestructiveDialogStyle"
+        BasedOn="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
+        TargetType="ContentDialog">
+        <Setter Property="PrimaryButtonStyle" Value="{StaticResource NixieDestructiveCompactButtonStyle}" />
+        <Setter Property="SecondaryButtonStyle" Value="{StaticResource NixieCompactButtonStyle}" />
+        <Setter Property="CloseButtonStyle" Value="{StaticResource NixieCompactButtonStyle}" />
+        <Setter Property="DefaultButton" Value="Close" />
     </Style>
     <!--
         Overlays: the More menu, card context menus, the profile flyout, tooltips, every ContentDialog and the player's menus

@@ -81,11 +81,12 @@ public sealed class GlassSettingTests
 		var xaml = GlassXaml();
 		Assert.Contains(xaml.Elements(), e => Key(e) == key);
 
-		foreach (var name in new[] { "GlassPillButtonTemplate", "GlassAccentPillButtonTemplate" })
+		// 1.2.0: the 1.1.x keys are aliases of the button system's; its glass buttons draw hover and pressed as glass overlays
+		foreach (var name in new[] { "NixieButtonTemplate", "NixieIconButtonTemplate", "NixieSubtleButtonTemplate" })
 		{
 			var template = xaml.Elements().Single(e => Key(e) == name).ToString();
-			Assert.Contains("GlassHoverOverlayBrush", template);
-			Assert.Contains("GlassPressedOverlayBrush", template);
+			Assert.Contains("NixieHoverOverlayBrush", template);
+			Assert.Contains("NixiePressedOverlayBrush", template);
 		}
 	}
 }

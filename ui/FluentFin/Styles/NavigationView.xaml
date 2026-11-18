@@ -69,6 +69,8 @@
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
+            <!--  the selected item's mark: the system highlight (Default gives it the light pink)  -->
+            <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="{ThemeResource SystemColorHighlightColor}" />
             <StaticResource x:Key="RailNavigationIconForegroundBrush" ResourceKey="SystemControlForegroundBaseHighBrush" />
             <!--  rest  -->
             <StaticResource x:Key="RailNavigationViewDefaultPaneBackground" ResourceKey="SystemColorWindowBrush" />

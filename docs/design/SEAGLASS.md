@@ -211,6 +211,17 @@ list with each feature's status is the glass stream's `shots\glass-features.md`.
 - **One glass layer per surface** (the 1.1.3 layout audit's "boxes in boxes"): panels have 12 px corners; `GlassSectionStyle` is a
   section with the panel's spacing and nothing behind it, for shelves on item pages and Settings groups; keep `GlassSurfaceStyle`
   for at most one form-like block a page and never nest it. The glassiness comes from the chrome, the backdrop and the overlays.
+- **Buttons** (`docs\reports\Nixie button review.md`, section 3; keys in Glass.xaml): six roles in two sizes, Large 44 on
+  media surfaces and Compact 32 in forms, one radius of 8, no pills. `NixiePrimaryButtonStyle` / `...Compact...` (the accent,
+  one per view; the Large one glows softly at rest), `NixieButtonStyle` / `NixieCompactButtonStyle` (glass: the flat inset fill
+  and the lit edge), `NixieSubtleButtonStyle`, `NixieIconButtonStyle` (44 circle), `NixieIconToggleButtonStyle` (on: the accent
+  glyph and a 1.5 px rim, never a filled disc), `NixieCompactIconButtonStyle` (32 rounded square), `NixieDestructiveButtonStyle`
+  / `...Compact...` (the danger ink #FF8A80 / #B3261E, never filled, never glowing), `NixieLinkButtonStyle` (neutral,
+  underlined), `NixieTabButtonStyle` (a neon underline; SelectionStates), and `NixieDialogStyle` / `NixieDestructiveDialogStyle`
+  (Cancel is the default there). Every state: hover and pressed are overlays (the weight never changes), focus is WinUI's two
+  rings 3 px outside plus the glow (not on Destructive or Link), disabled is a neutral fill and text, never a fade. The 1.1.x
+  keys (`GlassPillButtonStyle`, `GlassAccentPillButtonStyle`, `GlassInsetPillButtonStyle`, `GlassIconButtonStyle`,
+  `ItemGlassToggleButtonStyle`) are aliases of these. Every Nixie* colour has a high-contrast system colour.
 - **The top bar** (the side rail is gone, account stream): `GlassTitleBarBrush` (acrylic; `GlassTitleBarSolidBrush` in Solid),
   `GlassTitleBarStrokeBrush` for its bottom hairline, and the selected tab's `NeonUnderline` (a stroke-stack tube: hot-pink halo
   and glow around a near-white core; light: a crimson line; high contrast: the system highlight) or `GlassTabUnderlineBrush`.

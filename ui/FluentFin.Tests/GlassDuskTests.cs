@@ -216,15 +216,15 @@ public sealed class GlassDuskTests
 			}
 		}
 
-		// what the Dark dictionary adds beyond high contrast is WinUI's own keys (focus visuals, the dialog's smoke), which WinUI
-		// defines for it
-		Assert.All(dark.Except(highContrast), k => Assert.Contains(k, new[] { "SystemControlFocusVisualPrimaryBrush", "SystemControlFocusVisualSecondaryBrush", "ContentDialogSmokeFill" }));
+		// and every key Dark or Light defines has a high-contrast value (the states stream's rule; a missing one falls back to dark)
+		Assert.Empty(dark.Except(highContrast));
+		Assert.Empty(Theme("Light").Elements().Select(Key).ToHashSet().Except(highContrast));
 	}
 
-	/// <summary>Dark: the neon core's near-white ring (a pink one would vanish on the hot-pink Play) around a deep line; light: crimson around white.</summary>
+	/// <summary>Dark: the neon core's near-white ring (a pink one would vanish on the hot-pink Play) around a deep line; light: deep maroon around white (crimson vanished on the crimson Play).</summary>
 	[Theory]
 	[InlineData("Dark", "#FFF4EE", "#170508")]
-	[InlineData("Light", "#BC1E47", "#FFFFFF")]
+	[InlineData("Light", "#2D0F16", "#FFFFFF")]
 	public void The_focus_rings_read_on_the_accent_and_on_the_glass(string theme, string outer, string inner)
 	{
 		var dictionary = Theme(theme);
@@ -303,9 +303,11 @@ public sealed class GlassDuskTests
 		var backplate = DuskScene.Blend(new Rgb(255, 255, 255), Convert.ToByte(overlay[1..3], 16) / 255.0, new Rgb(0x3E, 0x28, 0x2E));
 		Assert.True(OkLab.Contrast(Parse(selected).Luminance, backplate.Luminance) >= 3, $"{selected} on {backplate.Hex}");
 		Assert.True(OkLab.Contrast(SeaglassPalette.AccentDark.Luminance, backplate.Luminance) < 3, "the hot pink would not read here");
-		// and never in the light dictionary or high contrast: WinUI's own there
-		Assert.DoesNotContain(Load("Styles", "NavigationView.xaml").Descendants().Where(e => e.Name.LocalName == "ResourceDictionary" && Key(e) != "Default")
-			.SelectMany(d => d.Elements()), e => Key(e) == "NavigationViewSelectionIndicatorForeground");
+		// light keeps WinUI's crimson; high contrast takes the system highlight
+		var dictionaries = Load("Styles", "NavigationView.xaml").Descendants().Where(e => e.Name.LocalName == "ResourceDictionary").ToList();
+		Assert.DoesNotContain(dictionaries.Single(d => Key(d) == "Light").Elements(), e => Key(e) == "NavigationViewSelectionIndicatorForeground");
+		Assert.Equal("{ThemeResource SystemColorHighlightColor}", (string?)dictionaries.Single(d => Key(d) == "HighContrast").Elements()
+			.Single(e => Key(e) == "NavigationViewSelectionIndicatorForeground").Attribute("Color"));
 	}
 
 	/// <summary>1.2.0, the top bar: its glass, Solid stand-in, hairline and tab accent exist in every theme; the glass swaps in Solid.</summary>
@@ -364,7 +366,11 @@ public sealed class GlassDuskTests
 	public void The_glow_colour_is_one_static_colour_and_the_glows_go_out_in_high_contrast()
 	{
 		var glass = Load("Styles", "Glass.xaml");
-		Assert.Contains(glass.Elements(), e => e.Name.LocalName == "Color" && Key(e) == "GlassNeonGlowColor");
+		// the outer glow's colour is a theme colour (orange in dark, crimson in light, the highlight in high contrast), never a top-level key
+		Assert.DoesNotContain(glass.Elements(), e => Key(e) == "GlassNeonGlowColor");
+		Assert.Equal("#FF7A50", Theme("Dark").Elements().Single(e => Key(e) == "GlassNeonGlowColor").Value);
+		Assert.Equal("#BC1E47", Theme("Light").Elements().Single(e => Key(e) == "GlassNeonGlowColor").Value);
+		Assert.Equal("SystemColorHighlightColor", (string?)Theme("HighContrast").Elements().Single(e => Key(e) == "GlassNeonGlowColor").Attribute("ResourceKey"));
 		var text = glass.ToString();
 		// each shadow's opacity is a shadow opacity, which high contrast sets to 0. (Not a value of the glows' own: a key with a
 		// value outside the theme dictionaries overrides the theme dictionaries' values, measured: no glow at all.)
