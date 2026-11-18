@@ -115,8 +115,16 @@ public sealed partial class HomeNotice(string message, ContinueRemoval? removal)
 }
 
 /// <summary>Seaglass 1.1.4: an item taken out of Continue Watching: its card, where it was, and the resume point it had.</summary>
-public sealed class ContinueRemoval(BaseItemViewModel item, BaseItemDto dto, int index, long positionTicks)
+public sealed class ContinueRemoval(BaseItemViewModel item, BaseItemDto dto, int index, long positionTicks, Guid user = default, string server = "")
 {
+	/// <summary>Who removed it, on which server: an Undo after a sign-in as someone else (or elsewhere) does nothing (the review, item 4).</summary>
+	public Guid User { get; } = user;
+
+	public string Server { get; } = server;
+
+	/// <summary>The server's message about the removal itself (position 0) has come.</summary>
+	internal bool EchoSeen { get; set; }
+
 	public BaseItemViewModel Item { get; } = item;
 
 	public BaseItemDto Dto { get; } = dto;
@@ -165,4 +173,39 @@ public sealed partial class ContinueWatchingSettingViewModel(ILocalSettingsServi
 public sealed record HideAfterChoice(int Days, string Label)
 {
 	public override string ToString() => Label;
+}
+
+/// <summary>
+/// 1.1.4: how long Home's notice after a removal stays: 10 s, held while the pointer or the keyboard is on it and 5 s more
+/// once they leave, and never more than <see cref="HardLimit"/> from when it showed (the review, item 1: a notice held for
+/// good kept an Undo that could put an old resume point back over newer progress).
+/// </summary>
+public static class NoticeTiming
+{
+	public static readonly TimeSpan Time = TimeSpan.FromSeconds(10);
+
+	public static readonly TimeSpan AfterHold = TimeSpan.FromSeconds(5);
+
+	public static readonly TimeSpan HardLimit = TimeSpan.FromSeconds(30);
+
+	/// <summary>When the notice should go, counted from now: <paramref name="shownFor"/> since it showed, <paramref name="held"/> by the pointer or the keyboard, <paramref name="afterHold"/> when a hold just ended.</summary>
+	public static TimeSpan Remaining(TimeSpan shownFor, bool held, bool afterHold)
+	{
+		var hard = HardLimit - shownFor;
+		if (hard <= TimeSpan.Zero)
+		{
+			return TimeSpan.Zero;
+		}
+
+		if (held)
+		{
+			return hard;
+		}
+
+		var soft = afterHold ? AfterHold : Time - shownFor;
+		return soft < hard ? (soft < TimeSpan.Zero ? TimeSpan.Zero : soft) : hard;
+	}
+
+	/// <summary>The timer is up: the notice goes unless it is held, and at the hard limit even then.</summary>
+	public static bool Closes(TimeSpan shownFor, bool held) => !held || shownFor >= HardLimit;
 }

@@ -31,10 +31,11 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 	private IReadOnlyList<BaseItemDto> _continueAnswer = [];
 	private IReadOnlyList<BaseItemDto> _nextUpAnswer = [];
 
-	// Seaglass 1.1.4: the resume point this page last set for an item (a removal: 0; an Undo: the old one). The server's
-	// UserDataChanged messages come in order; one that does not match is the state before (the removal's message arriving
-	// after its Undo) and is not applied, so it cannot take the card out again. Kept for OwnResumePointFor: a server whose
-	// websocket is not connected never says, and the server's later changes must not be ignored for good.
+	// Seaglass 1.1.4: an item put back by an Undo before the server's message about its removal came: that message (position
+	// 0), arriving after the Undo, is the state before and is not applied, so it cannot take the card out again. Only that
+	// one message, and only for OwnResumePointFor (a server whose websocket is not connected never sends it); anything else
+	// the server says about the item is applied at once, a "played" above all (the review, item 3: a merged "mark as
+	// watched" was ignored for 30 s).
 	private readonly Dictionary<Guid, (long Ticks, long SetAt)> _ownResumePoints = [];
 	internal static readonly TimeSpan OwnResumePointFor = TimeSpan.FromSeconds(30);
 
@@ -528,21 +529,36 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 	private void ProcessContinueWatchingItemChanged(UserItemDataDto userData, Guid guid)
 	{
-		// Seaglass 1.1.4: the server telling of a resume point this page set (a removal, an Undo): applied once it says what
-		// was set last; before that it is the earlier state (a removal's message coming after its Undo)
+		var ticks = userData.PlaybackPositionTicks ?? 0;
+		var played = userData.Played == true;
+
+		// Seaglass 1.1.4 (the review, item 1): an item waiting on its Undo that the server says changed elsewhere (played on
+		// another device, marked watched): the Undo would put the old resume point back over the new one. The Undo goes;
+		// an item with progress again is back in the row, as the server has it.
+		if (Notice?.Removal is { Settled: false } pending && pending.Dto.Id == guid)
+		{
+			if (!played && ticks == 0)
+			{
+				pending.EchoSeen = true; // the removal's own message
+			}
+			else if (played || ticks != pending.PositionTicks)
+			{
+				pending.Settled = true;
+				Notice = null;
+				if (!played)
+				{
+					PutBack(pending);
+				}
+			}
+		}
+
+		// the removal's own message, after an Undo that came first (above): not applied, once
 		if (_ownResumePoints.TryGetValue(guid, out var own))
 		{
-			if (_time.GetElapsedTime(own.SetAt) > OwnResumePointFor)
-			{
-				_ownResumePoints.Remove(guid);
-			}
-			else if ((userData.PlaybackPositionTicks ?? 0) != own.Ticks)
+			_ownResumePoints.Remove(guid);
+			if (!played && ticks == 0 && own.Ticks != 0 && _time.GetElapsedTime(own.SetAt) <= OwnResumePointFor)
 			{
 				return;
-			}
-			else
-			{
-				_ownResumePoints.Remove(guid);
 			}
 		}
 
@@ -603,14 +619,13 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 		var index = ContinueItems.IndexOf(item);
 		var position = dto.UserData?.PlaybackPositionTicks ?? item.Dto.UserData?.PlaybackPositionTicks ?? 0;
-		var removal = new ContinueRemoval(item, item.Dto, index, position);
+		var removal = new ContinueRemoval(item, item.Dto, index, position, JellyfinClient.UserId, JellyfinClient.BaseUrl ?? "");
 		_continueChanges++; // an answer asked for before this still has the item
 		ContinueItems.Remove(item);
 		_continueAnswer = [.. _continueAnswer.Where(x => x.Id != id)];
 		ShowNextUp();
 		Notice = new HomeNotice($"Removed {ContinueWatchingRules.NameOf(item.Dto)} from Continue Watching", removal);
 
-		_ownResumePoints[id] = (0, _time.GetTimestamp());
 		removal.Done = JellyfinClient.SetResumePosition(id, 0);
 		var ok = await removal.Done;
 		_continueChanges++; // nor does an answer asked for while the server took it
@@ -620,7 +635,6 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			return;
 		}
 
-		_ownResumePoints.Remove(id);
 		if (!removal.Settled)
 		{
 			removal.Settled = true;
@@ -640,6 +654,12 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 		removal.Settled = true;
 		Notice = null;
+		// the review, item 4: the resume point is the user's own data, set as whoever is signed in now
+		if (removal.User != JellyfinClient.UserId || removal.Server != (JellyfinClient.BaseUrl ?? ""))
+		{
+			return;
+		}
+
 		PutBack(removal);
 		if (!await removal.Done)
 		{
@@ -647,7 +667,11 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		}
 
 		var id = removal.Dto.Id!.Value;
-		_ownResumePoints[id] = (removal.PositionTicks, _time.GetTimestamp());
+		if (!removal.EchoSeen)
+		{
+			_ownResumePoints[id] = (removal.PositionTicks, _time.GetTimestamp());
+		}
+
 		var ok = await JellyfinClient.SetResumePosition(id, removal.PositionTicks);
 		_continueChanges++;
 		if (!ok)

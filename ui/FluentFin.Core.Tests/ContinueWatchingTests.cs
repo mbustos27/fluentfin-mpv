@@ -341,6 +341,97 @@ public sealed class ContinueWatchingTests : IDisposable
 		Assert.Equal(["Next"], home.Hero.Select(x => x.Title));
 	}
 
+	// ---- the review of wip/114-library
+
+	[Fact]
+	public async Task ProgressElsewhere_WhileTheUndoWaits_DropsTheUndo_SoItCannotPutTheOldPointBack()
+	{
+		var a = Item("A", position: 4_444);
+		Answer([a, Item("B")]);
+		var home = await Home();
+		await home.RemoveFromContinueWatching(a);
+		_socket.OnNext(Changed(a.Id!.Value, 0));     // the removal's own message
+		_socket.OnNext(Changed(a.Id!.Value, 9_000)); // watched on another device meanwhile
+
+		Assert.True(SpinWait.SpinUntil(() => home.Notice is null, TimeSpan.FromSeconds(5)), "the Undo stayed");
+		await home.UndoRemoval(); // Ctrl+Z after all: nothing
+
+		Assert.DoesNotContain(_resumeSet, x => x.Ticks == 4_444);
+		var back = Assert.Single(home.ContinueItems, x => x.Id == a.Id); // in the row again, as the server has it
+		Assert.Equal(9_000, back.Dto.UserData!.PlaybackPositionTicks);
+	}
+
+	[Fact]
+	public async Task MarkedWatchedElsewhere_WhileTheUndoWaits_DropsTheUndo_AndTheItemStaysOut()
+	{
+		var a = Item("A", position: 4_444);
+		Answer([a, Item("B")]);
+		var home = await Home();
+		await home.RemoveFromContinueWatching(a);
+		_socket.OnNext(Changed(a.Id!.Value, 0, played: true));
+
+		Assert.True(SpinWait.SpinUntil(() => home.Notice is null, TimeSpan.FromSeconds(5)), "the Undo stayed");
+		Assert.DoesNotContain(home.ContinueItems, x => x.Id == a.Id);
+	}
+
+	[Fact]
+	public async Task PlayedRightAfterAnUndo_IsFinal_NotIgnoredAsTheRemovalsMessage()
+	{
+		var a = Item("A", position: 4_444);
+		Answer([a, Item("B")]);
+		var home = await Home();
+		await home.RemoveFromContinueWatching(a);
+		await home.UndoRemoval();
+
+		_socket.OnNext(Changed(a.Id!.Value, 0, played: true)); // the server's messages merged: the Undo, then "mark as watched"
+
+		Assert.True(SpinWait.SpinUntil(() => home.ContinueItems.All(x => x.Id != a.Id), TimeSpan.FromSeconds(5)), "a watched item stayed in Continue Watching");
+	}
+
+	[Fact]
+	public async Task NewProgressRightAfterAnUndo_IsApplied()
+	{
+		var a = Item("A", position: 4_444);
+		Answer([a, Item("B")]);
+		var home = await Home();
+		await home.RemoveFromContinueWatching(a);
+		await home.UndoRemoval();
+
+		_socket.OnNext(Changed(a.Id!.Value, 9_500));
+
+		Assert.True(SpinWait.SpinUntil(() => home.ContinueItems.Single(x => x.Id == a.Id).Dto.UserData!.PlaybackPositionTicks == 9_500, TimeSpan.FromSeconds(5)));
+	}
+
+	[Fact]
+	public async Task AnUndo_AfterASignInAsSomeoneElse_DoesNothing()
+	{
+		var a = Item("A", position: 4_444);
+		Answer([a, Item("B")]);
+		var home = await Home();
+		await home.RemoveFromContinueWatching(a);
+
+		_client.SetupGet(x => x.UserId).Returns(Guid.NewGuid()); // signed in as another user
+		await home.UndoRemoval();
+
+		Assert.DoesNotContain(_resumeSet, x => x.Ticks == 4_444);
+		Assert.Null(home.Notice);
+		Assert.DoesNotContain(home.ContinueItems, x => x.Id == a.Id);
+	}
+
+	[Fact]
+	public async Task AnUndo_OnAnotherServer_DoesNothing()
+	{
+		var a = Item("A", position: 4_444);
+		Answer([a, Item("B")]);
+		var home = await Home();
+		await home.RemoveFromContinueWatching(a);
+
+		_client.SetupGet(x => x.BaseUrl).Returns("https://other.example");
+		await home.UndoRemoval();
+
+		Assert.DoesNotContain(_resumeSet, x => x.Ticks == 4_444);
+	}
+
 	// ---- the items review: a change the server pushes reaches the item record too (the menu and the toggles read it)
 
 	[Fact]
@@ -419,5 +510,33 @@ public sealed class HomePlaceTests
 
 		Assert.Equal(new HomePlace(640, "New in Movies", item), HomePlace.Recall(alice));
 		Assert.Null(HomePlace.Recall(Guid.NewGuid()));
+	}
+}
+
+/// <summary>The review, item 1: the notice's Undo cannot be held open for good.</summary>
+public sealed class NoticeTimingTests
+{
+	[Fact]
+	public void TheNotice_Goes_After10s_Or5sAfterAHold_AndAt30sEvenWhileHeld()
+	{
+		Assert.Equal(TimeSpan.FromSeconds(10), NoticeTiming.Remaining(TimeSpan.Zero, held: false, afterHold: false));
+		Assert.Equal(TimeSpan.FromSeconds(5), NoticeTiming.Remaining(TimeSpan.FromSeconds(12), held: false, afterHold: true));
+		Assert.Equal(TimeSpan.FromSeconds(22), NoticeTiming.Remaining(TimeSpan.FromSeconds(8), held: true, afterHold: false)); // runs on to the hard limit
+		Assert.Equal(TimeSpan.FromSeconds(2), NoticeTiming.Remaining(TimeSpan.FromSeconds(28), held: false, afterHold: true)); // never past it
+		Assert.Equal(TimeSpan.Zero, NoticeTiming.Remaining(TimeSpan.FromSeconds(31), held: true, afterHold: false));
+
+		Assert.False(NoticeTiming.Closes(TimeSpan.FromSeconds(20), held: true));
+		Assert.True(NoticeTiming.Closes(TimeSpan.FromSeconds(30), held: true));
+		Assert.True(NoticeTiming.Closes(TimeSpan.FromSeconds(10), held: false));
+	}
+
+	[Fact]
+	public void HomePage_UsesIt_AndNeverPutsTheFocusOnTheNotice()
+	{
+		var code = File.ReadAllText(Path.Combine(HomeAndLibraryXamlTests.RepoRoot, "FluentFin/Views/HomePage.xaml.cs"));
+
+		Assert.Contains("NoticeTiming.Closes(NoticeShownFor, held)", code);
+		Assert.Contains("_noticeTimer.Interval = NoticeTiming.Remaining(NoticeShownFor, held, afterHold);", code);
+		Assert.DoesNotContain("UndoButton.Focus(", code);
 	}
 }

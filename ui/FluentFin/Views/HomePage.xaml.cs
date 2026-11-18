@@ -12,13 +12,13 @@ public sealed partial class HomePage : Page
 {
 	public HomeViewModel ViewModel { get; } = App.GetService<HomeViewModel>();
 
-	// Seaglass 1.1.4: how long the notice after a removal from Continue Watching stays (while nothing holds it)
-	internal static readonly TimeSpan NoticeTime = TimeSpan.FromSeconds(10);
-	internal static readonly TimeSpan NoticeTimeAfterHold = TimeSpan.FromSeconds(5);
-
+	// Seaglass 1.1.4: the notice after a removal from Continue Watching stays as NoticeTiming says (at most 30 s, held or not)
 	private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _noticeTimer;
 	private bool _noticePointer;
 	private bool _noticeFocus;
+	private long _noticeShownAt;
+
+	private TimeSpan NoticeShownFor => System.Diagnostics.Stopwatch.GetElapsedTime(_noticeShownAt);
 
 	public HomePage()
 	{
@@ -29,9 +29,19 @@ public sealed partial class HomePage : Page
 		_noticeTimer.IsRepeating = false;
 		_noticeTimer.Tick += (_, _) =>
 		{
-			if (ViewModel.Notice is { } notice && !_noticePointer && !_noticeFocus)
+			if (ViewModel.Notice is not { } notice)
+			{
+				return;
+			}
+
+			var held = _noticePointer || _noticeFocus;
+			if (NoticeTiming.Closes(NoticeShownFor, held))
 			{
 				ViewModel.DismissNotice(notice);
+			}
+			else
+			{
+				StartNoticeTimer(held, afterHold: false);
 			}
 		};
 		ViewModel.PropertyChanged += (_, e) =>
@@ -138,16 +148,24 @@ public sealed partial class HomePage : Page
 			return;
 		}
 
-		_noticeTimer.Interval = NoticeTime;
-		_noticeTimer.Start();
-		// the card that had the focus left with the row's last card: the keyboard goes on to the Undo
+		_noticeShownAt = System.Diagnostics.Stopwatch.GetTimestamp();
+		StartNoticeTimer(_noticePointer || _noticeFocus, afterHold: false);
+		// the card that had the focus left with the row's last card: the keyboard goes on to the next row, not to the notice
+		// (the review, item 1: on the notice it held it, and its Undo, for good)
 		DispatcherQueue.TryEnqueue(() =>
 		{
 			if (XamlRoot is not null && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) is null && ViewModel.Notice?.CanUndo == true)
 			{
-				UndoButton.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+				_ = NextUpRow.FocusRow() || FluentFin.Controls.ShelfRow.Shown.Where(IsMine).Any(r => r.FocusRow());
 			}
 		});
+	}
+
+	private void StartNoticeTimer(bool held, bool afterHold)
+	{
+		_noticeTimer.Stop();
+		_noticeTimer.Interval = NoticeTiming.Remaining(NoticeShownFor, held, afterHold);
+		_noticeTimer.Start();
 	}
 
 	/// <summary>The notice as the view model has it: shown with its words and its Undo, or gone (null).</summary>
@@ -162,14 +180,10 @@ public sealed partial class HomePage : Page
 	{
 		_noticePointer = pointer;
 		_noticeFocus = focus;
-		if (pointer || focus)
+		if (ViewModel.Notice is not null)
 		{
-			_noticeTimer.Stop();
-		}
-		else if (ViewModel.Notice is not null)
-		{
-			_noticeTimer.Interval = NoticeTimeAfterHold;
-			_noticeTimer.Start();
+			// held: the timer runs on to the hard limit; let go: 5 s more (never past the hard limit)
+			StartNoticeTimer(pointer || focus, afterHold: !(pointer || focus));
 		}
 	}
 

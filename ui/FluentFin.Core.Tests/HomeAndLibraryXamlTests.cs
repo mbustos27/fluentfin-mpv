@@ -118,10 +118,17 @@ public sealed class HomeAndLibraryXamlTests
 
 		var filter = FindByName(library, "FilterButton");
 		Assert.Empty(filter.Descendants().Where(e => e.Name.LocalName == "TokenizingTextBox"));
+		// the review, item 5: one virtualised list (an ItemsRepeater in the menu's scroller), not nested ItemsControls
+		Assert.Empty(filter.Descendants().Where(e => e.Name.LocalName == "ItemsControl"));
+		var rows = FindByName(library, "FilterRepeater");
+		Assert.Equal("ItemsRepeater", rows.Name.LocalName);
+		Assert.Equal("{x:Bind ViewModel.FilterRows, Mode=OneWay}", (string?)rows.Attribute("ItemsSource"));
+		Assert.Contains(rows.Ancestors(), e => e.Name.LocalName == "ScrollViewer");
 		var boxes = filter.Descendants(Presentation + "CheckBox").ToList();
 		Assert.Equal(["UnwatchedBox", "FavoritesBox"], boxes.Take(2).Select(b => (string?)b.Attribute(Xaml + "Name")));
 		Assert.Equal("{x:Bind ViewModel.Filter.Unwatched, Mode=TwoWay}", (string?)boxes[0].Attribute("IsChecked"));
-		var box = boxes.Single(b => (string?)b.Attribute("Content") == "{x:Bind Label}");
+		var box = library.Descendants(Presentation + "DataTemplate").Single(t => (string?)t.Attribute(Xaml + "Key") == "FilterOptionTemplate")
+			.Descendants(Presentation + "CheckBox").Single();
 		Assert.Equal("{x:Bind IsChecked, Mode=TwoWay}", (string?)box.Attribute("IsChecked"));
 		Assert.Equal("{x:Bind Name}", (string?)box.Attribute("AutomationProperties.Name"));
 		Assert.Equal("{x:Bind ViewModel.ClearFiltersCommand}", (string?)FindByName(library, "ClearFiltersButton").Attribute("Command"));
@@ -222,7 +229,7 @@ public sealed class HomeAndLibraryXamlTests
 	private static XElement FindByName(XDocument doc, string name) =>
 		doc.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == name);
 
-	private static string RepoRoot { get; } = FindRepoRoot();
+	internal static string RepoRoot { get; } = FindRepoRoot();
 
 	private static string FindRepoRoot()
 	{
