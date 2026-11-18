@@ -2,10 +2,8 @@
     x:Class="FluentFin.Views.ShellPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:animatedvisuals="using:Microsoft.UI.Xaml.Controls.AnimatedVisuals"
     xmlns:behaviors="using:FluentFin.Behaviors"
     xmlns:cc="using:CommunityToolkit.WinUI.Converters"
-    xmlns:helpers="using:FluentFin.UI.Core"
     xmlns:i="using:Microsoft.Xaml.Interactivity"
     xmlns:ui="using:CommunityToolkit.WinUI"
     Loaded="OnLoaded">
@@ -14,67 +12,45 @@
         <cc:BoolToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Page.Resources>
 
-    <NavigationView
-        x:Name="NavigationViewControl"
-        x:FieldModifier="Public"
-        HighContrastAdjustment="None"
-        IsBackButtonVisible="Collapsed"
-        IsPaneOpen="False"
-        IsPaneVisible="{x:Bind Chrome.IsNavigationVisible, Mode=OneWay}"
-        IsPaneToggleButtonVisible="False"
-        IsSettingsVisible="False"
-        Style="{StaticResource MainNavigationViewStyle}">
-        <NavigationView.MenuItems>
-            <NavigationViewItem
-                helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.HomeViewModel"
-                Content="Home"
-                Icon="{ui:SymbolIcon Symbol=Home}" />
-            <NavigationViewItem
-                helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.LibrariesLandingPageViewModel"
-                Content="Libraries"
-                Icon="{ui:SymbolIcon Symbol=Library}" />
-        </NavigationView.MenuItems>
-        <!--  Seaglass 1.1.3: only destinations on the rail. Contribute (and Report a problem) moved to Settings > About,
-              Jellyseerr to Settings > Integrations (UX review, prioritised fix 1)  -->
-        <NavigationView.FooterMenuItems>
-            <NavigationViewItem
-                helpers:NavigationHelper.NavigateTo="FluentFin.Core.ViewModels.SettingsViewModel"
-                Content="Settings"
-                Icon="{ui:SymbolIcon Symbol=Setting}" />
-        </NavigationView.FooterMenuItems>
-        <!--  Seaglass: the opt-in update notice (Settings > Check for updates): quiet, above the page, closable, never over the player  -->
-        <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
-            <InfoBar
-                x:Name="UpdateBar"
-                Margin="16,8,16,0"
-                Closed="OnUpdateBarClosed"
-                IsClosable="True"
-                IsOpen="False"
-                Severity="Informational"
-                Visibility="{x:Bind Chrome.IsNavigationVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <InfoBar.ActionButton>
-                    <Button
-                        x:Name="UpdateInstallButton"
-                        AutomationProperties.Name="Download and install the update"
-                        Click="OnUpdateInstallClick"
-                        Content="Download and install" />
-                </InfoBar.ActionButton>
-                <InfoBar.Content>
-                    <HyperlinkButton
-                        Padding="0"
-                        AutomationProperties.Name="Release notes"
-                        Click="OnUpdateNotesClick"
-                        Content="Release notes" />
-                </InfoBar.Content>
-            </InfoBar>
-            <Frame
-                x:Name="NavigationFrame"
-                Grid.Row="1"
-                x:FieldModifier="Public" />
-        </Grid>
-    </NavigationView>
+    <!--
+        1.2.0 (the top bar): no left rail. The sections are tabs in the window's one bar (TitleBarControl, TopTabStrip), which
+        sits over this page: ContentRoot starts below it (TopBar.Height), or at the top for a page that extends under it (a
+        hero: Controls.TopBar.ExtendsUnder) and while the bar is hidden (full screen). ShellPage.UpdateInsets.
+    -->
+    <!--  Seaglass: the opt-in update notice (Settings > Check for updates): quiet, above the page, closable, never over the player  -->
+    <Grid x:Name="ContentRoot">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <InfoBar
+            x:Name="UpdateBar"
+            Margin="16,8,16,0"
+            Closed="OnUpdateBarClosed"
+            IsClosable="True"
+            IsOpen="False"
+            Severity="Informational"
+            Visibility="{x:Bind Chrome.IsNavigationVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <InfoBar.ActionButton>
+                <!--  button review A25: Narrator reads the visible label (it said "Download and install" over "Open the download page")  -->
+                <Button
+                    x:Name="UpdateInstallButton"
+                    Click="OnUpdateInstallClick"
+                    Content="Download and install" />
+            </InfoBar.ActionButton>
+            <InfoBar.Content>
+                <!--  button review A26: a link with a 32 px hit area (it was about 20 px high, no padding)  -->
+                <HyperlinkButton
+                    MinHeight="32"
+                    Padding="4,6"
+                    AutomationProperties.Name="Release notes"
+                    Click="OnUpdateNotesClick"
+                    Content="Release notes" />
+            </InfoBar.Content>
+        </InfoBar>
+        <Frame
+            x:Name="NavigationFrame"
+            Grid.Row="1"
+            x:FieldModifier="Public" />
+    </Grid>
 </Page>

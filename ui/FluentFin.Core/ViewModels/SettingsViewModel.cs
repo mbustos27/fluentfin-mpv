@@ -132,6 +132,8 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	public string SyncPlayDescription =>
 		IsMpvSelected ? "Watch in step with other people on this server. Not available with the mpv player: choose another player under Playback to use it."
 		: !SyncPlayAllowed(CurrentUser()) ? "Watch in step with other people on this server. Not available on this server: it doesn't allow SyncPlay for your account."
+		// review: a join-only account was offered "New group", which did nothing
+		: CurrentUser()?.Policy?.SyncPlayAccess == UserPolicy_SyncPlayAccess.JoinGroups ? "Watch in step with other people on this server: join a group. Your account can't start one here."
 		: "Watch in step with other people on this server: join a group or start one.";
 
 	/// <summary>
@@ -360,11 +362,14 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 	[ObservableProperty]
 	public partial string ForgetLearnedStatus { get; set; } = "";
 
-	/// <summary>Deletes the intros learned from the user's skips (<see cref="LearnedIntros"/>).</summary>
+	/// <summary>
+	/// Deletes the intros learned from the user's skips (<see cref="LearnedIntros"/>). Seaglass 1.1.4 (button review A39): after
+	/// a yes to <see cref="ForgetLearnedPrompt"/> (it went at once, with no way back).
+	/// </summary>
 	[RelayCommand]
-	private void ForgetLearnedIntros()
+	private async Task ForgetLearnedIntros()
 	{
-		if (knownFolders is null)
+		if (knownFolders is null || !await Asked(ForgetLearnedPrompt))
 		{
 			return;
 		}
@@ -640,8 +645,17 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		$"Seaglass forgets the sign-in saved for {user.Username} on this PC, with its saved home page. The account on the server is not changed.",
 		"Remove");
 
-	/// <summary>Seaglass 1.1.3: the accessible name of a saved sign-in's Remove button ("Remove alice").</summary>
-	public static string RemoveUserLabel(string username) => $"Remove {username}";
+	/// <summary>What "Forget learned intros" asks.</summary>
+	public static ConfirmPrompt ForgetLearnedPrompt { get; } = new(
+		"Forget learned intros?",
+		"Skips you made before stop being used. The player learns again from your next skips.",
+		"Forget");
+
+	/// <summary>
+	/// Seaglass 1.1.3: the accessible name of a saved sign-in's button; 1.1.4 (button review A48): "Remove sign-in", as it
+	/// reads ("Remove the sign-in for alice").
+	/// </summary>
+	public static string RemoveUserLabel(string username) => $"Remove the sign-in for {username}";
 
 	/// <summary>Seaglass 1.1.3: the accessible name of a saved server's Remove button ("Remove server Home").</summary>
 	public static string RemoveServerLabel(string displayName) => string.IsNullOrWhiteSpace(displayName) ? "Remove server" : $"Remove server {displayName.Trim()}";

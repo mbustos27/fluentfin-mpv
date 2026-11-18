@@ -7,7 +7,7 @@ namespace FluentFin.Services;
 
 /// <summary>
 /// Seaglass page change, through the one curve the theme uses (0.05, 0.9, 0.1, 1.0). Seaglass 1.1.4 (interaction audit, item
-/// 16): the motion says which way you went, as Windows' page transitions do. A rail destination (Home, Libraries, Settings, a
+/// 16): the motion says which way you went, as Windows' page transitions do. A top-bar tab (Home, a library, a
 /// plugin's) comes in with the page refresh: it fades in and slides up 28 px. Opening something (an item, a library, the search
 /// results; Forward) drills in: it fades in and grows from 94 %. Back drills out: the page you return to fades in and settles
 /// from 104 %. 300 ms in Full mode. Reduced mode: a 150 ms fade whichever way. Solid and animations off: nothing.
@@ -19,7 +19,7 @@ public static class PageTransition
 	public static readonly TimeSpan FadeOnly = TimeSpan.FromMilliseconds(150);
 
 	/// <summary>
-	/// Whether a page type is a rail destination (the shell sets it from its rail: ShellPage). A navigation to one is a
+	/// Whether a page type is a top-bar tab's (the shell sets it from its tabs: ShellPage). A navigation to one is a
 	/// switch of section (the refresh), not a drill in.
 	/// </summary>
 	public static Func<Type, bool> IsTopLevel { get; set; } = _ => false;
@@ -124,7 +124,7 @@ public enum PageTransitionKind
 /// <summary>Seaglass 1.1.4: which way a page change went (PageTransition.MotionFor).</summary>
 public enum PageMotion
 {
-	/// <summary>A rail destination: fade in, slide up.</summary>
+	/// <summary>A top-bar tab: fade in, slide up.</summary>
 	Refresh,
 
 	/// <summary>Opening something: fade in, grow from 94 %.</summary>

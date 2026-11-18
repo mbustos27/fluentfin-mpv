@@ -194,6 +194,49 @@ public sealed class TitleBarAccountTests
 		Assert.Equal("", vm.SearchText);
 	}
 
+	// ---- review: the search's list and its answers end with the page, and with the session
+
+	[Fact]
+	public void LeavingForAnotherPage_OrSigningOut_ResetsTheSearch()
+	{
+		var vm = Create();
+		var resets = 0;
+		vm.SearchReset += (_, _) => resets++;
+		vm.OnPageShown(typeof(HomePage));
+		Assert.Equal(1, resets);
+
+		// its results page keeps it
+		vm.SearchText = "quiet";
+		vm.OnPageShown(typeof(SearchResultsPage), "quiet");
+		Assert.Equal(1, resets);
+
+		// user B must not see user A's suggestions: the title bar outlives the session
+		vm.User = null;
+		Assert.Equal(2, resets);
+		Assert.Equal("", vm.SearchText);
+	}
+
+	[Fact]
+	public void BackBetweenTwoResultsPages_PutsEachPagesQueryBack()
+	{
+		// review: Back from "the" to "quiet" left "the" in the box
+		var vm = Create();
+		vm.OnPageShown(typeof(SearchResultsPage), "quiet");
+		Assert.Equal("quiet", vm.SearchText);
+		vm.OnPageShown(typeof(SearchResultsPage), "the");
+		Assert.Equal("the", vm.SearchText);
+
+		vm.OnPageShown(typeof(SearchResultsPage), "quiet");
+		Assert.Equal("quiet", vm.SearchText);
+	}
+
+	[Fact]
+	public void TheShell_PassesThePagesParameter()
+	{
+		var shell = File.ReadAllText(Path.Combine(Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!, "Views", "ShellPage.xaml.cs"));
+		Assert.Contains("_titleBar.OnPageShown(e.SourcePageType, e.Parameter);", shell);
+	}
+
 	// ---- Seaglass 1.1.4 (layout audit): the title bar
 
 	[Fact]
@@ -260,16 +303,67 @@ public sealed class TitleBarAccountTests
 	// ---- SyncPlay's dialog (layout audit, item 18)
 
 	[Fact]
-	public void SyncPlaysDialog_JoinsOnlyAChosenGroup_InSentenceCase()
+	public void SyncPlaysDialog_JoinsOnlyAChosenGroup()
 	{
 		var vm = new SyncPlayGroupPickerViewModel(Mock.Of<IJellyfinClient>());
 		Assert.False(vm.CanJoin);
 
 		vm.SelectedGroup = new GroupInfoDto { GroupId = Guid.NewGuid(), GroupName = "Friday" };
 		Assert.True(vm.CanJoin);
+	}
 
-		Assert.Equal("New group", SyncPlayGroupPickerViewModel.SecondaryText(null));
-		Assert.Equal("Leave group", SyncPlayGroupPickerViewModel.SecondaryText(new GroupInfoDto()));
+	[Theory]
+	[InlineData(UserPolicy_SyncPlayAccess.CreateAndJoinGroups, true)]
+	[InlineData(UserPolicy_SyncPlayAccess.JoinGroups, false)]
+	[InlineData(UserPolicy_SyncPlayAccess.None, false)]
+	public void NewGroup_IsOffered_OnlyToAnAccountAllowedToStartOne(UserPolicy_SyncPlayAccess access, bool offered)
+	{
+		// review: SettingsViewModel ruled out only "None", so a join-only account pressed "New group" and nothing happened
+		Assert.Equal(offered, SyncPlayGroupPickerViewModel.CanCreate(new UserDto { Policy = new UserPolicy { SyncPlayAccess = access } }));
+		// no policy known: offered, the server decides (and its refusal is said)
+		Assert.True(SyncPlayGroupPickerViewModel.CanCreate(null));
+	}
+
+	[Fact]
+	public async Task NewGroup_SaysTheServersRefusal_AndKeepsTheDialogOpen()
+	{
+		var client = new Mock<IJellyfinClient>();
+		client.Setup(x => x.StartSyncPlayGroup()).ReturnsAsync(FluentFin.Core.Services.JellyfinClient.SyncPlayRefused);
+		var vm = new SyncPlayGroupPickerViewModel(client.Object);
+		vm.UseAccount(new UserDto { Policy = new UserPolicy { SyncPlayAccess = UserPolicy_SyncPlayAccess.CreateAndJoinGroups } });
+
+		Assert.False(await vm.CreateGroup());
+		Assert.Equal(FluentFin.Core.Services.JellyfinClient.SyncPlayRefused, vm.Status);
+
+		client.Setup(x => x.StartSyncPlayGroup()).ReturnsAsync((string?)null);
+		Assert.True(await vm.CreateGroup());
+		Assert.Equal("", vm.Status);
+
+		// a join-only account is told without asking the server
+		client.Invocations.Clear();
+		vm.UseAccount(new UserDto { Policy = new UserPolicy { SyncPlayAccess = UserPolicy_SyncPlayAccess.JoinGroups } });
+		Assert.False(await vm.CreateGroup());
+		Assert.True(vm.HasCreateHint);
+		client.Verify(x => x.StartSyncPlayGroup(), Times.Never);
+	}
+
+	[Fact]
+	public async Task LeaveGroup_AsksFirst_ThenLeaves()
+	{
+		var client = new Mock<IJellyfinClient>();
+		var vm = new SyncPlayGroupPickerViewModel(client.Object);
+
+		vm.AskToLeaveCommand.Execute(null);
+		Assert.True(vm.IsLeaveConfirmShown);
+		client.Verify(x => x.LeaveSyncPlayGroup(), Times.Never);
+
+		vm.StayInGroupCommand.Execute(null);
+		Assert.False(vm.IsLeaveConfirmShown);
+
+		vm.AskToLeaveCommand.Execute(null);
+		await vm.LeaveGroupCommand.ExecuteAsync(null);
+		client.Verify(x => x.LeaveSyncPlayGroup(), Times.Once);
+		Assert.False(vm.IsInGroup);
 	}
 
 	// ---- Settings > Other devices > Quick Connect: the dialog says what Approve did
@@ -281,7 +375,7 @@ public sealed class TitleBarAccountTests
 	public async Task QuickConnect_SaysWhetherTheCodeWasApproved(string code, bool approved, string status)
 	{
 		var client = new Mock<IJellyfinClient>();
-		client.Setup(x => x.Authenticate("123456")).ReturnsAsync(approved);
+		client.Setup(x => x.ApproveQuickConnect("123456")).ReturnsAsync(approved ? QuickConnectApproval.Approved : QuickConnectApproval.NoSuchCode);
 		var vm = new QuickConnectViewModel(client.Object) { QuickConnectCode = code };
 
 		await vm.VerifyQuickConnectCommand.ExecuteAsync(null);
@@ -290,6 +384,23 @@ public sealed class TitleBarAccountTests
 		// Cancel until approved, then Close
 		Assert.Equal(approved ? "Close" : "Cancel", vm.CloseText);
 		Assert.Equal(!approved, vm.CanApprove);
-		client.Verify(x => x.Authenticate(It.IsAny<string>()), string.IsNullOrWhiteSpace(code) ? Times.Never() : Times.Once());
+		client.Verify(x => x.ApproveQuickConnect(It.IsAny<string>()), string.IsNullOrWhiteSpace(code) ? Times.Never() : Times.Once());
+	}
+
+	[Theory]
+	[InlineData(QuickConnectApproval.Disabled, "Quick Connect is off on")]
+	[InlineData(QuickConnectApproval.Failed, "Couldn't reach")]
+	[InlineData(QuickConnectApproval.NoSuchCode, "That code didn't work")]
+	public async Task QuickConnect_SaysWhenItIsOffOnTheServer_OrTheServerDidNotAnswer(QuickConnectApproval answer, string says)
+	{
+		// review: a server with Quick Connect off answers 403, which read as "That code didn't work"
+		var client = new Mock<IJellyfinClient>();
+		client.Setup(x => x.ApproveQuickConnect("123456")).ReturnsAsync(answer);
+		var vm = new QuickConnectViewModel(client.Object) { QuickConnectCode = "123456" };
+
+		await vm.VerifyQuickConnectCommand.ExecuteAsync(null);
+
+		Assert.StartsWith(says, vm.Status, StringComparison.Ordinal);
+		Assert.True(vm.CanApprove);
 	}
 }

@@ -38,7 +38,13 @@ public sealed record SearchSeeAll(string Query, int Count)
 }
 
 /// <summary>The suggestions for one query.</summary>
-public sealed record SearchUpdate(string Query, IReadOnlyList<object> Suggestions);
+public sealed record SearchUpdate(string Query, IReadOnlyList<object> Suggestions)
+{
+	/// <summary>Seaglass 1.1.4 (review): the search was dropped (Enter, a page change, a sign-out): an empty, closed list.</summary>
+	public static SearchUpdate Dropped { get; } = new("", []);
+
+	public bool IsDropped => ReferenceEquals(this, Dropped);
+}
 
 /// <summary>What the search box does when its query is submitted (Enter, a click on a row, the search button).</summary>
 public abstract record SearchAction
@@ -73,17 +79,23 @@ public static class SearchSuggestions
 	/// <summary>
 	/// Typed queries are searched once the typing pauses for <paramref name="quiet"/>; queries in <paramref name="now"/>
 	/// (choosing "try again") at once, and they drop a typed query still waiting for its pause. A newer query drops the answer
-	/// of any older one still running.
+	/// of any older one still running. Seaglass 1.1.4 (review): a signal in <paramref name="drop"/> (Enter, a page change, a
+	/// sign-out) goes through the same pause at once: a typed query still waiting is dropped, the answer of one still running
+	/// is never shown (a slow search used to open its list over the results page Enter had opened), the list is emptied
+	/// (<see cref="SearchUpdate.Dropped"/>), and the last typed query is forgotten, so typing it again searches again.
 	/// </summary>
-	public static IObservable<SearchUpdate> Pipeline(IObservable<string> typed, IObservable<string> now, Func<string, Task<BaseItemDtoQueryResult?>> search, TimeSpan quiet) =>
-		typed.DistinctUntilChanged()
-			.Select(query => (Query: query, Wait: quiet))
-			.Merge(now.Select(query => (Query: query, Wait: TimeSpan.Zero)))
+	public static IObservable<SearchUpdate> Pipeline(IObservable<string> typed, IObservable<string> now, Func<string, Task<BaseItemDtoQueryResult?>> search, TimeSpan quiet, IObservable<System.Reactive.Unit>? drop = null) =>
+		typed.Select(query => (string?)query)
+			.Merge((drop ?? Observable.Never<System.Reactive.Unit>()).Select(_ => (string?)null))
+			.DistinctUntilChanged()
+			.Select(query => (Query: query, Wait: query is null ? TimeSpan.Zero : quiet))
+			.Merge(now.Select(query => (Query: (string?)query, Wait: TimeSpan.Zero)))
 			.Throttle(x => Observable.Timer(x.Wait))
-			.Select(x => x.Query)
-			.Select(query => Observable.FromAsync(() => search(query))
-				.Catch((Exception _) => Observable.Return<BaseItemDtoQueryResult?>(null))
-				.Select(result => new SearchUpdate(query, For(query, result))))
+			.Select(x => x.Query is not { } query
+				? Observable.Return(SearchUpdate.Dropped)
+				: Observable.FromAsync(() => search(query))
+					.Catch((Exception _) => Observable.Return<BaseItemDtoQueryResult?>(null))
+					.Select(result => new SearchUpdate(query, For(query, result))))
 			.Switch();
 
 	/// <summary>What the list shows for a query's answer (null = the search failed).</summary>

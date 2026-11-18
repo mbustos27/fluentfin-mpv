@@ -82,6 +82,9 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<bool> Authenticate(string code);
 
+		/// <summary>Seaglass 1.1.4: approves another device's Quick Connect code, and how it went.</summary>
+		Task<QuickConnectApproval> ApproveQuickConnect(string code);
+
 		Task<MediaResponse?> GetMediaUrl(BaseItemDto dto, PlaybackSelection? selection = null);
 
 		Uri GetImage(BaseItemDto item, ImageInfo info);
@@ -225,6 +228,9 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task CreateSyncPlayGroup();
 
+		/// <summary>Seaglass 1.1.4: starts a SyncPlay group; null when it started, else why not (the server's refusal said).</summary>
+		Task<string?> StartSyncPlayGroup();
+
 		Task JoinSyncPlayGroup(Guid groupId);
 
 		Task LeaveSyncPlayGroup();
@@ -274,5 +280,20 @@ namespace FluentFin.Core.Contracts.Services
 	public class Metadata
 	{
 		public bool UseFileCreationTimeForDateAdded { get; set; }
+	}
+
+	/// <summary>Seaglass 1.1.4: how approving a Quick Connect code went (IJellyfinClient.ApproveQuickConnect).</summary>
+	public enum QuickConnectApproval
+	{
+		Approved,
+
+		/// <summary>No request is waiting with that code (mistyped, expired).</summary>
+		NoSuchCode,
+
+		/// <summary>Quick Connect is turned off on the server.</summary>
+		Disabled,
+
+		/// <summary>No answer (the connection, the server).</summary>
+		Failed,
 	}
 }

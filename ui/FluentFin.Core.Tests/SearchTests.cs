@@ -82,6 +82,100 @@ public sealed class SearchTests
 		Assert.Contains("Choose this to try again.", failed.ToString(), StringComparison.Ordinal);
 	}
 
+	// ---- review: a search dropped (Enter, a page change, a sign-out) never shows
+
+	private static BaseItemDtoQueryResult Found(string name) => Result(Item(name, BaseItemDto_Type.Movie));
+
+	private static async Task WaitFor(Func<bool> condition)
+	{
+		var watch = System.Diagnostics.Stopwatch.StartNew();
+		while (!condition())
+		{
+			Assert.True(watch.Elapsed < TimeSpan.FromSeconds(5), "timed out");
+			await Task.Delay(10);
+		}
+	}
+
+	[Fact]
+	public async Task ALateAnswer_AfterEnter_IsNeverShown()
+	{
+		// type "matrix", Enter while its search is still running: the results page opened, then the late answer filled the
+		// list and could pop it open over the page
+		var typed = new System.Reactive.Subjects.Subject<string>();
+		var drop = new System.Reactive.Subjects.Subject<System.Reactive.Unit>();
+		var slow = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		var started = new System.Collections.Concurrent.ConcurrentQueue<string>();
+		var updates = new System.Collections.Concurrent.ConcurrentQueue<SearchUpdate>();
+		using var _ = SearchSuggestions.Pipeline(typed, System.Reactive.Linq.Observable.Never<string>(), q => { started.Enqueue(q); return slow.Task; }, TimeSpan.FromMilliseconds(10), drop)
+			.Subscribe(updates.Enqueue);
+
+		typed.OnNext("matrix");
+		await WaitFor(() => started.Contains("matrix"));
+		drop.OnNext(System.Reactive.Unit.Default);
+		await WaitFor(() => !updates.IsEmpty);
+		slow.SetResult(Found("The Matrix"));
+		await Task.Delay(150);
+
+		var update = Assert.Single(updates);
+		Assert.True(update.IsDropped);
+		Assert.Empty(update.Suggestions);
+	}
+
+	[Fact]
+	public async Task EnterWithinThePause_StartsNoSearch()
+	{
+		var typed = new System.Reactive.Subjects.Subject<string>();
+		var drop = new System.Reactive.Subjects.Subject<System.Reactive.Unit>();
+		var started = new System.Collections.Concurrent.ConcurrentQueue<string>();
+		var updates = new System.Collections.Concurrent.ConcurrentQueue<SearchUpdate>();
+		using var _ = SearchSuggestions.Pipeline(typed, System.Reactive.Linq.Observable.Never<string>(), q => { started.Enqueue(q); return Task.FromResult<BaseItemDtoQueryResult?>(Found(q)); }, TimeSpan.FromMilliseconds(200), drop)
+			.Subscribe(updates.Enqueue);
+
+		typed.OnNext("matrix");
+		drop.OnNext(System.Reactive.Unit.Default);
+		await Task.Delay(400);
+
+		Assert.Empty(started);
+		Assert.True(Assert.Single(updates).IsDropped);
+	}
+
+	[Fact]
+	public async Task AfterADrop_TheSameQueryTypedAgain_SearchesAgain()
+	{
+		// the remembered last query is forgotten: coming back and typing "matrix" again lists it again
+		var typed = new System.Reactive.Subjects.Subject<string>();
+		var drop = new System.Reactive.Subjects.Subject<System.Reactive.Unit>();
+		var started = new System.Collections.Concurrent.ConcurrentQueue<string>();
+		var updates = new System.Collections.Concurrent.ConcurrentQueue<SearchUpdate>();
+		using var _ = SearchSuggestions.Pipeline(typed, System.Reactive.Linq.Observable.Never<string>(), q => { started.Enqueue(q); return Task.FromResult<BaseItemDtoQueryResult?>(Found(q)); }, TimeSpan.FromMilliseconds(10), drop)
+			.Subscribe(updates.Enqueue);
+
+		typed.OnNext("matrix");
+		await WaitFor(() => started.Count == 1 && updates.Count == 1);
+		drop.OnNext(System.Reactive.Unit.Default);
+		await WaitFor(() => updates.Count == 2);
+		typed.OnNext("matrix");
+		await WaitFor(() => started.Count == 2 && updates.Count == 3);
+
+		Assert.Equal(["matrix", "matrix"], started);
+		Assert.Equal("matrix", updates.Last().Query);
+		Assert.False(updates.Last().IsDropped);
+	}
+
+	[Fact]
+	public void TheBox_DropsItsSearch_OnEnter_OnAPageChange_AndOnASignOut()
+	{
+		var behavior = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Behaviors/GlobalSearchBoxBehavior.cs"));
+
+		Assert.Contains("TimeSpan.FromMilliseconds(500), _drop)", behavior, StringComparison.Ordinal);
+		// Enter on a row and on the text: both drop it (the retry row searches again instead)
+		var submitted = behavior[behavior.IndexOf("private void AssociatedObject_QuerySubmitted", StringComparison.Ordinal)..];
+		submitted = submitted[..submitted.IndexOf("private void Drop()", StringComparison.Ordinal)];
+		Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(submitted, @"Drop\(\);").Count);
+		// the title bar's reset: another page, or the user signed out (TitleBarAccountTests)
+		Assert.Contains("_titleBar.SearchReset += OnSearchReset;", behavior, StringComparison.Ordinal);
+	}
+
 	// ---- what Enter (or a click on a row) does
 
 	[Fact]

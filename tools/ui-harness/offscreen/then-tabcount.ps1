@@ -11,8 +11,8 @@ function Tab-Count([string]$Page) {
     for ($i = 1; $i -lt $stops.Count; $i++) {
         if ($stops[$i].type -eq $stops[0].type -and $stops[$i].name -eq $stops[0].name -and $stops[$i].class -eq $stops[0].class) { $stops = $stops[0..($i - 1)]; break }
     }
-    # content: not the title bar (its elements are in its top 48 px) nor the navigation rail (left of x 80)
-    $content = @($stops | Where-Object { $_.rect -and $_.rect[0] -ge 80 -and $_.type -ne 'TitleBar' -and -not ($_.rect[1] -lt 48 -and $_.rect[3] -le 48) })
+    # content: not the top bar (its tabs, search and account are in its top 48 px; 1.2.0: there is no rail to leave out)
+    $content = @($stops | Where-Object { $_.rect -and $_.type -ne 'TitleBar' -and -not ($_.rect[1] -lt 48 -and $_.rect[3] -le 48) })
     [pscustomobject]@{ Page = $Page; Method = $walk.method; Stops = $stops.Count; Content = $content.Count }
 }
 

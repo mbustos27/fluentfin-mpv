@@ -18,6 +18,10 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 	// fluentfin-mpv: queries searched at once: choosing "try again" after a failed search (Seaglass 1.1.4: Enter opens the results page)
 	private readonly Subject<string> _searchNow = new();
 
+	// Seaglass 1.1.4 (review): the search is dropped (Enter, a page change, a sign-out): no list, and no late answer opening one
+	private readonly Subject<System.Reactive.Unit> _drop = new();
+	private ViewModels.TitleBarViewModel? _titleBar;
+
 	protected override void OnAttached()
 	{
 		base.OnAttached();
@@ -28,14 +32,24 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 
 		// fluentfin-mpv: "no results" and a failed search (with a retry) are shown instead of nothing, and a newer query's
 		// answer is never replaced by an older one that came back late (SearchSuggestions)
-		_disposable = SearchSuggestions.Pipeline(_textChangedSubject, _searchNow, _jellyfinClient.Search, TimeSpan.FromMilliseconds(500))
+		_disposable = SearchSuggestions.Pipeline(_textChangedSubject, _searchNow, _jellyfinClient.Search, TimeSpan.FromMilliseconds(500), _drop)
 			.Subscribe(update =>
 			{
 				AssociatedObject.DispatcherQueue.TryEnqueue(() =>
 				{
 					AssociatedObject.ItemsSource = update.Suggestions;
+					if (update.IsDropped)
+					{
+						AssociatedObject.IsSuggestionListOpen = false;
+					}
 				});
 			});
+
+		_titleBar = App.GetService<ITitleBarViewModel>() as ViewModels.TitleBarViewModel;
+		if (_titleBar is not null)
+		{
+			_titleBar.SearchReset += OnSearchReset;
+		}
 	}
 
 	/// <summary>
@@ -49,6 +63,7 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 		switch (SearchSuggestions.OnSubmitted(args.ChosenSuggestion, args.QueryText))
 		{
 			case SearchAction.Open open:
+				Drop();
 				sender.IsSuggestionListOpen = false;
 				sender.Text = string.Empty;
 				App.Commands.DisplayDto(open.Item);
@@ -57,11 +72,22 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 				_searchNow.OnNext(retry.Query);
 				break;
 			case SearchAction.ShowResults results:
+				Drop();
 				sender.IsSuggestionListOpen = false;
 				App.GetService<INavigationService>().NavigateTo<SearchResultsViewModel>(results.Query);
 				break;
 		}
 	}
+
+	/// <summary>Seaglass 1.1.4 (review): the list goes, and a search still waiting or running never shows.</summary>
+	private void Drop()
+	{
+		_drop.OnNext(System.Reactive.Unit.Default);
+		AssociatedObject.IsSuggestionListOpen = false;
+		AssociatedObject.ItemsSource = null;
+	}
+
+	private void OnSearchReset(object? sender, EventArgs e) => AssociatedObject.DispatcherQueue.TryEnqueue(Drop);
 
 	private void AssociatedObject_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
 	{
@@ -86,6 +112,11 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 	protected override void OnDetaching()
 	{
 		_disposable?.Dispose();
+		if (_titleBar is not null)
+		{
+			_titleBar.SearchReset -= OnSearchReset;
+		}
+
 		AssociatedObject.TextChanged -= AssociatedObject_TextChanged;
 		AssociatedObject.QuerySubmitted -= AssociatedObject_QuerySubmitted;
 		base.OnDetaching();

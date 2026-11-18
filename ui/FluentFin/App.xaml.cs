@@ -153,7 +153,9 @@ public partial class App : Application
 			services.AddSingleton<IActivationService, ActivationService>();
 			services.AddSingleton<IPageService, PageService>();
 			services.AddSingleton<INavigationViewService, NavigationViewService>();
-			services.AddSingleton<INavigationViewServiceCore>(sp => sp.GetRequiredService<INavigationViewService>());
+			// 1.2.0 (the top bar): the shell's sections are tabs; the plugins' sections and the pins go there (no rail)
+			services.AddSingleton<TopNavigation>();
+			services.AddSingleton<INavigationViewServiceCore>(sp => sp.GetRequiredService<TopNavigation>());
 			services.AddSingleton<INavigationService, NavigationService>();
 			services.AddSingleton((Func<IServiceProvider, INavigationServiceCore>)(sp => sp.GetRequiredService<INavigationService>()));
 			services.AddTransient<IContentDialogService, ContentDialogService>();

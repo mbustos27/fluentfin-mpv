@@ -164,6 +164,10 @@ public static class ItemLabels
 	public static string AccountButtonName(string? userName) =>
 		string.IsNullOrWhiteSpace(userName) ? "Account" : $"Account, {userName.Trim()}";
 
+	/// <summary>The Account button's tooltip (button review T8): "Account (alice)".</summary>
+	public static string AccountTooltip(string? userName) =>
+		string.IsNullOrWhiteSpace(userName) ? "Account" : $"Account ({userName.Trim()})";
+
 	private static string? EpisodeNumber(BaseItemDto dto) => (dto.ParentIndexNumber, dto.IndexNumber) switch
 	{
 		({ } season, { } episode) => $"season {season} episode {episode}",

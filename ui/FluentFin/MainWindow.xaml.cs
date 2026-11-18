@@ -34,6 +34,13 @@ public sealed partial class MainWindow : WindowEx
 		}
 	}
 
+	/// <summary>
+	/// 1.2.0 (the top bar): a page before sign-in (servers, sign-in) starts below the bar, which is drawn over the frame; the
+	/// shell does that for its own pages (it lets a hero run under the bar).
+	/// </summary>
+	private void OnRootNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e) =>
+		RootFrame.Padding = new Thickness(0, e.Content is FluentFin.Views.ShellPage ? 0 : TopBar.Height, 0, 0);
+
 	private bool _acrylic;
 
 	private void RunOnUi(Action action)

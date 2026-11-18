@@ -31,6 +31,21 @@ public partial class QuickConnectViewModel(IJellyfinClient jellyfinClient) : Obs
 
 	public const string FailedStatus = "That code didn't work. Check it on the other device and try again: a code lasts a few minutes.";
 
+	/// <summary>Seaglass 1.1.4 (review): the server answered 403: Quick Connect is off there (it read as a wrong code).</summary>
+	public static string DisabledStatus() =>
+		$"Quick Connect is off on {Core.ViewModels.LoadMessages.ServerName()}. An administrator can turn it on in the server's dashboard, under General.";
+
+	public static string NoAnswerStatus() =>
+		$"Couldn't reach {Core.ViewModels.LoadMessages.ServerName()}. Check the connection, then try again.";
+
+	public static string StatusFor(QuickConnectApproval approval) => approval switch
+	{
+		QuickConnectApproval.Approved => ApprovedStatus,
+		QuickConnectApproval.Disabled => DisabledStatus(),
+		QuickConnectApproval.Failed => NoAnswerStatus(),
+		_ => FailedStatus,
+	};
+
 	[RelayCommand]
 	private async Task VerifyQuickConnect()
 	{
@@ -40,6 +55,6 @@ public partial class QuickConnectViewModel(IJellyfinClient jellyfinClient) : Obs
 			return;
 		}
 
-		Status = await jellyfinClient.Authenticate(QuickConnectCode.Trim()) ? ApprovedStatus : FailedStatus;
+		Status = StatusFor(await jellyfinClient.ApproveQuickConnect(QuickConnectCode.Trim()));
 	}
 }

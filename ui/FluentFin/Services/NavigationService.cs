@@ -137,7 +137,7 @@ public class NavigationService : INavigationService
 	{
 		if (sender is Frame frame)
 		{
-			// Seaglass 1.1.4: the motion follows the direction (a rail section, in, Back out)
+			// Seaglass 1.1.4: the motion follows the direction (a tab, in, Back out)
 			PageTransition.Play(e.Content, e.NavigationMode);
 			var clearNavigation = (bool)frame.Tag;
 			if (clearNavigation)

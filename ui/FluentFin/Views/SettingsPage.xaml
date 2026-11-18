@@ -21,7 +21,7 @@
 
     <!--
         Seaglass 1.1.4 (layout audit, items 3 and 17): no panel around a group: its header (Body Strong) sits above its cards,
-        which keep the toolkit's own card look, as Windows Settings does; the column is left-aligned next to the rail.
+        which keep the toolkit's own card look, as Windows Settings does; the column is left-aligned.
     -->
 
     <!--  fluentfin-mpv: scrolls (the Playback section made it taller than a window) and narrows with the window  -->
@@ -280,7 +280,7 @@
                                                 <Button
                                                     AutomationProperties.Name="{x:Bind vm:SettingsViewModel.RemoveUserLabel(Username)}"
                                                     Click="RemoveUser"
-                                                    Content="Remove"
+                                                    Content="Remove sign-in"
                                                     Tag="{x:Bind}" />
                                             </ctk:SettingsCard>
                                         </DataTemplate>

@@ -56,6 +56,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	[NotifyPropertyChangedFor(nameof(IsBackButtonShown))]
 	[NotifyPropertyChangedFor(nameof(IsAccountShown))]
 	[NotifyPropertyChangedFor(nameof(IsSearchShown))]
+	[NotifyPropertyChangedFor(nameof(IsNavigationShown))]
 	public partial UserDto? User { get; set; }
 
 	/// <summary>
@@ -94,6 +95,7 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	[NotifyPropertyChangedFor(nameof(IsBackButtonShown))]
 	[NotifyPropertyChangedFor(nameof(IsAccountShown))]
 	[NotifyPropertyChangedFor(nameof(IsSearchShown))]
+	[NotifyPropertyChangedFor(nameof(IsNavigationShown))]
 	public partial bool IsPlayerPageShown { get; private set; }
 
 	/// <summary>
@@ -101,6 +103,19 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	/// hides it (x:Bind does not call a function again when its argument becomes null: the box stayed after a sign-out).
 	/// </summary>
 	public bool IsSearchShown => User is not null && !IsPlayerPageShown;
+
+	/// <summary>1.2.0 (the top bar): the section tabs: signed in and not on the player page (its own bar is the way out).</summary>
+	public bool IsNavigationShown => User is not null && !IsPlayerPageShown;
+
+	/// <summary>1.2.0: the wordmark's text until the glass stream's AppWordmark takes its place.</summary>
+	public string AppName { get; } = Core.AppIdentity.Name;
+
+	/// <summary>
+	/// 1.2.0: the page shown starts under the bar (Controls.TopBar.ExtendsUnder: a hero's artwork): the bar shows a dark scrim
+	/// with light text instead of its glass. Set by the shell.
+	/// </summary>
+	[ObservableProperty]
+	public partial bool IsContentUnderBar { get; set; }
 
 	/// <summary>
 	/// The title bar's Back: signed in, and not on a player page that has a Back of its own (Seaglass's player controls do;
@@ -115,14 +130,39 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	/// The shell's frame now shows a page of <paramref name="pageType"/> (null: none, the shell went: Sign out and Switch user
 	/// take it away with whatever page it showed). A navigation that fails never gets here, so nothing stays hidden.
 	/// </summary>
-	public void OnPageShown(Type? pageType)
+	public void OnPageShown(Type? pageType, object? parameter = null)
 	{
 		IsPlayerPageShown = pageType == typeof(VideoPlayerPage);
 
-		// Seaglass 1.1.4 (interaction audit, item 2): the query stays only on its results page; any other page clears it
-		if (pageType != typeof(SearchResultsPage))
+		// Seaglass 1.1.4 (interaction audit, item 2): the query stays only on its results page; any other page clears it.
+		// Review: a results page shows its own query (Back from "the" to "quiet" left "the" in the box), and leaving for any
+		// other page drops the search too: its list, and an answer still on its way (SearchReset, GlobalSearchBoxBehavior).
+		if (pageType == typeof(SearchResultsPage))
+		{
+			if (parameter is string query)
+			{
+				SearchText = query;
+			}
+		}
+		else
 		{
 			SearchText = "";
+			SearchReset?.Invoke(this, EventArgs.Empty);
+		}
+	}
+
+	/// <summary>
+	/// Seaglass 1.1.4 (review): the search is over: a page other than its results was shown, or the user signed out (the title
+	/// bar outlives the session: user B must not see user A's suggestions). The search box drops its list and any answer due.
+	/// </summary>
+	public event EventHandler? SearchReset;
+
+	partial void OnUserChanged(UserDto? value)
+	{
+		if (value is null)
+		{
+			SearchText = "";
+			SearchReset?.Invoke(this, EventArgs.Empty);
 		}
 	}
 

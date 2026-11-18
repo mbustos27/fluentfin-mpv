@@ -36,11 +36,11 @@ public sealed class PageMotionTests
 	}
 
 	[Fact]
-	public void TheNavigation_PassesItsDirection_AndTheShellNamesItsRailPages()
+	public void TheNavigation_PassesItsDirection_AndTheShellNamesItsTabPages()
 	{
 		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
 
 		Assert.Contains("PageTransition.Play(e.Content, e.NavigationMode);", File.ReadAllText(Path.Combine(root, "Services", "NavigationService.cs")));
-		Assert.Contains("PageTransition.IsTopLevel = IsRailPage;", File.ReadAllText(Path.Combine(root, "Views", "ShellPage.xaml.cs")));
+		Assert.Contains("PageTransition.IsTopLevel = IsTabPage;", File.ReadAllText(Path.Combine(root, "Views", "ShellPage.xaml.cs")));
 	}
 }

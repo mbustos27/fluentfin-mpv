@@ -89,11 +89,21 @@ public sealed class AccountMenuXamlTests
 		var doc = Load(TitleBar);
 		var box = doc.Descendants(Presentation + "AutoSuggestBox").Single();
 
-		// a property, so signing out hides it: x:Bind does not call SearchVisibility(User, ...) again once User is null
-		Assert.Equal("{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsSearchShown), Mode=OneWay}", (string?)box.Attribute("Visibility"));
+		// a property, so signing out hides it: x:Bind does not call SearchVisibility(User, ...) again once User is null; 1.2.0: the
+		// box or, in a narrow window, its button (TitleBarControl.ShowSearch), both from IsSearchShown
+		Assert.Equal("Collapsed", (string?)box.Attribute("Visibility"));
+		var show = Code("FluentFin/Views/TitleBarControl.xaml.cs");
+		show = show[show.IndexOf("private void ShowSearch()", StringComparison.Ordinal)..];
+		show = show[..show.IndexOf("\n\t}", StringComparison.Ordinal)];
+		Assert.Contains("var shown = ViewModel.IsSearchShown;", show);
+		Assert.Contains("SearchBox.Visibility = shown && (!_compact || _searchOpen)", show);
+		Assert.Contains("SearchIconButton.Visibility = shown && _compact && !_searchOpen", show);
 		Assert.Equal("Hidden", (string?)box.Attribute("KeyboardAcceleratorPlacementMode"));
 		// layout audit item 20: the version is in Settings > About; the subtitle says "Preview" on a test build only
-		Assert.Equal("{x:Bind ViewModel.Subtitle}", (string?)doc.Descendants(Presentation + "TitleBar").Single().Attribute("Subtitle"));
+		// 1.2.0: the wordmark's own subtitle line, in the bar's left header with the tabs (the TitleBar's own Title and Subtitle unused)
+		Assert.Contains(doc.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute(Xaml + "Name") == "SubtitleText" && (string?)t.Attribute("Text") == "{x:Bind ViewModel.Subtitle}");
+		Assert.Contains(doc.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute(Xaml + "Name") == "WordmarkText" && (string?)t.Attribute("Text") == "{x:Bind ViewModel.AppName}");
+		Assert.Null(doc.Descendants(Presentation + "TitleBar").Single().Attribute("Subtitle"));
 		// layout audit item 10: a friendly kind under a suggestion, not the raw "Series"
 		Assert.Contains(doc.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind cvm:SearchLabels.KindTitle(Item.Type)}");
 	}
@@ -104,18 +114,29 @@ public sealed class AccountMenuXamlTests
 		var code = Code("FluentFin/Views/TitleBarControl.xaml.cs");
 
 		Assert.Contains("ActualThemeChanged += (_, _) => ApplyCaptionTheme();", code);
+		// review: high contrast switched while running (Windows' colours then, or the theme's again)
+		Assert.Contains("_themeSettings.Changed += (_, _) => DispatcherQueue.TryEnqueue(ApplyCaptionTheme);", code);
+		Assert.Contains("var highContrast = _themeSettings?.HighContrast", code);
+		// set up once the window exists, inside a try: subscribing to AccessibilitySettings in the constructor threw, and the
+		// window never opened
+		Assert.Contains("Loaded += (_, _) => WatchHighContrast();", code);
+		Assert.DoesNotContain("HighContrastChanged +=", code);
 		Assert.Contains("bar.PreferredTheme = CaptionThemeFor(ActualTheme, highContrast);", code);
 		Assert.Contains("bar.ButtonForegroundColor = colors?.Foreground;", code);
 		Assert.Contains("bar.ButtonHoverBackgroundColor = colors?.HoverBackground;", code);
 	}
 
 	[Fact]
-	public void TheAccountButton_IsA40PxTarget()
+	public void TheAccountButton_IsA32PxCircle_AndTheSearchIconA32PxSquare()
 	{
+		// button review T8 and T5: they rendered as 40 x 44 ellipses (stretched by the bar's height); 32 px is above WCAG 2.5.8's 24
 		var button = AccountButton();
+		Assert.Equal(("32", "32", "16", "Center"), ((string?)button.Attribute("Width"), (string?)button.Attribute("Height"), (string?)button.Attribute("CornerRadius"), (string?)button.Attribute("VerticalAlignment")));
+		Assert.Equal("{x:Bind core:ItemLabels.AccountTooltip(ViewModel.User.Name), Mode=OneWay}", (string?)button.Attribute("ToolTipService.ToolTip"));
+		Assert.Equal("Account (alice)", ItemLabels.AccountTooltip(" alice "));
 
-		Assert.Equal("40", (string?)button.Attribute("Width"));
-		Assert.Equal("40", (string?)button.Attribute("Height"));
+		var search = Load(TitleBar).Descendants(Presentation + "Button").Single(b => (string?)b.Attribute(Xaml + "Name") == "SearchIconButton");
+		Assert.Equal(("32", "32", "8", "Center"), ((string?)search.Attribute("Width"), (string?)search.Attribute("Height"), (string?)search.Attribute("CornerRadius"), (string?)search.Attribute("VerticalAlignment")));
 	}
 
 	// ---- the title bar while the player page is shown
@@ -136,7 +157,13 @@ public sealed class AccountMenuXamlTests
 
 		// by the page's type, as the frame shows it (not the navigation service's Navigated, which waits for the page's view model)
 		Assert.Contains("NavigationFrame.Navigated += OnFrameNavigated;", shell);
-		Assert.Contains("private void OnFrameNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e) => _titleBar.OnPageShown(e.SourcePageType);", shell);
+		var handler = shell[shell.IndexOf("private void OnFrameNavigated", StringComparison.Ordinal)..];
+		handler = handler[..handler.IndexOf("\n\t}", StringComparison.Ordinal)];
+		// review: with the page's parameter, so a results page puts its own query back in the box
+		Assert.Contains("_titleBar.OnPageShown(e.SourcePageType, e.Parameter);", handler);
+		// 1.2.0: the tab the page marks, and where it starts (under the bar for a hero)
+		Assert.Contains("_top.OnPageShown(KeyOf(e.SourcePageType), e.Parameter);", handler);
+		Assert.Contains("UpdateInsets();", handler);
 		// the shell going (Log out, Switch user) shows them again; a shell back in the window looks again
 		Assert.Contains("Unloaded += (_, _) => _titleBar.OnPageShown(null);", shell);
 		Assert.Contains("_titleBar.OnPageShown(NavigationFrame.Content?.GetType());", shell);
@@ -215,7 +242,7 @@ public sealed class AccountMenuXamlTests
 
 	[Theory]
 	[InlineData(UserPolicy_SyncPlayAccess.None, false, "Not available on this server")]
-	[InlineData(UserPolicy_SyncPlayAccess.JoinGroups, true, "join a group")]
+	[InlineData(UserPolicy_SyncPlayAccess.JoinGroups, true, "Your account can't start one here.")]
 	[InlineData(UserPolicy_SyncPlayAccess.CreateAndJoinGroups, true, "join a group")]
 	public void SyncPlay_FollowsWhatTheServerAllowsThisAccount(UserPolicy_SyncPlayAccess access, bool available, string says)
 	{

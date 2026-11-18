@@ -128,9 +128,32 @@ public sealed class SettingsRemoveAsksTests : IDisposable
 	}
 
 	[Fact]
+	public async Task ForgetLearnedIntros_AsksFirst()
+	{
+		// button review A39: it deleted the learned intros at once
+		var settings = new Mock<ISettings>();
+		var backend = new Mock<IMpvBackend>();
+		backend.SetupGet(x => x.StatusChanged).Returns(Observable.Never<MpvBackendStatus>());
+		var vm = new SettingsViewModel(settings.Object, backend.Object, Mock.Of<IJellyfinClient>(), _cache, new KnownFolders(_folder));
+		ConfirmPrompt? asked = null;
+		vm.Confirm = prompt => { asked = prompt; return Task.FromResult(false); };
+
+		await vm.ForgetLearnedIntrosCommand.ExecuteAsync(null);
+
+		Assert.Equal(SettingsViewModel.ForgetLearnedPrompt, asked);
+		Assert.Equal("Forget learned intros?", asked!.Title);
+		// a no forgets nothing (the status says nothing happened)
+		Assert.Equal("", vm.ForgetLearnedStatus);
+
+		vm.Confirm = _ => Task.FromResult(true);
+		await vm.ForgetLearnedIntrosCommand.ExecuteAsync(null);
+		Assert.NotEqual("", vm.ForgetLearnedStatus);
+	}
+
+	[Fact]
 	public void TheRemoveButtons_AreNamedForWhatTheyRemove()
 	{
-		Assert.Equal("Remove alice", SettingsViewModel.RemoveUserLabel("alice"));
+		Assert.Equal("Remove the sign-in for alice", SettingsViewModel.RemoveUserLabel("alice"));
 		Assert.Equal("Remove server Living room", SettingsViewModel.RemoveServerLabel("Living room"));
 		Assert.Equal("Remove server", SettingsViewModel.RemoveServerLabel(""));
 	}

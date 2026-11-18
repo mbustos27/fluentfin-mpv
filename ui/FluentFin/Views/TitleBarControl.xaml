@@ -32,38 +32,120 @@
             NotEmptyValue="True" />
     </UserControl.Resources>
 
+    <!--
+        1.2.0 (the top bar, replacing the left rail): the window's one bar, over the content (MainWindow, ShellPage): Back, the
+        wordmark (a text placeholder: the glass stream's AppWordmark replaces it), the section tabs (TopTabStrip), then search
+        and the account. One glass layer behind it; over a page that extends under it (a hero, Controls.TopBar.ExtendsUnder) a
+        dark scrim instead, and the bar's text in the dark theme (TitleBarControl.ShowBackground). The TitleBar control keeps
+        the window's drag regions and caption buttons: the tabs, search and account are its interactive areas.
+        Narrow windows (1100 px and below): the tabs fold into one menu button, search into a button that opens the box.
+    -->
+    <Grid x:Name="BarRoot" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsVisible), Mode=OneWay}">
+        <Border
+            x:Name="BarGlass"
+            Background="{ThemeResource GlassPanelBrush}"
+            BorderBrush="{ThemeResource GlassDividerBrush}"
+            BorderThickness="0,0,0,1"
+            IsHitTestVisible="False" />
+        <Rectangle
+            x:Name="BarScrim"
+            IsHitTestVisible="False"
+            Visibility="Collapsed">
+            <Rectangle.Fill>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Offset="0" Color="#B0000000" />
+                    <GradientStop Offset="0.6" Color="#5A000000" />
+                    <GradientStop Offset="1" Color="#00000000" />
+                </LinearGradientBrush>
+            </Rectangle.Fill>
+        </Rectangle>
+    <!--  the wordmark and the tabs in the left header, after Back: the TitleBar centres its Content; the middle stays the drag area  -->
     <TitleBar
         x:Name="TitleBar"
-        Title="Seaglass"
+        Height="48"
         BackRequested="TitleBar_BackRequested"
         IsBackButtonEnabled="{x:Bind ViewModel.CanGoBack, Mode=OneWay}"
         IsBackButtonVisible="{x:Bind ViewModel.IsBackButtonShown, Mode=OneWay}"
-        IsPaneToggleButtonVisible="False"
-        Subtitle="{x:Bind ViewModel.Subtitle}"
-        Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsVisible), Mode=OneWay}">
-        <TitleBar.IconSource>
-            <ImageIconSource ImageSource="/Assets/Seaglass-32.png" />
-        </TitleBar.IconSource>
-        <TitleBar.Content>
+        IsPaneToggleButtonVisible="False">
+        <TitleBar.LeftHeader>
+            <StackPanel
+                x:Name="LeftHeaderPanel"
+                VerticalAlignment="Stretch"
+                Orientation="Horizontal"
+                SizeChanged="OnHeaderSizeChanged">
+                <!--  the wordmark: a text placeholder for the glass stream's AppWordmark (wired at the merge); "Preview" on a test build  -->
+                <StackPanel
+                    x:Name="Wordmark"
+                    Margin="12,0,8,0"
+                    VerticalAlignment="Center"
+                    IsHitTestVisible="False"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <TextBlock
+                        x:Name="WordmarkText"
+                        VerticalAlignment="Center"
+                        FontSize="15"
+                        FontWeight="SemiBold"
+                        Text="{x:Bind ViewModel.AppName}" />
+                    <TextBlock
+                        x:Name="SubtitleText"
+                        VerticalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{ThemeResource CaptionTextBlockStyle}"
+                        Text="{x:Bind ViewModel.Subtitle}" />
+                </StackPanel>
+                <lc:TopTabStrip
+                    x:Name="Tabs"
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Stretch"
+                    Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsNavigationShown), Mode=OneWay}" />
+            </StackPanel>
+        </TitleBar.LeftHeader>
+        <TitleBar.RightHeader>
+            <StackPanel
+                x:Name="RightHeaderPanel"
+                HorizontalAlignment="Right"
+                Orientation="Horizontal"
+                SizeChanged="OnHeaderSizeChanged"
+                Spacing="10">
+                <!--  narrow windows: search is a button that opens the box (it folds back when left empty)  -->
+                <!--  button review T5: a subtle 32 x 32 icon button, radius 8 (it rendered as a 40 x 44 ellipse); the role style at the merge  -->
+                <Button
+                    x:Name="SearchIconButton"
+                    Width="32"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Search"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="OnSearchIconClick"
+                    CornerRadius="8"
+                    ToolTipService.ToolTip="Search (Ctrl+E)"
+                    Visibility="Collapsed">
+                    <FontIcon FontSize="16" Glyph="&#xE721;" />
+                </Button>
             <AutoSuggestBox
                 x:Name="SearchBox"
-                Width="600"
-                Margin="{StaticResource XSmallTopBottomMargin}"
-                CornerRadius="{StaticResource GlassButtonCornerRadius}"
+                Width="320"
+                Height="32"
+                VerticalAlignment="Center"
+                LostFocus="OnSearchLostFocus"
+                CornerRadius="8"
                 AutomationProperties.Name="Search"
                 KeyboardAcceleratorPlacementMode="Hidden"
-                PlaceholderText="Search movies, shows and episodes"
+                PlaceholderText="Search"
                 QueryIcon="Find"
                 Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                 TextMemberPath="Name"
-                Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsSearchShown), Mode=OneWay}">
+                Visibility="Collapsed">
                 <!--
                     Seaglass 1.1.4 (interaction audit, item 2): the arrows only move through the rows, the box showing the row's name
                     (TextMemberPath: every row has a Name); Enter on a row opens it, Enter on the text opens the results page
                     (GlobalSearchBoxBehavior, SearchSuggestions.OnSubmitted). Narrator reads each row's ToString ("Name, year,
                     type"). The text clears when you leave for another page (TitleBarViewModel.OnPageShown).
                 -->
-                <!--  Seaglass: the search box is a glass pill: the frosted brush and the lit edge, the stronger glass while typing  -->
+                <!--  Seaglass: the search box is glass: the frosted brush and the lit edge, the stronger glass while typing (1.2.0: a field's corners, not a pill's)  -->
                 <AutoSuggestBox.Resources>
                     <ResourceDictionary>
                         <ResourceDictionary.ThemeDictionaries>
@@ -147,12 +229,6 @@
                     </ItemsPanelTemplate>
                 </AutoSuggestBox.ItemsPanel>
             </AutoSuggestBox>
-        </TitleBar.Content>
-        <TitleBar.RightHeader>
-            <StackPanel
-                HorizontalAlignment="Right"
-                Orientation="Horizontal"
-                Spacing="10">
                 <!--  fluentfin-mpv: a sign-out in progress (the mpv playback's stop and report, up to ~2 s, then the sign-out request)  -->
                 <StackPanel
                     VerticalAlignment="Center"
@@ -175,20 +251,24 @@
                     went (administrators open the server's administration from Settings > Servers and accounts). Hidden while the player
                     page is shown (fix 5: a Sign out over a playing video is a hazard), from the navigation (TitleBarViewModel).
                 -->
+                <!--  button review T8: a 32 px circle (it rendered as a 40 x 44 ellipse), the tooltip naming the user; the role style at the merge  -->
                 <Button
                     x:Name="AccountButton"
-                    Width="40"
-                    Height="40"
+                    Width="32"
+                    Height="32"
+                    MinHeight="0"
                     Padding="0"
                     HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
                     AutomationProperties.Name="{x:Bind core:ItemLabels.AccountButtonName(ViewModel.User.Name), Mode=OneWay}"
-                    CornerRadius="{StaticResource GlassCircleCornerRadius}"
-                    Style="{StaticResource GlassPillButtonStyle}"
-                    ToolTipService.ToolTip="Account"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    CornerRadius="16"
+                    ToolTipService.ToolTip="{x:Bind core:ItemLabels.AccountTooltip(ViewModel.User.Name), Mode=OneWay}"
                     Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsAccountShown), Mode=OneWay}">
                     <PersonPicture
-                        Width="32"
-                        Height="32"
+                        Width="30"
+                        Height="30"
                         AutomationProperties.AccessibilityView="Raw"
                         DisplayName="{x:Bind ViewModel.User.Name, Mode=OneWay}" />
                     <Button.Flyout>
@@ -269,5 +349,6 @@
             </StackPanel>
         </TitleBar.RightHeader>
     </TitleBar>
+    </Grid>
 
 </UserControl>

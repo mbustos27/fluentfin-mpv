@@ -437,14 +437,18 @@ public static class OffscreenUi {
   // how the searches went (result.json): how many, their total and slowest time, how many had to be tried again
   public static long Searches, SearchMs, SlowestSearchMs, Retries;
 
-  // FluentFin's navigation pane (NavigationView's PaneRoot), for Open-Nav; null before sign-in
+  // 1.2.0: FluentFin's top bar's tab list (TopTabStrip, AutomationId TopTabs; it replaced the rail), for Open-Nav; null before
+  // sign-in. An older build's navigation pane (NavigationView's PaneRoot) when there is no tab list.
   public static AutomationElement NavPane(IntPtr main, int pid) {
-    return Where(main, pid, new PropertyCondition(AutomationElement.AutomationIdProperty, "PaneRoot")).FirstOrDefault();
+    return Where(main, pid, new PropertyCondition(AutomationElement.AutomationIdProperty, "TopTabs")).FirstOrDefault()
+      ?? Where(main, pid, new PropertyCondition(AutomationElement.AutomationIdProperty, "PaneRoot")).FirstOrDefault();
   }
 
+  // a tab of the tab list by name (an older build's navigation item, a list item)
   public static AutomationElement NavItem(AutomationElement pane, string name) {
     return Under(pane, new AndCondition(new PropertyCondition(AutomationElement.NameProperty, name),
-      new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem))).FirstOrDefault();
+      new OrCondition(new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.TabItem),
+        new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem)))).FirstOrDefault();
   }
 
   // scrolls the page's main vertical scroller (the largest vertically scrollable element) to percent (0-100); returns

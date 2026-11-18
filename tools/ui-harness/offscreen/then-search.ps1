@@ -69,6 +69,9 @@ function SrHome { [bool](Find-Ui -Name 'Continue Watching' -Type 'Text' -Offscre
 function SrType([string]$Text, [switch]$Slash) {
     if ($Slash) { Key 0xBF } else { $b = SrBox; if ($b) { [void][OffscreenUi]::SetFocus($b) } }
     SrSettle 500
+    # an empty box first (a results page keeps its query in it); set through UI Automation: no search starts for it
+    $b = SrBox
+    if ($b -and (SrText)) { try { ([System.Windows.Automation.ValuePattern]$b.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)).SetValue(''); SrSettle 300 } catch { } }
     $kw = [OffscreenUi]::KeyWindow($script:hwnd, $script:ui.Id)
     foreach ($ch in $Text.ToCharArray()) { [void][SgSearch.W]::PostMessage($kw, 0x0102, [IntPtr][int]$ch, [IntPtr]1); Start-Sleep -Milliseconds 80 }
     SrSettle 300
@@ -130,3 +133,23 @@ if ($card) {
     $back = Wait-Ui -Name 'Results for' -Type 'Text' -Contains -Seconds 15
     Check 'search: Back returns to the results page' ([bool]$back)
 }
+
+# ---- review: Back between two results pages puts each page's query back in the box
+Open-Nav 'Home'; SrSettle 1200
+SrType 'quiet' -Slash
+Key 0x0D                                                # at once: within the 500 ms pause of the typed search
+$srQuiet = Wait-Ui -Name 'Results for' -Type 'Text' -Contains -Seconds 15
+SrSettle 1800
+# review: the typed search, due after Enter, never opens its list over the results page
+$srLate = @(SrRows | Where-Object { -not $_.Current.IsOffscreen })
+Check 'search: Enter within the typing pause opens the results, and no list opens over them afterwards' ([bool]$srQuiet -and $srLate.Count -eq 0) "rows shown: $($srLate.Count)"
+SrType 'the'
+Key 0x0D
+[void](Wait-Until { if ((SrText) -eq 'the' -and (Find-Ui -Name 'the' -Type 'Text' -Contains)) { $true } } -Seconds 15 -PollMs 200)
+SrSettle 1500
+# the title bar's Back (the keys are the box's while it has the focus)
+$srWinTop = [OffscreenUi]::RectOf([OffscreenUi]::Root($script:hwnd, $script:ui.Id)).Top
+$srBack = @(Find-Ui -Name 'Back' -Type 'Button') | Where-Object { ([OffscreenUi]::RectOf($_).Top - $srWinTop) -lt 48 } | Select-Object -First 1
+if ($srBack) { [void](Invoke-Element $srBack) } else { Say 'search: no Back button in the title bar' }
+$srBackText = Wait-Until { if ((SrText) -eq 'quiet') { 'quiet' } } -Seconds 10 -PollMs 200
+Check 'search: Back to the first results page puts its query back in the box' ($srBackText -eq 'quiet') "text: '$(SrText)'"
