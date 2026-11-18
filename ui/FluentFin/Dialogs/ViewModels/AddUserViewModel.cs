@@ -12,8 +12,16 @@ namespace FluentFin.Dialogs.ViewModels
 	public partial class AddUserViewModel(IJellyfinClient jellyfinClient,
 										  [FromKeyedServices(NavigationRegions.Settings)] INavigationServiceCore navigationService) : ObservableObject, IHandleClose
 	{
+		/// <summary>Nixie 1.2.0 (admin, D46): "Create user" waits for a name; a password is optional, as on the server.</summary>
 		[ObservableProperty]
+		[NotifyPropertyChangedFor(nameof(CanCreate))]
 		public partial string? Username { get; set; }
+
+		public bool CanCreate => !string.IsNullOrWhiteSpace(Username);
+
+		/// <summary>Why the user wasn't created; empty otherwise.</summary>
+		[ObservableProperty]
+		public partial string Error { get; set; } = "";
 
 		[ObservableProperty]
 		public partial string? Password { get; set; }
@@ -40,19 +48,26 @@ namespace FluentFin.Dialogs.ViewModels
 		}
 
 
-		[RelayCommand]
-		private async Task AddUser()
+		/// <summary>
+		/// Creates the user; true when the server did (the dialog closes only then, D46: it closed on an empty form and created
+		/// nothing). The password is sent once and not kept.
+		/// </summary>
+		public async Task<bool> AddUser()
 		{
-			if (string.IsNullOrEmpty(Username) || string.IsNullOrEmpty(Password))
+			Error = "";
+			if (!CanCreate)
 			{
-				return;
+				Error = "Type a name for the new user.";
+				return false;
 			}
 
-			var user = await jellyfinClient.CreateUser(Username, Password);
+			var user = await jellyfinClient.CreateUser(Username!.Trim(), Password ?? "");
+			Password = null;
 
 			if (user is null)
 			{
-				return;
+				Error = "The server didn't create the user. The name may already be taken.";
+				return false;
 			}
 
 			if (user.Policy is { } policy)
@@ -71,6 +86,7 @@ namespace FluentFin.Dialogs.ViewModels
 			}
 
 			navigationService.NavigateTo<UserEditorViewModel>(new UserEditorViewModelNavigationParameter(user, UserEditorSection.Profile));
+			return true;
 		}
 	}
 }

@@ -11,11 +11,11 @@
     xmlns:local="using:FluentFin.Dialogs.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
-    Title="Add User"
+    Title="Add user"
     CloseButtonText="Cancel"
     DefaultButton="Primary"
-    PrimaryButtonCommand="{x:Bind ViewModel.AddUserCommand}"
-    PrimaryButtonText="Save"
+    IsPrimaryButtonEnabled="{x:Bind ViewModel.CanCreate, Mode=OneWay}"
+    PrimaryButtonText="Create user"
     Style="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
     mc:Ignorable="d">
 
@@ -28,16 +28,18 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Hidden">
         <StackPanel Spacing="20">
-            <StackPanel Spacing="5">
-                <TextBlock Text="Username" />
-                <TextBox Text="{x:Bind ViewModel.Username, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            </StackPanel>
-            <StackPanel Spacing="5">
-                <TextBlock Text="Password" />
-                <PasswordBox x:Name="PasswordBox" PasswordChanged="PasswordBox_PasswordChanged" />
-            </StackPanel>
+            <InfoBar
+                IsClosable="False"
+                IsOpen="{x:Bind local:AddUserDialog.HasText(ViewModel.Error), Mode=OneWay}"
+                Message="{x:Bind ViewModel.Error, Mode=OneWay}"
+                Severity="Error" />
+            <TextBox Header="Name" Text="{x:Bind ViewModel.Username, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            <PasswordBox
+                x:Name="PasswordBox"
+                Header="Password (optional)"
+                PasswordChanged="PasswordBox_PasswordChanged" />
             <StackPanel Spacing="10">
-                <TextBlock Style="{ThemeResource SubheaderTextBlockStyle}" Text="Library Access" />
+                <TextBlock Style="{ThemeResource SubtitleTextBlockStyle}" Text="Library access" />
                 <CheckBox Content="Enable access to all libraries" IsChecked="{x:Bind ViewModel.EnableAllFolders, Mode=TwoWay}" />
             </StackPanel>
             <TextBlock

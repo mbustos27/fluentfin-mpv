@@ -26,20 +26,32 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel
-            Margin="0,40,0,36"
-            Orientation="Horizontal"
-            Spacing="16">
-            <TextBlock
-                VerticalAlignment="Center"
-                Style="{ThemeResource SubheaderTextBlockStyle}"
-                Text="Users" />
-            <Button
-                AutomationProperties.Name="Add user"
-                Command="{x:Bind root:App.Dialogs.AddUserDialogCommand}"
-                Content="{ui:SymbolIcon Symbol=Add}"
-                ToolTipService.ToolTip="Add user" />
-            <HyperlinkButton Content="Help" NavigateUri="https://jellyfin.org/docs/general/server/users/adding-managing-users/" />
+        <StackPanel Margin="0,40,0,36" Spacing="12">
+            <StackPanel Orientation="Horizontal" Spacing="16">
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Style="{ThemeResource SubheaderTextBlockStyle}"
+                    Text="Users" />
+                <!--  D25: a text button "Add user" (role: Secondary Compact); Help is a link that leaves the app (D26)  -->
+                <Button x:Name="AddUserButton" Command="{x:Bind root:App.Dialogs.AddUserDialogCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE710;" />
+                        <TextBlock Text="Add user" />
+                    </StackPanel>
+                </Button>
+                <HyperlinkButton NavigateUri="https://jellyfin.org/docs/general/server/users/adding-managing-users/" ToolTipService.ToolTip="Opens jellyfin.org in your browser">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="Help" />
+                        <FontIcon FontSize="12" Glyph="&#xE8A7;" />
+                    </StackPanel>
+                </HyperlinkButton>
+            </StackPanel>
+            <InfoBar
+                Closed="NoticeBar_Closed"
+                IsOpen="{x:Bind local:LibrariesSettingsPage.IsOpen(ViewModel.Notice), Mode=OneWay}"
+                Message="{x:Bind ViewModel.Notice.Message, Mode=OneWay}"
+                Severity="{x:Bind local:DashboardPage.Severity(ViewModel.Notice), Mode=OneWay}"
+                Title="{x:Bind ViewModel.Notice.Title, Mode=OneWay}" />
         </StackPanel>
 
         <ScrollViewer
@@ -74,10 +86,14 @@
                                         TextWrapping="WrapWholeWords" />
                                 </StackPanel>
 
+                                <!--  D27: role Subtle/icon Compact (32), named for its user; D28-D31: sentence case, Delete last after a separator  -->
                                 <Button
                                     Grid.Column="1"
-                                    AutomationProperties.Name="More options"
-                                    Content="{ui:SymbolIcon Symbol=More}"
+                                    Width="32"
+                                    Height="32"
+                                    Padding="0"
+                                    AutomationProperties.Name="{x:Bind local:UsersPage.MoreName(Name)}"
+                                    Content="{ui:FontIcon Glyph=&#xE712;, FontSize=16}"
                                     ToolTipService.ToolTip="More options">
                                     <Button.Flyout>
                                         <MenuBarItemFlyout>
@@ -86,25 +102,24 @@
                                                 CommandParameter="{x:Bind}"
                                                 Icon="{ui:SymbolIcon Symbol=Edit}"
                                                 Tag="{x:Bind vm:UserEditorSection.Profile}"
-                                                Text="Edit User" />
+                                                Text="Edit user" />
                                             <MenuFlyoutItem
-                                                ui:FrameworkElementExtensions.AncestorType="Page"
                                                 Click="MenuFlyoutItem_Click"
                                                 CommandParameter="{x:Bind}"
                                                 Icon="{ui:FontIcon Glyph=&#xE72E;}"
                                                 Tag="{x:Bind vm:UserEditorSection.Access}"
-                                                Text="Library Access" />
+                                                Text="Library access" />
                                             <MenuFlyoutItem
                                                 Click="MenuFlyoutItem_Click"
                                                 CommandParameter="{x:Bind}"
-                                                Icon="{ui:FontIcon Glyph=&#xEA8C;}"
                                                 Tag="{x:Bind vm:UserEditorSection.ParentalControl}"
                                                 Text="Parental control" />
+                                            <MenuFlyoutSeparator />
                                             <MenuFlyoutItem
-                                                Command="{x:Bind root:App.Dialogs.DeleteUserCommand}"
+                                                Click="DeleteUser_Click"
                                                 CommandParameter="{x:Bind}"
                                                 Icon="{ui:SymbolIcon Symbol=Delete}"
-                                                Text="Delete" />
+                                                Text="Delete user…" />
                                         </MenuBarItemFlyout>
                                     </Button.Flyout>
                                 </Button>

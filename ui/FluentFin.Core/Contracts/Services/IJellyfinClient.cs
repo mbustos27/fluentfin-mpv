@@ -169,13 +169,16 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<UserDto?> CreateUser(string username, string password);
 
-		Task DeleteUser(UserDto user);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> DeleteUser(UserDto user);
 
 		Task UpdatePolicy(UserDto user, UserPolicy policy);
 
-		Task ChangePassword(UserDto user, string currentPassword, string newPassword);
+		/// <summary>Nixie 1.2.0 (admin): false when the server did not take it (logged).</summary>
+		Task<bool> ChangePassword(UserDto user, string currentPassword, string newPassword);
 
-		Task ResetPassword(UserDto user);
+		/// <summary>Nixie 1.2.0 (admin): removes the user's password (<c>ResetPassword</c>: they sign in with none); false when it failed (logged).</summary>
+		Task<bool> ResetPassword(UserDto user);
 
 		Task<List<TaskInfo>> GetScheduledTasks(bool? isEnabled);
 

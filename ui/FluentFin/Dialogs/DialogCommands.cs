@@ -42,29 +42,12 @@ public partial class DialogCommands(IContentDialogService dialogService)
 	{
 		var vm = App.GetService<AddUserViewModel>();
 		await vm.Initialize();
-		await dialogService.ShowDialog(vm, dialog => CloseOnlyOnCloseAndPrimaryButtonClick(dialog, vm));
+		// Nixie 1.2.0 (admin, D46): closes only once the user was created (it closed on an empty form and created nothing)
+		await dialogService.ShowDialog(vm, dialog => CloseOnCancelOrSaved(dialog, vm, vm.AddUser));
 	}
 
-	[RelayCommand]
-	private static async Task DeleteUser(UserDto user)
-	{
-		var dialog = new ContentDialog
-		{
-			XamlRoot = App.MainWindow.Content.XamlRoot,
-			Title = "Delete User",
-			Content = $"Are you sure you wan to delete the user : {user.Name}?",
-			CloseButtonText = "No",
-			PrimaryButtonText = "Yes",
-			DefaultButton = ContentDialogButton.Primary
-		};
-
-		var response = await dialog.ShowAsync();
-
-		if (response == ContentDialogResult.Primary)
-		{
-			await App.GetService<IJellyfinClient>().DeleteUser(user);
-		}
-	}
+	// Nixie 1.2.0 (admin, D81): Delete user asks in UsersViewModel.DeleteUser (DestructiveConfirm: "Delete user", Cancel the
+	// default; it was an accent "Yes" as the Enter key, "Are you sure you wan to delete the user : {name}?")
 
 	[RelayCommand]
 	private async Task MediaInfoDialog(BaseItemDto dto) => await ShowBaseItemDialog<MediaInfoViewModel>(dto);

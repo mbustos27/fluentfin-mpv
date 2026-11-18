@@ -243,21 +243,22 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task DeleteUser(UserDto user)
+	public async Task<bool> DeleteUser(UserDto user)
 	{
 		if (user.Id is not { } id)
 		{
-			return;
+			return false;
 		}
 
 		try
 		{
 			await _jellyfinApiClient.Users[id].DeleteAsync();
+			return true; // Nixie 1.2.0 (admin): the card goes only when the server deleted the user
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
 
@@ -279,11 +280,12 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task ChangePassword(UserDto user, string currentPassword, string newPassword)
+	// Nixie 1.2.0 (admin): ChangePassword and ResetPassword say whether the server took it (the page shows it)
+	public async Task<bool> ChangePassword(UserDto user, string currentPassword, string newPassword)
 	{
 		if (user.Id is not { } id)
 		{
-			return;
+			return false;
 		}
 
 		try
@@ -293,19 +295,20 @@ public partial class JellyfinClient
 				CurrentPassword = currentPassword,
 				NewPw = newPassword,
 			}, x => x.QueryParameters.UserId = id);
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
 
-	public async Task ResetPassword(UserDto user)
+	public async Task<bool> ResetPassword(UserDto user)
 	{
 		if (user.Id is not { } id)
 		{
-			return;
+			return false;
 		}
 
 		try
@@ -314,11 +317,12 @@ public partial class JellyfinClient
 			{
 				ResetPassword = true,
 			}, x => x.QueryParameters.UserId = id);
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
 
