@@ -20,6 +20,9 @@ public static class ItemRowConverters
 
 	public static Visibility Show(bool value) => value ? Visibility.Visible : Visibility.Collapsed;
 
+	/// <summary>1.2.0 (Nixie button review, I5 and I25): the favourite toggle's heart, an outline when off, filled when on.</summary>
+	public static string FavoriteGlyph(bool? on) => on == true ? "" : "";
+
 	public static Visibility Show(int count) => count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
 }

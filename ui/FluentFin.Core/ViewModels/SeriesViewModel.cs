@@ -48,6 +48,12 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 				return;
 			}
 
+			// one episode of an Undo: the kept episodes follow; the page refreshes once, at the Undo's end (Mixed)
+			if (e.Partial)
+			{
+				_seriesEpisodes.Apply(e);
+				return;
+			}
 			var series = e.ItemId == id;
 			var season = Seasons?.Any(x => x.Dto.Id == e.ItemId) == true;
 			var episode = Episodes.Any(x => x.Id == e.ItemId) || NextUp?.Dto.Id == e.ItemId || _seriesEpisodes.Contains(id, e.ItemId);

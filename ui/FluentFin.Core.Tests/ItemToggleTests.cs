@@ -179,11 +179,13 @@ public sealed class ItemToggleTests
 		await Commands().SetWatched(season, true);
 		await WaitUntil(() => _client.Invocations.Any(i => i.Method.Name == nameof(IJellyfinClient.GetItems)));
 
-		// gone from the page: no more refreshes
+		// gone from the page: no more refreshes (the page's own fetch of its season; marking the season reads its list for the
+		// Undo, which is not the page's)
 		await vm.OnNavigatedFrom();
 		_client.Invocations.Clear();
 		await Commands().SetWatched(season, false);
-		Assert.DoesNotContain(_client.Invocations, i => i.Method.Name is nameof(IJellyfinClient.GetItems) or nameof(IJellyfinClient.GetSeriesEpisodes));
+		await Task.Delay(100);
+		Assert.DoesNotContain(_client.Invocations, i => i.Method.Name is nameof(IJellyfinClient.GetItem) or nameof(IJellyfinClient.GetSeriesEpisodes));
 	}
 
 	[Fact]

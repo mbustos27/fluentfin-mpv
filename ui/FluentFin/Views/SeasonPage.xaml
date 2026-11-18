@@ -39,7 +39,6 @@
                             fix 12); Narrator and the tooltip get the episode's title too. The padding makes room for the bar in 44 px.
                         -->
                         <Button
-                            Padding="22,8"
                             AutomationProperties.Name="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}"
                             Command="{x:Bind root:App.Commands.PlayDtoCommand}"
                             CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"
@@ -115,7 +114,7 @@
                         </ItemsControl.ItemsPanel>
                     </controls:EpisodeList>
                     <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
-                    <controls:CastRow Heading="Cast &amp; Crew" People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />
+                    <controls:CastRow Heading="Cast &amp; crew" People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

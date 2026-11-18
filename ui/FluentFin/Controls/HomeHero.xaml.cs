@@ -127,7 +127,7 @@ public sealed partial class HomeHero : UserControl
 		for (var i = 0; i < _slides.Count; i++)
 		{
 			var at = i;
-			// 1.2.0: a 24 px target (WCAG 2.5.8; it was 22) with no gap between dots, so they sit as far apart as before
+			// 1.2.0: a 32 px target (Nixie button review, I20; it was 22) with no gap between dots
 			var dot = new Button
 			{
 				Width = HeroDots.TargetSize, Height = HeroDots.TargetSize, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
@@ -156,6 +156,8 @@ public sealed partial class HomeHero : UserControl
 			((Button)Dots.Children[i]).IsTabStop = i == index;
 			ellipse.Opacity = i == index ? 1 : 0.45;
 			ellipse.Width = ellipse.Height = i == index ? 10 : 8;
+			// 1.2.0 (Nixie button review, I20): Narrator hears which slide is shown, not only the eye (the dot's size)
+			AutomationProperties.SetItemStatus(Dots.Children[i], i == index ? "Current slide" : "");
 		}
 
 		var baseUrl = SessionInfo.BaseUrl ?? "";
@@ -187,8 +189,9 @@ public sealed partial class HomeHero : UserControl
 		MetaText.Visibility = string.IsNullOrEmpty(slide.Meta) ? Visibility.Collapsed : Visibility.Visible;
 		OverviewText.Text = slide.Overview;
 		OverviewText.Visibility = string.IsNullOrEmpty(slide.Overview) ? Visibility.Collapsed : Visibility.Visible;
-		PlayText.Text = slide.PlayLabel;
-		AutomationProperties.SetName(PlayButton, $"{slide.PlayLabel} {slide.Title}");
+		// 1.2.0 (Nixie button review, I16): the item pages' words, "Resume at 12:34" or "Play"; named as a card's Play is
+		PlayText.Text = ItemLabels.PlayLabel(slide.Dto);
+		AutomationProperties.SetName(PlayButton, ItemLabels.PlayAction(slide.Dto) is { Length: > 4 } name ? name : $"Play {slide.Title}");
 		AutomationProperties.SetName(MoreInfoButton, $"More info about {slide.Title}");
 
 		if (slide.LogoUri(baseUrl, 600) is { } logo)
@@ -357,9 +360,9 @@ internal static class HeroDots
 	public static int Step(int current, int count, int delta) =>
 		count <= 0 ? -1 : (((current + delta) % count) + count) % count;
 
-	/// <summary>1.2.0: each dot's target, the WCAG 2.5.8 minimum (the dot drawn in it stays 8 px, 10 for the slide shown);
-	/// the dots have no gap (HomeHero.xaml), so their centres stay 24 px apart as before (22 + 2).</summary>
-	public const double TargetSize = 24;
+	/// <summary>1.2.0: each dot's target (Nixie button review, I20: 32 px, above the WCAG 2.5.8 floor of 24; the dot drawn
+	/// in it stays 8 px, 10 for the slide shown); the dots have no gap (HomeHero.xaml).</summary>
+	public const double TargetSize = 32;
 
 	public static int? KeyTarget(Windows.System.VirtualKey key, int current, int count)
 	{

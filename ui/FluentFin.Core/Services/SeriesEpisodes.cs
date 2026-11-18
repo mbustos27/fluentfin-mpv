@@ -90,7 +90,8 @@ public sealed class SeriesEpisodes : IDisposable
 	/// <summary>A toggle the server took: the kept episodes follow its answer. The same change twice changes nothing more.</summary>
 	public void Apply(ItemUserDataChangedEventArgs change)
 	{
-		if (change.Failed)
+		// an Undo's series or season: its episodes came one by one (Partial), each as the server has it, so none is marked here
+		if (change.Failed || change.Mixed)
 		{
 			return;
 		}

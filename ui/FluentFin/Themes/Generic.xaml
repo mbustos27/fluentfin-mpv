@@ -12,7 +12,6 @@
     xmlns:ui="using:CommunityToolkit.WinUI">
 
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/Styles/PlayableMediaItem.xaml" />
         <ResourceDictionary Source="/Styles/MenuFlyoutButton.xaml" />
     </ResourceDictionary.MergedDictionaries>
 

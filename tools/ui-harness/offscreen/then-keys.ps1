@@ -3,7 +3,8 @@
 # the unmodified keys are used: the Back and Forward keys (VK 0xA6 / 0xA7, the same handler as Alt+Left / Mouse 4) and F1 (the sheet).
 # XButton and Alt+Left are covered by the unit tests (AppShortcuts, AppMouse); a real Mouse 4 / Mouse 5 click is a manual check.
 
-function Season-Shown { [bool][OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Play, ', $fixture.episode.name) }
+# the season page: its own Watched ("Mark Season 1 of <series> as ..."); 1.2.0's series page lists the same rows
+function Season-Shown { [bool][OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, "Mark $($fixture.season.name) of ", '') }
 
 Check 'keys: on the season page to begin with' (Season-Shown)
 

@@ -27,19 +27,19 @@ public sealed class ItemLayoutXamlTests
 	[InlineData("SeriesPage")]
 	public void MoreLikeThis_IsNotDrawnWhenEmpty(string page)
 	{
-		var row = Load($"FluentFin/Views/{page}.xaml").Descendants().Single(e => e.Name.LocalName == "ShelfRow" && (string?)e.Attribute("Header") == "More Like This");
+		var row = Load($"FluentFin/Views/{page}.xaml").Descendants().Single(e => e.Name.LocalName == "ShelfRow" && (string?)e.Attribute("Header") == "More like this");
 
 		Assert.Equal("{x:Bind c:ItemRowConverters.Show(ViewModel.Similar.Count), Mode=OneWay, FallbackValue=Collapsed}", (string?)row.Attribute("Visibility"));
 	}
 
 	[Fact]
-	public void EpisodePage_SaysNextUp_AsHomeDoes_AndItsSectionIsHiddenWithoutOne()
+	public void EpisodePage_SaysNextUp_InSentenceCase_AndItsSectionIsHiddenWithoutOne()
 	{
 		var doc = Load("FluentFin/Views/EpisodePage.xaml");
-		var heading = doc.Descendants().Single(e => e.Name.LocalName == "TextBlock" && (string?)e.Attribute("Text") == "Next Up");
+		var heading = doc.Descendants().Single(e => e.Name.LocalName == "TextBlock" && (string?)e.Attribute("Text") == "Next up");
 
 		Assert.Equal("{x:Bind ViewModel.HasNextEpisode, Mode=OneWay}", (string?)heading.Parent!.Attribute("Visibility"));
-		Assert.DoesNotContain(doc.Descendants(), e => (string?)e.Attribute("Text") == "Up next");
+		Assert.DoesNotContain(doc.Descendants(), e => (string?)e.Attribute("Text") is "Up next" or "Next Up");
 	}
 
 	[Fact]
@@ -159,7 +159,7 @@ public sealed class ItemLayoutXamlTests
 		Assert.Contains("TitleText.Text = ItemRowConverters.EpisodeTitle(dto);", code);
 		Assert.Contains("public static string EpisodeTitle(BaseItemDto? episode) => ItemLabels.EpisodeTitle(episode);", Code("FluentFin.Core/ItemMeta.cs"));
 		var row = Load("FluentFin/Controls/EpisodeRow.xaml");
-		Assert.Same(FindByName(row, "TitleText").Parent, FindByName(row, "RuntimeText").Parent);
+		Assert.Same(FindByName(row, "TitleLink").Parent, FindByName(row, "RuntimeText").Parent);
 	}
 
 	[Fact]

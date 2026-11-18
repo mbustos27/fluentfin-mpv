@@ -64,10 +64,10 @@ $itCardShown = {
     if ($c) { [void][OffscreenUi]::SetFocus($c); It-Settle 1200 }
 }
 & $itCardShown
-$itCardNames = It-Names 'card' @('Play ', 'Mark ', 'Add ', 'Remove ', 'More options')
+$itCardNames = It-Names 'card' @('Play ', 'Resume ', 'Mark ', 'Add ', 'Remove ', 'More options')
 Dump-Tree "items-$itTag-card"
 $itCardTitle = if ($itFirstCard) { ($itFirstCard.Cached.Name -split ',')[0] } else { '' }
-Check 'items: the focused card''s buttons are named for its item' ($itCardTitle -and @($itCardNames | Where-Object { $_ -like "*| Play $itCardTitle*" }).Count -ge 1 -and @($itCardNames | Where-Object { $_ -match "\| (Mark .* as (un)?watched)" -and $_ -like "*$itCardTitle*" }).Count -ge 1 -and @($itCardNames | Where-Object { $_ -like "*More options for $itCardTitle*" }).Count -ge 1) "card '$itCardTitle'"
+Check 'items: the focused card''s buttons are named for its item' ($itCardTitle -and @($itCardNames | Where-Object { $_ -like "*| Play $itCardTitle*" -or $_ -like "*| Resume $itCardTitle*" }).Count -ge 1 -and @($itCardNames | Where-Object { $_ -match "\| (Mark .* as (un)?watched)" -and $_ -like "*$itCardTitle*" }).Count -ge 1 -and @($itCardNames | Where-Object { $_ -like "*More options for $itCardTitle*" }).Count -ge 1) "card '$itCardTitle'"
 It-Widths 'card-buttons' $itCardShown
 
 # --- the movie page: its icon buttons named for the movie
@@ -221,7 +221,21 @@ if ($itP2) {
         $itT2 = Wait-Ui -Name $itS2Off -Type 'Button' -Seconds 15
         if ($itT2) {
             It-Toggle $itT2
-            [void](Wait-Ui -Name $itS2On -Type 'Button' -Seconds 10); It-Settle 2000
+            [void](Wait-Ui -Name $itS2On -Type 'Button' -Seconds 10)
+            # marking a whole season offers an Undo that puts each episode back (Nixie button review, I24)
+            $itUndo = Wait-Ui -Name 'Undo' -Type 'Button' -Seconds 8
+            Check 'items: marking a whole season watched offers an Undo' ([bool]$itUndo)
+            Shot "$itTag-season2-undo-notice"
+            if ($itUndo) {
+                [void](Invoke-Element $itUndo)
+                $itBackOff = Wait-Ui -Name $itS2Off -Type 'Button' -Seconds 15
+                It-Settle 1500
+                $itE2u = Find-Ui -Name 'S2 E2 ' -Type 'ListItem' -Contains -OffscreenToo
+                Check 'items: ... and Undo puts its episodes back (Season 2 and S2 E2 unwatched again)' ([bool]$itBackOff -and $itE2u -and $itE2u.Current.Name -notlike '*, watched*') $(if ($itE2u) { $itE2u.Current.Name })
+                $itT2 = Find-Ui -Name $itS2Off -Type 'Button'
+                if ($itT2) { It-Toggle $itT2; [void](Wait-Ui -Name $itS2On -Type 'Button' -Seconds 10) }
+            }
+            It-Settle 2000
             $itE2 = Wait-Until { Find-Ui -Name 'S2 E2 ' -Type 'ListItem' -Contains -OffscreenToo } -Seconds 10 -PollMs 200
             if ($itE2) {
                 [void][OffscreenUi]::SetFocus($itE2); It-Settle 600

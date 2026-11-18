@@ -394,6 +394,14 @@ function Step-Library {
     Capture-Page 'library'
 }
 
+# the fixture episode's row: the row itself plays it (a list item, or a button on its own; its Play disc is only a picture
+# since 1.2.0), else the row's Play button of an older build ("Play, episode 1, <name>")
+function Find-EpisodeRow {
+    $row = Find-Ui -Name $fixture.episode.name -Type 'ListItem' -Contains -OffscreenToo
+    if ($row) { return $row }
+    [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Play, ', $fixture.episode.name)
+}
+
 function Step-Movie {
     if ($script:page -ne "library:$($fixture.movie.library)") { Open-Library $fixture.movie.library }
     $at = Get-Epoch
@@ -428,7 +436,7 @@ function Step-Season([bool]$Capture = $true) {
     # the season page's own Watched ("Mark Season 1 of <series> as ..."), so the series page's rows do not count
     $play = Wait-Until {
         if ([OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, "Mark $($fixture.season.name) of ", '')) {
-            [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Play, ', $fixture.episode.name)
+            Find-EpisodeRow
         }
     } -Seconds 20 -PollMs 150
     $timings.season_page_ms = Ms $at (Get-Epoch)
@@ -440,8 +448,8 @@ function Step-Season([bool]$Capture = $true) {
 
 function Step-Play {
     if ($script:page -ne 'season') { Step-Season $false }
-    # the episode row's Play: "Play, episode 1, <name>" (a11y-items names each row's buttons)
-    $play = [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Play, ', $fixture.episode.name)
+    # the episode's row plays it (Find-EpisodeRow)
+    $play = Find-EpisodeRow
     if (-not $play) { throw "no Play button for '$($fixture.episode.name)'" }
     $playAt = Get-Epoch
     [void](Invoke-Element $play)
@@ -522,12 +530,12 @@ function Step-Leave {
     $how = if ($PlayerControls -eq 'Mpv') { 'q' } else { 'Esc' }
     $keyWorked = $true
     if ($PlayerControls -eq 'Mpv') { Send-PlayerKey 0x51 'q' } else { Key 0x1B }
-    $back = Wait-Until { [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Play, ', $fixture.episode.name) } -Seconds $(if ($PlayerControls -eq 'Mpv') { 20 } else { 5 }) -PollMs 150
+    $back = Wait-Until { Find-EpisodeRow } -Seconds $(if ($PlayerControls -eq 'Mpv') { 20 } else { 5 }) -PollMs 150
     if (-not $back -and $PlayerControls -eq 'FluentFin') {
         $keyWorked = $false
         $btn = Find-Ui -Id 'BackButton'
         if ($btn) { [void](Invoke-Element $btn); $how = 'Esc did nothing; the Back button left' } else { $how = 'Esc did nothing and the controls are hidden' }
-        $back = Wait-Until { [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, 'Play, ', $fixture.episode.name) } -Seconds 15 -PollMs 150
+        $back = Wait-Until { Find-EpisodeRow } -Seconds 15 -PollMs 150
     }
     $timings.leave_player_ms = Ms $at (Get-Epoch)
     $stopped = Wait-Until { @(Get-Requests $at | Where-Object { $_.route -eq 'report-stopped' }) | Select-Object -First 1 } -Seconds 15

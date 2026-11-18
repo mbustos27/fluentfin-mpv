@@ -81,12 +81,11 @@ Press 0x26 900   # Up from the first: out of the list
 $above = Info
 Check 'season: Up from the first episode leaves the list (to the season pills above)' ($above -and $above.Class -ne 'EpisodeRow') (Describe $above)
 
-# --- Play (on the thumbnail) and the row's "…" are there for the pointer, named for the episode, not Tab stops; 1.2.0:
-# Watched and Favourite are in the row's menu, not buttons (one watched mark: the thumbnail's)
-$playBtn = Find-Ui -Name "Play, episode 1, $($fixture.episode.name)" -Type 'Button'
+# --- the row's "…" is there for the pointer, named for the episode, not a Tab stop; 1.2.0 (Nixie button review, I8): the
+# Play disc on the thumbnail is a picture (the row is the button: a click, Enter, Invoke); Watched and Favourite are in the menu
 $moreBtn = Find-Ui -Name "More options, episode 1, $($fixture.episode.name)" -Type 'Button'
-Check 'season: Play and the row''s "…" are on the row, named for the episode' ($playBtn -and $moreBtn)
-Check 'season: ... and have no Tab stop of their own' ($playBtn -and -not $playBtn.Cached.IsKeyboardFocusable -and $moreBtn -and -not $moreBtn.Cached.IsKeyboardFocusable)
+Check 'season: the row''s "…" is on the row, named for the episode, not a Tab stop' ($moreBtn -and -not $moreBtn.Cached.IsKeyboardFocusable)
+Check 'season: the Play disc is no button of its own (the row plays)' (-not (Find-Ui -Name "Play, episode 1, $($fixture.episode.name)" -Type 'Button'))
 Check 'season: Watched and Favourite are not buttons on the row (they are in its menu)' (-not (Find-Ui -Name "Favorite, episode 1, $($fixture.episode.name)" -Type 'Button') -and -not (Find-Ui -Name "Mark as unwatched, episode 1, $($fixture.episode.name)" -Type 'Button') -and -not (Find-Ui -Name "Mark as watched, episode 1, $($fixture.episode.name)" -Type 'Button'))
 
 # --- the menu key: the row's menu, the episode's page first, favourite in it

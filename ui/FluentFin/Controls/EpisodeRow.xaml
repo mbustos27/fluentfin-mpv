@@ -70,32 +70,27 @@
                         </ProgressBar.Resources>
                     </ProgressBar>
                     <!--
-                        1.2.0 (1.1.3 UX audit, layout item 14 and interaction item 6): Play is a disc on the thumbnail, shown
-                        while the row is pointed at or has the keyboard (always there for Narrator and UI Automation, named for its
-                        episode; no Tab stop of its own: the row is the stop and Enter plays). A click anywhere on the row plays too.
+                        1.2.0 (Nixie button review, I8): a decorative Play disc on the thumbnail while the row is pointed at or has
+                        the keyboard; the row itself is the button (a click, Enter, Narrator's Invoke all play), so the disc takes
+                        no click and Narrator does not read it.
                     -->
-                    <Button
-                        x:Name="PlayButton"
+                    <Border
+                        x:Name="PlayDisc"
                         Width="44"
                         Height="44"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        AutomationProperties.Name="Play"
+                        AutomationProperties.AccessibilityView="Raw"
                         Background="{StaticResource Black65O}"
-                        BorderThickness="0"
-                        Command="{x:Bind root:App.Commands.PlayDtoCommand}"
                         CornerRadius="22"
-                        IsTabStop="False"
+                        IsHitTestVisible="False"
                         Opacity="0"
-                        Padding="0"
-                        RequestedTheme="Dark"
-                        Style="{ThemeResource BareButtonStyle}"
-                        ToolTipService.ToolTip="Play">
+                        RequestedTheme="Dark">
                         <FontIcon
-                            FontSize="18"
+                            FontSize="20"
                             Foreground="{ThemeResource GlassTextPrimaryBrush}"
                             Glyph="&#xF5B0;" />
-                    </Button>
+                    </Border>
                     <Border
                         x:Name="WatchedMark"
                         Margin="6"
@@ -124,17 +119,23 @@
                         "Mark as watched" is in the menu.
                     -->
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock
-                            x:Name="TitleText"
+                        <!--  1.2.0 (Nixie button review, I9): a neutral link to the episode's page, no Tab stop of its own (the row menu's "Episode details" is the keyboard's)  -->
+                        <HyperlinkButton
+                            x:Name="TitleLink"
                             MaxWidth="560"
+                            Padding="0"
                             VerticalAlignment="Center"
-                            FontWeight="SemiBold"
+                            Click="TitleLink_Click"
                             Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                            IsTabStop="False"
                             PointerEntered="Title_PointerEntered"
                             PointerExited="Title_PointerExited"
-                            Tapped="Title_Tapped"
-                            TextTrimming="CharacterEllipsis"
-                            ToolTipService.ToolTip="Episode details" />
+                            ToolTipService.ToolTip="Episode details">
+                            <TextBlock
+                                x:Name="TitleText"
+                                FontWeight="SemiBold"
+                                TextTrimming="CharacterEllipsis" />
+                        </HyperlinkButton>
                         <TextBlock
                             x:Name="RuntimeText"
                             VerticalAlignment="Center"
@@ -150,7 +151,7 @@
                             Background="Transparent"
                             Click="MoreButton_Click"
                             Content="{ui:SymbolIcon Symbol=More}"
-                            CornerRadius="16"
+                            CornerRadius="8"
                             IsTabStop="False"
                             Style="{StaticResource IconButtonStyle}"
                             ToolTipService.ToolTip="More options" />

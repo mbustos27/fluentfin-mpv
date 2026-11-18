@@ -76,6 +76,12 @@ namespace FluentFin.Core.Contracts.Services
 		/// <returns>1.2.0: the item's user data as the server has it now; null when the request failed.</returns>
 		Task<UserItemDataDto?> SetPlayed(BaseItemDto dto, bool played);
 
+		/// <summary>
+		/// 1.2.0: puts an item's watched state and resume point back as they were (an Undo of marking a whole series or season;
+		/// <c>POST /UserItems/{id}/UserData</c>). The server's answer; null when the request failed.
+		/// </summary>
+		Task<UserItemDataDto?> SetUserData(Guid id, bool played, long positionTicks);
+
 		Task<bool> Authenticate(string code);
 
 		Task<MediaResponse?> GetMediaUrl(BaseItemDto dto, PlaybackSelection? selection = null);

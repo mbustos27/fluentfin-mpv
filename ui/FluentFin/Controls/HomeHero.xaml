@@ -116,19 +116,19 @@
                 <Button
                     x:Name="PauseButton"
                     RequestedTheme="Dark"
-                    Width="24"
-                    Height="24"
+                    Width="32"
+                    Height="32"
                     Padding="0"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="Pause slideshow"
                     Background="Transparent"
                     BorderThickness="0"
                     Click="PauseButton_Click"
-                    CornerRadius="12"
+                    CornerRadius="8"
                     ToolTipService.ToolTip="Pause slideshow">
                     <FontIcon
                         x:Name="PauseIcon"
-                        FontSize="11"
+                        FontSize="16"
                         Foreground="{ThemeResource GlassTextPrimaryBrush}"
                         Glyph="&#xE769;" />
                 </Button>
@@ -136,23 +136,23 @@
                 <Button
                     x:Name="PreviousButton"
                     RequestedTheme="Dark"
-                    Width="24"
-                    Height="24"
+                    Width="32"
+                    Height="32"
                     Padding="0"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="Previous slide"
                     Background="Transparent"
                     BorderThickness="0"
                     Click="PreviousButton_Click"
-                    CornerRadius="12"
+                    CornerRadius="8"
                     IsTabStop="False"
                     ToolTipService.ToolTip="Previous slide">
                     <FontIcon
-                        FontSize="11"
+                        FontSize="16"
                         Foreground="{ThemeResource GlassTextPrimaryBrush}"
                         Glyph="&#xE76B;" />
                 </Button>
-                <!--  1.2.0: the dots' targets are 24 px and touch (HeroDots.TargetSize), so they keep their old spacing  -->
+                <!--  1.2.0 (Nixie button review, I18-I21): the dots and the buttons beside them are 32 px targets (HeroDots.TargetSize), the buttons' glyphs 16 px  -->
                 <StackPanel
                     x:Name="Dots"
                     AutomationProperties.Name="Slides"
@@ -162,19 +162,19 @@
                 <Button
                     x:Name="NextButton"
                     RequestedTheme="Dark"
-                    Width="24"
-                    Height="24"
+                    Width="32"
+                    Height="32"
                     Padding="0"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="Next slide"
                     Background="Transparent"
                     BorderThickness="0"
                     Click="NextButton_Click"
-                    CornerRadius="12"
+                    CornerRadius="8"
                     IsTabStop="False"
                     ToolTipService.ToolTip="Next slide">
                     <FontIcon
-                        FontSize="11"
+                        FontSize="16"
                         Foreground="{ThemeResource GlassTextPrimaryBrush}"
                         Glyph="&#xE76C;" />
                 </Button>

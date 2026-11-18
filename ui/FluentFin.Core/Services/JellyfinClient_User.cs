@@ -167,6 +167,21 @@ public partial class JellyfinClient
 		}
 	}
 
+	public async Task<UserItemDataDto?> SetUserData(Guid id, bool played, long positionTicks)
+	{
+		try
+		{
+			return await _jellyfinApiClient.UserItems[id].UserData.PostAsync(
+				new UpdateUserItemDataDto { Played = played, PlaybackPositionTicks = Math.Max(0, positionTicks) },
+				x => x.QueryParameters.UserId = UserId);
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "Setting the user data of {ItemId} failed", id);
+			return null;
+		}
+	}
+
 	public async Task<UserItemDataDto?> SetPlayed(BaseItemDto dto, bool played)
 	{
 		try

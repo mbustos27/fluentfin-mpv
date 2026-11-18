@@ -42,6 +42,7 @@ public sealed partial class BaseItemDtoCard : UserControl
 	public BaseItemDtoCard()
 	{
 		InitializeComponent();
+		UndoToast.Listen(); // 1.2.0: the Undo after a whole series or season is marked
 		// 1.2.0: the card shows its item's watched and favourite state as the server has it, whichever surface changed it
 		Loaded += (_, _) => ItemUserData.Changed += OnUserDataChanged;
 		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;

@@ -12,11 +12,11 @@ public sealed class TargetSizeTests
 	private const double WcagMinimum = 24;
 
 	[Fact]
-	public void HeroDots_AreAtLeast24Px_AndKeepTheirOldSpacing()
+	public void HeroDots_Are32PxTargets()
 	{
+		// 1.2.0 (Nixie button review, I20): the "Compact" target, above the WCAG floor (it was 24, 22 before)
 		Assert.True(HeroDots.TargetSize >= WcagMinimum, $"a dot's target is {HeroDots.TargetSize} px");
-		// the dots touch (no gap), so their centres sit 24 px apart: 22 px and a 2 px gap before
-		Assert.Equal(22 + 2, HeroDots.TargetSize);
+		Assert.Equal(32, HeroDots.TargetSize);
 	}
 
 	[Fact]

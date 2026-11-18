@@ -34,7 +34,20 @@ public sealed class ItemActionLabelsTests
 	{
 		Assert.Equal("Play Electric Ravenmoor", ItemLabels.PlayAction(Movie));
 		Assert.Equal("More options for Electric Ravenmoor", ItemLabels.MoreOptions(Movie));
-		Assert.Equal("Play Electric Ravenmoor from the beginning", ItemLabels.PlayFromBeginningAction(Movie));
+		// 1.2.0 (Nixie button review, I37): the button reads "Play from start"
+		Assert.Equal("Play Electric Ravenmoor from start", ItemLabels.PlayFromBeginningAction(Movie));
+	}
+
+	[Fact]
+	public void Play_IsNamedResume_WhenTheClickResumes()
+	{
+		// 1.2.0 (Nixie button review, I3): a card's Play resumes an item with a resume point, and says so
+		var started = new BaseItemDto { Type = BaseItemDto_Type.Movie, Name = "Heat", UserData = new UserItemDataDto { PlaybackPositionTicks = 6_000_000_000 } };
+		Assert.Equal("Resume Heat", ItemLabels.PlayAction(started));
+
+		// a series or season starts its next episode, whatever its own record holds
+		var series = new BaseItemDto { Type = BaseItemDto_Type.Series, Name = "Lost", UserData = new UserItemDataDto { PlaybackPositionTicks = 6_000_000_000 } };
+		Assert.Equal("Play Lost", ItemLabels.PlayAction(series));
 	}
 
 	[Fact]
@@ -46,7 +59,7 @@ public sealed class ItemActionLabelsTests
 		Assert.Equal("Add to favorites", ItemLabels.FavoriteAction(null, null));
 		Assert.Equal("Remove from favorites", ItemLabels.FavoriteAction(null, true));
 		Assert.Equal("More options", ItemLabels.MoreOptions(null));
-		Assert.Equal("Play from the beginning", ItemLabels.PlayFromBeginningAction(null));
+		Assert.Equal("Play from start", ItemLabels.PlayFromBeginningAction(null));
 	}
 
 	[Fact]

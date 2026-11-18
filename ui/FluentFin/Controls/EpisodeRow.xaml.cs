@@ -83,8 +83,6 @@ public sealed partial class EpisodeRow : UserControl
 		RuntimeText.Text = runtime.Length > 0 ? "· " + runtime : "";
 		RuntimeText.Visibility = runtime.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		OverviewText.Text = dto?.Overview ?? "";
-		PlayButton.CommandParameter = dto;
-		Label(PlayButton, ItemLabels.EpisodeAction("Play", dto));
 		Label(MoreButton, ItemLabels.EpisodeAction("More options", dto));
 		ApplyUserData();
 		UpdatePlace();
@@ -205,7 +203,7 @@ public sealed partial class EpisodeRow : UserControl
 	// 1.2.0: the play disc on the thumbnail says what a click or Enter does: shown while the pointer is on the row or the
 	// keyboard on it; never collapsed, so Narrator and UI Automation always find Play (its opacity hides it)
 	private void UpdatePlayDisc() =>
-		PlayButton.Opacity = _pointerOver || FocusRing.Visibility == Visibility.Visible ? 1 : 0;
+		PlayDisc.Opacity = _pointerOver || FocusRing.Visibility == Visibility.Visible ? 1 : 0;
 
 	private void Body_PointerEntered(object sender, PointerRoutedEventArgs e)
 	{
@@ -223,22 +221,18 @@ public sealed partial class EpisodeRow : UserControl
 
 	/// <summary>
 	/// 1.2.0 (1.1.3 UX audit, interaction item 6): a click on the row plays the episode, as Enter does; Play and the "…"
-	/// do their own thing, and the title opens the episode's page (<see cref="Title_Tapped"/>).
+	/// do their own thing, and the title's link opens the episode's page (<see cref="TitleLink_Click"/>).
 	/// </summary>
 	private void Body_Tapped(object sender, TappedRoutedEventArgs e)
 	{
-		if (RowClick.For(e.OriginalSource as DependencyObject, Body, TitleText) == RowClickAction.Play)
+		if (RowClick.For(e.OriginalSource as DependencyObject, Body, TitleLink) == RowClickAction.Play)
 		{
 			Play();
 			e.Handled = true;
 		}
 	}
 
-	private void Title_Tapped(object sender, TappedRoutedEventArgs e)
-	{
-		OpenDetails();
-		e.Handled = true;
-	}
+	private void TitleLink_Click(object sender, RoutedEventArgs e) => OpenDetails();
 
 	private void Title_PointerEntered(object sender, PointerRoutedEventArgs e) => TitleText.TextDecorations = Windows.UI.Text.TextDecorations.Underline;
 
@@ -302,7 +296,7 @@ internal static class RowClick
 
 /// <summary>
 /// Seaglass scrolling: Narrator reads an episode row as a list item named "S1 E4 Title, watched" (<see cref="ItemLabels.EpisodeRowName"/>),
-/// "4 of 8" from its place; Invoke plays it, as Enter does. Play and the "…" are under it. A row on its own (the episode
+/// "4 of 8" from its place; Invoke plays it, as Enter does. The "…" is under it (the Play disc is decorative). A row on its own (the episode
 /// page's "Up next") is a button: a list item with no list around it would say "1 of 1" or nothing at all.
 /// </summary>
 internal sealed partial class EpisodeRowAutomationPeer(EpisodeRow owner) : FrameworkElementAutomationPeer(owner), IInvokeProvider

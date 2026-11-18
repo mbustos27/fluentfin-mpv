@@ -116,17 +116,25 @@ public sealed class ItemButtonsXamlTests
 		Assert.DoesNotContain("OpenDetails", tapped);
 		// a click on the title, a button or the title's link is not the row's
 		Assert.Contains("if (node is ButtonBase || ReferenceEquals(node, title))", code);
-		Assert.Equal("Title_Tapped", (string?)FindByName(row, "TitleText").Attribute("Tapped"));
-		Assert.Matches(new Regex(@"private void Title_Tapped\([\s\S]*?OpenDetails\(\);"), code);
+		// the title is a neutral link to the episode's page with no Tab stop (Nixie button review, I9; the menu is the keyboard's)
+		var link = FindByName(row, "TitleLink");
+		Assert.Equal("HyperlinkButton", link.Name.LocalName);
+		Assert.Equal("False", (string?)link.Attribute("IsTabStop"));
+		Assert.Equal("{ThemeResource TextFillColorPrimaryBrush}", (string?)link.Attribute("Foreground"));
+		Assert.Same(link, FindByName(row, "TitleText").Parent);
+		Assert.Contains("private void TitleLink_Click(object sender, RoutedEventArgs e) => OpenDetails();", code);
 		// 1.2.0 (layout item 14): Play is the disc on the thumbnail, shown on hover and keyboard focus by its opacity, so
 		// Narrator and UI Automation always find it; the row's "…" sits right after the title, opening the row's menu
-		var play = FindByName(row, "PlayButton");
-		Assert.Equal("0", (string?)play.Attribute("Opacity"));
-		Assert.Equal("False", (string?)play.Attribute("IsTabStop"));
-		Assert.Same(FindByName(row, "Thumb").Parent, play.Parent);
-		Assert.Contains("PlayButton.Opacity = _pointerOver || FocusRing.Visibility == Visibility.Visible ? 1 : 0;", code);
+		// the Play disc is a picture (Nixie button review, I8: the row is the button): no click, not read
+		var disc = FindByName(row, "PlayDisc");
+		Assert.Equal("Border", disc.Name.LocalName);
+		Assert.Equal("False", (string?)disc.Attribute("IsHitTestVisible"));
+		Assert.Equal("Raw", (string?)disc.Attribute("AutomationProperties.AccessibilityView"));
+		Assert.Same(FindByName(row, "Thumb").Parent, disc.Parent);
+		Assert.Contains("PlayDisc.Opacity = _pointerOver || FocusRing.Visibility == Visibility.Visible ? 1 : 0;", code);
 		var more = FindByName(row, "MoreButton");
-		Assert.Same(FindByName(row, "TitleText").Parent, more.Parent);
+		Assert.Same(link.Parent, more.Parent);
+		Assert.Equal("8", (string?)more.Attribute("CornerRadius"));
 		Assert.Contains("_menu.ShowAt(MoreButton)", code);
 		// one watched mark: no check button at the row's end
 		Assert.DoesNotContain(row.Descendants(), e => e.Name.LocalName == "ToggleButton");
@@ -192,8 +200,10 @@ public sealed class ItemButtonsXamlTests
 			var button = FindByName(hero, name);
 			Assert.Equal(label, (string?)button.Attribute("AutomationProperties.Name"));
 			Assert.Equal(label, (string?)button.Attribute("ToolTipService.ToolTip"));
-			Assert.Equal("24", (string?)button.Attribute("Width"));
-			Assert.Equal("24", (string?)button.Attribute("Height"));
+			// Nixie button review, I19 / I21: 32 px targets, 16 px glyphs
+			Assert.Equal("32", (string?)button.Attribute("Width"));
+			Assert.Equal("32", (string?)button.Attribute("Height"));
+			Assert.Equal("16", (string?)button.Descendants().Single(e => e.Name.LocalName == "FontIcon").Attribute("FontSize"));
 			// the keyboard has Left/Right on the dots: no extra Tab stops
 			Assert.Equal("False", (string?)button.Attribute("IsTabStop"));
 			Assert.Same(FindByName(hero, "Dots").Parent, button.Parent);
@@ -220,7 +230,7 @@ public sealed class ItemButtonsXamlTests
 	{
 		var code = Code("FluentFin/Controls/EpisodeRow.xaml.cs");
 
-		Assert.Contains("Label(PlayButton, ItemLabels.EpisodeAction(\"Play\", dto))", code);
+		Assert.DoesNotContain("PlayButton", code);
 		Assert.Contains("Label(MoreButton, ItemLabels.EpisodeAction(\"More options\", dto))", code);
 		Assert.Matches(new Regex(@"AutomationProperties\.SetName\(button, name\);\s*ToolTipService\.SetToolTip\(button, name\);"), code);
 	}
@@ -235,7 +245,9 @@ public sealed class ItemButtonsXamlTests
 		Assert.Same(strip, pill.Parent);
 		Assert.Equal("RatingPanel", (string?)pill.Elements().Single(e => e.Name.LocalName == "JournalRatingPanel").Attribute(Xaml + "Name"));
 		Assert.Equal("{StaticResource GlassPillHeight}", (string?)pill.Attribute("Height"));
-		Assert.Equal("{StaticResource GlassButtonCornerRadius}", (string?)pill.Attribute("CornerRadius"));
+		// 1.2.0 (Nixie button review, I27): plain stars on the hero, no pill drawn around them
+		Assert.Null(pill.Attribute("Background"));
+		Assert.Null(pill.Attribute("BorderThickness"));
 		// hidden with the rating (movies, no journal): no empty pill
 		Assert.Equal("{x:Bind RatingPanel.Visibility, Mode=OneWay}", (string?)pill.Attribute("Visibility"));
 		Assert.Contains("RatingPanel.Item = dto;", Code("FluentFin/Controls/ItemHero.xaml.cs"));
@@ -260,14 +272,16 @@ public sealed class ItemButtonsXamlTests
 	}
 
 	[Fact]
-	public void HeroDots_Are24PxTargets_WithoutAGap()
+	public void HeroDots_Are32PxTargets_WithoutAGap()
 	{
 		var dots = FindByName(Load("FluentFin/Controls/HomeHero.xaml"), "Dots");
 		var code = Code("FluentFin/Controls/HomeHero.xaml.cs");
 
 		Assert.Equal("0", (string?)dots.Attribute("Spacing"));
 		Assert.Contains("Width = HeroDots.TargetSize, Height = HeroDots.TargetSize", code);
-		Assert.Contains("public const double TargetSize = 24;", code);
+		Assert.Contains("public const double TargetSize = 32;", code);
+		// Narrator hears which slide is shown (Nixie button review, I20)
+		Assert.Contains("AutomationProperties.SetItemStatus(Dots.Children[i], i == index ? \"Current slide\" : \"\");", code);
 	}
 
 	[Theory]

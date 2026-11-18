@@ -350,12 +350,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Page Update="Styles\PlayableMediaItem.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </Page>
-	</ItemGroup>
-
-	<ItemGroup>
 	  <Page Update="Views\VideoPlayerPage.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </Page>

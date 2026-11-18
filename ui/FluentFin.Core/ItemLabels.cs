@@ -208,10 +208,15 @@ public static class ItemLabels
 	}
 
 	/// <summary>"Play Inception" (a card's Play).</summary>
-	public static string PlayAction(BaseItemDto? dto) => Phrase("Play", ActionTarget(dto), "");
+	/// <remarks>1.2.0 (Nixie button review, I3): "Resume Inception" when the item has a resume point, as the click does.</remarks>
+	public static string PlayAction(BaseItemDto? dto) =>
+		Phrase(ResumePosition(dto) is null || dto?.Type is BaseItemDto_Type.Series or BaseItemDto_Type.Season ? "Play" : "Resume", ActionTarget(dto), "");
 
-	/// <summary>"Play Inception from the beginning" (next to Resume on a movie or an episode page).</summary>
-	public static string PlayFromBeginningAction(BaseItemDto? dto) => Phrase("Play", ActionTarget(dto), "from the beginning");
+	/// <summary>
+	/// "Play Inception from start" (next to Resume on a movie or an episode page; 1.2.0, Nixie button review I37: the button
+	/// reads "Play from start").
+	/// </summary>
+	public static string PlayFromBeginningAction(BaseItemDto? dto) => Phrase("Play", ActionTarget(dto), "from start");
 
 	/// <summary>
 	/// The watched toggle says what a click does now, as the item's menu does: "Mark Inception as watched", or "... as

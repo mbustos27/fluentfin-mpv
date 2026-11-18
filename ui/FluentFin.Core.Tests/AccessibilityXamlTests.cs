@@ -69,9 +69,12 @@ public class AccessibilityXamlTests
 		Assert.Equal("{StaticResource GlassAccentPillButtonStyle}", (string?)play.Attribute("Style"));
 
 		var fromBeginning = Assert.Single(buttons, b => (string?)b.Attribute("Command") == "{x:Bind ViewModel.PlayFromBeginningCommand}");
-		// 1.2.0: "Play Inception from the beginning", the tooltip the same words
+		// 1.2.0 (Nixie button review, I37 / I50): "Play from start" in words beside Resume (it was an icon alone), named
+		// "Play Inception from start"; the words say it, so no tooltip
 		Assert.StartsWith("{x:Bind core:ItemLabels.PlayFromBeginningAction(ViewModel.Dto), Mode=OneWay", (string?)fromBeginning.Attribute("AutomationProperties.Name"));
-		Assert.Equal((string?)fromBeginning.Attribute("AutomationProperties.Name"), (string?)fromBeginning.Attribute("ToolTipService.ToolTip"));
+		Assert.Contains(fromBeginning.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "Play from start");
+		Assert.Contains(fromBeginning.Descendants(Presentation + "FontIcon"), i => (string?)i.Attribute("Glyph") == "");
+		Assert.Equal("{StaticResource GlassPillButtonStyle}", (string?)fromBeginning.Attribute("Style"));
 		Assert.Equal("{x:Bind ViewModel.HasResumePoint, Mode=OneWay}", (string?)fromBeginning.Attribute("Visibility"));
 	}
 
@@ -368,14 +371,13 @@ public class AccessibilityXamlTests
 		Assert.Equal("False", (string?)row.Root!.Attribute("UseSystemFocusVisuals"));
 		Assert.Equal("Collapsed", (string?)FindByName(row, "FocusRing").Attribute("Visibility"));
 
-		// 1.2.0: Play (a disc on the thumbnail) and the row's "…" stay for the pointer, without a Tab stop of their own,
-		// each named for its episode; Watched is the thumbnail's mark, and "Mark as watched" is in the menu (layout audit item 14)
+		// 1.2.0: the row's "…" stays for the pointer, without a Tab stop of its own, named for its episode; the Play disc is a
+		// picture (the row is the button: Nixie button review, I8) and Watched is in the menu (layout audit item 14)
 		var buttons = row.Descendants().Where(e => e.Name.LocalName is "Button" or "ToggleButton").ToList();
-		Assert.Equal(new[] { "PlayButton", "MoreButton" }, buttons.Select(b => (string?)b.Attribute(Xaml + "Name")));
+		Assert.Equal(new[] { "MoreButton" }, buttons.Select(b => (string?)b.Attribute(Xaml + "Name")));
 		Assert.All(buttons, b => Assert.Equal("False", (string?)b.Attribute("IsTabStop")));
 		Assert.All(buttons, b => Assert.False(string.IsNullOrWhiteSpace((string?)b.Attribute("AutomationProperties.Name"))));
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/EpisodeRow.xaml.cs"));
-		Assert.Single(System.Text.RegularExpressions.Regex.Matches(code, @"ItemLabels\.EpisodeAction\(""Play"", dto\)"));
 		Assert.Single(System.Text.RegularExpressions.Regex.Matches(code, @"ItemLabels\.EpisodeAction\(""More options"", dto\)"));
 		// favourite and the rest: in the row's menu, which holds the More menu's own items
 		Assert.Contains("ContextFlyout = _menu", code);

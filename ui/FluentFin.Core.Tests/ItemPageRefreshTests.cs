@@ -197,9 +197,11 @@ public sealed class ItemPageRefreshTests
 		var calls = () => _client.Invocations.Count(i => i.Method.Name == nameof(IJellyfinClient.GetItems) && ((BaseItemDto)i.Arguments[0]).Id == id);
 		var before = calls();
 
-		// the season marked watched, then unmarked: each refreshes the list
-		await Commands().SetWatched(season, true);
-		await Commands().SetWatched(season, false);
+		// the series marked watched, then unmarked: each refreshes the season page's list (marking the season itself would
+		// also read its list, for the Undo)
+		var series = new BaseItemDto { Id = SeriesId, Type = BaseItemDto_Type.Series, Name = "Lost" };
+		await Commands().SetWatched(series, true);
+		await Commands().SetWatched(series, false);
 		await WaitUntil(() => calls() == before + 2, "two list refreshes");
 		List<BaseItemDto> newList = [.. _episodes[id].Take(2)];
 		newer.SetResult(new BaseItemDtoQueryResult { Items = newList });

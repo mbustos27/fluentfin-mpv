@@ -39,6 +39,7 @@ public sealed partial class ItemHero : UserControl
 	public ItemHero()
 	{
 		InitializeComponent();
+		UndoToast.Listen(); // 1.2.0: the Undo after a whole series or season is marked
 		// 1.2.0: the toggles' names follow what they show (a click flips them before the server hears it)
 		foreach (var toggle in new[] { WatchedButton, FavoriteButton })
 		{
@@ -212,6 +213,7 @@ public sealed partial class ItemHero : UserControl
 		var dto = Dto;
 		Label(WatchedButton, ItemLabels.WatchedAction(dto, WatchedButton.IsChecked));
 		Label(FavoriteButton, ItemLabels.FavoriteAction(dto, FavoriteButton.IsChecked));
+		FavoriteGlyph.Glyph = Converters.ItemRowConverters.FavoriteGlyph(FavoriteButton.IsChecked);
 		Label(MoreButton, ItemLabels.MoreOptions(dto));
 	}
 
