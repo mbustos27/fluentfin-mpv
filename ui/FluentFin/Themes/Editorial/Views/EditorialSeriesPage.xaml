@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Nixie 1.3.0, the Editorial theme's series page: a magazine spread (poster, big title, facts, cast, Resume with what is
+    left of it) with the Seasons panel beside it, each season's progress at a glance; under it the shown season whole, as a
+    grid of stills with synopses (all eight of a usual season on one 1920 px screen). Then the details, the cast and "More
+    like this". Picking a season is one click (or Enter) in the panel; the grid follows in place.
+-->
+<Page
+    x:Class="FluentFin.Themes.Editorial.Views.EditorialSeriesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls"
+    xmlns:ec="using:FluentFin.Themes.Editorial.Controls"
+    xmlns:local="using:FluentFin.Themes.Editorial.Views"
+    xmlns:root="using:FluentFin"
+    x:Name="Page"
+    Background="{ThemeResource EditorialGroundBrush}">
+
+    <Grid>
+        <ScrollViewer x:Name="PageContent">
+            <StackPanel>
+                <ec:EditorialItemHeader
+                    x:Name="Header"
+                    CastRequested="Header_CastRequested"
+                    Dto="{x:Bind ViewModel.Dto, Mode=OneWay}"
+                    Kicker="{x:Bind ViewModel.EditorialKicker, Mode=OneWay}"
+                    PlayNote="{x:Bind ViewModel.EditorialPlayLeft, Mode=OneWay}">
+                    <ec:EditorialItemHeader.PrimaryActions>
+                        <!--  the view's one Primary: what Play starts ("Resume S1 E3", "Play S2 E1"), with its progress under the words  -->
+                        <Button
+                            x:Name="PlayButton"
+                            AutomationProperties.Name="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}"
+                            Command="{x:Bind root:App.Commands.PlayDtoCommand}"
+                            CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"
+                            Style="{StaticResource NixiePrimaryButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}">
+                            <StackPanel Spacing="3">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon FontSize="16" Glyph="&#xE768;" />
+                                    <TextBlock Text="{x:Bind ViewModel.PlayTarget.Label, Mode=OneWay}" />
+                                </StackPanel>
+                                <Grid
+                                    Height="3"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Visibility="{x:Bind ViewModel.PlayTarget.HasProgress, Mode=OneWay}">
+                                    <Border
+                                        Background="{ThemeResource NixieAccentForegroundBrush}"
+                                        CornerRadius="1.5"
+                                        Opacity="0.3" />
+                                    <ProgressBar
+                                        Height="3"
+                                        MinHeight="3"
+                                        Background="Transparent"
+                                        Foreground="{ThemeResource NixieAccentForegroundBrush}"
+                                        Maximum="100"
+                                        Value="{x:Bind ViewModel.PlayTarget.ProgressValue, Mode=OneWay}">
+                                        <ProgressBar.Resources>
+                                            <x:Double x:Key="ProgressBarTrackHeight">3</x:Double>
+                                        </ProgressBar.Resources>
+                                    </ProgressBar>
+                                </Grid>
+                            </StackPanel>
+                        </Button>
+                    </ec:EditorialItemHeader.PrimaryActions>
+                    <ec:EditorialItemHeader.SidePanel>
+                        <ec:EditorialSeasonsPanel
+                            x:Name="SeasonsPanel"
+                            Width="560"
+                            SeasonPicked="SeasonsPanel_SeasonPicked"
+                            Seasons="{x:Bind ViewModel.EditorialSeasons, Mode=OneWay}"
+                            Watched="{x:Bind ViewModel.EditorialWatched, Mode=OneWay}" />
+                    </ec:EditorialItemHeader.SidePanel>
+                </ec:EditorialItemHeader>
+
+                <StackPanel
+                    x:Name="Body"
+                    Margin="56,8,56,56"
+                    Spacing="44">
+                    <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.HasEpisodeSection, Mode=OneWay}">
+                        <ec:EditorialEpisodeGrid
+                            x:Name="EpisodeGrid"
+                            Episodes="{x:Bind ViewModel.Episodes, Mode=OneWay}"
+                            Title="{x:Bind local:EditorialSeriesPage.SeasonTitle(ViewModel.SelectedSeason), Mode=OneWay}" />
+                        <!--  the grid's words when the season's episodes could not be loaded (with Try again) or it has none  -->
+                        <StackPanel
+                            Orientation="Horizontal"
+                            Spacing="16"
+                            Visibility="{x:Bind ViewModel.HasEpisodesMessage, Mode=OneWay}">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                Text="{x:Bind ViewModel.EpisodesMessage, Mode=OneWay}"
+                                TextWrapping="Wrap" />
+                            <Button
+                                Command="{x:Bind ViewModel.RetrySeasonCommand}"
+                                Content="Try again"
+                                Style="{StaticResource NixieCompactButtonStyle}"
+                                Visibility="{x:Bind ViewModel.EpisodesFailed, Mode=OneWay}" />
+                        </StackPanel>
+                        <!--  the shown season's own page (its overview, marking the whole season watched)  -->
+                        <HyperlinkButton
+                            Command="{x:Bind root:App.Commands.DisplayDtoCommand}"
+                            CommandParameter="{x:Bind ViewModel.SelectedSeason, Mode=OneWay}"
+                            Content="{x:Bind ViewModel.SeasonDetailsText, Mode=OneWay}"
+                            Style="{StaticResource NixieLinkButtonStyle}" />
+                    </StackPanel>
+                    <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
+                    <controls:CastRow
+                        x:Name="Cast"
+                        Heading="Cast &amp; crew"
+                        People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />
+                    <ec:EditorialShelf
+                        x:Name="SimilarShelf"
+                        HasSeeAll="True"
+                        ItemsSource="{x:Bind ViewModel.Similar, Mode=OneWay}"
+                        SeeAll="SimilarSeeAll"
+                        Title="More like this"
+                        Visibility="{x:Bind local:EditorialSeriesPage.Shown(ViewModel.Similar.Count), Mode=OneWay, FallbackValue=Collapsed}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--  the series could not be loaded: said with Retry instead of a blank page  -->
+        <controls:LoadStateView State="{x:Bind ViewModel.State}" VerticalContentAlignment="Center" />
+    </Grid>
+</Page>

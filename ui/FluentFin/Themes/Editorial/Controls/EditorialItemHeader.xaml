@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Editorial: the top of its item pages (series, season, movie, episode), a magazine spread: the item's backdrop across the
+    width, held back by a scrim from the left and faded into the ground below; the poster on the left; then the kicker
+    ("SERIES · 3 SEASONS · 24 EPISODES"), the title in big type, the facts with small badges, two lines of overview, the
+    cast, and the actions: the page's Play (its one Primary), what is left of it, Trailer, Watched, Favourite and the menu.
+    A side slot holds the series' Seasons panel; under 1400 px it moves under the words.
+-->
+<UserControl
+    x:Class="FluentFin.Themes.Editorial.Controls.EditorialItemHeader"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:journal="using:FluentFin.Plugins.Journal.Controls"
+    xmlns:media="using:CommunityToolkit.WinUI.Media"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    HorizontalContentAlignment="Stretch"
+    IsTabStop="False">
+
+    <Grid x:Name="Root">
+        <!--  the backdrop: content, opaque; the scrims keep the words on the ground's colour  -->
+        <Grid
+            x:Name="Backdrop"
+            VerticalAlignment="Top"
+            AutomationProperties.AccessibilityView="Raw"
+            IsHitTestVisible="False">
+            <Image
+                x:Name="BackdropImage"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Stretch="UniformToFill" />
+            <Border Background="{ThemeResource EditorialItemScrimBrush}" />
+            <Border Background="{ThemeResource EditorialItemFadeBrush}" />
+        </Grid>
+
+        <Grid
+            x:Name="Spread"
+            VerticalAlignment="Top"
+            Margin="56,32,56,8"
+            ColumnSpacing="32"
+            RowSpacing="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="PosterColumn" Width="216" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="SideColumn" Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!--  the poster: opaque artwork, the lit edge, a deep shadow  -->
+            <Grid
+                x:Name="PosterFrame"
+                Width="216"
+                Height="324"
+                VerticalAlignment="Top">
+                <Border Background="{ThemeResource NixieDeepBrush}" CornerRadius="8">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="40"
+                            CornerRadius="8"
+                            Offset="0,20"
+                            Opacity="0.55"
+                            Color="Black" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="8">
+                    <Image
+                        x:Name="PosterImage"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Stretch="UniformToFill" />
+                </Border>
+                <Border
+                    BorderBrush="{ThemeResource EditorialArtStrokeBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    IsHitTestVisible="False" />
+            </Grid>
+
+            <StackPanel
+                x:Name="Words"
+                Grid.Column="1"
+                MaxWidth="900"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top">
+                <TextBlock x:Name="KickerText" Style="{StaticResource EditorialKickerTextBlockStyle}" />
+                <TextBlock
+                    x:Name="TitleText"
+                    Margin="0,4,0,0"
+                    AutomationProperties.HeadingLevel="Level1"
+                    FontFamily="{StaticResource GlassDisplayFontFamily}"
+                    FontSize="96"
+                    FontWeight="Bold"
+                    CharacterSpacing="-25"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                    LineStackingStrategy="BlockLineHeight"
+                    MaxLines="2"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="Wrap" />
+                <TextBlock
+                    x:Name="SubtitleText"
+                    Margin="0,2,0,0"
+                    AutomationProperties.HeadingLevel="Level2"
+                    FontFamily="{StaticResource GlassDisplayFontFamily}"
+                    FontSize="28"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                    TextTrimming="CharacterEllipsis"
+                    Visibility="Collapsed" />
+                <StackPanel
+                    Margin="0,12,0,0"
+                    Orientation="Horizontal"
+                    Spacing="12">
+                    <TextBlock
+                        x:Name="MetaText"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource EditorialMetaTextBlockStyle}" />
+                    <ItemsControl
+                        x:Name="Badges"
+                        VerticalAlignment="Center"
+                        IsTabStop="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="6" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border
+                                    Height="21"
+                                    Padding="6,0"
+                                    BorderBrush="{ThemeResource GlassTextSecondaryBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="4">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        CharacterSpacing="40"
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                                        Text="{Binding}" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                <TextBlock
+                    x:Name="OverviewText"
+                    MaxWidth="800"
+                    Margin="0,10,0,0"
+                    HorizontalAlignment="Left"
+                    FontSize="16"
+                    LineHeight="24"
+                    MaxLines="2"
+                    Style="{StaticResource EditorialBodyTextBlockStyle}" />
+                <StackPanel
+                    Margin="0,8,0,0"
+                    Orientation="Horizontal"
+                    Spacing="10">
+                    <TextBlock
+                        x:Name="PeopleText"
+                        VerticalAlignment="Center"
+                        FontSize="14"
+                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                        TextTrimming="CharacterEllipsis" />
+                    <HyperlinkButton
+                        x:Name="CastLink"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Cast and crew"
+                        Click="CastLink_Click"
+                        Content="Cast &amp; crew"
+                        Style="{StaticResource NixieLinkButtonStyle}"
+                        Visibility="Collapsed" />
+                </StackPanel>
+                <StackPanel
+                    x:Name="ButtonStrip"
+                    Margin="0,18,0,0"
+                    Orientation="Horizontal"
+                    Spacing="10">
+                    <ContentPresenter x:Name="PrimaryPresenter" VerticalAlignment="Center" />
+                    <TextBlock
+                        x:Name="PlayNoteText"
+                        Margin="2,0,8,0"
+                        VerticalAlignment="Center"
+                        FontSize="14"
+                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                        Visibility="Collapsed" />
+                    <Button
+                        x:Name="TrailerButton"
+                        AutomationProperties.Name="Watch trailer"
+                        Click="TrailerButton_Click"
+                        Style="{StaticResource NixieButtonStyle}"
+                        ToolTipService.ToolTip="Watch trailer (opens in your browser)"
+                        Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="16" Glyph="&#xE714;" />
+                            <TextBlock Text="Trailer" />
+                        </StackPanel>
+                    </Button>
+                    <ToggleButton
+                        x:Name="WatchedButton"
+                        AutomationProperties.Name="Mark as watched"
+                        Click="WatchedButton_Click"
+                        Content="{ui:FontIcon Glyph=&#xE73E;}"
+                        Style="{StaticResource EditorialIconToggleButtonStyle}"
+                        ToolTipService.ToolTip="Mark as watched" />
+                    <ToggleButton
+                        x:Name="FavoriteButton"
+                        AutomationProperties.Name="Add to favorites"
+                        Click="FavoriteButton_Click"
+                        Style="{StaticResource EditorialIconToggleButtonStyle}"
+                        ToolTipService.ToolTip="Add to favorites">
+                        <FontIcon x:Name="FavoriteGlyph" Glyph="&#xEB51;" />
+                    </ToggleButton>
+                    <Button
+                        x:Name="MoreButton"
+                        AutomationProperties.Name="More options"
+                        Content="{ui:FontIcon Glyph=&#xE712;}"
+                        Style="{StaticResource EditorialIconButtonStyle}"
+                        ToolTipService.ToolTip="More options" />
+                    <!--  the journal's rating (hidden for items it does not rate, and without the journal)  -->
+                    <Border
+                        x:Name="RatingPill"
+                        Height="44"
+                        Padding="8,0"
+                        Visibility="{x:Bind RatingPanel.Visibility, Mode=OneWay}">
+                        <journal:JournalRatingPanel x:Name="RatingPanel" VerticalAlignment="Center" />
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+
+            <ContentPresenter
+                x:Name="SidePresenter"
+                Grid.Column="2"
+                VerticalAlignment="Top" />
+        </Grid>
+    </Grid>
+</UserControl>

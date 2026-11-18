@@ -376,3 +376,104 @@ public sealed class EditorialXamlTests
 		return dir?.FullName ?? throw new DirectoryNotFoundException("FluentFin.sln not found above " + AppContext.BaseDirectory);
 	}
 }
+
+/// <summary>Nixie 1.3.0, the Editorial theme's series and season pages: the Seasons panel, the season grid and the header's words.</summary>
+public sealed class EditorialSeriesTests
+{
+	private static BaseItemDto Season(int number, int? year = null, DateTimeOffset? added = null) => new()
+	{
+		Id = Guid.NewGuid(), Name = number == 0 ? "Specials" : $"Season {number}", Type = BaseItemDto_Type.Season, IndexNumber = number, ProductionYear = year, DateCreated = added,
+	};
+
+	private static BaseItemDto Episode(BaseItemDto season, int number, bool played = false, long runMinutes = 50, long positionMinutes = 0) => new()
+	{
+		Id = Guid.NewGuid(), Name = $"Ep {number}", Type = BaseItemDto_Type.Episode, SeasonId = season.Id, ParentIndexNumber = season.IndexNumber, IndexNumber = number,
+		RunTimeTicks = runMinutes * TimeSpan.TicksPerMinute,
+		UserData = new UserItemDataDto { Played = played, PlaybackPositionTicks = positionMinutes * TimeSpan.TicksPerMinute },
+	};
+
+	private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-11-17T20:00:00Z");
+
+	[Fact]
+	public void TheSeasonsPanel_CountsWhatIsWatched_PerSeason_SpecialsLast()
+	{
+		var s1 = Season(1, 2022);
+		var s2 = Season(2, 2023);
+		var s3 = Season(3, 2025, added: Now.AddDays(-3));
+		var specials = Season(0);
+		var episodes = new[] { Episode(s1, 1, true), Episode(s1, 2, true), Episode(s1, 3), Episode(s1, 4), Episode(s2, 1, true), Episode(s2, 2, true), Episode(s3, 1) };
+
+		var lines = EditorialSeries.Lines([specials, s2, s1, s3], episodes, current: s1.Id, Now);
+
+		Assert.Equal(["01", "02", "03", "SP"], lines.Select(l => l.Number));
+		Assert.Equal(["2 of 4 watched", "Watched", "New · Not started", ""], lines.Select(l => l.Progress));
+		Assert.Equal("2022 · 4 episodes", lines[0].Meta);
+		Assert.True(lines[0].IsCurrent && lines[0].HasFraction);
+		Assert.False(lines[1].HasFraction); // a whole season watched says so in words; no bar
+		Assert.Equal("Season 1, 2 of 4 watched", lines[0].AutomationName);
+	}
+
+	[Fact]
+	public void WithoutTheEpisodes_ASeasonsOwnCountsAreUsed()
+	{
+		var season = Season(1, 2022);
+		season.ChildCount = 8;
+		season.UserData = new UserItemDataDto { UnplayedItemCount = 6 };
+
+		Assert.Equal("2 of 8 watched", EditorialSeries.Lines([season], null, null, Now)[0].Progress);
+	}
+
+	[Fact]
+	public void TheSeriesWords()
+	{
+		var s1 = Season(1);
+		var episodes = new[] { Episode(s1, 1, true), Episode(s1, 2, positionMinutes: 6, runMinutes: 50), Episode(s1, 3) };
+
+		Assert.Equal("1 of 3 watched", EditorialSeries.Watched(episodes));
+		Assert.Equal("44 min left", EditorialSeries.PlayLeft(episodes));
+		Assert.Equal("", EditorialSeries.PlayLeft([Episode(s1, 1, true), Episode(s1, 2)]));
+		Assert.Equal("SERIES · 3 SEASONS · 24 EPISODES", EditorialSeries.Kicker("Series", 3, 24));
+		Assert.Equal("3 episodes · 2 h 30 m", EditorialSeries.SeasonCaption(episodes));
+	}
+
+	[Fact]
+	public void TheGrid_HidesWatched_TurnsOver_AndLandsOnTheEpisodeToWatch()
+	{
+		var s1 = Season(1);
+		var e1 = Episode(s1, 1, true);
+		var e2 = Episode(s1, 2);
+		var e3 = Episode(s1, 3);
+
+		Assert.Equal([e2, e3], EditorialSeries.Shown([e1, e2, e3], hideWatched: true, newestFirst: false));
+		Assert.Equal([e3, e2, e1], EditorialSeries.Shown([e1, e2, e3], hideWatched: false, newestFirst: true));
+		Assert.Equal(1, EditorialSeries.FocusIndex([e1, e2, e3]));
+		Assert.Equal(0, EditorialSeries.FocusIndex([e1]));
+	}
+
+	[Theory]
+	[InlineData(1808, 4)]
+	[InlineData(1500, 4)]
+	[InlineData(1020, 3)]
+	[InlineData(900, 2)]
+	public void TheGrid_FourAcrossAt1920(double width, int columns) => Assert.Equal(columns, EditorialEpisodeColumns.For(width).Columns);
+
+	[Fact]
+	public void TheHeadersTitle_ShrinksAsItGrows()
+	{
+		Assert.Equal(96, EditorialItemTitle.Size("The Iron Circus", narrow: false));
+		Assert.Equal(64, EditorialItemTitle.Size("The Iron Circus", narrow: true));
+		Assert.True(EditorialItemTitle.Size("The Extraordinarily Long Title of a Film", narrow: false) < 60);
+	}
+
+	[Fact]
+	public void TheHeadersFacts()
+	{
+		var series = new BaseItemDto { Type = BaseItemDto_Type.Series, ProductionYear = 2022, EndDate = DateTimeOffset.Parse("2025-06-01"), OfficialRating = "TV-14", Genres = ["Mystery", "Drama", "Western"], CommunityRating = 8.4f };
+		var running = new BaseItemDto { Type = BaseItemDto_Type.Series, ProductionYear = 1991, Status = "Continuing" };
+		var episode = new BaseItemDto { Type = BaseItemDto_Type.Episode, PremiereDate = DateTimeOffset.Parse("2022-03-28"), OfficialRating = "TV-14", RunTimeTicks = 52 * TimeSpan.TicksPerMinute, Genres = ["Drama"] };
+
+		Assert.Equal("2022 – 2025 · TV-14 · Mystery, Drama · ★ 8.4", EditorialItemTitle.Meta(series));
+		Assert.Equal("1991 – present", EditorialItemTitle.Meta(running));
+		Assert.Equal("28 Mar 2022 · TV-14 · 52m", EditorialItemTitle.Meta(episode));
+	}
+}

@@ -22,6 +22,8 @@ public sealed class EditorialTheme : ILayoutTheme
 	internal static IReadOnlyDictionary<Type, Type> Views { get; } = new Dictionary<Type, Type>
 	{
 		[typeof(HomeViewModel)] = typeof(EditorialHomePage),
+		[typeof(SeriesViewModel)] = typeof(EditorialSeriesPage),
+		[typeof(SeasonViewModel)] = typeof(EditorialSeasonPage),
 	};
 
 	public Type? ViewFor(Type viewModelType) => Views.TryGetValue(viewModelType, out var view) ? view : null;
