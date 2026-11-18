@@ -20,6 +20,25 @@
     mc:Ignorable="d">
 
     <Page.Resources>
+        <!--  the Filter menu's rows: a kind's heading, or one of its check boxes  -->
+        <DataTemplate x:Key="FilterHeaderTemplate" x:DataType="vm:FilterFacet">
+            <TextBlock
+                Margin="0,16,0,4"
+                AutomationProperties.HeadingLevel="Level3"
+                Style="{StaticResource BodyStrongTextBlockStyle}"
+                Text="{x:Bind Title}" />
+        </DataTemplate>
+        <DataTemplate x:Key="FilterOptionTemplate" x:DataType="vm:FilterOption">
+            <CheckBox
+                MinHeight="32"
+                AutomationProperties.Name="{x:Bind Name}"
+                Content="{x:Bind Label}"
+                IsChecked="{x:Bind IsChecked, Mode=TwoWay}" />
+        </DataTemplate>
+        <local:FilterRowTemplateSelector
+            x:Key="FilterRowTemplates"
+            Header="{StaticResource FilterHeaderTemplate}"
+            Option="{StaticResource FilterOptionTemplate}" />
         <!--  Seaglass: the sort and filter bar is glass pills  -->
         <Style
             x:Key="LibrarySortFilterButtonStyle"
@@ -236,30 +255,19 @@
                                             Margin="0,0,0,12"
                                             Content="Favorites only"
                                             IsChecked="{x:Bind ViewModel.Filter.Favorites, Mode=TwoWay}" />
-                                        <ItemsControl IsTabStop="False" ItemsSource="{x:Bind ViewModel.Facets, Mode=OneWay}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:FilterFacet">
-                                                    <StackPanel Margin="0,4,0,12">
-                                                        <TextBlock
-                                                            Margin="0,0,0,4"
-                                                            AutomationProperties.HeadingLevel="Level3"
-                                                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                            Text="{x:Bind Title}" />
-                                                        <ItemsControl IsTabStop="False" ItemsSource="{x:Bind Options}">
-                                                            <ItemsControl.ItemTemplate>
-                                                                <DataTemplate x:DataType="vm:FilterOption">
-                                                                    <CheckBox
-                                                                        MinHeight="32"
-                                                                        AutomationProperties.Name="{x:Bind Name}"
-                                                                        Content="{x:Bind Label}"
-                                                                        IsChecked="{x:Bind IsChecked, Mode=TwoWay}" />
-                                                                </DataTemplate>
-                                                            </ItemsControl.ItemTemplate>
-                                                        </ItemsControl>
-                                                    </StackPanel>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
+                                        <!--
+                                            the review, item 5: one virtualised list of the kinds' headings and their check
+                                            boxes (a library's genres, years, ratings and tags can be hundreds; nested
+                                            ItemsControls made every one of them when the menu opened)
+                                        -->
+                                        <ItemsRepeater
+                                            x:Name="FilterRepeater"
+                                            ItemTemplate="{StaticResource FilterRowTemplates}"
+                                            ItemsSource="{x:Bind ViewModel.FilterRows, Mode=OneWay}">
+                                            <ItemsRepeater.Layout>
+                                                <StackLayout />
+                                            </ItemsRepeater.Layout>
+                                        </ItemsRepeater>
                                         </StackPanel>
                                     </ScrollViewer>
                                 </Grid>

@@ -265,6 +265,115 @@ public sealed class LibraryBrowseTests
 	}
 }
 
+/// <summary>The review of wip/114-library: the year filter, the A-Z keys of every script, the Filter menu's one list.</summary>
+public sealed class LibraryReviewTests
+{
+	private static async Task<LibraryViewModel> Library(IEnumerable<BaseItemDto> items)
+	{
+		var client = new Mock<IJellyfinClient>();
+		client.SetupGet(x => x.UserId).Returns(Guid.NewGuid());
+		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [.. items] });
+		var vm = new LibraryViewModel(client.Object);
+		await vm.OnNavigatedTo(new BaseItemDto { Id = Guid.NewGuid(), Name = "Movies", CollectionType = BaseItemDto_CollectionType.Movies });
+		return vm;
+	}
+
+	private static BaseItemDto Movie(string name, int? year = null) => new() { Id = Guid.NewGuid(), Name = name, Type = BaseItemDto_Type.Movie, ProductionYear = year };
+
+	[Fact]
+	public async Task AYear_ShowsOnlyTheTitlesOfThatYear_AsItsCountSays()
+	{
+		var vm = await Library([Movie("Y1", 2020), Movie("Y2", 2020), Movie("Y3", 2020), Movie("N1"), Movie("N2")]);
+		var year = vm.Facets.Single(f => f.Title == "Years").Options.Single();
+
+		year.IsChecked = true;
+
+		Assert.Equal("2020 (3)", year.Label);
+		Assert.Equal(3, vm.Items.Count); // the two without a year were let through
+	}
+
+	[Theory]
+	[InlineData("Alien", "A")]
+	[InlineData("Ángel", "A")]
+	[InlineData("Æon Flux", "A")]
+	[InlineData("Évian", "E")]
+	[InlineData("Łódź", "L")]
+	[InlineData("Ølstykke", "O")]
+	[InlineData("Œuvre", "O")]
+	[InlineData("ß", "S")]
+	[InlineData("the Thing", "T")]
+	[InlineData("(500) Days", "#")]
+	[InlineData("2001", "#")]
+	[InlineData("Брат", "Б")]
+	[InlineData("ёлка", "Е")]
+	[InlineData("Ωmega", "Ω")]
+	[InlineData("千と千尋", "漢")]
+	[InlineData("となりのトトロ", "あ")]
+	[InlineData("올드보이", "한")]
+	public void ATitlesKey_IsItsFoldedFirstLetter_OrItsScript(string name, string key) => Assert.Equal(key, LibraryBrowse.LetterOf(name));
+
+	[Fact]
+	public async Task EveryLetter_LeadsToATitleWithIt_AndEveryTitleCanBeReached()
+	{
+		string[] names = ["Alien", "Æon Flux", "Batman", "Ølstykke", "Zorro", "Ángel", "千と千尋", "Брат", "Łódź", "Ocean", "the Thing", "Up", "(500) Days", "Évian", "ß", "Батя"];
+		var vm = await Library(names.Select(n => Movie(n)));
+
+		Assert.All(vm.Letters, l => Assert.All(l.Runs, i => Assert.Equal(l.Letter, LibraryBrowse.LetterOf(vm.Items[i].Name))));
+		// every title is in a run of its key that its letter reaches (the run's first title is one of the letter's stops)
+		for (var i = 0; i < vm.Items.Count; i++)
+		{
+			var key = LibraryBrowse.LetterOf(vm.Items[i].Name);
+			var start = i;
+			while (start > 0 && LibraryBrowse.LetterOf(vm.Items[start - 1].Name) == key)
+			{
+				start--;
+			}
+
+			Assert.Contains(start, vm.Letters.Single(l => l.Letter == key).Runs);
+		}
+
+		Assert.DoesNotContain(vm.Letters, l => l.Letter == "#" && l.Runs.Count > 1);
+		Assert.Contains(vm.Letters, l => l.Letter == "L");
+		Assert.Contains(vm.Letters, l => l.Letter == "Б");
+	}
+
+	[Fact]
+	public void AKeyTheSortSplits_StepsThroughItsRuns_WhenPressedAgain()
+	{
+		var letters = LibraryBrowse.Letters(["Apple", "Ølstykke", "Banana", "Øresund"]);
+		var o = letters.Single(l => l.Letter == "O");
+
+		Assert.Equal([1, 3], o.Runs);
+		Assert.Equal(1, o.Index);
+	}
+
+	[Fact]
+	public async Task TheSameLetterAgain_GoesToItsNextRun_ThenRound()
+	{
+		// a culture that sorts Ø after Z (Danish) splits O: the letter reaches both runs
+		var vm = await Library([Movie("Ocean"), Movie("Zorro")]);
+		var o = new LetterJump("O", 0) { Runs = [0, 1] };
+
+		vm.JumpTo(o);
+		Assert.Equal(0, vm.FocusRequest);
+		vm.JumpTo(o);
+		Assert.Equal(1, vm.FocusRequest);
+		vm.JumpTo(o);
+		Assert.Equal(0, vm.FocusRequest);
+	}
+
+	[Fact]
+	public async Task TheFilterMenu_IsOneList_OfEachKindThenItsValues()
+	{
+		var a = Movie("A", 2020); a.Genres = ["Drama"];
+		var b = Movie("B", 2021); b.Genres = ["Comedy"];
+		var vm = await Library([a, b]);
+
+		Assert.Equal(["Genres", "Comedy (1)", "Drama (1)", "Years", "2021 (1)", "2020 (1)"],
+			vm.FilterRows.Select(r => r switch { FilterFacet f => f.Title, FilterOption o => o.Label, _ => "?" }));
+	}
+}
+
 /// <summary>Seaglass 1.1.4 (interaction audit, item 5): Back to a row's "See all" grid puts the user where they were.</summary>
 public sealed class ItemGridPlaceTests
 {

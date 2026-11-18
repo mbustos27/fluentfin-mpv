@@ -198,3 +198,35 @@ internal static class RowScroll
 		return null;
 	}
 }
+
+/// <summary>
+/// 1.1.4: the hold after Back to a grid or an A-Z jump (CardGrid.FocusAndHold): the card is focused again on each tick until
+/// a card has the focus, for at most <paramref name="maxTicks"/> ticks, and never after the user did anything (the review,
+/// item 7: a click in the search box right after Back was pulled back to the card).
+/// </summary>
+internal sealed class FocusHold(int maxTicks = 10)
+{
+	private int _ticks;
+
+	public bool Done { get; private set; }
+
+	/// <summary>A click, a key or the wheel: the hold ends.</summary>
+	public void UserInput() => Done = true;
+
+	/// <summary>A tick with the focus on card <paramref name="focusedIndex"/> (-1: not on a card of the grid): true to focus the card again.</summary>
+	public bool Tick(int focusedIndex)
+	{
+		if (Done)
+		{
+			return false;
+		}
+
+		if (focusedIndex >= 0 || ++_ticks > maxTicks)
+		{
+			Done = true; // on the card, the user moved on in the grid, or the time is up
+			return false;
+		}
+
+		return true;
+	}
+}

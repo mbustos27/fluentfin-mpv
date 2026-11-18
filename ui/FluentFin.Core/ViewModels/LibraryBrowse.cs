@@ -68,7 +68,12 @@ public static class LibraryBrowse
 			: $"{shown:N0} of {total:N0} {(total == 1 ? one : many)}";
 	}
 
-	/// <summary>The A-Z key of a title: its first letter, without accents, A to Z; "#" for a digit, a sign or nothing.</summary>
+	/// <summary>
+	/// The A-Z key of a title (the review, item 6): its first letter without accents (Éclair: E), the Latin letters that do
+	/// not come apart under Unicode folded by hand (Ł: L, Ø: O, Æ: A, ß: S...); a letter of another cased script (Cyrillic,
+	/// Greek, Armenian) is its own key in capitals (Брат: Б); a script without capitals has one key for all its titles
+	/// (Chinese, Japanese kana, Korean, Arabic, Hebrew, Thai, Devanagari: 漢, あ, 한, ع, א, ก, अ); a number or a sign is "#".
+	/// </summary>
 	public static string LetterOf(string? name)
 	{
 		if (string.IsNullOrWhiteSpace(name))
@@ -76,49 +81,107 @@ public static class LibraryBrowse
 			return "#";
 		}
 
-		foreach (var c in name.Trim().Normalize(NormalizationForm.FormD))
+		foreach (var rune in name.Trim().Normalize(NormalizationForm.FormD).EnumerateRunes())
 		{
-			if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
+			var category = Rune.GetUnicodeCategory(rune);
+			if (category is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark)
 			{
 				continue;
 			}
 
-			var upper = char.ToUpperInvariant(c);
-			return upper is >= 'A' and <= 'Z' ? upper.ToString() : "#";
+			if (!Rune.IsLetter(rune))
+			{
+				return "#";
+			}
+
+			var upper = Rune.ToUpperInvariant(rune);
+			if (upper.Value is >= 'A' and <= 'Z')
+			{
+				return ((char)upper.Value).ToString();
+			}
+
+			if (LatinFolds.TryGetValue(upper.Value, out var folded))
+			{
+				return folded;
+			}
+
+			if (ScriptKey(rune.Value) is { } script)
+			{
+				return script;
+			}
+
+			// a cased letter of another script: its capital; a caseless one of a script not listed: itself
+			return upper.ToString();
 		}
 
 		return "#";
 	}
 
+	// Latin letters with no decomposition to a base letter
+	private static readonly Dictionary<int, string> LatinFolds = new()
+	{
+		['Ł'] = "L", ['Ŀ'] = "L", ['Ø'] = "O", ['Œ'] = "O", ['Æ'] = "A", ['Đ'] = "D", ['Ð'] = "D", ['Þ'] = "T", ['Ŧ'] = "T",
+		['Ħ'] = "H", ['Ŋ'] = "N", ['ẞ'] = "S", ['ß'] = "S", ['ı'] = "I", ['Ɨ'] = "I", ['ĸ'] = "K", ['Ƒ'] = "F", ['Ʒ'] = "Z",
+	};
+
+	// one key for every title of a script without capitals (they sort together, and a key per character would be hundreds)
+	private static string? ScriptKey(int c) => c switch
+	{
+		>= 0x3040 and <= 0x30FF or >= 0x31F0 and <= 0x31FF or >= 0xFF66 and <= 0xFF9F => "あ",           // kana: あ
+		>= 0x3400 and <= 0x4DBF or >= 0x4E00 and <= 0x9FFF or >= 0xF900 and <= 0xFAFF or >= 0x20000 and <= 0x3FFFF => "漢", // Han: 漢
+		>= 0xAC00 and <= 0xD7AF or >= 0x1100 and <= 0x11FF or >= 0x3130 and <= 0x318F => "한",           // Hangul: 한
+		>= 0x0600 and <= 0x06FF or >= 0x0750 and <= 0x077F => "ع",                                      // Arabic: ع
+		>= 0x0590 and <= 0x05FF => "א",                                                                // Hebrew: א
+		>= 0x0E00 and <= 0x0E7F => "ก",                                                                // Thai: ก
+		>= 0x0900 and <= 0x097F => "अ",                                                                // Devanagari: अ
+		_ => null,
+	};
+
 	/// <summary>
 	/// The A-Z jump of a list in its order (the library sorted by name, filtered): each key that some title has, once, in
-	/// the order the list meets them, with the place of its first title. Only the letters that exist.
+	/// the order the list meets them, with the place of its first title, and of the first title of every later run of it
+	/// (a key whose titles the sort does not keep together: the letter steps through them).
 	/// </summary>
 	public static IReadOnlyList<LetterJump> Letters(IEnumerable<string?> sortedNames)
 	{
-		var letters = new List<LetterJump>();
-		var seen = new HashSet<string>();
+		var runs = new Dictionary<string, List<int>>();
+		var order = new List<string>();
+		string? previous = null;
 		var index = 0;
 		foreach (var name in sortedNames)
 		{
 			var letter = LetterOf(name);
-			if (seen.Add(letter))
+			if (!runs.TryGetValue(letter, out var starts))
 			{
-				letters.Add(new LetterJump(letter, index));
+				runs[letter] = starts = [];
+				order.Add(letter);
 			}
 
+			if (letter != previous)
+			{
+				starts.Add(index);
+			}
+
+			previous = letter;
 			index++;
 		}
 
-		return letters;
+		return [.. order.Select(letter => new LetterJump(letter, runs[letter][0]) { Runs = [.. runs[letter]] })];
 	}
 }
 
 /// <summary>Seaglass 1.1.4: one button of the Library's A-Z jump: the letter and where its first title is in the library.</summary>
 public sealed record LetterJump(string Letter, int Index)
 {
+	/// <summary>Where each run of titles with this key starts (the first is <see cref="Index"/>): pressed again, the letter goes on to the next.</summary>
+	public IReadOnlyList<int> Runs { get; init; } = [Index];
+
 	/// <summary>What Narrator hears: "Jump to M", "Jump to titles that start with a number or a sign".</summary>
 	public string Name => Letter == "#" ? "Jump to titles that start with a number or a sign" : $"Jump to {Letter}";
+
+	public bool Equals(LetterJump? other) => other is not null && Letter == other.Letter && Index == other.Index && Runs.SequenceEqual(other.Runs);
+
+	public override int GetHashCode() => HashCode.Combine(Letter, Index, Runs.Count);
 }
 
 /// <summary>

@@ -332,25 +332,41 @@ internal sealed class CardGrid
 	internal void FocusAndHold(int index, FocusState state)
 	{
 		FocusIndex(index, state);
-		var tries = 0;
+		if (_repeater.XamlRoot?.Content is not UIElement content)
+		{
+			return;
+		}
+
+		// the review, item 7: anything the user does (a click, a key, the wheel) ends the hold: a click in the search box
+		// right after Back was pulled back to the card
+		var hold = new FocusHold();
+		var pointer = new PointerEventHandler((_, _) => hold.UserInput());
+		var key = new KeyEventHandler((_, _) => hold.UserInput());
+		content.AddHandler(UIElement.PointerPressedEvent, pointer, true);
+		content.AddHandler(UIElement.PointerWheelChangedEvent, pointer, true);
+		content.AddHandler(UIElement.KeyDownEvent, key, true);
+
 		var timer = _repeater.DispatcherQueue.CreateTimer();
 		timer.Interval = TimeSpan.FromMilliseconds(100);
 		timer.Tick += (t, _) =>
 		{
-			if (_repeater.XamlRoot is not { } root || ++tries > 10)
+			var root = _repeater.XamlRoot;
+			if (root is null)
+			{
+				hold.UserInput();
+			}
+			else if (hold.Tick(IndexOf(FocusManager.GetFocusedElement(root) as DependencyObject)))
+			{
+				FocusIndex(index, state);
+			}
+
+			if (hold.Done)
 			{
 				t.Stop();
-				return;
+				content.RemoveHandler(UIElement.PointerPressedEvent, pointer);
+				content.RemoveHandler(UIElement.PointerWheelChangedEvent, pointer);
+				content.RemoveHandler(UIElement.KeyDownEvent, key);
 			}
-
-			var focused = FocusManager.GetFocusedElement(root) as DependencyObject;
-			if (IndexOf(focused) >= 0)
-			{
-				t.Stop(); // on the card, or the user moved on in the grid
-				return;
-			}
-
-			FocusIndex(index, state);
 		};
 		timer.Start();
 	}

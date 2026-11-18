@@ -159,6 +159,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		if (!letters.SequenceEqual(Letters))
 		{
 			Letters = letters;
+			_lastJump = null;
 		}
 	}
 
@@ -171,8 +172,13 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			return;
 		}
 
-		ShowIndex(jump.Index);
+		// the same letter again goes on to its next run of titles (a key the sort does not keep together), then round
+		var run = _lastJump is { } last && last.Letter == jump.Letter ? (last.Run + 1) % jump.Runs.Count : 0;
+		_lastJump = (jump.Letter, run);
+		ShowIndex(jump.Runs[run]);
 	}
+
+	private (string Letter, int Run)? _lastJump;
 
 	private void ShowIndex(int index)
 	{
@@ -253,6 +259,15 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	/// </summary>
 	[ObservableProperty]
 	public partial IReadOnlyList<FilterFacet> Facets { get; set; } = [];
+
+	/// <summary>The Filter menu's rows, in one list for a virtualised repeater (the review, item 5): each kind, then its values.</summary>
+	public IReadOnlyList<object> FilterRows { get; private set; } = [];
+
+	partial void OnFacetsChanged(IReadOnlyList<FilterFacet> value)
+	{
+		FilterRows = [.. value.SelectMany(f => f.Options.Cast<object>().Prepend(f))];
+		OnPropertyChanged(nameof(FilterRows));
+	}
 
 	/// <summary>Filter's "Clear filters": every check box off.</summary>
 	[RelayCommand]
@@ -426,9 +441,11 @@ public partial class LibraryFilter : ObservableObject
 			hasMatchingOfficialRatings = OfficialRatings.Contains(dto.OfficialRating ?? "");
 		}
 
-		if (dto.ProductionYear is > 0 && Years is { Count: > 0 })
+		// Seaglass 1.1.4 (the review, item 2): a title with no year is not of the year picked (it was let through: "2020 (3)"
+		// showed 5); the year as the Filter menu writes it
+		if (Years is { Count: > 0 })
 		{
-			hasMatchingYears = Years.Contains(dto.ProductionYear.Value.ToString());
+			hasMatchingYears = dto.ProductionYear is > 0 && Years.Contains(dto.ProductionYear.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
 		}
 
 		if (Unwatched && dto.UserData?.Played == true)

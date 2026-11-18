@@ -184,3 +184,53 @@ public sealed class HomeInsetTests
 		Assert.Equal(new Microsoft.UI.Xaml.Thickness(24, 20, 24, 0), FluentFin.Views.HomePage.RowsMargin([slide]));
 	}
 }
+
+/// <summary>The review, item 7: the focus hold after Back or a jump gives way to anything the user does.</summary>
+public sealed class FocusHoldTests
+{
+	[Fact]
+	public void TheHold_FocusesAgainUntilACardHasIt()
+	{
+		var hold = new FluentFin.Controls.FocusHold();
+
+		Assert.True(hold.Tick(-1));  // the title bar took it: again
+		Assert.False(hold.Tick(62)); // on the card: done
+		Assert.True(hold.Done);
+		Assert.False(hold.Tick(-1));
+	}
+
+	[Fact]
+	public void TheHold_EndsOnAnyUserInput()
+	{
+		var hold = new FluentFin.Controls.FocusHold();
+		Assert.True(hold.Tick(-1));
+
+		hold.UserInput(); // a click in the search box
+
+		Assert.False(hold.Tick(-1));
+		Assert.True(hold.Done);
+	}
+
+	[Fact]
+	public void TheHold_GivesUpAfterItsTicks()
+	{
+		var hold = new FluentFin.Controls.FocusHold(maxTicks: 3);
+
+		Assert.Equal([true, true, true, false], Enumerable.Range(0, 4).Select(_ => hold.Tick(-1)));
+	}
+
+	[Fact]
+	public void CardGrid_EndsTheHold_OnAClickAKeyOrTheWheel()
+	{
+		var dir = AppContext.BaseDirectory;
+		while (!File.Exists(Path.Combine(dir, "FluentFin.sln")))
+		{
+			dir = Path.GetDirectoryName(dir)!;
+		}
+
+		var code = File.ReadAllText(Path.Combine(dir, "FluentFin", "Controls", "CardGrid.cs"));
+		Assert.Contains("content.AddHandler(UIElement.PointerPressedEvent, pointer, true);", code);
+		Assert.Contains("content.AddHandler(UIElement.KeyDownEvent, key, true);", code);
+		Assert.Contains("else if (hold.Tick(IndexOf(", code);
+	}
+}
