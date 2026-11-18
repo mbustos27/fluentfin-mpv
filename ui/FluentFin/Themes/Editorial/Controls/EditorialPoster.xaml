@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Editorial: a dense poster (144 px wide at 1920, 122 at 1100): opaque 2:3 artwork with 8 px corners and a faint lit edge,
+    the title and one line of facts under it. Watched: a small accent square with its check; in progress: the accent on a
+    dark track along the foot. Keyboard focus: the two-tone ring (the neon core's near-white around the deep colour) and the
+    pink glow, and a small lift in Full mode. Opened: the same ring, and a notch under it pointing at the details below the
+    row. A click or Enter opens the details in place (EditorialDetailsHost); the menu key or a right click opens the item's menu.
+-->
+<UserControl
+    x:Class="FluentFin.Themes.Editorial.Controls.EditorialPoster"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls"
+    xmlns:media="using:CommunityToolkit.WinUI.Media"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    IsTabStop="True"
+    UseSystemFocusVisuals="False">
+
+    <Grid x:Name="RootGrid" Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!--  the glow under keyboard focus or while open: the accent close in, the nixie orange further out (none in high contrast)  -->
+        <Grid
+            x:Name="FocusGlow"
+            IsHitTestVisible="False"
+            Visibility="Collapsed">
+            <Border CornerRadius="8">
+                <ui:Effects.Shadow>
+                    <media:AttachedCardShadow
+                        BlurRadius="10"
+                        CornerRadius="10"
+                        Opacity="{ThemeResource EditorialGlowOpacity}"
+                        Color="{ThemeResource NixieAccentColor}" />
+                </ui:Effects.Shadow>
+            </Border>
+            <Border CornerRadius="8">
+                <ui:Effects.Shadow>
+                    <media:AttachedCardShadow
+                        BlurRadius="30"
+                        CornerRadius="10"
+                        Opacity="{ThemeResource EditorialSoftGlowOpacity}"
+                        Color="{ThemeResource GlassNeonGlowColor}" />
+                </ui:Effects.Shadow>
+            </Border>
+        </Grid>
+
+        <Grid x:Name="Art" CornerRadius="8">
+            <!--  the shadow under the artwork (opaque, so nothing shows through)  -->
+            <Border x:Name="ShadowHost" Background="{ThemeResource NixieDeepBrush}" CornerRadius="8">
+                <ui:Effects.Shadow>
+                    <media:AttachedCardShadow
+                        x:Name="ArtShadow"
+                        BlurRadius="16"
+                        CornerRadius="8"
+                        Offset="0,6"
+                        Opacity="0.4"
+                        Color="Black" />
+                </ui:Effects.Shadow>
+            </Border>
+            <controls:LazyLoadedImage x:Name="Picture" EnableBlurHash="True" />
+            <!--  watched: the accent square with its check, top right  -->
+            <Border
+                x:Name="WatchedMark"
+                Width="24"
+                Height="24"
+                Margin="0,8,8,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                AutomationProperties.AccessibilityView="Raw"
+                Background="{ThemeResource NixieAccentOnImageBrush}"
+                CornerRadius="6"
+                Visibility="Collapsed">
+                <FontIcon
+                    FontSize="12"
+                    Foreground="{ThemeResource NixieOnAccentOnImageBrush}"
+                    Glyph="&#xE73E;" />
+            </Border>
+            <!--  in progress: the accent on a dark track as tall as the bar, along the foot  -->
+            <Grid
+                x:Name="ProgressTrack"
+                Height="4"
+                Margin="10,0,10,10"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AccessibilityView="Raw"
+                Background="#A6000000"
+                CornerRadius="2"
+                Visibility="Collapsed">
+                <Border
+                    x:Name="ProgressFill"
+                    HorizontalAlignment="Left"
+                    Background="{ThemeResource NixieAccentOnImageBrush}"
+                    CornerRadius="2" />
+            </Grid>
+            <Border
+                AutomationProperties.AccessibilityView="Raw"
+                BorderBrush="{ThemeResource EditorialArtStrokeBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                IsHitTestVisible="False" />
+        </Grid>
+
+        <!--  the ring: the outer near-white line around a deep one, 1 px outside the artwork  -->
+        <Border
+            x:Name="FocusRing"
+            Margin="-4"
+            BorderBrush="{ThemeResource EditorialFocusOuterBrush}"
+            BorderThickness="2"
+            CornerRadius="12"
+            IsHitTestVisible="False"
+            Visibility="Collapsed">
+            <Border
+                BorderBrush="{ThemeResource EditorialFocusInnerBrush}"
+                BorderThickness="2"
+                CornerRadius="10" />
+        </Border>
+
+        <!--  opened: a notch under the poster, in the details panel's colour, pointing at the panel  -->
+        <Path
+            x:Name="Notch"
+            Grid.Row="1"
+            Margin="0,0,0,-26"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            AutomationProperties.AccessibilityView="Raw"
+            Data="M0,12 L12,0 L24,12 Z"
+            Fill="{ThemeResource EditorialPanelBrush}"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
+
+        <StackPanel
+            x:Name="TitleArea"
+            Grid.Row="1"
+            Padding="1,8,1,0"
+            Spacing="1">
+            <TextBlock
+                x:Name="TitleText"
+                FontFamily="{StaticResource GlassTextFontFamily}"
+                FontSize="14"
+                FontWeight="SemiBold"
+                Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <TextBlock
+                x:Name="MetaText"
+                FontFamily="{StaticResource GlassTextFontFamily}"
+                FontSize="13"
+                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+        </StackPanel>
+    </Grid>
+</UserControl>

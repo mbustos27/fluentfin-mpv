@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Editorial: a dense shelf of posters with its details in place. The header is a big title ("Sci-fi"), a caption beside it
+    ("31 films and shows · newest first"), See all and the row's arrows on the right. The row itself is the shared ShelfRow
+    (one Tab stop, Left/Right/Home/End, Up/Down between rows, the wheel, a list named after the shelf for Narrator), its own
+    header hidden. A poster's click or Enter opens its details under the row (InlineDetailsRow); Down from the row enters
+    them, Up or Esc there goes back to the poster.
+-->
+<UserControl
+    x:Class="FluentFin.Themes.Editorial.Controls.EditorialShelf"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ec="using:FluentFin.Themes.Editorial.Controls"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    IsTabStop="False">
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="WidePoster" x:DataType="vm:BaseItemViewModel">
+            <ec:EditorialPoster Margin="0,0,18,30" Item="{x:Bind}" />
+        </DataTemplate>
+        <DataTemplate x:Key="NarrowPoster" x:DataType="vm:BaseItemViewModel">
+            <ec:EditorialPoster
+                Margin="0,0,16,30"
+                Item="{x:Bind}"
+                PosterWidth="122" />
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <StackPanel x:Name="Root">
+        <Grid
+            x:Name="HeaderGrid"
+            Margin="0,0,0,12"
+            ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="TitleText"
+                VerticalAlignment="Bottom"
+                AutomationProperties.HeadingLevel="Level2"
+                Style="{StaticResource EditorialShelfTitleTextBlockStyle}" />
+            <TextBlock
+                x:Name="CaptionText"
+                Grid.Column="1"
+                Margin="0,0,0,5"
+                VerticalAlignment="Bottom"
+                Style="{StaticResource EditorialCaptionTextBlockStyle}" />
+            <HyperlinkButton
+                x:Name="SeeAllButton"
+                Grid.Column="2"
+                VerticalAlignment="Bottom"
+                Click="SeeAllButton_Click"
+                Content="See all"
+                Style="{StaticResource NixieLinkButtonStyle}"
+                Visibility="Collapsed" />
+            <Button
+                x:Name="BackButton"
+                AutomationProperties.Name="Scroll left"
+                ToolTipService.ToolTip="Scroll left"
+                Grid.Column="3"
+                VerticalAlignment="Bottom"
+                Click="BackButton_Click"
+                IsTabStop="False"
+                Style="{StaticResource NixieCompactIconButtonStyle}"
+                Visibility="Collapsed">
+                <FontIcon FontSize="14" Glyph="&#xE76B;" />
+            </Button>
+            <Button
+                x:Name="ForwardButton"
+                AutomationProperties.Name="Scroll right"
+                ToolTipService.ToolTip="Scroll right"
+                Grid.Column="4"
+                VerticalAlignment="Bottom"
+                Click="ForwardButton_Click"
+                IsTabStop="False"
+                Style="{StaticResource NixieCompactIconButtonStyle}"
+                Visibility="Collapsed">
+                <FontIcon FontSize="14" Glyph="&#xE76C;" />
+            </Button>
+        </Grid>
+
+        <lc:ShelfRow x:Name="Row" HasSeeAll="False" />
+
+        <ec:InlineDetailsRow
+            x:Name="Details"
+            Margin="0,-4,0,8"
+            Visibility="Collapsed" />
+    </StackPanel>
+</UserControl>
