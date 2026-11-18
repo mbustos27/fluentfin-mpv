@@ -42,14 +42,17 @@ public sealed partial class LibraryPage : Page
 
 		_grid = new CardGrid(GridScroller, GridList, GridRepeater);
 		GridScroller.ScrollCompleted += GridScroller_ScrollCompleted;
-		Loaded += (_, _) =>
+		void FocusOnLoad(object sender, RoutedEventArgs e)
 		{
 			if (_focusOnLoad)
 			{
 				_focusOnLoad = false;
 				FocusRequested();
 			}
-		};
+		}
+
+		Loaded += FocusOnLoad;
+		GridScroller.Loaded += FocusOnLoad;
 		_grid.ForwardWheel(LibraryRoot);
 		_grid.SetPlace(0, ViewModel.TotalCount);
 		ViewModel.PropertyChanged += (_, e) =>
@@ -122,8 +125,9 @@ public sealed partial class LibraryPage : Page
 				return;
 			}
 
-			// a library that answers at once (Back: 100 ms) can be in before the page is in the window: done once it is
-			if (XamlRoot is null || !IsLoaded)
+			// a library that answers at once (Back: 100 ms) can be in before the page, or the grid (the loaded case of the
+			// page's switch, put in when loading ends), is in the window: done once it is
+			if (XamlRoot is null || !IsLoaded || GridScroller.XamlRoot is null || !GridScroller.IsLoaded)
 			{
 				_focusOnLoad = true;
 				return;

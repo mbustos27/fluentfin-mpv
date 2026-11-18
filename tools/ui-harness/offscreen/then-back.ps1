@@ -21,7 +21,10 @@ function Bk-OpenAndBack($left) {
     $page = Wait-Until { $x = Bk-Info; if ($x -and $x.Name -ne $left.Name) { $x } } -Seconds 10
     Start-Sleep -Milliseconds 2000
     Key 0xA6   # Back
-    Start-Sleep -Milliseconds 3000
+    # the page comes back and puts the focus on the card: waited for (a loaded machine has stalled the app for 5 s), the
+    # title bar keeping it to the end is the failure
+    [void](Wait-Until { $x = Bk-Info; if ($x -and $x.Class -eq 'BaseItemDtoCard') { $x } } -Seconds 15 -PollMs 250)
+    Start-Sleep -Milliseconds 1000
 }
 
 # --- Home
