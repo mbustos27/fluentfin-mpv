@@ -14,14 +14,10 @@ public sealed class NoLeftRailTests
 	private static readonly string[] PaneElements = ["NavigationView", "NavigationViewItem", "SplitView"];
 
 	/// <summary>
-	/// The only NavigationViews left: the server administration's and the Playback Reporting plugin's own section lists (owned
-	/// by the admin stream and the plugin; flagged to the coordinator). A new one anywhere else fails here.
+	/// Pages allowed a navigation pane: none. The last two, the server administration's and the Playback Reporting plugin's
+	/// section lists, became tabs along the top in the admin stream (AdminNoSidePaneTests); a pane anywhere fails here.
 	/// </summary>
-	private static readonly string[] KnownSectionLists =
-	[
-		"FluentFin/Views/JellyfinSettingsPage.xaml",
-		"FluentFin.Plugins/Playback Reporting/Views/PlaybackReportingDashboardPage.xaml",
-	];
+	private static readonly string[] KnownSectionLists = [];
 
 	[Theory]
 	[InlineData("FluentFin/Views/ShellPage.xaml")]
