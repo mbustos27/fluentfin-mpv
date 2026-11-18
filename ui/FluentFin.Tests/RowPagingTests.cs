@@ -170,3 +170,17 @@ public sealed class LibraryBarTests
 	public void OneLetter_IsNoJump() =>
 		Assert.Equal(Microsoft.UI.Xaml.Visibility.Collapsed, FluentFin.Views.LibraryPage.LettersVisibility([new("A", 0)], FluentFin.Core.ViewModels.LoadStatus.Loaded));
 }
+
+/// <summary>1.1.4 (the items stream's request): Home's hero runs edge to edge; the rows keep their inset.</summary>
+public sealed class HomeInsetTests
+{
+	[Fact]
+	public void TheRows_Keep24ASide_And36OnTop_Or20UnderTheHero()
+	{
+		var slide = new FluentFin.Core.ViewModels.HeroSlide(new Jellyfin.Sdk.Generated.Models.BaseItemDto(), "T", "", "", false, Guid.NewGuid(), "tag", null, null);
+
+		Assert.Equal(new Microsoft.UI.Xaml.Thickness(24, 36, 24, 0), FluentFin.Views.HomePage.RowsMargin([]));
+		Assert.Equal(new Microsoft.UI.Xaml.Thickness(24, 36, 24, 0), FluentFin.Views.HomePage.RowsMargin(null));
+		Assert.Equal(new Microsoft.UI.Xaml.Thickness(24, 20, 24, 0), FluentFin.Views.HomePage.RowsMargin([slide]));
+	}
+}

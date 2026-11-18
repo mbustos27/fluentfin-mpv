@@ -57,6 +57,14 @@ public sealed class HomeAndLibraryXamlTests
 	public void TheContinueWatchingNotice_HasAnUndo_ForTheKeyboardAndNarratorToo()
 	{
 		var home = Load("FluentFin/Views/HomePage.xaml");
+		// shown from code: an x:Bind function of the notice was not called again when it went (null), and an empty panel
+		// with its Undo stayed on screen after Undo (seen in the 1.1.4 screenshots)
+		Assert.Equal("Collapsed", (string?)FindByName(home, "NoticePanel").Attribute("Visibility"));
+		Assert.Equal("Collapsed", (string?)FindByName(home, "UndoButton").Attribute("Visibility"));
+		Assert.Null(FindByName(home, "NoticeText").Attribute("Text"));
+		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Views/HomePage.xaml.cs"));
+		Assert.Contains("NoticePanel.Visibility = NoticeVisibility(notice);", code);
+		Assert.Contains("ShowNotice(ViewModel.Notice);", code[code.IndexOf("private void OnNoticeChanged()", StringComparison.Ordinal)..]);
 		var undo = FindByName(home, "UndoButton");
 		Assert.Equal("Undo", (string?)undo.Attribute("AutomationProperties.Name"));
 		Assert.Contains("Ctrl+Z", (string?)undo.Attribute("ToolTipService.ToolTip"));
@@ -168,6 +176,27 @@ public sealed class HomeAndLibraryXamlTests
 		var loading = library.Descendants().Single(e => e.Name.LocalName == "Case" && (string?)e.Attribute("IsDefault") == "True");
 		Assert.Contains(loading.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.Title, Mode=OneWay}");
 		Assert.Null(typeof(LibraryViewModel).GetProperty("SelectedPage"));
+	}
+
+	// ---- the items stream's request: the hero runs edge to edge (the inset came from Home's page, scroller and hero margins)
+
+	[Fact]
+	public void HomesHero_RunsEdgeToEdge_TheRowsKeepTheirInset()
+	{
+		var home = Load("FluentFin/Views/HomePage.xaml");
+
+		Assert.Null(home.Root!.Attribute("Margin"));
+		Assert.Equal("0,0,0,36", (string?)FindByName(home, "PageScroller").Attribute("Margin"));
+		Assert.Equal("0", (string?)home.Descendants().Single(e => e.Name.LocalName == "HomeHero").Attribute("Margin"));
+		var rows = FindByName(home, "RowsPanel");
+		Assert.Equal("{x:Bind local:HomePage.RowsMargin(ViewModel.Hero), Mode=OneWay}", (string?)rows.Attribute("Margin"));
+		Assert.Contains(rows.Descendants(), e => e.Name.LocalName == "ItemsControl"); // the library rows are inside it
+		Assert.Contains("public static Microsoft.UI.Xaml.Thickness RowsMargin(IReadOnlyList<HeroSlide>? hero) => new(24, hero is { Count: > 0 } ? 20 : 36, 24, 0);",
+			File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Views/HomePage.xaml.cs")));
+		// nothing above the hero takes room: the page's own spacing is 0 and the state view has no top margin
+		var content = FindByName(home, "PageScroller").Elements().Single();
+		Assert.Null(content.Attribute("Spacing"));
+		Assert.Equal("36,0", (string?)content.Elements().First().Attribute("Margin"));
 	}
 
 	// ---- interaction audit, item 4: a single letter must never start playback

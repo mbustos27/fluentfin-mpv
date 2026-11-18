@@ -23,6 +23,7 @@ public sealed partial class HomePage : Page
 	public HomePage()
 	{
 		InitializeComponent();
+		ShowNotice(ViewModel.Notice);
 
 		_noticeTimer = DispatcherQueue.CreateTimer();
 		_noticeTimer.IsRepeating = false;
@@ -119,6 +120,9 @@ public sealed partial class HomePage : Page
 		timer.Start();
 	}
 
+	/// <summary>1.1.4: the rows' inset under an edge-to-edge hero: 24 a side, and 36 on top while there is no hero (as before).</summary>
+	public static Microsoft.UI.Xaml.Thickness RowsMargin(IReadOnlyList<HeroSlide>? hero) => new(24, hero is { Count: > 0 } ? 20 : 36, 24, 0);
+
 	public static Microsoft.UI.Xaml.Visibility NoticeVisibility(HomeNotice? notice) =>
 		notice is null ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
 
@@ -128,6 +132,7 @@ public sealed partial class HomePage : Page
 	private void OnNoticeChanged()
 	{
 		_noticeTimer.Stop();
+		ShowNotice(ViewModel.Notice);
 		if (ViewModel.Notice is null)
 		{
 			return;
@@ -143,6 +148,14 @@ public sealed partial class HomePage : Page
 				UndoButton.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
 			}
 		});
+	}
+
+	/// <summary>The notice as the view model has it: shown with its words and its Undo, or gone (null).</summary>
+	private void ShowNotice(HomeNotice? notice)
+	{
+		NoticeText.Text = notice?.Message ?? "";
+		UndoButton.Visibility = UndoVisibility(notice);
+		NoticePanel.Visibility = NoticeVisibility(notice);
 	}
 
 	private void HoldNotice(bool pointer, bool focus)
@@ -168,7 +181,39 @@ public sealed partial class HomePage : Page
 
 	private void Notice_LostFocus(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => HoldNotice(_noticePointer, false);
 
-	private async void UndoButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => await ViewModel.UndoRemoval();
+	private async void UndoButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => await Undo();
+
+	/// <summary>
+	/// Undo: the card goes back (at once, before the server answers), and the keyboard goes with it when it was on the notice,
+	/// which goes: it would be left nowhere.
+	/// </summary>
+	private async Task Undo()
+	{
+		var item = ViewModel.Notice?.Removal?.Item;
+		var focused = XamlRoot is null ? null : Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot) as Microsoft.UI.Xaml.DependencyObject;
+		var fromNotice = focused is not null && IsInside(focused, NoticePanel);
+		var undo = ViewModel.UndoRemoval();
+		if (item is not null && fromNotice)
+		{
+			ContinueRow.UpdateLayout();
+			ContinueRow.FocusItem(x => ReferenceEquals(x, item), Microsoft.UI.Xaml.FocusState.Keyboard);
+		}
+
+		await undo;
+	}
+
+	private static bool IsInside(Microsoft.UI.Xaml.DependencyObject element, Microsoft.UI.Xaml.DependencyObject ancestor)
+	{
+		for (var node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, ancestor))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
 
 	private void NoticeCloseButton_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
 	{
@@ -186,7 +231,7 @@ public sealed partial class HomePage : Page
 		}
 
 		args.Handled = true;
-		await ViewModel.UndoRemoval();
+		await Undo();
 	}
 
 	// fluentfin-mpv: a section is on screen while it loads (placeholder cards) and afterwards only if it has items

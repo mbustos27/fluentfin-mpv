@@ -104,7 +104,10 @@ if ($undo) { [void](Invoke-Element $undo) }
 $back = Wait-Until { $c = CwCards; if ($c.Count -eq $before.Count) { $c } } -Seconds 5 -PollMs 100
 Check 'continue: Undo puts the card back where it was' ($back -and $back[1] -eq $target) (($back | Select-Object -First 3) -join ' | ')
 Check 'continue: ... and its resume point (a second POST)' ([bool](Wait-Until { if ((CwUserDataPosts $t0) -ge 2) { $true } } -Seconds 5))
-Check 'continue: ... and the notice goes' ([bool](Wait-Until { -not (Find-Ui -Name 'from Continue Watching' -Type 'Text' -Contains) } -Seconds 3))
+Check 'continue: ... and the notice goes, its Undo too' ([bool](Wait-Until { -not (Find-Ui -Name 'from Continue Watching' -Type 'Text' -Contains) -and -not (Find-Ui -Name 'Undo' -Type 'Button') } -Seconds 3))
+Start-Sleep -Milliseconds 500
+$f = CwFocused
+Check 'continue: ... and the keyboard is on the card that came back (Undo had it)' ($f -and $f.Name -eq $target) ("{0} [{1}]" -f $f.Name, $f.Class)
 CwShot 'cw-4-undone'
 
 # --- a card of another row: no such entry
