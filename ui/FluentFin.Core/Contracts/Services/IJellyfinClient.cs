@@ -35,9 +35,11 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task DeleteItem(BaseItemDto dto);
 
-		Task CreateLibrary(string name, CollectionTypeOptions collectionType, LibraryOptions options);
+		/// <summary>Nixie 1.2.0 (admin): <c>POST /Library/VirtualFolders</c> (the folders in <c>options.PathInfos</c>); false when it failed (logged).</summary>
+		Task<bool> CreateLibrary(string name, CollectionTypeOptions collectionType, LibraryOptions options);
 
-		Task DeleteLibrary(string name);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> DeleteLibrary(string name);
 
 		Task RenameLibrary(string name, string newName);
 
@@ -206,7 +208,8 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<LibraryOptionsResultDto?> GetAvailableInfo(Jellyfin.Sdk.Generated.Libraries.AvailableOptions.CollectionType libraryContentType, bool isNewLibrary);
 
-		Task SaveLibraryOptions(Guid folderId, LibraryOptions options);
+		/// <summary>Nixie 1.2.0 (admin): false when it failed (logged).</summary>
+		Task<bool> SaveLibraryOptions(Guid folderId, LibraryOptions options);
 
 		Task<List<TaskInfo>> GetScheduledTasks();
 

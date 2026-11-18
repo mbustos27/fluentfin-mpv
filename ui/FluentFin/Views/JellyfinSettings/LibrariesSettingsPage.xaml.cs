@@ -13,6 +13,9 @@ public sealed partial class LibrariesSettingsPage : Page
 	public LibrariesSettingsPage()
 	{
 		InitializeComponent();
+		// Nixie 1.2.0 (admin): Delete asks here (Cancel the default); Add library opens the dialog that creates one
+		ViewModel.Confirm = DestructiveConfirm.AskInMainWindow;
+		ViewModel.AddLibraryDialog = App.Dialogs.CreateLibrary;
 	}
 
 	public static string SingleOrCount(IList<string> values)
@@ -20,23 +23,26 @@ public sealed partial class LibrariesSettingsPage : Page
 		return values.Count == 1 ? values[0] : $"{values.Count} folders";
 	}
 
+	public static bool IsOpen(ServerNotice? notice) => notice is not null;
+
+	/// <summary>D20: the card's More button says which library.</summary>
+	public static string MoreName(string? library) => string.IsNullOrWhiteSpace(library) ? "More options" : $"More options for {library}";
+
+	private void NoticeBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) => ViewModel.Notice = null;
+
 	private async void OnDelete(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
 	{
-		if (sender is not MenuFlyoutItem item)
+		if (sender is MenuFlyoutItem { Tag: VirtualFolderInfo info })
 		{
-			return;
+			await ViewModel.DeleteLibraryCommand.ExecuteAsync(info);
 		}
+	}
 
-		if (item.Tag is not VirtualFolderInfo info)
+	private async void OnManage(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+	{
+		if (sender is MenuFlyoutItem { Tag: VirtualFolderInfo info } && await App.Dialogs.ManageLibrary(info))
 		{
-			return;
-		}
-
-		var delete = await DialogCommands.DeleteLibraryDialog(info.Name ?? "");
-
-		if (delete)
-		{
-			ViewModel.VirtualFolders.Remove(info);
+			await ViewModel.Reload();
 		}
 	}
 
@@ -54,10 +60,10 @@ public sealed partial class LibrariesSettingsPage : Page
 
 		var newName = await App.GetKeyedService<IUserInput<string>>(UserInputs.LibraryNewName).GetValue();
 
-		if (!string.IsNullOrEmpty(newName))
+		if (!string.IsNullOrWhiteSpace(newName) && newName.Trim() != info.Name)
 		{
-			await App.GetService<IJellyfinClient>().RenameLibrary(info.Name ?? "", newName);
-			await ViewModel.OnNavigatedTo(new());
+			await App.GetService<IJellyfinClient>().RenameLibrary(info.Name ?? "", newName.Trim());
+			await ViewModel.Reload();
 		}
 	}
 }

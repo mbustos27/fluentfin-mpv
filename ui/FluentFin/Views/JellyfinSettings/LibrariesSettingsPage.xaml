@@ -26,13 +26,36 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel
-            Margin="0,40,0,36"
-            Orientation="Horizontal"
-            Spacing="16">
-            <Button Content="Scall All Libraries" />
-            <Button Command="{x:Bind root:App.Dialogs.CreateLibraryDialogCommand}" Content="Add New Library" />
-            <HyperlinkButton Content="Help" NavigateUri="https://jellyfin.org/docs/general/server/libraries/" />
+        <!--
+            Nixie 1.2.0 (admin, D17 / D18 / D19): "Scan all libraries" scans (it was "Scall All Libraries" with no action) and
+            "Add library" creates one (Save returned at once in create mode); both role: Secondary Compact. Help is a link that
+            leaves the app (E8A7 after the text).
+        -->
+        <StackPanel Margin="0,40,0,36" Spacing="12">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="AddLibraryButton" Command="{x:Bind ViewModel.AddLibraryCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE710;" />
+                        <TextBlock Text="Add library" />
+                    </StackPanel>
+                </Button>
+                <Button
+                    x:Name="ScanAllButton"
+                    Command="{x:Bind ViewModel.ScanAllCommand}"
+                    Content="Scan all libraries" />
+                <HyperlinkButton NavigateUri="https://jellyfin.org/docs/general/server/libraries/" ToolTipService.ToolTip="Opens jellyfin.org in your browser">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="Help" />
+                        <FontIcon FontSize="12" Glyph="&#xE8A7;" />
+                    </StackPanel>
+                </HyperlinkButton>
+            </StackPanel>
+            <InfoBar
+                Closed="NoticeBar_Closed"
+                IsOpen="{x:Bind local:LibrariesSettingsPage.IsOpen(ViewModel.Notice), Mode=OneWay}"
+                Message="{x:Bind ViewModel.Notice.Message, Mode=OneWay}"
+                Severity="{x:Bind local:DashboardPage.Severity(ViewModel.Notice), Mode=OneWay}"
+                Title="{x:Bind ViewModel.Notice.Title, Mode=OneWay}" />
         </StackPanel>
 
         <ScrollViewer Grid.Row="1">
@@ -62,10 +85,14 @@
                                     <TextBlock Text="{x:Bind local:LibrariesSettingsPage.SingleOrCount(Locations)}" />
                                 </StackPanel>
 
+                                <!--  D20: role Subtle/icon Compact (32), named for its library; D21 / D23: "Refresh metadata…", Delete last after a separator  -->
                                 <Button
                                     Grid.Column="1"
-                                    AutomationProperties.Name="More options"
-                                    Content="{ui:SymbolIcon Symbol=More}"
+                                    Width="32"
+                                    Height="32"
+                                    Padding="0"
+                                    AutomationProperties.Name="{x:Bind local:LibrariesSettingsPage.MoreName(Name)}"
+                                    Content="{ui:FontIcon Glyph=&#xE712;, FontSize=16}"
                                     ToolTipService.ToolTip="More options">
                                     <Button.Flyout>
                                         <MenuBarItemFlyout>
@@ -73,22 +100,23 @@
                                                 Command="{x:Bind root:App.Dialogs.RefreshMetadataDialogCommand}"
                                                 CommandParameter="{x:Bind c:Converters.ToGuid(ItemId)}"
                                                 Icon="{ui:SymbolIcon Symbol=Refresh}"
-                                                Text="Scan library" />
+                                                Text="Refresh metadata…" />
                                             <MenuFlyoutItem
-                                                Command="{x:Bind root:App.Dialogs.ManageLibraryDialogCommand}"
-                                                CommandParameter="{x:Bind}"
+                                                Click="OnManage"
                                                 Icon="{ui:FontIcon Glyph=&#xE8D5;}"
-                                                Text="Manage" />
-                                            <MenuFlyoutItem
-                                                Click="OnDelete"
-                                                Icon="{ui:SymbolIcon Symbol=Delete}"
                                                 Tag="{x:Bind}"
-                                                Text="Delete" />
+                                                Text="Manage…" />
                                             <MenuFlyoutItem
                                                 Click="OnRename"
                                                 Icon="{ui:SymbolIcon Symbol=Rename}"
                                                 Tag="{x:Bind}"
-                                                Text="Rename" />
+                                                Text="Rename…" />
+                                            <MenuFlyoutSeparator />
+                                            <MenuFlyoutItem
+                                                Click="OnDelete"
+                                                Icon="{ui:SymbolIcon Symbol=Delete}"
+                                                Tag="{x:Bind}"
+                                                Text="Delete library…" />
                                         </MenuBarItemFlyout>
                                     </Button.Flyout>
                                 </Button>

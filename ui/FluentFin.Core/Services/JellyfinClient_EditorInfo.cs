@@ -24,7 +24,7 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task SaveLibraryOptions(Guid folderId, LibraryOptions options)
+	public async Task<bool> SaveLibraryOptions(Guid folderId, LibraryOptions options)
 	{
 		try
 		{
@@ -33,11 +33,12 @@ public partial class JellyfinClient
 				Id = folderId,
 				LibraryOptions = options
 			});
+			return true; // Nixie 1.2.0 (admin): the dialog closes only when the server took it
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, "Unhandled Exception");
-			return;
+			return false;
 		}
 	}
 }

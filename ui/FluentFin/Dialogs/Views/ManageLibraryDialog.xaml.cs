@@ -18,8 +18,16 @@ public sealed partial class ManageLibraryDialog : IViewFor<ManageLibraryViewMode
 	public static string RefreshIntervalToString(int value) => value switch
 	{
 		0 => "Never",
-		int i => $"Every {i} Days"
+		int i => $"Every {i} days"
 	};
+
+	public static bool HasText(string? text) => !string.IsNullOrWhiteSpace(text);
+
+	public static string RemoveFolderName(string folder) => $"Remove folder {folder}";
+
+	public static string MoveUpName(string fetcher) => $"Move {fetcher} up";
+
+	public static string MoveDownName(string fetcher) => $"Move {fetcher} down";
 
 	private async void Button_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
 	{

@@ -132,7 +132,7 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task CreateLibrary(string name, CollectionTypeOptions collectionType, LibraryOptions options)
+	public async Task<bool> CreateLibrary(string name, CollectionTypeOptions collectionType, LibraryOptions options)
 	{
 		try
 		{
@@ -146,11 +146,12 @@ public partial class JellyfinClient
 				query.Name = name;
 				query.CollectionType = collectionType;
 			});
+			return true; // Nixie 1.2.0 (admin): the caller says whether it was created
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 		finally
 		{
@@ -158,7 +159,7 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task DeleteLibrary(string name)
+	public async Task<bool> DeleteLibrary(string name)
 	{
 		try
 		{
@@ -168,11 +169,12 @@ public partial class JellyfinClient
 				query.RefreshLibrary = true;
 				query.Name = name;
 			});
+			return true; // Nixie 1.2.0 (admin): the list drops the library only when the server did
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 		finally
 		{

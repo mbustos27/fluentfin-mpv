@@ -14,13 +14,12 @@
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Dialogs.ViewModels"
     x:Name="Page"
-    Title="{x:Bind ViewModel.Name, Mode=OneWay}"
-    CloseButtonText="Close"
+    Title="{x:Bind ViewModel.DialogTitle, Mode=OneWay}"
+    CloseButtonText="Cancel"
     DefaultButton="Primary"
-    PrimaryButtonCommand="{x:Bind ViewModel.SaveCommand}"
-    PrimaryButtonText="Save"
+    PrimaryButtonText="{x:Bind ViewModel.SaveText, Mode=OneWay}"
     SecondaryButtonCommand="{x:Bind ViewModel.ResetCommand}"
-    SecondaryButtonText="Reset"
+    SecondaryButtonText="{x:Bind ViewModel.UndoText, Mode=OneWay}"
     Style="{StaticResource DefaultContentDialogStyleWithTitleBackground}"
     mc:Ignorable="d">
 
@@ -46,21 +45,20 @@
                         Grid.Column="2"
                         Margin="{StaticResource SmallLeftMargin}"
                         IsChecked="{x:Bind IsSelected, Mode=TwoWay}" />
+                    <!--  D74 / D75: disabled, not hidden, at the ends (the row keeps its shape); named for their fetcher  -->
                     <Button
                         Grid.Column="0"
-                        AutomationProperties.Name="Move up"
+                        AutomationProperties.Name="{x:Bind local:ManageLibraryDialog.MoveUpName(Name)}"
                         Command="{x:Bind MoveUpCommand}"
-                        Content="{ui:FontIcon Glyph=&#xE70E;}"
-                        ToolTipService.ToolTip="Move up"
-                        Visibility="{Binding RelativeSource={RelativeSource Mode=Self}, Path=IsEnabled, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        Content="{ui:FontIcon Glyph=&#xE70E;, FontSize=16}"
+                        ToolTipService.ToolTip="Move up" />
                     <Button
                         Grid.Column="1"
                         Margin="{StaticResource XSmallLeftMargin}"
-                        AutomationProperties.Name="Move down"
+                        AutomationProperties.Name="{x:Bind local:ManageLibraryDialog.MoveDownName(Name)}"
                         Command="{x:Bind MoveDownCommand}"
-                        Content="{ui:FontIcon Glyph=&#xE70D;}"
-                        ToolTipService.ToolTip="Move down"
-                        Visibility="{Binding RelativeSource={RelativeSource Mode=Self}, Path=IsEnabled, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        Content="{ui:FontIcon Glyph=&#xE70D;, FontSize=16}"
+                        ToolTipService.ToolTip="Move down" />
                 </Grid>
             </ctk:SettingsCard>
         </DataTemplate>
@@ -68,6 +66,12 @@
 
     <ScrollView Width="800">
         <StackPanel Spacing="5">
+            <InfoBar
+                Margin="{StaticResource MediumBottomMargin}"
+                IsClosable="False"
+                IsOpen="{x:Bind local:ManageLibraryDialog.HasText(ViewModel.Error), Mode=OneWay}"
+                Message="{x:Bind ViewModel.Error, Mode=OneWay}"
+                Severity="Error" />
             <InfoBar
                 Margin="{StaticResource MediumBottomMargin}"
                 IsClosable="False"
@@ -94,17 +98,21 @@
                     Header="Folder"
                     IsExpanded="True"
                     ItemsSource="{x:Bind ViewModel.Locations, Mode=OneWay}">
-                    <Button
-                        Click="Button_Click"
-                        Content="Add"
-                        Style="{ThemeResource AccentButtonStyle}" />
+                    <!--  role: Secondary Compact (D72: no accent, says what it adds)  -->
+                    <Button Click="Button_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="16" Glyph="&#xE710;" />
+                            <TextBlock Text="Add folder" />
+                        </StackPanel>
+                    </Button>
                     <ctk:SettingsExpander.ItemTemplate>
-                        <DataTemplate>
-                            <ctk:SettingsCard Header="{Binding}">
+                        <DataTemplate x:DataType="x:String">
+                            <ctk:SettingsCard Header="{x:Bind}">
+                                <!--  D73: named for its folder  -->
                                 <Button
-                                    AutomationProperties.Name="Remove folder"
+                                    AutomationProperties.Name="{x:Bind local:ManageLibraryDialog.RemoveFolderName((x:String))}"
                                     Command="{Binding ElementName=Page, Path=ViewModel.RemoveFolderCommand}"
-                                    CommandParameter="{Binding}"
+                                    CommandParameter="{x:Bind}"
                                     Content="{ui:SymbolIcon Symbol=Remove}"
                                     ToolTipService.ToolTip="Remove folder" />
                             </ctk:SettingsCard>
@@ -129,7 +137,7 @@
                 <ctk:SettingsCard Header="Special season display name">
                     <TextBox Text="{x:Bind ViewModel.SeasonZeroDisplayName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 </ctk:SettingsCard>
-                <ctk:SettingsExpander Header="Embedded Information" IsExpanded="True">
+                <ctk:SettingsExpander Header="Embedded information" IsExpanded="True">
                     <ctk:SettingsExpander.Items>
                         <ctk:SettingsCard Description="Determine the display title to use when no internet metadata or local metadata is available." Header="Prefer embedded titles over filenames">
                             <ToggleSwitch IsOn="{x:Bind ViewModel.EnableEmbeddedTitles, Mode=TwoWay}" />
@@ -142,7 +150,7 @@
                         </ctk:SettingsCard>
                     </ctk:SettingsExpander.Items>
                 </ctk:SettingsExpander>
-                <ctk:SettingsCard Description="Disable subtitles that are packaged within media containers. Requires a full library refresh." Header="Enable real time monitoring">
+                <ctk:SettingsCard Description="Changes to files are picked up at once, on file systems that support it." Header="Enable real time monitoring">
                     <ToggleSwitch IsOn="{x:Bind ViewModel.EnableRealtimeMonitor, Mode=TwoWay}" />
                 </ctk:SettingsCard>
                 <ctk:SettingsExpander
@@ -229,7 +237,7 @@
                         </ctk:SettingsCard>
                     </ctk:SettingsExpander.Items>
                 </ctk:SettingsExpander>
-                <ctk:SettingsExpander Header="Chapter Images" IsExpanded="True">
+                <ctk:SettingsExpander Header="Chapter images" IsExpanded="True">
                     <ctk:SettingsExpander.Items>
                         <ctk:SettingsCard Description="Extracting chapter images will allow clients to display graphical scene selection menus. The process can be slow, resource intensive, and may require several gigabytes of space. It runs when videos are discovered, and also as a nightly scheduled task. The schedule is configurable in the scheduled tasks area. It is not recommended to run this task during peak usage hours." Header="Enable chapter image extraction">
                             <ToggleSwitch IsOn="{x:Bind ViewModel.EnableChapterImageExtraction, Mode=TwoWay}" />
@@ -244,7 +252,7 @@
                     Header="Subtitle downloaders"
                     ItemTemplate="{StaticResource FetcherTemplate}"
                     ItemsSource="{x:Bind ViewModel.SubtitleFetchers}" />
-                <ctk:SettingsExpander Header="Subtitle Downloads" IsExpanded="True">
+                <ctk:SettingsExpander Header="Subtitle downloads" IsExpanded="True">
                     <ctk:SettingsExpander.Items>
                         <ctk:SettingsCard Description="Only download subtitles that are a perfect match for video files" Header="Only download subtitles that are a perfect match for video files">
                             <ToggleSwitch IsOn="{x:Bind ViewModel.RequirePerfectSubtitleMatch, Mode=TwoWay}" />

@@ -12,12 +12,16 @@ public abstract partial class StringUserInput(IContentDialogService dialogServic
 	public virtual string? Title { get; }
 	public virtual string? PlaceholderText { get; }
 
+	/// <summary>Nixie 1.2.0 (admin, D79): the dialog's primary says what it does ("Rename", "Send"), never "OK".</summary>
+	public abstract string ConfirmText { get; }
+
 	public async Task<string?> GetValue()
 	{
 		var vm = serviceProvider.GetRequiredService<StringPickerViewModel>();
 		vm.Message = Message;
 		vm.PlaceholderText = PlaceholderText;
 		vm.Title = Title;
+		vm.ConfirmText = ConfirmText;
 
 		var result = await dialogService.ShowDialog(vm, null!);
 
@@ -32,13 +36,15 @@ public abstract partial class StringUserInput(IContentDialogService dialogServic
 
 public sealed class LibraryNewNameInput(IContentDialogService dialogService, IServiceProvider serviceProvider) : StringUserInput(dialogService, serviceProvider)
 {
-	public override string? Message => "Renaming a media library will cause all metadata to be lost, proceed with caution.";
-	public override string? Title => "Rename Library";
-	public override string? PlaceholderText => "Enter new name";
+	public override string? Message => "Renaming a library loses all of its metadata.";
+	public override string? Title => "Rename library";
+	public override string? PlaceholderText => "New name";
+	public override string ConfirmText => "Rename";
 }
 
 public sealed class SendMessageToSessionInput(IContentDialogService dialogService, IServiceProvider serviceProvider) : StringUserInput(dialogService, serviceProvider)
 {
-	public override string? Title => "Send Message";
-	public override string? PlaceholderText => "Enter message";
+	public override string? Title => "Send a message";
+	public override string? PlaceholderText => "Message";
+	public override string ConfirmText => "Send";
 }
