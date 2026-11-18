@@ -218,7 +218,8 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task RunScheduledTask(string id);
 
-		Task PlayOnSession(string sessionId, params IEnumerable<Guid?> itemIds);
+		/// <summary>Nixie 1.2.0 (admin): false when the server did not take it (logged).</summary>
+		Task<bool> PlayOnSession(string sessionId, params IEnumerable<Guid?> itemIds);
 
 		Task TogglePlayPause(string sessionId);
 

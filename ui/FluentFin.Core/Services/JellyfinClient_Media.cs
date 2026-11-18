@@ -209,13 +209,23 @@ public partial class JellyfinClient
 		}
 	}
 
-	public async Task PlayOnSession(string sessionId, params IEnumerable<Guid?> items)
+	public async Task<bool> PlayOnSession(string sessionId, params IEnumerable<Guid?> items)
 	{
-		await _jellyfinApiClient.Sessions[sessionId].Playing.PostAsync(x =>
+		// Nixie 1.2.0 (admin, A71): a refused request is false (logged), not an exception out of the dialog's button
+		try
 		{
-			x.QueryParameters.ItemIds = [.. items];
-			x.QueryParameters.PlayCommand = Jellyfin.Sdk.Generated.Sessions.Item.Playing.PlayCommand.PlayNow;
-		});
+			await _jellyfinApiClient.Sessions[sessionId].Playing.PostAsync(x =>
+			{
+				x.QueryParameters.ItemIds = [.. items];
+				x.QueryParameters.PlayCommand = Jellyfin.Sdk.Generated.Sessions.Item.Playing.PlayCommand.PlayNow;
+			});
+			return true;
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, @"Unhandled exception");
+			return false;
+		}
 	}
 
 	public async Task TogglePlayPause(string sessionId)
