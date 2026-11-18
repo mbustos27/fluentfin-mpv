@@ -73,12 +73,12 @@ function CwOpenMenu([string]$CardName) {
 
 [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
 Start-Sleep -Milliseconds 800
-$before = CwCards
-Check 'continue: the row has cards' ($before.Count -ge 3) ("{0} cards: {1}" -f $before.Count, ($before -join ' | '))
+$cwBefore = CwCards
+Check 'continue: the row has cards' ($cwBefore.Count -ge 3) ("{0} cards: {1}" -f $cwBefore.Count, ($cwBefore -join ' | '))
 CwShot 'cw-1-row-before'
 
 # --- the menu of the second card
-$target = $before[1]
+$target = $cwBefore[1]
 $entry = CwOpenMenu $target
 Check 'continue: the menu key opens the card''s menu, with "Remove from Continue Watching"' ([bool]$entry) $target
 Check 'continue: ... and no "Reset watch progress" beside it (the same thing on the server)' (-not (Find-Ui -Name 'Reset watch progress' -Type 'MenuItem'))
@@ -87,21 +87,21 @@ CwShot 'cw-2-menu'
 # --- remove: the card goes at once, the focus stays in the row, the notice with Undo, the server's resume point cleared
 $t0 = Get-Epoch
 if ($entry) { [void](Invoke-Element $entry) }
-$gone = Wait-Until { $c = CwCards; if ($c.Count -eq $before.Count - 1 -and $c -notcontains $target) { $c } } -Seconds 5 -PollMs 100
+$gone = Wait-Until { $c = CwCards; if ($c.Count -eq $cwBefore.Count - 1 -and $c -notcontains $target) { $c } } -Seconds 5 -PollMs 100
 Check 'continue: the card leaves the row at once' ([bool]$gone) (($gone | Select-Object -First 3) -join ' | ')
 $notice = Wait-Ui -Name 'from Continue Watching' -Type 'Text' -Contains -Seconds 3
 $undo = Find-Ui -Name 'Undo' -Type 'Button'
 Check 'continue: a notice says so, with Undo' ($notice -and $undo) $(if ($notice) { $notice.Current.Name })
 Start-Sleep -Milliseconds 700
 $f = CwFocused
-Check 'continue: the keyboard focus stays in the row (the card that took its place)' ($f -and $f.Class -eq 'BaseItemDtoCard' -and $f.Name -eq $before[2]) ("{0} [{1}]" -f $f.Name, $f.Class)
+Check 'continue: the keyboard focus stays in the row (the card that took its place)' ($f -and $f.Class -eq 'BaseItemDtoCard' -and $f.Name -eq $cwBefore[2]) ("{0} [{1}]" -f $f.Name, $f.Class)
 $posted = Wait-Until { if ((CwUserDataPosts $t0) -ge 1) { $true } } -Seconds 5
 Check 'continue: the server''s resume point was cleared (POST /UserItems/{id}/UserData)' ([bool]$posted)
 CwShot 'cw-3-removed-notice'
 
 # --- Undo: back where it was, and the resume point back on the server
 if ($undo) { [void](Invoke-Element $undo) }
-$back = Wait-Until { $c = CwCards; if ($c.Count -eq $before.Count) { $c } } -Seconds 5 -PollMs 100
+$back = Wait-Until { $c = CwCards; if ($c.Count -eq $cwBefore.Count) { $c } } -Seconds 5 -PollMs 100
 Check 'continue: Undo puts the card back where it was' ($back -and $back[1] -eq $target) (($back | Select-Object -First 3) -join ' | ')
 Check 'continue: ... and its resume point (a second POST)' ([bool](Wait-Until { if ((CwUserDataPosts $t0) -ge 2) { $true } } -Seconds 5))
 Check 'continue: ... and the notice goes, its Undo too' ([bool](Wait-Until { -not (Find-Ui -Name 'from Continue Watching' -Type 'Text' -Contains) -and -not (Find-Ui -Name 'Undo' -Type 'Button') } -Seconds 3))
@@ -131,5 +131,5 @@ CwShot 'cw-5-removed-again'
 $expired = Wait-Until { -not (Find-Ui -Name 'from Continue Watching' -Type 'Text' -Contains) } -Seconds 16 -PollMs 500
 Check 'continue: the notice goes by itself after about ten seconds' ([bool]$expired)
 $after = CwCards
-Check 'continue: ... and the card stays out of the row' ($after -notcontains $target -and $after.Count -eq $before.Count - 1) (($after | Select-Object -First 3) -join ' | ')
+Check 'continue: ... and the card stays out of the row' ($after -notcontains $target -and $after.Count -eq $cwBefore.Count - 1) (($after | Select-Object -First 3) -join ' | ')
 CwShot 'cw-6-row-after'

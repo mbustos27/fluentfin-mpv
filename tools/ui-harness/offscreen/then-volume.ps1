@@ -289,14 +289,14 @@ if ($null -eq $volumeNow) { $volumeNow = 95 }
 foreach ($name in $pick) {
     $sc = $scenarios[$name]; if (-not $sc) { Say "volume: no scenario $name"; continue }
     if ($sc.Wait) { Start-Sleep -Milliseconds $sc.Wait }
-    $before = Last-Mpv; if ($null -eq $before) { $before = $volumeNow }
+    $volBefore = Last-Mpv; if ($null -eq $volBefore) { $volBefore = $volumeNow }
     $posted = New-Object 'System.Collections.Generic.List[double]'
     [VolumeProbe]::MoveTo($wheelWindow, $sx, $sy)
     $rows = [VolumeProbe]::Burst($script:hwnd, $wheelWindow, $sx, $sy, [int[]]$sc.S.A, [int[]]$sc.S.D, [int]$sc.For, $bar[0], $bar[1], $span, $probeX, (Join-Path $volDir "$name-strip.png"), $posted)
     Start-Sleep -Milliseconds 300
     $start = [double](($rows[0] -split ' ')[1])
     # the expected volume after each notch (the view model's arithmetic: 120 a notch, 5 a notch, 0 to 100)
-    $acc = 0; $expect = [double]$before; $targets = @()
+    $acc = 0; $expect = [double]$volBefore; $targets = @()
     foreach ($d in $sc.S.D) { $acc += $d; $n = [math]::Truncate($acc / 120); $acc -= $n * 120; if ($n -ne 0) { $expect = [math]::Max(0, [math]::Min(100, $expect + 5 * $n)); $targets += $expect } }
     $direction = [math]::Sign(($sc.S.D | Measure-Object -Sum).Sum)
     $texts = @([VolumeProbe]::TextsNow() | Where-Object { $_.Key -ge $start - 50 -and $_.Key -le $start + $sc.For } | ForEach-Object { [pscustomobject]@{ T = $_.Key - $start; V = $_.Value } })
@@ -329,7 +329,7 @@ foreach ($name in $pick) {
     $textSeq = ($texts | ForEach-Object { '{0}@{1:0}' -f $_.V, $_.T }) -join ' '
     $line = "{0}: {1} events ({2} notches) over {3:0} ms, posted at {4}; volume {5} -> {6} (expected {7}); mpv changes {8} [{9}]; text [{10}]; grabs {11} ({12:0} ms avg); fill backward steps {13}, largest {14:0} px ({15:0.0} %); fill ends at {16} % ({17} px)" -f `
         $name, $sc.S.D.Count, $targets.Count, ($sc.S.A | Measure-Object -Maximum).Maximum, (($posted | ForEach-Object { '{0:0}' -f $_ }) -join ' '),
-        $before, $after, $expect, $mpv.Count, $mpvSeq, $textSeq, $samples.Count, (($samples | ForEach-Object { $_.T1 - $_.T } | Measure-Object -Average).Average),
+        $volBefore, $after, $expect, $mpv.Count, $mpvSeq, $textSeq, $samples.Count, (($samples | ForEach-Object { $_.T1 - $_.T } | Measure-Object -Average).Average),
         $back.Count, $maxBack, (100.0 * $maxBack / $span), $finalPct, $(if ($final) { $final.W } else { 0 })
     Say "volume $line"
     Add-Content -LiteralPath $summaryFile -Value $line -Encoding utf8

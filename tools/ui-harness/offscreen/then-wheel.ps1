@@ -27,10 +27,10 @@ for ($i = 0; $i -lt 3; $i++) {
     # tilt right over the same place (the page moved: find the row again)
     $r = (Rows-Now)[$i]; if (-not $r) { $r = (Rows-Now)[0] }
     $x = [int]($r.Rect[0] + $r.Rect[2] / 2); $y = [int]($r.Rect[1] + $r.Rect[3] / 2)
-    $before = $r.H; $pageB = (Page-State).V
+    $rowBefore = $r.H; $pageB = (Page-State).V
     Wheel-At $x $y 120 $true
     $after = (Rows-Now | Where-Object { [math]::Abs($_.Rect[1] - $r.Rect[1]) -lt 2 } | Select-Object -First 1).H
-    Check "wheel: the tilt wheel over $($names[$i]) moves the row" ($after -gt $before + 0.5) "row $before -> $after"
+    Check "wheel: the tilt wheel over $($names[$i]) moves the row" ($after -gt $rowBefore + 0.5) "row $rowBefore -> $after"
     Check "wheel: ... and not the page" ([math]::Abs((Page-State).V - $pageB) -lt 0.5)
     # the row's end: scroll it all the way, then the vertical wheel must still reach the page
     for ($k = 0; $k -lt 14; $k++) { Wheel-At $x $y 120 $true }
