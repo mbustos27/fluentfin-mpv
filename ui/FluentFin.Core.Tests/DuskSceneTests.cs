@@ -86,27 +86,32 @@ public sealed class DuskSceneTests
 		}
 	}
 
+	/// <summary>A sparkle: four tips on the circle, its sides curved in toward the centre, all inside its square, at any turn.</summary>
 	[Theory]
-	[InlineData(4, 0.25, false)]
-	[InlineData(8, 0.18, true)]
-	[InlineData(12, 0.18, false)]
-	public void A_starburst_alternates_long_and_short_rays_inside_its_square(int points, double inner, bool alternate)
+	[InlineData(50, 0.14, 0)]
+	[InlineData(50, 0.2, 45)]
+	[InlineData(12, 0.14, 0)]
+	public void A_sparkle_has_four_tips_on_its_circle_and_sides_pulled_in(double r, double waist, double angle)
 	{
-		const double r = 50;
-		var star = DuskScene.Starburst(r, points, inner, alternate);
-		Assert.Equal(points * 2, star.Count);
-		for (var i = 0; i < star.Count; i++)
+		var (start, curves) = DuskScene.Sparkle(r, waist, angle);
+		Assert.Equal(4, curves.Count);
+		double Distance((double X, double Y) p) => Math.Sqrt((p.X - r) * (p.X - r) + (p.Y - r) * (p.Y - r));
+		Assert.Equal(r, Distance(start), 6);
+		foreach (var (control, end) in curves)
 		{
-			var (x, y) = star[i];
-			Assert.InRange(x, -1e-9, 2 * r + 1e-9);
-			Assert.InRange(y, -1e-9, 2 * r + 1e-9);
-			var length = Math.Sqrt((x - r) * (x - r) + (y - r) * (y - r));
-			var expected = i % 2 == 1 ? r * inner : alternate && i % 4 == 2 ? r * 0.6 : r;
-			Assert.Equal(expected, length, 6);
+			Assert.Equal(r, Distance(end), 6);
+			Assert.Equal(r * waist, Distance(control), 6);
+			Assert.InRange(end.X, -1e-9, 2 * r + 1e-9);
+			Assert.InRange(end.Y, -1e-9, 2 * r + 1e-9);
 		}
 
-		// the first ray points straight up
-		Assert.Equal((r, 0.0), (Math.Round(star[0].X, 6), Math.Round(star[0].Y, 6)));
+		// the last curve closes on the first tip; unturned, the first tip points straight up
+		Assert.Equal(start.X, curves[^1].End.X, 6);
+		Assert.Equal(start.Y, curves[^1].End.Y, 6);
+		if (angle == 0)
+		{
+			Assert.Equal((r, 0.0), (Math.Round(start.X, 6), Math.Round(start.Y, 6)));
+		}
 	}
 
 	[Fact]
@@ -116,6 +121,8 @@ public sealed class DuskSceneTests
 		foreach (var (x, y, radius, points, _) in DuskScene.Stars)
 		{
 			Assert.False(x > 0.36 && x < 0.62 && y > 0.28 && y < 0.72, $"a star at {x},{y} would sit behind the card");
+			// nor where a page's title falls in a narrow window (the art pass: one sat behind "Settings" at 1100 px)
+			Assert.False(x < 0.5 && y > 0.09 && y < 0.3, $"a star at {x},{y} would sit behind a page title");
 			Assert.InRange(radius, 0.004, 0.03);
 			Assert.Contains(points, new[] { 4, 8, 12 });
 		}
@@ -124,8 +131,10 @@ public sealed class DuskSceneTests
 	[Fact]
 	public void The_crt_touches_stay_faint()
 	{
-		Assert.InRange(DuskScene.ScanlineAlpha(false), 0.04, 0.08);
-		Assert.InRange(DuskScene.ScanlineAlpha(true), 0.03, DuskScene.ScanlineAlpha(false));
+		// faint at dusk, none at noon (on the pale sky they read as grey hatching)
+		Assert.InRange(DuskScene.ScanlineAlpha(false), 0.02, 0.05);
+		Assert.Equal(0, DuskScene.ScanlineAlpha(true));
+		Assert.InRange(DuskScene.BandEdge, 0.005, 0.03);
 		Assert.True(DuskScene.VignetteAlpha(false) <= 0.35 && DuskScene.VignetteAlpha(true) < DuskScene.VignetteAlpha(false));
 		Assert.True(DuskScene.StripHillsHeight < DuskScene.SceneHillsHeight);
 	}

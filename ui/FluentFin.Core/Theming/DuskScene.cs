@@ -52,12 +52,21 @@ public static class DuskScene
 	public const double StripHillsHeight = 0.12;
 
 	/// <summary>How much of the hills the strip shows over its soft sky (dark theme, light theme).</summary>
-	public static double StripOpacity(bool light) => light ? 0.22 : 0.34;
+	/// <remarks>The art pass: a little fainter once the shell's grey content layer no longer washed it (a quiet horizon, not a band).</remarks>
+	public static double StripOpacity(bool light) => light ? 0.2 : 0.28;
 
 	/// <summary>The CRT touches, full scene only: a dark line every 3 DIP at this alpha, and a vignette darkest at the corners.</summary>
 	public const double ScanlinePeriod = 3;
-	public static double ScanlineAlpha(bool light) => light ? 0.045 : 0.07;
-	public static double VignetteAlpha(bool light) => light ? 0.14 : 0.35;
+
+	/// <summary>
+	/// The scanlines' strength: faint at dusk (a texture you notice, not stripes), none at noon (the art pass: on the pale sky they
+	/// read as grey hatching).
+	/// </summary>
+	public static double ScanlineAlpha(bool light) => light ? 0 : 0.035;
+
+	/// <summary>Half the width of the soft edge between two sky bands, as a share of the sky's height (the art pass: hard edges read harsh).</summary>
+	public const double BandEdge = 0.012;
+	public static double VignetteAlpha(bool light) => light ? 0.10 : 0.28;
 
 	/// <summary>
 	/// The sky as flat bands, top to bottom (the colour stops of one gradient, each repeated where a band ends). Dark: maroon at
@@ -93,7 +102,7 @@ public static class DuskScene
 
 	public static Rgb StarColor(bool light) => light ? Rose : Sun;
 
-	public const double StarOpacity = 0.8;
+	public const double StarOpacity = 0.72;
 
 	/// <summary><paramref name="color"/> at <paramref name="alpha"/> over the theme's sky base (Night, or the pale noon base).</summary>
 	public static Rgb Landscape(Rgb color, double alpha, bool light) => Blend(color, alpha, light ? new Rgb(0xFF, 0xF6, 0xF3) : Night);
@@ -126,32 +135,38 @@ public static class DuskScene
 	}
 
 	/// <summary>
-	/// The points of an atomic-age starburst in a 2r square: <paramref name="points"/> long rays between short ones
-	/// (<paramref name="inner"/> of r); with <paramref name="alternate"/>, every other long ray is 0.6 r (the clock-face starburst).
+	/// A four-point sparkle in a 2r square, its sides curved in (the art pass: straight spikes looked thin and cheap): the start, then
+	/// four quadratic curves (control, end), tip to tip, each curve pulled toward the centre to <paramref name="waist"/> of r.
+	/// <paramref name="angle"/> turns it (45: the diagonal one).
 	/// </summary>
-	public static IReadOnlyList<(double X, double Y)> Starburst(double radius, int points, double inner, bool alternate = false)
+	public static ((double X, double Y) Start, IReadOnlyList<((double X, double Y) Control, (double X, double Y) End)> Curves) Sparkle(double radius, double waist, double angle = 0)
 	{
-		var list = new List<(double, double)>(points * 2);
-		for (var i = 0; i < points * 2; i++)
+		(double, double) At(double length, double degrees)
 		{
-			var length = i % 2 == 1 ? radius * inner : alternate && i % 4 == 2 ? radius * 0.6 : radius;
-			var angle = Math.PI * i / points - Math.PI / 2;
-			list.Add((radius + length * Math.Cos(angle), radius + length * Math.Sin(angle)));
+			var a = (degrees + angle - 90) * Math.PI / 180;
+			return (radius + length * Math.Cos(a), radius + length * Math.Sin(a));
 		}
 
-		return list;
+		var curves = new List<((double, double), (double, double))>(4);
+		for (var i = 0; i < 4; i++)
+		{
+			curves.Add((At(radius * waist, i * 90 + 45), At(radius, (i + 1) * 90)));
+		}
+
+		return (At(radius, 0), curves);
 	}
 
 	/// <summary>The starbursts of the full scene: centre (as fractions of the window), radius (as a fraction of its height), rays, clock-face.</summary>
 	public static readonly (double X, double Y, double Radius, int Points, bool Alternate)[] Stars =
 	[
-		(0.11, 0.15, 0.024, 8, true),
-		(0.29, 0.31, 0.010, 4, false),
-		(0.43, 0.09, 0.014, 4, false),
-		(0.87, 0.17, 0.020, 8, true),
-		(0.64, 0.30, 0.008, 4, false),
-		(0.07, 0.44, 0.009, 4, false),
-		(0.95, 0.42, 0.011, 4, false),
+		// the art pass: none where a page's title can fall in a narrow window (left of 0.5, below the title bar, above 0.3);
+		// the left ones sit in the strip between the title bar and the page title
+		(0.24, 0.075, 0.015, 8, true),
+		(0.44, 0.08, 0.010, 4, false),
+		(0.75, 0.06, 0.008, 4, false),
+		(0.86, 0.16, 0.022, 8, true),
+		(0.66, 0.27, 0.008, 4, false),
+		(0.95, 0.40, 0.011, 4, false),
 	];
 
 	/// <summary>The sun: its centre's x (a fraction of the width), its radius (a fraction of the height), how far it sinks behind the hills.</summary>

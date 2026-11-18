@@ -382,9 +382,38 @@ public sealed class GlassDuskTests
 		Assert.True(OkLab.Contrast(brush.Luminance, bar.Luminance) >= 3);
 		if (!light)
 		{
-			Assert.Equal(3, layers.Count);
-			Assert.Equal(NeonUnderline.NeonCore, core.Color);
+			// a halo that fades in small steps: each layer narrower and stronger than the one around it
+			Assert.Equal(5, layers.Count);
+			Assert.Equal(NeonUnderline.TubeCore, core.Color);
+			for (var i = 1; i < layers.Count; i++)
+			{
+				Assert.True(layers[i].Height < layers[i - 1].Height && layers[i].Opacity > layers[i - 1].Opacity);
+			}
 		}
+	}
+
+	/// <summary>The lit underline's gradient: symmetric, clear at its edges, the core flat in the middle, no step out of order.</summary>
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void The_underline_glow_is_one_continuous_symmetric_gradient(bool light)
+	{
+		var layers = NeonUnderline.Layers(light, false, default);
+		var stops = NeonUnderline.Stops(layers);
+		Assert.Equal(0, stops[0].Offset);
+		Assert.Equal(1, stops[^1].Offset);
+		Assert.Equal(0, stops[0].Color.A);
+		Assert.Equal(0, stops[^1].Color.A);
+		for (var i = 1; i < stops.Count; i++)
+		{
+			Assert.True(stops[i].Offset >= stops[i - 1].Offset);
+			Assert.Equal(1 - stops[i].Offset, stops[stops.Count - 1 - i].Offset, 9);
+			Assert.Equal(stops[i].Color, stops[stops.Count - 1 - i].Color);
+		}
+
+		// the core: full strength across its own height, in the middle
+		Assert.Contains(stops, s => s.Color == layers[^1].Color && s.Offset < 0.5);
+		Assert.Contains(stops, s => s.Color == layers[^1].Color && s.Offset > 0.5);
 	}
 
 	[Fact]

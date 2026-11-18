@@ -29,11 +29,13 @@ public sealed partial class AppWordmark : Grid
 	public static Color TubeColor(bool light) => light ? Color.FromArgb(255, 0xBC, 0x1E, 0x47) : Color.FromArgb(255, 0xFF, 0xC4, 0xA6);
 
 	/// <summary>The two glows, close in and wide: (colour, blur, opacity), dimmer on the light theme.</summary>
-	public static (Color Color, float Blur, float Opacity)[] Glows(bool light) =>
-	[
-		(Color.FromArgb(255, 0xF9, 0x69, 0x85), 6f, light ? 0.45f : 0.9f),
-		(Color.FromArgb(255, 0xFF, 0x7A, 0x50), 22f, light ? 0.30f : 0.6f),
-	];
+	/// <remarks>The art pass: tighter and fainter than first drawn (the wide orange halo read dirty); noon is one faint crimson glow.</remarks>
+	public static (Color Color, float Blur, float Opacity)[] Glows(bool light) => light
+		? [(Color.FromArgb(255, 0xBC, 0x1E, 0x47), 5f, 0.22f)]
+		: [(Color.FromArgb(255, 0xF9, 0x69, 0x85), 5f, 0.8f), (Color.FromArgb(255, 0xFF, 0x7A, 0x50), 16f, 0.42f)];
+
+	/// <summary>Letter spacing, in thousandths of an em: a sign's air at display size, a little at title-bar size.</summary>
+	public static int Spacing(double size) => size >= NeonFontFrom ? 60 : 30;
 
 	/// <summary>Whether the glow shows: display size, not Solid, not high contrast.</summary>
 	public static bool Glows(double size, GlassModeKind mode, bool highContrast) => size >= NeonFontFrom && mode != GlassModeKind.Solid && !highContrast;
@@ -42,7 +44,7 @@ public sealed partial class AppWordmark : Grid
 		DependencyProperty.Register(nameof(Text), typeof(string), typeof(AppWordmark), new PropertyMetadata("Nixie", (d, _) => ((AppWordmark)d).Apply()));
 
 	public static readonly DependencyProperty SizeProperty =
-		DependencyProperty.Register(nameof(Size), typeof(double), typeof(AppWordmark), new PropertyMetadata(48.0, (d, _) => ((AppWordmark)d).Apply()));
+		DependencyProperty.Register(nameof(Size), typeof(double), typeof(AppWordmark), new PropertyMetadata(64.0, (d, _) => ((AppWordmark)d).Apply()));
 
 	private static bool _flickered;
 	private readonly Border _glowHost = new() { IsHitTestVisible = false };
@@ -112,6 +114,7 @@ public sealed partial class AppWordmark : Grid
 		var neon = Size >= NeonFontFrom;
 		_text.FontFamily = neon ? new FontFamily(NeonFont) : new FontFamily("Segoe UI Variable Display, Segoe UI");
 		_text.FontWeight = neon ? FontWeights.Normal : FontWeights.SemiBold;
+		_text.CharacterSpacing = Spacing(Size);
 		if (highContrast)
 		{
 			_text.ClearValue(TextBlock.ForegroundProperty);

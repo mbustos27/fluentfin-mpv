@@ -189,9 +189,11 @@ list with each feature's status is the glass stream's `shots\glass-features.md`.
   No aqua is left. A title's hue (at most 10 %, on the backdrop only) is clamped to the sunset's hues, 343 to 43.
 - **The dusk scene** (`FluentFin.Core.Theming.DuskScene`, drawn by `AmbientBackdropView`; vector shapes and gradients, no image
   files): a banded sky (maroon, crimson, rose, coral, hot pink, peach; light: neon-core white to coral), a striped sun with three
-  thin rings, seven atomic-age starbursts, three hill and mesa layers and one saguaro, faint scanlines (every 3 DIP, 7 % / 4.5 %)
-  and a vignette. **In full** outside the shell (the server page and sign-in, even over the server's splash image) and for an
-  empty state that asks (`AmbientBackdrop.RequestFullScene`); **a strip** of hills (34 % / 22 %) along the bottom inside the shell
+  thin rings, six four-point sparkles with curved sides (none where a page title can fall), rolling hills and buttes with curved
+  slopes, one saguaro with rounded elbows, faint scanlines at dusk only (every 3 DIP, 3.5 %) and a vignette; the bands meet over
+  a short soft edge (the art pass: `shots\art\README.md`). **In full** outside the shell (the server page and sign-in, even over
+  the server's splash image) and behind an empty state's `SceneCard` (which holds the scene while it is loaded and puts its text
+  on the strong glass); **a strip** of rolling hills (28 % / 20 %, no butte) along the bottom inside the shell
   where there is no artwork; **nothing** over artwork. Text straight on the strip keeps 4.5:1 (no strip colour above luminance
   0.08 in dark, none below 0.50 in light; `DuskSceneTests`). Motion (Full, window active, the full scene only): the stars
   glint, the sun's rings breathe, the hills sway for 20 s after the scene appears or the window comes back, then everything
@@ -225,7 +227,9 @@ list with each feature's status is the glass stream's `shots\glass-features.md`.
 - **The top bar** (the side rail is gone, account stream): `GlassTitleBarBrush` (acrylic; `GlassTitleBarSolidBrush` in Solid),
   `GlassTitleBarStrokeBrush` for its bottom hairline, and the selected tab's `NeonUnderline` (a stroke-stack tube: hot-pink halo
   and glow around a near-white core; light: a crimson line; high contrast: the system highlight) or `GlassTabUnderlineBrush`.
-  An in-app theme goes through `GlassTheme.SetAppTheme`, which themes the caption buttons too.
+  An in-app theme goes through `GlassTheme.SetAppTheme`, which themes the caption buttons too. No layer sits between the backdrop
+  and the shell's pages (`NavigationViewContentBackground` is transparent; WinUI's default greyed the scene into mud).
 - **The wordmark** (`AppWordmark`): the name as a lit tube, in Monoton (SIL OFL 1.1, `Assets\Fonts`, shipped unmodified beside
-  its licence) from 36 px up, with two masked composition glows and one flicker on the first showing in Full; the plain display
+  its licence) from 36 px up (64 by default: Monoton's lines render unevenly at 56), letter-spaced, with two restrained masked
+  glows (one faint crimson glow at noon) and one flicker on the first showing in Full; the plain display
   font in the tube's colour when small (the title bar). Body text stays Segoe UI Variable; no display font on server data.

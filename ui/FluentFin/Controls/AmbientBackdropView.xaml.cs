@@ -232,7 +232,8 @@ public sealed partial class AmbientBackdropView : UserControl
 		Scene.Visibility = scene == DuskSceneKind.None ? Visibility.Collapsed : Visibility.Visible;
 		var crt = ShowsCrt(scene, mode) ? Visibility.Visible : Visibility.Collapsed;
 		Vignette.Visibility = crt;
-		Scanlines.Visibility = crt;
+		// no scanlines where their strength is 0 (noon: the art pass)
+		Scanlines.Visibility = crt == Visibility.Visible && DuskScene.ScanlineAlpha(ActualTheme == ElementTheme.Light) > 0 ? Visibility.Visible : Visibility.Collapsed;
 		UpdateDrift();
 		UpdateSceneMotion();
 	}
@@ -261,11 +262,13 @@ public sealed partial class AmbientBackdropView : UserControl
 		var sky = new LinearGradientBrush { StartPoint = new Point(0.5, 0), EndPoint = new Point(0.5, 1) };
 		if (full)
 		{
-			// flat bands: each colour's stop repeated where its band ends
-			foreach (var (color, from, to) in DuskScene.SkyBands(light))
+			// bands, each flat across its middle, meeting the next over a short soft edge (DuskScene.BandEdge): banded, not hard-edged
+			var bands = DuskScene.SkyBands(light);
+			for (var i = 0; i < bands.Count; i++)
 			{
-				sky.GradientStops.Add(new GradientStop { Color = C(color), Offset = from });
-				sky.GradientStops.Add(new GradientStop { Color = C(color), Offset = to });
+				var (color, from, to) = bands[i];
+				sky.GradientStops.Add(new GradientStop { Color = C(color), Offset = i == 0 ? from : from + DuskScene.BandEdge });
+				sky.GradientStops.Add(new GradientStop { Color = C(color), Offset = i == bands.Count - 1 ? to : to - DuskScene.BandEdge });
 			}
 		}
 		else
@@ -281,6 +284,8 @@ public sealed partial class AmbientBackdropView : UserControl
 		NearHill.Fill = new SolidColorBrush(C(DuskScene.Hill(DuskHill.Near, light)));
 		Saguaro.Fill = new SolidColorBrush(C(DuskScene.Hill(DuskHill.Near, light)));
 		Hills.Opacity = full ? 1 : DuskScene.StripOpacity(light);
+		// the strip is a quiet horizon: rolling hills only, no mesa (the art pass: its flat-topped blocks read as slabs behind rows)
+		MesaHill.Visibility = full ? Visibility.Visible : Visibility.Collapsed;
 		Saguaro.Visibility = full ? Visibility.Visible : Visibility.Collapsed;
 
 		if (full)
@@ -290,7 +295,7 @@ public sealed partial class AmbientBackdropView : UserControl
 			var (sunTop, sunBottom) = DuskScene.SunGradient(light);
 			for (var i = 0; i < DuskScene.RingOpacity.Length; i++)
 			{
-				sun.Children.Add(new Ellipse { Stroke = new SolidColorBrush(C(DuskScene.RingColor(light), DuskScene.RingOpacity[i])), StrokeThickness = 1.5, Tag = 1.2 + i * 0.2 });
+				sun.Children.Add(new Ellipse { Stroke = new SolidColorBrush(C(DuskScene.RingColor(light), DuskScene.RingOpacity[i])), StrokeThickness = 1.25, Tag = 1.2 + i * 0.2 });
 			}
 
 			sun.Children.Add(new Path
@@ -349,9 +354,10 @@ public sealed partial class AmbientBackdropView : UserControl
 			return;
 		}
 
-		var cactus = hills * 0.9;
+		// one saguaro, a little smaller than the hills are tall (its outline is 92 x 224)
+		var cactus = hills * 0.66;
 		Saguaro.Height = cactus;
-		Saguaro.Width = cactus * 0.49;
+		Saguaro.Width = cactus * 92 / 224;
 		Saguaro.Margin = new Thickness(width * 0.16, 0, 0, hills * 0.1);
 
 		if (_sun is Canvas sun)
@@ -385,7 +391,7 @@ public sealed partial class AmbientBackdropView : UserControl
 			{
 				var (x, y, radius, points, alternate) = star;
 				var r = Math.Max(4, height * radius);
-				path.Data = Polygon(DuskScene.Starburst(r, points, points == 4 ? 0.25 : 0.18, alternate));
+				path.Data = SparkleGeometry(r, alternate);
 				Canvas.SetLeft(path, width * x - r);
 				Canvas.SetTop(path, height * y - r);
 				path.Width = path.Height = r * 2;
@@ -442,16 +448,29 @@ public sealed partial class AmbientBackdropView : UserControl
 		return geometry;
 	}
 
-	private static PathGeometry Polygon(IReadOnlyList<(double X, double Y)> points)
+	/// <summary>A four-point sparkle with curved sides; with <paramref name="withDiagonal"/>, a smaller one turned 45 degrees inside it.</summary>
+	private static PathGeometry SparkleGeometry(double r, bool withDiagonal)
 	{
-		var figure = new PathFigure { StartPoint = new Point(points[0].X, points[0].Y), IsClosed = true, IsFilled = true };
-		for (var i = 1; i < points.Count; i++)
+		var geometry = new PathGeometry { FillRule = FillRule.Nonzero };
+		void Add(double radius, double waist, double angle)
 		{
-			figure.Segments.Add(new LineSegment { Point = new Point(points[i].X, points[i].Y) });
+			var (start, curves) = DuskScene.Sparkle(radius, waist, angle);
+			var offset = r - radius; // centred in the 2r square
+			var figure = new PathFigure { StartPoint = new Point(start.X + offset, start.Y + offset), IsClosed = true, IsFilled = true };
+			foreach (var (control, end) in curves)
+			{
+				figure.Segments.Add(new QuadraticBezierSegment { Point1 = new Point(control.X + offset, control.Y + offset), Point2 = new Point(end.X + offset, end.Y + offset) });
+			}
+
+			geometry.Figures.Add(figure);
 		}
 
-		var geometry = new PathGeometry();
-		geometry.Figures.Add(figure);
+		Add(r, 0.14, 0);
+		if (withDiagonal)
+		{
+			Add(r * 0.55, 0.2, 45);
+		}
+
 		return geometry;
 	}
 

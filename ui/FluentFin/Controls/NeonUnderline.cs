@@ -21,13 +21,16 @@ public sealed partial class NeonUnderline : Grid
 
 	public static readonly Color HotPink = Color.FromArgb(255, 0xF9, 0x69, 0x85);
 	public static readonly Color NeonCore = Color.FromArgb(255, 0xFF, 0xF4, 0xEE);
+
+	/// <summary>The lit tube's core: a pink-tinted white (the art pass: the neutral white core read as a plain white line).</summary>
+	public static readonly Color TubeCore = Color.FromArgb(255, 0xFF, 0xE3, 0xEA);
 	public static readonly Color Crimson = Color.FromArgb(255, 0xBC, 0x1E, 0x47);
 
 	/// <summary>The strokes for a theme (in high contrast, <paramref name="highlight"/> alone).</summary>
 	public static IReadOnlyList<Layer> Layers(bool light, bool highContrast, Color highlight) =>
 		highContrast ? [new(3, highlight, 1)]
 		: light ? [new(3, Crimson, 1)]
-		: [new(9, HotPink, 0.18), new(5, HotPink, 0.45), new(2, NeonCore, 1)];
+		: [new(14, HotPink, 0.05), new(10, HotPink, 0.09), new(7, HotPink, 0.16), new(4.5, HotPink, 0.32), new(2.5, TubeCore, 1)];
 
 	/// <summary>
 	/// The user's highlight colour, as high contrast shows it: from Windows' UI settings. (Looking up SystemColorHighlightColor in
@@ -45,8 +48,8 @@ public sealed partial class NeonUnderline : Grid
 		}
 	}
 
-	/// <summary>The space the stack takes: its widest layer.</summary>
-	public const double StackHeight = 9;
+	/// <summary>The space the stack takes: its widest layer. (The art pass: five layers in small steps, so the halo fades instead of stepping.)</summary>
+	public const double StackHeight = 14;
 
 	public NeonUnderline()
 	{
@@ -70,20 +73,53 @@ public sealed partial class NeonUnderline : Grid
 		try { highContrast = GlassMode.IsHighContrast; }
 		catch (Exception) { highContrast = false; }
 
-		var highlight = SystemHighlight();
-		Children.Clear();
-		foreach (var layer in Layers(ActualTheme == ElementTheme.Light, highContrast, highlight))
+		var layers = Layers(ActualTheme == ElementTheme.Light, highContrast, SystemHighlight());
+		var fill = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0), EndPoint = new Windows.Foundation.Point(0.5, 1) };
+		foreach (var (offset, color) in Stops(layers))
 		{
-			Children.Add(new Rectangle
-			{
-				Height = layer.Height,
-				RadiusX = layer.Height / 2,
-				RadiusY = layer.Height / 2,
-				VerticalAlignment = VerticalAlignment.Center,
-				Fill = new SolidColorBrush(layer.Color),
-				Opacity = layer.Opacity,
-				IsHitTestVisible = false,
-			});
+			fill.GradientStops.Add(new GradientStop { Offset = offset, Color = color });
 		}
+
+		Children.Clear();
+		// one bar, its halo one continuous fall-off (the art pass: stacked rectangles showed each layer's edge as a step)
+		Children.Add(new Rectangle
+		{
+			Height = StackHeight,
+			RadiusX = StackHeight / 2,
+			RadiusY = StackHeight / 2,
+			VerticalAlignment = VerticalAlignment.Center,
+			Fill = fill,
+			IsHitTestVisible = false,
+		});
+	}
+
+	/// <summary>
+	/// The bar's vertical gradient, top to bottom, from the layers (outermost first): transparent at the bar's edges, each layer's
+	/// colour at its opacity where its edge falls, ramping between them; the innermost (the core) flat across its height, then
+	/// the same, mirrored. A single layer (light, high contrast) is a crisp line: no ramp into it.
+	/// </summary>
+	public static IReadOnlyList<(double Offset, Color Color)> Stops(IReadOnlyList<Layer> layers)
+	{
+		static Color At(Color c, double opacity) => Color.FromArgb((byte)Math.Round(Math.Clamp(opacity, 0, 1) * c.A), c.R, c.G, c.B);
+		double Edge(Layer layer) => (StackHeight - layer.Height) / 2 / StackHeight;
+
+		var top = new List<(double, Color)> { (0, At(layers[0].Color, 0)) };
+		if (layers.Count == 1)
+		{
+			top.Add((Math.Max(0, Edge(layers[0]) - 0.001), At(layers[0].Color, 0)));
+		}
+
+		foreach (var layer in layers)
+		{
+			top.Add((Edge(layer), At(layer.Color, layer.Opacity)));
+		}
+
+		var stops = new List<(double, Color)>(top);
+		for (var i = top.Count - 1; i >= 0; i--)
+		{
+			stops.Add((1 - top[i].Item1, top[i].Item2));
+		}
+
+		return stops;
 	}
 }

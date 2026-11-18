@@ -31,16 +31,17 @@
                 Stretch="Fill">
                 <Canvas Width="1000" Height="100">
                     <Path x:Name="FarHill" Data="M-40,60 C120,22 220,30 320,46 C420,62 520,12 640,26 C760,40 860,56 1040,32 L1040,100 L-40,100 Z" />
-                    <Path x:Name="MesaHill" Data="M-40,72 L150,72 L172,44 L318,44 L338,64 L520,64 C600,62 680,76 760,72 L790,52 L920,52 L946,74 L1040,74 L1040,100 L-40,100 Z" />
+                    <!--  the buttes: flat tops with softened shoulders and curved talus slopes (the art pass: straight-sided blocks read crude)  -->
+                    <Path x:Name="MesaHill" Data="M-40,74 L112,74 C134,74 146,70 154,60 L164,50 C167,47 170,46 174,46 L314,46 C318,46 321,47 324,50 L334,62 C342,70 356,71 376,71 L520,69 C600,67 680,75 752,74 C766,74 776,70 782,63 L790,56 C793,53 796,52 800,52 L914,52 C918,52 921,53 924,56 L934,68 C941,74 952,76 968,76 L1040,76 L1040,100 L-40,100 Z" />
                     <Path x:Name="NearHill" Data="M-40,84 C160,70 300,92 470,82 C640,72 820,90 1040,80 L1040,100 L-40,100 Z" />
                 </Canvas>
             </Viewbox>
-            <!--  one saguaro on the near hill  -->
+            <!--  one saguaro on the near hill: one trunk and two arms of even width, rounded tops and elbows (the art pass: square joints read as clip-art)  -->
             <Path
                 x:Name="Saguaro"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Bottom"
-                Data="M40,240 L40,20 A20,20 0 0 1 80,20 L80,240 Z M40,150 L18,150 A18,18 0 0 1 0,132 L0,80 A15,15 0 0 1 30,80 L30,120 L40,120 Z M80,170 L100,170 A18,18 0 0 0 118,152 L118,105 A15,15 0 0 0 88,105 L88,140 L80,140 Z"
+                Data="F1 M46,240 L46,30 A14,14 0 0 1 74,30 L74,240 Z M50,166 L34,166 A20,20 0 0 1 14,146 L14,104 A10,10 0 0 1 34,104 L34,140 A6,6 0 0 0 40,146 L50,146 Z M70,130 L86,130 A20,20 0 0 0 106,110 L106,70 A10,10 0 0 0 86,70 L86,104 A6,6 0 0 1 80,110 L70,110 Z"
                 Stretch="Uniform" />
             <!--  the CRT touches (full scene, not Solid): a vignette, and scanlines drawn by the compositor  -->
             <Rectangle x:Name="Vignette" />

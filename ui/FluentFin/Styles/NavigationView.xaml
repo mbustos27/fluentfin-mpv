@@ -11,6 +11,12 @@
 
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
+            <!--
+                1.2.0 (the art pass): no layer between the backdrop and the pages. WinUI's default (LayerFillColorDefault: a 30 %
+                grey in dark, 50 % white in light) greyed the dusk scene and the hill strip into mud and was a second surface under
+                every page; the pages' text was designed for the backdrop itself (DuskSceneTests, the ambient dim over artwork).
+            -->
+            <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
             <StaticResource x:Key="RailNavigationIconForegroundBrush" ResourceKey="ControlAAFillColorDefaultBrush" />
             <!--  rest  -->
             <SolidColorBrush x:Key="RailNavigationViewDefaultPaneBackground" Color="Transparent" />
@@ -43,6 +49,7 @@
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
             <StaticResource x:Key="RailNavigationIconForegroundBrush" ResourceKey="ControlAAFillColorDefaultBrush" />
             <!--  rest  -->
             <SolidColorBrush x:Key="RailNavigationViewDefaultPaneBackground" Color="Transparent" />
@@ -69,6 +76,8 @@
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
+            <!--  the pages sit on the window colour  -->
+            <SolidColorBrush x:Key="NavigationViewContentBackground" Color="{ThemeResource SystemColorWindowColor}" />
             <!--  the selected item's mark: the system highlight (Default gives it the light pink)  -->
             <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="{ThemeResource SystemColorHighlightColor}" />
             <StaticResource x:Key="RailNavigationIconForegroundBrush" ResourceKey="SystemControlForegroundBaseHighBrush" />
