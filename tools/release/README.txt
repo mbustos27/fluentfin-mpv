@@ -34,7 +34,7 @@ Where your data is
 - %LOCALAPPDATA%\Nixie: settings and saved servers, the TV journal, logs (Logs\) and the mpv
   backend's configuration (mpv-backend\: mpv.conf, input.conf, conf.json). Nixie was called Seaglass
   before 1.2.0 (and FluentFin MPV before 1.1.0): the first start copies the old %LOCALAPPDATA%\Seaglass
-  folder here (or %LOCALAPPDATA%\FluentFinMpv when there is no Seaglass folder) and leaves it as it was.
+  folder here (or %LOCALAPPDATA%\FluentFinMpv when Seaglass holds no settings) and leaves it as it was.
   If that copy fails, Nixie says so, uses the old folder for that session and tries again next time.
 - Nixie.exe --data-dir <folder> keeps all of it in that folder instead.
 - Nothing is written to this folder. From the zip nothing is installed: to remove Nixie, delete

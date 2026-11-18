@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Security.Cryptography;
 using DeviceId;
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.Mpv;
@@ -10,25 +12,25 @@ using Moq;
 namespace FluentFin.Core.Tests;
 
 /// <summary>
-/// Nixie (1.2.0): a saved login from Seaglass (or FluentFin MPV) still signs in, and the server sees the new name. The
-/// fake server records the calls. FluentFin's signed-in requests carry only the saved access token (the Jellyfin SDK's
-/// header, <c>MediaBrowser Token="..."</c>): the token is the server's key to the session and the device, so the rename
-/// changes nothing there. The name reaches the server with the mpv backend's own requests: <c>connect</c> gives it the
-/// client name Nixie and the same device id (the Windows device's, not derived from any name), so the server finds the
-/// device it already knows and only updates its app name. A new sign-in (the server page, Quick Connect, a password) says
-/// Client="Nixie" too: FluentFin.Tests' SignInClientTests.
+/// Nixie (1.2.0): what a saved sign-in from Seaglass (or FluentFin MPV) becomes. The app saves no access token: a saved
+/// sign-in is the user name and the password, protected with DPAPI and the entropy kept in LocalSettings.json
+/// (<see cref="SavedUser"/>), and every start signs in again with them (JellyfinAuthenticationService.Authenticate). So
+/// what must survive the rename is (1) the password, which still decrypts after the data folder copy because
+/// LocalSettings.json, the entropy with it, is copied, and (2) the device: the sign-in and the mpv backend send this PC's
+/// Windows device id, which no name or folder changes, so the server sees the same device sign in again as Nixie and gets
+/// a new token (a server's per-user data, such as Continue Watching, is untouched). The sign-in request itself:
+/// FluentFin.Tests' SignInClientTests.
 /// </summary>
 [Collection(SessionInfoCollection.Name)]
 public sealed class ClientNameSignInTests : IAsyncLifetime
 {
-	// a token the server gave Seaglass 1.1.x at its sign-in, kept in the saved login
-	private const string SavedToken = "seaglass-era-token-0123456789";
 	private static readonly Guid UserId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002");
-
+	private readonly string _local = Path.Combine(Path.GetTempPath(), "FluentFinTests", Guid.NewGuid().ToString("N"));
 	private readonly FakeJellyfin _server = new();
 
 	public Task InitializeAsync()
 	{
+		Directory.CreateDirectory(_local);
 		_server.Start();
 		return Task.CompletedTask;
 	}
@@ -36,49 +38,72 @@ public sealed class ClientNameSignInTests : IAsyncLifetime
 	public Task DisposeAsync()
 	{
 		_server.Dispose();
+		Directory.Delete(_local, true);
 		return Task.CompletedTask;
 	}
 
 	[Fact]
-	public async Task ASavedSeaglassLogin_SignsIn_WithItsToken_AndTheBackendConnectsAsNixie_OnTheSameDevice()
+	public void ASavedSeaglassSignIn_StillDecrypts_AfterTheDataFolderCopy()
+	{
+		// Seaglass 1.1.x saved a sign-in: the server, the user name, the password protected with its entropy
+		var seaglass = new LocalSettingsService(new KnownFolders(Path.Combine(_local, KnownFolders.SeaglassFolderName)));
+		var servers = new ObservableCollection<SavedServer>
+		{
+			new() { DisplayName = "home", PublicUrl = "http://jf:8096", Id = "fake-server", Users = [new SavedUser { Username = "alice", Password = "s3cret".Protect(seaglass.GetEntropyBytes()) }] },
+		};
+		seaglass.SaveSetting(SettingKeys.Servers, servers);
+
+		var note = KnownFolders.CopyLegacyFolder(_local, out var failed);
+		Assert.False(failed, note);
+
+		// Nixie's first start reads the copy: the same server and user, and the password decrypts with the copied entropy
+		var nixie = new LocalSettingsService(new KnownFolders(Path.Combine(_local, KnownFolders.FolderName)));
+		var server = Assert.Single(nixie.ReadSetting(SettingKeys.Servers));
+		var user = Assert.Single(server.Users);
+		Assert.Equal("http://jf:8096", server.PublicUrl);
+		Assert.Equal("alice", user.Username);
+		Assert.Equal(seaglass.GetEntropyBytes(), nixie.GetEntropyBytes());
+		Assert.Equal("s3cret", user.Password.Unprotect(nixie.GetEntropyBytes()));
+
+		// without that entropy (a Nixie folder that did not get LocalSettings.json) the saved password is lost
+		Assert.ThrowsAny<CryptographicException>(() => user.Password.Unprotect(RandomNumberGenerator.GetBytes(20)));
+	}
+
+	[Fact]
+	public async Task AfterTheSignIn_TheBackendConnectsAsNixie_OnTheSameDevice()
 	{
 		var settings = new Mock<ISettings>();
 		settings.SetupGet(x => x.MediaPlayer).Returns(MediaPlayerType.Mpv);
 		var client = new JellyfinClient(new CoreListLogger<JellyfinClient>(), Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(),
 			Mock.Of<IDeviceProfileFactory>(), settings.Object, TestHomeCache.Unused());
 
-		// the automatic sign-in: the saved server, user and token, no password
+		// the session a sign-in (with the saved user name and password) just returned: a new token, made for Nixie
+		const string newToken = "token-the-server-gave-nixie";
 		await client.Initialize(_server.BaseUrl, new AuthenticationResult
 		{
-			AccessToken = SavedToken,
+			AccessToken = newToken,
 			ServerId = "fake-server",
 			User = new UserDto { Id = UserId, Name = "alice" },
 		});
 
-		// the start-up calls (capabilities, plugins, views) went out with the saved token, as it was saved
+		// FluentFin's own calls carry that token as it was returned
 		var calls = _server.ApiRequests.ToList();
 		Assert.Contains(calls, x => x.Path.Equals("/Sessions/Capabilities/Full", StringComparison.OrdinalIgnoreCase));
 		foreach (var call in calls)
 		{
 			Assert.NotNull(call.Authorization);
-			Assert.StartsWith("MediaBrowser ", call.Authorization);
-			Assert.Equal(SavedToken, Fields(call.Authorization)["Token"]);
+			Assert.Equal(newToken, Fields(call.Authorization)["Token"]);
 			Assert.DoesNotContain("Seaglass", call.Authorization);
-			if (Fields(call.Authorization).TryGetValue("Client", out var named))
-			{
-				Assert.Equal("Nixie", named);
-			}
 		}
 
-		// what the backend is given in connect, and sends the server with the token: Nixie, on the device the server knows
-		var expectedDevice = new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
+		// the backend's connect: Nixie, on this PC's Windows device id (Seaglass sent the same one)
 		var identity = MpvIdentity.FromSession(settings.Object);
 		Assert.NotNull(identity);
 		Assert.Equal("Nixie", identity.ClientName);
 		Assert.Equal(AppVersion.Current, identity.ClientVersion);
-		Assert.Equal(expectedDevice, identity.DeviceId);
+		Assert.Equal(new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString(), identity.DeviceId);
 		Assert.Equal(Environment.MachineName, identity.DeviceName);
-		Assert.Equal(SavedToken, identity.AccessToken);
+		Assert.Equal(newToken, identity.AccessToken);
 	}
 
 	/// <summary>The fields of a <c>MediaBrowser Client="...", Device="...", ...</c> header.</summary>

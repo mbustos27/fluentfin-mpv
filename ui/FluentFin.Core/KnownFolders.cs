@@ -17,8 +17,23 @@ public class KnownFolders
 	/// <summary>The data folder's name before the rename to Seaglass (FluentFin MPV 1.0.x).</summary>
 	public const string FluentFinMpvFolderName = "FluentFinMpv";
 
-	/// <summary>The old data folders, newest first: the first one that exists is the one copied.</summary>
+	/// <summary>The old data folders, newest first: the first one that holds settings (<see cref="FindLegacyFolder"/>) is the one copied.</summary>
 	public static IReadOnlyList<string> LegacyFolderNames { get; } = [SeaglassFolderName, FluentFinMpvFolderName];
+
+	/// <summary>The settings file in a data folder (LocalSettingsService): saved servers and sign-ins, and the key their passwords need.</summary>
+	public const string SettingsFileName = "LocalSettings.json";
+
+	/// <summary>
+	/// Nixie: the old data folder to copy: the first of <see cref="LegacyFolderNames"/> under <paramref name="localAppData"/> that
+	/// holds <see cref="SettingsFileName"/>, null when none does. A folder without it is a stub, not an app's data: a standalone
+	/// backend run makes <c>Seaglass\mpv-backend</c> on its own, so a Seaglass folder must not win over a real FluentFinMpv just
+	/// by existing.
+	/// </summary>
+	public static string? FindLegacyFolder(string localAppData) =>
+		LegacyFolderNames.Select(name => Path.Combine(localAppData, name)).FirstOrDefault(folder => File.Exists(Path.Combine(folder, SettingsFileName)));
+
+	/// <summary>How long a start waits for another start's copy before it runs on the old folder instead.</summary>
+	public static TimeSpan CopyLockTimeout { get; } = TimeSpan.FromMinutes(5);
 
 	/// <summary>The app that used the old folder <paramref name="folderName"/> ("Seaglass", "FluentFin MPV"), for messages.</summary>
 	public static string LegacyAppName(string folderName) =>
@@ -81,22 +96,25 @@ public class KnownFolders
 	public const string CopyMutexName = @"Local\Nixie-data-folder-copy";
 
 	/// <summary>
-	/// Nixie: when <c>&lt;localAppData&gt;\Nixie</c> does not exist, COPIES the newest old folder that does
-	/// (<see cref="LegacyFolderNames"/>: <c>Seaglass</c>, else <c>FluentFinMpv</c>) to the new one, recursively except Logs and
+	/// Nixie: when <c>&lt;localAppData&gt;\Nixie</c> does not exist, COPIES the newest old folder that holds settings
+	/// (<see cref="FindLegacyFolder"/>: <c>Seaglass</c>, else <c>FluentFinMpv</c>) to the new one, recursively except Logs and
 	/// Updates; the old folder is never moved, changed or deleted. The journal database is copied with SQLite's online backup (a
 	/// consistent snapshot even while the old app runs), never as its db, -wal and -shm files. The copy is made beside the
 	/// target and renamed into place, so an interrupted copy never leaves a half-filled Nixie folder. On ANY failure the
 	/// partial copy is deleted and no Nixie folder exists: the caller runs on the old folder in place (<paramref name="source"/>)
-	/// and the next start tries again (<paramref name="failed"/> is true, the text says why). <paramref name="source"/> is the
-	/// old folder copied (or tried), null when there was nothing to do.
+	/// and the next start tries again (<paramref name="failed"/> is true, the text says why). When another start holds the copy
+	/// for longer than <paramref name="lockTimeout"/> (default <see cref="CopyLockTimeout"/>), nothing is copied or deleted
+	/// (its partial folder is its own): this run uses the old folder in place and the next start tries again, the same way.
+	/// <paramref name="source"/> is the old folder copied (or tried), null when there was nothing to do.
 	/// </summary>
-	public static string? CopyLegacyFolder(string localAppData, out bool failed, out string? source, Action<string>? afterEachFile = null)
+	public static string? CopyLegacyFolder(string localAppData, out bool failed, out string? source, Action<string>? afterEachFile = null, TimeSpan? lockTimeout = null)
 	{
 		failed = false;
 		source = null;
 		var target = Path.Combine(localAppData, FolderName);
 		var partial = target + ".copying";
 		string? legacy = null;
+		var locked = false;
 		// two Nixie windows started together on the first run must not share the partial folder (one would delete or move
 		// the other's half-done copy): one copies, the other waits and then finds the finished folder
 		using var copyLock = new Mutex(false, CopyMutexName);
@@ -104,11 +122,12 @@ public class KnownFolders
 		{
 			try
 			{
-				copyLock.WaitOne(TimeSpan.FromMinutes(5));
+				locked = copyLock.WaitOne(lockTimeout ?? CopyLockTimeout);
 			}
 			catch (AbandonedMutexException)
 			{
 				// the other copier ended without releasing it: ours now, and its partial folder is deleted below
+				locked = true;
 			}
 
 			if (Directory.Exists(target))
@@ -116,13 +135,21 @@ public class KnownFolders
 				return null;
 			}
 
-			legacy = LegacyFolderNames.Select(name => Path.Combine(localAppData, name)).FirstOrDefault(Directory.Exists);
+			legacy = FindLegacyFolder(localAppData);
 			if (legacy is null)
 			{
 				return null;
 			}
 
 			source = legacy;
+
+			if (!locked)
+			{
+				// the other start is still copying (a slow disk, a huge journal): its partial folder is not ours to delete,
+				// and a second copy beside it would race its rename
+				failed = true;
+				return $"Another start is still copying the data folder {legacy} to {target}. Using the old folder in place; the copy is tried again at the next start";
+			}
 
 			if (Directory.Exists(partial))
 			{
@@ -138,7 +165,8 @@ public class KnownFolders
 			failed = true;
 			try
 			{
-				if (Directory.Exists(partial))
+				// only our own partial folder: without the lock it may be another start's
+				if (locked && Directory.Exists(partial))
 				{
 					Directory.Delete(partial, recursive: true);
 				}
@@ -152,16 +180,18 @@ public class KnownFolders
 		}
 		finally
 		{
-			try { copyLock.ReleaseMutex(); }
-			catch (ApplicationException) { } // not held (the wait timed out)
+			if (locked)
+			{
+				copyLock.ReleaseMutex();
+			}
 		}
 	}
 
-	/// <summary><see cref="CopyLegacyFolder(string, out bool, out string?, Action{string}?)"/> without the source.</summary>
+	/// <summary><see cref="CopyLegacyFolder(string, out bool, out string?, Action{string}?, TimeSpan?)"/> without the source.</summary>
 	public static string? CopyLegacyFolder(string localAppData, out bool failed, Action<string>? afterEachFile = null) =>
 		CopyLegacyFolder(localAppData, out failed, out _, afterEachFile);
 
-	/// <summary><see cref="CopyLegacyFolder(string, out bool, out string?, Action{string}?)"/> for callers that only want the note.</summary>
+	/// <summary><see cref="CopyLegacyFolder(string, out bool, out string?, Action{string}?, TimeSpan?)"/> for callers that only want the note.</summary>
 	public static string? CopyLegacyFolder(string localAppData) => CopyLegacyFolder(localAppData, out _);
 
 	private static void CopyDirectory(string from, string to, bool top, Action<string>? afterEachFile)

@@ -22,7 +22,7 @@ public sealed class LegacyDataFolderTests : IDisposable
 		Directory.CreateDirectory(Path.Combine(folder, "Logs"));
 		Directory.CreateDirectory(Path.Combine(folder, "Updates"));
 		Directory.CreateDirectory(Path.Combine(folder, "mpv-backend", "shaders"));
-		File.WriteAllText(Path.Combine(folder, "settings.json"), marker);
+		File.WriteAllText(Path.Combine(folder, "LocalSettings.json"), marker);
 		File.WriteAllText(Path.Combine(folder, "Logs", "log.txt"), "old log");
 		File.WriteAllText(Path.Combine(folder, "Updates", "x.msi"), "old update");
 		File.WriteAllText(Path.Combine(folder, "mpv-backend", "shaders", "s.glsl"), "shader");
@@ -43,6 +43,7 @@ public sealed class LegacyDataFolderTests : IDisposable
 		Assert.Equal("FluentFinMpv", KnownFolders.FluentFinMpvFolderName);
 		Assert.Equal(["Seaglass", "FluentFinMpv"], KnownFolders.LegacyFolderNames);
 		Assert.Equal(@"Local\Nixie-data-folder-copy", KnownFolders.CopyMutexName);
+		Assert.Equal("LocalSettings.json", KnownFolders.SettingsFileName);
 		Assert.Equal("Seaglass", KnownFolders.LegacyAppName("Seaglass"));
 		Assert.Equal("FluentFin MPV", KnownFolders.LegacyAppName("FluentFinMpv"));
 	}
@@ -59,7 +60,7 @@ public sealed class LegacyDataFolderTests : IDisposable
 		Assert.Equal(Seaglass, source);
 		Assert.Contains("Copied", note);
 		Assert.Contains(Seaglass, note);
-		Assert.Equal("{\"a\":1}", File.ReadAllText(Path.Combine(New, "settings.json")));
+		Assert.Equal("{\"a\":1}", File.ReadAllText(Path.Combine(New, "LocalSettings.json")));
 		Assert.False(Directory.Exists(Path.Combine(New, "Logs"))); // old logs are skipped
 		Assert.False(Directory.Exists(Path.Combine(New, "Updates"))); // and downloaded updates
 		Assert.Equal("shader", File.ReadAllText(Path.Combine(New, "mpv-backend", "shaders", "s.glsl")));
@@ -77,7 +78,7 @@ public sealed class LegacyDataFolderTests : IDisposable
 
 		Assert.False(failed, note);
 		Assert.Equal(FluentFinMpv, source);
-		Assert.Equal("{\"a\":1}", File.ReadAllText(Path.Combine(New, "settings.json")));
+		Assert.Equal("{\"a\":1}", File.ReadAllText(Path.Combine(New, "LocalSettings.json")));
 		Assert.False(Directory.Exists(Path.Combine(New, "Logs")));
 		Assert.Equal(before, Snapshot(FluentFinMpv));
 		Assert.False(Directory.Exists(Seaglass)); // nothing is made under the in-between name
@@ -94,7 +95,7 @@ public sealed class LegacyDataFolderTests : IDisposable
 
 		Assert.False(failed);
 		Assert.Equal(Seaglass, source);
-		Assert.Equal("{\"from\":\"seaglass\"}", File.ReadAllText(Path.Combine(New, "settings.json")));
+		Assert.Equal("{\"from\":\"seaglass\"}", File.ReadAllText(Path.Combine(New, "LocalSettings.json")));
 		Assert.Equal(olderBefore, Snapshot(FluentFinMpv));
 	}
 
@@ -111,6 +112,83 @@ public sealed class LegacyDataFolderTests : IDisposable
 	}
 
 	[Fact]
+	public void AStubSeaglassFolder_WithoutSettings_DoesNotWin_OverARealFluentFinMpv()
+	{
+		// what a standalone backend run leaves (bridge.py's default config folder), or any folder that never held the app
+		Directory.CreateDirectory(Path.Combine(Seaglass, "mpv-backend"));
+		File.WriteAllText(Path.Combine(Seaglass, "mpv-backend", "conf.json"), "{}");
+		MakeOld(FluentFinMpv, "{\"real\":true}");
+
+		var note = KnownFolders.CopyLegacyFolder(_local, out var failed, out var source);
+
+		Assert.False(failed, note);
+		Assert.Equal(FluentFinMpv, source);
+		Assert.Equal(FluentFinMpv, KnownFolders.FindLegacyFolder(_local));
+		Assert.Equal("{\"real\":true}", File.ReadAllText(Path.Combine(New, "LocalSettings.json")));
+		Assert.False(File.Exists(Path.Combine(New, "mpv-backend", "conf.json")));
+	}
+
+	[Fact]
+	public void OldFoldersWithoutSettings_AreNotCopied()
+	{
+		Directory.CreateDirectory(Path.Combine(Seaglass, "mpv-backend"));
+		Directory.CreateDirectory(Path.Combine(FluentFinMpv, "Logs"));
+
+		Assert.Null(KnownFolders.CopyLegacyFolder(_local, out var failed, out var source));
+		Assert.False(failed);
+		Assert.Null(source);
+		Assert.Null(KnownFolders.FindLegacyFolder(_local));
+		Assert.False(Directory.Exists(New));
+	}
+
+	[Fact]
+	public void WhenAnotherStartHoldsTheCopyTooLong_NothingIsCopiedOrDeleted_AndTheOldFolderIsUsedThisTime()
+	{
+		MakeOld(Seaglass);
+		// the other start's half-done copy, and the lock it holds
+		Directory.CreateDirectory(New + ".copying");
+		File.WriteAllText(Path.Combine(New + ".copying", "theirs.txt"), "half done");
+		using var held = new ManualResetEventSlim();
+		using var release = new ManualResetEventSlim();
+		var other = new Thread(() =>
+		{
+			using var mutex = new Mutex(false, KnownFolders.CopyMutexName);
+			try
+			{
+				mutex.WaitOne();
+				held.Set();
+				release.Wait();
+			}
+			finally
+			{
+				mutex.ReleaseMutex();
+			}
+		});
+		other.Start();
+		Assert.True(held.Wait(TimeSpan.FromSeconds(10)));
+		try
+		{
+			var note = KnownFolders.CopyLegacyFolder(_local, out var failed, out var source, lockTimeout: TimeSpan.FromMilliseconds(300));
+
+			Assert.True(failed, note);
+			Assert.Equal(Seaglass, source); // the caller runs on it in place, and the next start tries again
+			Assert.Contains("still copying", note);
+			Assert.Equal("half done", File.ReadAllText(Path.Combine(New + ".copying", "theirs.txt")));
+			Assert.False(Directory.Exists(New));
+		}
+		finally
+		{
+			release.Set();
+			other.Join();
+		}
+
+		// the next start, with the lock free: the copy (and the stale partial folder is replaced)
+		Assert.Contains("Copied", KnownFolders.CopyLegacyFolder(_local));
+		Assert.True(File.Exists(Path.Combine(New, "LocalSettings.json")));
+		Assert.False(File.Exists(Path.Combine(New, "theirs.txt")));
+	}
+
+	[Fact]
 	public void NoOldFolder_DoesNothing()
 	{
 		Assert.Null(KnownFolders.CopyLegacyFolder(_local, out var failed, out var source));
@@ -124,11 +202,11 @@ public sealed class LegacyDataFolderTests : IDisposable
 	{
 		MakeOld(Seaglass);
 		KnownFolders.CopyLegacyFolder(_local);
-		File.WriteAllText(Path.Combine(New, "settings.json"), "changed");
-		File.WriteAllText(Path.Combine(Seaglass, "settings.json"), "newer old");
+		File.WriteAllText(Path.Combine(New, "LocalSettings.json"), "changed");
+		File.WriteAllText(Path.Combine(Seaglass, "LocalSettings.json"), "newer old");
 
 		Assert.Null(KnownFolders.CopyLegacyFolder(_local));
-		Assert.Equal("changed", File.ReadAllText(Path.Combine(New, "settings.json")));
+		Assert.Equal("changed", File.ReadAllText(Path.Combine(New, "LocalSettings.json")));
 	}
 
 	[Fact]
@@ -141,7 +219,7 @@ public sealed class LegacyDataFolderTests : IDisposable
 		Assert.NotNull(KnownFolders.CopyLegacyFolder(_local));
 
 		Assert.False(File.Exists(Path.Combine(New, "stale.txt")));
-		Assert.True(File.Exists(Path.Combine(New, "settings.json")));
+		Assert.True(File.Exists(Path.Combine(New, "LocalSettings.json")));
 	}
 
 	[Fact]
@@ -166,7 +244,7 @@ public sealed class LegacyDataFolderTests : IDisposable
 		Assert.NotNull(result.Note);
 		Assert.False(result.Failed);
 		Assert.Null(result.LegacyRoot); // nothing to fall back to: the run uses Nixie
-		Assert.True(File.Exists(Path.Combine(New, "settings.json")));
+		Assert.True(File.Exists(Path.Combine(New, "LocalSettings.json")));
 	}
 
 	[Theory]
@@ -200,7 +278,7 @@ public sealed class LegacyDataFolderTests : IDisposable
 
 		Assert.False(second.Failed);
 		Assert.Contains("Copied", second.Note);
-		Assert.Equal("{\"a\":1}", File.ReadAllText(Path.Combine(New, "settings.json")));
+		Assert.Equal("{\"a\":1}", File.ReadAllText(Path.Combine(New, "LocalSettings.json")));
 	}
 
 	[Fact]
@@ -241,7 +319,7 @@ public sealed class LegacyDataFolderTests : IDisposable
 
 		Assert.Null(second.Result.note); // the first copied; the second found the finished folder
 		Assert.False(second.Result.failed);
-		Assert.True(File.Exists(Path.Combine(New, "settings.json")));
+		Assert.True(File.Exists(Path.Combine(New, "LocalSettings.json")));
 	}
 
 	[Fact]

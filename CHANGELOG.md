@@ -13,13 +13,16 @@ its name (`fluentfin-mpv`).
   again if you had pinned the old app. Seaglass 1.1.x's own "Download and install" finds this release too: it also
   carries the installer as `Seaglass-1.2.0-win-x64.msi`.
 - **Your data comes along.** The first start copies `%LOCALAPPDATA%\Seaglass` (or `%LOCALAPPDATA%\FluentFinMpv` when
-  there is no Seaglass folder) to `%LOCALAPPDATA%\Nixie` and leaves the old folder as it was: saved servers and
+  Seaglass holds no settings) to `%LOCALAPPDATA%\Nixie` and leaves the old folder as it was: saved servers and
   sign-ins, settings, the journal (a consistent copy even while the old app runs) and the mpv backend's configuration;
   old logs and downloaded updates are left behind. If the copy fails, Nixie says so, uses the old folder for that
   session and tries again at the next start.
-- **The server sees Nixie.** The client name sent to Jellyfin is Nixie (a new sign-in, and the mpv backend's playback
-  reports), on the same device as before. Saved sign-ins keep working (the access token and this PC's device id are
-  unchanged), so nobody has to sign in again.
+- **The server sees Nixie, on the same device.** A saved sign-in is your user name and a password protected for your
+  Windows account (no access token is saved), and the app signs in again with them at every start. The copied
+  `LocalSettings.json` keeps the key that password needs, so it still works, and nobody has to type it again. The sign-in
+  and the mpv backend send the client name Nixie with this PC's device id, the same one Seaglass sent: the server sees the
+  same device sign in as Nixie and gives it a new token. What the server keeps per user, such as Continue Watching and
+  played state, is untouched.
 - **A new icon:** a nixie tube whose glowing digit is a play triangle, hot pink to orange on deep maroon, drawn from
   vector shapes (`tools\icon\make-icon.ps1`) for every size from 16 to 256 px. The installer's pictures match.
 - **For scripts:** the environment variables are `NIXIE_THEME`, `NIXIE_FULLSCREEN` and `NIXIE_TESTS_ON_DESKTOP`; the
