@@ -1,0 +1,68 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:cc="using:FluentFin.Themes.Cinematic.Controls"
+    xmlns:cin="using:FluentFin.Themes.Cinematic"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:views="using:FluentFin.Views"
+    xmlns:vm="using:FluentFin.Core.ViewModels">
+    <!--
+        Nixie 1.3.0: the Cinematic theme dictionary (ILayoutTheme.Dictionary). ThemeService merges it while Cinematic is the
+        theme. It holds the keys every theme defines (TopBarStyle, RowHeaderTemplate, PosterTemplate, StillTemplate,
+        PageHeaderStyle, SignInBackdropTemplate) over Cinematic's own resources (Cards.xaml).
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///Themes/Cinematic/Cards.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!--
+        The shared top bar as a floating glass island: inset from the window's left and top edges (16, 10), 8 px corners, its own
+        clearer acrylic with a lit top rim, ending before the caption buttons. The foundation's TitleBarControl template reads
+        these: Padding is the island's inset from the window, CornerRadius, Background, BorderBrush and BorderThickness are the
+        island's; the parts and their automation names stay the shared bar's.
+    -->
+    <Style x:Key="TopBarStyle" TargetType="views:TitleBarControl">
+        <Setter Property="Padding" Value="16,10,0,0" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Background" Value="{ThemeResource CinematicIslandBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CinematicIslandRimBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <!--  a shelf's title: 24 px SemiBold, Segoe UI Variable Display (a heading for Narrator: ShelfRow makes it level 2)  -->
+    <DataTemplate x:Key="RowHeaderTemplate">
+        <TextBlock
+            AutomationProperties.HeadingLevel="Level2"
+            Style="{StaticResource CinematicShelfTitleTextBlockStyle}"
+            Text="{Binding}" />
+    </DataTemplate>
+
+    <!--  posters stay the shared card (Cinematic draws stills; a poster appears only where a page shows people's or a collection's art)  -->
+    <DataTemplate x:Key="PosterTemplate">
+        <lc:BaseItemDtoCard
+            Width="200"
+            Height="352"
+            ImageSource="{Binding Dto, Converter={StaticResource CinematicPosterImageConverter}}"
+            Model="{Binding}" />
+    </DataTemplate>
+
+    <!--  the 16:9 still with title art (Controls\CinematicStill)  -->
+    <StaticResource x:Key="StillTemplate" ResourceKey="CinematicStillTemplate" />
+
+    <!--  a page's own title (the library's): Segoe UI Variable Display 28 SemiBold, a level-1 heading  -->
+    <Style x:Key="PageHeaderStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource GlassDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="28" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="AutomationProperties.HeadingLevel" Value="Level1" />
+    </Style>
+
+    <!--  behind the shared sign-in form: a full-window dusk still (Controls\CinematicSignInScene)  -->
+    <DataTemplate x:Key="SignInBackdropTemplate">
+        <cc:CinematicSignInScene />
+    </DataTemplate>
+</ResourceDictionary>

@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="FluentFin.Themes.Cinematic.Controls.CinematicStill"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cc="using:FluentFin.Themes.Cinematic.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:media="using:CommunityToolkit.WinUI.Media"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    IsTabStop="True"
+    UseSystemFocusVisuals="False"
+    mc:Ignorable="d">
+
+    <!--
+        Nixie 1.3.0, Cinematic: a 16:9 still. Opaque artwork with 8 px corners, a dark band along its bottom with the title art
+        (the Logo, or the title typeset) and the progress; the title and a line under it as plain text. Focus (keyboard) and the
+        pointer zoom it 1.1x about 40 % of its height (FocusZoom; only while motion is allowed), light a sheen across the art
+        and show the Play glyph; the keyboard also gets the neon rim: WinUI's two focus colours as two 2 px rings, a pink glow
+        close in and the nixie orange further out. The whole tile is one target; Narrator reads one list item named after
+        the item (the shared card's name, ItemLabels.CardName; an episode: ItemLabels.EpisodeRowName).
+    -->
+    <Grid x:Name="Zoomed" Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!--  the rest shadow under the still, and the focus glow (pink close in, nixie orange further out; 0 in high contrast)  -->
+        <Border
+            x:Name="RestShadow"
+            Width="{x:Bind ArtWidth, Mode=OneWay}"
+            Height="{x:Bind ArtHeight, Mode=OneWay}"
+            Background="{ThemeResource NixieDeepBrush}"
+            CornerRadius="8">
+            <ui:Effects.Shadow>
+                <media:AttachedCardShadow
+                    BlurRadius="26"
+                    CornerRadius="8"
+                    Offset="0,10"
+                    Opacity="{ThemeResource CinematicRestShadowOpacity}"
+                    Color="Black" />
+            </ui:Effects.Shadow>
+        </Border>
+        <Grid
+            x:Name="Glow"
+            Width="{x:Bind ArtWidth, Mode=OneWay}"
+            Height="{x:Bind ArtHeight, Mode=OneWay}"
+            x:DeferLoadStrategy="Lazy"
+            IsHitTestVisible="False"
+            Visibility="Collapsed">
+            <Border CornerRadius="8">
+                <ui:Effects.Shadow>
+                    <media:AttachedCardShadow
+                        BlurRadius="20"
+                        CornerRadius="12"
+                        Opacity="{ThemeResource CinematicGlowOpacity}"
+                        Color="{ThemeResource NixieAccentColor}" />
+                </ui:Effects.Shadow>
+            </Border>
+            <Border CornerRadius="8">
+                <ui:Effects.Shadow>
+                    <media:AttachedCardShadow
+                        BlurRadius="48"
+                        CornerRadius="12"
+                        Offset="0,6"
+                        Opacity="{ThemeResource CinematicGlowFarOpacity}"
+                        Color="{ThemeResource GlassNeonGlowColor}" />
+                </ui:Effects.Shadow>
+            </Border>
+        </Grid>
+
+        <Grid
+            x:Name="Art"
+            Width="{x:Bind ArtWidth, Mode=OneWay}"
+            Height="{x:Bind ArtHeight, Mode=OneWay}"
+            Background="{ThemeResource CinematicArtGroundBrush}"
+            CornerRadius="8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="45*" />
+                <RowDefinition Height="55*" />
+            </Grid.RowDefinitions>
+            <lc:LazyLoadedImage
+                Grid.RowSpan="2"
+                AutomationProperties.AccessibilityView="Raw"
+                BlurHashImageSource="{x:Bind BlurHashImageSource, Mode=OneWay}"
+                EnableBlurHash="True"
+                ImageSource="{x:Bind ImageSource, Mode=OneWay}"
+                Stretch="UniformToFill" />
+            <!--  the dark foreground band the title art sits on (a solid window colour in high contrast)  -->
+            <Border Grid.Row="1" Background="{ThemeResource CinematicArtShadeBrush}" IsHitTestVisible="False" />
+
+            <cc:CinematicTitleArt
+                x:Name="TitleArt"
+                Grid.Row="1"
+                Margin="16,0,16,20"
+                VerticalAlignment="Bottom"
+                Foreground="{ThemeResource CinematicOnArtTextBrush}"
+                LogoMaxHeight="{x:Bind TitleArtLogoHeight, Mode=OneWay}"
+                Size="{x:Bind TitleArtSize, Mode=OneWay}"
+                Visibility="{x:Bind ShowTitleArt, Mode=OneWay}" />
+
+            <!--  the progress: the accent on its own dark track, as tall as the bar  -->
+            <Grid
+                x:Name="ProgressTrack"
+                Grid.Row="1"
+                Height="4"
+                Margin="16,0,16,9"
+                VerticalAlignment="Bottom"
+                AutomationProperties.AccessibilityView="Raw"
+                Background="{ThemeResource CinematicProgressTrackBrush}"
+                CornerRadius="2"
+                Visibility="Collapsed">
+                <Border
+                    x:Name="ProgressFill"
+                    HorizontalAlignment="Left"
+                    Background="{ThemeResource CinematicProgressBrush}"
+                    CornerRadius="2" />
+            </Grid>
+
+            <!--  an episode's number, top left; watched, top right (the accent with its dark check)  -->
+            <Border
+                x:Name="BadgePlate"
+                Margin="12"
+                Padding="7,3"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Background="{ThemeResource CinematicBadgeFillBrush}"
+                CornerRadius="4"
+                Visibility="Collapsed">
+                <TextBlock
+                    x:Name="BadgeText"
+                    FontSize="12"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource CinematicOnArtTextBrush}" />
+            </Border>
+            <Border
+                x:Name="WatchedMark"
+                Width="24"
+                Height="24"
+                Margin="10"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                AutomationProperties.AccessibilityView="Raw"
+                Background="{ThemeResource NixieAccentOnImageBrush}"
+                CornerRadius="6"
+                Visibility="Collapsed">
+                <FontIcon
+                    FontSize="12"
+                    Foreground="{ThemeResource NixieOnAccentOnImageBrush}"
+                    Glyph="&#xE73E;" />
+            </Border>
+
+            <!--  the sheen: a soft diagonal light from the top-left corner while zoomed  -->
+            <Rectangle
+                x:Name="Sheen"
+                Grid.RowSpan="2"
+                AutomationProperties.AccessibilityView="Raw"
+                Fill="{ThemeResource CinematicSheenBrush}"
+                IsHitTestVisible="False"
+                Opacity="0" />
+
+            <!--  Play: on the art while zoomed (the pointer's one click; the keyboard plays from the menu or the item page)  -->
+            <Button
+                x:Name="PlayButton"
+                Grid.RowSpan="2"
+                Width="56"
+                Height="56"
+                Padding="0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Play"
+                Background="{ThemeResource CinematicGlyphFillBrush}"
+                BorderBrush="{ThemeResource CinematicGlyphStrokeBrush}"
+                BorderThickness="1"
+                Click="PlayButton_Click"
+                CornerRadius="8"
+                IsTabStop="False"
+                Style="{StaticResource BareButtonStyle}"
+                ToolTipService.ToolTip="Play"
+                Visibility="Collapsed">
+                <FontIcon
+                    FontSize="22"
+                    Foreground="{ThemeResource CinematicOnArtTextBrush}"
+                    Glyph="&#xE768;" />
+            </Button>
+
+            <!--  one subtle light edge on the art  -->
+            <Border
+                Grid.RowSpan="2"
+                AutomationProperties.AccessibilityView="Raw"
+                BorderBrush="{ThemeResource CinematicArtEdgeBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                IsHitTestVisible="False" />
+        </Grid>
+
+        <!--  the neon rim: two rings outside the art, WinUI's own focus colours (so they follow the theme and high contrast)  -->
+        <Border
+            x:Name="RimInner"
+            Width="{x:Bind RimWidth(ArtWidth, 4), Mode=OneWay}"
+            Height="{x:Bind RimWidth(ArtHeight, 4), Mode=OneWay}"
+            BorderBrush="{ThemeResource SystemControlFocusVisualSecondaryBrush}"
+            BorderThickness="2"
+            CornerRadius="10"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
+        <Border
+            x:Name="RimOuter"
+            Width="{x:Bind RimWidth(ArtWidth, 8), Mode=OneWay}"
+            Height="{x:Bind RimWidth(ArtHeight, 8), Mode=OneWay}"
+            BorderBrush="{ThemeResource SystemControlFocusVisualPrimaryBrush}"
+            BorderThickness="2"
+            CornerRadius="12"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
+
+        <!--  the title and its line, plain text under the art; part of the tile's target  -->
+        <StackPanel
+            x:Name="Words"
+            Grid.Row="1"
+            Width="{x:Bind ArtWidth, Mode=OneWay}"
+            Padding="0,12,0,0"
+            HorizontalAlignment="Left"
+            Spacing="2">
+            <TextBlock
+                x:Name="TitleText"
+                FontFamily="{StaticResource GlassDisplayFontFamily}"
+                FontSize="{x:Bind TitleSize, Mode=OneWay}"
+                FontWeight="SemiBold"
+                Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <TextBlock
+                x:Name="LineText"
+                FontSize="14"
+                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <TextBlock
+                x:Name="SynopsisText"
+                Margin="0,8,0,0"
+                FontSize="14"
+                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                MaxLines="2"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+        </StackPanel>
+    </Grid>
+</UserControl>

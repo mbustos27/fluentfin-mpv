@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="FluentFin.Themes.Cinematic.Views.CinematicEpisodePage"
+    lc:TopBar.ExtendsUnder="True"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:cc="using:FluentFin.Themes.Cinematic.Controls"
+    xmlns:controls="using:FluentFin.Controls"
+    xmlns:core="using:FluentFin.Core"
+    xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:local="using:FluentFin.Themes.Cinematic.Views"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Page"
+    Background="{ThemeResource CinematicNightBrush}"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <DataTemplate x:Key="StillSmall" x:DataType="vm:BaseItemViewModel">
+            <cc:CinematicStill
+                Margin="12,12,12,0"
+                ArtHeight="169"
+                ArtWidth="300"
+                DecodeWidth="520"
+                Model="{x:Bind}"
+                TitleArtLogoHeight="44"
+                TitleArtSize="20"
+                TitleSize="15" />
+        </DataTemplate>
+    </Page.Resources>
+
+    <!--
+        Nixie 1.3.0, Cinematic Episode: the show's backdrop fills the first screen, the show's title art over the episode's own title
+        (CinematicItemStage): Resume or Play (the one Primary; "Resume at 12:34") and Play from start beside it, Trailer,
+        Watched, Favourite, More. The next episode sits along the stage's foot as a still that plays it; below it the sound,
+        the subtitles, the details, the cast and the guest stars. Same view model and Back place as the shared episode page.
+    -->
+    <Grid>
+        <ScrollViewer x:Name="PageContent">
+            <StackPanel>
+                <cc:CinematicItemStage x:Name="Stage" Dto="{x:Bind ViewModel.Dto, Mode=OneWay}">
+                    <cc:CinematicItemStage.PrimaryActions>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button
+                                x:Name="PlayButton"
+                                AutomationProperties.Name="{x:Bind ViewModel.PlayLabel, Mode=OneWay}"
+                                Command="{x:Bind ViewModel.PlayCommand}"
+                                Style="{StaticResource NixiePrimaryButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind ViewModel.PlayLabel, Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon FontSize="16" Glyph="&#xE768;" />
+                                    <TextBlock Text="{x:Bind ViewModel.PlayLabel, Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                AutomationProperties.Name="{x:Bind core:ItemLabels.PlayFromBeginningAction(ViewModel.Dto), Mode=OneWay, FallbackValue='Play from start'}"
+                                Command="{x:Bind ViewModel.PlayFromBeginningCommand}"
+                                Style="{StaticResource NixieButtonStyle}"
+                                ToolTipService.ToolTip="Play from start"
+                                Visibility="{x:Bind ViewModel.HasResumePoint, Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon FontSize="16" Glyph="&#xE777;" />
+                                    <TextBlock Text="Play from start" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </cc:CinematicItemStage.PrimaryActions>
+                    <cc:CinematicItemStage.BottomContent>
+                        <!--  the next episode, one still that plays it (Narrator: the shared episode row's name, a button)  -->
+                        <StackPanel
+                            x:Name="NextBlock"
+                            Margin="96,0,0,24"
+                            Spacing="4"
+                            Visibility="{x:Bind ViewModel.HasNextEpisode, Mode=OneWay}">
+                            <TextBlock
+                                AutomationProperties.HeadingLevel="Level2"
+                                Style="{StaticResource CinematicShelfTitleTextBlockStyle}"
+                                Text="Next up" />
+                            <cc:CinematicStill
+                                x:Name="NextStill"
+                                Margin="0,14,0,0"
+                                HorizontalAlignment="Left"
+                                ArtHeight="169"
+                                ArtWidth="300"
+                                DecodeWidth="520"
+                                Kind="Episode"
+                                Model="{x:Bind local:CinematicEpisodePage.Wrap(ViewModel.NextEpisode), Mode=OneWay}"
+                                ShowTitleArt="False"
+                                TitleSize="15" />
+                        </StackPanel>
+                    </cc:CinematicItemStage.BottomContent>
+                </cc:CinematicItemStage>
+
+                <StackPanel
+                    x:Name="Body"
+                    Margin="96,24,48,56"
+                    Spacing="32">
+                    <!--  the picture and the sound: the shared pickers (plain labels, TrackLabels)  -->
+                    <Grid ColumnSpacing="16" RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition />
+                            <RowDefinition />
+                            <RowDefinition />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="88" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Style="{StaticResource GlassMetaTextBlockStyle}"
+                            Text="Video" />
+                        <TextBlock
+                            Grid.Column="1"
+                            Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                            Text="{x:Bind ViewModel.VideoTitle, Mode=OneWay}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Grid.Row="1"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Style="{StaticResource GlassMetaTextBlockStyle}"
+                            Text="Audio" />
+                        <ctk:SwitchPresenter
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            TargetType="x:Int32"
+                            Value="{x:Bind ViewModel.AudioStreams.Count, Mode=OneWay}">
+                            <ctk:Case Value="0" />
+                            <ctk:Case Value="1">
+                                <TextBlock Foreground="{ThemeResource GlassTextPrimaryBrush}" Text="{x:Bind ViewModel.SelectedAudioLabel, Mode=OneWay}" />
+                            </ctk:Case>
+                            <ctk:Case IsDefault="True">
+                                <ComboBox
+                                    MinWidth="360"
+                                    MaxWidth="720"
+                                    HorizontalAlignment="Left"
+                                    AutomationProperties.Name="Audio"
+                                    ItemsSource="{x:Bind ViewModel.AudioLabels, Mode=OneWay}"
+                                    SelectedIndex="{x:Bind ViewModel.SelectedAudioIndex, Mode=TwoWay}" />
+                            </ctk:Case>
+                        </ctk:SwitchPresenter>
+                        <TextBlock
+                            Grid.Row="2"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Style="{StaticResource GlassMetaTextBlockStyle}"
+                            Text="Subtitle"
+                            Visibility="{x:Bind ViewModel.HasSubtitles, Mode=OneWay}" />
+                        <ComboBox
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            MinWidth="360"
+                            MaxWidth="720"
+                            HorizontalAlignment="Left"
+                            AutomationProperties.Name="Subtitle"
+                            ItemsSource="{x:Bind ViewModel.SubtitleLabels, Mode=OneWay}"
+                            SelectedIndex="{x:Bind ViewModel.SelectedSubtitleIndex, Mode=TwoWay}"
+                            Visibility="{x:Bind ViewModel.HasSubtitles, Mode=OneWay}" />
+                    </Grid>
+                    <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
+                    <controls:CastRow Heading="Cast &amp; crew" People="{x:Bind ViewModel.CastAndCrew, Mode=OneWay}" />
+                    <controls:CastRow Heading="Guest stars" People="{x:Bind ViewModel.GuestStars, Mode=OneWay}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <controls:LoadStateView
+            State="{x:Bind ViewModel.State}"
+            VerticalContentAlignment="Center" />
+    </Grid>
+</Page>

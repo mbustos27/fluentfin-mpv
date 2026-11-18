@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="FluentFin.Themes.Cinematic.Controls.CinematicHero"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cc="using:FluentFin.Themes.Cinematic.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        Nixie 1.3.0, Cinematic: Home's hero is the whole first screen. The slide's backdrop fills the window under the floating
+        island; a scrim darkens the left (the words) and one fades the foot into the page, where the page lays the Up next
+        shelf over it (ContentBottom keeps the words above that shelf). The words: a kicker ("Continue watching · Film"), the
+        title art, the facts and badges, two lines of overview, Resume (the view's one Primary) with the time left in nixie
+        orange, More info, Watched and Favourite. The pager at the right: thumbnails of the slides (dots in a narrow window),
+        one Tab stop with Left/Right, and a pause for the auto-advance (7 s, 600 ms crossfade, only while motion is allowed,
+        held while the pointer or the focus is in the hero). A click on the art opens the slide's item.
+    -->
+    <Grid
+        x:Name="Root"
+        AutomationProperties.LandmarkType="Custom"
+        AutomationProperties.LocalizedLandmarkType="Featured"
+        AutomationProperties.Name="Featured"
+        Background="{ThemeResource CinematicNightBrush}"
+        GotFocus="Root_GotFocus"
+        LostFocus="Root_LostFocus"
+        PointerEntered="Root_PointerEntered"
+        PointerExited="Root_PointerExited"
+        Tapped="Root_Tapped">
+
+        <Image
+            x:Name="BackdropBottom"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            AutomationProperties.AccessibilityView="Raw"
+            Stretch="UniformToFill" />
+        <Image
+            x:Name="BackdropTop"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            AutomationProperties.AccessibilityView="Raw"
+            Opacity="0"
+            Stretch="UniformToFill" />
+
+        <Border Background="{ThemeResource CinematicHeroSideScrimBrush}" IsHitTestVisible="False" />
+        <Border Background="{ThemeResource CinematicHeroFootScrimBrush}" IsHitTestVisible="False" />
+        <Border
+            Height="200"
+            VerticalAlignment="Top"
+            Background="{ThemeResource CinematicHeroTopScrimBrush}"
+            IsHitTestVisible="False" />
+
+        <!--  the words sit on the dark side scrim in every theme  -->
+        <StackPanel
+            x:Name="Words"
+            MaxWidth="820"
+            Margin="96,0,48,280"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            RequestedTheme="Dark">
+            <TextBlock x:Name="KickerText" Style="{StaticResource CinematicKickerTextBlockStyle}" />
+            <cc:CinematicTitleArt
+                x:Name="TitleArt"
+                MaxWidth="820"
+                Margin="0,14,0,0"
+                HorizontalAlignment="Left"
+                Foreground="{ThemeResource CinematicOnArtTextBrush}"
+                IsHeading="True"
+                LogoDecodeWidth="820"
+                LogoMaxHeight="170"
+                Size="104" />
+            <StackPanel
+                x:Name="MetaRow"
+                Margin="0,18,0,0"
+                Orientation="Horizontal"
+                Spacing="14">
+                <TextBlock
+                    x:Name="MetaText"
+                    VerticalAlignment="Center"
+                    FontSize="16"
+                    Foreground="{ThemeResource CinematicOnArtSecondaryBrush}"
+                    TextTrimming="CharacterEllipsis" />
+                <StackPanel
+                    x:Name="Badges"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Orientation="Horizontal"
+                    Spacing="6" />
+            </StackPanel>
+            <TextBlock
+                x:Name="OverviewText"
+                MaxWidth="640"
+                Margin="0,14,0,0"
+                HorizontalAlignment="Left"
+                FontSize="18"
+                Foreground="{ThemeResource CinematicOnArtTextBrush}"
+                LineHeight="27"
+                MaxLines="2"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="Wrap" />
+            <StackPanel
+                Margin="0,26,0,0"
+                Orientation="Horizontal"
+                Spacing="12">
+                <Button
+                    x:Name="PlayButton"
+                    Click="Play_Click"
+                    Style="{StaticResource NixiePrimaryButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE768;" />
+                        <TextBlock x:Name="PlayText" Text="Play" />
+                    </StackPanel>
+                </Button>
+                <!--  the time left: a number you read, in nixie orange (not a control)  -->
+                <StackPanel
+                    x:Name="LeftPanel"
+                    Margin="4,0,10,0"
+                    VerticalAlignment="Center"
+                    Spacing="6"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="LeftText"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource CinematicNumberBrush}" />
+                    <Grid
+                        Width="110"
+                        Height="4"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Background="{ThemeResource CinematicProgressTrackBrush}"
+                        CornerRadius="2">
+                        <Border
+                            x:Name="LeftFill"
+                            HorizontalAlignment="Left"
+                            Background="{ThemeResource CinematicProgressBrush}"
+                            CornerRadius="2" />
+                    </Grid>
+                </StackPanel>
+                <Button
+                    x:Name="MoreInfoButton"
+                    Click="MoreInfo_Click"
+                    Content="More info"
+                    Style="{StaticResource NixieButtonStyle}" />
+                <ToggleButton
+                    x:Name="WatchedButton"
+                    AutomationProperties.Name="Mark as watched"
+                    Click="WatchedButton_Click"
+                    Style="{StaticResource NixieIconToggleButtonStyle}"
+                    ToolTipService.ToolTip="Mark as watched">
+                    <FontIcon FontSize="18" Glyph="&#xE73E;" />
+                </ToggleButton>
+                <ToggleButton
+                    x:Name="FavoriteButton"
+                    AutomationProperties.Name="Add to favorites"
+                    Click="FavoriteButton_Click"
+                    Style="{StaticResource NixieIconToggleButtonStyle}"
+                    ToolTipService.ToolTip="Add to favorites">
+                    <ToggleButton.Resources>
+                        <StaticResource x:Key="SystemAccentColor" ResourceKey="FavoriteCheckedBrush" />
+                    </ToggleButton.Resources>
+                    <FontIcon x:Name="FavoriteGlyph" FontSize="18" Glyph="&#xEB51;" />
+                </ToggleButton>
+            </StackPanel>
+        </StackPanel>
+
+        <!--  the pager: pause, then a thumbnail per slide (a dot per slide in a narrow window); one Tab stop, Left/Right  -->
+        <StackPanel
+            x:Name="Pager"
+            Margin="0,0,48,252"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Orientation="Horizontal"
+            RequestedTheme="Dark"
+            Spacing="10"
+            Tapped="Pager_Tapped">
+            <Button
+                x:Name="PauseButton"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Pause slideshow"
+                Click="PauseButton_Click"
+                Style="{StaticResource NixieCompactIconButtonStyle}"
+                ToolTipService.ToolTip="Pause slideshow">
+                <FontIcon x:Name="PauseIcon" FontSize="14" Glyph="&#xE769;" />
+            </Button>
+            <StackPanel
+                x:Name="Thumbs"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="Slides"
+                Orientation="Horizontal"
+                Spacing="10"
+                TabFocusNavigation="Once" />
+        </StackPanel>
+    </Grid>
+</UserControl>
