@@ -58,17 +58,20 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 		await jellyfinClient.ResetProgress(id);
 	}
 
+	// 1.2.0: through ItemUserData, which puts the server's answer into the item's copy (so the next toggle goes the
+	// other way and the menu says the right thing) and tells every card, hero and row; before, a second click sent the first
+	// one's request again. The More menu uses these; a toggle button sends the state it shows (SetWatched, SetFavorite).
 	[RelayCommand]
-	public async Task ToggleWatched(BaseItemDto dto)
-	{
-		await jellyfinClient.SetPlayed(dto, !(dto.UserData?.Played ?? false));
-	}
+	public Task ToggleWatched(BaseItemDto dto) => SetWatched(dto, !(dto.UserData?.Played ?? false));
 
 	[RelayCommand]
-	public async Task ToggleFavorite(BaseItemDto dto)
-	{
-		await jellyfinClient.SetIsFavorite(dto, !(dto.UserData?.IsFavorite ?? false));
-	}
+	public Task ToggleFavorite(BaseItemDto dto) => SetFavorite(dto, !(dto.UserData?.IsFavorite ?? false));
+
+	/// <summary>1.2.0: a Watched toggle: the state it shows after the click (two quick clicks end where the second one left it).</summary>
+	public Task<bool> SetWatched(BaseItemDto dto, bool played) => ItemUserData.SetPlayedAsync(jellyfinClient, dto, played);
+
+	/// <summary>1.2.0: a Favourite toggle: the state it shows after the click.</summary>
+	public Task<bool> SetFavorite(BaseItemDto dto, bool favorite) => ItemUserData.SetFavoriteAsync(jellyfinClient, dto, favorite);
 
 	[RelayCommand]
 	public void DisplayDto(BaseItemDto dto)

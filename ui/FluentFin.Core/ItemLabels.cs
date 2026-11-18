@@ -111,8 +111,8 @@ public static class ItemLabels
 	}
 
 	/// <summary>
-	/// Seaglass scrolling: the name Narrator reads for an episode row, the row's one keyboard stop ("S1E4 Pilot, watched";
-	/// "S2E5-E6 Two Parter, 45% watched, favorite"); its place in the list ("4 of 8") comes from the row's position.
+	/// Seaglass scrolling: the name Narrator reads for an episode row, the row's one keyboard stop ("S1 E4 Pilot, watched";
+	/// "S2 E5–E6 Two Parter, 45% watched, favorite"); its place in the list ("4 of 8") comes from the row's position.
 	/// </summary>
 	public static string EpisodeRowName(BaseItemDto? episode)
 	{
@@ -121,18 +121,7 @@ public static class ItemLabels
 			return string.Empty;
 		}
 
-		var code = (episode.ParentIndexNumber, episode.IndexNumber) switch
-		{
-			({ } season, { } number) => $"S{season}E{number}",
-			(null, { } number) => $"E{number}",
-			_ => "",
-		};
-		if (code.Length > 0 && episode.IndexNumberEnd is { } end && end > episode.IndexNumber)
-		{
-			code += $"-E{end}";
-		}
-
-		var title = string.Join(" ", new[] { code, episode.Name?.Trim() ?? "" }.Where(x => x.Length > 0));
+		var title = EpisodeSpoken(episode);
 		List<string> parts = title.Length > 0 ? [title] : [];
 
 		var data = episode.UserData;
@@ -154,10 +143,109 @@ public static class ItemLabels
 	}
 
 	/// <summary>
+	/// 1.2.0 (1.1.3 UX audit, layout item 7): THE way the app writes an episode's number, everywhere (it had five):
+	/// "S1 E4", "S2 E5–E6" for a double episode, "E7" without a season, empty without a number. Cards, rows, heroes, Play and the
+	/// player all call this (the converters too: BaseItemDtoConverters, JellyfinSubtitleConverter).
+	/// </summary>
+	public static string EpisodeCode(BaseItemDto? episode) =>
+		EpisodeCode(episode?.ParentIndexNumber, episode?.IndexNumber, episode?.IndexNumberEnd);
+
+	/// <inheritdoc cref="EpisodeCode(BaseItemDto?)"/>
+	public static string EpisodeCode(int? season, int? number, int? end = null)
+	{
+		var code = (season, number) switch
+		{
+			({ } s, { } n) => $"S{s} E{n}",
+			(null, { } n) => $"E{n}",
+			_ => "",
+		};
+		if (code.Length > 0 && end is { } last && last > number)
+		{
+			code += $"–E{last}";
+		}
+
+		return code;
+	}
+
+	/// <summary>
+	/// 1.2.0: an episode's number and title as the app shows them, "S1 E4 · Pilot" (the code alone without a title, the
+	/// title alone without a number). The one visible format; see <see cref="EpisodeCode(BaseItemDto?)"/>.
+	/// </summary>
+	public static string EpisodeTitle(BaseItemDto? episode) =>
+		string.Join(" · ", new[] { EpisodeCode(episode), episode?.Name?.Trim() ?? "" }.Where(x => x.Length > 0));
+
+	/// <summary>The same for Narrator, without the dot: "S1 E4 Pilot".</summary>
+	internal static string EpisodeSpoken(BaseItemDto? episode) =>
+		string.Join(" ", new[] { EpisodeCode(episode), episode?.Name?.Trim() ?? "" }.Where(x => x.Length > 0));
+
+	/// <summary>
+	/// 1.2.0: the item a card's or an item page's button acts on, in its name and tooltip, so thirty cards do not
+	/// read as thirty "Play" buttons (Seaglass UX review, fix 4): "Inception"; "Season 2 of Lost"; an episode with its series
+	/// and code, "The Office S2 E3 The Fight" (a name that only repeats the series is left out).
+	/// </summary>
+	public static string ActionTarget(BaseItemDto? dto)
+	{
+		if (dto is null)
+		{
+			return "";
+		}
+
+		var name = dto.Name?.Trim() ?? "";
+		var series = dto.SeriesName?.Trim() ?? "";
+		switch (dto.Type)
+		{
+			case BaseItemDto_Type.Episode:
+				if (string.Equals(name, series, StringComparison.OrdinalIgnoreCase))
+				{
+					name = "";
+				}
+				return string.Join(" ", new[] { series, EpisodeCode(dto), name }.Where(x => x.Length > 0));
+			case BaseItemDto_Type.Season when series.Length > 0:
+				return name.Length > 0 ? $"{name} of {series}" : series;
+			default:
+				return name;
+		}
+	}
+
+	/// <summary>"Play Inception" (a card's Play).</summary>
+	/// <remarks>1.2.0 (Nixie button review, I3): "Resume Inception" when the item has a resume point, as the click does.</remarks>
+	public static string PlayAction(BaseItemDto? dto) =>
+		Phrase(ResumePosition(dto) is null || dto?.Type is BaseItemDto_Type.Series or BaseItemDto_Type.Season ? "Play" : "Resume", ActionTarget(dto), "");
+
+	/// <summary>
+	/// "Play Inception from start" (next to Resume on a movie or an episode page; 1.2.0, Nixie button review I37: the button
+	/// reads "Play from start").
+	/// </summary>
+	public static string PlayFromBeginningAction(BaseItemDto? dto) => Phrase("Play", ActionTarget(dto), "from start");
+
+	/// <summary>
+	/// The watched toggle says what a click does now, as the item's menu does: "Mark Inception as watched", or "... as
+	/// unwatched" while it shows watched. <paramref name="watched"/> is the toggle's state (what the user sees).
+	/// </summary>
+	public static string WatchedAction(BaseItemDto? dto, bool? watched) =>
+		Phrase("Mark", ActionTarget(dto), watched == true ? "as unwatched" : "as watched");
+
+	/// <summary>"Add Inception to favorites", or "Remove Inception from favorites" while the toggle shows a favourite.</summary>
+	public static string FavoriteAction(BaseItemDto? dto, bool? favorite) =>
+		favorite == true ? Phrase("Remove", ActionTarget(dto), "from favorites") : Phrase("Add", ActionTarget(dto), "to favorites");
+
+	/// <summary>"More options for Inception".</summary>
+	public static string MoreOptions(BaseItemDto? dto) => Phrase("More options", ActionTarget(dto).Length > 0 ? "for " + ActionTarget(dto) : "", "");
+
+	/// <summary>
+	/// An episode row's watched toggle, named as its Play is ("Mark as unwatched, episode 3, Pilot"); see <see cref="WatchedAction"/>.
+	/// </summary>
+	public static string EpisodeWatchedAction(BaseItemDto? episode, bool? watched) =>
+		EpisodeAction(watched == true ? "Mark as unwatched" : "Mark as watched", episode);
+
+	private static string Phrase(string verb, string target, string tail) =>
+		string.Join(" ", new[] { verb, target, tail }.Where(x => x.Length > 0));
+
+	/// <summary>
 	/// "45% watched" for a progress bar that shows: never 0% (the bar shows for any progress) and never 100% (an item at
 	/// 99.6% is not watched; the server says so with Played).
 	/// </summary>
-	private static string WatchedPercent(double percent) =>
+	internal static string WatchedPercent(double percent) =>
 		$"{Math.Clamp((int)Math.Round(percent), 1, 99)}% watched";
 
 	/// <summary>"Account, alice": the title bar button that shows only the user's picture.</summary>

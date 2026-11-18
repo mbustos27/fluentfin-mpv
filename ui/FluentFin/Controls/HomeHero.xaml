@@ -10,8 +10,13 @@
     <!--
         Seaglass: Home's hero (docs/design/SEAGLASS.md). The slide's backdrop fills the width, scrimmed at the left and the
         bottom so the words read on any artwork; its logo (or its title), meta line, overview, the Play pill and the More
-        info pill sit at the lower left; the dots at the lower right. Slides crossfade (600 ms); they advance by themselves
+        info pill sit at the lower left; the dots at the lower right. 1.2.0: a click on the artwork or the words opens
+        the slide's item, as More info does; previous and next slide flank the dots. Slides crossfade (600 ms); they advance by themselves
         only when GlassMode allows motion, and not while the pointer or the focus is in the hero.
+        1.2.0 (1.1.3 UX audit, layout item 1): full-bleed like the item pages' hero, not an inset card with a second
+        frosted panel inside: square edges, the words straight on the artwork over the item hero's scrims and type ramp, no
+        glass behind them; its height a share of the window's (HeroLayout.HomeShare). Edge to edge needs HomePage to give it
+        the page's full width with no top margin (HomePage.xaml is the library stream's).
     -->
     <Grid
         x:Name="Root"
@@ -19,11 +24,12 @@
         AutomationProperties.LandmarkType="Custom"
         AutomationProperties.LocalizedLandmarkType="Featured"
         AutomationProperties.Name="Featured"
-        CornerRadius="{StaticResource GlassPanelCornerRadius}"
+        RequestedTheme="Dark"
         GotFocus="Root_GotFocus"
         LostFocus="Root_LostFocus"
         PointerEntered="Root_PointerEntered"
-        PointerExited="Root_PointerExited">
+        PointerExited="Root_PointerExited"
+        Tapped="Root_Tapped">
         <Grid.Background>
             <SolidColorBrush Color="#FF101A1E" />
         </Grid.Background>
@@ -40,39 +46,26 @@
             Opacity="0"
             Stretch="UniformToFill" />
 
-        <!--  the scrims: dark at the left (the words) and at the bottom (the dots, the edge into the page)  -->
-        <Rectangle IsHitTestVisible="False">
-            <Rectangle.Fill>
-                <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
-                    <GradientStop Offset="0" Color="#E6000000" />
-                    <GradientStop Offset="0.55" Color="#66000000" />
-                    <GradientStop Offset="1" Color="#00000000" />
-                </LinearGradientBrush>
-            </Rectangle.Fill>
-        </Rectangle>
-        <Rectangle IsHitTestVisible="False">
-            <Rectangle.Fill>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                    <GradientStop Offset="0.55" Color="#00000000" />
-                    <GradientStop Offset="1" Color="#99000000" />
-                </LinearGradientBrush>
-            </Rectangle.Fill>
-        </Rectangle>
+        <!--  the item hero's scrims (ItemHero.xaml): a deep wash, dark at the left (the words) and at the bottom (the dots, the edge into the page)  -->
+        <Border Background="{ThemeResource SeaglassDeepBrush}" IsHitTestVisible="False" Opacity="0.35" />
+        <Border Background="{ThemeResource ItemHeroSideScrimBrush}" IsHitTestVisible="False" />
+        <Border
+            Height="260"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource GlassImageScrimBrush}"
+            IsHitTestVisible="False" />
 
         <!--  the hero sits on artwork in every theme: its words are the dark theme's glass text (white), the system text colour in high contrast  -->
-        <!--  Seaglass: the words sit on one glass panel (the left scrim keeps its backdrop dark, so the white text reads on any artwork)  -->
-        <ContentControl
-            MaxWidth="600"
-            Margin="32,0,32,32"
-            Padding="26,22"
+        <StackPanel
+            x:Name="Words"
+            Margin="48,24,48,36"
+            MaxWidth="{StaticResource ItemHeroTextMaxWidth}"
             HorizontalAlignment="Left"
-            RequestedTheme="Dark"
             VerticalAlignment="Bottom"
-            Style="{StaticResource GlassSurfaceStyle}">
-            <StackPanel x:Name="Words" Spacing="12">
+            Spacing="12">
                 <Image
                     x:Name="Logo"
-                    MaxHeight="110"
+                    MaxHeight="120"
                     HorizontalAlignment="Left"
                     AutomationProperties.AccessibilityView="Raw"
                     Stretch="Uniform"
@@ -105,46 +98,86 @@
                         x:Name="MoreInfoButton"
                         Click="MoreInfo_Click"
                         Content="More info"
-                        Style="{StaticResource GlassInsetPillButtonStyle}" />
+                        Style="{StaticResource GlassPillButtonStyle}" />
                 </StackPanel>
-            </StackPanel>
-
-        </ContentControl>
+        </StackPanel>
 
         <Border
-            Margin="0,0,28,20"
+            Margin="0,0,48,36"
             Padding="10,6"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
+            x:Name="SlideControls"
             Background="#66000000"
-            CornerRadius="{StaticResource GlassChipCornerRadius}">
+            CornerRadius="{StaticResource GlassChipCornerRadius}"
+            Tapped="SlideControls_Tapped">
             <StackPanel Orientation="Horizontal" Spacing="4">
                 <!--  Seaglass scrolling: a visible pause for the auto-advance (WCAG 2.2.2); the dots are one Tab stop, Left/Right pick a slide  -->
                 <Button
                     x:Name="PauseButton"
                     RequestedTheme="Dark"
-                    Width="24"
-                    Height="24"
+                    Width="32"
+                    Height="32"
                     Padding="0"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="Pause slideshow"
                     Background="Transparent"
                     BorderThickness="0"
                     Click="PauseButton_Click"
-                    CornerRadius="12"
+                    CornerRadius="8"
                     ToolTipService.ToolTip="Pause slideshow">
                     <FontIcon
                         x:Name="PauseIcon"
-                        FontSize="11"
+                        FontSize="16"
                         Foreground="{ThemeResource GlassTextPrimaryBrush}"
                         Glyph="&#xE769;" />
                 </Button>
+                <!--  1.2.0 (1.1.3 UX audit, interaction item 13): previous and next slide for the pointer (the keyboard has Left/Right on the dots); at the dots, as the words' panel takes the hero's left edge  -->
+                <Button
+                    x:Name="PreviousButton"
+                    RequestedTheme="Dark"
+                    Width="32"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Previous slide"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="PreviousButton_Click"
+                    CornerRadius="8"
+                    IsTabStop="False"
+                    ToolTipService.ToolTip="Previous slide">
+                    <FontIcon
+                        FontSize="16"
+                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                        Glyph="&#xE76B;" />
+                </Button>
+                <!--  1.2.0 (Nixie button review, I18-I21): the dots and the buttons beside them are 32 px targets (HeroDots.TargetSize), the buttons' glyphs 16 px  -->
                 <StackPanel
                     x:Name="Dots"
                     AutomationProperties.Name="Slides"
                     Orientation="Horizontal"
-                    Spacing="2"
+                    Spacing="0"
                     TabFocusNavigation="Once" />
+                <Button
+                    x:Name="NextButton"
+                    RequestedTheme="Dark"
+                    Width="32"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Next slide"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="NextButton_Click"
+                    CornerRadius="8"
+                    IsTabStop="False"
+                    ToolTipService.ToolTip="Next slide">
+                    <FontIcon
+                        FontSize="16"
+                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                        Glyph="&#xE76C;" />
+                </Button>
             </StackPanel>
         </Border>
     </Grid>

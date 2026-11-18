@@ -142,20 +142,61 @@ public sealed class ItemPageTrackPickTests
 		}
 	}
 
-	/// <summary>What the page's ComboBoxes do when the user chooses an entry.</summary>
+	/// <summary>
+	/// What the page's ComboBoxes do when the user chooses an entry: 1.2.0, they show plain labels and set the choice by its
+	/// place (SelectedAudioIndex, SelectedSubtitleIndex).
+	/// </summary>
 	private static void Pick(INavigationAware page, int? audio = null, bool subtitleNone = false)
 	{
 		switch (page)
 		{
 			case MovieViewModel movie:
-				if (audio is { } a) movie.SelectedAudio = movie.AudioStreams.Single(x => x.Index == a);
-				if (subtitleNone) movie.SelectedSubtitle = movie.SubtitleStreams[0];
+				if (audio is { } a) movie.SelectedAudioIndex = movie.AudioStreams.ToList().FindIndex(x => x.Index == a);
+				if (subtitleNone) movie.SelectedSubtitleIndex = 0;
 				break;
 			case EpisodeViewModel episode:
-				if (audio is { } b) episode.SelectedAudio = episode.AudioStreams.Single(x => x.Index == b);
-				if (subtitleNone) episode.SelectedSubtitle = episode.SubtitleStreams[0];
+				if (audio is { } b) episode.SelectedAudioIndex = episode.AudioStreams.ToList().FindIndex(x => x.Index == b);
+				if (subtitleNone) episode.SelectedSubtitleIndex = 0;
 				break;
 		}
+	}
+
+	/// <summary>The pickers' state as the page binds it: labels, the chosen place, the one audio track's label.</summary>
+	private static (IReadOnlyList<string> Audio, IReadOnlyList<string> Subtitles, int AudioIndex, int SubtitleIndex, Action<int, int> Echo) Pickers(INavigationAware page) => page switch
+	{
+		MovieViewModel m => (m.AudioLabels, m.SubtitleLabels, m.SelectedAudioIndex, m.SelectedSubtitleIndex, (a, s) => { m.SelectedAudioIndex = a; m.SelectedSubtitleIndex = s; }),
+		EpisodeViewModel e => (e.AudioLabels, e.SubtitleLabels, e.SelectedAudioIndex, e.SelectedSubtitleIndex, (a, s) => { e.SelectedAudioIndex = a; e.SelectedSubtitleIndex = s; }),
+		_ => throw new ArgumentException(nameof(page)),
+	};
+
+	[Theory]
+	[MemberData(nameof(Pages))]
+	public async Task ThePickers_ShowPlainLabels_AtTheServersDefaults(string page)
+	{
+		var (vm, _) = await Open(page, MediaPlayerType.Mpv);
+		var pickers = Pickers(vm);
+
+		// the fixture's tracks name no language: told apart by number, never by codec
+		Assert.Equal(["Unknown language", "Unknown language (2)"], pickers.Audio);
+		Assert.Equal(["Off", "Unknown language", "Unknown language (2)"], pickers.Subtitles);
+		Assert.Equal(0, pickers.AudioIndex);
+		Assert.Equal(1, pickers.SubtitleIndex);
+	}
+
+	[Theory]
+	[MemberData(nameof(Pages))]
+	public async Task TheComboBoxEchoingItsPlace_OrLosingItsItems_IsNotAPick(string page)
+	{
+		// a ComboBox sets its index back when it shows the page's choice, and to -1 when its items are replaced
+		var (vm, play) = await Open(page, MediaPlayerType.Mpv);
+		var pickers = Pickers(vm);
+
+		pickers.Echo(pickers.AudioIndex, pickers.SubtitleIndex);
+		pickers.Echo(-1, -1);
+		await play();
+
+		Assert.IsType<BaseItemDto>(Assert.Single(_played));
+		Assert.Equal((0, 1), (Pickers(vm).AudioIndex, Pickers(vm).SubtitleIndex));
 	}
 
 	private static BaseItemDto Item(BaseItemDto_Type type) => new()

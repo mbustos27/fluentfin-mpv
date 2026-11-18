@@ -19,7 +19,8 @@
     mc:Ignorable="d">
 
     <!--  Seaglass: the item page. The hero (backdrop, logo, chips, actions, overview) is always dark; the body below it is
-          opaque content on the window's ambient backdrop: cast and episodes as cards, the journal as one glass card.  -->
+          opaque content on the window's ambient backdrop, in plain sections (1.2.0, 1.1.3 UX audit layout item 3: no glass
+          panel per section; a section with nothing in it is not drawn).  -->
     <Page.Resources>
         <cc:BoolToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     </Page.Resources>
@@ -27,17 +28,47 @@
     <Grid>
         <ScrollViewer x:Name="PageContent">
             <StackPanel>
-                <controls:ItemHero Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" Overview="{x:Bind ViewModel.Dto.Overview, Mode=OneWay}">
+                <controls:ItemHero
+                    Dto="{x:Bind ViewModel.Dto, Mode=OneWay}"
+                    HeightShare="0.45"
+                    Overview="{x:Bind ViewModel.Dto.Overview, Mode=OneWay}">
                     <controls:ItemHero.PrimaryActions>
-                        <!--  fluentfin-mpv: a named Play (ux-review I2, I3)  -->
+                        <!--
+                            fluentfin-mpv: a named Play (ux-review I2, I3). 1.2.0: it says what it starts, "Resume S1E4" with
+                            the episode's progress under the words, "Play S2E1", "Play from the start" (ItemPlay; Seaglass UX review,
+                            fix 12); Narrator and the tooltip get the episode's title too. The padding makes room for the bar in 44 px.
+                        -->
                         <Button
-                            AutomationProperties.Name="Play"
+                            AutomationProperties.Name="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}"
                             Command="{x:Bind root:App.Commands.PlayDtoCommand}"
                             CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"
-                            Style="{StaticResource GlassAccentPillButtonStyle}">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <SymbolIcon Symbol="Play" />
-                                <TextBlock Text="Play" />
+                            Style="{StaticResource GlassAccentPillButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}">
+                            <StackPanel Spacing="3">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <SymbolIcon Symbol="Play" />
+                                    <TextBlock Text="{x:Bind ViewModel.PlayTarget.Label, Mode=OneWay}" />
+                                </StackPanel>
+                                <Grid
+                                    Height="3"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Visibility="{x:Bind ViewModel.PlayTarget.HasProgress, Mode=OneWay}">
+                                    <Border
+                                        Background="{ThemeResource SeaglassAccentForegroundBrush}"
+                                        CornerRadius="1.5"
+                                        Opacity="0.3" />
+                                    <ProgressBar
+                                        Height="3"
+                                        MinHeight="3"
+                                        Background="Transparent"
+                                        Foreground="{ThemeResource SeaglassAccentForegroundBrush}"
+                                        Maximum="100"
+                                        Value="{x:Bind ViewModel.PlayTarget.ProgressValue, Mode=OneWay}">
+                                        <ProgressBar.Resources>
+                                            <x:Double x:Key="ProgressBarTrackHeight">3</x:Double>
+                                        </ProgressBar.Resources>
+                                    </ProgressBar>
+                                </Grid>
                             </StackPanel>
                         </Button>
                     </controls:ItemHero.PrimaryActions>
@@ -63,33 +94,27 @@
                             <ctk:WrapLayout HorizontalSpacing="8" VerticalSpacing="8" />
                         </ItemsRepeater.Layout>
                     </ItemsRepeater>
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <!--
-                            Seaglass scrolling: an ItemsControl (EpisodeList), not a virtualizing ItemsRepeater: Tab never reached the
-                            episodes after the first. One Tab stop per episode, Up/Down/Home/End between them, a list for Narrator.
-                        -->
-                        <controls:EpisodeList
-                            AutomationProperties.Name="Episodes"
-                            IsTabStop="False"
-                            ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="jm:BaseItemDto">
-                                    <controls:EpisodeRow Dto="{x:Bind}" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Spacing="10" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                        </controls:EpisodeList>
-                    </ContentControl>
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
-                    </ContentControl>
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <controls:CastRow Heading="Cast &amp; Crew" People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />
-                    </ContentControl>
+                    <!--
+                        Seaglass scrolling: an ItemsControl (EpisodeList), not a virtualizing ItemsRepeater: Tab never reached the
+                        episodes after the first. One Tab stop per episode, Up/Down/Home/End between them, a list for Narrator.
+                    -->
+                    <controls:EpisodeList
+                        AutomationProperties.Name="Episodes"
+                        IsTabStop="False"
+                        ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="jm:BaseItemDto">
+                                <controls:EpisodeRow Dto="{x:Bind}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="10" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </controls:EpisodeList>
+                    <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
+                    <controls:CastRow Heading="Cast &amp; crew" People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

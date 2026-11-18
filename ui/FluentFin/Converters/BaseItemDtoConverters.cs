@@ -35,9 +35,11 @@ public static class BaseItemDtoConverters
 			return string.Empty;
 		}
 
+		// 1.2.0 (1.1.3 UX audit, layout items 7 and 23): the one episode format, "S3 E4 · After the Machine"
+		// (ItemLabels.EpisodeTitle), and a year range with an en dash, "1996–2000", "2011–present"
 		if (dto.Type == BaseItemDto_Type.Episode)
 		{
-			return $"S{dto.ParentIndexNumber}:E{dto.IndexNumber} - {dto.Name}";
+			return ItemLabels.EpisodeTitle(dto);
 		}
 		if (dto.Type == BaseItemDto_Type.Movie)
 		{
@@ -45,7 +47,7 @@ public static class BaseItemDtoConverters
 		}
 		if (dto.Type == BaseItemDto_Type.Series)
 		{
-			return $"{dto.ProductionYear} - {(string.Equals(dto.Status, "Continuing", StringComparison.OrdinalIgnoreCase) ? "Present" : dto.EndDate?.Year)}";
+			return SeriesYears(dto);
 		}
 
 		return "";
@@ -60,7 +62,7 @@ public static class BaseItemDtoConverters
 
 		if (dto.Type == BaseItemDto_Type.Episode)
 		{
-			return $"S{dto.ParentIndexNumber}:E{dto.IndexNumber} - {dto.Name}";
+			return ItemLabels.EpisodeTitle(dto);
 		}
 		if (dto.Type == BaseItemDto_Type.Movie)
 		{
@@ -82,7 +84,26 @@ public static class BaseItemDtoConverters
 			return string.Empty;
 		}
 
-		return $"S{dto.ParentIndexNumber}:E{dto.IndexNumber}";
+		return ItemLabels.EpisodeCode(dto);
+	}
+
+	/// <summary>
+	/// 1.2.0 (1.1.3 UX audit, layout item 23): "1996–2000", "2011–present", "2004" (one year); an en dash with no
+	/// spaces. Empty without a first year.
+	/// </summary>
+	public static string SeriesYears(BaseItemDto? dto)
+	{
+		if (dto?.ProductionYear is not { } start)
+		{
+			return "";
+		}
+
+		if (string.Equals(dto.Status, "Continuing", StringComparison.OrdinalIgnoreCase))
+		{
+			return $"{start}–present";
+		}
+
+		return dto.EndDate?.Year is { } end && end != start ? $"{start}–{end}" : $"{start}";
 	}
 
 	public static BitmapImage? GetImage(BaseItemPerson personDto, double height)
@@ -281,24 +302,6 @@ public static class BaseItemDtoConverters
 		}
 
 		return null;
-	}
-
-	public static Brush CardBadgeBackground(BaseItemViewModel vm)
-	{
-		if (vm is null)
-		{
-			return (Brush)Application.Current.Resources["InfoBadgeBackground"];
-		}
-
-		var unwatchedCount = vm.UserData?.UnplayedItemCount ?? 0;
-		var played = vm.UserData?.Played ?? false;
-
-		if (played && unwatchedCount == 0)
-		{
-			return (Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
-		}
-
-		return (Brush)Application.Current.Resources["InfoBadgeBackground"];
 	}
 
 	public static Visibility IsCardBadgeVisible(BaseItemViewModel vm)

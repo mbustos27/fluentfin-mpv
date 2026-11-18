@@ -9,6 +9,7 @@
     xmlns:cc="using:CommunityToolkit.WinUI.Converters"
     xmlns:cl="using:FluentFin.Controls.Lights"
     xmlns:controls="using:FluentFin.Controls"
+    xmlns:core="using:FluentFin.Core"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:i="using:Microsoft.Xaml.Interactivity"
     xmlns:local="using:FluentFin.Controls"
@@ -50,11 +51,20 @@
         <c:NullableBoolToValueOrDefaultConverter x:Key="NullableBoolToValueOrDefaultConverter" />
     </UserControl.Resources>
 
+    <!--
+        1.2.0 (1.1.3 UX audit, interaction item 11): the whole tile is one target, the title under the artwork too: the
+        pointer over any of it lifts the card and shows its buttons, a click anywhere but on a button opens the item. No tilt
+        toward the pointer and no sheen any more (a tvOS focus effect, odd with a mouse); the lift and the shadow stay.
+    -->
     <Grid
         x:Name="RootGrid"
         ui:VisualExtensions.NormalizedCenterPoint="0.5, 0.5"
         ui:VisualExtensions.Scale="0.9"
-        ContextFlyout="{x:Bind Model.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}">
+        ContextFlyout="{x:Bind Model.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}"
+        PointerCanceled="Card_PointerExited"
+        PointerEntered="Card_PointerEntered"
+        PointerExited="Card_PointerExited"
+        Tapped="Card_Tapped">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -79,11 +89,7 @@
         <Grid
             x:Name="ImageCanvas"
             Background="Transparent"
-            CornerRadius="{StaticResource GlassCardCornerRadius}"
-            PointerEntered="ImageCanvas_PointerEntered"
-            PointerExited="ImageCanvas_PointerExited"
-            PointerMoved="ImageCanvas_PointerMoved"
-            Tapped="ImageCanvas_Tapped">
+            CornerRadius="{StaticResource GlassCardCornerRadius}">
 
             <Grid ui:VisualExtensions.NormalizedCenterPoint="0.5, 0.5">
                 <controls:LazyLoadedImage
@@ -91,12 +97,6 @@
                     EnableBlurHash="True"
                     ImageSource="{x:Bind ImageSource, Mode=OneWay}" />
             </Grid>
-
-            <!--  Seaglass: the specular sheen that follows the pointer (PosterTilt); Full mode only, never takes hits  -->
-            <Border
-                x:Name="SheenHost"
-                AutomationProperties.AccessibilityView="Raw"
-                IsHitTestVisible="False" />
 
             <Grid x:Name="ContentOverlay">
                 <!--  under the buttons while they show, so they read on any artwork  -->
@@ -108,20 +108,20 @@
                     Visibility="Collapsed" />
                 <Button
                     x:Name="PlayButton" IsTabStop="False"
-                    Width="50"
-                    Height="50"
+                    Width="44"
+                    Height="44"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     ui:VisualExtensions.NormalizedCenterPoint="0.5,0.5"
                     ui:VisualExtensions.Scale="0.8"
-                    AutomationProperties.Name="Play"
+                    AutomationProperties.Name="{x:Bind core:ItemLabels.PlayAction(Model.Dto), Mode=OneWay, FallbackValue=Play}"
                     Background="{StaticResource Black65O}"
                     BorderThickness="0"
                     Command="{x:Bind root:App.Commands.PlayDtoCommand}"
                     CommandParameter="{x:Bind Model.Dto, Mode=OneWay}"
-                    CornerRadius="25"
+                    CornerRadius="22"
                     Style="{ThemeResource BareButtonStyle}"
-                    ToolTipService.ToolTip="Play"
+                    ToolTipService.ToolTip="{x:Bind core:ItemLabels.PlayAction(Model.Dto), Mode=OneWay, FallbackValue=Play}"
                     Visibility="Collapsed">
 
                     <animations:Implicit.ShowAnimations>
@@ -149,7 +149,7 @@
                         </i:EventTriggerBehavior>
                     </i:Interaction.Behaviors>
 
-                    <FontIcon Glyph="&#xF5B0;">
+                    <FontIcon FontSize="20" Glyph="&#xF5B0;">
                         <animations:Explicit.Animations>
                             <animations:AnimationSet x:Name="OnEnter">
                                 <animations:ColorAnimation
@@ -169,6 +169,10 @@
                     </FontIcon>
                 </Button>
 
+                <!--
+                    1.2.0 (1.1.3 UX audit, layout item 23): one badge everywhere, the accent on artwork with its dark check or
+                    count, as the episode rows' watched mark (it was a saturated green pill, and the count Windows' own accent)
+                -->
                 <InfoBadge
                     Width="50"
                     Height="25"
@@ -176,7 +180,8 @@
                     Padding="5,0"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Top"
-                    Background="{x:Bind c:BaseItemDtoConverters.CardBadgeBackground(Model), Mode=OneWay}"
+                    Background="{ThemeResource SeaglassAccentOnImageBrush}"
+                    Foreground="{ThemeResource SeaglassOnAccentOnImageBrush}"
                     FontSize="25"
                     FontWeight="ExtraBold"
                     IconSource="{x:Bind c:BaseItemDtoConverters.CardBadgeSource(Model), Mode=OneWay}"
@@ -217,50 +222,54 @@
                     Spacing="4"
                     Visibility="Collapsed">
 
+                    <!--
+                        1.2.0: each button is named for its item and says what a click does now, its tooltip the same
+                        words (Seaglass UX review, fix 4): "Mark Inception as watched", "Remove Inception from favorites"
+                    -->
                     <ToggleButton
                         x:Name="MarkWatchedButton" IsTabStop="False"
-                        Width="40"
-                        Height="40"
-                        AutomationProperties.Name="Watched"
+                        Width="44"
+                        Height="44"
+                        AutomationProperties.Name="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay, FallbackValue='Mark as watched'}"
                         Click="MarkWatchedButton_Clicked"
                         Content="{ui:FontIcon Glyph=&#xE73E;,
-                                              FontSize=15}"
+                                              FontSize=16}"
                         Background="{StaticResource Black65O}"
-                        CornerRadius="20"
+                        CornerRadius="22"
                         IsChecked="{x:Bind Model.UserData.Played, Converter={StaticResource NullableBoolToValueOrDefaultConverter}, Mode=OneWay}"
                         Style="{ThemeResource IconToggleButtonStyle}"
-                        ToolTipService.ToolTip="Mark watched" />
+                        ToolTipService.ToolTip="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay, FallbackValue='Mark as watched'}" />
 
                     <ToggleButton
                         x:Name="AddToFavoriteButton" IsTabStop="False"
-                        Width="40"
-                        Height="40"
-                        AutomationProperties.Name="Favorite"
+                        Width="44"
+                        Height="44"
+                        AutomationProperties.Name="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay, FallbackValue='Add to favorites'}"
                         Click="AddToFavoriteButton_Clicked"
-                        Content="{ui:FontIcon Glyph=&#xEB52;,
-                                              FontSize=15}"
                         Background="{StaticResource Black65O}"
-                        CornerRadius="20"
+                        CornerRadius="22"
                         IsChecked="{x:Bind Model.UserData.IsFavorite, Converter={StaticResource NullableBoolToValueOrDefaultConverter}, Mode=OneWay}"
                         Style="{ThemeResource IconToggleButtonStyle}"
-                        ToolTipService.ToolTip="Add to favorites">
+                        ToolTipService.ToolTip="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay, FallbackValue='Add to favorites'}">
                         <ToggleButton.Resources>
                             <StaticResource x:Key="SystemAccentColor" ResourceKey="FavoriteCheckedBrush" />
                         </ToggleButton.Resources>
+                        <!--  1.2.0 (Nixie button review, I5): an outline heart when off, filled when on  -->
+                        <FontIcon FontSize="16" Glyph="{x:Bind c:ItemRowConverters.FavoriteGlyph(AddToFavoriteButton.IsChecked), Mode=OneWay}" />
                     </ToggleButton>
 
                     <Button
                         x:Name="MoreButton" IsTabStop="False"
-                        Width="40"
-                        Height="40"
-                        AutomationProperties.Name="More options"
+                        Width="44"
+                        Height="44"
+                        AutomationProperties.Name="{x:Bind core:ItemLabels.MoreOptions(Model.Dto), Mode=OneWay, FallbackValue='More options'}"
                         Content="{ui:FontIcon Glyph=&#xE712;,
-                                              FontSize=15}"
+                                              FontSize=16}"
                         Background="{StaticResource Black65O}"
-                        CornerRadius="20"
+                        CornerRadius="22"
                         Flyout="{x:Bind Model.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}"
                         Style="{ThemeResource IconButtonStyle}"
-                        ToolTipService.ToolTip="More options"
+                        ToolTipService.ToolTip="{x:Bind core:ItemLabels.MoreOptions(Model.Dto), Mode=OneWay, FallbackValue='More options'}"
                         Visibility="{x:Bind c:JellyfinFlyoutConverter.CardMenuVisibility(Model.Dto), Mode=OneWay}" />
 
                 </StackPanel>
@@ -283,10 +292,12 @@
                 CornerRadius="{StaticResource GlassCardCornerRadius}"
                 IsHitTestVisible="False" />
         </Grid>
-        <!--  the title and subtitle are plain text under the artwork: no plate, no border  -->
+        <!--  the title and subtitle are plain text under the artwork: no plate, no border; part of the card's target (a transparent background takes the pointer between the lines)  -->
         <StackPanel
+            x:Name="TitleArea"
             Grid.Row="1"
             Padding="2,10,2,2"
+            Background="Transparent"
             Spacing="2">
 
             <TextBlock

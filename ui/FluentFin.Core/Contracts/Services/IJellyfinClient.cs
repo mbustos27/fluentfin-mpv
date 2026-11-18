@@ -77,9 +77,17 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<QueryFiltersLegacy?> GetFilters(BaseItemDto library);
 
-		Task SetIsFavorite(BaseItemDto dto, bool isFavorite);
+		/// <returns>1.2.0: the item's user data as the server has it now; null when the request failed.</returns>
+		Task<UserItemDataDto?> SetIsFavorite(BaseItemDto dto, bool isFavorite);
 
-		Task SetPlayed(BaseItemDto dto, bool played);
+		/// <returns>1.2.0: the item's user data as the server has it now; null when the request failed.</returns>
+		Task<UserItemDataDto?> SetPlayed(BaseItemDto dto, bool played);
+
+		/// <summary>
+		/// 1.2.0: puts an item's watched state and resume point back as they were (an Undo of marking a whole series or season;
+		/// <c>POST /UserItems/{id}/UserData</c>). The server's answer; null when the request failed.
+		/// </summary>
+		Task<UserItemDataDto?> SetUserData(Guid id, bool played, long positionTicks);
 
 		Task<bool> Authenticate(string code);
 

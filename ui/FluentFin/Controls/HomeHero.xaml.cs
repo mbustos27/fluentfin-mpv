@@ -38,6 +38,13 @@ public sealed partial class HomeHero : UserControl
 		_timer.Tick += (_, _) => Advance();
 		Loaded += (_, _) =>
 		{
+			// 1.2.0: a share of the window's height, as the item pages' hero (HeroLayout)
+			if (XamlRoot is { } root)
+			{
+				root.Changed += OnRootChanged;
+			}
+
+			Resize();
 			SafeMotion.Subscribe(OnGlassModeChanged);
 			UpdateTimer();
 			// the backdrop is set only while the hero is on screen (Show), so coming back to Home puts its slide behind it again
@@ -48,6 +55,11 @@ public sealed partial class HomeHero : UserControl
 		};
 		Unloaded += (_, _) =>
 		{
+			if (XamlRoot is { } root)
+			{
+				root.Changed -= OnRootChanged;
+			}
+
 			SafeMotion.Unsubscribe(OnGlassModeChanged);
 			_timer.Stop();
 			if (AmbientBackdrop.Current is { } current && current == _shown)
@@ -78,6 +90,17 @@ public sealed partial class HomeHero : UserControl
 
 	private void OnGlassModeChanged(object? sender, EventArgs e) => DispatcherQueue.TryEnqueue(UpdateTimer);
 
+	private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => Resize();
+
+	private void Resize()
+	{
+		var height = HeroLayout.Height(XamlRoot?.Size.Height ?? 0, HeroLayout.HomeShare);
+		Root.Height = height;
+		var compact = HeroLayout.IsCompact(height);
+		Logo.MaxHeight = compact ? 88 : 120;
+		Words.Spacing = compact ? 8 : 12;
+	}
+
 	/// <summary>Auto-advance runs only with several slides, motion allowed, and no pointer or focus in the hero.</summary>
 	private void UpdateTimer()
 	{
@@ -97,16 +120,18 @@ public sealed partial class HomeHero : UserControl
 	private void BuildDots()
 	{
 		Dots.Children.Clear();
-		Dots.Visibility = PauseButton.Visibility = _slides.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+		Dots.Visibility = PauseButton.Visibility = PreviousButton.Visibility = NextButton.Visibility =
+			_slides.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
 		Dots.KeyDown -= Dots_KeyDown;
 		Dots.KeyDown += Dots_KeyDown;
 		for (var i = 0; i < _slides.Count; i++)
 		{
 			var at = i;
+			// 1.2.0: a 32 px target (Nixie button review, I20; it was 22) with no gap between dots
 			var dot = new Button
 			{
-				Width = 22, Height = 22, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-				BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(11),
+				Width = HeroDots.TargetSize, Height = HeroDots.TargetSize, Padding = new Thickness(0), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+				BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(HeroDots.TargetSize / 2),
 				Content = new Microsoft.UI.Xaml.Shapes.Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Microsoft.UI.Colors.White), Opacity = 0.45 },
 			};
 			AutomationProperties.SetName(dot, $"Slide {i + 1} of {_slides.Count}: {_slides[i].Title}");
@@ -131,6 +156,8 @@ public sealed partial class HomeHero : UserControl
 			((Button)Dots.Children[i]).IsTabStop = i == index;
 			ellipse.Opacity = i == index ? 1 : 0.45;
 			ellipse.Width = ellipse.Height = i == index ? 10 : 8;
+			// 1.2.0 (Nixie button review, I20): Narrator hears which slide is shown, not only the eye (the dot's size)
+			AutomationProperties.SetItemStatus(Dots.Children[i], i == index ? "Current slide" : "");
 		}
 
 		var baseUrl = SessionInfo.BaseUrl ?? "";
@@ -162,8 +189,9 @@ public sealed partial class HomeHero : UserControl
 		MetaText.Visibility = string.IsNullOrEmpty(slide.Meta) ? Visibility.Collapsed : Visibility.Visible;
 		OverviewText.Text = slide.Overview;
 		OverviewText.Visibility = string.IsNullOrEmpty(slide.Overview) ? Visibility.Collapsed : Visibility.Visible;
-		PlayText.Text = slide.PlayLabel;
-		AutomationProperties.SetName(PlayButton, $"{slide.PlayLabel} {slide.Title}");
+		// 1.2.0 (Nixie button review, I16): the item pages' words, "Resume at 12:34" or "Play"; named as a card's Play is
+		PlayText.Text = ItemLabels.PlayLabel(slide.Dto);
+		AutomationProperties.SetName(PlayButton, ItemLabels.PlayAction(slide.Dto) is { Length: > 4 } name ? name : $"Play {slide.Title}");
 		AutomationProperties.SetName(MoreInfoButton, $"More info about {slide.Title}");
 
 		if (slide.LogoUri(baseUrl, 600) is { } logo)
@@ -224,6 +252,37 @@ public sealed partial class HomeHero : UserControl
 		}
 	}
 
+	/// <summary>
+	/// 1.2.0 (1.1.3 UX audit, interaction item 13): a click on the artwork, the title or the words opens the slide's
+	/// item, as More info does (and as a streaming app's billboard does); the buttons and the dots do their own thing.
+	/// </summary>
+	private void Root_Tapped(object sender, TappedRoutedEventArgs e)
+	{
+		if (_index < 0 || HeroClick.OnAControl(e.OriginalSource as DependencyObject, Root))
+		{
+			return;
+		}
+
+		App.Commands.DisplayDto(_slides[_index].Dto);
+		e.Handled = true;
+	}
+
+	// a click between the dots is not a click on the artwork
+	private void SlideControls_Tapped(object sender, TappedRoutedEventArgs e) => e.Handled = true;
+
+	private void PreviousButton_Click(object sender, RoutedEventArgs e) => Step(-1);
+
+	private void NextButton_Click(object sender, RoutedEventArgs e) => Step(1);
+
+	private void Step(int delta)
+	{
+		if (_slides.Count > 1)
+		{
+			Show(HeroDots.Step(_index, _slides.Count, delta), animate: true);
+			UpdateTimer();
+		}
+	}
+
 	/// <summary>Seaglass scrolling: the dots are one control: the Tab stop is the dot of the slide shown (see <see cref="Show"/>), Left/Right/Home/End pick a slide.</summary>
 	private void Dots_KeyDown(object sender, KeyRoutedEventArgs e)
 	{
@@ -277,9 +336,34 @@ public sealed partial class HomeHero : UserControl
 	}
 }
 
+/// <summary>1.2.0: whether a click on the hero landed on one of its controls (a button: Play, More info, the dots, pause, the arrows).</summary>
+internal static class HeroClick
+{
+	public static bool OnAControl(DependencyObject? source, DependencyObject hero)
+	{
+		for (var node = source; node is not null && !ReferenceEquals(node, hero); node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+}
+
 /// <summary>Seaglass scrolling: which slide a key picks on the hero's dots (Left/Right by one, no wrap; Home/End).</summary>
 internal static class HeroDots
 {
+	/// <summary>1.2.0: the previous or next slide's index for the arrow buttons, round from the last to the first and back.</summary>
+	public static int Step(int current, int count, int delta) =>
+		count <= 0 ? -1 : (((current + delta) % count) + count) % count;
+
+	/// <summary>1.2.0: each dot's target (Nixie button review, I20: 32 px, above the WCAG 2.5.8 floor of 24; the dot drawn
+	/// in it stays 8 px, 10 for the slide shown); the dots have no gap (HomeHero.xaml).</summary>
+	public const double TargetSize = 32;
+
 	public static int? KeyTarget(Windows.System.VirtualKey key, int current, int count)
 	{
 		if (count <= 1)

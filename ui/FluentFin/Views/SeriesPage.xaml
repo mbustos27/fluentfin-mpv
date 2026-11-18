@@ -20,7 +20,7 @@
     mc:Ignorable="d">
 
     <!--  Seaglass: the item page. The hero (backdrop, logo, chips, actions, overview) is always dark; the body below it is
-          opaque content on the window's ambient backdrop: cast and episodes as cards, the journal as one glass card.  -->
+          opaque content on the window's ambient backdrop, in plain sections (1.2.0: no glass panel per section).  -->
     <Page.Resources>
         <cc:EmptyObjectToObjectConverter
             x:Key="ObjectToVisibilityConverter"
@@ -31,68 +31,156 @@
     <Grid>
         <ScrollViewer x:Name="PageContent">
             <StackPanel>
-                <controls:ItemHero Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" Overview="{x:Bind ViewModel.Dto.Overview, Mode=OneWay}">
+                <controls:ItemHero
+                    Dto="{x:Bind ViewModel.Dto, Mode=OneWay}"
+                    HeightShare="0.45"
+                    Overview="{x:Bind ViewModel.Dto.Overview, Mode=OneWay}">
                     <controls:ItemHero.PrimaryActions>
-                        <!--  fluentfin-mpv: a named Play (ux-review I2, I3)  -->
+                        <!--
+                            fluentfin-mpv: a named Play (ux-review I2, I3). 1.2.0: it says what it starts, "Resume S1E4" with
+                            the episode's progress under the words, "Play S2E1", "Play from the start" (ItemPlay; Seaglass UX review,
+                            fix 12); Narrator and the tooltip get the episode's title too. The padding makes room for the bar in 44 px.
+                        -->
                         <Button
-                            AutomationProperties.Name="Play"
+                            AutomationProperties.Name="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}"
                             Command="{x:Bind root:App.Commands.PlayDtoCommand}"
                             CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"
-                            Style="{StaticResource GlassAccentPillButtonStyle}">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <SymbolIcon Symbol="Play" />
-                                <TextBlock Text="Play" />
+                            Style="{StaticResource GlassAccentPillButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}">
+                            <StackPanel Spacing="3">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <SymbolIcon Symbol="Play" />
+                                    <TextBlock Text="{x:Bind ViewModel.PlayTarget.Label, Mode=OneWay}" />
+                                </StackPanel>
+                                <Grid
+                                    Height="3"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Visibility="{x:Bind ViewModel.PlayTarget.HasProgress, Mode=OneWay}">
+                                    <Border
+                                        Background="{ThemeResource SeaglassAccentForegroundBrush}"
+                                        CornerRadius="1.5"
+                                        Opacity="0.3" />
+                                    <ProgressBar
+                                        Height="3"
+                                        MinHeight="3"
+                                        Background="Transparent"
+                                        Foreground="{ThemeResource SeaglassAccentForegroundBrush}"
+                                        Maximum="100"
+                                        Value="{x:Bind ViewModel.PlayTarget.ProgressValue, Mode=OneWay}">
+                                        <ProgressBar.Resources>
+                                            <x:Double x:Key="ProgressBarTrackHeight">3</x:Double>
+                                        </ProgressBar.Resources>
+                                    </ProgressBar>
+                                </Grid>
                             </StackPanel>
                         </Button>
                     </controls:ItemHero.PrimaryActions>
                 </controls:ItemHero>
+                <!--
+                    1.2.0 (1.1.3 UX audit, layout items 3 and 9): the season picker and that season's episodes come first, as
+                    in Netflix and Apple TV (opened on the season of the next episode; a pill switches the list in place); then
+                    the details, Cast & Crew and More Like This as plain sections under a heading, no glass panel around each, and
+                    a section with nothing in it is not drawn. The lone Next Up card and the small season posters are gone: Play
+                    names the next episode and the list shows it.
+                -->
                 <StackPanel Margin="48,28,48,56" Spacing="32">
-                    <!--  fluentfin-mpv: the TV journal's rating (docs/JOURNAL.md), one glass card  -->
-                    <journal:JournalRatingPanel Item="{x:Bind ViewModel.Dto, Mode=OneWay}" />
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
-                    </ContentControl>
-                    <StackPanel HorizontalAlignment="Left" Spacing="12" Visibility="{x:Bind ViewModel.NextUp, Converter={StaticResource ObjectToVisibilityConverter}, Mode=OneWay}">
-                        <TextBlock AutomationProperties.HeadingLevel="Level2" Style="{StaticResource GlassSectionTitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="Next Up" />
-                        <controls:BaseItemDtoCard
-                            Width="390"
-                            Height="240"
-                            BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(ViewModel.NextUp.Dto, jm:ImageType.Thumb, 300), Mode=OneWay}"
-                            ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(ViewModel.NextUp.Dto, jm:ImageType.Thumb, 300), Mode=OneWay}"
-                            JellyfinClient="{x:Bind ViewModel.JellyfinClient}"
-                            Model="{x:Bind ViewModel.NextUp, Mode=OneWay}" />
+                    <!--  1.2.0 (items review, item 4): shown while there is a season to show, its picker too, even when its episodes could not be loaded  -->
+                    <StackPanel Spacing="16" Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.HasEpisodeSection), Mode=OneWay, FallbackValue=Collapsed}">
+                        <TextBlock
+                            AutomationProperties.HeadingLevel="Level2"
+                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                            Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                            Text="Episodes" />
+                        <!--
+                            the series' seasons (empty, so hidden, for a series of one season), and the link to the shown season's
+                            own page ("Season 2 details": its overview, marking the whole season watched)
+                        -->
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ItemsRepeater x:Name="SeasonPicker" ItemsSource="{x:Bind ViewModel.SeasonPills, Mode=OneWay}" Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.SeasonPills.Count), Mode=OneWay}">
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="core:SeasonPill">
+                                        <Button
+                                            AutomationProperties.Name="{x:Bind AutomationName}"
+                                            Command="{Binding ElementName=Page, Path=ViewModel.SelectSeasonCommand}"
+                                            CommandParameter="{x:Bind Dto}"
+                                            Style="{StaticResource GlassPillButtonStyle}">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="{x:Bind Name}" />
+                                                <Border Height="3" CornerRadius="2" Background="{ThemeResource SeaglassAccentBrush}" Visibility="{x:Bind c:ItemRowConverters.Show(IsCurrent)}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                                <ItemsRepeater.Layout>
+                                    <ctk:WrapLayout HorizontalSpacing="8" VerticalSpacing="8" />
+                                </ItemsRepeater.Layout>
+                            </ItemsRepeater>
+                            <HyperlinkButton
+                                x:Name="SeasonDetailsLink"
+                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                Grid.Column="1"
+                                MinHeight="44"
+                                VerticalAlignment="Center"
+                                Command="{x:Bind root:App.Commands.DisplayDtoCommand}"
+                                CommandParameter="{x:Bind ViewModel.SelectedSeason, Mode=OneWay}"
+                                Content="{x:Bind ViewModel.SeasonDetailsText, Mode=OneWay}" />
+                        </Grid>
+                        <!--  the season page's list: one Tab stop per episode, Up/Down between them, a list for Narrator  -->
+                        <controls:EpisodeList
+                            AutomationProperties.Name="Episodes"
+                            IsTabStop="False"
+                            ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="jm:BaseItemDto">
+                                    <controls:EpisodeRow Dto="{x:Bind}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="10" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </controls:EpisodeList>
+                        <!--  the list area's words when the season's episodes could not be loaded (with Try again) or it has none  -->
+                        <StackPanel
+                            x:Name="EpisodesMessagePanel"
+                            Orientation="Horizontal"
+                            Spacing="16"
+                            Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.HasEpisodesMessage), Mode=OneWay}">
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.EpisodesMessage, Mode=OneWay}"
+                                TextWrapping="Wrap" />
+                            <Button
+                                Command="{x:Bind ViewModel.RetrySeasonCommand}"
+                                Content="Try again"
+                                Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.EpisodesFailed), Mode=OneWay}" />
+                        </StackPanel>
                     </StackPanel>
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <lc:ShelfRow Header="Seasons" HasSeeAll="True" ItemsSource="{x:Bind ViewModel.Seasons, Mode=OneWay}" SeeAll="SeasonsSeeAll">
-                                <lc:ShelfRow.ItemTemplate>
-                                        <DataTemplate x:DataType="viewmodels:BaseItemViewModel">
-                                            <controls:BaseItemDtoCard
-                                                Width="200"
-                                                BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 300)}"
-                                                ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 300)}"
-                                                JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
-                                                Model="{x:Bind}" />
-                                        </DataTemplate>
-                                </lc:ShelfRow.ItemTemplate>
-                            </lc:ShelfRow>
-                    </ContentControl>
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <controls:CastRow Heading="Cast &amp; Crew" People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />
-                    </ContentControl>
-                    <ContentControl Style="{StaticResource GlassSurfaceStyle}">
-                        <lc:ShelfRow Header="More Like This" HasSeeAll="True" ItemsSource="{x:Bind ViewModel.Similar, Mode=OneWay}" SeeAll="SimilarSeeAll">
-                                <lc:ShelfRow.ItemTemplate>
-                                        <DataTemplate x:DataType="viewmodels:BaseItemViewModel">
-                                            <controls:BaseItemDtoCard
-                                                Width="200"
-                                                BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 300)}"
-                                                ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 300)}"
-                                                JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
-                                                Model="{x:Bind}" />
-                                        </DataTemplate>
-                                </lc:ShelfRow.ItemTemplate>
-                            </lc:ShelfRow>
-                    </ContentControl>
+                    <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />
+                    <controls:CastRow Heading="Cast &amp; crew" People="{x:Bind ViewModel.Dto.People, Mode=OneWay}" />
+                    <lc:ShelfRow
+                        Header="More like this"
+                        HasSeeAll="True"
+                        ItemsSource="{x:Bind ViewModel.Similar, Mode=OneWay}"
+                        SeeAll="SimilarSeeAll"
+                        Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.Similar.Count), Mode=OneWay, FallbackValue=Collapsed}">
+                        <lc:ShelfRow.ItemTemplate>
+                            <DataTemplate x:DataType="viewmodels:BaseItemViewModel">
+                                <controls:BaseItemDtoCard
+                                    Width="200"
+                                    BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 300)}"
+                                    ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 300)}"
+                                    JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
+                                    Model="{x:Bind}" />
+                            </DataTemplate>
+                        </lc:ShelfRow.ItemTemplate>
+                    </lc:ShelfRow>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

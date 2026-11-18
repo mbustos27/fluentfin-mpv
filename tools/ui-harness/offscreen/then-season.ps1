@@ -1,7 +1,7 @@
 # Seaglass scrolling, the season page's episode rows: run with -Script season -Then offscreen\then-season.ps1 (the showcase
 # series' Season 1: 8 episodes, the first three watched). One Tab stop per row (it was five buttons), Up/Down/Home/End between
 # episodes, out of the list at either end, every episode reached by Tab, the focused row clear of the title bar, Narrator's
-# "S1E4 Title, watched" and "4 of 8" in a list named Episodes, Play and Watched still there for the pointer, the row's menu
+# "S1 E4 Title, watched" and "4 of 8" in a list named Episodes, Play (on the thumbnail) and "…" there for the pointer, the row's menu
 # (the menu key) with the episode's page and the More menu's items, the wheel over the rows scrolling the page, and Enter
 # playing the episode (last: it opens the player). Shift cannot be posted (WinUI reads the real keyboard state): Shift+Tab
 # and Shift+F10 are hands-on checks; the menu key (VK_APPS) stands in for Shift+F10.
@@ -39,7 +39,7 @@ Check 'season: the season pill is there' ([bool]$pill)
 Press 0x09
 $ep1 = Info
 Check 'season: Tab from the season pill goes to the first episode row' ($ep1 -and $ep1.Class -eq 'EpisodeRow' -and $ep1.Type -eq 'ListItem') (Describe $ep1)
-Check 'season: Narrator: the row is named for its episode ("S1E1 <title>, watched")' ($ep1 -and $ep1.Name -eq "S1E1 $($fixture.episode.name), watched") (Describe $ep1)
+Check 'season: Narrator: the row is named for its episode ("S1 E1 <title>, watched")' ($ep1 -and $ep1.Name -eq "S1 E1 $($fixture.episode.name), watched") (Describe $ep1)
 Check 'season: Narrator: ... "1 of 8" in a list named Episodes' ($ep1 -and $ep1.Pos -eq 1 -and $ep1.Size -eq $epCount -and $ep1.ListType -eq 'List' -and $ep1.ListName -eq 'Episodes') ("$(Describe $ep1); $($ep1.ListType) '$($ep1.ListName)'")
 Shot 'season-1-first-row'
 $tabbed = @($ep1)
@@ -81,12 +81,12 @@ Press 0x26 900   # Up from the first: out of the list
 $above = Info
 Check 'season: Up from the first episode leaves the list (to the season pills above)' ($above -and $above.Class -ne 'EpisodeRow') (Describe $above)
 
-# --- Play and Watched are still there for the pointer, named for the episode, not Tab stops; Favourite is not a button
-$playBtn = Find-Ui -Name "Play, episode 1, $($fixture.episode.name)" -Type 'Button'
-$watchedBtn = Find-Ui -Name "Watched, episode 1, $($fixture.episode.name)" -Type 'Button'
-Check 'season: Play and Watched stay on the row, named for the episode' ($playBtn -and $watchedBtn)
-Check 'season: ... and have no Tab stop of their own' ($playBtn -and -not $playBtn.Cached.IsKeyboardFocusable -and $watchedBtn -and -not $watchedBtn.Cached.IsKeyboardFocusable)
-Check 'season: Favourite is no longer a button on the row' (-not (Find-Ui -Name "Favorite, episode 1, $($fixture.episode.name)" -Type 'Button'))
+# --- the row's "…" is there for the pointer, named for the episode, not a Tab stop; 1.2.0 (Nixie button review, I8): the
+# Play disc on the thumbnail is a picture (the row is the button: a click, Enter, Invoke); Watched and Favourite are in the menu
+$moreBtn = Find-Ui -Name "More options, episode 1, $($fixture.episode.name)" -Type 'Button'
+Check 'season: the row''s "…" is on the row, named for the episode, not a Tab stop' ($moreBtn -and -not $moreBtn.Cached.IsKeyboardFocusable)
+Check 'season: the Play disc is no button of its own (the row plays)' (-not (Find-Ui -Name "Play, episode 1, $($fixture.episode.name)" -Type 'Button'))
+Check 'season: Watched and Favourite are not buttons on the row (they are in its menu)' (-not (Find-Ui -Name "Favorite, episode 1, $($fixture.episode.name)" -Type 'Button') -and -not (Find-Ui -Name "Mark as unwatched, episode 1, $($fixture.episode.name)" -Type 'Button') -and -not (Find-Ui -Name "Mark as watched, episode 1, $($fixture.episode.name)" -Type 'Button'))
 
 # --- the menu key: the row's menu, the episode's page first, favourite in it
 [void][OffscreenUi]::SetFocus($pill); Start-Sleep -Milliseconds 300
@@ -108,20 +108,20 @@ if ($detailsItem) { Invoke-Element $detailsItem | Out-Null }
 $epPage = Wait-ItemPage $fixture.episode.name
 Check 'season: the menu''s Episode details opens the episode''s page' ([bool]$epPage)
 $rowCond = New-Object System.Windows.Automation.PropertyCondition($A::ClassNameProperty, 'EpisodeRow')
-$upNext = Wait-Until { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, $rowCond)) | Where-Object { $_.Cached.Name -like 'S1E2 *' } | Select-Object -First 1 } -Seconds 10 -PollMs 200
+$upNext = Wait-Until { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, $rowCond)) | Where-Object { $_.Cached.Name -like 'S1 E2 *' } | Select-Object -First 1 } -Seconds 10 -PollMs 200
 if ($upNext) {
     $unPos = $upNext.GetCurrentPropertyValue($Ids::PositionInSetProperty)
     $unType = $upNext.Cached.ControlType.ProgrammaticName -replace '^ControlType\.', ''
     Check 'season: the episode page''s Up next row is a button, not a list item without a list' ($unType -eq 'Button' -and [int]$unPos -le 0) ("$unType '$($upNext.Cached.Name)', position $unPos")
 }
-else { Check 'season: the episode page''s Up next row is a button, not a list item without a list' $false 'no Up next row (S1E2) found' }
+else { Check 'season: the episode page''s Up next row is a button, not a list item without a list' $false 'no Up next row (S1 E2) found' }
 Key 0xA6   # Back to the season page
 $pill = Wait-Ui -Name 'Season 1, current season' -Type 'Button' -Seconds 15
 Start-Sleep -Milliseconds 1200
 
 # --- the wheel over the rows scrolls the page
 [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0); Start-Sleep -Milliseconds 700
-$rowEl = Find-Ui -Name "S1E2 " -Type 'ListItem' -Contains
+$rowEl = Find-Ui -Name "S1 E2 " -Type 'ListItem' -Contains
 if ($rowEl) {
     $rr = [OffscreenUi]::RectOf($rowEl)
     $p0 = (Page-State).V

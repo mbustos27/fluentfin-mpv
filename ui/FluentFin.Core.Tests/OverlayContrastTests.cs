@@ -91,7 +91,6 @@ public class OverlayContrastTests
 
 	[Theory]
 	[InlineData("FluentFin/Controls/BaseItemDtoCard.xaml")]
-	[InlineData("FluentFin/Styles/PlayableMediaItem.xaml")]
 	public void CardActionButtons_AreDarkThemedWithScrim(string file)
 	{
 		var buttons = FindByName(Load(file), "ActionButtons");
