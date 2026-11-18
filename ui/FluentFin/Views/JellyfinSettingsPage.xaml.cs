@@ -2,68 +2,167 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using FluentFin.Contracts.Services;
 using FluentFin.Contracts.ViewModels;
 using FluentFin.Core;
-using FluentFin.Core.Contracts.Services;
+using FluentFin.Core.Admin;
 using FluentFin.Core.Services;
 using FluentFin.Core.ViewModels;
 using FluentFin.Helpers;
 using FluentFin.UI.Core.Contracts.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace FluentFin.Views;
 
+/// <summary>
+/// Nixie 1.2.0 (admin): the server administration, with its sections as text tabs along the top (Core.Admin.AdminSections)
+/// instead of a left navigation pane. Picking a tab opens its page in the Settings frame; opening a page any other way
+/// (a user's settings from Users) selects its section's tab, and a page opened from a section links back to it.
+/// </summary>
 public sealed partial class JellyfinSettingsPage : Page
 {
+	private readonly INavigationService _navigationService = App.GetKeyedService<INavigationService>(NavigationRegions.Settings);
+	private readonly IPageService _pageService = App.GetService<IPageService>();
+	private bool _syncing;
+
 	public JellyfinSettingsViewModel ViewModel { get; } = App.GetService<JellyfinSettingsViewModel>();
 
 	public JellyfinSettingsPage()
 	{
 		InitializeComponent();
 
-		var navigationService = App.GetKeyedService<INavigationService>("Settings");
-		var navigationViewService = App.GetKeyedService<INavigationViewService>("Settings");
+		foreach (var section in AdminSections.All)
+		{
+			SectionBar.Items.Add(new SelectorBarItem { Text = section.Name, Tag = section });
+		}
 
-		navigationService.Frame = NavFrame;
-		navigationViewService.Initialize(NavView);
+		_navigationService.Frame = NavFrame;
+		Follow(true);
+		// a page in the back stack is unloaded and loaded again: the tabs follow the frame only while the page is shown
+		Loaded += (_, _) =>
+		{
+			Follow(true);
+			ShowPlace(NavFrame.Content?.GetType());
+		};
+		Unloaded += (_, _) => Follow(false);
 	}
 
-	private void NavView_BackRequested(NavigationView sender, NavigationViewBackRequestedEventArgs args)
+	private bool _following;
+
+	private void Follow(bool on)
+	{
+		if (on != _following)
+		{
+			if (on)
+			{
+				_navigationService.Navigated += OnNavigated;
+			}
+			else
+			{
+				_navigationService.Navigated -= OnNavigated;
+			}
+
+			_following = on;
+		}
+	}
+
+	private void SectionBar_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+	{
+		if (_syncing || sender.SelectedItem?.Tag is not AdminSection section)
+		{
+			return;
+		}
+
+		// a section with pages opens its first one; its own tab row shows once the page is there (OnNavigated)
+		Open(section.Key);
+	}
+
+	private void PageBar_SelectionChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+	{
+		if (_syncing || sender.SelectedItem?.Tag is not AdminPage page)
+		{
+			return;
+		}
+
+		Open(page.Key);
+	}
+
+	private void Open(string key)
+	{
+		if (_pageService.GetPageType(key) != NavFrame.Content?.GetType())
+		{
+			_navigationService.NavigateTo(key);
+		}
+	}
+
+	private void BackLink_Click(object sender, RoutedEventArgs e)
 	{
 		if (NavFrame.CanGoBack)
 		{
 			NavFrame.GoBack();
 		}
+		else if (SectionBar.SelectedItem?.Tag is AdminSection section)
+		{
+			_navigationService.NavigateTo(section.Key);
+		}
 	}
+
+	/// <summary>The tabs follow the page, however it was opened.</summary>
+	private void OnNavigated(object sender, NavigationEventArgs e) => ShowPlace(e.SourcePageType);
+
+	private void ShowPlace(Type? pageType)
+	{
+		AdminPlace? place;
+		try
+		{
+			place = pageType is null ? null : AdminSections.Find(_pageService.GetViewModelType(pageType)?.FullName);
+		}
+		catch (ArgumentException)
+		{
+			place = null; // a page of no view model
+		}
+
+		_syncing = true;
+		try
+		{
+			foreach (var item in SectionBar.Items)
+			{
+				item.IsSelected = place is not null && item.Tag == place.Section;
+			}
+
+			PageBar.Items.Clear();
+			if (place is { Section.HasPageTabs: true })
+			{
+				AutomationPropertiesName(PageBar, $"{place.Section.Name} pages");
+				foreach (var page in place.Section.Pages)
+				{
+					var item = new SelectorBarItem { Text = page.Name, Tag = page };
+					PageBar.Items.Add(item);
+					item.IsSelected = page == place.Page;
+				}
+			}
+
+			PageBar.Visibility = PageBar.Items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+			BackLink.Visibility = place is { IsSubPage: true } ? Visibility.Visible : Visibility.Collapsed;
+			BackLinkText.Text = place is { IsSubPage: true } ? $"Back to {place.Section.Name}" : "";
+		}
+		finally
+		{
+			_syncing = false;
+		}
+	}
+
+	private static void AutomationPropertiesName(DependencyObject element, string name) =>
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(element, name);
 }
 
 public partial class JellyfinSettingsViewModel : ObservableObject, INavigationAware
 {
 	private readonly INavigationService _navigationService;
-	private readonly INavigationViewService _navigationViewService;
-	private readonly IJellyfinClient _jellyfinClient;
 
-	public JellyfinSettingsViewModel([FromKeyedServices(NavigationRegions.Settings)] INavigationService navigationService,
-									 [FromKeyedServices(NavigationRegions.Settings)] INavigationViewService navigationViewService,
-									 IJellyfinClient jellyfinClient)
+	public JellyfinSettingsViewModel([FromKeyedServices(NavigationRegions.Settings)] INavigationService navigationService)
 	{
 		_navigationService = navigationService;
-		_navigationViewService = navigationViewService;
-		_jellyfinClient = jellyfinClient;
-
-		_navigationService.Navigated += OnNavigated;
-	}
-
-	[ObservableProperty]
-	public partial NavigationViewItem? Selected { get; set; }
-
-	private void OnNavigated(object sender, NavigationEventArgs e)
-	{
-		var selectedItem = _navigationViewService.GetSelectedItem(e.SourcePageType);
-		if (selectedItem != null)
-		{
-			Selected = selectedItem;
-		}
 	}
 
 	public async Task OnNavigatedFrom()
