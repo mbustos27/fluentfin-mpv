@@ -213,7 +213,7 @@ class Store(unittest.TestCase):
     def test_corrupt_file_is_ignored(self):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, src.LEARNED_FILE)
-            with open(path, "w") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 f.write("{nope")
             self.assertIsNone(src.LearnedStore(path).get("s:1"))
 

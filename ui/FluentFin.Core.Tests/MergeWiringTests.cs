@@ -66,6 +66,16 @@ public sealed class MergeWiringTests
 		Assert.Equal("Lost S2 E5–E6", ContinueWatchingRules.NameOf(episode));
 	}
 
+	[Fact]
+	public void TheLibrariesPage_HasPosterLikeTiles_ThatFillTheRow()
+	{
+		// the 1.1.3 layout audit's item 23 (an unowned page, applied at the merge): no solid name strip, art not stretched
+		var page = Load("FluentFin/Views/LibrariesLandingPage.xaml");
+		Assert.DoesNotContain(page.Descendants().Attributes("Background"), a => a.Value.Contains("CardBackgroundFillColorDefaultBrush"));
+		Assert.Equal("UniformToFill", (string?)page.Descendants().Single(e => e.Name.LocalName == "LoadingImage").Attribute("Stretch"));
+		Assert.Equal("Uniform", (string?)page.Descendants().Single(e => e.Name.LocalName == "UniformGridLayout").Attribute("ItemsStretch"));
+	}
+
 	private static XDocument Load(string file) => XDocument.Load(Path.Combine(RepoRoot, file));
 
 	private static string Code(string file) => File.ReadAllText(Path.Combine(RepoRoot, file));

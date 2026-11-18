@@ -33,7 +33,11 @@
             <DataTemplate x:DataType="jm:BaseItemDto">
                 <!--  fluentfin-mpv: Narrator reads the library's name for the tile (ux-review A1)  -->
                 <ItemContainer AutomationProperties.Name="{x:Bind Name}">
-                    <Grid CornerRadius="{StaticResource GlassCardCornerRadius}">
+                    <!--
+                        1.2.0 (1.1.3 layout audit, item 23): the art alone has the corners, 16:9 and filled without stretching, and the
+                        name is a plain caption under it, as a poster's (it sat on a solid strip of its own, white in light)
+                    -->
+                    <Grid RowSpacing="8">
                         <Grid.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem
@@ -47,33 +51,30 @@
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-
-                        <controls:LoadingImage
-                            Glyph="&#xEA8C;"
-                            Source="{x:Bind c:BaseItemDtoConverters.GetImage((jm:BaseItemDto), jm:ImageType.Primary, 270)}"
-                            Stretch="Fill" />
-
-                        <Grid
-                            Grid.Row="1"
-                            Padding="8"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                Style="{ThemeResource BodyStrongTextBlockStyle}"
-                                Text="{x:Bind Name}" />
+                        <Grid CornerRadius="{StaticResource GlassCardCornerRadius}">
+                            <controls:LoadingImage
+                                Glyph="&#xEA8C;"
+                                Source="{x:Bind c:BaseItemDtoConverters.GetImage((jm:BaseItemDto), jm:ImageType.Primary, 270)}"
+                                Stretch="UniformToFill" />
                         </Grid>
+                        <TextBlock
+                            Grid.Row="1"
+                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                            Style="{ThemeResource BodyStrongTextBlockStyle}"
+                            Text="{x:Bind Name}"
+                            TextTrimming="CharacterEllipsis" />
                     </Grid>
                 </ItemContainer>
             </DataTemplate>
         </ItemsView.ItemTemplate>
         <ItemsView.Layout>
+            <!--  tiles that fill the row and keep their shape (16:9 art at 320 x 180, the caption under it)  -->
             <UniformGridLayout
-                ItemsStretch="Fill"
+                ItemsStretch="Uniform"
                 MinColumnSpacing="16"
-                MinItemHeight="270"
-                MinItemWidth="330"
-                MinRowSpacing="16" />
+                MinItemHeight="210"
+                MinItemWidth="320"
+                MinRowSpacing="24" />
         </ItemsView.Layout>
     </ItemsView>
     </Grid>
