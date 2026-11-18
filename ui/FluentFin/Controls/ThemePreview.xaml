@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Nixie 1.3.0: a layout theme drawn small for the picker (Settings > Appearance, "Choose a look"): each theme's Home as a
+    240 x 135 sketch in vector shapes, no image files. Decorative (the option's text names the theme): Raw for Narrator.
+    The sketches show the themes at dusk whatever the app's theme, as a screenshot would.
+-->
+<UserControl
+    x:Class="FluentFin.Controls.ThemePreview"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AutomationProperties.AccessibilityView="Raw"
+    IsTabStop="False">
+
+    <UserControl.Resources>
+        <LinearGradientBrush x:Key="PreviewDusk" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Offset="0" Color="#1A0710" />
+            <GradientStop Offset="0.45" Color="#500723" />
+            <GradientStop Offset="0.75" Color="#BC1E47" />
+            <GradientStop Offset="1" Color="#EC6A79" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PreviewSun" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Offset="0" Color="#FFF4EE" />
+            <GradientStop Offset="0.6" Color="#F7AA9C" />
+            <GradientStop Offset="1" Color="#EC6A79" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PreviewSunsetRule" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Offset="0" Color="#BC1E47" />
+            <GradientStop Offset="0.5" Color="#F96985" />
+            <GradientStop Offset="1" Color="#F7AA9C" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PreviewTealArt" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Offset="0" Color="#1F5C63" />
+            <GradientStop Offset="1" Color="#0C2328" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PreviewVioletArt" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Offset="0" Color="#5B2A86" />
+            <GradientStop Offset="1" Color="#1E0C33" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PreviewAmberArt" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Offset="0" Color="#8A3A1C" />
+            <GradientStop Offset="1" Color="#2A0E08" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PreviewNightArt" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Offset="0" Color="#24406E" />
+            <GradientStop Offset="1" Color="#0B1426" />
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="PreviewInk" Color="#FFF4EE" />
+        <SolidColorBrush x:Key="PreviewInkDim" Color="#80FFF4EE" />
+        <SolidColorBrush x:Key="PreviewPink" Color="#F96985" />
+        <SolidColorBrush x:Key="PreviewOrange" Color="#FF7A50" />
+        <SolidColorBrush x:Key="PreviewGlass" Color="#33FFFFFF" />
+        <SolidColorBrush x:Key="PreviewDeep" Color="#170508" />
+    </UserControl.Resources>
+
+    <Viewbox Stretch="Uniform">
+        <Grid Width="240" Height="135">
+
+            <!--  Classic: 1.2.0's Home: the glass bar, the hero, rows of wide cards  -->
+            <Canvas x:Name="ClassicSketch" Visibility="Collapsed">
+                <Rectangle Width="240" Height="135" Fill="{StaticResource PreviewDeep}" />
+                <Rectangle Width="240" Height="80">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Offset="0" Color="#3A0E1E" />
+                            <GradientStop Offset="1" Color="#7A2A2E" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <Rectangle Width="240" Height="11" Fill="{StaticResource PreviewGlass}" />
+                <Rectangle Canvas.Left="8" Canvas.Top="4" Width="14" Height="3" Fill="{StaticResource PreviewPink}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="30" Canvas.Top="4" Width="12" Height="3" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="46" Canvas.Top="4" Width="12" Height="3" Fill="{StaticResource PreviewInkDim}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="62" Canvas.Top="4" Width="12" Height="3" Fill="{StaticResource PreviewInkDim}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="180" Canvas.Top="3" Width="44" Height="5" Fill="{StaticResource PreviewGlass}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="12" Canvas.Top="44" Width="64" Height="6" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="12" Canvas.Top="54" Width="90" Height="2" Fill="{StaticResource PreviewInkDim}" />
+                <Rectangle Canvas.Left="12" Canvas.Top="64" Width="20" Height="7" Fill="{StaticResource PreviewPink}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="36" Canvas.Top="64" Width="22" Height="7" Fill="{StaticResource PreviewGlass}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="10" Canvas.Top="86" Width="34" Height="3" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="10" Canvas.Top="93" Width="52" Height="29" Fill="{StaticResource PreviewTealArt}" RadiusX="2" RadiusY="2" />
+                <Rectangle Canvas.Left="67" Canvas.Top="93" Width="52" Height="29" Fill="{StaticResource PreviewVioletArt}" RadiusX="2" RadiusY="2" />
+                <Rectangle Canvas.Left="124" Canvas.Top="93" Width="52" Height="29" Fill="{StaticResource PreviewAmberArt}" RadiusX="2" RadiusY="2" />
+                <Rectangle Canvas.Left="181" Canvas.Top="93" Width="52" Height="29" Fill="{StaticResource PreviewNightArt}" RadiusX="2" RadiusY="2" />
+                <Rectangle Canvas.Left="10" Canvas.Top="120" Width="20" Height="2" Fill="{StaticResource PreviewPink}" />
+                <Rectangle Canvas.Left="10" Canvas.Top="128" Width="28" Height="3" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+            </Canvas>
+
+            <!--  Drive-in: the sky, the screen with the sun and the road, the marquee sign, the cars, the posters  -->
+            <Canvas x:Name="DriveInSketch" Visibility="Collapsed">
+                <Rectangle Width="240" Height="135" Fill="{StaticResource PreviewDusk}" />
+                <Ellipse Canvas.Left="20" Canvas.Top="5" Width="1.5" Height="1.5" Fill="{StaticResource PreviewInk}" />
+                <Ellipse Canvas.Left="64" Canvas.Top="9" Width="1.2" Height="1.2" Fill="{StaticResource PreviewInk}" />
+                <Ellipse Canvas.Left="108" Canvas.Top="4" Width="1.5" Height="1.5" Fill="{StaticResource PreviewInk}" />
+                <Ellipse Canvas.Left="141" Canvas.Top="10" Width="1.2" Height="1.2" Fill="{StaticResource PreviewInk}" />
+                <Ellipse Canvas.Left="232" Canvas.Top="6" Width="1.5" Height="1.5" Fill="{StaticResource PreviewInk}" />
+                <!--  the screen  -->
+                <Rectangle Canvas.Left="12" Canvas.Top="14" Width="126" Height="64" Fill="#22060E" RadiusX="2" RadiusY="2" />
+                <Rectangle Canvas.Left="15" Canvas.Top="17" Width="120" Height="58" RadiusX="1.5" RadiusY="1.5">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#3A0E2A" />
+                            <GradientStop Offset="0.7" Color="#BC1E47" />
+                            <GradientStop Offset="1" Color="#500723" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <Ellipse Canvas.Left="60" Canvas.Top="36" Width="30" Height="30" Fill="{StaticResource PreviewSun}" />
+                <Rectangle Canvas.Left="15" Canvas.Top="56" Width="120" Height="19" Fill="#2A0614" />
+                <Polygon Fill="#140308" Points="70,75 80,75 92,56 58,56" />
+                <Rectangle Canvas.Left="22" Canvas.Top="64" Width="40" Height="4" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <!--  the marquee sign  -->
+                <Rectangle Canvas.Left="146" Canvas.Top="12" Width="82" Height="68" Fill="#0E0206" RadiusX="2" RadiusY="2" Stroke="#FFF4EE" StrokeDashArray="0.5 2" StrokeThickness="1.2" />
+                <Rectangle Canvas.Left="154" Canvas.Top="22" Width="50" Height="3" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="154" Canvas.Top="28" Width="18" Height="3" Fill="{StaticResource PreviewOrange}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="154" Canvas.Top="40" Width="54" Height="3" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="154" Canvas.Top="46" Width="18" Height="3" Fill="{StaticResource PreviewOrange}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="154" Canvas.Top="58" Width="46" Height="3" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="154" Canvas.Top="64" Width="18" Height="3" Fill="{StaticResource PreviewOrange}" RadiusX="1" RadiusY="1" />
+                <!--  the cars, from behind  -->
+                <Path Data="M14,92 C14,86 18,84 24,84 L40,84 C46,84 50,86 50,92 Z" Fill="#140308" />
+                <Path Data="M58,92 C58,86 62,84 68,84 L84,84 C90,84 94,86 94,92 Z" Fill="#140308" />
+                <Path Data="M102,92 C102,86 106,84 112,84 L128,84 C134,84 138,86 138,92 Z" Fill="#140308" />
+                <Rectangle Canvas.Left="10" Canvas.Top="92" Width="220" Height="3" Fill="#140308" />
+                <Rectangle Canvas.Left="17" Canvas.Top="89" Width="3" Height="1.5" Fill="{StaticResource PreviewPink}" />
+                <Rectangle Canvas.Left="44" Canvas.Top="89" Width="3" Height="1.5" Fill="{StaticResource PreviewPink}" />
+                <Rectangle Canvas.Left="61" Canvas.Top="89" Width="3" Height="1.5" Fill="{StaticResource PreviewPink}" />
+                <Rectangle Canvas.Left="88" Canvas.Top="89" Width="3" Height="1.5" Fill="{StaticResource PreviewPink}" />
+                <Rectangle Canvas.Left="105" Canvas.Top="89" Width="3" Height="1.5" Fill="{StaticResource PreviewPink}" />
+                <Rectangle Canvas.Left="132" Canvas.Top="89" Width="3" Height="1.5" Fill="{StaticResource PreviewPink}" />
+                <!--  the posters  -->
+                <Rectangle Canvas.Left="12" Canvas.Top="101" Width="50" Height="28" Fill="{StaticResource PreviewTealArt}" RadiusX="2" RadiusY="2" />
+                <Rectangle Canvas.Left="68" Canvas.Top="101" Width="50" Height="28" Fill="{StaticResource PreviewVioletArt}" RadiusX="2" RadiusY="2" />
+                <Rectangle Canvas.Left="124" Canvas.Top="101" Width="50" Height="28" Fill="{StaticResource PreviewAmberArt}" RadiusX="2" RadiusY="2" />
+                <Rectangle Canvas.Left="180" Canvas.Top="101" Width="50" Height="28" Fill="{StaticResource PreviewNightArt}" RadiusX="2" RadiusY="2" />
+            </Canvas>
+
+            <!--  Cinematic: full-bleed artwork, the floating glass island, one shelf with the focused card grown  -->
+            <Canvas x:Name="CinematicSketch" Visibility="Collapsed">
+                <Rectangle Width="240" Height="135">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#1C0A26" />
+                            <GradientStop Offset="0.55" Color="#5A1E4A" />
+                            <GradientStop Offset="0.85" Color="#A8344F" />
+                            <GradientStop Offset="1" Color="#2A0A14" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <Ellipse Canvas.Left="150" Canvas.Top="58" Width="56" Height="56" Fill="{StaticResource PreviewSun}" />
+                <Rectangle Canvas.Top="86" Width="240" Height="49">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#00170508" />
+                            <GradientStop Offset="0.4" Color="#E6170508" />
+                            <GradientStop Offset="1" Color="#170508" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <Rectangle Canvas.Left="14" Canvas.Top="6" Width="212" Height="9" Fill="{StaticResource PreviewGlass}" RadiusX="2.5" RadiusY="2.5" Stroke="#40FFFFFF" StrokeThickness="0.6" />
+                <Rectangle Canvas.Left="20" Canvas.Top="9" Width="10" Height="3" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="34" Canvas.Top="9" Width="10" Height="3" Fill="{StaticResource PreviewInkDim}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="48" Canvas.Top="9" Width="10" Height="3" Fill="{StaticResource PreviewInkDim}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="16" Canvas.Top="38" Width="78" Height="7" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="16" Canvas.Top="49" Width="52" Height="2" Fill="{StaticResource PreviewInkDim}" />
+                <Rectangle Canvas.Left="16" Canvas.Top="57" Width="22" Height="7" Fill="{StaticResource PreviewPink}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="14" Canvas.Top="92" Width="58" Height="33" Fill="{StaticResource PreviewTealArt}" RadiusX="2" RadiusY="2" Stroke="{StaticResource PreviewInk}" StrokeThickness="1.4" />
+                <Rectangle Canvas.Left="78" Canvas.Top="96" Width="46" Height="26" Fill="{StaticResource PreviewVioletArt}" RadiusX="2" RadiusY="2" />
+                <Rectangle Canvas.Left="130" Canvas.Top="96" Width="46" Height="26" Fill="{StaticResource PreviewAmberArt}" RadiusX="2" RadiusY="2" />
+                <Rectangle Canvas.Left="182" Canvas.Top="96" Width="46" Height="26" Fill="{StaticResource PreviewNightArt}" RadiusX="2" RadiusY="2" />
+            </Canvas>
+
+            <!--  Editorial: the sunset rule, the hero beside a numbered list, the chip line, a dense poster row  -->
+            <Canvas x:Name="EditorialSketch" Visibility="Collapsed">
+                <Rectangle Width="240" Height="135" Fill="#12040A" />
+                <Rectangle Width="240" Height="2.5" Fill="{StaticResource PreviewSunsetRule}" />
+                <Rectangle Canvas.Left="10" Canvas.Top="10" Width="140" Height="64" RadiusX="2" RadiusY="2">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Offset="0" Color="#3A0E2A" />
+                            <GradientStop Offset="0.75" Color="#BC1E47" />
+                            <GradientStop Offset="1" Color="#500723" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <Ellipse Canvas.Left="108" Canvas.Top="38" Width="26" Height="26" Fill="{StaticResource PreviewSun}" />
+                <Rectangle Canvas.Left="10" Canvas.Top="62" Width="140" Height="12" Fill="#3A0A14" />
+                <Rectangle Canvas.Left="18" Canvas.Top="26" Width="54" Height="6" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="18" Canvas.Top="38" Width="20" Height="6" Fill="{StaticResource PreviewPink}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="158" Canvas.Top="12" Width="6" Height="3" Fill="{StaticResource PreviewOrange}" />
+                <Rectangle Canvas.Left="168" Canvas.Top="11" Width="14" Height="8" Fill="{StaticResource PreviewTealArt}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="186" Canvas.Top="13" Width="44" Height="2.5" Fill="{StaticResource PreviewInk}" />
+                <Rectangle Canvas.Left="158" Canvas.Top="25" Width="6" Height="3" Fill="{StaticResource PreviewOrange}" />
+                <Rectangle Canvas.Left="168" Canvas.Top="24" Width="14" Height="8" Fill="{StaticResource PreviewVioletArt}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="186" Canvas.Top="26" Width="44" Height="2.5" Fill="{StaticResource PreviewInk}" />
+                <Rectangle Canvas.Left="158" Canvas.Top="38" Width="6" Height="3" Fill="{StaticResource PreviewOrange}" />
+                <Rectangle Canvas.Left="168" Canvas.Top="37" Width="14" Height="8" Fill="{StaticResource PreviewAmberArt}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="186" Canvas.Top="39" Width="44" Height="2.5" Fill="{StaticResource PreviewInk}" />
+                <Rectangle Canvas.Left="158" Canvas.Top="51" Width="6" Height="3" Fill="{StaticResource PreviewOrange}" />
+                <Rectangle Canvas.Left="168" Canvas.Top="50" Width="14" Height="8" Fill="{StaticResource PreviewNightArt}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="186" Canvas.Top="52" Width="44" Height="2.5" Fill="{StaticResource PreviewInk}" />
+                <Rectangle Canvas.Left="158" Canvas.Top="64" Width="6" Height="3" Fill="{StaticResource PreviewOrange}" />
+                <Rectangle Canvas.Left="168" Canvas.Top="63" Width="14" Height="8" Fill="{StaticResource PreviewTealArt}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="186" Canvas.Top="65" Width="44" Height="2.5" Fill="{StaticResource PreviewInk}" />
+                <Rectangle Canvas.Left="10" Canvas.Top="82" Width="26" Height="3" Fill="{StaticResource PreviewInkDim}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="42" Canvas.Top="82" Width="26" Height="3" Fill="{StaticResource PreviewInkDim}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="74" Canvas.Top="82" Width="26" Height="3" Fill="{StaticResource PreviewInk}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="106" Canvas.Top="82" Width="26" Height="3" Fill="{StaticResource PreviewInkDim}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="138" Canvas.Top="82" Width="26" Height="3" Fill="{StaticResource PreviewInkDim}" RadiusX="1" RadiusY="1" />
+                <Rectangle Canvas.Left="10" Canvas.Top="92" Width="26" Height="36" Fill="{StaticResource PreviewTealArt}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="41" Canvas.Top="92" Width="26" Height="36" Fill="{StaticResource PreviewVioletArt}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="72" Canvas.Top="92" Width="26" Height="36" Fill="{StaticResource PreviewAmberArt}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="103" Canvas.Top="92" Width="26" Height="36" Fill="{StaticResource PreviewNightArt}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="134" Canvas.Top="92" Width="26" Height="36" Fill="{StaticResource PreviewTealArt}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="165" Canvas.Top="92" Width="26" Height="36" Fill="{StaticResource PreviewAmberArt}" RadiusX="1.5" RadiusY="1.5" />
+                <Rectangle Canvas.Left="196" Canvas.Top="92" Width="26" Height="36" Fill="{StaticResource PreviewVioletArt}" RadiusX="1.5" RadiusY="1.5" />
+            </Canvas>
+        </Grid>
+    </Viewbox>
+</UserControl>

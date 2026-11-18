@@ -8,13 +8,13 @@
         Nixie 1.3.0: the top bar's chrome as 1.2.0 drew it (TitleBarControl, before the themes): one glass layer behind the
         bar with a hairline under it; over a page whose artwork runs under the bar, a dark scrim instead. The default style of
         TopBarChrome, so the bar is drawn before any theme's dictionary is in and whatever a theme's TopBarStyle leaves out;
-        Classic's TopBarStyle sets nothing over it. A theme's TopBarStyle replaces the Template and keeps the states
-        (TopBarChrome: "BarStates", OverContent and OverHero) and one ContentPresenter for the bar.
+        Classic's TopBarStyle sets nothing over it. A theme's TopBarStyle replaces the Template (drawn behind the bar's parts,
+        which are not in it: TopBarChrome) with the same states ("BarStates": OverContent and OverHero), and may set Padding
+        (the parts' inset).
     -->
     <Style TargetType="controls:TopBarChrome">
         <Setter Property="IsTabStop" Value="False" />
-        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Padding" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="controls:TopBarChrome">
@@ -48,11 +48,6 @@
                                 </LinearGradientBrush>
                             </Rectangle.Fill>
                         </Rectangle>
-                        <ContentPresenter
-                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                            Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}" />
                     </Grid>
                 </ControlTemplate>
             </Setter.Value>

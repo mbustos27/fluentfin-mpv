@@ -23,8 +23,26 @@ public static class ThemeContract
 	/// <summary>The optional DataTemplate the shared LoginPage hosts behind its form (its content: the LoginViewModel).</summary>
 	public const string SignInBackdropKey = "SignInBackdropTemplate";
 
+	/// <summary>
+	/// The optional DataTemplate that draws <see cref="ILayoutTheme.CreateOptions"/>'s object in Settings &gt; Appearance when
+	/// that object is not an element itself.
+	/// </summary>
+	public const string OptionsTemplateKey = "ThemeOptionsTemplate";
+
+	/// <summary>The optional styles the player's overlay bars take in place (themes:ThemeStyle; TargetType Grid).</summary>
+	public static IReadOnlyList<string> PlayerOverlayKeys { get; } = ["PlayerTopBarStyle", "PlayerBottomBarStyle"];
+
 	/// <summary>The key of the shared top bar's style (its TargetType: <see cref="Controls.TopBarChrome"/>).</summary>
 	public const string TopBarStyleKey = "TopBarStyle";
+
+	/// <summary>The keys a theme dictionary may define, with the element each one must be.</summary>
+	public static IReadOnlyList<(string Key, string Element)> OptionalKeys { get; } =
+	[
+		(SignInBackdropKey, "DataTemplate"),
+		(OptionsTemplateKey, "DataTemplate"),
+		("PlayerTopBarStyle", "Style"),
+		("PlayerBottomBarStyle", "Style"),
+	];
 
 	/// <summary>The view models a theme may give its own view; every other page is shared.</summary>
 	public static IReadOnlyList<Type> ThemableViewModels { get; } =
@@ -71,6 +89,10 @@ public static class ThemeContract
 			{
 				problems.Add($"{theme.Id}: the view for {vm.Name}, {view.Name}, has no public parameterless constructor");
 			}
+			else if (!IsXamlPage(view))
+			{
+				problems.Add($"{theme.Id}: the view for {vm.Name}, {view.Name}, is not a XAML page (a .xaml with x:Class): the frame cannot create it");
+			}
 
 			if (seen.TryGetValue(view, out var other))
 			{
@@ -84,6 +106,14 @@ public static class ThemeContract
 
 		return problems;
 	}
+
+	/// <summary>
+	/// Whether a page type comes from XAML (the XAML compiler gave it InitializeComponent). The frame creates pages through the
+	/// app's XAML type information: navigating to a page written in code only ended the process (an access violation in
+	/// Frame.Navigate, found with the foundation's stub theme), so such a view is never used (ThemeService.ViewFor).
+	/// </summary>
+	public static bool IsXamlPage(Type page) =>
+		page.GetMethod("InitializeComponent", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic, Type.EmptyTypes) is not null;
 
 	/// <summary>
 	/// The keys a theme dictionary defines (its own and its merged dictionaries', following each Source), with the element
@@ -122,9 +152,12 @@ public static class ThemeContract
 			}
 		}
 
-		if (keys.TryGetValue(SignInBackdropKey, out var backdrop) && backdrop.Name.LocalName != "DataTemplate")
+		foreach (var (key, element) in OptionalKeys)
 		{
-			problems.Add($"{theme.Id}: {SignInBackdropKey} is a {backdrop.Name.LocalName}, not a DataTemplate");
+			if (keys.TryGetValue(key, out var found) && found.Name.LocalName != element)
+			{
+				problems.Add($"{theme.Id}: {key} is a {found.Name.LocalName}, not a {element}");
+			}
 		}
 
 		return problems;

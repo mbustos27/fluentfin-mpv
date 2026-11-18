@@ -59,6 +59,37 @@
                         AutomationProperties.HeadingLevel="Level2"
                         Style="{StaticResource BodyStrongTextBlockStyle}"
                         Text="Appearance" />
+                    <!--
+                        Nixie 1.3.0: the layout theme, one tile per theme (ThemePicker), applied at once and saved on this PC
+                        (ThemeSwitcher); under it the active theme's own options (ILayoutTheme.CreateOptions). Hidden in a build
+                        with one theme.
+                    -->
+                    <StackPanel
+                        x:Name="ThemeSection"
+                        Margin="0,0,0,8"
+                        Spacing="6"
+                        Visibility="{x:Bind ThemePicker.HasChoice}">
+                        <TextBlock
+                            Margin="1,0,0,0"
+                            AutomationProperties.HeadingLevel="Level3"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Text="Theme" />
+                        <TextBlock
+                            Margin="1,0,0,4"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="Changes the layout of the browsing pages. It applies at once and keeps your place; buttons, keys, dialogs and menus stay the same."
+                            TextWrapping="WrapWholeWords" />
+                        <controls:ThemePicker x:Name="ThemeTiles" ViewModel="{x:Bind ThemePicker}" />
+                        <StackPanel Spacing="4" Visibility="{x:Bind ThemePicker.HasOptions, Mode=OneWay}">
+                            <TextBlock
+                                Margin="1,4,0,2"
+                                AutomationProperties.HeadingLevel="Level3"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Text="{x:Bind ThemePicker.OptionsHeader, Mode=OneWay}" />
+                            <ContentPresenter x:Name="ThemeOptions" Content="{x:Bind ThemePicker.OptionsBlock, Mode=OneWay}" />
+                        </StackPanel>
+                    </StackPanel>
                     <ctk:SettingsCard
                         Description="{x:Bind ViewModel.SelectedGlass.Description, Mode=OneWay}"
                         Header="Glass"

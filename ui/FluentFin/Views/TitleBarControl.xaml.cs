@@ -72,7 +72,20 @@ public sealed partial class TitleBarControl : UserControl
 		ThemeResources.Applied += OnThemeApplied;
 	}
 
-	private void OnThemeApplied(object? sender, EventArgs e) => ThemeResources.StyleTopBar(BarChrome);
+	/// <summary>
+	/// Nixie 1.3.0: a theme switch restyles the chrome behind the bar; the bar's parts stay where they are (the search text,
+	/// an open account menu). The chrome's Padding may inset them differently: the bar measures again and the window's
+	/// click-through areas follow.
+	/// </summary>
+	private void OnThemeApplied(object? sender, EventArgs e)
+	{
+		ThemeResources.StyleTopBar(BarChrome);
+		if (IsLoaded)
+		{
+			QueueRelayout();
+			QueuePassthrough();
+		}
+	}
 
 	private void RegisterAsWindowTitleBar()
 	{
@@ -201,7 +214,8 @@ public sealed partial class TitleBarControl : UserControl
 	/// </summary>
 	private void Relayout()
 	{
-		var width = ActualWidth;
+		// Nixie 1.3.0: less the room the theme's chrome insets the bar by (TopBarChrome.Padding)
+		var width = ActualWidth - BarChrome.Padding.Left - BarChrome.Padding.Right;
 		if (width <= 0)
 		{
 			return;

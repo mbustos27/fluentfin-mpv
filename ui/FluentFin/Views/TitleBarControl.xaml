@@ -40,18 +40,21 @@
         the window's drag regions and caption buttons: the tabs, search and account are its interactive areas.
         Narrow windows (1100 px and below): the tabs fold into one menu button, search into a button that opens the box.
     -->
-    <!--
-        Nixie 1.3.0: the glass and the scrim are the chrome's (TopBarChrome, its default style in Styles/TopBarChrome.xaml):
-        the active layout theme's TopBarStyle restyles them (ThemeResources), the bar inside stays this one element.
-    -->
-    <lc:TopBarChrome
-        x:Name="BarChrome"
-        AutomationProperties.AccessibilityView="Raw"
-        Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsVisible), Mode=OneWay}">
+    <Grid x:Name="BarRoot" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsVisible), Mode=OneWay}">
+        <!--
+            Nixie 1.3.0: the glass and the scrim are the chrome's (TopBarChrome, its default style in Styles/TopBarChrome.xaml),
+            drawn behind the bar: the active layout theme's TopBarStyle restyles the chrome alone (ThemeResources), so the bar's
+            parts are never moved or rebuilt by a switch; the chrome's Padding insets them.
+        -->
+        <lc:TopBarChrome
+            x:Name="BarChrome"
+            AutomationProperties.AccessibilityView="Raw"
+            IsHitTestVisible="False" />
     <!--  the wordmark and the tabs in the left header, after Back: the TitleBar centres its Content; the middle stays the drag area  -->
     <TitleBar
         x:Name="TitleBar"
         Height="48"
+        Margin="{x:Bind BarChrome.Padding, Mode=OneWay}"
         BackRequested="TitleBar_BackRequested"
         IsBackButtonEnabled="{x:Bind ViewModel.CanGoBack, Mode=OneWay}"
         IsBackButtonVisible="{x:Bind ViewModel.IsBackButtonShown, Mode=OneWay}"
@@ -337,6 +340,6 @@
             </StackPanel>
         </TitleBar.RightHeader>
     </TitleBar>
-    </lc:TopBarChrome>
+    </Grid>
 
 </UserControl>

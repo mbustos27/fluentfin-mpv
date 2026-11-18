@@ -61,6 +61,18 @@
                 Text="{x:Bind ViewModel.StartupStatus, Mode=OneWay}" />
         </StackPanel>
 
+        <!--
+            Nixie 1.3.0: a layout theme switch's crossfade (ThemeSwitcher): the window as it was, over everything, fading out
+            over the new look for 200 ms; nothing when motion is reduced. Never hit-tested, never read by Narrator.
+        -->
+        <Image
+            x:Name="ThemeFade"
+            Grid.RowSpan="2"
+            AutomationProperties.AccessibilityView="Raw"
+            IsHitTestVisible="False"
+            Stretch="Fill"
+            Visibility="Collapsed" />
+
     </Grid>
 
 </windowex:WindowEx>
