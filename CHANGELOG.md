@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.1
+
+- **Keyboard controls are the same in every theme, playing or paused.** The player's keys go through one router that takes
+  each key before whatever control has the focus, so they work at once after you use the mouse: after a click on Play,
+  Pause, the seek bar, the volume or the video, and right after unpausing, without waiting for the controls to hide.
+  - Space always plays and pauses; Enter presses the button the keyboard is on. After the volume, speed or audio and
+    subtitles menu closed, Space no longer opens it again, and with Full screen focused it no longer leaves full screen.
+  - The player's buttons and the seek bar no longer keep the keyboard after a click (Tab still reaches each one).
+  - In Cinematic's player tabs the arrows move between the tabs, and Esc closes its panel even after a click opened it.
+  - A held Space, M, F or Shift+N does its job once; held arrows still seek and change the volume.
+- **Double click:** a double click on the video goes full screen (or back) and keeps playing or paused as it was, also on
+  the dark fade at the top and bottom of the video; a double click on a control never goes full screen.
+
 ## 1.3.0
 
 Nixie now has **four layouts to choose from**: not new colours on the same pages, but Home, the series and season pages,
