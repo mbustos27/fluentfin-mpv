@@ -219,9 +219,9 @@ public sealed class TopBarTests
 		Assert.Contains("unpin.Click += (_, _) => _navigation?.RemoveNavigationItem(pin);", strip);
 		// review 6: a second load listens again
 		Assert.Contains("if (_attached && ReferenceEquals(_navigation, navigation))", strip);
-		// and the Libraries page's wording
+		// and the Libraries page's wording; Nixie 1.4.0: its dead pin menu is gone (every library is a tab)
 		var landing = File.ReadAllText(Path.Combine(root, "Views", "LibrariesLandingPage.xaml"));
-		Assert.Contains("Text=\"Add to the top bar\"", landing);
+		Assert.DoesNotContain("Add to the top bar", landing);
 		Assert.DoesNotContain("side bar", landing, StringComparison.OrdinalIgnoreCase);
 	}
 

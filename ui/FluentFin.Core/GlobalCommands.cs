@@ -73,30 +73,46 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 	/// <summary>1.2.0: a Favourite toggle: the state it shows after the click.</summary>
 	public Task<bool> SetFavorite(BaseItemDto dto, bool favorite) => ItemUserData.SetFavoriteAsync(jellyfinClient, dto, favorite);
 
+	/// <summary>
+	/// Nixie 1.4.0 (the bug hunt's m5, the rest of the UX review's X2): an item Nixie has no page for was opened (a song, a photo,
+	/// a book, a person): what to tell the user (the app shows it in a message). Nothing is opened silently any more.
+	/// </summary>
+	public event EventHandler<(string Title, string Message)>? CannotOpen;
+
+	/// <summary>Where <see cref="DisplayDto"/> takes an item of each type: its page's view model, or null (<see cref="CannotOpen"/>).</summary>
+	public static Type? PageFor(BaseItemDto_Type? type) => type switch
+	{
+		BaseItemDto_Type.Movie => typeof(MovieViewModel),
+		// a trailer: the item page, whose Play plays it alone (MpvQueue). A home video or a music video has no player queue yet
+		// (MpvQueue answers nothing for them): it says so rather than opening a page whose Play would do nothing
+		BaseItemDto_Type.Trailer => typeof(MovieViewModel),
+		BaseItemDto_Type.Series => typeof(SeriesViewModel),
+		BaseItemDto_Type.Season => typeof(SeasonViewModel),
+		BaseItemDto_Type.Episode => typeof(EpisodeViewModel),
+		// Nixie 1.4.0 (the UX review's plan item 1, X1): a box set opens the shared Collection page, in its own order; a
+		// playlist too, as an ordered list (1.3.1 opened both as the library page); an album as the list of what it holds
+		BaseItemDto_Type.BoxSet or BaseItemDto_Type.Playlist or BaseItemDto_Type.MusicAlbum or BaseItemDto_Type.PhotoAlbum => typeof(CollectionViewModel),
+		BaseItemDto_Type.Folder or BaseItemDto_Type.CollectionFolder or BaseItemDto_Type.UserView or BaseItemDto_Type.AggregateFolder
+			or BaseItemDto_Type.ManualPlaylistsFolder or BaseItemDto_Type.PlaylistsFolder or BaseItemDto_Type.ChannelFolderItem
+			or BaseItemDto_Type.Channel or BaseItemDto_Type.BasePluginFolder => typeof(LibraryViewModel),
+		_ => null,
+	};
+
+	/// <summary>The message for an item with no page: "Nixie can't open Song name here".</summary>
+	public static (string Title, string Message) CannotOpenText(BaseItemDto dto) =>
+		($"{AppIdentity.Name} can't open {(string.IsNullOrWhiteSpace(dto.Name) ? "this item" : dto.Name.Trim())} here",
+		 $"{AppIdentity.Name} has pages for films, shows, collections and playlists. Open this one in Jellyfin's web app on {LoadMessages.ServerName()}.");
+
 	[RelayCommand]
 	public void DisplayDto(BaseItemDto dto)
 	{
-		switch (dto.Type)
+		if (PageFor(dto.Type) is { } page)
 		{
-			case BaseItemDto_Type.Movie:
-				navigationService.NavigateTo<MovieViewModel>(dto);
-				break;
-			case BaseItemDto_Type.Series:
-				navigationService.NavigateTo<SeriesViewModel>(dto);
-				break;
-			case BaseItemDto_Type.Season:
-				navigationService.NavigateTo<SeasonViewModel>(dto);
-				break;
-			case BaseItemDto_Type.Episode:
-				navigationService.NavigateTo<EpisodeViewModel>(dto);
-				break;
-			// Nixie 1.3.1: a playlist opens too (it did nothing: the UX review's B1), its items in the playlist's order
-			case BaseItemDto_Type.Folder or BaseItemDto_Type.CollectionFolder or BaseItemDto_Type.BoxSet or BaseItemDto_Type.Playlist:
-				navigationService.NavigateTo<LibraryViewModel>(dto);
-				break;
-			default:
-				break;
+			navigationService.NavigateTo(page.FullName!, dto);
+			return;
 		}
+
+		CannotOpen?.Invoke(this, CannotOpenText(dto));
 	}
 
 	[RelayCommand]
@@ -111,33 +127,8 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 		await jellyfinClient.DeleteItem(dto);
 	}
 
-	[RelayCommand]
-	private void PinToSideBar(BaseItemDto library)
-	{
-		if (library is not { Id: not null, CollectionType: not null })
-		{
-			return;
-		}
-
-		var folder = new CustomNavigationViewItem
-		{
-			Key = typeof(LibraryViewModel).FullName!,
-			Name = library.Name!,
-			Parameter = library.Id.Value,
-			Glyph = library.CollectionType.Value switch
-			{
-				BaseItemDto_CollectionType.Tvshows => "\uE7F4",
-				BaseItemDto_CollectionType.Movies => "\uE8B2",
-				_ => null
-			},
-			Commands = [new CommandModel() { Name = "Unpin", DisplayName = "Unpin", Glyph = "\uE77A" }],
-			Persistent = true,
-		};
-
-		navigationViewService.AddNavigationItem(folder);
-		navigationViewService.SaveCustomViews();
-	}
-
+	// Nixie 1.4.0: no "Add to the top bar" (PinToSideBar): every library is a tab (the top bar stream deleted the pins). Unpin
+	// stays while saved pins and the command factory (CommandFactory "Unpin") still name it
 	[RelayCommand]
 	private void UnPinFromSideBar(CustomNavigationViewItem item)
 	{

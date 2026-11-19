@@ -52,6 +52,24 @@
   rows run on across letters, each letter tagged on its first title, its heading folds to one line as you scroll, and its
   titles are a size larger. Drive-in's sky folds to a band as you scroll.
 - **Loading looks like the page it loads,** the header and letter row in place and the posters where they will be.
+- **A collection has a page of its own,** the same in every theme, drawn in that theme's type and colours: the box set's
+  poster, its title, "6 films · 1979–2016 · 1 of 6 watched" with a progress bar, three lines of its overview (More shows
+  the rest), **Play** or **Resume** on the first film you haven't watched, in the collection's order, **Shuffle**, and
+  Watched and Favourite for the whole set. The films are in the collection's own order (the one set on your server;
+  release date when none is set), each numbered; **Order** offers release date, name and date added, and **Hide watched**
+  leaves the rest. No genre filter, and an A to Z only from 30 films sorted by name. A collection that is empty or does
+  not load says so, with Retry.
+- **A playlist opens on the same page,** as a numbered list in its own order.
+- **Film pages say "Part of: Copper and Glass"** when the film is in a collection (servers from Jellyfin 10.11); the
+  link opens it.
+- **Home no longer shows "New in Collections" or "New in Playlists".** A collection is made when its films are imported,
+  so the row repeated "New in Movies".
+- **The Libraries page is in your theme** (its title, margins and ground), shows what each library holds ("Movies · 320 ·
+  97 unwatched"), puts Collections and Playlists in a group of their own after the media libraries, shares the tiles
+  evenly between rows (no tile alone on a row), says when it cannot load your libraries (with Retry), and puts the
+  keyboard on the first tile.
+- **One page grid per theme:** the Libraries page, a collection, Search results and Settings put their title where the
+  theme's library puts its title, with the same side margins on both sides (on the 4 px grid).
 
 ## 1.3.1
 

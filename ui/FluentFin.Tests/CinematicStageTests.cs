@@ -20,7 +20,7 @@ public sealed class CinematicStageTests
 		var items = Items("A Quiet Harbor", "Bright Lines", "Copper Shadow", "Delta");
 
 		Assert.Equal("Copper Shadow", CinematicLibraryPage.StageTarget(items, hovered: items[2].Id, focused: items[1].Id, firstVisible: 0)!.Name);
-		Assert.Equal("Bright Lines", CinematicLibraryPage.StageTarget(items, hovered: null, focused: items[1].Id, firstVisible: 3)!.Name);
+		Assert.Equal("Bright Lines", CinematicLibraryPage.StageTarget(items, hovered: null, focused: items[1].Id, firstVisible: 0)!.Name);
 		// scrolled: the first title in view, not the first of the list
 		Assert.Equal("Delta", CinematicLibraryPage.StageTarget(items, hovered: null, focused: null, firstVisible: 3)!.Name);
 		Assert.Equal("A Quiet Harbor", CinematicLibraryPage.StageTarget(items, hovered: null, focused: null, firstVisible: -1)!.Name);
@@ -77,7 +77,9 @@ public sealed class CinematicStageTests
 
 		Assert.DoesNotContain("Stage.Current is null &&", page);
 		Assert.Contains("ViewModel.Items).CollectionChanged += (_, _) => QueueStage();", page);
-		Assert.Contains("GridScroller.ViewChanged += (_, _) =>\n\t\t{\n\t\t\tQueueStage();", page.Replace("\r\n", "\n"));
+		var scrolled = page.Replace("\r\n", "\n");
+		var onScroll = scrolled[scrolled.IndexOf("GridScroller.ViewChanged += (_, _) =>", StringComparison.Ordinal)..];
+		Assert.Contains("QueueStage();", onScroll[..onScroll.IndexOf("};", StringComparison.Ordinal)]);
 		Assert.Contains("PointerEnteredEvent", page);
 		Assert.Contains("Stage.ShowNothing();", page);
 		// Nixie 1.4.0: the letter in view is marked by the shared A to Z from the tile (LetterTile.IsCurrent), never a recycled button

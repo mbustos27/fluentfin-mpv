@@ -16,6 +16,8 @@
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
             <SolidColorBrush x:Key="DriveInGroundBrush" Color="#1A0710" />
+            <!--  1.4.0 shared: the ground of the shared pages (a collection, Libraries, Search, Settings)  -->
+            <StaticResource x:Key="PageGroundBrush" ResourceKey="DriveInGroundBrush" />
             <LinearGradientBrush x:Key="DriveInConsoleBrush" StartPoint="0.5,0" EndPoint="0.5,1">
                 <GradientStop Offset="0" Color="#F2180710" />
                 <GradientStop Offset="1" Color="#F70E0306" />
@@ -62,6 +64,8 @@
         <ResourceDictionary x:Key="Light">
             <!--  noon: the ground under the rows is pale, the page's text dark; the lit objects stay dark  -->
             <SolidColorBrush x:Key="DriveInGroundBrush" Color="#FBEFEA" />
+            <!--  1.4.0 shared: the ground of the shared pages (a collection, Libraries, Search, Settings)  -->
+            <StaticResource x:Key="PageGroundBrush" ResourceKey="DriveInGroundBrush" />
             <LinearGradientBrush x:Key="DriveInConsoleBrush" StartPoint="0.5,0" EndPoint="0.5,1">
                 <GradientStop Offset="0" Color="#F2180710" />
                 <GradientStop Offset="1" Color="#F70E0306" />
@@ -108,6 +112,8 @@
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="DriveInGroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <!--  1.4.0 shared: the ground of the shared pages (a collection, Libraries, Search, Settings)  -->
+            <SolidColorBrush x:Key="PageGroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="DriveInConsoleBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <SolidColorBrush x:Key="DriveInHeaderTextBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="DriveInTileBrush" Color="{ThemeResource SystemColorButtonFaceColor}" />
@@ -576,5 +582,13 @@
             </Button>
         </dc:TheatreLot>
     </ControlTemplate>
+
+    <!--  1.4.0 shared: the page grid (Controls.PageGrid, Styles/PageGrid.xaml): the gutter at a 1100 and a 1920 px window, and a page title's y  -->
+    <x:Double x:Key="PageGutterNarrow">40</x:Double>
+    <x:Double x:Key="PageGutterWide">96</x:Double>
+    <x:Double x:Key="PageTitleY">56</x:Double>
+    <!--  the shared pages' titles in capitals, as the marquee's title is on the library  -->
+    <x:Boolean x:Key="PageTitleUppercase">True</x:Boolean>
+    <!--  /1.4.0 shared  -->
 
 </ResourceDictionary>

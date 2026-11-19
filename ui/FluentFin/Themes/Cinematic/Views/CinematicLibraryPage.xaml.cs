@@ -18,6 +18,7 @@ public sealed partial class CinematicLibraryPage : Page
 	private readonly CardGrid _grid;
 	private readonly LibraryGridHost _host;
 	private bool? _narrow;
+	private double _side;
 	private bool _band;
 
 	public CinematicLibraryPage()
@@ -147,8 +148,10 @@ public sealed partial class CinematicLibraryPage : Page
 		}
 
 		var narrow = width < CinematicItemPageLayout.NarrowBelow;
-		var side = narrow ? 48 : 96;
-		var top = narrow ? 104 : 112;
+		// Nixie 1.4.0 (plan item 13): the theme's page grid: its gutter (48 at 1100 to 96 at 1920) and the title at its y (72)
+		var side = PageGrid.GutterAt(width);
+		var titleY = PageGrid.Tokens().TitleY;
+		var top = titleY + (narrow ? 44 : 52);
 		Stage.SetLayout(narrow, top);
 		Stage.SetBand(_band);
 		// the stage's own rows: under the name, its words; the header line right under them; the art fades past it
@@ -157,10 +160,11 @@ public sealed partial class CinematicLibraryPage : Page
 		// the art ends where the header line starts: the sections and the toolbar sit on the night ground, never on art (C-M2)
 		Stage.ArtHeight = Math.Max(96, stageRow) + 8;
 		TitleText.FontSize = _band ? 26 : narrow ? 34 : 40;
-		TopLine.Margin = new Thickness(side, _band ? 54 : 60, side, 0);
-		if (_narrow != narrow)
+		TopLine.Margin = new Thickness(side, _band ? 54 : titleY, side, 0);
+		if (_narrow != narrow || Math.Abs(_side - side) >= 1)
 		{
 			_narrow = narrow;
+			_side = side;
 			HeaderLine.Margin = new Thickness(side, 0, side, 10);
 			AppliedFilters.Margin = new Thickness(side, 0, side, 10);
 			LetterRow.Margin = new Thickness(side, 0, side, 6);

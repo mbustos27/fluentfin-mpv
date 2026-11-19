@@ -154,8 +154,10 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 
 		var narrow = width < 1400;
-		var margin = narrow ? 40 : 56;
-		Head.Padding = new Thickness(margin, _compact ? 10 : narrow ? 16 : 22, margin, 0);
+		// Nixie 1.4.0 (plan item 13): the theme's page grid: its gutter (40 at 1100 to 56 at 1920) and the title at its y (56)
+		var margin = PageGrid.GutterAt(width);
+		var pageTop = XamlRoot?.Content is UIElement root ? TransformToVisual(root).TransformPoint(default).Y : FluentFin.Controls.TopBar.Height;
+		Head.Padding = new Thickness(margin, _compact ? 6 : Core.Theming.PageGridMetrics.TitleTop(PageGrid.Tokens().TitleY, pageTop), margin, 0);
 		GridScroller.Padding = new Thickness(margin, 0, margin, 0);
 		Skeleton.Margin = new Thickness(margin, 8, margin, 0);
 		AppliedFilters.Margin = new Thickness(margin, _compact ? 6 : 12, margin, 0);

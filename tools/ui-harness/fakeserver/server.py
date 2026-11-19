@@ -298,7 +298,9 @@ class Server:
         """FAKESERVER_PHOTO_DIR=<folder of .jpg>: photographic art (the JPEG as it is, one per item) for Primary, Backdrop and Thumb, so
         the UI can be judged on real pictures (faces, scenes) instead of the generated colour blocks. None when unset."""
         folder = os.environ.get("FAKESERVER_PHOTO_DIR")
-        if not folder or kind not in ("Primary", "Backdrop", "Thumb"):
+        # UXCAP (the library and collections review's captures): FAKESERVER_PHOTO_KINDS limits the photos to some image types (e.g. Backdrop,Thumb)
+        kinds = [k.strip() for k in os.environ.get("FAKESERVER_PHOTO_KINDS", "Primary,Backdrop,Thumb").split(",") if k.strip()]
+        if not folder or kind not in ("Primary", "Backdrop", "Thumb") or kind not in kinds:
             return None
         files = sorted(f for f in os.listdir(folder) if f.lower().endswith((".jpg", ".jpeg")))
         if not files:
@@ -339,6 +341,8 @@ class Server:
             sub = "S%02dE%02d - %s" % (item["parent_index"], item["index"], self.lib.items[item["series"]]["Name"])
         elif item["kind"] == "view":
             sub = "Library"
+        elif item["kind"] == "boxset":   # UXCAP
+            sub = "Collection"
         if kind == "Chapter":
             sub = "Chapter %d" % ((index or 0) + 1)
         elif kind in ("Backdrop", "Thumb", "Banner", "Art"):
@@ -770,6 +774,17 @@ class Server:
                         if cur:
                             chain.append(lib.dto(cur))
                     return self._json(200, chain)
+                # Nixie 1.4.0: the collections an item is in (Jellyfin 10.11), and a playlist's items in its own order
+                mm = match(r"/items/" + ID + r"/collections")
+                if mm:
+                    self.route = "item-collections"
+                    found = [lib.dto(c) for c in lib.collections_of(library.norm_id(mm.group(1)))]
+                    return self._json(200, {"Items": found, "TotalRecordCount": len(found), "StartIndex": 0})
+                mm = match(r"/playlists/" + ID + r"/items")
+                if mm:
+                    self.route = "playlist-items"
+                    found = [lib.dto(lib.items[c]) for c in lib.children.get(library.norm_id(mm.group(1)), [])]
+                    return self._json(200, {"Items": found, "TotalRecordCount": len(found), "StartIndex": 0})
                 mm = match(U + r"/items/" + ID + r"/(intros)") or match(U + r"/items/" + ID + r"/(specialfeatures|localtrailers|externalidinfos)")
                 if mm:
                     self.route = "extras"

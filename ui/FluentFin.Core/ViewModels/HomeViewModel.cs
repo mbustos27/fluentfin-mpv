@@ -403,11 +403,17 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		}
 	}
 
+	/// <summary>Nixie 1.4.0: a library with a "New in" row on Home: not music, collections or playlists.</summary>
+	public static bool HasLatestRow(BaseItemDto view) =>
+		view.CollectionType is not (BaseItemDto_CollectionType.Music or BaseItemDto_CollectionType.Boxsets or BaseItemDto_CollectionType.Playlists);
+
 	private async Task UpdateRecentItems()
 	{
 		// fluentfin-mpv: a row per view at once, in the server's order: the cached row of that library, a placeholder, or
 		// (a library that had nothing recent last time) none until it has; each fills in, or goes, as its request answers
-		var views = (await JellyfinClient.GetUserViews()).Where(x => x.CollectionType is not BaseItemDto_CollectionType.Music).ToList();
+		// Nixie 1.4.0 (the UX review's X3, CL-M5): no "New in Collections" or "New in Playlists": a box set is made when a film is
+		// imported, so the row repeated "New in Movies" (and fed the hero); HasLatestRow
+		var views = (await JellyfinClient.GetUserViews()).Where(HasLatestRow).ToList();
 		if (views.Count == 0 && RecentItems.Count > 0)
 		{
 			return; // the views could not be read: the cached rows stay

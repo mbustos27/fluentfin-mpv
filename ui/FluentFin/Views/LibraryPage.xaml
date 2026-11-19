@@ -74,9 +74,11 @@
         Seaglass scrolling: hit-testable everywhere, so the wheel over its empty parts reaches the grid, and the page's margin
         is its padding: a margin is outside the page, where the wheel reached nothing
     -->
+    <!--  Nixie 1.4.0 (plan item 13): on the theme's page grid (its gutter both sides, the title at its y), as every page  -->
     <Grid
         x:Name="LibraryRoot"
         Padding="{StaticResource MediumLeftTopRightBottomMargin}"
+        lc:PageGrid.Apply="True"
         Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -95,7 +97,6 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock
-                Margin="12,0,0,0"
                 VerticalAlignment="Center"
                 AutomationProperties.HeadingLevel="Level1"
                 Style="{StaticResource GlassPageTitleTextBlockStyle}"
@@ -128,14 +129,14 @@
         <lc:AppliedFilterRow
             x:Name="AppliedFilters"
             Grid.Row="1"
-            Margin="12,0,0,12"
+            Margin="0,0,0,12"
             ViewModel="{x:Bind ViewModel}" />
 
         <!--  Nixie 1.4.0 (item 13): the A to Z, or the sort's directions; while loading its placeholder keeps its height  -->
         <Grid
             x:Name="LetterRow"
             Grid.Row="2"
-            Margin="8,0,8,12">
+            Margin="0,0,0,12">
             <lc:LetterBar x:Name="Letters" ViewModel="{x:Bind ViewModel}" />
             <ctkl:Shimmer
                 x:Name="LetterPlaceholder"

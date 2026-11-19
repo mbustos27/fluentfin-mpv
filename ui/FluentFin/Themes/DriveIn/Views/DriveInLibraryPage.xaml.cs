@@ -60,7 +60,8 @@ public sealed partial class DriveInLibraryPage : Page
 		Header.SizeChanged += (_, e) => Sky.Layout = Controls.DriveInLayout.Strip(e.NewSize.Width, e.NewSize.Height);
 		SizeChanged += (_, e) =>
 		{
-			_margin = Controls.DriveInLayout.MarginFor(e.NewSize.Width);
+			// Nixie 1.4.0 (plan item 13): the theme's page grid (PageGutterNarrow to PageGutterWide), as every Drive-in page
+			_margin = PageGrid.GutterAt(e.NewSize.Width);
 			Fold(_band);
 			GridScroller.Padding = new Thickness(_margin - 8, 24, _margin - 8, 24);
 			SkeletonRepeater.Margin = new Thickness(_margin - 8, 24, _margin - 8, 0);
@@ -92,7 +93,8 @@ public sealed partial class DriveInLibraryPage : Page
 	private void Fold(bool band)
 	{
 		_band = band;
-		HeaderContent.Padding = new Thickness(_margin, 56, _margin, band ? 10 : 18);
+		// the marquee at the theme's title y (56: it clears the top bar the strip runs under)
+		HeaderContent.Padding = new Thickness(_margin, PageGrid.Tokens().TitleY, _margin, band ? 10 : 18);
 		HeaderContent.RowSpacing = band ? 10 : 22;
 		TitleSign.Style = (Style)Application.Current.Resources[band ? "DriveInCompactMarqueeStyle" : "DriveInLargeMarqueeStyle"];
 		CountTubes.DigitHeight = band ? 28 : 40;
