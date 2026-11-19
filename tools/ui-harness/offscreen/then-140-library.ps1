@@ -173,9 +173,8 @@ if ($lbM) {
     Check "library ($lbTag): an absent letter is silent to Narrator (not in the tree)" (-not $lbZ) $(if ($lbZ) { $lbZ.Current.Name })
 }
 
-# --- a filter that leaves nothing: Favorites, then a genre whose favorites are all watched (the Unwatched switch says how
-# many unwatched titles the other filters leave: "Unwatched, 0 titles"), then Unwatched. The panel greys a value that would
-# leave nothing, so only a switch can get there.
+# --- a filter that leaves nothing. The panel greys a value that would leave nothing, so only a switch gets there: Favorites
+# on, a value it greys (no favorite has it: "2026, 0 titles"); Favorites off, that value on (it has titles); Favorites on again.
 $lbNone = $false
 function Lb-Boxes {
     $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::CheckBox)
@@ -185,31 +184,31 @@ if (Lb-IsOn (Lb-Toggle 'Unwatched')) { [void](Invoke-Element (Lb-Toggle 'Unwatch
 [void](Invoke-Element (Find-Ui -Name 'Filter, ' -Type 'Button' -Contains)); Lb-Settle 900
 $lbFav = Wait-Until { Find-Ui -Name 'Favorites only' -Type 'CheckBox' } -Seconds 3
 if ($lbFav) { [void](Invoke-Element $lbFav); Lb-Settle 700 }
-$lbAll = Lb-Boxes
-Say "no-matches: the Filter panel's boxes (favorites): $(($lbAll | Select-Object -First 30) -join '; ')"
-$lbGenres = @($lbAll | Where-Object { $_ -match '^([^,]+), (\d+) titles?$' -and $_ -notmatch ', 0 titles$' } |
-    Sort-Object { [int](([regex]::Match($_, ', (\d+) title')).Groups[1].Value) })
-foreach ($lbGenre in ($lbGenres | Select-Object -First 20)) {
-    $lbBox = Find-Ui -Name $lbGenre -Type 'CheckBox'
-    if (-not $lbBox) { $lbBox = Find-Ui -Name "$($lbGenre -replace ', \d+ titles?$', ''), " -Type 'CheckBox' -Contains }
-    if (-not $lbBox) { continue }
-    [void](Invoke-Element $lbBox); Lb-Settle 500
-    $lbUnwName = (Lb-Toggle 'Unwatched').Current.Name
-    if ($lbUnwName -eq 'Unwatched, 0 titles') {
-        Lb-Key 0x1B; Lb-Settle 500
-        [void](Invoke-Element (Lb-Toggle 'Unwatched')); Lb-Settle 900
-        if (Wait-Until { Find-Ui -Name 'No unwatched favorite movies' -Type 'Text' -Contains } -Seconds 3) { $lbNone = $true }
-        break
-    }
-
-    $lbBox = Find-Ui -Name "$($lbGenre -replace ', \d+ titles?$', ''), " -Type 'CheckBox' -Contains
-    if ($lbBox) { [void](Invoke-Element $lbBox); Lb-Settle 400 }
+$lbAll = @(Lb-Boxes)
+$lbZero = @($lbAll | Where-Object { $_ -match '^[^,]+, 0 titles$' }) | Select-Object -First 1
+Say "no-matches: with Favorites, a value no favorite has: '$lbZero'"
+Lb-Shot 'filter-panel-favorites-1920'
+if ($lbZero) {
+    $lbValue = $lbZero -replace ', 0 titles$', ''
+    $lbGreyed = Find-Ui -Name $lbZero -Type 'CheckBox' -OffscreenToo
+    Check "library ($lbTag): a value that would leave nothing is greyed, not hidden" ($lbGreyed -and -not $lbGreyed.Current.IsEnabled) $lbZero
+    [void](Invoke-Element (Find-Ui -Name 'Favorites only' -Type 'CheckBox')); Lb-Settle 700
+    $lbBox = Find-Ui -Name "$lbValue, " -Type 'CheckBox' -Contains -OffscreenToo
+    Say "no-matches: Favorites off, '$(if ($lbBox) { $lbBox.Current.Name } else { 'not found' })' enabled=$(if ($lbBox) { $lbBox.Current.IsEnabled })"
+    if ($lbBox) { [void](Invoke-Element $lbBox); Lb-Settle 500 }
+    [void](Invoke-Element (Find-Ui -Name 'Favorites only' -Type 'CheckBox')); Lb-Settle 700
+    Lb-Shot 'filter-panel-zero-1920'
+    Lb-Key 0x1B; Lb-Settle 700
+    if (Wait-Until { Find-Ui -Name 'No favorite movies' -Type 'Text' -Contains } -Seconds 3) { $lbNone = $true }
+    else { Lb-Shot 'no-matches-missing-1920'; Say "no-matches: the row says '$(if (Lb-Showing) { (Lb-Showing).Current.Name } else { 'nothing' })'" }
 }
-if (-not $lbNone) { Lb-Key 0x1B; Lb-Settle 400 }
+else { Lb-Key 0x1B; Lb-Settle 500 }
 Check "library ($lbTag): a filter that leaves nothing says so (no blank grid)" $lbNone
 if ($lbNone) {
-    $lbNoText = Find-Ui -Name 'No unwatched favorite movies' -Type 'Text' -Contains
-    Check "library ($lbTag): ... in words (""No unwatched favorite movies in <genre>"")" ([bool]$lbNoText) $(if ($lbNoText) { $lbNoText.Current.Name })
+    $lbNoText = Find-Ui -Name 'No favorite movies' -Type 'Text' -Contains
+    Check "library ($lbTag): ... in words (""No favorite movies from <year>"")" ([bool]$lbNoText) $(if ($lbNoText) { $lbNoText.Current.Name })
+    $lbTubes = Find-Ui -Name 'Showing 0 of 320' -Contains
+    Check "library ($lbTag): ... and the row says 0 of 320" ([bool]$lbTubes) ''
     $lbTubes = Find-Ui -Name '0 of 320' -Contains
     Lb-Both 'movies-no-matches'
     [void](Lb-Click (Find-Ui -Name 'Clear filters' -Type 'Button'))
@@ -266,7 +265,11 @@ Check "library ($lbTag): R mid-filter keeps the card" ($lbAfterR -and $lbBeforeR
 # --- an item and Back: the filter and the card kept
 $lbOpen = Lb-Focus
 if ($lbOpen -and $lbOpen.type -eq 'ListItem') {
-    Lb-Key 0x0D; Lb-Settle 2500
+    Lb-Key 0x0D; Lb-Settle 1500
+    # Editorial: Enter opens the details in place; their Full details opens the page
+    $lbFull = Find-Ui -Name 'Full details' -Type 'Button' -Contains
+    if ($lbFull) { [void][OffscreenUi]::SetFocus($lbFull); Lb-Settle 300; Lb-Key 0x0D }
+    Lb-Settle 2000
     Lb-Key 0xA6; Lb-Settle 2500   # Browser Back
     [void](Wait-Until { Find-Ui -Name ', Sort' -Type 'Button' -Contains } -Seconds 10); Lb-Settle 1200
     $lbAfter = Lb-Focus
@@ -275,19 +278,30 @@ if ($lbOpen -and $lbOpen.type -eq 'ListItem') {
     Check "library ($lbTag): Back from an item: the filter kept" ([bool](Lb-Showing)) ''
 }
 
-# --- Cinematic (the bug hunt's M5): after a wheel scroll the stage previews a title in view (the focused one, else the first)
+# --- Cinematic (the bug hunt's M5): a wheel scroll under a resting pointer never leaves the stage offering a title scrolled past:
+# scrolled, the stage is a band with no Play; back at the top, it previews a still in view (the keyboard's, else the first)
 if ($lbTag -like 'cinematic*') {
     $lbGrid = Find-Ui -Name 'Movies' -Type 'List'
     if ($lbGrid) {
         $lbR = [OffscreenUi]::RectOf($lbGrid)
-        [OffscreenUi]::Wheel($script:hwnd, $script:ui.Id, [int]($lbR.X + $lbR.Width / 2), [int]($lbR.Y + 120), -360, $false, $false); Lb-Settle 1500
+        $lbAt = @([int]($lbR.X + $lbR.Width / 2), [int]($lbR.Y + 120))
+        [OffscreenUi]::Wheel($script:hwnd, $script:ui.Id, $lbAt[0], $lbAt[1], -360, $false, $false); Lb-Settle 1500
         $lbStage = Find-Ui -Name 'More info about ' -Type 'Button' -Contains
         $lbStageTitle = if ($lbStage) { $lbStage.Current.Name -replace '^More info about ', '' } else { '' }
-        $lbVisible = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) |
-            ForEach-Object { try { $c = $_.Cached; if (-not $c.IsOffscreen -and $c.BoundingRectangle.Y -ge $lbR.Y -and $c.BoundingRectangle.Bottom -le $lbR.Bottom + 40) { $c.Name } } catch { } })
-        $lbFocusNow = Lb-Focus
-        Check "library ($lbTag): after a wheel scroll the stage previews a still in view" ($lbStageTitle -and @($lbVisible | Where-Object { $_ -like "$lbStageTitle*" }).Count -gt 0) "stage '$lbStageTitle'; focus $(Lb-Desc $lbFocusNow); in view: $(($lbVisible | Select-Object -First 4) -join ' | ')"
         Lb-Shot 'movies-scrolled-stage-1920'
+        function Lb-InView {
+            $g = Find-Ui -Name 'Movies' -Type 'List'; $gr = [OffscreenUi]::RectOf($g)
+            @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) |
+                ForEach-Object { try { $c = $_.Cached; if (-not $c.IsOffscreen -and $c.BoundingRectangle.Y -ge $gr.Y - 20 -and $c.BoundingRectangle.Bottom -le $gr.Bottom + 40) { $c.Name } } catch { } })
+        }
+        $lbVisible = Lb-InView
+        Check "library ($lbTag): scrolled by the wheel, the stage offers no title scrolled past" (-not $lbStageTitle -or @($lbVisible | Where-Object { $_ -like "$lbStageTitle*" }).Count -gt 0) "stage '$lbStageTitle'; in view: $(($lbVisible | Select-Object -First 4) -join ' | ')"
+        for ($k = 0; $k -lt 6; $k++) { [OffscreenUi]::Wheel($script:hwnd, $script:ui.Id, $lbAt[0], $lbAt[1], 360, $false, $false); Start-Sleep -Milliseconds 300 }
+        Lb-Settle 1500
+        $lbStage = Find-Ui -Name 'More info about ' -Type 'Button' -Contains
+        $lbStageTitle = if ($lbStage) { $lbStage.Current.Name -replace '^More info about ', '' } else { '' }
+        $lbVisible = Lb-InView
+        Check "library ($lbTag): back at the top, the stage previews a still in view" ($lbStageTitle -and @($lbVisible | Where-Object { $_ -like "$lbStageTitle*" }).Count -gt 0) "stage '$lbStageTitle'; focus $(Lb-Desc (Lb-Focus)); in view: $(($lbVisible | Select-Object -First 4) -join ' | ')"
     }
 }
 

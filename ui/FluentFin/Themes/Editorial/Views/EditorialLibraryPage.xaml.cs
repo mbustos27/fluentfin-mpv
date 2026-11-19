@@ -101,11 +101,20 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		GridScroller.SizeChanged += (_, e) => Fit(e.NewSize.Width - GridScroller.Padding.Left - GridScroller.Padding.Right);
 		ChipScroller.ViewChanged += (_, _) => ShowChipCue();
 		ChipScroller.SizeChanged += (_, _) => ShowChipCue();
+		ChipStack.SizeChanged += (_, _) => DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ShowChipCue);
 		// Nixie 1.3.1: before the posters' rows see the key (they moved the focus by the arrows' geometry first, so Right from a
 		// letter's last title went to the nearest poster below and right, skipping the next title)
 		GridList.AddHandler(PreviewKeyDownEvent, new KeyEventHandler(Grid_KeyDown), true);
 		GridList.GettingFocus += GridList_GettingFocus;
 		GridList.CharacterReceived += GridList_CharacterReceived;
+		// the poster the keyboard is on is the one Back and R come back to, however it got the focus (a click, Narrator, Tab)
+		GridList.GotFocus += (_, e) =>
+		{
+			if (e.OriginalSource is EditorialPoster { Item: { } item } && IndexOf(item) is >= 0 and var index)
+			{
+				_lastIndex = index;
+			}
+		};
 		// Nixie 1.4.0 (the UX review's E-m1, item 4): Right from the last genre goes on to More filters (it stopped there)
 		ChipList.AddHandler(KeyDownEvent, new KeyEventHandler((_, e) =>
 		{
@@ -286,6 +295,10 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			return;
 		}
 
+		// the poster the keyboard is on keeps it across the rebuild (a window resized, another sort): the rows are made anew,
+		// and the focus fell to the title bar
+		var keep = XamlRoot is { } root && FocusManager.GetFocusedElement(root) is EditorialPoster { Item: { } kept } poster && IsInside(poster, Lines)
+			? (Item: kept, State: poster.FocusState) : default;
 		var lines = EditorialLibrary.Flow(ViewModel.Items, _columns, ByLetter, _opened);
 		_lines.Clear();
 		foreach (var line in lines)
@@ -302,6 +315,21 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		{
 			_toTop = false;
 			GridScroller.ChangeView(null, 0, null, disableAnimation: true);
+		}
+
+		if (keep.Item is { } item && IndexOf(item) is >= 0 and var index)
+		{
+			var state = keep.State is FocusState.Unfocused ? FocusState.Programmatic : keep.State;
+			DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+			{
+				Lines.UpdateLayout();
+				if (!FocusIndex(index, state))
+				{
+					_jumped = true;
+					_jumpFocus = state;
+					ViewModel.FocusRequest = index;
+				}
+			});
 		}
 
 		UpdateBar();
@@ -655,10 +683,16 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		if (ViewModel.TypeAhead(query, query.Length == 1 ? current + 1 : Math.Max(current, 0)) is { } target)
 		{
 			e.Handled = true;
-			if (!FocusIndex(target, FocusState.Keyboard))
+			// a title whose row is drawn: straight to it; one far down goes the A to Z's way (its row made and put at the top
+			// once laid out, then focused: a poster made out there from inside the key's handler lost the focus to the title bar)
+			if (Find(target) is { } at && Lines.TryGetElement(at.Line) is not null && FocusIndex(target, FocusState.Keyboard))
 			{
-				DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => FocusIndex(target, FocusState.Keyboard));
+				return;
 			}
+
+			_jumped = true;
+			_jumpFocus = FocusState.Keyboard;
+			ViewModel.FocusRequest = target;
 		}
 	}
 
