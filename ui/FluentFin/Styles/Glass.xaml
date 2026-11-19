@@ -1,6 +1,7 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:controls="using:FluentFin.Controls"
+    xmlns:converters="using:FluentFin.Converters"
     xmlns:media="using:CommunityToolkit.WinUI.Media"
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -134,6 +135,30 @@
             <SolidColorBrush x:Key="NixieToggleOnForegroundBrush" Color="#FF9EB1" />
             <SolidColorBrush x:Key="NixieToggleOnBorderBrush" Color="#F96985" />
             <StaticResource x:Key="NixieToggleOnFillBrush" ResourceKey="GlassInsetFillBrush" />
+            <!--
+                1.4.0 style: one accent budget (pink only for the view's one Primary, the current place and progress) and one
+                highlight vocabulary. Badges sit ON artwork, so they are dark plates with light marks in both themes: watched a
+                dim neutral check (top right), "N to watch" a neutral square count (top left), never the accent, never a capsule.
+                A selected chip or section tab is a neutral plate and the weight; the current letter bold accent text; an open
+                item the accent rim. Hover on a card brightens it (NixieCardHoverOverlayBrush); pressed is never selected.
+            -->
+            <SolidColorBrush x:Key="NixieBadgeFillBrush" Color="#B8170508" />
+            <SolidColorBrush x:Key="NixieBadgeStrokeBrush" Color="#38FFFFFF" />
+            <SolidColorBrush x:Key="NixieBadgeForegroundBrush" Color="#FFF4EE" />
+            <SolidColorBrush x:Key="NixieWatchedGlyphBrush" Color="#D9C6C8" />
+            <SolidColorBrush x:Key="NixieCardHoverOverlayBrush" Color="#17FFFFFF" />
+            <LinearGradientBrush x:Key="NixieCardStripScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#00100306" />
+                <GradientStop Offset="0.35" Color="#CC100306" />
+                <GradientStop Offset="0.6" Color="#F7100306" />
+                <GradientStop Offset="1" Color="#FA100306" />
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="NixieOpenRimBrush" Color="#F96985" />
+            <SolidColorBrush x:Key="NixieChipSelectedFillBrush" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="NixieChipSelectedBorderBrush" Color="#80F8EFF0" />
+            <StaticResource x:Key="NixieChipSelectedForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <SolidColorBrush x:Key="NixieCurrentLetterForegroundBrush" Color="#FF9EB1" />
+            <Color x:Key="NixieDangerColor">#FFB347</Color>
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
             <Color x:Key="NixieAccentColor">#BC1E47</Color>
@@ -248,6 +273,24 @@
             <SolidColorBrush x:Key="NixieToggleOnForegroundBrush" Color="#BC1E47" />
             <SolidColorBrush x:Key="NixieToggleOnBorderBrush" Color="#BC1E47" />
             <StaticResource x:Key="NixieToggleOnFillBrush" ResourceKey="GlassInsetFillBrush" />
+            <!--  1.4.0 style: the badge and highlight vocabulary (see Dark); the badges are on artwork, so the dark theme's  -->
+            <SolidColorBrush x:Key="NixieBadgeFillBrush" Color="#B8170508" />
+            <SolidColorBrush x:Key="NixieBadgeStrokeBrush" Color="#38FFFFFF" />
+            <SolidColorBrush x:Key="NixieBadgeForegroundBrush" Color="#FFF4EE" />
+            <SolidColorBrush x:Key="NixieWatchedGlyphBrush" Color="#D9C6C8" />
+            <SolidColorBrush x:Key="NixieCardHoverOverlayBrush" Color="#17FFFFFF" />
+            <LinearGradientBrush x:Key="NixieCardStripScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#00100306" />
+                <GradientStop Offset="0.35" Color="#CC100306" />
+                <GradientStop Offset="0.6" Color="#F7100306" />
+                <GradientStop Offset="1" Color="#FA100306" />
+            </LinearGradientBrush>
+            <SolidColorBrush x:Key="NixieOpenRimBrush" Color="#BC1E47" />
+            <SolidColorBrush x:Key="NixieChipSelectedFillBrush" Color="#1F2D0F16" />
+            <SolidColorBrush x:Key="NixieChipSelectedBorderBrush" Color="#992D0F16" />
+            <StaticResource x:Key="NixieChipSelectedForegroundBrush" ResourceKey="GlassTextPrimaryBrush" />
+            <SolidColorBrush x:Key="NixieCurrentLetterForegroundBrush" Color="#BC1E47" />
+            <Color x:Key="NixieDangerColor">#805000</Color>
         </ResourceDictionary>
         <ResourceDictionary x:Key="HighContrast">
             <!--  1.1.4 (states): the user's contrast colours, not a fixed yellow and black (wrong in a light scheme)  -->
@@ -316,6 +359,19 @@
             <SolidColorBrush x:Key="NixieToggleOnForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="NixieToggleOnBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="NixieToggleOnFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <!--  1.4.0 style: the badges and highlights in the system colours  -->
+            <SolidColorBrush x:Key="NixieBadgeFillBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="NixieBadgeStrokeBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="NixieBadgeForegroundBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="NixieWatchedGlyphBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="NixieCardHoverOverlayBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="NixieCardStripScrimBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="NixieOpenRimBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieChipSelectedFillBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieChipSelectedBorderBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NixieChipSelectedForegroundBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="NixieCurrentLetterForegroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <StaticResource x:Key="NixieDangerColor" ResourceKey="SystemColorHighlightColor" />
             <!--  WinUI's keys that Dark and Light set: high contrast takes the system colours WinUI gives them  -->
             <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -324,6 +380,8 @@
     </ResourceDictionary.ThemeDictionaries>
 
 
+    <!--  1.4.0: a button's content as text for the hidden bold copy that keeps a label's width ("" for an element: TextOnlyConverter)  -->
+    <converters:TextOnlyConverter x:Key="NixieTextOnlyConverter" />
     <!--  shapes  -->
     <!--  1.1.4: panels 12 like the pills and overlays (the layout audit: 20 read as phone cards)  -->
     <CornerRadius x:Key="GlassPanelCornerRadius">12</CornerRadius>
@@ -1040,9 +1098,37 @@
         </Grid>
     </ControlTemplate>
 
-    <!--  Destructive: the danger ink on the glass fill, never filled, never glowing; a destructive verb and the trash glyph carry it too  -->
+    <!--
+        Destructive: the danger ink on the glass fill, never filled, no glow at rest; a destructive verb and the trash glyph
+        carry it too. 1.4.0: keyboard focus glows in the danger ink (NixieDangerColor), as every other role's focus glows in
+        the accent: the Delete a dialog asks about was the one button that drew no glow, so Cancel looked focused beside it.
+    -->
     <ControlTemplate x:Key="NixieDestructiveButtonTemplate" TargetType="Button">
         <Grid>
+            <Grid
+                x:Name="FocusGlow"
+                x:DeferLoadStrategy="Lazy"
+                IsHitTestVisible="False"
+                Visibility="Collapsed">
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="6"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource NixieDangerColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+                <Border CornerRadius="{TemplateBinding CornerRadius}">
+                    <ui:Effects.Shadow>
+                        <media:AttachedCardShadow
+                            BlurRadius="14"
+                            CornerRadius="10"
+                            Opacity="{ThemeResource GlassShadowOpacity}"
+                            Color="{ThemeResource NixieDangerColor}" />
+                    </ui:Effects.Shadow>
+                </Border>
+            </Grid>
             <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
                 <Border
                     x:Name="Backplate"
@@ -1096,6 +1182,7 @@
                 <VisualStateGroup x:Name="FocusStates">
                     <VisualState x:Name="Focused">
                         <VisualState.Setters>
+                            <Setter Target="FocusGlow.Visibility" Value="Visible" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Unfocused" />
@@ -1166,9 +1253,10 @@
     </ControlTemplate>
 
     <!--
-        Tab: text, the selected one SemiBold with a 22 x 3 neon underline (a soft accent glow under GlassTabUnderlineBrush); the
-        hover a faint line where the underline goes. A control that is selected goes to "Selected" (SelectionStates), as the
-        account stream's TopTabButton does. Never a fill.
+        Tab: text, the selected one SemiBold with a 22 x 3 neon underline (a soft accent glow under GlassTabUnderlineBrush). 1.4.0:
+        the hover a faint fill (the overlay, radius 8), never a line where the underline goes, so hover and selection differ in
+        kind, not only in hue. A control that is selected goes to "Selected" (SelectionStates), as the account stream's
+        TopTabButton does. The selected tab is never a fill.
     -->
     <ControlTemplate x:Key="NixieTabButtonTemplate" TargetType="Button">
         <Grid>
@@ -1187,17 +1275,6 @@
                         <BrushTransition Duration="0:0:0.12" />
                     </Border.BackgroundTransition>
                 </Border>
-                <Border
-                    x:Name="HoverLine"
-                    Width="22"
-                    Height="2"
-                    Margin="0,0,0,5"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Bottom"
-                    Background="{ThemeResource NixieTabHoverLineBrush}"
-                    CornerRadius="1"
-                    IsHitTestVisible="False"
-                    Opacity="0" />
                 <Grid
                     x:Name="Underline"
                     Width="22"
@@ -1227,7 +1304,7 @@
                     FontWeight="SemiBold"
                     IsHitTestVisible="False"
                     Opacity="0"
-                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" />
+                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NixieTextOnlyConverter}}" />
                 <ContentPresenter
                     x:Name="ContentPresenter"
                     Padding="{TemplateBinding Padding}"
@@ -1243,13 +1320,13 @@
                     <VisualState x:Name="Normal" />
                     <VisualState x:Name="PointerOver">
                         <VisualState.Setters>
-                            <Setter Target="HoverLine.Opacity" Value="1" />
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Pressed">
                         <VisualState.Setters>
                             <Setter Target="ContentPresenter.Opacity" Value="0.8" />
-                            <Setter Target="HoverLine.Opacity" Value="0.6" />
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
                         </VisualState.Setters>
                     </VisualState>
                     <VisualState x:Name="Disabled">
@@ -1274,7 +1351,6 @@
                             <Setter Target="ContentPresenter.FontWeight" Value="SemiBold" />
                             <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieTabSelectedForegroundBrush}" />
                             <Setter Target="Underline.Opacity" Value="1" />
-                            <Setter Target="HoverLine.Visibility" Value="Collapsed" />
                         </VisualState.Setters>
                     </VisualState>
                 </VisualStateGroup>
@@ -1680,17 +1756,619 @@
         <Setter Property="Padding" Value="12,0" />
         <Setter Property="MinHeight" Value="40" />
         <Setter Property="FontSize" Value="15" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
         <Setter Property="FocusVisualMargin" Value="2,4,2,4" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Template" Value="{StaticResource NixieTabButtonTemplate}" />
     </Style>
-    <!--  the 1.1.x keys, as aliases (the button review): the pages keep compiling and take the new look  -->
-    <StaticResource x:Key="GlassPillButtonStyle" ResourceKey="NixieButtonStyle" />
-    <StaticResource x:Key="GlassAccentPillButtonStyle" ResourceKey="NixiePrimaryButtonStyle" />
-    <StaticResource x:Key="GlassInsetPillButtonStyle" ResourceKey="NixieButtonStyle" />
-    <StaticResource x:Key="GlassIconButtonStyle" ResourceKey="NixieIconButtonStyle" />
+    <!--
+        1.4.0: the 1.1.x "Pill" aliases (GlassPillButtonStyle, GlassAccentPillButtonStyle, GlassInsetPillButtonStyle,
+        GlassIconButtonStyle) are gone: every page names its role (NixieButtonStyle, NixiePrimaryButtonStyle,
+        NixieIconButtonStyle), so no key says "pill" for a shape the system no longer draws.
+    -->
+
+    <!--  ======================================== 1.4.0 style ========================================  -->
+    <!--
+        1.4.0 (the library UX review, plan items 7 and 11): the shared keys the themes, the library and the player use, so one
+        accent budget, one highlight vocabulary and one button system hold in all four themes.
+        Highlights, one meaning each:
+          - pink: the view's one Primary, the current place (a tab's underline, the current letter) and progress; nothing else;
+          - keyboard focus: the two-tone ring (SystemControlFocusVisual*) plus the item's actions;
+          - hover: a brighten (NixieCardHoverOverlayBrush) or a lift of the art; never a zoom or a Play glyph while the keyboard
+            focus is in the grid;
+          - pressed: the pressed overlay, never the selected look;
+          - selected chip or section tab: a neutral plate and the weight; a switch that is on: its check glyph and the plate;
+          - an open item (Editorial's details in place): the accent rim and the notch, never the focus ring.
+        Badges (on artwork, so the same dark plate in both themes): watched is a dim neutral check, top right; "N to watch" a
+        neutral square count, top left; 24 high, radius 6; never the accent, never a capsule.
+    -->
+    <x:Double x:Key="NixieBadgeSize">24</x:Double>
+    <CornerRadius x:Key="NixieBadgeCornerRadius">6</CornerRadius>
+    <Thickness x:Key="NixieBadgeMargin">8</Thickness>
+    <!--  a card's action glyphs: 20 at 44, as every icon button  -->
+    <x:Double x:Key="NixieCardGlyphSize">20</x:Double>
+    <!--  the art grows on keyboard focus (or a free hover) by this much; its words never move: the growth is reserved in the gap  -->
+    <x:Double x:Key="NixieCardArtLift">1.05</x:Double>
+
+    <!--  watched: a dim neutral check on a dark square plate, top right  -->
+    <Style x:Key="NixieWatchedBadgeStyle" TargetType="Border">
+        <Setter Property="Width" Value="{StaticResource NixieBadgeSize}" />
+        <Setter Property="Height" Value="{StaticResource NixieBadgeSize}" />
+        <Setter Property="Margin" Value="{StaticResource NixieBadgeMargin}" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Background" Value="{ThemeResource NixieBadgeFillBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieBadgeStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource NixieBadgeCornerRadius}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+    </Style>
+    <Style x:Key="NixieWatchedGlyphStyle" TargetType="FontIcon">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Glyph" Value="&#xE73E;" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieWatchedGlyphBrush}" />
+    </Style>
+    <!--  "N to watch": a neutral square count, top left (the card's name says it to Narrator: "5 unwatched episodes")  -->
+    <Style x:Key="NixieCountChipStyle" TargetType="Border">
+        <Setter Property="MinWidth" Value="{StaticResource NixieBadgeSize}" />
+        <Setter Property="Height" Value="{StaticResource NixieBadgeSize}" />
+        <Setter Property="Padding" Value="6,0" />
+        <Setter Property="Margin" Value="{StaticResource NixieBadgeMargin}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="Background" Value="{ThemeResource NixieBadgeFillBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieBadgeStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource NixieBadgeCornerRadius}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+    </Style>
+    <Style x:Key="NixieCountChipTextStyle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource GlassTextFontFamily}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextLineBounds" Value="Tight" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieBadgeForegroundBrush}" />
+    </Style>
+
+    <!--
+        A card's actions: one strip along the foot of the art (over NixieCardStripScrimBrush), centred, 8 apart: Play (the
+        Primary, as an icon circle), then the icon toggles and More, all 44 with 20 px glyphs. The words under the art stay.
+    -->
+    <Style x:Key="NixieCardActionStripStyle" TargetType="StackPanel">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="Spacing" Value="8" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Bottom" />
+        <Setter Property="Margin" Value="0,0,0,12" />
+    </Style>
+    <!--  Primary as a 44 icon circle (a card's Play): the accent fill on the icon template  -->
+    <Style
+        x:Key="NixiePrimaryIconButtonStyle"
+        BasedOn="{StaticResource NixieIconButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Background" Value="{ThemeResource NixiePrimaryFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixiePrimaryForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+    </Style>
+    <!--  the icon roles on artwork: the badges' dark plate under the glyph, so they read on any picture  -->
+    <Style
+        x:Key="NixieCardIconButtonStyle"
+        BasedOn="{StaticResource NixieIconButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Background" Value="{ThemeResource NixieBadgeFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieBadgeForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieBadgeStrokeBrush}" />
+    </Style>
+    <Style
+        x:Key="NixieCardIconToggleButtonStyle"
+        BasedOn="{StaticResource NixieIconToggleButtonStyle}"
+        TargetType="ToggleButton">
+        <Setter Property="Background" Value="{ThemeResource NixieBadgeFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieBadgeForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieBadgeStrokeBrush}" />
+    </Style>
+
+    <!--  every toolbar (Sort, Filter, the Unwatched switch beside them): Compact 32 in every theme; no page makes it Large  -->
+    <Style
+        x:Key="NixieToolbarButtonStyle"
+        BasedOn="{StaticResource NixieCompactButtonStyle}"
+        TargetType="Button" />
+
+    <!--  a chip that is an action (an applied filter's "Comedy ✕", Clear all): the Compact Secondary at 32, radius 8  -->
+    <Style
+        x:Key="NixieChipButtonStyle"
+        BasedOn="{StaticResource NixieCompactButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Padding" Value="12,0" />
+    </Style>
+
+    <!--
+        A chip that is a switch (Unwatched, Favorites): 32, radius 8, the glass fill; on: its check glyph shows before the
+        words and the neutral plate and edge come up (never the accent), so it reads as on/off beside a single-select chip.
+    -->
+    <ControlTemplate x:Key="NixieChipToggleButtonTemplate" TargetType="ToggleButton">
+        <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+            <Border
+                x:Name="Backplate"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}" />
+            <Border
+                x:Name="Overlay"
+                Background="Transparent"
+                CornerRadius="{TemplateBinding CornerRadius}" />
+            <StackPanel
+                Padding="{TemplateBinding Padding}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="6">
+                <FontIcon
+                    x:Name="CheckGlyph"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    FontSize="12"
+                    Foreground="{TemplateBinding Foreground}"
+                    Glyph="&#xE73E;"
+                    Visibility="Collapsed" />
+                <ContentPresenter
+                    x:Name="ContentPresenter"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    Foreground="{TemplateBinding Foreground}" />
+            </StackPanel>
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieDisabledFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieDisabledBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Checked">
+                        <VisualState.Setters>
+                            <Setter Target="CheckGlyph.Visibility" Value="Visible" />
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieChipSelectedFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieChipSelectedBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieChipSelectedForegroundBrush}" />
+                            <Setter Target="CheckGlyph.Foreground" Value="{ThemeResource NixieChipSelectedForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="CheckedPointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="CheckGlyph.Visibility" Value="Visible" />
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieChipSelectedFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieChipSelectedBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieChipSelectedForegroundBrush}" />
+                            <Setter Target="CheckGlyph.Foreground" Value="{ThemeResource NixieChipSelectedForegroundBrush}" />
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="CheckedPressed">
+                        <VisualState.Setters>
+                            <Setter Target="CheckGlyph.Visibility" Value="Visible" />
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieChipSelectedFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieChipSelectedBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieChipSelectedForegroundBrush}" />
+                            <Setter Target="CheckGlyph.Foreground" Value="{ThemeResource NixieChipSelectedForegroundBrush}" />
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="CheckedDisabled">
+                        <VisualState.Setters>
+                            <Setter Target="CheckGlyph.Visibility" Value="Visible" />
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieDisabledFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieDisabledBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                            <Setter Target="CheckGlyph.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused" />
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+    <Style
+        x:Key="NixieChipToggleButtonStyle"
+        BasedOn="{StaticResource DefaultToggleButtonStyle}"
+        TargetType="ToggleButton">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassChipCornerRadius}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="Height" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Background" Value="{ThemeResource NixieButtonFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieButtonBorderBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixieChipToggleButtonTemplate}" />
+    </Style>
+
+    <!--
+        A single-select chip (a genre, a preset): a RadioButton, so Narrator hears "1 of 9, selected"; picked: the neutral plate,
+        its edge and the weight (the hidden bold copy keeps its width, so nothing moves). Never the accent, never a check.
+    -->
+    <ControlTemplate x:Key="NixieChoiceChipTemplate" TargetType="RadioButton">
+        <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+            <Border
+                x:Name="Backplate"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}" />
+            <Border
+                x:Name="Overlay"
+                Background="Transparent"
+                CornerRadius="{TemplateBinding CornerRadius}" />
+            <TextBlock
+                x:Name="SelectedWidth"
+                Margin="{TemplateBinding Padding}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                FontWeight="SemiBold"
+                IsHitTestVisible="False"
+                Opacity="0"
+                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NixieTextOnlyConverter}}" />
+            <ContentPresenter
+                x:Name="ContentPresenter"
+                Padding="{TemplateBinding Padding}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                Content="{TemplateBinding Content}"
+                ContentTemplate="{TemplateBinding ContentTemplate}"
+                Foreground="{TemplateBinding Foreground}" />
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieHoverBorderBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieDisabledFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieDisabledBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="CheckStates">
+                    <VisualState x:Name="Checked">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieChipSelectedFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieChipSelectedBorderBrush}" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieChipSelectedForegroundBrush}" />
+                            <Setter Target="ContentPresenter.FontWeight" Value="SemiBold" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Unchecked" />
+                    <VisualState x:Name="Indeterminate" />
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused" />
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+    <Style
+        x:Key="NixieChoiceChipStyle"
+        BasedOn="{StaticResource DefaultRadioButtonStyle}"
+        TargetType="RadioButton">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="FocusVisualPrimaryThickness" Value="2" />
+        <Setter Property="FocusVisualSecondaryThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassChipCornerRadius}" />
+        <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="Height" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="Background" Value="{ThemeResource NixieButtonFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieButtonForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NixieButtonBorderBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixieChoiceChipTemplate}" />
+    </Style>
+
+    <!--
+        A section tab (Cinematic's All / Unwatched / Favorites, any view switch inside a page): selected is a neutral plate and
+        the weight, never the underline, which marks only where you are in the top bar. A control goes to "Selected"
+        (SelectionStates) from code, as the Tab role does.
+    -->
+    <ControlTemplate x:Key="NixieSectionTabButtonTemplate" TargetType="Button">
+        <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+            <Border
+                x:Name="Backplate"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}" />
+            <Border
+                x:Name="Overlay"
+                Background="Transparent"
+                CornerRadius="{TemplateBinding CornerRadius}">
+                <Border.BackgroundTransition>
+                    <BrushTransition Duration="0:0:0.12" />
+                </Border.BackgroundTransition>
+            </Border>
+            <TextBlock
+                x:Name="SelectedWidth"
+                Margin="{TemplateBinding Padding}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                FontWeight="SemiBold"
+                IsHitTestVisible="False"
+                Opacity="0"
+                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NixieTextOnlyConverter}}" />
+            <ContentPresenter
+                x:Name="ContentPresenter"
+                Padding="{TemplateBinding Padding}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                Content="{TemplateBinding Content}"
+                ContentTemplate="{TemplateBinding ContentTemplate}"
+                Foreground="{TemplateBinding Foreground}" />
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Opacity" Value="0.85" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused" />
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="SelectionStates">
+                    <VisualState x:Name="Unselected" />
+                    <VisualState x:Name="Selected">
+                        <VisualState.Setters>
+                            <Setter Target="Backplate.Background" Value="{ThemeResource NixieChipSelectedFillBrush}" />
+                            <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieChipSelectedBorderBrush}" />
+                            <Setter Target="ContentPresenter.FontWeight" Value="SemiBold" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieChipSelectedForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+    <Style
+        x:Key="NixieSectionTabButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieTabForegroundBrush}" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-3" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Template" Value="{StaticResource NixieSectionTabButtonTemplate}" />
+    </Style>
+
+    <!--
+        An A to Z letter, one role in every theme: at least 32 x 32, radius 8, transparent at rest with the overlays on hover
+        and press; a letter with no titles is disabled (dimmed, skipped); the current letter goes to "Selected" from code
+        (SelectionStates): bold accent text, no underline, no plate (it is the current place). Narrator: set IsSelected on it.
+    -->
+    <ControlTemplate x:Key="NixieLetterButtonTemplate" TargetType="Button">
+        <Grid x:Name="RootGrid" CornerRadius="{TemplateBinding CornerRadius}">
+            <Border
+                x:Name="Backplate"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}" />
+            <Border
+                x:Name="Overlay"
+                Background="Transparent"
+                CornerRadius="{TemplateBinding CornerRadius}" />
+            <TextBlock
+                x:Name="SelectedWidth"
+                Margin="{TemplateBinding Padding}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                FontWeight="Bold"
+                IsHitTestVisible="False"
+                Opacity="0"
+                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NixieTextOnlyConverter}}" />
+            <ContentPresenter
+                x:Name="ContentPresenter"
+                Padding="{TemplateBinding Padding}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                Content="{TemplateBinding Content}"
+                ContentTemplate="{TemplateBinding ContentTemplate}"
+                Foreground="{TemplateBinding Foreground}" />
+            <VisualStateManager.VisualStateGroups>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
+                            <Setter Target="ContentPresenter.Opacity" Value="0.85" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="FocusStates">
+                    <VisualState x:Name="Focused" />
+                    <VisualState x:Name="Unfocused" />
+                    <VisualState x:Name="PointerFocused" />
+                </VisualStateGroup>
+                <VisualStateGroup x:Name="SelectionStates">
+                    <VisualState x:Name="Unselected" />
+                    <VisualState x:Name="Selected">
+                        <VisualState.Setters>
+                            <Setter Target="ContentPresenter.FontWeight" Value="Bold" />
+                            <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource NixieCurrentLetterForegroundBrush}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateManager.VisualStateGroups>
+        </Grid>
+    </ControlTemplate>
+    <Style
+        x:Key="NixieLetterButtonStyle"
+        BasedOn="{StaticResource DefaultButtonStyle}"
+        TargetType="Button">
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="FocusVisualMargin" Value="-2" />
+        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinWidth" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="Padding" Value="4,0" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieSubtleForegroundBrush}" />
+        <Setter Property="Template" Value="{StaticResource NixieLetterButtonTemplate}" />
+    </Style>
+
+    <!--
+        The player's transport on the system (the player stream lays it out): the 44 icon circles, with the Nixie hover, press
+        and focus glow; Play/Pause at 60 in the accent is the one documented hero exception to the 44/32 sizes. The prompts:
+        Secondary 44 (Skip, Watch credits, Keep watching) and the Primary 44 (the next episode).
+    -->
+    <Style
+        x:Key="NixiePlayerButtonStyle"
+        BasedOn="{StaticResource NixieIconButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Background" Value="{ThemeResource NixieBadgeFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixieBadgeForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+    </Style>
+    <x:Double x:Key="NixiePlayerHeroButtonSize">60</x:Double>
+    <Style
+        x:Key="NixiePlayerPlayButtonStyle"
+        BasedOn="{StaticResource NixieIconButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Width" Value="{StaticResource NixiePlayerHeroButtonSize}" />
+        <Setter Property="Height" Value="{StaticResource NixiePlayerHeroButtonSize}" />
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="Background" Value="{ThemeResource NixiePrimaryFillBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NixiePrimaryForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+    </Style>
+    <Style
+        x:Key="NixiePlayerPromptButtonStyle"
+        BasedOn="{StaticResource NixieButtonStyle}"
+        TargetType="Button" />
+    <Style
+        x:Key="NixiePlayerPromptPrimaryButtonStyle"
+        BasedOn="{StaticResource NixiePrimaryButtonStyle}"
+        TargetType="Button" />
+
+    <!--
+        Delete (the item's delete confirmation): the Destructive role, Compact, with the trash glyph (E74D) before the verb;
+        its focus glows in the danger ink at radius 8. NixieDeleteDialogStyle: the destructive dialog with that confirm.
+    -->
+    <Style
+        x:Key="NixieDeleteCompactButtonStyle"
+        BasedOn="{StaticResource NixieDestructiveCompactButtonStyle}"
+        TargetType="Button">
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon
+                            VerticalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="16"
+                            Glyph="&#xE74D;" />
+                        <TextBlock VerticalAlignment="Center" Text="{Binding}" />
+                    </StackPanel>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!--  ====================================== end 1.4.0 style ======================================  -->
     <!--
         Dialogs with the Compact buttons (the button review, section 3.6), on the dialog template of TextBlock.xaml (merged
         earlier). NixieDialogStyle: the commit is the Primary. NixieDestructiveDialogStyle: the confirm is Destructive, and Cancel
@@ -1713,6 +2391,13 @@
         <Setter Property="SecondaryButtonStyle" Value="{StaticResource NixieCompactButtonStyle}" />
         <Setter Property="CloseButtonStyle" Value="{StaticResource NixieCompactButtonStyle}" />
         <Setter Property="DefaultButton" Value="Close" />
+    </Style>
+    <!--  1.4.0 style: the item's delete confirmation: the destructive dialog whose confirm carries the trash glyph  -->
+    <Style
+        x:Key="NixieDeleteDialogStyle"
+        BasedOn="{StaticResource NixieDestructiveDialogStyle}"
+        TargetType="ContentDialog">
+        <Setter Property="PrimaryButtonStyle" Value="{StaticResource NixieDeleteCompactButtonStyle}" />
     </Style>
     <!--
         Overlays: the More menu, card context menus, the profile flyout, tooltips, every ContentDialog and the player's menus

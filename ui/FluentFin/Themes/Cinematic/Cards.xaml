@@ -314,7 +314,23 @@
         <Setter Property="Foreground" Value="{ThemeResource GlassTextSecondaryBrush}" />
     </Style>
 
-    <!--  a still on a shelf: 384 x 216 (300 x 169 in a narrow window), room around it for the 1.1x zoom (FocusZoom)  -->
+    <!--  1.4.0 style  -->
+    <!--
+        The library's section tabs (All, Unwatched, Favorites; CinematicTabStrip.TabStyle): a neutral plate and the weight, at
+        the strip's 17 px (the library UX review, C-M7: one pink underline marked the section, the view and the letter). The
+        current letter of the A to Z: the shared NixieLetterButtonStyle (its Selected state: bold accent text, no underline, no
+        plate), which the page's own CinematicLetterButtonStyle should be BasedOn.
+    -->
+    <Style
+        x:Key="CinematicSectionTabButtonStyle"
+        BasedOn="{StaticResource NixieSectionTabButtonStyle}"
+        TargetType="Button">
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+    </Style>
+    <!--  end 1.4.0 style  -->
+
+    <!--  a still on a shelf: 384 x 216 (300 x 169 in a narrow window), room around it for the art's zoom (FocusZoom: at most 8 px a side, the words never move)  -->
     <!--  (no x:Bind here: the theme dictionary is loaded by its address, ILayoutTheme.Dictionary. The still takes its item from its DataContext, a {Binding} to its typed Model never arrived, and loads its own picture)  -->
     <DataTemplate x:Key="CinematicStillTemplate">
         <cc:CinematicStill Margin="16,14,16,0" UseDataContext="True" />

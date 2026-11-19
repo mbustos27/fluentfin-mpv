@@ -25,10 +25,10 @@ namespace FluentFin.Themes.DriveIn.Controls;
 public static class DriveInRows
 {
 	/// <summary>The shared row's parts this dresses (ShelfRow.xaml).</summary>
-	public static readonly string[] RowParts = ["TitleText", "SeeAllButton", "SeeAllTitle", "SeeAllChevron"];
+	public static readonly string[] RowParts = ["TitleText", "SeeAllButton"];
 
 	/// <summary>The shared card's parts this dresses (BaseItemDtoCard.xaml).</summary>
-	public static readonly string[] CardParts = ["ImageCanvas", "TitleArea"];
+	public static readonly string[] CardParts = ["ContentOverlay", "TitleArea"];
 
 	// ---- the row's marquee ------------------------------------------------------------------------------------------------
 
@@ -97,13 +97,20 @@ public static class DriveInRows
 		Place(row);
 	}
 
-	/// <summary>The marquee goes where the row's title is: inside the See all button (with its chevron), or in the title's place.</summary>
+	/// <summary>
+	/// The marquee goes in the title's place. 1.4.0 (the library UX review, X13): the row's See all stays the shared Link at
+	/// the header's right, as in every theme (it was the marquee itself, a 282 or 415 x 56 tile).
+	/// </summary>
 	private static void Place(ShelfRow row)
 	{
-		if (Dressed(row) is not { } dress
-			|| Find<TextBlock>(row, "TitleText") is not { Parent: Grid header } title
-			|| Find<Button>(row, "SeeAllButton") is not { } seeAll)
+		if (Dressed(row) is not { } dress || Find<TextBlock>(row, "TitleText") is not { Parent: Grid header } title)
 		{
+			return;
+		}
+
+		if (dress.Sign.Parent is StackPanel { Parent: Grid } placed && ReferenceEquals(placed.Parent, header))
+		{
+			title.Visibility = Visibility.Collapsed;
 			return;
 		}
 
@@ -113,23 +120,8 @@ public static class DriveInRows
 		line.Children.Add(dress.Sign);
 		line.Children.Add(dress.Subtitle);
 		title.Visibility = Visibility.Collapsed;
-		if (row.HasSeeAll)
-		{
-			if (Find<FontIcon>(row, "SeeAllChevron") is { } chevron)
-			{
-				Detach(chevron);
-				line.Children.Add(chevron);
-			}
-
-			seeAll.Content = line;
-			seeAll.Margin = new Thickness(-6, 0, 0, 0);
-			seeAll.Padding = new Thickness(6, 2, 10, 2);
-		}
-		else
-		{
-			Grid.SetColumn(line, 0);
-			header.Children.Add(line);
-		}
+		Grid.SetColumn(line, 0);
+		header.Children.Add(line);
 	}
 
 	private static void Detach(FrameworkElement element)
@@ -195,7 +187,7 @@ public static class DriveInRows
 			dress = new CardDress();
 			card.SetValue(CardDressProperty, dress);
 			// the time left on a still (16:9) card; a poster keeps its progress bar alone (the chip would cover its title art)
-			if (card.Width > card.Height && Find<Grid>(card, "ImageCanvas") is { } canvas)
+			if (card.Width > card.Height && Find<Grid>(card, "ContentOverlay") is { } canvas)
 			{
 				dress.ChipTubes = new NixieReadout { DigitHeight = 22 };
 				dress.ChipUnit = new TextBlock
@@ -223,7 +215,8 @@ public static class DriveInRows
 				};
 				// Narrator hears the card by its own name; the chip is what the eye reads
 				AutomationProperties.SetAccessibilityView(dress.Chip, AccessibilityView.Raw);
-				canvas.Children.Add(dress.Chip);
+				// 1.4.0: under the card's action strip (the overlay's first child), so the strip covers it while it shows
+				canvas.Children.Insert(0, dress.Chip);
 			}
 
 			if (Find<StackPanel>(card, "TitleArea") is { Children.Count: >= 2 } area && area.Children[1] is TextBlock subtitle)

@@ -107,26 +107,27 @@
                 <StaticResource x:Key="ButtonForeground" ResourceKey="PlayerGlassForeground" />
                 <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="PlayerGlassForeground" />
                 <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="PlayerGlassForeground" />
-        <!--  round icon buttons and pills on the scrim: translucent fill, the glass edge, no acrylic  -->
-        <Style x:Key="PlayerButton" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
-            <Setter Property="Width" Value="44" />
-            <Setter Property="Height" Value="44" />
-            <Setter Property="MinHeight" Value="0" />
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="CornerRadius" Value="22" />
-            <Setter Property="BorderThickness" Value="1" />
+        <!--
+            round icon buttons and pills on the scrim: translucent fill, the glass edge, no acrylic. Nixie 1.4.0 style (the library
+            UX review, X13): the transport is on the button system: the 44 icon circles (NixiePlayerButtonStyle, the Nixie hover,
+            press and focus glow), Play/Pause the 60 px hero (NixiePlayerPlayButtonStyle, the one documented exception to the
+            44/32 sizes); the pills on the Secondary template. The player stream owns the layout and the prompts.
+        -->
+        <Style x:Key="PlayerButton" BasedOn="{StaticResource NixiePlayerButtonStyle}" TargetType="Button">
             <Setter Property="Background" Value="{ThemeResource PlayerGlassFill}" />
             <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
             <Setter Property="Foreground" Value="{ThemeResource PlayerGlassForeground}" />
         </Style>
         <Style x:Key="PlayerPill" BasedOn="{StaticResource PlayerButton}" TargetType="Button">
             <Setter Property="Width" Value="NaN" />
+            <Setter Property="Height" Value="NaN" />
+            <Setter Property="MinHeight" Value="{StaticResource NixieButtonHeight}" />
             <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
             <Setter Property="MinWidth" Value="120" />
             <Setter Property="Padding" Value="18,0" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="FontSize" Value="15" />
+            <Setter Property="Template" Value="{StaticResource NixieButtonTemplate}" />
         </Style>
         <!--
             1.2.0: the pills over the video (Next near the end, Skip) on the dense PlayerPromptFill. Each pill also sets
@@ -138,14 +139,8 @@
             <!--  1.2.0 (button review P22): the button system's radius 8, not a pill  -->
             <Setter Property="CornerRadius" Value="8" />
         </Style>
-        <!--  the one primary action: play/pause, in the accent  -->
-        <Style x:Key="PlayerPlayButton" BasedOn="{StaticResource PlayerButton}" TargetType="Button">
-            <Setter Property="Width" Value="60" />
-            <Setter Property="Height" Value="60" />
-            <Setter Property="CornerRadius" Value="30" />
-            <Setter Property="Background" Value="{ThemeResource NixieAccentBrush}" />
-            <Setter Property="Foreground" Value="{ThemeResource NixieDeepBrush}" />
-        </Style>
+        <!--  the one primary action: play/pause, in the accent, at 60 (the hero exception)  -->
+        <Style x:Key="PlayerPlayButton" BasedOn="{StaticResource NixiePlayerPlayButtonStyle}" TargetType="Button" />
 
         <!--
             menus: Seaglass 1.1.3, the shared overlay recipe (Styles\Glass.xaml): the audio menu is a window of its own on

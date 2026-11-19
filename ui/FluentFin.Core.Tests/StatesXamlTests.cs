@@ -25,7 +25,7 @@ public class StatesXamlTests
 		Assert.Equal("Polite", (string?)ByName(doc, "LoadingTextBlock").Attribute("AutomationProperties.LiveSetting"));
 		Assert.Equal("{x:Bind LoadingText, Mode=OneWay}", (string?)doc.Descendants(Presentation + "ProgressRing").Single().Attribute("AutomationProperties.Name"));
 		// the accent is for Play: Try again is a neutral glass pill (ux review: "accent on the Retry button")
-		Assert.Equal("{StaticResource GlassPillButtonStyle}", (string?)ByName(doc, "RetryButton").Attribute("Style"));
+		Assert.Equal("{StaticResource NixieButtonStyle}", (string?)ByName(doc, "RetryButton").Attribute("Style"));
 		// the words in the glass text colours (measured by OverlayContrastTests), not WinUI's default secondary
 		Assert.DoesNotContain(doc.Descendants(), e => ((string?)e.Attribute("Foreground"))?.Contains("TextFillColorSecondaryBrush") == true);
 		// its own glass panel, made flat in code when it is inside one already (one layer of glass)

@@ -87,7 +87,7 @@
                 <GradientStop Offset="0.3" Color="#992A0C18" />
                 <GradientStop Offset="0.6" Color="#002A0C18" />
             </LinearGradientBrush>
-            <!--  the sunset rule under the top bar: the palette's six bands, maroon to peach, hard steps  -->
+            <!--  the sunset rule under the top bar: maroon to peach in hard steps. 1.4.0 (E-m8): no hot-pink band; the accent marks only what you act on  -->
             <LinearGradientBrush x:Key="EditorialSunsetRuleBrush" StartPoint="0,0" EndPoint="1,0" Opacity="0.9">
                 <GradientStop Offset="0" Color="#500723" />
                 <GradientStop Offset="0.14" Color="#500723" />
@@ -96,10 +96,8 @@
                 <GradientStop Offset="0.30" Color="#E6385F" />
                 <GradientStop Offset="0.46" Color="#E6385F" />
                 <GradientStop Offset="0.46" Color="#EC6A79" />
-                <GradientStop Offset="0.62" Color="#EC6A79" />
-                <GradientStop Offset="0.62" Color="#F96985" />
-                <GradientStop Offset="0.78" Color="#F96985" />
-                <GradientStop Offset="0.78" Color="#F7AA9C" />
+                <GradientStop Offset="0.70" Color="#EC6A79" />
+                <GradientStop Offset="0.70" Color="#F7AA9C" />
                 <GradientStop Offset="1" Color="#F7AA9C" />
             </LinearGradientBrush>
             <!--  the Googie arc: a coral swash with a sparkle at its end (decoration only)  -->
@@ -109,6 +107,8 @@
             <SolidColorBrush x:Key="EditorialStillNumberBrush" Color="#FFC2AE" />
             <x:Double x:Key="EditorialGlowOpacity">0.85</x:Double>
             <x:Double x:Key="EditorialSoftGlowOpacity">0.45</x:Double>
+            <!--  1.4.0 style: a pressed row is the hover fill one step on, never the selected wash  -->
+            <SolidColorBrush x:Key="EditorialRowPressedBrush" Color="#0AFFFFFF" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Light">
@@ -149,7 +149,8 @@
                 <GradientStop Offset="0.2" Color="#1F000000" />
                 <GradientStop Offset="1" Color="#29000000" />
             </LinearGradientBrush>
-            <SolidColorBrush x:Key="EditorialFocusOuterBrush" Color="#BC1E47" />
+            <!--  1.4.0 style: the keyboard ring is the app's two tones in Light too (deep maroon around white, as SystemControlFocusVisual*), never the accent  -->
+            <SolidColorBrush x:Key="EditorialFocusOuterBrush" Color="#2D0F16" />
             <SolidColorBrush x:Key="EditorialFocusInnerBrush" Color="#FFFFFF" />
             <!--  the hero tile and the paused column stay dark (RequestedTheme Dark): these are the light theme's copies for any other text on art  -->
             <LinearGradientBrush x:Key="EditorialHeroScrimBrush" StartPoint="0,0" EndPoint="1,0">
@@ -174,10 +175,8 @@
                 <GradientStop Offset="0.30" Color="#E6385F" />
                 <GradientStop Offset="0.46" Color="#E6385F" />
                 <GradientStop Offset="0.46" Color="#EC6A79" />
-                <GradientStop Offset="0.62" Color="#EC6A79" />
-                <GradientStop Offset="0.62" Color="#F96985" />
-                <GradientStop Offset="0.78" Color="#F96985" />
-                <GradientStop Offset="0.78" Color="#F7AA9C" />
+                <GradientStop Offset="0.70" Color="#EC6A79" />
+                <GradientStop Offset="0.70" Color="#F7AA9C" />
                 <GradientStop Offset="1" Color="#F7AA9C" />
             </LinearGradientBrush>
             <SolidColorBrush x:Key="EditorialArcBrush" Color="#E6385F" />
@@ -185,6 +184,8 @@
             <SolidColorBrush x:Key="EditorialStillNumberBrush" Color="#FFC2AE" />
             <x:Double x:Key="EditorialGlowOpacity">0.35</x:Double>
             <x:Double x:Key="EditorialSoftGlowOpacity">0.2</x:Double>
+            <!--  1.4.0 style: a pressed row is the hover fill one step on, never the selected wash  -->
+            <SolidColorBrush x:Key="EditorialRowPressedBrush" Color="#17500723" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
@@ -219,6 +220,8 @@
             <SolidColorBrush x:Key="EditorialStillNumberBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
             <x:Double x:Key="EditorialGlowOpacity">0</x:Double>
             <x:Double x:Key="EditorialSoftGlowOpacity">0</x:Double>
+            <!--  1.4.0 style  -->
+            <SolidColorBrush x:Key="EditorialRowPressedBrush" Color="{ThemeResource SystemColorWindowColor}" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
@@ -311,17 +314,17 @@
         <Setter Property="CharacterSpacing" Value="20" />
     </Style>
 
-    <!--  icon buttons as 44 px rounded squares (the owner: no circles, no oblong pills), on the shared roles  -->
-    <Style x:Key="EditorialIconButtonStyle" BasedOn="{StaticResource NixieIconButtonStyle}" TargetType="Button">
-        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
-    </Style>
-    <Style x:Key="EditorialIconToggleButtonStyle" BasedOn="{StaticResource NixieIconToggleButtonStyle}" TargetType="ToggleButton">
-        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
-    </Style>
+    <!--
+        1.4.0 style (the library UX review, X13): icon buttons are the system's 44 circles in every theme, Editorial too (its
+        rounded squares were the one exception, and the player's transport is round everywhere). The keys stay for its pages.
+    -->
+    <Style x:Key="EditorialIconButtonStyle" BasedOn="{StaticResource NixieIconButtonStyle}" TargetType="Button" />
+    <Style x:Key="EditorialIconToggleButtonStyle" BasedOn="{StaticResource NixieIconToggleButtonStyle}" TargetType="ToggleButton" />
 
     <!--
         the genre strip's tabs: big type, the text secondary; the lit one bright with the accent's tube under it (and its glow);
-        hover: the text bright and a faint line. Keyboard focus: WinUI's two rings (FocusVisualMargin keeps them off the text).
+        hover: the text bright (1.4.0: no faint line where the underline goes; hover and the lit tab differ in kind, not hue).
+        Keyboard focus: WinUI's two rings (FocusVisualMargin keeps them off the text).
     -->
     <Style x:Key="EditorialGenreTabStyle" TargetType="ec:EditorialTabButton">
         <Setter Property="Background" Value="Transparent" />
@@ -385,7 +388,6 @@
                                 <VisualState x:Name="PointerOver">
                                     <VisualState.Setters>
                                         <Setter Target="Label.Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
-                                        <Setter Target="HoverLine.Opacity" Value="1" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Pressed">
@@ -417,15 +419,19 @@
         </Setter>
     </Style>
 
-    <!--  a chip with a count: "Drama 84" (34 high, radius 8); picked: the accent's wash and a 1.5 px rim  -->
+    <!--
+        a genre chip with a count: "Drama 84", single-select. 1.4.0 style (E-m6): 32 high (the Compact size; 34 was a third
+        height), radius 8; picked: the neutral plate and its edge (never the accent, which marks only the current place), so it
+        never looks like a switch that is on (EditorialToggleChipStyle: its check glyph)
+    -->
     <Style x:Key="EditorialChipStyle" TargetType="ec:EditorialTabButton">
         <Setter Property="Background" Value="{ThemeResource EditorialChipFillBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource EditorialChipStrokeBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
         <Setter Property="Padding" Value="14,0" />
-        <Setter Property="MinHeight" Value="34" />
-        <Setter Property="Height" Value="34" />
+        <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+        <Setter Property="Height" Value="{StaticResource NixieCompactButtonHeight}" />
         <Setter Property="FontSize" Value="14" />
         <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
@@ -473,10 +479,10 @@
                                 <VisualState x:Name="Unselected" />
                                 <VisualState x:Name="Selected">
                                     <VisualState.Setters>
-                                        <Setter Target="Backplate.Background" Value="{ThemeResource EditorialChipSelectedFillBrush}" />
-                                        <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieAccentBrush}" />
+                                        <Setter Target="Backplate.Background" Value="{ThemeResource NixieChipSelectedFillBrush}" />
+                                        <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieChipSelectedBorderBrush}" />
                                         <Setter Target="Backplate.BorderThickness" Value="1.5" />
-                                        <Setter Target="Label.Foreground" Value="{ThemeResource EditorialChipSelectedTextBrush}" />
+                                        <Setter Target="Label.Foreground" Value="{ThemeResource NixieChipSelectedForegroundBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
@@ -487,86 +493,18 @@
         </Setter>
     </Style>
 
-    <!--  a chip that is a switch (Unwatched, Favourites): the same chip, its on state the picked chip's  -->
-    <Style x:Key="EditorialToggleChipStyle" TargetType="ToggleButton">
+    <!--
+        a chip that is a switch (Unwatched, Favourites). 1.4.0 style (E-m6): the shared switch chip (NixieChipToggleButtonStyle,
+        32, radius 8): on, its check glyph shows before the words over the neutral plate, so it never reads as a picked genre
+    -->
+    <Style
+        x:Key="EditorialToggleChipStyle"
+        BasedOn="{StaticResource NixieChipToggleButtonStyle}"
+        TargetType="ToggleButton">
         <Setter Property="Background" Value="{ThemeResource EditorialChipFillBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource EditorialChipStrokeBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
         <Setter Property="Padding" Value="14,0" />
-        <Setter Property="Height" Value="34" />
-        <Setter Property="FontSize" Value="14" />
-        <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
-        <Setter Property="UseSystemFocusVisuals" Value="True" />
-        <Setter Property="FocusVisualMargin" Value="-3" />
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ToggleButton">
-                    <Grid>
-                        <Border
-                            x:Name="Backplate"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{TemplateBinding CornerRadius}" />
-                        <Border x:Name="Overlay" Background="Transparent" CornerRadius="{TemplateBinding CornerRadius}" />
-                        <ContentPresenter
-                            x:Name="Label"
-                            Padding="{TemplateBinding Padding}"
-                            VerticalAlignment="Center"
-                            AutomationProperties.AccessibilityView="Raw"
-                            Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}"
-                            Foreground="{TemplateBinding Foreground}" />
-                        <VisualStateManager.VisualStateGroups>
-                            <VisualStateGroup x:Name="CommonStates">
-                                <VisualState x:Name="Normal" />
-                                <VisualState x:Name="PointerOver">
-                                    <VisualState.Setters>
-                                        <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Pressed">
-                                    <VisualState.Setters>
-                                        <Setter Target="Overlay.Background" Value="{ThemeResource NixiePressedOverlayBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Disabled">
-                                    <VisualState.Setters>
-                                        <Setter Target="Label.Foreground" Value="{ThemeResource NixieDisabledForegroundBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="Checked">
-                                    <VisualState.Setters>
-                                        <Setter Target="Backplate.Background" Value="{ThemeResource EditorialChipSelectedFillBrush}" />
-                                        <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieAccentBrush}" />
-                                        <Setter Target="Backplate.BorderThickness" Value="1.5" />
-                                        <Setter Target="Label.Foreground" Value="{ThemeResource EditorialChipSelectedTextBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="CheckedPointerOver">
-                                    <VisualState.Setters>
-                                        <Setter Target="Backplate.Background" Value="{ThemeResource EditorialChipSelectedFillBrush}" />
-                                        <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieAccentBrush}" />
-                                        <Setter Target="Backplate.BorderThickness" Value="1.5" />
-                                        <Setter Target="Label.Foreground" Value="{ThemeResource EditorialChipSelectedTextBrush}" />
-                                        <Setter Target="Overlay.Background" Value="{ThemeResource NixieHoverOverlayBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                                <VisualState x:Name="CheckedPressed">
-                                    <VisualState.Setters>
-                                        <Setter Target="Backplate.Background" Value="{ThemeResource EditorialChipSelectedFillBrush}" />
-                                        <Setter Target="Backplate.BorderBrush" Value="{ThemeResource NixieAccentBrush}" />
-                                        <Setter Target="Backplate.BorderThickness" Value="1.5" />
-                                        <Setter Target="Label.Foreground" Value="{ThemeResource EditorialChipSelectedTextBrush}" />
-                                    </VisualState.Setters>
-                                </VisualState>
-                            </VisualStateGroup>
-                        </VisualStateManager.VisualStateGroups>
-                    </Grid>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
     </Style>
 
     <!--

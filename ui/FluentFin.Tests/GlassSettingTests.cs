@@ -73,15 +73,15 @@ public sealed class GlassSettingTests
 	}
 
 	[Theory]
-	[InlineData("GlassPillButtonStyle")]
-	[InlineData("GlassAccentPillButtonStyle")]
-	[InlineData("GlassIconButtonStyle")]
+	[InlineData("NixieButtonStyle")]
+	[InlineData("NixiePrimaryButtonStyle")]
+	[InlineData("NixieIconButtonStyle")]
 	public void TheGlassButtons_KeepTheirKeys_AndDrawPointerOverAndPressedAsGlass(string key)
 	{
 		var xaml = GlassXaml();
 		Assert.Contains(xaml.Elements(), e => Key(e) == key);
 
-		// 1.2.0: the 1.1.x keys are aliases of the button system's; its glass buttons draw hover and pressed as glass overlays
+		// 1.4.0: the 1.1.x pill aliases are gone (the pages name these roles); the glass buttons draw hover and pressed as glass overlays
 		foreach (var name in new[] { "NixieButtonTemplate", "NixieIconButtonTemplate", "NixieSubtleButtonTemplate" })
 		{
 			var template = xaml.Elements().Single(e => Key(e) == name).ToString();

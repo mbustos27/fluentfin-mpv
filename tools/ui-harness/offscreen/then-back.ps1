@@ -69,7 +69,7 @@ Open-Nav 'Home'
 Start-Sleep -Milliseconds 2500
 [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0)
 Start-Sleep -Milliseconds 800
-$seeAll = Find-Ui -Name 'See all Continue Watching' -Type 'Button'
+$seeAll = Find-Ui -Name 'See all Continue Watching' -Type 'Hyperlink'
 if ($seeAll) {
     [void](Invoke-Element $seeAll)
     [void](Wait-Ui -Name 'Continue Watching' -Type 'List' -Seconds 10)
