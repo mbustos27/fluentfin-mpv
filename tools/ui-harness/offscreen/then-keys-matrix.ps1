@@ -470,7 +470,7 @@ if ($script:page -ne 'player') {
         if ($kbJump) {
             [void][OffscreenUi]::SetFocus($kbJump); Start-Sleep -Milliseconds 300
             [void](KM-Press 'Enter')
-            $kbLanded = Wait-Until { $f = KB-Focus; if ($f -and $f.name -match '^\s*C') { $f } } -Seconds 8 -PollMs 150
+            $kbLanded = Wait-Until { $f = KB-Focus; if ($f -and $f.name -match '^\s*((The|An)\s+)?C') { $f } } -Seconds 8 -PollMs 150
             KM-Row 'browsing' 'Library' 'letter jump (Enter on "Jump to C")' ([bool]$kbLanded) "to $script:kmLastTarget; $(KB-Desc (KB-Focus))"
         }
         else { KM-Row 'browsing' 'Library' 'letter jump (Enter on "Jump to C")' $false 'no "Jump to C"' }

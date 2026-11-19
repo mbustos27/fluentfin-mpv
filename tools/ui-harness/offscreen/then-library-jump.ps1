@@ -18,8 +18,9 @@ function Jf-Info {
 function Jf-Describe($f) { if ($f) { "{0} [{1} {2}] {3} of {4}" -f $f.Name, $f.Type, $f.Class, $f.Pos, $f.Size } else { 'no focus' } }
 function Jf-Press([int]$Vk, [int]$Ms = 700) { Key $Vk; Start-Sleep -Milliseconds $Ms }
 # the A-Z key of a title as the app makes it: its first letter without accents, A-Z, else '#'
+# Nixie 1.3.1: a title files under its sort name: Jellyfin (and the fake server) drop a leading "The" or "An"
 function Jf-Letter([string]$Name) {
-    $n = ($Name -split ',')[0].Trim().Normalize([Text.NormalizationForm]::FormD)
+    $n = (($Name -split ',')[0].Trim() -replace '^(The|An)\s+', '').Normalize([Text.NormalizationForm]::FormD)
     foreach ($ch in $n.ToCharArray()) {
         if ([Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch) -eq 'NonSpacingMark') { continue }
         $u = [char]::ToUpperInvariant($ch)

@@ -330,10 +330,12 @@ public sealed partial class CinematicLibraryPage : Page
 	{
 		focused ??= Stage.Current;
 		var parts = new List<string>();
-		var letter = ViewModel.SortBy == ItemSortBy.Name && !ViewModel.InPlaylistOrder && focused?.Name is { Length: > 0 } name ? char.ToUpperInvariant(name.TrimStart()[0]) : (char?)null;
+		// Nixie 1.3.1: the letter the title files under (its sort name), as the A-Z jump's
+		var letter = ViewModel.SortBy == ItemSortBy.Name && !ViewModel.InPlaylistOrder && focused is not null
+			? LibraryBrowse.LetterOf(string.IsNullOrWhiteSpace(focused.SortName) ? focused.Name : focused.SortName) : null;
 		if (letter is { } l)
 		{
-			parts.Add(char.IsLetter(l) ? l.ToString() : "#");
+			parts.Add(l);
 		}
 
 		if (!string.IsNullOrEmpty(ViewModel.CountText))
@@ -344,7 +346,7 @@ public sealed partial class CinematicLibraryPage : Page
 		parts.Add(ViewModel.InPlaylistOrder ? ViewModel.SortName
 			: $"{ViewModel.SortName}, {(ViewModel.Order == SortOrder.Ascending ? ViewModel.SortBy == ItemSortBy.Name ? "A to Z" : "low to high" : ViewModel.SortBy == ItemSortBy.Name ? "Z to A" : "high to low")}");
 		PlaceText.Text = string.Join(" · ", parts);
-		MarkLetter(letter is { } c ? (char.IsLetter(c) ? c.ToString() : "#") : null);
+		MarkLetter(letter);
 	}
 
 	/// <summary>The letter of the title in focus is underlined in the A-Z jump.</summary>

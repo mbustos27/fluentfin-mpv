@@ -633,7 +633,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 				GridScroller.UpdateLayout();
 			}
 			else if (index >= 0 && ByLetter && index < ViewModel.Items.Count
-				&& EditorialLibrary.SectionOf(_lines, LibraryBrowse.LetterOf(ViewModel.Items[index].Name)) is >= 0 and var section
+				&& EditorialLibrary.SectionOf(_lines, LibraryBrowse.LetterOf(LibraryBrowse.SortKey(ViewModel.Items[index]))) is >= 0 and var section
 				&& Lines.GetOrCreateElement(section) is FrameworkElement heading)
 			{
 				// the letter's section heading to the top, under the bar (it takes the heading's place there)

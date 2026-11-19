@@ -31,6 +31,25 @@ public sealed class LibraryViewModelTests
 		AssertOrder(vm, dtos, descending: true);
 	}
 
+	// Nixie 1.3.1 (the UX review's CL-M6): the name sort and the A-Z jump go by Jellyfin's sort name: "The Matrix" files under M
+	[Fact]
+	public async Task TheNameSort_AndTheLetters_GoBySortName()
+	{
+		var dtos = new[] { ("The Matrix", "matrix"), ("Alien", "alien"), ("Zodiac", "zodiac"), ("Brazil", "") }
+			.Select(t => new BaseItemDto { Id = Guid.NewGuid(), Name = t.Item1, SortName = t.Item2 == "" ? null : t.Item2 }).ToList();
+		var client = new Mock<IJellyfinClient>();
+		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = dtos });
+		var vm = new LibraryViewModel(client.Object);
+
+		await vm.OnNavigatedTo(new BaseItemDto());
+
+		Assert.Equal(["Alien", "Brazil", "The Matrix", "Zodiac"], vm.Items.Select(x => x.Name));
+		Assert.Equal(["A", "B", "M", "Z"], vm.Letters.Select(x => x.Letter));
+		Assert.Equal(2, vm.Letters.Single(x => x.Letter == "M").Index);
+		vm.UpdateSortOrder(SortOrder.Descending);
+		Assert.Equal(["Zodiac", "The Matrix", "Brazil", "Alien"], vm.Items.Select(x => x.Name));
+	}
+
 	// Nixie 1.3.1 (the UX review's B1): a playlist opens, and shows its items in the playlist's order
 	[Fact]
 	public void APlaylist_Opens_InTheLibraryPage()

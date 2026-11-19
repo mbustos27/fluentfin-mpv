@@ -61,7 +61,7 @@ $dtTile = Wait-Ui -Name 'Jump to C' -Type 'Button' -Seconds 10
 Check 'drive-in task 3: the letter board has its tiles' ([bool]$dtTile)
 if ($dtTile) {
     [void](Invoke-Element $dtTile)
-    $dtCard = Wait-Until { $f = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id); if ($f -and $f -match '"C') { $f } } -Seconds 10 -PollMs 150
+    $dtCard = Wait-Until { $f = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id); if ($f -and $f -match '"((The|An) )?C') { $f } } -Seconds 10 -PollMs 150
     Check 'drive-in task 3: one tile takes the focus to a title starting with C' ([bool]$dtCard) "$dtCard"
     $dtRest = Find-Ui -Name 'No titles start with' -Type 'Button' -Contains
     Check 'drive-in task 3: a letter with no titles rests (not a stop)' ((-not $dtRest) -or (-not $dtRest.Current.IsEnabled)) $(if ($dtRest) { $dtRest.Current.Name } else { 'every letter has titles' })

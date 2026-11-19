@@ -111,9 +111,9 @@ public static class EditorialLibrary
 		var start = 0;
 		while (start < items.Count)
 		{
-			var letter = LibraryBrowse.LetterOf(items[start].Name);
+			var letter = LibraryBrowse.LetterOf(LibraryBrowse.SortKey(items[start]));
 			var end = start + 1;
-			while (end < items.Count && LibraryBrowse.LetterOf(items[end].Name) == letter)
+			while (end < items.Count && LibraryBrowse.LetterOf(LibraryBrowse.SortKey(items[end])) == letter)
 			{
 				end++;
 			}

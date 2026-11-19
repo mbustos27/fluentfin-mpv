@@ -74,6 +74,12 @@ public static class LibraryBrowse
 	/// Greek, Armenian) is its own key in capitals (Брат: Б); a script without capitals has one key for all its titles
 	/// (Chinese, Japanese kana, Korean, Arabic, Hebrew, Thai, Devanagari: 漢, あ, 한, ع, א, ก, अ); a number or a sign is "#".
 	/// </summary>
+	/// <summary>
+	/// Nixie 1.3.1 (the UX review's CL-M6): what a title sorts and files under: Jellyfin's SortName ("Matrix" for "The
+	/// Matrix"; the server's own rules and the user's forced sort name), else its name.
+	/// </summary>
+	public static string SortKey(BaseItemViewModel item) => string.IsNullOrWhiteSpace(item.SortName) ? item.Name ?? "" : item.SortName;
+
 	public static string LetterOf(string? name)
 	{
 		if (string.IsNullOrWhiteSpace(name))
