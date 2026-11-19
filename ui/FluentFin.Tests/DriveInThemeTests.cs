@@ -67,7 +67,9 @@ public sealed class DriveInThemeTests
 		}
 
 		var shared = new[] { "TopBarStyle", "RowHeaderTemplate", "PosterTemplate", "StillTemplate", "PageHeaderStyle", "SignInBackdropTemplate",
-			"ThemeOptionsTemplate", "PlayerTopBarStyle", "PlayerBottomBarStyle", "TrailerFrameTemplate", "Default", "Light", "HighContrast" };
+			"ThemeOptionsTemplate", "PlayerTopBarStyle", "PlayerBottomBarStyle", "TrailerFrameTemplate", "Default", "Light", "HighContrast",
+			// Nixie 1.4.0: the shared pages' ground and the page grid (ThemeContract, Styles/PageGrid.xaml)
+			"PageGroundBrush", "PageGutterNarrow", "PageGutterWide", "PageTitleY", "PageTitleUppercase" };
 		Assert.All(keys.Except(shared), key => Assert.StartsWith("DriveIn", key));
 	}
 

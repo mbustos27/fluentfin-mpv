@@ -61,6 +61,24 @@ public static class ItemMeta
 
 	public static IReadOnlyList<string> Tags(BaseItemDto? dto) => Names(dto?.Tags);
 
+	/// <summary>
+	/// Nixie 1.4.0: the collections a film is part of, as the movie page's link says it: "Copper and Glass", "Copper and Glass
+	/// and Winter Films", "A, B and C"; "" when none.
+	/// </summary>
+	public static string PartOfText(IReadOnlyList<BaseItemDto>? collections)
+	{
+		var names = Names(collections?.Select(c => c.Name));
+		return names.Count switch
+		{
+			0 => "",
+			1 => names[0],
+			_ => $"{string.Join(", ", names.Take(names.Count - 1))} and {names[^1]}",
+		};
+	}
+
+	/// <summary>A "Part of" link for Narrator: "Part of the collection Copper and Glass".</summary>
+	public static string PartOfName(BaseItemDto? collection) => $"Part of the collection {collection?.Name?.Trim()}";
+
 	/// <summary>The first trailer link that is a web address, or null (anything else would be handed to the shell).</summary>
 	public static Uri? TrailerUrl(BaseItemDto? dto) =>
 		dto?.RemoteTrailers?.Select(t => Uri.TryCreate(t.Url?.Trim(), UriKind.Absolute, out var uri) ? uri : null)

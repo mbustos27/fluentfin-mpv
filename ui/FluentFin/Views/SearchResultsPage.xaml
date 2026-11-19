@@ -10,6 +10,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
+    Background="{ThemeResource PageGroundBrush}"
     mc:Ignorable="d">
 
     <!--
@@ -17,9 +18,11 @@
         grouped by type (movies, shows, episodes), the query in the title. Each group is one Tab stop (the cards' arrows move
         inside it), named for Narrator, its heading a level-2 heading. Loading, no results and a failed search: LoadStateView.
     -->
+    <!--  Nixie 1.4.0 (the UX review's plan item 13): on the theme's page grid (its gutter, its title y, its title style and ground)  -->
     <Grid
         x:Name="ResultsRoot"
-        Padding="{StaticResource MediumLeftTopRightBottomMargin}"
+        Padding="36,72,36,24"
+        lc:PageGrid.Apply="True"
         Background="Transparent"
         RowSpacing="16">
         <Grid.RowDefinitions>
@@ -29,10 +32,10 @@
 
         <TextBlock
             x:Name="ResultsTitle"
-            Margin="12,0,0,0"
             AutomationProperties.HeadingLevel="Level1"
-            Style="{StaticResource GlassPageTitleTextBlockStyle}"
-            Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+            AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+            Style="{StaticResource PageHeaderStyle}"
+            Text="{x:Bind lc:PageGrid.Title(ViewModel.Title), Mode=OneWay}"
             TextTrimming="CharacterEllipsis"
             TextWrapping="NoWrap" />
 
@@ -54,7 +57,6 @@
                     <DataTemplate x:DataType="vm:SearchResultGroup">
                         <StackPanel Spacing="12">
                             <TextBlock
-                                Margin="12,0,0,0"
                                 AutomationProperties.HeadingLevel="Level2"
                                 Style="{StaticResource GlassSectionTitleTextBlockStyle}"
                                 Text="{x:Bind Heading}" />

@@ -48,6 +48,8 @@ public sealed class PageRefreshTests
 	[InlineData(typeof(SeasonViewModel), true)]
 	[InlineData(typeof(SearchResultsViewModel), true)]
 	[InlineData(typeof(DiaryViewModel), true)]
+	[InlineData(typeof(CollectionViewModel), true)]
+	[InlineData(typeof(LibrariesLandingPageViewModel), true)]
 	[InlineData(typeof(SettingsViewModel), false)]
 	[InlineData(typeof(VideoPlayerViewModel), false)]
 	[InlineData(null, false)]

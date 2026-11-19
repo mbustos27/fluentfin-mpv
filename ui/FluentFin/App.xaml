@@ -14,6 +14,8 @@
                 <ResourceDictionary Source="/Styles/ImageEx.xaml" />
                 <ResourceDictionary Source="/Styles/Glass.xaml" />
                 <ResourceDictionary Source="/Styles/ItemPage.xaml" />
+                <!--  Nixie 1.4.0: the page grid's tokens (Classic's; each layout theme gives its own)  -->
+                <ResourceDictionary Source="/Styles/PageGrid.xaml" />
                 <ResourceDictionary Source="ms-appx:///DevWinUI/Themes/Generic.xaml" />
                 <!--  Nixie 1.3.0: the active layout theme's dictionary, put here at start-up and swapped on a switch (ThemeResources); last, so its keys win  -->
                 <themes:LayoutThemeSlot />

@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+    The Libraries page ("All libraries"). Nixie 1.4.0 (the UX review's plan item 10; X11, CL-M13, CL-p5, DI-M6, C-M13, E-M9):
+    one shared page skinned by the theme (its PageHeaderStyle title where its library puts its title, its gutter, its ground),
+    the media libraries first, then "Collections & playlists" in a group of their own; each tile its art, its name and what
+    it holds ("Movies · 320 · 97 unwatched"); the rows share the tiles evenly (no lone tile on a row of its own); loading,
+    empty and failed said, with Retry; each list named for Narrator.
+-->
 <Page
     x:Class="FluentFin.Views.LibrariesLandingPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -7,75 +14,111 @@
     xmlns:controls="using:FluentFin.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:lc="using:FluentFin.Controls"
     xmlns:local="using:FluentFin.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:root="using:FluentFin"
-    xmlns:ui="using:CommunityToolkit.WinUI"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
+    Background="{ThemeResource PageGroundBrush}"
     mc:Ignorable="d">
 
-    <Grid RowSpacing="20" Margin="36,40,36,40">
-    <Grid.RowDefinitions>
-        <RowDefinition Height="Auto" />
-        <RowDefinition Height="*" />
-    </Grid.RowDefinitions>
-    <TextBlock
-        AutomationProperties.HeadingLevel="Level1"
-        Style="{StaticResource GlassPageTitleTextBlockStyle}"
-        Text="Libraries" />
-    <ItemsView
-        Grid.Row="1"
-        IsItemInvokedEnabled="True"
-        ItemInvoked="ItemsView_ItemInvoked"
-        ItemsSource="{x:Bind ViewModel.Libraries, Mode=OneWay}"
-        SelectionMode="None">
-        <ItemsView.ItemTemplate>
-            <DataTemplate x:DataType="jm:BaseItemDto">
-                <!--  fluentfin-mpv: Narrator reads the library's name for the tile (ux-review A1)  -->
-                <ItemContainer AutomationProperties.Name="{x:Bind Name}">
-                    <!--
-                        1.2.0 (1.1.3 layout audit, item 23): the art alone has the corners, 16:9 and filled without stretching, and the
-                        name is a plain caption under it, as a poster's (it sat on a solid strip of its own, white in light)
-                    -->
-                    <Grid RowSpacing="8">
-                        <Grid.ContextFlyout>
-                            <MenuFlyout>
-                                <MenuFlyoutItem
-                                    Command="{x:Bind root:App.Commands.PinToSideBarCommand}"
-                                    CommandParameter="{x:Bind}"
-                                    Icon="{ui:FontIcon Glyph=&#xE718;}"
-                                    Text="Add to the top bar" />
-                            </MenuFlyout>
-                        </Grid.ContextFlyout>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <Grid CornerRadius="{StaticResource GlassCardCornerRadius}">
-                            <controls:LoadingImage
-                                Glyph="&#xEA8C;"
-                                Source="{x:Bind c:BaseItemDtoConverters.GetImage((jm:BaseItemDto), jm:ImageType.Primary, 270)}"
-                                Stretch="UniformToFill" />
-                        </Grid>
-                        <TextBlock
-                            Grid.Row="1"
-                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                            Style="{ThemeResource BodyStrongTextBlockStyle}"
-                            Text="{x:Bind Name}"
-                            TextTrimming="CharacterEllipsis" />
+    <Page.Resources>
+        <DataTemplate x:Key="LibraryTileTemplate" x:DataType="vm:LibraryTile">
+            <!--  Narrator reads what the tile shows: "Movies, 320 movies, 97 unwatched" (ux-review A1; the review's X17)  -->
+            <!--  the focus ring outside the tile, clear of the caption  -->
+            <ItemContainer
+                AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
+                CornerRadius="{StaticResource GlassCardCornerRadius}"
+                FocusVisualMargin="-4">
+                <!--
+                    1.2.0 (1.1.3 layout audit, item 23): the art alone has the corners, 16:9 and filled without stretching, and the
+                    name is a plain caption under it; 1.4.0: what the library holds beside the name
+                -->
+                <!--  1.4.0: no pin menu on a tile: every library is a tab of the bar (the pins are gone)  -->
+                <Grid RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid Background="{ThemeResource GlassInsetFillBrush}" CornerRadius="{StaticResource GlassCardCornerRadius}">
+                        <controls:LoadingImage
+                            Glyph="&#xEA8C;"
+                            Source="{x:Bind c:BaseItemDtoConverters.GetImage(Library, jm:ImageType.Primary, 270)}"
+                            Stretch="UniformToFill" />
                     </Grid>
-                </ItemContainer>
-            </DataTemplate>
-        </ItemsView.ItemTemplate>
-        <ItemsView.Layout>
-            <!--  tiles that fill the row and keep their shape (16:9 art at 320 x 180, the caption under it)  -->
-            <UniformGridLayout
-                ItemsStretch="Uniform"
-                MinColumnSpacing="16"
-                MinItemHeight="210"
-                MinItemWidth="320"
-                MinRowSpacing="24" />
-        </ItemsView.Layout>
-    </ItemsView>
-    </Grid>
+                    <TextBlock Grid.Row="1" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
+                        <Run
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                            Text="{x:Bind Name}" /><Run Foreground="{ThemeResource GlassTextSecondaryBrush}" Text="{x:Bind Detail, Mode=OneWay}" />
+                    </TextBlock>
+                </Grid>
+            </ItemContainer>
+        </DataTemplate>
+    </Page.Resources>
+
+    <ScrollView x:Name="PageScroller" HorizontalScrollMode="Disabled">
+        <StackPanel
+            x:Name="PageContent"
+            Padding="36,72,36,48"
+            lc:PageGrid.Apply="True"
+            Spacing="20">
+            <TextBlock
+                x:Name="TitleText"
+                AutomationProperties.HeadingLevel="Level1"
+                AutomationProperties.Name="Libraries"
+                Style="{StaticResource PageHeaderStyle}"
+                Text="{x:Bind lc:PageGrid.Title('Libraries')}" />
+
+            <ItemsView
+                x:Name="MediaView"
+                AutomationProperties.Name="Libraries"
+                IsItemInvokedEnabled="True"
+                ItemInvoked="ItemsView_ItemInvoked"
+                ItemTemplate="{StaticResource LibraryTileTemplate}"
+                ItemsSource="{x:Bind ViewModel.Media}"
+                SelectionMode="None">
+                <ItemsView.Layout>
+                    <UniformGridLayout
+                        x:Name="MediaLayout"
+                        ItemsStretch="None"
+                        MinColumnSpacing="16"
+                        MinItemHeight="210"
+                        MinItemWidth="320"
+                        MinRowSpacing="24" />
+                </ItemsView.Layout>
+            </ItemsView>
+
+            <!--  collections and playlists are not media libraries (the review's X3): a group of their own, after them  -->
+            <TextBlock
+                x:Name="CollectionsHeading"
+                Margin="0,12,0,0"
+                AutomationProperties.HeadingLevel="Level2"
+                Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                Text="Collections &amp; playlists"
+                Visibility="{x:Bind ViewModel.HasCollections, Mode=OneWay}" />
+            <ItemsView
+                x:Name="CollectionsView"
+                AutomationProperties.Name="Collections &amp; playlists"
+                IsItemInvokedEnabled="True"
+                ItemInvoked="ItemsView_ItemInvoked"
+                ItemTemplate="{StaticResource LibraryTileTemplate}"
+                ItemsSource="{x:Bind ViewModel.Collections}"
+                SelectionMode="None"
+                Visibility="{x:Bind ViewModel.HasCollections, Mode=OneWay}">
+                <ItemsView.Layout>
+                    <UniformGridLayout
+                        x:Name="CollectionsLayout"
+                        ItemsStretch="None"
+                        MinColumnSpacing="16"
+                        MinItemHeight="210"
+                        MinItemWidth="320"
+                        MinRowSpacing="24" />
+                </ItemsView.Layout>
+            </ItemsView>
+
+            <!--  loading, no libraries, or the views could not be read: said, with Retry  -->
+            <lc:LoadStateView ShowsLoading="True" State="{x:Bind ViewModel.State}" />
+        </StackPanel>
+    </ScrollView>
 </Page>

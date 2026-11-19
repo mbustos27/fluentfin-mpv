@@ -1,0 +1,358 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Nixie 1.4.0 (the UX review's plan item 1; X1, X2, CL-M4, CL-B1): the shared Collection page, one structure in every theme,
+    skinned by the theme's keys (PageHeaderStyle for the title, PosterTemplate for the cards, PageGroundBrush behind it, the
+    page grid's gutter and title y). A box set: its poster, its title, "6 films · 1979–2016 · 1 of 6 watched" with a progress
+    bar, a three-line overview (More), Play or Resume from the first film not watched in collection order (the one Primary),
+    Shuffle, the Watched and Favourite toggles; then Order (Collection, the server's DisplayOrder, by default) and Hide watched
+    over the films, each numbered in collection order. No genre filter, and an A to Z only from 30 items sorted by name. A
+    playlist opens here as an ordered list (its own order). Loading, empty and failed are worded (LoadStateView), with Retry.
+-->
+<Page
+    x:Class="FluentFin.Views.CollectionPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:ctkl="using:CommunityToolkit.Labs.WinUI"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:local="using:FluentFin.Views"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Page"
+    Background="{ThemeResource PageGroundBrush}"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <!--  the films' place in the collection's own order: a neutral square tab on the poster's corner (not the accent: X9)  -->
+        <Style x:Key="CollectionPositionStyle" TargetType="Border">
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Margin" Value="8" />
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="CornerRadius" Value="{StaticResource GlassChipCornerRadius}" />
+            <Setter Property="Background" Value="#E6141016" />
+            <Setter Property="BorderBrush" Value="#59FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+    </Page.Resources>
+
+    <Grid x:Name="CollectionRoot" Background="Transparent">
+        <ScrollView x:Name="PageScroller" HorizontalScrollMode="Disabled">
+            <StackPanel
+                x:Name="PageContent"
+                Padding="36,72,36,48"
+                lc:PageGrid.Apply="True"
+                Spacing="24">
+
+                <!--  the header: the poster, then the title, the summary and progress, the overview, the actions  -->
+                <Grid x:Name="Header" ColumnSpacing="32">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid
+                        x:Name="ArtFrame"
+                        Width="200"
+                        Height="300"
+                        VerticalAlignment="Top"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Background="{ThemeResource GlassInsetFillBrush}"
+                        CornerRadius="{StaticResource GlassCardCornerRadius}">
+                        <lc:LoadingImage
+                            Glyph="&#xE8F1;"
+                            Source="{x:Bind local:CollectionPage.Art(ViewModel.Collection), Mode=OneWay}"
+                            Stretch="UniformToFill" />
+                    </Grid>
+
+                    <StackPanel Grid.Column="1" MaxWidth="900" HorizontalAlignment="Left" Spacing="12">
+                        <TextBlock
+                            x:Name="TitleText"
+                            AutomationProperties.HeadingLevel="Level1"
+                            MaxLines="2"
+                            Style="{StaticResource PageHeaderStyle}"
+                            AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+                            Text="{x:Bind lc:PageGrid.Title(ViewModel.Title), Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="WrapWholeWords" />
+                        <StackPanel x:Name="SummaryBlock" Spacing="8" Visibility="{x:Bind local:CollectionPage.Shown(ViewModel.Summary), Mode=OneWay}">
+                            <TextBlock
+                                x:Name="SummaryText"
+                                AutomationProperties.LiveSetting="Polite"
+                                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="{x:Bind local:CollectionPage.KindAndSummary(ViewModel.Kind, ViewModel.Summary), Mode=OneWay}"
+                                TextWrapping="Wrap" />
+                            <!--  progress: the accent's third use (the one Primary, the current place, progress)  -->
+                            <ProgressBar
+                                x:Name="WatchedBar"
+                                Width="240"
+                                Height="4"
+                                HorizontalAlignment="Left"
+                                AutomationProperties.Name="{x:Bind local:CollectionPage.ProgressName(ViewModel.Progress), Mode=OneWay}"
+                                Foreground="{ThemeResource NixieAccentBrush}"
+                                Maximum="100"
+                                Value="{x:Bind ViewModel.Progress, Mode=OneWay}" />
+                        </StackPanel>
+                        <StackPanel Spacing="2" Visibility="{x:Bind local:CollectionPage.Shown(ViewModel.Overview), Mode=OneWay}">
+                            <TextBlock
+                                x:Name="OverviewText"
+                                MaxWidth="720"
+                                HorizontalAlignment="Left"
+                                Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                                IsTextTrimmedChanged="OverviewText_IsTextTrimmedChanged"
+                                LineHeight="22"
+                                MaxLines="3"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Text="{x:Bind ViewModel.Overview, Mode=OneWay}"
+                                TextTrimming="WordEllipsis"
+                                TextWrapping="Wrap" />
+                            <HyperlinkButton
+                                x:Name="MoreButton"
+                                Click="MoreButton_Click"
+                                Content="More"
+                                Style="{StaticResource NixieLinkButtonStyle}"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+
+                        <!--  one row of actions on the button roles: the one Primary, a Secondary, the icon toggles  -->
+                        <StackPanel
+                            x:Name="Actions"
+                            Margin="0,4,0,0"
+                            Orientation="Horizontal"
+                            Spacing="12"
+                            Visibility="{x:Bind local:CollectionPage.ActionsVisibility(ViewModel.State.Status), Mode=OneWay}">
+                            <Button
+                                x:Name="PlayButton"
+                                MaxWidth="440"
+                                AutomationProperties.Name="{x:Bind ViewModel.PlayName, Mode=OneWay}"
+                                Command="{x:Bind ViewModel.PlayCommand}"
+                                IsEnabled="{x:Bind ViewModel.CanPlay, Mode=OneWay}"
+                                Style="{StaticResource NixiePrimaryButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind ViewModel.PlayName, Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon FontSize="16" Glyph="&#xE768;" />
+                                    <TextBlock Text="{x:Bind ViewModel.PlayLabel, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="ShuffleButton"
+                                AutomationProperties.Name="Shuffle"
+                                Command="{x:Bind ViewModel.ShuffleCommand}"
+                                IsEnabled="{x:Bind ViewModel.CanPlay, Mode=OneWay}"
+                                Style="{StaticResource NixieButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind local:CollectionPage.ShuffleTip(ViewModel.Kind), Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon FontSize="16" Glyph="&#xE8B1;" />
+                                    <TextBlock Text="Shuffle" />
+                                </StackPanel>
+                            </Button>
+                            <ToggleButton
+                                x:Name="WatchedToggle"
+                                AutomationProperties.Name="{x:Bind local:CollectionPage.WatchedName(ViewModel.Kind), Mode=OneWay}"
+                                Click="WatchedToggle_Click"
+                                IsChecked="{x:Bind ViewModel.IsWatched, Mode=OneWay}"
+                                Style="{StaticResource NixieIconToggleButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind local:CollectionPage.WatchedName(ViewModel.Kind), Mode=OneWay}">
+                                <FontIcon Glyph="&#xE73E;" />
+                            </ToggleButton>
+                            <ToggleButton
+                                x:Name="FavoriteToggle"
+                                AutomationProperties.Name="Favourite"
+                                Click="FavoriteToggle_Click"
+                                IsChecked="{x:Bind ViewModel.IsFavorite, Mode=OneWay}"
+                                Style="{StaticResource NixieIconToggleButtonStyle}"
+                                ToolTipService.ToolTip="Favourite">
+                                <FontIcon Glyph="&#xEB51;" />
+                            </ToggleButton>
+                        </StackPanel>
+
+                        <!--  loading: the summary, the overview and the actions as placeholders in their places  -->
+                        <StackPanel x:Name="HeaderSkeleton" Spacing="12" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.State.IsLoading), Mode=OneWay}">
+                            <ctkl:Shimmer Width="320" Height="20" HorizontalAlignment="Left" CornerRadius="4" />
+                            <ctkl:Shimmer Width="560" Height="56" HorizontalAlignment="Left" CornerRadius="4" />
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <ctkl:Shimmer Width="200" Height="44" CornerRadius="{StaticResource GlassButtonCornerRadius}" />
+                                <ctkl:Shimmer Width="120" Height="44" CornerRadius="{StaticResource GlassButtonCornerRadius}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!--  the toolbar over the films: what is shown on the left; Order and Hide watched on the right, at the grid's right edge  -->
+                <Grid
+                    x:Name="Toolbar"
+                    ColumnSpacing="12"
+                    Visibility="{x:Bind local:CollectionPage.ToolbarVisibility(ViewModel.State.Status), Mode=OneWay}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        x:Name="ShownText"
+                        VerticalAlignment="Center"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                        Text="{x:Bind ViewModel.ShownText, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis" />
+                    <CheckBox
+                        x:Name="HideWatchedBox"
+                        Grid.Column="1"
+                        MinHeight="32"
+                        VerticalAlignment="Center"
+                        Content="Hide watched"
+                        IsChecked="{x:Bind ViewModel.HideWatched, Mode=TwoWay}" />
+                    <Button
+                        x:Name="OrderButton"
+                        Grid.Column="2"
+                        MinWidth="180"
+                        AutomationProperties.Name="{x:Bind ViewModel.OrderButtonName, Mode=OneWay}"
+                        Style="{StaticResource NixieCompactButtonStyle}"
+                        ToolTipService.ToolTip="Order">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="14" Glyph="&#xE8CB;" />
+                            <TextBlock Text="{x:Bind ViewModel.OrderLabel, Mode=OneWay}" />
+                            <FontIcon FontSize="10" Glyph="&#xE70D;" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <MenuFlyout x:Name="OrderMenu" Placement="BottomEdgeAlignedRight">
+                                <RadioMenuFlyoutItem
+                                    x:Name="OrderCollection"
+                                    Click="Order_Click"
+                                    GroupName="Collection_Order"
+                                    IsChecked="{x:Bind local:CollectionPage.Is(ViewModel.Order, vm:CollectionOrder.Collection), Mode=OneWay}"
+                                    Tag="Collection"
+                                    Text="{x:Bind local:CollectionPage.OwnOrderText(ViewModel.Kind), Mode=OneWay}" />
+                                <RadioMenuFlyoutItem
+                                    Click="Order_Click"
+                                    GroupName="Collection_Order"
+                                    IsChecked="{x:Bind local:CollectionPage.Is(ViewModel.Order, vm:CollectionOrder.ReleaseDate), Mode=OneWay}"
+                                    Tag="ReleaseDate"
+                                    Text="Release date" />
+                                <RadioMenuFlyoutItem
+                                    Click="Order_Click"
+                                    GroupName="Collection_Order"
+                                    IsChecked="{x:Bind local:CollectionPage.Is(ViewModel.Order, vm:CollectionOrder.Name), Mode=OneWay}"
+                                    Tag="Name"
+                                    Text="Name" />
+                                <RadioMenuFlyoutItem
+                                    Click="Order_Click"
+                                    GroupName="Collection_Order"
+                                    IsChecked="{x:Bind local:CollectionPage.Is(ViewModel.Order, vm:CollectionOrder.DateAdded), Mode=OneWay}"
+                                    Tag="DateAdded"
+                                    Text="Date added" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+
+                <!--  the A to Z: only from 30 items sorted by name (a jump list is for sets too big to scan)  -->
+                <lc:RowList
+                    x:Name="LetterList"
+                    HorizontalContentAlignment="Stretch"
+                    AutomationProperties.Name="Jump to a letter"
+                    TabFocusNavigation="Once"
+                    Visibility="{x:Bind local:CollectionPage.LettersVisibility(ViewModel.Letters), Mode=OneWay}"
+                    XYFocusKeyboardNavigation="Enabled">
+                    <ItemsRepeater x:Name="LetterRepeater" ItemsSource="{x:Bind ViewModel.Letters, Mode=OneWay}">
+                        <ItemsRepeater.Layout>
+                            <StackLayout Orientation="Horizontal" Spacing="4" />
+                        </ItemsRepeater.Layout>
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="vm:LetterJump">
+                                <Button
+                                    Width="32"
+                                    Height="32"
+                                    MinWidth="0"
+                                    Padding="0"
+                                    AutomationProperties.Name="{x:Bind Name}"
+                                    Click="Letter_Click"
+                                    Content="{x:Bind Letter}"
+                                    Style="{StaticResource NixieSubtleButtonStyle}"
+                                    Tag="{x:Bind}" />
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
+                </lc:RowList>
+
+                <!--  the films, as the theme's posters, numbered in collection order; one Tab stop, arrows inside  -->
+                <Grid>
+                    <lc:RowList
+                        x:Name="GridList"
+                        HorizontalContentAlignment="Stretch"
+                        AutomationProperties.Name="{x:Bind local:CollectionPage.ListName(ViewModel.Title, ViewModel.Kind), Mode=OneWay}"
+                        TabFocusNavigation="Once"
+                        XYFocusKeyboardNavigation="Enabled">
+                        <ItemsRepeater x:Name="GridRepeater" ItemsSource="{x:Bind ViewModel.Entries, Mode=OneWay}">
+                            <!--  the columns fill the row: the last one ends at the toolbar's right edge (CollectionPage.LayoutGrid sets the spacing)  -->
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout
+                                    x:Name="GridLayout"
+                                    ItemsJustification="Start"
+                                    ItemsStretch="None"
+                                    MinColumnSpacing="16"
+                                    MinRowSpacing="24"
+                                    Orientation="Horizontal" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="vm:CollectionEntry">
+                                    <Grid>
+                                        <ContentPresenter Content="{x:Bind Item}" ContentTemplate="{StaticResource PosterTemplate}" />
+                                        <Border AutomationProperties.AccessibilityView="Raw" Style="{StaticResource CollectionPositionStyle}" Visibility="{x:Bind ShowsPosition}">
+                                            <TextBlock
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                FontSize="13"
+                                                FontWeight="SemiBold"
+                                                Foreground="White"
+                                                Text="{x:Bind PositionText}" />
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </lc:RowList>
+
+                    <!--  loading: posters' placeholders in the grid's place  -->
+                    <ItemsRepeater x:Name="GridSkeleton" ItemsSource="{x:Bind c:Converters.GetDummyItemSource(6)}" Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.State.IsLoading), Mode=OneWay}">
+                        <ItemsRepeater.Layout>
+                            <UniformGridLayout
+                                ItemsJustification="Start"
+                                MinColumnSpacing="16"
+                                MinItemHeight="330"
+                                MinItemWidth="200"
+                                MinRowSpacing="24"
+                                Orientation="Horizontal" />
+                        </ItemsRepeater.Layout>
+                        <DataTemplate>
+                            <ctkl:Shimmer Width="200" Height="300" VerticalAlignment="Top" CornerRadius="{StaticResource GlassCardCornerRadius}" />
+                        </DataTemplate>
+                    </ItemsRepeater>
+
+                    <!--  Hide watched left nothing: said, with the way back  -->
+                    <StackPanel
+                        x:Name="AllHiddenPanel"
+                        Margin="0,24,0,0"
+                        HorizontalAlignment="Left"
+                        Spacing="12"
+                        Visibility="{x:Bind local:CollectionPage.Shown(ViewModel.AllHiddenText), Mode=OneWay}">
+                        <TextBlock Style="{StaticResource GlassSectionTitleTextBlockStyle}" Text="{x:Bind ViewModel.AllHiddenText, Mode=OneWay}" />
+                        <Button
+                            HorizontalAlignment="Left"
+                            Command="{x:Bind ViewModel.ShowWatchedCommand}"
+                            Content="Show watched"
+                            Style="{StaticResource NixieCompactButtonStyle}" />
+                    </StackPanel>
+
+                    <!--  failed or empty: worded, with Retry  -->
+                    <lc:LoadStateView State="{x:Bind ViewModel.State}" VerticalContentAlignment="Top" />
+                </Grid>
+            </StackPanel>
+        </ScrollView>
+    </Grid>
+</Page>

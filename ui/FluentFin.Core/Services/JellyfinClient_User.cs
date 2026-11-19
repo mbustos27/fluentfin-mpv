@@ -110,6 +110,26 @@ public partial class JellyfinClient
 		return await views ?? [];
 	}
 
+	public async Task<IReadOnlyList<BaseItemDto>?> GetUserViewsOrNull()
+	{
+		var views = await GetUserViews();
+		if (views.Count > 0)
+		{
+			return views;
+		}
+
+		// none: an empty server, or a read that failed (GetUserViews answers both with none); asked once more to tell them apart
+		// (and kept, as GetUserViews keeps its answer)
+		Task<IReadOnlyList<BaseItemDto>?> again;
+		lock (_userViewsLock)
+		{
+			_userViewsReadAt = Time.GetTimestamp();
+			_userViews = again = ReadUserViews();
+		}
+
+		return await again;
+	}
+
 	internal void ForgetUserViews()
 	{
 		lock (_userViewsLock)

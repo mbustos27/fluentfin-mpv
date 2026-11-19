@@ -22,7 +22,8 @@ public sealed class HomeViewModelTests : IDisposable
 	private static readonly BaseItemDto Music = View("Music", BaseItemDto_CollectionType.Music);
 	private static readonly BaseItemDto Shows = View("Shows", BaseItemDto_CollectionType.Tvshows);
 	private static readonly BaseItemDto Kids = View("Kids", BaseItemDto_CollectionType.Movies);
-	private static readonly BaseItemDto Collections = View("Collections", BaseItemDto_CollectionType.Boxsets);
+	private static readonly BaseItemDto HomeVideos = View("Home videos", BaseItemDto_CollectionType.Homevideos);
+	private static readonly BaseItemDto BoxSets = View("Collections", BaseItemDto_CollectionType.Boxsets); // 1.4.0: no "New in Collections" row, never asked for
 
 	private readonly Mock<IJellyfinClient> _client = new();
 	private readonly TaskCompletionSource<BaseItemDtoQueryResult?> _continue = new();
@@ -41,8 +42,8 @@ public sealed class HomeViewModelTests : IDisposable
 		_client.SetupGet(x => x.UserId).Returns(Guid.Parse("cccccccc-0000-0000-0000-000000000001"));
 		_client.Setup(x => x.GetContinueWatching()).Returns(_continue.Task);
 		_client.Setup(x => x.GetNextUp()).Returns(_nextUp.Task);
-		_client.Setup(x => x.GetUserViews()).ReturnsAsync([Movies, Music, Shows, Kids, Collections]);
-		foreach (var view in new[] { Movies, Music, Shows, Kids, Collections })
+		_client.Setup(x => x.GetUserViews()).ReturnsAsync([Movies, Music, Shows, Kids, HomeVideos, BoxSets]);
+		foreach (var view in new[] { Movies, Music, Shows, Kids, HomeVideos, BoxSets })
 		{
 			_latest[view.Id!.Value] = new();
 		}
@@ -68,7 +69,7 @@ public sealed class HomeViewModelTests : IDisposable
 		_latest[Movies.Id!.Value].TrySetResult([Item("Movie 1")]);
 		_latest[Shows.Id!.Value].TrySetResult(null);
 		_latest[Kids.Id!.Value].TrySetResult([Item("Kid 1")]);
-		_latest[Collections.Id!.Value].TrySetResult([]);
+		_latest[HomeVideos.Id!.Value].TrySetResult([]);
 	}
 
 	[Fact]
@@ -114,7 +115,7 @@ public sealed class HomeViewModelTests : IDisposable
 				[Item("Half watched", A), Item("Other", B)],
 				[Item("Next episode", C)],
 				[new HomeSnapshotRow(Movies, [Item("Movie 1", D)]), new HomeSnapshotRow(Shows, [Item("Show 1", E)]), new HomeSnapshotRow(Kids, [Item("Kid 1", F)])],
-				[Collections.Id!.Value]), 0);
+				[HomeVideos.Id!.Value]), 0);
 		}
 
 		using var ui = new UiThread();
@@ -123,7 +124,7 @@ public sealed class HomeViewModelTests : IDisposable
 		var navigation = ui.Run(() => home.OnNavigatedTo(null!));
 		Assert.True(SpinWait.SpinUntil(() => { lock (_latestAsked) { return _latestAsked.Count == 4; } }, TimeSpan.FromSeconds(5)));
 
-		// before any answer: the saved page, every row asked for again, and no placeholder for Collections, which had
+		// before any answer: the saved page, every row asked for again, and no placeholder for Home videos, which had
 		// nothing recent last time (a row that came and went would move the rows below it)
 		var (continueShown, moviesShown) = await ui.Invoke(() =>
 		{
@@ -142,7 +143,7 @@ public sealed class HomeViewModelTests : IDisposable
 			_latest[Movies.Id!.Value].SetResult([Item("Movie 1", D)]);                                               // as saved
 			_latest[Shows.Id!.Value].SetResult(null);                                                                // failed
 			_latest[Kids.Id!.Value].SetResult([]);                                                                    // nothing now
-			_latest[Collections.Id!.Value].SetResult([Item("Boxset 1")]);                                           // something now
+			_latest[HomeVideos.Id!.Value].SetResult([Item("Boxset 1")]);                                           // something now
 			return 0;
 		});
 		await navigation;
@@ -151,7 +152,7 @@ public sealed class HomeViewModelTests : IDisposable
 		{
 			Assert.Same(continueShown, home.ContinueItems);
 			Assert.Equal(["Episode after"], home.NextUpItems.Select(x => x.Dto.Name));
-			Assert.Equal(["Movies", "Shows", "Collections"], home.RecentItems.Select(x => x.Library.Name));
+			Assert.Equal(["Movies", "Shows", "Home videos"], home.RecentItems.Select(x => x.Library.Name));
 			Assert.Equal(["Boxset 1"], home.RecentItems[2].Items.Select(x => x.Dto.Name));
 			Assert.Same(moviesShown, home.RecentItems[0].Items);
 			Assert.Equal(["Show 1"], home.RecentItems[1].Items.Select(x => x.Dto.Name));
@@ -163,7 +164,7 @@ public sealed class HomeViewModelTests : IDisposable
 		var next = await cache.Get(_client.Object.BaseUrl, _client.Object.UserId);
 		Assert.True(next.IsFresh);
 		Assert.Equal(["Episode after"], next.Snapshot!.NextUpItems.Select(x => x.Name));
-		Assert.Equal(["Movies", "Shows", "Collections"], next.Snapshot.Rows.Select(x => x.Library.Name));
+		Assert.Equal(["Movies", "Shows", "Home videos"], next.Snapshot.Rows.Select(x => x.Library.Name));
 		Assert.Equal([Kids.Id!.Value], next.Snapshot.EmptyLibraries);
 	}
 
@@ -179,15 +180,15 @@ public sealed class HomeViewModelTests : IDisposable
 		Assert.True(home.IsLoading);
 		Assert.True(home.IsContinueLoading);
 		Assert.True(home.IsNextUpLoading);
-		Assert.Equal(["Movies", "Shows", "Kids", "Collections"], home.RecentItems.Select(x => x.Library.Name));
+		Assert.Equal(["Movies", "Shows", "Kids", "Home videos"], home.RecentItems.Select(x => x.Library.Name));
 		Assert.All(home.RecentItems, x => Assert.True(x.IsLoading));
-		Assert.Equal(["Movies", "Shows", "Kids", "Collections"], _latestAsked);
+		Assert.Equal(["Movies", "Shows", "Kids", "Home videos"], _latestAsked);
 		_client.Verify(x => x.GetContinueWatching(), Times.Once);
 		_client.Verify(x => x.GetNextUp(), Times.Once);
 
 		// the third row answers first: it shows, the rows above it stay placeholders in their places
 		_latest[Kids.Id!.Value].SetResult([Item("Kid 1"), Item("Kid 2")]);
-		Assert.Equal(["Movies", "Shows", "Kids", "Collections"], home.RecentItems.Select(x => x.Library.Name));
+		Assert.Equal(["Movies", "Shows", "Kids", "Home videos"], home.RecentItems.Select(x => x.Library.Name));
 		var kids = home.RecentItems[2];
 		Assert.False(kids.IsLoading);
 		Assert.Equal(["Kid 1", "Kid 2"], kids.Items.Select(x => x.Dto.Name));
@@ -195,7 +196,7 @@ public sealed class HomeViewModelTests : IDisposable
 		Assert.True(home.RecentItems[1].IsLoading);
 
 		// nothing recent, or a failed request: the row goes
-		_latest[Collections.Id!.Value].SetResult([]);
+		_latest[HomeVideos.Id!.Value].SetResult([]);
 		_latest[Shows.Id!.Value].SetResult(null);
 		Assert.Equal(["Movies", "Kids"], home.RecentItems.Select(x => x.Library.Name));
 
@@ -409,7 +410,7 @@ public sealed class HomeViewModelTests : IDisposable
 	}
 
 	// the saved pages here have a Movies row only; the other libraries had nothing recent (no placeholder rows for them)
-	private static readonly Guid[] OtherLibraries = [Shows.Id!.Value, Kids.Id!.Value, Collections.Id!.Value];
+	private static readonly Guid[] OtherLibraries = [Shows.Id!.Value, Kids.Id!.Value, HomeVideos.Id!.Value];
 
 	private static BaseItemDto Tagged(BaseItemDto item, string tag)
 	{

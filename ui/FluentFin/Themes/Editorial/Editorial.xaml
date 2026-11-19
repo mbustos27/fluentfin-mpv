@@ -23,6 +23,8 @@
         <ResourceDictionary x:Key="Dark">
             <!--  the page's ground: the concept's night (#160610), opaque (content; the window's backdrop does not show through)  -->
             <SolidColorBrush x:Key="EditorialGroundBrush" Color="#160610" />
+            <!--  1.4.0 shared: the ground of the shared pages (a collection, Libraries, Search, Settings)  -->
+            <StaticResource x:Key="PageGroundBrush" ResourceKey="EditorialGroundBrush" />
             <Color x:Key="EditorialGroundColor">#160610</Color>
             <!--  the top bar's night tint over the shared glass: the concept's denser bar  -->
             <SolidColorBrush x:Key="EditorialTopBarTintBrush" Color="#8C160610" />
@@ -114,6 +116,8 @@
         <ResourceDictionary x:Key="Light">
             <!--  "noon": a pale peach ground, deep maroon text; numbers and kickers in deep sunset colours (4.5:1 or more)  -->
             <SolidColorBrush x:Key="EditorialGroundBrush" Color="#FFF6F3" />
+            <!--  1.4.0 shared: the ground of the shared pages (a collection, Libraries, Search, Settings)  -->
+            <StaticResource x:Key="PageGroundBrush" ResourceKey="EditorialGroundBrush" />
             <Color x:Key="EditorialGroundColor">#FFF6F3</Color>
             <SolidColorBrush x:Key="EditorialTopBarTintBrush" Color="#8CFFF6F3" />
             <LinearGradientBrush x:Key="EditorialItemScrimBrush" StartPoint="0,0" EndPoint="1,0">
@@ -190,6 +194,8 @@
 
         <ResourceDictionary x:Key="HighContrast">
             <SolidColorBrush x:Key="EditorialGroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+            <!--  1.4.0 shared: the ground of the shared pages (a collection, Libraries, Search, Settings)  -->
+            <SolidColorBrush x:Key="PageGroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
             <StaticResource x:Key="EditorialGroundColor" ResourceKey="SystemColorWindowColor" />
             <SolidColorBrush x:Key="EditorialTopBarTintBrush" Color="Transparent" />
             <SolidColorBrush x:Key="EditorialItemScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
@@ -666,5 +672,13 @@
             </Grid>
         </Border>
     </ControlTemplate>
+
+    <!--  1.4.0 shared: the page grid (Controls.PageGrid, Styles/PageGrid.xaml): the gutter at a 1100 and a 1920 px window, and a page title's y  -->
+    <x:Double x:Key="PageGutterNarrow">40</x:Double>
+    <x:Double x:Key="PageGutterWide">56</x:Double>
+    <x:Double x:Key="PageTitleY">56</x:Double>
+    <!--  the shared pages' titles in capitals, as the big type's title is on the library  -->
+    <x:Boolean x:Key="PageTitleUppercase">True</x:Boolean>
+    <!--  /1.4.0 shared  -->
 
 </ResourceDictionary>

@@ -22,6 +22,10 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 	[ObservableProperty]
 	public partial ObservableCollection<BaseItemViewModel> Similar { get; set; }
 
+	/// <summary>Nixie 1.4.0: the collections the film is part of, for "Part of: Copper and Glass" (Controls.PartOfLink); none on an older server.</summary>
+	[ObservableProperty]
+	public partial IReadOnlyList<BaseItemDto> PartOf { get; set; } = [];
+
 	[ObservableProperty]
 	public partial IList<MediaStream> AudioStreams { get; set; }
 
@@ -113,7 +117,7 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 				return LoadMessages.CouldNotLoad("this movie");
 			}
 
-			await UpdateSimilar(dto);
+			await Task.WhenAll(UpdateSimilar(dto), UpdatePartOf(id));
 			return LoadOutcome.Loaded;
 		});
 	}
@@ -159,6 +163,8 @@ public partial class MovieViewModel(IJellyfinClient jellyfinClient, GlobalComman
 
 		_streamsPreselected = true;
 	}
+
+	private async Task UpdatePartOf(Guid id) => PartOf = await (JellyfinClient.GetItemCollections(id) ?? Task.FromResult<IReadOnlyList<BaseItemDto>>([])) ?? [];
 
 	private async Task UpdateSimilar(BaseItemDto dto)
 	{

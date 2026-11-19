@@ -298,7 +298,12 @@ function Open-Library([string]$Name) {
     Open-Nav 'Home'
     Start-Sleep -Milliseconds 300
     Open-Nav 'Libraries'
-    $tile = Wait-Until { [OffscreenUi]::FindByNameAndClass($script:hwnd, $script:ui.Id, $Name, 'Microsoft.UI.Xaml.Controls.ItemContainer') } -Seconds 15 -PollMs 200
+    # (Nixie 1.4.0: a tile is named with what the library holds, "Movies, 320 movies, 97 unwatched", once its counts are in)
+    $tile = Wait-Until {
+        $t = [OffscreenUi]::FindByNameAndClass($script:hwnd, $script:ui.Id, $Name, 'Microsoft.UI.Xaml.Controls.ItemContainer')
+        if (-not $t) { $t = Find-Ui -Name "$Name, " -Type 'ListItem' -Contains; if ($t -and -not $t.Current.Name.StartsWith("$Name, ")) { $t = $null } }
+        $t
+    } -Seconds 15 -PollMs 200
     if ($tile) { Say "library '$Name' ($(Invoke-Element $tile))"; $script:page = "library:$Name"; return }
     throw "no library '$Name'"
 }

@@ -1,0 +1,217 @@
+using System.Globalization;
+using Jellyfin.Sdk.Generated.Models;
+
+namespace FluentFin.Core.ViewModels;
+
+/// <summary>Nixie 1.4.0: the orders a collection or a playlist can be shown in (its own first).</summary>
+public enum CollectionOrder
+{
+	/// <summary>The collection's own order: a box set's DisplayOrder (release date when unset), a playlist's as the server keeps it.</summary>
+	Collection,
+	ReleaseDate,
+	Name,
+	DateAdded,
+}
+
+/// <summary>What Play does on a collection page: the film it starts, and whether it resumes it or starts it again.</summary>
+public readonly record struct CollectionNext(BaseItemDto? Item, int Position, bool Resume, bool Again);
+
+/// <summary>
+/// Nixie 1.4.0 (the UX review's plan item 1; X1, CL-M4): what the shared Collection page says and does, apart from the page so
+/// it can be tested: the collection's own order (the server's DisplayOrder, release date when unset), its summary line
+/// ("6 films · 1979–2016 · 1 of 6 watched"), the film Play starts (the first unwatched in collection order) and the words of
+/// its buttons.
+/// </summary>
+public static class CollectionBrowse
+{
+	/// <summary>Fewer items than this and the page has no A to Z (a jump list is for sets too big to scan).</summary>
+	public const int LettersFrom = 30;
+
+	/// <summary>
+	/// The order a box set asks for: Jellyfin's BoxSet DisplayOrder is "SortName" (by name) or "PremiereDate" (by release
+	/// date, its default); anything else or nothing is release date, as Infuse and jellyfin-web fall back to.
+	/// </summary>
+	public static CollectionOrder OwnOrder(string? displayOrder) =>
+		displayOrder?.Trim().ToLowerInvariant() is "sortname" or "name" ? CollectionOrder.Name : CollectionOrder.ReleaseDate;
+
+	/// <summary>
+	/// The items in <paramref name="order"/>. <paramref name="serverOrder"/> is the order the server gave them in (a playlist's
+	/// own); a box set's own order is its DisplayOrder's.
+	/// </summary>
+	public static IReadOnlyList<BaseItemDto> Ordered(IReadOnlyList<BaseItemDto> serverOrder, CollectionOrder order, bool playlist, string? displayOrder)
+	{
+		var places = serverOrder.Select((item, i) => (item, i)).ToDictionary(x => x.item, x => x.i, ReferenceEqualityComparer.Instance);
+		int Place(BaseItemDto item) => places.TryGetValue(item, out var i) ? i : int.MaxValue;
+
+		if (order == CollectionOrder.Collection && !playlist && displayOrder == TrackOrder)
+		{
+			return [.. serverOrder.OrderBy(x => x.ParentIndexNumber ?? 0).ThenBy(x => x.IndexNumber ?? int.MaxValue).ThenBy(Place)];
+		}
+
+		var effective = order == CollectionOrder.Collection && !playlist ? OwnOrder(displayOrder) : order;
+		IEnumerable<BaseItemDto> sorted = effective switch
+		{
+			CollectionOrder.Collection => serverOrder.OrderBy(Place),
+			CollectionOrder.ReleaseDate => serverOrder.OrderBy(ReleaseKey).ThenBy(SortKey, StringComparer.CurrentCultureIgnoreCase).ThenBy(Place),
+			CollectionOrder.Name => serverOrder.OrderBy(SortKey, StringComparer.CurrentCultureIgnoreCase).ThenBy(Place),
+			CollectionOrder.DateAdded => serverOrder.OrderByDescending(x => x.DateCreated ?? DateTimeOffset.MinValue).ThenBy(Place),
+			_ => serverOrder,
+		};
+		return [.. sorted];
+	}
+
+	/// <summary>When a film came out: its premiere date, else 1 January of its year; undated films last.</summary>
+	public static DateTimeOffset ReleaseKey(BaseItemDto item) =>
+		item.PremiereDate ?? (item.ProductionYear is int year and > 0 ? new DateTimeOffset(year, 1, 1, 0, 0, 0, TimeSpan.Zero) : DateTimeOffset.MaxValue);
+
+	/// <summary>What a title sorts under: the server's SortName ("Matrix" for "The Matrix"), else its name.</summary>
+	public static string SortKey(BaseItemDto item) => string.IsNullOrWhiteSpace(item.SortName) ? item.Name ?? "" : item.SortName;
+
+	public static bool IsWatched(BaseItemDto item) => item.UserData?.Played == true;
+
+	/// <summary>
+	/// What Play and Shuffle can start: a film, an episode, a show, a video; not a collection inside the collection, a folder or
+	/// a playlist (the player has nothing to queue for them: they open their own page instead).
+	/// </summary>
+	public static bool IsPlayable(BaseItemDto item) =>
+		item.Type is BaseItemDto_Type.Movie or BaseItemDto_Type.Episode or BaseItemDto_Type.Series or BaseItemDto_Type.Season
+			or BaseItemDto_Type.Trailer;
+
+	/// <summary>The display order an album keeps: its discs and tracks.</summary>
+	public const string TrackOrder = "IndexNumber";
+
+	/// <summary>"Collection", "Playlist" or "Album": what the page is (its eyebrow, the list's name, the empty state).</summary>
+	public static string KindOf(BaseItemDto? collection) => collection?.Type switch
+	{
+		BaseItemDto_Type.Playlist => "Playlist",
+		BaseItemDto_Type.MusicAlbum or BaseItemDto_Type.PhotoAlbum => "Album",
+		_ => "Collection",
+	};
+
+	/// <summary>The noun for the items: "film"/"films" for films, "show", "episode", else "item".</summary>
+	public static (string One, string Many) Noun(IReadOnlyList<BaseItemDto> items)
+	{
+		var types = items.Select(x => x.Type).Distinct().ToList();
+		return types.Count != 1 ? ("item", "items") : types[0] switch
+		{
+			BaseItemDto_Type.Movie => ("film", "films"),
+			BaseItemDto_Type.Series => ("show", "shows"),
+			BaseItemDto_Type.Episode => ("episode", "episodes"),
+			BaseItemDto_Type.MusicVideo => ("music video", "music videos"),
+			BaseItemDto_Type.Audio => ("song", "songs"),
+			_ => ("item", "items"),
+		};
+	}
+
+	public static string Count(int n, (string One, string Many) noun) => $"{n.ToString("N0", CultureInfo.CurrentCulture)} {(n == 1 ? noun.One : noun.Many)}";
+
+	/// <summary>"1979–2016", "1979" for one year, "" when no item has a year.</summary>
+	public static string YearSpan(IReadOnlyList<BaseItemDto> items)
+	{
+		var years = items.Select(x => x.ProductionYear ?? x.PremiereDate?.Year).Where(y => y is > 0).Select(y => y!.Value).ToList();
+		if (years.Count == 0)
+		{
+			return "";
+		}
+
+		var (first, last) = (years.Min(), years.Max());
+		return first == last ? first.ToString(CultureInfo.InvariantCulture) : $"{first.ToString(CultureInfo.InvariantCulture)}–{last.ToString(CultureInfo.InvariantCulture)}";
+	}
+
+	/// <summary>"6 films · 1979–2016 · 1 of 6 watched" (a playlist: no years); "" when there is nothing.</summary>
+	public static string Summary(IReadOnlyList<BaseItemDto> items, bool playlist)
+	{
+		if (items.Count == 0)
+		{
+			return "";
+		}
+
+		var parts = new List<string> { Count(items.Count, Noun(items)) };
+		if (!playlist && YearSpan(items) is { Length: > 0 } span)
+		{
+			parts.Add(span);
+		}
+
+		parts.Add($"{items.Count(IsWatched).ToString("N0", CultureInfo.CurrentCulture)} of {items.Count.ToString("N0", CultureInfo.CurrentCulture)} watched");
+		return string.Join(" · ", parts);
+	}
+
+	/// <summary>Over the cards: "6 films", or "5 of 6 films" when some are hidden; "" when there is nothing.</summary>
+	public static string ShownText(int shown, IReadOnlyList<BaseItemDto> items) =>
+		items.Count == 0 ? "" : shown == items.Count ? Count(items.Count, Noun(items))
+		: $"{shown.ToString("N0", CultureInfo.CurrentCulture)} of {Count(items.Count, Noun(items))}";
+
+	/// <summary>How much of the collection is watched, 0 to 1 (the progress bar).</summary>
+	public static double Progress(IReadOnlyList<BaseItemDto> items) => items.Count == 0 ? 0 : (double)items.Count(IsWatched) / items.Count;
+
+	/// <summary>
+	/// What Play starts, from the items in collection order: the first one not watched (resumed when it has a resume point);
+	/// when every one is watched, the first, again. Its position is 1-based.
+	/// </summary>
+	public static CollectionNext Next(IReadOnlyList<BaseItemDto> inCollectionOrder)
+	{
+		var first = -1;
+		for (var i = 0; i < inCollectionOrder.Count; i++)
+		{
+			var item = inCollectionOrder[i];
+			if (!IsPlayable(item))
+			{
+				continue;
+			}
+
+			first = first < 0 ? i : first;
+			if (!IsWatched(item))
+			{
+				return new CollectionNext(item, i + 1, item.UserData?.PlaybackPositionTicks is > 0, Again: false);
+			}
+		}
+
+		return first < 0 ? default : new CollectionNext(inCollectionOrder[first], first + 1, Resume: false, Again: true);
+	}
+
+	/// <summary>The Primary button's words: "Resume Forest of Brightwater", "Play Copper Mine", "Play again from the start".</summary>
+	public static string PlayLabel(CollectionNext next) => next.Item is null ? "Play"
+		: next.Again ? "Play again from the start"
+		: $"{(next.Resume ? "Resume" : "Play")} {next.Item.Name}";
+
+	/// <summary>The Primary button for Narrator, with where the film is in the set: "Resume Forest of Brightwater, film 3 of 6".</summary>
+	public static string PlayName(CollectionNext next, IReadOnlyList<BaseItemDto> items) => next.Item is null ? "Play"
+		: next.Again ? $"Play again from the start: {next.Item.Name}, {Noun(items).One} {next.Position.ToString(CultureInfo.CurrentCulture)} of {items.Count.ToString(CultureInfo.CurrentCulture)}"
+		: $"{PlayLabel(next)}, {Noun(items).One} {next.Position.ToString(CultureInfo.CurrentCulture)} of {items.Count.ToString(CultureInfo.CurrentCulture)}";
+
+	/// <summary>What Shuffle plays: one of the items not watched yet, picked by <paramref name="pick"/> (0 to n-1); every item when all are watched.</summary>
+	public static BaseItemDto? Shuffle(IReadOnlyList<BaseItemDto> items, Func<int, int> pick)
+	{
+		var pool = items.Where(x => IsPlayable(x) && !IsWatched(x)).ToList();
+		if (pool.Count == 0)
+		{
+			pool = [.. items.Where(IsPlayable)];
+		}
+
+		return pool.Count == 0 ? null : pool[Math.Clamp(pick(pool.Count), 0, pool.Count - 1)];
+	}
+
+	/// <summary>The Order button's words: "Order: Collection" ("Order: Playlist" for a playlist's own order).</summary>
+	public static string OrderLabel(CollectionOrder order, bool playlist) => $"Order: {OrderName(order, playlist)}";
+
+	public static string OrderName(CollectionOrder order, bool playlist) => order switch
+	{
+		CollectionOrder.Collection => playlist ? "Playlist" : "Collection",
+		CollectionOrder.ReleaseDate => "Release date",
+		CollectionOrder.Name => "Name",
+		CollectionOrder.DateAdded => "Date added",
+		_ => order.ToString(),
+	};
+
+	/// <summary>The words of an empty page, and of one whose items are all hidden by Hide watched.</summary>
+	public static (string Title, string Message) EmptyText(string kind, string server) => kind switch
+	{
+		"Playlist" => ("This playlist is empty", $"Items added to it on {server} appear here."),
+		"Album" => ("This album is empty", $"What is added to it on {server} appears here."),
+		_ => ("No films in this collection you can see", $"Films added to it on {server} appear here."),
+	};
+
+	/// <summary>"All 6 films are watched", for Hide watched with nothing left to show.</summary>
+	public static string AllWatchedText(IReadOnlyList<BaseItemDto> items) =>
+		items.Count == 1 ? $"The one {Noun(items).One} is watched" : $"All {Count(items.Count, Noun(items))} are watched";
+}
