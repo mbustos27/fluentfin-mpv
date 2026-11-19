@@ -92,7 +92,7 @@
                 Click="ScrollLeftBtn_Click"
                 IsEnabled="False"
                 IsTabStop="False"
-                Style="{StaticResource GlassIconButtonStyle}"
+                Style="{StaticResource NixieIconButtonStyle}"
                 ToolTipService.ToolTip="Scroll left"
                 Visibility="Collapsed">
                 <FontIcon FontSize="20" Glyph="&#xE76B;" />
@@ -106,7 +106,7 @@
                 AutomationProperties.Name="Scroll right"
                 Click="ScrollRightBtn_Click"
                 IsTabStop="False"
-                Style="{StaticResource GlassIconButtonStyle}"
+                Style="{StaticResource NixieIconButtonStyle}"
                 ToolTipService.ToolTip="Scroll right"
                 Visibility="Collapsed">
                 <FontIcon FontSize="20" Glyph="&#xE76C;" />

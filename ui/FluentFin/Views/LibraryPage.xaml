@@ -39,13 +39,11 @@
             x:Key="FilterRowTemplates"
             Header="{StaticResource FilterHeaderTemplate}"
             Option="{StaticResource FilterOptionTemplate}" />
-        <!--  Seaglass: the sort and filter bar is glass pills  -->
+        <!--  1.4.0 style: the toolbar is Compact 32 in every theme (Classic's Large 44 override is gone)  -->
         <Style
             x:Key="LibrarySortFilterButtonStyle"
-            BasedOn="{StaticResource GlassPillButtonStyle}"
-            TargetType="Button">
-            <Setter Property="Padding" Value="18,8" />
-        </Style>
+            BasedOn="{StaticResource NixieToolbarButtonStyle}"
+            TargetType="Button" />
         <!--
             Seaglass 1.1.4: the A-Z jump's letters: flat (no glass per letter: 27 acrylic buttons would cost every frame), the
             button's own hover and press (system colours in high contrast), 32 px square (WCAG 2.5.8)

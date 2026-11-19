@@ -113,7 +113,7 @@
                         AutomationProperties.Name="Sign in"
                         AutomationProperties.HelpText="Type a username to sign in"
                         Command="{x:Bind ViewModel.LoginCommand}"
-                        Style="{StaticResource GlassAccentPillButtonStyle}">
+                        Style="{StaticResource NixiePrimaryButtonStyle}">
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <ProgressRing
                                 Width="16"
@@ -129,7 +129,7 @@
                         HorizontalAlignment="Stretch"
                         AutomationProperties.Name="Use Quick Connect"
                         Command="{x:Bind ViewModel.QuickConnectCommand}"
-                        Style="{StaticResource GlassPillButtonStyle}"
+                        Style="{StaticResource NixieButtonStyle}"
                         ToolTipService.ToolTip="Sign in by approving a code on a device that is already signed in">
                         <TextBlock Text="Use Quick Connect" />
                     </Button>

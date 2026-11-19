@@ -87,7 +87,7 @@
                     x:Name="TrailerButton"
                     AutomationProperties.Name="Watch trailer"
                     Click="TrailerButton_Click"
-                    Style="{StaticResource GlassPillButtonStyle}"
+                    Style="{StaticResource NixieButtonStyle}"
                     ToolTipService.ToolTip="Watch trailer"
                     Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -118,7 +118,7 @@
                     x:Name="MoreButton"
                     AutomationProperties.Name="More options"
                     Content="{ui:SymbolIcon Symbol=More}"
-                    Style="{StaticResource GlassIconButtonStyle}"
+                    Style="{StaticResource NixieIconButtonStyle}"
                     ToolTipService.ToolTip="More options" />
                 <!--
                     the journal's rating of the item, in the row at the row's height (it hides with the rating, which is
