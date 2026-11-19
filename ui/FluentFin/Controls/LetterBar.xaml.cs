@@ -75,6 +75,7 @@ public sealed partial class LetterBar : UserControl
 		InitializeComponent();
 		Visibility = Visibility.Collapsed;
 		LetterRepeater.ElementPrepared += (_, e) => Prepare(e.Element);
+		LetterList.CharacterReceived += LetterList_CharacterReceived;
 		RowGrid.SizeChanged += (_, _) => Fit();
 		PositionPlate.SizeChanged += (_, _) => Fit();
 	}
@@ -260,6 +261,57 @@ public sealed partial class LetterBar : UserControl
 
 		_width = width;
 		Restyle();
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (R in a grid is Refresh): on the A to Z a letter key presses that letter (its row to the top, its first title
+	/// gets the keyboard), so the titles that start with R are one key away; a digit presses #. A letter no title starts with
+	/// does nothing.
+	/// </summary>
+	private void LetterList_CharacterReceived(UIElement sender, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs e)
+	{
+		if (ViewModel is not { } vm || TileFor(vm.LetterTiles, e.Character) is not { Jump: { } jump })
+		{
+			return;
+		}
+
+		e.Handled = true;
+		Jumped?.Invoke(this, new LetterJumpedEventArgs(jump, FocusState.Keyboard));
+		vm.JumpToCommand.Execute(jump);
+	}
+
+	/// <summary>The tile a typed character presses: its letter (either case), # for a digit; null for anything else.</summary>
+	internal static LetterTile? TileFor(IReadOnlyList<LetterTile> tiles, char typed)
+	{
+		var key = char.IsAsciiDigit(typed) ? "#" : char.IsAsciiLetter(typed) ? char.ToUpperInvariant(typed).ToString() : null;
+		return key is null ? null : tiles.FirstOrDefault(t => string.Equals(t.Letter, key, StringComparison.OrdinalIgnoreCase));
+	}
+
+	/// <summary>Nixie 1.4.0: whether a key's element is one of the A to Z's letters (they take the bare letters: R there is the letter).</summary>
+	public static bool OwnsLetters(object? source)
+	{
+		for (var node = source as DependencyObject; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+		{
+			if (node is LetterBar bar)
+			{
+				return bar.LetterList.Visibility == Visibility.Visible && IsWithin(source as DependencyObject, bar.LetterList);
+			}
+		}
+
+		return false;
+	}
+
+	private static bool IsWithin(DependencyObject? element, DependencyObject ancestor)
+	{
+		for (var node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, ancestor))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>The keyboard into the A to Z: the letter in view, else the first that has titles.</summary>

@@ -671,7 +671,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 
 		var now = Environment.TickCount64;
-		if (now - _typedAt > 1000)
+		if (!FluentFin.Core.Shortcuts.TypeAheadWord.IsOpen(_typedAt, now))
 		{
 			_typed = "";
 		}
@@ -683,6 +683,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 		_typedAt = now;
 		_typed += e.Character;
+		FluentFin.Controls.GridTypeAhead.Typed(sender); // 1.4.0: an R within the second is a letter of the word, not Refresh
 		var current = IndexOf(item);
 		var query = _typed.Length > 1 && _typed.All(c => char.ToUpperInvariant(c) == char.ToUpperInvariant(_typed[0])) ? _typed[..1] : _typed;
 		if (ViewModel.TypeAhead(query, query.Length == 1 ? current + 1 : Math.Max(current, 0)) is { } target)

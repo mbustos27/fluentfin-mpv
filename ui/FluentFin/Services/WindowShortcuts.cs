@@ -46,7 +46,9 @@ public static class WindowShortcuts
 		var state = InputKeyboardSource.GetKeyStateForCurrentThread;
 		bool Down(VirtualKey k) => state(k).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
 		var shortcut = AppShortcuts.For((int)e.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift), Down(VirtualKey.Menu),
-			TextInput.IsTextInput(e.OriginalSource), ownsLetters: TextInput.OwnsLetters(e.OriginalSource));
+			TextInput.IsTextInput(e.OriginalSource), ownsLetters: TextInput.OwnsLetters(e.OriginalSource)
+				// Nixie 1.4.0: R in a grid while a title is being typed is its letter; on the A to Z a letter presses that letter
+				|| Controls.GridTypeAhead.Continues(e.OriginalSource) || Controls.LetterBar.OwnsLetters(e.OriginalSource));
 
 		// Nixie 1.4.0 (bug hunt M3): any other key the user presses ends a refresh's place restore (a refresh key joins the
 		// refresh under way, a modifier alone is the start of a chord)

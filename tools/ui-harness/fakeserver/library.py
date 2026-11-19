@@ -413,7 +413,13 @@ class Library:
         series = found["series"]
         season = self.items[self.children[series["Id"]][0]]
         episode = self.items[self.children[season["Id"]][0]]
-        return {"movie": {"id": found["movie"]["Id"], "name": found["movie"]["Name"], "library": "Movies"},
+        # Nixie 1.4.0 (R in a grid): three letters ending in R that start a Movies title ("Mir" of "Mirror of Avalon"), for
+        # the keys matrix's "m", "i", "r" within a second (R a letter of the word, not Refresh)
+        movies = sorted(self.items[i]["Name"] for i in self.children.get(found["movie"]["view"], [])
+                        if self.items[i]["kind"] == "movie")
+        r_word = next((n[:3] for n in movies if len(n) > 3 and n[:3].isalpha() and n[2] in "rR" and n[0] not in "rR"
+                       and not n.startswith("The ")), None)
+        return {"movie": {"id": found["movie"]["Id"], "name": found["movie"]["Name"], "library": "Movies", "r_word": r_word},
                 "series": {"id": series["Id"], "name": series["Name"], "library": "Shows"},
                 "season": {"id": season["Id"], "name": season["Name"]},
                 "episode": {"id": episode["Id"], "name": episode["Name"], "index": 1},

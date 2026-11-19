@@ -593,7 +593,7 @@ internal sealed class CardGrid
 
 		var current = IndexOf(e.OriginalSource as DependencyObject);
 		var now = Environment.TickCount64;
-		if (now - _typedAt > 1000)
+		if (!Core.Shortcuts.TypeAheadWord.IsOpen(_typedAt, now))
 		{
 			_typed = "";
 		}
@@ -605,6 +605,7 @@ internal sealed class CardGrid
 
 		_typedAt = now;
 		_typed += e.Character;
+		GridTypeAhead.Typed(sender); // 1.4.0: an R within the second is a letter of the word, not Refresh
 		var query = _typed.Length > 1 && _typed.All(c => char.ToUpperInvariant(c) == char.ToUpperInvariant(_typed[0])) ? _typed[..1] : _typed;
 		var from = query.Length == 1 ? current + 1 : Math.Max(current, 0);
 		if (TypeAhead(query, Math.Max(0, from)) is { } target)

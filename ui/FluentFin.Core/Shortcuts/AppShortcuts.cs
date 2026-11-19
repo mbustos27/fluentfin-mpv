@@ -164,6 +164,12 @@ public static class ShortcutCatalog
 			new("N", "Go to the Next Up row (Enter plays)", ShortcutScope.Page),
 			new("C", "Go to the Continue Watching row (Enter plays)", ShortcutScope.Page),
 		]),
+		// Nixie 1.4.0: R refreshes; while you're typing a title, R is a letter; R titles: the A to Z bar
+		new("Library grids",
+		[
+			new("Letters on a poster", "Go to the title they start; R alone refreshes, but within a second of another letter it is part of the title", ShortcutScope.Page),
+			new("A letter on the A to Z", "Go to that letter's titles (R there for the titles that start with R)", ShortcutScope.Page),
+		]),
 		new("Playback",
 		[
 			new("Space, K", "Play or pause", ShortcutScope.Player, C(Space), C(MpvControlsViewModel.Keys.K)),

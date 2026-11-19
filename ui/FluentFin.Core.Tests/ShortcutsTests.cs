@@ -95,6 +95,28 @@ public sealed class ShortcutsTests
 		Assert.Equal(AppShortcut.ShowHelp, AppShortcuts.For(AppShortcuts.Keys.F1, false, false, false, inTextInput: false, ownsLetters: true));
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (R in a grid, the coordinator's rule): R alone refreshes, grids included; a letter typed on a grid within
+	/// the last second opens a word, and R then goes on with it ("m", "a", "r" to "Mar…"); a second later R refreshes again.
+	/// F5 and Ctrl+R always refresh.
+	/// </summary>
+	[Theory]
+	[InlineData(0L, 0L, false)]           // nothing typed yet
+	[InlineData(10_000L, 10_400L, true)]  // "m", "a" and then R within the second
+	[InlineData(10_000L, 11_000L, true)]  // the second's last moment
+	[InlineData(10_000L, 11_001L, false)] // a moment later: the word is over, R refreshes
+	[InlineData(10_000L, 9_000L, false)]  // a clock that went back closes it
+	public void RInAGrid_RefreshesUnlessATitleIsBeingTyped(long lastTypedAt, long now, bool wordOpen)
+	{
+		Assert.Equal(wordOpen, TypeAheadWord.IsOpen(lastTypedAt, now));
+		var r = AppShortcuts.For(AppShortcuts.Keys.R, false, false, false, inTextInput: false, ownsLetters: TypeAheadWord.IsOpen(lastTypedAt, now));
+		Assert.Equal(wordOpen ? null : (AppShortcut?)AppShortcut.Refresh, r);
+		Assert.Equal(AppShortcut.Refresh, AppShortcuts.For(AppShortcuts.Keys.F5, false, false, false, inTextInput: false, ownsLetters: TypeAheadWord.IsOpen(lastTypedAt, now)));
+		Assert.Equal(AppShortcut.Refresh, AppShortcuts.For(AppShortcuts.Keys.R, true, false, false, inTextInput: false, ownsLetters: TypeAheadWord.IsOpen(lastTypedAt, now)));
+		// R in the search box (or any text box) is always a letter
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.R, false, false, false, inTextInput: true));
+	}
+
 	[Fact]
 	public void TheModifiersAlone_AreNoKeyOfTheirOwn()
 	{

@@ -28,7 +28,7 @@ letter accelerators on Home had no explicit text-input rule.
 | Alt+Home | Home |
 | Ctrl+, | Settings |
 | ? (Shift+/), F1 | The shortcut sheet; pressed while it is open, they close it (1.3.1), as Esc does, and the keyboard goes back where it was |
-| R, F5, Ctrl+R | Refresh the page from the server (1.3.1): Home, a library, a See all grid, an item, series or season page, search results, the Diary. The page loads again in place (the item the keyboard was on and each row's first item kept) and Narrator says "Refreshed". Not while typing, in a dialog or menu, in the player or over a trailer; nothing on pages without server data (Settings). 1.4.0: once per press (a held R or F5 refreshes once); a second R while the page is still loading joins the first; the keyboard goes back to the button it was on (Trailer stays Trailer) unless you moved first; on a closed list box (Audio, Subtitles) R is the box's letter, and F5 and Ctrl+R refresh |
+| R, F5, Ctrl+R | Refresh the page from the server (1.3.1): Home, a library, a See all grid, an item, series or season page, search results, the Diary. The page loads again in place (the item the keyboard was on and each row's first item kept) and Narrator says "Refreshed". Not while typing, in a dialog or menu, in the player or over a trailer; nothing on pages without server data (Settings). 1.4.0: once per press (a held R or F5 refreshes once); a second R while the page is still loading joins the first; the keyboard goes back to the button it was on (Trailer stays Trailer) unless you moved first; on a closed list box (Audio, Subtitles) R is the box's letter, and F5 and Ctrl+R refresh; in a grid, within a second of another letter typed on it, R is a letter of the title, and on the A to Z R is the letter (see Library grids) |
 
 A held key acts once, but Back and Forward step on while held (1.4.0).
 
@@ -45,7 +45,9 @@ longer play anything: a single letter must never start a video (Enter on the foc
 | Key | Does |
 |---|---|
 | Arrows, Home, End, Page Up, Page Down | Move in the grid (as before) |
-| Letters typed on a poster | Go to the first title they start (sort name or name); the same letter again goes on to the next. R is Refresh, not a letter (the A to Z has R) |
+| Letters typed on a poster | Go to the first title they start (sort name or name), each letter within a second of the last; the same letter again goes on to the next |
+| R on a poster | **R refreshes; while you're typing a title, R is a letter; R titles: the A to Z bar.** R alone refreshes the library, as on every page. Within a second of another letter it is part of the title ("m", "a", "r" goes to "Mar…"). Titles that start with R: the A to Z's R |
+| A letter (or a digit) on the A to Z | Presses that letter (# for a digit): its row goes to the top, its first title gets the keyboard. R there is the letter, not Refresh |
 | Enter on a letter of the A to Z | That letter's row goes to the top, its first title gets the keyboard |
 | Ctrl+Up on a Cinematic still | The stage's Play |
 

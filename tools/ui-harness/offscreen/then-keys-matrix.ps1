@@ -431,6 +431,18 @@ function KB-ArrowsAndEnds([string]$Page, $Start, [string[]]$Pairs) {
     }
 }
 # the Back key (Back, Alt+Left, Mouse 4) returns: $Test says the page is there again
+# Nixie 1.4.0: FluentFin's "Refresh:" log lines since an epoch (R in a grid: refreshed or a letter)
+function KM-RefreshLog([double]$Since) {
+    @(Get-ChildItem (Join-Path $DataDir 'Logs') -Filter 'log*.txt' -ErrorAction SilentlyContinue | ForEach-Object {
+        Get-Content -LiteralPath $_.FullName -Encoding utf8 | Where-Object { $_ -match '\[INF\] Refresh: ' } | ForEach-Object {
+            $kmWhen = [DateTimeOffset]::MinValue
+            if ([DateTimeOffset]::TryParse(($_ -split ' \[INF\] ')[0], [ref]$kmWhen) -and $kmWhen.ToUnixTimeMilliseconds() / 1000.0 -ge $Since) { ($_ -split '\[INF\] ', 2)[1] }
+        }
+    })
+}
+function KM-Loads([double]$Since) { @(KM-RefreshLog $Since | Where-Object { $_ -match 'loaded again' }).Count }
+$kmTitleOf = { param($Prefix) "^\s*((The|An|A)\s+)?$([regex]::Escape($Prefix))" }
+
 function KB-Back([string]$Page, [scriptblock]$Test) {
     $sent = KM-Press 'BackKey'
     $ok = $sent -and [bool](Wait-Until $Test -Seconds 12 -PollMs 200)
@@ -474,6 +486,37 @@ if ($script:page -ne 'player') {
             KM-Row 'browsing' 'Library' 'letter jump (Enter on "Jump to C")' ([bool]$kbLanded) "to $script:kmLastTarget; $(KB-Desc (KB-Focus))"
         }
         else { KM-Row 'browsing' 'Library' 'letter jump (Enter on "Jump to C")' $false 'no "Jump to C"' }
+        # Nixie 1.4.0 (R in a grid): R refreshes; while you're typing a title, R is a letter; R titles: the A to Z's R
+        # (a) on the A to Z, R presses R: the keyboard on a title that starts with R, nothing refreshed
+        $kbJump = Find-Ui -Name 'Jump to C' -Type 'Button'
+        if ($kbJump) {
+            [void][OffscreenUi]::SetFocus($kbJump); Start-Sleep -Milliseconds 1300
+            $kmAt = Get-Epoch
+            [void](KM-Press 'R')
+            $kmR = Wait-Until { $f = KB-Focus; if ($f -and $f.name -match (& $kmTitleOf 'R')) { $f } } -Seconds 6 -PollMs 150
+            Start-Sleep -Milliseconds 1200
+            KM-Row 'browsing' 'Library' 'R on the A to Z (the letter R: to an R title)' ([bool]$kmR -and (KM-Loads $kmAt) -eq 0) "to $script:kmLastTarget; $(KB-Desc (KB-Focus)); $(KM-Loads $kmAt) refresh(es)"
+        }
+        else { KM-Row 'browsing' 'Library' 'R on the A to Z (the letter R: to an R title)' $false 'no "Jump to C"' }
+        # (b) a title's letters within a second, R the last: the keyboard on that title, nothing refreshed
+        $kmRWord = $fixture.movie.r_word
+        if ($kmRWord) {
+            [void](KB-Start 'Library' (Find-MediaCard $fixture.movie.name)); Start-Sleep -Milliseconds 1300
+            $kmAt = Get-Epoch
+            foreach ($kmCh in $kmRWord.ToCharArray()) { [void](KM-Press "$kmCh") }
+            $kmWord = Wait-Until { $f = KB-Focus; if ($f -and $f.name -match (& $kmTitleOf $kmRWord)) { $f } } -Seconds 4 -PollMs 150
+            Start-Sleep -Milliseconds 1500
+            KM-Row 'browsing' 'Library' "$(($kmRWord.ToLowerInvariant().ToCharArray() | ForEach-Object { "'$_'" }) -join ', ') within a second (R a letter: to $kmRWord...)" ([bool]$kmWord -and (KM-Loads $kmAt) -eq 0) "to $script:kmLastTarget; $(KB-Desc (KB-Focus)); $(KM-Loads $kmAt) refresh(es)"
+        }
+        else { KM-Row 'browsing' 'Library' 'a word ending in R within a second' $false 'the fixture has no r_word' }
+        # (c) R alone on a poster (no letter in the last second) refreshes the library
+        [void](KB-Start 'Library' (Find-MediaCard $fixture.movie.name)); Start-Sleep -Milliseconds 1300
+        $kmAt = Get-Epoch
+        [void](KM-Press 'R')
+        $kmDone = Wait-Until { if ((KM-Loads $kmAt) -gt 0) { $true } } -Seconds 8 -PollMs 150
+        KM-Row 'browsing' 'Library' 'R alone on a poster (refreshes)' ([bool]$kmDone) "to $script:kmLastTarget; $((KM-RefreshLog $kmAt) -join ' | ')"
+        Start-Sleep -Seconds 3
+        [void](Wait-Until { Find-MediaCard $fixture.movie.name } -Seconds 15 -PollMs 200)
         [void](KB-Start 'Library' (Find-MediaCard $fixture.movie.name))
         [void](KM-Press 'Enter')
         # (Editorial: its details in place first; Enter on their Full details opens the page)
@@ -531,6 +574,14 @@ if ($script:page -ne 'player') {
         [void](KM-Press $kbChord)
         $kbBox = Wait-Until { $f = KB-Focus; if ($f -and $f.type -eq 'Edit') { $f } } -Seconds 4 -PollMs 150
         KM-Row 'browsing' 'Search' "$kbChord (the search box)" ([bool]$kbBox) "$(KB-Desc (KB-Focus))"
+        if ($kbBox -and $kbChord -eq '/') {
+            # Nixie 1.4.0: R in the search box is a letter (typed; nothing refreshed), and Backspace takes it out again
+            $kmAt = Get-Epoch
+            [void](KM-Press 'R'); Start-Sleep -Milliseconds 1200
+            $kmStill = KB-Focus
+            KM-Row 'browsing' 'Search' 'R in the search box (a letter)' ($kmStill -and $kmStill.type -eq 'Edit' -and (KM-Loads $kmAt) -eq 0) "$(KB-Desc $kmStill); $(KM-Loads $kmAt) refresh(es)"
+            [void](KM-Press 'Backspace'); Start-Sleep -Milliseconds 400
+        }
         if ($kbBox -and $kbChord -eq 'Ctrl+F') {
             $kbTarget = [KeysMatrix]::FocusWindow($script:hwnd)
             foreach ($ch in 'Signal'.ToCharArray()) { [void][OffscreenUi]::PostMessage($kbTarget, 0x0102, [IntPtr][int]$ch, [IntPtr]1); Start-Sleep -Milliseconds 80 }
