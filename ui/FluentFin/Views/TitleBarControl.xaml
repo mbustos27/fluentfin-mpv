@@ -99,6 +99,11 @@
                 Orientation="Horizontal"
                 SizeChanged="OnHeaderSizeChanged"
                 Spacing="10">
+                <!--
+                    Nixie 1.4.0 (the trail rule): the search box (or its button) and its mark, the tabs' underline on its bottom edge
+                    while its results, or an item opened from it, show (TitleBarControl.ShowLit)
+                -->
+                <Grid x:Name="SearchHost" VerticalAlignment="Center">
                 <!--  narrow windows: search is a button that opens the box (it folds back when left empty)  -->
                 <!--  button review T5: a subtle 32 x 32 icon button, radius 8 (it rendered as a 40 x 44 ellipse); the role style at the merge  -->
                 <Button
@@ -220,6 +225,17 @@
                     </ItemsPanelTemplate>
                 </AutoSuggestBox.ItemsPanel>
             </AutoSuggestBox>
+                <Border
+                    x:Name="SearchLit"
+                    Height="2"
+                    Margin="8,0,8,0"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Bottom"
+                    Background="{ThemeResource GlassTabUnderlineBrush}"
+                    CornerRadius="1"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed" />
+                </Grid>
                 <!--  fluentfin-mpv: a sign-out in progress (the mpv playback's stop and report, up to ~2 s, then the sign-out request)  -->
                 <StackPanel
                     VerticalAlignment="Center"
@@ -257,11 +273,22 @@
                     CornerRadius="16"
                     ToolTipService.ToolTip="{x:Bind core:ItemLabels.AccountTooltip(ViewModel.User.Name), Mode=OneWay}"
                     Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsAccountShown), Mode=OneWay}">
-                    <PersonPicture
-                        Width="30"
-                        Height="30"
-                        AutomationProperties.AccessibilityView="Raw"
-                        DisplayName="{x:Bind ViewModel.User.Name, Mode=OneWay}" />
+                    <Grid>
+                        <PersonPicture
+                            Width="30"
+                            Height="30"
+                            AutomationProperties.AccessibilityView="Raw"
+                            DisplayName="{x:Bind ViewModel.User.Name, Mode=OneWay}" />
+                        <!--  Nixie 1.4.0 (the trail rule): Settings lit, an accent ring on the account (TitleBarControl.ShowLit)  -->
+                        <Ellipse
+                            x:Name="AccountLit"
+                            Width="32"
+                            Height="32"
+                            IsHitTestVisible="False"
+                            Stroke="{ThemeResource GlassTabUnderlineBrush}"
+                            StrokeThickness="2"
+                            Visibility="Collapsed" />
+                    </Grid>
                     <Button.Flyout>
                         <Flyout
                             x:Name="AccountFlyout"

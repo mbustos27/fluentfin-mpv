@@ -118,6 +118,69 @@ public sealed class TopBarTests
 		Assert.False(TopBar.Fit(1120, Caption, Back, Wordmark, 12 + 6 * 80, LongMenu, Account, search: true, searchOpen: false).Compact);
 	}
 
+	// ---- Nixie 1.4.0 (the review's X6): the libraries fold by width, in three steps
+
+	/// <summary>Home and Diary with the strip's margin; nine library tabs of 90 px; "Libraries" 96, folded 112.</summary>
+	private static TopRowWidths Row(int libraries) => new(12 + 66 + 66, Enumerable.Repeat(90.0, libraries).ToList(), 96, 112);
+
+	[Theory]
+	// the user's bar: about 2000 px, five or six views; the review's 1920 and 2560; 1440 and 1100
+	[InlineData(2000, 6, 6)]
+	[InlineData(2560, 9, 9)]
+	[InlineData(1920, 9, 9)]
+	[InlineData(1440, 9, 6)]
+	[InlineData(1440, 5, 5)]
+	[InlineData(1100, 5, 2)]
+	[InlineData(1100, 9, 2)]
+	public void TheLibraries_FoldByWidth_FromTheEnd_LeavingTheSearchBoxItsRoom(double width, int libraries, int shown)
+	{
+		var fit = TopBar.Fit(width, Caption, Back, Wordmark, Row(libraries), LongMenu, Account, search: true, searchOpen: false);
+
+		Assert.False(fit.Compact);
+		Assert.Equal(shown, fit.ShownLibraries);
+		Assert.InRange(fit.SearchWidth, TopBar.MinSearchWidth, TopBar.MaxSearchWidth);
+		var row = Row(libraries);
+		var taken = Back + Wordmark + row.Fixed + row.Libraries.Take(shown).Sum() + (shown < libraries ? row.Folded : row.Plain)
+			+ fit.SearchWidth + TopBar.Spacing + Account + TopBar.Spacing + TopBar.MinDragGap + Caption;
+		Assert.True(taken <= width, $"{taken} px taken at {width}");
+	}
+
+	[Fact]
+	public void TheSectionsMenu_OnlyWhenHomeLibrariesAndSearchDoNotFit()
+	{
+		var row = Row(9);
+		// Home, "Libraries ▾", Diary and the smallest search box, just: still tabs, every library folded
+		var just = Back + Wordmark + row.Fixed + row.Folded + TopBar.MinSearchWidth + TopBar.Spacing + Account + TopBar.Spacing + TopBar.MinDragGap + Caption;
+		var fit = TopBar.Fit(just, Caption, Back, Wordmark, row, LongMenu, Account, search: true, searchOpen: false);
+		Assert.False(fit.Compact);
+		Assert.Equal(0, fit.ShownLibraries);
+
+		Assert.True(TopBar.Fit(just - 1, Caption, Back, Wordmark, row, LongMenu, Account, search: true, searchOpen: false).Compact);
+	}
+
+	[Fact]
+	public void TheFold_NeverShowsMoreLibrariesInANarrowerWindow()
+	{
+		var previous = int.MaxValue;
+		for (var width = 2560; width >= 500; width -= 10)
+		{
+			var fit = TopBar.Fit(width, Caption, Back, Wordmark, Row(9), LongMenu, Account, search: true, searchOpen: false);
+			var shown = fit.Compact ? -1 : fit.ShownLibraries;
+			Assert.True(shown <= previous, $"{width} px: {shown} after {previous}");
+			previous = shown;
+		}
+	}
+
+	[Theory]
+	// room: centred in the window; a long row of tabs: pinned beside the account
+	[InlineData(1920, 600, 360, 1720, 1720 - (1920 + 360) / 2)]
+	[InlineData(1920, 1100, 360, 1720, 0)]
+	[InlineData(1100, 500, 300, 900, 0)]
+	public void TheSearchBox_IsCentredWhenThereIsRoom_ElsePinnedToTheAccount(double window, double leftEnd, double search, double right, double offset)
+	{
+		Assert.Equal(offset, TopBar.SearchOffset(window, leftEnd, search, right));
+	}
+
 	[Fact]
 	public void AGapMeasuredShort_KeepsMoreRoom_UpToALimit_AndNeverLess()
 	{
@@ -202,7 +265,7 @@ public sealed class TopBarTests
 	}
 
 	[Fact]
-	public void TheShell_RereadsTheLibraries_AndKeepsEachPagesTab_AndAPinnedTabUnpins()
+	public void TheShell_RereadsTheLibraries_AndKeepsEachPagesTab_AndReturnsToTheTop()
 	{
 		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
 		var shell = File.ReadAllText(Path.Combine(root, "Views", "ShellPage.xaml.cs"));
@@ -213,16 +276,20 @@ public sealed class TopBarTests
 		Assert.Contains("_top.OnPageShown(KeyOf(e.SourcePageType), e.Parameter, NavigationFrame.BackStackDepth,", shell);
 		Assert.Contains("returning: e.NavigationMode is Microsoft.UI.Xaml.Navigation.NavigationMode.Back or Microsoft.UI.Xaml.Navigation.NavigationMode.Forward);", shell);
 
+		// Nixie 1.4.0 (the trail rule): the lit destination chosen again on its own page goes back to its top
+		Assert.Contains("_top.ReturnToTopRequested += OnReturnToTop;", shell);
+		Assert.Contains("navigation.ReloadForRefresh(_ => true);", shell);
+
 		var strip = File.ReadAllText(Path.Combine(root, "Controls", "TopTabStrip.xaml.cs"));
-		// review 2: a pinned tab's menu (right-click, the menu key) has Unpin
-		Assert.Contains("button.ContextFlyout = UnpinMenu(pin);", strip);
-		Assert.Contains("unpin.Click += (_, _) => _navigation?.RemoveNavigationItem(pin);", strip);
 		// review 6: a second load listens again
 		Assert.Contains("if (_attached && ReferenceEquals(_navigation, navigation))", strip);
-		// and the Libraries page's wording
-		var landing = File.ReadAllText(Path.Combine(root, "Views", "LibrariesLandingPage.xaml"));
-		Assert.Contains("Text=\"Add to the top bar\"", landing);
-		Assert.DoesNotContain("side bar", landing, StringComparison.OrdinalIgnoreCase);
+		// Nixie 1.4.0: the pins are gone (every library is a tab); the menus check the lit destination and hand the keyboard to the page
+		Assert.DoesNotContain("Unpin", strip);
+		Assert.Contains("new RadioMenuFlyoutItem { Text = entry.Title, GroupName = \"TopDestinations\", IsChecked = _navigation?.Lit is { } lit && entry.Mark == lit };", strip);
+		Assert.Contains("HandFocusToPage();", strip);
+		// and the search box's list lights the search box
+		var search = File.ReadAllText(Path.Combine(root, "Behaviors", "GlobalSearchBoxBehavior.cs"));
+		Assert.Contains("App.GetService<Core.ViewModels.TopNavigation>().ChooseSearch();", search);
 	}
 
 	[Fact]

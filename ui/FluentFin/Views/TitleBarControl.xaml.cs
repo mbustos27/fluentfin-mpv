@@ -14,6 +14,9 @@ public sealed partial class TitleBarControl : UserControl
 {
 	public TitleBarViewModel ViewModel { get; } = (TitleBarViewModel)App.GetService<ITitleBarViewModel>();
 
+	/// <summary>Nixie 1.4.0: the tabs' fold, and the lit destination (the search box's and the account's marks).</summary>
+	private readonly TopNavigation _top = App.GetService<TopNavigation>();
+
 	// fluentfin-mpv: no search while a player page is open (docs/research/ux-review.md V9); Seaglass 1.1.4: nor signed out
 	// (TitleBarViewModel.IsSearchShown)
 
@@ -67,6 +70,16 @@ public sealed partial class TitleBarControl : UserControl
 		ShowSearch();
 		ShowBackground();
 
+		// Nixie 1.4.0 (the trail rule): the search box and Settings are destinations: lit like a tab while they are
+		_top.PropertyChanged += OnTopChanged;
+		Unloaded += (_, _) => _top.PropertyChanged -= OnTopChanged;
+		Loaded += (_, _) =>
+		{
+			_top.PropertyChanged -= OnTopChanged;
+			_top.PropertyChanged += OnTopChanged;
+			ShowLit();
+		};
+
 		// Nixie 1.3.0: the active layout theme's TopBarStyle on the chrome, now and on every switch (the bar itself is kept)
 		ThemeResources.StyleTopBar(BarChrome);
 		ThemeResources.Applied += OnThemeApplied;
@@ -85,6 +98,28 @@ public sealed partial class TitleBarControl : UserControl
 			QueueRelayout();
 			QueuePassthrough();
 		}
+	}
+
+	private void OnTopChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName is nameof(TopNavigation.Lit))
+		{
+			DispatcherQueue.TryEnqueue(ShowLit);
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the review's X7, CL-m9): the search box wears the tabs' underline while its results (or an item opened from
+	/// it) show; the account button an accent ring while Settings (or a page opened from it) shows.
+	/// </summary>
+	private void ShowLit()
+	{
+		SearchLit.Visibility = _top.IsSearchLit ? Visibility.Visible : Visibility.Collapsed;
+		AccountLit.Visibility = _top.IsSettingsLit ? Visibility.Visible : Visibility.Collapsed;
+		// Narrator hears it as it hears the marked tab's "selected"
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(SearchBox, _top.IsSearchLit ? "Current" : "");
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(SearchIconButton, _top.IsSearchLit ? "Current" : "");
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(AccountButton, _top.IsSettingsLit ? "Settings is open" : "");
 	}
 
 	private void RegisterAsWindowTitleBar()
@@ -266,13 +301,19 @@ public sealed partial class TitleBarControl : UserControl
 			inset + _slack,
 			back: Math.Max(leftStart, ViewModel.IsBackButtonShown ? Math.Max(BackButton()?.ActualWidth ?? 0, 48) : 0),
 			wordmark: _wordmarkWidth > 0 ? _wordmarkWidth : 120,
-			tabs: navigation ? Tabs.FullWidth() : 0,
+			row: navigation ? Tabs.RowWidths() : new TopRowWidths(0, [], 0, 0),
 			menuButton: navigation ? Tabs.MenuButtonWidth() : 0,
 			account: ViewModel.IsAccountShown ? AccountButton.Width : 0,
 			search: ViewModel.IsSearchShown,
 			searchOpen: _searchOpen);
 
 		_compact = fit.Compact;
+		// Nixie 1.4.0: the library tabs the bar has no room for fold into "Libraries ▾" (the row changes: TabsChanged, measured again)
+		if (navigation)
+		{
+			_top.Fold(fit.ShownLibraries);
+		}
+
 		Tabs.IsCompact = fit.Compact;
 		Tabs.IsMenuHidden = !fit.ShowSections;
 		Tabs.IsMenuLabelHidden = !fit.ShowSectionsLabel;
@@ -315,6 +356,7 @@ public sealed partial class TitleBarControl : UserControl
 	private void ShowSearch()
 	{
 		var shown = ViewModel.IsSearchShown;
+		SearchHost.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
 		SearchBox.Visibility = shown && (!_compact || _searchOpen) ? Visibility.Visible : Visibility.Collapsed;
 		SearchIconButton.Visibility = shown && _compact && !_searchOpen ? Visibility.Visible : Visibility.Collapsed;
 	}

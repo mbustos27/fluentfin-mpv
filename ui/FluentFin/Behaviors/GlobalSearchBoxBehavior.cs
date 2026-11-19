@@ -66,6 +66,8 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 				Drop();
 				sender.IsSuggestionListOpen = false;
 				sender.Text = string.Empty;
+				// Nixie 1.4.0 (the trail rule): an item chosen in the box's list lights the search box
+				App.GetService<Core.ViewModels.TopNavigation>().ChooseSearch();
 				App.Commands.DisplayDto(open.Item);
 				break;
 			case SearchAction.Retry retry:

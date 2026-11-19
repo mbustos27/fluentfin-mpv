@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.0
+
+- **The top bar shows every library while it has room.** Each of your libraries is a tab, in your server's order, with
+  Collections and Playlists last; the bar no longer folds five or more into one "Libraries" tab at any width. When the
+  window is too narrow for them all beside the search box, the last ones move into **Libraries ▾**, whose menu starts with
+  All libraries; only when even Home, Libraries ▾ and the search box do not fit does the bar fold into one Sections menu.
+  The folded tab is named after the library you are in ("Movies ▾"), and its menu checks it. "Add to the top bar" is gone:
+  every library already is a tab. All libraries is always one click away.
+- **One place is lit in the bar, always the one you chose.** A tab, a library from the menu, the search box or Settings
+  stays lit on every page you open from it (a film, a season, the player), so the same film no longer lights Home, Libraries
+  or nothing depending on how you got there. The search box wears the underline while its results (or an item from it)
+  show, the account button a ring while Settings does. Choosing the lit tab again on its own page takes it back to its top;
+  choosing a library from a menu puts the keyboard in the page, not back on the tab.
+
 ## 1.3.1
 
 - **Trailers play in Nixie.** The Trailer button no longer sends you to the browser.

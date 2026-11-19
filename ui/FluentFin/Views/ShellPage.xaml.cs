@@ -36,6 +36,9 @@ public sealed partial class ShellPage : Page
 		_top.Reset();
 		App.GetService<FluentFin.UI.Core.IPluginManager>().AddNavigationItems(_top);
 		_ = LoadLibrariesAsync();
+		// Nixie 1.4.0 (the trail rule): the lit destination chosen again on its own page goes back to its top
+		_top.ReturnToTopRequested += OnReturnToTop;
+		Unloaded += (_, _) => _top.ReturnToTopRequested -= OnReturnToTop;
 		_titleBar.PropertyChanged += OnTitleBarChanged;
 		Unloaded += (_, _) => _titleBar.PropertyChanged -= OnTitleBarChanged;
 
@@ -97,8 +100,20 @@ public sealed partial class ShellPage : Page
 	private bool IsTabPage(Type pageType)
 	{
 		var key = KeyOf(pageType);
-		return key.Length > 0 && _top.Tabs.SelectMany(t => t.Menu.Prepend(t)).Any(t => t.Key == key);
+		return key.Length > 0 && _top.AllTabs.SelectMany(t => t.Menu.Prepend(t)).Any(t => t.Key == key);
 	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the trail rule, the review's DI-p7 and C-m13: choosing the library already on screen did nothing): the page
+	/// shown again, fresh, at its top (a refresh's reload in place: the history and the bar as they were).
+	/// </summary>
+	private void OnReturnToTop(object? sender, EventArgs e) => DispatcherQueue.TryEnqueue(() =>
+	{
+		if (ViewModel.NavigationService is NavigationService navigation)
+		{
+			navigation.ReloadForRefresh(_ => true);
+		}
+	});
 
 	/// <summary>
 	/// 1.2.0: where the page starts: below the bar, or at the window's top for a page that extends under it (a hero) and while
