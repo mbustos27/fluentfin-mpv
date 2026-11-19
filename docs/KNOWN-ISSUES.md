@@ -89,6 +89,22 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `InputSiteWindowClass` child (the thread's focus window), not its `DesktopChildSiteBridge`; the
   fluentfin-controls harness posts there (Space, F, Escape through the page's key path).
 
+## Nixie 1.4.0: the consistency release
+- **Editorial has no list view.** Its View menu offers the poster sizes only; the other three themes have the list.
+- **Drive-in's chapter bulbs come later.** Drive-in has the Chapters menu in the player's bar like every theme, but no
+  bulbs on its console's scrubber yet.
+- **To check by hand at each release** (off-screen runs cannot do them):
+  - **the lost-overlay fix:** open the player, press Space before any click, then move the mouse: the controls must come
+    back. Off-screen, posted mouse moves are not real cursor moves, so the 1.3.1 case was never reproduced there; the fix
+    hears every pointer move and polls the cursor every 250 ms, and logs a line if the case recurs;
+  - **Esc inside YouTube's player in the trailer theatre:** the web view has the keyboard there, and Esc must still close
+    the theatre.
+- **R in a grid is Refresh first** (the coordinator's rule; the user asked for R to refresh): a first R refreshes, so a
+  title that starts with R cannot be typed. Within a second of another letter R is a letter of the title. The R titles are
+  on the A to Z's R, and on the A to Z a letter key presses that letter.
+- **The skeleton and [perf] probes** (`LibraryProbe`) log one line per library opened; they measure, they never change
+  the layout.
+
 ## Nixie 1.3.0: the layout themes
 - **Editorial has no paused side column** (synopsis, cast and chapters beside a paused video), nor its segmented chapter
   scrubber: the theme no longer promises them (1.4.0). Its player is the shared one; chapters are in the bar's Chapters

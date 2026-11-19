@@ -24,7 +24,8 @@ Everything below the feature list is for building from source.
 - **A top bar, no side rail.** Home, your libraries, Diary and the libraries you add are tabs in the window's one bar, with search and the Account menu (where Settings is). A narrow window folds the tabs into one menu.
 - **Home, item pages and the player, redesigned.**
   - **Home:** a hero of up to five items new to you that never autoplays trailers, poster rows whose cards lift on hover, and a Continue Watching row you can clean up (remove an item with Undo, or hide what you have not played for a month or more).
-  - **Libraries:** one scrolling grid with Sort, Filter (check boxes with counts) and an A–Z jump.
+  - **Libraries:** one scrolling grid with Sort (it says its direction in words), Filter (check boxes with counts), a one-click Unwatched switch, a row of the filters on with their crosses, an A–Z jump, type-to-jump and small, medium or large posters or a list (1.4.0: the same in every layout).
+  - **Collections and playlists** (1.4.0): a page of their own in every layout, in the collection's or playlist's own order, with Play or Resume on the first unwatched, Shuffle and Hide watched; a film's page says which collections it is part of.
   - **Item pages:** a full-width backdrop with the title's logo, info chips (year, rating, runtime, resolution, HDR, audio), and Play as the one highlighted action.
   - **The player's own controls:** on a dark gradient, with Skip intro/credits, Previous and Next, a Next episode countdown near the end, speed (0.5–2×), subtitle delay, and a subtitle **Text size** slider (50–200 %, remembered).
 - **Mouse and keyboard.**

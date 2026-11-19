@@ -2,30 +2,84 @@
 
 ## 1.4.0
 
-- **The player's controls always come back with the mouse.** On 1.3.1, after opening the player and pressing Space before
-  any click, moving the mouse could stop bringing the controls back until the player was opened again. Any move of the
-  mouse over the video now shows them, whatever had the keyboard, and keys work in any order with the mouse. A stress
-  run checks it after every kind of transition in all four themes (`then-keys-matrix.ps1`, its overlay section).
-- **The next episode looks and reads the same everywhere** (the library review's X12):
-  - In the player, **Next episode** is the main button (Primary, 44 high) with a skip-next icon, and the countdown runs as
-    a clear 3 px line along its foot; the episode's title is in its tooltip and Narrator's name. **Watch credits**,
-    **Keep watching**, **Skip intro** and **Skip credits** are secondary buttons of the same height, all on one line, in
-    the theme's wine instead of a stray teal, and they line up with the bar's own edge in every theme (they overhung
-    Editorial's bar by 16 px and Cinematic's by 64).
-  - **One label, "Up next"**, on every Home, the episode pages and Drive-in's sign (it said Next Up, Next up and Coming
-    up), and one episode code: Drive-in's tubes say "S1 E03" (they said "S1·E03").
-  - **Home's next-up item opens its episode in every theme** (Drive-in's sign and Editorial's list played it, Classic and
-    Cinematic opened it); its page's Play is one more Enter. Editorial's list lost the play mark that was not a button.
-  - **The season page marks the episode its Play starts "Up next"** in every theme (Drive-in's showtimes said NEXT).
-- **Chapters in every theme:** the player's bar has a Chapters menu (the chapters with their times, the one playing
-  checked; a click goes there), disabled and saying so when the item has none. Editorial no longer promises a paused
-  side column it never had.
-- **Cinematic's player:** the bar's Audio and subtitles button opens the player panel's own Audio and subtitles part (one
-  place for the job), and the window's glass island no longer floats over the video.
-- **The keyboard in the player:** Tab reaches the prompts first while they show, then runs left to right; after the player,
-  the keyboard is back on the page's Play in every theme (Drive-in left it nowhere). With F1's shortcut sheet open over
-  the player, the player's keys no longer act under it.
-- **Home videos and music videos play** in Nixie's player, alone like a film (they could only say "can't play here").
+The consistency release. The library and collections review found that the library layer under the four themes was never
+finished, and that the worst faults were shared by all four; 1.4.0 finishes it once, for every theme.
+
+**Libraries**
+
+- **Filters you can see.** Every library has a one-click Unwatched switch beside Sort and Filter, in every theme.
+  - Under the toolbar, a row says what is shown ("Showing 223 of 320 movies") with a chip for each filter on; its cross
+    takes that filter off, and Clear all takes them all off. Narrator hears the new count.
+  - Two genres now mean either genre; a genre and a year mean both. The Filter menu's counts follow the other filters, and
+    a choice that would leave nothing is greyed.
+  - A filter that leaves nothing says so ("No unwatched favorite movies in Comedy") with Clear filters, instead of a blank
+    grid that looked like loading. Drive-in's tubes read 0.
+  - Cinematic's section tabs light only when they are exactly what is shown, and never reset your sort. Editorial's
+    Unwatched and Favorites are in the toolbar (they were off-screen), its genre row shows when it scrolls on, and More
+    filters opens the full Filter menu.
+- **A sort that says what it does.** Dates, ratings and play count open newest, highest or most first. The button says the
+  direction in words ("Date added · newest first"), the arrow beside it turns it in one click, and choosing the sort in use
+  again turns it too. Under any sort but Title, the A to Z's row holds Oldest first and Newest first, so the grid never moves.
+- **The A to Z in one shape.** # and A to Z in every theme, letters with no titles dimmed and skipped, at least 32 px high
+  and on one row. It shows from 48 titles. The letter you are at is marked, a jump puts that letter's row at the top, and the
+  row ends with where you are ("M · 171 of 320"). On the A to Z, a letter key presses that letter.
+- **Libraries open on the first poster**, and Back returns to the one you left. Type a title's first letters on a poster to
+  go to it.
+- **R refreshes; while you're typing a title, R is a letter.** R alone refreshes a library as it does every page, keeping
+  the sort, the filters and the poster. Within a second of another letter, R is part of the title ("m", "a", "r" goes to
+  "Mar…"). Titles that start with R: the A to Z's R.
+- **View: small, medium or large posters, or a list,** kept for each library; Cinematic also offers posters instead of stills.
+- **Room for the titles.** Posters keep their shape at every window size (they were cropped at 1100 px). Cinematic's preview
+  takes a third of the window at most and folds to a band as you scroll, with Sort and Filter above the grid. Editorial's
+  rows run on across letters, each letter tagged on its first title, its heading folds to one line as you scroll, and its
+  titles are a size larger. Drive-in's sky folds to a band as you scroll.
+- **Loading looks like the page it loads,** the header and letter row in place and the posters where they will be.
+
+**Collections and playlists**
+
+- **A collection has a page of its own,** the same in every theme, drawn in that theme's type and colours: the box set's
+  poster, its title, "6 films · 1979–2016 · 1 of 6 watched" with a progress bar, three lines of its overview (More shows
+  the rest), **Play** or **Resume** on the first film you haven't watched, in the collection's order, **Shuffle**, and
+  Watched and Favourite for the whole set. The films are in the collection's own order (the one set on your server;
+  release date when none is set), each numbered; **Order** offers release date, name and date added, and **Hide watched**
+  leaves the rest. No genre filter, and an A to Z only from 30 films sorted by name. A collection that is empty or does
+  not load says so, with Retry.
+- **A playlist opens on the same page,** as a numbered list in its own order.
+- **Film pages say "Part of: Copper and Glass"** in every theme when the film is in a collection (servers from Jellyfin
+  10.11); the link opens it.
+- **Home no longer shows "New in Collections" or "New in Playlists".** A collection is made when its films are imported,
+  so the row repeated "New in Movies".
+- **The Libraries page is in your theme** (its title, margins and ground), shows what each library holds ("Movies · 320 ·
+  97 unwatched"), puts Collections and Playlists in a group of their own after the media libraries, shares the tiles
+  evenly between rows (no tile alone on a row), says when it cannot load your libraries (with Retry), and puts the
+  keyboard on the first tile.
+- **One page grid per theme:** the Libraries page, a collection, Search results and Settings put their title where the
+  theme's library puts its title, with the same side margins on both sides (on the 4 px grid).
+
+**The top bar**
+
+- **The top bar shows every library while it has room.** Each of your libraries is a tab, in your server's order, with
+  Collections and Playlists last; the bar no longer folds five or more into one "Libraries" tab at any width. When the
+  window is too narrow for them all beside the search box, the last ones move into **Libraries ▾**, whose menu starts with
+  All libraries; only when even Home, Libraries ▾ and the search box do not fit does the bar fold into one Sections menu.
+  The folded tab is named after the library you are in ("Movies ▾"), and its menu checks it. "Add to the top bar" is gone:
+  every library already is a tab. All libraries is always one click away.
+- **One place is lit in the bar, always the one you chose.** A tab, a library from the menu, the search box or Settings
+  stays lit on every page you open from it (a film, a season, the player), so the same film no longer lights Home, Libraries
+  or nothing depending on how you got there. The search box wears the underline while its results (or an item from it)
+  show, the account button a ring while Settings does. Choosing the lit tab again on its own page takes it back to its top;
+  choosing a library from a menu puts the keyboard in the page, not back on the tab.
+- **A film you reach from Home or the search results names its library** above its title ("Movies ›"); a click opens the
+  library.
+- **The top bar sits on one line.** The window's Minimize, Maximize and Close are as tall as the bar, so they line up with
+  everything else; Back is a quiet arrow 16 px from the edge (a dead Back no longer sits on a darker tile), with the same
+  soft hover as the tabs; the tab underline is as wide as its label, and hovering a tab shows a soft fill instead of a line;
+  the spacing is even (16, 24, 24, 8). The search box is centred in the window when there is room, otherwise it sits beside
+  the account; its tooltip names Ctrl+F and /. The Nixie wordmark goes Home. Cinematic's floating bar is centred, with its
+  menu on the same glass; Drive-in's sparkles stay out of the bar. The bar itself is no longer a Tab stop with nothing on it.
+
+**Highlights and buttons**
+
 - **One accent, used for three things.** Pink now marks only the page's main action, where you are, and progress.
   - A watched title shows a small, dim check in the top-right corner of its card.
   - A series, season or collection with episodes or films left shows how many in a small square in the top-left corner.
@@ -52,82 +106,66 @@
   - The player's buttons respond to hover, press and focus like every other button.
   - Editorial's sunset stripe under the top bar has no pink band and no longer shows over the video.
 
-- **Filters you can see.** Every library has a one-click Unwatched switch beside Sort and Filter, in every theme.
-  - Under the toolbar, a row says what is shown ("Showing 223 of 320 movies") with a chip for each filter on; its cross
-    takes that filter off, and Clear all takes them all off. Narrator hears the new count.
-  - Two genres now mean either genre; a genre and a year mean both. The Filter menu's counts follow the other filters, and
-    a choice that would leave nothing is greyed.
-  - A filter that leaves nothing says so ("No unwatched favorite movies in Comedy") with Clear filters, instead of a blank
-    grid that looked like loading. Drive-in's tubes read 0.
-  - Cinematic's section tabs light only when they are exactly what is shown, and never reset your sort. Editorial's
-    Unwatched and Favorites are in the toolbar (they were off-screen), its genre row shows when it scrolls on, and More
-    filters opens the full Filter menu.
-- **A sort that says what it does.** Dates, ratings and play count open newest, highest or most first. The button says the
-  direction in words ("Date added · newest first"), the arrow beside it turns it in one click, and choosing the sort in use
-  again turns it too. Under any sort but Title, the A to Z's row holds Oldest first and Newest first, so the grid never moves.
-- **The A to Z in one shape.** # and A to Z in every theme, letters with no titles dimmed and skipped, at least 32 px high
-  and on one row. It shows from 48 titles. The letter you are at is marked, a jump puts that letter's row at the top, and the
-  row ends with where you are ("M · 171 of 320").
-- **Libraries open on the first poster**, and Back returns to the one you left. Type a title's first letters on a poster to
-  go to it. R or F5 keeps the sort, the filters and the poster.
-- **View: small, medium or large posters, or a list,** kept for each library; Cinematic also offers posters instead of stills.
-- **Room for the titles.** Posters keep their shape at every window size (they were cropped at 1100 px). Cinematic's preview
-  takes a third of the window at most and folds to a band as you scroll, with Sort and Filter above the grid. Editorial's
-  rows run on across letters, each letter tagged on its first title, its heading folds to one line as you scroll, and its
-  titles are a size larger. Drive-in's sky folds to a band as you scroll.
-- **Loading looks like the page it loads,** the header and letter row in place and the posters where they will be.
-- **A collection has a page of its own,** the same in every theme, drawn in that theme's type and colours: the box set's
-  poster, its title, "6 films · 1979–2016 · 1 of 6 watched" with a progress bar, three lines of its overview (More shows
-  the rest), **Play** or **Resume** on the first film you haven't watched, in the collection's order, **Shuffle**, and
-  Watched and Favourite for the whole set. The films are in the collection's own order (the one set on your server;
-  release date when none is set), each numbered; **Order** offers release date, name and date added, and **Hide watched**
-  leaves the rest. No genre filter, and an A to Z only from 30 films sorted by name. A collection that is empty or does
-  not load says so, with Retry.
-- **A playlist opens on the same page,** as a numbered list in its own order.
-- **Film pages say "Part of: Copper and Glass"** when the film is in a collection (servers from Jellyfin 10.11); the
-  link opens it.
-- **Home no longer shows "New in Collections" or "New in Playlists".** A collection is made when its films are imported,
-  so the row repeated "New in Movies".
-- **The Libraries page is in your theme** (its title, margins and ground), shows what each library holds ("Movies · 320 ·
-  97 unwatched"), puts Collections and Playlists in a group of their own after the media libraries, shares the tiles
-  evenly between rows (no tile alone on a row), says when it cannot load your libraries (with Retry), and puts the
-  keyboard on the first tile.
-- **One page grid per theme:** the Libraries page, a collection, Search results and Settings put their title where the
-  theme's library puts its title, with the same side margins on both sides (on the 4 px grid).
-- **The top bar shows every library while it has room.** Each of your libraries is a tab, in your server's order, with
-  Collections and Playlists last; the bar no longer folds five or more into one "Libraries" tab at any width. When the
-  window is too narrow for them all beside the search box, the last ones move into **Libraries ▾**, whose menu starts with
-  All libraries; only when even Home, Libraries ▾ and the search box do not fit does the bar fold into one Sections menu.
-  The folded tab is named after the library you are in ("Movies ▾"), and its menu checks it. "Add to the top bar" is gone:
-  every library already is a tab. All libraries is always one click away.
-- **One place is lit in the bar, always the one you chose.** A tab, a library from the menu, the search box or Settings
-  stays lit on every page you open from it (a film, a season, the player), so the same film no longer lights Home, Libraries
-  or nothing depending on how you got there. The search box wears the underline while its results (or an item from it)
-  show, the account button a ring while Settings does. Choosing the lit tab again on its own page takes it back to its top;
-  choosing a library from a menu puts the keyboard in the page, not back on the tab.
-- **A film you reach from Home or the search results names its library** above its title ("Movies ›"); a click opens the
-  library.
-- **The top bar sits on one line.** The window's Minimize, Maximize and Close are as tall as the bar, so they line up with
-  everything else; Back is a quiet arrow 16 px from the edge (a dead Back no longer sits on a darker tile), with the same
-  soft hover as the tabs; the tab underline is as wide as its label, and hovering a tab shows a soft fill instead of a line;
-  the spacing is even (16, 24, 24, 8). The search box is centred in the window when there is room, otherwise it sits beside
-  the account; its tooltip names Ctrl+F and /. The Nixie wordmark goes Home. Cinematic's floating bar is centred, with its
-  menu on the same glass; Drive-in's sparkles stay out of the bar. The bar itself is no longer a Tab stop with nothing on it.
-- **The trailer theatre keeps the keyboard.** While a trailer plays, Tab and Shift+Tab stay inside it, Esc and Back always
-  close it, and every other shortcut (Ctrl+F, /, R, F1, Alt+Home, Ctrl+,) and a page's own keys (Home's N and C, Ctrl+Z)
-  do nothing. Before, Ctrl+F moved the keyboard into the search box under the dim, and Esc then no longer closed it.
-  A click on the dim's top band closes it too: that band was still the window's title bar, and a click there dragged the
-  window (a double click maximized it).
+**Up next and the player**
+
+- **The player's controls always come back with the mouse.** On 1.3.1, after opening the player and pressing Space before
+  any click, moving the mouse could stop bringing the controls back until the player was opened again. Any move of the
+  mouse over the video now shows them, whatever had the keyboard, and keys work in any order with the mouse.
+- **The next episode looks and reads the same everywhere:**
+  - In the player, **Next episode** is the main button (Primary, 44 high) with a skip-next icon, and the countdown runs as
+    a clear 3 px line along its foot; the episode's title is in its tooltip and Narrator's name. **Watch credits**,
+    **Keep watching**, **Skip intro** and **Skip credits** are secondary buttons of the same height, all on one line, in
+    the theme's wine instead of a stray teal, and they line up with the bar's own edge in every theme (they overhung
+    Editorial's bar by 16 px and Cinematic's by 64).
+  - **One label, "Up next"**, on every Home, the episode pages and Drive-in's sign (it said Next Up, Next up and Coming
+    up), and one episode code: Drive-in's tubes say "S1 E03" (they said "S1·E03").
+  - **Home's next-up item opens its episode in every theme** (Drive-in's sign and Editorial's list played it, Classic and
+    Cinematic opened it); its page's Play is one more Enter. Editorial's list lost the play mark that was not a button.
+  - **The season page marks the episode its Play starts "Up next"** in every theme (Drive-in's showtimes said NEXT).
+- **Chapters in every theme:** the player's bar has a Chapters menu (the chapters with their times, the one playing
+  checked; a click goes there), disabled and saying so when the item has none. Editorial no longer promises a paused
+  side column it never had.
+- **Cinematic's player:** the bar's Audio and subtitles button opens the player panel's own Audio and subtitles part (one
+  place for the job), and the window's glass island no longer floats over the video.
+- **Home videos and music videos play** in Nixie's player, alone like a film (they could only say "can't play here").
+
+**The keyboard**
+
+- **A film or an episode page opens with the keyboard on Play** in every theme (it was on the top bar's Back); Back and
+  Forward still put it back where it was.
+- **In the player,** Tab reaches the prompts first while they show, then runs left to right; after the player, the
+  keyboard is back on the page's Play in every theme (Drive-in left it nowhere). With F1's shortcut sheet open over the
+  player, the player's keys no longer act under it.
 - **R keeps your place, and only once.** Holding R or F5 refreshes the page once (it reloaded on every auto-repeat), a
   second R while the page is still loading joins the first, and the keyboard goes back to the button it was on (Trailer,
   not Play) or the card it was on (not a card out of view). On a slow server, if you move first (a key, a click, the wheel,
   the search box), the refresh leaves the keyboard where you put it. R on a closed list box (Audio, Subtitles) picks the
   entry starting with R instead of refreshing; F5 and Ctrl+R still refresh there.
+- **Ctrl+F has one owner,** the window's shortcuts: like every shortcut it does nothing while you type in a box.
+
+**Fixes from the first bug hunt**
+
+- **The trailer theatre keeps the keyboard.** While a trailer plays, Tab and Shift+Tab stay inside it, Esc and Back always
+  close it, and every other shortcut (Ctrl+F, /, R, F1, Alt+Home, Ctrl+,) and a page's own keys (Home's N and C, Ctrl+Z)
+  do nothing. Before, Ctrl+F moved the keyboard into the search box under the dim, and Esc then no longer closed it.
+  A click on the dim's top band closes it too: that band was still the window's title bar, and a click there dragged the
+  window (a double click maximized it).
 - **After "Choose a look", the old Home lets go.** Classic's, Cinematic's and Editorial's Home listen to the page's data
   only while shown, as Drive-in's did: the Home you left could close the new one's "Removed from Continue Watching ·
   Undo" under your pointer.
 - **Update checks survive a clock change.** When GitHub asks Nixie to wait, the wait is kept for a day at most, a wait
   that a clock set back put days ahead counts as over, and Check now says which day ("wait until tomorrow at 09:00").
+
+**Verified, and the known limits**
+
+- Every theme runs the keyboard matrix, the streams' harness scripts and the review's measurements as checks
+  (`then-140-checks.ps1`): the top bar on one line, the loading placeholders where the cards land, every library's items
+  opening, the focus named after every navigation, Narrator's names carrying the numbers on screen, the empty states, and
+  in the player no prompt over the time or the seek bar and its labels at 4.5:1.
+- Editorial has no list view (View offers its poster sizes only).
+- Drive-in's chapter bulbs on the console come later; its Chapters menu is in the bar.
+- Two checks are by hand, not off-screen: open the player and press Space before any click, then move the mouse (the
+  controls must come back); and Esc inside YouTube's own player in the trailer theatre.
 
 ## 1.3.1
 

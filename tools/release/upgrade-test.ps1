@@ -33,12 +33,12 @@
            shortcuts and registry keys, so they can never touch an installed Nixie or Seaglass), runs the whole test on
            them, and does not need the published MSI. The safety check still runs, for those products.
 
-  Usage: upgrade-test.ps1 -Out <scratch folder> [-Version 1.3.1] [-OldMsi <msi>] [-NewMsi <msi>] [-Launch] [-SelfCheck]
+  Usage: upgrade-test.ps1 -Out <scratch folder> [-Version 1.4.0] [-OldMsi <msi>] [-NewMsi <msi>] [-Launch] [-SelfCheck]
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Out,
-    [string]$Version = '1.3.1',
+    [string]$Version = '1.4.0',
     [string]$OldMsi,
     [string]$NewMsi,
     [switch]$Launch,
