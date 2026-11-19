@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.4.0
+
+- **One accent, used for three things.** Pink now marks only the page's main action, where you are, and progress.
+  - A watched title shows a small, dim check in the top-right corner of its card.
+  - A series, season or collection with episodes or films left shows how many in a small square in the top-left corner.
+    Narrator says the same number.
+  - The old pink capsule, which meant both "watched" and "this many left", is gone from every theme.
+- **One highlight for each meaning, in every theme.**
+  - The card the keyboard is on has a two-tone ring and its buttons.
+  - The mouse lifts a card or brightens it. While the keyboard is on a card, the mouse only brightens the others, so two
+    cards never look selected at once.
+  - Only the artwork grows when a card is selected. The title under it no longer moves or overlaps its neighbours.
+  - Cinematic's stills grow by at most 8 px a side, without the pink glow. Play shows on a still the keyboard is on only
+    where Enter plays it.
+  - Editorial: a poster whose details are open has an accent rim and a notch instead of the focus ring. Narrator says
+    "expanded" or "collapsed" only when the details open or close.
+- **One set of button shapes and sizes in every theme.**
+  - Every library toolbar uses the small 32 px buttons.
+  - Round 44 px icon buttons everywhere, Editorial included.
+  - Each row has one "See all" link at its right; the row title stays a heading.
+  - Editorial's chips are 32 px. A picked genre is a plain highlight; Unwatched and Favorites show a check when on.
+  - A card's buttons sit in one strip along the foot of the artwork: Play, Watched, Favorite and More.
+  - Drive-in's season tubes work like tabs.
+  - Delete confirmations show a trash icon, and Delete shows its focus.
+  - The update notice: Download and install is the main button, Release notes a link.
+  - The player's buttons respond to hover, press and focus like every other button.
+  - Editorial's sunset stripe under the top bar has no pink band and no longer shows over the video.
+
 ## 1.3.1
 
 - **Trailers play in Nixie.** The Trailer button no longer sends you to the browser.

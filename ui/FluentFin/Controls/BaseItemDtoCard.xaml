@@ -141,7 +141,7 @@
                     Visibility="Collapsed">
                     <Border
                         x:Name="HoverScrim"
-                        Height="96"
+                        Height="112"
                         VerticalAlignment="Bottom"
                         Background="{ThemeResource NixieCardStripScrimBrush}"
                         IsHitTestVisible="False" />
