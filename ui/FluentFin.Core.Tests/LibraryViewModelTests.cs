@@ -24,11 +24,12 @@ public sealed class LibraryViewModelTests
 		await vm.OnNavigatedTo(new BaseItemDto());
 		Assert.Equal(250, vm.Items.Count);
 
+		// Nixie 1.4.0 (item 8): a rating opens highest first; the direction turns
 		vm.UpdateSortBy(ItemSortBy.CommunityRating);
-		AssertOrder(vm, dtos);
-
-		vm.UpdateSortOrder(SortOrder.Descending);
 		AssertOrder(vm, dtos, descending: true);
+
+		vm.UpdateSortOrder(SortOrder.Ascending);
+		AssertOrder(vm, dtos);
 	}
 
 	// Nixie 1.3.1 (the UX review's CL-M6): the name sort and the A-Z jump go by Jellyfin's sort name: "The Matrix" files under M
@@ -82,7 +83,7 @@ public sealed class LibraryViewModelTests
 
 		vm.UpdateSortBy(ItemSortBy.Name);
 		Assert.Equal(["Alpha", "Bravo", "Mike", "Zulu"], vm.Items.Select(x => x.Name));
-		Assert.Equal("Name", vm.SortName);
+		Assert.Equal("Title", vm.SortName);
 	}
 
 	[Fact]

@@ -17,9 +17,10 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	private readonly ReadOnlyObservableCollection<BaseItemViewModel> _items;
 
 
-	public LibraryViewModel(IJellyfinClient jellyfinClient)
+	public LibraryViewModel(IJellyfinClient jellyfinClient, ILocalSettingsService? localSettings = null)
 	{
 		JellyfinClient = jellyfinClient;
+		_localSettings = localSettings;
 
 		// tie-break so equal keys (e.g. unrated, never played) keep a stable order
 		// Nixie 1.3.1: a playlist keeps its own order until a sort is picked (InPlaylistOrder)
@@ -41,7 +42,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			.Subscribe(x =>
 			{
 				_itemsCache.Refresh();
-				ActiveFilters = LibraryBrowse.ActiveFilters(Filter);
+				FiltersChanged();
 			});
 
 		// Seaglass 1.1.4 (layout audit, item 6): one continuously scrolling grid, as every streaming app has, not pages of 100
@@ -114,14 +115,25 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	private IComparer<BaseItemViewModel>? _comparer;
 	private BaseItemDto? _library;
 
-	/// <summary>The sort in use, on the Sort button ("Name").</summary>
+	private readonly ILocalSettingsService? _localSettings;
+
+	/// <summary>The sort in use, as its menu says it ("Title").</summary>
 	public string SortName => InPlaylistOrder ? PlaylistOrderName : LibraryBrowse.SortName(SortBy);
+
+	/// <summary>Nixie 1.4.0 (item 8): what the Sort button shows in every theme: "Title · A to Z", "Date added · newest first".</summary>
+	public string SortText => InPlaylistOrder ? PlaylistOrderName : LibraryBrowse.SortText(SortBy, Order);
+
+	/// <summary>The direction in words: "A to Z", "newest first".</summary>
+	public string DirectionWords => LibraryBrowse.DirectionWords(SortBy, Order);
+
+	/// <summary>The other direction in words: "Z to A", "oldest first".</summary>
+	public string OtherDirectionWords => LibraryBrowse.OtherDirectionWords(SortBy, Order);
 
 	/// <summary>Up for ascending, down for descending, beside the sort's name.</summary>
 	public string SortGlyph => LibraryBrowse.SortGlyph(Order);
 
-	/// <summary>The Sort button for Narrator: "Sort: Name, ascending".</summary>
-	public string SortButtonName => InPlaylistOrder ? $"Sort: {PlaylistOrderName}" : LibraryBrowse.SortButtonName(SortBy, Order);
+	/// <summary>The Sort button for Narrator, its words first: "Title, A to Z, Sort".</summary>
+	public string SortButtonName => InPlaylistOrder ? $"{PlaylistOrderName}, Sort" : LibraryBrowse.SortButtonName(SortBy, Order);
 
 	/// <summary>The genres, tags, years and ratings picked in Filter.</summary>
 	[ObservableProperty]
@@ -135,6 +147,173 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	/// <summary>"368 movies", or "12 of 368 movies" with filters on.</summary>
 	[ObservableProperty]
 	public partial string CountText { get; set; } = "";
+
+	// ---- Nixie 1.4.0 (the UX review's X4, item 2): the filters on, said; their counts honest; nothing left, said ----------
+
+	/// <summary>Every filter on, one chip each ("Unwatched ✕", "Comedy ✕"), for the applied-filter row.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(HasAppliedFilters))]
+	public partial IReadOnlyList<AppliedFilter> AppliedFilters { get; set; } = [];
+
+	/// <summary>The applied-filter row shows (a filter is on, over a library that has titles).</summary>
+	public bool HasAppliedFilters => AppliedFilters.Count > 0 && _itemsCache.Count > 0;
+
+	/// <summary>The applied-filter row's count line (a polite live region): "Showing 223 of 320 movies".</summary>
+	[ObservableProperty]
+	public partial string ShowingText { get; set; } = "";
+
+	/// <summary>The library has titles, and the filters on leave none: said ("No unwatched movies in Comedy"), not a blank grid.</summary>
+	[ObservableProperty]
+	public partial bool NoMatches { get; set; }
+
+	/// <summary>The no-matches state's title: "No unwatched movies in Comedy".</summary>
+	[ObservableProperty]
+	public partial string NoMatchesText { get; set; } = "";
+
+	/// <summary>The no-matches state's message.</summary>
+	public string NoMatchesMessage => LibraryNoMatches.Message;
+
+	/// <summary>The titles not watched yet among those the other filters leave: the Unwatched switch's count.</summary>
+	[ObservableProperty]
+	public partial int UnwatchedCount { get; set; }
+
+	/// <summary>A chip's ✕: that one filter off.</summary>
+	[RelayCommand]
+	public void RemoveFilter(AppliedFilter? filter)
+	{
+		if (filter is not null)
+		{
+			Filter.Remove(filter);
+		}
+	}
+
+	private void FiltersChanged()
+	{
+		ActiveFilters = LibraryBrowse.ActiveFilters(Filter);
+		AppliedFilters = Filter.Applied();
+		Recount();
+		UpdateBrowse();
+	}
+
+	/// <summary>The Filter menu's counts and the Unwatched switch's, against the other filters on.</summary>
+	private void Recount()
+	{
+		var items = _itemsCache.Items.ToList();
+		foreach (var facet in Facets)
+		{
+			facet.Recount(items, Filter);
+		}
+
+		UnwatchedCount = items.Count(x => x.UserData?.Played != true && Filter.Matches(x, FilterGroup.Unwatched));
+	}
+
+	// ---- Nixie 1.4.0 (item 13): the A to Z in one shape, the letter in view, where the view is ----------------------------
+
+	/// <summary>The A to Z's tiles: # and A to Z always (those with no titles dimmed), then any other key; none when <see cref="LetterRow"/> is not Letters.</summary>
+	[ObservableProperty]
+	public partial IReadOnlyList<LetterTile> LetterTiles { get; set; } = [];
+
+	/// <summary>What the row under the toolbar holds: the A to Z (sorted by title, 48 titles or more), else the two directions (its height kept, so a sort never moves the grid), else nothing (nothing shown).</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(ShowsLetters), nameof(ShowsDirections))]
+	public partial LetterRowMode LetterRow { get; set; }
+
+	public bool ShowsLetters => LetterRow == LetterRowMode.Letters;
+
+	public bool ShowsDirections => LetterRow == LetterRowMode.Directions;
+
+	/// <summary>The letter the first title in view files under (sorted by title), else null.</summary>
+	[ObservableProperty]
+	public partial string? CurrentLetter { get; set; }
+
+	/// <summary>Where the view is: "M · 324 of 1,000" (large libraries), empty before the grid has scrolled.</summary>
+	[ObservableProperty]
+	public partial string PositionText { get; set; } = "";
+
+	private int _firstShown;
+
+	/// <summary>The page says which title is first in view (on every scroll): the A to Z marks its letter, the readout says where.</summary>
+	public void ShowingFrom(int index)
+	{
+		if (_items.Count == 0 || index < 0)
+		{
+			CurrentLetter = null;
+			PositionText = "";
+			MarkLetter(null);
+			return;
+		}
+
+		_firstShown = index = Math.Min(index, _items.Count - 1);
+		var letter = SortBy == ItemSortBy.Name && !InPlaylistOrder ? LibraryBrowse.LetterOf(LibraryBrowse.SortKey(_items[index])) : null;
+		CurrentLetter = letter;
+		PositionText = LibraryBrowse.PositionText(letter, index, _items.Count);
+		MarkLetter(letter);
+	}
+
+	private void MarkLetter(string? letter)
+	{
+		foreach (var tile in LetterTiles)
+		{
+			tile.IsCurrent = letter is not null && string.Equals(tile.Letter, letter, StringComparison.OrdinalIgnoreCase);
+		}
+	}
+
+	/// <summary>Type-to-jump: the first title, from <paramref name="from"/> on, whose name starts with what was typed, else null.</summary>
+	public int? TypeAhead(string typed, int from = 0) => LibraryBrowse.TypeAhead(_items, typed, from);
+
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's X8, item 4): the library just opened (not Back): its first poster gets the focus, by the
+	/// program (a ring only for a keyboard user), once the grid is in. The page reads it with <see cref="FocusRequest"/>.
+	/// </summary>
+	public bool ArrivalFocus { get; set; }
+
+	// ---- Nixie 1.4.0 (items 12 and 13): the library's view, kept per library ----------------------------------------------
+
+	/// <summary>Small, medium or large posters.</summary>
+	[ObservableProperty]
+	public partial LibraryDensity Density { get; set; } = LibraryDensity.Medium;
+
+	/// <summary>A grid of posters, or a list.</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsList))]
+	public partial LibraryLayout Layout { get; set; } = LibraryLayout.Grid;
+
+	public bool IsList => Layout == LibraryLayout.List;
+
+	/// <summary>Cinematic: 16:9 stills or posters.</summary>
+	[ObservableProperty]
+	public partial LibraryArt Art { get; set; } = LibraryArt.Stills;
+
+	[RelayCommand]
+	public void SetDensity(LibraryDensity density)
+	{
+		Density = density;
+		SaveView();
+	}
+
+	[RelayCommand]
+	public void SetLayout(LibraryLayout layout)
+	{
+		Layout = layout;
+		SaveView();
+	}
+
+	[RelayCommand]
+	public void SetArt(LibraryArt art)
+	{
+		Art = art;
+		SaveView();
+	}
+
+	private void SaveView() => LibraryViews.Save(_localSettings, _library?.Id, new LibraryView(Density, Layout, Art));
+
+	private void ReadView()
+	{
+		var view = LibraryViews.Read(_localSettings, _library?.Id);
+		Density = view.Density;
+		Layout = view.Layout;
+		Art = view.Art;
+	}
 
 	/// <summary>The A-Z jump: the letters the library's titles start with, while it is sorted by name (else none).</summary>
 	[ObservableProperty]
@@ -154,17 +333,21 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	public double? ReturnOffset { get; set; }
 
 
-	partial void OnSortByChanged(ItemSortBy value)
+	partial void OnSortByChanged(ItemSortBy value) => SortWordsChanged();
+
+	partial void OnOrderChanged(SortOrder value) => SortWordsChanged();
+
+	partial void OnInPlaylistOrderChanged(bool value) => SortWordsChanged();
+
+	private void SortWordsChanged()
 	{
 		OnPropertyChanged(nameof(SortName));
-		OnPropertyChanged(nameof(SortButtonName));
-	}
-
-	partial void OnOrderChanged(SortOrder value)
-	{
+		OnPropertyChanged(nameof(SortText));
 		OnPropertyChanged(nameof(SortGlyph));
 		OnPropertyChanged(nameof(SortButtonName));
 		OnPropertyChanged(nameof(SortOrderButtonName));
+		OnPropertyChanged(nameof(DirectionWords));
+		OnPropertyChanged(nameof(OtherDirectionWords));
 	}
 
 	/// <summary>The whole library as the grid shows it across its pages: filtered and in the sort's order.</summary>
@@ -176,13 +359,31 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 	private void UpdateBrowse()
 	{
-		CountText = _itemsCache.Count == 0 ? "" : LibraryBrowse.CountText(TotalCount, _itemsCache.Count, _library?.CollectionType);
-		var letters = SortBy == ItemSortBy.Name && !InPlaylistOrder && _itemsCache.Count > 0 ? LibraryBrowse.Letters(Ordered().Select(LibraryBrowse.SortKey)) : [];
+		var all = _itemsCache.Count;
+		var shown = TotalCount;
+		CountText = all == 0 ? "" : LibraryBrowse.CountText(shown, all, _library?.CollectionType);
+		ShowingText = all == 0 ? "" : LibraryBrowse.ShowingText(shown, all, _library?.CollectionType);
+		NoMatches = all > 0 && shown == 0 && !IsLoading;
+		NoMatchesText = NoMatches ? LibraryNoMatches.Title(Filter, _library?.CollectionType) : "";
+		OnPropertyChanged(nameof(HasAppliedFilters));
+
+		// Nixie 1.4.0 (item 13): the A to Z from 48 titles shown, sorted by title; else the row holds the two directions
+		var byName = SortBy == ItemSortBy.Name && !InPlaylistOrder;
+		LetterRow = all == 0 || shown == 0 ? LetterRowMode.None : byName && shown >= LibraryBrowse.LettersFrom ? LetterRowMode.Letters : LetterRowMode.Directions;
+		var letters = byName && all > 0 ? LibraryBrowse.Letters(Ordered().Select(LibraryBrowse.SortKey)) : [];
 		if (!letters.SequenceEqual(Letters))
 		{
 			Letters = letters;
 			_lastJump = null;
 		}
+
+		var tiles = LetterRow == LetterRowMode.Letters ? Letters : [];
+		if (LetterTiles.Count == 0 && tiles.Count > 0 || !LetterTiles.Where(t => t.HasTitles).Select(t => t.Jump).SequenceEqual(tiles))
+		{
+			LetterTiles = tiles.Count == 0 ? [] : LibraryBrowse.Tiles(tiles);
+		}
+
+		ShowingFrom(Math.Min(_firstShown, Math.Max(0, _items?.Count - 1 ?? 0)));
 	}
 
 	/// <summary>A-Z: the first title with that letter gets the focus (the grid scrolls to it).</summary>
@@ -307,8 +508,8 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	[RelayCommand]
 	public void ToggleSortOrder() => UpdateSortOrder(Order == SortOrder.Descending ? SortOrder.Ascending : SortOrder.Descending);
 
-	/// <summary>The direction button for Narrator: "Ascending, switch to descending".</summary>
-	public string SortOrderButtonName => LibraryBrowse.SortOrderButtonName(Order);
+	/// <summary>The direction button for Narrator: "A to Z, switch to Z to A".</summary>
+	public string SortOrderButtonName => LibraryBrowse.SortOrderButtonName(SortBy, Order);
 
 	[ObservableProperty]
 	public partial bool IsLoading { get; set; }
@@ -324,10 +525,30 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 	public LibraryFilter Filter { get; set; } = new();
 
+	/// <summary>
+	/// A key picked in the Sort menu. Nixie 1.4.0 (the UX review's X5, item 8): a new key opens in its natural direction (dates
+	/// and ratings newest and highest first; Date added opened oldest first); the key in use picked again turns the direction.
+	/// </summary>
 	[RelayCommand]
 	public void UpdateSortBy(ItemSortBy sortBy)
 	{
+		var again = sortBy == SortBy && !InPlaylistOrder;
 		InPlaylistOrder = false; // Nixie 1.3.1: a sort picked replaces a playlist's own order
+		if (again)
+		{
+			ToggleSortOrder();
+			return;
+		}
+
+		Order = LibraryBrowse.NaturalOrder(sortBy);
+		SortBy = sortBy;
+	}
+
+	/// <summary>Cinematic's presets: a key and a direction at once (no turn for the key in use).</summary>
+	public void SetSort(ItemSortBy sortBy, SortOrder order)
+	{
+		InPlaylistOrder = false;
+		Order = order;
 		SortBy = sortBy;
 	}
 
@@ -372,6 +593,8 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		IsLoading = true;
 		Title = dto.Name ?? "";
 		_library = dto;
+		ReadView();
+		_firstShown = 0;
 
 		try
 		{
@@ -397,13 +620,22 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			});
 			Facets = FilterFacet.From(result.Items, Filter);
 
+			var cameBack = false;
 			if (ComingBack && dto.Id is { } library && LibraryPlaces.Recall(JellyfinClient.UserId, library) is { } place)
 			{
 				ComingBack = false;
+				cameBack = true;
 				PutBack(place);
 			}
 
-			UpdateBrowse();
+			FiltersChanged();
+
+			// Nixie 1.4.0 (the UX review's X8, item 4): a library opened anew gives its first poster the focus (Back: the one left)
+			if (!cameBack && result.Items.Count > 0 && FocusRequest < 0)
+			{
+				ArrivalFocus = true;
+				ShowIndex(0);
+			}
 
 			if (result.Items.Count == 0 && playlist)
 			{
@@ -420,8 +652,22 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		finally
 		{
 			IsLoading = false;
+			UpdateBrowse();
 		}
 	}
+}
+
+/// <summary>Nixie 1.4.0: what the row under a library's toolbar holds.</summary>
+public enum LetterRowMode
+{
+	/// <summary>Nothing to show (loading, empty, nothing matches).</summary>
+	None,
+
+	/// <summary>The A to Z (sorted by title, 48 titles or more).</summary>
+	Letters,
+
+	/// <summary>The two directions of the sort ("Newest first", "Oldest first"), in the A to Z's room.</summary>
+	Directions,
 }
 
 public partial class LibraryFilter : ObservableObject
@@ -453,45 +699,106 @@ public partial class LibraryFilter : ObservableObject
 	[ObservableProperty]
 	public partial ObservableCollection<string> Years { get; set; } = new();
 
-	public bool IsVisible(BaseItemViewModel dto)
+	/// <summary>The title passes every filter on.</summary>
+	public bool IsVisible(BaseItemViewModel dto) => Matches(dto, null);
+
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's X4, item 2): the title passes every filter on but those of <paramref name="except"/> (a
+	/// facet's counts are counted so: against the other filters). Values of one kind combine with OR (Comedy or Drama), kinds
+	/// with AND (a comedy, from 1999); ticking two genres reached zero titles while every count promised dozens.
+	/// </summary>
+	public bool Matches(BaseItemViewModel dto, FilterGroup? except)
 	{
-		bool hasMatchingTags = true;
-		bool hasMatchingGenres = true;
-		bool hasMatchingOfficialRatings = true;
-		bool hasMatchingYears = true;
-
-		if (Tags is { Count: > 0 })
+		if (except != FilterGroup.Unwatched && Unwatched && dto.UserData?.Played == true)
 		{
-			hasMatchingTags = dto.Tags?.Intersect(Tags).Count() == Tags.Count;
+			return false;
 		}
 
-		if (Genres is { Count: > 0 })
+		if (except != FilterGroup.Favorites && Favorites && dto.UserData?.IsFavorite != true)
 		{
-			hasMatchingGenres = dto.Genres?.Intersect(Genres).Count() == Genres.Count;
+			return false;
 		}
 
-		if (OfficialRatings is { Count: > 0 })
+		if (except != FilterGroup.Genres && Genres is { Count: > 0 } && dto.Genres?.Any(Genres.Contains) != true)
 		{
-			hasMatchingOfficialRatings = OfficialRatings.Contains(dto.OfficialRating ?? "");
+			return false;
+		}
+
+		if (except != FilterGroup.Tags && Tags is { Count: > 0 } && dto.Tags?.Any(Tags.Contains) != true)
+		{
+			return false;
+		}
+
+		if (except != FilterGroup.Ratings && OfficialRatings is { Count: > 0 } && !OfficialRatings.Contains(dto.OfficialRating ?? ""))
+		{
+			return false;
 		}
 
 		// Seaglass 1.1.4 (the review, item 2): a title with no year is not of the year picked (it was let through: "2020 (3)"
 		// showed 5); the year as the Filter menu writes it
-		if (Years is { Count: > 0 })
-		{
-			hasMatchingYears = dto.ProductionYear is > 0 && Years.Contains(dto.ProductionYear.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
-		}
-
-		if (Unwatched && dto.UserData?.Played == true)
+		if (except != FilterGroup.Years && Years is { Count: > 0 }
+			&& !(dto.ProductionYear is > 0 && Years.Contains(dto.ProductionYear.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))))
 		{
 			return false;
 		}
 
-		if (Favorites && dto.UserData?.IsFavorite != true)
-		{
-			return false;
-		}
-
-		return hasMatchingTags && hasMatchingGenres && hasMatchingOfficialRatings && hasMatchingYears;
+		return true;
 	}
+
+	/// <summary>Nixie 1.4.0: every filter on, one chip each, in the Filter menu's order: Unwatched, Favorites, genres, years, ratings, tags.</summary>
+	public IReadOnlyList<AppliedFilter> Applied()
+	{
+		var applied = new List<AppliedFilter>();
+		if (Unwatched)
+		{
+			applied.Add(new AppliedFilter(FilterGroup.Unwatched, "", "Unwatched"));
+		}
+
+		if (Favorites)
+		{
+			applied.Add(new AppliedFilter(FilterGroup.Favorites, "", "Favorites"));
+		}
+
+		applied.AddRange(Genres.Select(g => new AppliedFilter(FilterGroup.Genres, g, g)));
+		applied.AddRange(Years.Select(y => new AppliedFilter(FilterGroup.Years, y, y)));
+		applied.AddRange(OfficialRatings.Select(r => new AppliedFilter(FilterGroup.Ratings, r, $"Rated {r}")));
+		applied.AddRange(Tags.Select(t => new AppliedFilter(FilterGroup.Tags, t, t)));
+		return applied;
+	}
+
+	/// <summary>Nixie 1.4.0: a chip's ✕: that one filter off.</summary>
+	public void Remove(AppliedFilter filter)
+	{
+		switch (filter.Group)
+		{
+			case FilterGroup.Unwatched:
+				Unwatched = false;
+				break;
+			case FilterGroup.Favorites:
+				Favorites = false;
+				break;
+			case FilterGroup.Genres:
+				Genres.Remove(filter.Value);
+				break;
+			case FilterGroup.Years:
+				Years.Remove(filter.Value);
+				break;
+			case FilterGroup.Ratings:
+				OfficialRatings.Remove(filter.Value);
+				break;
+			case FilterGroup.Tags:
+				Tags.Remove(filter.Value);
+				break;
+		}
+	}
+
+	/// <summary>The picked values of a facet's kind.</summary>
+	public ObservableCollection<string>? Picked(FilterGroup group) => group switch
+	{
+		FilterGroup.Genres => Genres,
+		FilterGroup.Years => Years,
+		FilterGroup.Ratings => OfficialRatings,
+		FilterGroup.Tags => Tags,
+		_ => null,
+	};
 }

@@ -138,7 +138,7 @@
                                     CommandParameter="{x:Bind jm:ItemSortBy.Name}"
                                     GroupName="Library_SortItem"
                                     IsChecked="{x:Bind local:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.Name), Mode=OneWay}"
-                                    Text="Name" />
+                                    Text="Title" />
                                 <RadioMenuFlyoutItem
                                     Command="{x:Bind ViewModel.UpdateSortByCommand}"
                                     CommandParameter="{x:Bind jm:ItemSortBy.CommunityRating}"

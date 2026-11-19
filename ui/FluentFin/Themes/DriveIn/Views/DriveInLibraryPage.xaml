@@ -159,7 +159,7 @@
                             x:Name="CountTubes"
                             DigitHeight="40"
                             Spoken="{x:Bind ViewModel.CountText, Mode=OneWay}"
-                            Text="{x:Bind vm:DriveInLibrary.CountTubes(ViewModel.TotalCount), Mode=OneWay}" />
+                            Text="{x:Bind vm:DriveInLibrary.CountTubes(ViewModel.TotalCount, ViewModel.IsLoading), Mode=OneWay}" />
                         <TextBlock
                             VerticalAlignment="Center"
                             AutomationProperties.AccessibilityView="Raw"

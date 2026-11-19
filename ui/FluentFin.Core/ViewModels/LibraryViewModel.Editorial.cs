@@ -20,22 +20,23 @@ public partial class LibraryViewModel
 	public IReadOnlyList<FilterOption> EditorialGenreChips() =>
 		Facets.FirstOrDefault(f => f.Title == "Genres")?.Options ?? [];
 
-	/// <summary>Titles not watched yet, for the Unwatched chip.</summary>
-	public int EditorialUnwatched => _itemsCache.Items.Count(x => x.UserData?.Played != true);
+	/// <summary>Titles not watched yet among those the other filters leave, for the Unwatched switch (Nixie 1.4.0: honest under a filter).</summary>
+	public int EditorialUnwatched => UnwatchedCount;
 
 	/// <summary>The genre the chips show as picked: the one genre the filter has, null for none (All) or several.</summary>
 	public string? EditorialGenre => Filter.Genres.Count == 1 ? Filter.Genres[0] : null;
 
-	/// <summary>A chip: only that genre (null: All, every genre).</summary>
+	/// <summary>
+	/// A chip. Nixie 1.4.0 (the UX review's E-M3, item 2): the genre chips are the shared filter's genres, picked and unpicked
+	/// one by one (OR within: Comedy or Drama), as the Filter panel's boxes; All takes every genre off.
+	/// </summary>
 	public void EditorialPickGenre(string? genre)
 	{
-		if (genre == EditorialGenre && (genre is not null || Filter.Genres.Count == 0))
+		if (genre is null)
 		{
-			return;
+			Filter.Genres.Clear();
 		}
-
-		Filter.Genres.Clear();
-		if (genre is not null)
+		else if (!Filter.Genres.Remove(genre))
 		{
 			Filter.Genres.Add(genre);
 		}
@@ -243,25 +244,17 @@ public static class EditorialLibrary
 		return string.Join(" · ", parts);
 	}
 
-	/// <summary>The Sort button's words: "A to Z", "Z to A", "Date added", "Newest first"...</summary>
 	/// <summary>
-	/// Nixie 1.3.1 (the UX review's E-M4, WCAG 2.5.3): the Sort button's name starts with the words it shows ("A to Z"), then
-	/// says what they mean ("A to Z, Sort: Name, ascending"); it was "Sort: Name, ascending" under a button reading "A to Z".
+	/// Nixie 1.3.1 (the UX review's E-M4, WCAG 2.5.3): the Sort button's name starts with the words it shows. Nixie 1.4.0: the
+	/// shared words ("Title · A to Z" shows, "Title, A to Z, Sort" is heard), as in every theme.
 	/// </summary>
-	public static string SortButtonName(ItemSortBy sortBy, SortOrder order, bool inPlaylistOrder, string sortButtonName)
-	{
-		var shown = SortWords(sortBy, order, inPlaylistOrder);
-		return inPlaylistOrder ? $"{shown}, Sort" : $"{shown}, {sortButtonName}";
-	}
+	public static string SortButtonName(ItemSortBy sortBy, SortOrder order, bool inPlaylistOrder, string sortButtonName) =>
+		inPlaylistOrder ? $"{LibraryViewModel.PlaylistOrderName}, Sort" : LibraryBrowse.SortButtonName(sortBy, order);
 
 	/// <summary>Nixie 1.3.1: a playlist in its own order says so.</summary>
 	public static string SortWords(ItemSortBy sortBy, SortOrder order, bool inPlaylistOrder) =>
 		inPlaylistOrder ? LibraryViewModel.PlaylistOrderName : SortWords(sortBy, order);
 
-	public static string SortWords(ItemSortBy sortBy, SortOrder order) => (sortBy, order) switch
-	{
-		(ItemSortBy.Name, SortOrder.Ascending) => "A to Z",
-		(ItemSortBy.Name, _) => "Z to A",
-		_ => LibraryBrowse.SortName(sortBy),
-	};
+	/// <summary>Nixie 1.4.0 (item 8): the direction in words on the button in every theme: "Title · A to Z", "Date added · newest first".</summary>
+	public static string SortWords(ItemSortBy sortBy, SortOrder order) => LibraryBrowse.SortText(sortBy, order);
 }
