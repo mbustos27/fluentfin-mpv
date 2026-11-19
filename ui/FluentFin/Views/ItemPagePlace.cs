@@ -127,8 +127,12 @@ internal sealed class ItemPagePlace
 	/// </summary>
 	internal static long UserActedAt;
 
-	/// <summary>How long after the Primary took the focus it is given back if the navigation's own focus handling moved it out of the page.</summary>
-	private static readonly TimeSpan Settled = TimeSpan.FromMilliseconds(1500);
+	/// <summary>
+	/// How long after the Primary took the focus it is given back if it left the page by itself: the navigation's own focus
+	/// handling, or the page drawing its actions again once its artwork came (Drive-in's board, a documentary's page: Play was
+	/// unloaded and the focus went to the top bar's Back).
+	/// </summary>
+	private static readonly TimeSpan Settled = TimeSpan.FromSeconds(10);
 
 	/// <summary>
 	/// Nixie 1.4.0: whether the Primary takes the focus again a moment after it took it: the navigation's own focus handling
@@ -139,9 +143,19 @@ internal sealed class ItemPagePlace
 	internal static bool FocusAgain(bool focusInPage, int openPopups, bool userActedSince, int times) =>
 		!focusInPage && openPopups == 0 && !userActedSince && times < 3;
 
+	/// <summary>
+	/// How long an arrival waits for the page to load (a slow server) before it leaves the focus where it is; the user pressing
+	/// a key or clicking meanwhile ends the wait at once.
+	/// </summary>
+	private static readonly TimeSpan ArrivalPatience = TimeSpan.FromSeconds(15);
+
+	/// <summary>A key or click this soon after the arrival is the one that opened the page, not the user moving on.</summary>
+	private const long ArrivalGraceMs = 400;
+
 	private void FocusPrimaryWhenDrawn()
 	{
-		var deadline = DateTime.UtcNow + Patience;
+		var deadline = DateTime.UtcNow + ArrivalPatience;
+		var arrivedTick = Environment.TickCount64;
 		DateTime? placedAt = null;
 		long placedTick = 0;
 		var again = 0;
@@ -166,12 +180,13 @@ internal sealed class ItemPagePlace
 			var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count;
 			if (placedAt is { } at)
 			{
-				// placed: watch a moment for the navigation taking it back out of the page
-				if (DateTime.UtcNow - at > Settled || !ready)
+				// placed: watch a while for the focus leaving the page by itself (Play, drawn again, is not ready for a moment);
+				// the user's first key or click ends the watch
+				if (DateTime.UtcNow - at > Settled || UserActedAt > placedTick)
 				{
 					_timer?.Stop();
 				}
-				else if (FocusAgain(inPage, popups, UserActedAt > placedTick, again))
+				else if (ready && FocusAgain(inPage, popups, UserActedAt > placedTick, again))
 				{
 					again++;
 					primary!.Focus(FocusState.Programmatic);
@@ -180,7 +195,8 @@ internal sealed class ItemPagePlace
 				return;
 			}
 
-			switch (ArrivalFocus(_loaded(), ready, inPage, popups))
+			// the user moved on (a key, a click) while the page loaded: leave the focus where they put it
+			switch (ArrivalFocus(_loaded(), ready, inPage || UserActedAt > arrivedTick + ArrivalGraceMs, popups))
 			{
 				case ArrivalStep.Focus:
 					// Programmatic: the ring shows when the keyboard brought the user here, not after a click
