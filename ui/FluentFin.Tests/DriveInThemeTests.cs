@@ -294,7 +294,9 @@ public sealed class DriveInThemeTests
 		Assert.Equal(300, strip.SceneHeight);
 		Assert.False(strip.HasScreen || strip.HasSign);
 		Assert.Empty(strip.Cars);
-		Assert.True(strip.Sun.X > 1920 / 2);
+		// Nixie 1.4.0 (the UX review's DI-m1): the sun sets mid-strip, its top below the toolbar's row (it sat behind Sort and Filter)
+		Assert.Equal(1920 / 2, strip.Sun.X);
+		Assert.True(strip.Sun.Y - strip.SunRadius > 300 - 30 - strip.SunRadius);
 	}
 
 	[Theory]

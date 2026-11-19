@@ -103,7 +103,8 @@ public sealed record DriveInLayout(
 
 	/// <summary>
 	/// A page header's strip of the lot (the Library's letter board sits on it, never the posters): the sky and the hills,
-	/// the sun low at the right, no screen, sign or cars.
+	/// the sun setting in the middle, no screen, sign or cars. Nixie 1.4.0 (the UX review's DI-m1): the sun sat behind Sort
+	/// and Filter (light words on its white disc); it sets mid-strip now, its top below the toolbar's row.
 	/// </summary>
 	public static DriveInLayout Strip(double width, double height)
 	{
@@ -112,7 +113,7 @@ public sealed record DriveInLayout(
 		var ground = height - 30;
 		var radius = Math.Round(Math.Clamp(height * 0.28, 48, 96));
 		return new DriveInLayout(width, false, width >= WideFrom, MarginFor(width), height, ground, Rect.Empty, Rect.Empty, Rect.Empty,
-			new Point(Math.Round(width * 0.78), ground - radius * 0.45), radius, [], height);
+			new Point(Math.Round(width * 0.5), ground + radius * 0.1), radius, [], height);
 	}
 
 	/// <summary>A page's side margin at a width: 40 at 1100, 96 at 1920 (the concept's), in proportion between.</summary>

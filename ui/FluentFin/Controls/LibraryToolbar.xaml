@@ -48,7 +48,8 @@
             AutomationProperties.Name="{x:Bind local:LibraryToolbar.UnwatchedName(ViewModel.UnwatchedCount), Mode=OneWay}"
             IsChecked="{x:Bind ViewModel.Filter.Unwatched, Mode=TwoWay}"
             Style="{StaticResource NixieChipToggleButtonStyle}"
-            ToolTipService.ToolTip="Only what you haven't watched">
+            ToolTipService.ToolTip="Only what you haven't watched"
+            ToolTipService.Placement="Bottom">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <FontIcon FontSize="14" Glyph="&#xE890;" />
                 <TextBlock Text="Unwatched" />
@@ -60,6 +61,7 @@
             IsChecked="{x:Bind ViewModel.Filter.Favorites, Mode=TwoWay}"
             Style="{StaticResource NixieChipToggleButtonStyle}"
             ToolTipService.ToolTip="Only your favorites"
+            ToolTipService.Placement="Bottom"
             Visibility="Collapsed">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <FontIcon FontSize="14" Glyph="&#xEB51;" />
@@ -71,7 +73,8 @@
         <Button
             x:Name="SortButton"
             AutomationProperties.Name="{x:Bind ViewModel.SortButtonName, Mode=OneWay}"
-            ToolTipService.ToolTip="Sort">
+            ToolTipService.ToolTip="Sort"
+            ToolTipService.Placement="Bottom">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <FontIcon FontSize="14" Glyph="&#xE8CB;" />
                 <TextBlock x:Name="SortText" Text="{x:Bind ViewModel.SortText, Mode=OneWay}" />
@@ -85,7 +88,8 @@
             AutomationProperties.Name="{x:Bind ViewModel.SortOrderButtonName, Mode=OneWay}"
             Click="DirectionButton_Click"
             Style="{StaticResource NixieCompactIconButtonStyle}"
-            ToolTipService.ToolTip="{x:Bind local:LibraryToolbar.SwitchTo(ViewModel.OtherDirectionWords), Mode=OneWay}">
+            ToolTipService.ToolTip="{x:Bind local:LibraryToolbar.SwitchTo(ViewModel.OtherDirectionWords), Mode=OneWay}"
+            ToolTipService.Placement="Bottom">
             <FontIcon FontSize="14" Glyph="{x:Bind ViewModel.SortGlyph, Mode=OneWay}" />
         </Button>
 
@@ -94,7 +98,8 @@
             MinWidth="116"
             AutomationProperties.Name="{x:Bind ViewModel.FilterButtonName, Mode=OneWay}"
             HorizontalContentAlignment="Left"
-            ToolTipService.ToolTip="Filter">
+            ToolTipService.ToolTip="Filter"
+            ToolTipService.Placement="Bottom">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <FontIcon FontSize="14" Glyph="&#xE71C;" />
                 <TextBlock Text="{x:Bind ViewModel.FilterText, Mode=OneWay}" />
@@ -167,7 +172,8 @@
             x:Name="ViewButton"
             AutomationProperties.Name="{x:Bind local:LibraryToolbar.ViewName(ViewModel.Density, ViewModel.Layout, ViewModel.Art, ShowArtChoice), Mode=OneWay}"
             Style="{StaticResource NixieCompactIconButtonStyle}"
-            ToolTipService.ToolTip="View">
+            ToolTipService.ToolTip="View"
+            ToolTipService.Placement="Bottom">
             <FontIcon FontSize="14" Glyph="{x:Bind local:LibraryToolbar.ViewGlyph(ViewModel.Layout), Mode=OneWay}" />
             <Button.Flyout>
                 <MenuFlyout x:Name="ViewMenu" Opening="ViewMenu_Opening" Placement="BottomEdgeAlignedRight" />
