@@ -359,8 +359,13 @@ public sealed class UpdateTests : IDisposable
 		Assert.True(offline.IsError && offline.CanRetry);
 
 		var until = new DateTimeOffset(2026, 11, 20, 14, 5, 0, TimeSpan.Zero);
-		var limited = UpdateCheckMessage.For(new UpdateCheckResult(UpdateCheckStatus.RateLimited, RetryAfter: until), "1.3.1", TimeZoneInfo.Utc);
+		var limited = UpdateCheckMessage.For(new UpdateCheckResult(UpdateCheckStatus.RateLimited, RetryAfter: until), "1.3.1", TimeZoneInfo.Utc, until.AddHours(-2));
 		Assert.Equal("Couldn't check: GitHub asked Nixie to wait until 14:05", limited.Text);
+		// Nixie 1.4.0 (bug hunt m7): a wait that is not today says which day
+		Assert.Equal("Couldn't check: GitHub asked Nixie to wait until tomorrow at 14:05",
+			UpdateCheckMessage.For(new UpdateCheckResult(UpdateCheckStatus.RateLimited, RetryAfter: until), "1.3.1", TimeZoneInfo.Utc, until.AddHours(-16)).Text);
+		Assert.Equal("Couldn't check: GitHub asked Nixie to wait until Fri 27 Nov at 14:05",
+			UpdateCheckMessage.For(new UpdateCheckResult(UpdateCheckStatus.RateLimited, RetryAfter: until.AddDays(7)), "1.3.1", TimeZoneInfo.Utc, until.AddHours(-2)).Text);
 		Assert.True(limited.CanRetry);
 		Assert.Equal("Couldn't check: no answer from GitHub", UpdateCheckMessage.For(new UpdateCheckResult(UpdateCheckStatus.Failed), "1.3.1").Text);
 	}
@@ -416,6 +421,59 @@ public sealed class UpdateTests : IDisposable
 		Assert.Equal(2, handler.Requests.Count);
 		Assert.Equal("1.2.0", later.Notice!.Version);
 		Assert.Null(UpdateState.Parse(state()).RetryAfter);
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m7): GitHub's wait survives a clock change. Rate-limited, then the clock set back two days: the
+	/// stored wait is now days ahead, which counts as over (the start check and Check now ask). A Retry-After a week away is
+	/// kept as a day at most.
+	/// </summary>
+	[Fact]
+	public async Task TheWait_SurvivesAClockSetBack_AndAWeekLongRetryAfter_IsADayAtMost()
+	{
+		var (settings, state) = FakeSettings(enabled: true);
+		var now = new DateTimeOffset(2026, 11, 20, 8, 0, 0, TimeSpan.Zero);
+		var limited = true;
+		var retry = TimeSpan.FromHours(2);
+		var handler = new Fake(_ =>
+		{
+			if (!limited)
+			{
+				return Ok(Release());
+			}
+
+			var r = new HttpResponseMessage((HttpStatusCode)429);
+			r.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(retry);
+			return r;
+		});
+		UpdateCoordinator New() => new(settings.Object, new UpdateChecker(new HttpClient(handler), "1.1.1"), () => now, "1.1.1");
+
+		await New().TickAsync();
+		Assert.Equal(now.AddHours(2), UpdateState.Parse(state()).RetryAfter);
+
+		// the clock set back two days: the wait is 50 hours ahead, more than any GitHub gives: over
+		limited = false;
+		now = now.AddDays(-2);
+		Assert.False(UpdateGate.Waiting(UpdateState.Parse(state()), now));
+		var asked = await New().CheckNowAsync();
+		Assert.Equal(UpdateCheckStatus.Available, asked.Status);
+		Assert.Equal(2, handler.Requests.Count);
+
+		// a Retry-After a week away: stored as a day; Check now waits that day, then asks
+		limited = true;
+		retry = TimeSpan.FromDays(7);
+		Assert.Equal(UpdateCheckStatus.RateLimited, (await New().CheckNowAsync()).Status);
+		Assert.Equal(now + UpdateGate.LongestWait, UpdateState.Parse(state()).RetryAfter);
+		now = now.AddHours(23);
+		Assert.Equal(UpdateCheckStatus.RateLimited, (await New().CheckNowAsync()).Status);
+		Assert.Equal(3, handler.Requests.Count);
+		limited = false;
+		now = now.AddHours(1).AddMinutes(1);
+		Assert.Equal(UpdateCheckStatus.Available, (await New().CheckNowAsync()).Status);
+		Assert.Equal(4, handler.Requests.Count);
+
+		Assert.Equal(now.AddHours(24), UpdateGate.CapWait(now.AddDays(7), now));
+		Assert.Equal(now.AddHours(3), UpdateGate.CapWait(now.AddHours(3), now));
 	}
 
 	// Nixie 1.3.1: on by default, also where an older version wrote its old default (off) into the settings

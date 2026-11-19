@@ -13,6 +13,8 @@
 - **After "Choose a look", the old Home lets go.** Classic's, Cinematic's and Editorial's Home listen to the page's data
   only while shown, as Drive-in's did: the Home you left could close the new one's "Removed from Continue Watching ·
   Undo" under your pointer.
+- **Update checks survive a clock change.** When GitHub asks Nixie to wait, the wait is kept for a day at most, a wait
+  that a clock set back put days ahead counts as over, and Check now says which day ("wait until tomorrow at 09:00").
 
 ## 1.3.1
 
