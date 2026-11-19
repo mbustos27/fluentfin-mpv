@@ -25,8 +25,6 @@ public sealed partial class ShellPage : Page
 	{
 		ViewModel = App.GetService<ShellViewModel>();
 		InitializeComponent();
-		// 1.3.0: the update bar's room comes and goes with it (UpdateBarTop)
-		UpdateBar.RegisterPropertyChangedCallback(InfoBar.IsOpenProperty, (_, _) => UpdateInsets());
 		_updates.Coordinator.NoticeChanged += OnUpdateNoticeChanged;
 		Unloaded += (_, _) => _updates.Coordinator.NoticeChanged -= OnUpdateNoticeChanged;
 		ShowUpdateNotice();
@@ -111,7 +109,7 @@ public sealed partial class ShellPage : Page
 		var extendsUnder = NavigationFrame.Content is DependencyObject page && TopBar.GetExtendsUnder(page);
 		var top = TopBar.TopInset(_titleBar.IsVisible, extendsUnder);
 		ContentRoot.Padding = new Thickness(0, top, 0, 0);
-		UpdateBar.Margin = UpdateBarTop(UpdateBar.IsOpen, _titleBar.IsVisible, extendsUnder) is { } barTop ? new Thickness(16, barTop, 16, 0) : new Thickness(0);
+		UpdateBar.Margin = UpdateBarTop(UpdateBarOpen, _titleBar.IsVisible, extendsUnder) is { } barTop ? new Thickness(16, barTop, 16, 0) : new Thickness(0);
 		_titleBar.IsContentUnderBar = _titleBar.IsVisible && extendsUnder;
 	}
 
@@ -173,18 +171,44 @@ public sealed partial class ShellPage : Page
 
 	private void OnUpdateNoticeChanged() => DispatcherQueue.TryEnqueue(ShowUpdateNotice);
 
+	/// <summary>Whether the update bar shows (1.3.0: its room comes and goes with it, UpdateBarTop).</summary>
+	private bool UpdateBarOpen
+	{
+		get => UpdateBar.Visibility == Microsoft.UI.Xaml.Visibility.Visible;
+		set
+		{
+			var visibility = value ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+			if (UpdateBar.Visibility != visibility)
+			{
+				UpdateBar.Visibility = visibility;
+				UpdateInsets();
+			}
+		}
+	}
+
+	// Nixie 1.3.1: Narrator hears each version's notice once
+	private static string? s_announcedUpdate;
+
 	private void ShowUpdateNotice()
 	{
 		if (_updates.Coordinator.Notice is not { } notice)
 		{
-			UpdateBar.IsOpen = false;
+			UpdateBarOpen = false;
 			return;
 		}
 
-		UpdateBar.Title = $"{Core.AppIdentity.Name} {notice.Version} is available";
+		UpdateTitle.Text = $"{Core.AppIdentity.Name} {notice.Version} is available";
 		UpdateInstallButton.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
 		UpdateInstallButton.Content = UpdateNoticeService.IsMsiInstall() && notice.HasInstaller ? "Download and install" : "Open the download page";
-		UpdateBar.IsOpen = true;
+		UpdateBarOpen = true;
+		if (s_announcedUpdate != notice.Version)
+		{
+			s_announcedUpdate = notice.Version;
+			var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(UpdateTitle)
+				?? Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(UpdateTitle);
+			peer?.RaiseNotificationEvent(Microsoft.UI.Xaml.Automation.Peers.AutomationNotificationKind.Other,
+				Microsoft.UI.Xaml.Automation.Peers.AutomationNotificationProcessing.ImportantMostRecent, UpdateTitle.Text, "NixieUpdateNotice");
+		}
 	}
 
 	private async void OnUpdateInstallClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
@@ -194,7 +218,7 @@ public sealed partial class ShellPage : Page
 			UpdateInstallButton.IsEnabled = false;
 			await _updates.InstallAsync(notice, () =>
 			{
-				UpdateBar.Title = $"{Core.AppIdentity.Name} will close to update";
+				UpdateTitle.Text = $"{Core.AppIdentity.Name} will close to update";
 				UpdateInstallButton.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
 			});
 			UpdateInstallButton.IsEnabled = true;
@@ -211,13 +235,4 @@ public sealed partial class ShellPage : Page
 
 	// Nixie 1.3.1: Dismiss: that version is not offered again
 	private void OnUpdateDismissClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _updates.Coordinator.Dismiss();
-
-	// the close button dismisses that version; the bar closing because the notice went away does not
-	private void OnUpdateBarClosed(InfoBar sender, InfoBarClosedEventArgs args)
-	{
-		if (args.Reason == InfoBarCloseReason.CloseButton)
-		{
-			_updates.Coordinator.Dismiss();
-		}
-	}
 }

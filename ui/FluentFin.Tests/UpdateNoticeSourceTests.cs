@@ -63,7 +63,15 @@ public sealed class UpdateNoticeSourceTests
 		var shell = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "ShellPage.xaml"));
 		Assert.Contains("Content=\"Dismiss\"", shell);
 		var code = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "ShellPage.xaml.cs"));
-		Assert.Contains("UpdateBar.Title = $\"{Core.AppIdentity.Name} {notice.Version} is available\";", code);
+		Assert.Contains("UpdateTitle.Text = $\"{Core.AppIdentity.Name} {notice.Version} is available\";", code);
+		// one row (Nixie 1.3.1): the title, Download and install, Release notes and Dismiss side by side, centred
+		var bar = shell[shell.IndexOf("x:Name=\"UpdateBar\"", StringComparison.Ordinal)..];
+		bar = bar[..bar.IndexOf("</Border>", StringComparison.Ordinal)];
+		Assert.Contains("Orientation=\"Horizontal\"", bar);
+		Assert.True(bar.IndexOf("UpdateTitle", StringComparison.Ordinal) < bar.IndexOf("UpdateInstallButton", StringComparison.Ordinal)
+			&& bar.IndexOf("UpdateInstallButton", StringComparison.Ordinal) < bar.IndexOf("Release notes", StringComparison.Ordinal)
+			&& bar.IndexOf("Release notes", StringComparison.Ordinal) < bar.IndexOf("Content=\"Dismiss\"", StringComparison.Ordinal));
+		Assert.DoesNotContain("<InfoBar", bar);
 		Assert.Contains("_updates.Coordinator.Dismiss()", code);
 		// InstallAsync only from the buttons' click handlers
 		var service = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Services", "UpdateNoticeService.cs"));
