@@ -46,6 +46,8 @@ public sealed partial class LibraryPage : Page
 		_grid = new CardGrid(GridScroller, GridList, GridRepeater);
 		_grid.ForwardWheel(LibraryRoot);
 		_host = new LibraryGridHost(this, ViewModel, GridScroller, GridRepeater, _grid, Letters);
+		// Nixie 1.4.0 (item 15): the placeholders' cells against the grid's, in the log
+		LibraryProbe.Attach(this, SkeletonRepeater, GridRepeater, i => LibraryProbe.SlotOf(SkeletonRepeater, i, this), i => LibraryProbe.SlotOf(GridRepeater, i, this), logFirstCard: false);
 		ViewModel.PropertyChanged += (_, e) =>
 		{
 			if (e.PropertyName is nameof(LibraryViewModel.Density) or nameof(LibraryViewModel.Layout))

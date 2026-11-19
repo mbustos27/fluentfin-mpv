@@ -58,6 +58,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 	public EditorialLibraryPage()
 	{
 		InitializeComponent();
+		// Nixie 1.4.0 (item 15): the first poster's time ([perf]) and the placeholders' cells against the posters', in the log
+		LibraryProbe.Attach(this, Skeleton, Lines, i => LibraryProbe.SlotOf(Skeleton, i, this), i => LibraryProbe.RectOf(PosterAt(i), this), logFirstCard: true);
 		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, _) => QueueRebuild();
 		ViewModel.PropertyChanged += (_, e) =>
 		{
@@ -700,6 +702,29 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			_jumpFocus = FocusState.Keyboard;
 			ViewModel.FocusRequest = target;
 		}
+	}
+
+	/// <summary>Nixie 1.4.0 (item 15, LibraryProbe): the <paramref name="index"/>th poster drawn, in reading order (null when not drawn).</summary>
+	private EditorialPoster? PosterAt(int index)
+	{
+		var seen = 0;
+		for (var line = 0; line < _lines.Count && line < 8; line++)
+		{
+			if (Lines.TryGetElement(line) is not { } element)
+			{
+				continue;
+			}
+
+			foreach (var poster in FluentFin.Helpers.ThemeAnchors.Descendants(element).OfType<EditorialPoster>())
+			{
+				if (seen++ == index)
+				{
+					return poster;
+				}
+			}
+		}
+
+		return null;
 	}
 
 	// ---- A-Z, arrival, Back ------------------------------------------------------------------------------------------

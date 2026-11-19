@@ -501,6 +501,9 @@ if ($script:page -ne 'player') {
         # (b) a title's letters within a second, R the last: the keyboard on that title, nothing refreshed
         $kmRWord = $fixture.movie.r_word
         if ($kmRWord) {
+            # back to the grid's top first (the A to Z's R left it far down, the showcase film's card not drawn)
+            [void](KM-Press 'Home'); Start-Sleep -Milliseconds 900
+            [void](Wait-Until { Find-MediaCard $fixture.movie.name } -Seconds 6 -PollMs 200)
             [void](KB-Start 'Library' (Find-MediaCard $fixture.movie.name)); Start-Sleep -Milliseconds 1300
             $kmAt = Get-Epoch
             foreach ($kmCh in $kmRWord.ToCharArray()) { [void](KM-Press "$kmCh") }

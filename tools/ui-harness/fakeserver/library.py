@@ -260,6 +260,27 @@ class Library:
                            "community": None, "critic": None}
         self.children[pvid] = [pid]
         self.children[pid] = members
+        # Nixie 1.4.0 integration (item 15, real playlists): a playlist as servers make them, of episodes and films mixed, in
+        # the user's order; one of a single item; and an empty one (the page's empty state)
+        shows = _id("view", "Shows")
+        episodes = [i for s in self.children.get(shows, []) for season in self.children.get(s, [])
+                    for i in self.children.get(season, [])][:40]
+        mixed = rng.sample(episodes, min(3, len(episodes))) + rng.sample(pool, 2)
+        rng.shuffle(mixed)
+        for name, kids, days, overview in (("Season Openers", mixed, 30, "First episodes and a couple of films, for a long evening."),
+                                           ("One for the Road", rng.sample(pool, 1), 5, ""),
+                                           ("Nothing Yet", [], 1, "")):
+            plid = _id("playlist", name)
+            years = [self.items[m]["year"] for m in kids if "year" in self.items[m]] or [self.now.year]
+            self.items[plid] = {"Id": plid, "kind": "boxset", "playlist": True, "Name": name, "parent": pvid, "view": pvid,
+                                "created": self.now - datetime.timedelta(days=days), "year": min(years),
+                                "premiere": min((self.items[m]["premiere"] for m in kids if "premiere" in self.items[m]),
+                                                default=self.now - datetime.timedelta(days=days)),
+                                "genres": [], "tags": [], "rating": None, "people": [], "studios": [], "overview": overview,
+                                "tagline": "", "community": None, "critic": None}
+            self.children[pvid].append(plid)
+            self.children[plid] = list(kids)
+        self.children[pvid].sort(key=lambda i: self.sort_name(self.items[i]))
 
     def collections_of(self, item_id):
         """Nixie 1.4.0: the box sets an item is in (GET /Items/{id}/Collections, Jellyfin 10.11)."""
@@ -571,7 +592,8 @@ class Library:
         d["Tags"] = item["tags"]
         d["Overview"] = item["overview"]
         if kind == "boxset":   # UXCAP: Jellyfin's BoxSet: a folder of films, with a backdrop
-            d.update(PrimaryImageAspectRatio=2 / 3, ChildCount=len(self.children.get(iid, [])), MediaType="Unknown",
+            d.update(PrimaryImageAspectRatio=2 / 3, ChildCount=len(self.children.get(iid, [])),
+                     MediaType="Video" if item.get("playlist") else "Unknown",   # 1.4.0: a video playlist, as Jellyfin says
                      BackdropImageTags=[_tag(iid, "Backdrop")], CommunityRating=None)
             d["ImageBlurHashes"]["Backdrop"] = {d["BackdropImageTags"][0]: blurhash(iid + "Backdrop")}
             d.pop("CommunityRating")

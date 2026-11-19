@@ -29,6 +29,8 @@ public sealed partial class CinematicLibraryPage : Page
 		_grid = new CardGrid(GridScroller, GridList, GridRepeater);
 		_grid.ForwardWheel(LibraryRoot);
 		_host = new LibraryGridHost(this, ViewModel, GridScroller, GridRepeater, _grid, Letters);
+		// Nixie 1.4.0 (item 15): the first still's time ([perf]) and the placeholders' cells against the grid's, in the log
+		LibraryProbe.Attach(this, Placeholders, GridRepeater, i => LibraryProbe.SlotOf(Placeholders, i, this), i => LibraryProbe.SlotOf(GridRepeater, i, this), logFirstCard: true);
 		ViewModel.PropertyChanged += (_, e) =>
 		{
 			switch (e.PropertyName)

@@ -47,6 +47,8 @@ public sealed partial class DriveInLibraryPage : Page
 		_grid = new CardGrid(GridScroller, GridList, GridRepeater);
 		_grid.ForwardWheel(LibraryRoot);
 		_host = new LibraryGridHost(this, ViewModel, GridScroller, GridRepeater, _grid, Letters);
+		// Nixie 1.4.0 (item 15): the placeholders' cells against the grid's, in the log
+		LibraryProbe.Attach(this, SkeletonRepeater, GridRepeater, i => LibraryProbe.SlotOf(SkeletonRepeater, i, this), i => LibraryProbe.SlotOf(GridRepeater, i, this), logFirstCard: false);
 		// the readout ("M · 171 of 320") sits on the sky: on a board tile's plate, in the board's ink (the tiles' own colours in
 		// Dark and Light; high contrast keeps the system's)
 		if (!new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
