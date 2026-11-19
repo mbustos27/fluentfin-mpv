@@ -508,15 +508,34 @@ public sealed partial class MpvPlayerControls : UserControl
 	{
 		if (BottomBar.Visibility == Visibility.Visible && BottomBar.ActualHeight > 0)
 		{
-			_barControlsHeight = Math.Max(0, BottomBar.ActualHeight - BottomBar.Padding.Top);
+			_barControlsHeight = BarTopAbove(BottomBar.ActualHeight, BottomBar.Margin, BottomBar.Padding, BottomBar.BorderThickness);
 		}
 
-		var bottom = Controls is { ControlsVisible: true } && _barControlsHeight > 0 ? _barControlsHeight + SkipGapAboveBar : SkipEdgeBottom;
-		var margin = new Thickness(0, 0, SkipEdgeRight, bottom);
+		var margin = PromptMargin(Controls is { ControlsVisible: true }, _barControlsHeight, BottomBar.Margin, BottomBar.BorderThickness);
 		if (PillRow.Margin != margin)
 		{
 			PillRow.Margin = margin;
 		}
+	}
+
+	/// <summary>
+	/// Nixie 1.3.1 (the UX review's DI-M4): how far above the player's foot the bottom bar's visible top is. A bar on a scrim
+	/// (no border: the default, Cinematic, Editorial) starts its controls below its padding's transparent top; a framed bar
+	/// (Drive-in's nixie console) is solid from its edge. Its own margin lifts it: Drive-in's console sits 28 above the foot,
+	/// and the prompts were placed as if it did not (Watch credits on the seek bar's end, the Next card over the time left).
+	/// </summary>
+	internal static double BarTopAbove(double barHeight, Thickness barMargin, Thickness barPadding, Thickness barBorder) =>
+		Math.Max(0, barMargin.Bottom + barHeight - (barBorder.Top > 0 ? 0 : barPadding.Top));
+
+	/// <summary>
+	/// The prompts' row (Skip, Next): above the bar while it shows (<paramref name="barTop"/> and a gap), a small margin from
+	/// the foot while it is hidden; its right edge at the bar's own side: a framed bar's edge, else the scrim's padding.
+	/// </summary>
+	internal static Thickness PromptMargin(bool barsShown, double barTop, Thickness barMargin, Thickness barBorder)
+	{
+		var bottom = barsShown && barTop > 0 ? barTop + SkipGapAboveBar : SkipEdgeBottom;
+		var right = barBorder.Right > 0 ? Math.Max(SkipEdgeRight, barMargin.Right) : barMargin.Right + SkipEdgeRight;
+		return new Thickness(0, 0, right, bottom);
 	}
 
 	private void ReportBottomBar() => ReportBottomBarFor(Root.ActualHeight);
