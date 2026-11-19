@@ -1,9 +1,6 @@
 using FluentFin.Controls;
 using FluentFin.Core.ViewModels;
-using FluentFin.Core;
-using Jellyfin.Sdk.Generated.Models;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -13,17 +10,20 @@ namespace FluentFin.Themes.DriveIn.Views;
 
 /// <summary>
 /// Drive-in: the Library (see DriveInLibraryPage.xaml), over the shared <see cref="LibraryViewModel"/>. The grid's keyboard,
-/// Narrator and wheel model, the jump and Back's place are the shared Library page's (this code is its, the header aside).
+/// Narrator and wheel model, the jump, the arrival's focus and Back's place are the shared host's (<see cref="LibraryGridHost"/>).
 /// </summary>
 public sealed partial class DriveInLibraryPage : Page
 {
 	public LibraryViewModel ViewModel { get; } = App.GetService<LibraryViewModel>();
 
+	/// <summary>The medium poster cell (2:3 art and the caption).</summary>
+	private const double CardWidth = 206, CardHeight = 372;
+
 	// Seaglass scrolling: the grid's keyboard and Narrator model, and the wheel over the rest of the page
 	private readonly CardGrid _grid;
-
-	// Seaglass 1.1.4: the A-Z jump was used with the keyboard (its card then gets the keyboard focus, a click's the program's)
-	private FocusState _jumpFocus = FocusState.Keyboard;
+	private readonly LibraryGridHost _host;
+	private bool _band;
+	private double _margin = 96;
 
 	// Seaglass 1.1.4: when the page was made, for the first card's time in the log ("[perf] library: ..."), which the harness's
 	// then-library-speed reads: the app's own time, without UI Automation's
@@ -45,141 +45,93 @@ public sealed partial class DriveInLibraryPage : Page
 		};
 
 		_grid = new CardGrid(GridScroller, GridList, GridRepeater);
-		GridScroller.ScrollCompleted += GridScroller_ScrollCompleted;
-		void FocusOnLoad(object sender, RoutedEventArgs e)
-		{
-			if (_focusOnLoad)
-			{
-				_focusOnLoad = false;
-				FocusRequested();
-			}
-		}
-
-		Loaded += FocusOnLoad;
-		GridScroller.Loaded += FocusOnLoad;
 		_grid.ForwardWheel(LibraryRoot);
-		_grid.SetPlace(0, ViewModel.TotalCount);
+		_host = new LibraryGridHost(this, ViewModel, GridScroller, GridRepeater, _grid, Letters);
+		// the readout ("M · 171 of 320") sits on the sky: on a board tile's plate, in the board's ink (the tiles' own colours in
+		// Dark and Light; high contrast keeps the system's)
+		if (!new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
+		{
+			Letters.ReadoutPlate = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x2A, 0x08, 0x14));
+			Letters.ReadoutBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xF4, 0xEE));
+		}
 		ViewModel.PropertyChanged += (_, e) =>
 		{
-			if (e.PropertyName is nameof(LibraryViewModel.TotalCount))
+			if (e.PropertyName is nameof(LibraryViewModel.Density) or nameof(LibraryViewModel.Layout))
 			{
-				_grid.SetPlace(0, ViewModel.TotalCount);
-			}
-			else if (e.PropertyName is nameof(LibraryViewModel.FocusRequest) or nameof(LibraryViewModel.IsLoading))
-			{
-				FocusRequested();
+				ShowView();
 			}
 		};
-
-		// the letter tiles: the place among the letters that have titles, for Narrator ("3 of 24"); a resting tile has none
-		LetterRepeater.ElementPrepared += (_, e) =>
-		{
-			if (e.Element is Button { Tag: LetterJump jump })
-			{
-				AutomationProperties.SetPositionInSet(e.Element, ViewModel.Letters.ToList().IndexOf(jump) + 1);
-				AutomationProperties.SetSizeOfSet(e.Element, ViewModel.Letters.Count);
-			}
-		};
+		ShowView();
 
 		// the header's strip of sky follows its size; the page's margins follow the window's width
 		Header.SizeChanged += (_, e) => Sky.Layout = Controls.DriveInLayout.Strip(e.NewSize.Width, e.NewSize.Height);
 		SizeChanged += (_, e) =>
 		{
-			var margin = Controls.DriveInLayout.MarginFor(e.NewSize.Width);
-			HeaderContent.Padding = new Thickness(margin, 40, margin, 18);
-			GridScroller.Padding = new Thickness(margin - 8, 24, margin - 8, 24);
+			// Nixie 1.4.0 (plan item 13): the theme's page grid (PageGutterNarrow to PageGutterWide), as every Drive-in page
+			_margin = PageGrid.GutterAt(e.NewSize.Width);
+			Fold(_band);
+			GridScroller.Padding = new Thickness(_margin - 8, 24, _margin - 8, 24);
+			SkeletonRepeater.Margin = new Thickness(_margin - 8, 24, _margin - 8, 0);
+			AppliedFilters.Margin = new Thickness(_margin, 16, _margin, 0);
 		};
+
+		// a jump past the first line folds the sky first, so the letter's row lands at the top of the grid as it will be
+		Letters.Jumped += (_, e) =>
+		{
+			if (e.Jump.Index >= _grid.ColumnCount && !_band)
+			{
+				Fold(true);
+				UpdateLayout();
+			}
+		};
+
+		// Nixie 1.4.0 (the UX review's DI-M7, item 12): the sky folds to a band once the grid has scrolled, and opens at its top
+		GridScroller.ViewChanged += (_, _) =>
+		{
+			var band = GridScroller.VerticalOffset > (_band ? 8 : 40);
+			if (band != _band)
+			{
+				Fold(band);
+			}
+		};
+	}
+
+	/// <summary>The header at rest (the large marquee) or as a band (the compact one, smaller tubes, tighter rows).</summary>
+	private void Fold(bool band)
+	{
+		_band = band;
+		// the marquee at the theme's title y (56: it clears the top bar the strip runs under)
+		HeaderContent.Padding = new Thickness(_margin, PageGrid.Tokens().TitleY, _margin, band ? 10 : 18);
+		HeaderContent.RowSpacing = band ? 10 : 22;
+		TitleSign.Style = (Style)Application.Current.Resources[band ? "DriveInCompactMarqueeStyle" : "DriveInLargeMarqueeStyle"];
+		CountTubes.DigitHeight = band ? 28 : 40;
+	}
+
+	/// <summary>Nixie 1.4.0 (item 13): the grid's density, or the list; the placeholders follow the grid's layout.</summary>
+	private void ShowView()
+	{
+		LibraryDensities.Apply(GridLayout, ViewModel.Density, CardWidth, CardHeight);
+		LibrarySkeleton.Mirror(GridLayout, SkeletonLayout);
+		var list = ViewModel.IsList;
+		var template = (DataTemplate)Resources[list ? "RowTemplate" : "CardTemplate"];
+		if (!ReferenceEquals(GridRepeater.ItemTemplate, template))
+		{
+			GridRepeater.ItemTemplate = template;
+			GridRepeater.Layout = list ? new StackLayout { Spacing = 4 } : GridLayout;
+		}
 	}
 
 	/// <summary>Seaglass 1.1.4: coming back to the library (Back, Forward) puts the user where they were: the view model needs to know before it loads.</summary>
 	protected override void OnNavigatedTo(NavigationEventArgs e)
 	{
-		ViewModel.ComingBack = e.NavigationMode is NavigationMode.Back or NavigationMode.Forward;
-		_jumpFocus = FocusState.Keyboard;
+		_host.OnNavigatedTo(e);
 		base.OnNavigatedTo(e);
 	}
 
 	/// <summary>Seaglass 1.1.4: leaving for an item: the card the user was on (the grid's last-focused card) is kept for Back.</summary>
 	protected override void OnNavigatedFrom(NavigationEventArgs e)
 	{
-		ViewModel.LeftAt(_grid.LastItem as BaseItemViewModel, GridScroller.VerticalOffset);
+		_host.OnNavigatedFrom();
 		base.OnNavigatedFrom(e);
-	}
-
-	private void Letter_Click(object sender, RoutedEventArgs e)
-	{
-		if (sender is Button { Tag: LetterJump jump } button)
-		{
-			_jumpFocus = button.FocusState is FocusState.Keyboard ? FocusState.Keyboard : FocusState.Programmatic;
-			ViewModel.JumpToCommand.Execute(jump);
-		}
-	}
-
-	// the card a jump or a Back asked for: focused once the grid has its page (it may still be loading)
-	private void FocusRequested()
-	{
-		if (ViewModel.IsLoading || (ViewModel.FocusRequest < 0 && ViewModel.ReturnOffset is null))
-		{
-			return;
-		}
-
-		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-		{
-			if (ViewModel.IsLoading)
-			{
-				return;
-			}
-
-			// a library that answers at once (Back: 100 ms) can be in before the page, or the grid (the loaded case of the
-			// page's switch, put in when loading ends), is in the window: done once it is
-			if (XamlRoot is null || !IsLoaded || GridScroller.XamlRoot is null || !GridScroller.IsLoaded)
-			{
-				_focusOnLoad = true;
-				return;
-			}
-
-			// Back: how far down the grid was (so the card is where it was on screen), then the card. A ScrollView scrolls
-			// on its next tick: the card is focused when that scroll is done, or it would be brought into view from the top
-			UpdateLayout();
-			var index = ViewModel.FocusRequest;
-			ViewModel.FocusRequest = -1; // done: a Retry later does not take the focus again
-			var state = _jumpFocus;
-			_jumpFocus = FocusState.Keyboard;
-			if (ViewModel.ReturnOffset is { } offset && Math.Abs(Math.Min(offset, GridScroller.ScrollableHeight) - GridScroller.VerticalOffset) >= 1)
-			{
-				ViewModel.ReturnOffset = null;
-				GridScroller.UpdateLayout();
-				_returnScroll = GridScroller.ScrollTo(0, Math.Min(offset, GridScroller.ScrollableHeight), new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
-				_returnFocus = (index, state);
-				return;
-			}
-
-			ViewModel.ReturnOffset = null;
-			if (index >= 0)
-			{
-				_grid.FocusAndHold(index, state);
-			}
-		});
-	}
-
-	private bool _focusOnLoad;
-	private int _returnScroll = -1;
-	private (int Index, FocusState State) _returnFocus = (-1, FocusState.Keyboard);
-
-	private void GridScroller_ScrollCompleted(ScrollView sender, ScrollingScrollCompletedEventArgs args)
-	{
-		if (args.CorrelationId != _returnScroll)
-		{
-			return;
-		}
-
-		_returnScroll = -1;
-		if (_returnFocus.Index >= 0)
-		{
-			GridRepeater.UpdateLayout();
-			_grid.FocusAndHold(_returnFocus.Index, _returnFocus.State);
-		}
-
-		_returnFocus = (-1, FocusState.Keyboard);
 	}
 }

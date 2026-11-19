@@ -1,9 +1,7 @@
 using FluentFin.Controls;
 using FluentFin.Core.ViewModels;
-using FluentFin.Core;
 using Jellyfin.Sdk.Generated.Models;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -11,15 +9,20 @@ using Microsoft.UI.Xaml.Navigation;
 namespace FluentFin.Views;
 
 
+/// <summary>
+/// Classic: the Library (see LibraryPage.xaml). Nixie 1.4.0: the toolbar, the applied filters, the A to Z and the no-matches
+/// state are the shared library controls; the focus, the jump and Back's place the shared host's (<see cref="LibraryGridHost"/>).
+/// </summary>
 public sealed partial class LibraryPage : Page
 {
 	public LibraryViewModel ViewModel { get; } = App.GetService<LibraryViewModel>();
 
+	/// <summary>The medium cell (the card's 2:3 art and its caption).</summary>
+	private const double CardWidth = 220, CardHeight = 390;
+
 	// Seaglass scrolling: the grid's keyboard and Narrator model, and the wheel over the rest of the page
 	private readonly CardGrid _grid;
-
-	// Seaglass 1.1.4: the A-Z jump was used with the keyboard (its card then gets the keyboard focus, a click's the program's)
-	private FocusState _jumpFocus = FocusState.Keyboard;
+	private readonly LibraryGridHost _host;
 
 	// Seaglass 1.1.4: when the page was made, for the first card's time in the log ("[perf] library: ..."), which the harness's
 	// then-library-speed reads: the app's own time, without UI Automation's
@@ -41,38 +44,30 @@ public sealed partial class LibraryPage : Page
 		};
 
 		_grid = new CardGrid(GridScroller, GridList, GridRepeater);
-		GridScroller.ScrollCompleted += GridScroller_ScrollCompleted;
-		void FocusOnLoad(object sender, RoutedEventArgs e)
-		{
-			if (_focusOnLoad)
-			{
-				_focusOnLoad = false;
-				FocusRequested();
-			}
-		}
-
-		Loaded += FocusOnLoad;
-		GridScroller.Loaded += FocusOnLoad;
 		_grid.ForwardWheel(LibraryRoot);
-		_grid.SetPlace(0, ViewModel.TotalCount);
+		_host = new LibraryGridHost(this, ViewModel, GridScroller, GridRepeater, _grid, Letters);
 		ViewModel.PropertyChanged += (_, e) =>
 		{
-			if (e.PropertyName is nameof(LibraryViewModel.TotalCount))
+			if (e.PropertyName is nameof(LibraryViewModel.Density) or nameof(LibraryViewModel.Layout))
 			{
-				_grid.SetPlace(0, ViewModel.TotalCount);
-			}
-			else if (e.PropertyName is nameof(LibraryViewModel.FocusRequest) or nameof(LibraryViewModel.IsLoading))
-			{
-				FocusRequested();
+				ShowView();
 			}
 		};
+		ShowView();
+	}
 
-		// the A-Z jump's buttons: their place for Narrator ("3 of 26")
-		LetterRepeater.ElementPrepared += (_, e) =>
+	/// <summary>Nixie 1.4.0 (item 13): the grid's density, or the list; the placeholders follow the grid's layout.</summary>
+	private void ShowView()
+	{
+		LibraryDensities.Apply(GridLayout, ViewModel.Density, CardWidth, CardHeight);
+		LibrarySkeleton.Mirror(GridLayout, SkeletonLayout);
+		var list = ViewModel.IsList;
+		var template = (DataTemplate)Resources[list ? "RowTemplate" : "CardTemplate"];
+		if (!ReferenceEquals(GridRepeater.ItemTemplate, template))
 		{
-			AutomationProperties.SetPositionInSet(e.Element, e.Index + 1);
-			AutomationProperties.SetSizeOfSet(e.Element, ViewModel.Letters.Count);
-		};
+			GridRepeater.ItemTemplate = template;
+			GridRepeater.Layout = list ? new StackLayout { Spacing = 4 } : GridLayout;
+		}
 	}
 
 	// Seaglass 1.1.4: the sort menu shows the sort in use (also the one a Back put back)
@@ -80,8 +75,8 @@ public sealed partial class LibraryPage : Page
 
 	public static bool IsOrder(SortOrder current, SortOrder item) => current == item;
 
-	/// <summary>1.2.0 (the button review, L15): the Sort button shows the sort in use, "Sort: Name".</summary>
-	public static string SortLabel(string sortName) => $"Sort: {sortName}";
+	/// <summary>1.2.0 (the button review, L15): the Sort button shows the sort in use. Nixie 1.4.0: with its direction, "Title · A to Z".</summary>
+	public static string SortLabel(string sortText) => sortText;
 
 	public static bool AnyOn(int activeFilters) => activeFilters > 0;
 
@@ -94,92 +89,14 @@ public sealed partial class LibraryPage : Page
 	/// <summary>Seaglass 1.1.4: coming back to the library (Back, Forward) puts the user where they were: the view model needs to know before it loads.</summary>
 	protected override void OnNavigatedTo(NavigationEventArgs e)
 	{
-		ViewModel.ComingBack = e.NavigationMode is NavigationMode.Back or NavigationMode.Forward;
-		_jumpFocus = FocusState.Keyboard;
+		_host.OnNavigatedTo(e);
 		base.OnNavigatedTo(e);
 	}
 
 	/// <summary>Seaglass 1.1.4: leaving for an item: the card the user was on (the grid's last-focused card) is kept for Back.</summary>
 	protected override void OnNavigatedFrom(NavigationEventArgs e)
 	{
-		ViewModel.LeftAt(_grid.LastItem as BaseItemViewModel, GridScroller.VerticalOffset);
+		_host.OnNavigatedFrom();
 		base.OnNavigatedFrom(e);
-	}
-
-	private void Letter_Click(object sender, RoutedEventArgs e)
-	{
-		if (sender is Button { Tag: LetterJump jump } button)
-		{
-			_jumpFocus = button.FocusState is FocusState.Keyboard ? FocusState.Keyboard : FocusState.Programmatic;
-			ViewModel.JumpToCommand.Execute(jump);
-		}
-	}
-
-	// the card a jump or a Back asked for: focused once the grid has its page (it may still be loading)
-	private void FocusRequested()
-	{
-		if (ViewModel.IsLoading || (ViewModel.FocusRequest < 0 && ViewModel.ReturnOffset is null))
-		{
-			return;
-		}
-
-		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-		{
-			if (ViewModel.IsLoading)
-			{
-				return;
-			}
-
-			// a library that answers at once (Back: 100 ms) can be in before the page, or the grid (the loaded case of the
-			// page's switch, put in when loading ends), is in the window: done once it is
-			if (XamlRoot is null || !IsLoaded || GridScroller.XamlRoot is null || !GridScroller.IsLoaded)
-			{
-				_focusOnLoad = true;
-				return;
-			}
-
-			// Back: how far down the grid was (so the card is where it was on screen), then the card. A ScrollView scrolls
-			// on its next tick: the card is focused when that scroll is done, or it would be brought into view from the top
-			UpdateLayout();
-			var index = ViewModel.FocusRequest;
-			ViewModel.FocusRequest = -1; // done: a Retry later does not take the focus again
-			var state = _jumpFocus;
-			_jumpFocus = FocusState.Keyboard;
-			if (ViewModel.ReturnOffset is { } offset && Math.Abs(Math.Min(offset, GridScroller.ScrollableHeight) - GridScroller.VerticalOffset) >= 1)
-			{
-				ViewModel.ReturnOffset = null;
-				GridScroller.UpdateLayout();
-				_returnScroll = GridScroller.ScrollTo(0, Math.Min(offset, GridScroller.ScrollableHeight), new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
-				_returnFocus = (index, state);
-				return;
-			}
-
-			ViewModel.ReturnOffset = null;
-			if (index >= 0)
-			{
-				_grid.FocusAndHold(index, state);
-			}
-		});
-	}
-
-	private bool _focusOnLoad;
-	private int _returnScroll = -1;
-	private (int Index, FocusState State) _returnFocus = (-1, FocusState.Keyboard);
-
-	private void GridScroller_ScrollCompleted(ScrollView sender, ScrollingScrollCompletedEventArgs args)
-	{
-		if (args.CorrelationId != _returnScroll)
-		{
-			return;
-		}
-
-		_returnScroll = -1;
-		if (_returnFocus.Index >= 0)
-		{
-			GridRepeater.UpdateLayout();
-			_grid.FocusAndHold(_returnFocus.Index, _returnFocus.State);
-		}
-
-		_returnFocus = (-1, FocusState.Keyboard);
 	}
 }

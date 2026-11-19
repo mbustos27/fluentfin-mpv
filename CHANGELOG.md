@@ -51,6 +51,31 @@
   - The update notice: Download and install is the main button, Release notes a link.
   - The player's buttons respond to hover, press and focus like every other button.
   - Editorial's sunset stripe under the top bar has no pink band and no longer shows over the video.
+
+- **Filters you can see.** Every library has a one-click Unwatched switch beside Sort and Filter, in every theme.
+  - Under the toolbar, a row says what is shown ("Showing 223 of 320 movies") with a chip for each filter on; its cross
+    takes that filter off, and Clear all takes them all off. Narrator hears the new count.
+  - Two genres now mean either genre; a genre and a year mean both. The Filter menu's counts follow the other filters, and
+    a choice that would leave nothing is greyed.
+  - A filter that leaves nothing says so ("No unwatched favorite movies in Comedy") with Clear filters, instead of a blank
+    grid that looked like loading. Drive-in's tubes read 0.
+  - Cinematic's section tabs light only when they are exactly what is shown, and never reset your sort. Editorial's
+    Unwatched and Favorites are in the toolbar (they were off-screen), its genre row shows when it scrolls on, and More
+    filters opens the full Filter menu.
+- **A sort that says what it does.** Dates, ratings and play count open newest, highest or most first. The button says the
+  direction in words ("Date added · newest first"), the arrow beside it turns it in one click, and choosing the sort in use
+  again turns it too. Under any sort but Title, the A to Z's row holds Oldest first and Newest first, so the grid never moves.
+- **The A to Z in one shape.** # and A to Z in every theme, letters with no titles dimmed and skipped, at least 32 px high
+  and on one row. It shows from 48 titles. The letter you are at is marked, a jump puts that letter's row at the top, and the
+  row ends with where you are ("M · 171 of 320").
+- **Libraries open on the first poster**, and Back returns to the one you left. Type a title's first letters on a poster to
+  go to it. R or F5 keeps the sort, the filters and the poster.
+- **View: small, medium or large posters, or a list,** kept for each library; Cinematic also offers posters instead of stills.
+- **Room for the titles.** Posters keep their shape at every window size (they were cropped at 1100 px). Cinematic's preview
+  takes a third of the window at most and folds to a band as you scroll, with Sort and Filter above the grid. Editorial's
+  rows run on across letters, each letter tagged on its first title, its heading folds to one line as you scroll, and its
+  titles are a size larger. Drive-in's sky folds to a band as you scroll.
+- **Loading looks like the page it loads,** the header and letter row in place and the posters where they will be.
 - **A collection has a page of its own,** the same in every theme, drawn in that theme's type and colours: the box set's
   poster, its title, "6 films · 1979–2016 · 1 of 6 watched" with a progress bar, three lines of its overview (More shows
   the rest), **Play** or **Resume** on the first film you haven't watched, in the collection's order, **Shuffle**, and

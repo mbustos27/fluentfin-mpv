@@ -10,32 +10,37 @@ public partial class LibraryViewModel
 	public BaseItemDto_CollectionType? DriveInCollectionType => _library?.CollectionType;
 }
 
-/// <summary>One tile of the letter board's A to Z: its letter, and the jump it makes (null: no title starts with it; the tile rests).</summary>
-public sealed record LetterTile(string Letter, LetterJump? Jump)
+/// <summary>
+/// One tile of the A to Z: its letter, and the jump it makes (null: no title starts with it; the tile rests). Nixie 1.4.0:
+/// every theme's (LibraryBrowse.Tiles), and it says whether its letter is the one in view (<see cref="IsCurrent"/>): set on
+/// the tile, not on a button the repeater recycles (the UX review's C-M6: the mark went stale).
+/// </summary>
+public sealed partial class LetterTile(string letter, LetterJump? jump) : CommunityToolkit.Mvvm.ComponentModel.ObservableObject
 {
+	public string Letter { get; } = letter;
+
+	public LetterJump? Jump { get; } = jump;
+
 	public bool HasTitles => Jump is not null;
+
+	/// <summary>Its place among the letters that have titles, and how many have (Narrator's "3 of 24"); 0 for a resting tile.</summary>
+	public int Position { get; internal set; }
+
+	public int Size { get; internal set; }
 
 	/// <summary>What Narrator hears: the jump's name ("Jump to M"); a resting tile is not reachable.</summary>
 	public string Name => Jump?.Name ?? $"No titles start with {Letter}";
+
+	/// <summary>The first title in view files under this letter.</summary>
+	[CommunityToolkit.Mvvm.ComponentModel.ObservableProperty]
+	public partial bool IsCurrent { get; set; }
 }
 
 /// <summary>Nixie 1.3.0, Drive-in: the Library's letter board.</summary>
 public static class DriveInLibrary
 {
-	/// <summary>The board's tiles: # and A to Z always (a letter with no titles rests, dimmed and not a stop), then any other letter the titles start with.</summary>
-	public static IReadOnlyList<LetterTile> Tiles(IReadOnlyList<LetterJump> letters)
-	{
-		var byLetter = letters.ToDictionary(l => l.Letter, StringComparer.OrdinalIgnoreCase);
-		var tiles = new List<LetterTile>();
-		foreach (var letter in "#ABCDEFGHIJKLMNOPQRSTUVWXYZ".Select(c => c.ToString()))
-		{
-			tiles.Add(new LetterTile(letter, byLetter.GetValueOrDefault(letter)));
-			byLetter.Remove(letter);
-		}
-
-		tiles.AddRange(letters.Where(l => byLetter.ContainsKey(l.Letter)).Select(l => new LetterTile(l.Letter, l)));
-		return tiles;
-	}
+	/// <summary>The board's tiles: the shared A to Z (<see cref="LibraryBrowse.Tiles"/>).</summary>
+	public static IReadOnlyList<LetterTile> Tiles(IReadOnlyList<LetterJump> letters) => LibraryBrowse.Tiles(letters);
 
 	/// <summary>The words beside the nixie count: "FEATURES ON THE LOT" (movies), "SHOWS ON THE LOT" (series), "TITLES ON THE LOT".</summary>
 	public static string CountLabel(BaseItemDto_CollectionType? collection) => collection switch
@@ -45,6 +50,11 @@ public static class DriveInLibrary
 		_ => "TITLES ON THE LOT",
 	};
 
-	/// <summary>The count in tubes: up to five digits ("312"); a larger library shows "99999" at most (the words say the rest).</summary>
-	public static string CountTubes(int count) => count <= 0 ? "" : Math.Min(count, 99999).ToString(CultureInfo.InvariantCulture);
+	/// <summary>
+	/// The count in tubes: up to five digits ("312"); a larger library shows "99999" at most (the words say the rest). Nixie
+	/// 1.4.0 (the UX review's DI-M3): a filter that leaves nothing reads "0" (it read nothing, pixel for pixel the loading
+	/// header); only while the library loads are the tubes dark.
+	/// </summary>
+	public static string CountTubes(int count, bool loading = false) =>
+		loading ? "" : Math.Clamp(count, 0, 99999).ToString(CultureInfo.InvariantCulture);
 }

@@ -42,14 +42,17 @@ public sealed class LibraryBrowseTests
 		var vm = Library([Movie("A")]);
 		await vm.OnNavigatedTo(Movies);
 
-		Assert.Equal(("Name", "Sort: Name, ascending", ""), (vm.SortName, vm.SortButtonName, vm.SortGlyph));
+		// Nixie 1.4.0 (item 8): the direction in words, on the button and first in its name (WCAG 2.5.3)
+		Assert.Equal(("Title", "Title · A to Z", "Title, A to Z, Sort", ""), (vm.SortName, vm.SortText, vm.SortButtonName, vm.SortGlyph));
 
 		var changed = new List<string?>();
 		vm.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
 		vm.UpdateSortBy(ItemSortBy.DateCreated);
-		vm.UpdateSortOrder(SortOrder.Descending);
 
-		Assert.Equal(("Date added", "Sort: Date added, descending", ""), (vm.SortName, vm.SortButtonName, vm.SortGlyph));
+		// a date opens newest first (it opened oldest first)
+		Assert.Equal(SortOrder.Descending, vm.Order);
+		Assert.Equal(("Date added", "Date added · newest first", "Date added, newest first, Sort", ""), (vm.SortName, vm.SortText, vm.SortButtonName, vm.SortGlyph));
+		Assert.Contains(nameof(LibraryViewModel.SortText), changed);
 		Assert.Contains(nameof(LibraryViewModel.SortName), changed);
 		Assert.Contains(nameof(LibraryViewModel.SortButtonName), changed);
 		Assert.Contains(nameof(LibraryViewModel.SortGlyph), changed);
@@ -211,10 +214,10 @@ public sealed class LibraryBrowseTests
 	{
 		var vm = Library([Movie("A"), Movie("B")]);
 		await vm.OnNavigatedTo(Movies);
-		Assert.Equal("Ascending, switch to descending", vm.SortOrderButtonName);
+		Assert.Equal("A to Z, switch to Z to A", vm.SortOrderButtonName);
 
 		vm.ToggleSortOrder();
-		Assert.Equal((SortOrder.Descending, "Descending, switch to ascending"), (vm.Order, vm.SortOrderButtonName));
+		Assert.Equal((SortOrder.Descending, "Z to A, switch to A to Z"), (vm.Order, vm.SortOrderButtonName));
 		Assert.Equal(["B", "A"], vm.Items.Select(x => x.Name));
 
 		vm.ToggleSortOrder();
@@ -260,7 +263,8 @@ public sealed class LibraryBrowseTests
 		var again = Library(all);
 		await again.OnNavigatedTo(library);
 
-		Assert.Equal(-1, again.FocusRequest);
+		// Nixie 1.4.0 (item 4): opened anew, the first poster gets the focus (by the program), not the card left last time
+		Assert.Equal((0, true), (again.FocusRequest, again.ArrivalFocus));
 		Assert.Null(again.ReturnOffset);
 	}
 }

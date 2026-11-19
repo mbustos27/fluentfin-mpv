@@ -588,8 +588,10 @@ public sealed class EditorialLibraryTests
 
 		Assert.Equal("3 films · 2 unwatched · 1 added this month", EditorialLibrary.Summary(titles, BaseItemDto_CollectionType.Movies, now));
 		Assert.Equal("1 show", EditorialLibrary.Count(1, BaseItemDto_CollectionType.Tvshows));
-		Assert.Equal("A to Z", EditorialLibrary.SortWords(ItemSortBy.Name, SortOrder.Ascending));
-		Assert.Equal("Z to A", EditorialLibrary.SortWords(ItemSortBy.Name, SortOrder.Descending));
+		// Nixie 1.4.0 (item 8): the shared words, the key and its direction
+		Assert.Equal("Title · A to Z", EditorialLibrary.SortWords(ItemSortBy.Name, SortOrder.Ascending));
+		Assert.Equal("Title · Z to A", EditorialLibrary.SortWords(ItemSortBy.Name, SortOrder.Descending));
+		Assert.Equal("Date added · newest first", EditorialLibrary.SortWords(ItemSortBy.DateCreated, SortOrder.Descending));
 	}
 
 	// Nixie 1.3.1 (the UX review's E-M4, WCAG 2.5.3 "label in name"): the Sort button's name starts with the words it shows
@@ -598,9 +600,11 @@ public sealed class EditorialLibraryTests
 	{
 		var name = EditorialLibrary.SortButtonName(ItemSortBy.Name, SortOrder.Ascending, false, LibraryBrowse.SortButtonName(ItemSortBy.Name, SortOrder.Ascending));
 
-		Assert.Equal("A to Z, Sort: Name, ascending", name);
-		Assert.StartsWith(EditorialLibrary.SortWords(ItemSortBy.CommunityRating, SortOrder.Descending),
-			EditorialLibrary.SortButtonName(ItemSortBy.CommunityRating, SortOrder.Descending, false, LibraryBrowse.SortButtonName(ItemSortBy.CommunityRating, SortOrder.Descending)));
+		Assert.Equal("Title, A to Z, Sort", name);
+		// the words shown ("Community rating · highest first") start the name, the dot aside
+		static string Words(string text) => string.Join(' ', text.Split([' ', ',', '·'], StringSplitOptions.RemoveEmptyEntries));
+		Assert.StartsWith(Words(EditorialLibrary.SortWords(ItemSortBy.CommunityRating, SortOrder.Descending)),
+			Words(EditorialLibrary.SortButtonName(ItemSortBy.CommunityRating, SortOrder.Descending, false, LibraryBrowse.SortButtonName(ItemSortBy.CommunityRating, SortOrder.Descending))));
 		Assert.Equal("Playlist order, Sort", EditorialLibrary.SortButtonName(ItemSortBy.Name, SortOrder.Ascending, true, "Sort: Playlist order"));
 	}
 }

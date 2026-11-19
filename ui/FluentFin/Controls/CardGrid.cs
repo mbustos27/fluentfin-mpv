@@ -54,12 +54,16 @@ internal sealed class CardGrid
 		// comes back to it. Handled events too: the card handles its own taps.
 		list.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(List_PointerPressed), true);
 		list.BringIntoViewRequested += List_BringIntoViewRequested;
+		list.CharacterReceived += List_CharacterReceived;
 		scroller.ScrollCompleted += Scroller_ScrollCompleted;
 		repeater.ElementPrepared += (_, e) => SetPlace(e.Element, e.Index);
 		repeater.ElementIndexChanged += (_, e) => SetPlace(e.Element, e.NewIndex);
 		repeater.RegisterPropertyChangedCallback(ItemsRepeater.ItemsSourceProperty, (_, _) => WatchSource());
 		WatchSource();
 	}
+
+	/// <summary>Nixie 1.4.0: how many cards a line holds now (from the lines drawn; 1 before two lines are drawn).</summary>
+	internal int ColumnCount => Math.Max(1, GridPaging.Columns([.. Realized().Select(r => (double)r.Element.ActualOffset.Y)]));
 
 	/// <summary>The cards in the grid now.</summary>
 	internal int Count => _repeater.ItemsSourceView?.Count ?? 0;
@@ -329,9 +333,18 @@ internal sealed class CardGrid
 	/// it has the focus (the page that was left leaves the window, and the focus it had lands on the title bar about when the
 	/// grid is shown; a far card is made only once the grid has scrolled to it). A move to another card is left alone.
 	/// </summary>
-	internal void FocusAndHold(int index, FocusState state)
+	/// <param name="atTop">Nixie 1.4.0: an A to Z jump: the card's row goes to the top of the view first.</param>
+	internal void FocusAndHold(int index, FocusState state, bool atTop = false)
 	{
-		FocusIndex(index, state);
+		if (atTop)
+		{
+			FocusAtTop(index, state);
+		}
+		else
+		{
+			FocusIndex(index, state);
+		}
+
 		if (_repeater.XamlRoot?.Content is not UIElement content)
 		{
 			return;
@@ -508,6 +521,100 @@ internal sealed class CardGrid
 		return card;
 	}
 
+	private bool InView(UIElement element)
+	{
+		try
+		{
+			var bounds = element.TransformToVisual(_scroller).TransformBounds(new Rect(0, 0, element.ActualSize.X, element.ActualSize.Y));
+			return bounds.Height > 0 && bounds.Top >= 0 && bounds.Bottom <= _scroller.ViewportHeight;
+		}
+		catch (ArgumentException)
+		{
+			return false;
+		}
+	}
+
+	// ---- Nixie 1.4.0 (the UX review's X16, item 13): a letter's row to the top; type-to-jump --------------------------------
+
+	/// <summary>Room left above a row a jump puts at the top of the view.</summary>
+	internal const double TopMargin = 8;
+
+	/// <summary>
+	/// An A to Z jump: card <paramref name="index"/>'s row is scrolled to the top of the view (it landed on the last row of the
+	/// letter before), then the card gets the focus.
+	/// </summary>
+	internal bool FocusAtTop(int index, FocusState state)
+	{
+		if (index < 0 || index >= Count)
+		{
+			return false;
+		}
+
+		_focusState = state;
+		double? top = null;
+		if (_repeater.TryGetElement(index) is { } shown)
+		{
+			try
+			{
+				top = _scroller.VerticalOffset + shown.TransformToVisual(_scroller).TransformPoint(new Point(0, 0)).Y;
+			}
+			catch (ArgumentException)
+			{
+			}
+		}
+
+		top ??= LineTop(index) is { } line ? line + _scroller.Padding.Top : null; // the scroller's padding is part of what it scrolls
+		if (top is { } at)
+		{
+			var offset = Math.Clamp(at - TopMargin, 0, Math.Max(0, _scroller.ScrollableHeight));
+			if (Math.Abs(offset - _scroller.VerticalOffset) >= 1)
+			{
+				_pending.Begin(index, _scroller.ScrollTo(_scroller.HorizontalOffset, offset, new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore)), fromOutside: true);
+				return true;
+			}
+		}
+
+		return FocusIndex(index, state);
+	}
+
+	/// <summary>Type-to-jump: what a typed run of letters finds (the text, the card it starts from), or null; none: no type-to-jump.</summary>
+	internal Func<string, int, int?>? TypeAhead { get; set; }
+
+	private string _typed = "";
+	private long _typedAt;
+
+	/// <summary>Letters typed on a card (within a second of each other) go to the first title they start; one letter again goes on to the next.</summary>
+	private void List_CharacterReceived(UIElement sender, CharacterReceivedRoutedEventArgs e)
+	{
+		if (TypeAhead is null || char.IsControl(e.Character) || IsDown(VirtualKey.Control) || IsDown(VirtualKey.Menu))
+		{
+			return;
+		}
+
+		var current = IndexOf(e.OriginalSource as DependencyObject);
+		var now = Environment.TickCount64;
+		if (now - _typedAt > 1000)
+		{
+			_typed = "";
+		}
+
+		if (e.Character == ' ' && _typed.Length == 0)
+		{
+			return; // Space presses the card
+		}
+
+		_typedAt = now;
+		_typed += e.Character;
+		var query = _typed.Length > 1 && _typed.All(c => char.ToUpperInvariant(c) == char.ToUpperInvariant(_typed[0])) ? _typed[..1] : _typed;
+		var from = query.Length == 1 ? current + 1 : Math.Max(current, 0);
+		if (TypeAhead(query, Math.Max(0, from)) is { } target)
+		{
+			_pending.Cancel();
+			FocusIndex(target, FocusState.Keyboard);
+			e.Handled = true;
+		}
+	}
+
 	private void List_PointerPressed(object sender, PointerRoutedEventArgs e) => Remember(IndexOf(e.OriginalSource as DependencyObject));
 
 	private void Remember(int index)
@@ -527,11 +634,20 @@ internal sealed class CardGrid
 		}
 	}
 
-	/// <summary>A card scrolled into view (keyboard focus) keeps <see cref="RevealMargin"/> clear above and below it (WCAG 2.4.11).</summary>
+	/// <summary>
+	/// A card scrolled into view (keyboard focus) keeps <see cref="RevealMargin"/> clear above and below it (WCAG 2.4.11).
+	/// Nixie 1.4.0: a card already wholly in view is left where it is (a letter's row put at the top stays there).
+	/// </summary>
 	private void List_BringIntoViewRequested(UIElement sender, BringIntoViewRequestedEventArgs args)
 	{
 		if (IndexOf(args.TargetElement) < 0)
 		{
+			return;
+		}
+
+		if (InView(args.TargetElement))
+		{
+			args.Handled = true;
 			return;
 		}
 

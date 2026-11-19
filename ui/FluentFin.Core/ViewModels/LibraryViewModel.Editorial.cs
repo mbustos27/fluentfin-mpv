@@ -20,13 +20,16 @@ public partial class LibraryViewModel
 	public IReadOnlyList<FilterOption> EditorialGenreChips() =>
 		Facets.FirstOrDefault(f => f.Title == "Genres")?.Options ?? [];
 
-	/// <summary>Titles not watched yet, for the Unwatched chip.</summary>
-	public int EditorialUnwatched => _itemsCache.Items.Count(x => x.UserData?.Played != true);
+	/// <summary>Titles not watched yet among those the other filters leave, for the Unwatched switch (Nixie 1.4.0: honest under a filter).</summary>
+	public int EditorialUnwatched => UnwatchedCount;
 
 	/// <summary>The genre the chips show as picked: the one genre the filter has, null for none (All) or several.</summary>
 	public string? EditorialGenre => Filter.Genres.Count == 1 ? Filter.Genres[0] : null;
 
-	/// <summary>A chip: only that genre (null: All, every genre).</summary>
+	/// <summary>
+	/// A chip: only that genre (null: All, every genre). Nixie 1.4.0: the chips stay one genre at a time (a tab list); several
+	/// genres (OR) are picked in the shared Filter panel ("More filters"), and then no genre chip is lit.
+	/// </summary>
 	public void EditorialPickGenre(string? genre)
 	{
 		if (genre == EditorialGenre && (genre is not null || Filter.Genres.Count == 0))
@@ -54,14 +57,20 @@ public sealed record EditorialSectionLine(string Letter, string Caption, int Fir
 }
 
 /// <summary>A row of posters; <paramref name="FirstIndex"/>: the first one's place in the library as shown.</summary>
-public sealed record EditorialRowLine(IReadOnlyList<BaseItemViewModel> Items, int FirstIndex, string Letter, int Total = 0) : EditorialLibraryLine
+public sealed record EditorialRowLine(IReadOnlyList<BaseItemViewModel> Items, int FirstIndex, string Letter, int Total = 0, IReadOnlyList<string?>? Tags = null) : EditorialLibraryLine
 {
-	/// <summary>The row's posters with their place in the library as shown (Narrator's "n of m").</summary>
-	public IReadOnlyList<EditorialCell> Cells => [.. Items.Select((item, i) => new EditorialCell(item, FirstIndex + i + 1, Total))];
+	/// <summary>The row's posters with their place in the library as shown (Narrator's "n of m"), and their letter tags.</summary>
+	public IReadOnlyList<EditorialCell> Cells => [.. Items.Select((item, i) => new EditorialCell(item, FirstIndex + i + 1, Total) { Tag = Tags is { } tags && i < tags.Count ? tags[i] : null })];
 }
 
 /// <summary>A poster of a row, with its place: <paramref name="Position"/> of <paramref name="Size"/>.</summary>
-public sealed record EditorialCell(BaseItemViewModel Item, int Position, int Size);
+public sealed record EditorialCell(BaseItemViewModel Item, int Position, int Size)
+{
+	/// <summary>Nixie 1.4.0 (the UX review's E-M5, item 12): the letter of the first title of a letter, on its poster ("M"); else null.</summary>
+	public string? Tag { get; init; }
+
+	public bool HasTag => !string.IsNullOrEmpty(Tag);
+}
 
 /// <summary>The opened poster's details, under its row.</summary>
 public sealed record EditorialDetailsLine(BaseItemViewModel Item) : EditorialLibraryLine;
@@ -121,6 +130,44 @@ public static class EditorialLibrary
 			lines.Add(new EditorialSectionLine(letter, Count(end - start, kind), start));
 			AddRows(start, end, letter);
 			start = end;
+		}
+
+		return lines;
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's E-M5, item 12): the grid's lines with the rows flowing across letters (each letter started a
+	/// row: 1 to 11 posters a row, 4 collections on a screen), the first title of each letter tagged with it when
+	/// <paramref name="tagLetters"/> (sorted by title); <paramref name="opened"/>'s details follow its row.
+	/// </summary>
+	public static IReadOnlyList<EditorialLibraryLine> Flow(IReadOnlyList<BaseItemViewModel> items, int columns, bool tagLetters, Guid? opened)
+	{
+		var lines = new List<EditorialLibraryLine>();
+		columns = Math.Max(1, columns);
+		string? previous = null;
+		for (var i = 0; i < items.Count; i += columns)
+		{
+			var row = new List<BaseItemViewModel>();
+			var tags = new List<string?>();
+			for (var j = i; j < Math.Min(items.Count, i + columns); j++)
+			{
+				row.Add(items[j]);
+				string? tag = null;
+				if (tagLetters)
+				{
+					var letter = LibraryBrowse.LetterOf(LibraryBrowse.SortKey(items[j]));
+					tag = letter != previous ? letter : null;
+					previous = letter;
+				}
+
+				tags.Add(tag);
+			}
+
+			lines.Add(new EditorialRowLine(row, i, tagLetters ? LibraryBrowse.LetterOf(LibraryBrowse.SortKey(row[0])) : "", items.Count, tags));
+			if (opened is { } id && row.FirstOrDefault(x => x.Id == id) is { } item)
+			{
+				lines.Add(new EditorialDetailsLine(item));
+			}
 		}
 
 		return lines;
@@ -243,25 +290,17 @@ public static class EditorialLibrary
 		return string.Join(" · ", parts);
 	}
 
-	/// <summary>The Sort button's words: "A to Z", "Z to A", "Date added", "Newest first"...</summary>
 	/// <summary>
-	/// Nixie 1.3.1 (the UX review's E-M4, WCAG 2.5.3): the Sort button's name starts with the words it shows ("A to Z"), then
-	/// says what they mean ("A to Z, Sort: Name, ascending"); it was "Sort: Name, ascending" under a button reading "A to Z".
+	/// Nixie 1.3.1 (the UX review's E-M4, WCAG 2.5.3): the Sort button's name starts with the words it shows. Nixie 1.4.0: the
+	/// shared words ("Title · A to Z" shows, "Title, A to Z, Sort" is heard), as in every theme.
 	/// </summary>
-	public static string SortButtonName(ItemSortBy sortBy, SortOrder order, bool inPlaylistOrder, string sortButtonName)
-	{
-		var shown = SortWords(sortBy, order, inPlaylistOrder);
-		return inPlaylistOrder ? $"{shown}, Sort" : $"{shown}, {sortButtonName}";
-	}
+	public static string SortButtonName(ItemSortBy sortBy, SortOrder order, bool inPlaylistOrder, string sortButtonName) =>
+		inPlaylistOrder ? $"{LibraryViewModel.PlaylistOrderName}, Sort" : LibraryBrowse.SortButtonName(sortBy, order);
 
 	/// <summary>Nixie 1.3.1: a playlist in its own order says so.</summary>
 	public static string SortWords(ItemSortBy sortBy, SortOrder order, bool inPlaylistOrder) =>
 		inPlaylistOrder ? LibraryViewModel.PlaylistOrderName : SortWords(sortBy, order);
 
-	public static string SortWords(ItemSortBy sortBy, SortOrder order) => (sortBy, order) switch
-	{
-		(ItemSortBy.Name, SortOrder.Ascending) => "A to Z",
-		(ItemSortBy.Name, _) => "Z to A",
-		_ => LibraryBrowse.SortName(sortBy),
-	};
+	/// <summary>Nixie 1.4.0 (item 8): the direction in words on the button in every theme: "Title · A to Z", "Date added · newest first".</summary>
+	public static string SortWords(ItemSortBy sortBy, SortOrder order) => LibraryBrowse.SortText(sortBy, order);
 }

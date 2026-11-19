@@ -82,73 +82,75 @@ public sealed class HomeAndLibraryXamlTests
 	[Fact]
 	public void TheLibrarysBar_SaysTheSortTheFiltersAndTheCount()
 	{
+		// Nixie 1.4.0: the bar is the shared toolbar (every theme's), its menus built from LibraryBrowse.SortKeys
 		var library = Load("FluentFin/Views/LibraryPage.xaml");
+		var bar = Load("FluentFin/Controls/LibraryToolbar.xaml");
 
-		Assert.Equal("{x:Bind ViewModel.SortButtonName, Mode=OneWay}", (string?)FindByName(library, "SortButton").Attribute("AutomationProperties.Name"));
-		Assert.Contains(FindByName(library, "SortButton").Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind local:LibraryPage.SortLabel(ViewModel.SortName), Mode=OneWay}"); // the button review, L15: "Sort: Name"
-		Assert.Equal("{x:Bind ViewModel.FilterButtonName, Mode=OneWay}", (string?)FindByName(library, "FilterButton").Attribute("AutomationProperties.Name"));
-		Assert.Contains(FindByName(library, "FilterButton").Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.FilterText, Mode=OneWay}");
-		Assert.Equal("{x:Bind ViewModel.CountText, Mode=OneWay}", (string?)FindByName(library, "CountText").Attribute("Text"));
-
-		// the sort menu shows the sort in use (a Back puts another one back), never a fixed "Name": the eight keys, then (the
-		// button review, L24) the direction as a second group
-		var radios = library.Descendants(Presentation + "RadioMenuFlyoutItem").ToList();
-		Assert.Equal(10, radios.Count);
-		Assert.All(radios.Take(8), r => Assert.StartsWith("{x:Bind local:LibraryPage.IsSort(", (string?)r.Attribute("IsChecked")));
-		Assert.All(radios.Skip(8), r => Assert.StartsWith("{x:Bind local:LibraryPage.IsOrder(", (string?)r.Attribute("IsChecked")));
+		Assert.Equal("LibraryToolbar", FindByName(library, "SortFilterBar").Name.LocalName);
+		Assert.Equal("{x:Bind ViewModel.SortButtonName, Mode=OneWay}", (string?)FindByName(bar, "SortButton").Attribute("AutomationProperties.Name"));
+		Assert.Contains(FindByName(bar, "SortButton").Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.SortText, Mode=OneWay}");
+		Assert.Equal("{x:Bind ViewModel.FilterButtonName, Mode=OneWay}", (string?)FindByName(bar, "FilterButton").Attribute("AutomationProperties.Name"));
+		Assert.Contains(FindByName(bar, "FilterButton").Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.FilterText, Mode=OneWay}");
+		Assert.Equal("{x:Bind ViewModel.LibraryCountText, Mode=OneWay}", (string?)FindByName(library, "CountText").Attribute("Text")); // 1.4.0: the row says what is shown
+		// the stable toolbar (item 8): Filter keeps its width when it says "Filter (2)"
+		Assert.True(double.Parse((string)FindByName(bar, "FilterButton").Attribute("MinWidth")!) >= 100);
+		// the one-click Unwatched (item 2), before Sort
+		var unwatched = FindByName(bar, "UnwatchedToggle");
+		Assert.Equal("{x:Bind ViewModel.Filter.Unwatched, Mode=TwoWay}", (string?)unwatched.Attribute("IsChecked"));
+		Assert.Contains(FindByName(bar, "SortButton"), unwatched.ElementsAfterSelf());
+		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/LibraryToolbar.xaml.cs"));
+		Assert.Contains("foreach (var key in LibraryBrowse.SortKeys)", code);
+		Assert.Contains("LibraryBrowse.DirectionWords(vm.SortBy, order)", code);
 	}
 
-	// layout audit, item 13: the sort menu in sentence case, the same words as the Sort button ("Sort: Date added, ...")
+	// layout audit, item 13: the sort menu in sentence case, the same words as the Sort button
 	[Fact]
 	public void TheSortMenu_SaysWhatTheButtonSays_InSentenceCase()
 	{
-		// the sort keys (the direction is its own group since the button review's L24)
-		var radios = Load("FluentFin/Views/LibraryPage.xaml").Descendants(Presentation + "RadioMenuFlyoutItem")
-			.Where(r => ((string?)r.Attribute("CommandParameter"))?.StartsWith("{x:Bind jm:ItemSortBy.", StringComparison.Ordinal) == true).ToList();
-
-		foreach (var radio in radios)
+		Assert.Equal(8, LibraryBrowse.SortKeys.Count);
+		foreach (var key in LibraryBrowse.SortKeys)
 		{
-			var key = Enum.Parse<Jellyfin.Sdk.Generated.Models.ItemSortBy>(((string?)radio.Attribute("CommandParameter"))!["{x:Bind jm:ItemSortBy.".Length..^1]);
-			Assert.Equal(LibraryBrowse.SortName(key), (string?)radio.Attribute("Text"));
+			var text = LibraryBrowse.SortName(key);
+			Assert.Equal(text[..1] + text[1..].ToLowerInvariant(), text);
+			Assert.StartsWith(text, LibraryBrowse.SortText(key, LibraryBrowse.NaturalOrder(key)));
 		}
-
-		Assert.All(radios.Select(r => ((string?)r.Attribute("Text"))!), t => Assert.Equal(t[..1] + t[1..].ToLowerInvariant(), t));
 	}
 
 	// interaction audit, item 12: the direction is one click, beside Sort; Filter is lists of check boxes with Clear filters
 	[Fact]
 	public void TheDirection_IsItsOwnButton_AndFilter_IsCheckBoxLists()
 	{
-		var library = Load("FluentFin/Views/LibraryPage.xaml");
+		var bar = Load("FluentFin/Controls/LibraryToolbar.xaml");
 
-		// 1.2.0 (the button review, L24): the direction is a second group in the Sort menu again, the round button gone
-		Assert.DoesNotContain(library.Descendants(), e => (string?)e.Attribute(Xaml + "Name") == "SortOrderButton");
-		Assert.Equal(new[] { "Ascending", "Descending" }, library.Descendants(Presentation + "RadioMenuFlyoutItem")
-			.Where(r => (string?)r.Attribute("Command") == "{x:Bind ViewModel.UpdateSortOrderCommand}").Select(r => (string?)r.Attribute("Text")));
+		// Nixie 1.4.0 (item 8): the direction is one click again, its name in words ("A to Z, switch to Z to A")
+		Assert.Equal("{x:Bind ViewModel.SortOrderButtonName, Mode=OneWay}", (string?)FindByName(bar, "DirectionButton").Attribute("AutomationProperties.Name"));
 
-		var filter = FindByName(library, "FilterButton");
+		var filter = FindByName(bar, "FilterButton");
 		Assert.Empty(filter.Descendants().Where(e => e.Name.LocalName == "TokenizingTextBox"));
 		// the review, item 5: one virtualised list (an ItemsRepeater in the menu's scroller), not nested ItemsControls
 		Assert.Empty(filter.Descendants().Where(e => e.Name.LocalName == "ItemsControl"));
-		var rows = FindByName(library, "FilterRepeater");
+		var rows = FindByName(bar, "FilterRepeater");
 		Assert.Equal("ItemsRepeater", rows.Name.LocalName);
 		Assert.Equal("{x:Bind ViewModel.FilterRows, Mode=OneWay}", (string?)rows.Attribute("ItemsSource"));
 		Assert.Contains(rows.Ancestors(), e => e.Name.LocalName == "ScrollViewer");
 		var boxes = filter.Descendants(Presentation + "CheckBox").ToList();
 		Assert.Equal(["UnwatchedBox", "FavoritesBox"], boxes.Take(2).Select(b => (string?)b.Attribute(Xaml + "Name")));
 		Assert.Equal("{x:Bind ViewModel.Filter.Unwatched, Mode=TwoWay}", (string?)boxes[0].Attribute("IsChecked"));
-		var box = library.Descendants(Presentation + "DataTemplate").Single(t => (string?)t.Attribute(Xaml + "Key") == "FilterOptionTemplate")
+		var box = bar.Descendants(Presentation + "DataTemplate").Single(t => (string?)t.Attribute(Xaml + "Key") == "FilterOptionTemplate")
 			.Descendants(Presentation + "CheckBox").Single();
 		Assert.Equal("{x:Bind IsChecked, Mode=TwoWay}", (string?)box.Attribute("IsChecked"));
-		Assert.Equal("{x:Bind Name}", (string?)box.Attribute("AutomationProperties.Name"));
-		Assert.Equal("{x:Bind ViewModel.ClearFiltersCommand}", (string?)FindByName(library, "ClearFiltersButton").Attribute("Command"));
+		Assert.Equal("{x:Bind Name, Mode=OneWay}", (string?)box.Attribute("AutomationProperties.Name"));
+		// Nixie 1.4.0 (item 2): a value that would leave nothing is greyed, its count follows the other filters
+		Assert.Equal("{x:Bind IsAvailable, Mode=OneWay}", (string?)box.Attribute("IsEnabled"));
+		Assert.Equal("{x:Bind Label, Mode=OneWay}", (string?)box.Attribute("Content"));
+		Assert.Equal("{x:Bind ViewModel.ClearFiltersCommand}", (string?)FindByName(bar, "ClearFiltersButton").Attribute("Command"));
 	}
 
 	[Fact]
 	public void TheAToZJump_IsOneTabStop_ANamedList_OfNamedButtons()
 	{
-		var library = Load("FluentFin/Views/LibraryPage.xaml");
-		var list = FindByName(library, "LetterList");
+		var bar = Load("FluentFin/Controls/LetterBar.xaml");
+		var list = FindByName(bar, "LetterList");
 
 		Assert.Equal("RowList", list.Name.LocalName);
 		Assert.Equal("Jump to a letter", (string?)list.Attribute("AutomationProperties.Name"));
@@ -156,7 +158,15 @@ public sealed class HomeAndLibraryXamlTests
 		Assert.Equal("Enabled", (string?)list.Attribute("XYFocusKeyboardNavigation"));
 		var letter = list.Descendants(Presentation + "Button").Single();
 		Assert.Equal("{x:Bind Name}", (string?)letter.Attribute("AutomationProperties.Name"));
-		Assert.True(double.Parse((string)letter.Attribute("Width")!) >= 24 && double.Parse((string)letter.Attribute("Height")!) >= 24); // WCAG 2.5.8
+		// Nixie 1.4.0 (item 13): a letter with no titles rests: disabled (not a stop) and silent to Narrator; the mark is the tile's
+		Assert.Equal("{x:Bind HasTitles}", (string?)letter.Attribute("IsEnabled"));
+		Assert.Equal("{x:Bind local:LetterBar.ViewFor(HasTitles)}", (string?)letter.Attribute("AutomationProperties.AccessibilityView"));
+		Assert.Equal("{x:Bind Letter}", (string?)letter.Attribute("Content")); // the letter role (NixieLetterButtonStyle) draws it
+		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/LetterBar.xaml.cs"));
+		Assert.Contains("VisualStateManager.GoToState(button, tile.IsCurrent ? \"Selected\" : \"Unselected\", false);", code);
+		Assert.Contains("(Style)Application.Current.Resources[\"NixieLetterButtonStyle\"]", code);
+		Assert.Contains("button.Height = Math.Max(TileHeight, 32);", code); // WCAG 2.5.8, and the review's 32
+		Assert.Contains("RowGrid.MinHeight = Math.Max(TileHeight, 32);", code); // the row's height kept, letters or directions
 	}
 
 	// ---- layout audit, items 2, 6 and 22
@@ -187,11 +197,16 @@ public sealed class HomeAndLibraryXamlTests
 		Assert.DoesNotContain(library.Descendants(), e => e.Name.LocalName == "PagerControl");
 		Assert.Equal("{x:Bind local:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}", (string?)FindByName(library, "SortFilterBar").Attribute("Visibility"));
 		Assert.Equal("{x:Bind local:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}", (string?)FindByName(library, "CountText").Attribute("Visibility"));
-		Assert.Contains("ViewModel.State.Status", (string?)FindByName(library, "LetterList").Attribute("Visibility"));
 
-		// the loading skeleton has the page's own header: the library's name where the title goes
-		var loading = library.Descendants().Single(e => e.Name.LocalName == "Case" && (string?)e.Attribute("IsDefault") == "True");
-		Assert.Contains(loading.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.Title, Mode=OneWay}");
+		// Nixie 1.4.0 (item 13): while loading the header stays (the library's name), the letter row keeps its height, and the
+		// placeholders are laid out by a copy of the grid's own layout
+		Assert.DoesNotContain(library.Descendants(), e => e.Name.LocalName == "Case");
+		Assert.Equal("{x:Bind ViewModel.IsLoading, Mode=OneWay}", (string?)FindByName(library, "LetterPlaceholder").Attribute("Visibility"));
+		Assert.Equal("{x:Bind ViewModel.IsLoading, Mode=OneWay}", (string?)FindByName(library, "SkeletonRepeater").Attribute("Visibility"));
+		Assert.Equal("Uniform", (string?)FindByName(library, "GridLayout").Attribute("ItemsStretch")); // a poster keeps its 2:3 at 1100
+		Assert.Contains("LibrarySkeleton.Mirror(GridLayout, SkeletonLayout);", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Views/LibraryPage.xaml.cs")));
+		Assert.Contains(library.Descendants(), e => e.Name.LocalName == "LibraryNoMatchesView");
+		Assert.Contains(library.Descendants(), e => e.Name.LocalName == "AppliedFilterRow");
 		Assert.Null(typeof(LibraryViewModel).GetProperty("SelectedPage"));
 	}
 

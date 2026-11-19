@@ -267,6 +267,8 @@ public sealed class DriveInThemeTests
 		Assert.Equal("TITLES ON THE LOT", DriveInLibrary.CountLabel(null));
 		Assert.Equal("312", DriveInLibrary.CountTubes(312));
 		Assert.Equal("99999", DriveInLibrary.CountTubes(250_000));
-		Assert.Equal("", DriveInLibrary.CountTubes(0));
+		// Nixie 1.4.0 (the UX review's DI-M3): nothing matching reads 0; only loading is dark
+		Assert.Equal("0", DriveInLibrary.CountTubes(0));
+		Assert.Equal("", DriveInLibrary.CountTubes(312, loading: true));
 	}
 }

@@ -150,10 +150,14 @@ internal sealed class PendingFocus
 	/// <summary>Moves on at every cancel: a focus queued for later checks it has not changed.</summary>
 	public int Generation { get; private set; }
 
-	public void Begin(int index, int scroll)
+	private bool _fromOutside;
+
+	/// <param name="fromOutside">Nixie 1.4.0: the card takes the focus when the scroll ends even if the focus is not in the grid (an A to Z jump: it is on the letter).</param>
+	public void Begin(int index, int scroll, bool fromOutside = false)
 	{
 		Index = index;
 		_scroll = scroll;
+		_fromOutside = fromOutside;
 	}
 
 	/// <returns>Whether a card was waiting.</returns>
@@ -188,6 +192,6 @@ internal sealed class PendingFocus
 
 		var index = Index;
 		Index = _scroll = -1;
-		return focusInGrid ? index : -1;
+		return focusInGrid || _fromOutside ? index : -1;
 	}
 }

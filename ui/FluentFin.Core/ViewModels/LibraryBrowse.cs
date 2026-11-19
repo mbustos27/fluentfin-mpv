@@ -13,10 +13,10 @@ namespace FluentFin.Core.ViewModels;
 /// </summary>
 public static class LibraryBrowse
 {
-	/// <summary>The sort's name, as its menu says it.</summary>
+	/// <summary>The sort's name, as its menu says it. Nixie 1.4.0 (the UX review's item 8): the name sort is "Title".</summary>
 	public static string SortName(ItemSortBy sortBy) => sortBy switch
 	{
-		ItemSortBy.Name => "Name",
+		ItemSortBy.Name => "Title",
 		ItemSortBy.CommunityRating => "Community rating",
 		ItemSortBy.CriticRating => "Critic rating",
 		ItemSortBy.DateCreated => "Date added",
@@ -27,13 +27,56 @@ public static class LibraryBrowse
 		_ => sortBy.ToString(),
 	};
 
-	/// <summary>What Narrator hears for the Sort button: "Sort: Name, ascending".</summary>
-	public static string SortButtonName(ItemSortBy sortBy, SortOrder order) =>
-		$"Sort: {SortName(sortBy)}, {(order == SortOrder.Descending ? "descending" : "ascending")}";
+	/// <summary>The keys the Sort menu offers, in its order.</summary>
+	public static IReadOnlyList<ItemSortBy> SortKeys { get; } =
+	[
+		ItemSortBy.Name, ItemSortBy.DateCreated, ItemSortBy.PremiereDate, ItemSortBy.CommunityRating, ItemSortBy.CriticRating,
+		ItemSortBy.DatePlayed, ItemSortBy.PlayCount, ItemSortBy.Runtime,
+	];
 
-	/// <summary>The direction button for Narrator, what it is and what a click does: "Ascending, switch to descending".</summary>
-	public static string SortOrderButtonName(SortOrder order) =>
-		order == SortOrder.Descending ? "Descending, switch to ascending" : "Ascending, switch to descending";
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's X5, item 8): the direction a key opens in: titles A to Z, the shortest first, and every
+	/// date, rating and play count newest, highest or most first (Date added opened oldest first).
+	/// </summary>
+	public static SortOrder NaturalOrder(ItemSortBy sortBy) => sortBy switch
+	{
+		ItemSortBy.Name or ItemSortBy.Runtime => SortOrder.Ascending,
+		_ => SortOrder.Descending,
+	};
+
+	/// <summary>The direction in words, for the key: "A to Z", "newest first", "highest first", "most played first", "shortest first".</summary>
+	public static string DirectionWords(ItemSortBy sortBy, SortOrder order)
+	{
+		var descending = order == SortOrder.Descending;
+		return sortBy switch
+		{
+			ItemSortBy.Name => descending ? "Z to A" : "A to Z",
+			ItemSortBy.DateCreated or ItemSortBy.DatePlayed or ItemSortBy.PremiereDate => descending ? "newest first" : "oldest first",
+			ItemSortBy.CommunityRating or ItemSortBy.CriticRating => descending ? "highest first" : "lowest first",
+			ItemSortBy.PlayCount => descending ? "most played first" : "least played first",
+			ItemSortBy.Runtime => descending ? "longest first" : "shortest first",
+			_ => descending ? "descending" : "ascending",
+		};
+	}
+
+	/// <summary>The words of the other direction ("Z to A" for "A to Z").</summary>
+	public static string OtherDirectionWords(ItemSortBy sortBy, SortOrder order) =>
+		DirectionWords(sortBy, order == SortOrder.Descending ? SortOrder.Ascending : SortOrder.Descending);
+
+	/// <summary>What the Sort button shows in every theme: "Title · A to Z", "Date added · newest first".</summary>
+	public static string SortText(ItemSortBy sortBy, SortOrder order) => $"{SortName(sortBy)} · {DirectionWords(sortBy, order)}";
+
+	/// <summary>
+	/// What Narrator hears for the Sort button: the words it shows first (WCAG 2.5.3, label in name), then what it is:
+	/// "Title, A to Z, Sort".
+	/// </summary>
+	public static string SortButtonName(ItemSortBy sortBy, SortOrder order) => $"{SortName(sortBy)}, {DirectionWords(sortBy, order)}, Sort";
+
+	/// <summary>The direction button for Narrator, what it is and what a click does: "A to Z, switch to Z to A".</summary>
+	public static string SortOrderButtonName(ItemSortBy sortBy, SortOrder order) =>
+		$"{Capital(DirectionWords(sortBy, order))}, switch to {OtherDirectionWords(sortBy, order)}";
+
+	private static string Capital(string words) => words.Length == 0 ? words : char.ToUpperInvariant(words[0]) + words[1..];
 
 	/// <summary>The arrow beside the sort's name: up for ascending, down for descending (Segoe Fluent Icons).</summary>
 	public static string SortGlyph(SortOrder order) => order == SortOrder.Descending ? "" : "";
@@ -66,6 +109,81 @@ public static class LibraryBrowse
 		return shown == total
 			? $"{total:N0} {(total == 1 ? one : many)}"
 			: $"{shown:N0} of {total:N0} {(total == 1 ? one : many)}";
+	}
+
+	/// <summary>Nixie 1.4.0 (item 2): the applied-filter row's count line: "Showing 223 of 320 movies".</summary>
+	public static string ShowingText(int shown, int total, BaseItemDto_CollectionType? collection) => $"Showing {CountText(shown, total, collection)}";
+
+	/// <summary>
+	/// Nixie 1.4.0 (item 13): the A to Z shows from this many titles shown; under it the grid is one or two screens, where a
+	/// jump list only costs room (Microsoft's semantic zoom guidance; the UX review's X16: it showed for a six-film collection).
+	/// </summary>
+	public const int LettersFrom = 48;
+
+	/// <summary>
+	/// Nixie 1.4.0 (item 13, large libraries): where the view is: "M · 324 of 1,000" (the letter of the first title in view,
+	/// sorted by title), else "324 of 1,000"; <paramref name="index"/> counts from 0.
+	/// </summary>
+	public static string PositionText(string? letter, int index, int total)
+	{
+		if (total <= 0 || index < 0)
+		{
+			return "";
+		}
+
+		var place = $"{Math.Min(index + 1, total):N0} of {total:N0}";
+		return string.IsNullOrEmpty(letter) ? place : $"{letter} · {place}";
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (item 4, type-to-jump): the first title, from <paramref name="from"/> on and round, whose sort name or name
+	/// starts with what was typed (any case, accents ignored), else null.
+	/// </summary>
+	public static int? TypeAhead(IReadOnlyList<BaseItemViewModel> items, string typed, int from = 0)
+	{
+		if (items.Count == 0 || string.IsNullOrWhiteSpace(typed))
+		{
+			return null;
+		}
+
+		var compare = CultureInfo.CurrentCulture.CompareInfo;
+		const CompareOptions options = CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace;
+		var start = Math.Clamp(from, 0, items.Count - 1);
+		for (var i = 0; i < items.Count; i++)
+		{
+			var item = items[(start + i) % items.Count];
+			if (compare.IsPrefix(SortKey(item).TrimStart(), typed, options) || compare.IsPrefix((item.Name ?? "").TrimStart(), typed, options))
+			{
+				return (start + i) % items.Count;
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (item 13): the A to Z in every theme: # and A to Z always, in one shape (a letter no title starts with is
+	/// dimmed, skipped by the arrows and silent to Narrator), then any other key the titles have (Б, 漢).
+	/// </summary>
+	public static IReadOnlyList<LetterTile> Tiles(IReadOnlyList<LetterJump> letters)
+	{
+		var byLetter = letters.ToDictionary(l => l.Letter, StringComparer.OrdinalIgnoreCase);
+		var tiles = new List<LetterTile>();
+		foreach (var letter in "#ABCDEFGHIJKLMNOPQRSTUVWXYZ".Select(c => c.ToString()))
+		{
+			tiles.Add(new LetterTile(letter, byLetter.GetValueOrDefault(letter)));
+			byLetter.Remove(letter);
+		}
+
+		tiles.AddRange(letters.Where(l => byLetter.ContainsKey(l.Letter)).Select(l => new LetterTile(l.Letter, l)));
+		var reachable = tiles.Where(t => t.HasTitles).ToList();
+		foreach (var tile in reachable)
+		{
+			tile.Position = reachable.IndexOf(tile) + 1;
+			tile.Size = reachable.Count;
+		}
+
+		return tiles;
 	}
 
 	/// <summary>
@@ -227,12 +345,15 @@ public static class LibraryPlaces
 
 /// <summary>
 /// Seaglass 1.1.4 (interaction audit, item 12): one list of the Filter menu (genres, years, ratings, tags): each value the
-/// library's titles have, with how many have it, as a check box bound to the filter's own list of picked values.
+/// library's titles have, with how many have it, as a check box bound to the filter's own list of picked values. Nixie
+/// 1.4.0 (the UX review's X4): the counts are counted again on every filter change, against the other filters on (they were
+/// counted once, at load), and a value that would leave nothing is greyed, not hidden.
 /// </summary>
 public sealed class FilterFacet
 {
-	private FilterFacet(string title, IReadOnlyList<FilterOption> options, ObservableCollection<string> picked)
+	private FilterFacet(FilterGroup group, string title, IReadOnlyList<FilterOption> options, ObservableCollection<string> picked)
 	{
+		Group = group;
 		Title = title;
 		Options = options;
 		picked.CollectionChanged += (_, _) =>
@@ -244,6 +365,8 @@ public sealed class FilterFacet
 		};
 	}
 
+	public FilterGroup Group { get; }
+
 	public string Title { get; }
 
 	public IReadOnlyList<FilterOption> Options { get; }
@@ -253,7 +376,7 @@ public sealed class FilterFacet
 	{
 		var facets = new List<FilterFacet>();
 
-		void Add(string title, IEnumerable<string> values, ObservableCollection<string> picked, bool newestFirst = false)
+		void Add(FilterGroup group, string title, IEnumerable<string> values, ObservableCollection<string> picked, bool newestFirst = false)
 		{
 			var counted = values.Where(v => !string.IsNullOrWhiteSpace(v)).GroupBy(v => v, StringComparer.Ordinal)
 				.Select(g => (Value: g.Key, Count: g.Count()));
@@ -261,31 +384,82 @@ public sealed class FilterFacet
 			var options = counted.Select(x => new FilterOption(x.Value, x.Count, picked)).ToList();
 			if (options.Count > 0)
 			{
-				facets.Add(new FilterFacet(title, options, picked));
+				facets.Add(new FilterFacet(group, title, options, picked));
 			}
 		}
 
 		// each title counts once per value (a title listing a genre twice is still one)
-		Add("Genres", items.SelectMany(x => (x.Genres ?? []).Distinct()), filter.Genres);
-		Add("Years", items.Where(x => x.ProductionYear is > 0).Select(x => x.ProductionYear!.Value.ToString(CultureInfo.InvariantCulture)), filter.Years, newestFirst: true);
-		Add("Ratings", items.Select(x => x.OfficialRating ?? ""), filter.OfficialRatings);
-		Add("Tags", items.SelectMany(x => (x.Tags ?? []).Distinct()), filter.Tags);
+		Add(FilterGroup.Genres, "Genres", items.SelectMany(x => (x.Genres ?? []).Distinct()), filter.Genres);
+		Add(FilterGroup.Years, "Years", items.Where(x => x.ProductionYear is > 0).Select(x => x.ProductionYear!.Value.ToString(CultureInfo.InvariantCulture)), filter.Years, newestFirst: true);
+		Add(FilterGroup.Ratings, "Ratings", items.Select(x => x.OfficialRating ?? ""), filter.OfficialRatings);
+		Add(FilterGroup.Tags, "Tags", items.SelectMany(x => (x.Tags ?? []).Distinct()), filter.Tags);
 		return facets;
 	}
+
+	/// <summary>Each value's count again: the titles that have it among those the other filters on let through.</summary>
+	public void Recount(IEnumerable<BaseItemViewModel> items, LibraryFilter filter)
+	{
+		var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+		foreach (var item in items)
+		{
+			if (!filter.Matches(item, Group))
+			{
+				continue;
+			}
+
+			foreach (var value in ValuesOf(item, Group))
+			{
+				counts[value] = counts.GetValueOrDefault(value) + 1;
+			}
+		}
+
+		foreach (var option in Options)
+		{
+			option.Count = counts.GetValueOrDefault(option.Value);
+		}
+	}
+
+	private static IEnumerable<string> ValuesOf(BaseItemViewModel item, FilterGroup group) => group switch
+	{
+		FilterGroup.Genres => (item.Genres ?? []).Distinct(),
+		FilterGroup.Tags => (item.Tags ?? []).Distinct(),
+		FilterGroup.Ratings => string.IsNullOrWhiteSpace(item.OfficialRating) ? [] : [item.OfficialRating],
+		FilterGroup.Years => item.ProductionYear is > 0 and var year ? [year.ToString(CultureInfo.InvariantCulture)] : [],
+		_ => [],
+	};
 }
 
-/// <summary>Seaglass 1.1.4: one check box of the Filter menu: a value, how many titles have it, and whether it is picked.</summary>
+/// <summary>
+/// Seaglass 1.1.4: one check box of the Filter menu: a value, how many titles have it, and whether it is picked. Nixie 1.4.0:
+/// its count follows the other filters; at 0 (and not picked) it is greyed.
+/// </summary>
 public sealed partial class FilterOption(string value, int count, ObservableCollection<string> picked) : ObservableObject
 {
 	public string Value { get; } = value;
 
-	public int Count { get; } = count;
+	/// <summary>How many titles the other filters on leave that have it.</summary>
+	public int Count
+	{
+		get;
+		set
+		{
+			if (SetProperty(ref field, value))
+			{
+				OnPropertyChanged(nameof(Label));
+				OnPropertyChanged(nameof(Name));
+				OnPropertyChanged(nameof(IsAvailable));
+			}
+		}
+	} = count;
 
 	/// <summary>"Drama (12)".</summary>
 	public string Label => $"{Value} ({Count})";
 
 	/// <summary>For Narrator: "Drama, 12 titles".</summary>
 	public string Name => Count == 1 ? $"{Value}, 1 title" : $"{Value}, {Count} titles";
+
+	/// <summary>Nixie 1.4.0: something to pick: it would leave titles, or it is picked (and can be taken off).</summary>
+	public bool IsAvailable => Count > 0 || IsChecked;
 
 	/// <summary>Picked: in the filter's list (a click adds or removes it; a change of the list from elsewhere shows here).</summary>
 	public bool IsChecked
@@ -309,5 +483,9 @@ public sealed partial class FilterOption(string value, int count, ObservableColl
 		}
 	}
 
-	internal void Refresh() => OnPropertyChanged(nameof(IsChecked));
+	internal void Refresh()
+	{
+		OnPropertyChanged(nameof(IsChecked));
+		OnPropertyChanged(nameof(IsAvailable));
+	}
 }

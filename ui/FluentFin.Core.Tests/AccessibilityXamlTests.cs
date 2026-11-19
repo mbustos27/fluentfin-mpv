@@ -257,8 +257,6 @@ public class AccessibilityXamlTests
 	// words ("Sort: Name, ascending", "Filter, 2 on"): the view model's (LibraryBrowseTests)
 	[Theory]
 	[InlineData("FluentFin/Views/SelectServerPage.xaml", "Find servers", "Find servers", "Connect", "Connect")]
-	[InlineData("FluentFin/Views/LibraryPage.xaml", "{x:Bind ViewModel.SortButtonName, Mode=OneWay}", "{x:Bind local:LibraryPage.SortLabel(ViewModel.SortName), Mode=OneWay}",
-		"{x:Bind ViewModel.FilterButtonName, Mode=OneWay}", "{x:Bind ViewModel.FilterText, Mode=OneWay}")]
 	public void ButtonsShowingAnIconAndAText_AreNamedAfterTheText(string page, string firstName, string firstText, string secondName, string secondText)
 	{
 		// visual-check (UIA scan): a TextBlock inside a panel does not name its button, so Narrator read "button"
@@ -268,6 +266,24 @@ public class AccessibilityXamlTests
 			.ToList();
 
 		Assert.Equal(new (string?, string?)[] { (firstName, firstText), (secondName, secondText) }, named);
+	}
+
+	// Nixie 1.4.0: the library toolbar's buttons with an icon and words are named after their words (WCAG 2.5.3: Sort's name
+	// starts with them, "Title, A to Z, Sort"; the view model's, LibraryFilterModelTests)
+	[Fact]
+	public void TheLibraryToolbarsButtons_AreNamedAfterTheirWords()
+	{
+		var named = Load("FluentFin/Controls/LibraryToolbar.xaml").Descendants().Where(e => e.Name.Namespace == Presentation && ButtonTypes.Contains(e.Name.LocalName))
+			.Where(b => (string?)b.Attribute("Content") is null && ContentElements(b).Any(e => e.Name.LocalName == "TextBlock") && ContentElements(b).Any(e => e.Name.LocalName != "TextBlock"))
+			.Select(b => (Name: (string?)b.Attribute("AutomationProperties.Name"), Text: ContentElements(b).Where(e => e.Name.LocalName == "TextBlock").Select(t => (string?)t.Attribute("Text")).First()))
+			.ToList();
+
+		Assert.Equal(new (string?, string?)[]
+		{
+			("{x:Bind local:LibraryToolbar.UnwatchedName(ViewModel.UnwatchedCount), Mode=OneWay}", "Unwatched"), ("Favorites", "Favorites"),
+			("{x:Bind ViewModel.SortButtonName, Mode=OneWay}", "{x:Bind ViewModel.SortText, Mode=OneWay}"),
+			("{x:Bind ViewModel.FilterButtonName, Mode=OneWay}", "{x:Bind ViewModel.FilterText, Mode=OneWay}"),
+		}, named);
 	}
 
 	[Theory]

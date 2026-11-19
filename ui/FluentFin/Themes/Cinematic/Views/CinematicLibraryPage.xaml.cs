@@ -16,11 +16,10 @@ public sealed partial class CinematicLibraryPage : Page
 	public LibraryViewModel ViewModel { get; } = App.GetService<LibraryViewModel>();
 
 	private readonly CardGrid _grid;
-	private FocusState _jumpFocus = FocusState.Keyboard;
-	private bool _focusOnLoad;
-	private int _returnScroll = -1;
-	private (int Index, FocusState State) _returnFocus = (-1, FocusState.Keyboard);
+	private readonly LibraryGridHost _host;
 	private bool? _narrow;
+	private double _side;
+	private bool _band;
 
 	public CinematicLibraryPage()
 	{
@@ -28,49 +27,36 @@ public sealed partial class CinematicLibraryPage : Page
 		InitializeComponent();
 
 		_grid = new CardGrid(GridScroller, GridList, GridRepeater);
-		GridScroller.ScrollCompleted += GridScroller_ScrollCompleted;
-		void FocusOnLoad(object sender, RoutedEventArgs e)
-		{
-			if (_focusOnLoad)
-			{
-				_focusOnLoad = false;
-				FocusRequested();
-			}
-		}
-
-		Loaded += FocusOnLoad;
-		GridScroller.Loaded += FocusOnLoad;
 		_grid.ForwardWheel(LibraryRoot);
-		_grid.SetPlace(0, ViewModel.TotalCount);
+		_host = new LibraryGridHost(this, ViewModel, GridScroller, GridRepeater, _grid, Letters);
 		ViewModel.PropertyChanged += (_, e) =>
 		{
 			switch (e.PropertyName)
 			{
-				case nameof(LibraryViewModel.TotalCount):
-					_grid.SetPlace(0, ViewModel.TotalCount);
+				case nameof(LibraryViewModel.TotalCount) or nameof(LibraryViewModel.FocusRequest) or nameof(LibraryViewModel.IsLoading):
 					QueueStage();
 					break;
-				case nameof(LibraryViewModel.FocusRequest) or nameof(LibraryViewModel.IsLoading):
-					FocusRequested();
-					QueueStage();
-					break;
-				case nameof(LibraryViewModel.SortBy) or nameof(LibraryViewModel.Order) or nameof(LibraryViewModel.CountText) or nameof(LibraryViewModel.Title):
+				case nameof(LibraryViewModel.SortBy) or nameof(LibraryViewModel.Order) or nameof(LibraryViewModel.AppliedFilters):
 					ShowTabs();
-					ShowPlace();
+					QueueStage();
+					break;
+				case nameof(LibraryViewModel.Density) or nameof(LibraryViewModel.Layout) or nameof(LibraryViewModel.Art):
+					_narrow = null;
+					Layout();
 					break;
 			}
 		};
-		ViewModel.Filter.PropertyChanged += (_, _) => ShowTabs();
 
 		// Nixie 1.3.1 (the UX review's C-B1): the stage shows the still the pointer rests on, else the one the keyboard is on in
 		// the grid, else the first one in view, and it follows every sort, filter, section, load and scroll; with nothing
-		// left to show it goes, Play with it (StageTarget). The place line and the letter mark follow the first title in view.
+		// left to show it goes, Play with it (StageTarget).
 		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, _) => QueueStage();
 		GridRepeater.GotFocus += (_, _) => QueueStage();
 		GridRepeater.LostFocus += (_, _) => QueueStage();
 		GridRepeater.AddHandler(PointerEnteredEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
 		{
-			_hovered = StillOf(e.OriginalSource as DependencyObject)?.Model?.Dto?.Id;
+			_hovered = ModelOf(e.OriginalSource as DependencyObject)?.Dto?.Id;
+			_hoveredAt = GridScroller.VerticalOffset;
 			QueueStage();
 		}), true);
 		GridRepeater.PointerExited += (_, _) =>
@@ -78,12 +64,42 @@ public sealed partial class CinematicLibraryPage : Page
 			_hovered = null;
 			QueueStage();
 		};
-		GridScroller.ViewChanged += (_, _) => QueueStage();
-		LetterRepeater.ElementPrepared += (_, e) =>
+		GridScroller.ViewChanged += (_, _) =>
 		{
-			AutomationProperties.SetPositionInSet(e.Element, e.Index + 1);
-			AutomationProperties.SetSizeOfSet(e.Element, ViewModel.Letters.Count);
-			MarkLetter(_markedLetter); // a letter made after the mark was set gets it too
+			// the bug hunt's M5: the wheel moves the stills under a resting pointer, and no PointerEntered comes: what it rested
+			// on is not what it rests on now
+			if (Math.Abs(GridScroller.VerticalOffset - _hoveredAt) >= 1)
+			{
+				_hovered = null;
+			}
+
+			QueueStage();
+			// Nixie 1.4.0 (the UX review's C-M1, item 12): the stage folds to a band once the grid scrolls, and opens at its top
+			var band = GridScroller.VerticalOffset > (_band ? 8 : 40);
+			if (band != _band)
+			{
+				_band = band;
+				Layout();
+			}
+		};
+		// Nixie 1.4.0 (item 4): Ctrl+Up from a still: the stage's Play (the stage previews the title the keyboard is on)
+		GridList.AddHandler(KeyDownEvent, new Microsoft.UI.Xaml.Input.KeyEventHandler((_, e) =>
+		{
+			if (e.Key == Windows.System.VirtualKey.Up && Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down)
+				&& !_band && Stage.FocusPrimary(FocusState.Keyboard))
+			{
+				e.Handled = true;
+			}
+		}), true);
+		// a jump past the first line folds the stage first, so the letter's row lands at the top of the grid as it will be
+		Letters.Jumped += (_, e) =>
+		{
+			if (e.Jump.Index >= _grid.ColumnCount && !_band)
+			{
+				_band = true;
+				Layout();
+				UpdateLayout();
+			}
 		};
 		SizeChanged += (_, _) => Layout();
 		Stage.WordsSizeChanged += (_, _) => Layout();
@@ -117,7 +133,11 @@ public sealed partial class CinematicLibraryPage : Page
 
 	public static IReadOnlyList<int> Slots(int count) => [.. Enumerable.Range(0, count)];
 
-	/// <summary>The stage takes the top of the window (660 of 1080, never under 420), the grid the rest.</summary>
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's C-M1, item 12): the stage takes a third of the window at most (it took 61 %: 12 stills on
+	/// screen), its words under the library's name, the header line on the night ground under them; three rows of stills at
+	/// 1080. Scrolled, it is a 96 px band (the name only). The grid shows stills, posters or the list (View).
+	/// </summary>
 	private void Layout()
 	{
 		var height = ActualHeight;
@@ -128,47 +148,101 @@ public sealed partial class CinematicLibraryPage : Page
 		}
 
 		var narrow = width < CinematicItemPageLayout.NarrowBelow;
-		var art = Math.Clamp(Math.Round(height * 0.61), 420, 720);
-		Stage.ArtHeight = art;
-		var top = narrow ? 118 : Math.Max(150, art * 0.28);
+		// Nixie 1.4.0 (plan item 13): the theme's page grid: its gutter (48 at 1100 to 96 at 1920) and the title at its y (72)
+		var side = PageGrid.GutterAt(width);
+		var titleY = PageGrid.Tokens().TitleY;
+		var top = titleY + (narrow ? 44 : 52);
 		Stage.SetLayout(narrow, top);
-		// the grid starts under the preview's words (their height, with room for the header line), never above the art's foot
-		StageRow.Height = new GridLength(Math.Max(art - (narrow ? 96 : 112), top + Stage.WordsHeight + 14));
-		if (_narrow != narrow)
+		Stage.SetBand(_band);
+		// the stage's own rows: under the name, its words; the header line right under them; the art fades past it
+		var stageRow = _band ? 96 : Math.Min(Math.Round(height * 0.34), top + Stage.WordsHeight + 12);
+		StageRow.Height = new GridLength(Math.Max(96, stageRow));
+		// the art ends where the header line starts: the sections and the toolbar sit on the night ground, never on art (C-M2)
+		Stage.ArtHeight = Math.Max(96, stageRow) + 8;
+		TitleText.FontSize = _band ? 26 : narrow ? 34 : 40;
+		TopLine.Margin = new Thickness(side, _band ? 54 : titleY, side, 0);
+		if (_narrow != narrow || Math.Abs(_side - side) >= 1)
 		{
 			_narrow = narrow;
-			var side = narrow ? 48 : 96;
-			TopLine.Margin = new Thickness(side, 70, side, 0);
-			HeaderLine.Margin = new Thickness(side, 0, side - 12, 6);
-			GridRepeater.Margin = new Thickness(side - 12, 0, narrow ? 24 : 36, 32);
-			GridRepeater.ItemTemplate = (DataTemplate)Resources[narrow ? "GridSmall" : "GridLarge"];
-			GridLayout.MinItemWidth = narrow ? 256 : 296;
-			GridLayout.MinItemHeight = narrow ? 210 : 240;
-			Placeholders.Margin = new Thickness(side, 14, side - 26, 0);
+			_side = side;
+			HeaderLine.Margin = new Thickness(side, 0, side, 10);
+			AppliedFilters.Margin = new Thickness(side, 0, side, 10);
+			LetterRow.Margin = new Thickness(side, 0, side, 6);
+			ShowGrid(narrow, side);
 		}
 	}
 
+	/// <summary>Stills (large or small by the window), posters at their 2:3, or the list; the placeholders follow the grid's layout.</summary>
+	private void ShowGrid(bool narrow, double side)
+	{
+		// six stills a row at 1920 (the slots carry their own 12 px sides)
+		GridRepeater.Margin = new Thickness(side - 12, 0, narrow ? 24 : 36, 32);
+		Placeholders.Margin = new Thickness(side - 12, 0, narrow ? 24 : 36, 0);
+		DataTemplate template;
+		if (ViewModel.IsList)
+		{
+			template = (DataTemplate)Resources["ListRow"];
+			GridRepeater.Layout = new StackLayout { Spacing = 4 };
+		}
+		else if (ViewModel.Art == LibraryArt.Posters)
+		{
+			template = (DataTemplate)Resources["PosterCard"];
+			GridLayout.ItemsStretch = UniformGridLayoutItemsStretch.Uniform;
+			GridLayout.MinColumnSpacing = GridLayout.MinRowSpacing = 8;
+			LibraryDensities.Apply(GridLayout, ViewModel.Density, narrow ? 170 : 190, narrow ? 315 : 345);
+			GridRepeater.Layout = GridLayout;
+		}
+		else
+		{
+			template = (DataTemplate)Resources[narrow ? "GridSmall" : "GridLarge"];
+			GridLayout.ItemsStretch = UniformGridLayoutItemsStretch.None;
+			GridLayout.MinColumnSpacing = GridLayout.MinRowSpacing = 0;
+			GridLayout.MinItemWidth = narrow ? 256 : 296;
+			GridLayout.MinItemHeight = narrow ? 196 : 218;
+			GridRepeater.Layout = GridLayout;
+		}
+
+		GridRepeater.ItemTemplate = template;
+		LibrarySkeleton.Mirror(GridLayout, SkeletonLayout);
+	}
+
 	private Guid? _hovered;
+	private double _hoveredAt;
 	private bool _stageQueued;
-	private string? _markedLetter;
 
 	/// <summary>
 	/// Nixie 1.3.1: what the stage shows: the still the pointer rests on, else the one the keyboard is on in the grid, else
 	/// (the keyboard on the stage's own buttons) the title it shows, else the first in view, else the first of the list; only
-	/// a title the grid shows (filtered out: never), null when it shows none.
+	/// a title the grid shows (filtered out: never), null when it shows none. Nixie 1.4.0 (the bug hunt's M5): the pointer's
+	/// and the keyboard's titles count only while they are in view (<paramref name="firstVisible"/> to
+	/// <paramref name="lastVisible"/>): a wheel scroll under a resting pointer, or past the focused still, moves the stage on.
 	/// </summary>
-	public static BaseItemDto? StageTarget(IReadOnlyList<BaseItemViewModel> items, Guid? hovered, Guid? focused, int firstVisible, Guid? kept = null)
+	public static BaseItemDto? StageTarget(IReadOnlyList<BaseItemViewModel> items, Guid? hovered, Guid? focused, int firstVisible, Guid? kept = null, int lastVisible = int.MaxValue)
 	{
 		if (items.Count == 0)
 		{
 			return null;
 		}
 
-		foreach (var wanted in new[] { hovered, focused, kept })
+		bool InView(int index) => firstVisible < 0 || index >= firstVisible && index <= lastVisible;
+		foreach (var (wanted, mustBeInView) in new[] { (hovered, true), (focused, true), (kept, false) })
 		{
-			if (wanted is { } id && items.FirstOrDefault(x => x.Id == id) is { } item)
+			if (wanted is not { } id)
 			{
-				return item.Dto;
+				continue;
+			}
+
+			for (var i = 0; i < items.Count; i++)
+			{
+				if (items[i].Id == id)
+				{
+					if (!mustBeInView || InView(i))
+					{
+						return items[i].Dto;
+					}
+
+					break;
+				}
 			}
 		}
 
@@ -199,9 +273,9 @@ public sealed partial class CinematicLibraryPage : Page
 		}
 
 		var items = ViewModel.Items;
-		var first = FirstVisibleIndex();
+		var (first, last) = LibraryGridHost.VisibleRange(GridRepeater, GridScroller);
 		var kept = XamlRoot is { } root && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) is DependencyObject on && IsWithin(on, Stage) ? Stage.Current?.Id : null;
-		var target = StageTarget(items, _hovered, FocusedInGrid(), first, kept);
+		var target = StageTarget(items, _hovered, FocusedInGrid(), first, kept, last < 0 ? int.MaxValue : last);
 		if (target is null)
 		{
 			Stage.ShowNothing();
@@ -211,21 +285,26 @@ public sealed partial class CinematicLibraryPage : Page
 			Stage.Show(target);
 		}
 
-		ShowPlace(first >= 0 && first < items.Count ? items[first].Dto : target);
 	}
 
-	/// <summary>The title of the still the keyboard is on, when it is in the grid.</summary>
+	/// <summary>The title of the still (or poster, or row) the keyboard is on, when it is in the grid.</summary>
 	private Guid? FocusedInGrid() =>
 		XamlRoot is { } root && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) is DependencyObject focused
-			&& StillOf(focused) is { Model.Dto.Id: { } id } still && IsWithin(still, GridRepeater) ? id : null;
+			&& IsWithin(focused, GridRepeater) && ModelOf(focused) is { Dto.Id: { } id } ? id : null;
 
-	private static CinematicStill? StillOf(DependencyObject? element)
+	/// <summary>The title of the still, poster or row <paramref name="element"/> is in.</summary>
+	private static BaseItemViewModel? ModelOf(DependencyObject? element)
 	{
 		for (var node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
 		{
-			if (node is CinematicStill still)
+			switch (node)
 			{
-				return still;
+				case CinematicStill still:
+					return still.Model;
+				case BaseItemDtoCard card:
+					return card.Model;
+				case LibraryListRow row:
+					return row.Model;
 			}
 		}
 
@@ -244,36 +323,6 @@ public sealed partial class CinematicLibraryPage : Page
 
 		return false;
 	}
-
-	/// <summary>The index of the first still in view (its foot below the view's top), -1 when none is drawn.</summary>
-	private int FirstVisibleIndex()
-	{
-		var best = -1;
-		var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(GridRepeater);
-		for (var i = 0; i < count; i++)
-		{
-			if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(GridRepeater, i) is not FrameworkElement { ActualHeight: > 0 } element
-				|| GridRepeater.GetElementIndex(element) is not (>= 0 and var index))
-			{
-				continue;
-			}
-
-			try
-			{
-				var top = element.TransformToVisual(GridScroller).TransformPoint(default).Y;
-				if (top + element.ActualHeight * 0.5 > 0 && top < GridScroller.ViewportHeight && (best < 0 || index < best))
-				{
-					best = index;
-				}
-			}
-			catch (ArgumentException)
-			{
-			}
-		}
-
-		return best;
-	}
-
 	// ---- the sections: tabs over the shared filter and sort --------------------------------------------------------
 
 	private enum Section
@@ -284,11 +333,27 @@ public sealed partial class CinematicLibraryPage : Page
 		Recent,
 	}
 
-	private Section Current =>
-		ViewModel.Filter.Favorites && !ViewModel.Filter.Unwatched ? Section.Favorites
-		: ViewModel.Filter.Unwatched && !ViewModel.Filter.Favorites ? Section.Unwatched
-		: ViewModel.SortBy == ItemSortBy.DateCreated && ViewModel.Order == SortOrder.Descending && !ViewModel.Filter.Unwatched && !ViewModel.Filter.Favorites ? Section.Recent
-		: Section.All;
+
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's C-M3, item 2): a section is lit only when it is exactly what is shown: All, no filter (in any
+	/// sort but Recently added's); Unwatched or Favorites, that switch alone; Recently added, no filter, newest added first.
+	/// A genre ticked, or two switches, light none (they lit All).
+	/// </summary>
+	private Section? Current
+	{
+		get
+		{
+			var f = ViewModel.Filter;
+			var recent = ViewModel.SortBy == ItemSortBy.DateCreated && ViewModel.Order == SortOrder.Descending && !ViewModel.InPlaylistOrder;
+			return ViewModel.ActiveFilters switch
+			{
+				0 => recent ? Section.Recent : Section.All,
+				1 when f.Unwatched => Section.Unwatched,
+				1 when f.Favorites => Section.Favorites,
+				_ => null,
+			};
+		}
+	}
 
 	private void ShowTabs()
 	{
@@ -302,6 +367,9 @@ public sealed partial class CinematicLibraryPage : Page
 		]);
 	}
 
+	// the sort in use before Recently added put its own: All puts it back (a preset never resets the user's sort to Name)
+	private (ItemSortBy SortBy, SortOrder Order)? _sortBeforeRecent;
+
 	private void SectionTabs_TabInvoked(object? sender, CinematicTab tab)
 	{
 		if (tab.Payload is not Section section || section == Current)
@@ -309,141 +377,45 @@ public sealed partial class CinematicLibraryPage : Page
 			return;
 		}
 
-		ViewModel.Filter.Unwatched = section == Section.Unwatched;
-		ViewModel.Filter.Favorites = section == Section.Favorites;
-		if (section == Section.Recent)
+		var wasRecent = Current == Section.Recent;
+		ViewModel.ClearFilters();
+		switch (section)
 		{
-			ViewModel.UpdateSortBy(ItemSortBy.DateCreated);
-			ViewModel.UpdateSortOrder(SortOrder.Descending);
+			case Section.Unwatched:
+				ViewModel.Filter.Unwatched = true;
+				break;
+			case Section.Favorites:
+				ViewModel.Filter.Favorites = true;
+				break;
+			case Section.Recent:
+				_sortBeforeRecent ??= (ViewModel.SortBy, ViewModel.Order);
+				ViewModel.SetSort(ItemSortBy.DateCreated, SortOrder.Descending);
+				break;
+			case Section.All when wasRecent:
+				var (sortBy, order) = _sortBeforeRecent ?? (ItemSortBy.Name, SortOrder.Ascending);
+				ViewModel.SetSort(sortBy, order == SortOrder.Descending && sortBy == ItemSortBy.DateCreated ? SortOrder.Ascending : order);
+				break;
 		}
-		else if (ViewModel.SortBy == ItemSortBy.DateCreated && ViewModel.Order == SortOrder.Descending)
+
+		if (section != Section.Recent)
 		{
-			ViewModel.UpdateSortBy(ItemSortBy.Name);
-			ViewModel.UpdateSortOrder(SortOrder.Ascending);
+			_sortBeforeRecent = null;
 		}
 
 		ShowTabs();
 	}
 
-	/// <summary>"B · 23 movies · Name, A to Z": the first title in view's letter (sorted by name), the count, the sort.</summary>
-	private void ShowPlace(BaseItemDto? focused = null)
-	{
-		focused ??= Stage.Current;
-		var parts = new List<string>();
-		// Nixie 1.3.1: the letter the title files under (its sort name), as the A-Z jump's
-		var letter = ViewModel.SortBy == ItemSortBy.Name && !ViewModel.InPlaylistOrder && focused is not null
-			? LibraryBrowse.LetterOf(string.IsNullOrWhiteSpace(focused.SortName) ? focused.Name : focused.SortName) : null;
-		if (letter is { } l)
-		{
-			parts.Add(l);
-		}
-
-		if (!string.IsNullOrEmpty(ViewModel.CountText))
-		{
-			parts.Add(ViewModel.CountText);
-		}
-
-		parts.Add(ViewModel.InPlaylistOrder ? ViewModel.SortName
-			: $"{ViewModel.SortName}, {(ViewModel.Order == SortOrder.Ascending ? ViewModel.SortBy == ItemSortBy.Name ? "A to Z" : "low to high" : ViewModel.SortBy == ItemSortBy.Name ? "Z to A" : "high to low")}");
-		PlaceText.Text = string.Join(" · ", parts);
-		MarkLetter(letter);
-	}
-
-	/// <summary>The letter of the title in focus is underlined in the A-Z jump.</summary>
-	private void MarkLetter(string? letter)
-	{
-		_markedLetter = letter;
-		for (var i = 0; i < ViewModel.Letters.Count; i++)
-		{
-			if (LetterRepeater.TryGetElement(i) is Button { Content: Grid { Children: [_, Border mark] } } button && button.Tag is LetterJump jump)
-			{
-				var current = string.Equals(jump.Letter, letter, StringComparison.OrdinalIgnoreCase);
-				mark.Opacity = current ? 1 : 0;
-				AutomationProperties.SetItemStatus(button, current ? "Shown" : "");
-			}
-		}
-	}
-
-	// ---- the shared library's place, jump and focus (LibraryPage) -----------------------------------------------------
+	// ---- the shared library's place, jump and focus (LibraryGridHost) ------------------------------------------------
 
 	protected override void OnNavigatedTo(NavigationEventArgs e)
 	{
-		ViewModel.ComingBack = e.NavigationMode is NavigationMode.Back or NavigationMode.Forward;
-		_jumpFocus = FocusState.Keyboard;
+		_host.OnNavigatedTo(e);
 		base.OnNavigatedTo(e);
 	}
 
 	protected override void OnNavigatedFrom(NavigationEventArgs e)
 	{
-		ViewModel.LeftAt(_grid.LastItem as BaseItemViewModel, GridScroller.VerticalOffset);
+		_host.OnNavigatedFrom();
 		base.OnNavigatedFrom(e);
-	}
-
-	private void Letter_Click(object sender, RoutedEventArgs e)
-	{
-		if (sender is Button { Tag: LetterJump jump } button)
-		{
-			_jumpFocus = button.FocusState is FocusState.Keyboard ? FocusState.Keyboard : FocusState.Programmatic;
-			ViewModel.JumpToCommand.Execute(jump);
-		}
-	}
-
-	private void FocusRequested()
-	{
-		if (ViewModel.IsLoading || (ViewModel.FocusRequest < 0 && ViewModel.ReturnOffset is null))
-		{
-			return;
-		}
-
-		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-		{
-			if (ViewModel.IsLoading)
-			{
-				return;
-			}
-
-			if (XamlRoot is null || !IsLoaded || GridScroller.XamlRoot is null || !GridScroller.IsLoaded)
-			{
-				_focusOnLoad = true;
-				return;
-			}
-
-			UpdateLayout();
-			var index = ViewModel.FocusRequest;
-			ViewModel.FocusRequest = -1;
-			var state = _jumpFocus;
-			_jumpFocus = FocusState.Keyboard;
-			if (ViewModel.ReturnOffset is { } offset && Math.Abs(Math.Min(offset, GridScroller.ScrollableHeight) - GridScroller.VerticalOffset) >= 1)
-			{
-				ViewModel.ReturnOffset = null;
-				GridScroller.UpdateLayout();
-				_returnScroll = GridScroller.ScrollTo(0, Math.Min(offset, GridScroller.ScrollableHeight), new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
-				_returnFocus = (index, state);
-				return;
-			}
-
-			ViewModel.ReturnOffset = null;
-			if (index >= 0)
-			{
-				_grid.FocusAndHold(index, state);
-			}
-		});
-	}
-
-	private void GridScroller_ScrollCompleted(ScrollView sender, ScrollingScrollCompletedEventArgs args)
-	{
-		if (args.CorrelationId != _returnScroll)
-		{
-			return;
-		}
-
-		_returnScroll = -1;
-		if (_returnFocus.Index >= 0)
-		{
-			GridRepeater.UpdateLayout();
-			_grid.FocusAndHold(_returnFocus.Index, _returnFocus.State);
-		}
-
-		_returnFocus = (-1, FocusState.Keyboard);
 	}
 }
