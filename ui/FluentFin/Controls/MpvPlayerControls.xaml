@@ -108,15 +108,13 @@
                 <StaticResource x:Key="ButtonForeground" ResourceKey="PlayerGlassForeground" />
                 <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="PlayerGlassForeground" />
                 <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="PlayerGlassForeground" />
-        <!--  round icon buttons and pills on the scrim: translucent fill, the glass edge, no acrylic  -->
-        <Style x:Key="PlayerButton" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
-            <Setter Property="Width" Value="44" />
-            <Setter Property="Height" Value="44" />
-            <Setter Property="MinHeight" Value="0" />
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="CornerRadius" Value="22" />
-            <Setter Property="BorderThickness" Value="1" />
+        <!--
+            round icon buttons and pills on the scrim: translucent fill, the glass edge, no acrylic. Nixie 1.4.0 style (the library
+            UX review, X13): the transport is on the button system: the 44 icon circles (NixiePlayerButtonStyle, the Nixie hover,
+            press and focus glow), Play/Pause the 60 px hero (NixiePlayerPlayButtonStyle, the one documented exception to the
+            44/32 sizes); the pills on the Secondary template. The player stream owns the layout and the prompts.
+        -->
+        <Style x:Key="PlayerButton" BasedOn="{StaticResource NixiePlayerButtonStyle}" TargetType="Button">
             <Setter Property="Background" Value="{ThemeResource PlayerGlassFill}" />
             <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
             <Setter Property="Foreground" Value="{ThemeResource PlayerGlassForeground}" />
@@ -126,9 +124,11 @@
             with the Nixie templates' hover, press and focus glow. "Next episode" is the Primary (the outcome that will happen
             carries the accent); Skip intro, Skip credits, Watch credits and Keep watching are Secondary on the dense
             PlayerPromptFill (the palette's deep wine, readable over any picture). In 1.3.1 they were PlayerPromptPill on WinUI's
-            own template, the Next card 69 high and on the same teal-black fill as its cancel.
+            own template, the Next card 69 high and on the same teal-black fill as its cancel. They are the style stream's
+            player roles (Glass.xaml: NixiePlayerPromptButtonStyle, NixiePlayerPromptPrimaryButtonStyle) with the player's own
+            layout (44, centred) and, for the Secondary ones, the dense fill they need over video.
         -->
-        <Style x:Key="PlayerPromptStyle" BasedOn="{StaticResource NixieButtonStyle}" TargetType="Button">
+        <Style x:Key="PlayerPromptStyle" BasedOn="{StaticResource NixiePlayerPromptButtonStyle}" TargetType="Button">
             <Setter Property="Height" Value="44" />
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="Padding" Value="18,0" />
@@ -137,20 +137,14 @@
             <Setter Property="Foreground" Value="{ThemeResource PlayerGlassForeground}" />
             <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
         </Style>
-        <Style x:Key="PlayerPromptPrimaryStyle" BasedOn="{StaticResource NixiePrimaryButtonStyle}" TargetType="Button">
+        <Style x:Key="PlayerPromptPrimaryStyle" BasedOn="{StaticResource NixiePlayerPromptPrimaryButtonStyle}" TargetType="Button">
             <Setter Property="Height" Value="44" />
             <Setter Property="Padding" Value="18,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Stretch" />
         </Style>
-        <!--  the one primary action: play/pause, in the accent  -->
-        <Style x:Key="PlayerPlayButton" BasedOn="{StaticResource PlayerButton}" TargetType="Button">
-            <Setter Property="Width" Value="60" />
-            <Setter Property="Height" Value="60" />
-            <Setter Property="CornerRadius" Value="30" />
-            <Setter Property="Background" Value="{ThemeResource NixieAccentBrush}" />
-            <Setter Property="Foreground" Value="{ThemeResource NixieDeepBrush}" />
-        </Style>
+        <!--  the one primary action: play/pause, in the accent, at 60 (the hero exception)  -->
+        <Style x:Key="PlayerPlayButton" BasedOn="{StaticResource NixiePlayerPlayButtonStyle}" TargetType="Button" />
 
         <!--
             menus: Seaglass 1.1.3, the shared overlay recipe (Styles\Glass.xaml): the audio menu is a window of its own on

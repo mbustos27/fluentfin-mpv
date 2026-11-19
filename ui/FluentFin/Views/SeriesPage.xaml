@@ -46,7 +46,7 @@
                             AutomationProperties.Name="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}"
                             Command="{x:Bind root:App.Commands.PlayDtoCommand}"
                             CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"
-                            Style="{StaticResource GlassAccentPillButtonStyle}"
+                            Style="{StaticResource NixiePrimaryButtonStyle}"
                             ToolTipService.ToolTip="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}">
                             <StackPanel Spacing="3">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -108,7 +108,7 @@
                                             AutomationProperties.Name="{x:Bind AutomationName}"
                                             Command="{Binding ElementName=Page, Path=ViewModel.SelectSeasonCommand}"
                                             CommandParameter="{x:Bind Dto}"
-                                            Style="{StaticResource GlassPillButtonStyle}">
+                                            Style="{StaticResource NixieButtonStyle}">
                                             <StackPanel Spacing="4">
                                                 <TextBlock Text="{x:Bind Name}" />
                                                 <Border Height="3" CornerRadius="2" Background="{ThemeResource NixieAccentBrush}" Visibility="{x:Bind c:ItemRowConverters.Show(IsCurrent)}" />

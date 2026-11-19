@@ -170,7 +170,7 @@ Check 'library: End then Tab at once leaves the grid (the scroll''s end does not
 
 # --- the See all grid (Continue Watching): the same model; nothing above it in the page, so Up stays on the card
 Open-Nav 'Home'
-$seeAll = Wait-Ui -Name 'See all Continue Watching' -Type 'Button' -Seconds 15
+$seeAll = Wait-Ui -Name 'See all Continue Watching' -Type 'Hyperlink' -Seconds 15
 Check 'see all: Continue Watching has its See all' ([bool]$seeAll)
 if ($seeAll) {
     Invoke-Element $seeAll | Out-Null

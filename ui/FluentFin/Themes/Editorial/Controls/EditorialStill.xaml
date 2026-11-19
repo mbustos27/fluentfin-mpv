@@ -84,21 +84,13 @@
                 Foreground="{ThemeResource EditorialStillNumberBrush}"
                 LineHeight="64"
                 LineStackingStrategy="BlockLineHeight" />
+            <!--  1.4.0 (the library UX review, X10): watched is the dim neutral check of every card, never the accent  -->
             <Border
                 x:Name="WatchedMark"
-                Width="24"
-                Height="24"
                 Margin="0,10,10,0"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Top"
-                AutomationProperties.AccessibilityView="Raw"
-                Background="{ThemeResource NixieAccentOnImageBrush}"
-                CornerRadius="6"
+                Style="{StaticResource NixieWatchedBadgeStyle}"
                 Visibility="Collapsed">
-                <FontIcon
-                    FontSize="12"
-                    Foreground="{ThemeResource NixieOnAccentOnImageBrush}"
-                    Glyph="&#xE73E;" />
+                <FontIcon Style="{StaticResource NixieWatchedGlyphStyle}" />
             </Border>
             <Grid
                 x:Name="ProgressTrack"

@@ -15,7 +15,7 @@
         scroll viewer would swallow it: microsoft-ui-xaml #10172), the tilt wheel, Shift+wheel and a swipe move the row.
         Always-visible arrows and "See all" in the header; one Tab stop (TabFocusNavigation Once), Left/Right/Home/End along
         the row, Up/Down between rows; the title is a heading and the row a list for Narrator. Seaglass 1.1.4 (layout audit,
-        item 2): the title is the See all link (with a chevron), and the arrows are plain chevrons (the filled triangles read
+        item 2): the arrows are plain chevrons (the filled triangles read
         as Play), quiet (half strength) until the pointer is over the row or the keyboard is in it, never hidden.
     -->
     <Grid x:Name="RowRoot" RowSpacing="8">
@@ -32,7 +32,7 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!--  a row with nowhere to go: its title, a heading  -->
+            <!--  the row's title, a heading (1.4.0: always; See all is its own link)  -->
             <TextBlock
                 x:Name="TitleText"
                 VerticalAlignment="Center"
@@ -41,46 +41,20 @@
                 Text="{x:Bind Header, Mode=OneWay}" />
 
             <!--
-                Seaglass 1.1.4 (UX review, fix 9): a row with a See all: the title itself is the button, with a chevron that shows
-                it opens something; Narrator hears "See all <title>, button", and the title inside is still a heading. The row
-                header's one Tab stop (the arrows have none: the row's keys and the wheel move it).
+                Nixie 1.4.0 (the library UX review, X13: "See all" came in four forms, a 179 x 40 title button, a 56 px tile, a
+                48 x 32 link and a 40-high variant): one See all in every theme, the Link role (NixieLinkButtonStyle, 32 high,
+                underlined) at the header's right, before the arrows; the title is always the plain heading. Narrator hears
+                "See all <title>, link" (the visible words lead the name). The row header's one Tab stop (the arrows have none:
+                the row's keys and the wheel move it).
             -->
-            <Button
+            <HyperlinkButton
                 x:Name="SeeAllButton"
-                MinHeight="40"
-                Margin="-10,0,0,0"
-                Padding="10,2,8,2"
-                HorizontalAlignment="Left"
+                Grid.Column="1"
                 VerticalAlignment="Center"
-                Background="Transparent"
-                BorderThickness="0"
                 Click="SeeAllButton_Click"
-                CornerRadius="{StaticResource GlassButtonCornerRadius}"
-                ToolTipService.ToolTip="See all"
-                Visibility="Collapsed">
-                <Button.Resources>
-                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="GlassHoverOverlayBrush" />
-                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="GlassPressedOverlayBrush" />
-                    <StaticResource x:Key="ButtonForeground" ResourceKey="GlassTextPrimaryBrush" />
-                    <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="GlassTextPrimaryBrush" />
-                    <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="GlassTextPrimaryBrush" />
-                </Button.Resources>
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock
-                        x:Name="SeeAllTitle"
-                        VerticalAlignment="Center"
-                        AutomationProperties.HeadingLevel="Level2"
-                        Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                        Text="{x:Bind Header, Mode=OneWay}" />
-                    <FontIcon
-                        x:Name="SeeAllChevron"
-                        Margin="0,3,0,0"
-                        VerticalAlignment="Center"
-                        AutomationProperties.AccessibilityView="Raw"
-                        FontSize="16"
-                        Glyph="&#xE76C;" />
-                </StackPanel>
-            </Button>
+                Content="See all"
+                Style="{StaticResource NixieLinkButtonStyle}"
+                Visibility="Collapsed" />
 
             <Button
                 x:Name="ScrollLeftBtn"
@@ -92,7 +66,7 @@
                 Click="ScrollLeftBtn_Click"
                 IsEnabled="False"
                 IsTabStop="False"
-                Style="{StaticResource GlassIconButtonStyle}"
+                Style="{StaticResource NixieIconButtonStyle}"
                 ToolTipService.ToolTip="Scroll left"
                 Visibility="Collapsed">
                 <FontIcon FontSize="20" Glyph="&#xE76B;" />
@@ -106,7 +80,7 @@
                 AutomationProperties.Name="Scroll right"
                 Click="ScrollRightBtn_Click"
                 IsTabStop="False"
-                Style="{StaticResource GlassIconButtonStyle}"
+                Style="{StaticResource NixieIconButtonStyle}"
                 ToolTipService.ToolTip="Scroll right"
                 Visibility="Collapsed">
                 <FontIcon FontSize="20" Glyph="&#xE76C;" />

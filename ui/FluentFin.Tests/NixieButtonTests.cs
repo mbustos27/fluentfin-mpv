@@ -88,6 +88,10 @@ public sealed class NixieButtonTests
 	[InlineData("NixieLinkButtonTemplate")]
 	[InlineData("NixieTabButtonTemplate")]
 	[InlineData("NixieIconToggleButtonTemplate")]
+	[InlineData("NixieChipToggleButtonTemplate")]
+	[InlineData("NixieChoiceChipTemplate")]
+	[InlineData("NixieSectionTabButtonTemplate")]
+	[InlineData("NixieLetterButtonTemplate")]
 	public void Every_template_has_every_state_and_disabled_is_neutral_never_a_fade(string key)
 	{
 		var template = Top(key);
@@ -125,15 +129,20 @@ public sealed class NixieButtonTests
 	}
 
 	[Fact]
-	public void Destructive_is_never_filled_and_never_glows_and_links_are_underlined()
+	public void Destructive_is_never_filled_never_glows_at_rest_and_links_are_underlined()
 	{
 		var setters = Setters("NixieDestructiveButtonStyle");
 		Assert.Equal("{ThemeResource NixieButtonFillBrush}", setters["Background"]);
 		Assert.Equal("{ThemeResource NixieDangerForegroundBrush}", setters["Foreground"]);
 		var template = Top("NixieDestructiveButtonTemplate").ToString();
-		Assert.DoesNotContain("FocusGlow", template);
 		Assert.DoesNotContain("RestGlow", template);
 		Assert.DoesNotContain("NixiePrimaryFillBrush", template);
+		// 1.4.0: keyboard focus glows, in the danger ink (never the accent): Delete was the one button with no focus glow
+		var focused = States(Top("NixieDestructiveButtonTemplate")).Single(s => (string?)s.Attribute(X + "Name") == "Focused").ToString();
+		Assert.Contains("FocusGlow.Visibility", focused);
+		var glow = Top("NixieDestructiveButtonTemplate").Descendants().Single(e => (string?)e.Attribute(X + "Name") == "FocusGlow").ToString();
+		Assert.Contains("NixieDangerColor", glow);
+		Assert.DoesNotContain("NixieAccentColor", glow);
 
 		// a string is underlined (the style's ContentTemplate); any content is shown (a ContentPresenter, not a TextBlock that
 		// would print an element's type name)
@@ -213,19 +222,40 @@ public sealed class NixieButtonTests
 		Assert.True(OkLab.Contrast(1.0, Hex("#BC1E47").Luminance) >= 3);
 	}
 
+	/// <summary>
+	/// 1.4.0: the 1.1.x "Pill" aliases are gone (the review: the key said "pill" for a shape the system no longer draws), and no
+	/// XAML or code names them any more: a StaticResource to a missing key would fail only at run time.
+	/// </summary>
 	[Theory]
-	[InlineData("GlassPillButtonStyle", "NixieButtonStyle")]
-	[InlineData("GlassAccentPillButtonStyle", "NixiePrimaryButtonStyle")]
-	[InlineData("GlassInsetPillButtonStyle", "NixieButtonStyle")]
-	[InlineData("GlassIconButtonStyle", "NixieIconButtonStyle")]
-	public void The_1_1_keys_are_aliases_of_the_new_roles(string old, string role)
+	[InlineData("GlassPillButtonStyle")]
+	[InlineData("GlassAccentPillButtonStyle")]
+	[InlineData("GlassInsetPillButtonStyle")]
+	[InlineData("GlassIconButtonStyle")]
+	public void The_1_1_pill_aliases_are_gone_and_nothing_names_them(string old)
 	{
-		var alias = Top(old);
-		Assert.Equal("StaticResource", alias.Name.LocalName);
-		Assert.Equal(role, (string?)alias.Attribute("ResourceKey"));
-		// defined after the style it names (a StaticResource alias resolves at load)
-		var keys = Glass().Elements().Select(Key).ToList();
-		Assert.True(keys.IndexOf(role) < keys.IndexOf(old));
+		Assert.DoesNotContain(Glass().Elements(), e => Key(e) == old);
+		var ui = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var users = Directory.EnumerateFiles(ui, "*.xaml", SearchOption.AllDirectories)
+			.Concat(Directory.EnumerateFiles(ui, "*.cs", SearchOption.AllDirectories))
+			.Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+				&& !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+			.Where(f => File.ReadAllText(f).Contains("{StaticResource " + old + "}", StringComparison.Ordinal) || File.ReadAllText(f).Contains("\"" + old + "\"", StringComparison.Ordinal))
+			.ToList();
+		Assert.Empty(users);
+	}
+
+	/// <summary>
+	/// 1.4.0 (the library review's plan item 11, CL-m13): Classic's Home hero Play was reported on a radius-22 template. It is
+	/// the Primary at radius 8: the 22 the inventory joined to it is the card's 44 circle (BaseItemDtoCard's PlayButton).
+	/// </summary>
+	[Fact]
+	public void The_home_hero_Play_is_the_Primary_at_radius_8_not_22()
+	{
+		var hero = XDocument.Load(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "Controls", "HomeHero.xaml"))).Root!;
+		var play = hero.Descendants().Single(e => (string?)e.Attribute(X + "Name") == "PlayButton");
+		Assert.Equal("{StaticResource NixiePrimaryButtonStyle}", (string?)play.Attribute("Style"));
+		Assert.Null(play.Attribute("CornerRadius"));
+		Assert.Equal("{StaticResource GlassButtonCornerRadius}", Setters("NixiePrimaryButtonStyle")["CornerRadius"]);
 	}
 
 	/// <summary>The item page's styles: its toggles are the system's icon toggle; its scrim is dusk, not 1.1.x's teal-black.</summary>

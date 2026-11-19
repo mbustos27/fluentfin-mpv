@@ -114,7 +114,7 @@
                     HorizontalAlignment="Center"
                     Click="Retry_Click"
                     Content="Try again"
-                    Style="{StaticResource GlassPillButtonStyle}"
+                    Style="{StaticResource NixieButtonStyle}"
                     Visibility="{x:Bind RetryVisibility(Status), Mode=OneWay}" />
             </StackPanel>
             <ProgressRing
@@ -138,7 +138,7 @@
             <Button
                 Click="OnCancel"
                 Content="Cancel"
-                Style="{StaticResource GlassPillButtonStyle}" />
+                Style="{StaticResource NixieButtonStyle}" />
         </StackPanel>
     </Grid>
 </UserControl>

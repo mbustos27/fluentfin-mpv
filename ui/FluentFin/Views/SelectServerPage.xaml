@@ -114,7 +114,7 @@
                                         Grid.Column="2"
                                         AutomationProperties.Name="{x:Bind local:SelectServerPage.MoreOptionsName(DisplayName)}"
                                         Content="{ui:FontIcon Glyph=&#xE712;, FontSize=16}"
-                                        Style="{StaticResource GlassIconButtonStyle}"
+                                        Style="{StaticResource NixieIconButtonStyle}"
                                         ToolTipService.ToolTip="More options">
                                         <Button.Flyout>
                                             <MenuFlyout>
@@ -158,7 +158,7 @@
                 <Button
                     AutomationProperties.Name="Find servers"
                     Command="{x:Bind ViewModel.DetectServersCommand}"
-                    Style="{StaticResource GlassPillButtonStyle}"
+                    Style="{StaticResource NixieButtonStyle}"
                     ToolTipService.ToolTip="Look for Jellyfin servers on this network">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <ctk:SwitchPresenter TargetType="x:Boolean" Value="{x:Bind ViewModel.IsDetecting, Mode=OneWay}">
@@ -179,7 +179,7 @@
                     AutomationProperties.Name="Connect"
                     Command="{x:Bind ViewModel.CheckConnectivityAndGoToLoginCommand}"
                     CommandParameter="{x:Bind TxtUrl.Text, Mode=OneWay}"
-                    Style="{StaticResource GlassAccentPillButtonStyle}">
+                    Style="{StaticResource NixiePrimaryButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="10">
                         <!--  fluentfin-mpv: progress while the address is checked; 1.1.4: no "Send" glyph (layout audit #4)  -->
                         <ProgressRing

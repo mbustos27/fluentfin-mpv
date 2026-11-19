@@ -15,6 +15,16 @@ public static class ButtonRoles
 	/// <summary>A confirmation of a destructive action: Compact buttons, the default (Cancel) drawn Secondary, the confirm Destructive.</summary>
 	public const string DestructiveDialog = "NixieDestructiveDialogStyle";
 
+	/// <summary>1.4.0: Destructive, Compact, with the trash glyph (E74D) before the verb: the confirm of a delete.</summary>
+	public const string DeleteCompact = "NixieDeleteCompactButtonStyle";
+
+	/// <summary>
+	/// 1.4.0 (the library UX review, X13): the confirm button's role for a verb: a delete ("Delete", "Delete user") carries
+	/// the trash glyph; any other destructive verb (Remove, Forget, Restart server) is the plain Destructive.
+	/// </summary>
+	public static string ConfirmStyleKey(string? verb) =>
+		verb?.TrimStart().StartsWith("Delete", StringComparison.OrdinalIgnoreCase) == true ? DeleteCompact : DestructiveCompact;
+
 	/// <summary>The style with that key in the app's resources, or null when there is none (yet), or no running app to ask.</summary>
 	public static Style? Find(string key)
 	{

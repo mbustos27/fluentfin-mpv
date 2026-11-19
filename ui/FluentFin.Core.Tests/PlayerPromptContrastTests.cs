@@ -103,9 +103,9 @@ public sealed class PlayerPromptContrastTests
 	/// (their hover, press and focus glow), centred on one line.
 	/// </summary>
 	[Theory]
-	[InlineData("NextPill", "PlayerPromptPrimaryStyle", "NixiePrimaryButtonStyle")]
-	[InlineData("SkipSegmentButton", "PlayerPromptStyle", "NixieButtonStyle")]
-	[InlineData("CancelNextButton", "PlayerPromptStyle", "NixieButtonStyle")]
+	[InlineData("NextPill", "PlayerPromptPrimaryStyle", "NixiePlayerPromptPrimaryButtonStyle")]
+	[InlineData("SkipSegmentButton", "PlayerPromptStyle", "NixiePlayerPromptButtonStyle")]
+	[InlineData("CancelNextButton", "PlayerPromptStyle", "NixiePlayerPromptButtonStyle")]
 	public void Each_prompt_is_on_its_role_44_high_on_one_centre_line(string name, string style, string role)
 	{
 		var doc = Controls();
@@ -121,7 +121,7 @@ public sealed class PlayerPromptContrastTests
 		Assert.Equal("Center", Setter("VerticalAlignment"));
 		Assert.Null(Setter("CornerRadius"));
 		Assert.Null(Setter("Template"));
-		if (role == "NixieButtonStyle")
+		if (role == "NixiePlayerPromptButtonStyle")
 		{
 			Assert.Equal("{ThemeResource PlayerPromptFill}", Setter("Background"));
 		}

@@ -80,8 +80,15 @@ public sealed partial class CinematicStill : UserControl, FluentFin.Controls.IUp
 		{
 			ItemUserData.Changed += OnUserDataChanged;
 			UpdateUpNext();
+			CardFocus.Changed += OnCardFocusChanged;
+			_keyboardElsewhere = CardFocus.IsElsewhere(this);
 		};
-		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
+		Unloaded += (_, _) =>
+		{
+			ItemUserData.Changed -= OnUserDataChanged;
+			CardFocus.Changed -= OnCardFocusChanged;
+			CardFocus.Release(this);
+		};
 		AddHandler(KeyDownEvent, new KeyEventHandler(Still_KeyDown), false);
 		GotFocus += Still_GotFocus;
 		LostFocus += Still_LostFocus;
@@ -98,7 +105,7 @@ public sealed partial class CinematicStill : UserControl, FluentFin.Controls.IUp
 		RegisterPropertyChangedCallback(SynopsisProperty, (_, _) => Apply());
 		RegisterPropertyChangedCallback(KindProperty, (_, _) => Apply());
 		RegisterPropertyChangedCallback(DecodeWidthProperty, (_, _) => Apply());
-		Zoomed.SizeChanged += (_, _) => { if (IsZoomed) { FocusZoom.Apply(Zoomed, true); } };
+		ArtZoom.SizeChanged += (_, _) => { if (CurrentLook.Zoom) { FocusZoom.Apply(ArtZoom, true); } };
 		// in a list's template the item is the DataContext (a {Binding} to the typed Model never arrived)
 		DataContextChanged += (_, e) => TakeDataContext(e.NewValue);
 		Loaded += (_, _) => TakeDataContext(DataContext);
@@ -121,7 +128,35 @@ public sealed partial class CinematicStill : UserControl, FluentFin.Controls.IUp
 
 	public double RimWidth(double size, double grow) => size + grow;
 
-	private bool IsZoomed => _pointerOver || _focused;
+	private bool _keyboardElsewhere;
+
+	private StillLook CurrentLook => Look(_pointerOver, _focused, _keyboard, _keyboardElsewhere, enterPlays: Kind == StillKind.Episode);
+
+	/// <summary>
+	/// Nixie 1.4.0 (the library UX review, C-M7): one highlight per meaning. The keyboard's still zooms (the art only) and gets
+	/// the rim; it shows Play only where Enter plays (an episode). A free pointer zooms the still and shows Play (its one
+	/// click); a pointer resting on a still while the keyboard is on another card only lights the sheen: no zoom, no Play.
+	/// </summary>
+	internal static StillLook Look(bool pointerOver, bool focused, bool keyboard, bool keyboardElsewhere, bool enterPlays)
+	{
+		var byKeyboard = focused && keyboard;
+		var freePointer = pointerOver && !keyboardElsewhere;
+		return new StillLook(
+			Zoom: byKeyboard || freePointer,
+			Play: freePointer || (byKeyboard && enterPlays),
+			Sheen: byKeyboard || pointerOver,
+			Rim: byKeyboard);
+	}
+
+	private void OnCardFocusChanged(object? sender, EventArgs e)
+	{
+		var elsewhere = CardFocus.IsElsewhere(this);
+		if (elsewhere != _keyboardElsewhere)
+		{
+			_keyboardElsewhere = elsewhere;
+			Show();
+		}
+	}
 
 	/// <summary>The item's page (a shelf's still) or its playback (an episode's).</summary>
 	internal void Invoke()
@@ -222,7 +257,11 @@ public sealed partial class CinematicStill : UserControl, FluentFin.Controls.IUp
 		UpdateProgress(progress);
 
 		ApplyBadge();
-		WatchedMark.Visibility = played && (Kind == StillKind.Episode || dto?.UserData?.UnplayedItemCount is null or 0) ? Visibility.Visible : Visibility.Collapsed;
+		// 1.4.0 (X10, C-m6): watched a dim check when nothing is left; "N to watch" a count chip (a series, a season, a collection)
+		WatchedMark.Visibility = (Kind == StillKind.Episode ? played : ItemBadges.Watched(dto)) ? Visibility.Visible : Visibility.Collapsed;
+		var toWatch = Kind == StillKind.Episode ? "" : ItemBadges.ToWatchText(dto);
+		CountText.Text = toWatch;
+		CountChip.Visibility = toWatch.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
 		var play = Kind == StillKind.Episode ? ItemLabels.EpisodeAction("Play", dto) : ItemLabels.PlayAction(dto);
 		AutomationProperties.SetName(PlayButton, play);
@@ -241,33 +280,23 @@ public sealed partial class CinematicStill : UserControl, FluentFin.Controls.IUp
 	private void OnTrackSized(object sender, SizeChangedEventArgs e) =>
 		ProgressFill.Width = Math.Max(0, e.NewSize.Width * CinematicLabels.Progress(Model?.Dto) / 100);
 
-	/// <summary>The zoom, sheen, Play and (keyboard only) the rim and glow: as the pointer and the focus say.</summary>
+	/// <summary>The zoom (the art only), sheen, Play and (keyboard only) the rim: as the pointer and the focus say (<see cref="Look"/>).</summary>
 	private void Show()
 	{
-		var zoom = IsZoomed;
-		var rim = _focused && _keyboard;
-		FocusZoom.Apply(Zoomed, zoom);
-		FocusZoom.Fade(Sheen, zoom ? 1f : 0f);
-		if (zoom)
+		var look = CurrentLook;
+		FocusZoom.Apply(ArtZoom, look.Zoom);
+		FocusZoom.Fade(Sheen, look.Sheen ? 1f : 0f);
+		if (look.Sheen)
 		{
 			FocusZoom.Sweep(Sheen, ArtWidth);
 		}
 
-		PlayButton.Visibility = zoom ? Visibility.Visible : Visibility.Collapsed;
-		RimInner.Visibility = RimOuter.Visibility = rim ? Visibility.Visible : Visibility.Collapsed;
-		if (zoom)
-		{
-			FindName(nameof(Glow)); // made on the first zoom
-		}
-
-		if (Glow is not null)
-		{
-			Glow.Visibility = zoom ? Visibility.Visible : Visibility.Collapsed;
-		}
+		PlayButton.Visibility = look.Play ? Visibility.Visible : Visibility.Collapsed;
+		RimInner.Visibility = RimOuter.Visibility = look.Rim ? Visibility.Visible : Visibility.Collapsed;
 
 		SynopsisText.Visibility = _focused && !string.IsNullOrEmpty(SynopsisText.Text) ? Visibility.Visible : Visibility.Collapsed;
 		// the zoomed still is drawn over its neighbours: the element its list holds (this, or the container around it)
-		Canvas.SetZIndex(ListChild(), zoom ? 1 : 0);
+		Canvas.SetZIndex(ListChild(), look.Zoom ? 1 : 0);
 		if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
 		{
 			peer.RaiseAutomationEvent(AutomationEvents.StructureChanged);
@@ -302,6 +331,15 @@ public sealed partial class CinematicStill : UserControl, FluentFin.Controls.IUp
 
 		_focused = true;
 		_keyboard = BaseItemDtoCard.ShowsFocusRing(FocusState);
+		if (_keyboard)
+		{
+			CardFocus.Take(this);
+		}
+		else
+		{
+			CardFocus.Release(this);
+		}
+
 		Show();
 	}
 
@@ -314,6 +352,7 @@ public sealed partial class CinematicStill : UserControl, FluentFin.Controls.IUp
 
 		_focused = false;
 		_keyboard = false;
+		CardFocus.Release(this);
 		Show();
 	}
 
@@ -417,6 +456,9 @@ public sealed partial class CinematicStill : UserControl, FluentFin.Controls.IUp
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new CinematicStillAutomationPeer(this);
 }
+
+/// <summary>Nixie 1.4.0: what a still draws for the pointer and the focus (<see cref="CinematicStill.Look"/>).</summary>
+internal readonly record struct StillLook(bool Zoom, bool Play, bool Sheen, bool Rim);
 
 /// <summary>What a still does when it is invoked.</summary>
 public enum StillKind

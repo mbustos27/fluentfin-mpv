@@ -88,7 +88,7 @@
                     TextTrimming="CharacterEllipsis"
                     TextWrapping="Wrap" />
                 <StackPanel Margin="0,8,0,0" Orientation="Horizontal" Spacing="12">
-                    <Button x:Name="PlayButton" Click="Play_Click" Style="{StaticResource GlassAccentPillButtonStyle}">
+                    <Button x:Name="PlayButton" Click="Play_Click" Style="{StaticResource NixiePrimaryButtonStyle}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon FontSize="14" Glyph="&#xE768;" />
                             <TextBlock x:Name="PlayText" Text="Play" />
@@ -98,7 +98,7 @@
                         x:Name="MoreInfoButton"
                         Click="MoreInfo_Click"
                         Content="More info"
-                        Style="{StaticResource GlassPillButtonStyle}" />
+                        Style="{StaticResource NixieButtonStyle}" />
                 </StackPanel>
         </StackPanel>
 

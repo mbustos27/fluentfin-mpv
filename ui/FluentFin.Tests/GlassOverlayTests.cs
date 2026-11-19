@@ -234,7 +234,7 @@ public sealed class HomeHeroGlassTests
 	public void Play_or_Resume_is_the_accent_pill()
 	{
 		var play = Panel().Descendants().Single(e => e.Name.LocalName == "Button" && (string?)e.Attribute(Xaml + "Name") == "PlayButton");
-		Assert.Equal("{StaticResource GlassAccentPillButtonStyle}", (string?)play.Attribute("Style"));
+		Assert.Equal("{StaticResource NixiePrimaryButtonStyle}", (string?)play.Attribute("Style"));
 	}
 
 	[Fact]
@@ -257,9 +257,8 @@ public sealed class HomeHeroGlassTests
 		Assert.Equal("{ThemeResource SystemColorButtonFaceColor}", Color("GlassInsetFillBrush"));
 		Assert.Equal("{ThemeResource SystemColorButtonTextColor}", Color("GlassInsetTextBrush"));
 
-		// 1.2.0: the inset pill is an alias of the Secondary button, whose fill and label are ButtonFace and ButtonText there
-		var alias = glass.Elements().Single(e => (string?)e.Attribute(Xaml + "Key") == "GlassInsetPillButtonStyle");
-		Assert.Equal("NixieButtonStyle", (string?)alias.Attribute("ResourceKey"));
+		// 1.4.0: the inset pill alias is gone; its pages name the Secondary button, whose fill and label are ButtonFace and ButtonText there
+		Assert.DoesNotContain(glass.Elements(), e => (string?)e.Attribute(Xaml + "Key") == "GlassInsetPillButtonStyle");
 		var style = glass.Elements().Single(e => (string?)e.Attribute(Xaml + "Key") == "NixieButtonStyle");
 		var setters = style.Elements().Where(e => e.Name.LocalName == "Setter").ToDictionary(e => (string)e.Attribute("Property")!, e => (string?)e.Attribute("Value"));
 		Assert.Equal("{ThemeResource NixieButtonFillBrush}", setters["Background"]);
@@ -278,6 +277,6 @@ public sealed class HomeHeroGlassTests
 		// one glass layer at most: More info is the item hero's glass pill (ItemHero.xaml), straight on the scrim
 		Assert.DoesNotContain(Hero().Descendants(), e => ((string?)e.Attribute("Style"))?.Contains("GlassSurfaceStyle") == true);
 		var styles = Panel().Descendants().Where(e => e.Name.LocalName == "Button").Select(e => (string?)e.Attribute("Style")).ToList();
-		Assert.Equal(["{StaticResource GlassAccentPillButtonStyle}", "{StaticResource GlassPillButtonStyle}"], styles);
+		Assert.Equal(["{StaticResource NixiePrimaryButtonStyle}", "{StaticResource NixieButtonStyle}"], styles);
 	}
 }

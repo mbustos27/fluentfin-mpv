@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
     Editorial: a dense poster (144 px wide at 1920, 122 at 1100): opaque 2:3 artwork with 8 px corners and a faint lit edge,
-    the title and one line of facts under it. Watched: a small accent square with its check; in progress: the accent on a
-    dark track along the foot. Keyboard focus: the two-tone ring (the neon core's near-white around the deep colour) and the
-    pink glow, and a small lift in Full mode. Opened: the same ring, and a notch under it pointing at the details below the
-    row. A click or Enter opens the details in place (EditorialDetailsHost); the menu key or a right click opens the item's menu.
+    the title and one line of facts under it. 1.4.0 (the library UX review, X9, X10, E-M8): watched a dim neutral check, top
+    right; "N to watch" a neutral square count, top left; in progress the accent on a dark track along the foot. Keyboard
+    focus: the two-tone ring (the neon core's near-white around the deep colour) and a small lift of the art in Full mode,
+    no pink glow. A free pointer lifts it; a pointer while the keyboard is on another card only brightens it. Opened: the
+    accent rim and a notch under it pointing at the details below the row, never the keyboard's ring. A click or Enter
+    opens the details in place (EditorialDetailsHost); the menu key or a right click opens the item's menu.
 -->
 <UserControl
     x:Class="FluentFin.Themes.Editorial.Controls.EditorialPoster"
@@ -22,30 +24,6 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!--  the glow under keyboard focus or while open: the accent close in, the nixie orange further out (none in high contrast)  -->
-        <Grid
-            x:Name="FocusGlow"
-            IsHitTestVisible="False"
-            Visibility="Collapsed">
-            <Border CornerRadius="8">
-                <ui:Effects.Shadow>
-                    <media:AttachedCardShadow
-                        BlurRadius="10"
-                        CornerRadius="10"
-                        Opacity="{ThemeResource EditorialGlowOpacity}"
-                        Color="{ThemeResource NixieAccentColor}" />
-                </ui:Effects.Shadow>
-            </Border>
-            <Border CornerRadius="8">
-                <ui:Effects.Shadow>
-                    <media:AttachedCardShadow
-                        BlurRadius="30"
-                        CornerRadius="10"
-                        Opacity="{ThemeResource EditorialSoftGlowOpacity}"
-                        Color="{ThemeResource GlassNeonGlowColor}" />
-                </ui:Effects.Shadow>
-            </Border>
-        </Grid>
 
         <Grid x:Name="Art" CornerRadius="8">
             <!--  the shadow under the artwork (opaque, so nothing shows through)  -->
@@ -61,22 +39,18 @@
                 </ui:Effects.Shadow>
             </Border>
             <controls:LazyLoadedImage x:Name="Picture" EnableBlurHash="True" />
-            <!--  watched: the accent square with its check, top right  -->
+            <!--  1.4.0: a pointer over a poster while the keyboard is on another card brightens it, nothing more  -->
             <Border
-                x:Name="WatchedMark"
-                Width="24"
-                Height="24"
-                Margin="0,8,8,0"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Top"
-                AutomationProperties.AccessibilityView="Raw"
-                Background="{ThemeResource NixieAccentOnImageBrush}"
-                CornerRadius="6"
-                Visibility="Collapsed">
-                <FontIcon
-                    FontSize="12"
-                    Foreground="{ThemeResource NixieOnAccentOnImageBrush}"
-                    Glyph="&#xE73E;" />
+                x:Name="HoverBrighten"
+                Background="{ThemeResource NixieCardHoverOverlayBrush}"
+                IsHitTestVisible="False"
+                Visibility="Collapsed" />
+            <!--  1.4.0 (X10, E-m4): "N to watch" a neutral square count, top left; watched a dim neutral check, top right  -->
+            <Border x:Name="CountChip" Style="{StaticResource NixieCountChipStyle}" Visibility="Collapsed">
+                <TextBlock x:Name="CountText" Style="{StaticResource NixieCountChipTextStyle}" />
+            </Border>
+            <Border x:Name="WatchedMark" Style="{StaticResource NixieWatchedBadgeStyle}" Visibility="Collapsed">
+                <FontIcon Style="{StaticResource NixieWatchedGlyphStyle}" />
             </Border>
             <!--  in progress: the accent on a dark track as tall as the bar, along the foot  -->
             <Grid
@@ -101,6 +75,20 @@
                 CornerRadius="8"
                 IsHitTestVisible="False" />
         </Grid>
+
+        <!--
+            1.4.0 (the library UX review, E-M8): opened is its own mark, the accent rim (1.5 px, the current place) and the notch,
+            never the keyboard's ring, so an open poster and the focused one never look alike
+        -->
+        <Border
+            x:Name="OpenRim"
+            Margin="-3"
+            VerticalAlignment="Top"
+            BorderBrush="{ThemeResource NixieOpenRimBrush}"
+            BorderThickness="1.5"
+            CornerRadius="11"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
 
         <!--  the ring: the outer near-white line around a deep one, 1 px outside the artwork  -->
         <Border

@@ -83,7 +83,7 @@
                     HorizontalAlignment="Center"
                     Command="{x:Bind State.RetryCommand, Mode=OneWay}"
                     Content="{x:Bind State.RetryText, Mode=OneWay}"
-                    Style="{StaticResource GlassPillButtonStyle}" />
+                    Style="{StaticResource NixieButtonStyle}" />
             </StackPanel>
         </ContentControl>
 

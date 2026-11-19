@@ -91,20 +91,14 @@
                             Foreground="{ThemeResource GlassTextPrimaryBrush}"
                             Glyph="&#xF5B0;" />
                     </Border>
+                    <!--  1.4.0 (the library UX review, X10): the same watched mark as every card, a dim neutral check, never the accent  -->
                     <Border
                         x:Name="WatchedMark"
                         Margin="6"
-                        Padding="4"
-                        HorizontalAlignment="Right"
-                        VerticalAlignment="Top"
                         AutomationProperties.Name="Watched"
-                        Background="{ThemeResource NixieAccentOnImageBrush}"
-                        CornerRadius="999"
+                        Style="{StaticResource NixieWatchedBadgeStyle}"
                         Visibility="Collapsed">
-                        <FontIcon
-                            FontSize="12"
-                            Foreground="{ThemeResource NixieOnAccentOnImageBrush}"
-                            Glyph="&#xE73E;" />
+                        <FontIcon Style="{StaticResource NixieWatchedGlyphStyle}" />
                     </Border>
                 </Grid>
 

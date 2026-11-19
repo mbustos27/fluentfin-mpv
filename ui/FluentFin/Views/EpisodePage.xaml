@@ -39,7 +39,7 @@
                                 x:Name="PlayButton"
                                 AutomationProperties.Name="{x:Bind ViewModel.PlayLabel, Mode=OneWay}"
                                 Command="{x:Bind ViewModel.PlayCommand}"
-                                Style="{StaticResource GlassAccentPillButtonStyle}">
+                                Style="{StaticResource NixiePrimaryButtonStyle}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <SymbolIcon Symbol="Play" />
                                     <TextBlock Text="{x:Bind ViewModel.PlayLabel, Mode=OneWay}" />
@@ -49,7 +49,7 @@
                             <Button
                                 AutomationProperties.Name="{x:Bind core:ItemLabels.PlayFromBeginningAction(ViewModel.Dto), Mode=OneWay, FallbackValue='Play from start'}"
                                 Command="{x:Bind ViewModel.PlayFromBeginningCommand}"
-                                Style="{StaticResource GlassPillButtonStyle}"
+                                Style="{StaticResource NixieButtonStyle}"
                                 Visibility="{x:Bind ViewModel.HasResumePoint, Mode=OneWay}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon FontSize="14" Glyph="&#xE777;" />
