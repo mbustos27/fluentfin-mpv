@@ -74,21 +74,14 @@ public static class WindowShortcuts
 	{
 		try
 		{
-			if (!AppShortcuts.AllowedIn(shortcut, CurrentContext()) || HasOpenPopup(root.XamlRoot))
+			var theater = Controls.TrailerTheater.Current;
+			switch (Gate(shortcut, CurrentContext(), HasOpenPopup(root.XamlRoot), theater?.IsOpen == true))
 			{
-				return false;
-			}
-
-			// Nixie 1.3.1: while a trailer plays in the theatre window, Back (a key or Mouse 4) closes it and nothing else runs
-			if (Controls.TrailerTheater.Current is { IsOpen: true } theater)
-			{
-				if (shortcut == AppShortcut.Back)
-				{
-					theater.Close();
+				case ShortcutGate.Ignore:
+					return false;
+				case ShortcutGate.CloseTrailer:
+					theater!.Close();
 					return true;
-				}
-
-				return false;
 			}
 
 			switch (shortcut)
@@ -106,6 +99,8 @@ public static class WindowShortcuts
 				case AppShortcut.ShowHelp:
 					ShowHelp(root.XamlRoot);
 					return true;
+				case AppShortcut.Refresh:
+					return PageRefresh.Run();
 				default:
 					return false;
 			}
@@ -116,6 +111,29 @@ public static class WindowShortcuts
 			return false;
 		}
 	}
+
+	/// <summary>What a global shortcut does now (pure, for the tests).</summary>
+	internal enum ShortcutGate
+	{
+		/// <summary>Nothing: not where the user is (the player, signed out), or a menu or dialog has the keys.</summary>
+		Ignore,
+
+		/// <summary>It runs.</summary>
+		Run,
+
+		/// <summary>Nixie 1.3.1: a trailer plays in the theatre window: Back (a key or Mouse 4) closes it, nothing else runs.</summary>
+		CloseTrailer,
+	}
+
+	/// <summary>
+	/// Whether <paramref name="shortcut"/> runs: allowed where the user is (<see cref="AppShortcuts.AllowedIn"/>), no menu or
+	/// dialog open (<paramref name="popupOpen"/>: the keys are theirs), and over a trailer (<paramref name="trailerOpen"/>) only
+	/// Back, which closes it. A key typed in a text box never gets here (<see cref="AppShortcuts.For"/>).
+	/// </summary>
+	internal static ShortcutGate Gate(AppShortcut shortcut, ShortcutContext context, bool popupOpen, bool trailerOpen) =>
+		!AppShortcuts.AllowedIn(shortcut, context) || popupOpen ? ShortcutGate.Ignore
+		: trailerOpen ? (shortcut == AppShortcut.Back ? ShortcutGate.CloseTrailer : ShortcutGate.Ignore)
+		: ShortcutGate.Run;
 
 	private static ShortcutContext CurrentContext()
 	{

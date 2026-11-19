@@ -25,6 +25,44 @@ public sealed class ThemeAnchors
 	/// <summary>Each row's items list and the key of its first visible item.</summary>
 	public IReadOnlyList<(object Source, object First)> Rows { get; init; } = [];
 
+	/// <summary>
+	/// Nixie 1.3.1 (a refresh, R / F5): each row's place among the page's lists, with the key of its first visible item. A
+	/// refresh makes a new view model, so its lists are new objects: a row is then found by its place (and its item).
+	/// </summary>
+	public IReadOnlyList<(int Position, object First)> RowPlaces { get; init; } = [];
+
+	/// <summary>
+	/// Nixie 1.3.1: which of a refreshed page's lists stands for a row (-1 for none): the same list when it is the same object
+	/// (the view model kept), else the list at the row's place when it still has the anchor item, else the first list that has
+	/// it (a row came or went before it).
+	/// </summary>
+	public static int RowFor(IReadOnlyList<object> sources, object? oldSource, int oldPosition, object key)
+	{
+		for (var i = 0; i < sources.Count; i++)
+		{
+			if (ReferenceEquals(sources[i], oldSource))
+			{
+				return i;
+			}
+		}
+
+		bool Has(object source) => source is IEnumerable items && IndexOf(items, key) >= 0;
+		if (oldPosition >= 0 && oldPosition < sources.Count && Has(sources[oldPosition]))
+		{
+			return oldPosition;
+		}
+
+		for (var i = 0; i < sources.Count; i++)
+		{
+			if (Has(sources[i]))
+			{
+				return i;
+			}
+		}
+
+		return -1;
+	}
+
 	/// <summary>An item's identity across views: a Jellyfin item's id, else the object itself.</summary>
 	public static object? ItemKey(object? item) => item switch
 	{
@@ -84,8 +122,11 @@ public sealed class ThemeAnchors
 		}
 
 		var rows = new List<(object, object)>();
+		var places = new List<(int, object)>();
+		var position = -1;
 		foreach (var (list, source) in Lists(page))
 		{
+			position++;
 			if (Scroller(list) is not { } scroller)
 			{
 				continue;
@@ -116,10 +157,11 @@ public sealed class ThemeAnchors
 			if (FirstVisible(placed, 0, viewport) is { } first && ItemKey(first) is { } key)
 			{
 				rows.Add((source, key));
+				places.Add((position, key));
 			}
 		}
 
-		return new ThemeAnchors { Focused = focused, HadFocus = hadFocus, Rows = rows };
+		return new ThemeAnchors { Focused = focused, HadFocus = hadFocus, Rows = rows, RowPlaces = places };
 	}
 
 	/// <summary>Puts <paramref name="page"/> (the new view) back at the place, once it is laid out.</summary>
@@ -191,6 +233,95 @@ public sealed class ThemeAnchors
 		(FocusManager.FindFirstFocusableElement(page) as Control)?.Focus(FocusState.Keyboard);
 	}
 
+	/// <summary>
+	/// Nixie 1.3.1: puts a refreshed page (a new view model, its rows arriving from the server) back at the place: tried as the
+	/// rows fill, until the keyboard is back on its item (or, when it was not on one, the rows are placed), at most
+	/// <paramref name="within"/>; then the keyboard goes to the page's Primary, else its first control.
+	/// </summary>
+	public void RestoreAfterRefresh(Page page, TimeSpan within, Action<string>? log = null)
+	{
+		var started = DateTime.UtcNow;
+		var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+		timer.Tick += (_, _) =>
+		{
+			var last = DateTime.UtcNow - started >= within;
+			if (!page.IsLoaded && !last)
+			{
+				return;
+			}
+
+			var done = TryRestoreByPlace(page, last);
+			if (done || last)
+			{
+				timer.Stop();
+				log?.Invoke($"the place {(done ? "kept" : "not found")} after {(int)(DateTime.UtcNow - started).TotalMilliseconds} ms (keyboard {(HadFocus ? Focused is null ? "on the page, on no item" : "on an item" : "not in the page")}, {RowPlaces.Count} row(s))");
+			}
+		};
+		timer.Start();
+	}
+
+	/// <summary>One try of <see cref="RestoreAfterRefresh"/>: true when the place is back.</summary>
+	private bool TryRestoreByPlace(Page page, bool last)
+	{
+		page.UpdateLayout();
+		var lists = Lists(page).ToList();
+		var sources = lists.Select(l => l.Source).ToList();
+		var placed = 0;
+		for (var i = 0; i < RowPlaces.Count; i++)
+		{
+			var (position, key) = RowPlaces[i];
+			var old = i < Rows.Count ? Rows[i].Source : null;
+			var at = RowFor(sources, old, position, key);
+			if (at < 0 || Scroller(lists[at].List) is not { } scroller)
+			{
+				continue;
+			}
+
+			var index = IndexOf((IEnumerable)lists[at].Source, key);
+			if (index < 0 || Realize(lists[at].List, index) is not { } element)
+			{
+				continue;
+			}
+
+			try
+			{
+				element.UpdateLayout();
+				var horizontal = IsHorizontal(scroller);
+				var inList = element.TransformToVisual(lists[at].List).TransformPoint(default);
+				var target = Math.Max(0, horizontal ? inList.X : inList.Y);
+				_ = horizontal ? scroller.ChangeView(target, null, null, true) : scroller.ChangeView(null, target, null, true);
+				placed++;
+			}
+			catch (ArgumentException)
+			{
+			}
+		}
+
+		if (!HadFocus)
+		{
+			return placed >= RowPlaces.Count;
+		}
+
+		if (Focused is not null && FindItem(page, Focused) is { } control && control.Focus(FocusState.Keyboard))
+		{
+			control.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+			return true;
+		}
+
+		if (Focused is null || last)
+		{
+			// the keyboard was on the page but on no item (a button), or its item is gone: the Primary, else the first control
+			if (Primary(page) is { } primary && primary.Focus(FocusState.Keyboard))
+			{
+				return true;
+			}
+
+			return (FocusManager.FindFirstFocusableElement(page) as Control)?.Focus(FocusState.Keyboard) ?? false;
+		}
+
+		return false;
+	}
+
 	// ---- the visual tree ----
 
 	private static bool IsInside(DependencyObject element, DependencyObject ancestor)
@@ -212,7 +343,7 @@ public sealed class ThemeAnchors
 		var pageContext = page.DataContext;
 		for (var node = element; node is not null && !ReferenceEquals(node, page); node = VisualTreeHelper.GetParent(node))
 		{
-			if (node is FrameworkElement { DataContext: { } context } && !ReferenceEquals(context, pageContext) && IsItem(context))
+			if (node is FrameworkElement shown && ItemOfElement(shown) is { } context && !ReferenceEquals(context, pageContext))
 			{
 				return ItemKey(context);
 			}
@@ -222,6 +353,15 @@ public sealed class ThemeAnchors
 	}
 
 	private static bool IsItem(object context) => context is BaseItemViewModel or BaseItemDto or BaseItemPerson;
+
+	/// <summary>
+	/// The item an element shows: its data context when that is an item, else (Nixie 1.3.1) a card's own Model: a card in a
+	/// template compiled with x:Bind (the Library's grid) has no data context, so the grid's card was never found.
+	/// </summary>
+	private static object? ItemOfElement(FrameworkElement element) =>
+		element.DataContext is { } context && IsItem(context) ? context
+		: element is Controls.BaseItemDtoCard { Model: { } model } ? model
+		: null;
 
 	/// <summary>Every list in the page with items: repeaters and items controls, with their source.</summary>
 	private static IEnumerable<(FrameworkElement List, object Source)> Lists(DependencyObject root)
@@ -291,7 +431,7 @@ public sealed class ThemeAnchors
 	{
 		foreach (var element in Descendants(page).OfType<FrameworkElement>())
 		{
-			if (element.DataContext is { } context && IsItem(context) && Equals(ItemKey(context), key))
+			if (ItemOfElement(element) is { } context && Equals(ItemKey(context), key))
 			{
 				var focusable = element as Control ?? Descendants(element).OfType<Control>().FirstOrDefault(c => c.IsTabStop && c.IsEnabled);
 				if (focusable is { IsTabStop: true, IsEnabled: true })

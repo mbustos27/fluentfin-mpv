@@ -204,6 +204,76 @@ public class NavigationService : INavigationService
 		return ThemeReload.Reloaded;
 	}
 
+	/// <summary>Nixie 1.3.1: the page type a refresh is navigating to, until its Navigated (<see cref="ReloadForRefresh"/>).</summary>
+	private Type? _pendingRefresh;
+
+	/// <summary>
+	/// Nixie 1.3.1: whether the frame's last navigation was a refresh (R, F5: the same page loaded again): the shell leaves
+	/// the top bar as it was, as after a theme switch. Set before the frame's other Navigated handlers run.
+	/// </summary>
+	public bool LastNavigationWasRefresh { get; private set; }
+
+	/// <summary>
+	/// Nixie 1.3.1 (R, F5, Ctrl+R; the user: "make r refresh the jellyfin page"): the page shown, loaded again: a new view of the
+	/// same page with the same parameter and a new view model, which asks the server again (its OnNavigatedTo), in place of
+	/// the old one in the history (Back and Forward as they were), no transition. Only a page whose view model
+	/// <paramref name="refreshes"/> says has server data; null (nothing done) for any other, and when nothing is shown.
+	/// </summary>
+	public Page? ReloadForRefresh(Func<Type, bool> refreshes)
+	{
+		if (_frame is not { Content: Page page } frame)
+		{
+			return null;
+		}
+
+		Type viewModel;
+		try
+		{
+			viewModel = _pageService.GetViewModelType(page.GetType());
+		}
+		catch (ArgumentException)
+		{
+			return null;
+		}
+
+		if (!refreshes(viewModel))
+		{
+			return null;
+		}
+
+		var before = frame.GetPageViewModel();
+		var forward = frame.ForwardStack.ToList();
+		_pendingRefresh = page.GetType();
+		frame.Tag = false;
+		try
+		{
+			if (!frame.Navigate(page.GetType(), _currentParameter, new SuppressNavigationTransitionInfo()))
+			{
+				_pendingRefresh = null;
+				return null;
+			}
+		}
+		catch (Exception)
+		{
+			_pendingRefresh = null;
+			return null;
+		}
+
+		// a new navigation empties Forward: it is put back, the refresh is not a step
+		foreach (var entry in forward)
+		{
+			frame.ForwardStack.Add(entry);
+		}
+
+		if (before is INavigationAware navigationAware)
+		{
+			navigationAware.OnNavigatedFrom();
+		}
+
+		_lastParameterUsed = _currentParameter;
+		return frame.Content as Page;
+	}
+
 	/// <summary>The page the active theme shows for <paramref name="page"/>'s view model (the shared page when it has none), null for a page the service does not know.</summary>
 	private Type? ThemedPageFor(Type page)
 	{
@@ -273,8 +343,23 @@ public class NavigationService : INavigationService
 
 			LastNavigationWasThemeReload = false;
 
-			// Seaglass 1.1.4: the motion follows the direction (a tab, in, Back out)
-			PageTransition.Play(e.Content, e.NavigationMode);
+			// Nixie 1.3.1: a refresh's navigation: the same page again, in place of the old one in the history, no transition;
+			// its new view model loads as on any arrival (OnNavigatedTo, below)
+			var refresh = _pendingRefresh is { } refreshed && e.SourcePageType == refreshed && e.NavigationMode == NavigationMode.New;
+			LastNavigationWasRefresh = refresh;
+			if (refresh)
+			{
+				_pendingRefresh = null;
+				if (frame.BackStack.Count > 0)
+				{
+					frame.BackStack.RemoveAt(frame.BackStack.Count - 1);
+				}
+			}
+			else
+			{
+				// Seaglass 1.1.4: the motion follows the direction (a tab, in, Back out)
+				PageTransition.Play(e.Content, e.NavigationMode);
+			}
 			var clearNavigation = (bool)frame.Tag;
 			if (clearNavigation)
 			{

@@ -12,6 +12,9 @@
 - **Drive-in's theatre is a little drive-in:** a small outdoor screen on two posts under a bulb-lit marquee reading
   NOW SHOWING and the title, the dusk sky and the striped sun around it, and two cars with their speaker posts in front.
   Cinematic and Editorial frame the trailer in their own glass; Classic in the shared glass frame.
+- **R refreshes the page** (F5 and Ctrl+R too): Home, a library, a See all grid, an item, series or season page, search
+  results and the Diary load again from your server, in place: the card the keyboard was on keeps it, and Narrator says
+  "Refreshed". Not while you type in a box, in a dialog or menu, or in the player; Settings has nothing to refresh.
 - **F1 closes the shortcut sheet too.** F1 and ? open the list of keyboard shortcuts; pressed again while it is open, they
   close it, and the keyboard goes back where it was. Esc and Close still close it.
 

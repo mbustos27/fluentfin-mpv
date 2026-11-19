@@ -28,6 +28,7 @@ letter accelerators on Home had no explicit text-input rule.
 | Alt+Home | Home |
 | Ctrl+, | Settings |
 | ? (Shift+/), F1 | The shortcut sheet; pressed while it is open, they close it (1.3.1), as Esc does, and the keyboard goes back where it was |
+| R, F5, Ctrl+R | Refresh the page from the server (1.3.1): Home, a library, a See all grid, an item, series or season page, search results, the Diary. The page loads again in place (the item the keyboard was on and each row's first item kept) and Narrator says "Refreshed". Not while typing, in a dialog or menu, in the player or over a trailer; nothing on pages without server data (Settings) |
 
 Home page only: N goes to the Next Up row, C to the Continue Watching row (they ignore typing too). Since 1.1.4 they no
 longer play anything: a single letter must never start a video (Enter on the focused card does).
@@ -78,7 +79,6 @@ forward. Every button of the player names its key in its tooltip.
   controls mpv's default bindings answer the same keys (its `[` and `]` change the speed by 10 % rather than a step).
   `<` `>` (YouTube's) were the other candidate; they are Shift chords on most layouts, and `[` `]` match mpv.
   `[` and `]` are the keys of a US layout (VK_OEM_4, VK_OEM_6): on others the key in that place.
-- F5 refresh: no page has a refresh to call.
 - Backspace as Back: too close to text editing and it would add nothing to Alt+Left and Mouse 4.
 - F11 outside the player: a full-screen window without the title bar has no use on the browsing pages.
 - The built-in player's own global key hook keeps its keys as they are (Space, arrows, S, F, Up/Down); it is not the player

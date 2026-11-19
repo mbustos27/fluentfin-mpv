@@ -21,6 +21,9 @@ public sealed class ShortcutsTests
 	[InlineData(AppShortcuts.Keys.Slash, false, true, false, AppShortcut.ShowHelp)]
 	[InlineData(AppShortcuts.Keys.F1, false, false, false, AppShortcut.ShowHelp)]
 	[InlineData(AppShortcuts.Keys.Comma, true, false, false, AppShortcut.OpenSettings)]
+	[InlineData(AppShortcuts.Keys.R, false, false, false, AppShortcut.Refresh)]
+	[InlineData(AppShortcuts.Keys.R, true, false, false, AppShortcut.Refresh)]
+	[InlineData(AppShortcuts.Keys.F5, false, false, false, AppShortcut.Refresh)]
 	public void GlobalKeys_MeanWhatTheMapSays(int key, bool control, bool shift, bool alt, AppShortcut expected) =>
 		Assert.Equal(expected, AppShortcuts.For(key, control, shift, alt, inTextInput: false));
 
@@ -36,6 +39,23 @@ public sealed class ShortcutsTests
 	[InlineData(0x1B, false, false, false, false, false)]
 	public void TheKeysThatOpenTheSheet_CloseIt_ButNotTheirRepeats(int key, bool control, bool shift, bool alt, bool repeat, bool closes) =>
 		Assert.Equal(closes, AppShortcuts.ClosesHelp(key, control, shift, alt, repeat));
+
+	// Nixie 1.3.1 (the user: "make r refresh the jellyfin page"): R, F5 and Ctrl+R, and no other chord of them; never while
+	// typing (an R typed in Search or a Settings field is a letter), never in the player or signed out
+	[Fact]
+	public void Refresh_IsRF5AndCtrlR_NotWhileTyping_NotInThePlayer()
+	{
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.R, control: false, shift: true, alt: false, inTextInput: false));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.R, control: true, shift: true, alt: false, inTextInput: false));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.F5, control: true, shift: false, alt: false, inTextInput: false));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.R, control: false, shift: false, alt: true, inTextInput: false));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.R, control: false, shift: false, alt: false, inTextInput: true));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.F5, control: false, shift: false, alt: false, inTextInput: true));
+		Assert.True(AppShortcuts.AllowedIn(AppShortcut.Refresh, ShortcutContext.Browsing));
+		Assert.False(AppShortcuts.AllowedIn(AppShortcut.Refresh, ShortcutContext.Player));
+		Assert.False(AppShortcuts.AllowedIn(AppShortcut.Refresh, ShortcutContext.SignedOut));
+		Assert.Null(MpvControlsViewModel.ActionFor(AppShortcuts.Keys.R, false, false, false));
+	}
 
 	[Fact]
 	public void NothingFires_WhileTyping()

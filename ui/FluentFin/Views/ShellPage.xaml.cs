@@ -140,7 +140,8 @@ public sealed partial class ShellPage : Page
 	{
 		// Nixie 1.3.0: a theme switch showing the same page in the new theme's view: the bar keeps its search text and its
 		// tab; only where the page starts can change (the new view may run under the bar)
-		if (ViewModel.NavigationService is NavigationService { LastNavigationWasThemeReload: true })
+		// Nixie 1.3.1: a refresh (R, F5) too: the same page loaded again
+		if (ViewModel.NavigationService is NavigationService { LastNavigationWasThemeReload: true } or NavigationService { LastNavigationWasRefresh: true })
 		{
 			UpdateInsets();
 			return;

@@ -11,6 +11,9 @@ public enum AppShortcut
 	OpenSettings,
 	GoHome,
 	ShowHelp,
+
+	/// <summary>Nixie 1.3.1: load the page again from the server (R, F5, Ctrl+R; the user: "make r refresh the jellyfin page").</summary>
+	Refresh,
 }
 
 /// <summary>Where the user is: signed out (server list, login), browsing, or in the player.</summary>
@@ -27,17 +30,17 @@ public static class AppShortcuts
 	/// <summary>Win32 virtual-key codes (the values of Windows.System.VirtualKey).</summary>
 	public static class Keys
 	{
-		public const int Left = 0x25, Right = 0x27, Home = 0x24, F1 = 0x70;
+		public const int Left = 0x25, Right = 0x27, Home = 0x24, F1 = 0x70, F5 = 0x74;
 		public const int BrowserBack = 0xA6, BrowserForward = 0xA7;
-		public const int E = 0x45, F = 0x46;
+		public const int E = 0x45, F = 0x46, R = 0x52;
 		/// <summary>The "/" and "?" key (VK_OEM_2), and the "," key (VK_OEM_COMMA).</summary>
 		public const int Slash = 0xBF, Comma = 0xBC;
 	}
 
 	/// <summary>
 	/// Whether <paramref name="shortcut"/> applies where the user is. Signed out: back, forward and the sheet (there is no
-	/// search, Home or Settings yet). In the player: back (it leaves) and the sheet only; going elsewhere would leave the
-	/// video playing behind another page, and Forward has nowhere to go.
+	/// search, Home or Settings yet, and no server page to refresh). In the player: back (it leaves) and the sheet only; going
+	/// elsewhere would leave the video playing behind another page, Forward has nowhere to go, and a refresh would start it again.
 	/// </summary>
 	public static bool AllowedIn(AppShortcut shortcut, ShortcutContext context) => context switch
 	{
@@ -74,6 +77,8 @@ public static class AppShortcuts
 			Keys.Slash when shift && !control => AppShortcut.ShowHelp,
 			Keys.F1 when !control && !shift => AppShortcut.ShowHelp,
 			Keys.Comma when control && !shift => AppShortcut.OpenSettings,
+			Keys.R when !shift => AppShortcut.Refresh,
+			Keys.F5 when !control && !shift => AppShortcut.Refresh,
 			_ => null,
 		};
 	}
@@ -131,6 +136,8 @@ public static class ShortcutCatalog
 			new("Alt+Home", "Go to Home", ShortcutScope.Global, C(AppShortcuts.Keys.Home, Alt: true)),
 			new("Ctrl+,", "Settings", ShortcutScope.Global, C(AppShortcuts.Keys.Comma, Control: true)),
 			new("? (Shift+/), F1", "This list", ShortcutScope.Global, C(AppShortcuts.Keys.Slash, Shift: true), C(AppShortcuts.Keys.F1)),
+			new("R, F5, Ctrl+R", "Refresh the page from the server", ShortcutScope.Global,
+				C(AppShortcuts.Keys.R), C(AppShortcuts.Keys.F5), C(AppShortcuts.Keys.R, Control: true)),
 		]),
 		new("Home page",
 		[
