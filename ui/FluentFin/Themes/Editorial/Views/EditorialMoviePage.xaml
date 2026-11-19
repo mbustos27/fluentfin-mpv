@@ -56,6 +56,8 @@
                     x:Name="Body"
                     Margin="56,8,56,56"
                     Spacing="44">
+                    <!--  Nixie 1.4.0: "Part of: Copper and Glass", the film's collections, each opening its Collection page  -->
+                    <controls:PartOfLink Collections="{x:Bind ViewModel.PartOf, Mode=OneWay}" />
                     <!--  the tracks it plays with, and the facts, side by side (one column in a narrow window)  -->
                     <Grid x:Name="DetailsGrid" ColumnSpacing="56" RowSpacing="32">
                         <Grid.ColumnDefinitions>

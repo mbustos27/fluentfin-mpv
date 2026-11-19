@@ -74,9 +74,13 @@
             TargetType="Button" />
         <!--
             the letter board's tiles: a dark tile with a groove, the letter in the display face; a tile with no titles rests
-            (dimmed, 4.5:1 still, not a stop); the keyboard's tile gets the system's two rings and the pink edge
+            (dimmed, 4.5:1 still, not a stop); the keyboard's tile gets the system's two rings and the pink edge. 1.4.0 integration:
+            the shared letter role (NixieLetterButtonStyle) in the board's dress, not a parallel letter style
         -->
-        <Style x:Key="DriveInLetterTileStyle" TargetType="Button">
+        <Style
+            x:Key="DriveInLetterTileStyle"
+            BasedOn="{StaticResource NixieLetterButtonStyle}"
+            TargetType="Button">
             <Setter Property="Width" Value="38" />
             <Setter Property="Height" Value="42" />
             <Setter Property="Padding" Value="0" />

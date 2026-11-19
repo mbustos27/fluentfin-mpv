@@ -585,16 +585,6 @@ public sealed partial class TitleBarControl : UserControl
 	{
 		AccountFlyout.Hide();
 	}
-
-	private void KeyboardAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-	{
-		if (FocusManager.GetFocusedElement() is AutoSuggestBox sb && sb == SearchBox)
-		{
-			return;
-		}
-
-		OpenSearch(FocusState.Programmatic);
-	}
 }
 
 /// <summary>Seaglass 1.1.4 (layout audit, item 17): the window's caption buttons' colours (TitleBarControl.CaptionColorsFor).</summary>

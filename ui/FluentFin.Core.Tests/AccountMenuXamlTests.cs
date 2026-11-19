@@ -99,6 +99,9 @@ public sealed class AccountMenuXamlTests
 		Assert.Contains("SearchBox.Visibility = shown && (!_compact || _searchOpen)", show);
 		Assert.Contains("SearchIconButton.Visibility = shown && _compact && !_searchOpen", show);
 		Assert.Equal("Hidden", (string?)box.Attribute("KeyboardAcceleratorPlacementMode"));
+		// Nixie 1.4.0: one owner for Ctrl+F (the window's shortcuts, AppShortcut.FocusSearch): the box has no accelerator of its own
+		Assert.Empty(box.Descendants(Presentation + "KeyboardAccelerator"));
+		Assert.DoesNotContain("KeyboardAccelerator_Invoked", show + Code("FluentFin/Views/TitleBarControl.xaml.cs"));
 		// layout audit item 20: the version is in Settings > About; the subtitle says "Preview" on a test build only
 		// 1.2.0: the wordmark's own subtitle line, in the bar's left header with the tabs (the TitleBar's own Title and Subtitle unused)
 		Assert.Contains(doc.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute(Xaml + "Name") == "SubtitleText" && (string?)t.Attribute("Text") == "{x:Bind ViewModel.Subtitle}");

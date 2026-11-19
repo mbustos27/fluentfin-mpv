@@ -91,6 +91,55 @@ public sealed class ItemNavigationTests
 		Assert.Equal(restores ? ItemPagePlace.FocusStep.Restore : ItemPagePlace.FocusStep.Leave, ItemPagePlace.FocusRestore(focusInPage, openPopups));
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's item 4): a Movie or Episode page opened anew puts the focus on its Primary once drawn, not
+	/// on the top bar's Back; never once the user is in the page or something is open over it.
+	/// </summary>
+	[Theory]
+	[InlineData(false, false, false, 0, "Wait")]   // still loading
+	[InlineData(true, false, false, 0, "Wait")]    // loaded, Play not drawn yet
+	[InlineData(true, true, false, 0, "Focus")]    // the focus on Back (where WinUI leaves it): Play takes it
+	[InlineData(true, true, true, 0, "Leave")]     // the user is in the page already
+	[InlineData(false, false, true, 0, "Leave")]   // ... even before it loaded
+	[InlineData(true, true, false, 1, "Leave")]    // a menu, a flyout or F1's sheet is open and has it
+	public void AnItemPage_OpenedAnew_FocusesItsPrimary(bool loaded, bool primaryReady, bool focusInPage, int openPopups, string step)
+	{
+		Assert.Equal(step, ItemPagePlace.ArrivalFocus(loaded, primaryReady, focusInPage, openPopups).ToString());
+	}
+
+	/// <summary>Nixie 1.4.0: every theme's Movie and Episode page gives its Play as the Primary its arrival focuses.</summary>
+	[Theory]
+	[InlineData(@"Views\MoviePage.xaml.cs")]
+	[InlineData(@"Views\EpisodePage.xaml.cs")]
+	[InlineData(@"Themes\Cinematic\Views\CinematicMoviePage.xaml.cs")]
+	[InlineData(@"Themes\Cinematic\Views\CinematicEpisodePage.xaml.cs")]
+	[InlineData(@"Themes\DriveIn\Views\DriveInMoviePage.xaml.cs")]
+	[InlineData(@"Themes\DriveIn\Views\DriveInEpisodePage.xaml.cs")]
+	[InlineData(@"Themes\Editorial\Views\EditorialMoviePage.xaml.cs")]
+	[InlineData(@"Themes\Editorial\Views\EditorialEpisodePage.xaml.cs")]
+	public void EveryMovieAndEpisodePage_FocusesItsPlayOnArrival(string page)
+	{
+		var source = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", page));
+		Assert.Contains("primary: () => PlayButton);", source);
+		var xaml = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", page[..^3]));
+		Assert.Contains("x:Name=\"PlayButton\"", xaml);
+		Assert.Contains("NixiePrimaryButtonStyle", xaml);
+	}
+
+	/// <summary>Nixie 1.4.0: every theme's movie page says which collections the film is in ("Part of"), above its facts.</summary>
+	[Theory]
+	[InlineData(@"Views\MoviePage.xaml")]
+	[InlineData(@"Themes\Cinematic\Views\CinematicMoviePage.xaml")]
+	[InlineData(@"Themes\DriveIn\Views\DriveInMoviePage.xaml")]
+	[InlineData(@"Themes\Editorial\Views\EditorialMoviePage.xaml")]
+	public void EveryMoviePage_SaysWhatItIsPartOf(string page)
+	{
+		var xaml = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", page));
+		var partOf = xaml.IndexOf("PartOfLink Collections=\"{x:Bind ViewModel.PartOf, Mode=OneWay}\"", StringComparison.Ordinal);
+		Assert.True(partOf > 0, "no PartOfLink");
+		Assert.True(partOf < xaml.IndexOf("ItemMetaRows", StringComparison.Ordinal), "PartOfLink is not above ItemMetaRows");
+	}
+
 	/// <summary>Items review, item 6: a row asks for its thumbnail within a screen of the view, not before it is laid out.</summary>
 	[Theory]
 	[InlineData(null, false)]                                  // not laid out yet

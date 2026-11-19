@@ -22,17 +22,22 @@ internal sealed class ItemPagePlace
 	private readonly Page _page;
 	private readonly ScrollViewer _scroller;
 	private readonly Func<bool> _loaded;
+	private readonly Func<Control?>? _primary;
 
 	// the last element of the page that had the focus, and how it got it: when the page is left from a menu or a flyout the
 	// focus is in its popup, not in the page (a row's "Episode details")
 	private WeakReference<DependencyObject>? _lastFocus;
 	private FocusState _lastFocusState;
 
-	public ItemPagePlace(Page page, ScrollViewer scroller, Func<bool> loaded)
+	/// <param name="primary">Nixie 1.4.0 (the UX review's item 4): the page's one Primary (its Play), which takes the focus when
+	/// the page is opened anew (not on Back or Forward, which give the focus back to where it was); null for a page whose
+	/// arrival leaves the focus where it is.</param>
+	public ItemPagePlace(Page page, ScrollViewer scroller, Func<bool> loaded, Func<Control?>? primary = null)
 	{
 		_page = page;
 		_scroller = scroller;
 		_loaded = loaded;
+		_primary = primary;
 		page.GotFocus += (_, e) =>
 		{
 			if (e.OriginalSource is UIElement element && IsInPage(element))
@@ -67,6 +72,28 @@ internal sealed class ItemPagePlace
 	/// </summary>
 	internal static FocusState RestoreAs(bool fromKeyboard) => fromKeyboard ? FocusState.Keyboard : FocusState.Pointer;
 
+	internal enum ArrivalStep
+	{
+		/// <summary>The page or its Primary is not ready yet: look again.</summary>
+		Wait,
+
+		/// <summary>Put the focus on the Primary.</summary>
+		Focus,
+
+		/// <summary>The user is somewhere in the page already, or something is open over it: leave the focus where it is.</summary>
+		Leave,
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's item 4): a Movie or Episode page opened anew puts the focus on its Primary once it is drawn,
+	/// not on the top bar's Back, where the navigation leaves it; never once the user has put the focus in the page, or while
+	/// a menu, flyout or dialog is open over it (it has the focus, and Esc must still reach it).
+	/// </summary>
+	internal static ArrivalStep ArrivalFocus(bool loaded, bool primaryReady, bool focusInPage, int openPopups) =>
+		focusInPage || openPopups > 0 ? ArrivalStep.Leave
+		: loaded && primaryReady ? ArrivalStep.Focus
+		: ArrivalStep.Wait;
+
 	private static readonly TimeSpan Patience = TimeSpan.FromSeconds(6);
 
 	/// <summary>A page that turns out shorter than it was gets its content this long to grow before it is scrolled to its end.</summary>
@@ -86,7 +113,52 @@ internal sealed class ItemPagePlace
 			return place;
 		}
 
+		if (_primary is not null)
+		{
+			FocusPrimaryWhenDrawn();
+		}
+
 		return null;
+	}
+
+	private void FocusPrimaryWhenDrawn()
+	{
+		var deadline = DateTime.UtcNow + Patience;
+		_timer?.Stop();
+		_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+		_timer.Tick += (_, _) =>
+		{
+			if (_page.XamlRoot is not { } root)
+			{
+				if (DateTime.UtcNow >= deadline)
+				{
+					_timer?.Stop();
+				}
+
+				return;
+			}
+
+			var primary = _primary?.Invoke();
+			var ready = primary is { IsLoaded: true, IsEnabled: true, Visibility: Visibility.Visible } && primary.ActualWidth > 0;
+			var current = FocusManager.GetFocusedElement(root) as DependencyObject;
+			switch (ArrivalFocus(_loaded(), ready, current is not null && IsInPage(current) && !ReferenceEquals(current, _scroller), VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count))
+			{
+				case ArrivalStep.Focus:
+					// Programmatic: the ring shows when the keyboard brought the user here, not after a click
+					primary!.Focus(FocusState.Programmatic);
+					_timer?.Stop();
+					return;
+				case ArrivalStep.Leave:
+					_timer?.Stop();
+					return;
+			}
+
+			if (DateTime.UtcNow >= deadline)
+			{
+				_timer?.Stop();
+			}
+		};
+		_timer.Start();
 	}
 
 	/// <param name="selectedSeasonId">The series page's shown season, to show it again on Back.</param>

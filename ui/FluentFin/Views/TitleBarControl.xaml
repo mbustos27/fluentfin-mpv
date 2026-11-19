@@ -207,12 +207,7 @@
                         </ResourceDictionary.ThemeDictionaries>
                     </ResourceDictionary>
                 </AutoSuggestBox.Resources>
-                <AutoSuggestBox.KeyboardAccelerators>
-                    <KeyboardAccelerator
-                        Key="F"
-                        Invoked="KeyboardAccelerator_Invoked"
-                        Modifiers="Control" />
-                </AutoSuggestBox.KeyboardAccelerators>
+                <!--  Nixie 1.4.0: no Ctrl+F accelerator of its own: the window's shortcuts (WindowShortcuts, AppShortcut.FocusSearch) own Ctrl+F, Ctrl+E and /  -->
                 <i:Interaction.Behaviors>
                     <b:GlobalSearchBoxBehavior />
                 </i:Interaction.Behaviors>
