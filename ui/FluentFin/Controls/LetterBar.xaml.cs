@@ -49,6 +49,16 @@ public sealed partial class LetterBar : UserControl
 	[GeneratedDependencyProperty]
 	public partial Microsoft.UI.Xaml.Media.Brush? ReadoutBrush { get; set; }
 
+	/// <summary>A plate under the readout, where the row sits on art (Drive-in's sky: its tiles' ground).</summary>
+	[GeneratedDependencyProperty]
+	public partial Microsoft.UI.Xaml.Media.Brush? ReadoutPlate { get; set; }
+
+	partial void OnReadoutPlateChanged(Microsoft.UI.Xaml.Media.Brush? newValue)
+	{
+		PositionPlate.Background = newValue;
+		PositionPlate.Padding = newValue is null ? new Thickness(0) : new Thickness(10, 5, 10, 6);
+	}
+
 	partial void OnReadoutBrushChanged(Microsoft.UI.Xaml.Media.Brush? newValue)
 	{
 		if (newValue is not null)
@@ -66,7 +76,7 @@ public sealed partial class LetterBar : UserControl
 		Visibility = Visibility.Collapsed;
 		LetterRepeater.ElementPrepared += (_, e) => Prepare(e.Element);
 		RowGrid.SizeChanged += (_, _) => Fit();
-		PositionLine.SizeChanged += (_, _) => Fit();
+		PositionPlate.SizeChanged += (_, _) => Fit();
 	}
 
 	/// <summary>The letters as drawn (the page's tests and the harness find them by name).</summary>
@@ -239,7 +249,7 @@ public sealed partial class LetterBar : UserControl
 			return;
 		}
 
-		var readout = PositionLine.Visibility == Visibility.Visible ? PositionLine.ActualWidth + RowGrid.ColumnSpacing : 0;
+		var readout = PositionPlate.Visibility == Visibility.Visible ? PositionPlate.ActualWidth + RowGrid.ColumnSpacing : 0;
 		var room = RowGrid.ActualWidth - readout;
 		var width = room <= 0 ? TileWidth : Math.Floor((room - TileSpacing * (count - 1)) / count);
 		width = Math.Clamp(width, MinTileWidth, TileWidth);

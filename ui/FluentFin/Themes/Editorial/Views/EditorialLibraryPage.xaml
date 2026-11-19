@@ -194,9 +194,10 @@
                     Visibility="Collapsed">
                     <FontIcon x:Name="ChipMoreGlyph" FontSize="12" Glyph="&#xE76C;" />
                 </Button>
-                <Button
+                <HyperlinkButton
                     x:Name="MoreFilters"
                     Grid.Column="2"
+                    VerticalAlignment="Center"
                     Click="MoreFilters_Click"
                     Content="More filters"
                     Style="{StaticResource NixieLinkButtonStyle}" />

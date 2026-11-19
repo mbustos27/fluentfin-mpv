@@ -233,6 +233,38 @@ internal sealed class LibraryGridHost
 		return FirstVisibleIndex(_repeater, _scroller);
 	}
 
+	/// <summary>The first and the last card in view (more than half of each inside it), (-1, -1) when none is drawn.</summary>
+	public static (int First, int Last) VisibleRange(ItemsRepeater repeater, FrameworkElement viewport)
+	{
+		int first = -1, last = -1;
+		var height = viewport.ActualHeight;
+		var count = VisualTreeHelper.GetChildrenCount(repeater);
+		for (var i = 0; i < count; i++)
+		{
+			if (VisualTreeHelper.GetChild(repeater, i) is not FrameworkElement { ActualHeight: > 0 } element
+				|| repeater.GetElementIndex(element) is not (>= 0 and var index))
+			{
+				continue;
+			}
+
+			try
+			{
+				var top = element.TransformToVisual(viewport).TransformPoint(default).Y;
+				var middle = top + element.ActualHeight * 0.5;
+				if (middle > 0 && middle < height)
+				{
+					first = first < 0 ? index : Math.Min(first, index);
+					last = Math.Max(last, index);
+				}
+			}
+			catch (ArgumentException)
+			{
+			}
+		}
+
+		return (first, last);
+	}
+
 	/// <summary>The index of the first card in view (more than half of it below the view's top), -1 when none is drawn.</summary>
 	public static int FirstVisibleIndex(ItemsRepeater repeater, FrameworkElement viewport)
 	{

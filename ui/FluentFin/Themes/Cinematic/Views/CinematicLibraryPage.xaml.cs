@@ -55,6 +55,7 @@ public sealed partial class CinematicLibraryPage : Page
 		GridRepeater.AddHandler(PointerEnteredEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
 		{
 			_hovered = ModelOf(e.OriginalSource as DependencyObject)?.Dto?.Id;
+			_hoveredAt = GridScroller.VerticalOffset;
 			QueueStage();
 		}), true);
 		GridRepeater.PointerExited += (_, _) =>
@@ -64,6 +65,13 @@ public sealed partial class CinematicLibraryPage : Page
 		};
 		GridScroller.ViewChanged += (_, _) =>
 		{
+			// the bug hunt's M5: the wheel moves the stills under a resting pointer, and no PointerEntered comes: what it rested
+			// on is not what it rests on now
+			if (Math.Abs(GridScroller.VerticalOffset - _hoveredAt) >= 1)
+			{
+				_hovered = null;
+			}
+
 			QueueStage();
 			// Nixie 1.4.0 (the UX review's C-M1, item 12): the stage folds to a band once the grid scrolls, and opens at its top
 			var band = GridScroller.VerticalOffset > (_band ? 8 : 40);
@@ -146,7 +154,8 @@ public sealed partial class CinematicLibraryPage : Page
 		// the stage's own rows: under the name, its words; the header line right under them; the art fades past it
 		var stageRow = _band ? 96 : Math.Min(Math.Round(height * 0.34), top + Stage.WordsHeight + 12);
 		StageRow.Height = new GridLength(Math.Max(96, stageRow));
-		Stage.ArtHeight = _band ? 150 : Math.Max(96, stageRow) + 90;
+		// the art ends where the header line starts: the sections and the toolbar sit on the night ground, never on art (C-M2)
+		Stage.ArtHeight = Math.Max(96, stageRow) + 8;
 		TitleText.FontSize = _band ? 26 : narrow ? 34 : 40;
 		TopLine.Margin = new Thickness(side, _band ? 54 : 60, side, 0);
 		if (_narrow != narrow)
@@ -162,8 +171,9 @@ public sealed partial class CinematicLibraryPage : Page
 	/// <summary>Stills (large or small by the window), posters at their 2:3, or the list; the placeholders follow the grid's layout.</summary>
 	private void ShowGrid(bool narrow, double side)
 	{
-		GridRepeater.Margin = new Thickness(side - 12, 0, side - 12, 32);
-		Placeholders.Margin = new Thickness(side - 12, 0, side - 12, 0);
+		// six stills a row at 1920 (the slots carry their own 12 px sides)
+		GridRepeater.Margin = new Thickness(side - 12, 0, narrow ? 24 : 36, 32);
+		Placeholders.Margin = new Thickness(side - 12, 0, narrow ? 24 : 36, 0);
 		DataTemplate template;
 		if (ViewModel.IsList)
 		{
@@ -184,7 +194,7 @@ public sealed partial class CinematicLibraryPage : Page
 			GridLayout.ItemsStretch = UniformGridLayoutItemsStretch.None;
 			GridLayout.MinColumnSpacing = GridLayout.MinRowSpacing = 0;
 			GridLayout.MinItemWidth = narrow ? 256 : 296;
-			GridLayout.MinItemHeight = narrow ? 196 : 224;
+			GridLayout.MinItemHeight = narrow ? 196 : 218;
 			GridRepeater.Layout = GridLayout;
 		}
 
@@ -193,25 +203,42 @@ public sealed partial class CinematicLibraryPage : Page
 	}
 
 	private Guid? _hovered;
+	private double _hoveredAt;
 	private bool _stageQueued;
 
 	/// <summary>
 	/// Nixie 1.3.1: what the stage shows: the still the pointer rests on, else the one the keyboard is on in the grid, else
 	/// (the keyboard on the stage's own buttons) the title it shows, else the first in view, else the first of the list; only
-	/// a title the grid shows (filtered out: never), null when it shows none.
+	/// a title the grid shows (filtered out: never), null when it shows none. Nixie 1.4.0 (the bug hunt's M5): the pointer's
+	/// and the keyboard's titles count only while they are in view (<paramref name="firstVisible"/> to
+	/// <paramref name="lastVisible"/>): a wheel scroll under a resting pointer, or past the focused still, moves the stage on.
 	/// </summary>
-	public static BaseItemDto? StageTarget(IReadOnlyList<BaseItemViewModel> items, Guid? hovered, Guid? focused, int firstVisible, Guid? kept = null)
+	public static BaseItemDto? StageTarget(IReadOnlyList<BaseItemViewModel> items, Guid? hovered, Guid? focused, int firstVisible, Guid? kept = null, int lastVisible = int.MaxValue)
 	{
 		if (items.Count == 0)
 		{
 			return null;
 		}
 
-		foreach (var wanted in new[] { hovered, focused, kept })
+		bool InView(int index) => firstVisible < 0 || index >= firstVisible && index <= lastVisible;
+		foreach (var (wanted, mustBeInView) in new[] { (hovered, true), (focused, true), (kept, false) })
 		{
-			if (wanted is { } id && items.FirstOrDefault(x => x.Id == id) is { } item)
+			if (wanted is not { } id)
 			{
-				return item.Dto;
+				continue;
+			}
+
+			for (var i = 0; i < items.Count; i++)
+			{
+				if (items[i].Id == id)
+				{
+					if (!mustBeInView || InView(i))
+					{
+						return items[i].Dto;
+					}
+
+					break;
+				}
 			}
 		}
 
@@ -242,9 +269,9 @@ public sealed partial class CinematicLibraryPage : Page
 		}
 
 		var items = ViewModel.Items;
-		var first = LibraryGridHost.FirstVisibleIndex(GridRepeater, GridScroller);
+		var (first, last) = LibraryGridHost.VisibleRange(GridRepeater, GridScroller);
 		var kept = XamlRoot is { } root && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) is DependencyObject on && IsWithin(on, Stage) ? Stage.Current?.Id : null;
-		var target = StageTarget(items, _hovered, FocusedInGrid(), first, kept);
+		var target = StageTarget(items, _hovered, FocusedInGrid(), first, kept, last < 0 ? int.MaxValue : last);
 		if (target is null)
 		{
 			Stage.ShowNothing();

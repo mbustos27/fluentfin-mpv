@@ -70,15 +70,21 @@
         </StackPanel>
 
         <!--  where the view is (large libraries)  -->
-        <TextBlock
-            x:Name="PositionLine"
+        <Border
+            x:Name="PositionPlate"
             Grid.Column="1"
+            Padding="0"
             VerticalAlignment="Center"
-            Foreground="{ThemeResource GlassTextSecondaryBrush}"
-            Style="{StaticResource BodyTextBlockStyle}"
-            Text="{x:Bind ViewModel.PositionText, Mode=OneWay}"
-            TextTrimming="CharacterEllipsis"
-            TextWrapping="NoWrap"
-            Visibility="{x:Bind local:LetterBar.PositionVisibility(ViewModel.PositionText, ViewModel.TotalCount), Mode=OneWay}" />
+            CornerRadius="8"
+            Visibility="{x:Bind local:LetterBar.PositionVisibility(ViewModel.PositionText, ViewModel.TotalCount), Mode=OneWay}">
+            <TextBlock
+                x:Name="PositionLine"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                Style="{StaticResource BodyTextBlockStyle}"
+                Text="{x:Bind ViewModel.PositionText, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+        </Border>
     </Grid>
 </UserControl>

@@ -22,7 +22,7 @@
         <!--  the grid's stills: 264 x 149 (224 x 126 in a narrow window); the slot holds the rim and the zoom's room  -->
         <DataTemplate x:Key="GridLarge" x:DataType="vm:BaseItemViewModel">
             <cc:CinematicStill
-                Margin="12,8,12,8"
+                Margin="12,4,12,4"
                 ArtHeight="149"
                 ArtWidth="264"
                 DecodeWidth="440"

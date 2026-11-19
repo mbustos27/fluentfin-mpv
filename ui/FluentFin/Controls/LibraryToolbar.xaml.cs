@@ -74,6 +74,9 @@ public sealed partial class LibraryToolbar : UserControl
 		}
 	}
 
+	/// <summary>The Unwatched switch for Narrator, its word first: "Unwatched, 223 titles" (what the other filters leave unwatched).</summary>
+	public static string UnwatchedName(int count) => count == 1 ? "Unwatched, 1 title" : $"Unwatched, {count:N0} titles";
+
 	/// <summary>The direction button's tooltip: "Switch to newest first".</summary>
 	public static string SwitchTo(string? words) => string.IsNullOrEmpty(words) ? "Switch the direction" : $"Switch to {words}";
 

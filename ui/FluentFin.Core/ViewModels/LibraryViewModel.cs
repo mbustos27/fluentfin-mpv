@@ -573,6 +573,24 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 
+	/// <summary>
+	/// Nixie 1.4.0 (the bug hunt's M2): the library loaded again from the server in place, keeping its sort, its filters, its
+	/// view and the card the user is on (<paramref name="on"/>, <paramref name="offset"/> down the grid), as Back keeps them.
+	/// For R and F5 without a new page (the refresh navigates to a new view model today, which <see cref="ReloadedInPlace"/>
+	/// covers the same way).
+	/// </summary>
+	public async Task RefreshAsync(BaseItemViewModel? on = null, double offset = 0)
+	{
+		if (_library is not { } library)
+		{
+			return;
+		}
+
+		LeftAt(on, offset);
+		ComingBack = true;
+		await State.RunAsync(() => Initialize(library));
+	}
+
 	public async Task OnNavigatedTo(object parameter)
 	{
 		if (parameter is BaseItemDto libraryDto)

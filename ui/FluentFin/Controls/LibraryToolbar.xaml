@@ -45,7 +45,7 @@
         Spacing="8">
         <ToggleButton
             x:Name="UnwatchedToggle"
-            AutomationProperties.Name="Unwatched"
+            AutomationProperties.Name="{x:Bind local:LibraryToolbar.UnwatchedName(ViewModel.UnwatchedCount), Mode=OneWay}"
             IsChecked="{x:Bind ViewModel.Filter.Unwatched, Mode=TwoWay}"
             Style="{StaticResource NixieChipToggleButtonStyle}"
             ToolTipService.ToolTip="Only what you haven't watched">

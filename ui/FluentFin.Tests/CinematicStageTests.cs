@@ -46,6 +46,30 @@ public sealed class CinematicStageTests
 		Assert.Null(CinematicLibraryPage.StageTarget([], null, null, 0));
 	}
 
+	// Nixie 1.4.0 (the bug hunt's M5): a wheel scroll under a resting pointer (or past the focused still) moves the stage on to
+	// what is in view: the pointer's and the keyboard's titles count only while they are in view
+	[Fact]
+	public void APointerOrAFocusScrolledOutOfView_GivesTheFirstInView()
+	{
+		var items = Items("A Quiet Harbor", "Bright Lines", "Copper Shadow", "Delta", "Echo", "Foxtrot");
+
+		Assert.Equal("Delta", CinematicLibraryPage.StageTarget(items, hovered: items[0].Id, focused: null, firstVisible: 3, lastVisible: 5)!.Name);
+		Assert.Equal("Delta", CinematicLibraryPage.StageTarget(items, hovered: null, focused: items[1].Id, firstVisible: 3, lastVisible: 5)!.Name);
+		Assert.Equal("Echo", CinematicLibraryPage.StageTarget(items, hovered: items[0].Id, focused: items[4].Id, firstVisible: 3, lastVisible: 5)!.Name);
+		Assert.Equal("Foxtrot", CinematicLibraryPage.StageTarget(items, hovered: items[5].Id, focused: items[4].Id, firstVisible: 3, lastVisible: 5)!.Name);
+		// the stage's own buttons have the keyboard: the title it shows stays (it is the stage's)
+		Assert.Equal("Bright Lines", CinematicLibraryPage.StageTarget(items, null, null, firstVisible: 3, kept: items[1].Id, lastVisible: 5)!.Name);
+	}
+
+	[Fact]
+	public void TheWheel_ForgetsThePointersTitle()
+	{
+		var page = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Themes", "Cinematic", "Views", "CinematicLibraryPage.xaml.cs"));
+
+		Assert.Contains("if (Math.Abs(GridScroller.VerticalOffset - _hoveredAt) >= 1)", page);
+		Assert.Contains("StageTarget(items, _hovered, FocusedInGrid(), first, kept, last < 0 ? int.MaxValue : last)", page);
+	}
+
 	[Fact]
 	public void ThePage_RefreshesTheStage_OnEveryChange_AndNotOnlyOnTheFirst()
 	{

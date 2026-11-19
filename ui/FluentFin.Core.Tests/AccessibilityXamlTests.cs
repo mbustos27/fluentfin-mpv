@@ -280,7 +280,7 @@ public class AccessibilityXamlTests
 
 		Assert.Equal(new (string?, string?)[]
 		{
-			("Unwatched", "Unwatched"), ("Favorites", "Favorites"),
+			("{x:Bind local:LibraryToolbar.UnwatchedName(ViewModel.UnwatchedCount), Mode=OneWay}", "Unwatched"), ("Favorites", "Favorites"),
 			("{x:Bind ViewModel.SortButtonName, Mode=OneWay}", "{x:Bind ViewModel.SortText, Mode=OneWay}"),
 			("{x:Bind ViewModel.FilterButtonName, Mode=OneWay}", "{x:Bind ViewModel.FilterText, Mode=OneWay}"),
 		}, named);

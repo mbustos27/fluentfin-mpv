@@ -33,6 +33,15 @@ letter accelerators on Home had no explicit text-input rule.
 Home page only: N goes to the Next Up row, C to the Continue Watching row (they ignore typing too). Since 1.1.4 they no
 longer play anything: a single letter must never start a video (Enter on the focused card does).
 
+## Library grids (1.4.0)
+
+| Key | Does |
+|---|---|
+| Arrows, Home, End, Page Up, Page Down | Move in the grid (as before) |
+| Letters typed on a poster | Go to the first title they start (sort name or name); the same letter again goes on to the next. R is Refresh, not a letter (the A to Z has R) |
+| Enter on a letter of the A to Z | That letter's row goes to the top, its first title gets the keyboard |
+| Ctrl+Up on a Cinematic still | The stage's Play |
+
 ## Player keys (only while the video is shown)
 
 | Key | Does |

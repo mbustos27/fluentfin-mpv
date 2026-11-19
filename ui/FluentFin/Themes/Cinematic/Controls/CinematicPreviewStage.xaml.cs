@@ -68,7 +68,8 @@ public sealed partial class CinematicPreviewStage : UserControl
 
 	/// <summary>
 	/// Nixie 1.4.0 (the UX review's C-M1, C-m12, item 12): the words under the library's name, sized for a stage a third of the
-	/// window high: no kicker (at 1100 it read as the name's subtitle), the title at 56 (48 narrow), one line of overview.
+	/// window high: no kicker (at 1100 it read as the name's subtitle), the title at 56 (48 narrow), the facts and the buttons
+	/// (the overview is More info's).
 	/// </summary>
 	public void SetLayout(bool narrow, double top)
 	{
@@ -81,7 +82,8 @@ public sealed partial class CinematicPreviewStage : UserControl
 		OverviewText.MaxWidth = narrow ? 520 : 640;
 		OverviewText.FontSize = narrow ? 15 : 16;
 		OverviewText.LineHeight = narrow ? 22 : 24;
-		OverviewText.MaxLines = 1;
+		// the overview is More info's: the stage keeps the room for three rows of stills at 1080
+		OverviewText.Visibility = Visibility.Collapsed;
 	}
 
 	/// <summary>Nixie 1.4.0: the stage folded to a band (the grid scrolled): the art's strip only, its words and Play gone.</summary>

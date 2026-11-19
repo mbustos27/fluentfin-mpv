@@ -318,4 +318,27 @@ public sealed class LibraryFilterModelTests
 		await fresh.OnNavigatedTo(library);
 		Assert.Equal((false, ItemSortBy.Name, 0, true), (fresh.Filter.Unwatched, fresh.SortBy, fresh.FocusRequest, fresh.ArrivalFocus));
 	}
+
+	// the bug hunt's M2: R after a sort and a filter keeps both, and the card; the titles are asked for again
+	[Fact]
+	public async Task RefreshAsync_AsksAgain_AndKeepsTheSortTheFiltersAndTheCard()
+	{
+		var library = new BaseItemDto { Id = Guid.NewGuid(), Name = "Movies", CollectionType = BaseItemDto_CollectionType.Movies };
+		var client = new Mock<IJellyfinClient>();
+		client.SetupGet(x => x.UserId).Returns(Guid.NewGuid());
+		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [.. Sample()] });
+		var vm = new LibraryViewModel(client.Object);
+		await vm.OnNavigatedTo(library);
+		vm.UpdateSortBy(ItemSortBy.PremiereDate);
+		vm.Filter.Genres.Add("Comedy");
+		var on = vm.Items[1];
+		vm.FocusRequest = -1;
+
+		await vm.RefreshAsync(on, 120);
+
+		client.Verify(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>()), Times.Exactly(2));
+		Assert.Equal((ItemSortBy.PremiereDate, SortOrder.Descending, "Showing 3 of 5 movies"), (vm.SortBy, vm.Order, vm.ShowingText));
+		Assert.Equal(["Comedy"], vm.Filter.Genres);
+		Assert.Equal((1, on.Id, 120d), (vm.FocusRequest, vm.Items[vm.FocusRequest].Id, vm.ReturnOffset ?? 0));
+	}
 }

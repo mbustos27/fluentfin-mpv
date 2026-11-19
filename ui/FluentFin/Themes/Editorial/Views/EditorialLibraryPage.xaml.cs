@@ -106,6 +106,15 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		GridList.AddHandler(PreviewKeyDownEvent, new KeyEventHandler(Grid_KeyDown), true);
 		GridList.GettingFocus += GridList_GettingFocus;
 		GridList.CharacterReceived += GridList_CharacterReceived;
+		// Nixie 1.4.0 (the UX review's E-m1, item 4): Right from the last genre goes on to More filters (it stopped there)
+		ChipList.AddHandler(KeyDownEvent, new KeyEventHandler((_, e) =>
+		{
+			if (e.Key == VirtualKey.Right && _chips.Count > 0 && XamlRoot is { } root && ReferenceEquals(FocusManager.GetFocusedElement(root), _chips[^1]))
+			{
+				ChipScroller.ChangeView(ChipScroller.ScrollableWidth, null, null, true);
+				e.Handled = MoreFilters.Focus(FocusState.Keyboard);
+			}
+		}), true);
 		Letters.Jumped += (_, e) =>
 		{
 			_jumpFocus = e.FocusState;
