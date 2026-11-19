@@ -4,7 +4,7 @@
 # offscreen\then-140-shared.ps1, once per NIXIE_LAYOUT; SG_SHOT_TAG names the shots. Dot-sourced by drive.ps1: no variable
 # here may reuse one of its names.
 $s14Tag = if ($env:SG_SHOT_TAG) { $env:SG_SHOT_TAG } else { 'run' }
-$s14Only = if ($env:S14_ONLY) { $env:S14_ONLY -split ',' } else { @('collection', 'playlist', 'partof', 'libraries', 'grid') }
+$s14Only = if ($env:S14_ONLY) { $env:S14_ONLY -split ',' } else { @('collection', 'playlist', 'partof', 'libraries', 'grid', 'switch') }
 function S14-Settle([int]$Ms = 1200) { Start-Sleep -Milliseconds $Ms }
 # the element with the keyboard focus in FluentFin's window, by its name (UI Automation's FocusedElement does not cross desktops)
 function S14-FocusName {
@@ -70,6 +70,8 @@ if ($s14Only -contains 'collection') {
     $s14Again = Wait-Ui -Name 'Play ' -Type 'Button' -Contains -Seconds 15
     S14-Settle 1200
     Check 'collection: Back from the film shows the collection again, with its Play' ([bool]$s14Again -and [bool](Find-Ui -Name 'Copper and Glass, collection' -Type 'List'))
+    $s14Focus = S14-FocusName
+    Check 'collection: ... with the keyboard back on the film it left from' ($s14Focus.StartsWith('Wild Canyons')) $s14Focus
     # R refreshes it in place
     Key 0x52
     S14-Settle 2500
@@ -131,6 +133,13 @@ if ($s14Only -contains 'libraries') {
     Open-Nav 'Libraries'
     S14-Settle 2500
     S14-Sizes { param($w) S14-Grid "libraries-$w" 'Libraries'; Capture-Page "$s14Tag-libraries-$w" }
+    $s14Tile = Find-Ui -Name 'Movies, 320 movies, ' -Type 'ListItem' -Contains
+    Check 'libraries: a tile says what the library holds' ([bool]$s14Tile) $(if ($s14Tile) { $s14Tile.Current.Name })
+    Check 'libraries: collections and playlists are a group of their own' ([bool](Find-Ui -Name 'Collections & playlists' -Type 'List' -OffscreenToo))
+    $s14Focus = S14-FocusName
+    Check 'libraries: arriving, the keyboard is on the first tile' ($s14Focus.StartsWith('Movies')) $s14Focus
+    Key 0x52; S14-Settle 2500
+    Check 'libraries: R refreshes it in place' ([bool](Find-Ui -Name 'Movies, 320 movies, ' -Type 'ListItem' -Contains))
     [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080); S14-Settle 1200
 }
 
@@ -150,5 +159,26 @@ if ($s14Only -contains 'grid') {
         [void](Wait-Ui -Name 'Results for' -Type 'Text' -Contains -Seconds 15)
         S14-Settle 2500
         S14-Sizes { param($w) S14-Grid "search-$w" 'Results for' -Contains; Shot "$s14Tag-search-$w" }
+    }
+}
+
+# a theme switch from Settings, then Back to the collection: it is drawn in the new theme (its ground, its title's y)
+if ($s14Only -contains 'switch') {
+    [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080); S14-Settle 1200
+    Open-Library 'Collections'; S14-Settle 2000; Open-Card 'Copper and Glass'
+    [void](Wait-Ui -Name 'Play ' -Type 'Button' -Contains -Seconds 20); S14-Settle 1200
+    $s14To = if ($env:NIXIE_LAYOUT -eq 'DriveIn') { 'Classic' } else { 'Drive-in' }
+    Open-Nav 'Settings'; S14-Settle 2500
+    $s14Tile = Find-Ui -Name $s14To -Type 'ListItem' -Contains
+    if (-not $s14Tile) { Say "switch: no theme tile '$s14To'" } else {
+        try { ($s14Tile.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)).Select() } catch { [void](Invoke-Element $s14Tile) }
+        S14-Settle 3500
+        $s14BackBtn = Find-Ui -Name 'Back' -Type 'Button'
+        if ($s14BackBtn) { [void](Invoke-Element $s14BackBtn) }
+        $s14Again = Wait-Ui -Name 'Play ' -Type 'Button' -Contains -Seconds 15
+        S14-Settle 1500
+        S14-Grid "switched-to-$s14To-1920" 'Copper and Glass' -Contains
+        Check "switch: after switching to $s14To, Back shows the collection in it" ([bool]$s14Again -and [bool](Find-Ui -Name 'Copper and Glass, collection' -Type 'List'))
+        Shot "$s14Tag-switched-to-$($s14To -replace '-', '')-collection-1920"
     }
 }

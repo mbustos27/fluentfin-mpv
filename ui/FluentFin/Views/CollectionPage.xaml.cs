@@ -17,9 +17,17 @@ public sealed partial class CollectionPage : Page
 
 	private bool _focusedOnArrival;
 
+	// the card the user left the page from, per collection: Back (or Forward) puts the keyboard on it again, as the library does
+	private static readonly Dictionary<Guid, Guid> LeftFrom = [];
+	private Guid? _returnTo;
+	private Guid? _lastEntry;
+
 	public CollectionPage()
 	{
 		InitializeComponent();
+
+		GridList.GotFocus += (_, e) => Remember(e.OriginalSource as DependencyObject);
+		GridList.AddHandler(PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) => Remember(e.OriginalSource as DependencyObject)), true);
 
 		// each card's place for Narrator ("3 of 6"): the card (the theme's poster) is the element it reads
 		GridRepeater.ElementPrepared += (_, e) =>
@@ -49,13 +57,23 @@ public sealed partial class CollectionPage : Page
 		{
 			if (e.PropertyName == nameof(LoadState.Status) && ViewModel.State.IsLoaded && !_focusedOnArrival)
 			{
-				// arriving, the focus is in the page, on its one Primary (the UX review's item 4), once the page is drawn
+				// arriving, the focus is in the page (the UX review's item 4), once the page is drawn: back from a film, on its card;
+				// else on the one Primary; with nothing to play (an album of songs), on the first card
 				_focusedOnArrival = true;
 				DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
 				{
-					if (PlayButton.IsLoaded && PlayButton.IsEnabled)
+					var back = _returnTo is { } id ? IndexOf(id) : -1;
+					if (back >= 0)
+					{
+						FocusCard(back);
+					}
+					else if (PlayButton.IsLoaded && PlayButton.IsEnabled)
 					{
 						PlayButton.Focus(FocusState.Programmatic);
+					}
+					else if (ViewModel.Entries.Count > 0)
+					{
+						FocusCard(0);
 					}
 				});
 			}
@@ -77,7 +95,50 @@ public sealed partial class CollectionPage : Page
 	protected override void OnNavigatedTo(NavigationEventArgs e)
 	{
 		_focusedOnArrival = false;
+		var set = e.Parameter is BaseItemDto { Id: { } given } ? given : e.Parameter as Guid?;
+		_returnTo = e.NavigationMode is NavigationMode.Back or NavigationMode.Forward && set is { } key && LeftFrom.TryGetValue(key, out var item) ? item : null;
 		base.OnNavigatedTo(e);
+	}
+
+	protected override void OnNavigatedFrom(NavigationEventArgs e)
+	{
+		if (ViewModel.Collection?.Id is { } set && _lastEntry is { } item)
+		{
+			LeftFrom[set] = item;
+		}
+
+		base.OnNavigatedFrom(e);
+	}
+
+	private int IndexOf(Guid item)
+	{
+		for (var i = 0; i < ViewModel.Entries.Count; i++)
+		{
+			if (ViewModel.Entries[i].Item.Id == item)
+			{
+				return i;
+			}
+		}
+
+		return -1;
+	}
+
+	/// <summary>The entry a card (or anything in it) belongs to: the last one the keyboard or the pointer was on.</summary>
+	private void Remember(DependencyObject? source)
+	{
+		for (var node = source; node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is UIElement element && VisualTreeHelper.GetParent(node) == GridRepeater)
+			{
+				var index = GridRepeater.GetElementIndex(element);
+				if (index >= 0 && index < ViewModel.Entries.Count)
+				{
+					_lastEntry = ViewModel.Entries[index].Item.Id;
+				}
+
+				return;
+			}
+		}
 	}
 
 	private double _itemWidth;

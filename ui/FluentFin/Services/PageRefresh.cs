@@ -30,7 +30,8 @@ public static class PageRefresh
 	[
 		typeof(HomeViewModel),
 		typeof(LibraryViewModel),
-		typeof(CollectionViewModel), // Nixie 1.4.0
+		typeof(CollectionViewModel), // Nixie 1.4.0: a collection or a playlist, and the Libraries page (its counts)
+		typeof(LibrariesLandingPageViewModel),
 		typeof(ItemGridViewModel),
 		typeof(MovieViewModel),
 		typeof(EpisodeViewModel),
