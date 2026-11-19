@@ -529,79 +529,6 @@ $kmB = KM-State
 $kmA = KM-State
 KM-Row 'windowed' 'playing' 'Esc (shows the controls, nothing else)' ($kmA.Bars -and -not $kmA.Full -and $kmA.Paused -eq $kmB.Paused) "bars $($kmA.Bars), full $($kmA.Full), paused $($kmB.Paused)->$($kmA.Paused)"
 
-# ==== 4. paused, the keyboard on each control (Tab or a menu closing puts it there) ===================================================
-$kmControls = @('PlayPauseButton', 'SeekBar', 'VolumeButton', 'TracksButton', 'NextButton', 'PreviousButton', 'SpeedButton', 'FullScreenButton', 'SkipBackButton', 'SkipForwardButton', 'BackButton')
-foreach ($kmId in $kmControls) {
-    KM-Ready $true
-    $kmE = Find-Ui -Id $kmId
-    if (-not $kmE -or -not $kmE.Current.IsEnabled) { KM-Row 'paused, focus on a control' $kmId 'focus' $false 'not found or disabled'; continue }
-    [void][OffscreenUi]::SetFocus($kmE); Start-Sleep -Milliseconds 300
-    $kmOn = KM-FocusName
-    foreach ($kmChord in @('Space', 'Space', 'Left', 'Right', 'Up', 'Down', 'M', 'M')) {
-        if ((KM-Num 'time-pos') -lt 40) { [void](KM-Press '2'); Start-Sleep -Milliseconds 300 }
-        [void](KM-Key 'paused, focus on a control' "$kmId (focus: $kmOn)" $kmChord)
-    }
-}
-
-# Enter presses the focused button (the keyboard's way to use one): Full screen, then Play/Pause
-KM-Ready $true
-$kmE = Find-Ui -Id 'FullScreenButton'; [void][OffscreenUi]::SetFocus($kmE); Start-Sleep -Milliseconds 300
-$kmB = KM-State -NoUi; [void](KM-Press 'Enter'); $kmA = Wait-WindowState $script:hwnd (-not $kmB.Full) 5
-KM-Row 'paused, focus on a control' 'FullScreenButton' 'Enter (presses it)' ($kmA.FullScreen -ne $kmB.Full) "full $($kmB.Full) -> $($kmA.FullScreen)"
-Start-Sleep -Milliseconds 800; KM-SetWindowed
-KM-Ready $true
-$kmE = Find-Ui -Id 'PlayPauseButton'; [void][OffscreenUi]::SetFocus($kmE); Start-Sleep -Milliseconds 300
-[void](KM-Key 'paused, focus on a control' 'PlayPauseButton' 'Space')
-KM-SetPaused $true
-
-# ==== 5. panels: the tracks panel (a flyout) and the volume flyout, then Cinematic's tabs panel ===========================================
-foreach ($kmPanel in @(@{ Button = 'TracksButton'; Inside = 'SubtitleTracks'; Name = 'tracks panel' }, @{ Button = 'VolumeButton'; Inside = 'MuteButton'; Name = 'volume flyout' }, @{ Button = 'SpeedButton'; Inside = ''; Name = 'speed menu' })) {
-    KM-Ready $true
-    if (-not (KM-Click $kmPanel.Button)) { KM-Row 'panels' $kmPanel.Name 'open' $false 'its button is not shown'; continue }
-    # (the speed menu is a window of its own, outside the main window's UI Automation tree: its item has the keyboard)
-    $kmOpen = if ($kmPanel.Inside) { [bool](Wait-Ui -Id $kmPanel.Inside -Seconds 3) } else { [bool](Wait-Until { if ((KM-Focus).type -eq 'MenuItem') { $true } } -Seconds 3 -PollMs 150) }
-    KM-Row 'panels' $kmPanel.Name 'a click opens it' $kmOpen "focus $(KM-FocusName)"
-    if (-not $kmOpen) { continue }
-    KM-KeyIsNotThePlayers 'panels' "$($kmPanel.Name) open" 'Down'
-    $kmB = KM-State -NoUi
-    [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 600
-    $kmClosed = if ($kmPanel.Inside) { -not (Find-Ui -Id $kmPanel.Inside) } else { (KM-Focus).type -ne 'MenuItem' }
-    KM-Row 'panels' $kmPanel.Name 'Esc closes it' $kmClosed "focus $(KM-FocusName)"
-    # the user's report: after a menu closed, Space opened it again (1.3.0)
-    foreach ($kmChord in @('Space', 'Space', 'Left', 'Up', 'Down', 'F', 'F')) { [void](KM-Key 'panels' "$($kmPanel.Name) closed" $kmChord); if ($kmChord -eq 'F') { Start-Sleep -Milliseconds 700 } }
-    $kmReopened = if ($kmPanel.Inside) { [bool](Find-Ui -Id $kmPanel.Inside) } else { (KM-Focus).type -eq 'MenuItem' }
-    KM-Row 'panels' $kmPanel.Name 'Space did not open it again' (-not $kmReopened) ''
-    KM-SetWindowed
-}
-
-if ($kmTheme -eq 'Cinematic') {
-    foreach ($kmTab in @('Info', 'Episodes', 'Chapters', 'Audio and subtitles')) {
-        KM-Ready $true
-        if (-not (KM-Click -Name $kmTab)) { KM-Row 'panels' "Cinematic tabs: $kmTab" 'open' $false 'the tab is not shown'; continue }
-        Start-Sleep -Milliseconds 500
-        # a click leaves the keyboard on the video: the player's keys work with the panel open, Esc closes it
-        foreach ($kmChord in @('Space', 'Space', 'Left', 'Right', 'Up', 'Down')) { [void](KM-Key 'panels' "Cinematic tabs panel ($kmTab) open by a click" $kmChord) }
-        [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 600
-        $kmStill = KM-Click -Name $kmTab   # opens it again to see it was closed: a second click on an open tab closes it
-        Start-Sleep -Milliseconds 300
-        [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 400
-        KM-Row 'panels' "Cinematic tabs: $kmTab" 'Esc closes the panel' $kmStill ''
-    }
-    # the keyboard on the tabs (Tab put it there): Left/Right move between them, Enter opens one, Esc closes, Space is the tab's
-    KM-Ready $true
-    $kmT = Find-Ui -Name 'Info' -Type 'Button'
-    if (-not $kmT) { $kmT = Find-Ui -Name 'Info' }
-    if ($kmT) {
-        [void][OffscreenUi]::SetFocus($kmT); Start-Sleep -Milliseconds 300
-        $kmF0 = KM-FocusName
-        KM-KeyIsNotThePlayers 'panels' 'Cinematic tabs focused' 'Right' { (KM-FocusName) -ne $kmF0 }
-        KM-KeyIsNotThePlayers 'panels' 'Cinematic tabs focused' 'Left' { (KM-FocusName) -eq $kmF0 }
-        [void](KM-Key 'panels' 'Cinematic tabs focused' 'F'); Start-Sleep -Milliseconds 700; KM-SetWindowed
-        [void](KM-Key 'panels' 'Cinematic tabs focused' 'M'); [void](KM-Key 'panels' 'Cinematic tabs focused' 'M')
-    }
-    else { KM-Row 'panels' 'Cinematic tabs focused' 'focus' $false 'no Info tab' }
-}
-
 # ==== 6. the user's report: the mouse, then the keys at once (the bars still showing) ===================================================
 # 6.1 click pause, then Space
 KM-Ready $false
@@ -652,6 +579,54 @@ KM-Ready $true
 [void](KM-Key 'after the mouse' '6. click Volume, Esc, then' 'Space')
 [void](KM-Key 'after the mouse' '6. click Volume, Esc, then' 'Space')
 
+# ==== 5. panels: the tracks panel (a flyout) and the volume flyout, then Cinematic's tabs panel ===========================================
+foreach ($kmPanel in @(@{ Button = 'TracksButton'; Inside = 'SubtitleTracks'; Name = 'tracks panel' }, @{ Button = 'VolumeButton'; Inside = 'MuteButton'; Name = 'volume flyout' }, @{ Button = 'SpeedButton'; Inside = ''; Name = 'speed menu' })) {
+    KM-Ready $true
+    if (-not (KM-Click $kmPanel.Button)) { KM-Row 'panels' $kmPanel.Name 'open' $false 'its button is not shown'; continue }
+    # (the speed menu is a window of its own, outside the main window's UI Automation tree: its item has the keyboard)
+    $kmOpen = if ($kmPanel.Inside) { [bool](Wait-Ui -Id $kmPanel.Inside -Seconds 3) } else { [bool](Wait-Until { if ((KM-Focus).type -eq 'MenuItem') { $true } } -Seconds 3 -PollMs 150) }
+    KM-Row 'panels' $kmPanel.Name 'a click opens it' $kmOpen "focus $(KM-FocusName)"
+    if (-not $kmOpen) { continue }
+    KM-KeyIsNotThePlayers 'panels' "$($kmPanel.Name) open" 'Down'
+    $kmB = KM-State -NoUi
+    [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 600
+    $kmClosed = if ($kmPanel.Inside) { -not (Find-Ui -Id $kmPanel.Inside) } else { (KM-Focus).type -ne 'MenuItem' }
+    KM-Row 'panels' $kmPanel.Name 'Esc closes it' $kmClosed "focus $(KM-FocusName)"
+    # the user's report: after a menu closed, Space opened it again (1.3.0)
+    foreach ($kmChord in @('Space', 'Space', 'Left', 'Up', 'Down', 'F', 'F')) { [void](KM-Key 'panels' "$($kmPanel.Name) closed" $kmChord); if ($kmChord -eq 'F') { Start-Sleep -Milliseconds 700 } }
+    $kmReopened = if ($kmPanel.Inside) { [bool](Find-Ui -Id $kmPanel.Inside) } else { (KM-Focus).type -eq 'MenuItem' }
+    KM-Row 'panels' $kmPanel.Name 'Space did not open it again' (-not $kmReopened) ''
+    KM-SetWindowed
+}
+
+if ($kmTheme -eq 'Cinematic') {
+    foreach ($kmTab in @('Info', 'Episodes', 'Chapters', 'Audio and subtitles')) {
+        KM-Ready $true
+        if (-not (KM-Click -Name $kmTab)) { KM-Row 'panels' "Cinematic tabs: $kmTab" 'open' $false 'the tab is not shown'; continue }
+        Start-Sleep -Milliseconds 500
+        # a click leaves the keyboard on the video: the player's keys work with the panel open, Esc closes it
+        foreach ($kmChord in @('Space', 'Space', 'Left', 'Right', 'Up', 'Down')) { [void](KM-Key 'panels' "Cinematic tabs panel ($kmTab) open by a click" $kmChord) }
+        [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 600
+        $kmStill = KM-Click -Name $kmTab   # opens it again to see it was closed: a second click on an open tab closes it
+        Start-Sleep -Milliseconds 300
+        [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 400
+        KM-Row 'panels' "Cinematic tabs: $kmTab" 'Esc closes the panel' $kmStill ''
+    }
+    # the keyboard on the tabs (Tab put it there): Left/Right move between them, Enter opens one, Esc closes, Space is the tab's
+    KM-Ready $true
+    $kmT = Find-Ui -Name 'Info' -Type 'Button'
+    if (-not $kmT) { $kmT = Find-Ui -Name 'Info' }
+    if ($kmT) {
+        [void][OffscreenUi]::SetFocus($kmT); Start-Sleep -Milliseconds 300
+        $kmF0 = KM-FocusName
+        KM-KeyIsNotThePlayers 'panels' 'Cinematic tabs focused' 'Right' { (KM-FocusName) -ne $kmF0 }
+        KM-KeyIsNotThePlayers 'panels' 'Cinematic tabs focused' 'Left' { (KM-FocusName) -eq $kmF0 }
+        [void](KM-Key 'panels' 'Cinematic tabs focused' 'F'); Start-Sleep -Milliseconds 700; KM-SetWindowed
+        [void](KM-Key 'panels' 'Cinematic tabs focused' 'M'); [void](KM-Key 'panels' 'Cinematic tabs focused' 'M')
+    }
+    else { KM-Row 'panels' 'Cinematic tabs focused' 'focus' $false 'no Info tab' }
+}
+
 # ==== 7. double click ========================================================================================================
 function KM-DoubleCase([string]$Case, [int[]]$At, [string]$Id, [bool]$ShouldToggle) {
     $b = KM-State -NoUi
@@ -689,6 +664,32 @@ foreach ($kmId in @('PlayPauseButton', 'SeekBar', 'VolumeButton', 'SpeedButton',
     KM-SetPaused $true
     [void](KM-Key 'double click' "on $kmId, then" 'Space')
 }
+
+# ==== 4. paused, the keyboard on each control (Tab or a menu closing puts it there); last: on a 1.3.0 build Space on Back left
+# the player, so everything after it would have run on the season page =============================================================
+$kmControls = @('PlayPauseButton', 'SeekBar', 'VolumeButton', 'TracksButton', 'NextButton', 'PreviousButton', 'SpeedButton', 'FullScreenButton', 'SkipBackButton', 'SkipForwardButton', 'BackButton')
+foreach ($kmId in $kmControls) {
+    KM-Ready $true
+    $kmE = Find-Ui -Id $kmId
+    if (-not $kmE -or -not $kmE.Current.IsEnabled) { KM-Row 'paused, focus on a control' $kmId 'focus' $false 'not found or disabled'; continue }
+    [void][OffscreenUi]::SetFocus($kmE); Start-Sleep -Milliseconds 300
+    $kmOn = KM-FocusName
+    foreach ($kmChord in @('Space', 'Space', 'Left', 'Right', 'Up', 'Down', 'M', 'M')) {
+        if ((KM-Num 'time-pos') -lt 40) { [void](KM-Press '2'); Start-Sleep -Milliseconds 300 }
+        [void](KM-Key 'paused, focus on a control' "$kmId (focus: $kmOn)" $kmChord)
+    }
+}
+
+# Enter presses the focused button (the keyboard's way to use one): Full screen, then Play/Pause
+KM-Ready $true
+$kmE = Find-Ui -Id 'FullScreenButton'; [void][OffscreenUi]::SetFocus($kmE); Start-Sleep -Milliseconds 300
+$kmB = KM-State -NoUi; [void](KM-Press 'Enter'); $kmA = Wait-WindowState $script:hwnd (-not $kmB.Full) 5
+KM-Row 'paused, focus on a control' 'FullScreenButton' 'Enter (presses it)' ($kmA.FullScreen -ne $kmB.Full) "full $($kmB.Full) -> $($kmA.FullScreen)"
+Start-Sleep -Milliseconds 800; KM-SetWindowed
+KM-Ready $true
+$kmE = Find-Ui -Id 'PlayPauseButton'; [void][OffscreenUi]::SetFocus($kmE); Start-Sleep -Milliseconds 300
+[void](KM-Key 'paused, focus on a control' 'PlayPauseButton' 'Space')
+KM-SetPaused $true
 
 # ==== 8. the Back key leaves; a theme switch mid-session, then the player again =========================================================
 KM-SetWindowed

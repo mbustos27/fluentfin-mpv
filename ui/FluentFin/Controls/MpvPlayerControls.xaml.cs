@@ -310,12 +310,13 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	/// <summary>
 	/// The heartbeat's check: the focus went nowhere (the element that had it was collapsed or removed: a theme's control, the
-	/// title bar as full screen begins) while the player shows: it comes back to the player, so the keys never stop until
-	/// the bars happen to hide (1.3.0).
+	/// title bar as full screen begins) while the player shows and the app is in front: it comes back to the player, so the
+	/// keys never stop until the bars happen to hide (1.3.0).
 	/// </summary>
 	private void KeepKeyboardSomewhere()
 	{
-		if (XamlRoot is { } root && IsLoaded && Visibility == Visibility.Visible && FocusManager.GetFocusedElement(root) is null && !HasOpenMenu(root))
+		if (XamlRoot is { } root && IsLoaded && Visibility == Visibility.Visible && KeyboardFocus.AppIsActive()
+			&& FocusManager.GetFocusedElement(root) is null && !HasOpenMenu(root))
 		{
 			Focus(FocusState.Programmatic);
 		}
