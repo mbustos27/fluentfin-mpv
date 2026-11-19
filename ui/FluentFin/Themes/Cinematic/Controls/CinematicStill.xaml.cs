@@ -18,7 +18,7 @@ using Windows.System;
 namespace FluentFin.Themes.Cinematic.Controls;
 
 /// <summary>Cinematic's 16:9 still (see CinematicStill.xaml).</summary>
-public sealed partial class CinematicStill : UserControl
+public sealed partial class CinematicStill : UserControl, FluentFin.Controls.IUpNextMarked
 {
 	[GeneratedDependencyProperty]
 	public partial BaseItemViewModel? Model { get; set; }
@@ -79,6 +79,7 @@ public sealed partial class CinematicStill : UserControl
 		Loaded += (_, _) =>
 		{
 			ItemUserData.Changed += OnUserDataChanged;
+			UpdateUpNext();
 			CardFocus.Changed += OnCardFocusChanged;
 			_keyboardElsewhere = CardFocus.IsElsewhere(this);
 		};
@@ -196,9 +197,35 @@ public sealed partial class CinematicStill : UserControl
 
 	private string? _picture;
 
+	/// <summary>Nixie 1.4.0 (the UX review's C-m10): the episode the season page's Play starts (UpNextMark), "Up next" on its plate.</summary>
+	internal bool IsUpNext { get; private set; }
+
+	public void UpdateUpNext()
+	{
+		var upNext = Kind == StillKind.Episode && FluentFin.Controls.UpNextMark.IsUpNext(this, Model?.Dto?.Id);
+		if (upNext != IsUpNext)
+		{
+			IsUpNext = upNext;
+			ApplyBadge();
+		}
+	}
+
+	private void ApplyBadge()
+	{
+		var badge = Kind == StillKind.Episode ? CinematicLabels.EpisodeBadge(Model?.Dto) : "";
+		if (IsUpNext)
+		{
+			badge = badge.Length > 0 ? $"{badge}  ·  {FluentFin.Controls.UpNextMark.Label}" : FluentFin.Controls.UpNextMark.Label;
+		}
+
+		BadgeText.Text = badge;
+		BadgePlate.Visibility = badge.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+	}
+
 	private void Apply()
 	{
 		var dto = Model?.Dto;
+		IsUpNext = Kind == StillKind.Episode && FluentFin.Controls.UpNextMark.IsUpNext(this, dto?.Id);
 		// the still's DataContext is its item, whatever set it: the theme switch keeps the place by the item an element's
 		// DataContext names (Helpers\ThemeAnchors), and a list here does not give its elements their item themselves
 		if (Model is { } model && !ReferenceEquals(DataContext, model))
@@ -229,9 +256,7 @@ public sealed partial class CinematicStill : UserControl
 		ProgressTrack.Visibility = progress > 0 && !played ? Visibility.Visible : Visibility.Collapsed;
 		UpdateProgress(progress);
 
-		var badge = Kind == StillKind.Episode ? CinematicLabels.EpisodeBadge(dto) : "";
-		BadgeText.Text = badge;
-		BadgePlate.Visibility = badge.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+		ApplyBadge();
 		// 1.4.0 (X10, C-m6): watched a dim check when nothing is left; "N to watch" a count chip (a series, a season, a collection)
 		WatchedMark.Visibility = (Kind == StillKind.Episode ? played : ItemBadges.Watched(dto)) ? Visibility.Visible : Visibility.Collapsed;
 		var toWatch = Kind == StillKind.Episode ? "" : ItemBadges.ToWatchText(dto);
@@ -470,7 +495,7 @@ internal sealed partial class CinematicStillAutomationPeer(CinematicStill owner)
 			return name;
 		}
 
-		return owner.Kind == StillKind.Episode ? ItemLabels.EpisodeRowName(owner.Model?.Dto) : ItemLabels.CardName(owner.Model);
+		return owner.Kind == StillKind.Episode ? FluentFin.Controls.UpNextMark.Spoken(ItemLabels.EpisodeRowName(owner.Model?.Dto), owner.IsUpNext) : ItemLabels.CardName(owner.Model);
 	}
 
 	protected override bool IsControlElementCore() => true;

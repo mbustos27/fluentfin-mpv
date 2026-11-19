@@ -14,10 +14,15 @@ using Windows.System;
 namespace FluentFin.Controls;
 
 /// <summary>Seaglass: one episode as an opaque card (see EpisodeRow.xaml); the item is <see cref="Dto"/>. One keyboard stop.</summary>
-public sealed partial class EpisodeRow : UserControl
+public sealed partial class EpisodeRow : UserControl, IUpNextMarked
 {
 	public static readonly DependencyProperty DtoProperty =
-		DependencyProperty.Register(nameof(Dto), typeof(object), typeof(EpisodeRow), new PropertyMetadata(null, (d, _) => ((EpisodeRow)d).Apply()));
+		DependencyProperty.Register(nameof(Dto), typeof(object), typeof(EpisodeRow), new PropertyMetadata(null, (d, _) =>
+		{
+			var row = (EpisodeRow)d;
+			row.Apply();
+			row.UpdateUpNext();
+		}));
 
 	/// <summary>The row's menu (a right click, the menu key, Shift+F10, a long press), made when it opens so it says what is true now.</summary>
 	private readonly MenuBarItemFlyout _menu = new();
@@ -33,6 +38,7 @@ public sealed partial class EpisodeRow : UserControl
 		Loaded += (_, _) =>
 		{
 			UpdatePlace();
+			UpdateUpNext();
 			ItemUserData.Changed += OnUserDataChanged;
 		};
 		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
@@ -48,6 +54,15 @@ public sealed partial class EpisodeRow : UserControl
 	{
 		get => GetValue(DtoProperty) as BaseItemDto;
 		set => SetValue(DtoProperty, value);
+	}
+
+	/// <summary>Nixie 1.4.0: this is the episode the page's Play starts (UpNextMark): it says "Up next" beside its title.</summary>
+	internal bool IsUpNext { get; private set; }
+
+	public void UpdateUpNext()
+	{
+		IsUpNext = UpNextMark.IsUpNext(this, Dto?.Id);
+		UpNextBadge.Visibility = IsUpNext ? Visibility.Visible : Visibility.Collapsed;
 	}
 
 	/// <summary>What Enter (and Narrator's Invoke) does: play the episode.</summary>
@@ -310,7 +325,7 @@ internal sealed partial class EpisodeRowAutomationPeer(EpisodeRow owner) : Frame
 	protected override string GetNameCore()
 	{
 		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? ItemLabels.EpisodeRowName(owner.Dto) : name;
+		return string.IsNullOrEmpty(name) ? UpNextMark.Spoken(ItemLabels.EpisodeRowName(owner.Dto), owner.IsUpNext) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;

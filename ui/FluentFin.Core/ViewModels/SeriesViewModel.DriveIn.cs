@@ -39,10 +39,14 @@ public static class DriveInItems
 		return episodes.FirstOrDefault(e => e.UserData?.Played != true);
 	}
 
-	/// <summary>The board's line beside the season tubes: "8 episodes · 6 h 12 m · 2 watched" (parts left out when unknown).</summary>
-	public static string SeasonSummary(IReadOnlyList<BaseItemDto> episodes)
+	/// <summary>
+	/// The board's line beside the season tubes: "8 episodes · 6 h 12 m · 2 watched" (parts left out when unknown). Nixie 1.4.0:
+	/// empty for no list too: Back to the season page from the player bound it before the episodes came (an unhandled
+	/// NullReferenceException in every overlay stress run).
+	/// </summary>
+	public static string SeasonSummary(IReadOnlyList<BaseItemDto>? episodes)
 	{
-		if (episodes.Count == 0)
+		if (episodes is not { Count: > 0 })
 		{
 			return "";
 		}

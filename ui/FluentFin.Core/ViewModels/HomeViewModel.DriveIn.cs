@@ -103,34 +103,15 @@ public static class DriveInHome
 	/// <summary>"5 in progress" beside the Continue watching marquee; empty when nothing is.</summary>
 	public static string InProgressText(int count) => count <= 0 ? "" : $"{count} in progress";
 
-	/// <summary>The sign's link to everything up next: "All of Up next (9)".</summary>
+	/// <summary>The sign's link to everything up next: "All of Up next (9)" (the grid it opens is "Up next" too).</summary>
 	public static string AllUpNextText(int count) => $"All of Up next ({count})";
 
-	/// <summary>What Narrator reads for one of the sign's entries, the button that plays it: "Play A Signal in Winter, season 2, episode 1".</summary>
-	public static string ComingUpName(BaseItemDto? dto)
-	{
-		if (dto is null)
-		{
-			return "Play";
-		}
-
-		var title = dto.Type == BaseItemDto_Type.Episode && !string.IsNullOrWhiteSpace(dto.SeriesName) ? dto.SeriesName.Trim() : dto.Name?.Trim() ?? "";
-		var parts = new List<string> { $"Play {title}".TrimEnd() };
-		if (dto.Type == BaseItemDto_Type.Episode)
-		{
-			if (dto.ParentIndexNumber is { } season)
-			{
-				parts.Add(string.Create(CultureInfo.InvariantCulture, $"season {season}"));
-			}
-
-			if (dto.IndexNumber is { } episode)
-			{
-				parts.Add(string.Create(CultureInfo.InvariantCulture, $"episode {episode}"));
-			}
-		}
-
-		return string.Join(", ", parts);
-	}
+	/// <summary>
+	/// What Narrator reads for one of the sign's entries, the button that opens it: what the entry shows, the series, the code
+	/// and the episode ("A Signal in Winter S2 E1 Static"), as a card is named. Nixie 1.4.0 (the UX review's X12): Home's
+	/// next-up item opens its episode in every theme (in 1.3.0 the sign's entries played it, Classic's and Cinematic's opened it).
+	/// </summary>
+	public static string UpNextName(BaseItemDto? dto) => ItemLabels.ActionTarget(dto);
 
 	/// <summary>The title a sign entry or a card shows on its first line: the series of an episode, else the item's name.</summary>
 	public static string EntryTitle(BaseItemDto? dto) =>
@@ -147,7 +128,11 @@ public static class DriveInHome
 /// </summary>
 public static class DriveInText
 {
-	/// <summary>An episode's code as tubes show it, "S1·E03" (two digits for the episode, as a showtime board does); "E7" with no season; empty without a number.</summary>
+	/// <summary>
+	/// An episode's code as tubes show it, "S1 E03": the app's one shape ("S1 E4", ItemLabels.EpisodeCode), the episode in two
+	/// digits as a showtime board pads it (Nixie 1.4.0, the UX review's DI-m5: it was "S1·E03"); "E07" with no season; empty
+	/// without a number.
+	/// </summary>
 	public static string NixieCode(BaseItemDto? dto) => NixieCode(dto?.ParentIndexNumber, dto?.IndexNumber, dto?.IndexNumberEnd);
 
 	/// <inheritdoc cref="NixieCode(BaseItemDto?)"/>
@@ -164,7 +149,7 @@ public static class DriveInText
 			code += string.Create(CultureInfo.InvariantCulture, $"-{last:00}");
 		}
 
-		return season is { } s ? string.Create(CultureInfo.InvariantCulture, $"S{s}·{code}") : code;
+		return season is { } s ? string.Create(CultureInfo.InvariantCulture, $"S{s} {code}") : code;
 	}
 
 	/// <summary>Two-digit episode number for a showtime board's tubes: "03"; "12"; "103".</summary>

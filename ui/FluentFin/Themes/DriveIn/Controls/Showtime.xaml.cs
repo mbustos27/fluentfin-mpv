@@ -97,10 +97,14 @@ public sealed partial class Showtime : UserControl
 		UpdateNext();
 	}
 
-	/// <summary>NEXT on the row Play starts; the watched mark otherwise when watched.</summary>
+	/// <summary>The row is the one Play starts (Narrator hears ", up next").</summary>
+	internal bool IsUpNext { get; private set; }
+
+	/// <summary>UP NEXT on the row Play starts (Nixie 1.4.0: the one label, "Up next"); the watched mark otherwise when watched.</summary>
 	internal void UpdateNext()
 	{
 		var next = Dto?.Id is { } id && ShowtimesList.Of(this)?.Next?.Id == id;
+		IsUpNext = next;
 		NextText.Visibility = next ? Visibility.Visible : Visibility.Collapsed;
 		if (next)
 		{
@@ -216,7 +220,7 @@ internal sealed partial class ShowtimeAutomationPeer(Showtime owner) : Framework
 	protected override string GetNameCore()
 	{
 		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? ItemLabels.EpisodeRowName(owner.Dto) : name;
+		return string.IsNullOrEmpty(name) ? FluentFin.Controls.UpNextMark.Spoken(ItemLabels.EpisodeRowName(owner.Dto), owner.IsUpNext) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;

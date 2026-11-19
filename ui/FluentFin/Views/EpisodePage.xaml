@@ -34,7 +34,9 @@
                     <controls:ItemHero.PrimaryActions>
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <!--  fluentfin-mpv: a named Play / "Resume at 12:34", "Play from start" next to it (ux-review I2, I3)  -->
+                            <!--  Nixie 1.4.0 (the UX review's DI-M5): named, so the keyboard comes back to it after the player (ItemPagePlace)  -->
                             <Button
+                                x:Name="PlayButton"
                                 AutomationProperties.Name="{x:Bind ViewModel.PlayLabel, Mode=OneWay}"
                                 Command="{x:Bind ViewModel.PlayCommand}"
                                 Style="{StaticResource NixiePrimaryButtonStyle}">
@@ -115,7 +117,7 @@
                     </Grid>
                     <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" /></StackPanel>
                     <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.HasNextEpisode, Mode=OneWay}">
-                        <TextBlock AutomationProperties.HeadingLevel="Level2" Style="{StaticResource GlassSectionTitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="Next up" />
+                        <TextBlock AutomationProperties.HeadingLevel="Level2" Style="{StaticResource GlassSectionTitleTextBlockStyle}" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="Up next" />
                         <controls:EpisodeRow Dto="{x:Bind ViewModel.NextEpisode, Mode=OneWay}" />
                     </StackPanel>
                     <controls:CastRow Heading="Cast &amp; crew" People="{x:Bind ViewModel.CastAndCrew, Mode=OneWay}" />

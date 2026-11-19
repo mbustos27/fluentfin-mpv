@@ -133,7 +133,10 @@
                             Spacing="2" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Spacing="6">
-                        <TextBlock Style="{StaticResource CinematicKickerTextBlockStyle}" Text="SUBTITLES" />
+                        <TextBlock
+                            x:Name="TracksSubtitlesHeading"
+                            Style="{StaticResource CinematicKickerTextBlockStyle}"
+                            Text="SUBTITLES" />
                         <StackPanel
                             x:Name="SubtitleList"
                             AutomationProperties.Name="Subtitles"

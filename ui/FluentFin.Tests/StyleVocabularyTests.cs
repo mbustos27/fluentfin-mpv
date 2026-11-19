@@ -327,8 +327,10 @@ public sealed class StyleVocabularyTests
 		var player = Ui("Controls/MpvPlayerControls.xaml");
 		Assert.Equal("{StaticResource NixiePlayerButtonStyle}", (string?)Keyed(player, "PlayerButton").Attribute("BasedOn"));
 		Assert.Equal("{StaticResource NixiePlayerPlayButtonStyle}", (string?)Keyed(player, "PlayerPlayButton").Attribute("BasedOn"));
-		var pill = Keyed(player, "PlayerPill");
-		Assert.Equal("{StaticResource NixieButtonTemplate}", (string?)pill.Elements().Single(e => (string?)e.Attribute("Property") == "Template").Attribute("Value"));
+		// the prompts (the player stream, 1.4.0): the player roles, Secondary and Primary 44 (PlayerPill went with them)
+		Assert.Equal("{StaticResource NixiePlayerPromptButtonStyle}", (string?)Keyed(player, "PlayerPromptStyle").Attribute("BasedOn"));
+		Assert.Equal("{StaticResource NixiePlayerPromptPrimaryButtonStyle}", (string?)Keyed(player, "PlayerPromptPrimaryStyle").Attribute("BasedOn"));
+		Assert.Null(player.Descendants().SingleOrDefault(e => (string?)e.Attribute(X + "Key") == "PlayerPill"));
 		Assert.DoesNotContain(Keyed(player, "PlayerButton").Elements(), e => (string?)e.Attribute("Property") is "CornerRadius" or "Width" or "Height");
 	}
 

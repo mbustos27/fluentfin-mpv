@@ -202,7 +202,7 @@ function KM-FocusName { $f = KM-Focus; if ($f) { if ($f.automationId) { $f.autom
 $kmKeys = @{
     'Space' = 0x20; 'Enter' = 0x0D; 'Esc' = 0x1B; 'Tab' = 0x09; 'Left' = 0x25; 'Up' = 0x26; 'Right' = 0x27; 'Down' = 0x28; 'Home' = 0x24
     'End' = 0x23; 'PageUp' = 0x21; 'PageDown' = 0x22; 'Backspace' = 0x08; 'F11' = 0x7A; '[' = 0xDB; ']' = 0xDD; 'BackKey' = 0xA6
-    '0' = 0x30; '5' = 0x35; '9' = 0x39; 'Numpad3' = 0x63; 'Apps' = 0x5D; '/' = 0xBF
+    '0' = 0x30; '5' = 0x35; '9' = 0x39; 'Numpad3' = 0x63; 'Apps' = 0x5D; '/' = 0xBF; 'F1' = 0x70
 }
 function KM-Vk([string]$Name) { if ($kmKeys.ContainsKey($Name)) { $kmKeys[$Name] } else { [int][char]$Name.ToUpperInvariant() } }
 
@@ -565,6 +565,286 @@ KM-ConnectPipe
 $kmFirst = KM-State
 Say ("keys-matrix ${kmTheme}: start {0}, focus {1}, keyboard window {2}" -f ($kmFirst | ConvertTo-Json -Compress), (KM-FocusName), [KeysMatrix]::ClassOf([KeysMatrix]::FocusWindow($script:hwnd)))
 
+# ==== 9. the overlay after each transition (Nixie 1.4.0) ===========================================================================
+# The user's report on 1.3.1: "we've lost the player controls overlay" (it came back once the player was opened again). After
+# every transition the bars must show on a pointer move and on a key, drawn (not only present to UI Automation: a PrintWindow
+# of the window, Play/Pause's own fill where UI Automation puts it), and hide again by themselves while playing. Run alone with
+# NIXIE_MATRIX_ONLY=overlay (run-offscreen.ps1 -Script season,play -Then offscreen\then-keys-matrix.ps1).
+if (-not ('KmOverlay' -as [type])) {
+    Add-Type -ReferencedAssemblies System.Drawing @"
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+
+public static class KmOverlay {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+
+  // the mean colour (r, g, b) of a square of side 2*half+1 at a point on the screen, from a PrintWindow of the window (what is
+  // drawn, composition included); null when the point is outside it
+  public static int[] Sample(IntPtr main, int x, int y, int half, string save) {
+    RECT r; if (!GetWindowRect(main, out r)) return null;
+    int w = r.R - r.L, h = r.B - r.T;
+    using (var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb)) {
+      using (var g = Graphics.FromImage(bmp)) { var hdc = g.GetHdc(); try { PrintWindow(main, hdc, 2); } finally { g.ReleaseHdc(hdc); } }
+      if (!string.IsNullOrEmpty(save)) bmp.Save(save, ImageFormat.Png);
+      int cx = x - r.L, cy = y - r.T; long sr = 0, sg = 0, sb = 0, n = 0;
+      for (int dy = -half; dy <= half; dy++) for (int dx = -half; dx <= half; dx++) {
+        int px = cx + dx, py = cy + dy; if (px < 0 || py < 0 || px >= w || py >= h) continue;
+        var c = bmp.GetPixel(px, py); sr += c.R; sg += c.G; sb += c.B; n++;
+      }
+      return n == 0 ? null : new[] { (int)(sr / n), (int)(sg / n), (int)(sb / n) };
+    }
+  }
+}
+"@
+}
+
+$script:kmOvRef = $null      # Play/Pause's fill as drawn the first time (the theme's accent)
+$script:kmOvRect = $null     # where Play/Pause was last seen
+$script:kmOvShot = 0
+$kmOvDir = Join-Path $kmDir 'overlay'
+New-Item -ItemType Directory -Force $kmOvDir | Out-Null
+
+# the point sampled: inside Play/Pause's circle, below its glyph (its fill alone)
+function KM-OvPoint($Rect) { @([int]($Rect.X + $Rect.Width / 2), [int]($Rect.Y + $Rect.Height * 0.84)) }
+function KM-OvNear([int[]]$A, [int[]]$B) { $A -and $B -and ([math]::Abs($A[0] - $B[0]) + [math]::Abs($A[1] - $B[1]) + [math]::Abs($A[2] - $B[2])) -le 60 }
+# the overlay now: Ui (Play/Pause in UI Automation), Drawn (its fill drawn where it was last seen), the colour there
+function KM-Overlay([string]$Save) {
+    $pp = Find-Ui -Id 'PlayPauseButton'
+    if ($pp) { $script:kmOvRect = [OffscreenUi]::RectOf($pp) }
+    if (-not $script:kmOvRect) { return [pscustomobject]@{ Ui = [bool]$pp; Drawn = $false; Colour = $null } }
+    $p = KM-OvPoint $script:kmOvRect
+    $file = if ($Save) { Join-Path $kmOvDir ("{0:D3}-{1}.png" -f (++$script:kmOvShot), ($Save -replace '[^A-Za-z0-9]+', '-')) } else { $null }
+    $c = [KmOverlay]::Sample($script:hwnd, $p[0], $p[1], 3, $file)
+    if ($pp -and -not $script:kmOvRef -and $c -and $c[0] -gt 150) { $script:kmOvRef = $c; Say "keys-matrix ${kmTheme}: Play/Pause's fill as drawn: $($c -join ',')" }
+    [pscustomobject]@{ Ui = [bool]$pp; Drawn = [bool](KM-OvNear $c $script:kmOvRef); Colour = $(if ($c) { $c -join ',' } else { 'none' }) }
+}
+# the harness's pointer move over the video (HarnessPointer's Move: the player's own PointerMoved), which also logs the
+# overlay as XAML has it ("[harness] overlay ...")
+function KM-OvMove { $p = KM-VideoPoint; [void][KeysMatrix]::Pointer($script:hwnd, 4, $p[0], $p[1], 0) }
+function KM-OvWaitHidden([double]$Seconds = 8) { [bool](Wait-Until { if (-not (KM-Bars)) { $true } } -Seconds $Seconds -PollMs 200) }
+function KM-OvWaitDrawn([double]$Seconds = 2.5) {
+    $s = $null
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    do { Start-Sleep -Milliseconds 250; $s = KM-Overlay } while (-not ($s.Ui -and $s.Drawn) -and (Get-Date) -lt $deadline)
+    $s
+}
+
+# after a transition: a pointer move shows the bars, drawn; playing, they hide by themselves (and are no longer drawn); a key
+# shows them again, drawn; and they hide again
+function KM-OvCase([string]$After) {
+    # the window minimized by anything but the activation case is a finding of its own (then put back, so the case still runs)
+    if ([KmOverlay]::IsIconic($script:hwnd)) {
+        KM-Row 'overlay' $After 'the window is not minimized' $false 'it was: restored'
+        [void][KmOverlay]::ShowWindow($script:hwnd, 9); Start-Sleep -Milliseconds 1200
+    }
+    KM-OvMove
+    $s = KM-OvWaitDrawn
+    if (-not ($s.Ui -and $s.Drawn)) { $s = KM-Overlay "$After-move" }
+    KM-Row 'overlay' $After 'a pointer move shows the bars, drawn' ($s.Ui -and $s.Drawn) "in UI Automation $($s.Ui), drawn $($s.Drawn) ($($s.Colour); the accent $($script:kmOvRef -join ',')), full $((Get-WindowState $script:hwnd).FullScreen), paused $(KM-Bool 'pause')"
+    if (KM-Bool 'pause') { return }
+    $hidden = KM-OvWaitHidden
+    # the fade out takes 0.3 s after UI Automation has let them go
+    Start-Sleep -Milliseconds 700
+    $h = KM-Overlay
+    KM-Row 'overlay' $After 'playing, they hide by themselves' ($hidden -and -not $h.Ui -and -not $h.Drawn) "in UI Automation $($h.Ui), drawn $($h.Drawn) ($($h.Colour))"
+    # a key that changes nothing for good: a volume step down and back up
+    [void](KM-Press 'Down'); Start-Sleep -Milliseconds 200; [void](KM-Press 'Up')
+    $k = KM-OvWaitDrawn
+    if (-not ($k.Ui -and $k.Drawn)) { $k = KM-Overlay "$After-key" }
+    KM-Row 'overlay' $After 'a key shows the bars, drawn' ($k.Ui -and $k.Drawn) "in UI Automation $($k.Ui), drawn $($k.Drawn) ($($k.Colour))"
+    $hidden = KM-OvWaitHidden
+    KM-Row 'overlay' $After 'and they hide again' $hidden ''
+}
+
+# the app loses the activation and gets it back: its window minimized, then restored and brought to the front (a window of
+# the harness's own could not take the foreground on the private desktop)
+function KM-OvDeactivate([double]$Seconds = 2) {
+    [void][KmOverlay]::ShowWindow($script:hwnd, 6)
+    Start-Sleep -Milliseconds 300
+    $away = [KmOverlay]::GetForegroundWindow() -ne $script:hwnd
+    Start-Sleep -Milliseconds ([int]($Seconds * 1000))
+    [void][KmOverlay]::ShowWindow($script:hwnd, 9)
+    [void][KmOverlay]::SetForegroundWindow($script:hwnd)
+    # the private desktop does not always hand the foreground back to it: restored (not minimized) is what counts here
+    $front = [bool](Wait-Until { if ([KmOverlay]::GetForegroundWindow() -eq $script:hwnd) { $true } } -Seconds 4 -PollMs 200)
+    $back = -not [KmOverlay]::IsIconic($script:hwnd)
+    Start-Sleep -Milliseconds 800
+    Say "keys-matrix ${kmTheme}: activation away $away, restored $back, in front again $front"
+    @($away, $back, $front)
+}
+
+# out of the player (when in it) and in again from the season page's Play: by the keyboard (the focus put on Play, Enter) or by
+# a click on it (the hook); then nothing until mpv plays. Leaves $script:kmOvFocusAtOpen (what has the keyboard then).
+function KM-OvOpen([string]$How) {
+    if ((Find-Ui -Id 'PlayPauseButton') -or (Find-Ui -Id 'SeekBar') -or $script:page -eq 'player') {
+        KM-SetWindowed
+        [void](KM-Press 'BackKey')
+        [void](Wait-Until { if (-not (Find-Ui -Id 'PlayPauseButton') -and -not (Find-Ui -Id 'SeekBar')) { $true } } -Seconds 10 -PollMs 200)
+        Start-Sleep -Seconds 2
+    }
+    [KeysMatrix]::Close()
+    $script:page = 'season'
+    $play = Wait-Until { @([OffscreenUi]::All($script:hwnd, $script:ui.Id) | Where-Object { try { $_.Cached.ControlType.ProgrammaticName -eq 'ControlType.Button' -and $_.Cached.Name -match '^(Play|Resume) S\d' -and -not $_.Cached.IsOffscreen } catch { $false } }) | Select-Object -First 1 } -Seconds 12 -PollMs 300
+    if (-not $play) { KM-Row 'overlay' "opened by $How" 'the season page''s Play' $false 'not found'; return $false }
+    if ($How -eq 'key') { [void][OffscreenUi]::SetFocus($play); Start-Sleep -Milliseconds 400; [void](KM-Press 'Enter') }
+    else { [void](KM-Click -At (KM-Centre $play)) }
+    $shown = Wait-Until { Find-Ui -Id 'PlayPauseButton' } -Seconds 40 -PollMs 150
+    $script:page = 'player'
+    KM-ConnectPipe
+    $playing = Wait-Until { $t = KM-Num 'time-pos'; if ($null -ne $t -and $t -gt 0.5 -and -not (KM-Bool 'pause')) { $true } } -Seconds 30 -PollMs 150
+    $script:kmOvFocusAtOpen = "$(KM-FocusName) (window $([KeysMatrix]::ClassOf([KeysMatrix]::FocusWindow($script:hwnd))))"
+    KM-Row 'overlay' "opened by $How" 'the player plays' ([bool]$shown -and [bool]$playing) "focus $script:kmOvFocusAtOpen"
+    [bool]$playing
+}
+
+# Nixie 1.4.0, the user's repro of the lost overlay: "i opened the player and then hit the spacebar and it like locked me in
+# keyboard only mode", "if u spacebar before clicking into it": open the player (by the keyboard, and by a click on Play), press
+# Space before any click on the player (at once, and once the bars have hidden), then move the mouse: the bars must show,
+# drawn; then Space, mouse, key, mouse, and the reverse
+function KM-OvSpaceFirst {
+    foreach ($how in 'key', 'click') {
+        foreach ($when in 'at once', 'once the bars hid') {
+            $case = "opened by $how, Space $when"
+            if (-not (KM-OvOpen $how)) { continue }
+            if ($when -ne 'at once') { [void](KM-OvWaitHidden 10) }
+            $p0 = KM-Bool 'pause'; $f0 = "$(KM-FocusName) (window $([KeysMatrix]::ClassOf([KeysMatrix]::FocusWindow($script:hwnd))))"
+            $sent = KM-Press 'Space'
+            [void](Wait-Until { if ((KM-Bool 'pause') -ne $p0) { $true } } -Seconds 3 -PollMs 100)
+            $p1 = KM-Bool 'pause'
+            KM-Row 'overlay' $case 'Space (the first input) paused' ($sent -and $p1 -ne $p0) "sent $sent to $script:kmLastTarget; focus before $f0, after $(KM-FocusName); paused $p0 -> $p1"
+            KM-OvMove
+            $s = KM-OvWaitDrawn
+            if (-not ($s.Ui -and $s.Drawn)) { $s = KM-Overlay "$case-then-mouse" }
+            KM-Row 'overlay' $case 'then the mouse shows the bars, drawn' ($s.Ui -and $s.Drawn) "in UI Automation $($s.Ui), drawn $($s.Drawn) ($($s.Colour)), focus $(KM-FocusName)"
+            # Space again (playing): the mouse, the bars hiding, a key, hiding again
+            $p0 = KM-Bool 'pause'; [void](KM-Press 'Space'); [void](Wait-Until { if ((KM-Bool 'pause') -ne $p0) { $true } } -Seconds 3 -PollMs 100)
+            KM-OvCase "$case, then Space again"
+            # the reverse: the mouse, then Space, then the mouse
+            KM-OvMove; Start-Sleep -Milliseconds 500
+            $p0 = KM-Bool 'pause'; [void](KM-Press 'Space'); [void](Wait-Until { if ((KM-Bool 'pause') -ne $p0) { $true } } -Seconds 3 -PollMs 100)
+            KM-OvMove
+            $s = KM-OvWaitDrawn
+            KM-Row 'overlay' $case 'the mouse, Space, the mouse: the bars, drawn' ($s.Ui -and $s.Drawn) "in UI Automation $($s.Ui), drawn $($s.Drawn) ($($s.Colour)), paused $(KM-Bool 'pause')"
+            if (KM-Bool 'pause') { [void](KM-Press 'Space'); Start-Sleep -Milliseconds 600 }
+            KM-OvCase "$case, the mouse and Space in turn"
+        }
+    }
+}
+
+# Nixie 1.4.0 (the bug hunt's m1): F1's shortcut sheet over the player is modal: every player key under it changes nothing,
+# and Esc closes the sheet only (then the player's Esc as before)
+function KM-SheetSection {
+    foreach ($kmFull in @($false, $true)) {
+        $case = if ($kmFull) { 'the shortcut sheet open, full screen' } else { 'the shortcut sheet open, windowed' }
+        KM-Ready $true
+        if ($kmFull) { [void](KM-Press 'F'); [void](Wait-WindowState $script:hwnd $true 6); Start-Sleep -Milliseconds 800 }
+        [void](KM-Press 'F1')
+        $open = [bool](Wait-Until { Find-Ui -Name 'Keyboard shortcuts' } -Seconds 4 -PollMs 150)
+        KM-Row 'dialog over the player' $case 'F1 opens it' $open "focus $(KM-FocusName)"
+        if (-not $open) { KM-SetWindowed; continue }
+        foreach ($kmChord in @('F', 'M', '0', '5', 'K', 'J', 'L', 'Left', 'Up', 'S', 'Shift+N')) {
+            $t = [KeysMatrix]::Get('media-title')
+            KM-KeyIsNotThePlayers 'dialog over the player' $case $kmChord { ([KeysMatrix]::Get('media-title') -eq $t) -and [bool](Find-Ui -Name 'Keyboard shortcuts') }
+        }
+        $kmB = KM-State -NoUi
+        [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 700
+        $kmA = KM-State -NoUi
+        KM-Row 'dialog over the player' $case 'Esc closes the sheet only' ((-not (Find-Ui -Name 'Keyboard shortcuts')) -and $kmA.Full -eq $kmB.Full -and $kmA.Paused -eq $kmB.Paused) "full $($kmB.Full)->$($kmA.Full), paused $($kmB.Paused)->$($kmA.Paused)"
+        [void](KM-Key 'dialog over the player' "$case, then closed" 'M')
+        [void](KM-Key 'dialog over the player' "$case, then closed" 'M')
+        KM-SetWindowed
+    }
+}
+
+function KM-OverlaySection {
+    # first: the user's repro (the player opened again for each); NIXIE_OVERLAY_PART=space runs it alone
+    KM-OvSpaceFirst
+    if ($env:NIXIE_OVERLAY_PART -eq 'space') { return }
+    KM-Ready $false
+    KM-OvCase 'the player playing'
+    # pause and play by click, then by key (from the bars hidden too)
+    KM-ShowBars; [void](KM-Click 'PlayPauseButton'); KM-OvCase 'a click paused'
+    KM-ShowBars; [void](KM-Click 'PlayPauseButton'); KM-OvCase 'a click played'
+    [void](KM-OvWaitHidden); [void](KM-Press 'K'); Start-Sleep -Milliseconds 600; KM-OvCase 'K paused (bars hidden)'
+    [void](KM-Press 'Space'); Start-Sleep -Milliseconds 600; KM-OvCase 'Space played'
+    [void](KM-OvWaitHidden); [void](KM-Click -At (KM-VideoPoint)); Start-Sleep -Milliseconds 600; KM-OvCase 'a click on the video paused (bars hidden)'
+    [void](KM-Click -At (KM-VideoPoint)); Start-Sleep -Milliseconds 600; KM-OvCase 'a click on the video played'
+    # double click into full screen and out (from the bars hidden, and shown)
+    [void](KM-OvWaitHidden); [void](KM-Click -At (KM-VideoPoint) -Double); [void](Wait-WindowState $script:hwnd $true 5); Start-Sleep -Milliseconds 800
+    KM-OvCase 'a double click into full screen (bars hidden)'
+    KM-ShowBars; [void](KM-Click -At (KM-VideoPoint) -Double); [void](Wait-WindowState $script:hwnd $false 5); Start-Sleep -Milliseconds 800
+    KM-OvCase 'a double click out of full screen'
+    [void](KM-Press 'F'); [void](Wait-WindowState $script:hwnd $true 5); Start-Sleep -Milliseconds 800; KM-OvCase 'F into full screen'
+    [void](KM-Press 'Esc'); [void](Wait-WindowState $script:hwnd $false 5); Start-Sleep -Milliseconds 800; KM-OvCase 'Esc out of full screen'
+    # the menus: opened by a click, closed by Esc
+    foreach ($id in 'VolumeButton', 'SpeedButton', 'TracksButton', 'ChaptersButton') {
+        KM-SetPaused $false; KM-ShowBars
+        if (KM-Click $id) { Start-Sleep -Milliseconds 500; [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 600; KM-OvCase "$id's menu opened and closed" }
+        else { KM-Row 'overlay' "$id's menu" 'opened' $false 'the button is not shown' }
+    }
+    if ($kmTheme -eq 'Cinematic') {
+        foreach ($tab in 'Info', 'Chapters') {
+            KM-ShowBars
+            if (KM-Click -Name $tab) { Start-Sleep -Milliseconds 700; [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 600; KM-OvCase "Cinematic's $tab panel opened and closed" }
+            else { KM-Row 'overlay' "Cinematic's $tab panel" 'opened' $false 'the tab is not shown' }
+        }
+    }
+    [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 600; KM-OvCase 'Esc in a window'
+    # the app loses the activation and gets it back: the bars shown, then hidden
+    KM-ShowBars; $a = KM-OvDeactivate; KM-Row 'overlay' 'activation' 'minimized, then restored' ($a[0] -and $a[1]) "away $($a[0]), restored $($a[1]), in front again $($a[2])"
+    KM-OvCase 'the activation lost and back (bars shown)'
+    [void](KM-OvWaitHidden); $a = KM-OvDeactivate 5; KM-OvCase 'the activation lost and back (bars hidden)'
+    # the seek bar dragged; the wheel
+    KM-ShowBars; [void](KM-Drag 'SeekBar' 0.2 0.4); KM-OvCase 'a drag of the seek bar'
+    [void](KM-OvWaitHidden); KM-Wheel -120; KM-Wheel 120; KM-OvCase 'the wheel (bars hidden)'
+    # the next and previous episode: keys and the bar's buttons
+    [void](KM-Key 'overlay' 'next episode' 'Shift+N' 12); Start-Sleep -Seconds 3; KM-OvCase 'Shift+N (the next episode)'
+    [void](KM-Key 'overlay' 'previous episode' 'Shift+P' 12); Start-Sleep -Seconds 3; KM-OvCase 'Shift+P (the previous episode)'
+    KM-ShowBars; $t = [KeysMatrix]::Get('media-title'); [void](KM-Click 'NextButton')
+    [void](Wait-Until { if ([KeysMatrix]::Get('media-title') -ne $t) { $true } } -Seconds 12 -PollMs 300); Start-Sleep -Seconds 3; KM-OvCase 'the Next button'
+    KM-ShowBars; $t = [KeysMatrix]::Get('media-title'); [void](KM-Click 'PreviousButton')
+    [void](Wait-Until { if ([KeysMatrix]::Get('media-title') -ne $t) { $true } } -Seconds 12 -PollMs 300); Start-Sleep -Seconds 3; KM-OvCase 'the Previous button'
+    # the countdown's auto-play into the next episode (the last seconds, the bars hidden)
+    KM-SetPaused $false; [void](KM-Press '9'); Start-Sleep -Milliseconds 600
+    $t = [KeysMatrix]::Get('media-title')
+    for ($i = 0; $i -lt 8 -and (KM-Num 'time-pos') -lt ((KM-Num 'duration') - 25); $i++) { [void](KM-Press 'Shift+Right'); Start-Sleep -Milliseconds 400 }
+    $next = Wait-Until { if ([KeysMatrix]::Get('media-title') -ne $t) { $true } } -Seconds 60 -PollMs 500
+    KM-Row 'overlay' 'the countdown' 'played the next episode by itself' ([bool]$next) "from '$t' to '$([KeysMatrix]::Get('media-title'))'"
+    Start-Sleep -Seconds 3; KM-OvCase 'the countdown played the next episode'
+    # leaving the player and coming back
+    [void](KM-Press 'BackKey')
+    [void](Wait-Until { if (-not (Find-Ui -Id 'PlayPauseButton') -and -not (Find-Ui -Id 'SeekBar')) { $true } } -Seconds 10 -PollMs 200)
+    $script:page = 'season'
+    $row = Wait-Until { Find-EpisodeRow } -Seconds 12 -PollMs 300
+    if ($row) {
+        [void](Invoke-Element $row)
+        $shown = Wait-Until { Find-Ui -Id 'PlayPauseButton' } -Seconds 40 -PollMs 200
+        Start-Sleep -Seconds 3
+        KM-ConnectPipe
+        KM-Row 'overlay' 'the player again' 'opened' ([bool]$shown) ''
+        KM-SetPaused $false
+        KM-OvCase 'the player left and opened again'
+    }
+    else { KM-Row 'overlay' 'the player again' 'opened' $false 'no episode row' }
+}
+
+if ($env:NIXIE_MATRIX_ONLY -eq 'overlay') {
+    if ($env:NIXIE_OVERLAY_PART -ne 'space') { KM-SheetSection }
+    KM-OverlaySection
+    [KeysMatrix]::Close()
+    [IO.File]::WriteAllText((Join-Path $kmDir 'keys-matrix.json'), (ConvertTo-Json -InputObject @($kmRows) -Depth 4), [Text.UTF8Encoding]::new($false))
+    return
+}
+
 # ==== 0. the next episode and back (Shift+N, Shift+P): on the second episode Previous is enabled too ==========================
 KM-Ready $false
 [void](KM-Key 'all keys' 'playing, bars shown' 'Shift+N' 12)
@@ -671,7 +951,9 @@ KM-Ready $true
 [void](KM-Key 'after the mouse' '6. click Volume, Esc, then' 'Space')
 
 # ==== 5. panels: the tracks panel (a flyout) and the volume flyout, then Cinematic's tabs panel ===========================================
-foreach ($kmPanel in @(@{ Button = 'TracksButton'; Inside = 'SubtitleTracks'; Name = 'tracks panel' }, @{ Button = 'VolumeButton'; Inside = 'MuteButton'; Name = 'volume flyout' }, @{ Button = 'SpeedButton'; Inside = ''; Name = 'speed menu' })) {
+# Nixie 1.4.0: in Cinematic the bar's Audio and subtitles button opens its player panel's part (one UI for the job), not the flyout
+$kmTracksInside = if ($kmTheme -eq 'Cinematic') { 'TracksSubtitlesHeading' } else { 'SubtitleTracks' }
+foreach ($kmPanel in @(@{ Button = 'TracksButton'; Inside = $kmTracksInside; Name = 'tracks panel' }, @{ Button = 'VolumeButton'; Inside = 'MuteButton'; Name = 'volume flyout' }, @{ Button = 'SpeedButton'; Inside = ''; Name = 'speed menu' }, @{ Button = 'ChaptersButton'; Inside = ''; Name = 'chapters menu (1.4.0)' })) {
     KM-Ready $true
     if (-not (KM-Click $kmPanel.Button)) { KM-Row 'panels' $kmPanel.Name 'open' $false 'its button is not shown'; continue }
     # (the speed menu is a window of its own, outside the main window's UI Automation tree: its item has the keyboard)
@@ -781,6 +1063,10 @@ KM-Ready $true
 $kmE = Find-Ui -Id 'PlayPauseButton'; [void][OffscreenUi]::SetFocus($kmE); Start-Sleep -Milliseconds 300
 [void](KM-Key 'paused, focus on a control' 'PlayPauseButton' 'Space')
 KM-SetPaused $true
+
+# ==== 9 (defined above): F1's sheet over the player is modal; the overlay after each transition, before the theme switch ======
+KM-SheetSection
+KM-OverlaySection
 
 # ==== 8. the Back key leaves; a theme switch mid-session, then the player again =========================================================
 KM-SetWindowed

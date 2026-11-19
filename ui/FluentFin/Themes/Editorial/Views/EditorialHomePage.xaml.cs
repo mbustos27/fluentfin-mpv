@@ -606,7 +606,8 @@ public sealed partial class EditorialHomePage : Page
 
 	public static double ProgressWidth(double percent, double width) => Math.Max(3, width * Math.Clamp(percent, 0, 100) / 100);
 
-	public static string PlayName(BaseItemViewModel item) => ItemLabels.PlayAction(item.Dto);
+	/// <summary>Nixie 1.4.0: an Up next line's tooltip, what it opens ("Iron Lighthouses S3 E4 The Lamp Room").</summary>
+	public static string OpenName(BaseItemViewModel item) => ItemLabels.ActionTarget(item.Dto);
 
 	/// <summary>The narrow tiles' one line: what is left, or "Next episode".</summary>
 	public static string ShortDetail(BaseItemViewModel item, bool resume) =>

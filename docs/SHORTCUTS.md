@@ -85,6 +85,8 @@ restyle and re-lay out the controls and never change a key (`PlayerKeysContractT
 - **A held key** repeats only the seeks, the volume, the speed steps and the subtitle delay; a held Space, K, M, F, F11,
   Alt+Enter, Shift+N, Shift+P, S, C, V, B, Home, a digit or Backspace does its job once.
 - **Escape** stays the page's: an open theme panel closes first, then full screen ends; in a window it shows the controls.
+- **A dialog over the player** (F1's sheet, a confirmation) has every key (1.4.0: the router sees the open dialog itself,
+  `PlayerFocus.Modal`; in 1.3.1 F, M, the digits, K and Shift+N still acted under the sheet). Esc and F1 close the sheet.
 - **Not in the key matrix, by design** (`tools\ui-harness\keys-matrix.ps1` checks every other context in all four themes):
   paused with the controls auto-hidden (a paused player always shows its controls; they hide only while playing), and the
   keyboard on Previous on a first episode (disabled there, so it cannot hold the focus: the matrix plays the second episode).

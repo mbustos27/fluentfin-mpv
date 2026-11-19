@@ -331,6 +331,23 @@ public sealed class PlayerKeyRouterTests
 		Assert.True(PlayerKeyRouter.Repeats(decision.Action!.Value));
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (the bug hunt's m1): a dialog over the player (F1's shortcut sheet): every key is the dialog's, the player
+	/// underneath changes nothing; in 1.3.1 F, M, 5, K and Shift+N acted under the sheet.
+	/// </summary>
+	[Fact]
+	public void UnderADialog_NoKeyIsThePlayers()
+	{
+		foreach (var row in Table)
+		{
+			foreach (var repeat in new[] { false, true })
+			{
+				var decision = PlayerKeyRouter.Route(row.Key, row.Control, row.Shift, row.Alt, repeat, videoShown: true, PlayerFocus.Modal);
+				Assert.True(decision.Route == PlayerKeyRoute.Element, $"{row}: {decision.Route}");
+			}
+		}
+	}
+
 	private static string RepoRoot { get; } = FindRepoRoot();
 
 	private static string FindRepoRoot()

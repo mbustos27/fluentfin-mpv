@@ -1,7 +1,8 @@
 # Nixie 1.3.0, the Drive-in theme's gate: the four common tasks, each one action (the concepts' table), run as a user would
 # with the keyboard or one click (UI Automation Invoke):
 #   1. resume the last thing: Home opens with Resume on the outdoor screen focused; Enter plays it;
-#   2. the next episode of a show: one entry of the Coming up sign plays it;
+#   2. the next episode of a show: one entry of the Up next sign opens it (Nixie 1.4.0: Home's next-up item opens in every
+#      theme), and its page's Play (focused) plays it with Enter;
 #   3. a letter jump in the Library: one letter tile, and a title starting with it has the focus;
 #   4. picking a season: one season tube, and the SHOWTIMES board lists that season.
 # Run with NIXIE_LAYOUT=DriveIn: run-offscreen.ps1 -Script home -Then offscreen\then-drivein-tasks.ps1
@@ -34,23 +35,28 @@ if ($dtFocused) {
     $dtPlays = DT-Playing $dtAt
     Check 'drive-in task 1: Enter resumes it (one key)' $dtPlays
     if ($dtPlays) {
-        $dtLeft = DT-LeavePlayer { Find-Ui -Name 'Coming up' -Type 'Text' }
+        $dtLeft = DT-LeavePlayer { Find-Ui -Name 'Up next' -Type 'Text' }
         Say "drive-in tasks: left the player ($(if ($dtLeft) { 'back on Home' } else { 'not back on Home: Home from its tab' }))"
-        if (-not $dtLeft) { Open-Nav 'Home'; [void](Wait-Ui -Name 'Coming up' -Type 'Text' -Seconds 15) }
+        if (-not $dtLeft) { Open-Nav 'Home'; [void](Wait-Ui -Name 'Up next' -Type 'Text' -Seconds 15) }
         DT-Settle 2000
         Shot 'drivein-tasks-home-again'
     }
 }
 
-# ---- 2. the next episode: one entry of the Coming up sign ---------------------------------------------------------------
-$dtEntry = Wait-Until { @([OffscreenUi]::All($script:hwnd, $script:ui.Id) | Where-Object { try { $_.Cached.ControlType.ProgrammaticName -eq 'ControlType.Button' -and $_.Cached.Name -match '^Play .+, season \d+, episode \d+$' } catch { $false } }) | Select-Object -First 1 } -Seconds 15 -PollMs 200
-Check 'drive-in task 2: the Coming up sign lists the next episodes' ([bool]$dtEntry) $(if ($dtEntry) { $dtEntry.Current.Name })
+# ---- 2. the next episode: one entry of the Up next sign opens it, its page's Play plays it -------------------------------
+$dtEntry = Wait-Until { @([OffscreenUi]::All($script:hwnd, $script:ui.Id) | Where-Object { try { $_.Cached.ControlType.ProgrammaticName -eq 'ControlType.Button' -and $_.Cached.Name -match ' S\d+ E\d+' -and $_.Cached.Name -notmatch '^(Play|Resume) ' } catch { $false } }) | Select-Object -First 1 } -Seconds 15 -PollMs 200
+Check 'drive-in task 2: the Up next sign lists the next episodes' ([bool]$dtEntry) $(if ($dtEntry) { $dtEntry.Current.Name })
 if ($dtEntry) {
-    $dtAt = Get-Epoch
     [void](Invoke-Element $dtEntry)
-    $dtPlays = DT-Playing $dtAt
-    Check 'drive-in task 2: one click plays the next episode' $dtPlays
-    if ($dtPlays) { [void](DT-LeavePlayer { Find-Ui -Name 'Coming up' -Type 'Text' }); DT-Settle 1500 }
+    $dtPlay = Wait-Until { @([OffscreenUi]::All($script:hwnd, $script:ui.Id) | Where-Object { try { $_.Cached.ControlType.ProgrammaticName -eq 'ControlType.Button' -and $_.Cached.Name -match '^(Play|Resume)' -and -not $_.Cached.IsOffscreen } catch { $false } }) | Select-Object -First 1 } -Seconds 15 -PollMs 200
+    Check 'drive-in task 2: one click opens the next episode' ([bool]$dtPlay) $(if ($dtPlay) { $dtPlay.Current.Name })
+    if ($dtPlay) {
+        $dtAt = Get-Epoch
+        [void](Invoke-Element $dtPlay)
+        $dtPlays = DT-Playing $dtAt
+        Check 'drive-in task 2: its Play plays it' $dtPlays
+        if ($dtPlays) { [void](DT-LeavePlayer { Find-Ui -Name 'Up next' -Type 'Text' }); DT-Settle 1500 }
+    }
 }
 
 # ---- 3. a letter jump: one tile --------------------------------------------------------------------------------------

@@ -7,7 +7,10 @@ namespace FluentFin.Core;
 /// <param name="FocusFromKeyboard">The focus got there by the keyboard (Tab, the arrows): it comes back as keyboard focus,
 /// with its ring and a card's buttons; focus a click gave comes back without them (items review, item 5).</param>
 /// <param name="SelectedSeasonId">The series page's shown season (items review, item 1).</param>
-public sealed record PagePlace(double VerticalOffset, Guid? FocusedItemId, IReadOnlyList<int>? FocusedPath, bool FocusFromKeyboard = false, Guid? SelectedSeasonId = null);
+/// <param name="FocusedName">Nixie 1.4.0 (the UX review's DI-M5): the focused element's x:Name when it has one (the page's Play,
+/// "PlayButton"), found again by name first: a path does not survive a part the page presents after it loads (Drive-in's
+/// stage), so Back from the player left the focus nowhere.</param>
+public sealed record PagePlace(double VerticalOffset, Guid? FocusedItemId, IReadOnlyList<int>? FocusedPath, bool FocusFromKeyboard = false, Guid? SelectedSeasonId = null, string? FocusedName = null);
 
 /// <summary>
 /// 1.2.0 (1.1.3 UX audit, interaction item 5): the item pages give their place back when the user returns to them

@@ -1,4 +1,5 @@
 using FluentFin.Core.Mpv;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -54,6 +55,11 @@ public sealed partial class MpvPlayerControls : UserControl
 		// Nixie 1.3.1: after any press of the mouse on the player, the keyboard is the player's (KeepKeyboardAfterPointer)
 		Root.AddHandler(PointerReleasedEvent, new PointerEventHandler(OnRootPointerReleased), handledEventsToo: true);
 		Root.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(OnRootPointerReleased), handledEventsToo: true);
+
+		// Nixie 1.4.0 (the user's "lost the player controls overlay" on 1.3.1): any move of the pointer over the player shows the
+		// bars, also one a control below it marked handled (in 1.3.1 Root heard only moves nothing had handled)
+		Root.AddHandler(PointerMovedEvent, new PointerEventHandler(OnPointerMoved), handledEventsToo: true);
+		Root.AddHandler(PointerEnteredEvent, new PointerEventHandler(OnPointerMoved), handledEventsToo: true);
 	}
 
 	public MpvControlsViewModel? Controls
@@ -83,6 +89,7 @@ public sealed partial class MpvPlayerControls : UserControl
 			self.UpdateCursor();
 			self.ReportBottomBar();
 			self.PlaceSkipButton();
+			self.RefreshChapters();
 		}
 	}
 
@@ -121,6 +128,12 @@ public sealed partial class MpvPlayerControls : UserControl
 		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible))
 		{
 			PlaceSkipButton();
+		}
+
+		if (e.PropertyName is nameof(MpvControlsViewModel.Title) or nameof(MpvControlsViewModel.ControlsVisible) && !string.Equals(_chaptersFor, Controls?.ItemId, StringComparison.OrdinalIgnoreCase))
+		{
+			// another item (its title came): its chapters
+			RefreshChapters();
 		}
 
 		if (e.PropertyName == nameof(MpvControlsViewModel.CursorHidden))
@@ -248,9 +261,116 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnTick(DispatcherQueueTimer sender, object args)
 	{
+		WakeOnCursorMove();
 		Controls?.Tick();
 		KeepKeyboardSomewhere();
 	}
+
+	// -- the mouse, whatever XAML hears (Nixie 1.4.0) ----------------------------------------------------------------------
+
+	/// <summary>Where the mouse's cursor was at the last heartbeat (screen pixels); null when it could not be read.</summary>
+	private (int X, int Y)? _lastCursor;
+
+	/// <summary>
+	/// Nixie 1.4.0, the user's report on 1.3.1: "we've lost the player controls overlay" ("i opened the player and then hit the
+	/// spacebar and it like locked me in keyboard only mode"): the keys worked, and moving the mouse never brought the bars back
+	/// until the player was opened again. Showing the bars on a move hung on XAML's pointer events reaching the player alone.
+	/// Now the heartbeat also reads the cursor itself: a cursor that moved over the player, with the window in front, shows the
+	/// bars, whichever element (or window) the pointer's input went to. No mode: a move always shows them, a key always works.
+	/// </summary>
+	private void WakeOnCursorMove()
+	{
+		var now = CursorPosition();
+		var last = _lastCursor;
+		_lastCursor = now;
+		if (now is not { } at || Controls is not { } controls || XamlRoot is null || !IsLoaded || Visibility != Visibility.Visible)
+		{
+			return;
+		}
+
+		var heard = _pointerHeard;
+		_pointerHeard = false;
+		if (CursorWakes(last, at, OverPlayer(at), InFront()))
+		{
+			if (!heard && !controls.ControlsVisible && !_missedLogged)
+			{
+				// the evidence of the 1.3.1 report, once per player: the mouse moved over the player and XAML told it nothing
+				_missedLogged = true;
+				App.GetService<Microsoft.Extensions.Logging.ILogger<MpvPlayerControls>>().LogInformation("[player] the cursor moved over the player and no pointer event came: the bars are shown from the cursor ({State})", OverlayState());
+			}
+
+			controls.NotifyActivity();
+		}
+	}
+
+	/// <summary>A pointer move reached the player through XAML since the last heartbeat.</summary>
+	private bool _pointerHeard;
+
+	/// <summary>A move XAML missed was logged for this player.</summary>
+	private bool _missedLogged;
+
+	/// <summary>The bars show: the cursor moved since the last heartbeat, it is over the player, and the window is the one in front.</summary>
+	internal static bool CursorWakes((int X, int Y)? last, (int X, int Y) now, bool overPlayer, bool inFront) =>
+		inFront && overPlayer && last is { } before && before != now;
+
+	private static (int X, int Y)? CursorPosition() => GetCursorPos(out var p) ? (p.X, p.Y) : null;
+
+	private static nint MainWindowHandle()
+	{
+		try
+		{
+			return WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+		}
+		catch (Exception)
+		{
+			return 0;
+		}
+	}
+
+	/// <summary>One of the app's windows is the foreground window (never wake the bars for a cursor moving over another app).</summary>
+	private static bool InFront()
+	{
+		var front = GetForegroundWindow();
+		return front != 0 && GetWindowThreadProcessId(front, out var process) != 0 && process == (uint)Environment.ProcessId;
+	}
+
+	/// <summary>Whether a point on the screen is over the player (this control's bounds, in the window).</summary>
+	private bool OverPlayer((int X, int Y) at)
+	{
+		var main = MainWindowHandle();
+		if (main == 0 || XamlRoot is not { } root || ActualWidth <= 0)
+		{
+			return false;
+		}
+
+		var client = new POINT { X = at.X, Y = at.Y };
+		if (!ScreenToClient(main, ref client))
+		{
+			return false;
+		}
+
+		var scale = root.RasterizationScale > 0 ? root.RasterizationScale : 1;
+		var bounds = TransformToVisual(null).TransformBounds(new Windows.Foundation.Rect(0, 0, ActualWidth, ActualHeight));
+		return bounds.Contains(new Windows.Foundation.Point(client.X / scale, client.Y / scale));
+	}
+
+	[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+	private struct POINT
+	{
+		public int X, Y;
+	}
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern bool GetCursorPos(out POINT point);
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern bool ScreenToClient(nint hwnd, ref POINT point);
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern nint GetForegroundWindow();
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern uint GetWindowThreadProcessId(nint hwnd, out uint process);
 
 	/// <summary>A key pressed on the player page. True when it is one of the player's keys (it was handled).</summary>
 	public bool HandleKey(Windows.System.VirtualKey key)
@@ -325,7 +445,30 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	// -- pointer over the video ------------------------------------------------------------------------------------------
 
-	private void OnPointerMoved(object sender, PointerRoutedEventArgs e) => Controls?.NotifyActivity();
+	private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
+	{
+		_pointerHeard = true;
+		Controls?.NotifyActivity();
+	}
+
+	/// <summary>The harness's pointer move (HarnessPointer, dev builds): what <see cref="OnPointerMoved"/> does.</summary>
+	internal void HarnessPointerMoved() => Controls?.NotifyActivity();
+
+	/// <summary>The overlay as XAML has it, for the harness's log: the view model's word, each bar's visibility, size and opacity.</summary>
+	internal string OverlayState()
+	{
+		static string Bar(FrameworkElement bar) => $"{bar.Visibility} {bar.ActualWidth:0}x{bar.ActualHeight:0} opacity {bar.Opacity:0.##}";
+		var focused = XamlRoot is { } root ? FocusManager.GetFocusedElement(root) : null;
+		var focus = focused switch
+		{
+			null => "nothing",
+			Control { Name.Length: > 0 } named => $"{named.GetType().Name} {named.Name} ({named.FocusState})",
+			Control control => $"{control.GetType().Name} ({control.FocusState})",
+			_ => focused.GetType().Name,
+		};
+		var island = XamlRoot?.ContentIsland is { } content ? Microsoft.UI.Input.InputFocusController.GetForIsland(content).HasFocus.ToString() : "?";
+		return $"controls {(Controls is { } c ? $"visible {c.ControlsVisible}, held by {c.HeldBy ?? "nothing"}, cursor hidden {c.CursorHidden}" : "none")}; player {Visibility} {ActualWidth:0}x{ActualHeight:0}; top {Bar(TopBar)}; bottom {Bar(BottomBar)}; focus {focus}; the island has the keyboard {island}";
+	}
 
 	[System.Runtime.InteropServices.DllImport("user32.dll")]
 	private static extern uint GetDoubleClickTime();
@@ -496,7 +639,7 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	// -- the Skip button's place -----------------------------------------------------------------------------------------
 
-	/// <summary>The Skip button's distance from the right edge (the bottom bar's own padding) and, bars hidden, from the bottom.</summary>
+	/// <summary>The prompts' least distance from the right edge (a framed bar's) and, bars hidden, their distance from the bottom.</summary>
 	private const double SkipEdgeRight = 32, SkipEdgeBottom = 24;
 
 	/// <summary>Its gap above the bottom bar's controls while they show.</summary>
@@ -516,7 +659,7 @@ public sealed partial class MpvPlayerControls : UserControl
 			_barControlsHeight = BarTopAbove(BottomBar.ActualHeight, BottomBar.Margin, BottomBar.Padding, BottomBar.BorderThickness);
 		}
 
-		var margin = PromptMargin(Controls is { ControlsVisible: true }, _barControlsHeight, BottomBar.Margin, BottomBar.BorderThickness);
+		var margin = PromptMargin(Controls is { ControlsVisible: true }, _barControlsHeight, BottomBar.Margin, BottomBar.Padding, BottomBar.BorderThickness);
 		if (PillRow.Margin != margin)
 		{
 			PillRow.Margin = margin;
@@ -534,12 +677,14 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	/// <summary>
 	/// The prompts' row (Skip, Next): above the bar while it shows (<paramref name="barTop"/> and a gap), a small margin from
-	/// the foot while it is hidden; its right edge at the bar's own side: a framed bar's edge, else the scrim's padding.
+	/// the foot while it is hidden; its right edge at the bar's own side: a framed bar's edge, else the theme's bar padding.
+	/// Nixie 1.4.0 (the UX review's CL-m14, E-m7, C-M12): the padding is the theme's (Editorial 48, Cinematic 96), so the row
+	/// ends where Full screen and the time left end; in 1.3.1 it was 32 in every theme and overhung the bar by 16 to 64 px.
 	/// </summary>
-	internal static Thickness PromptMargin(bool barsShown, double barTop, Thickness barMargin, Thickness barBorder)
+	internal static Thickness PromptMargin(bool barsShown, double barTop, Thickness barMargin, Thickness barPadding, Thickness barBorder)
 	{
 		var bottom = barsShown && barTop > 0 ? barTop + SkipGapAboveBar : SkipEdgeBottom;
-		var right = barBorder.Right > 0 ? Math.Max(SkipEdgeRight, barMargin.Right) : barMargin.Right + SkipEdgeRight;
+		var right = barBorder.Right > 0 ? Math.Max(SkipEdgeRight, barMargin.Right) : barMargin.Right + Math.Max(barPadding.Right, 0);
 		return new Thickness(0, 0, right, bottom);
 	}
 
@@ -957,6 +1102,25 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 	}
 
+	// -- Nixie 1.4.0: a theme's own tracks panel (the UX review's C-m9) ---------------------------------------------------
+
+	private Action? _themeTracks;
+
+	/// <summary>
+	/// A layout theme's own audio and subtitles panel (Cinematic's player panel): the bar's Audio and subtitles button opens it
+	/// instead of the shared flyout, so one screen has one UI for the job. Null gives the button its flyout back.
+	/// </summary>
+	public void UseThemeTracksPanel(Action? open)
+	{
+		_themeTracks = open;
+		TracksButton.Flyout = open is null ? TracksMenu : null;
+	}
+
+	/// <summary>Whether the bar's tracks button opens a theme's panel now (the shared flyout otherwise).</summary>
+	internal bool TracksOpenThemePanel => _themeTracks is not null;
+
+	private void OnTracksClick(object sender, RoutedEventArgs e) => _themeTracks?.Invoke();
+
 	private void OnMenuOpened(object? sender, object e) => Controls?.MenuOpened(true);
 
 	private void OnMenuClosed(object? sender, object e) => Controls?.MenuOpened(false);
@@ -1072,6 +1236,42 @@ public sealed partial class MpvPlayerControls : UserControl
 		{
 			_ = controls.StepSubtitleDelay(steps);
 			Announce(DelayName(controls.SubtitleDelay), "SubtitleDelay");
+		}
+	}
+
+	// -- Nixie 1.4.0: the Chapters menu -----------------------------------------------------------------------------------
+
+	private IReadOnlyList<Jellyfin.Sdk.Generated.Models.ChapterInfo> _chapters = [];
+	private string? _chaptersFor;
+
+	/// <summary>The playing item's chapters, asked for once per item (PlayingItem): the button enabled with them, disabled without.</summary>
+	private async void RefreshChapters()
+	{
+		var id = Controls?.ItemId;
+		_chaptersFor = id;
+		var item = await PlayingItem.Get(id);
+		if (!string.Equals(Controls?.ItemId, id, StringComparison.OrdinalIgnoreCase))
+		{
+			return;
+		}
+
+		_chapters = item?.Chapters?.Where(c => c.StartPositionTicks is >= 0).ToList() ?? [];
+		ChaptersButton.IsEnabled = _chapters.Count > 0;
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(ChaptersButton, PlayerChapters.ButtonName(_chapters.Count));
+		ToolTipService.SetToolTip(ChaptersButton, PlayerChapters.ToolTip(_chapters.Count));
+	}
+
+	/// <summary>The Chapters menu as it opens: one radio item per chapter, the one playing checked; a click goes there.</summary>
+	private void OnChaptersMenuOpening(object? sender, object e)
+	{
+		ChaptersMenu.Items.Clear();
+		foreach (var chapter in PlayerChapters.From(_chapters, Controls?.PositionTicks ?? 0))
+		{
+			var item = new RadioMenuFlyoutItem { Text = chapter.Label, IsChecked = chapter.IsCurrent, GroupName = "chapters" };
+			Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(item, chapter.SpokenName);
+			var start = chapter.StartTicks;
+			item.Click += (_, _) => _ = Controls?.SeekTo(start);
+			ChaptersMenu.Items.Add(item);
 		}
 	}
 

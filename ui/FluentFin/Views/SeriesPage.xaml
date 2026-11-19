@@ -132,6 +132,7 @@
                         </Grid>
                         <!--  the season page's list: one Tab stop per episode, Up/Down between them, a list for Narrator  -->
                         <controls:EpisodeList
+                            controls:UpNextMark.EpisodeId="{x:Bind ViewModel.PlayTarget.EpisodeId, Mode=OneWay}"
                             AutomationProperties.Name="Episodes"
                             IsTabStop="False"
                             ItemsSource="{x:Bind ViewModel.Episodes, Mode=OneWay}">

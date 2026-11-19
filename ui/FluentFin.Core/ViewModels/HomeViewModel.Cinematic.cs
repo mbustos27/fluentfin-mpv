@@ -261,7 +261,7 @@ public static class CinematicLabels
 			BaseItemDto_Type.Series or BaseItemDto_Type.Season or BaseItemDto_Type.Episode => "Series",
 			_ => "",
 		};
-		var what = isResume ? "Continue watching" : dto?.Type == BaseItemDto_Type.Episode ? "Next up" : "New";
+		var what = isResume ? "Continue watching" : dto?.Type == BaseItemDto_Type.Episode ? "Up next" : "New";
 		return kind.Length == 0 ? what : $"{what} · {kind}";
 	}
 

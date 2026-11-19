@@ -100,6 +100,7 @@ internal sealed class ItemPagePlace
 
 		Guid? item = null;
 		IReadOnlyList<int>? path = null;
+		string? name = null;
 		var fromKeyboard = false;
 		DependencyObject? focused = _page.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject now && IsInPage(now) ? now : null;
 		var state = focused is UIElement element ? element.FocusState : FocusState.Unfocused;
@@ -113,10 +114,11 @@ internal sealed class ItemPagePlace
 		{
 			item = ItemOf(focused);
 			path = item is null ? PathOf(focused) : null;
+			name = item is null ? NameOf(focused) : null;
 			fromKeyboard = state == FocusState.Keyboard;
 		}
 
-		PagePlaces.Save(_key, new PagePlace(_scroller.VerticalOffset, item, path, fromKeyboard, selectedSeasonId));
+		PagePlaces.Save(_key, new PagePlace(_scroller.VerticalOffset, item, path, fromKeyboard, selectedSeasonId, name));
 	}
 
 	private void Restore(PagePlace place)
@@ -124,7 +126,7 @@ internal sealed class ItemPagePlace
 		var deadline = DateTime.UtcNow + Patience;
 		DateTime? loadedAt = null;
 		var scrolled = false;
-		var focused = place.FocusedItemId is null && place.FocusedPath is null;
+		var focused = place.FocusedItemId is null && place.FocusedPath is null && place.FocusedName is null;
 		_timer?.Stop();
 		_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
 		_timer.Tick += (_, _) =>
@@ -167,7 +169,16 @@ internal sealed class ItemPagePlace
 	}
 
 	private DependencyObject? Target(PagePlace place) =>
-		place.FocusedItemId is { } id ? Find(_page, id) : place.FocusedPath is { } path ? ElementAt(path) : null;
+		place.FocusedItemId is { } id ? Find(_page, id)
+		: place.FocusedName is { } name && _page.FindName(name) is Control { IsLoaded: true } named ? named
+		: place.FocusedPath is { } path ? ElementAt(path) : null;
+
+	/// <summary>
+	/// Nixie 1.4.0: the element's x:Name when the page finds it by that name (the page's own named controls, such as its Play,
+	/// "PlayButton"); null for a template's parts or a name the page does not know.
+	/// </summary>
+	private string? NameOf(DependencyObject element) =>
+		element is FrameworkElement { Name.Length: > 0 } named && ReferenceEquals(_page.FindName(named.Name), named) ? named.Name : null;
 
 	private bool IsInPage(DependencyObject element)
 	{

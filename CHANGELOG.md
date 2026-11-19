@@ -2,6 +2,30 @@
 
 ## 1.4.0
 
+- **The player's controls always come back with the mouse.** On 1.3.1, after opening the player and pressing Space before
+  any click, moving the mouse could stop bringing the controls back until the player was opened again. Any move of the
+  mouse over the video now shows them, whatever had the keyboard, and keys work in any order with the mouse. A stress
+  run checks it after every kind of transition in all four themes (`then-keys-matrix.ps1`, its overlay section).
+- **The next episode looks and reads the same everywhere** (the library review's X12):
+  - In the player, **Next episode** is the main button (Primary, 44 high) with a skip-next icon, and the countdown runs as
+    a clear 3 px line along its foot; the episode's title is in its tooltip and Narrator's name. **Watch credits**,
+    **Keep watching**, **Skip intro** and **Skip credits** are secondary buttons of the same height, all on one line, in
+    the theme's wine instead of a stray teal, and they line up with the bar's own edge in every theme (they overhung
+    Editorial's bar by 16 px and Cinematic's by 64).
+  - **One label, "Up next"**, on every Home, the episode pages and Drive-in's sign (it said Next Up, Next up and Coming
+    up), and one episode code: Drive-in's tubes say "S1 E03" (they said "S1·E03").
+  - **Home's next-up item opens its episode in every theme** (Drive-in's sign and Editorial's list played it, Classic and
+    Cinematic opened it); its page's Play is one more Enter. Editorial's list lost the play mark that was not a button.
+  - **The season page marks the episode its Play starts "Up next"** in every theme (Drive-in's showtimes said NEXT).
+- **Chapters in every theme:** the player's bar has a Chapters menu (the chapters with their times, the one playing
+  checked; a click goes there), disabled and saying so when the item has none. Editorial no longer promises a paused
+  side column it never had.
+- **Cinematic's player:** the bar's Audio and subtitles button opens the player panel's own Audio and subtitles part (one
+  place for the job), and the window's glass island no longer floats over the video.
+- **The keyboard in the player:** Tab reaches the prompts first while they show, then runs left to right; after the player,
+  the keyboard is back on the page's Play in every theme (Drive-in left it nowhere). With F1's shortcut sheet open over
+  the player, the player's keys no longer act under it.
+- **Home videos and music videos play** in Nixie's player, alone like a film (they could only say "can't play here").
 - **One accent, used for three things.** Pink now marks only the page's main action, where you are, and progress.
   - A watched title shows a small, dim check in the top-right corner of its card.
   - A series, season or collection with episodes or films left shows how many in a small square in the top-left corner.

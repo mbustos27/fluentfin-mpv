@@ -77,6 +77,7 @@
                     Spacing="44">
                     <ec:EditorialEpisodeGrid
                         x:Name="EpisodeGrid"
+                        controls:UpNextMark.EpisodeId="{x:Bind ViewModel.PlayTarget.EpisodeId, Mode=OneWay}"
                         Episodes="{x:Bind ViewModel.Episodes, Mode=OneWay}"
                         Title="{x:Bind local:EditorialSeasonPage.SeasonTitle(ViewModel.Dto), Mode=OneWay}" />
                     <controls:ItemMetaRows Dto="{x:Bind ViewModel.Dto, Mode=OneWay}" />

@@ -92,7 +92,7 @@ public sealed class DriveInThemeTests
 	[Fact]
 	public void EveryNumberTheThemeShows_HasItsGlyphs()
 	{
-		foreach (var text in new[] { "0123456789", "S1·E03", "1:12", "0:50:52", "−0:01:18", "S2·E05-06", "10:42", "1 H 58" })
+		foreach (var text in new[] { "0123456789", "S1 E03", "1:12", "0:50:52", "−0:01:18", "S2 E05-06", "10:42", "1 H 58" })
 		{
 			Assert.True(NixieGlyphs.CanShow(text), text);
 		}

@@ -69,6 +69,20 @@ public sealed class ItemPlayTests
 		Assert.False(target.HasProgress);
 	}
 
+	/// <summary>Nixie 1.4.0 (the UX review's X12, C-m10): the episode lists mark the one Play starts "Up next" (none once all are watched).</summary>
+	[Fact]
+	public void TheTarget_NamesTheEpisodeItStarts_ForTheUpNextMark()
+	{
+		List<BaseItemDto> resume = [Episode(1, 1, played: true), Episode(1, 2, position: 5 * Minute), Episode(1, 3)];
+		List<BaseItemDto> next = [Episode(1, 1, played: true), Episode(1, 2)];
+		List<BaseItemDto> watched = [Episode(1, 1, played: true), Episode(1, 2, played: true)];
+
+		Assert.Equal(resume[1].Id, ItemPlay.For(Series, resume).EpisodeId);
+		Assert.Equal(next[1].Id, ItemPlay.For(Season(1), next).EpisodeId);
+		Assert.Null(ItemPlay.For(Series, watched).EpisodeId);
+		Assert.Null(ItemPlay.For(Episode(1, 1), null).EpisodeId);
+	}
+
 	[Fact]
 	public void AllWatched_IsPlayFromTheStart_TheFirstEpisode()
 	{

@@ -6,8 +6,9 @@ namespace FluentFin.Themes.Editorial;
 /// <summary>
 /// Nixie 1.3.0: the Editorial layout theme (an Infuse / Netflix hybrid, a magazine for a big library): a hero tile beside a
 /// numbered "Up next" list, a big-type genre strip that picks the shelf, posters whose details open in place under their row,
-/// a series page that shows a whole season at once, a library split by letter, and a paused player that reads like a page.
-/// Its look is the sunset rule under the top bar, the lit genre, the display headings and a Googie arc; everything else is
+/// a series page that shows a whole season at once, and a library split by letter. Nixie 1.4.0 (the UX review's E-M10): the
+/// player is the shared one, with the shared bar's Chapters menu; 1.3.0 promised "a paused player that reads like a page" here
+/// (a side column of synopsis, cast and chapters), which no release has: the promise is struck until one does. Its look is the sunset rule under the top bar, the lit genre, the display headings and a Googie arc; everything else is
 /// the shared tokens (docs\reports\Nixie redesign concepts\Nixie redesign concepts.md, "Theme 3: Editorial").
 /// </summary>
 public sealed class EditorialTheme : ILayoutTheme

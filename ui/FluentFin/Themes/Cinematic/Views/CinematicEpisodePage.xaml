@@ -78,7 +78,7 @@
                             <TextBlock
                                 AutomationProperties.HeadingLevel="Level2"
                                 Style="{StaticResource CinematicShelfTitleTextBlockStyle}"
-                                Text="Next up" />
+                                Text="Up next" />
                             <cc:CinematicStill
                                 x:Name="NextStill"
                                 Margin="0,14,0,0"
