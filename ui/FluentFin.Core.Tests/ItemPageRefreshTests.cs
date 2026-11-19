@@ -13,6 +13,7 @@ namespace FluentFin.Core.Tests;
 /// that cannot be listed keeps its picker and says so (item 4); Play's label comes from kept episodes, not a new download
 /// per page and per toggle (item 6).
 /// </summary>
+[Collection(ItemUserDataCollection.Name)]
 public sealed class ItemPageRefreshTests
 {
 	private static readonly Guid SeriesId = Guid.NewGuid();

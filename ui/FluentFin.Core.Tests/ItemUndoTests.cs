@@ -10,6 +10,7 @@ namespace FluentFin.Core.Tests;
 /// 1.2.0 (Nixie button review, I4 and I24): marking a whole series or season (un)watched is one click and offers an Undo
 /// that puts each episode back as it was, its resume point too; the pages refresh once at its end.
 /// </summary>
+[Collection(ItemUserDataCollection.Name)]
 public sealed class ItemUndoTests
 {
 	private static readonly Guid SeriesId = Guid.NewGuid();

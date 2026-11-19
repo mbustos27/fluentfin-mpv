@@ -13,6 +13,7 @@ namespace FluentFin.Core.Tests;
 /// surface showing the item is told. Before, each surface sent "the opposite of its copy", which nothing updated: Watched
 /// on then off sent "mark watched" twice, and the menu kept saying "Mark as watched".
 /// </summary>
+[Collection(ItemUserDataCollection.Name)]
 public sealed class ItemToggleTests
 {
 	private readonly Mock<IJellyfinClient> _client = new();
@@ -177,7 +178,10 @@ public sealed class ItemToggleTests
 		// the season itself: every episode is listed again (their rows show the server's state)
 		_client.Invocations.Clear();
 		await Commands().SetWatched(season, true);
-		await WaitUntil(() => _client.Invocations.Any(i => i.Method.Name == nameof(IJellyfinClient.GetItems)));
+		// 1.4.0: wait for the page's own fetch (GetItem), not the Undo's read of the list (GetItems), or the page's refresh
+		// could land after the Clear below and look like one from a page that is gone
+		await WaitUntil(() => _client.Invocations.Any(i => i.Method.Name == nameof(IJellyfinClient.GetItem)));
+		await WaitUntil(() => _client.Invocations.Count(i => i.Method.Name == nameof(IJellyfinClient.GetItems)) >= 2);
 
 		// gone from the page: no more refreshes (the page's own fetch of its season; marking the season reads its list for the
 		// Undo, which is not the page's)
@@ -217,4 +221,11 @@ public sealed class ItemToggleTests
 			await Task.Delay(10);
 		}
 	}
+}
+
+/// <summary>1.4.0: tests that raise or listen to ItemUserData's static events (Changed, UndoOffered) run one at a time; in
+/// parallel, one class's season Undo reached another's listener.</summary>
+public sealed class ItemUserDataCollection
+{
+	public const string Name = "ItemUserData";
 }
