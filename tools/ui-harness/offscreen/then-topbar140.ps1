@@ -76,6 +76,11 @@ $ttWidths = [ordered]@{}
 function TtBar([int]$W, [int]$H) {
     TtSize $W $H
     $win = TtWin
+    if ([Math]::Abs($win.Width - $W) -gt 24) {
+        # the off-screen desktop is as big as the screen: a window wider than it is clamped (Windows' maximum track size)
+        Say "bar $($W): skipped, the window is $($win.Width) px wide at most on this desktop"
+        return
+    }
     $tabs = TtTabItems
     $compact = [bool](Find-Ui -Id 'TopTabsMenu')
     $box = TtBox; $icon = Find-Ui -Name 'Search' -Type 'Button'
@@ -119,11 +124,11 @@ Say "views: $($ttViews -join ', ')"
 foreach ($ttW in @(2560, 1920, 1440, 1100)) { TtBar $ttW $(if ($ttW -ge 1920) { 1080 } else { 900 }) }
 
 # the fold: every view a tab while it fits; once folded, the shown libraries are the server's first ones
-$ttAll = $ttWidths['2560']
-Check 'fold: at 2560 every view is a tab, then Libraries' (-not $ttAll.compact -and -not $ttAll.folded -and ($ttViews | Where-Object { ($ttAll.tabs -split ',') -notcontains $_ }).Count -eq 0) $ttAll.tabs
+$ttAll = if ($ttWidths['2560']) { $ttWidths['2560'] } else { $ttWidths['1920'] }
+Check 'fold: at the widest every view is a tab, then Libraries' (-not $ttAll.compact -and -not $ttAll.folded -and ($ttViews | Where-Object { ($ttAll.tabs -split ',') -notcontains $_ }).Count -eq 0) $ttAll.tabs
 $ttPrev = 99
 foreach ($ttW in @('2560', '1920', '1440', '1100')) {
-    $i = $ttWidths[$ttW]; $n = if ($i.compact) { -1 } else { @(($i.tabs -split ',') | Where-Object { $ttViews -contains $_ }).Count }
+    $i = $ttWidths[$ttW]; if (-not $i) { continue }; $n = if ($i.compact) { -1 } else { @(($i.tabs -split ',') | Where-Object { $ttViews -contains $_ }).Count }
     Check "fold $($ttW): no more library tabs than in a wider window" ($n -le $ttPrev) "$n after $ttPrev"
     $ttPrev = $n
 }
@@ -174,8 +179,8 @@ if ($ttFoldedTab) {
     TtSettle 2500
     Check 'menu: the lit library chosen again stays lit' ([bool]$ttAgain -and (TtMarked) -eq $ttOther -and [bool](Find-Ui -Name $ttOther -Type 'Text')) "marked: $(TtMarked)"
     # the lit library across the fold: its own tab when the window grows, the folded tab's name again when it shrinks
-    TtSize 2560 1080
-    Check 'resize: at 2560 the lit library is its own tab' ((TtMarked) -eq $ttOther -and -not (TtFolded)) "marked: $(TtMarked), tabs: $(TtNames)"
+    TtSize 1920 1080
+    Check 'resize: at 1920 the lit library is its own tab' ((TtMarked) -eq $ttOther -and -not (TtFolded)) "marked: $(TtMarked), tabs: $(TtNames)"
     TtSize 1100 900
     Check 'resize: back at 1100 the folded tab is named after it again' ((TtMarked) -eq $ttOther -and (TtFolded).Current.Name -eq $ttOther) "marked: $(TtMarked), tabs: $(TtNames)"
 }
@@ -204,6 +209,7 @@ $ttItem = Wait-ItemPage $fixture.movie.name -Seconds 20
 TtSettle 1500
 $ttF = TtFocused
 Check 'trail: a film opened from Movies keeps Movies lit' ([bool]$ttItem -and (TtMarked) -eq 'Movies') (TtMarked)
+Check 'eyebrow: none on a film opened from its own library' (-not (Find-Ui -Id 'TrailEyebrow')) "eyebrow: $((Find-Ui -Id 'TrailEyebrow').Current.Name)"
 Check 'focus: after opening a film the keyboard is not on the TitleBar' (-not $ttF -or $ttF.Current.ClassName -ne 'TitleBar') "focused: $($ttF.Current.Name) ($($ttF.Current.ClassName))"
 Key 0xA6; TtSettle 2500
 Check 'trail: Back to Movies, Movies lit' ((TtMarked) -eq 'Movies') (TtMarked)
@@ -219,12 +225,26 @@ $ttResults = Wait-Ui -Name 'Results for' -Type 'Text' -Contains -Seconds 15
 TtSettle 1500
 Check 'trail: the search results light the search box, no tab' ([bool]$ttResults -and -not (TtMarked) -and (TtBox).Current.ItemStatus -eq 'Current') "marked: '$(TtMarked)', box: '$((TtBox).Current.ItemStatus)'"
 Shot "$ttTag-search-lit-1920"
-$ttCard = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition($ttUia::ClassNameProperty, 'FluentFin.Controls.BaseItemDtoCard'))) | Where-Object { -not $_.Current.IsOffscreen }) | Select-Object -First 1
+$ttCard = $null
+foreach ($ttClass in 'FluentFin.Controls.BaseItemDtoCard', 'BaseItemDtoCard') {
+    if (-not $ttCard) { $ttCard = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition($ttUia::ClassNameProperty, $ttClass))) | Where-Object { -not $_.Current.IsOffscreen }) | Select-Object -First 1 }
+}
+Check 'trail: the results page has a card to open' ([bool]$ttCard)
 if ($ttCard) {
     [void](Invoke-Element $ttCard)
     [void](Wait-Until { if (-not (Find-Ui -Name 'Results for' -Type 'Text' -Contains)) { $true } } -Seconds 15 -PollMs 200)
     TtSettle 1500
     Check 'trail: an item from the results keeps the search box lit' (-not (TtMarked) -and (TtBox).Current.ItemStatus -eq 'Current') "marked: '$(TtMarked)', box: '$((TtBox).Current.ItemStatus)'"
+    $ttBrow = Wait-Ui -Id 'TrailEyebrow' -Seconds 8
+    Check 'eyebrow: an item from the search results names its library' ([bool]$ttBrow -and $ttViews -contains $ttBrow.Current.Name) "eyebrow: '$(if ($ttBrow) { $ttBrow.Current.Name })'"
+    Shot "$ttTag-eyebrow-1920"
+    if ($ttBrow) {
+        $ttLib = $ttBrow.Current.Name
+        [void](Invoke-Element $ttBrow)
+        $ttLibOpen = Wait-Until { if ((TtMarked) -eq $ttLib -or (TtFolded).Current.Name -eq $ttLib) { $true } } -Seconds 15 -PollMs 200
+        TtSettle 1200
+        Check 'eyebrow: it opens its library, which is then lit' ([bool]$ttLibOpen -and -not (TtBox).Current.ItemStatus) "marked: $(TtMarked)"
+    }
 }
 # Settings: the account button
 Open-Nav 'Settings'
