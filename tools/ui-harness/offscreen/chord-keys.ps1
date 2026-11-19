@@ -69,6 +69,30 @@ public static class ChordKeys {
     uint scan = MapVirtualKey((uint)vk, 0);
     PostMessage(target, 0x0101, (IntPtr)vk, (IntPtr)(long)(1u | (scan << 16) | (1u << 30) | (1u << 31)));
   }
+  // what a click at a screen point of FluentFin's window hits, as Windows decides it (then-topbar.ps1's test): WM_NCHITTEST
+  // to the deepest of its own child windows there, then up while they answer HTTRANSPARENT (-1). 2 caption (drag), 1 client,
+  // 8 minimize, 9 maximize, 20 close
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+  [DllImport("user32.dll")] static extern IntPtr ChildWindowFromPointEx(IntPtr parent, POINT pt, uint flags);
+  [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr h, ref POINT p);
+  [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  public static int HitTest(IntPtr hwnd, int pid, int x, int y) {
+    if (ProcessOf(hwnd) != (uint)pid) throw new InvalidOperationException("not FluentFin's window");
+    var chain = new System.Collections.Generic.List<IntPtr> { hwnd };
+    for (var cur = hwnd; ;) {
+      var pt = new POINT { X = x, Y = y };
+      ScreenToClient(cur, ref pt);
+      var child = ChildWindowFromPointEx(cur, pt, 1);
+      if (child == IntPtr.Zero || child == cur || ProcessOf(child) != (uint)pid) break;
+      chain.Add(child); cur = child;
+    }
+    var lparam = (IntPtr)(((y & 0xFFFF) << 16) | (x & 0xFFFF));
+    for (int i = chain.Count - 1; i >= 0; i--) {
+      int r = (int)(long)SendMessage(chain[i], 0x0084, IntPtr.Zero, lparam);
+      if (r != -1) return r;
+    }
+    return 0;
+  }
   // the dev build's pointer hook (HarnessPointer): kind 1 click, 2 double click; x, y on the screen
   public static bool Pointer(IntPtr main, int kind, int x, int y) {
     uint msg = RegisterWindowMessage("NixieHarnessPointer");

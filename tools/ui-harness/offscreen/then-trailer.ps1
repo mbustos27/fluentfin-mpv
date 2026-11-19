@@ -123,3 +123,36 @@ if ($trButton) {
     Start-Sleep -Milliseconds 500
     if ($trOpened) { TR-Modal 'mouse first' }
 }
+
+# ---- Nixie 1.4.0 (bug hunt m8): while the theatre is open the top bar is not the window's caption: a press on the dim's top
+# band is the dim's (it closes the theatre) and never drags or maximizes the window; Close is a click target; the window's own
+# minimize and close stay. Asked of Windows itself (WM_NCHITTEST), at both sizes; the caption is back after it closes.
+function TR-Hit([int]$X, [int]$Y) { [ChordKeys]::HitTest($script:hwnd, $script:ui.Id, $X, $Y) }
+foreach ($trSize in @(@(1920, 1080), @(1100, 700))) {
+    [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, $trSize[0], $trSize[1])
+    Start-Sleep -Milliseconds 1500
+    $trWin = New-Object OffscreenUi+RECT
+    [void][OffscreenUi]::GetWindowRect($script:hwnd, [ref]$trWin)
+    # a point of the bar that drags the window (between the tabs and the search box, or whatever the width shows)
+    $trBand = $trWin.T + 24
+    $trMid = @(for ($trX = $trWin.L + 200; $trX -lt $trWin.R - 200; $trX += 16) { if ((TR-Hit $trX $trBand) -eq 2) { $trX } }) | Select-Object -First 1
+    if (-not $trMid) { $trMid = [int](($trWin.L + $trWin.R) / 2) }
+    $trBefore = TR-Hit $trMid $trBand
+    if (TR-Open "caption $($trSize[0])") {
+        $trOpen = TR-Hit $trMid $trBand
+        $trCloseBtn = (CK-Focus)
+        $trCloseHit = $null
+        $trF = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id)
+        if ($trF) { $trJ = $trF | ConvertFrom-Json; if ($trJ.rect) { $trCloseHit = TR-Hit ([int]($trJ.rect[0] + $trJ.rect[2] / 2)) ([int]($trJ.rect[1] + $trJ.rect[3] / 2)) } }
+        $trWinClose = TR-Hit ($trWin.R - 24) ($trWin.T + 16)
+        Check "trailer ($($trSize[0])x$($trSize[1])): the top band over the theatre is the dim's, not the window's caption (no drag, no maximize)" ($trBefore -eq 2 -and $trOpen -eq 1) "before: $trBefore, open: $trOpen (2 caption, 1 client)"
+        Check "trailer ($($trSize[0])x$($trSize[1])): Close trailer takes clicks, the window's close stays" ($trCloseHit -eq 1 -and $trWinClose -eq 20) "Close trailer: $trCloseHit ($trCloseBtn); the window's close: $trWinClose"
+        Shot "$trTag-caption-$($trSize[0])"
+        $trAt = Get-Epoch
+        CK-Key 'Esc'
+        TR-Closed "Esc (caption $($trSize[0]))" $trAt
+        Start-Sleep -Milliseconds 800
+        $trAfter = TR-Hit $trMid $trBand
+        Check "trailer ($($trSize[0])x$($trSize[1])): after it closes, the top bar drags the window again" ($trAfter -eq 2) "after: $trAfter"
+    }
+}
