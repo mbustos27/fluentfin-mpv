@@ -46,7 +46,7 @@ public class LoginPageAccessibilityTests
 		// 1.1.4 (layout audit #4): one accent button (Sign in, no Send glyph); Use Quick Connect is a standard button; the
 		// server is changed from a "Change" link next to its name ("Change server" for Narrator: the visible word is in it)
 		var doc = Load();
-		var accent = doc.Descendants(Presentation + "Button").Where(b => ((string?)b.Attribute("Style"))?.Contains("Accent") == true).ToList();
+		var accent = doc.Descendants(Presentation + "Button").Where(b => ((string?)b.Attribute("Style"))?.Contains("Primary") == true).ToList();
 		var signIn = Assert.Single(accent);
 		Assert.Equal("Sign in", (string?)signIn.Attribute("AutomationProperties.Name"));
 		Assert.Empty(signIn.Descendants(Presentation + "FontIcon"));

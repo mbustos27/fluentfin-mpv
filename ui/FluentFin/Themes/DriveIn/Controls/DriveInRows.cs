@@ -28,7 +28,7 @@ public static class DriveInRows
 	public static readonly string[] RowParts = ["TitleText", "SeeAllButton", "SeeAllTitle", "SeeAllChevron"];
 
 	/// <summary>The shared card's parts this dresses (BaseItemDtoCard.xaml).</summary>
-	public static readonly string[] CardParts = ["ImageCanvas", "TitleArea"];
+	public static readonly string[] CardParts = ["ContentOverlay", "TitleArea"];
 
 	// ---- the row's marquee ------------------------------------------------------------------------------------------------
 
@@ -195,7 +195,7 @@ public static class DriveInRows
 			dress = new CardDress();
 			card.SetValue(CardDressProperty, dress);
 			// the time left on a still (16:9) card; a poster keeps its progress bar alone (the chip would cover its title art)
-			if (card.Width > card.Height && Find<Grid>(card, "ImageCanvas") is { } canvas)
+			if (card.Width > card.Height && Find<Grid>(card, "ContentOverlay") is { } canvas)
 			{
 				dress.ChipTubes = new NixieReadout { DigitHeight = 22 };
 				dress.ChipUnit = new TextBlock
@@ -223,7 +223,8 @@ public static class DriveInRows
 				};
 				// Narrator hears the card by its own name; the chip is what the eye reads
 				AutomationProperties.SetAccessibilityView(dress.Chip, AccessibilityView.Raw);
-				canvas.Children.Add(dress.Chip);
+				// 1.4.0: under the card's action strip (the overlay's first child), so the strip covers it while it shows
+				canvas.Children.Insert(0, dress.Chip);
 			}
 
 			if (Find<StackPanel>(card, "TitleArea") is { Children.Count: >= 2 } area && area.Children[1] is TextBlock subtitle)

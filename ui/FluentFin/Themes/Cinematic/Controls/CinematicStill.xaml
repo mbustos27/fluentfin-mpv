@@ -15,11 +15,13 @@
 
     <!--
         Nixie 1.3.0, Cinematic: a 16:9 still. Opaque artwork with 8 px corners, a dark band along its bottom with the title art
-        (the Logo, or the title typeset) and the progress; the title and a line under it as plain text. Focus (keyboard) and the
-        pointer zoom it 1.1x about 40 % of its height (FocusZoom; only while motion is allowed), light a sheen across the art
-        and show the Play glyph; the keyboard also gets the neon rim: WinUI's two focus colours as two 2 px rings, a pink glow
-        close in and the nixie orange further out. The whole tile is one target; Narrator reads one list item named after
-        the item (the shared card's name, ItemLabels.CardName; an episode: ItemLabels.EpisodeRowName).
+        (the Logo, or the title typeset) and the progress; the title and a line under it as plain text. 1.4.0 (the library UX
+        review, C-M7, C-m1): keyboard focus zooms the art and its rings about their centre (at most 8 px a side, FocusZoom;
+        only while motion is allowed; the words never move) and draws the neon rim, WinUI's two focus colours as two 2 px
+        rings, with no pink glow. A free pointer zooms it, lights the sheen and shows Play; while the keyboard is on another
+        card the pointer only lights the sheen. The keyboard sees Play only where Enter plays (an episode shelf).
+        The whole tile is one target; Narrator reads one list item named after the item (the shared card's name,
+        ItemLabels.CardName; an episode: ItemLabels.EpisodeRowName).
     -->
     <Grid x:Name="Zoomed" Background="Transparent">
         <Grid.RowDefinitions>
@@ -27,7 +29,11 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!--  the rest shadow under the still, and the focus glow (pink close in, nixie orange further out; 0 in high contrast)  -->
+        <!--
+            1.4.0 (the library UX review, C-m1, C-M7): the art and its rings zoom together, about their centre, by at most 8 px a
+            side (FocusZoom); the words under them never move. No pink glow: keyboard focus is the two-tone ring.
+        -->
+        <Grid x:Name="ArtZoom" VerticalAlignment="Top">
         <Border
             x:Name="RestShadow"
             Width="{x:Bind ArtWidth, Mode=OneWay}"
@@ -43,33 +49,6 @@
                     Color="Black" />
             </ui:Effects.Shadow>
         </Border>
-        <Grid
-            x:Name="Glow"
-            Width="{x:Bind ArtWidth, Mode=OneWay}"
-            Height="{x:Bind ArtHeight, Mode=OneWay}"
-            x:DeferLoadStrategy="Lazy"
-            IsHitTestVisible="False"
-            Visibility="Collapsed">
-            <Border CornerRadius="8">
-                <ui:Effects.Shadow>
-                    <media:AttachedCardShadow
-                        BlurRadius="20"
-                        CornerRadius="12"
-                        Opacity="{ThemeResource CinematicGlowOpacity}"
-                        Color="{ThemeResource NixieAccentColor}" />
-                </ui:Effects.Shadow>
-            </Border>
-            <Border CornerRadius="8">
-                <ui:Effects.Shadow>
-                    <media:AttachedCardShadow
-                        BlurRadius="48"
-                        CornerRadius="12"
-                        Offset="0,6"
-                        Opacity="{ThemeResource CinematicGlowFarOpacity}"
-                        Color="{ThemeResource GlassNeonGlowColor}" />
-                </ui:Effects.Shadow>
-            </Border>
-        </Grid>
 
         <Grid
             x:Name="Art"
@@ -119,7 +98,7 @@
                     CornerRadius="2" />
             </Grid>
 
-            <!--  an episode's number, top left; watched, top right (the accent with its dark check)  -->
+            <!--  an episode's number, top left  -->
             <Border
                 x:Name="BadgePlate"
                 Margin="12"
@@ -135,21 +114,12 @@
                     FontWeight="SemiBold"
                     Foreground="{ThemeResource CinematicOnArtTextBrush}" />
             </Border>
-            <Border
-                x:Name="WatchedMark"
-                Width="24"
-                Height="24"
-                Margin="10"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Top"
-                AutomationProperties.AccessibilityView="Raw"
-                Background="{ThemeResource NixieAccentOnImageBrush}"
-                CornerRadius="6"
-                Visibility="Collapsed">
-                <FontIcon
-                    FontSize="12"
-                    Foreground="{ThemeResource NixieOnAccentOnImageBrush}"
-                    Glyph="&#xE73E;" />
+            <!--  1.4.0 (X10, C-m6): "N to watch" a neutral square count, top left (a series or a collection); watched a dim neutral check, top right  -->
+            <Border x:Name="CountChip" Style="{StaticResource NixieCountChipStyle}" Margin="12" Visibility="Collapsed">
+                <TextBlock x:Name="CountText" Style="{StaticResource NixieCountChipTextStyle}" />
+            </Border>
+            <Border x:Name="WatchedMark" Style="{StaticResource NixieWatchedBadgeStyle}" Margin="12" Visibility="Collapsed">
+                <FontIcon Style="{StaticResource NixieWatchedGlyphStyle}" />
             </Border>
 
             <!--  the sheen: a soft diagonal light from the top-left corner while zoomed  -->
@@ -161,29 +131,23 @@
                 IsHitTestVisible="False"
                 Opacity="0" />
 
-            <!--  Play: on the art while zoomed (the pointer's one click; the keyboard plays from the menu or the item page)  -->
+            <!--
+                Play: on the art for a free pointer (its one click), and for the keyboard only where Enter plays (an episode
+                shelf); a still Enter opens shows no Play glyph (C-M7). 1.4.0: the icon role on art, 44, glyph 20 (the stage holds the Primary).
+            -->
             <Button
                 x:Name="PlayButton"
                 Grid.RowSpan="2"
-                Width="56"
-                Height="56"
-                Padding="0"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 AutomationProperties.Name="Play"
-                Background="{ThemeResource CinematicGlyphFillBrush}"
-                BorderBrush="{ThemeResource CinematicGlyphStrokeBrush}"
-                BorderThickness="1"
                 Click="PlayButton_Click"
-                CornerRadius="8"
                 IsTabStop="False"
-                Style="{StaticResource BareButtonStyle}"
+                RequestedTheme="Dark"
+                Style="{StaticResource NixieCardIconButtonStyle}"
                 ToolTipService.ToolTip="Play"
                 Visibility="Collapsed">
-                <FontIcon
-                    FontSize="22"
-                    Foreground="{ThemeResource CinematicOnArtTextBrush}"
-                    Glyph="&#xE768;" />
+                <FontIcon FontSize="{StaticResource NixieCardGlyphSize}" Glyph="&#xE768;" />
             </Button>
 
             <!--  one subtle light edge on the art  -->
@@ -215,6 +179,7 @@
             CornerRadius="12"
             IsHitTestVisible="False"
             Visibility="Collapsed" />
+        </Grid>
 
         <!--  the title and its line, plain text under the art; part of the tile's target  -->
         <StackPanel

@@ -57,13 +57,23 @@ public sealed class CinematicThemeTests
 		Assert.NotNull(typeof(CinematicTheme).GetConstructor(Type.EmptyTypes));
 	}
 
+	/// <summary>
+	/// 1.4.0 (the library UX review, C-m1): the zoom grows the art about its centre by at most 8 px a side (it grew the whole
+	/// tile 1.1x about a point 40 % down: the title dropped 18 px and the gaps shrank from 24 to 10), only while motion is allowed.
+	/// </summary>
 	[Fact]
-	public void FocusZoom_IsTenPercent_OnlyWhileMotionIsAllowed()
+	public void FocusZoom_GrowsTheArtAtMost8PxASide_OnlyWhileMotionIsAllowed()
 	{
-		Assert.Equal(1.1f, FocusZoom.ScaleFor(zoomed: true, motionAllowed: true));
-		Assert.Equal(1f, FocusZoom.ScaleFor(zoomed: true, motionAllowed: false)); // Reduced, Solid: the rim alone, nothing moves
-		Assert.Equal(1f, FocusZoom.ScaleFor(zoomed: false, motionAllowed: true));
-		Assert.Equal(0.4f, FocusZoom.Origin.Y);
+		const double still = 384 + 8; // the art and its rings
+		var scale = FocusZoom.ScaleFor(zoomed: true, motionAllowed: true, still);
+		Assert.InRange((scale - 1) * still / 2, 7.9, 8.01);
+		Assert.Equal(1f, FocusZoom.ScaleFor(zoomed: true, motionAllowed: false, still)); // Reduced, Solid: the rim alone, nothing moves
+		Assert.Equal(1f, FocusZoom.ScaleFor(zoomed: false, motionAllowed: true, still));
+		Assert.Equal(FocusZoom.Scale, FocusZoom.ScaleFor(zoomed: true, motionAllowed: true, 100)); // the cap
+		Assert.Equal(0.5f, FocusZoom.Origin.X);
+		Assert.Equal(0.5f, FocusZoom.Origin.Y);
+		// the still's margins (16 a side on a shelf, 12 in a narrow window) keep the growth inside its own slot
+		Assert.True(FocusZoom.MaxGrowthPerSide <= 12);
 	}
 
 	[Fact]

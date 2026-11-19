@@ -24,7 +24,9 @@
         Seaglass: opaque artwork with GlassCardCornerRadius and no border, the title and subtitle below it, progress as a thin
         accent bar, a lift (a spring scale and a deeper shadow, only while GlassMode.MotionAllowed) on pointer-over and
         keyboard focus, and a focus ring of its own (FocusRing) around the artwork, since the system's rectangle would
-        surround the whole slot.
+        surround the whole slot. Nixie 1.4.0: the lift scales the art only (the words stay); the ring is two-tone; the actions
+        are one strip along the art's foot on the button system; a pointer over a card while the keyboard is on another one
+        only brightens it (CardActions, CardFocus); watched and "N to watch" are two neutral marks (Core.ItemBadges).
     -->
     <!--
         fluentfin-mpv: the card is a keyboard stop of its own (Enter/Space open it, arrows move along its row), shows its buttons
@@ -98,104 +100,100 @@
                     ImageSource="{x:Bind ImageSource, Mode=OneWay}" />
             </Grid>
 
+            <!--
+                1.4.0 (the library UX review, X9): hover brightens the art, the keyboard's focus gets the two-tone ring and the
+                actions; a resting pointer never shows a second set of actions while the keyboard is on another card
+            -->
+            <Border
+                x:Name="HoverBrighten"
+                Background="{ThemeResource NixieCardHoverOverlayBrush}"
+                IsHitTestVisible="False"
+                Visibility="Collapsed" />
+
             <Grid x:Name="ContentOverlay">
-                <!--  under the buttons while they show, so they read on any artwork  -->
+                <!--
+                    1.4.0 (X10): two marks, never one capsule for both meanings, never the accent: "N to watch" a neutral square
+                    count, top left; watched a dim neutral check, top right, only when nothing is left (Core.ItemBadges)
+                -->
                 <Border
-                    x:Name="HoverScrim"
-                    Background="{StaticResource Black65O}"
-                    IsHitTestVisible="False"
-                    Opacity="0.55"
-                    Visibility="Collapsed" />
-                <Button
-                    x:Name="PlayButton" IsTabStop="False"
-                    Width="44"
-                    Height="44"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    ui:VisualExtensions.NormalizedCenterPoint="0.5,0.5"
-                    ui:VisualExtensions.Scale="0.8"
-                    AutomationProperties.Name="{x:Bind core:ItemLabels.PlayAction(Model.Dto), Mode=OneWay, FallbackValue=Play}"
-                    Background="{StaticResource Black65O}"
-                    BorderThickness="0"
-                    Command="{x:Bind root:App.Commands.PlayDtoCommand}"
-                    CommandParameter="{x:Bind Model.Dto, Mode=OneWay}"
-                    CornerRadius="22"
-                    Style="{ThemeResource BareButtonStyle}"
-                    ToolTipService.ToolTip="{x:Bind core:ItemLabels.PlayAction(Model.Dto), Mode=OneWay, FallbackValue=Play}"
-                    Visibility="Collapsed">
-
-                    <animations:Implicit.ShowAnimations>
-                        <animations:OpacityAnimation
-                            From="0"
-                            To="1.0"
-                            Duration="0:0:0.2" />
-                    </animations:Implicit.ShowAnimations>
-                    <animations:Explicit.Animations>
-                        <animations:AnimationSet x:Name="ZoomAnimation">
-                            <animations:ScaleAnimation To="1" Duration="0:0:0.3" />
-                            <animations:StartAnimationActivity Animation="{Binding ElementName=OnEnter}" />
-                        </animations:AnimationSet>
-                        <animations:AnimationSet x:Name="ZoomOutAnimation">
-                            <animations:ScaleAnimation To="0.8" Duration="0:0:0.3" />
-                            <animations:StartAnimationActivity Animation="{Binding ElementName=OnExit}" />
-                        </animations:AnimationSet>
-                    </animations:Explicit.Animations>
-                    <i:Interaction.Behaviors>
-                        <i:EventTriggerBehavior EventName="PointerEntered">
-                            <cb:StartAnimationAction Animation="{Binding ElementName=ZoomAnimation}" />
-                        </i:EventTriggerBehavior>
-                        <i:EventTriggerBehavior EventName="PointerExited">
-                            <cb:StartAnimationAction Animation="{Binding ElementName=ZoomOutAnimation}" />
-                        </i:EventTriggerBehavior>
-                    </i:Interaction.Behaviors>
-
-                    <FontIcon FontSize="20" Glyph="&#xF5B0;">
-                        <animations:Explicit.Animations>
-                            <animations:AnimationSet x:Name="OnEnter">
-                                <animations:ColorAnimation
-                                    Layer="Xaml"
-                                    Target="(FontIcon.Foreground).(SolidColorBrush.Color)"
-                                    To="{ThemeResource SystemAccentColor}"
-                                    Duration="0:0:0.3" />
-                            </animations:AnimationSet>
-                            <animations:AnimationSet x:Name="OnExit">
-                                <animations:ColorAnimation
-                                    Layer="Xaml"
-                                    Target="(FontIcon.Foreground).(SolidColorBrush.Color)"
-                                    To="White"
-                                    Duration="0:0:0.3" />
-                            </animations:AnimationSet>
-                        </animations:Explicit.Animations>
-                    </FontIcon>
-                </Button>
+                    x:Name="CountChip"
+                    Style="{StaticResource NixieCountChipStyle}"
+                    Visibility="{x:Bind c:BaseItemDtoConverters.ToWatchVisibility(Model), Mode=OneWay}">
+                    <TextBlock Style="{StaticResource NixieCountChipTextStyle}" Text="{x:Bind c:BaseItemDtoConverters.ToWatchText(Model), Mode=OneWay}" />
+                </Border>
+                <Border
+                    x:Name="WatchedMark"
+                    Style="{StaticResource NixieWatchedBadgeStyle}"
+                    Visibility="{x:Bind c:BaseItemDtoConverters.WatchedMarkVisibility(Model), Mode=OneWay}">
+                    <FontIcon Style="{StaticResource NixieWatchedGlyphStyle}" />
+                </Border>
 
                 <!--
-                    1.2.0 (1.1.3 UX audit, layout item 23): one badge everywhere, the accent on artwork with its dark check or
-                    count, as the episode rows' watched mark (it was a saturated green pill, and the count Windows' own accent)
+                    1.4.0 (DI-m6, CL-M12): the actions in one strip along the art's foot, on the button system: Play the Primary
+                    (an icon circle), Watched and Favorite the icon toggles, More the icon button, all 44 with 20 px glyphs, on the
+                    strip's scrim. The words under the art stay where they are. 1.2.0: each button is named for its item and says
+                    what a click does now, its tooltip the same words ("Mark Inception as watched").
                 -->
-                <InfoBadge
-                    Width="50"
-                    Height="25"
-                    Margin="10"
-                    Padding="5,0"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    Background="{ThemeResource NixieAccentOnImageBrush}"
-                    Foreground="{ThemeResource NixieOnAccentOnImageBrush}"
-                    FontSize="25"
-                    FontWeight="ExtraBold"
-                    IconSource="{x:Bind c:BaseItemDtoConverters.CardBadgeSource(Model), Mode=OneWay}"
-                    Visibility="{x:Bind c:BaseItemDtoConverters.IsCardBadgeVisible(Model), Mode=OneWay}"
-                    Value="{x:Bind c:BaseItemDtoConverters.GetCardBadgeValue(Model), Mode=OneWay}">
-                    <InfoBadge.Resources>
-                        <x:Double x:Key="InfoBadgeMaxHeight">100</x:Double>
-                        <x:Double x:Key="InfoBadgeValueFontSize">18</x:Double>
-                    </InfoBadge.Resources>
-                </InfoBadge>
+                <Grid
+                    x:Name="ActionStrip"
+                    VerticalAlignment="Bottom"
+                    RequestedTheme="Dark"
+                    Visibility="Collapsed">
+                    <Border
+                        x:Name="HoverScrim"
+                        Height="96"
+                        VerticalAlignment="Bottom"
+                        Background="{ThemeResource NixieCardStripScrimBrush}"
+                        IsHitTestVisible="False" />
+                    <StackPanel x:Name="ActionButtons" Style="{StaticResource NixieCardActionStripStyle}">
+                        <Button
+                            x:Name="PlayButton"
+                            AutomationProperties.Name="{x:Bind core:ItemLabels.PlayAction(Model.Dto), Mode=OneWay, FallbackValue=Play}"
+                            Command="{x:Bind root:App.Commands.PlayDtoCommand}"
+                            CommandParameter="{x:Bind Model.Dto, Mode=OneWay}"
+                            IsTabStop="False"
+                            Style="{StaticResource NixiePrimaryIconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind core:ItemLabels.PlayAction(Model.Dto), Mode=OneWay, FallbackValue=Play}">
+                            <FontIcon FontSize="{StaticResource NixieCardGlyphSize}" Glyph="&#xE768;" />
+                        </Button>
+                        <ToggleButton
+                            x:Name="MarkWatchedButton"
+                            AutomationProperties.Name="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay, FallbackValue='Mark as watched'}"
+                            Click="MarkWatchedButton_Clicked"
+                            IsChecked="{x:Bind Model.UserData.Played, Converter={StaticResource NullableBoolToValueOrDefaultConverter}, Mode=OneWay}"
+                            IsTabStop="False"
+                            Style="{StaticResource NixieCardIconToggleButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay, FallbackValue='Mark as watched'}">
+                            <FontIcon FontSize="{StaticResource NixieCardGlyphSize}" Glyph="&#xE73E;" />
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="AddToFavoriteButton"
+                            AutomationProperties.Name="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay, FallbackValue='Add to favorites'}"
+                            Click="AddToFavoriteButton_Clicked"
+                            IsChecked="{x:Bind Model.UserData.IsFavorite, Converter={StaticResource NullableBoolToValueOrDefaultConverter}, Mode=OneWay}"
+                            IsTabStop="False"
+                            Style="{StaticResource NixieCardIconToggleButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay, FallbackValue='Add to favorites'}">
+                            <!--  1.2.0 (Nixie button review, I5): an outline heart when off, filled when on  -->
+                            <FontIcon FontSize="{StaticResource NixieCardGlyphSize}" Glyph="{x:Bind c:ItemRowConverters.FavoriteGlyph(AddToFavoriteButton.IsChecked), Mode=OneWay}" />
+                        </ToggleButton>
+                        <Button
+                            x:Name="MoreButton"
+                            AutomationProperties.Name="{x:Bind core:ItemLabels.MoreOptions(Model.Dto), Mode=OneWay, FallbackValue='More options'}"
+                            Flyout="{x:Bind Model.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}"
+                            IsTabStop="False"
+                            Style="{StaticResource NixieCardIconButtonStyle}"
+                            ToolTipService.ToolTip="{x:Bind core:ItemLabels.MoreOptions(Model.Dto), Mode=OneWay, FallbackValue='More options'}"
+                            Visibility="{x:Bind c:JellyfinFlyoutConverter.CardMenuVisibility(Model.Dto), Mode=OneWay}">
+                            <FontIcon FontSize="{StaticResource NixieCardGlyphSize}" Glyph="&#xE712;" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
 
                 <!--
                     Seaglass 1.1.3: the accent on artwork, on a dark track as tall as the bar (WinUI's track is a 1 px line, so the
                     bar sat on the poster itself: any poster near the accent's own lightness hid it). Glass.xaml, NixieAccentOnImageBrush.
+                    1.4.0: progress is one of the accent's three jobs; drawn over the strip's scrim, so it stays in sight.
                 -->
                 <ProgressBar
                     Height="4"
@@ -211,78 +209,21 @@
                         <x:Double x:Key="ProgressBarTrackHeight">4</x:Double>
                     </ProgressBar.Resources>
                 </ProgressBar>
-
-                <StackPanel
-                    x:Name="ActionButtons"
-                    RequestedTheme="Dark"
-                    Margin="10"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Bottom"
-                    Orientation="Horizontal"
-                    Spacing="4"
-                    Visibility="Collapsed">
-
-                    <!--
-                        1.2.0: each button is named for its item and says what a click does now, its tooltip the same
-                        words (Seaglass UX review, fix 4): "Mark Inception as watched", "Remove Inception from favorites"
-                    -->
-                    <ToggleButton
-                        x:Name="MarkWatchedButton" IsTabStop="False"
-                        Width="44"
-                        Height="44"
-                        AutomationProperties.Name="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay, FallbackValue='Mark as watched'}"
-                        Click="MarkWatchedButton_Clicked"
-                        Content="{ui:FontIcon Glyph=&#xE73E;,
-                                              FontSize=16}"
-                        Background="{StaticResource Black65O}"
-                        CornerRadius="22"
-                        IsChecked="{x:Bind Model.UserData.Played, Converter={StaticResource NullableBoolToValueOrDefaultConverter}, Mode=OneWay}"
-                        Style="{ThemeResource IconToggleButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind core:ItemLabels.WatchedAction(Model.Dto, MarkWatchedButton.IsChecked), Mode=OneWay, FallbackValue='Mark as watched'}" />
-
-                    <ToggleButton
-                        x:Name="AddToFavoriteButton" IsTabStop="False"
-                        Width="44"
-                        Height="44"
-                        AutomationProperties.Name="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay, FallbackValue='Add to favorites'}"
-                        Click="AddToFavoriteButton_Clicked"
-                        Background="{StaticResource Black65O}"
-                        CornerRadius="22"
-                        IsChecked="{x:Bind Model.UserData.IsFavorite, Converter={StaticResource NullableBoolToValueOrDefaultConverter}, Mode=OneWay}"
-                        Style="{ThemeResource IconToggleButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind core:ItemLabels.FavoriteAction(Model.Dto, AddToFavoriteButton.IsChecked), Mode=OneWay, FallbackValue='Add to favorites'}">
-                        <ToggleButton.Resources>
-                            <StaticResource x:Key="SystemAccentColor" ResourceKey="FavoriteCheckedBrush" />
-                        </ToggleButton.Resources>
-                        <!--  1.2.0 (Nixie button review, I5): an outline heart when off, filled when on  -->
-                        <FontIcon FontSize="16" Glyph="{x:Bind c:ItemRowConverters.FavoriteGlyph(AddToFavoriteButton.IsChecked), Mode=OneWay}" />
-                    </ToggleButton>
-
-                    <Button
-                        x:Name="MoreButton" IsTabStop="False"
-                        Width="44"
-                        Height="44"
-                        AutomationProperties.Name="{x:Bind core:ItemLabels.MoreOptions(Model.Dto), Mode=OneWay, FallbackValue='More options'}"
-                        Content="{ui:FontIcon Glyph=&#xE712;,
-                                              FontSize=16}"
-                        Background="{StaticResource Black65O}"
-                        CornerRadius="22"
-                        Flyout="{x:Bind Model.Dto, Converter={StaticResource FlyoutConverter}, Mode=OneWay}"
-                        Style="{ThemeResource IconButtonStyle}"
-                        ToolTipService.ToolTip="{x:Bind core:ItemLabels.MoreOptions(Model.Dto), Mode=OneWay, FallbackValue='More options'}"
-                        Visibility="{x:Bind c:JellyfinFlyoutConverter.CardMenuVisibility(Model.Dto), Mode=OneWay}" />
-
-                </StackPanel>
-
             </Grid>
 
+            <!--  1.4.0: the keyboard's ring, two-tone (WinUI's own focus colours, so it follows the theme and high contrast)  -->
             <Border
                 x:Name="FocusRing"
-                BorderBrush="{ThemeResource GlassTextPrimaryBrush}"
+                BorderBrush="{ThemeResource SystemControlFocusVisualPrimaryBrush}"
                 BorderThickness="3"
                 CornerRadius="{StaticResource GlassCardCornerRadius}"
                 IsHitTestVisible="False"
-                Visibility="Collapsed" />
+                Visibility="Collapsed">
+                <Border
+                    BorderBrush="{ThemeResource SystemControlFocusVisualSecondaryBrush}"
+                    BorderThickness="1.5"
+                    CornerRadius="9" />
+            </Border>
 
             <!--  one very subtle light edge on the artwork, nothing else around it  -->
             <Border

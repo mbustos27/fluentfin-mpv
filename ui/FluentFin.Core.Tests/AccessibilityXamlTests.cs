@@ -66,7 +66,7 @@ public class AccessibilityXamlTests
 		var play = Assert.Single(buttons, b => (string?)b.Attribute("Command") == "{x:Bind ViewModel.PlayCommand}");
 		Assert.Equal("{x:Bind ViewModel.PlayLabel, Mode=OneWay}", (string?)play.Attribute("AutomationProperties.Name"));
 		Assert.Contains(play.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.PlayLabel, Mode=OneWay}");
-		Assert.Equal("{StaticResource GlassAccentPillButtonStyle}", (string?)play.Attribute("Style"));
+		Assert.Equal("{StaticResource NixiePrimaryButtonStyle}", (string?)play.Attribute("Style"));
 
 		var fromBeginning = Assert.Single(buttons, b => (string?)b.Attribute("Command") == "{x:Bind ViewModel.PlayFromBeginningCommand}");
 		// 1.2.0 (Nixie button review, I37 / I50): "Play from start" in words beside Resume (it was an icon alone), named
@@ -74,7 +74,7 @@ public class AccessibilityXamlTests
 		Assert.StartsWith("{x:Bind core:ItemLabels.PlayFromBeginningAction(ViewModel.Dto), Mode=OneWay", (string?)fromBeginning.Attribute("AutomationProperties.Name"));
 		Assert.Contains(fromBeginning.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "Play from start");
 		Assert.Contains(fromBeginning.Descendants(Presentation + "FontIcon"), i => (string?)i.Attribute("Glyph") == "");
-		Assert.Equal("{StaticResource GlassPillButtonStyle}", (string?)fromBeginning.Attribute("Style"));
+		Assert.Equal("{StaticResource NixieButtonStyle}", (string?)fromBeginning.Attribute("Style"));
 		Assert.Equal("{x:Bind ViewModel.HasResumePoint, Mode=OneWay}", (string?)fromBeginning.Attribute("Visibility"));
 	}
 
@@ -90,7 +90,7 @@ public class AccessibilityXamlTests
 		Assert.Contains(play.Descendants(Presentation + "TextBlock"), t => (string?)t.Attribute("Text") == "{x:Bind ViewModel.PlayTarget.Label, Mode=OneWay}");
 		Assert.Equal("{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}", (string?)play.Attribute("AutomationProperties.Name"));
 		Assert.Equal("{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}", (string?)play.Attribute("ToolTipService.ToolTip"));
-		Assert.Equal("{StaticResource GlassAccentPillButtonStyle}", (string?)play.Attribute("Style"));
+		Assert.Equal("{StaticResource NixiePrimaryButtonStyle}", (string?)play.Attribute("Style"));
 	}
 
 	[Theory]
@@ -150,7 +150,7 @@ public class AccessibilityXamlTests
 
 		Assert.Equal(["Watch trailer", "Mark as watched", "Add to favorites", "More options"],
 			new[] { "TrailerButton", "WatchedButton", "FavoriteButton", "MoreButton" }.Select(n => (string?)FindByName(hero, n).Attribute("AutomationProperties.Name")));
-		Assert.DoesNotContain(hero.Descendants(), e => (string?)e.Attribute("Style") == "{StaticResource GlassAccentPillButtonStyle}");
+		Assert.DoesNotContain(hero.Descendants(), e => (string?)e.Attribute("Style") == "{StaticResource NixiePrimaryButtonStyle}");
 		var scrims = hero.Descendants(Presentation + "Border").Select(b => (string?)b.Attribute("Background")).ToList();
 		Assert.Contains("{ThemeResource GlassImageScrimBrush}", scrims);
 		Assert.Contains("{ThemeResource ItemHeroSideScrimBrush}", scrims);
@@ -215,8 +215,10 @@ public class AccessibilityXamlTests
 		// Seaglass: the ring is the card's own, around the artwork (the system's rectangle would surround the whole slot)
 		Assert.Equal("False", (string?)root.Attribute("UseSystemFocusVisuals"));
 		var ring = FindByName(Load("FluentFin/Controls/BaseItemDtoCard.xaml"), "FocusRing");
-		Assert.StartsWith("{ThemeResource GlassTextPrimaryBrush}", (string?)ring.Attribute("BorderBrush"));
+		// 1.4.0: the two-tone ring (WinUI's own focus colours: the theme's and high contrast's), 3 px outside and a 1.5 px line inside
+		Assert.Equal("{ThemeResource SystemControlFocusVisualPrimaryBrush}", (string?)ring.Attribute("BorderBrush"));
 		Assert.Equal("3", (string?)ring.Attribute("BorderThickness"));
+		Assert.Equal("{ThemeResource SystemControlFocusVisualSecondaryBrush}", (string?)ring.Elements().Single().Attribute("BorderBrush"));
 	}
 
 	[Fact]

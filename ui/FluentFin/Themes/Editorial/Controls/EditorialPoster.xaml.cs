@@ -40,10 +40,11 @@ public sealed partial class EditorialPoster : UserControl
 		DependencyProperty.Register(nameof(PosterWidth), typeof(double), typeof(EditorialPoster), new PropertyMetadata(144.0, (d, _) => ((EditorialPoster)d).Resize()));
 
 	public static readonly DependencyProperty IsOpenProperty =
-		DependencyProperty.Register(nameof(IsOpen), typeof(bool), typeof(EditorialPoster), new PropertyMetadata(false, (d, _) => ((EditorialPoster)d).UpdateRing()));
+		DependencyProperty.Register(nameof(IsOpen), typeof(bool), typeof(EditorialPoster), new PropertyMetadata(false, (d, e) => ((EditorialPoster)d).OnIsOpenChanged((bool)e.OldValue, (bool)e.NewValue)));
 
 	private bool _pointerOver;
 	private bool _keyboardFocus;
+	private bool _keyboardElsewhere;
 	private int _decodedHeight;
 
 	public EditorialPoster()
@@ -52,20 +53,33 @@ public sealed partial class EditorialPoster : UserControl
 		Loaded += (_, _) =>
 		{
 			ItemUserData.Changed += OnUserDataChanged;
+			CardFocus.Changed += OnCardFocusChanged;
+			_keyboardElsewhere = CardFocus.IsElsewhere(this);
 			IsOpen = Item is { } item && FindHost() is { } host && host.IsOpen(item);
 		};
-		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
+		Unloaded += (_, _) =>
+		{
+			ItemUserData.Changed -= OnUserDataChanged;
+			CardFocus.Changed -= OnCardFocusChanged;
+			CardFocus.Release(this);
+		};
 		AddHandler(KeyDownEvent, new KeyEventHandler(OnKeyDown), false);
 		GotFocus += OnGotFocus;
 		LostFocus += (_, _) =>
 		{
+			if (FocusState != FocusState.Unfocused)
+			{
+				return;
+			}
+
 			_keyboardFocus = false;
+			CardFocus.Release(this);
 			UpdateRing();
 		};
 		RootGrid.Tapped += OnTapped;
-		RootGrid.PointerEntered += (_, _) => { _pointerOver = true; Lift(); };
-		RootGrid.PointerExited += (_, _) => { _pointerOver = false; Lift(); };
-		RootGrid.PointerCanceled += (_, _) => { _pointerOver = false; Lift(); };
+		RootGrid.PointerEntered += (_, _) => { _pointerOver = true; UpdateRing(); };
+		RootGrid.PointerExited += (_, _) => { _pointerOver = false; UpdateRing(); };
+		RootGrid.PointerCanceled += (_, _) => { _pointerOver = false; UpdateRing(); };
 		ContextRequested += OnContextRequested;
 		Resize();
 	}
@@ -95,10 +109,10 @@ public sealed partial class EditorialPoster : UserControl
 	private void Resize()
 	{
 		Width = PosterWidth;
-		Art.Height = FocusGlow.Height = ArtHeight;
+		Art.Height = ArtHeight;
 		FocusRing.Height = ArtHeight + 8;
 		FocusRing.VerticalAlignment = VerticalAlignment.Top;
-		FocusGlow.VerticalAlignment = VerticalAlignment.Top;
+		OpenRim.Height = ArtHeight + 6;
 		ApplyImage();
 	}
 
@@ -132,7 +146,10 @@ public sealed partial class EditorialPoster : UserControl
 	private void ApplyUserData()
 	{
 		var dto = Item?.Dto;
-		WatchedMark.Visibility = EditorialCards.Watched(dto) ? Visibility.Visible : Visibility.Collapsed;
+		WatchedMark.Visibility = ItemBadges.Watched(dto) ? Visibility.Visible : Visibility.Collapsed;
+		// 1.4.0 (X10, E-m4): the count Narrator hears ("5 unwatched items") is on screen too
+		CountText.Text = ItemBadges.ToWatchText(dto);
+		CountChip.Visibility = CountText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		var progress = EditorialCards.Progress(dto);
 		ProgressTrack.Visibility = progress > 0 ? Visibility.Visible : Visibility.Collapsed;
 		ProgressFill.Width = Math.Max(4, (PosterWidth - 20) * progress / 100);
@@ -231,26 +248,67 @@ public sealed partial class EditorialPoster : UserControl
 	private void OnGotFocus(object sender, RoutedEventArgs e)
 	{
 		_keyboardFocus = ReferenceEquals(e.OriginalSource, this) && FocusState is FocusState.Keyboard or FocusState.Programmatic;
+		if (_keyboardFocus)
+		{
+			CardFocus.Take(this);
+		}
+		else
+		{
+			CardFocus.Release(this);
+		}
+
 		UpdateRing();
 	}
 
-	private void UpdateRing()
+	private void OnCardFocusChanged(object? sender, EventArgs e)
 	{
-		var ring = _keyboardFocus || IsOpen;
-		FocusRing.Visibility = FocusGlow.Visibility = ring ? Visibility.Visible : Visibility.Collapsed;
-		Notch.Visibility = IsOpen ? Visibility.Visible : Visibility.Collapsed;
-		Lift();
-		if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
+		var elsewhere = CardFocus.IsElsewhere(this);
+		if (elsewhere != _keyboardElsewhere)
 		{
-			peer.RaisePropertyChangedEvent(ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty,
-				IsOpen ? ExpandCollapseState.Collapsed : ExpandCollapseState.Expanded, IsOpen ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed);
+			_keyboardElsewhere = elsewhere;
+			UpdateRing();
 		}
 	}
 
-	/// <summary>Hover and keyboard focus lift the artwork a little (1.04 on a spring, in Full mode only) and deepen its shadow.</summary>
-	private void Lift()
+	/// <summary>
+	/// 1.4.0 (the library UX review, E-m4): Narrator hears "expanded" or "collapsed" when the details open or close, never on a
+	/// focus change (the poster raised the event on every arrow key, whether or not anything opened).
+	/// </summary>
+	private void OnIsOpenChanged(bool was, bool now)
 	{
-		var lifted = _pointerOver || _keyboardFocus;
+		UpdateRing();
+		if (was != now && FrameworkElementAutomationPeer.FromElement(this) is { } peer)
+		{
+			peer.RaisePropertyChangedEvent(ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty,
+				was ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed, now ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed);
+		}
+	}
+
+	/// <summary>What the poster draws now (<see cref="Look"/>).</summary>
+	private void UpdateRing()
+	{
+		var look = Look(_pointerOver, _keyboardFocus, _keyboardElsewhere, IsOpen);
+		FocusRing.Visibility = look.Ring ? Visibility.Visible : Visibility.Collapsed;
+		OpenRim.Visibility = Notch.Visibility = look.Open ? Visibility.Visible : Visibility.Collapsed;
+		HoverBrighten.Visibility = look.Brighten ? Visibility.Visible : Visibility.Collapsed;
+		Lift(look.Lift);
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the library UX review, E-M8, X9): one mark per meaning. The keyboard's poster: the two-tone ring and the lift.
+	/// An open poster: the accent rim and the notch, no ring, no lift (two posters never look focused at once). A free pointer:
+	/// the lift; a pointer while the keyboard is on another card: the brighten alone.
+	/// </summary>
+	internal static PosterLook Look(bool pointerOver, bool keyboardFocus, bool keyboardElsewhere, bool open)
+	{
+		var freePointer = pointerOver && !keyboardElsewhere;
+		var lift = keyboardFocus || (freePointer && !open);
+		return new PosterLook(Ring: keyboardFocus, Open: open, Lift: lift, Brighten: pointerOver && !lift && !keyboardFocus);
+	}
+
+	/// <summary>The keyboard's focus and a free pointer lift the artwork a little (1.04 on a spring, in Full mode only) and deepen its shadow.</summary>
+	private void Lift(bool lifted)
+	{
 		var visual = ElementCompositionPreview.GetElementVisual(Art);
 		visual.CenterPoint = new Vector3((float)(PosterWidth / 2), (float)(ArtHeight / 2), 0);
 		var scale = lifted && SafeMotion.Allowed ? 1.04f : 1f;
@@ -276,6 +334,9 @@ public sealed partial class EditorialPoster : UserControl
 
 	protected override AutomationPeer OnCreateAutomationPeer() => new EditorialPosterAutomationPeer(this);
 }
+
+/// <summary>Nixie 1.4.0: what an Editorial poster draws for the focus, the pointer and its open details.</summary>
+internal readonly record struct PosterLook(bool Ring, bool Open, bool Lift, bool Brighten);
 
 /// <summary>
 /// Narrator reads an Editorial poster as the shared card is read (ItemLabels.CardName: "Glass Canyon, 2022, favorite"), an item
