@@ -174,6 +174,21 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(["Intro", "Outro"], [s["Type"] for s in segments])
         self.assertEqual(200, self.request("/Videos/%s/Trickplay/320/0.jpg" % item["Id"], raw=True)[0])
 
+    def test_the_release_answer_stands_in_for_github_and_its_version_can_be_set(self):
+        # Nixie 1.3.1: the app's update check asks this in a harness run (NIXIE_UPDATE_API), never GitHub
+        latest = self.get("/__harness/release/latest")
+        self.assertEqual("v0.0.1", latest["tag_name"])
+        self.assertFalse(latest["draft"] or latest["prerelease"])
+        self.assertEqual(200, self.request("/__harness/release", "POST", {"version": "1.3.2"})[0])
+        latest = self.get("/__harness/release/latest")
+        self.assertEqual("v1.3.2", latest["tag_name"])
+        self.assertEqual(["Nixie-1.3.2-win-x64.msi", "Nixie-1.3.2-win-x64.msi.sha256"], [a["name"] for a in latest["assets"]])
+        self.assertTrue(all(a["browser_download_url"].startswith("https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.3.2/")
+                            for a in latest["assets"]))
+        self.request("/__harness/release", "POST", {"version": "not a version"})
+        self.assertEqual("v1.3.2", self.get("/__harness/release/latest")["tag_name"])
+        self.request("/__harness/release", "POST", {"version": "0.0.1"})
+
     def test_the_showcase_movie_has_a_youtube_trailer_served_by_the_harness(self):
         # Nixie 1.3.1: the theatre window plays it from the fake server's page, never from YouTube
         fx = self.get("/__harness/fixture")

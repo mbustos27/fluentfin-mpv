@@ -110,4 +110,22 @@ public static class UpdateGate
 		lastAttempt is not { } last || last > now || now - last >= RetryInterval;
 
 	public static readonly TimeSpan RetryInterval = TimeSpan.FromHours(1);
+
+	/// <summary>Nixie 1.3.1: the last attempt got no answer (it was not followed by a check).</summary>
+	public static bool LastAttemptFailed(UpdateState state) =>
+		state.LastAttempt is { } attempt && (state.LastCheck is not { } check || check < attempt);
+
+	/// <summary>Nixie 1.3.1: GitHub asked to wait (Retry-After, or its rate limit's reset) and the time has not come.</summary>
+	public static bool Waiting(UpdateState state, DateTimeOffset now) => state.RetryAfter is { } until && until > now;
+
+	/// <summary>
+	/// Nixie 1.3.1: whether the automatic check asks now. At the run's start (<paramref name="atStart"/>), unless the last attempt
+	/// failed within the hour; later in the run, once a day (<see cref="IsDue"/>), at most one attempt an hour. Never while
+	/// GitHub asked to wait.
+	/// </summary>
+	public static bool ShouldCheck(UpdateState state, DateTimeOffset now, bool atStart) =>
+		!Waiting(state, now)
+		&& (atStart
+			? !(LastAttemptFailed(state) && !AttemptAllowed(state.LastAttempt, now))
+			: IsDue(state.LastCheck, now) && AttemptAllowed(state.LastAttempt, now));
 }

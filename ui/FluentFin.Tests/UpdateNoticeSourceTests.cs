@@ -46,5 +46,31 @@ public sealed class UpdateNoticeSourceTests
 		var page = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "SettingsPage.xaml"));
 		Assert.Contains("Header=\"Check for updates\"", page);
 		Assert.Contains("ViewModel.CheckForUpdates", page);
+		// Nixie 1.3.1: Check now, and the text says the check is on by default and what it sends
+		Assert.Contains("Content=\"Check now\"", page);
+		Assert.Contains("Nothing is sent but the request for the latest release", page);
+		Assert.Contains("On by default.", page);
+		var code = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "SettingsPage.xaml.cs"));
+		Assert.Contains("Coordinator.CheckNowAsync()", code);
+		Assert.Contains("CheckNowButton.IsEnabled = false;", code);
+		Assert.Contains("RaiseNotificationEvent", code);
+	}
+
+	// Nixie 1.3.1: the notice names the version and offers Download and install, Release notes and Dismiss; it only tells
+	[Fact]
+	public void TheNotice_OffersInstallNotesAndDismiss_AndNeverInstallsByItself()
+	{
+		var shell = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "ShellPage.xaml"));
+		Assert.Contains("Content=\"Dismiss\"", shell);
+		var code = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "ShellPage.xaml.cs"));
+		Assert.Contains("UpdateBar.Title = $\"{Core.AppIdentity.Name} {notice.Version} is available\";", code);
+		Assert.Contains("_updates.Coordinator.Dismiss()", code);
+		// InstallAsync only from the buttons' click handlers
+		var service = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Services", "UpdateNoticeService.cs"));
+		Assert.DoesNotContain("InstallAsync(", service[service.IndexOf("private async Task RunAsync", StringComparison.Ordinal)..]);
+		// a test run asks the fake server, never GitHub, and turns the check off unless it asks for it
+		Assert.Contains("UpdateSource.ApiFor(", service);
+		var prepare = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "..", "tools", "ui-harness", "offscreen", "prepare.ps1"));
+		Assert.Contains("-NotePropertyName CheckForUpdates -NotePropertyValue $false", prepare);
 	}
 }

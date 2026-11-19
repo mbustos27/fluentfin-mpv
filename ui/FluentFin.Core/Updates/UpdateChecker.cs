@@ -20,22 +20,26 @@ public enum UpdateCheckStatus
 	RateLimited,
 }
 
-public sealed record UpdateCheckResult(UpdateCheckStatus Status, ReleaseInfo? Release = null, DateTimeOffset? RetryAfter = null);
+/// <param name="Reason">Nixie 1.3.1: why a check failed, in plain words for "Check now" ("no connection to GitHub").</param>
+public sealed record UpdateCheckResult(UpdateCheckStatus Status, ReleaseInfo? Release = null, DateTimeOffset? RetryAfter = null, string? Reason = null);
 
 /// <summary>
 /// Seaglass: the opt-in update check. One request, to GitHub's "latest release" API for this repository, with a plain
 /// User-Agent ("Nixie/x.y.z") and nothing else about the user or the PC. It fails silently, and honours GitHub's rate limit
 /// headers (Retry-After, x-ratelimit-remaining/reset): a limited answer is reported, never retried here.
 /// </summary>
-public sealed class UpdateChecker(HttpClient http, string currentVersion)
+public sealed class UpdateChecker(HttpClient http, string currentVersion, Uri? api = null)
 {
+	/// <summary>Nixie 1.3.1: where the check asks (GitHub's latest-release API; the harness's fake server in its dev runs: <see cref="UpdateSource.ApiFor"/>).</summary>
+	public Uri Api { get; } = api ?? new Uri(UpdateSource.LatestReleaseApi);
+
 	public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
 
 	public async Task<UpdateCheckResult> CheckAsync(DateTimeOffset now, CancellationToken cancellation = default)
 	{
 		try
 		{
-			using var request = new HttpRequestMessage(HttpMethod.Get, UpdateSource.LatestReleaseApi);
+			using var request = new HttpRequestMessage(HttpMethod.Get, Api);
 			request.Headers.UserAgent.Add(new ProductInfoHeaderValue(AppIdentity.Name, currentVersion));
 			request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
 			using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
@@ -46,27 +50,35 @@ public sealed class UpdateChecker(HttpClient http, string currentVersion)
 			{
 				return RateLimit(response, now) is { } until
 					? new UpdateCheckResult(UpdateCheckStatus.RateLimited, RetryAfter: until)
-					: new UpdateCheckResult(UpdateCheckStatus.Failed);
+					: new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: $"GitHub answered {(int)response.StatusCode}");
 			}
 
 			if (!response.IsSuccessStatusCode)
 			{
-				return new UpdateCheckResult(UpdateCheckStatus.Failed);
+				return new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: $"GitHub answered {(int)response.StatusCode}");
 			}
 
 			var release = ReleaseInfo.Parse(await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false));
 			if (release is null)
 			{
-				return new UpdateCheckResult(UpdateCheckStatus.Failed);
+				return new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: "GitHub's answer could not be read");
 			}
 
 			return UpdateVersion.IsNewer(release.Version, currentVersion)
 				? new UpdateCheckResult(UpdateCheckStatus.Available, release)
 				: new UpdateCheckResult(UpdateCheckStatus.UpToDate);
 		}
+		catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
+		{
+			return new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: "GitHub did not answer in time");
+		}
+		catch (HttpRequestException)
+		{
+			return new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: "no connection to GitHub");
+		}
 		catch (Exception)
 		{
-			return new UpdateCheckResult(UpdateCheckStatus.Failed);
+			return new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: "the check did not finish");
 		}
 	}
 

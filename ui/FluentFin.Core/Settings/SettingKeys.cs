@@ -40,8 +40,12 @@ public static class SettingKeys
 	/// <summary>fluentfin-mpv: the subtitle text size in the mpv player's controls, in percent (50 to 200), kept on this PC.</summary>
 	public static Key<int> SubtitleSize { get; } = new Key<int>("SubtitleSize", 100);
 
-	/// <summary>Seaglass: Settings > Check for updates. Off by default: nothing is asked of GitHub until the user turns it on.</summary>
-	public static Key<bool> CheckForUpdates { get; } = new Key<bool>("CheckForUpdates", false);
+	/// <summary>
+	/// Seaglass: Settings > Check for updates. Nixie 1.3.1: on by default (the user confirmed): Nixie asks GitHub for its latest
+	/// release when it opens and once a day; nothing else is sent. A saved off from an older version is the old default unless
+	/// the check ever ran (<see cref="Updates.UpdateDefaults"/>).
+	/// </summary>
+	public static Key<bool> CheckForUpdates { get; } = new Key<bool>("CheckForUpdates", true);
 
 	/// <summary>Seaglass: what the update check remembers (when it last asked, the release it found, the one dismissed), as JSON: <see cref="Updates.UpdateState"/>.</summary>
 	public static Key<string> UpdateState { get; } = new Key<string>("UpdateState", "");

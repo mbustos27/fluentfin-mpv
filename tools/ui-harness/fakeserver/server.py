@@ -26,6 +26,8 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   Unknown endpoints answer 404 and are listed there as unhandled.
 - Control (127.0.0.1 only, no auth): GET /__harness/fixture (the showcase items the UI harness navigates to),
   GET /__harness/trailer/<id> (Nixie 1.3.1: a still page standing in for YouTube's trailer embed),
+  GET /__harness/release/latest and POST /__harness/release {"version"} (Nixie 1.3.1: GitHub's latest-release answer for
+  the app's update check; FAKESERVER_RELEASE sets the version at start, 0.0.1 by default),
   GET /__harness/summary, POST /__harness/latency, POST /__harness/streams, POST /__harness/shutdown,
   GET /__harness/quickconnect (the codes waiting, never their secrets), POST /__harness/quickconnect/approve,
   POST /__harness/libraries {"rename": {"old": "new"}, "add": ["name"]} (the views change; clients hear LibraryChanged).
@@ -58,6 +60,17 @@ import imagegen  # noqa: E402
 import library  # noqa: E402
 import media as media_mod  # noqa: E402
 import admin  # noqa: E402  (Nixie 1.2.0: the administration endpoints)
+
+def release_answer(version):
+    """Nixie 1.3.1: GitHub's latest-release answer for this repository at `version` (its page and assets on github.com,
+    which the app only opens or downloads on a click; a harness run never clicks them)."""
+    base = "https://github.com/mbustos27/fluentfin-mpv/releases"
+    msi = "Nixie-%s-win-x64.msi" % version
+    return {"tag_name": "v" + version, "name": "Nixie " + version, "draft": False, "prerelease": False,
+            "html_url": "%s/tag/v%s" % (base, version), "body": "Harness release " + version,
+            "assets": [{"name": msi, "browser_download_url": "%s/download/v%s/%s" % (base, version, msi)},
+                       {"name": msi + ".sha256", "browser_download_url": "%s/download/v%s/%s.sha256" % (base, version, msi)}]}
+
 
 # Nixie 1.3.1: the trailer embed's stand-in (GET /__harness/trailer/<id>): a still frame of a "film" with a play bar, made of
 # CSS only (no script, nothing loaded from anywhere), so the theatre window's screenshots show a picture where the video goes
@@ -127,6 +140,8 @@ class Server:
         self.rules = [(re.compile(r, re.I), rule_value(ms)) for r, ms in rules]
         self.jitter = jitter
         self.encode_subtitle = False    # POST /__harness/streams: the last embedded subtitle burnt in (a restart to pick)
+        # Nixie 1.3.1: the version GET /__harness/release/latest answers (the app's update check in a harness run)
+        self.release_version = os.environ.get("FAKESERVER_RELEASE") or "0.0.1"
         self.seq = 0
         self.counts = collections.Counter()
         self.unhandled = collections.Counter()
@@ -895,6 +910,15 @@ class Server:
                     if "outro_seconds" in body:
                         outer.lib.outro_seconds = float(body["outro_seconds"])
                     return self._json(200, {"outro_seconds": outer.lib.outro_seconds})
+                if low == "/__harness/release/latest" and method in ("GET", "HEAD"):
+                    # Nixie 1.3.1: the stand-in for GitHub's latest-release API (NIXIE_UPDATE_API points the app here): the
+                    # version FAKESERVER_RELEASE names (or POST /__harness/release {"version"}), 0.0.1 by default (up to date)
+                    return self._json(200, release_answer(outer.release_version))
+                if low == "/__harness/release" and method == "POST":
+                    version = str(self._body().get("version") or "")
+                    if re.fullmatch(r"\d+\.\d+\.\d+", version):
+                        outer.release_version = version
+                    return self._json(200, {"version": outer.release_version})
                 if low.startswith("/__harness/trailer/") and method in ("GET", "HEAD"):
                     # Nixie 1.3.1: the stand-in for YouTube's embed page (NIXIE_TRAILER_EMBED_BASE points the app here):
                     # a still "trailer" card, no script, nothing fetched from anywhere

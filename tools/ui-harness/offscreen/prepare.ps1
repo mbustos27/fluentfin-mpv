@@ -72,6 +72,11 @@ function Initialize-HarnessSettings([string]$DataDir, [string]$BackendCommand, [
     # Nixie 1.3.0: the one-time "Choose a look" dialog would stop every script after the sign-in; the runs that look at it
     # say -Setting ChooseLookOffered=false
     if (-not $settings.PSObject.Properties['ChooseLookOffered']) { $settings | Add-Member -NotePropertyName ChooseLookOffered -NotePropertyValue $true -Force }
+    # Nixie 1.3.1: update checks are on by default; a test run asks nothing of GitHub: off, and the default's one-time switch
+    # marked done (UpdateDefaults), unless the run says -Setting CheckForUpdates=true (a dev build then asks the fake server:
+    # drive.ps1's NIXIE_UPDATE_API; a release package would ask GitHub, so verify-package never says it)
+    $settings | Add-Member -NotePropertyName CheckForUpdates -NotePropertyValue $false -Force
+    $settings | Add-Member -NotePropertyName CheckForUpdatesDefaultOn -NotePropertyValue $true -Force
     foreach ($name in $parsedSettings.Keys) { $settings | Add-Member -NotePropertyName $name -NotePropertyValue $parsedSettings[$name] -Force }
     [IO.File]::WriteAllText($file, ($settings | ConvertTo-Json -Depth 20), [Text.UTF8Encoding]::new($false))
     $chosen = if ($settings.PSObject.Properties['MpvPlayerControls'] -and "$($settings.MpvPlayerControls)" -in @('Mpv', '0')) { 'Mpv' } else { 'FluentFin' }

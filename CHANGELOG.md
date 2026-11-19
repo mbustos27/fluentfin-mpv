@@ -15,6 +15,10 @@
 - **R refreshes the page** (F5 and Ctrl+R too): Home, a library, a See all grid, an item, series or season page, search
   results and the Diary load again from your server, in place: the card the keyboard was on keeps it, and Narrator says
   "Refreshed". Not while you type in a box, in a dialog or menu, or in the player; Settings has nothing to refresh.
+- **Update checks are now on by default** (Settings > Check for updates to turn them off); Nixie checks each time it
+  opens, and **Check now** asks at once. When a newer version is out, a notice above the page says so in every layout,
+  with Download and install, Release notes and Dismiss; nothing is downloaded until you click. Nothing is sent but the
+  request for the latest release. If you had turned the check on before and then off, it stays off.
 - **F1 closes the shortcut sheet too.** F1 and ? open the list of keyboard shortcuts; pressed again while it is open, they
   close it, and the keyboard goes back where it was. Esc and Close still close it.
 

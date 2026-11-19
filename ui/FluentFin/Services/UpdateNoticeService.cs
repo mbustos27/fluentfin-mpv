@@ -9,8 +9,10 @@ using Microsoft.Win32;
 namespace FluentFin.Services;
 
 /// <summary>
-/// Seaglass: the opt-in update notice (Settings > Check for updates, off by default). A timer ticks every minute; the work is in
-/// <see cref="UpdateCoordinator"/> (nothing goes out while the setting is off, and at most one request a day when it is on).
+/// Seaglass: the update notice (Settings > Check for updates; Nixie 1.3.1: on by default). A timer ticks every minute, the first
+/// tick about 20 s after the start; the work is in <see cref="UpdateCoordinator"/> (nothing goes out while the setting is off;
+/// with it on, one request when the app opens and once a day after). It only tells: nothing is downloaded or installed before
+/// the user's click.
 /// The notice is an InfoBar in the shell (ShellPage). This replaces upstream FluentFin's WindowsUpdateService, which fetched
 /// upstream's installer; nothing here can name any release but this repository's (<see cref="UpdateSource"/>).
 /// </summary>
@@ -25,7 +27,12 @@ public sealed class UpdateNoticeService : IHostedService, IDisposable
 	public UpdateNoticeService(ISettings settings, ILogger<UpdateNoticeService> logger)
 	{
 		_logger = logger;
-		Coordinator = new UpdateCoordinator(settings, new UpdateChecker(Http, AppVersion.Current), () => DateTimeOffset.UtcNow, AppVersion.Current);
+		// Nixie 1.3.1: the harness's dev runs ask its fake server (NIXIE_UPDATE_API), never GitHub; a release always asks GitHub
+		var api = UpdateSource.ApiFor(AppIdentity.ReadEnvironment(UpdateSource.ApiVariable),
+			harnessOn: Environment.GetEnvironmentVariable(GlassActivity.AlwaysActiveVariable) == "1", releasePackage: AppVersion.IsReleasePackage);
+		Coordinator = new UpdateCoordinator(settings, new UpdateChecker(Http, AppVersion.Current, api), () => DateTimeOffset.UtcNow, AppVersion.Current);
+		Coordinator.Checked += result => _logger.LogInformation("[update] checked {Host}: {Status}{Version}{Reason}", api.Host, result.Status,
+			result.Release is { } r ? $" {r.Version}" : "", result.Reason is { } why ? $" ({why})" : "");
 	}
 
 	public UpdateCoordinator Coordinator { get; }

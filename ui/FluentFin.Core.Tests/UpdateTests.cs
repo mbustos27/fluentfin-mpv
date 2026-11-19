@@ -57,9 +57,10 @@ public sealed class UpdateTests : IDisposable
 	private static HttpResponseMessage Ok(string body) => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
 	[Fact]
-	public void TheSetting_IsOffByDefault_AndNothingIsRemembered()
+	public void TheSetting_IsOnByDefault_AndNothingIsRemembered()
 	{
-		Assert.False(SettingKeys.CheckForUpdates.Default.Value);
+		// Nixie 1.3.1: on by default (the user confirmed); it was off
+		Assert.True(SettingKeys.CheckForUpdates.Default.Value);
 		Assert.Equal("", SettingKeys.UpdateState.Default.Value);
 		Assert.Null(UpdateState.Parse("").LastCheck);
 		Assert.Null(UpdateState.Parse("{ not json").Release);
@@ -259,7 +260,7 @@ public sealed class UpdateTests : IDisposable
 	}
 
 	[Fact]
-	public async Task Coordinator_OffByDefault_SendsNothing_AndShowsNothing()
+	public async Task Coordinator_Off_SendsNothing_AndShowsNothing()
 	{
 		var (settings, _) = FakeSettings(enabled: false);
 		var handler = new Fake(_ => Ok(Release()));
@@ -271,8 +272,9 @@ public sealed class UpdateTests : IDisposable
 		Assert.Null(coordinator.Notice);
 	}
 
+	// Nixie 1.3.1 (the user: "it should check when we open"): every start asks once, then once a day while the app stays open
 	[Fact]
-	public async Task Coordinator_On_AsksOncePerDay_AndKeepsTheNoticeAcrossRestarts()
+	public async Task Coordinator_On_AsksAtEveryStart_OnceARun_ThenOncePerDay_AndTheNoticeShows()
 	{
 		var (settings, state) = FakeSettings(enabled: true);
 		var now = new DateTimeOffset(2026, 11, 20, 8, 0, 0, TimeSpan.Zero);
@@ -280,21 +282,217 @@ public sealed class UpdateTests : IDisposable
 		UpdateCoordinator New() => new(settings.Object, new UpdateChecker(new HttpClient(handler), "1.1.1"), () => now, "1.1.1");
 
 		var first = New();
-		await first.TickAsync();
+		await first.TickAsync();          // the start check: a newer version, and the notice shows
 		Assert.Equal("1.2.0", first.Notice!.Version);
 		Assert.Single(handler.Requests);
 
+		now = now.AddMinutes(1);
+		await first.TickAsync();          // the same run, a minute later: no second start check
 		now = now.AddHours(5);
 		await first.TickAsync();
-		var restarted = New();            // a new run of the app, the same day: no new request, the notice is still there
-		await restarted.TickAsync();
 		Assert.Single(handler.Requests);
-		Assert.Equal("1.2.0", restarted.Notice!.Version);
 
-		now = now.AddHours(20);           // a day after the first
+		var restarted = New();            // a new run, the same day: it asks at its start
 		await restarted.TickAsync();
 		Assert.Equal(2, handler.Requests.Count);
+		Assert.Equal("1.2.0", restarted.Notice!.Version);
+		now = now.AddHours(2);
+		await restarted.TickAsync();
+		Assert.Equal(2, handler.Requests.Count);
+
+		now = now.AddHours(22);           // a day after its start check, the app still open
+		await restarted.TickAsync();
+		Assert.Equal(3, handler.Requests.Count);
 		Assert.Contains("1.2.0", state());
+	}
+
+	[Fact]
+	public async Task Coordinator_TheStartCheck_ShowsTheNotice_OnlyForANewerVersion()
+	{
+		var (settings, _) = FakeSettings(enabled: true);
+		var coordinator = new UpdateCoordinator(settings.Object, new UpdateChecker(new HttpClient(new Fake(_ => Ok(Release("v1.3.1")))), "1.3.1"), () => DateTimeOffset.UtcNow, "1.3.1");
+
+		await coordinator.TickAsync();
+
+		Assert.Null(coordinator.Notice);
+	}
+
+	// Check now: the user's own request, the setting on or off; the shell's bar only with it on
+	[Fact]
+	public async Task CheckNow_AsksWithTheSettingOff_AndSaysWhatItFound_WithoutTheBar()
+	{
+		var (settings, state) = FakeSettings(enabled: false);
+		var handler = new Fake(_ => Ok(Release("v1.3.2")));
+		var coordinator = new UpdateCoordinator(settings.Object, new UpdateChecker(new HttpClient(handler), "1.3.1"), () => DateTimeOffset.UtcNow, "1.3.1");
+
+		var result = await coordinator.CheckNowAsync();
+
+		Assert.Single(handler.Requests);
+		Assert.Equal(UpdateCheckStatus.Available, result.Status);
+		Assert.Null(coordinator.Notice);
+		Assert.Contains("1.3.2", state());
+		var message = UpdateCheckMessage.For(result, "1.3.1");
+		Assert.Equal("Nixie 1.3.2 is available", message.Text);
+		Assert.Equal("1.3.2", message.Release!.Version);
+		Assert.False(message.CanRetry);
+	}
+
+	[Fact]
+	public async Task CheckNow_WithTheSettingOn_ShowsTheBarToo()
+	{
+		var (settings, _) = FakeSettings(enabled: true);
+		var coordinator = new UpdateCoordinator(settings.Object, new UpdateChecker(new HttpClient(new Fake(_ => Ok(Release("v1.3.2")))), "1.3.1"), () => DateTimeOffset.UtcNow, "1.3.1");
+
+		await coordinator.CheckNowAsync();
+
+		Assert.Equal("1.3.2", coordinator.Notice!.Version);
+	}
+
+	[Fact]
+	public void CheckNow_SaysEachResultPlainly()
+	{
+		Assert.Equal("Checking\u2026", UpdateCheckMessage.Checking);
+		Assert.Equal("Nixie is up to date (1.3.1)", UpdateCheckMessage.For(new UpdateCheckResult(UpdateCheckStatus.UpToDate), "1.3.1").Text);
+
+		var offline = UpdateCheckMessage.For(new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: "no connection to GitHub"), "1.3.1");
+		Assert.Equal("Couldn't check: no connection to GitHub", offline.Text);
+		Assert.True(offline.IsError && offline.CanRetry);
+
+		var until = new DateTimeOffset(2026, 11, 20, 14, 5, 0, TimeSpan.Zero);
+		var limited = UpdateCheckMessage.For(new UpdateCheckResult(UpdateCheckStatus.RateLimited, RetryAfter: until), "1.3.1", TimeZoneInfo.Utc);
+		Assert.Equal("Couldn't check: GitHub asked Nixie to wait until 14:05", limited.Text);
+		Assert.True(limited.CanRetry);
+		Assert.Equal("Couldn't check: no answer from GitHub", UpdateCheckMessage.For(new UpdateCheckResult(UpdateCheckStatus.Failed), "1.3.1").Text);
+	}
+
+	[Fact]
+	public async Task TheChecker_SaysWhyItFailed()
+	{
+		var offline = await new UpdateChecker(new HttpClient(new Fake(_ => throw new HttpRequestException("offline"))), "1.3.1").CheckAsync(DateTimeOffset.UtcNow);
+		var broken = await new UpdateChecker(new HttpClient(new Fake(_ => new HttpResponseMessage(HttpStatusCode.BadGateway))), "1.3.1").CheckAsync(DateTimeOffset.UtcNow);
+		var garbled = await new UpdateChecker(new HttpClient(new Fake(_ => Ok("{ not json"))), "1.3.1").CheckAsync(DateTimeOffset.UtcNow);
+
+		Assert.Equal("no connection to GitHub", offline.Reason);
+		Assert.Equal("GitHub answered 502", broken.Reason);
+		Assert.Equal("GitHub's answer could not be read", garbled.Reason);
+	}
+
+	// GitHub's Retry-After is kept across starts and by Check now: nothing goes out before it
+	[Fact]
+	public async Task RetryAfter_IsRespected_ByTheStartCheck_AndByCheckNow()
+	{
+		var (settings, state) = FakeSettings(enabled: true);
+		var now = new DateTimeOffset(2026, 11, 20, 8, 0, 0, TimeSpan.Zero);
+		var limited = true;
+		var handler = new Fake(_ =>
+		{
+			if (!limited)
+			{
+				return Ok(Release());
+			}
+
+			var r = new HttpResponseMessage((HttpStatusCode)429);
+			r.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromHours(2));
+			return r;
+		});
+		UpdateCoordinator New() => new(settings.Object, new UpdateChecker(new HttpClient(handler), "1.1.1"), () => now, "1.1.1");
+
+		await New().TickAsync();                         // the start check: told to wait two hours
+		Assert.Single(handler.Requests);
+		Assert.Equal(now.AddHours(2), UpdateState.Parse(state()).RetryAfter);
+
+		limited = false;
+		now = now.AddMinutes(30);
+		var next = New();
+		await next.TickAsync();                          // a new start inside the wait: nothing sent
+		var asked = await next.CheckNowAsync();          // nor for Check now
+		Assert.Single(handler.Requests);
+		Assert.Equal(UpdateCheckStatus.RateLimited, asked.Status);
+		Assert.Equal(now.AddMinutes(90), asked.RetryAfter);
+
+		now = now.AddMinutes(91);
+		var later = New();
+		await later.TickAsync();                         // after it: the start check asks
+		Assert.Equal(2, handler.Requests.Count);
+		Assert.Equal("1.2.0", later.Notice!.Version);
+		Assert.Null(UpdateState.Parse(state()).RetryAfter);
+	}
+
+	// Nixie 1.3.1: on by default, also where an older version wrote its old default (off) into the settings
+	private sealed class MemorySettings : Contracts.Services.ILocalSettingsService
+	{
+		public Dictionary<string, System.Text.Json.Nodes.JsonNode?> Values { get; } = [];
+
+		public System.Text.Json.Nodes.JsonNode? ReadSettingRaw(string key) => Values.GetValueOrDefault(key);
+
+		public T ReadSetting<T>(string key, T defaultValue)
+		{
+			if (!Values.TryGetValue(key, out var node))
+			{
+				SaveSetting(key, defaultValue);    // as LocalSettingsService does: the default is written out
+				return defaultValue;
+			}
+
+			return node is null ? defaultValue : System.Text.Json.JsonSerializer.Deserialize<T>(node)!;
+		}
+
+		public void SaveSetting<T>(string key, T value) => Values[key] = System.Text.Json.JsonSerializer.SerializeToNode(value);
+
+		public void RemoveSetting(string key) => Values.Remove(key);
+
+		public byte[] GetEntropyBytes() => [];
+	}
+
+	[Fact]
+	public void UpdateChecks_AreOnForANewInstall()
+	{
+		var store = new MemorySettings();
+
+		Assert.True(new Settings.Settings(store).CheckForUpdates);
+	}
+
+	[Fact]
+	public void ASavedOff_FromAnOlderVersionsDefault_BecomesOn_Once_AndAnOffChosenLaterStays()
+	{
+		var store = new MemorySettings();
+		store.SaveSetting("CheckForUpdates", false);   // 1.3.0 wrote its default out the first time it read it
+		var settings = new Settings.Settings(store);
+
+		Assert.True(settings.CheckForUpdates);
+		settings.CheckForUpdates = false;               // the user turns it off in 1.3.1
+		Assert.False(new Settings.Settings(store).CheckForUpdates);
+	}
+
+	[Fact]
+	public void ASavedOff_AfterTheCheckEverRan_IsTheUsersChoice_AndStaysOff()
+	{
+		var store = new MemorySettings();
+		store.SaveSetting("CheckForUpdates", false);
+		store.SaveSetting("UpdateState", new UpdateState(LastAttempt: DateTimeOffset.UtcNow).ToJson());
+
+		Assert.False(new Settings.Settings(store).CheckForUpdates);
+	}
+
+	[Fact]
+	public void ASavedOn_StaysOn()
+	{
+		var store = new MemorySettings();
+		store.SaveSetting("CheckForUpdates", true);
+		store.SaveSetting("UpdateState", new UpdateState(LastAttempt: DateTimeOffset.UtcNow).ToJson());
+
+		Assert.True(new Settings.Settings(store).CheckForUpdates);
+	}
+
+	[Fact]
+	public void TheApiOverride_IsTheHarnesssOnly_OnThisMachine_NeverInARelease()
+	{
+		const string fake = "http://127.0.0.1:5123/__harness/release/latest";
+
+		Assert.Equal(fake, UpdateSource.ApiFor(fake, harnessOn: true, releasePackage: false).AbsoluteUri);
+		Assert.Equal(UpdateSource.LatestReleaseApi, UpdateSource.ApiFor(fake, harnessOn: true, releasePackage: true).AbsoluteUri);
+		Assert.Equal(UpdateSource.LatestReleaseApi, UpdateSource.ApiFor(fake, harnessOn: false, releasePackage: false).AbsoluteUri);
+		Assert.Equal(UpdateSource.LatestReleaseApi, UpdateSource.ApiFor("https://evil.example/latest", harnessOn: true, releasePackage: false).AbsoluteUri);
+		Assert.Equal(UpdateSource.LatestReleaseApi, UpdateSource.ApiFor(null, harnessOn: true, releasePackage: false).AbsoluteUri);
 	}
 
 	[Fact]
@@ -358,9 +556,9 @@ public sealed class UpdateTests : IDisposable
 			"https://github.com/mbustos27/fluentfin-mpv/releases/download/%2e%2e/%2e%2e/evil/a.msi",
 			"https://github.com/mbustos27/fluentfin-mpv/releases/download/v1.2.0/Nixie-1.2.0-win-x64.msi.sha256"), null).ToJson();
 		var (settings, _) = FakeSettings(enabled: true, stored);
-		var coordinator = new UpdateCoordinator(settings.Object, new UpdateChecker(new HttpClient(new Fake(_ => Ok(Release()))), "1.1.1"), () => DateTimeOffset.UtcNow, "1.1.1");
+		var coordinator = new UpdateCoordinator(settings.Object, new UpdateChecker(new HttpClient(new Fake(_ => throw new HttpRequestException("offline"))), "1.1.1"), () => DateTimeOffset.UtcNow, "1.1.1");
 
-		await coordinator.TickAsync();
+		await coordinator.TickAsync();         // 1.3.1: the start check asks; offline, the stored release is what is offered
 
 		Assert.False(coordinator.Notice!.HasInstaller);
 		Assert.StartsWith("https://github.com/mbustos27/fluentfin-mpv/releases/", coordinator.Notice.PageUrl);

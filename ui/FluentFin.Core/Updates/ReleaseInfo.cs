@@ -10,6 +10,22 @@ public static class UpdateSource
 	public const string LatestReleaseApi = "https://api.github.com/repos/mbustos27/fluentfin-mpv/releases/latest";
 	public const string ReleasesPage = RepositoryUrl + "/releases";
 
+	/// <summary>
+	/// Nixie 1.3.1: the harness's override of <see cref="LatestReleaseApi"/> (<c>NIXIE_UPDATE_API</c>, through
+	/// <see cref="AppIdentity.ReadEnvironment"/>): its fake server's release answer, so no automated run asks GitHub.
+	/// </summary>
+	public const string ApiVariable = "UPDATE_API";
+
+	/// <summary>
+	/// The API this run asks: <see cref="LatestReleaseApi"/>, unless the off-screen harness (<paramref name="harnessOn"/>, a dev
+	/// build only: never in a release package) points it at its fake server on this machine (http, loopback).
+	/// </summary>
+	public static Uri ApiFor(string? overrideValue, bool harnessOn, bool releasePackage) =>
+		!releasePackage && harnessOn && !string.IsNullOrWhiteSpace(overrideValue)
+		&& Uri.TryCreate(overrideValue.Trim(), UriKind.Absolute, out var uri) && uri.Scheme == "http" && uri.IsLoopback && uri.UserInfo.Length == 0
+			? uri
+			: new Uri(LatestReleaseApi);
+
 	/// <summary>Nixie: the installer a release of <paramref name="version"/> carries, <c>Nixie-&lt;version&gt;-win-x64.msi</c> (Seaglass-... before 1.2.0).</summary>
 	public static string InstallerName(string version) => $"{AppIdentity.Name}-{version}-win-x64.msi";
 

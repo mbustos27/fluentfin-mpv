@@ -81,7 +81,12 @@ public partial class Settings(ILocalSettingsService localSettingsService, MediaP
 
 	public bool CheckForUpdates
 	{
-		get => localSettingsService.ReadSetting(SettingKeys.CheckForUpdates);
+		get
+		{
+			// Nixie 1.3.1: on by default, also where an older version wrote its old default (off) out (UpdateDefaults)
+			Updates.UpdateDefaults.Apply(localSettingsService);
+			return localSettingsService.ReadSetting(SettingKeys.CheckForUpdates);
+		}
 		set => localSettingsService.SaveSetting(SettingKeys.CheckForUpdates, value);
 	}
 

@@ -209,6 +209,9 @@ public sealed partial class ShellPage : Page
 		}
 	}
 
+	// Nixie 1.3.1: Dismiss: that version is not offered again
+	private void OnUpdateDismissClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _updates.Coordinator.Dismiss();
+
 	// the close button dismisses that version; the bar closing because the notice went away does not
 	private void OnUpdateBarClosed(InfoBar sender, InfoBarClosedEventArgs args)
 	{

@@ -719,6 +719,8 @@ try {
 
     # Nixie 1.3.1: a trailer plays from the fake server's page, never from YouTube (honoured by dev builds under the harness only)
     $env:NIXIE_TRAILER_EMBED_BASE = "$($script:serverUrl)/__harness/trailer/"
+    # Nixie 1.3.1: the update check (when a run turns it on) asks the fake server's release answer, never GitHub
+    $env:NIXIE_UPDATE_API = "$($script:serverUrl)/__harness/release/latest"
 
     # 2. FluentFin with its own data folder
     Start-App 'window_ms'

@@ -17,7 +17,11 @@
         sits over this page: ContentRoot starts below it (TopBar.Height), or at the top for a page that extends under it (a
         hero: Controls.TopBar.ExtendsUnder) and while the bar is hidden (full screen). ShellPage.UpdateInsets.
     -->
-    <!--  Seaglass: the opt-in update notice (Settings > Check for updates): quiet, above the page, closable, never over the player  -->
+    <!--
+        Seaglass: the update notice (Settings > Check for updates; on by default since 1.3.1): quiet, above the page, never over
+        the player: "Nixie 1.3.2 is available", Download and install, Release notes and Dismiss (that version is not offered
+        again). It only tells: nothing is downloaded before the click. InfoBar tells Narrator once when it opens.
+    -->
     <Grid x:Name="ContentRoot">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -27,7 +31,7 @@
             x:Name="UpdateBar"
             Margin="16,8,16,0"
             Closed="OnUpdateBarClosed"
-            IsClosable="True"
+            IsClosable="False"
             IsOpen="False"
             Severity="Informational"
             Visibility="{x:Bind Chrome.IsNavigationVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -39,13 +43,25 @@
                     Content="Download and install" />
             </InfoBar.ActionButton>
             <InfoBar.Content>
-                <!--  button review A26: a link with a 32 px hit area (it was about 20 px high, no padding)  -->
-                <HyperlinkButton
-                    MinHeight="32"
-                    Padding="4,6"
-                    AutomationProperties.Name="Release notes"
-                    Click="OnUpdateNotesClick"
-                    Content="Release notes" />
+                <StackPanel
+                    Margin="0,0,0,8"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <!--  button review A26: a link with a 32 px hit area (it was about 20 px high, no padding)  -->
+                    <HyperlinkButton
+                        MinHeight="32"
+                        Padding="4,6"
+                        AutomationProperties.Name="Release notes"
+                        Click="OnUpdateNotesClick"
+                        Content="Release notes" />
+                    <!--  Nixie 1.3.1: Dismiss says what the close button did (that version is not offered again)  -->
+                    <Button
+                        x:Name="UpdateDismissButton"
+                        Click="OnUpdateDismissClick"
+                        Content="Dismiss"
+                        Style="{StaticResource NixieSubtleButtonStyle}"
+                        ToolTipService.ToolTip="Don't offer this version again" />
+                </StackPanel>
             </InfoBar.Content>
         </InfoBar>
         <Frame
