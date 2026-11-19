@@ -180,6 +180,12 @@ internal sealed class LibraryProbe
 			return; // loaded before the placeholders were drawn, or gone: nothing to compare
 		}
 
+		// a place put back (Back, R) scrolls the grid far from where the placeholders stood: nothing to compare (a false "differs")
+		if (grid[0].Y < placeholders[0].Y - placeholders[0].Height)
+		{
+			return;
+		}
+
 		var differences = Differences(placeholders, grid);
 		if (differences.Count == 0)
 		{
