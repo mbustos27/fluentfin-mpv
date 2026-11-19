@@ -50,9 +50,10 @@ public sealed class LibraryViewModelTests
 		Assert.Equal(["Zodiac", "The Matrix", "Brazil", "Alien"], vm.Items.Select(x => x.Name));
 	}
 
-	// Nixie 1.3.1 (the UX review's B1): a playlist opens, and shows its items in the playlist's order
+	// Nixie 1.3.1 (the UX review's B1): a playlist opens, and shows its items in the playlist's order; 1.4.0: on the shared
+	// Collection page, as an ordered list (CollectionPageTests)
 	[Fact]
-	public void APlaylist_Opens_InTheLibraryPage()
+	public void APlaylist_Opens_InTheCollectionPage()
 	{
 		var navigation = new Mock<Services.INavigationServiceCore>();
 		var commands = new GlobalCommands(navigation.Object, Mock.Of<IJellyfinClient>(), Mock.Of<Services.INavigationViewServiceCore>(), Mock.Of<Settings.ISettings>());
@@ -60,7 +61,7 @@ public sealed class LibraryViewModelTests
 
 		commands.DisplayDto(playlist);
 
-		navigation.Verify(x => x.NavigateTo(typeof(LibraryViewModel).FullName!, playlist, false), Times.Once);
+		navigation.Verify(x => x.NavigateTo(typeof(CollectionViewModel).FullName!, playlist, false), Times.Once);
 	}
 
 	[Fact]

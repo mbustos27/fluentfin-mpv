@@ -65,4 +65,10 @@
         BasedOn="{StaticResource GlassPageTitleTextBlockStyle}"
         TargetType="TextBlock" />
 
+    <!--  1.4.0 shared: the page grid (Controls.PageGrid, Styles/PageGrid.xaml): the gutter at a 1100 and a 1920 px window, and a page title's y  -->
+    <x:Double x:Key="PageGutterNarrow">36</x:Double>
+    <x:Double x:Key="PageGutterWide">36</x:Double>
+    <x:Double x:Key="PageTitleY">72</x:Double>
+    <!--  /1.4.0 shared  -->
+
 </ResourceDictionary>

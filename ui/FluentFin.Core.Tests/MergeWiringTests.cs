@@ -81,7 +81,9 @@ public sealed class MergeWiringTests
 		var page = Load("FluentFin/Views/LibrariesLandingPage.xaml");
 		Assert.DoesNotContain(page.Descendants().Attributes("Background"), a => a.Value.Contains("CardBackgroundFillColorDefaultBrush"));
 		Assert.Equal("UniformToFill", (string?)page.Descendants().Single(e => e.Name.LocalName == "LoadingImage").Attribute("Stretch"));
-		Assert.Equal("Uniform", (string?)page.Descendants().Single(e => e.Name.LocalName == "UniformGridLayout").Attribute("ItemsStretch"));
+		// Nixie 1.4.0: two groups; each tile sized by the page to share the rows evenly, its art kept 16:9 (PageGridMetrics.Tiles, TileHeight)
+		Assert.All(page.Descendants().Where(e => e.Name.LocalName == "UniformGridLayout"), l => Assert.Equal("None", (string?)l.Attribute("ItemsStretch")));
+		Assert.Contains("PageGridMetrics.TileHeight(tile)", Code("FluentFin/Views/LibrariesLandingPage.xaml.cs"), StringComparison.Ordinal);
 	}
 
 	private static XDocument Load(string file) => XDocument.Load(Path.Combine(RepoRoot, file));

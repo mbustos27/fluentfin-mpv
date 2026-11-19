@@ -19,6 +19,20 @@
         <ResourceDictionary Source="ms-appx:///Themes/Cinematic/Cards.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
+    <!--  1.4.0 shared: the ground of the shared pages (a collection, Libraries, Search, Settings): the night of Cards.xaml's CinematicNightBrush  -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="PageGroundBrush" Color="#1A0710" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="PageGroundBrush" Color="#FFF6F3" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <SolidColorBrush x:Key="PageGroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+    <!--  /1.4.0 shared  -->
+
     <!--
         The shared top bar as a floating glass island (TopBarChrome): one rounded glass surface (8 px corners), inset from the
         window's left and top edges and ending before the caption buttons, its own clearer acrylic with a lit top edge and a soft
@@ -202,5 +216,11 @@
             </Grid>
         </Grid>
     </ControlTemplate>
+
+    <!--  1.4.0 shared: the page grid (Controls.PageGrid, Styles/PageGrid.xaml): the gutter at a 1100 and a 1920 px window, and a page title's y  -->
+    <x:Double x:Key="PageGutterNarrow">48</x:Double>
+    <x:Double x:Key="PageGutterWide">96</x:Double>
+    <x:Double x:Key="PageTitleY">72</x:Double>
+    <!--  /1.4.0 shared  -->
 
 </ResourceDictionary>

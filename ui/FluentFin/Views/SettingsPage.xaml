@@ -16,6 +16,7 @@
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
+    Background="{ThemeResource PageGroundBrush}"
     mc:Ignorable="d">
 
 
@@ -33,7 +34,11 @@
     -->
     <ScrollViewer>
         <!--  left-aligned: one star column up to 1000 px; the rest of a wide window stays empty on the right  -->
-        <Grid x:Name="SettingsColumn" Padding="36,0,24,40">
+        <!--  Nixie 1.4.0 (the UX review's plan item 13, CL-m7): on the theme's page grid: its gutter, the title at its y, its title style  -->
+        <Grid
+            x:Name="SettingsColumn"
+            Padding="36,72,36,40"
+            controls:PageGrid.Apply="True">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MaxWidth="1000" />
                 <ColumnDefinition Width="Auto" />
@@ -43,12 +48,13 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Grid Margin="0,40,0,4">
+            <Grid Margin="0,0,0,4">
                 <TextBlock
                     HorizontalAlignment="Left"
                     AutomationProperties.HeadingLevel="Level1"
-                    Style="{StaticResource GlassPageTitleTextBlockStyle}"
-                    Text="Settings" />
+                    AutomationProperties.Name="Settings"
+                    Style="{StaticResource PageHeaderStyle}"
+                    Text="{x:Bind controls:PageGrid.Title('Settings')}" />
             </Grid>
 
             <StackPanel Grid.Row="1" Spacing="2">

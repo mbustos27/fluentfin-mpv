@@ -283,7 +283,9 @@ public sealed class EditorialXamlTests
 
 		// keys only this theme uses carry its prefix
 		Assert.All(keys.Where(k => k is not ("TopBarStyle" or "RowHeaderTemplate" or "PosterTemplate" or "StillTemplate" or "PageHeaderStyle" or "SignInBackdropTemplate"
-			or "ThemeOptionsTemplate" or "PlayerTopBarStyle" or "PlayerBottomBarStyle" or "TrailerFrameTemplate")),
+			or "ThemeOptionsTemplate" or "PlayerTopBarStyle" or "PlayerBottomBarStyle" or "TrailerFrameTemplate"
+			// Nixie 1.4.0: the page grid's contract keys (PageGridXamlTests)
+			or "PageGutterNarrow" or "PageGutterWide" or "PageTitleY" or "PageTitleUppercase")),
 			k => Assert.StartsWith("Editorial", k));
 	}
 
@@ -297,7 +299,7 @@ public sealed class EditorialXamlTests
 
 		Assert.Equal(dark.Keys.Order(), light.Keys.Order());
 		Assert.Equal(dark.Keys.Order(), contrast.Keys.Order());
-		Assert.All(dark.Keys, k => Assert.StartsWith("Editorial", k));
+		Assert.All(dark.Keys.Where(k => k != "PageGroundBrush"), k => Assert.StartsWith("Editorial", k)); // 1.4.0: the shared pages' ground
 		foreach (var (key, element) in contrast)
 		{
 			var text = element.ToString();

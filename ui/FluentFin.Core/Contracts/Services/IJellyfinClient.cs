@@ -55,6 +55,9 @@ namespace FluentFin.Core.Contracts.Services
 		/// <summary>Nixie 1.3.1: a playlist's items in the playlist's order (/Playlists/{id}/Items), null on a failure.</summary>
 		Task<BaseItemDtoQueryResult?> GetPlaylistItems(Guid playlistId);
 
+		/// <summary>Nixie 1.4.0: the collections an item is part of (none on a server without the request).</summary>
+		Task<IReadOnlyList<BaseItemDto>> GetItemCollections(Guid itemId);
+
 		/// <summary>Nixie 1.3.1: the item's trailers on the server (/Items/{id}/LocalTrailers), empty when none or on a failure.</summary>
 		Task<List<BaseItemDto>> GetLocalTrailers(Guid id);
 
@@ -83,6 +86,15 @@ namespace FluentFin.Core.Contracts.Services
 		/// be read (logged).
 		/// </summary>
 		Task<IReadOnlyList<BaseItemDto>> GetUserViews();
+
+		/// <summary>Nixie 1.4.0: the user's views as <see cref="GetUserViews"/>, but null when they could not be read (the Libraries page says so, with Retry).</summary>
+		Task<IReadOnlyList<BaseItemDto>?> GetUserViewsOrNull();
+
+		/// <summary>
+		/// Nixie 1.4.0: how many titles a library holds, and how many of them are not watched (null for a library whose items have
+		/// no watched state, a collection or a playlist); null when the server did not say.
+		/// </summary>
+		Task<FluentFin.Core.ViewModels.LibraryCounts?> GetLibraryCounts(BaseItemDto library);
 
 		/// <summary>
 		/// 1.2.0 (review): the views read before are out of date (a library added, removed or renamed here, or the server's

@@ -303,7 +303,8 @@ public class AccessibilityXamlTests
 	{
 		var container = Assert.Single(Load("FluentFin/Views/LibrariesLandingPage.xaml").Descendants(Presentation + "ItemContainer"));
 
-		Assert.Equal("{x:Bind Name}", (string?)container.Attribute("AutomationProperties.Name"));
+		// Nixie 1.4.0: with what the tile shows beside the name: "Movies, 320 movies, 97 unwatched" (LibraryTile.AutomationName)
+		Assert.Equal("{x:Bind AutomationName, Mode=OneWay}", (string?)container.Attribute("AutomationProperties.Name"));
 	}
 
 	[Fact]

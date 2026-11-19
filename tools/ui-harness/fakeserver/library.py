@@ -649,7 +649,8 @@ class Library:
             pool = [self.items[v] for v in self.views]
 
         kind_of = {"movie": "movie", "series": "series", "season": "season", "episode": "episode",
-                   "person": "person", "collectionfolder": "view", "boxset": "boxset"}
+                   "person": "person", "collectionfolder": "view", "boxset": "boxset",
+                   "playlist": "boxset"}   # 1.4.0: the fake's playlist is a boxset-like item (Type Playlist)
         # UXCAP: a film in a collection is under two views; a recursive pool lists it once
         seen = set()
         pool = [i for i in pool if not (i["Id"] in seen or seen.add(i["Id"]))]

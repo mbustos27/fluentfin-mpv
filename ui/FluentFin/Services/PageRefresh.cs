@@ -30,6 +30,7 @@ public static class PageRefresh
 	[
 		typeof(HomeViewModel),
 		typeof(LibraryViewModel),
+		typeof(CollectionViewModel), // Nixie 1.4.0
 		typeof(ItemGridViewModel),
 		typeof(MovieViewModel),
 		typeof(EpisodeViewModel),

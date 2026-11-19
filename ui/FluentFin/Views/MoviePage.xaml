@@ -59,7 +59,10 @@
                 </controls:ItemHero>
                 <StackPanel Margin="48,28,48,56" Spacing="32">
                     <!--  the lists are named after their labels for Narrator (fluentfin-mpv)  -->
-                    <StackPanel Spacing="20"><Grid ColumnSpacing="16" RowSpacing="12">
+                    <StackPanel Spacing="20">
+                    <!--  Nixie 1.4.0: "Part of: Copper and Glass", the film's collections, each opening its Collection page  -->
+                    <lc:PartOfLink Collections="{x:Bind ViewModel.PartOf, Mode=OneWay}" />
+                    <Grid ColumnSpacing="16" RowSpacing="12">
                         <Grid.RowDefinitions>
                             <RowDefinition />
                             <RowDefinition />

@@ -248,6 +248,7 @@ public partial class App : Application
 			services.AddTransient<PlaybackTranscodingViewModel>();
 			services.AddTransient<ActivitiesViewModel>();
 			services.AddTransient<LibrariesLandingPageViewModel>();
+			services.AddTransient<CollectionViewModel>(); // Nixie 1.4.0
 			services.AddTransient<ScheduledTasksViewModel>();
 
 			// Dialogs
@@ -348,6 +349,9 @@ public partial class App : Application
 			await Host.StartAsync();
 
 			Locator.SetServiceProvider(Host.Services);
+
+			// Nixie 1.4.0 (the bug hunt's m5): an item Nixie has no page for says so, instead of nothing happening
+			Commands.CannotOpen += (_, e) => _ = GetService<IContentDialogService>().ShowMessage(e.Title, e.Message);
 
 			base.OnLaunched(args);
 

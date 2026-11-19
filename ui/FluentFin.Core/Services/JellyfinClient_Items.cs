@@ -115,6 +115,66 @@ public partial class JellyfinClient
 		}
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's plan item 1): the collections a film is part of (GET /Items/{id}/Collections, Jellyfin
+	/// 10.11's "Included in"), for the movie page's "Part of". An older server has no such request (404): none, quietly.
+	/// </summary>
+	public async Task<IReadOnlyList<BaseItemDto>> GetItemCollections(Guid itemId)
+	{
+		try
+		{
+			var result = await _jellyfinApiClient.Items[itemId].Collections.GetAsync(x => x.QueryParameters.UserId = UserId);
+			return result?.Items is { } items ? [.. items.Where(x => x.Id is not null)] : [];
+		}
+		catch (Exception ex)
+		{
+			logger.LogDebug("The collections of {ItemId} could not be read (an older server has no such request): {Error}", itemId, ex.Message);
+			return [];
+		}
+	}
+
+	/// <summary>Nixie 1.4.0: a library's titles and its unwatched ones, two counting requests (no items) asked together.</summary>
+	public async Task<FluentFin.Core.ViewModels.LibraryCounts?> GetLibraryCounts(BaseItemDto library)
+	{
+		if (library.Id is not { } id || FluentFin.Core.ViewModels.LibraryCounts.KindOf(library.CollectionType) is not { } kind)
+		{
+			return null;
+		}
+
+		Task<BaseItemDtoQueryResult?> Count(bool unwatched) => _jellyfinApiClient.Items.GetAsync(x =>
+		{
+			var query = x.QueryParameters;
+			query.UserId = UserId;
+			query.ParentId = id;
+			query.Recursive = true;
+			query.IncludeItemTypes = [kind];
+			query.Limit = 0;
+			query.EnableTotalRecordCount = true;
+			query.EnableImages = false;
+			query.EnableUserData = false;
+			if (unwatched)
+			{
+				query.IsPlayed = false;
+			}
+		});
+
+		try
+		{
+			var watchable = FluentFin.Core.ViewModels.LibraryCounts.HasWatchedState(kind);
+			var all = Count(unwatched: false);
+			var unseen = watchable ? Count(unwatched: true) : Task.FromResult<BaseItemDtoQueryResult?>(null);
+			await Task.WhenAll(all, unseen);
+			return (await all)?.TotalRecordCount is { } total
+				? new FluentFin.Core.ViewModels.LibraryCounts(total, watchable ? (await unseen)?.TotalRecordCount : null)
+				: null;
+		}
+		catch (Exception ex)
+		{
+			logger.LogDebug("The counts of library {Library} could not be read: {Error}", id, ex.Message);
+			return null;
+		}
+	}
+
 	// Nixie 1.3.1: the Trailer button plays a local trailer in the mpv player (Trailers.Choose)
 	public async Task<List<BaseItemDto>> GetLocalTrailers(Guid id)
 	{
