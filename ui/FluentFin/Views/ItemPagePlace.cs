@@ -152,6 +152,12 @@ internal sealed class ItemPagePlace
 	/// <summary>A key or click this soon after the arrival is the one that opened the page, not the user moving on.</summary>
 	private const long ArrivalGraceMs = 400;
 
+	private static string Describe(DependencyObject? element) =>
+		element is FrameworkElement { Name.Length: > 0 } named ? $"{element.GetType().Name} {named.Name}" : element?.GetType().Name ?? "nothing";
+
+	private static void Log(string text) =>
+		Microsoft.Extensions.Logging.LoggerExtensions.LogInformation(App.GetService<Microsoft.Extensions.Logging.ILogger<ItemPagePlace>>(), "{Text}", text);
+
 	private void FocusPrimaryWhenDrawn()
 	{
 		var deadline = DateTime.UtcNow + ArrivalPatience;
@@ -189,6 +195,7 @@ internal sealed class ItemPagePlace
 				else if (ready && FocusAgain(inPage, popups, UserActedAt > placedTick, again))
 				{
 					again++;
+					Log($"[focus] {_page.GetType().Name}: Play again (the focus had gone to {Describe(current)})");
 					primary!.Focus(FocusState.Programmatic);
 				}
 
@@ -200,17 +207,20 @@ internal sealed class ItemPagePlace
 			{
 				case ArrivalStep.Focus:
 					// Programmatic: the ring shows when the keyboard brought the user here, not after a click
+					Log($"[focus] {_page.GetType().Name}: Play takes the keyboard on arrival (it was on {Describe(current)})");
 					primary!.Focus(FocusState.Programmatic);
 					placedAt = DateTime.UtcNow;
 					placedTick = Environment.TickCount64;
 					return;
 				case ArrivalStep.Leave:
+					Log($"[focus] {_page.GetType().Name}: arrival leaves the keyboard on {Describe(current)} (in the page {inPage}, menus {popups}, a key or click since {UserActedAt > arrivedTick + ArrivalGraceMs})");
 					_timer?.Stop();
 					return;
 			}
 
 			if (DateTime.UtcNow >= deadline)
 			{
+				Log($"[focus] {_page.GetType().Name}: arrival gave up (loaded {_loaded()}, Play ready {ready})");
 				_timer?.Stop();
 			}
 		};
