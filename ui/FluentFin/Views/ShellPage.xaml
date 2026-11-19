@@ -35,7 +35,7 @@
         <Grid Visibility="{x:Bind Chrome.IsNavigationVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Border
                 x:Name="UpdateBar"
-                Padding="16,8,12,8"
+                Padding="16,8,16,8"
                 AutomationProperties.LandmarkType="Custom"
                 AutomationProperties.LocalizedLandmarkType="Notice"
                 AutomationProperties.Name="Update notice"
