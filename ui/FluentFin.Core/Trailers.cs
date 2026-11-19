@@ -221,7 +221,7 @@ public static partial class Trailers
 			return TheaterKey.Close;
 		}
 
-		var modifierAlone = virtualKey is 0x10 or 0x11 or 0x12 or (>= 0xA0 and <= 0xA5) or 0x5B or 0x5C or 0x14;
+		var modifierAlone = Shortcuts.AppShortcuts.IsModifierKey(virtualKey);
 		var gamepad = virtualKey is >= 0xC3 and <= 0xDA;
 		var plain = !control && !alt;
 		return modifierAlone || gamepad || (plain && virtualKey is Tab or Enter or Space or (>= Left and <= Down))

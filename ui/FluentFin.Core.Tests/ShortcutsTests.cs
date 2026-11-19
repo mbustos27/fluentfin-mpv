@@ -57,6 +57,58 @@ public sealed class ShortcutsTests
 		Assert.Null(MpvControlsViewModel.ActionFor(AppShortcuts.Keys.R, false, false, false));
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M4: a held R reloaded the page on every auto-repeat, 16 reloads and 32 requests in a second; a
+	/// held F5 11): a held key's repeats do nothing but Back and Forward, which step on as in a browser.
+	/// </summary>
+	[Fact]
+	public void AHeldKey_ActsOnce_ButBackAndForwardStepOn()
+	{
+		Assert.Equal(AppShortcut.Refresh, AppShortcuts.For(AppShortcuts.Keys.R, false, false, false, inTextInput: false, repeat: false));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.R, false, false, false, inTextInput: false, repeat: true));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.F5, false, false, false, inTextInput: false, repeat: true));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.R, true, false, false, inTextInput: false, repeat: true));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.F, true, false, false, inTextInput: false, repeat: true));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.Home, false, false, true, inTextInput: false, repeat: true));
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.Comma, true, false, false, inTextInput: false, repeat: true));
+		Assert.Equal(AppShortcut.Back, AppShortcuts.For(AppShortcuts.Keys.Left, false, false, true, inTextInput: false, repeat: true));
+		Assert.Equal(AppShortcut.Back, AppShortcuts.For(AppShortcuts.Keys.BrowserBack, false, false, false, inTextInput: false, repeat: true));
+		Assert.Equal(AppShortcut.Forward, AppShortcuts.For(AppShortcuts.Keys.Right, false, false, true, inTextInput: false, repeat: true));
+		foreach (var shortcut in Enum.GetValues<AppShortcut>())
+		{
+			Assert.Equal(shortcut is AppShortcut.Back or AppShortcut.Forward, AppShortcuts.Repeats(shortcut));
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m2: R on a closed Audio box refreshed the page): a control that types with its letters (a combo
+	/// box's type-ahead) keeps the bare letters; F5 and Ctrl+R still refresh there, and the other keys still work.
+	/// </summary>
+	[Fact]
+	public void AControlThatTypesWithItsLetters_KeepsR_ButF5AndCtrlRStillRefresh()
+	{
+		Assert.Null(AppShortcuts.For(AppShortcuts.Keys.R, false, false, false, inTextInput: false, ownsLetters: true));
+		Assert.Equal(AppShortcut.Refresh, AppShortcuts.For(AppShortcuts.Keys.F5, false, false, false, inTextInput: false, ownsLetters: true));
+		Assert.Equal(AppShortcut.Refresh, AppShortcuts.For(AppShortcuts.Keys.R, true, false, false, inTextInput: false, ownsLetters: true));
+		Assert.Equal(AppShortcut.FocusSearch, AppShortcuts.For(AppShortcuts.Keys.F, true, false, false, inTextInput: false, ownsLetters: true));
+		Assert.Equal(AppShortcut.Back, AppShortcuts.For(AppShortcuts.Keys.Left, false, false, true, inTextInput: false, ownsLetters: true));
+		Assert.Equal(AppShortcut.ShowHelp, AppShortcuts.For(AppShortcuts.Keys.F1, false, false, false, inTextInput: false, ownsLetters: true));
+	}
+
+	[Fact]
+	public void TheModifiersAlone_AreNoKeyOfTheirOwn()
+	{
+		foreach (var key in new[] { 0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C, 0x14 })
+		{
+			Assert.True(AppShortcuts.IsModifierKey(key), $"{key:X}");
+		}
+
+		foreach (var key in new[] { AppShortcuts.Keys.R, AppShortcuts.Keys.F5, 0x09, 0x1B, 0x20, 0x0D, 0x25 })
+		{
+			Assert.False(AppShortcuts.IsModifierKey(key), $"{key:X}");
+		}
+	}
+
 	[Fact]
 	public void NothingFires_WhileTyping()
 	{

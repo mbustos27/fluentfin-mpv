@@ -41,12 +41,53 @@ public static class PageRefresh
 
 	public static bool Refreshes(Type? viewModel) => viewModel is not null && Refreshable.Contains(viewModel);
 
+	/// <summary>The refresh whose place is still being put back (null when none is).</summary>
+	private static RefreshRestore? _pending;
+
+	/// <summary>Why the user's own move since the refresh wins over its place (null: nothing yet).</summary>
+	private static string? _userMoved;
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M4: R, R 150 ms apart loaded the page twice and the second took its place from the page still
+	/// loading, the keyboard ending on the TitleBar): whether a refresh is still under way on the page shown (<paramref name="samePage"/>):
+	/// its place not yet back (<paramref name="running"/>), and the user has not moved since. Another R then joins it (<see cref="Run"/>).
+	/// </summary>
+	public static bool Coalesces(bool running, bool samePage, string? userMoved) => running && samePage && userMoved is null;
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M3): the user pressed a key (not a refresh key, not a modifier alone), clicked or turned the
+	/// wheel: a refresh's place restore stops at its next try and leaves the keyboard where the user put it.
+	/// </summary>
+	public static void UserActed(string how)
+	{
+		if (_pending is { IsRunning: true })
+		{
+			_userMoved ??= how;
+		}
+	}
+
+	/// <summary>
+	/// Why a running restore gives up now (null: it goes on): the user moved (<see cref="UserActed"/>), the keyboard is in a
+	/// text box (never pulled out of one), or the page is no longer the one shown.
+	/// </summary>
+	public static string? YieldReason(string? userMoved, bool focusInTextInput, bool pageShown) =>
+		userMoved is not null ? $"the user moved first ({userMoved})"
+		: focusInTextInput ? "the keyboard is in a text box"
+		: !pageShown ? "the page was left"
+		: null;
+
 	/// <summary>Refreshes the page shown; false (nothing done) when it is not one of <see cref="Refreshable"/>.</summary>
 	public static bool Run()
 	{
 		if (App.GetService<INavigationService>() is not NavigationService { Frame.Content: Page shown } navigation)
 		{
 			return false;
+		}
+
+		if (Coalesces(_pending?.IsRunning == true, ReferenceEquals(_pending?.Page, shown), _userMoved))
+		{
+			App.GetService<ILogger<NavigationService>>().LogInformation("Refresh: one is already loading this page; this key joins it");
+			return true;
 		}
 
 		var anchors = ThemeAnchors.Capture(shown);
@@ -71,7 +112,12 @@ public static class PageRefresh
 
 		var log = App.GetService<ILogger<NavigationService>>();
 		log.LogInformation("Refresh: {Page} loaded again from the server (the keyboard was on {Focused})", fresh.GetType().Name, where);
-		anchors.RestoreAfterRefresh(fresh, RestoreWithin, text => log.LogInformation("Refresh: {Place}", text));
+		_pending?.Stop("a new refresh");
+		_userMoved = null;
+		_pending = anchors.RestoreAfterRefresh(fresh, RestoreWithin, text => log.LogInformation("Refresh: {Place}", text), () => YieldReason(
+			_userMoved,
+			fresh.XamlRoot is { } root && TextInput.IsTextInput(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root)),
+			ReferenceEquals(navigation.Frame?.Content, fresh)));
 		Announce(navigation.Frame);
 		return true;
 	}

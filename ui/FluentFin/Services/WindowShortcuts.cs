@@ -30,6 +30,8 @@ public static class WindowShortcuts
 	{
 		root.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(OnPreviewKeyDown), false);
 		root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnPointerPressed), true);
+		// Nixie 1.4.0 (bug hunt M3): the wheel is the user moving too (a refresh's place restore stops)
+		root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler((_, _) => PageRefresh.UserActed("the wheel")), true);
 	}
 
 	// -- keys ------------------------------------------------------------------------------------------------------------
@@ -43,6 +45,15 @@ public static class WindowShortcuts
 
 		var state = InputKeyboardSource.GetKeyStateForCurrentThread;
 		bool Down(VirtualKey k) => state(k).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+		var shortcut = AppShortcuts.For((int)e.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift), Down(VirtualKey.Menu),
+			TextInput.IsTextInput(e.OriginalSource), ownsLetters: TextInput.OwnsLetters(e.OriginalSource));
+
+		// Nixie 1.4.0 (bug hunt M3): any other key the user presses ends a refresh's place restore (a refresh key joins the
+		// refresh under way, a modifier alone is the start of a chord)
+		if (shortcut != AppShortcut.Refresh && !AppShortcuts.IsModifierKey((int)e.Key))
+		{
+			PageRefresh.UserActed("a key");
+		}
 
 		// Nixie 1.4.0 (bug hunt M1): the theatre is modal. Its keys are decided here, before any page handler or key
 		// accelerator (a key handled here runs no accelerator: the search box's Ctrl+F, Home's N and C): Esc and Back close
@@ -64,8 +75,8 @@ public static class WindowShortcuts
 			return;
 		}
 
-		var shortcut = AppShortcuts.For((int)e.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift), Down(VirtualKey.Menu), TextInput.IsTextInput(e.OriginalSource));
-		if (shortcut is { } found && Run(root, found))
+		// Nixie 1.4.0 (bug hunt M4): a held key's repeats are handled and do nothing (Run); they never reach the page either
+		if (shortcut is { } found && Run(root, found, e.KeyStatus.WasKeyDown))
 		{
 			e.Handled = true;
 		}
@@ -80,6 +91,7 @@ public static class WindowShortcuts
 			return;
 		}
 
+		PageRefresh.UserActed("a click");
 		var kind = e.GetCurrentPoint(root).Properties.PointerUpdateKind;
 		if (AppMouse.For(kind == PointerUpdateKind.XButton1Pressed, kind == PointerUpdateKind.XButton2Pressed) is { } shortcut)
 		{
@@ -91,7 +103,7 @@ public static class WindowShortcuts
 	// -- doing it --------------------------------------------------------------------------------------------------------
 
 	/// <summary>Carries the shortcut out where it applies; true when it did something (the key is then handled).</summary>
-	private static bool Run(UIElement root, AppShortcut shortcut)
+	private static bool Run(UIElement root, AppShortcut shortcut, bool repeat = false)
 	{
 		try
 		{
@@ -105,6 +117,12 @@ public static class WindowShortcuts
 				case ShortcutGate.CloseTrailer:
 					theater!.Close();
 					return true;
+			}
+
+			// Nixie 1.4.0 (bug hunt M4: a held R reloaded the page 16 times in a second): a held key acts once
+			if (repeat && !AppShortcuts.Repeats(shortcut))
+			{
+				return true;
 			}
 
 			switch (shortcut)
@@ -241,6 +259,12 @@ public static class TextInput
 	/// <summary>The focused element takes text: a text, password or rich edit box (a search box and a number box hold a TextBox), an editable combo box.</summary>
 	public static bool IsTextInput(object? element) =>
 		element is not null && (IsTextInputType(element.GetType()) || element is ComboBox { IsEditable: true });
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m2: R on the Audio box refreshed the page instead of its type-ahead): the focused control types
+	/// with its bare letters: a closed combo box jumps to the entry that starts with the letter.
+	/// </summary>
+	public static bool OwnsLetters(object? element) => element is ComboBox;
 
 	public static bool IsTextInputType(Type type) =>
 		typeof(TextBox).IsAssignableFrom(type) || typeof(PasswordBox).IsAssignableFrom(type) || typeof(RichEditBox).IsAssignableFrom(type)

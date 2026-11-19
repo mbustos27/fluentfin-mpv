@@ -5,6 +5,11 @@
 - **The trailer theatre keeps the keyboard.** While a trailer plays, Tab and Shift+Tab stay inside it, Esc and Back always
   close it, and every other shortcut (Ctrl+F, /, R, F1, Alt+Home, Ctrl+,) and a page's own keys (Home's N and C, Ctrl+Z)
   do nothing. Before, Ctrl+F moved the keyboard into the search box under the dim, and Esc then no longer closed it.
+- **R keeps your place, and only once.** Holding R or F5 refreshes the page once (it reloaded on every auto-repeat), a
+  second R while the page is still loading joins the first, and the keyboard goes back to the button it was on (Trailer,
+  not Play) or the card it was on (not a card out of view). On a slow server, if you move first (a key, a click, the wheel,
+  the search box), the refresh leaves the keyboard where you put it. R on a closed list box (Audio, Subtitles) picks the
+  entry starting with R instead of refreshing; F5 and Ctrl+R still refresh there.
 
 ## 1.3.1
 
