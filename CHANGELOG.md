@@ -113,6 +113,21 @@
   the spacing is even (16, 24, 24, 8). The search box is centred in the window when there is room, otherwise it sits beside
   the account; its tooltip names Ctrl+F and /. The Nixie wordmark goes Home. Cinematic's floating bar is centred, with its
   menu on the same glass; Drive-in's sparkles stay out of the bar. The bar itself is no longer a Tab stop with nothing on it.
+- **The trailer theatre keeps the keyboard.** While a trailer plays, Tab and Shift+Tab stay inside it, Esc and Back always
+  close it, and every other shortcut (Ctrl+F, /, R, F1, Alt+Home, Ctrl+,) and a page's own keys (Home's N and C, Ctrl+Z)
+  do nothing. Before, Ctrl+F moved the keyboard into the search box under the dim, and Esc then no longer closed it.
+  A click on the dim's top band closes it too: that band was still the window's title bar, and a click there dragged the
+  window (a double click maximized it).
+- **R keeps your place, and only once.** Holding R or F5 refreshes the page once (it reloaded on every auto-repeat), a
+  second R while the page is still loading joins the first, and the keyboard goes back to the button it was on (Trailer,
+  not Play) or the card it was on (not a card out of view). On a slow server, if you move first (a key, a click, the wheel,
+  the search box), the refresh leaves the keyboard where you put it. R on a closed list box (Audio, Subtitles) picks the
+  entry starting with R instead of refreshing; F5 and Ctrl+R still refresh there.
+- **After "Choose a look", the old Home lets go.** Classic's, Cinematic's and Editorial's Home listen to the page's data
+  only while shown, as Drive-in's did: the Home you left could close the new one's "Removed from Continue Watching ·
+  Undo" under your pointer.
+- **Update checks survive a clock change.** When GitHub asks Nixie to wait, the wait is kept for a day at most, a wait
+  that a clock set back put days ahead counts as over, and Check now says which day ("wait until tomorrow at 09:00").
 
 ## 1.3.1
 

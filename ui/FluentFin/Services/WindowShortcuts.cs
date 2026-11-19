@@ -30,6 +30,8 @@ public static class WindowShortcuts
 	{
 		root.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(OnPreviewKeyDown), false);
 		root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnPointerPressed), true);
+		// Nixie 1.4.0 (bug hunt M3): the wheel is the user moving too (a refresh's place restore stops)
+		root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler((_, _) => PageRefresh.UserActed("the wheel")), true);
 	}
 
 	// -- keys ------------------------------------------------------------------------------------------------------------
@@ -43,8 +45,38 @@ public static class WindowShortcuts
 
 		var state = InputKeyboardSource.GetKeyStateForCurrentThread;
 		bool Down(VirtualKey k) => state(k).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-		var shortcut = AppShortcuts.For((int)e.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift), Down(VirtualKey.Menu), TextInput.IsTextInput(e.OriginalSource));
-		if (shortcut is { } found && Run(root, found))
+		var shortcut = AppShortcuts.For((int)e.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift), Down(VirtualKey.Menu),
+			TextInput.IsTextInput(e.OriginalSource), ownsLetters: TextInput.OwnsLetters(e.OriginalSource));
+
+		// Nixie 1.4.0 (bug hunt M3): any other key the user presses ends a refresh's place restore (a refresh key joins the
+		// refresh under way, a modifier alone is the start of a chord)
+		if (shortcut != AppShortcut.Refresh && !AppShortcuts.IsModifierKey((int)e.Key))
+		{
+			PageRefresh.UserActed("a key");
+		}
+
+		// Nixie 1.4.0 (bug hunt M1): the theatre is modal. Its keys are decided here, before any page handler or key
+		// accelerator (a key handled here runs no accelerator: the search box's Ctrl+F, Home's N and C): Esc and Back close
+		// it from wherever the keyboard is, its own controls get Tab, Enter, Space and the arrows, and the rest is held back.
+		if (Controls.TrailerTheater.Current is { IsOpen: true } theater)
+		{
+			switch (Trailers.KeyOverTheater((int)e.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift), Down(VirtualKey.Menu)))
+			{
+				case TheaterKey.Close:
+					e.Handled = true;
+					theater.Close();
+					return;
+				case TheaterKey.HoldBack:
+					e.Handled = true;
+					theater.HeldBack(e.KeyStatus.WasKeyDown);
+					return;
+			}
+
+			return;
+		}
+
+		// Nixie 1.4.0 (bug hunt M4): a held key's repeats are handled and do nothing (Run); they never reach the page either
+		if (shortcut is { } found && Run(root, found, e.KeyStatus.WasKeyDown))
 		{
 			e.Handled = true;
 		}
@@ -59,6 +91,7 @@ public static class WindowShortcuts
 			return;
 		}
 
+		PageRefresh.UserActed("a click");
 		var kind = e.GetCurrentPoint(root).Properties.PointerUpdateKind;
 		if (AppMouse.For(kind == PointerUpdateKind.XButton1Pressed, kind == PointerUpdateKind.XButton2Pressed) is { } shortcut)
 		{
@@ -70,7 +103,7 @@ public static class WindowShortcuts
 	// -- doing it --------------------------------------------------------------------------------------------------------
 
 	/// <summary>Carries the shortcut out where it applies; true when it did something (the key is then handled).</summary>
-	private static bool Run(UIElement root, AppShortcut shortcut)
+	private static bool Run(UIElement root, AppShortcut shortcut, bool repeat = false)
 	{
 		try
 		{
@@ -79,9 +112,17 @@ public static class WindowShortcuts
 			{
 				case ShortcutGate.Ignore:
 					return false;
+				case ShortcutGate.HoldBack:
+					return true;
 				case ShortcutGate.CloseTrailer:
 					theater!.Close();
 					return true;
+			}
+
+			// Nixie 1.4.0 (bug hunt M4: a held R reloaded the page 16 times in a second): a held key acts once
+			if (repeat && !AppShortcuts.Repeats(shortcut))
+			{
+				return true;
 			}
 
 			switch (shortcut)
@@ -123,16 +164,24 @@ public static class WindowShortcuts
 
 		/// <summary>Nixie 1.3.1: a trailer plays in the theatre window: Back (a key or Mouse 4) closes it, nothing else runs.</summary>
 		CloseTrailer,
+
+		/// <summary>
+		/// Nixie 1.4.0 (bug hunt M1): over a trailer, every other shortcut is handled and does nothing. Left unhandled (1.3.1's
+		/// Ignore) it went on to the key accelerators: the search box's own Ctrl+F took the keyboard out from under the dim.
+		/// </summary>
+		HoldBack,
 	}
 
 	/// <summary>
 	/// Whether <paramref name="shortcut"/> runs: allowed where the user is (<see cref="AppShortcuts.AllowedIn"/>), no menu or
 	/// dialog open (<paramref name="popupOpen"/>: the keys are theirs), and over a trailer (<paramref name="trailerOpen"/>) only
-	/// Back, which closes it. A key typed in a text box never gets here (<see cref="AppShortcuts.For"/>).
+	/// Back, which closes it; the rest is held back (handled, nothing runs). A key typed in a text box never gets here
+	/// (<see cref="AppShortcuts.For"/>); a key over a trailer is decided first (<see cref="Trailers.KeyOverTheater"/>), so this
+	/// rule is the mouse's (Mouse 4 closes it, Mouse 5 does nothing).
 	/// </summary>
 	internal static ShortcutGate Gate(AppShortcut shortcut, ShortcutContext context, bool popupOpen, bool trailerOpen) =>
-		!AppShortcuts.AllowedIn(shortcut, context) || popupOpen ? ShortcutGate.Ignore
-		: trailerOpen ? (shortcut == AppShortcut.Back ? ShortcutGate.CloseTrailer : ShortcutGate.Ignore)
+		trailerOpen && !popupOpen ? (shortcut == AppShortcut.Back ? ShortcutGate.CloseTrailer : ShortcutGate.HoldBack)
+		: !AppShortcuts.AllowedIn(shortcut, context) || popupOpen ? ShortcutGate.Ignore
 		: ShortcutGate.Run;
 
 	private static ShortcutContext CurrentContext()
@@ -210,6 +259,12 @@ public static class TextInput
 	/// <summary>The focused element takes text: a text, password or rich edit box (a search box and a number box hold a TextBox), an editable combo box.</summary>
 	public static bool IsTextInput(object? element) =>
 		element is not null && (IsTextInputType(element.GetType()) || element is ComboBox { IsEditable: true });
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m2: R on the Audio box refreshed the page instead of its type-ahead): the focused control types
+	/// with its bare letters: a closed combo box jumps to the entry that starts with the letter.
+	/// </summary>
+	public static bool OwnsLetters(object? element) => element is ComboBox;
 
 	public static bool IsTextInputType(Type type) =>
 		typeof(TextBox).IsAssignableFrom(type) || typeof(PasswordBox).IsAssignableFrom(type) || typeof(RichEditBox).IsAssignableFrom(type)

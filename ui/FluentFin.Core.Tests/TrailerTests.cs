@@ -1,5 +1,6 @@
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.Mpv;
+using FluentFin.Core.Shortcuts;
 using Jellyfin.Sdk.Generated.Models;
 using Moq;
 
@@ -203,6 +204,42 @@ public sealed class TrailerTests
 		state.Close();
 
 		Assert.Equal([first], focused);
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M1): the theatre is modal: Esc and Back close it, its controls get Tab, Enter, Space and the arrows,
+	/// and every other key is held back: each global shortcut but Back, and the pages' own keys (Home's N and C, Ctrl+Z).
+	/// </summary>
+	[Fact]
+	public void OverTheTheatre_EscAndBackClose_ItsControlsKeepTheirKeys_EverythingElseIsHeldBack()
+	{
+		Assert.Equal(TheaterKey.Close, Trailers.KeyOverTheater(0x1B, false, false, false));
+		Assert.Equal(TheaterKey.Close, Trailers.KeyOverTheater(0x1B, true, true, false));
+		Assert.Equal(TheaterKey.Close, Trailers.KeyOverTheater(0x25, false, false, true));    // Alt+Left
+		Assert.Equal(TheaterKey.Close, Trailers.KeyOverTheater(0xA6, false, false, false));   // the Back key
+
+		foreach (var (key, shift) in new[] { (0x09, false), (0x09, true), (0x0D, false), (0x20, false), (0x25, false), (0x26, false), (0x27, false), (0x28, false), (0x10, true), (0x11, false), (0x12, false) })
+		{
+			Assert.Equal(TheaterKey.Pass, Trailers.KeyOverTheater(key, key == 0x11, shift, key == 0x12));
+		}
+
+		// every global shortcut the sheet lists, Back's aside, is held back
+		foreach (var entry in ShortcutCatalog.Sections.SelectMany(s => s.Entries).Where(e => e.Scope == ShortcutScope.Global))
+		{
+			foreach (var chord in entry.Chords)
+			{
+				var back = AppShortcuts.For(chord.Key, chord.Control, chord.Shift, chord.Alt, inTextInput: false) == AppShortcut.Back;
+				Assert.Equal(back ? TheaterKey.Close : TheaterKey.HoldBack, Trailers.KeyOverTheater(chord.Key, chord.Control, chord.Shift, chord.Alt));
+			}
+		}
+
+		// the pages' own keys: N, C, Ctrl+Z; a letter typed; Alt+Right; Ctrl+Tab
+		Assert.Equal(TheaterKey.HoldBack, Trailers.KeyOverTheater(0x4E, false, false, false));
+		Assert.Equal(TheaterKey.HoldBack, Trailers.KeyOverTheater(0x43, false, false, false));
+		Assert.Equal(TheaterKey.HoldBack, Trailers.KeyOverTheater(0x5A, true, false, false));
+		Assert.Equal(TheaterKey.HoldBack, Trailers.KeyOverTheater(0x42, false, false, false));
+		Assert.Equal(TheaterKey.HoldBack, Trailers.KeyOverTheater(0x27, false, false, true));
+		Assert.Equal(TheaterKey.HoldBack, Trailers.KeyOverTheater(0x09, true, false, false));
 	}
 
 	[Fact]

@@ -49,14 +49,34 @@ public static class AppShortcuts
 		_ => shortcut is AppShortcut.Back or AppShortcut.ShowHelp,
 	};
 
-	/// <summary>The key map: null for a key that is none of the global ones, or whenever <paramref name="inTextInput"/>.</summary>
-	public static AppShortcut? For(int virtualKey, bool control, bool shift, bool alt, bool inTextInput)
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M4: a held R reloaded the page on every auto-repeat, 16 reloads in a second): whether a held key's
+	/// repeats do the shortcut again. Only Back and Forward step on (a held Alt+Left walks back, as in a browser); the rest act
+	/// once per press.
+	/// </summary>
+	public static bool Repeats(AppShortcut shortcut) => shortcut is AppShortcut.Back or AppShortcut.Forward;
+
+	/// <summary>Nixie 1.4.0: Shift, Ctrl, Alt, the Windows keys and Caps Lock alone (the start of a chord, not a key of its own).</summary>
+	public static bool IsModifierKey(int virtualKey) => virtualKey is 0x10 or 0x11 or 0x12 or (>= 0xA0 and <= 0xA5) or 0x5B or 0x5C or 0x14;
+
+	/// <summary>
+	/// The key map: null for a key that is none of the global ones, or whenever <paramref name="inTextInput"/>. Nixie 1.4.0:
+	/// null for a held key's <paramref name="repeat"/> (<see cref="Repeats"/>), and for a bare letter when the focused control
+	/// types with its letters (<paramref name="ownsLetters"/>: a closed combo box's type-ahead, bug hunt m2; F5 and Ctrl+R still
+	/// refresh there).
+	/// </summary>
+	public static AppShortcut? For(int virtualKey, bool control, bool shift, bool alt, bool inTextInput, bool repeat = false, bool ownsLetters = false)
 	{
-		if (inTextInput)
+		if (inTextInput || (ownsLetters && !control && !alt && virtualKey is >= 0x41 and <= 0x5A))
 		{
 			return null;
 		}
 
+		return Map(virtualKey, control, shift, alt) is { } found && (!repeat || Repeats(found)) ? found : null;
+	}
+
+	private static AppShortcut? Map(int virtualKey, bool control, bool shift, bool alt)
+	{
 		if (alt)
 		{
 			return control || shift ? null : virtualKey switch
@@ -88,7 +108,7 @@ public static class AppShortcuts
 	/// toggle it. A held key's repeats do not (<paramref name="repeat"/>): holding F1 must not open and close it in turn.
 	/// </summary>
 	public static bool ClosesHelp(int virtualKey, bool control, bool shift, bool alt, bool repeat = false) =>
-		!repeat && For(virtualKey, control, shift, alt, inTextInput: false) == AppShortcut.ShowHelp;
+		For(virtualKey, control, shift, alt, inTextInput: false, repeat) == AppShortcut.ShowHelp;
 }
 
 /// <summary>The mouse's side buttons (Mouse 4 and Mouse 5).</summary>

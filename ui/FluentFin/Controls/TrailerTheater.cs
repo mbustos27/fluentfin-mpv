@@ -82,7 +82,11 @@ public sealed partial class TrailerTheater : Grid
 		KeyboardAccelerators.Add(escape);
 		KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
 
-		SizeChanged += (_, _) => Resize();
+		SizeChanged += (_, _) =>
+		{
+			Resize();
+			KeepCaptionOff();
+		};
 		Loaded += (_, _) => Current = this;
 		Unloaded += (_, _) =>
 		{
@@ -128,6 +132,8 @@ public sealed partial class TrailerTheater : Grid
 		_frame.Content = _web;
 
 		Visibility = Visibility.Visible;
+		Contain();
+		CaptionOff();
 		_frame.ApplyTemplate();
 		UpdateLayout();
 		Resize();
@@ -160,10 +166,181 @@ public sealed partial class TrailerTheater : Grid
 		}
 
 		_generation++;
+		// first: closing the web view and collapsing move the keyboard out, on its way back to the Trailer button
+		Release();
+		CaptionBack();
 		CloseWeb();
 		Visibility = Visibility.Collapsed;
 		Log()?.LogInformation("[trailer] theatre closed");
 		_state.Close();
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M1): a key held back over the theatre (<see cref="Trailers.KeyOverTheater"/>): logged with where the
+	/// keyboard is (the harness checks it stayed inside), once per press (not for a held key's repeats). The key is not named.
+	/// </summary>
+	public void HeldBack(bool repeat)
+	{
+		if (!repeat)
+		{
+			Log()?.LogInformation("[trailer] a key over the theatre held back; the keyboard on {Focused} ({Inside})", FocusedName(), WithinTheater() ? "inside" : "OUTSIDE");
+		}
+	}
+
+	private UIElement? _contained;
+
+	/// <summary>The top bar's own click-through areas while the theatre covers them (put back on close), null when closed.</summary>
+	private Windows.Graphics.RectInt32[]? _barPassthrough;
+
+	private const Microsoft.UI.Input.NonClientRegionKind Passthrough = Microsoft.UI.Input.NonClientRegionKind.Passthrough;
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m8): the top bar is the window's title bar (TitleBarControl), so its empty parts are the window's
+	/// caption, and the theatre is drawn over them: a click on the dim's top band dragged the window, a double click there
+	/// maximized it, instead of closing the theatre. While it is open the whole window but Windows' own buttons (minimize,
+	/// maximize, close: they stay) is click-through, so the band is the dim's (a click there closes it, as anywhere on the dim).
+	/// The bar's own click-through areas are put back on close.
+	/// </summary>
+	private void CaptionOff()
+	{
+		try
+		{
+			var source = Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(App.MainWindow.AppWindow.Id);
+			_barPassthrough ??= source.GetRegionRects(Passthrough);
+			source.SetRegionRects(Passthrough, [WholeWindowButCaptionButtons()]);
+			Log()?.LogInformation("[trailer] the top bar is not the window's caption while the theatre is open");
+		}
+		catch (Exception ex)
+		{
+			Log()?.LogWarning(ex, "[trailer] the window's caption could not be set aside");
+		}
+	}
+
+	/// <summary>The window's client area but the caption buttons' corner, in physical pixels.</summary>
+	private static Windows.Graphics.RectInt32 WholeWindowButCaptionButtons()
+	{
+		var window = App.MainWindow.AppWindow;
+		var size = window.ClientSize;
+		return new Windows.Graphics.RectInt32(0, 0, Math.Max(0, size.Width - window.TitleBar.RightInset), size.Height);
+	}
+
+	/// <summary>
+	/// The window was resized while open: the top bar sets its click-through areas again, for the new size (TitleBarControl,
+	/// after layout); those are the ones put back on close, and the whole window is click-through again.
+	/// </summary>
+	private void KeepCaptionOff()
+	{
+		if (!_state.IsOpen || _barPassthrough is null)
+		{
+			return;
+		}
+
+		void Again()
+		{
+			if (!_state.IsOpen)
+			{
+				return;
+			}
+
+			try
+			{
+				var source = Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(App.MainWindow.AppWindow.Id);
+				var whole = WholeWindowButCaptionButtons();
+				var now = source.GetRegionRects(Passthrough);
+				if (now is not [var only] || !only.Equals(whole))
+				{
+					if (now.Length > 0 && !now.Any(r => r.X == 0 && r.Y == 0 && r.Height > whole.Height / 2))
+					{
+						_barPassthrough = now;
+					}
+
+					source.SetRegionRects(Passthrough, [whole]);
+				}
+			}
+			catch (Exception)
+			{
+			}
+		}
+
+		// after the bar's own update (queued at the same priority when the window's size changed), and once more after that
+		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+		{
+			Again();
+			DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Again);
+		});
+	}
+
+	private void CaptionBack()
+	{
+		if (_barPassthrough is not { } saved)
+		{
+			return;
+		}
+
+		_barPassthrough = null;
+		try
+		{
+			Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(App.MainWindow.AppWindow.Id).SetRegionRects(Passthrough, saved);
+			Log()?.LogInformation("[trailer] the top bar is the window's caption again ({Count} click-through area(s))", saved.Length);
+		}
+		catch (Exception ex)
+		{
+			Log()?.LogWarning(ex, "[trailer] the window's caption could not be put back");
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M1): while it is open, the keyboard stays inside: a move to anything under the dim (the page's own
+	/// focus calls, a refresh's place, the top bar) is refused. Tab and Shift+Tab already cycle inside (TabFocusNavigation).
+	/// </summary>
+	private void Contain()
+	{
+		if (_contained is not null || XamlRoot?.Content is not UIElement root)
+		{
+			return;
+		}
+
+		_contained = root;
+		root.GettingFocus += OnRootGettingFocus;
+	}
+
+	private void Release()
+	{
+		if (_contained is { } root)
+		{
+			root.GettingFocus -= OnRootGettingFocus;
+			_contained = null;
+		}
+	}
+
+	private void OnRootGettingFocus(UIElement sender, GettingFocusEventArgs args)
+	{
+		if (!_state.IsOpen || args.NewFocusedElement is not DependencyObject target || IsInside(target))
+		{
+			return;
+		}
+
+		// the first move in comes from outside (the Trailer button): only moves out are refused
+		if (!WithinTheater())
+		{
+			return;
+		}
+
+		var refused = args.TryCancel();
+		Log()?.LogInformation("[trailer] the keyboard kept inside (it was going to {Target}): {Refused}", (target as FrameworkElement)?.GetType().Name ?? target.GetType().Name, refused);
+	}
+
+	private bool IsInside(DependencyObject element)
+	{
+		for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, this))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private void CloseWeb()
@@ -387,23 +564,8 @@ public sealed partial class TrailerTheater : Grid
 		XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is FrameworkElement f ? $"{f.GetType().Name} {AutomationProperties.GetName(f)}" : "nothing";
 
 	/// <summary>Whether the keyboard is already inside the theatre (on Close, or in the video).</summary>
-	private bool WithinTheater()
-	{
-		if (XamlRoot is null || FocusManager.GetFocusedElement(XamlRoot) is not DependencyObject focused)
-		{
-			return false;
-		}
-
-		for (var node = focused; node is not null; node = VisualTreeHelper.GetParent(node))
-		{
-			if (ReferenceEquals(node, this))
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
+	private bool WithinTheater() =>
+		XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is DependencyObject focused && IsInside(focused);
 
 	/// <summary>The dim over the page: a deep dusk at 72 % (the frame's light edge reads on it); the window colour in high contrast.</summary>
 	private static Brush DimBrush()

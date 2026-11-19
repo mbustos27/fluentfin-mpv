@@ -67,33 +67,62 @@ public sealed partial class CinematicHomePage : Page
 				StartNoticeTimer(held, afterHold: false);
 			}
 		};
-		ViewModel.PropertyChanged += (_, e) =>
+		// Nixie 1.4.0 (bug hunt m6): the view model outlives the page ("Choose a look" hands it to the new theme's Home): listen
+		// only while shown. Subscribed in the constructor, the old page kept listening, and its notice timer closed the new
+		// page's "Removed from Continue Watching · Undo" under the user's pointer.
+		Unloaded += (_, _) =>
 		{
-			if (e.PropertyName == nameof(HomeViewModel.Notice))
-			{
-				OnNoticeChanged();
-			}
-			else if (e.PropertyName == nameof(HomeViewModel.Hero))
-			{
-				LayoutFirstScreen();
-			}
+			_noticeTimer.Stop();
+			ViewModel.PropertyChanged -= OnViewModelChanged;
+			ViewModel.UpNext.PropertyChanged -= OnUpNextChanged;
 		};
-		Unloaded += (_, _) => _noticeTimer.Stop();
 		Loaded += (_, _) =>
 		{
+			ViewModel.PropertyChanged -= OnViewModelChanged;
+			ViewModel.PropertyChanged += OnViewModelChanged;
+			ViewModel.UpNext.PropertyChanged -= OnUpNextChanged;
+			ViewModel.UpNext.PropertyChanged += OnUpNextChanged;
+			ResumeNotice();
 			LayoutFirstScreen();
 			RestorePlace();
 		};
 		PageScroller.SizeChanged += (_, _) => LayoutFirstScreen();
 		UpNextBlock.SizeChanged += (_, _) => Hero.ContentBottom = UpNextBlock.ActualHeight;
 		UpNextRow.Loaded += (_, _) => CinematicShelf.Fit(UpNextRow, 16, ViewModel.UpNext.Summary);
-		ViewModel.UpNext.PropertyChanged += (_, e) =>
+	}
+
+	private void OnViewModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(HomeViewModel.Notice))
 		{
-			if (e.PropertyName == nameof(UpNextShelf.Summary))
-			{
-				CinematicShelf.SetSummary(UpNextRow, ViewModel.UpNext.Summary);
-			}
-		};
+			OnNoticeChanged();
+		}
+		else if (e.PropertyName == nameof(HomeViewModel.Hero))
+		{
+			LayoutFirstScreen();
+		}
+	}
+
+	private void OnUpNextChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(UpNextShelf.Summary))
+		{
+			CinematicShelf.SetSummary(UpNextRow, ViewModel.UpNext.Summary);
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m6): shown (again, or first after "Choose a look" handed the view model over): the notice as it is
+	/// now, timed by this page, the one the pointer and the keyboard are on.
+	/// </summary>
+	private void ResumeNotice()
+	{
+		ShowNotice(ViewModel.Notice);
+		if (ViewModel.Notice is not null && !_noticeTimer.IsRunning)
+		{
+			_noticeShownAt = System.Diagnostics.Stopwatch.GetTimestamp();
+			StartNoticeTimer(_noticePointer || _noticeFocus, afterHold: false);
+		}
 	}
 
 	// ---- the layout ---------------------------------------------------------------------------------------------------

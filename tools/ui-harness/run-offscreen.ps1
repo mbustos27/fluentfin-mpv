@@ -15,6 +15,8 @@
     tools\backend-bench\hidden_run.py: the fake server (tools\ui-harness\fakeserver, 127.0.0.1 only), FluentFin, its
     backend and mpv. When the run ends (or -TimeoutSeconds runs out) the job ends whatever is left; nothing else is
     ever ended. APPDATA and LOCALAPPDATA point into -Out\env for the run, and whatever lands there is listed at the end.
+  - One run at a time on this machine (Nixie 1.4.0): a run waits up to -QueueMinutes (30) for the one before it to end.
+    Runs at once each ended with FluentFin's window minimized and every later check failing.
   - Sign-in: -SignIn quickconnect (default): FluentFin's Quick Connect, the code it shows approved through the fake
     server's harness endpoint; the server issues a fresh random token. No password is typed. -SignIn password types the
     fake server's generated test credentials (fakeserver\credentials.json) instead. Never a real server or account.
@@ -71,7 +73,9 @@ param(
     # by dev builds only); -GlassFollowsActivity leaves the window's real activation in charge.
     [switch]$GlassFollowsActivity,
     [int]$TabStops = 60,
-    [int]$TimeoutSeconds = 900
+    [int]$TimeoutSeconds = 900,
+    # Nixie 1.4.0 (bug hunt m10): how long a run waits for the off-screen run before it (one at a time on this machine)
+    [int]$QueueMinutes = 30
 )
 
 $ErrorActionPreference = 'Stop'
@@ -169,11 +173,29 @@ $glassEnv = if ($GlassFollowsActivity) { @() } else { @('--env', 'FLUENTFIN_MPV_
 # Nixie 1.3.1: the harness's mouse (posted clicks never reach WinUI off-screen): a dev build takes a registered window message
 # and clicks through its own code (ui\FluentFin\Services\HarnessPointer.cs; a release package never listens)
 $pointerEnv = @('--env', 'NIXIE_HARNESS_POINTER=1')
-& $Python -B -I $hidden --log (Join-Path $Out 'hidden_run.log') --timeout $TimeoutSeconds --desktop "ffh-ui-$PID" `
-    --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" @glassEnv @pointerEnv `
-    --env "PATH=$mpvDir;$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0" `
-    -- $ps @driveArgs | Out-Host
-$code = $LASTEXITCODE
+# Nixie 1.4.0 (bug hunt m10): one off-screen run at a time on this machine. Three at once (each on its own private desktop
+# and data folder) all ended with FluentFin's window minimized, 160 x 28, about 10 s after sign-in, and every later check
+# failed ("full screen: F did nothing"); the same runs one after another passed. A run waits here for the one before it.
+$runLock = New-Object System.Threading.Mutex($false, 'Local\NixieHarnessOffscreenRun')
+function Enter-RunLock([TimeSpan]$Wait) {
+    try { $runLock.WaitOne($Wait) }
+    catch { if ($_.Exception -is [Threading.AbandonedMutexException] -or $_.Exception.InnerException -is [Threading.AbandonedMutexException]) { $true } else { throw } }
+}
+if (-not (Enter-RunLock ([TimeSpan]::Zero))) {
+    Write-Host "another off-screen run is going on this machine: this one waits for it (at most $QueueMinutes min)"
+    if (-not (Enter-RunLock ([TimeSpan]::FromMinutes($QueueMinutes)))) { $runLock.Dispose(); throw "another off-screen run kept the harness for $QueueMinutes min" }
+}
+try {
+    & $Python -B -I $hidden --log (Join-Path $Out 'hidden_run.log') --timeout $TimeoutSeconds --desktop "ffh-ui-$PID" `
+        --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" @glassEnv @pointerEnv `
+        --env "PATH=$mpvDir;$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0" `
+        -- $ps @driveArgs | Out-Host
+    $code = $LASTEXITCODE
+}
+finally {
+    $runLock.ReleaseMutex()
+    $runLock.Dispose()
+}
 
 $resultFile = Join-Path $Out 'result.json'
 if (Test-Path $resultFile) {

@@ -91,5 +91,18 @@ finally {
     foreach ($h in @($made)[($made.Count - 1)..0]) { [void][UiaTestWindows]::DestroyWindow($h) }
 }
 
+# --- Nixie 1.4.0 (bug hunt m10): a minimized window is refused for a shot (drive.ps1's Shot fails the run instead) ----------
+Check 'a shot of a minimized window is refused' ([OffscreenUi]::ShotRefusal($true, 1936, 1048) -match 'minimized')
+Check 'a shot of a 160 x 28 window (what a minimized one measures) is refused' ([OffscreenUi]::ShotRefusal($false, 160, 28) -match '160x28')
+Check 'a shot of a shown window is taken' ($null -eq [OffscreenUi]::ShotRefusal($false, 1100, 900))
+Check 'a shot of a small shown window is taken' ($null -eq [OffscreenUi]::ShotRefusal($false, 500, 500))
+
+# --- Nixie 1.4.0 (bug hunt m10): drive.ps1's steps find every theme's cards, and its shots ask first ----------------------
+$driveText = [IO.File]::ReadAllText((Join-Path (Split-Path $Uia) 'drive.ps1'))
+$stepLibrary = [regex]::Match($driveText, '(?s)function Step-Library \{.*?\r?\n\}').Value
+Check "Step-Library looks for the showcase film with Find-MediaCard (Editorial's posters too)" ($stepLibrary -match 'Find-MediaCard \$fixture\.movie\.name' -and $stepLibrary -notmatch 'FindCard\(')
+$shot = [regex]::Match($driveText, '(?s)function Shot\(.*?\r?\n\}').Value
+Check 'Shot refuses a minimized window before it saves anything' ($shot.IndexOf('ShotRefusal') -ge 0 -and $shot.IndexOf('ShotRefusal') -lt $shot.IndexOf('::Shot('))
+
 Write-Host ("{0} failed" -f $script:failed)
 if ($script:failed) { exit 1 }

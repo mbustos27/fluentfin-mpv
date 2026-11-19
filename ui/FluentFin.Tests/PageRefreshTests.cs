@@ -25,17 +25,101 @@ public sealed class PageRefreshTests
 		Assert.Equal(WindowShortcuts.ShortcutGate.Ignore, WindowShortcuts.Gate(AppShortcut.Refresh, ShortcutContext.Browsing, popupOpen: true, trailerOpen: false));
 		Assert.Equal(WindowShortcuts.ShortcutGate.Ignore, WindowShortcuts.Gate(AppShortcut.Refresh, ShortcutContext.Player, popupOpen: false, trailerOpen: false));
 		Assert.Equal(WindowShortcuts.ShortcutGate.Ignore, WindowShortcuts.Gate(AppShortcut.Refresh, ShortcutContext.SignedOut, popupOpen: false, trailerOpen: false));
-		Assert.Equal(WindowShortcuts.ShortcutGate.Ignore, WindowShortcuts.Gate(AppShortcut.Refresh, ShortcutContext.Browsing, popupOpen: false, trailerOpen: true));
+		Assert.Equal(WindowShortcuts.ShortcutGate.HoldBack, WindowShortcuts.Gate(AppShortcut.Refresh, ShortcutContext.Browsing, popupOpen: false, trailerOpen: true));
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M1): over a trailer every shortcut is handled: Back closes it, the rest is held back. 1.3.1 left
+	/// them unhandled (Ignore), so the key went on to the accelerators and the search box's Ctrl+F took the keyboard.
+	/// </summary>
 	[Fact]
-	public void OverATrailer_BackClosesIt_AndNothingElseRuns()
+	public void OverATrailer_BackClosesIt_AndEveryOtherShortcutIsHandled_NothingRuns()
 	{
 		Assert.Equal(WindowShortcuts.ShortcutGate.CloseTrailer, WindowShortcuts.Gate(AppShortcut.Back, ShortcutContext.Browsing, popupOpen: false, trailerOpen: true));
 		foreach (var other in Enum.GetValues<AppShortcut>().Where(s => s != AppShortcut.Back))
 		{
-			Assert.Equal(WindowShortcuts.ShortcutGate.Ignore, WindowShortcuts.Gate(other, ShortcutContext.Browsing, popupOpen: false, trailerOpen: true));
+			Assert.Equal(WindowShortcuts.ShortcutGate.HoldBack, WindowShortcuts.Gate(other, ShortcutContext.Browsing, popupOpen: false, trailerOpen: true));
 		}
+	}
+
+	/// <summary>Nixie 1.4.0 (bug hunt M1): the window's key handler decides the theatre's keys before any shortcut or accelerator.</summary>
+	[Fact]
+	public void OverATrailer_TheWindowDecidesTheKeysFirst_AndTheTheatreKeepsTheKeyboard()
+	{
+		var keys = Source("Services", "WindowShortcuts.cs").Replace("\r\n", "\n");
+		var theatre = keys.IndexOf("if (Controls.TrailerTheater.Current is { IsOpen: true } theater)", StringComparison.Ordinal);
+		Assert.True(theatre > 0 && theatre < keys.IndexOf("if (shortcut is { } found && Run(root, found", StringComparison.Ordinal));
+		Assert.Contains("case TheaterKey.HoldBack:\n\t\t\t\t\te.Handled = true;", keys);
+		Assert.Contains("case TheaterKey.Close:\n\t\t\t\t\te.Handled = true;\n\t\t\t\t\ttheater.Close();", keys);
+
+		var theater = Source("Controls", "TrailerTheater.cs");
+		Assert.Contains("root.GettingFocus += OnRootGettingFocus;", theater);
+		Assert.Contains("args.TryCancel()", theater);
+		// let go before the web view closes and the theatre collapses (the keyboard goes back to the Trailer button)
+		var close = theater[theater.IndexOf("public void Close()", StringComparison.Ordinal)..];
+		Assert.True(close.IndexOf("Release();", StringComparison.Ordinal) < close.IndexOf("CloseWeb();", StringComparison.Ordinal));
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M4: R, R 150 ms apart loaded the page twice and the keyboard ended on the TitleBar; a held R 16
+	/// times): the window passes a held key's repeat bit on and a repeat runs nothing; a second R while the first refresh's
+	/// place is still coming back joins it.
+	/// </summary>
+	[Fact]
+	public void AHeldR_RefreshesOnce_AndASecondRJoinsTheRefreshUnderWay()
+	{
+		var keys = Source("Services", "WindowShortcuts.cs").Replace("\r\n", "\n");
+		Assert.Contains("Run(root, found, e.KeyStatus.WasKeyDown)", keys);
+		Assert.Contains("if (repeat && !AppShortcuts.Repeats(shortcut))\n\t\t\t{\n\t\t\t\treturn true;", keys);
+		Assert.Contains("ownsLetters: TextInput.OwnsLetters(e.OriginalSource)", keys);
+
+		Assert.True(PageRefresh.Coalesces(running: true, samePage: true, userMoved: null));
+		Assert.False(PageRefresh.Coalesces(running: false, samePage: true, userMoved: null));
+		Assert.False(PageRefresh.Coalesces(running: true, samePage: false, userMoved: null));
+		// the user moved since: this R is a new refresh, from where the user is now
+		Assert.False(PageRefresh.Coalesces(running: true, samePage: true, userMoved: "a key"));
+
+		var run = Source("Services", "PageRefresh.cs");
+		Assert.True(run.IndexOf("if (Coalesces(", StringComparison.Ordinal) < run.IndexOf("ThemeAnchors.Capture(shown)", StringComparison.Ordinal));
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M3: on a slow server the place came back 4.6 s after R, taking the keyboard out of the search box
+	/// the user had typed in): the restore gives way to the user's own move, to a text box, and to leaving the page.
+	/// </summary>
+	[Fact]
+	public void ThePlaceRestore_GivesWayToTheUser()
+	{
+		Assert.Null(PageRefresh.YieldReason(userMoved: null, focusInTextInput: false, pageShown: true));
+		Assert.Contains("the user moved first (a key)", PageRefresh.YieldReason("a key", false, true));
+		Assert.Contains("text box", PageRefresh.YieldReason(null, focusInTextInput: true, pageShown: true));
+		Assert.Contains("left", PageRefresh.YieldReason(null, false, pageShown: false));
+
+		var keys = Source("Services", "WindowShortcuts.cs").Replace("\r\n", "\n");
+		// every key but a refresh key or a modifier alone; a click; the wheel
+		Assert.Contains("if (shortcut != AppShortcut.Refresh && !AppShortcuts.IsModifierKey((int)e.Key))\n\t\t{\n\t\t\tPageRefresh.UserActed(\"a key\");", keys);
+		Assert.Contains("PageRefresh.UserActed(\"a click\");", keys);
+		Assert.Contains("PageRefresh.UserActed(\"the wheel\")", keys);
+
+		var anchors = Source("Helpers", "ThemeAnchors.cs").Replace("\r\n", "\n");
+		var tick = anchors[anchors.IndexOf("public RefreshRestore RestoreAfterRefresh", StringComparison.Ordinal)..];
+		Assert.True(tick.IndexOf("yieldTo?.Invoke()", StringComparison.Ordinal) < tick.IndexOf("TryRestoreByPlace(page, last)", StringComparison.Ordinal));
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m3: R with the keyboard on Trailer put it on Play): a page's own button is anchored by its
+	/// x:Name (else its type and Narrator name) and gets the keyboard back once it shows; the Primary only when it is gone.
+	/// </summary>
+	[Fact]
+	public void AButtonOfThePage_KeepsTheKeyboard()
+	{
+		var anchors = Source("Helpers", "ThemeAnchors.cs").Replace("\r\n", "\n");
+		Assert.Contains("control = focused is null && element is FrameworkElement shown ? ControlAnchor.Of(shown) : null;", anchors);
+		Assert.Contains("FocusedControl = control", anchors);
+		var tryRestore = anchors[anchors.IndexOf("private bool TryRestoreByPlace", StringComparison.Ordinal)..];
+		Assert.True(tryRestore.IndexOf("anchor.Find(page)", StringComparison.Ordinal) < tryRestore.IndexOf("if (Focused is null || last)", StringComparison.Ordinal));
+		Assert.Equal("TrailerButton", new ControlAnchor("TrailerButton", null, null).ToString());
+		Assert.Equal("Button 'Mark watched'", new ControlAnchor(null, "Microsoft.UI.Xaml.Controls.Button", "Mark watched").ToString());
 	}
 
 	[Theory]

@@ -138,4 +138,26 @@ public sealed class TrailerFrameTests
 		Assert.DoesNotContain("AddHostObjectToScript", code);
 		Assert.DoesNotContain("WebMessageReceived", code);
 	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m8): the top bar is the window's title bar, and its empty parts were the window's caption under
+	/// the theatre's dim: a press there dragged the window, a double press maximized it. While the theatre is open the caption
+	/// is set aside (the window is click-through but its own buttons: a press on the band closes the theatre), again after a
+	/// resize, and the bar's own click-through areas are put back on close.
+	/// (The harness asks Windows itself: then-trailer.ps1, WM_NCHITTEST at 1920 and 1100 wide.)
+	/// </summary>
+	[Fact]
+	public void WhileOpen_TheTopBarIsNotTheWindowsCaption_AndIsAgainAfter()
+	{
+		var code = File.ReadAllText(App("Controls", "TrailerTheater.cs")).Replace("\r\n", "\n");
+		var open = code[code.IndexOf("public bool Open(", StringComparison.Ordinal)..code.IndexOf("public void Close()", StringComparison.Ordinal)];
+		Assert.Contains("CaptionOff();", open);
+		var close = code[code.IndexOf("public void Close()", StringComparison.Ordinal)..];
+		Assert.True(close.IndexOf("CaptionBack();", StringComparison.Ordinal) < close.IndexOf("Visibility = Visibility.Collapsed;", StringComparison.Ordinal));
+		// the whole window but Windows' own buttons is click-through while open; the bar's own areas come back on close
+		Assert.Contains("source.SetRegionRects(Passthrough, [WholeWindowButCaptionButtons()]);", code);
+		Assert.Contains("size.Width - window.TitleBar.RightInset", code);
+		Assert.Contains(".SetRegionRects(Passthrough, saved);", code);
+		Assert.Contains("KeepCaptionOff();", code[code.IndexOf("SizeChanged += (_, _) =>", StringComparison.Ordinal)..]);
+	}
 }

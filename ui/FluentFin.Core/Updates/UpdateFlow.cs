@@ -193,7 +193,7 @@ public sealed class UpdateCoordinator(Settings.ISettings settings, UpdateChecker
 				break;
 			case UpdateCheckStatus.RateLimited:
 				// GitHub's word on when to ask again is kept (Retry-After, or the limit's reset): nothing goes out before it
-				state = state with { LastCheck = now, RetryAfter = result.RetryAfter ?? now + UpdateGate.RetryInterval };
+				state = state with { LastCheck = now, RetryAfter = UpdateGate.CapWait(result.RetryAfter ?? now + UpdateGate.RetryInterval, now) };
 				break;
 		}
 
@@ -227,16 +227,30 @@ public sealed record UpdateCheckMessage(string Text, bool IsError, bool CanRetry
 {
 	public const string Checking = "Checking\u2026";
 
-	public static UpdateCheckMessage For(UpdateCheckResult result, string currentVersion, TimeZoneInfo? zone = null) => result.Status switch
+	public static UpdateCheckMessage For(UpdateCheckResult result, string currentVersion, TimeZoneInfo? zone = null, DateTimeOffset? now = null) => result.Status switch
 	{
 		UpdateCheckStatus.Available when result.Release is { } release =>
 			new($"{AppIdentity.Name} {release.Version} is available", false, false, release.Validated()),
 		UpdateCheckStatus.UpToDate => new($"{AppIdentity.Name} is up to date ({currentVersion})", false, false),
 		UpdateCheckStatus.RateLimited when result.RetryAfter is { } until =>
-			new($"Couldn't check: GitHub asked {AppIdentity.Name} to wait until {TimeZoneInfo.ConvertTime(until, zone ?? TimeZoneInfo.Local):HH:mm}", true, true),
+			new($"Couldn't check: GitHub asked {AppIdentity.Name} to wait until {When(until, now ?? DateTimeOffset.Now, zone ?? TimeZoneInfo.Local)}", true, true),
 		UpdateCheckStatus.RateLimited => new($"Couldn't check: GitHub asked {AppIdentity.Name} to wait a while", true, true),
 		_ => new($"Couldn't check: {result.Reason ?? "no answer from GitHub"}", true, true),
 	};
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m7: "wait until 09:00" did not say which day): the time alone today, "tomorrow at" the time, else
+	/// the day and date at the time, in the user's time zone.
+	/// </summary>
+	public static string When(DateTimeOffset until, DateTimeOffset now, TimeZoneInfo zone)
+	{
+		var at = TimeZoneInfo.ConvertTime(until, zone);
+		var today = TimeZoneInfo.ConvertTime(now, zone).Date;
+		var time = at.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+		return at.Date == today ? time
+			: at.Date == today.AddDays(1) ? $"tomorrow at {time}"
+			: $"{at.ToString("ddd d MMM", System.Globalization.CultureInfo.InvariantCulture)} at {time}";
+	}
 }
 
 /// <summary>

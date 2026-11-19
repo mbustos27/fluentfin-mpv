@@ -115,8 +115,23 @@ public static class UpdateGate
 	public static bool LastAttemptFailed(UpdateState state) =>
 		state.LastAttempt is { } attempt && (state.LastCheck is not { } check || check < attempt);
 
-	/// <summary>Nixie 1.3.1: GitHub asked to wait (Retry-After, or its rate limit's reset) and the time has not come.</summary>
-	public static bool Waiting(UpdateState state, DateTimeOffset now) => state.RetryAfter is { } until && until > now;
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m7): the longest GitHub's word to wait is kept. A Retry-After further off (a date from a server
+	/// whose clock is wrong) is cut to this when stored (<see cref="CapWait"/>), and a stored wait further ahead than this (the
+	/// clock was set back since) counts as over: a wrong clock never stops the checks, and Check now, for days.
+	/// </summary>
+	public static readonly TimeSpan LongestWait = TimeSpan.FromHours(24);
+
+	/// <summary>Nixie 1.4.0: GitHub's wait as it is stored: at most <see cref="LongestWait"/> from now.</summary>
+	public static DateTimeOffset CapWait(DateTimeOffset until, DateTimeOffset now) => until - now > LongestWait ? now + LongestWait : until;
+
+	/// <summary>
+	/// Nixie 1.3.1: GitHub asked to wait (Retry-After, or its rate limit's reset) and the time has not come. Nixie 1.4.0 (bug
+	/// hunt m7): like <see cref="IsDue"/> and <see cref="AttemptAllowed"/>, it survives a clock change: a wait more than
+	/// <see cref="LongestWait"/> ahead (the clock was set back after it was stored) is over.
+	/// </summary>
+	public static bool Waiting(UpdateState state, DateTimeOffset now) =>
+		state.RetryAfter is { } until && until > now && until - now <= LongestWait;
 
 	/// <summary>
 	/// Nixie 1.3.1: whether the automatic check asks now. At the run's start (<paramref name="atStart"/>), unless the last attempt

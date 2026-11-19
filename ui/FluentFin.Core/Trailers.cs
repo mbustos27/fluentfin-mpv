@@ -206,6 +206,29 @@ public static partial class Trailers
 		return (w, Math.Round(w * 9 / 16));
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M1: Ctrl+F over a playing trailer moved the keyboard into the hidden search box, and Esc then never
+	/// closed the theatre): the theatre is modal. Esc and Back close it from anywhere; Tab, Enter, Space, the arrows and the
+	/// modifiers go to its controls; every other key (Ctrl+F, /, R, F1, Alt+Home, Ctrl+, and a page's N, C or Ctrl+Z) is held back.
+	/// Virtual-key codes, as <see cref="Shortcuts.AppShortcuts.For"/> takes them.
+	/// </summary>
+	public static TheaterKey KeyOverTheater(int virtualKey, bool control, bool shift, bool alt)
+	{
+		const int Tab = 0x09, Enter = 0x0D, Escape = 0x1B, Space = 0x20, Left = 0x25, Down = 0x28, GamepadB = 0xC4;
+		if (virtualKey is Escape or GamepadB
+			|| Shortcuts.AppShortcuts.For(virtualKey, control, shift, alt, inTextInput: false) == Shortcuts.AppShortcut.Back)
+		{
+			return TheaterKey.Close;
+		}
+
+		var modifierAlone = Shortcuts.AppShortcuts.IsModifierKey(virtualKey);
+		var gamepad = virtualKey is >= 0xC3 and <= 0xDA;
+		var plain = !control && !alt;
+		return modifierAlone || gamepad || (plain && virtualKey is Tab or Enter or Space or (>= Left and <= Down))
+			? TheaterKey.Pass
+			: TheaterKey.HoldBack;
+	}
+
 	private static string? Query(Uri url, string name)
 	{
 		foreach (var part in url.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
@@ -219,6 +242,19 @@ public static partial class Trailers
 
 		return null;
 	}
+}
+
+/// <summary>Nixie 1.4.0 (bug hunt M1): what a key does while the theatre window is open (<see cref="Trailers.KeyOverTheater"/>).</summary>
+public enum TheaterKey
+{
+	/// <summary>The theatre's own controls take it: Tab and Shift+Tab (they cycle inside), Enter, Space, the arrows, a modifier alone.</summary>
+	Pass,
+
+	/// <summary>It closes the theatre: Esc, and Back (Alt+Left, the Back key).</summary>
+	Close,
+
+	/// <summary>Held back: handled at the window and nothing runs (no shortcut, no page key, no key accelerator under the dim).</summary>
+	HoldBack,
 }
 
 /// <summary>

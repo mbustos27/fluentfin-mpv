@@ -22,6 +22,12 @@ public sealed class ThemeAnchors
 	/// <summary>Whether the keyboard was in the page at all.</summary>
 	public bool HadFocus { get; init; }
 
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m3: R on an item page moved the keyboard from Trailer to Play): the control the keyboard was on
+	/// when it was on no item (a page's own button): its x:Name, else its type and Narrator name. Null when it was on an item.
+	/// </summary>
+	public ControlAnchor? FocusedControl { get; init; }
+
 	/// <summary>Each row's items list and the key of its first visible item.</summary>
 	public IReadOnlyList<(object Source, object First)> Rows { get; init; } = [];
 
@@ -114,11 +120,13 @@ public sealed class ThemeAnchors
 	public static ThemeAnchors Capture(Page page)
 	{
 		object? focused = null;
+		ControlAnchor? control = null;
 		var hadFocus = false;
 		if (page.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject element && IsInside(element, page))
 		{
 			hadFocus = true;
 			focused = ItemOf(element, page);
+			control = focused is null && element is FrameworkElement shown ? ControlAnchor.Of(shown) : null;
 		}
 
 		var rows = new List<(object, object)>();
@@ -161,7 +169,7 @@ public sealed class ThemeAnchors
 			}
 		}
 
-		return new ThemeAnchors { Focused = focused, HadFocus = hadFocus, Rows = rows, RowPlaces = places };
+		return new ThemeAnchors { Focused = focused, HadFocus = hadFocus, FocusedControl = control, Rows = rows, RowPlaces = places };
 	}
 
 	/// <summary>Puts <paramref name="page"/> (the new view) back at the place, once it is laid out.</summary>
@@ -237,13 +245,25 @@ public sealed class ThemeAnchors
 	/// Nixie 1.3.1: puts a refreshed page (a new view model, its rows arriving from the server) back at the place: tried as the
 	/// rows fill, until the keyboard is back on its item (or, when it was not on one, the rows are placed), at most
 	/// <paramref name="within"/>; then the keyboard goes to the page's Primary, else its first control.
+	/// <para>
+	/// Nixie 1.4.0 (bug hunt M3: on a slow server the place came back 4.6 s after R and took the keyboard from the search box
+	/// the user had moved to): each try first asks <paramref name="yieldTo"/>, which names why the user's own move wins (a
+	/// key, a click, the wheel, the keyboard in a text box, the page left); the restore then stops where it is.
+	/// </para>
 	/// </summary>
-	public void RestoreAfterRefresh(Page page, TimeSpan within, Action<string>? log = null)
+	public RefreshRestore RestoreAfterRefresh(Page page, TimeSpan within, Action<string>? log = null, Func<string?>? yieldTo = null)
 	{
 		var started = DateTime.UtcNow;
 		var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+		var restore = new RefreshRestore(page, timer, started, log);
 		timer.Tick += (_, _) =>
 		{
+			if (yieldTo?.Invoke() is { } why)
+			{
+				restore.Stop(why);
+				return;
+			}
+
 			var last = DateTime.UtcNow - started >= within;
 			if (!page.IsLoaded && !last)
 			{
@@ -254,11 +274,14 @@ public sealed class ThemeAnchors
 			if (done || last)
 			{
 				timer.Stop();
-				log?.Invoke($"the place {(done ? "kept" : "not found")} after {(int)(DateTime.UtcNow - started).TotalMilliseconds} ms (keyboard {(HadFocus ? Focused is null ? "on the page, on no item" : "on an item" : "not in the page")}, {RowPlaces.Count} row(s))");
+				log?.Invoke($"the place {(done ? "kept" : "not found")} after {(int)(DateTime.UtcNow - started).TotalMilliseconds} ms (keyboard {(HadFocus ? Focused is null ? FocusedControl is { } c ? $"on {c}" : "on the page, on no item" : "on an item" : "not in the page")}, {RowPlaces.Count} row(s))");
 			}
 		};
 		timer.Start();
+		return restore;
 	}
+
+	private bool _interimOnPrimary;
 
 	/// <summary>One try of <see cref="RestoreAfterRefresh"/>: true when the place is back.</summary>
 	private bool TryRestoreByPlace(Page page, bool last)
@@ -308,8 +331,35 @@ public sealed class ThemeAnchors
 			return true;
 		}
 
+		if (Focused is null && FocusedControl is { } anchor && !last)
+		{
+			// Nixie 1.4.0 (bug hunt m3): the keyboard was on a button of the page's own: that button, once it shows (an item
+			// page's Trailer comes with its item; meanwhile the Primary holds the keyboard); the Primary when the page is up
+			// (its Primary shows) and has no such button
+			if (anchor.Find(page) is { } named && named.Focus(FocusState.Keyboard))
+			{
+				return true;
+			}
+
+			var interim = Primary(page);
+			if (interim is null || anchor.InPage(page))
+			{
+				if (!_interimOnPrimary && interim is not null && interim.Focus(FocusState.Keyboard))
+				{
+					_interimOnPrimary = true;
+				}
+
+				return false;
+			}
+		}
+
 		if (Focused is null || last)
 		{
+			if (last && Focused is null && FocusedControl?.Find(page) is { } late && late.Focus(FocusState.Keyboard))
+			{
+				return true;
+			}
+
 			// the keyboard was on the page but on no item (a button), or its item is gone: the Primary, else the first control
 			if (Primary(page) is { } primary && primary.Focus(FocusState.Keyboard))
 			{
@@ -356,10 +406,12 @@ public sealed class ThemeAnchors
 
 	/// <summary>
 	/// The item an element shows: its data context when that is an item, else (Nixie 1.3.1) a card's own Model: a card in a
-	/// template compiled with x:Bind (the Library's grid) has no data context, so the grid's card was never found.
+	/// template compiled with x:Bind (the Library's grid) has no data context, so the grid's card was never found. Nixie 1.4.0:
+	/// Editorial's poster, whose data context is its grid cell (R in Editorial's library put the keyboard on Sort).
 	/// </summary>
 	private static object? ItemOfElement(FrameworkElement element) =>
 		element.DataContext is { } context && IsItem(context) ? context
+		: element.DataContext is EditorialCell { Item: { } cell } ? cell
 		: element is Controls.BaseItemDtoCard { Model: { } model } ? model
 		: null;
 
@@ -431,7 +483,9 @@ public sealed class ThemeAnchors
 	{
 		foreach (var element in Descendants(page).OfType<FrameworkElement>())
 		{
-			if (ItemOfElement(element) is { } context && Equals(ItemKey(context), key))
+			// Nixie 1.4.0: not a grid's recycled card (kept in the tree out of view with the item it showed last: R in a library
+			// put the keyboard on an unseen card, "Circus of Ashford", instead of the one it was on)
+			if (ItemOfElement(element) is { } context && Equals(ItemKey(context), key) && !Recycled(element))
 			{
 				var focusable = element as Control ?? Descendants(element).OfType<Control>().FirstOrDefault(c => c.IsTabStop && c.IsEnabled);
 				if (focusable is { IsTabStop: true, IsEnabled: true })
@@ -444,6 +498,20 @@ public sealed class ThemeAnchors
 		return null;
 	}
 
+	/// <summary>Whether <paramref name="element"/> is in an items repeater's card that the repeater no longer shows (its index -1).</summary>
+	private static bool Recycled(DependencyObject element)
+	{
+		for (DependencyObject? child = element, parent = VisualTreeHelper.GetParent(element); parent is not null; child = parent, parent = VisualTreeHelper.GetParent(parent))
+		{
+			if (parent is ItemsRepeater repeater && child is UIElement card)
+			{
+				return repeater.GetElementIndex(card) < 0;
+			}
+		}
+
+		return false;
+	}
+
 	/// <summary>The page's Primary button (the one Nixie primary per view), null when it shows none.</summary>
 	private static Control? Primary(Page page)
 	{
@@ -454,7 +522,7 @@ public sealed class ThemeAnchors
 		return Descendants(page).OfType<Button>().FirstOrDefault(b => b.Style is { } s && styles.Contains(s) && b.Visibility == Visibility.Visible && b.IsEnabled);
 	}
 
-	private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+	internal static IEnumerable<DependencyObject> Descendants(DependencyObject root)
 	{
 		var queue = new Queue<DependencyObject>();
 		queue.Enqueue(root);
@@ -469,5 +537,84 @@ public sealed class ThemeAnchors
 				queue.Enqueue(child);
 			}
 		}
+	}
+}
+
+/// <summary>
+/// Nixie 1.4.0 (bug hunt m3): a page's own control the keyboard was on (not an item's): known by its x:Name, else by its type
+/// and Narrator name (a button with no x:Name: Watched, Favourite). <see cref="Find"/> gives the refreshed page's one once it
+/// shows and takes the keyboard.
+/// </summary>
+public sealed record ControlAnchor(string? Name, string? TypeName, string? AutomationName)
+{
+	/// <summary>The control <paramref name="element"/> is, or the one it is in (a button's text), as an anchor; null when none can be told again.</summary>
+	public static ControlAnchor? Of(FrameworkElement element)
+	{
+		for (DependencyObject? node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is Control control)
+			{
+				var automation = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(control);
+				return !string.IsNullOrEmpty(control.Name) ? new ControlAnchor(control.Name, null, null)
+					: !string.IsNullOrEmpty(automation) ? new ControlAnchor(null, control.GetType().FullName, automation)
+					: null;
+			}
+
+			if (node is Page)
+			{
+				break;
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>Whether <paramref name="element"/> is the anchored control.</summary>
+	public bool Matches(FrameworkElement element) => Name is not null
+		? element.Name == Name
+		: element.GetType().FullName == TypeName && Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(element) == AutomationName;
+
+	/// <summary>Whether the page has the control at all (shown or not yet).</summary>
+	public bool InPage(Page page) => ThemeAnchors.Descendants(page).OfType<Control>().Any(Matches);
+
+	/// <summary>The page's control, when it shows and can take the keyboard.</summary>
+	public Control? Find(Page page) => ThemeAnchors.Descendants(page).OfType<Control>()
+		.FirstOrDefault(c => Matches(c) && c is { IsEnabled: true, IsTabStop: true, Visibility: Visibility.Visible } && c.ActualWidth > 0 && Shown(c, page));
+
+	private static bool Shown(UIElement element, Page page)
+	{
+		for (DependencyObject? node = element; node is not null && !ReferenceEquals(node, page); node = VisualTreeHelper.GetParent(node))
+		{
+			if (node is UIElement { Visibility: Visibility.Collapsed })
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	public override string ToString() => Name ?? $"{TypeName?.Split('.').LastOrDefault()} '{AutomationName}'";
+}
+
+/// <summary>Nixie 1.4.0: a refresh's place restore while it runs (<see cref="ThemeAnchors.RestoreAfterRefresh"/>).</summary>
+public sealed class RefreshRestore(Page page, DispatcherTimer timer, DateTime started, Action<string>? log)
+{
+	/// <summary>The refreshed page.</summary>
+	public Page Page { get; } = page;
+
+	/// <summary>Whether it is still looking for the place.</summary>
+	public bool IsRunning => timer.IsEnabled;
+
+	/// <summary>Stops looking (the user moved, or the page was left), and says why in the log.</summary>
+	public void Stop(string why)
+	{
+		if (!timer.IsEnabled)
+		{
+			return;
+		}
+
+		timer.Stop();
+		log?.Invoke($"the place given up after {(int)(DateTime.UtcNow - started).TotalMilliseconds} ms: {why}");
 	}
 }

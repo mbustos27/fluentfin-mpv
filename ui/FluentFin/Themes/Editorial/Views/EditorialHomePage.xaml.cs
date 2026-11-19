@@ -66,16 +66,6 @@ public sealed partial class EditorialHomePage : Page
 			}
 		};
 
-		ViewModel.PropertyChanged += OnViewModelChanged;
-		ViewModel.ContinueItems.CollectionChanged += OnSectionChanged;
-		ViewModel.NextUpItems.CollectionChanged += OnSectionChanged;
-		ViewModel.EditorialGenres.PropertyChanged += (_, e) =>
-		{
-			if (e.PropertyName is nameof(EditorialGenreStrip.Genres) or nameof(EditorialGenreStrip.Selected))
-			{
-				UpdateGenres();
-			}
-		};
 		UpNextRepeater.ElementPrepared += (_, e) =>
 		{
 			AutomationProperties.SetPositionInSet(e.Element, e.Index + 1);
@@ -84,14 +74,69 @@ public sealed partial class EditorialHomePage : Page
 		HeroDetails.CloseRequested += (_, _) => CloseHeroDetails(returnFocus: true);
 		HeroDetails.UpRequested += (_, _) => HeroDetailsButton.Focus(FocusState.Keyboard);
 		SizeChanged += (_, e) => Layout(e.NewSize.Width);
+		// Nixie 1.4.0 (bug hunt m6): the view model outlives the page ("Choose a look" hands it to the new theme's Home): listen
+		// only while shown. Subscribed in the constructor, the old page kept listening, and its notice timer closed the new
+		// page's "Removed from Continue Watching · Undo" under the user's pointer.
 		Loaded += (_, _) =>
 		{
+			Listen(false);
+			Listen(true);
+			ResumeNotice();
 			AmbientBackdrop.Set(null);
 			Layout(ActualWidth);
 			Refresh();
+			if (ViewModel.EditorialGenres.Genres.Count > 0)
+			{
+				UpdateGenres();
+			}
+
 			RestorePlace();
 		};
-		Unloaded += (_, _) => _noticeTimer.Stop();
+		Unloaded += (_, _) =>
+		{
+			_noticeTimer.Stop();
+			Listen(false);
+		};
+	}
+
+	private void Listen(bool on)
+	{
+		if (on)
+		{
+			ViewModel.PropertyChanged += OnViewModelChanged;
+			ViewModel.ContinueItems.CollectionChanged += OnSectionChanged;
+			ViewModel.NextUpItems.CollectionChanged += OnSectionChanged;
+			ViewModel.EditorialGenres.PropertyChanged += OnGenresChanged;
+		}
+		else
+		{
+			ViewModel.PropertyChanged -= OnViewModelChanged;
+			ViewModel.ContinueItems.CollectionChanged -= OnSectionChanged;
+			ViewModel.NextUpItems.CollectionChanged -= OnSectionChanged;
+			ViewModel.EditorialGenres.PropertyChanged -= OnGenresChanged;
+		}
+	}
+
+	private void OnGenresChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName is nameof(EditorialGenreStrip.Genres) or nameof(EditorialGenreStrip.Selected))
+		{
+			UpdateGenres();
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m6): shown (again, or first after "Choose a look" handed the view model over): the notice as it is
+	/// now, timed by this page, the one the pointer and the keyboard are on.
+	/// </summary>
+	private void ResumeNotice()
+	{
+		ShowNotice(ViewModel.Notice);
+		if (ViewModel.Notice is not null && !_noticeTimer.IsRunning)
+		{
+			_noticeShownAt = System.Diagnostics.Stopwatch.GetTimestamp();
+			StartNoticeTimer(_noticePointer || _noticeFocus, afterHold: false);
+		}
 	}
 
 	private TimeSpan NoticeShownFor => System.Diagnostics.Stopwatch.GetElapsedTime(_noticeShownAt);
