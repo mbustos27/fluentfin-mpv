@@ -67,7 +67,7 @@ public sealed class DriveInThemeTests
 		}
 
 		var shared = new[] { "TopBarStyle", "RowHeaderTemplate", "PosterTemplate", "StillTemplate", "PageHeaderStyle", "SignInBackdropTemplate",
-			"ThemeOptionsTemplate", "PlayerTopBarStyle", "PlayerBottomBarStyle", "Default", "Light", "HighContrast" };
+			"ThemeOptionsTemplate", "PlayerTopBarStyle", "PlayerBottomBarStyle", "TrailerFrameTemplate", "Default", "Light", "HighContrast" };
 		Assert.All(keys.Except(shared), key => Assert.StartsWith("DriveIn", key));
 	}
 

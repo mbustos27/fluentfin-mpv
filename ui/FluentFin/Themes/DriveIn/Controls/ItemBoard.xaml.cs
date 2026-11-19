@@ -96,7 +96,7 @@ public sealed partial class ItemBoard : UserControl
 		OverviewText.Text = dto?.Overview ?? "";
 		OverviewText.Visibility = string.IsNullOrWhiteSpace(dto?.Overview) ? Visibility.Collapsed : Visibility.Visible;
 
-		TrailerButton.Visibility = ItemMeta.TrailerUrl(dto) is null ? Visibility.Collapsed : Visibility.Visible;
+		TrailerButton.Visibility = Services.TrailerPlayback.ButtonVisibility(dto);
 		ApplyUserData();
 		RatingPanel.Item = dto;
 		ApplyLeft();
@@ -172,11 +172,6 @@ public sealed partial class ItemBoard : UserControl
 		ToolTipService.SetToolTip(button, name);
 	}
 
-	private async void TrailerButton_Click(object sender, RoutedEventArgs e)
-	{
-		if (ItemMeta.TrailerUrl(Dto) is { } url)
-		{
-			await Launcher.LaunchUriAsync(url);
-		}
-	}
+	// Nixie 1.3.1: the trailer plays in Nixie (a local one in the player, YouTube in the theatre window)
+	private async void TrailerButton_Click(object sender, RoutedEventArgs e) => await Services.TrailerPlayback.Play(Dto, TrailerButton);
 }

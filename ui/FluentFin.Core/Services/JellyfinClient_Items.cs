@@ -93,6 +93,20 @@ public partial class JellyfinClient
 		}
 	}
 
+	// Nixie 1.3.1: the Trailer button plays a local trailer in the mpv player (Trailers.Choose)
+	public async Task<List<BaseItemDto>> GetLocalTrailers(Guid id)
+	{
+		try
+		{
+			return await _jellyfinApiClient.Items[id].LocalTrailers.GetAsync(x => x.QueryParameters.UserId = UserId) ?? [];
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, @"Unhandled exception");
+			return [];
+		}
+	}
+
 	public async Task<BaseItemDtoQueryResult?> GetMediaFolders()
 	{
 		try

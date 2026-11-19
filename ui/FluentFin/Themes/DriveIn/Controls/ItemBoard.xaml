@@ -103,7 +103,7 @@
                     AutomationProperties.Name="Watch trailer"
                     Click="TrailerButton_Click"
                     Style="{StaticResource NixieButtonStyle}"
-                    ToolTipService.ToolTip="Watch trailer (opens in your browser)"
+                    ToolTipService.ToolTip="Watch trailer"
                     Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon FontSize="15" Glyph="&#xE714;" />

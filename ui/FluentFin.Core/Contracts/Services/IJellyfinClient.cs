@@ -52,6 +52,9 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<BaseItemDtoQueryResult?> GetSimilarItems(BaseItemDto dto);
 
+		/// <summary>Nixie 1.3.1: the item's trailers on the server (/Items/{id}/LocalTrailers), empty when none or on a failure.</summary>
+		Task<List<BaseItemDto>> GetLocalTrailers(Guid id);
+
 		Task<BaseItemDtoQueryResult?> Search(string searchTerm);
 
 		/// <summary>Seaglass 1.1.4: tells the server the selected player's profile and commands now (Settings > Player). Never throws.</summary>

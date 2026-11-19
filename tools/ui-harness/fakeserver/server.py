@@ -25,6 +25,7 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   status, bytes, total ms, injected delay, client); <out>/summary.json on shutdown and on GET /__harness/summary.
   Unknown endpoints answer 404 and are listed there as unhandled.
 - Control (127.0.0.1 only, no auth): GET /__harness/fixture (the showcase items the UI harness navigates to),
+  GET /__harness/trailer/<id> (Nixie 1.3.1: a still page standing in for YouTube's trailer embed),
   GET /__harness/summary, POST /__harness/latency, POST /__harness/streams, POST /__harness/shutdown,
   GET /__harness/quickconnect (the codes waiting, never their secrets), POST /__harness/quickconnect/approve,
   POST /__harness/libraries {"rename": {"old": "new"}, "add": ["name"]} (the views change; clients hear LibraryChanged).
@@ -35,6 +36,7 @@ import base64
 import collections
 import datetime
 import hashlib
+import html
 import json
 import os
 import random
@@ -56,6 +58,20 @@ import imagegen  # noqa: E402
 import library  # noqa: E402
 import media as media_mod  # noqa: E402
 import admin  # noqa: E402  (Nixie 1.2.0: the administration endpoints)
+
+# Nixie 1.3.1: the trailer embed's stand-in (GET /__harness/trailer/<id>): a still frame of a "film" with a play bar, made of
+# CSS only (no script, nothing loaded from anywhere), so the theatre window's screenshots show a picture where the video goes
+TRAILER_PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>Harness trailer {id}</title><style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Segoe UI,sans-serif}
+.f{position:absolute;inset:0;background:linear-gradient(180deg,#1c0512 0%,#500723 38%,#c9305a 62%,#f5b3a6 78%,#3a0f1f 79%,#12040a 100%)}
+.s{position:absolute;left:62%;top:44%;width:16vw;height:16vw;margin:-8vw;border-radius:50%;background:linear-gradient(#fff4ee,#f5a8a5 50%,#f96985)}
+.t{position:absolute;left:6%;bottom:22%;color:#fff4ee;font-size:4.2vw;font-weight:600;letter-spacing:.3vw;text-shadow:0 .3vw 1vw #000}
+.k{display:block;font-size:1.4vw;letter-spacing:.5vw;color:#f7aa9c}
+.b{position:absolute;left:0;right:0;bottom:0;height:12%;background:linear-gradient(transparent,rgba(0,0,0,.8))}
+.p{position:absolute;left:3%;right:3%;bottom:5%;height:.5vw;background:rgba(255,255,255,.35)}
+.p i{display:block;width:34%;height:100%;background:#f96985}
+</style></head><body><div class="f"></div><div class="s"></div>
+<div class="t"><span class="k">HARNESS TRAILER &middot; {id}</span>A Quiet Harbor</div><div class="b"></div><div class="p"><i></i></div></body></html>"""
 
 TICKS = library.TICKS
 TOKEN_RE = re.compile(r'Token="([^"]*)"')
@@ -879,6 +895,11 @@ class Server:
                     if "outro_seconds" in body:
                         outer.lib.outro_seconds = float(body["outro_seconds"])
                     return self._json(200, {"outro_seconds": outer.lib.outro_seconds})
+                if low.startswith("/__harness/trailer/") and method in ("GET", "HEAD"):
+                    # Nixie 1.3.1: the stand-in for YouTube's embed page (NIXIE_TRAILER_EMBED_BASE points the app here):
+                    # a still "trailer" card, no script, nothing fetched from anywhere
+                    vid = html.escape(low.rsplit("/", 1)[-1][:32])
+                    return self._send(200, TRAILER_PAGE.replace("{id}", vid).encode("utf-8"), "text/html; charset=utf-8")
                 if low == "/__harness/shutdown" and method == "POST":
                     self._json(200, {"ok": True})
                     outer.stop()

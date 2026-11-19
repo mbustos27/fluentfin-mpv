@@ -413,4 +413,153 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!--
+        Nixie 1.3.1: the theatre window (TrailerFrame) as a little drive-in at dusk (Controls\TheatreLot): the lot behind (the
+        banded sky, the striped sun peeking past the screen, the hills, the ground and the screen's two posts), the marquee on two
+        short poles above the screen (NOW SHOWING, then the title, a bulb border that chases once when it opens), the outdoor
+        screen's painted steel frame around the video with the projector's warm spill on the sky, and two cars with their speaker
+        posts in front. The marquee and the screen are lit objects, dark in both themes; the lot is the noon one in the light
+        theme; high contrast: the system colours, no scene, no bulbs.
+    -->
+    <ControlTemplate x:Key="TrailerFrameTemplate" TargetType="lc:TrailerFrame">
+        <dc:TheatreLot
+            Background="{ThemeResource DriveInGroundBrush}"
+            BorderBrush="{ThemeResource DriveInBoardRimBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            VideoWidth="{TemplateBinding VideoWidth}">
+            <!--  each scene on a Canvas: a scene is sized to the lot, and must never size it (the stage does)  -->
+            <Canvas>
+                <dc:DriveInScene Layer="Back" />
+            </Canvas>
+            <Grid
+                x:Name="Stage"
+                Margin="0,18,0,100"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="14" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!--  the projector's warm spill on the sky around the screen  -->
+                <Border
+                    Grid.Row="2"
+                    Margin="-70"
+                    AutomationProperties.AccessibilityView="Raw"
+                    IsHitTestVisible="False">
+                    <Border.Background>
+                        <RadialGradientBrush>
+                            <GradientStop Offset="0.55" Color="#2EF7AA9C" />
+                            <GradientStop Offset="1" Color="#00F7AA9C" />
+                        </RadialGradientBrush>
+                    </Border.Background>
+                </Border>
+
+                <!--  the marquee: a letter board with bulbs all round, NOW SHOWING over the title  -->
+                <Grid
+                    MinWidth="320"
+                    MaxWidth="{TemplateBinding VideoWidth}"
+                    HorizontalAlignment="Center">
+                    <Border
+                        Background="{ThemeResource DriveInBoardBrush}"
+                        BorderBrush="{ThemeResource DriveInBoardRimBrush}"
+                        BorderThickness="2"
+                        CornerRadius="8">
+                        <Border
+                            Margin="3"
+                            BorderBrush="{ThemeResource DriveInBoardHairlineBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6">
+                            <dc:BoardLines Pitch="7" />
+                        </Border>
+                    </Border>
+                    <dc:BulbFrame
+                        Inset="12"
+                        Offset="8"
+                        Pitch="16"
+                        Radius="1.8"
+                        SideOpacity="0.6"
+                        Sides="True" />
+                    <StackPanel
+                        Padding="40,16,40,15"
+                        HorizontalAlignment="Center"
+                        Spacing="3">
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            CharacterSpacing="320"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource DriveInKickerBrush}"
+                            Text="NOW SHOWING" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            AutomationProperties.HeadingLevel="Level1"
+                            AutomationProperties.Name="{TemplateBinding Title}"
+                            CharacterSpacing="150"
+                            FontFamily="{StaticResource DriveInDisplayFontFamily}"
+                            FontSize="28"
+                            FontStretch="Condensed"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource DriveInBoardTextBrush}"
+                            MaxLines="1"
+                            Text="{TemplateBinding MarqueeTitle}"
+                            TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+
+                <!--  the marquee's two short poles, standing on the screen's top edge  -->
+                <Grid Grid.Row="1" Width="220">
+                    <Rectangle
+                        Width="7"
+                        HorizontalAlignment="Left"
+                        Fill="{ThemeResource DriveInBoardRimBrush}"
+                        Stroke="{ThemeResource DriveInBoardHairlineBrush}"
+                        StrokeThickness="1" />
+                    <Rectangle
+                        Width="7"
+                        HorizontalAlignment="Right"
+                        Fill="{ThemeResource DriveInBoardRimBrush}"
+                        Stroke="{ThemeResource DriveInBoardHairlineBrush}"
+                        StrokeThickness="1" />
+                </Grid>
+
+                <!--  the outdoor screen: painted steel, a lit edge, the video  -->
+                <Border
+                    x:Name="Screen"
+                    Grid.Row="2"
+                    Padding="7"
+                    Background="{ThemeResource DriveInScreenFrameBrush}"
+                    BorderBrush="{ThemeResource DriveInScreenFrameEdgeBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <Border
+                        Width="{TemplateBinding VideoWidth}"
+                        Height="{TemplateBinding VideoHeight}"
+                        Background="Black"
+                        BorderBrush="{ThemeResource DriveInScreenEdgeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <ContentPresenter Content="{TemplateBinding Content}" />
+                    </Border>
+                </Border>
+            </Grid>
+            <Canvas>
+                <dc:DriveInScene Layer="Front" />
+            </Canvas>
+            <Button
+                x:Name="PART_CloseButton"
+                Margin="14"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                AutomationProperties.Name="Close trailer"
+                ToolTipService.ToolTip="Close trailer (Esc)"
+                Style="{StaticResource NixieIconButtonStyle}">
+                <FontIcon FontSize="16" Glyph="&#xE711;" />
+            </Button>
+        </dc:TheatreLot>
+    </ControlTemplate>
+
 </ResourceDictionary>

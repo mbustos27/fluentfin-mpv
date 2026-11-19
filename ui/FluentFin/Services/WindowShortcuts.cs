@@ -79,6 +79,18 @@ public static class WindowShortcuts
 				return false;
 			}
 
+			// Nixie 1.3.1: while a trailer plays in the theatre window, Back (a key or Mouse 4) closes it and nothing else runs
+			if (Controls.TrailerTheater.Current is { IsOpen: true } theater)
+			{
+				if (shortcut == AppShortcut.Back)
+				{
+					theater.Close();
+					return true;
+				}
+
+				return false;
+			}
+
 			switch (shortcut)
 			{
 				case AppShortcut.Back:

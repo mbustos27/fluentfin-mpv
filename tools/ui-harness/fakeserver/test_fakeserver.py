@@ -174,6 +174,22 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(["Intro", "Outro"], [s["Type"] for s in segments])
         self.assertEqual(200, self.request("/Videos/%s/Trickplay/320/0.jpg" % item["Id"], raw=True)[0])
 
+    def test_the_showcase_movie_has_a_youtube_trailer_served_by_the_harness(self):
+        # Nixie 1.3.1: the theatre window plays it from the fake server's page, never from YouTube
+        fx = self.get("/__harness/fixture")
+        movie = self.get("/Items/%s?userId=%s" % (fx["movie"]["id"], self.srv.user_id))
+        self.assertEqual(["https://www.youtube.com/watch?v=" + library.TRAILER_ID], [t["Url"] for t in movie["RemoteTrailers"]])
+        episode = self.get("/Items/%s?userId=%s" % (fx["episode"]["id"], self.srv.user_id))
+        self.assertEqual([], episode["RemoteTrailers"])
+        status, page, headers = self.request("/__harness/trailer/%s?autoplay=1&rel=0&playsinline=1" % library.TRAILER_ID, raw=True)
+        self.assertEqual(200, status)
+        self.assertTrue(headers["Content-Type"].startswith("text/html"))
+        self.assertIn(b"HARNESS TRAILER", page)
+        self.assertNotIn(b"<script", page)
+        self.assertNotIn(b"http", page.split(b"<style>")[1])
+        status, page, _ = self.request("/__harness/trailer/%3Cb%3Ex", raw=True)
+        self.assertNotIn(b"<b>x", page)
+
     def test_stream_serves_ranges(self):
         fx = self.get("/__harness/fixture")
         status, data, headers = self.request("/Videos/%s/stream?static=true" % fx["movie"]["id"], raw=True,

@@ -95,7 +95,7 @@ public sealed partial class InlineDetailsRow : UserControl
 		PeopleText.Text = EditorialCards.People(dto);
 		PeopleText.Visibility = PeopleText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		Backdrop.Source = ItemArtworkConverters.Backdrop(dto, 1280);
-		TrailerButton.Visibility = ItemMeta.TrailerUrl(dto) is null ? Visibility.Collapsed : Visibility.Visible;
+		TrailerButton.Visibility = Services.TrailerPlayback.ButtonVisibility(dto);
 		PlayText.Text = ItemLabels.ResumePosition(dto) is not null && dto?.Type is not (BaseItemDto_Type.Series or BaseItemDto_Type.Season) ? "Resume" : "Play";
 		AutomationProperties.SetName(PlayButton, ItemLabels.PlayAction(dto));
 		ToolTipService.SetToolTip(PlayButton, ItemLabels.PlayAction(dto));
@@ -146,13 +146,8 @@ public sealed partial class InlineDetailsRow : UserControl
 		}
 	}
 
-	private async void TrailerButton_Click(object sender, RoutedEventArgs e)
-	{
-		if (ItemMeta.TrailerUrl(_shown) is { } url)
-		{
-			await Launcher.LaunchUriAsync(url);
-		}
-	}
+	// Nixie 1.3.1: the trailer plays in Nixie (a local one in the player, YouTube in the theatre window)
+	private async void TrailerButton_Click(object sender, RoutedEventArgs e) => await Services.TrailerPlayback.Play(_shown, TrailerButton);
 
 	private void FullDetailsButton_Click(object sender, RoutedEventArgs e)
 	{

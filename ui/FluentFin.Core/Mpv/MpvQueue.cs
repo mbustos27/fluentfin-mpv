@@ -49,6 +49,10 @@ public static class MpvQueue
 			case BaseItemDto_Type.Movie:
 				return await Alone(client, id, fetched, selection);
 
+			// Nixie 1.3.1: a local trailer (the Trailer button) plays alone, like a film
+			case BaseItemDto_Type.Trailer:
+				return await Alone(client, id, fetched, selection);
+
 			case BaseItemDto_Type.Episode or BaseItemDto_Type.Season or BaseItemDto_Type.Series when seriesId is { } series:
 				var result = await client.GetSeriesEpisodes(series) ?? throw new MpvQueueException("The episodes could not be loaded from the server.");
 				var episodes = result.Items?.Where(x => x.Id.HasValue).ToList() ?? [];

@@ -717,6 +717,9 @@ try {
     $fixture = Invoke-Server '/__harness/fixture'
     Say "fake server $($script:serverUrl): $($fixture.counts.movie) movies, $($fixture.counts.series) series, $($fixture.counts.episode) episodes; latency $Latency ms $(if ($LatencyRule) { '+ ' + ($LatencyRule -join ' ') })"
 
+    # Nixie 1.3.1: a trailer plays from the fake server's page, never from YouTube (honoured by dev builds under the harness only)
+    $env:NIXIE_TRAILER_EMBED_BASE = "$($script:serverUrl)/__harness/trailer/"
+
     # 2. FluentFin with its own data folder
     Start-App 'window_ms'
     # the window a key goes to: the XAML island's (hidden) input site; posted to the bridge, F and Esc never reached the

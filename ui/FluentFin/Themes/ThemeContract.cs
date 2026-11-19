@@ -42,7 +42,12 @@ public static class ThemeContract
 		(OptionsTemplateKey, "DataTemplate"),
 		("PlayerTopBarStyle", "Style"),
 		("PlayerBottomBarStyle", "Style"),
+		// Nixie 1.3.1: the theatre window's frame (a ControlTemplate for Controls.TrailerFrame); without it, the shared glass frame
+		(TrailerFrameKey, "ControlTemplate"),
 	];
+
+	/// <summary>The optional ControlTemplate the theatre window's frame takes (<see cref="Controls.TrailerFrame"/>).</summary>
+	public const string TrailerFrameKey = Controls.TrailerFrame.TemplateKey;
 
 	/// <summary>The view models a theme may give its own view; every other page is shared.</summary>
 	public static IReadOnlyList<Type> ThemableViewModels { get; } =

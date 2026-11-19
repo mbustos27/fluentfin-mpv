@@ -25,7 +25,8 @@ public sealed record DriveInLayout(
 	Point Sun,
 	double SunRadius,
 	IReadOnlyList<CarRow> Cars,
-	double RowsTop)
+	double RowsTop,
+	int Legs = 3)
 {
 	public const double WideFrom = 1600, SignFrom = 1000;
 
@@ -138,6 +139,30 @@ public sealed record DriveInLayout(
 			new(ground + 120 * k, 0.95 * k, [.. new[] { 0.115, 0.78 }.Select(f => Math.Round(width * f))], true),
 		};
 		return new DriveInLayout(width, false, true, 0, height, ground, screen, Rect.Empty, Rect.Empty, sun, radius, cars, height);
+	}
+
+	/// <summary>
+	/// Nixie 1.3.1: the theatre window's little lot (the trailer's frame): a small screen on two posts at <paramref name="screen"/>,
+	/// the ground a little below it, the sun low at the right peeking past the screen, and two cars in front at its corners with
+	/// their speaker posts, small enough to stay below the screen.
+	/// </summary>
+	public static DriveInLayout Theatre(double width, double height, Rect screen)
+	{
+		// exactly the lot's size (never more: the lot is sized by its stage, and a scene larger than it would grow it)
+		width = Math.Max(1, width);
+		height = Math.Max(1, height);
+		var ground = Math.Round(Math.Min(height - 30, screen.Bottom + 50));
+		var k = Math.Clamp(screen.Width / 1150, 0.55, 1.2);
+		var radius = Math.Round(54 * k);
+		// half of it peeks past the screen's right edge, high over the hills
+		var sun = new Point(Math.Round(screen.Right + radius * 0.25), Math.Round(screen.Y + screen.Height * 0.58));
+		var scale = Math.Round(0.62 * k, 3);
+		var carWidth = 220 * scale;
+		var cars = new List<CarRow>
+		{
+			new(Math.Round(height - 16), scale, [Math.Round(screen.X - carWidth * 0.18), Math.Round(screen.Right - carWidth * 0.82)], true),
+		};
+		return new DriveInLayout(width, false, true, 0, height, ground, screen, Rect.Empty, Rect.Empty, sun, radius, cars, height, Legs: 2);
 	}
 
 	/// <summary>Cars along a row from <paramref name="from"/>, one every <paramref name="step"/>, while a whole car still ends before <paramref name="to"/>.</summary>

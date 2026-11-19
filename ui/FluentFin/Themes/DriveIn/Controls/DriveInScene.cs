@@ -259,7 +259,11 @@ public sealed partial class DriveInScene : Canvas
 			var braces = new GeometryGroup();
 			var top = screen.Bottom;
 			var foot = g + 6;
-			foreach (var x in new[] { screen.X + screen.Width * 0.16, screen.X + screen.Width * 0.5 - leg / 2, screen.X + screen.Width * 0.84 - leg })
+			// Nixie 1.3.1: the theatre window's little screen stands on two posts
+			var places = l.Legs == 2
+				? new[] { screen.X + screen.Width * 0.2 - leg / 2, screen.X + screen.Width * 0.8 - leg / 2 }
+				: new[] { screen.X + screen.Width * 0.16, screen.X + screen.Width * 0.5 - leg / 2, screen.X + screen.Width * 0.84 - leg };
+			foreach (var x in places)
 			{
 				legs.Children.Add(new RectangleGeometry { Rect = new Rect(x, top, leg, Math.Max(0, foot - top)) });
 				for (var y = top; y < foot - 6; y += 22 * k)

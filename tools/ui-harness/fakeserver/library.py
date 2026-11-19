@@ -44,6 +44,9 @@ VIEWS = [  # name, collection type, how many top-level items
     ("Anime", "tvshows", 28),
 ]
 
+# Nixie 1.3.1: the showcase movie's (fake) YouTube trailer id
+TRAILER_ID = "hArNeSs0001"
+
 SHOWCASE = {"movie": "A Quiet Harbor", "series": "A Signal in Winter", "anime": "A Comet Over Avalon",
             "documentary": "A Field Guide to Rivers"}
 
@@ -463,7 +466,9 @@ class Library:
             d["ProviderIds"] = {"Tmdb": str(int(iid[:6], 16)), "Imdb": "tt%07d" % (int(iid[6:12], 16) % 10000000)}
             d["ExternalUrls"] = []
             d["Taglines"] = [item["tagline"]] if item.get("tagline") else []
-            d["RemoteTrailers"] = []
+            # Nixie 1.3.1: the showcase movie has a YouTube trailer (the app plays it in its theatre window from the fake
+            # server's own page, GET /__harness/trailer/<id>: no run ever contacts YouTube)
+            d["RemoteTrailers"] = [{"Url": "https://www.youtube.com/watch?v=" + TRAILER_ID, "Name": "Trailer"}]                 if item.get("showcase") == "movie" else []
             d["LockedFields"] = []
             d["LockData"] = False
             d["Path"] = self.path(item)

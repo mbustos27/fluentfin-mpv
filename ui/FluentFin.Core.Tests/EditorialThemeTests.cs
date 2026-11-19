@@ -271,7 +271,7 @@ public sealed class EditorialXamlTests
 
 		// keys only this theme uses carry its prefix
 		Assert.All(keys.Where(k => k is not ("TopBarStyle" or "RowHeaderTemplate" or "PosterTemplate" or "StillTemplate" or "PageHeaderStyle" or "SignInBackdropTemplate"
-			or "ThemeOptionsTemplate" or "PlayerTopBarStyle" or "PlayerBottomBarStyle")),
+			or "ThemeOptionsTemplate" or "PlayerTopBarStyle" or "PlayerBottomBarStyle" or "TrailerFrameTemplate")),
 			k => Assert.StartsWith("Editorial", k));
 	}
 

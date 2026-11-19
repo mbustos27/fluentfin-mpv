@@ -206,7 +206,7 @@ public partial class VideoPlayerViewModel(IJellyfinClient jellyfinClient,
 
 		Playlist = dto.Type switch
 		{
-			BaseItemDto_Type.Movie => PlaylistViewModel.FromMovie(dto),
+			BaseItemDto_Type.Movie or BaseItemDto_Type.Trailer => PlaylistViewModel.FromMovie(dto), // Nixie 1.3.1: a local trailer
 			BaseItemDto_Type.Episode => await PlaylistViewModel.FromEpisode(JellyfinClient, dto),
 			BaseItemDto_Type.Series => await PlaylistViewModel.FromSeries(JellyfinClient, dto),
 			BaseItemDto_Type.Season => await PlaylistViewModel.FromSeason(JellyfinClient, dto),

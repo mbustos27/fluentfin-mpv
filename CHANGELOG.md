@@ -2,6 +2,16 @@
 
 ## 1.3.1
 
+- **Trailers play in Nixie.** The Trailer button no longer sends you to the browser.
+  - A **YouTube trailer** plays in a **theatre window** over the page: the page dims, the trailer plays at about 60 % of
+    the window's width with its title and Close. Esc, Close or a click on the dimmed page close it, and the keyboard goes
+    back to the Trailer button. It uses YouTube's privacy-enhanced player (youtube-nocookie.com) in a locked-down web view
+    that may load nothing else; "Watch on YouTube" and any other link open in your browser.
+  - A **trailer file on your server** plays in Nixie's player, like any video, and comes first when there are both.
+  - Other trailer links still open in the browser.
+- **Drive-in's theatre is a little drive-in:** a small outdoor screen on two posts under a bulb-lit marquee reading
+  NOW SHOWING and the title, the dusk sky and the striped sun around it, and two cars with their speaker posts in front.
+  Cinematic and Editorial frame the trailer in their own glass; Classic in the shared glass frame.
 - **F1 closes the shortcut sheet too.** F1 and ? open the list of keyboard shortcuts; pressed again while it is open, they
   close it, and the keyboard goes back where it was. Esc and Close still close it.
 

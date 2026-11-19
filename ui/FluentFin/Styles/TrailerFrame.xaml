@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls">
+
+    <!--
+        Nixie 1.3.1: the theatre window's shared frame (TrailerFrame's default style; Classic's, and any theme without a
+        TrailerFrameTemplate): one glass panel (the strong glass, the light edge, 12 px corners) holding the kicker, the title
+        and Close over the 16:9 video on black. Text on the strong glass keeps 4.5:1 (the overlay recipe); high contrast: the
+        system colours (Glass.xaml's HighContrast dictionary).
+    -->
+    <Style TargetType="controls:TrailerFrame">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:TrailerFrame">
+                    <Border
+                        Padding="20,14,20,20"
+                        Background="{ThemeResource GlassPanelStrongBrush}"
+                        BorderBrush="{ThemeResource GlassStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="12">
+                        <Grid RowSpacing="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock
+                                        AutomationProperties.AccessibilityView="Raw"
+                                        CharacterSpacing="140"
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                        Text="TRAILER" />
+                                    <TextBlock
+                                        AutomationProperties.HeadingLevel="Level1"
+                                        FontFamily="{StaticResource GlassDisplayFontFamily}"
+                                        FontSize="22"
+                                        FontWeight="SemiBold"
+                                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                                        MaxLines="1"
+                                        Text="{TemplateBinding Title}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <Button
+                                    x:Name="PART_CloseButton"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="Close trailer"
+                                    ToolTipService.ToolTip="Close trailer (Esc)"
+                                    Style="{StaticResource NixieIconButtonStyle}">
+                                    <FontIcon FontSize="16" Glyph="&#xE711;" />
+                                </Button>
+                            </Grid>
+                            <Border
+                                Grid.Row="1"
+                                Width="{TemplateBinding VideoWidth}"
+                                Height="{TemplateBinding VideoHeight}"
+                                Background="Black"
+                                CornerRadius="8">
+                                <ContentPresenter Content="{TemplateBinding Content}" />
+                            </Border>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

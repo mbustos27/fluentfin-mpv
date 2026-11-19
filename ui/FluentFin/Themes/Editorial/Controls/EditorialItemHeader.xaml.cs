@@ -161,7 +161,7 @@ public sealed partial class EditorialItemHeader : UserControl
 		PeopleText.Text = EditorialCards.People(dto);
 		PeopleText.Visibility = PeopleText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		CastLink.Visibility = dto?.People is { Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
-		TrailerButton.Visibility = ItemMeta.TrailerUrl(dto) is null ? Visibility.Collapsed : Visibility.Visible;
+		TrailerButton.Visibility = Services.TrailerPlayback.ButtonVisibility(dto);
 		RatingPanel.Item = dto;
 		ApplyUserData();
 	}
@@ -217,13 +217,8 @@ public sealed partial class EditorialItemHeader : UserControl
 		}
 	}
 
-	private async void TrailerButton_Click(object sender, RoutedEventArgs e)
-	{
-		if (ItemMeta.TrailerUrl(Dto) is { } url)
-		{
-			await Launcher.LaunchUriAsync(url);
-		}
-	}
+	// Nixie 1.3.1: the trailer plays in Nixie (a local one in the player, YouTube in the theatre window)
+	private async void TrailerButton_Click(object sender, RoutedEventArgs e) => await Services.TrailerPlayback.Play(Dto, TrailerButton);
 
 	private void CastLink_Click(object sender, RoutedEventArgs e) => CastRequested?.Invoke(this, EventArgs.Empty);
 }
