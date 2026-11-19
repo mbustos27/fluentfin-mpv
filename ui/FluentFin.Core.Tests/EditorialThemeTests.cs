@@ -543,6 +543,20 @@ public sealed class EditorialLibraryTests
 		Assert.Equal(2, EditorialLibrary.SectionOf(lines, "B"));
 	}
 
+	/// <summary>Nixie 1.3.1: Page Up and Page Down go a page of rows in the column, as the other themes' grids; at the ends, as far as there are rows.</summary>
+	[Fact]
+	public void PageUpAndPageDown_GoAPageOfRows()
+	{
+		var lines = EditorialLibrary.Lines(Titles, columns: 3, byLetter: true, opened: null, BaseItemDto_CollectionType.Movies);
+		int? Move(int from, string key, int rows) => EditorialLibrary.Move(lines, from, Titles.Length, key, rows);
+
+		Assert.Equal(EditorialLibrary.Move(lines, 0, Titles.Length, "Down"), Move(0, "PageDown", 1));
+		Assert.Equal(Move(Move(0, "PageDown", 1)!.Value, "PageDown", 1), Move(0, "PageDown", 2));
+		Assert.Equal(6, Move(0, "PageDown", 50));      // as far as there are rows: the last row
+		Assert.Equal(0, Move(6, "PageUp", 50));        // and back to the first
+		Assert.Null(Move(0, "PageUp", 3));             // nothing above the first row (the bar above takes Up, not Page Up)
+	}
+
 	[Fact]
 	public void TheColumns_TwelveAcrossAt1920()
 	{
