@@ -24,6 +24,19 @@ public sealed class ShortcutsTests
 	public void GlobalKeys_MeanWhatTheMapSays(int key, bool control, bool shift, bool alt, AppShortcut expected) =>
 		Assert.Equal(expected, AppShortcuts.For(key, control, shift, alt, inTextInput: false));
 
+	// Nixie 1.3.1 (the user: "f1 should close the menu as well"): the keys that open the sheet close it; Esc stays the dialog's own
+	[Theory]
+	[InlineData(AppShortcuts.Keys.F1, false, false, false, false, true)]
+	[InlineData(AppShortcuts.Keys.Slash, false, true, false, false, true)]
+	[InlineData(AppShortcuts.Keys.F1, false, false, false, true, false)]
+	[InlineData(AppShortcuts.Keys.Slash, false, true, false, true, false)]
+	[InlineData(AppShortcuts.Keys.Slash, false, false, false, false, false)]
+	[InlineData(AppShortcuts.Keys.F1, true, false, false, false, false)]
+	[InlineData(AppShortcuts.Keys.Comma, true, false, false, false, false)]
+	[InlineData(0x1B, false, false, false, false, false)]
+	public void TheKeysThatOpenTheSheet_CloseIt_ButNotTheirRepeats(int key, bool control, bool shift, bool alt, bool repeat, bool closes) =>
+		Assert.Equal(closes, AppShortcuts.ClosesHelp(key, control, shift, alt, repeat));
+
 	[Fact]
 	public void NothingFires_WhileTyping()
 	{

@@ -77,6 +77,13 @@ public static class AppShortcuts
 			_ => null,
 		};
 	}
+
+	/// <summary>
+	/// Nixie 1.3.1: whether a key pressed while the shortcut sheet is open closes it: the keys that open it (F1, ? as Shift+/)
+	/// toggle it. A held key's repeats do not (<paramref name="repeat"/>): holding F1 must not open and close it in turn.
+	/// </summary>
+	public static bool ClosesHelp(int virtualKey, bool control, bool shift, bool alt, bool repeat = false) =>
+		!repeat && For(virtualKey, control, shift, alt, inTextInput: false) == AppShortcut.ShowHelp;
 }
 
 /// <summary>The mouse's side buttons (Mouse 4 and Mouse 5).</summary>

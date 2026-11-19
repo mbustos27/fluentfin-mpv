@@ -27,7 +27,7 @@ letter accelerators on Home had no explicit text-input rule.
 | Ctrl+F, Ctrl+E, / | Search |
 | Alt+Home | Home |
 | Ctrl+, | Settings |
-| ? (Shift+/), F1 | The shortcut sheet |
+| ? (Shift+/), F1 | The shortcut sheet; pressed while it is open, they close it (1.3.1), as Esc does, and the keyboard goes back where it was |
 
 Home page only: N goes to the Next Up row, C to the Continue Watching row (they ignore typing too). Since 1.1.4 they no
 longer play anything: a single letter must never start a video (Enter on the focused card does).

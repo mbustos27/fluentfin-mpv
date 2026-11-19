@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+- **F1 closes the shortcut sheet too.** F1 and ? open the list of keyboard shortcuts; pressed again while it is open, they
+  close it, and the keyboard goes back where it was. Esc and Close still close it.
+
 ## 1.3.0
 
 Nixie now has **four layouts to choose from**: not new colours on the same pages, but Home, the series and season pages,

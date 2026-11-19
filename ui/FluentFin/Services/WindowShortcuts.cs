@@ -153,9 +153,15 @@ public static class WindowShortcuts
 		}
 
 		_helpOpen = true;
+		// Nixie 1.3.1: F1 or ? closes the sheet too (ShortcutsDialog); whichever way it closes, the keyboard goes back where it was
+		var before = FocusManager.GetFocusedElement(xamlRoot) as Control;
 		try
 		{
 			await new ShortcutsDialog { XamlRoot = xamlRoot }.ShowAsync();
+			if (before is { XamlRoot: not null } && FocusManager.GetFocusedElement(xamlRoot) is null)
+			{
+				before.Focus(FocusState.Programmatic);
+			}
 		}
 		catch (Exception ex)
 		{
