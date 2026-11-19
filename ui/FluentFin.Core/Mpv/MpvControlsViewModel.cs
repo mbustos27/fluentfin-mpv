@@ -1696,9 +1696,29 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			return false;
 		}
 
-		NotifyActivity();
-		_ = Run(action);
+		_ = RunKey(action);
 		return true;
+	}
+
+	/// <summary>Nixie 1.3.1: an action the page's key router chose (<see cref="PlayerKeyRouter"/>): the controls show and it is done.</summary>
+	public Task RunKey(MpvControlsAction action)
+	{
+		NotifyActivity();
+		return Run(action);
+	}
+
+	/// <summary>
+	/// Nixie 1.3.1: a theme's own panel over the player (Cinematic's tabs panel) listens and closes when asked
+	/// (<see cref="ClosePanels"/>), marking the request handled.
+	/// </summary>
+	public event EventHandler<System.ComponentModel.HandledEventArgs>? ClosePanelsRequested;
+
+	/// <summary>Escape: a theme's open panel closes first (true); false when none was open (the page's own Escape goes on).</summary>
+	public bool ClosePanels()
+	{
+		var request = new System.ComponentModel.HandledEventArgs();
+		ClosePanelsRequested?.Invoke(this, request);
+		return request.Handled;
 	}
 
 	public Task Run(MpvControlsAction action)
