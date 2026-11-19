@@ -28,7 +28,14 @@ letter accelerators on Home had no explicit text-input rule.
 | Alt+Home | Home |
 | Ctrl+, | Settings |
 | ? (Shift+/), F1 | The shortcut sheet; pressed while it is open, they close it (1.3.1), as Esc does, and the keyboard goes back where it was |
-| R, F5, Ctrl+R | Refresh the page from the server (1.3.1): Home, a library, a See all grid, an item, series or season page, search results, the Diary. The page loads again in place (the item the keyboard was on and each row's first item kept) and Narrator says "Refreshed". Not while typing, in a dialog or menu, in the player or over a trailer; nothing on pages without server data (Settings) |
+| R, F5, Ctrl+R | Refresh the page from the server (1.3.1): Home, a library, a See all grid, an item, series or season page, search results, the Diary. The page loads again in place (the item the keyboard was on and each row's first item kept) and Narrator says "Refreshed". Not while typing, in a dialog or menu, in the player or over a trailer; nothing on pages without server data (Settings). 1.4.0: once per press (a held R or F5 refreshes once); a second R while the page is still loading joins the first; the keyboard goes back to the button it was on (Trailer stays Trailer) unless you moved first; on a closed list box (Audio, Subtitles) R is the box's letter, and F5 and Ctrl+R refresh |
+
+A held key acts once, but Back and Forward step on while held (1.4.0).
+
+**Over a trailer** (the theatre, 1.3.1; modal since 1.4.0): Esc, Alt+Left, the Back key and Mouse 4 close it, from wherever
+the keyboard is; Tab and Shift+Tab move between Close and the video and stay inside; Enter and Space press Close. Every other
+key, global or a page's own (Ctrl+F, /, R, F1, Alt+Home, Ctrl+, N, C, Ctrl+Z), does nothing. A click on the dimmed page,
+its top band included, closes it.
 
 Home page only: N goes to the Next Up row, C to the Continue Watching row (they ignore typing too). Since 1.1.4 they no
 longer play anything: a single letter must never start a video (Enter on the focused card does).
