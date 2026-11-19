@@ -25,6 +25,7 @@
 - **The keyboard in the player:** Tab reaches the prompts first while they show, then runs left to right; after the player,
   the keyboard is back on the page's Play in every theme (Drive-in left it nowhere). With F1's shortcut sheet open over
   the player, the player's keys no longer act under it.
+- **Home videos and music videos play** in Nixie's player, alone like a film (they could only say "can't play here").
 - **One accent, used for three things.** Pink now marks only the page's main action, where you are, and progress.
   - A watched title shows a small, dim check in the top-right corner of its card.
   - A series, season or collection with episodes or films left shows how many in a small square in the top-left corner.

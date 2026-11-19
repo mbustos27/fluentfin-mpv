@@ -46,7 +46,8 @@ public static class MpvQueue
 
 		switch (type)
 		{
-			case BaseItemDto_Type.Movie:
+			// Nixie 1.4.0: a home video or a music video plays alone, like a film (no next item; they said "can't play here")
+			case BaseItemDto_Type.Movie or BaseItemDto_Type.Video or BaseItemDto_Type.MusicVideo:
 				return await Alone(client, id, fetched, selection);
 
 			// Nixie 1.3.1: a local trailer (the Trailer button) plays alone, like a film

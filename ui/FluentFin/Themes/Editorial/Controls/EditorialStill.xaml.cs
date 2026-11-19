@@ -118,8 +118,26 @@ public sealed partial class EditorialStill : UserControl, FluentFin.Controls.IUp
 	private void ApplyUserData()
 	{
 		var dto = Episode;
-		// Nixie 1.4.0 (the UX review's X12): the episode the season's Play starts says so first
-		MetaText.Text = IsUpNext ? string.Join(" · ", new[] { FluentFin.Controls.UpNextMark.Label, EditorialCards.StillMeta(dto) }.Where(x => x.Length > 0)) : EditorialCards.StillMeta(dto);
+		// Nixie 1.4.0 (the UX review's X12): the episode the season's Play starts says so first, in the title's ink and weight
+		var meta = EditorialCards.StillMeta(dto);
+		MetaText.Inlines.Clear();
+		if (IsUpNext)
+		{
+			MetaText.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+			{
+				Text = FluentFin.Controls.UpNextMark.Label,
+				FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+				Foreground = TitleText.Foreground,
+			});
+			if (meta.Length > 0)
+			{
+				MetaText.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = " · " + meta });
+			}
+		}
+		else
+		{
+			MetaText.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = meta });
+		}
 		WatchedMark.Visibility = EditorialCards.Watched(dto) ? Visibility.Visible : Visibility.Collapsed;
 		var progress = EditorialCards.Progress(dto);
 		ProgressTrack.Visibility = progress > 0 ? Visibility.Visible : Visibility.Collapsed;

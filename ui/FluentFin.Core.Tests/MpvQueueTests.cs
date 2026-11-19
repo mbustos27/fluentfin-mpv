@@ -113,6 +113,24 @@ public sealed class MpvQueueTests
 	}
 
 	[Fact]
+	public async Task AHomeVideoOrAMusicVideo_PlaysAlone_LikeAFilm_FromItsResumePoint()
+	{
+		// Nixie 1.4.0: every item type opens a page; these two could only say "can't play here"
+		foreach (var type in new[] { BaseItemDto_Type.Video, BaseItemDto_Type.MusicVideo })
+		{
+			var id = Guid.NewGuid();
+			_client.Setup(x => x.GetItem(id)).ReturnsAsync(new BaseItemDto { Id = id, Type = type, UserData = new UserItemDataDto { PlaybackPositionTicks = 7 } });
+
+			var request = await MpvQueue.BuildAsync(_client.Object, new BaseItemDto { Id = id, Type = type }, null);
+
+			Assert.NotNull(request);
+			Assert.Equal([id.ToString("N")], request.ItemIds);
+			Assert.Equal(7L, request.StartPositionTicks);
+			_client.Verify(x => x.GetSeriesEpisodes(It.IsAny<Guid>()), Times.Never);
+		}
+	}
+
+	[Fact]
 	public async Task AMovie_FromTheBeginning_StartsAtZero()
 	{
 		var id = Guid.NewGuid();
@@ -190,7 +208,7 @@ public sealed class MpvQueueTests
 
 	[Theory]
 	[InlineData(BaseItemDto_Type.BoxSet)]
-	[InlineData(BaseItemDto_Type.Video)]
+	[InlineData(BaseItemDto_Type.Person)]
 	public async Task AnotherType_IsNothingToPlay_AsWithFluentFinsOwnPlaylist(BaseItemDto_Type type)
 	{
 		Assert.Null(await MpvQueue.BuildAsync(_client.Object, new BaseItemDto { Id = Guid.NewGuid(), Type = type }, null));

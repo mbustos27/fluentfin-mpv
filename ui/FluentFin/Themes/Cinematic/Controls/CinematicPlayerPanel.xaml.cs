@@ -208,6 +208,15 @@ public sealed partial class CinematicPlayerPanel : UserControl
 	{
 		await Show(Part.Tracks);
 		_returnTo = returnTo is null ? null : new WeakReference<Control>(returnTo);
+		// the keyboard into the part once its choices are laid out, and after the player's after-click step (which runs at
+		// low priority once the click is done and would take it back): queued twice (seen in the keys matrix: Down went to
+		// the volume)
+		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+			DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, FocusFirstChoice));
+	}
+
+	private void FocusFirstChoice()
+	{
 		if (_open == Part.Tracks && (AudioList.Children.OfType<Button>().FirstOrDefault() ?? SubtitleList.Children.OfType<Button>().FirstOrDefault()) is { } first)
 		{
 			first.Focus(FocusState.Programmatic);
