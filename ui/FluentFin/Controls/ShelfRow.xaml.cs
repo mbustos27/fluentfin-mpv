@@ -233,9 +233,9 @@ public sealed partial class ShelfRow : UserControl
 		AutomationProperties.SetName(ScrollLeftBtn, RowPaging.ArrowName(Header, forward: false));
 		AutomationProperties.SetName(ScrollRightBtn, RowPaging.ArrowName(Header, forward: true));
 		AutomationProperties.SetName(SeeAllButton, RowPaging.SeeAllName(Header));
-		// Seaglass 1.1.4: with a See all the title is the button (and its chevron); without, the title alone
+		// 1.4.0: See all is one link at the header's right (the Link role), when the row has one; the title is always the
+		// heading, and its visibility is left alone here (a theme may draw its own title in its place: Drive-in's marquee)
 		SeeAllButton.Visibility = HasSeeAll ? Visibility.Visible : Visibility.Collapsed;
-		TitleText.Visibility = HasSeeAll ? Visibility.Collapsed : Visibility.Visible;
 		for (var i = 0; i < Count; i++)
 		{
 			if (Repeater.TryGetElement(i) is { } element)

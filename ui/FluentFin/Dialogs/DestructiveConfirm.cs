@@ -38,7 +38,7 @@ public static class DestructiveConfirm
 			dialog.Style = dialogStyle;
 		}
 
-		if (ButtonRoles.Find(ButtonRoles.DestructiveCompact) is { } confirmStyle)
+		if (ButtonRoles.Find(ButtonRoles.ConfirmStyleKey(prompt.ConfirmText)) is { } confirmStyle)
 		{
 			dialog.PrimaryButtonStyle = confirmStyle;
 		}

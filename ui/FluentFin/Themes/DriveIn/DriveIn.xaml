@@ -367,6 +367,21 @@
     </Style>
     <Style BasedOn="{StaticResource DriveInLetterBoardStyle}" TargetType="dc:LetterBoard" />
 
+    <!--  1.4.0 style  -->
+    <!--
+        A season tube on the series and season pages (DP-p5): the button system's Tab role (NixieTabButtonStyle: the hover a
+        faint fill at radius 8, the system's two focus rings), around the tube, whose lit glass and neon underline mark the
+        season shown; one Tab stop for the strip, the arrows along it (the strip's ItemsControl).
+    -->
+    <Style
+        x:Key="DriveInSeasonTubeButtonStyle"
+        BasedOn="{StaticResource NixieTabButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Padding" Value="4,4,4,2" />
+        <Setter Property="Foreground" Value="{ThemeResource DriveInEntryForegroundBrush}" />
+    </Style>
+    <!--  end 1.4.0 style  -->
+
     <!--  an entry on a board (the Coming up sign): the whole row is the button; a quiet hover, the system's two focus rings  -->
     <Style x:Key="DriveInEntryButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="Transparent" />

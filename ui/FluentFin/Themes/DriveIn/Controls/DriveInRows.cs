@@ -25,7 +25,7 @@ namespace FluentFin.Themes.DriveIn.Controls;
 public static class DriveInRows
 {
 	/// <summary>The shared row's parts this dresses (ShelfRow.xaml).</summary>
-	public static readonly string[] RowParts = ["TitleText", "SeeAllButton", "SeeAllTitle", "SeeAllChevron"];
+	public static readonly string[] RowParts = ["TitleText", "SeeAllButton"];
 
 	/// <summary>The shared card's parts this dresses (BaseItemDtoCard.xaml).</summary>
 	public static readonly string[] CardParts = ["ContentOverlay", "TitleArea"];
@@ -97,13 +97,20 @@ public static class DriveInRows
 		Place(row);
 	}
 
-	/// <summary>The marquee goes where the row's title is: inside the See all button (with its chevron), or in the title's place.</summary>
+	/// <summary>
+	/// The marquee goes in the title's place. 1.4.0 (the library UX review, X13): the row's See all stays the shared Link at
+	/// the header's right, as in every theme (it was the marquee itself, a 282 or 415 x 56 tile).
+	/// </summary>
 	private static void Place(ShelfRow row)
 	{
-		if (Dressed(row) is not { } dress
-			|| Find<TextBlock>(row, "TitleText") is not { Parent: Grid header } title
-			|| Find<Button>(row, "SeeAllButton") is not { } seeAll)
+		if (Dressed(row) is not { } dress || Find<TextBlock>(row, "TitleText") is not { Parent: Grid header } title)
 		{
+			return;
+		}
+
+		if (dress.Sign.Parent is StackPanel { Parent: Grid } placed && ReferenceEquals(placed.Parent, header))
+		{
+			title.Visibility = Visibility.Collapsed;
 			return;
 		}
 
@@ -113,23 +120,8 @@ public static class DriveInRows
 		line.Children.Add(dress.Sign);
 		line.Children.Add(dress.Subtitle);
 		title.Visibility = Visibility.Collapsed;
-		if (row.HasSeeAll)
-		{
-			if (Find<FontIcon>(row, "SeeAllChevron") is { } chevron)
-			{
-				Detach(chevron);
-				line.Children.Add(chevron);
-			}
-
-			seeAll.Content = line;
-			seeAll.Margin = new Thickness(-6, 0, 0, 0);
-			seeAll.Padding = new Thickness(6, 2, 10, 2);
-		}
-		else
-		{
-			Grid.SetColumn(line, 0);
-			header.Children.Add(line);
-		}
+		Grid.SetColumn(line, 0);
+		header.Children.Add(line);
 	}
 
 	private static void Detach(FrameworkElement element)

@@ -237,4 +237,111 @@ public sealed class StyleVocabularyTests
 		Assert.Equal("{StaticResource NixieToolbarButtonStyle}", (string?)style.Attribute("BasedOn"));
 		Assert.DoesNotContain(style.Elements(), e => (string?)e.Attribute("Property") is "Padding" or "MinHeight" or "Height");
 	}
+
+	private static XElement Ui(string path) => XDocument.Load(AppVersionTests.FindUp(Path.Combine(["ui", "FluentFin", .. path.Split('/')]))).Root!;
+
+	private static XElement Named(XElement root, string name) => root.Descendants().Single(e => (string?)e.Attribute(X + "Name") == name);
+
+	private static XElement Keyed(XElement root, string key) => root.Descendants().Single(e => Key(e) == key);
+
+	/// <summary>A delete's confirm carries the trash glyph; any other destructive verb is the plain Destructive role.</summary>
+	[Theory]
+	[InlineData("Delete", "NixieDeleteCompactButtonStyle")]
+	[InlineData("Delete user", "NixieDeleteCompactButtonStyle")]
+	[InlineData("delete library", "NixieDeleteCompactButtonStyle")]
+	[InlineData("Remove", "NixieDestructiveCompactButtonStyle")]
+	[InlineData("Forget", "NixieDestructiveCompactButtonStyle")]
+	[InlineData("Restart server", "NixieDestructiveCompactButtonStyle")]
+	[InlineData(null, "NixieDestructiveCompactButtonStyle")]
+	public void A_delete_confirm_takes_the_trash_glyph_role(string? verb, string key)
+	{
+		Assert.Equal(key, FluentFin.Dialogs.ButtonRoles.ConfirmStyleKey(verb));
+		Assert.Equal("Style", Top(key).Name.LocalName);
+	}
+
+	/// <summary>E-m8: the sunset rule's #F96985 band sat 12 px under the tab's underline and read as a second "here"; in the player it ran over the video.</summary>
+	[Fact]
+	public void Editorials_sunset_rule_has_no_pink_band_and_hides_over_the_player()
+	{
+		var editorial = Ui("Themes/Editorial/Editorial.xaml");
+		foreach (var rule in editorial.Descendants().Where(e => Key(e) == "EditorialSunsetRuleBrush" && e.Name.LocalName == "LinearGradientBrush"))
+		{
+			Assert.DoesNotContain(rule.Descendants(), s => ((string?)s.Attribute("Color"))?.EndsWith("F96985", StringComparison.OrdinalIgnoreCase) == true);
+		}
+
+		// the rule is the bar's ornament part, which TopBarChrome hides while the player is open
+		Assert.Contains(editorial.Descendants(), e => (string?)e.Attribute(X + "Name") == FluentFin.Controls.TopBarChrome.OrnamentPart);
+		Assert.True(FluentFin.Controls.TopBarChrome.ShowsOrnament(overPlayer: false));
+		Assert.False(FluentFin.Controls.TopBarChrome.ShowsOrnament(overPlayer: true));
+	}
+
+	/// <summary>X13 in Editorial: icon buttons are the 44 circles of every theme; chips are 32; a switch is not a picked chip.</summary>
+	[Fact]
+	public void Editorials_icons_are_circles_and_its_chips_are_32()
+	{
+		var editorial = Ui("Themes/Editorial/Editorial.xaml");
+		foreach (var key in new[] { "EditorialIconButtonStyle", "EditorialIconToggleButtonStyle" })
+		{
+			Assert.DoesNotContain(Keyed(editorial, key).Elements(), e => (string?)e.Attribute("Property") == "CornerRadius");
+		}
+
+		var chip = Keyed(editorial, "EditorialChipStyle");
+		Assert.Equal("{StaticResource NixieCompactButtonHeight}", (string?)chip.Elements().Single(e => (string?)e.Attribute("Property") == "Height").Attribute("Value"));
+		var picked = chip.Descendants().Single(e => e.Name.LocalName == "VisualState" && (string?)e.Attribute(X + "Name") == "Selected").ToString();
+		Assert.DoesNotContain("Accent", picked);
+		Assert.Contains("NixieChipSelectedFillBrush", picked);
+		Assert.Equal("{StaticResource NixieChipToggleButtonStyle}", (string?)Keyed(editorial, "EditorialToggleChipStyle").Attribute("BasedOn"));
+
+		// pressed rows are never the selected wash (E-p4)
+		foreach (var file in new[] { "Themes/Editorial/Views/EditorialHomePage.xaml", "Themes/Editorial/Controls/EditorialSeasonsPanel.xaml" })
+		{
+			foreach (var pressed in Ui(file).Descendants().Where(e => e.Name.LocalName == "VisualState" && (string?)e.Attribute(X + "Name") == "Pressed"))
+			{
+				Assert.DoesNotContain("Selected", pressed.ToString());
+			}
+		}
+	}
+
+	/// <summary>Drive-in's season tubes are the Tab role (DI-p5), the update notice's buttons the Primary Compact and the Link.</summary>
+	[Fact]
+	public void Season_tubes_are_tabs_and_the_update_notice_is_primary_and_link()
+	{
+		Assert.Equal("{StaticResource NixieTabButtonStyle}", (string?)Keyed(Ui("Themes/DriveIn/DriveIn.xaml"), "DriveInSeasonTubeButtonStyle").Attribute("BasedOn"));
+		foreach (var page in new[] { "Themes/DriveIn/Views/DriveInSeriesPage.xaml", "Themes/DriveIn/Views/DriveInSeasonPage.xaml" })
+		{
+			var tube = Ui(page).Descendants().Single(e => e.Name.LocalName == "SeasonTube");
+			Assert.Equal("{StaticResource DriveInSeasonTubeButtonStyle}", (string?)tube.Parent!.Attribute("Style"));
+		}
+
+		var shell = Ui("Views/ShellPage.xaml");
+		Assert.Equal("{StaticResource NixiePrimaryCompactButtonStyle}", (string?)Named(shell, "UpdateInstallButton").Attribute("Style"));
+		var notes = shell.Descendants().Single(e => e.Name.LocalName == "HyperlinkButton" && (string?)e.Attribute("Content") == "Release notes");
+		Assert.Equal("{StaticResource NixieLinkButtonStyle}", (string?)notes.Attribute("Style"));
+		Assert.DoesNotContain(Named(shell, "UpdateBar").Descendants(), e => ((string?)e.Attribute("Foreground"))?.Contains("Accent") == true);
+	}
+
+	/// <summary>The player's transport is on the Nixie templates; the pills on the Secondary template; Play/Pause the 60 px hero.</summary>
+	[Fact]
+	public void The_players_transport_styles_are_based_on_the_Nixie_keys()
+	{
+		var player = Ui("Controls/MpvPlayerControls.xaml");
+		Assert.Equal("{StaticResource NixiePlayerButtonStyle}", (string?)Keyed(player, "PlayerButton").Attribute("BasedOn"));
+		Assert.Equal("{StaticResource NixiePlayerPlayButtonStyle}", (string?)Keyed(player, "PlayerPlayButton").Attribute("BasedOn"));
+		var pill = Keyed(player, "PlayerPill");
+		Assert.Equal("{StaticResource NixieButtonTemplate}", (string?)pill.Elements().Single(e => (string?)e.Attribute("Property") == "Template").Attribute("Value"));
+		Assert.DoesNotContain(Keyed(player, "PlayerButton").Elements(), e => (string?)e.Attribute("Property") is "CornerRadius" or "Width" or "Height");
+	}
+
+	/// <summary>The hidden bold copy that keeps a label's width prints text only: bound to an element it printed the type name.</summary>
+	[Fact]
+	public void The_hidden_bold_label_takes_text_only()
+	{
+		Assert.Equal("Drama", FluentFin.Converters.TextOnlyConverter.TextOf("Drama"));
+		Assert.Equal("", FluentFin.Converters.TextOnlyConverter.TextOf(new object()));
+		Assert.Equal("", FluentFin.Converters.TextOnlyConverter.TextOf(null));
+		foreach (var copy in Glass().Descendants().Where(e => (string?)e.Attribute(X + "Name") == "SelectedWidth"))
+		{
+			Assert.Contains("Converter={StaticResource NixieTextOnlyConverter}", (string?)copy.Attribute("Text"));
+		}
+	}
 }

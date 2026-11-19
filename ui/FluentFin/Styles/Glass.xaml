@@ -1,6 +1,7 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:controls="using:FluentFin.Controls"
+    xmlns:converters="using:FluentFin.Converters"
     xmlns:media="using:CommunityToolkit.WinUI.Media"
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -377,6 +378,8 @@
     </ResourceDictionary.ThemeDictionaries>
 
 
+    <!--  1.4.0: a button's content as text for the hidden bold copy that keeps a label's width ("" for an element: TextOnlyConverter)  -->
+    <converters:TextOnlyConverter x:Key="NixieTextOnlyConverter" />
     <!--  shapes  -->
     <!--  1.1.4: panels 12 like the pills and overlays (the layout audit: 20 read as phone cards)  -->
     <CornerRadius x:Key="GlassPanelCornerRadius">12</CornerRadius>
@@ -1299,7 +1302,7 @@
                     FontWeight="SemiBold"
                     IsHitTestVisible="False"
                     Opacity="0"
-                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" />
+                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NixieTextOnlyConverter}}" />
                 <ContentPresenter
                     x:Name="ContentPresenter"
                     Padding="{TemplateBinding Padding}"
@@ -2038,7 +2041,7 @@
                 FontWeight="SemiBold"
                 IsHitTestVisible="False"
                 Opacity="0"
-                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" />
+                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NixieTextOnlyConverter}}" />
             <ContentPresenter
                 x:Name="ContentPresenter"
                 Padding="{TemplateBinding Padding}"
@@ -2145,7 +2148,7 @@
                 FontWeight="SemiBold"
                 IsHitTestVisible="False"
                 Opacity="0"
-                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" />
+                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NixieTextOnlyConverter}}" />
             <ContentPresenter
                 x:Name="ContentPresenter"
                 Padding="{TemplateBinding Padding}"
@@ -2238,7 +2241,7 @@
                 FontWeight="Bold"
                 IsHitTestVisible="False"
                 Opacity="0"
-                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" />
+                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}, Converter={StaticResource NixieTextOnlyConverter}}" />
             <ContentPresenter
                 x:Name="ContentPresenter"
                 Padding="{TemplateBinding Padding}"
