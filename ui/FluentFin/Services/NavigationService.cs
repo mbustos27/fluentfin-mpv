@@ -214,12 +214,20 @@ public class NavigationService : INavigationService
 	public bool LastNavigationWasRefresh { get; private set; }
 
 	/// <summary>
+	/// Nixie 1.4.0 (integration: the top bar's trail rule against the library's R): whether the last refresh keeps the page's
+	/// place (R, F5: the sort, the filters, the card and how far down) or starts it at its top (the lit tab chosen again on its
+	/// own page). A library put its place back on both, so choosing Movies again on Movies stayed far down (Editorial).
+	/// </summary>
+	public bool LastRefreshKeepsPlace { get; private set; } = true;
+
+	/// <summary>
 	/// Nixie 1.3.1 (R, F5, Ctrl+R; the user: "make r refresh the jellyfin page"): the page shown, loaded again: a new view of the
 	/// same page with the same parameter and a new view model, which asks the server again (its OnNavigatedTo), in place of
 	/// the old one in the history (Back and Forward as they were), no transition. Only a page whose view model
 	/// <paramref name="refreshes"/> says has server data; null (nothing done) for any other, and when nothing is shown.
 	/// </summary>
-	public Page? ReloadForRefresh(Func<Type, bool> refreshes)
+	/// <param name="keepPlace">False for a reload that starts the page at its top (<see cref="LastRefreshKeepsPlace"/>).</param>
+	public Page? ReloadForRefresh(Func<Type, bool> refreshes, bool keepPlace = true)
 	{
 		if (_frame is not { Content: Page page } frame)
 		{
@@ -243,6 +251,7 @@ public class NavigationService : INavigationService
 
 		var before = frame.GetPageViewModel();
 		var forward = frame.ForwardStack.ToList();
+		LastRefreshKeepsPlace = keepPlace;
 		_pendingRefresh = page.GetType();
 		frame.Tag = false;
 		try

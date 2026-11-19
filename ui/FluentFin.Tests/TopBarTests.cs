@@ -352,7 +352,12 @@ public sealed class TopBarTests
 
 		// Nixie 1.4.0 (the trail rule): the lit destination chosen again on its own page goes back to its top
 		Assert.Contains("_top.ReturnToTopRequested += OnReturnToTop;", shell);
-		Assert.Contains("navigation.ReloadForRefresh(_ => true);", shell);
+		Assert.Contains("navigation.ReloadForRefresh(_ => true, keepPlace: false);", shell);
+		// Nixie 1.4.0 (integration): the library keeps its place on R only, not on the lit tab chosen again
+		foreach (var page in new[] { Path.Combine("Controls", "LibraryGridHost.cs"), Path.Combine("Themes", "Editorial", "Views", "EditorialLibraryPage.xaml.cs") })
+		{
+			Assert.Contains("{ LastNavigationWasRefresh: true, LastRefreshKeepsPlace: true }", File.ReadAllText(Path.Combine(root, page)));
+		}
 
 		var strip = File.ReadAllText(Path.Combine(root, "Controls", "TopTabStrip.xaml.cs"));
 		// review 6: a second load listens again

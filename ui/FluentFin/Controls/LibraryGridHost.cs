@@ -43,7 +43,8 @@ internal sealed class LibraryGridHost
 		grid.SetPlace(0, vm.TotalCount);
 		grid.TypeAhead = (typed, from) => _vm.TypeAhead(typed, from);
 		// R or F5 (a new view model for the same library): the sort, the filters and the card are put back, as for Back
-		vm.ReloadedInPlace = () => App.GetService<Contracts.Services.INavigationService>() is Services.NavigationService { LastNavigationWasRefresh: true };
+		// (R and F5 keep the place; the lit tab chosen again starts at the top: LastRefreshKeepsPlace false)
+		vm.ReloadedInPlace = () => App.GetService<Contracts.Services.INavigationService>() is Services.NavigationService { LastNavigationWasRefresh: true, LastRefreshKeepsPlace: true };
 		vm.PropertyChanged += (_, e) =>
 		{
 			switch (e.PropertyName)

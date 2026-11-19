@@ -139,7 +139,8 @@ public sealed partial class ShellPage : Page
 	{
 		if (ViewModel.NavigationService is NavigationService navigation)
 		{
-			navigation.ReloadForRefresh(_ => true);
+			// Nixie 1.4.0 (integration): back to its top, not to the place R keeps
+			navigation.ReloadForRefresh(_ => true, keepPlace: false);
 		}
 	});
 

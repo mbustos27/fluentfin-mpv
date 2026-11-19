@@ -94,7 +94,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			UpdateChips();
 		};
 		// R or F5 (a new view model for the same library): the sort, the filters and the poster are put back, as for Back
-		ViewModel.ReloadedInPlace = () => App.GetService<Contracts.Services.INavigationService>() is NavigationService { LastNavigationWasRefresh: true };
+		// (R and F5 keep the place; the lit tab chosen again starts at the top: LastRefreshKeepsPlace false)
+		ViewModel.ReloadedInPlace = () => App.GetService<Contracts.Services.INavigationService>() is NavigationService { LastNavigationWasRefresh: true, LastRefreshKeepsPlace: true };
 		Lines.ElementPrepared += Lines_ElementPrepared;
 		GridScroller.ViewChanged += (_, _) =>
 		{
