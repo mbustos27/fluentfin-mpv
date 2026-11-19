@@ -50,6 +50,10 @@ public sealed partial class MpvPlayerControls : UserControl
 		SeekBar.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(OnSeekBarPointerReleased), handledEventsToo: true);
 		SeekBar.AddHandler(PointerMovedEvent, new PointerEventHandler(OnSeekBarPointerMoved), handledEventsToo: true);
 		SeekBar.AddHandler(PointerExitedEvent, new PointerEventHandler(OnSeekBarPointerExited), handledEventsToo: true);
+
+		// Nixie 1.3.1: after any press of the mouse on the player, the keyboard is the player's (KeepKeyboardAfterPointer)
+		Root.AddHandler(PointerReleasedEvent, new PointerEventHandler(OnRootPointerReleased), handledEventsToo: true);
+		Root.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(OnRootPointerReleased), handledEventsToo: true);
 	}
 
 	public MpvControlsViewModel? Controls
@@ -241,7 +245,11 @@ public sealed partial class MpvPlayerControls : UserControl
 		RestoreCursor();
 	}
 
-	private void OnTick(DispatcherQueueTimer sender, object args) => Controls?.Tick();
+	private void OnTick(DispatcherQueueTimer sender, object args)
+	{
+		Controls?.Tick();
+		KeepKeyboardSomewhere();
+	}
 
 	/// <summary>A key pressed on the player page. True when it is one of the player's keys (it was handled).</summary>
 	public bool HandleKey(Windows.System.VirtualKey key)
@@ -256,6 +264,64 @@ public sealed partial class MpvPlayerControls : UserControl
 		return controls.HandleKey((int)key, Down(Windows.System.VirtualKey.Control), Down(Windows.System.VirtualKey.Shift), Down(Windows.System.VirtualKey.Menu));
 	}
 
+	/// <summary>Nixie 1.3.1: a player action the key router chose (<see cref="MpvPlayerKeys"/>): the controls show and it is done.</summary>
+	public void Run(MpvControlsAction action) => _ = Controls?.RunKey(action);
+
+	// -- the keyboard after the mouse (Nixie 1.3.1) ----------------------------------------------------------------------
+
+	/// <summary>
+	/// A press of the mouse anywhere on the player has ended (a click, a drag of the seek bar, a tap on the video): the keyboard
+	/// is the player's again at once, as in every video player, unless the press opened a menu (its flyout has the keyboard
+	/// now). The player's own controls take no focus from a click (AllowFocusOnInteraction), so this is for the rest: the
+	/// focus left in the title bar or on nothing, a theme panel's button, and the window's own keyboard focus (a click must
+	/// never leave the keys going to a window that does nothing with them). Run after the click's own work (a menu opening).
+	/// </summary>
+	private void OnRootPointerReleased(object sender, PointerRoutedEventArgs e) => DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, KeepKeyboardAfterPointer);
+
+	internal void KeepKeyboardAfterPointer()
+	{
+		if (XamlRoot is not { } root || !IsLoaded || Visibility != Visibility.Visible || HasOpenMenu(root))
+		{
+			return;
+		}
+
+		var focused = FocusManager.GetFocusedElement(root);
+		if (!ReferenceEquals(focused, this))
+		{
+			Focus(FocusState.Pointer);
+		}
+
+		KeyboardFocus.EnsureWindowHasIt(root, "a click on the player");
+	}
+
+	/// <summary>A menu, flyout or dialog is open (its keys are its own); tooltips do not count.</summary>
+	private static bool HasOpenMenu(XamlRoot root)
+	{
+		foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
+		{
+			if (popup.IsOpen && popup.Child is not ToolTip)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// The heartbeat's check: the focus went nowhere (the element that had it was collapsed or removed: a theme's control, the
+	/// title bar as full screen begins) while the player shows and the app is in front: it comes back to the player, so the
+	/// keys never stop until the bars happen to hide (1.3.0).
+	/// </summary>
+	private void KeepKeyboardSomewhere()
+	{
+		if (XamlRoot is { } root && IsLoaded && Visibility == Visibility.Visible && KeyboardFocus.AppIsActive()
+			&& FocusManager.GetFocusedElement(root) is null && !HasOpenMenu(root))
+		{
+			Focus(FocusState.Programmatic);
+		}
+	}
+
 	// -- pointer over the video ------------------------------------------------------------------------------------------
 
 	private void OnPointerMoved(object sender, PointerRoutedEventArgs e) => Controls?.NotifyActivity();
@@ -265,25 +331,46 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnVideoTapped(object sender, TappedRoutedEventArgs e)
 	{
-		if (Controls is not { } controls || IsOnControls(e.OriginalSource as DependencyObject))
+		if (TapVideo(e.OriginalSource as DependencyObject, e.GetPosition))
 		{
-			return;
+			e.Handled = true;
 		}
-
-		e.Handled = true;
-		// 1.2.0: plays or pauses at once (MpvControlsViewModel.VideoClicked); a double click puts it back
-		_ = controls.VideoClicked();
 	}
 
 	private void OnVideoDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
 	{
-		if (Controls is not { } controls || IsOnControls(e.OriginalSource as DependencyObject))
+		if (DoubleTapVideo(e.OriginalSource as DependencyObject, e.GetPosition))
 		{
-			return;
+			e.Handled = true;
+		}
+	}
+
+	/// <summary>
+	/// A click whose topmost element is <paramref name="source"/> (<paramref name="position"/>: the click's place relative to an
+	/// element): on the video it plays or pauses at once (1.2.0, MpvControlsViewModel.VideoClicked; a double click puts it back).
+	/// True when it was the video's. Also the harness's way in (HarnessPointer): posted clicks never reach WinUI off-screen.
+	/// </summary>
+	internal bool TapVideo(DependencyObject? source, Func<UIElement, Windows.Foundation.Point> position)
+	{
+		if (Controls is not { } controls || IsOnControls(source, position))
+		{
+			return false;
 		}
 
-		e.Handled = true;
+		_ = controls.VideoClicked();
+		return true;
+	}
+
+	/// <summary>A double click on the video: full screen, the play state back to what it was before its first click. Never on a control.</summary>
+	internal bool DoubleTapVideo(DependencyObject? source, Func<UIElement, Windows.Foundation.Point> position)
+	{
+		if (Controls is not { } controls || IsOnControls(source, position))
+		{
+			return false;
+		}
+
 		controls.VideoDoubleClicked();
+		return true;
 	}
 
 	/// <summary>The controls go or change: a double click after this puts nothing back.</summary>
@@ -298,7 +385,14 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 
 		e.Handled = true;
-		_ = controls.Wheel(e.GetCurrentPoint(this).Properties.MouseWheelDelta);
+		Wheel(controls, e.GetCurrentPoint(this).Properties.MouseWheelDelta);
+	}
+
+	/// <summary>A wheel notch over the player: volume, and the keyboard stays the player's (also the harness's way in).</summary>
+	internal void Wheel(MpvControlsViewModel controls, int delta)
+	{
+		_ = controls.Wheel(delta);
+		DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, KeepKeyboardAfterPointer);
 	}
 
 	private bool IsInBars(DependencyObject? source)
@@ -319,8 +413,40 @@ public sealed partial class MpvPlayerControls : UserControl
 		return false;
 	}
 
-	/// <summary>A tap there is a control's, not the video's (the bars, and the Skip and Next pills over the video).</summary>
-	private bool IsOnControls(DependencyObject? source) => IsInBars(source) || (source is not null && IsWithin(source, PillRow));
+	/// <summary>
+	/// A tap there is a control's, not the video's: the bars and what is in them, and the Skip and Next pills over the video.
+	/// Nixie 1.3.1: except a bar's own scrim where it only fades into the picture (the bottom bar's top padding, the top bar's
+	/// bottom padding, while the bar's fill is a gradient): a click or double click there is the video's, as it looks. In 1.3.0
+	/// it did nothing, so a double click near the bottom whose first click showed the bars under the pointer neither paused
+	/// nor went full screen. A theme's solid board (Drive-in's console) stays the controls' everywhere.
+	/// </summary>
+	private bool IsOnControls(DependencyObject? source, Func<UIElement, Windows.Foundation.Point> position)
+	{
+		if (source is not null && IsWithin(source, PillRow))
+		{
+			return true;
+		}
+
+		if (!IsInBars(source))
+		{
+			return false;
+		}
+
+		if (source is Grid bar && (ReferenceEquals(bar, TopBar) || ReferenceEquals(bar, BottomBar)) && FadesOut(bar.Background))
+		{
+			var at = position(bar);
+			return !InScrim(at.Y, bar.ActualHeight, bar.Padding, bottomBar: ReferenceEquals(bar, BottomBar));
+		}
+
+		return true;
+	}
+
+	/// <summary>A scrim: a gradient that fades out to nothing (a theme's board, such as Drive-in's console, is dense all over).</summary>
+	private static bool FadesOut(Brush? fill) => fill is GradientBrush gradient && gradient.GradientStops.Any(s => s.Color.A == 0);
+
+	/// <summary>Whether a point <paramref name="y"/> DIPs down a bar <paramref name="height"/> tall is in the scrim's fade over the video (the padding on the video's side).</summary>
+	public static bool InScrim(double y, double height, Thickness padding, bool bottomBar) =>
+		bottomBar ? y >= 0 && y < padding.Top : y <= height && y > height - padding.Bottom;
 
 	private void OnBarPointerEntered(object sender, PointerRoutedEventArgs e)
 	{
@@ -741,13 +867,19 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	public static string HoverTimeFor(long ticks) => MpvControlsViewModel.FormatTime(TimeSpan.FromTicks(Math.Max(0, ticks)));
 
-	private void OnSeekBarPointerPressed(object sender, PointerRoutedEventArgs e)
+	private void OnSeekBarPointerPressed(object sender, PointerRoutedEventArgs e) => SeekBarPressed();
+
+	private void OnSeekBarPointerReleased(object sender, PointerRoutedEventArgs e) => SeekBarReleased();
+
+	/// <summary>The seek bar is pressed (a click or the start of a drag): the position follows the thumb until it is let go.</summary>
+	internal void SeekBarPressed()
 	{
 		_seekBarPressed = true;
 		Controls?.BeginScrub();
 	}
 
-	private void OnSeekBarPointerReleased(object sender, PointerRoutedEventArgs e)
+	/// <summary>The seek bar is let go: a seek to where the thumb is.</summary>
+	internal void SeekBarReleased()
 	{
 		if (!_seekBarPressed)
 		{
@@ -757,6 +889,9 @@ public sealed partial class MpvPlayerControls : UserControl
 		_seekBarPressed = false;
 		_ = Controls?.SeekTo(TimeSpan.FromSeconds(SeekBar.Value).Ticks);
 	}
+
+	/// <summary>The seek bar's slider (the harness's drag moves its value as a drag does).</summary>
+	internal Slider SeekSlider => SeekBar;
 
 	private void OnSeekBarValueChanged(object sender, RangeBaseValueChangedEventArgs e)
 	{

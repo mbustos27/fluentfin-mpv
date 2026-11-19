@@ -166,8 +166,11 @@ if ($Before) { $driveArgs += @('-Before', $Before) }
 if ($NoA11y) { $driveArgs += '-NoA11y' }
 Write-Host "running off-screen (desktop ffh-ui-$PID; log $Out\drive.log)"
 $glassEnv = if ($GlassFollowsActivity) { @() } else { @('--env', 'FLUENTFIN_MPV_GLASS_ALWAYS_ACTIVE=1') }
+# Nixie 1.3.1: the harness's mouse (posted clicks never reach WinUI off-screen): a dev build takes a registered window message
+# and clicks through its own code (ui\FluentFin\Services\HarnessPointer.cs; a release package never listens)
+$pointerEnv = @('--env', 'NIXIE_HARNESS_POINTER=1')
 & $Python -B -I $hidden --log (Join-Path $Out 'hidden_run.log') --timeout $TimeoutSeconds --desktop "ffh-ui-$PID" `
-    --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" @glassEnv `
+    --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" @glassEnv @pointerEnv `
     --env "PATH=$mpvDir;$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0" `
     -- $ps @driveArgs | Out-Host
 $code = $LASTEXITCODE

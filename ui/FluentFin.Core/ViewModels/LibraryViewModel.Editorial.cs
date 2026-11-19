@@ -169,10 +169,27 @@ public static class EditorialLibrary
 	/// <summary>
 	/// The keyboard in the grid: from the title at <paramref name="index"/>, the arrow keys' title (Left and Right along the
 	/// library's order, across rows; Up and Down to the nearest column of the row above or below, across sections), or null
-	/// at an end.
+	/// at an end. Nixie 1.3.1: Page Up and Page Down go <paramref name="rowsPerPage"/> rows up or down in the same column (as
+	/// far as there are rows: the first or the last row at the ends), as the other themes' grids do.
 	/// </summary>
-	public static int? Move(IReadOnlyList<EditorialLibraryLine> lines, int index, int count, string key)
+	public static int? Move(IReadOnlyList<EditorialLibraryLine> lines, int index, int count, string key, int rowsPerPage = 1)
 	{
+		if (key is "PageUp" or "PageDown")
+		{
+			int? landed = null;
+			for (var i = 0; i < Math.Max(1, rowsPerPage); i++)
+			{
+				if (Move(lines, landed ?? index, count, key == "PageDown" ? "Down" : "Up") is not { } next)
+				{
+					break;
+				}
+
+				landed = next;
+			}
+
+			return landed;
+		}
+
 		switch (key)
 		{
 			case "Left":

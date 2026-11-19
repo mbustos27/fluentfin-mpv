@@ -204,11 +204,26 @@ function Wait-Ui([string]$Name, [string]$Id, [string]$Type, [switch]$Contains, [
 # ($script:lastKeyWindow: the window it went to)
 function Key([int]$Vk, [switch]$Shift) { $script:lastKeyWindow = [OffscreenUi]::Key($script:hwnd, $script:ui.Id, $Vk, [bool]$Shift) }
 
+# a media card by its item's name: the shared card (BaseItemDtoCard), else a layout theme's (Nixie 1.3.0: a list item named
+# "<title>" or "<title>, ...", Editorial's EditorialPoster among them)
+function Find-MediaCard([string]$Title) {
+    $card = [OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $Title)
+    if ($card) { return $card }
+    $card = Find-Ui -Name "$Title, " -Type 'ListItem' -Contains -OffscreenToo
+    if ($card -and $card.Current.Name.StartsWith("$Title, ")) { return $card }
+    Find-Ui -Name $Title -Type 'ListItem' -OffscreenToo
+}
 # opens a media card: the card is one UIA button named after its item (a11y-items) that opens the item on Invoke; an
-# older build's card (an image that opens on a pointer tap) gets a posted click on its image, above its title
+# older build's card (an image that opens on a pointer tap) gets a posted click on its image, above its title. Editorial's
+# poster opens its details in place: their "Full details" opens the page.
 function Open-Card([string]$Title, [double]$Seconds = 30) {
-    $card = Wait-Until { [OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $Title) } -Seconds $Seconds -PollMs 200
-    if ($card) { Say "card '$Title' ($(Invoke-Element $card))"; return }
+    $card = Wait-Until { Find-MediaCard $Title } -Seconds $Seconds -PollMs 200
+    if ($card) {
+        Say "card '$Title' ($(Invoke-Element $card))"
+        $full = Wait-Until { Find-Ui -Name 'Full details' -Type 'Button' -Contains } -Seconds 2 -PollMs 150
+        if ($full) { Say "card '$Title': its details in place, then Full details ($(Invoke-Element $full))" }
+        return
+    }
     $text = Find-Ui -Name $Title -Type 'Text'
     if (-not $text) { throw "no card titled '$Title' on screen" }
     $r = [OffscreenUi]::RectOf($text)

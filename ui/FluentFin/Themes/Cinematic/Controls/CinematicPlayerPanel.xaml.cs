@@ -40,6 +40,9 @@ public sealed partial class CinematicPlayerPanel : UserControl
 	{
 		CinematicResources.Ensure();
 		InitializeComponent();
+		// Nixie 1.3.1: the tabs and the panel are a list to the player's key router: with the keyboard in them, the arrows, Home,
+		// End, Space and Enter are theirs; every other player key still works (docs/SHORTCUTS.md)
+		MpvPlayerKeys.SetOwnsArrows(this, true);
 		Loaded += (_, _) => { Attach(); ShowTabs(); };
 		Unloaded += (_, _) =>
 		{
@@ -67,6 +70,7 @@ public sealed partial class CinematicPlayerPanel : UserControl
 		if (_controls is not null)
 		{
 			_controls.PropertyChanged += OnControlsChanged;
+			_controls.ClosePanelsRequested += OnClosePanelsRequested;
 		}
 
 		ShowEnds();
@@ -77,8 +81,38 @@ public sealed partial class CinematicPlayerPanel : UserControl
 		if (_controls is not null)
 		{
 			_controls.PropertyChanged -= OnControlsChanged;
+			_controls.ClosePanelsRequested -= OnClosePanelsRequested;
 			_controls = null;
 		}
+	}
+
+	/// <summary>
+	/// Nixie 1.3.1: Escape reached the page with the panel open (the keyboard on the video: a click on a tab leaves it there): the
+	/// panel closes, as a menu would. The keyboard goes back to the tabs only if it was in the panel.
+	/// </summary>
+	private void OnClosePanelsRequested(object? sender, System.ComponentModel.HandledEventArgs e)
+	{
+		if (_open is null || e.Handled)
+		{
+			return;
+		}
+
+		var inside = XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject focused && IsInside(focused);
+		Close(returnFocus: inside);
+		e.Handled = true;
+	}
+
+	private bool IsInside(DependencyObject element)
+	{
+		for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, this))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private void OnControlsChanged(object? sender, PropertyChangedEventArgs e) => DispatcherQueue.TryEnqueue(() =>

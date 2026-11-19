@@ -68,7 +68,9 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		Lines.ElementPrepared += Lines_ElementPrepared;
 		GridScroller.ViewChanged += (_, _) => UpdateBar();
 		GridScroller.SizeChanged += (_, e) => Fit(e.NewSize.Width - GridScroller.Padding.Left - GridScroller.Padding.Right);
-		GridList.AddHandler(KeyDownEvent, new KeyEventHandler(Grid_KeyDown), true);
+		// Nixie 1.3.1: before the posters' rows see the key (they moved the focus by the arrows' geometry first, so Right from a
+		// letter's last title went to the nearest poster below and right, skipping the next title)
+		GridList.AddHandler(PreviewKeyDownEvent, new KeyEventHandler(Grid_KeyDown), true);
 		GridList.GettingFocus += GridList_GettingFocus;
 		LetterRepeater.ElementPrepared += (_, e) =>
 		{
@@ -425,6 +427,16 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 	private (int Line, int Column)? Find(int index) => index < 0 ? null : EditorialLibrary.Find(_lines, index);
 
+	/// <summary>
+	/// Title <paramref name="index"/>'s poster in its row: by its item. Nixie 1.3.1: by its place in the row's children it was
+	/// sometimes the wrong one (an ItemsRepeater's children are not in its items' order), so Right from the last title of a
+	/// letter skipped the first title of the next.
+	/// </summary>
+	private EditorialPoster? PosterOf(FrameworkElement row, int index) =>
+		index >= 0 && index < ViewModel.Items.Count && ViewModel.Items[index] is { } item
+			? Posters(row).FirstOrDefault(p => p.Item is { } shown && (ReferenceEquals(shown, item) || shown.Id == item.Id))
+			: null;
+
 	/// <summary>Gives title <paramref name="index"/> the focus (its row made if it is not drawn yet; the focus scrolls it in).</summary>
 	private bool FocusIndex(int index, FocusState state)
 	{
@@ -434,7 +446,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 
 		row.UpdateLayout();
-		var poster = Posters(row).ElementAtOrDefault(at.Column);
+		var poster = PosterOf(row, index);
 		if (poster is null)
 		{
 			return false;
@@ -500,6 +512,9 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			VirtualKey.Down or VirtualKey.GamepadDPadDown => "Down",
 			VirtualKey.Home => "Home",
 			VirtualKey.End => "End",
+			// Nixie 1.3.1: a page of rows, as the other themes' grids (CardGrid's Page Up and Page Down)
+			VirtualKey.PageUp or VirtualKey.GamepadLeftShoulder => "PageUp",
+			VirtualKey.PageDown or VirtualKey.GamepadRightShoulder => "PageDown",
 			_ => null,
 		};
 		if (key is null || index < 0)
@@ -525,10 +540,22 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			return;
 		}
 
-		if (EditorialLibrary.Move(_lines, index, ViewModel.Items.Count, key) is { } target)
+		if (EditorialLibrary.Move(_lines, index, ViewModel.Items.Count, key, RowsPerPage()) is { } target)
 		{
 			FocusIndex(target, FocusState.Keyboard);
 		}
+	}
+
+	/// <summary>How many rows of posters the view shows at once (Page Up and Page Down move by them), at least one.</summary>
+	private int RowsPerPage()
+	{
+		var stride = 0d;
+		foreach (var poster in Posters(Lines))
+		{
+			stride = Math.Max(stride, poster.ActualHeight);
+		}
+
+		return stride > 0 && GridScroller.ViewportHeight > 0 ? Math.Max(1, (int)Math.Floor(GridScroller.ViewportHeight / (stride + 24))) : 1;
 	}
 
 	/// <summary>The keyboard comes into the grid from outside: to the poster it left (or the first).</summary>
@@ -540,7 +567,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 
 		var index = Math.Clamp(_lastIndex, 0, ViewModel.Items.Count - 1);
-		if (Find(index) is { } at && Lines.TryGetElement(at.Line) is FrameworkElement row && Posters(row).ElementAtOrDefault(at.Column) is { } poster
+		if (Find(index) is { } at && Lines.TryGetElement(at.Line) is FrameworkElement row && PosterOf(row, index) is { } poster
 			&& !ReferenceEquals(poster, args.NewFocusedElement))
 		{
 			args.TrySetNewFocusedElement(poster);

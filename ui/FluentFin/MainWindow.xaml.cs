@@ -44,6 +44,9 @@ public sealed partial class MainWindow : WindowEx
 			ThemeSwitcher.FadeSource = root;
 			ThemeSwitcher.FadeLayer = ThemeFade;
 		}
+
+		// Nixie 1.3.1: the off-screen harness's clicks (dev builds only, NIXIE_HARNESS_POINTER=1)
+		HarnessPointer.Attach(this);
 	}
 
 	/// <summary>

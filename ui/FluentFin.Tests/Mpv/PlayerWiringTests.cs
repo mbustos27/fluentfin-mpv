@@ -51,11 +51,14 @@ public sealed class PlayerWiringTests
 	public void A_click_on_the_video_plays_or_pauses_at_once_through_the_view_model()
 	{
 		var controls = Source("Controls", "MpvPlayerControls.xaml.cs");
-		var tapped = Body(controls, "OnVideoTapped");
+		// Nixie 1.3.1: the tap's work is TapVideo (the harness's pointer hook goes through it too)
+		Assert.Contains("TapVideo(", Body(controls, "OnVideoTapped"));
+		Assert.Contains("DoubleTapVideo(", Body(controls, "OnVideoDoubleTapped"));
+		var tapped = Body(controls, "OnVideoTapped") + Body(controls, "TapVideo");
 		Assert.Contains("VideoClicked()", tapped);
 		Assert.DoesNotContain("TogglePause", tapped);
 		Assert.DoesNotContain("Timer", tapped);
-		Assert.DoesNotContain("TogglePause", Body(controls, "OnVideoDoubleTapped"));
+		Assert.DoesNotContain("TogglePause", Body(controls, "OnVideoDoubleTapped") + Body(controls, "DoubleTapVideo"));
 		Assert.DoesNotContain("ClickWaitOver", controls);
 	}
 

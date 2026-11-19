@@ -531,14 +531,21 @@ public sealed partial class VideoPlayerPage : Page
 	private bool _escapeRepeat;
 
 	/// <summary>
-	/// Seaglass 1.1.3: every key in the window, before anything else (the accelerator too): a held Escape repeats, and each
+	/// Every key in the window, before anything else (the accelerator too). Seaglass 1.1.3: a held Escape repeats, and each
 	/// repeat used to be another Escape: out of full screen, then out of the player, stopping the playback. Its repeats are
-	/// marked and do nothing (<see cref="FluentFin.Controls.MpvPlayerKeys.IgnoresRepeat"/>).
+	/// marked and do nothing (<see cref="FluentFin.Controls.MpvPlayerKeys.IgnoresRepeat"/>). Nixie 1.3.1: the player's one key
+	/// router, here at the window's root rather than on the player's own grid, so the keys work whatever has the focus (the
+	/// title bar, a button a click or a closing menu left it on, nothing at all), in every theme (MpvPlayerKeys).
 	/// </summary>
 	private void OnRootPreviewKeyDown(object sender, KeyRoutedEventArgs e)
 	{
 		if (e.Key != VirtualKey.Escape)
 		{
+			if (ViewModel.UsesFluentFinControls && !_navigatedFrom)
+			{
+				FluentFin.Controls.MpvPlayerKeys.OnPreviewKeyDown(MpvControlsView, ViewModel.IsMpvVideoVisible, e);
+			}
+
 			return;
 		}
 
@@ -560,6 +567,13 @@ public sealed partial class VideoPlayerPage : Page
 		if (_escapeRepeat)
 		{
 			// a held Escape: the first press did its job
+			return;
+		}
+
+		// Nixie 1.3.1: a theme's own panel open over the video (Cinematic's tabs panel, opened by a click that left the keyboard
+		// on the player) closes first, as a menu does, whatever has the focus
+		if (!ViewModel.IsMpvStarting && ViewModel.MpvControls?.ClosePanels() == true)
+		{
 			return;
 		}
 
@@ -605,19 +619,6 @@ public sealed partial class VideoPlayerPage : Page
 		else
 		{
 			_videoHost.Focus();
-		}
-	}
-
-	/// <summary>
-	/// fluentfin-mpv player controls: the player's keys anywhere on the page (Space, arrows, F, M, ...), before a focused
-	/// slider takes them; only while the video is shown, and Space and Enter stay a focused button's (MpvPlayerKeys).
-	/// Escape stays the page's accelerator (full screen off; in a window, the controls shown).
-	/// </summary>
-	private void OnMpvPreviewKeyDown(object sender, KeyRoutedEventArgs e)
-	{
-		if (ViewModel.UsesFluentFinControls)
-		{
-			FluentFin.Controls.MpvPlayerKeys.OnPreviewKeyDown(MpvControlsView, ViewModel.IsMpvVideoVisible, e);
 		}
 	}
 
