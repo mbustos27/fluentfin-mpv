@@ -57,6 +57,12 @@ public static class PageRefresh
 	public static bool Coalesces(bool running, bool samePage, string? userMoved) => running && samePage && userMoved is null;
 
 	/// <summary>
+	/// Nixie 1.4.0 (integration: the hunt's M3 against the library's M2): whether the user moved (a key, a click, the wheel)
+	/// since the last refresh began. The libraries put their place back on R too, and their focus must yield the same way.
+	/// </summary>
+	public static bool UserMovedSinceRefresh => _userMoved is not null;
+
+	/// <summary>
 	/// Nixie 1.4.0 (bug hunt M3): the user pressed a key (not a refresh key, not a modifier alone), clicked or turned the
 	/// wheel: a refresh's place restore stops at its next try and leaves the keyboard where the user put it.
 	/// </summary>

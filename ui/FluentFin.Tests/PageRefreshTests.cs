@@ -18,6 +18,26 @@ public sealed class PageRefreshTests
 {
 	private static string Source(params string[] parts) => File.ReadAllText(Path.Combine([FlyleafEngineTests.RepoRoot, "FluentFin", .. parts]));
 
+	/// <summary>
+	/// Nixie 1.4.0 (integration: the hunt's M3 against the library's M2, seen in then-refresh on Drive-in): after R on a slow
+	/// server, a user who moved first (Ctrl+F and a letter, or Down) keeps the keyboard; the library's own place restore
+	/// yields as the refresh's does, and still scrolls back.
+	/// </summary>
+	[Fact]
+	public void TheLibrarysPlaceAfterR_YieldsTheKeyboardToAUserWhoMovedFirst()
+	{
+		var host = Source("Controls", "LibraryGridHost.cs");
+		var editorial = Source("Themes", "Editorial", "Views", "EditorialLibraryPage.xaml.cs");
+		foreach (var page in new[] { host, editorial })
+		{
+			Assert.Contains("{ LastNavigationWasRefresh: true } && Services.PageRefresh.UserMovedSinceRefresh".Replace("Services.", page == editorial ? "" : "Services."), page);
+		}
+
+		Assert.Equal(2, host.Split("_vm.FocusYields?.Invoke() != true").Length - 1);      // the card at once, and after the scroll back
+		Assert.Contains("index >= 0 && ViewModel.FocusYields?.Invoke() != true", editorial);
+		Assert.Contains("public static bool UserMovedSinceRefresh => _userMoved is not null;", Source("Services", "PageRefresh.cs"));
+	}
+
 	[Fact]
 	public void Refresh_RunsWhileBrowsing_NotInADialogOrMenu_NotInThePlayer_NotSignedOut_NotOverATrailer()
 	{

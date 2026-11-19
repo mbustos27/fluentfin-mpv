@@ -96,6 +96,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		// R or F5 (a new view model for the same library): the sort, the filters and the poster are put back, as for Back
 		// (R and F5 keep the place; the lit tab chosen again starts at the top: LastRefreshKeepsPlace false)
 		ViewModel.ReloadedInPlace = () => App.GetService<Contracts.Services.INavigationService>() is NavigationService { LastNavigationWasRefresh: true, LastRefreshKeepsPlace: true };
+		// after R, a user who moved first keeps the keyboard where they put it (the refresh's own restore yields the same way)
+		ViewModel.FocusYields = () => App.GetService<Contracts.Services.INavigationService>() is NavigationService { LastNavigationWasRefresh: true } && PageRefresh.UserMovedSinceRefresh;
 		Lines.ElementPrepared += Lines_ElementPrepared;
 		GridScroller.ViewChanged += (_, _) =>
 		{
@@ -795,7 +797,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 				GridScroller.UpdateLayout();
 			}
 
-			if (index >= 0)
+			if (index >= 0 && ViewModel.FocusYields?.Invoke() != true)
 			{
 				FocusIndex(index, state);
 			}

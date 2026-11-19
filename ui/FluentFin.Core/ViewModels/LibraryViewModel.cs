@@ -158,6 +158,13 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	/// </summary>
 	public Func<bool>? ReloadedInPlace { get; set; }
 
+	/// <summary>
+	/// Nixie 1.4.0 (integration): whether the place put back after R leaves the keyboard alone (the user moved first: a key in
+	/// the search box, Down), as the refresh's own restore does; the page asks it before focusing the card. Scrolling back
+	/// still happens.
+	/// </summary>
+	public Func<bool>? FocusYields { get; set; }
+
 	// ---- Nixie 1.4.0 (the UX review's X4, item 2): the filters on, said; their counts honest; nothing left, said ----------
 
 	/// <summary>Every filter on, one chip each ("Unwatched ✕", "Comedy ✕"), for the applied-filter row.</summary>

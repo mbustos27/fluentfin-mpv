@@ -45,6 +45,8 @@ internal sealed class LibraryGridHost
 		// R or F5 (a new view model for the same library): the sort, the filters and the card are put back, as for Back
 		// (R and F5 keep the place; the lit tab chosen again starts at the top: LastRefreshKeepsPlace false)
 		vm.ReloadedInPlace = () => App.GetService<Contracts.Services.INavigationService>() is Services.NavigationService { LastNavigationWasRefresh: true, LastRefreshKeepsPlace: true };
+		// after R, a user who moved first keeps the keyboard where they put it (the refresh's own restore yields the same way)
+		vm.FocusYields = () => App.GetService<Contracts.Services.INavigationService>() is Services.NavigationService { LastNavigationWasRefresh: true } && Services.PageRefresh.UserMovedSinceRefresh;
 		vm.PropertyChanged += (_, e) =>
 		{
 			switch (e.PropertyName)
@@ -149,7 +151,7 @@ internal sealed class LibraryGridHost
 			}
 
 			_vm.ReturnOffset = null;
-			if (index >= 0)
+			if (index >= 0 && _vm.FocusYields?.Invoke() != true)
 			{
 				_grid.FocusAndHold(index, state, atTop: jumped);
 			}
@@ -164,7 +166,7 @@ internal sealed class LibraryGridHost
 		}
 
 		_returnScroll = -1;
-		if (_returnFocus.Index >= 0)
+		if (_returnFocus.Index >= 0 && _vm.FocusYields?.Invoke() != true)
 		{
 			_repeater.UpdateLayout();
 			_grid.FocusAndHold(_returnFocus.Index, _returnFocus.State);
