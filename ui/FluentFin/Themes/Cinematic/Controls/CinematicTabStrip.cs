@@ -44,6 +44,13 @@ public sealed partial class CinematicTabStrip : UserControl
 
 	internal IReadOnlyList<CinematicTabButton> Buttons => _buttons;
 
+	/// <summary>
+	/// Nixie 1.3.1: whether a click gives a tab the keyboard (true, as on the browsing pages). The player's strip says no: a
+	/// click there opens its panel and leaves the keyboard on the video, so the player's keys go on working (docs/SHORTCUTS.md);
+	/// Tab still reaches the tabs.
+	/// </summary>
+	public bool TabsTakeFocusOnClick { get; set; } = true;
+
 	/// <summary>Shows <paramref name="tabs"/>; the keyboard's stop is the tab shown (else the first).</summary>
 	public void SetTabs(IReadOnlyList<CinematicTab> tabs)
 	{
@@ -63,6 +70,7 @@ public sealed partial class CinematicTabStrip : UserControl
 			AutomationProperties.SetName(button, tab.Name);
 			AutomationProperties.SetPositionInSet(button, i + 1);
 			AutomationProperties.SetSizeOfSet(button, tabs.Count);
+			button.AllowFocusOnInteraction = TabsTakeFocusOnClick;
 			button.Click += (_, _) => Invoke(tab);
 			_buttons.Add(button);
 			_panel.Children.Add(button);

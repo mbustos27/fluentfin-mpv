@@ -178,6 +178,12 @@
 
         <SwapChainPanel x:Name="VideoPanel" />
 
+        <!--
+            Nixie 1.3.1: every control of the bars and the pills takes no focus from a click (AllowFocusOnInteraction False;
+            Tab and Narrator still reach each one): a click leaves the keyboard on the player, so every key works at once
+            after it (docs/SHORTCUTS.md). PlayerKeysContractTests keeps it so, and keeps the named parts the key router and
+            the harness rely on.
+        -->
         <!--  top: back and the title, on a scrim  -->
         <Grid
             x:Name="TopBar"
@@ -191,6 +197,7 @@
             <StackPanel Orientation="Horizontal" Spacing="16">
                 <Button
                     x:Name="BackButton"
+                    AllowFocusOnInteraction="False"
                     VerticalAlignment="Center"
                     AutomationProperties.AcceleratorKey="Alt+Left"
                     AutomationProperties.Name="Back"
@@ -343,6 +350,7 @@
                 </Grid>
                 <Slider
                     x:Name="SeekBar"
+                    AllowFocusOnInteraction="False"
                     Grid.Column="1"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="Seek"
@@ -378,6 +386,7 @@
                     Spacing="8">
                     <Button
                         x:Name="VolumeButton"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.Name="{x:Bind VolumeName(Controls.Volume, Controls.IsMuted), Mode=OneWay}"
                         Style="{StaticResource PlayerButton}"
                         ToolTipService.ToolTip="Volume (M mutes)">
@@ -430,6 +439,7 @@
                     <!--  1.2.0: previous and next with the transport (an episode or a queue); the Next pill is the prompt near the end  -->
                     <Button
                         x:Name="PreviousButton"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.AcceleratorKey="Shift+P"
                         AutomationProperties.Name="{x:Bind Controls.PreviousName, Mode=OneWay}"
                         Click="OnPreviousClick"
@@ -441,6 +451,7 @@
                     </Button>
                     <Button
                         x:Name="SkipBackButton"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.AcceleratorKey="J"
                         AutomationProperties.Name="Back 10 seconds"
                         Click="OnSkipBackClick"
@@ -450,6 +461,7 @@
                     </Button>
                     <Button
                         x:Name="PlayPauseButton"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.AcceleratorKey="Space"
                         AutomationProperties.Name="{x:Bind PlayPauseName(Controls.IsPaused), Mode=OneWay}"
                         Click="OnPlayPauseClick"
@@ -467,6 +479,7 @@
                     </Button>
                     <Button
                         x:Name="SkipForwardButton"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.AcceleratorKey="L"
                         AutomationProperties.Name="Forward 10 seconds"
                         Click="OnSkipForwardClick"
@@ -489,6 +502,7 @@
                     </Button>
                     <Button
                         x:Name="NextButton"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.AcceleratorKey="Shift+N"
                         AutomationProperties.Name="{x:Bind Controls.NextButtonName, Mode=OneWay}"
                         Click="OnNextClick"
@@ -512,6 +526,7 @@
                     -->
                     <Button
                         x:Name="SpeedButton"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.AcceleratorKey="]"
                         AutomationProperties.Name="{x:Bind SpeedName(Controls.Speed), Mode=OneWay}"
                         Style="{StaticResource PlayerButton}"
@@ -545,6 +560,7 @@
                     -->
                     <Button
                         x:Name="TracksButton"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.HelpText="B changes the audio track, C turns subtitles on or off, V changes them"
                         AutomationProperties.Name="Audio and subtitles"
                         IsEnabled="{x:Bind Controls.HasTrackChoice, Mode=OneWay}"
@@ -707,6 +723,7 @@
                     </Button>
                     <Button
                         x:Name="FullScreenButton"
+                        AllowFocusOnInteraction="False"
                         AutomationProperties.AcceleratorKey="F"
                         AutomationProperties.Name="{x:Bind FullScreenName(Controls.IsFullScreen), Mode=OneWay}"
                         Click="OnFullScreenClick"
@@ -786,6 +803,7 @@
             -->
             <Button
                 x:Name="CancelNextButton"
+                AllowFocusOnInteraction="False"
                 VerticalAlignment="Bottom"
                 AutomationProperties.Name="{x:Bind Controls.CancelNextName, Mode=OneWay}"
                 Click="OnCancelNextClick"
@@ -802,6 +820,7 @@
             </Button>
             <Button
                 x:Name="NextPill"
+                AllowFocusOnInteraction="False"
                 Height="NaN"
                 MinHeight="44"
                 Padding="18,8"
@@ -863,6 +882,7 @@
             </Button>
             <Button
                 x:Name="SkipSegmentButton"
+                AllowFocusOnInteraction="False"
                 AutomationProperties.AcceleratorKey="S"
                 AutomationProperties.Name="{x:Bind Controls.SkipText, Mode=OneWay}"
                 Click="OnSkipSegmentClick"

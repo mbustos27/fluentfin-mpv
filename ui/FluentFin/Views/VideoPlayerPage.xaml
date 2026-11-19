@@ -41,9 +41,9 @@
             XAML cannot draw over that window, so the message bar has its own row above it; transport controls are mpv's OSC.
             fluentfin-mpv player controls: or (Player controls: FluentFin) MpvControlsView shows an mpv inside FluentFin.
         -->
+        <!--  Nixie 1.3.1: the player's keys are routed at the window's root (VideoPlayerPage.OnRootPreviewKeyDown), not here  -->
         <Grid
             x:Name="MpvRoot"
-            PreviewKeyDown="OnMpvPreviewKeyDown"
             Visibility="{x:Bind VisibleIf(ViewModel.IsMpv), Mode=OneWay}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

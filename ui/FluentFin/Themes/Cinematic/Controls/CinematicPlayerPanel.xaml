@@ -35,7 +35,8 @@
                 x:Name="Tabs"
                 AutomationProperties.Name="Player panels"
                 TabFontSize="15"
-                TabInvoked="Tabs_TabInvoked" />
+                TabInvoked="Tabs_TabInvoked"
+                TabsTakeFocusOnClick="False" />
         </Border>
 
         <!--  when the item ends: a time you read (nixie orange)  -->
