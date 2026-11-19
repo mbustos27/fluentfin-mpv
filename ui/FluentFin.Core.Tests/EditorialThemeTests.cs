@@ -249,6 +249,18 @@ public sealed class EditorialXamlTests
 
 	private static string Dir => Path.Combine(RepoRoot, "FluentFin", "Themes", "Editorial");
 
+	// Nixie 1.3.1: Home from far down the library goes to the top first (the keys matrix: Home stayed on the last title once
+	// the library sorted by sort name, its first rows long virtualized away), and asks for the focus again if it did not take
+	[Fact]
+	public void LibraryHome_ScrollsToTheTop_ThenFocuses_AndAsksAgain()
+	{
+		var page = File.ReadAllText(Path.Combine(Dir, "Views", "EditorialLibraryPage.xaml.cs")).Replace("\r\n", "\n");
+		var keys = page[page.IndexOf("private void Grid_KeyDown", StringComparison.Ordinal)..];
+		var home = keys.IndexOf("if (key == \"Home\")", StringComparison.Ordinal);
+		Assert.True(home > 0 && home < keys.IndexOf("GridScroller.ChangeView(null, 0, null, disableAnimation: true);", StringComparison.Ordinal));
+		Assert.Contains("if (!FocusIndex(target, FocusState.Keyboard))", keys);
+	}
+
 	private static System.Xml.Linq.XDocument Load(string name) => System.Xml.Linq.XDocument.Load(Path.Combine(Dir, name));
 
 	private static IEnumerable<string> TopKeys(System.Xml.Linq.XDocument doc) =>

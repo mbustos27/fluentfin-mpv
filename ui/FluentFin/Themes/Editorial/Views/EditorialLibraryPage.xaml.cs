@@ -543,7 +543,18 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 		if (EditorialLibrary.Move(_lines, index, ViewModel.Items.Count, key, RowsPerPage()) is { } target)
 		{
-			FocusIndex(target, FocusState.Keyboard);
+			// Nixie 1.3.1: Home from far down the library: the top's rows are long gone (virtualized), and a poster made out
+			// there did not take the focus; the grid goes to its top first, and the focus is asked again once laid out
+			if (key == "Home")
+			{
+				GridScroller.ChangeView(null, 0, null, disableAnimation: true);
+				GridScroller.UpdateLayout();
+			}
+
+			if (!FocusIndex(target, FocusState.Keyboard))
+			{
+				DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => FocusIndex(target, FocusState.Keyboard));
+			}
 		}
 	}
 
