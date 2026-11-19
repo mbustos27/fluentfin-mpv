@@ -27,6 +27,7 @@ public static class OffscreenUi {
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
   [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr h, ref POINT p);
   [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
@@ -172,6 +173,15 @@ public static class OffscreenUi {
   }
 
   // PrintWindow(PW_RENDERFULLCONTENT) of FluentFin's window into a PNG; returns "WxH, n% not black[, video: m% not black]"
+  // Nixie 1.4.0 (bug hunt m10): why a shot of the window is refused, null when it is fine: a minimized window (iconic, or the
+  // 160 x 28 caption Windows leaves of one) was saved as a 160 x 28 picture, and every later check read past it
+  public static string ShotRefusal(bool iconic, int w, int h) {
+    if (iconic) return string.Format("the window is minimized ({0}x{1})", w, h);
+    if (w <= 200 && h <= 40) return string.Format("the window is {0}x{1}, a minimized window's size", w, h);
+    return null;
+  }
+  public static string ShotRefusal(IntPtr main) { RECT r; GetWindowRect(main, out r); return ShotRefusal(IsIconic(main), r.R - r.L, r.B - r.T); }
+
   public static string Shot(IntPtr main, int pid, string file) {
     if (ProcessOf(main) != (uint)pid) throw new InvalidOperationException("not FluentFin's window");
     RECT r; GetWindowRect(main, out r);

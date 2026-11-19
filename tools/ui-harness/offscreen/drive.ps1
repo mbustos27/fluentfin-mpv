@@ -104,6 +104,11 @@ function Safe-Name([string]$Name) { ($Name -replace '[^A-Za-z0-9._-]+', '-').Tri
 
 # --- captures -------------------------------------------------------------------------------------------------------
 function Shot([string]$Name) {
+    # Nixie 1.4.0 (bug hunt m10): a minimized window fails the run, loudly, instead of a 160 x 28 picture
+    if ([OffscreenUi]::ShotRefusal($script:hwnd) -is [string]) {
+        Check "shot ${Name}: the window is shown (not minimized)" $false ([OffscreenUi]::ShotRefusal($script:hwnd))
+        return
+    }
     $script:shotN++
     $file = Join-Path $Out ("shots\{0:00}-{1}.png" -f $script:shotN, $Name)
     $info = [OffscreenUi]::Shot($script:hwnd, $script:ui.Id, $file)
@@ -459,7 +464,8 @@ function Step-Home {
 function Step-Library {
     $at = Get-Epoch
     Open-Library $fixture.movie.library
-    $card = Wait-Until { [OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $fixture.movie.name) } -Seconds 30 -PollMs 150
+    # Nixie 1.4.0 (bug hunt m10): any theme's card (Find-MediaCard: Editorial's posters too; FindCard knew only the shared one)
+    $card = Wait-Until { Find-MediaCard $fixture.movie.name } -Seconds 30 -PollMs 150
     $timings.library_first_card_ms = Ms $at (Get-Epoch)
     Check 'library: the showcase movie is shown' ([bool]$card) $fixture.movie.name
     Start-Sleep -Seconds 2
