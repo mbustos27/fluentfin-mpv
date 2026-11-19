@@ -43,6 +43,27 @@ public static class WindowShortcuts
 
 		var state = InputKeyboardSource.GetKeyStateForCurrentThread;
 		bool Down(VirtualKey k) => state(k).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+
+		// Nixie 1.4.0 (bug hunt M1): the theatre is modal. Its keys are decided here, before any page handler or key
+		// accelerator (a key handled here runs no accelerator: the search box's Ctrl+F, Home's N and C): Esc and Back close
+		// it from wherever the keyboard is, its own controls get Tab, Enter, Space and the arrows, and the rest is held back.
+		if (Controls.TrailerTheater.Current is { IsOpen: true } theater)
+		{
+			switch (Trailers.KeyOverTheater((int)e.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift), Down(VirtualKey.Menu)))
+			{
+				case TheaterKey.Close:
+					e.Handled = true;
+					theater.Close();
+					return;
+				case TheaterKey.HoldBack:
+					e.Handled = true;
+					theater.HeldBack(e.KeyStatus.WasKeyDown);
+					return;
+			}
+
+			return;
+		}
+
 		var shortcut = AppShortcuts.For((int)e.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift), Down(VirtualKey.Menu), TextInput.IsTextInput(e.OriginalSource));
 		if (shortcut is { } found && Run(root, found))
 		{
@@ -79,6 +100,8 @@ public static class WindowShortcuts
 			{
 				case ShortcutGate.Ignore:
 					return false;
+				case ShortcutGate.HoldBack:
+					return true;
 				case ShortcutGate.CloseTrailer:
 					theater!.Close();
 					return true;
@@ -123,16 +146,24 @@ public static class WindowShortcuts
 
 		/// <summary>Nixie 1.3.1: a trailer plays in the theatre window: Back (a key or Mouse 4) closes it, nothing else runs.</summary>
 		CloseTrailer,
+
+		/// <summary>
+		/// Nixie 1.4.0 (bug hunt M1): over a trailer, every other shortcut is handled and does nothing. Left unhandled (1.3.1's
+		/// Ignore) it went on to the key accelerators: the search box's own Ctrl+F took the keyboard out from under the dim.
+		/// </summary>
+		HoldBack,
 	}
 
 	/// <summary>
 	/// Whether <paramref name="shortcut"/> runs: allowed where the user is (<see cref="AppShortcuts.AllowedIn"/>), no menu or
 	/// dialog open (<paramref name="popupOpen"/>: the keys are theirs), and over a trailer (<paramref name="trailerOpen"/>) only
-	/// Back, which closes it. A key typed in a text box never gets here (<see cref="AppShortcuts.For"/>).
+	/// Back, which closes it; the rest is held back (handled, nothing runs). A key typed in a text box never gets here
+	/// (<see cref="AppShortcuts.For"/>); a key over a trailer is decided first (<see cref="Trailers.KeyOverTheater"/>), so this
+	/// rule is the mouse's (Mouse 4 closes it, Mouse 5 does nothing).
 	/// </summary>
 	internal static ShortcutGate Gate(AppShortcut shortcut, ShortcutContext context, bool popupOpen, bool trailerOpen) =>
-		!AppShortcuts.AllowedIn(shortcut, context) || popupOpen ? ShortcutGate.Ignore
-		: trailerOpen ? (shortcut == AppShortcut.Back ? ShortcutGate.CloseTrailer : ShortcutGate.Ignore)
+		trailerOpen && !popupOpen ? (shortcut == AppShortcut.Back ? ShortcutGate.CloseTrailer : ShortcutGate.HoldBack)
+		: !AppShortcuts.AllowedIn(shortcut, context) || popupOpen ? ShortcutGate.Ignore
 		: ShortcutGate.Run;
 
 	private static ShortcutContext CurrentContext()

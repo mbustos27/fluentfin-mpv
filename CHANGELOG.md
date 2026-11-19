@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+
+- **The trailer theatre keeps the keyboard.** While a trailer plays, Tab and Shift+Tab stay inside it, Esc and Back always
+  close it, and every other shortcut (Ctrl+F, /, R, F1, Alt+Home, Ctrl+,) and a page's own keys (Home's N and C, Ctrl+Z)
+  do nothing. Before, Ctrl+F moved the keyboard into the search box under the dim, and Esc then no longer closed it.
+
 ## 1.3.1
 
 - **Trailers play in Nixie.** The Trailer button no longer sends you to the browser.

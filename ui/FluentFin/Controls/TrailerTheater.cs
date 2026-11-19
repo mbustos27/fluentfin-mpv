@@ -128,6 +128,7 @@ public sealed partial class TrailerTheater : Grid
 		_frame.Content = _web;
 
 		Visibility = Visibility.Visible;
+		Contain();
 		_frame.ApplyTemplate();
 		UpdateLayout();
 		Resize();
@@ -160,10 +161,80 @@ public sealed partial class TrailerTheater : Grid
 		}
 
 		_generation++;
+		// first: closing the web view and collapsing move the keyboard out, on its way back to the Trailer button
+		Release();
 		CloseWeb();
 		Visibility = Visibility.Collapsed;
 		Log()?.LogInformation("[trailer] theatre closed");
 		_state.Close();
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M1): a key held back over the theatre (<see cref="Trailers.KeyOverTheater"/>): logged with where the
+	/// keyboard is (the harness checks it stayed inside), once per press (not for a held key's repeats). The key is not named.
+	/// </summary>
+	public void HeldBack(bool repeat)
+	{
+		if (!repeat)
+		{
+			Log()?.LogInformation("[trailer] a key over the theatre held back; the keyboard on {Focused} ({Inside})", FocusedName(), WithinTheater() ? "inside" : "OUTSIDE");
+		}
+	}
+
+	private UIElement? _contained;
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M1): while it is open, the keyboard stays inside: a move to anything under the dim (the page's own
+	/// focus calls, a refresh's place, the top bar) is refused. Tab and Shift+Tab already cycle inside (TabFocusNavigation).
+	/// </summary>
+	private void Contain()
+	{
+		if (_contained is not null || XamlRoot?.Content is not UIElement root)
+		{
+			return;
+		}
+
+		_contained = root;
+		root.GettingFocus += OnRootGettingFocus;
+	}
+
+	private void Release()
+	{
+		if (_contained is { } root)
+		{
+			root.GettingFocus -= OnRootGettingFocus;
+			_contained = null;
+		}
+	}
+
+	private void OnRootGettingFocus(UIElement sender, GettingFocusEventArgs args)
+	{
+		if (!_state.IsOpen || args.NewFocusedElement is not DependencyObject target || IsInside(target))
+		{
+			return;
+		}
+
+		// the first move in comes from outside (the Trailer button): only moves out are refused
+		if (!WithinTheater())
+		{
+			return;
+		}
+
+		var refused = args.TryCancel();
+		Log()?.LogInformation("[trailer] the keyboard kept inside (it was going to {Target}): {Refused}", (target as FrameworkElement)?.GetType().Name ?? target.GetType().Name, refused);
+	}
+
+	private bool IsInside(DependencyObject element)
+	{
+		for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, this))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private void CloseWeb()
@@ -387,23 +458,8 @@ public sealed partial class TrailerTheater : Grid
 		XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is FrameworkElement f ? $"{f.GetType().Name} {AutomationProperties.GetName(f)}" : "nothing";
 
 	/// <summary>Whether the keyboard is already inside the theatre (on Close, or in the video).</summary>
-	private bool WithinTheater()
-	{
-		if (XamlRoot is null || FocusManager.GetFocusedElement(XamlRoot) is not DependencyObject focused)
-		{
-			return false;
-		}
-
-		for (var node = focused; node is not null; node = VisualTreeHelper.GetParent(node))
-		{
-			if (ReferenceEquals(node, this))
-			{
-				return true;
-			}
-		}
-
-		return false;
-	}
+	private bool WithinTheater() =>
+		XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is DependencyObject focused && IsInside(focused);
 
 	/// <summary>The dim over the page: a deep dusk at 72 % (the frame's light edge reads on it); the window colour in high contrast.</summary>
 	private static Brush DimBrush()

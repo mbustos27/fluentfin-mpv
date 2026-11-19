@@ -25,17 +25,39 @@ public sealed class PageRefreshTests
 		Assert.Equal(WindowShortcuts.ShortcutGate.Ignore, WindowShortcuts.Gate(AppShortcut.Refresh, ShortcutContext.Browsing, popupOpen: true, trailerOpen: false));
 		Assert.Equal(WindowShortcuts.ShortcutGate.Ignore, WindowShortcuts.Gate(AppShortcut.Refresh, ShortcutContext.Player, popupOpen: false, trailerOpen: false));
 		Assert.Equal(WindowShortcuts.ShortcutGate.Ignore, WindowShortcuts.Gate(AppShortcut.Refresh, ShortcutContext.SignedOut, popupOpen: false, trailerOpen: false));
-		Assert.Equal(WindowShortcuts.ShortcutGate.Ignore, WindowShortcuts.Gate(AppShortcut.Refresh, ShortcutContext.Browsing, popupOpen: false, trailerOpen: true));
+		Assert.Equal(WindowShortcuts.ShortcutGate.HoldBack, WindowShortcuts.Gate(AppShortcut.Refresh, ShortcutContext.Browsing, popupOpen: false, trailerOpen: true));
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M1): over a trailer every shortcut is handled: Back closes it, the rest is held back. 1.3.1 left
+	/// them unhandled (Ignore), so the key went on to the accelerators and the search box's Ctrl+F took the keyboard.
+	/// </summary>
 	[Fact]
-	public void OverATrailer_BackClosesIt_AndNothingElseRuns()
+	public void OverATrailer_BackClosesIt_AndEveryOtherShortcutIsHandled_NothingRuns()
 	{
 		Assert.Equal(WindowShortcuts.ShortcutGate.CloseTrailer, WindowShortcuts.Gate(AppShortcut.Back, ShortcutContext.Browsing, popupOpen: false, trailerOpen: true));
 		foreach (var other in Enum.GetValues<AppShortcut>().Where(s => s != AppShortcut.Back))
 		{
-			Assert.Equal(WindowShortcuts.ShortcutGate.Ignore, WindowShortcuts.Gate(other, ShortcutContext.Browsing, popupOpen: false, trailerOpen: true));
+			Assert.Equal(WindowShortcuts.ShortcutGate.HoldBack, WindowShortcuts.Gate(other, ShortcutContext.Browsing, popupOpen: false, trailerOpen: true));
 		}
+	}
+
+	/// <summary>Nixie 1.4.0 (bug hunt M1): the window's key handler decides the theatre's keys before any shortcut or accelerator.</summary>
+	[Fact]
+	public void OverATrailer_TheWindowDecidesTheKeysFirst_AndTheTheatreKeepsTheKeyboard()
+	{
+		var keys = Source("Services", "WindowShortcuts.cs").Replace("\r\n", "\n");
+		var theatre = keys.IndexOf("if (Controls.TrailerTheater.Current is { IsOpen: true } theater)", StringComparison.Ordinal);
+		Assert.True(theatre > 0 && theatre < keys.IndexOf("var shortcut = AppShortcuts.For(", StringComparison.Ordinal));
+		Assert.Contains("case TheaterKey.HoldBack:\n\t\t\t\t\te.Handled = true;", keys);
+		Assert.Contains("case TheaterKey.Close:\n\t\t\t\t\te.Handled = true;\n\t\t\t\t\ttheater.Close();", keys);
+
+		var theater = Source("Controls", "TrailerTheater.cs");
+		Assert.Contains("root.GettingFocus += OnRootGettingFocus;", theater);
+		Assert.Contains("args.TryCancel()", theater);
+		// let go before the web view closes and the theatre collapses (the keyboard goes back to the Trailer button)
+		var close = theater[theater.IndexOf("public void Close()", StringComparison.Ordinal)..];
+		Assert.True(close.IndexOf("Release();", StringComparison.Ordinal) < close.IndexOf("CloseWeb();", StringComparison.Ordinal));
 	}
 
 	[Theory]
