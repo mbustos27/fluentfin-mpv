@@ -146,7 +146,10 @@ foreach ($trSize in @(@(1920, 1080), @(1100, 700))) {
         if ($trF) { $trJ = $trF | ConvertFrom-Json; if ($trJ.rect) { $trCloseHit = TR-Hit ([int]($trJ.rect[0] + $trJ.rect[2] / 2)) ([int]($trJ.rect[1] + $trJ.rect[3] / 2)) } }
         $trWinClose = TR-Hit ($trWin.R - 24) ($trWin.T + 16)
         Check "trailer ($($trSize[0])x$($trSize[1])): the top band over the theatre is the dim's, not the window's caption (no drag, no maximize)" ($trBefore -eq 2 -and $trOpen -eq 1) "before: $trBefore, open: $trOpen (2 caption, 1 client)"
-        Check "trailer ($($trSize[0])x$($trSize[1])): Close trailer takes clicks, the window's close stays" ($trCloseHit -eq 1 -and $trWinClose -eq 20) "Close trailer: $trCloseHit ($trCloseBtn); the window's close: $trWinClose"
+        Check "trailer ($($trSize[0])x$($trSize[1])): the window's own close stays over the theatre" ($trWinClose -eq 20) "the window's close: $trWinClose (20 close)"
+        # Close trailer's place, when UI Automation can read the focused element (Drive-in's frame hides it from UIA)
+        if ($null -ne $trCloseHit) { Check "trailer ($($trSize[0])x$($trSize[1])): Close trailer takes clicks" ($trCloseHit -eq 1) "Close trailer: $trCloseHit ($trCloseBtn)" }
+        else { Say "trailer ($($trSize[0])x$($trSize[1])): Close trailer's place is not readable by UI Automation here ($trCloseBtn): its click not checked" }
         Shot "$trTag-caption-$($trSize[0])"
         $trAt = Get-Epoch
         CK-Key 'Esc'

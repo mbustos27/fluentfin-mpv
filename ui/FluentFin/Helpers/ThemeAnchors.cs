@@ -406,10 +406,12 @@ public sealed class ThemeAnchors
 
 	/// <summary>
 	/// The item an element shows: its data context when that is an item, else (Nixie 1.3.1) a card's own Model: a card in a
-	/// template compiled with x:Bind (the Library's grid) has no data context, so the grid's card was never found.
+	/// template compiled with x:Bind (the Library's grid) has no data context, so the grid's card was never found. Nixie 1.4.0:
+	/// Editorial's poster, whose data context is its grid cell (R in Editorial's library put the keyboard on Sort).
 	/// </summary>
 	private static object? ItemOfElement(FrameworkElement element) =>
 		element.DataContext is { } context && IsItem(context) ? context
+		: element.DataContext is EditorialCell { Item: { } cell } ? cell
 		: element is Controls.BaseItemDtoCard { Model: { } model } ? model
 		: null;
 

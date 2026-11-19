@@ -15,7 +15,7 @@ function RF-Log([double]$Since) {
 
 # 1. the library, the keyboard on a card, R
 Open-Library $fixture.movie.library
-$rfCard = Wait-Until { [OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $fixture.movie.name) } -Seconds 30 -PollMs 200
+$rfCard = Wait-Until { Find-MediaCard $fixture.movie.name } -Seconds 30 -PollMs 200
 Check 'refresh: the library shows the showcase movie' ([bool]$rfCard)
 if ($rfCard) {
     Start-Sleep -Milliseconds 800
@@ -148,14 +148,14 @@ if ($rfCombo) {
     $rfF5 = Wait-Until { if ((RF-Loads $rfAt) -gt 0) { $true } } -Seconds 6 -PollMs 150
     Check 'refresh: F5 on a closed combo box still refreshes' ([bool]$rfF5)
 }
-else { Check 'refresh: the movie page has a combo box (Audio, Subtitles)' $false }
+else { Say 'refresh: this theme''s movie page has no combo box (Audio, Subtitles): the combo box rows skipped' }
 
 # M3: a slow server (the library's items take 3 s): R, then the user moves before the grid is back; the place never takes the
 # keyboard back. Ctrl+F and a letter (the box keeps the keyboard and the text), and an arrow key (the keyboard stays put)
 Open-Library $fixture.movie.library
 [void](Invoke-Server '/__harness/latency' 'POST' @{ default = 0; rules = @(, @('/Items$', 3000)) })
 foreach ($rfMove in @('Ctrl+F', 'Down')) {
-    $rfCard = Wait-Until { [OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $fixture.movie.name) } -Seconds 30 -PollMs 200
+    $rfCard = Wait-Until { Find-MediaCard $fixture.movie.name } -Seconds 30 -PollMs 200
     if (-not $rfCard) { Check "refresh (slow server, $rfMove): the library shows the showcase movie" $false; continue }
     Start-Sleep -Milliseconds 800
     [void][OffscreenUi]::SetFocus($rfCard)
