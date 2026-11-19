@@ -307,7 +307,8 @@ public sealed partial class DriveInScene : Canvas
 		foreach (var (x, y, size) in candidates)
 		{
 			var rect = new Rect(x - size, y - size, size * 2, size * 2);
-			if (Overlaps(rect, l.Screen) || Overlaps(rect, l.Board) || Overlaps(rect, l.Arrow) || y < 24)
+			// Nixie 1.4.0 (the review's DI-m1): clear of the top bar by 8 px (a sparkle sat in the bar, beside Back and the tabs)
+			if (Overlaps(rect, l.Screen) || Overlaps(rect, l.Board) || Overlaps(rect, l.Arrow) || IsUnderTheBar(y, size))
 			{
 				continue;
 			}
@@ -315,6 +316,9 @@ public sealed partial class DriveInScene : Canvas
 			yield return (x, y, size);
 		}
 	}
+
+	/// <summary>Nixie 1.4.0: a sparkle at <paramref name="y"/> reaches up into the top bar or the 8 px under it.</summary>
+	internal static bool IsUnderTheBar(double y, double size) => y - size < FluentFin.Controls.TopBar.Height + 8;
 
 	private static bool Overlaps(Rect a, Rect b) => !b.IsEmpty && a.X < b.Right && a.Right > b.X && a.Y < b.Bottom && a.Bottom > b.Y;
 

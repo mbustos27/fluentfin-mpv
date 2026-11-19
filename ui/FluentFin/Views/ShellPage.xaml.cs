@@ -36,6 +36,9 @@ public sealed partial class ShellPage : Page
 		_top.Reset();
 		App.GetService<FluentFin.UI.Core.IPluginManager>().AddNavigationItems(_top);
 		_ = LoadLibrariesAsync();
+		// Nixie 1.4.0 (the trail rule): an item page reached from another section names its library (TrailEyebrow), from the
+		// item's folders on the server (asked once per item)
+		_top.LibraryOf = LibraryOfAsync;
 		// Nixie 1.4.0 (the trail rule): the lit destination chosen again on its own page goes back to its top
 		_top.ReturnToTopRequested += OnReturnToTop;
 		Unloaded += (_, _) => _top.ReturnToTopRequested -= OnReturnToTop;
@@ -101,6 +104,31 @@ public sealed partial class ShellPage : Page
 	{
 		var key = KeyOf(pageType);
 		return key.Length > 0 && _top.AllTabs.SelectMany(t => t.Menu.Prepend(t)).Any(t => t.Key == key);
+	}
+
+	private readonly Dictionary<Guid, Guid?> _libraryOf = [];
+
+	/// <summary>Nixie 1.4.0: the library an item is in: the first of its folders that is one of the user's views.</summary>
+	private async Task<Guid?> LibraryOfAsync(Jellyfin.Sdk.Generated.Models.BaseItemDto item)
+	{
+		if (item.Id is not { } id)
+		{
+			return null;
+		}
+
+		if (_libraryOf.TryGetValue(id, out var known))
+		{
+			return known;
+		}
+
+		var libraries = _top.AllTabs.Where(t => t.Kind == TopTabKind.Library).Select(t => t.LibraryId).ToHashSet();
+		var library = (await _client.GetAncestors(id)).FirstOrDefault(a => libraries.Contains(a.Id))?.Id;
+		if (library is not null)
+		{
+			_libraryOf[id] = library;
+		}
+
+		return library;
 	}
 
 	/// <summary>

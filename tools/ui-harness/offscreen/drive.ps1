@@ -276,6 +276,11 @@ function Open-Nav([string]$Name) {
     if ($tab -eq 'not-a-tab') {
         # a library inside the "Libraries" tab's menu, or the Libraries page itself ("All libraries")
         $libs = [OffscreenUi]::NavItem($script:navPane, 'Libraries')
+        # Nixie 1.4.0: the folded tab is named after the lit library it holds ("Movies ▾"); its help text says what it is
+        if (-not $libs) {
+            $libs = $script:navPane.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition) |
+                Where-Object { try { $_.Current.HelpText -like 'Libraries menu*' } catch { $false } } | Select-Object -First 1
+        }
         if (-not $libs) { throw "no navigation tab '$Name' (nor a Libraries tab with it)" }
         [void](Invoke-Element $libs)
         $mi = Open-NavMenuItem $(if ($Name -eq 'Libraries') { 'All libraries' } else { $Name })

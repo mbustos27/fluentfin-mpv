@@ -46,6 +46,8 @@
             HorizontalAlignment="Left"
             VerticalAlignment="Bottom"
             Spacing="14">
+            <!--  Nixie 1.4.0: the library this is in, when reached from another section ("Movies ›")  -->
+            <controls:TrailEyebrow Margin="0,0,0,-8" />
             <Image
                 x:Name="LogoImage"
                 MaxWidth="480"

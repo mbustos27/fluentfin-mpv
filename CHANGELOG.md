@@ -13,6 +13,14 @@
   or nothing depending on how you got there. The search box wears the underline while its results (or an item from it)
   show, the account button a ring while Settings does. Choosing the lit tab again on its own page takes it back to its top;
   choosing a library from a menu puts the keyboard in the page, not back on the tab.
+- **A film you reach from Home or the search results names its library** above its title ("Movies ›"); a click opens the
+  library.
+- **The top bar sits on one line.** The window's Minimize, Maximize and Close are as tall as the bar, so they line up with
+  everything else; Back is a quiet arrow 16 px from the edge (a dead Back no longer sits on a darker tile), with the same
+  soft hover as the tabs; the tab underline is as wide as its label, and hovering a tab shows a soft fill instead of a line;
+  the spacing is even (16, 24, 24, 8). The search box is centred in the window when there is room, otherwise it sits beside
+  the account; its tooltip names Ctrl+F and /. The Nixie wordmark goes Home. Cinematic's floating bar is centred, with its
+  menu on the same glass; Drive-in's sparkles stay out of the bar. The bar itself is no longer a Tab stop with nothing on it.
 
 ## 1.3.1
 

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Nixie 1.4.0 (the trail rule's location, the review's Y3 and X7): over an item page's title, the library the item is in
+    ("Movies ›") when the page was reached from another section (Home, the search results), where the top bar's light says
+    where you came from rather than where the item lives (TopNavigation.Eyebrow). A click (or Enter) opens the library, which
+    is then lit. Nothing shows otherwise. Neutral ink (the accent is the bar's light's), the bar's subtle 8-radius fill on
+    hover; Narrator: a button "Movies" whose help text says it is the library this is in.
+-->
+<UserControl
+    x:Class="FluentFin.Controls.TrailEyebrow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    Visibility="Collapsed">
+    <Button
+        x:Name="LibraryButton"
+        MinHeight="32"
+        Margin="-8,0,0,0"
+        Padding="8,6,8,6"
+        HorizontalAlignment="Left"
+        AutomationProperties.AutomationId="TrailEyebrow"
+        AutomationProperties.HelpText="The library this is in. Opens it"
+        Background="Transparent"
+        BorderThickness="0"
+        Click="OnClick"
+        CornerRadius="8"
+        Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+        <Button.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.ThemeDictionaries>
+                    <ResourceDictionary x:Key="Default">
+                        <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                        <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                        <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
+                        <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="TextFillColorSecondaryBrush" />
+                        <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                        <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="Light">
+                        <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                        <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                        <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
+                        <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="TextFillColorSecondaryBrush" />
+                        <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                        <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    </ResourceDictionary>
+                </ResourceDictionary.ThemeDictionaries>
+            </ResourceDictionary>
+        </Button.Resources>
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock
+                x:Name="Label"
+                VerticalAlignment="Center"
+                FontSize="13"
+                FontWeight="SemiBold"
+                TextLineBounds="Tight" />
+            <FontIcon
+                Margin="0,1,0,0"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                FontSize="10"
+                Glyph="&#xE76C;" />
+        </StackPanel>
+    </Button>
+</UserControl>

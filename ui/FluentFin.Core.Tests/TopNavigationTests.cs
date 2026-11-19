@@ -254,6 +254,14 @@ public sealed class TopNavigationTests
 		top.OnPageShown(TopTabs.HomeKey, null);
 		top.OnPageShown(Movie, null);
 		Assert.Equal("Home", top.SelectedTab?.Title);
+
+		// a choice that opened nothing does not light the search box on a page opened later from Home
+		var now = 1000L;
+		top.Clock = () => now;
+		top.ChooseSearch();
+		now += 10_000;
+		top.OnPageShown(Movie, null);
+		Assert.Equal("Home", top.SelectedTab?.Title);
 	}
 
 	[Fact]
@@ -336,6 +344,55 @@ public sealed class TopNavigationTests
 		top.OnPageShown(TopTabs.HomeKey, null);
 		top.Open(top.Tabs[0]);
 		Assert.Equal(2, returned);
+	}
+
+	[Fact]
+	public async Task AnItemReachedFromAnotherSection_ShowsItsLibraryAsAnEyebrow_NotFromItsOwn()
+	{
+		var top = Create();
+		var movies = Library("Movies");
+		top.SetLibraries([movies, Library("Shows")]);
+		var film = new BaseItemDto { Id = Guid.NewGuid(), Name = "Copper", Type = BaseItemDto_Type.Movie };
+		top.LibraryOf = item => Task.FromResult<Guid?>(item.Id == film.Id ? movies.Id : null);
+
+		// from Home: "Movies ›"
+		top.OnPageShown(TopTabs.HomeKey, null);
+		top.OnPageShown(Movie, film);
+		await top.EyebrowLookup;
+		Assert.Equal("Movies", top.Eyebrow?.Title);
+
+		// from Movies: the bar says it already
+		top.OnPageShown(TopTabs.LibraryKey, movies);
+		Assert.Null(top.Eyebrow);
+		top.OnPageShown(Movie, film);
+		await top.EyebrowLookup;
+		Assert.Null(top.Eyebrow);
+
+		// from the search results: "Movies ›"; any other page: none
+		top.OnPageShown(Search, "copper");
+		top.OnPageShown(Movie, film);
+		await top.EyebrowLookup;
+		Assert.Equal("Movies", top.Eyebrow?.Title);
+		top.OnPageShown(Settings, null);
+		Assert.Null(top.Eyebrow);
+	}
+
+	[Fact]
+	public async Task ALateEyebrow_ForAPageLeft_IsNotShown()
+	{
+		var top = Create();
+		var movies = Library("Movies");
+		top.SetLibraries([movies]);
+		var slow = new TaskCompletionSource<Guid?>();
+		top.LibraryOf = _ => slow.Task;
+
+		top.OnPageShown(Movie, new BaseItemDto { Id = Guid.NewGuid(), Type = BaseItemDto_Type.Movie });
+		var first = top.EyebrowLookup;
+		top.OnPageShown(TopTabs.HomeKey, null);
+		slow.SetResult(movies.Id);
+		await first;
+
+		Assert.Null(top.Eyebrow);
 	}
 
 	[Fact]

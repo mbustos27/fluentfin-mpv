@@ -198,6 +198,108 @@ class Library:
                     self._series(vid, view_name, name, created, year, showcase)
             self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
         self._seed_user_data()
+        # UXCAP (the 1.4.0 review captures): env switches for the library/collections UX capture; off by default, and generated
+        # after everything else with their own random sources, so the default fixture is unchanged
+        import os
+        if os.environ.get("FAKESERVER_COLLECTIONS"):
+            self._collections()
+        big = self.int_of(os.environ.get("FAKESERVER_BIG_LIBRARY"), 0)
+        if big > 0:
+            self._big_library(big)
+        # 1.4.0 topbar: FAKESERVER_EXTRA_VIEWS=<n> adds n small movie libraries (the top bar's fold with 9 views)
+        extra = self.int_of(os.environ.get("FAKESERVER_EXTRA_VIEWS"), 0)
+        for name in self.EXTRA_VIEW_NAMES[:max(0, extra)]:
+            self._small_library(name, 8)
+
+    # UXCAP (the 1.4.0 review captures): a "Collections" view (boxsets) of BoxSets made of the Movies library's titles
+    COLLECTION_NAMES = ["The Harbor Collection", "Kestrel Bay Trilogy", "Midnight Stories", "The Northgate Saga",
+                        "Copper and Glass", "Winter Films", "Ravenmoor Quartet", "The Lighthouse Pictures",
+                        "Saltmarsh Double Feature", "Electric Machines", "Frontier Classics", "Endless Summer Set"]
+
+    def _collections(self):
+        rng = random.Random(4242)
+        vid = _id("view", "Collections")
+        self.items[vid] = {"Id": vid, "kind": "view", "Name": "Collections", "collection": "boxsets", "parent": None,
+                           "view": vid, "created": self.now - datetime.timedelta(days=900)}
+        self.views.append(vid)
+        self.children[vid] = []
+        movies_view = _id("view", "Movies")
+        pool = list(self.children[movies_view])
+        showcase = next(i for i in pool if self.items[i].get("showcase") == "movie")
+        for n, name in enumerate(self.COLLECTION_NAMES):
+            bid = _id("boxset", name)
+            members = rng.sample(pool, rng.choice([2, 3, 3, 4, 5, 6, 8, 12]))
+            if n == 0 and showcase not in members:
+                members[0] = showcase
+            members.sort(key=lambda i: (self.items[i]["premiere"], self.sort_name(self.items[i])))
+            created = self.now - datetime.timedelta(days=rng.randint(3, 700))
+            years = [self.items[m]["year"] for m in members]
+            genres = sorted({g for m in members for g in self.items[m]["genres"]})[:3]
+            self.items[bid] = {"Id": bid, "kind": "boxset", "Name": name, "parent": vid, "view": vid, "created": created,
+                               "year": min(years), "premiere": min(self.items[m]["premiere"] for m in members),
+                               "genres": genres, "tags": [], "rating": self.items[members[0]]["rating"], "people": [],
+                               "studios": [], "overview": "%d films, %d-%d." % (len(members), min(years), max(years)),
+                               "tagline": "", "community": None, "critic": None}
+            self.children[vid].append(bid)
+            self.children[bid] = members
+        self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
+
+    # 1.4.0 topbar: the extra views' names (FAKESERVER_EXTRA_VIEWS), long and short, as real servers name them
+    EXTRA_VIEW_NAMES = ["Concerts", "Kids and Family", "Stand-up Specials", "Classics", "Home Videos", "4K Remasters"]
+
+    def _small_library(self, view_name, n):
+        saved = self.rng
+        self.rng = random.Random(sum(map(ord, view_name)))
+        try:
+            rng = self.rng
+            vid = _id("view", view_name)
+            start = self.now - datetime.timedelta(days=3 * 365)
+            self.items[vid] = {"Id": vid, "kind": "view", "Name": view_name, "collection": "movies", "parent": None,
+                               "view": vid, "created": start}
+            self.views.append(vid)
+            self.children[vid] = []
+            for _ in range(n):
+                name = self._name("movies")
+                mid = _id("movie", view_name, name)
+                item = self._common(mid, "movie", name, vid, vid, start + datetime.timedelta(days=rng.randint(0, 900)),
+                                    rng.randint(1950, 2026), rng.sample(GENRES, rng.randint(1, 3)), rng.choice(MOVIE_RATINGS))
+                item["showcase"] = None
+                self.items[mid] = item
+                self.children[vid].append(mid)
+            self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
+        finally:
+            self.rng = saved
+
+    # UXCAP (the 1.4.0 review captures): a big movies library ("Archive") of n titles, for density and scrolling
+    def _big_library(self, n):
+        saved = self.rng
+        self.rng = random.Random(9090)
+        try:
+            rng = self.rng
+            vid = _id("view", "Archive")
+            start = self.now - datetime.timedelta(days=6 * 365)
+            span = (self.now - start).total_seconds()
+            self.items[vid] = {"Id": vid, "kind": "view", "Name": "Archive", "collection": "movies", "parent": None,
+                               "view": vid, "created": start}
+            self.views.append(vid)
+            self.children[vid] = []
+            for _ in range(n):
+                name = self._name("movies")
+                created = start + datetime.timedelta(seconds=rng.uniform(0, span))
+                year = rng.randint(1930, 2026)
+                mid = _id("movie", "Archive", name)
+                item = self._common(mid, "movie", name, vid, vid, created, year, rng.sample(GENRES, rng.randint(1, 3)),
+                                    rng.choice(MOVIE_RATINGS))
+                item["showcase"] = None
+                self.items[mid] = item
+                self.children[vid].append(mid)
+                r = rng.random()
+                if r < 0.3:
+                    self._ud(mid).update(played=True, play_count=1,
+                                         last_played=self.now - datetime.timedelta(days=rng.randint(2, 900)))
+            self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
+        finally:
+            self.rng = saved
 
     def _series(self, vid, view_name, name, created, year, showcase):
         rng = self.rng
@@ -296,7 +398,13 @@ class Library:
                 "anime": {"id": found["anime"]["Id"], "name": found["anime"]["Name"], "library": "Anime"},
                 "documentary": {"id": found["documentary"]["Id"], "name": found["documentary"]["Name"],
                                 "library": "Documentaries"},
-                "views": [self.items[v]["Name"] for v in self.views]}
+                "views": [self.items[v]["Name"] for v in self.views],
+                # UXCAP: the collections (FAKESERVER_COLLECTIONS) and the big library (FAKESERVER_BIG_LIBRARY), when on
+                "collections": [{"id": b, "name": self.items[b]["Name"], "count": len(self.children[b]),
+                                 "first": self.items[self.children[b][0]]["Name"]}
+                                for v in self.views if self.items[v].get("collection") == "boxsets" for b in self.children[v]],
+                "big": [{"name": self.items[v]["Name"], "count": len(self.children[v])} for v in self.views
+                        if self.items[v]["Name"] == "Archive"]}
 
     def episodes_of(self, series_id, season_id=None):
         out = []
@@ -341,9 +449,10 @@ class Library:
             out["LastPlayedDate"] = iso(ud["last_played"])
         if ud["position"] and self.runtime:
             out["PlayedPercentage"] = round(100.0 * ud["position"] / self.runtime, 2)
-        if item["kind"] in ("series", "season"):
-            eps = self.episodes_of(item["series"] if item["kind"] == "season" else iid,
-                                   iid if item["kind"] == "season" else None)
+        if item["kind"] in ("series", "season", "boxset"):
+            eps = ([self.items[c] for c in self.children.get(iid, [])] if item["kind"] == "boxset"   # UXCAP
+                   else self.episodes_of(item["series"] if item["kind"] == "season" else iid,
+                                         iid if item["kind"] == "season" else None))
             unplayed = sum(1 for e in eps if not (self.user.get(e["Id"]) or {}).get("played"))
             out["UnplayedItemCount"] = unplayed
             out["Played"] = unplayed == 0
@@ -367,7 +476,7 @@ class Library:
         item = self.get(item_id)
         if not item:
             return None
-        targets = [item] + (self.descendants(item["Id"]) if item["kind"] in ("series", "season") else [])
+        targets = [item] + (self.descendants(item["Id"]) if item["kind"] in ("series", "season", "boxset") else [])
         with self.lock:
             for t in targets:
                 if t["kind"] in ("movie", "episode"):
@@ -397,17 +506,19 @@ class Library:
         tags = {"Primary": _tag(iid, "Primary")}
         if kind in ("movie", "series"):
             tags.update(Logo=_tag(iid, "Logo"), Thumb=_tag(iid, "Thumb"), Banner=_tag(iid, "Banner"))
+        if kind == "boxset":   # UXCAP
+            tags.update(Thumb=_tag(iid, "Thumb"))
         return tags
 
     def dto(self, item, detail=False):
         from imagegen import blurhash_cached as blurhash
         iid, kind = item["Id"], item["kind"]
         types = {"view": "CollectionFolder", "movie": "Movie", "series": "Series", "season": "Season",
-                 "episode": "Episode", "person": "Person"}
+                 "episode": "Episode", "person": "Person", "boxset": "BoxSet"}
         d = {"Name": item["Name"], "ServerId": self.server_id, "Id": iid, "Etag": _tag(iid, "etag")[:16],
              "DateCreated": iso(item["created"]), "CanDelete": False, "CanDownload": kind in ("movie", "episode"),
              "SortName": self.sort_name(item), "Type": types[kind], "LocationType": "FileSystem",
-             "IsFolder": kind in ("view", "series", "season"), "ImageTags": {}, "BackdropImageTags": [],
+             "IsFolder": kind in ("view", "series", "season", "boxset"), "ImageTags": {}, "BackdropImageTags": [],
              "ImageBlurHashes": {}}
         if kind == "person":
             d.update(ImageTags={"Primary": _tag(iid, "Primary")}, PrimaryImageAspectRatio=2 / 3,
@@ -431,6 +542,11 @@ class Library:
         d["GenreItems"] = [{"Name": g, "Id": _id("genre", g)} for g in item["genres"]]
         d["Tags"] = item["tags"]
         d["Overview"] = item["overview"]
+        if kind == "boxset":   # UXCAP: Jellyfin's BoxSet: a folder of films, with a backdrop
+            d.update(PrimaryImageAspectRatio=2 / 3, ChildCount=len(self.children.get(iid, [])), MediaType="Unknown",
+                     BackdropImageTags=[_tag(iid, "Backdrop")], CommunityRating=None)
+            d["ImageBlurHashes"]["Backdrop"] = {d["BackdropImageTags"][0]: blurhash(iid + "Backdrop")}
+            d.pop("CommunityRating")
         if kind in ("movie", "series", "episode"):
             d["CommunityRating"] = item["community"]
             d["BackdropImageTags"] = [_tag(iid, "Backdrop")] if kind != "episode" else []
@@ -541,12 +657,15 @@ class Library:
             pool = [self.items[v] for v in self.views]
 
         kind_of = {"movie": "movie", "series": "series", "season": "season", "episode": "episode",
-                   "person": "person", "collectionfolder": "view"}
+                   "person": "person", "collectionfolder": "view", "boxset": "boxset"}
+        # UXCAP: a film in a collection is under two views; a recursive pool lists it once
+        seen = set()
+        pool = [i for i in pool if not (i["Id"] in seen or seen.add(i["Id"]))]
         if types:
             wanted = {kind_of.get(t) for t in types}
             pool = [i for i in pool if i["kind"] in wanted]
         elif term:
-            pool = [i for i in pool if i["kind"] in ("movie", "series", "episode", "person")]
+            pool = [i for i in pool if i["kind"] in ("movie", "series", "episode", "person", "boxset")]
         else:
             pool = [i for i in pool if i["kind"] != "person"]
         if exclude:

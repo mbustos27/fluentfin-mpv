@@ -110,7 +110,8 @@ $tbItems = TbItems
 Say ("top bar tabs: " + (($tbItems | ForEach-Object { "{0} ({1} of {2}{3})" -f $_.Name, $_.Pos, $_.Size, $(if ($_.Selected) { ', selected' }) }) -join '; '))
 Check 'top bar: a tab list named Sections' ($tbList.Count -eq 1 -and $tbList[0].Name -eq 'Sections') (($tbList | ForEach-Object Name) -join ',')
 $tbNames = @($tbItems | ForEach-Object Name)
-Check 'top bar: Home, the four libraries, Diary' (($tbNames -join ',') -eq 'Home,Movies,Shows,Documentaries,Anime,Diary') ($tbNames -join ',')
+# Nixie 1.4.0: every library a tab, then Libraries (the Libraries page), then Diary
+Check 'top bar: Home, the four libraries, Libraries, Diary' (($tbNames -join ',') -eq 'Home,Movies,Shows,Documentaries,Anime,Libraries,Diary') ($tbNames -join ',')
 $tbOk = $tbItems.Count -gt 0
 for ($i = 0; $i -lt $tbItems.Count; $i++) { if ($tbItems[$i].Pos -ne $i + 1 -or $tbItems[$i].Size -ne $tbItems.Count) { $tbOk = $false } }
 Check 'top bar: Narrator reads each tab "n of m"' $tbOk
@@ -150,7 +151,7 @@ $tbAfterRight = TbFocusedTab
 Key 0x25; TbSettle 300; Key 0x25; TbSettle 400         # Left, Left: round to the last
 $tbAfterLeft = TbFocusedTab
 Check 'top bar: Right moves to the next tab, Left round to the last, and Home stays marked' ($tbAfterRight -eq 'Movies' -and $tbAfterLeft -eq 'Diary' -and (TbMarked) -eq 'Home') "Right: $tbAfterRight, Left Left: $tbAfterLeft, marked: $(TbMarked)"
-Key 0x25; TbSettle 300; Key 0x25; TbSettle 300; Key 0x25; TbSettle 300; Key 0x25; TbSettle 300   # Left x4: Movies
+Key 0x25; TbSettle 300; Key 0x25; TbSettle 300; Key 0x25; TbSettle 300; Key 0x25; TbSettle 300; Key 0x25; TbSettle 300   # Left x5: Movies
 $tbFocus = TbFocusedTab
 Key 0x0D                                                # Enter
 $tbMovies = Wait-Until { if ((TbMarked) -eq 'Movies') { $true } } -Seconds 15 -PollMs 200
@@ -175,6 +176,9 @@ Open-Nav 'Settings'
 $tbSettings = Wait-Ui -Name 'Appearance' -Type 'Text' -OffscreenToo -Seconds 10
 TbSettle 1200
 Check 'top bar: Settings opens from the Account menu, and marks no tab' ([bool]$tbSettings -and -not (TbMarked)) "marked: '$(TbMarked)'"
+# Nixie 1.4.0 (the trail rule): Settings is lit on the account button instead
+$tbAcct = Find-Ui -Name 'Account, ' -Type 'Button' -Contains
+Check 'top bar: Settings lights the account button (its item status)' ([bool]$tbAcct -and $tbAcct.Current.ItemStatus -eq 'Settings is open') "status: '$(if ($tbAcct) { $tbAcct.Current.ItemStatus })'"
 TbShots 'settings'
 Open-Nav 'Home'; [void](Wait-Until { if ((TbMarked) -eq 'Home') { $true } } -Seconds 10); TbSettle 800
 
@@ -283,22 +287,10 @@ TbSize 1920 1080
 [void](Invoke-Server '/__harness/libraries' 'POST' @{ rename = @{ 'Television Shows' = 'Shows' } })
 [void](Wait-Until { if ((TbItems | ForEach-Object Name) -contains 'Shows') { $true } } -Seconds 15 -PollMs 250)
 
-# 3: a fifth library added on the server: the libraries move into the Libraries menu, the new one in it
+# 3 (Nixie 1.4.0): a fifth library added on the server is a tab of its own (the fold is by width, not by count)
 [void](Invoke-Server '/__harness/libraries' 'POST' @{ add = @('Concerts') })
-$tbFifth = Wait-Until { if ((TbItems | ForEach-Object Name) -contains 'Libraries') { $true } } -Seconds 15 -PollMs 250
-Check 'top bar: a fifth library moves the libraries into one Libraries tab' ([bool]$tbFifth) ((TbItems | ForEach-Object Name) -join ',')
+$tbFifth = Wait-Until { if ((TbItems | ForEach-Object Name) -contains 'Concerts') { $true } } -Seconds 15 -PollMs 250
+Check 'top bar: a fifth library is a tab of its own at 1920 px' ([bool]$tbFifth) ((TbItems | ForEach-Object Name) -join ',')
 Open-Nav 'Concerts'
 $tbConcerts = Wait-Ui -Name 'Concerts' -Type 'Text' -Seconds 10
-Check 'top bar: the new library opens from the Libraries menu' ([bool]$tbConcerts -and (TbMarked) -eq 'Libraries') "marked: $(TbMarked)"
-
-# 2: a pinned library (the run is given one: -Setting _Items=[Anime], see the header) is a tab of its own once the libraries
-# are in the menu; its menu (the menu key) has Unpin, which removes the tab
-$tbPinned = Wait-Until { if ((TbItems | ForEach-Object Name) -contains 'Anime') { $true } } -Seconds 10 -PollMs 200
-Check 'top bar: a pinned library is a tab of its own beside the Libraries menu' ([bool]$tbPinned) ((TbItems | ForEach-Object Name) -join ',')
-if ($tbPinned) {
-    [void][OffscreenUi]::SetFocus((TbTab 'Anime')); TbSettle 400; Key 0x5D; TbSettle 800
-    $tbUnpin = Find-Ui -Name 'Unpin' -Type 'MenuItem'
-    if ($tbUnpin) { [void](Invoke-Element $tbUnpin) }
-    $tbGone = Wait-Until { if (-not ((TbItems | ForEach-Object Name) -contains 'Anime')) { $true } } -Seconds 10 -PollMs 200
-    Check 'top bar: the menu key on a pinned tab offers Unpin, which removes the tab' ([bool]$tbUnpin -and [bool]$tbGone) ((TbItems | ForEach-Object Name) -join ',')
-}
+Check 'top bar: the new library opens from its tab, and is marked' ([bool]$tbConcerts -and (TbMarked) -eq 'Concerts') "marked: $(TbMarked)"

@@ -181,6 +181,80 @@ public sealed class TopBarTests
 		Assert.Equal(offset, TopBar.SearchOffset(window, leftEnd, search, right));
 	}
 
+	// ---- Nixie 1.4.0, item 6 (the review's X14): the bar's geometry
+
+	[Fact]
+	public void Back_Is40By32_16PxFromTheEdge_CentredOnTheBarsLine()
+	{
+		// the TitleBar lays Back at its own left edge (measured live: then-topbar140.ps1)
+		Assert.Equal(16, TitleBarControl.BackMargin.Left);
+		Assert.Equal(32, TopBar.Height - TitleBarControl.BackMargin.Top - TitleBarControl.BackMargin.Bottom);
+		Assert.Equal(TopBar.Height / 2, TitleBarControl.BackMargin.Top + 16);
+	}
+
+	[Theory]
+	[InlineData(1920)]
+	[InlineData(1100)]
+	public void DriveInsSparkles_StayClearOfTheBar(double width)
+	{
+		// the review's DI-m1: a 30 px sparkle sat in the bar between the tabs and search, another beside Back at 1100
+		foreach (var (_, y, size) in FluentFin.Themes.DriveIn.Controls.DriveInScene.Sparkles(FluentFin.Themes.DriveIn.Controls.DriveInLayout.Home(width, compact: false)))
+		{
+			Assert.True(y - size >= TopBar.Height + 8, $"a sparkle at y {y}, {size} px, reaches {y - size}");
+		}
+
+		Assert.True(FluentFin.Themes.DriveIn.Controls.DriveInScene.IsUnderTheBar(60, 14));
+		Assert.False(FluentFin.Themes.DriveIn.Controls.DriveInScene.IsUnderTheBar(80, 14));
+	}
+
+	[Fact]
+	public void TheBar_TallCaptions_NoTileOnADeadBack_NoTabStopOnTheTitleBar_AndCinematicsIslandCentred()
+	{
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var code = File.ReadAllText(Path.Combine(root, "Views", "TitleBarControl.xaml.cs"));
+		// the caption buttons 48 px tall: their glyphs on y 24 with the bar's
+		Assert.Contains("App.MainWindow.AppWindow.TitleBar.PreferredHeightOption = CaptionHeightFor(ViewModel.IsPlayerPageShown);", code);
+		Assert.Equal(Microsoft.UI.Windowing.TitleBarHeightOption.Tall, TitleBarControl.CaptionHeightFor(playerPage: false));
+		// the player's own top bar is laid out under the standard caption buttons (its stream's)
+		Assert.Equal(Microsoft.UI.Windowing.TitleBarHeightOption.Standard, TitleBarControl.CaptionHeightFor(playerPage: true));
+		var bar = System.Xml.Linq.XDocument.Parse(File.ReadAllText(Path.Combine(root, "Views", "TitleBarControl.xaml")));
+		var titleBar = bar.Descendants().Single(e => e.Name.LocalName == "TitleBar" && (string?)e.Attribute(System.Xml.Linq.XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TitleBar");
+		// item 4: no Tab stop with no name and no ring
+		Assert.Equal("False", (string?)titleBar.Attribute("IsTabStop"));
+		// a disabled Back draws no tile, in every theme dictionary
+		var disabled = titleBar.Descendants().Where(e => (string?)e.Attribute(System.Xml.Linq.XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TitleBarBackButtonBackgroundDisabled").ToList();
+		Assert.Equal(3, disabled.Count);
+		Assert.All(disabled, e => Assert.True((string?)e.Attribute("ResourceKey") == "SubtleFillColorTransparentBrush" || (string?)e.Attribute("Color") == "Transparent"));
+		// the wordmark goes Home; search names its keys
+		Assert.Contains("_top.Open(home);", code[code.IndexOf("private void OnWordmarkClick", StringComparison.Ordinal)..]);
+		var xaml = File.ReadAllText(Path.Combine(root, "Views", "TitleBarControl.xaml"));
+		Assert.Equal(2, xaml.Split("ToolTipService.ToolTip=\"Search (Ctrl+F or /)\"").Length - 1);
+
+		var cinematic = System.Xml.Linq.XDocument.Parse(File.ReadAllText(Path.Combine(root, "Themes", "Cinematic", "Cinematic.xaml")));
+		var island = cinematic.Descendants().Single(e => (string?)e.Attribute(System.Xml.Linq.XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "Island");
+		var margin = ((string)island.Attribute("Margin")!).Split(',').Select(double.Parse).ToArray();
+		// y 2 to 46: centred on 24, as the bar's items and the caption buttons are
+		Assert.Equal(TopBar.Height / 2, (margin[1] + TopBar.Height - margin[3]) / 2);
+		var style = cinematic.Descendants().Single(e => (string?)e.Attribute(System.Xml.Linq.XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TopBarStyle");
+		Assert.Contains(style.Elements(), e => (string?)e.Attribute("Property") == "Padding" && (string?)e.Attribute("Value") == "0");
+		Assert.Contains(cinematic.Descendants(), e => (string?)e.Attribute(System.Xml.Linq.XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TopBarMenuPresenterStyle");
+	}
+
+	[Theory]
+	// the item pages' headers in every theme: Classic's hero, Drive-in's board, Cinematic's stage, Editorial's header
+	[InlineData("Controls/ItemHero.xaml")]
+	[InlineData("Themes/DriveIn/Controls/ItemBoard.xaml")]
+	[InlineData("Themes/Cinematic/Controls/CinematicItemStage.xaml")]
+	[InlineData("Themes/Editorial/Controls/EditorialItemHeader.xaml")]
+	public void EveryItemHeader_HostsTheEyebrow_BeforeItsTitle(string header)
+	{
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var xaml = File.ReadAllText(Path.Combine(root, header));
+		var eyebrow = xaml.IndexOf("TrailEyebrow", StringComparison.Ordinal);
+		Assert.True(eyebrow > 0, $"{header}: no TrailEyebrow");
+		Assert.True(eyebrow < xaml.IndexOf("HeadingLevel=\"Level1\"", StringComparison.Ordinal) || eyebrow < xaml.IndexOf("TitleArt", StringComparison.Ordinal), $"{header}: the eyebrow after the title");
+	}
+
 	[Fact]
 	public void AGapMeasuredShort_KeepsMoreRoom_UpToALimit_AndNeverLess()
 	{
@@ -257,7 +331,7 @@ public sealed class TopBarTests
 		Assert.Contains("App.MainWindow.SetTitleBar(TitleBar);", bar);
 		// and its clickable areas follow the headers (the TitleBar looks again only when the window is resized)
 		Assert.Contains(".SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Passthrough, [.. rects]);", bar);
-		Assert.Contains("foreach (var element in new FrameworkElement?[] { BackButton(), LeftHeaderPanel, RightHeaderPanel })", bar);
+		Assert.Contains("foreach (var element in new FrameworkElement?[] { BackButton(), LeftHeaderPanel, SearchHost, SignOutPanel, AccountButton })", bar);
 		var keys = File.ReadAllText(Path.Combine(root, "Services", "WindowShortcuts.cs"));
 		var settings = keys[keys.IndexOf("case AppShortcut.OpenSettings:", StringComparison.Ordinal)..];
 		Assert.StartsWith("case AppShortcut.OpenSettings:", settings);

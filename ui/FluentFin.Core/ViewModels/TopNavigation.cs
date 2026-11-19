@@ -187,6 +187,15 @@ public static class TopTabs
 	}
 
 	/// <summary>
+	/// Nixie 1.4.0: the eyebrow over an item page: the tab of the item's <paramref name="library"/>, unless that library is the
+	/// lit destination (the bar says it already); null for none.
+	/// </summary>
+	public static TopTab? EyebrowFor(IReadOnlyList<TopTab> tabs, Guid? library, TopMark? lit) =>
+		library is null ? null
+		: tabs.FirstOrDefault(t => t.Kind == TopTabKind.Library && t.LibraryId == library) is { } tab && tab.Mark != lit ? tab
+		: null;
+
+	/// <summary>
 	/// The tab that shows <paramref name="lit"/> in <paramref name="row"/> (a <see cref="Fold"/> row): its own, or "Libraries ▾"
 	/// for a folded library; -1 for none (the search box, Settings, a destination that went).
 	/// </summary>
@@ -300,8 +309,16 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 
 	private (string Key, object? Parameter)? _shown;
 
-	/// <summary>The next page comes from the search box (an item chosen in its list): it lights the search box.</summary>
-	private bool _fromSearch;
+	/// <summary>
+	/// When an item was chosen in the search box's list: the page it opens, within <see cref="SearchChoiceLasts"/>, lights the
+	/// search box (a choice that opened nothing must not light it on a later page).
+	/// </summary>
+	private long? _searchChosenAt;
+
+	public static readonly TimeSpan SearchChoiceLasts = TimeSpan.FromSeconds(3);
+
+	/// <summary>The clock (milliseconds) the search choice is timed by (tests).</summary>
+	internal Func<long> Clock { get; set; } = () => Environment.TickCount64;
 
 	/// <summary>A new shell (signed in): the sections are added again by the plugins after this, the libraries asked for by <see cref="SetLibraries"/>.</summary>
 	public void Reset()
@@ -310,7 +327,7 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 		_libraries = [];
 		_shown = null;
 		_marks.Clear();
-		_fromSearch = false;
+		_searchChosenAt = null;
 		Lit = new TopMark(TopTabs.HomeKey);
 		Rebuild();
 	}
@@ -339,7 +356,7 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 	}
 
 	/// <summary>The search box opened an item (its list): that page lights the search box (the trail rule).</summary>
-	public void ChooseSearch() => _fromSearch = true;
+	public void ChooseSearch() => _searchChosenAt = Clock();
 
 	/// <summary>The destination lit when the page at each depth of the frame's history was shown.</summary>
 	private readonly Dictionary<int, TopMark?> _marks = [];
@@ -352,12 +369,13 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 	public void OnPageShown(string pageKey, object? parameter, int depth = -1, bool returning = false)
 	{
 		_shown = (pageKey, parameter);
-		var fromSearch = _fromSearch;
-		_fromSearch = false;
+		var fromSearch = _searchChosenAt is { } at && Clock() - at <= SearchChoiceLasts.TotalMilliseconds;
+		_searchChosenAt = null;
 		Lit = returning && depth >= 0 && _marks.TryGetValue(depth, out var mark)
 			? mark
 			: TopTabs.MarkFor(AllTabs, pageKey, parameter, Lit, fromSearch);
 		ShowRow();
+		ShowEyebrow(pageKey, parameter);
 
 		if (depth < 0)
 		{
@@ -374,6 +392,61 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 		}
 
 		_marks[depth] = Lit;
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the trail rule's location, the review's Y3): the library an item page shows when it was reached from
+	/// another section ("Movies ›" over a film opened from Home or the search results); null on any other page, or when the
+	/// item's own library is the lit destination. Item pages show it (lc:TrailEyebrow).
+	/// </summary>
+	[ObservableProperty]
+	public partial TopTab? Eyebrow { get; private set; }
+
+	/// <summary>The item's library (its id), asked of the server (the shell sets it: the item's ancestors); null for none.</summary>
+	public Func<BaseItemDto, Task<Guid?>>? LibraryOf { get; set; }
+
+	/// <summary>The item pages that show the eyebrow.</summary>
+	public static IReadOnlySet<string> ItemPages { get; } = new HashSet<string>
+	{
+		typeof(MovieViewModel).FullName!, typeof(SeriesViewModel).FullName!, typeof(SeasonViewModel).FullName!, typeof(EpisodeViewModel).FullName!,
+	};
+
+	private int _eyebrowFor;
+
+	/// <summary>The eyebrow's last lookup (tests wait on it).</summary>
+	internal Task EyebrowLookup { get; private set; } = Task.CompletedTask;
+
+	private void ShowEyebrow(string pageKey, object? parameter)
+	{
+		var version = ++_eyebrowFor;
+		Eyebrow = null;
+		if (!ItemPages.Contains(pageKey) || parameter is not BaseItemDto item || LibraryOf is not { } libraryOf)
+		{
+			EyebrowLookup = Task.CompletedTask;
+			return;
+		}
+
+		EyebrowLookup = Lookup();
+
+		async Task Lookup()
+		{
+			Guid? library;
+			try
+			{
+				library = await libraryOf(item);
+			}
+			catch (Exception ex)
+			{
+				logger.LogDebug("Top bar: no library for the eyebrow: {Error}", ex.Message);
+				return;
+			}
+
+			// a page shown since: its own lookup decides
+			if (version == _eyebrowFor)
+			{
+				Eyebrow = TopTabs.EyebrowFor(AllTabs, library, Lit);
+			}
+		}
 	}
 
 	/// <summary>

@@ -76,29 +76,36 @@ public sealed partial class TopTabStrip : UserControl
 	/// </summary>
 	public TopRowWidths RowWidths()
 	{
-		var row = _navigation?.Tabs ?? [];
-		if (!IsCompact && TabsPanel.ActualWidth > 0 && row.Count > 0)
+		// what each tab shown really took (the estimate ran short in the running app): kept per label, so the fold, measured
+		// on the whole row, never swings with which tabs happen to be shown
+		foreach (var button in _buttons)
 		{
-			var estimate = row.Sum(TabWidth);
-			_correction = Math.Max(0, (TabsPanel.ActualWidth - estimate) / row.Count);
+			if (!IsCompact && button.ActualWidth > 0)
+			{
+				_measured[(button.Tab.Title, button.ShowsMenu)] = button.ActualWidth;
+			}
 		}
 
 		var all = _navigation?.AllTabs ?? [];
-		var fixedWidth = Margin.Left + Margin.Right + all.Where(t => t.Kind is not (TopTabKind.Library or TopTabKind.Libraries)).Sum(t => TabWidth(t) + _correction);
-		var libraries = all.Where(t => t.Kind == TopTabKind.Library).Select(t => TabWidth(t) + _correction).ToList();
-		var plain = TabWidth(new TopTab(TopTabs.LibrariesTitle, TopTabs.LibrariesKey, Kind: TopTabKind.Libraries)) + _correction;
+		var fixedWidth = Margin.Left + Margin.Right + all.Where(t => t.Kind is not (TopTabKind.Library or TopTabKind.Libraries)).Sum(t => TabWidth(t.Title, false));
+		var libraries = all.Where(t => t.Kind == TopTabKind.Library).Select(t => TabWidth(t.Title, false)).ToList();
+		var plain = TabWidth(TopTabs.LibrariesTitle, false);
 		var lit = all.FirstOrDefault(t => t.Kind == TopTabKind.Library && _navigation?.Lit is { } m && t.Mark == m)?.Title;
-		var folded = Math.Max(plain, lit is null ? 0 : TabWidth(new TopTab(lit, "", Kind: TopTabKind.Libraries)) + _correction) + ChevronWidth;
+		var folded = Math.Max(TabWidth(TopTabs.LibrariesTitle, true), lit is null ? 0 : TabWidth(lit, true));
 		return new TopRowWidths(fixedWidth, libraries, plain, folded);
 	}
 
-	private double _correction;
+	private readonly Dictionary<(string Title, bool Menu), double> _measured = [];
 
 	/// <summary>The folded tab's chevron and its gap.</summary>
 	private const double ChevronWidth = 16;
 
-	/// <summary>A tab's width: its label (SemiBold, the marked one's) and the padding, up to the tab's MaxWidth.</summary>
-	private double TabWidth(TopTab tab) => Math.Min(200, TextWidth(tab.Title) + 24) + (tab.HasMenu ? ChevronWidth : 0);
+	/// <summary>
+	/// A tab's width: as last laid out, else its label (SemiBold, the marked one's) and the padding, up to the tab's MaxWidth,
+	/// with the chevron for the folded tab.
+	/// </summary>
+	private double TabWidth(string title, bool menu) =>
+		_measured.TryGetValue((title, menu), out var measured) ? measured : Math.Min(200, TextWidth(title) + 24) + (menu ? ChevronWidth : 0);
 
 	/// <summary>The sections' menu button's width (its glyph, the marked section's name up to 150, its padding), margin included.</summary>
 	public double MenuButtonWidth() => Margin.Left + Margin.Right + 20 + 16 + 10 + Math.Min(150, TextWidth(CompactTitle()));
@@ -181,26 +188,28 @@ public sealed partial class TopTabStrip : UserControl
 			return;
 		}
 
+		var tabs = _navigation.Tabs;
+		// Nixie 1.4.0: the same row with new names (the folded tab named after the lit library): the buttons stay, so the
+		// keyboard and an open menu's way back (its placement) are not lost
+		if (_buttons.Count == tabs.Count && _buttons.Zip(tabs).All(p => p.First.Tab.Kind == p.Second.Kind && p.First.Tab.Key == p.Second.Key && p.First.Tab.LibraryId == p.Second.LibraryId))
+		{
+			for (var i = 0; i < tabs.Count; i++)
+			{
+				Show(_buttons[i], tabs[i], i, tabs.Count);
+			}
+
+			Mark();
+			TabsChanged?.Invoke(this, EventArgs.Empty);
+			return;
+		}
+
 		var hadFocus = _buttons.Any(b => b.FocusState != FocusState.Unfocused);
 		TabsPanel.Children.Clear();
 		_buttons.Clear();
-		var tabs = _navigation.Tabs;
 		for (var i = 0; i < tabs.Count; i++)
 		{
-			var button = new TopTabButton(this, tabs[i])
-			{
-				Style = (Style)Resources["TopTabButtonStyle"],
-				Content = tabs[i].Title,
-				ShowsMenu = tabs[i].HasMenu,
-			};
-			AutomationProperties.SetName(button, tabs[i].Title);
-			AutomationProperties.SetPositionInSet(button, i + 1);
-			AutomationProperties.SetSizeOfSet(button, tabs.Count);
-			if (tabs[i].HasMenu)
-			{
-				// Nixie 1.4.0: the folded tab names the lit library ("Movies ▾"); Narrator hears that it is the libraries' menu
-				AutomationProperties.SetHelpText(button, "Libraries menu: All libraries and the libraries the bar has no room for");
-			}
+			var button = new TopTabButton(this, tabs[i]) { Style = (Style)Resources["TopTabButtonStyle"] };
+			Show(button, tabs[i], i, tabs.Count);
 
 			button.Click += OnTabClick;
 			TabsPanel.Children.Add(button);
@@ -214,6 +223,19 @@ public sealed partial class TopTabStrip : UserControl
 		}
 
 		TabsChanged?.Invoke(this, EventArgs.Empty);
+	}
+
+	/// <summary>A tab's button shows <paramref name="tab"/>: its label, the chevron of the folded tab, Narrator's name and "n of m".</summary>
+	private static void Show(TopTabButton button, TopTab tab, int index, int count)
+	{
+		button.Tab = tab;
+		button.Content = tab.Title;
+		button.ShowsMenu = tab.HasMenu;
+		AutomationProperties.SetName(button, tab.Title);
+		AutomationProperties.SetPositionInSet(button, index + 1);
+		AutomationProperties.SetSizeOfSet(button, count);
+		// Nixie 1.4.0: the folded tab names the lit library ("Movies ▾"); Narrator hears that it is the libraries' menu
+		AutomationProperties.SetHelpText(button, tab.HasMenu ? "Libraries menu: All libraries and the libraries the bar has no room for" : "");
 	}
 
 	private void Mark()
@@ -272,7 +294,7 @@ public sealed partial class TopTabStrip : UserControl
 	private void ShowMenu(IReadOnlyList<TopTab?> entries, FrameworkElement placement)
 	{
 		var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
-		if (Application.Current.Resources.TryGetValue("TopBarMenuPresenterStyle", out var style) && style is Style presenter)
+		if (Services.ThemeResources.Find("TopBarMenuPresenterStyle") is Style presenter)
 		{
 			menu.MenuFlyoutPresenterStyle = presenter;
 		}
@@ -330,11 +352,30 @@ public sealed partial class TopTabStrip : UserControl
 				return;
 			}
 
-			(Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(page) as Control)?.Focus(FocusState.Keyboard);
+			// Programmatic: the ring shows when the menu was used with the keyboard, not after a click
+			(Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(page) as Control)?.Focus(FocusState.Programmatic);
+			// once more shortly after: the flyout's own way back (to a tab the new row replaced) can land in the bar after us
+			if (!_rechecked)
+			{
+				_rechecked = true;
+				var timer = DispatcherQueue.CreateTimer();
+				timer.Interval = TimeSpan.FromMilliseconds(350);
+				timer.IsRepeating = false;
+				timer.Tick += (_, _) =>
+				{
+					tries = 0;
+					Try();
+				};
+				timer.Start();
+			}
 		}
+
+		_rechecked = false;
 
 		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Try);
 	}
+
+	private bool _rechecked;
 
 	/// <summary>Narrow windows: every destination in one menu, the lit one checked (TopMenus.Sections).</summary>
 	private void OnCompactClick(object sender, RoutedEventArgs e)
@@ -429,7 +470,7 @@ public sealed partial class TopTabButton : Button
 		Loaded += (_, _) => ShowSelection();
 	}
 
-	public TopTab Tab { get; }
+	public TopTab Tab { get; internal set; }
 
 	public bool IsSelected
 	{

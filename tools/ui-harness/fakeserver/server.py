@@ -298,7 +298,9 @@ class Server:
         """FAKESERVER_PHOTO_DIR=<folder of .jpg>: photographic art (the JPEG as it is, one per item) for Primary, Backdrop and Thumb, so
         the UI can be judged on real pictures (faces, scenes) instead of the generated colour blocks. None when unset."""
         folder = os.environ.get("FAKESERVER_PHOTO_DIR")
-        if not folder or kind not in ("Primary", "Backdrop", "Thumb"):
+        # UXCAP (the 1.4.0 review captures): FAKESERVER_PHOTO_KINDS limits the photos to some image types (e.g. Backdrop,Thumb)
+        kinds = [k.strip() for k in os.environ.get("FAKESERVER_PHOTO_KINDS", "Primary,Backdrop,Thumb").split(",") if k.strip()]
+        if not folder or kind not in ("Primary", "Backdrop", "Thumb") or kind not in kinds:
             return None
         files = sorted(f for f in os.listdir(folder) if f.lower().endswith((".jpg", ".jpeg")))
         if not files:
@@ -339,6 +341,8 @@ class Server:
             sub = "S%02dE%02d - %s" % (item["parent_index"], item["index"], self.lib.items[item["series"]]["Name"])
         elif item["kind"] == "view":
             sub = "Library"
+        elif item["kind"] == "boxset":   # UXCAP
+            sub = "Collection"
         if kind == "Chapter":
             sub = "Chapter %d" % ((index or 0) + 1)
         elif kind in ("Backdrop", "Thumb", "Banner", "Art"):

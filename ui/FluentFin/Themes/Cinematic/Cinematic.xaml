@@ -27,8 +27,11 @@
     -->
     <Style x:Key="TopBarStyle" TargetType="lc:TopBarChrome">
         <Setter Property="IsTabStop" Value="False" />
-        <!--  the bar's parts sit in from the island's left edge  -->
-        <Setter Property="Padding" Value="14,0,0,0" />
+        <!--
+            Nixie 1.4.0 (the review's C-M10, CL-m1): no inset of its own: the bar's parts sit where they do in every theme (the
+            tabs at the shared x), Back's arrow and the account's edge both about 18 px inside the island
+        -->
+        <Setter Property="Padding" Value="0" />
         <!--  the island's glass follows the bar: dark over a hero (CinematicIsland)  -->
         <Setter Property="cin:CinematicIsland.Follows" Value="True" />
         <Setter Property="Template">
@@ -42,9 +45,10 @@
                                 <VisualState x:Name="OverHero" />
                             </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
+                        <!--  Nixie 1.4.0 (C-M10): y 2 to 46, centred on the bar's line (24) and the tall caption buttons'  -->
                         <Grid
                             x:Name="Island"
-                            Margin="10,4,142,-6"
+                            Margin="10,2,142,2"
                             IsHitTestVisible="False">
                             <Border CornerRadius="8">
                                 <ui:Effects.Shadow>
@@ -82,6 +86,19 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!--  1.4.0 topbar  -->
+    <!--
+        Nixie 1.4.0 (the review's C-P6): the top bar's menus (Libraries ▾, the narrow window's Sections) on the island's glass
+        (TopTabStrip.ShowMenu takes this optional key); high contrast keeps the system's colours (the brushes' own)
+    -->
+    <Style x:Key="TopBarMenuPresenterStyle" TargetType="MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{ThemeResource GlassTitleBarBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CinematicIslandRimBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <!--  end 1.4.0 topbar  -->
 
     <!--  a shelf's title: 24 px SemiBold, Segoe UI Variable Display (a heading for Narrator: ShelfRow makes it level 2)  -->
     <DataTemplate x:Key="RowHeaderTemplate">
