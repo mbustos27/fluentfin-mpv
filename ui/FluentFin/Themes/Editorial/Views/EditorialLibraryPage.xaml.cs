@@ -59,7 +59,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 	{
 		InitializeComponent();
 		// Nixie 1.4.0 (item 15): the first poster's time ([perf]) and the placeholders' cells against the posters', in the log
-		LibraryProbe.Attach(this, Skeleton, Lines, i => LibraryProbe.SlotOf(Skeleton, i, this), i => LibraryProbe.RectOf(PosterAt(i), this), logFirstCard: true);
+		// (the artwork: a poster's 2:3 art against the placeholder's; their captions differ in lines, not in place)
+		LibraryProbe.Attach(this, Skeleton, Lines, i => LibraryProbe.RectOf(SkeletonArt(i), this), i => LibraryProbe.RectOf(PosterAt(i)?.ArtElement, this), logFirstCard: true);
 		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, _) => QueueRebuild();
 		ViewModel.PropertyChanged += (_, e) =>
 		{
@@ -74,6 +75,11 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 					break;
 				case nameof(LibraryViewModel.FocusRequest) or nameof(LibraryViewModel.IsLoading):
 					FocusRequested();
+					if (e.PropertyName == nameof(LibraryViewModel.IsLoading))
+					{
+						Layout(ActualWidth); // the genre row keeps its place while loading (the grid would drop 46 px when it came)
+					}
+
 					break;
 				case nameof(LibraryViewModel.Density):
 					Fit(_gridWidth);
@@ -171,7 +177,10 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		Arc.Visibility = _compact ? Visibility.Collapsed : Visibility.Visible;
 		SummaryText.Margin = new Thickness(0, 0, 0, _compact ? 6 : 26);
 		SortFilterBar.Margin = new Thickness(0, 0, 0, _compact ? 2 : 22);
-		ChipRow.Visibility = _compact || ViewModel.EditorialTotal == 0 ? Visibility.Collapsed : Visibility.Visible;
+		// Nixie 1.4.0 (item 15: the placeholders where the posters land): while loading the genre row keeps its height, empty
+		ChipRow.Visibility = _compact || (!ViewModel.IsLoading && ViewModel.EditorialTotal == 0) ? Visibility.Collapsed : Visibility.Visible;
+		ChipRow.MinHeight = ViewModel.IsLoading ? (double)Application.Current.Resources["NixieCompactButtonHeight"] : 0;
+		MoreFilters.Visibility = ViewModel.IsLoading ? Visibility.Collapsed : Visibility.Visible;
 	}
 
 	public static string Upper(string? title) => (title ?? "").Trim().ToUpper(System.Globalization.CultureInfo.CurrentCulture);
@@ -703,6 +712,10 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			ViewModel.FocusRequest = target;
 		}
 	}
+
+	/// <summary>Nixie 1.4.0 (item 15, LibraryProbe): the art placeholder of the <paramref name="index"/>th skeleton cell.</summary>
+	private FrameworkElement? SkeletonArt(int index) =>
+		Skeleton.TryGetElement(index) is Panel { Children.Count: > 0 } cell ? cell.Children[0] as FrameworkElement : null;
 
 	/// <summary>Nixie 1.4.0 (item 15, LibraryProbe): the <paramref name="index"/>th poster drawn, in reading order (null when not drawn).</summary>
 	private EditorialPoster? PosterAt(int index)

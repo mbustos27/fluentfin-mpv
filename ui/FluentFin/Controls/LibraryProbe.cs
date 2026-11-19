@@ -30,7 +30,10 @@ internal sealed class LibraryProbe
 	private readonly bool _logFirstCard;
 	private readonly long _openedAt = Stopwatch.GetTimestamp();
 	private List<Rect>? _placeholders;
-	private bool _firstCardLogged, _compared;
+	private bool _firstCardLogged, _compared, _waiting;
+
+	/// <summary>How long after its first cells the grid is measured (a binding such as Editorial's poster width lands a pass later).</summary>
+	private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(700);
 
 	private LibraryProbe(FrameworkElement page, FrameworkElement skeleton, FrameworkElement grid, Func<int, Rect?> skeletonCell, Func<int, Rect?> gridCell, bool logFirstCard)
 	{
@@ -150,19 +153,31 @@ internal sealed class LibraryProbe
 			return;
 		}
 
-		// compared once two cells are drawn (a library of one title has no row to compare)
-		var grid = Take(_gridCell);
-		if (grid.Count < 2)
+		// compared once two cells are drawn (a library of one title has no row to compare) and the grid has settled
+		if (_waiting || Take(_gridCell).Count < 2)
 		{
 			return;
 		}
 
+		_waiting = true;
+		var timer = new DispatcherTimer { Interval = Settle };
+		timer.Tick += (_, _) =>
+		{
+			timer.Stop();
+			Compare();
+		};
+		timer.Start();
+	}
+
+	private void Compare()
+	{
 		_compared = true;
 		_skeleton.LayoutUpdated -= Skeleton_LayoutUpdated;
 		_grid.LayoutUpdated -= Grid_LayoutUpdated;
-		if (_placeholders is not { } placeholders)
+		var grid = Take(_gridCell);
+		if (_placeholders is not { } placeholders || grid.Count < 2 || _page.XamlRoot is null)
 		{
-			return; // loaded before the placeholders were drawn: nothing to compare
+			return; // loaded before the placeholders were drawn, or gone: nothing to compare
 		}
 
 		var differences = Differences(placeholders, grid);

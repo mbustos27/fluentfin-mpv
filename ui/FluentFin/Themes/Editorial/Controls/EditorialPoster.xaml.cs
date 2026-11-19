@@ -33,6 +33,9 @@ public interface IEditorialDetailsHost
 /// <summary>Editorial's poster card (see EditorialPoster.xaml).</summary>
 public sealed partial class EditorialPoster : UserControl
 {
+	/// <summary>Nixie 1.4.0 (item 15, LibraryProbe): the 2:3 artwork, measured against the loading placeholders.</summary>
+	internal FrameworkElement ArtElement => Art;
+
 	public static readonly DependencyProperty ItemProperty =
 		DependencyProperty.Register(nameof(Item), typeof(BaseItemViewModel), typeof(EditorialPoster), new PropertyMetadata(null, (d, _) => ((EditorialPoster)d).Apply()));
 

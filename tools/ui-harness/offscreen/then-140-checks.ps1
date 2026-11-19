@@ -249,6 +249,9 @@ if ($icViews -contains 'Playlists') {
     $icEmpty = Wait-Until { Find-MediaCard 'Nothing Yet' } -Seconds 20 -PollMs 250
     if ($icEmpty) {
         [void](Invoke-Element $icEmpty)
+        # (Editorial: the details in place first; their Full details opens the page)
+        $icFull = Wait-Until { Find-Ui -Name 'Full details' -Type 'Button' -Contains } -Seconds 2 -PollMs 150
+        if ($icFull) { [void](Invoke-Element $icFull) }
         $icSays = Wait-Until { Find-Ui -Name 'This playlist is empty' -Type 'Text' -Contains } -Seconds 12 -PollMs 250
         IcSettle 1200
         IcShot 'empty-playlist'
