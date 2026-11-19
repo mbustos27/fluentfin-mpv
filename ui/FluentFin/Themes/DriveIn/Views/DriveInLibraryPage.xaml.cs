@@ -47,6 +47,13 @@ public sealed partial class DriveInLibraryPage : Page
 		_grid = new CardGrid(GridScroller, GridList, GridRepeater);
 		_grid.ForwardWheel(LibraryRoot);
 		_host = new LibraryGridHost(this, ViewModel, GridScroller, GridRepeater, _grid, Letters);
+		// the readout ("M · 171 of 320") sits on the sky: on a board tile's plate, in the board's ink (the tiles' own colours in
+		// Dark and Light; high contrast keeps the system's)
+		if (!new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
+		{
+			Letters.ReadoutPlate = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0x2A, 0x08, 0x14));
+			Letters.ReadoutBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xF4, 0xEE));
+		}
 		ViewModel.PropertyChanged += (_, e) =>
 		{
 			if (e.PropertyName is nameof(LibraryViewModel.Density) or nameof(LibraryViewModel.Layout))

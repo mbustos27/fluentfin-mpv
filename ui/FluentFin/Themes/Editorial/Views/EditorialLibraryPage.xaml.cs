@@ -113,6 +113,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			if (e.OriginalSource is EditorialPoster { Item: { } item } && IndexOf(item) is >= 0 and var index)
 			{
 				_lastIndex = index;
+				UpdateBar(); // the letter and the readout follow the keyboard
 			}
 		};
 		// Nixie 1.4.0 (the UX review's E-m1, item 4): Right from the last genre goes on to More filters (it stopped there)
@@ -331,6 +332,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 					_jumpFocus = state;
 					ViewModel.FocusRequest = index;
 				}
+
+				UpdateBar();
 			});
 		}
 

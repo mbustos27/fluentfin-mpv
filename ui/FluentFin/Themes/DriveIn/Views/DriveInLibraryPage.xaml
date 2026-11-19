@@ -124,13 +124,16 @@
                                         </VisualState.Setters>
                                     </VisualState>
                                 </VisualStateGroup>
-                                <!--  Nixie 1.4.0: the letter in view (LetterBar sets it from its tile): the accent letter and edge  -->
+                                <!--
+                                    Nixie 1.4.0: the letter in view (LetterBar sets it from its tile): the current letter's pink, the
+                                    light one in both themes (the board's tiles are dark in Light too: the darker pink read 2:1 on them)
+                                -->
                                 <VisualStateGroup x:Name="SelectionStates">
                                     <VisualState x:Name="Unselected" />
                                     <VisualState x:Name="Selected">
                                         <VisualState.Setters>
-                                            <Setter Target="Letter.Foreground" Value="{ThemeResource NixieCurrentLetterForegroundBrush}" />
-                                            <Setter Target="Tile.BorderBrush" Value="{ThemeResource NixieCurrentLetterForegroundBrush}" />
+                                            <Setter Target="Letter.Foreground" Value="#FF9EB1" />
+                                            <Setter Target="Tile.BorderBrush" Value="#FF9EB1" />
                                         </VisualState.Setters>
                                     </VisualState>
                                 </VisualStateGroup>
@@ -221,8 +224,6 @@
                         x:Name="Letters"
                         LetterStyle="{StaticResource DriveInLetterTileStyle}"
                         MinTileWidth="28"
-                        ReadoutBrush="{ThemeResource DriveInBoardTextBrush}"
-                        ReadoutPlate="{ThemeResource DriveInTileBrush}"
                         TileHeight="42"
                         TileSpacing="4"
                         TileWidth="38"
