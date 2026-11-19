@@ -17,8 +17,8 @@
   "Refreshed". Not while you type in a box, in a dialog or menu, or in the player; Settings has nothing to refresh.
 - **Update checks are now on by default** (Settings > Check for updates to turn them off); Nixie checks each time it
   opens, and **Check now** asks at once. When a newer version is out, a notice above the page says so in every layout,
-  with Download and install, Release notes and Dismiss; nothing is downloaded until you click. Nothing is sent but the
-  request for the latest release. If you had turned the check on before and then off, it stays off.
+  on one row with Download and install, Release notes and Dismiss; nothing is downloaded until you click. Nothing is
+  sent but the request for the latest release. If you had turned the check on before and then off, it stays off.
 - **F1 closes the shortcut sheet too.** F1 and ? open the list of keyboard shortcuts; pressed again while it is open, they
   close it, and the keyboard goes back where it was. Esc and Close still close it.
 - **Keyboard controls are the same in every theme, playing or paused.** The player's keys go through one router that takes
@@ -33,6 +33,18 @@
   the dark fade at the top and bottom of the video; a double click on a control never goes full screen.
 - **Editorial's library:** the arrows go along the library (Right from a letter's last title no longer skips the next
   one), and Page Up and Page Down move a page of rows, as in the other themes.
+- **Fixes from the library and collections review:**
+  - **Playlists open.** A click or Enter on a playlist did nothing; it now opens with its items in the playlist's own
+    order (the Sort button says "Playlist order" until you pick another sort).
+  - **Cinematic's library preview shows the title you are on:** the still under the pointer, else the one the keyboard
+    is on, else the first in view, and it follows every sort, filter and scroll. Its Play no longer plays a film the
+    grid has moved past or filtered out, and with nothing left to show it goes. The place line and the A to Z mark
+    follow the first title in view.
+  - **Names sort the way Jellyfin files them:** "The Matrix" sorts and jumps under M, in every layout.
+  - **Drive-in's player:** the Skip and Next prompts sit above the nixie console, no longer over the time left or the
+    seek bar's end.
+  - **Narrator:** the next-episode countdown names the button that stops it ("Keep watching", "Watch credits"), and
+    Editorial's Sort button's name starts with the words it shows ("A to Z").
 
 ## 1.3.0
 
