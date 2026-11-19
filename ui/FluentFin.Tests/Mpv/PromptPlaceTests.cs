@@ -56,3 +56,18 @@ public sealed class PromptPlaceTests
 		Assert.Equal(24, MpvPlayerControls.PromptMargin(false, 76, margin, border).Bottom);
 	}
 }
+
+/// <summary>Nixie 1.3.1 (the UX review's DI-m2): the countdown's announcement names the control that stops it.</summary>
+public sealed class CountdownAnnouncementTests
+{
+	[Theory]
+	[InlineData("Keep watching")]
+	[InlineData("Watch credits")]
+	public void TheCountdown_NamesTheRealControl_NotCancel(string stop)
+	{
+		var said = MpvPlayerControls.CountdownAnnouncement(8, "The Fight", stop);
+
+		Assert.Equal($"Next episode in 8 seconds: The Fight. Shift+N plays it now; {stop} keeps this one playing.", said);
+		Assert.DoesNotContain("Cancel", said);
+	}
+}

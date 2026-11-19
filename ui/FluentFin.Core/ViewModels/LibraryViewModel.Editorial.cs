@@ -244,6 +244,16 @@ public static class EditorialLibrary
 	}
 
 	/// <summary>The Sort button's words: "A to Z", "Z to A", "Date added", "Newest first"...</summary>
+	/// <summary>
+	/// Nixie 1.3.1 (the UX review's E-M4, WCAG 2.5.3): the Sort button's name starts with the words it shows ("A to Z"), then
+	/// says what they mean ("A to Z, Sort: Name, ascending"); it was "Sort: Name, ascending" under a button reading "A to Z".
+	/// </summary>
+	public static string SortButtonName(ItemSortBy sortBy, SortOrder order, bool inPlaylistOrder, string sortButtonName)
+	{
+		var shown = SortWords(sortBy, order, inPlaylistOrder);
+		return inPlaylistOrder ? $"{shown}, Sort" : $"{shown}, {sortButtonName}";
+	}
+
 	/// <summary>Nixie 1.3.1: a playlist in its own order says so.</summary>
 	public static string SortWords(ItemSortBy sortBy, SortOrder order, bool inPlaylistOrder) =>
 		inPlaylistOrder ? LibraryViewModel.PlaylistOrderName : SortWords(sortBy, order);

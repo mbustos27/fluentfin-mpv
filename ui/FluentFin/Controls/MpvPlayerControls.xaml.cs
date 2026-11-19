@@ -114,7 +114,8 @@ public sealed partial class MpvPlayerControls : UserControl
 		else if (e.PropertyName is nameof(MpvControlsViewModel.IsCountingDown) && Controls is { IsCountingDown: true, NextCountdown: int seconds } counting)
 		{
 			// 1.2.0: once, as the countdown starts (not every second)
-			Announce($"Next episode in {seconds} seconds{(counting.NextItemTitle is { } title ? $": {title}" : "")}. Shift+N plays it now; Cancel keeps watching.", "NextPrompt");
+			// Nixie 1.3.1 (the UX review's DI-m2): the control that stops it is named as it is ("Keep watching", "Watch credits"); no control is called Cancel
+			Announce(CountdownAnnouncement(seconds, counting.NextItemTitle, counting.CancelNextText), "NextPrompt");
 		}
 
 		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible))
@@ -372,6 +373,10 @@ public sealed partial class MpvPlayerControls : UserControl
 		controls.VideoDoubleClicked();
 		return true;
 	}
+
+	/// <summary>What Narrator hears as the countdown to the next episode starts.</summary>
+	internal static string CountdownAnnouncement(int seconds, string? nextTitle, string stopButton) =>
+		$"Next episode in {seconds} seconds{(nextTitle is { } title ? $": {title}" : "")}. Shift+N plays it now; {stopButton} keeps this one playing.";
 
 	/// <summary>The controls go or change: a double click after this puts nothing back.</summary>
 	private static void DropWaitingClick(MpvControlsViewModel? controls) => controls?.CancelClick();
