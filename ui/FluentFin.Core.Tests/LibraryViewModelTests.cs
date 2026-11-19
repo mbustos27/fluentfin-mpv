@@ -31,6 +31,41 @@ public sealed class LibraryViewModelTests
 		AssertOrder(vm, dtos, descending: true);
 	}
 
+	// Nixie 1.3.1 (the UX review's B1): a playlist opens, and shows its items in the playlist's order
+	[Fact]
+	public void APlaylist_Opens_InTheLibraryPage()
+	{
+		var navigation = new Mock<Services.INavigationServiceCore>();
+		var commands = new GlobalCommands(navigation.Object, Mock.Of<IJellyfinClient>(), Mock.Of<Services.INavigationViewServiceCore>(), Mock.Of<Settings.ISettings>());
+		var playlist = new BaseItemDto { Id = Guid.NewGuid(), Type = BaseItemDto_Type.Playlist, Name = "Road trip" };
+
+		commands.DisplayDto(playlist);
+
+		navigation.Verify(x => x.NavigateTo(typeof(LibraryViewModel).FullName!, playlist, false), Times.Once);
+	}
+
+	[Fact]
+	public async Task APlaylist_KeepsItsOwnOrder_UntilASortIsPicked()
+	{
+		var id = Guid.NewGuid();
+		var dtos = new[] { "Zulu", "Alpha", "Mike", "Bravo" }.Select(n => new BaseItemDto { Id = Guid.NewGuid(), Name = n }).ToList();
+		var client = new Mock<IJellyfinClient>(MockBehavior.Strict);
+		client.Setup(x => x.GetPlaylistItems(id)).ReturnsAsync(new BaseItemDtoQueryResult { Items = dtos });
+		client.SetupGet(x => x.UserId).Returns(Guid.NewGuid());
+		var vm = new LibraryViewModel(client.Object);
+
+		await vm.OnNavigatedTo(new BaseItemDto { Id = id, Type = BaseItemDto_Type.Playlist, Name = "Road trip" });
+
+		Assert.Equal(["Zulu", "Alpha", "Mike", "Bravo"], vm.Items.Select(x => x.Name));
+		Assert.Equal("Playlist order", vm.SortName);
+		Assert.Empty(vm.Letters);
+		client.Verify(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>()), Times.Never);
+
+		vm.UpdateSortBy(ItemSortBy.Name);
+		Assert.Equal(["Alpha", "Bravo", "Mike", "Zulu"], vm.Items.Select(x => x.Name));
+		Assert.Equal("Name", vm.SortName);
+	}
+
 	[Fact]
 	public async Task TheTitleIsTheLibrarysName()
 	{

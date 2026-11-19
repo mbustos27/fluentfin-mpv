@@ -22,8 +22,9 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		JellyfinClient = jellyfinClient;
 
 		// tie-break so equal keys (e.g. unrated, never played) keep a stable order
-		var comparer = this.WhenAnyValue(x => x.SortBy, x => x.Order)
-						   .Select(x => (IComparer<BaseItemViewModel>)GetComparer(x).ThenByAscending(i => i.Name ?? "").ThenByAscending(i => i.Id ?? Guid.Empty))
+		// Nixie 1.3.1: a playlist keeps its own order until a sort is picked (InPlaylistOrder)
+		var comparer = this.WhenAnyValue(x => x.SortBy, x => x.Order, x => x.InPlaylistOrder)
+						   .Select(x => (IComparer<BaseItemViewModel>)(x.Item3 ? PlaylistComparer() : GetComparer((x.Item1, x.Item2))).ThenByAscending(i => i.Name ?? "").ThenByAscending(i => i.Id ?? Guid.Empty))
 						   .Do(x =>
 						   {
 							   _comparer = x; // Seaglass 1.1.4: the A-Z jump orders the library the same way
@@ -59,6 +60,26 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			});
 	}
 
+	/// <summary>Nixie 1.3.1: each item's place in the playlist (the server's order), while a playlist is shown.</summary>
+	private Dictionary<Guid, int> _playlistPlaces = [];
+
+	private SortExpressionComparer<BaseItemViewModel> PlaylistComparer()
+	{
+		var places = _playlistPlaces;
+		return SortExpressionComparer<BaseItemViewModel>.Ascending(x => places.TryGetValue(x.Id ?? Guid.Empty, out var place) ? place : int.MaxValue);
+	}
+
+	/// <summary>
+	/// Nixie 1.3.1: a playlist is shown in its own order (the user's, as the server keeps it), until a sort is picked. The
+	/// Sort button then says "Playlist order", and there is no A-Z jump.
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(SortName), nameof(SortButtonName))]
+	public partial bool InPlaylistOrder { get; private set; }
+
+	/// <summary>The Sort button's name for the playlist's own order.</summary>
+	public const string PlaylistOrderName = "Playlist order";
+
 	private SortExpressionComparer<BaseItemViewModel> GetComparer((ItemSortBy, SortOrder) sortDescription)
 	{
 		return sortDescription switch
@@ -93,13 +114,13 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	private BaseItemDto? _library;
 
 	/// <summary>The sort in use, on the Sort button ("Name").</summary>
-	public string SortName => LibraryBrowse.SortName(SortBy);
+	public string SortName => InPlaylistOrder ? PlaylistOrderName : LibraryBrowse.SortName(SortBy);
 
 	/// <summary>Up for ascending, down for descending, beside the sort's name.</summary>
 	public string SortGlyph => LibraryBrowse.SortGlyph(Order);
 
 	/// <summary>The Sort button for Narrator: "Sort: Name, ascending".</summary>
-	public string SortButtonName => LibraryBrowse.SortButtonName(SortBy, Order);
+	public string SortButtonName => InPlaylistOrder ? $"Sort: {PlaylistOrderName}" : LibraryBrowse.SortButtonName(SortBy, Order);
 
 	/// <summary>The genres, tags, years and ratings picked in Filter.</summary>
 	[ObservableProperty]
@@ -155,7 +176,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	private void UpdateBrowse()
 	{
 		CountText = _itemsCache.Count == 0 ? "" : LibraryBrowse.CountText(TotalCount, _itemsCache.Count, _library?.CollectionType);
-		var letters = SortBy == ItemSortBy.Name && _itemsCache.Count > 0 ? LibraryBrowse.Letters(Ordered().Select(x => x.Name)) : [];
+		var letters = SortBy == ItemSortBy.Name && !InPlaylistOrder && _itemsCache.Count > 0 ? LibraryBrowse.Letters(Ordered().Select(x => x.Name)) : [];
 		if (!letters.SequenceEqual(Letters))
 		{
 			Letters = letters;
@@ -305,12 +326,14 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	[RelayCommand]
 	public void UpdateSortBy(ItemSortBy sortBy)
 	{
+		InPlaylistOrder = false; // Nixie 1.3.1: a sort picked replaces a playlist's own order
 		SortBy = sortBy;
 	}
 
 	[RelayCommand]
 	public void UpdateSortOrder(SortOrder order)
 	{
+		InPlaylistOrder = false;
 		Order = order;
 	}
 
@@ -353,12 +376,17 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		{
 			// Seaglass 1.1.4: one request. The Filter menu's lists were a second one, asked for after the items, and the grid
 			// waited for it (one round trip late); they are now made from the items themselves
-			var result = await JellyfinClient.GetItems(dto);
+			var playlist = dto.Type == BaseItemDto_Type.Playlist && dto.Id is not null;
+			var result = playlist ? await JellyfinClient.GetPlaylistItems(dto.Id!.Value) : await JellyfinClient.GetItems(dto);
 
 			if (result is null or { Items: null })
 			{
-				return LoadMessages.CouldNotLoad("this library");
+				return LoadMessages.CouldNotLoad(playlist ? "this playlist" : "this library");
 			}
+
+			// Nixie 1.3.1: a playlist in its own order: each item's place, then the order (before the items, so they come sorted)
+			_playlistPlaces = playlist ? result.Items.Select((x, i) => (x.Id, i)).Where(x => x.Id is not null).GroupBy(x => x.Id!.Value).ToDictionary(g => g.Key, g => g.First().i) : [];
+			InPlaylistOrder = playlist;
 
 			// a Retry starts from what the server has now
 			_itemsCache.Edit(cache =>
@@ -375,6 +403,11 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			}
 
 			UpdateBrowse();
+
+			if (result.Items.Count == 0 && playlist)
+			{
+				return LoadOutcome.Empty("This playlist is empty", $"Items added to it on {LoadMessages.ServerName()} appear here.");
+			}
 
 			if (result.Items.Count == 0)
 			{

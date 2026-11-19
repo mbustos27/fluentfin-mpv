@@ -93,6 +93,27 @@ public partial class JellyfinClient
 		}
 	}
 
+	// Nixie 1.3.1: a playlist opens in the library page, in its own order (no sort asked of the server)
+	public async Task<BaseItemDtoQueryResult?> GetPlaylistItems(Guid playlistId)
+	{
+		try
+		{
+			return await _jellyfinApiClient.Playlists[playlistId].Items.GetAsync(x =>
+			{
+				var query = x.QueryParameters;
+				query.UserId = UserId;
+				query.Fields = [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated, ItemFields.Overview, ItemFields.Tags, ItemFields.Genres];
+				query.ImageTypeLimit = 1;
+				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb];
+			});
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, @"Unhandled exception");
+			return null;
+		}
+	}
+
 	// Nixie 1.3.1: the Trailer button plays a local trailer in the mpv player (Trailers.Choose)
 	public async Task<List<BaseItemDto>> GetLocalTrailers(Guid id)
 	{

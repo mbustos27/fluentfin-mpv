@@ -217,7 +217,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 	}
 
-	private bool ByLetter => ViewModel.SortBy == ItemSortBy.Name;
+	// Nixie 1.3.1: a playlist in its own order has no letter sections
+	private bool ByLetter => ViewModel.SortBy == ItemSortBy.Name && !ViewModel.InPlaylistOrder;
 
 	private void QueueRebuild()
 	{

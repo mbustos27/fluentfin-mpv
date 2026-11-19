@@ -90,7 +90,8 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 			case BaseItemDto_Type.Episode:
 				navigationService.NavigateTo<EpisodeViewModel>(dto);
 				break;
-			case BaseItemDto_Type.Folder or BaseItemDto_Type.CollectionFolder or BaseItemDto_Type.BoxSet:
+			// Nixie 1.3.1: a playlist opens too (it did nothing: the UX review's B1), its items in the playlist's order
+			case BaseItemDto_Type.Folder or BaseItemDto_Type.CollectionFolder or BaseItemDto_Type.BoxSet or BaseItemDto_Type.Playlist:
 				navigationService.NavigateTo<LibraryViewModel>(dto);
 				break;
 			default:

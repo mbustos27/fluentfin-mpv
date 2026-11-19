@@ -144,7 +144,7 @@
                         ToolTipService.ToolTip="Sort">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon FontSize="14" Glyph="&#xE8CB;" />
-                            <TextBlock Text="{x:Bind vm:EditorialLibrary.SortWords(ViewModel.SortBy, ViewModel.Order), Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind vm:EditorialLibrary.SortWords(ViewModel.SortBy, ViewModel.Order, ViewModel.InPlaylistOrder), Mode=OneWay}" />
                         </StackPanel>
                         <Button.Flyout>
                             <MenuFlyout x:Name="SortMenu" Placement="BottomEdgeAlignedRight" />

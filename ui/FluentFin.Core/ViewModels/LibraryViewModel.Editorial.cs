@@ -244,6 +244,10 @@ public static class EditorialLibrary
 	}
 
 	/// <summary>The Sort button's words: "A to Z", "Z to A", "Date added", "Newest first"...</summary>
+	/// <summary>Nixie 1.3.1: a playlist in its own order says so.</summary>
+	public static string SortWords(ItemSortBy sortBy, SortOrder order, bool inPlaylistOrder) =>
+		inPlaylistOrder ? LibraryViewModel.PlaylistOrderName : SortWords(sortBy, order);
+
 	public static string SortWords(ItemSortBy sortBy, SortOrder order) => (sortBy, order) switch
 	{
 		(ItemSortBy.Name, SortOrder.Ascending) => "A to Z",

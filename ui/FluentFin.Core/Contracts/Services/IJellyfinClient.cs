@@ -52,6 +52,9 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<BaseItemDtoQueryResult?> GetSimilarItems(BaseItemDto dto);
 
+		/// <summary>Nixie 1.3.1: a playlist's items in the playlist's order (/Playlists/{id}/Items), null on a failure.</summary>
+		Task<BaseItemDtoQueryResult?> GetPlaylistItems(Guid playlistId);
+
 		/// <summary>Nixie 1.3.1: the item's trailers on the server (/Items/{id}/LocalTrailers), empty when none or on a failure.</summary>
 		Task<List<BaseItemDto>> GetLocalTrailers(Guid id);
 
