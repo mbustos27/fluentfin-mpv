@@ -88,6 +88,42 @@ public static class KeysMatrix {
     return true;
   }
 
+  // Ctrl/Shift/Alt held in the UI thread's keyboard state until Release (KM-Key holds them until the key has done its job: a
+  // UI thread busy for longer than a fixed hold once read a Shift+Right as a plain Right)
+  static byte[] _before; static uint _heldUi, _heldMe;
+  public static bool Hold(IntPtr target, bool ctrl, bool shift, bool alt) {
+    Release();
+    uint ui = ThreadOf(target), me = GetCurrentThreadId();
+    if (!AttachThreadInput(me, ui, true)) return false;
+    var before = new byte[256]; GetKeyboardState(before);
+    var st = (byte[])before.Clone();
+    if (ctrl) { st[0x11] = 0x80; st[0xA2] = 0x80; }
+    if (shift) { st[0x10] = 0x80; st[0xA0] = 0x80; }
+    if (alt) { st[0x12] = 0x80; st[0xA4] = 0x80; }
+    SetKeyboardState(st);
+    _before = before; _heldUi = ui; _heldMe = me;
+    Thread.Sleep(60);
+    return true;
+  }
+  public static void Release() {
+    if (_before == null) return;
+    var clear = (byte[])_before.Clone();
+    foreach (var k in new[] { 0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5 }) clear[k] = 0;
+    SetKeyboardState(clear);
+    AttachThreadInput(_heldMe, _heldUi, false);
+    _before = null;
+  }
+  // the key alone (its modifiers already held), WM_SYSKEYDOWN/UP with alt
+  public static void Post(IntPtr target, int vk, bool alt, bool repeat) {
+    uint scan = MapVirtualKey((uint)vk, 0);
+    uint down = alt ? 0x0104u : 0x0100u, up = alt ? 0x0105u : 0x0101u;
+    uint l = 1u | (scan << 16) | (alt ? (1u << 29) : 0u) | (repeat ? (1u << 30) : 0u);
+    PostMessage(target, down, (IntPtr)vk, (IntPtr)(long)l);
+    Thread.Sleep(30);
+    uint lu = 1u | (scan << 16) | (alt ? (1u << 29) : 0u) | (1u << 30) | (1u << 31);
+    PostMessage(target, up, (IntPtr)vk, (IntPtr)(long)lu);
+  }
+
   // the dev build's pointer hook (HarnessPointer): kind 1 click, 2 double click, 3 drag to toX; x, y on the screen
   public static bool Pointer(IntPtr main, int kind, int x, int y, int toX) {
     uint msg = RegisterWindowMessage("NixieHarnessPointer");
@@ -259,15 +295,31 @@ function KM-Did([string]$Chord, $B, $A) {
     }
 }
 
-# presses a key and checks it did its job (polled up to $Seconds); the row says where the key went and what it changed
+# presses a key and checks it did its job (polled up to $Seconds); the row says where the key went and what it changed. A
+# chord's modifiers stay held until the key has done its job or the time is up.
 function KM-Key([string]$Section, [string]$Case, [string]$Chord, [double]$Seconds = 2.5) {
     $b = KM-State -NoUi
-    $sent = KM-Press $Chord
-    $a = $null; $ok = $false
-    if ($sent) {
-        $deadline = (Get-Date).AddSeconds($Seconds)
-        do { Start-Sleep -Milliseconds 120; $a = KM-State -NoUi; $ok = [bool](KM-Did $Chord $b $a) } while (-not $ok -and (Get-Date) -lt $deadline)
+    $parts = $Chord -split '\+'
+    $mods = ($parts -contains 'Ctrl') -or ($parts -contains 'Shift') -or ($parts -contains 'Alt')
+    $sent = $false
+    if ($mods) {
+        $target = [KeysMatrix]::FocusWindow($script:hwnd)
+        if ($target -ne [IntPtr]::Zero -and [KeysMatrix]::ProcessOf($target) -eq [uint32]$script:ui.Id) {
+            $script:kmLastTarget = [KeysMatrix]::ClassOf($target)
+            $sent = [KeysMatrix]::Hold($target, ($parts -contains 'Ctrl'), ($parts -contains 'Shift'), ($parts -contains 'Alt'))
+            if ($sent) { [KeysMatrix]::Post($target, (KM-Vk $parts[-1]), ($parts -contains 'Alt'), $false) }
+        }
+        else { $script:kmLastTarget = "no FluentFin window has the keyboard ($([KeysMatrix]::ClassOf($target)))" }
     }
+    else { $sent = KM-Press $Chord }
+    $a = $null; $ok = $false
+    try {
+        if ($sent) {
+            $deadline = (Get-Date).AddSeconds($Seconds)
+            do { Start-Sleep -Milliseconds 120; $a = KM-State -NoUi; $ok = [bool](KM-Did $Chord $b $a) } while (-not $ok -and (Get-Date) -lt $deadline)
+        }
+    }
+    finally { if ($mods) { [KeysMatrix]::Release() } }
     $detail = if (-not $sent) { "not sent: $script:kmLastTarget" } else {
         "to $script:kmLastTarget; paused $($b.Paused)->$($a.Paused), pos $([math]::Round([double]$b.Pos,1))->$([math]::Round([double]$a.Pos,1)), vol $($b.Vol)/$($b.Mute)->$($a.Vol)/$($a.Mute), full $($b.Full)->$($a.Full), speed $($b.Speed)->$($a.Speed), sid $($b.Sid)->$($a.Sid), aid $($b.Aid)->$($a.Aid), delay $($b.Delay)->$($a.Delay)" }
     KM-Row $Section $Case $Chord $ok $detail
