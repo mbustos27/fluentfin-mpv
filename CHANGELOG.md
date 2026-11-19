@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0
+
+- **The player's controls always come back with the mouse.** On 1.3.1, after opening the player and pressing Space before
+  any click, moving the mouse could stop bringing the controls back until the player was opened again. Any move of the
+  mouse over the video now shows them, whatever had the keyboard, and keys work in any order with the mouse. A stress
+  run checks it after every kind of transition in all four themes (`then-keys-matrix.ps1`, its overlay section).
+
 ## 1.3.1
 
 - **Trailers play in Nixie.** The Trailer button no longer sends you to the browser.

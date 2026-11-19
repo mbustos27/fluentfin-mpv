@@ -1,4 +1,5 @@
 using FluentFin.Core.Mpv;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -54,6 +55,11 @@ public sealed partial class MpvPlayerControls : UserControl
 		// Nixie 1.3.1: after any press of the mouse on the player, the keyboard is the player's (KeepKeyboardAfterPointer)
 		Root.AddHandler(PointerReleasedEvent, new PointerEventHandler(OnRootPointerReleased), handledEventsToo: true);
 		Root.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(OnRootPointerReleased), handledEventsToo: true);
+
+		// Nixie 1.4.0 (the user's "lost the player controls overlay" on 1.3.1): any move of the pointer over the player shows the
+		// bars, also one a control below it marked handled (in 1.3.1 Root heard only moves nothing had handled)
+		Root.AddHandler(PointerMovedEvent, new PointerEventHandler(OnPointerMoved), handledEventsToo: true);
+		Root.AddHandler(PointerEnteredEvent, new PointerEventHandler(OnPointerMoved), handledEventsToo: true);
 	}
 
 	public MpvControlsViewModel? Controls
@@ -248,9 +254,116 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnTick(DispatcherQueueTimer sender, object args)
 	{
+		WakeOnCursorMove();
 		Controls?.Tick();
 		KeepKeyboardSomewhere();
 	}
+
+	// -- the mouse, whatever XAML hears (Nixie 1.4.0) ----------------------------------------------------------------------
+
+	/// <summary>Where the mouse's cursor was at the last heartbeat (screen pixels); null when it could not be read.</summary>
+	private (int X, int Y)? _lastCursor;
+
+	/// <summary>
+	/// Nixie 1.4.0, the user's report on 1.3.1: "we've lost the player controls overlay" ("i opened the player and then hit the
+	/// spacebar and it like locked me in keyboard only mode"): the keys worked, and moving the mouse never brought the bars back
+	/// until the player was opened again. Showing the bars on a move hung on XAML's pointer events reaching the player alone.
+	/// Now the heartbeat also reads the cursor itself: a cursor that moved over the player, with the window in front, shows the
+	/// bars, whichever element (or window) the pointer's input went to. No mode: a move always shows them, a key always works.
+	/// </summary>
+	private void WakeOnCursorMove()
+	{
+		var now = CursorPosition();
+		var last = _lastCursor;
+		_lastCursor = now;
+		if (now is not { } at || Controls is not { } controls || XamlRoot is null || !IsLoaded || Visibility != Visibility.Visible)
+		{
+			return;
+		}
+
+		var heard = _pointerHeard;
+		_pointerHeard = false;
+		if (CursorWakes(last, at, OverPlayer(at), InFront()))
+		{
+			if (!heard && !controls.ControlsVisible && !_missedLogged)
+			{
+				// the evidence of the 1.3.1 report, once per player: the mouse moved over the player and XAML told it nothing
+				_missedLogged = true;
+				App.GetService<Microsoft.Extensions.Logging.ILogger<MpvPlayerControls>>().LogInformation("[player] the cursor moved over the player and no pointer event came: the bars are shown from the cursor ({State})", OverlayState());
+			}
+
+			controls.NotifyActivity();
+		}
+	}
+
+	/// <summary>A pointer move reached the player through XAML since the last heartbeat.</summary>
+	private bool _pointerHeard;
+
+	/// <summary>A move XAML missed was logged for this player.</summary>
+	private bool _missedLogged;
+
+	/// <summary>The bars show: the cursor moved since the last heartbeat, it is over the player, and the window is the one in front.</summary>
+	internal static bool CursorWakes((int X, int Y)? last, (int X, int Y) now, bool overPlayer, bool inFront) =>
+		inFront && overPlayer && last is { } before && before != now;
+
+	private static (int X, int Y)? CursorPosition() => GetCursorPos(out var p) ? (p.X, p.Y) : null;
+
+	private static nint MainWindowHandle()
+	{
+		try
+		{
+			return WinRT.Interop.WindowNative.GetWindowHandle(App.MainWindow);
+		}
+		catch (Exception)
+		{
+			return 0;
+		}
+	}
+
+	/// <summary>One of the app's windows is the foreground window (never wake the bars for a cursor moving over another app).</summary>
+	private static bool InFront()
+	{
+		var front = GetForegroundWindow();
+		return front != 0 && GetWindowThreadProcessId(front, out var process) != 0 && process == (uint)Environment.ProcessId;
+	}
+
+	/// <summary>Whether a point on the screen is over the player (this control's bounds, in the window).</summary>
+	private bool OverPlayer((int X, int Y) at)
+	{
+		var main = MainWindowHandle();
+		if (main == 0 || XamlRoot is not { } root || ActualWidth <= 0)
+		{
+			return false;
+		}
+
+		var client = new POINT { X = at.X, Y = at.Y };
+		if (!ScreenToClient(main, ref client))
+		{
+			return false;
+		}
+
+		var scale = root.RasterizationScale > 0 ? root.RasterizationScale : 1;
+		var bounds = TransformToVisual(null).TransformBounds(new Windows.Foundation.Rect(0, 0, ActualWidth, ActualHeight));
+		return bounds.Contains(new Windows.Foundation.Point(client.X / scale, client.Y / scale));
+	}
+
+	[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+	private struct POINT
+	{
+		public int X, Y;
+	}
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern bool GetCursorPos(out POINT point);
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern bool ScreenToClient(nint hwnd, ref POINT point);
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern nint GetForegroundWindow();
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	private static extern uint GetWindowThreadProcessId(nint hwnd, out uint process);
 
 	/// <summary>A key pressed on the player page. True when it is one of the player's keys (it was handled).</summary>
 	public bool HandleKey(Windows.System.VirtualKey key)
@@ -325,7 +438,30 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	// -- pointer over the video ------------------------------------------------------------------------------------------
 
-	private void OnPointerMoved(object sender, PointerRoutedEventArgs e) => Controls?.NotifyActivity();
+	private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
+	{
+		_pointerHeard = true;
+		Controls?.NotifyActivity();
+	}
+
+	/// <summary>The harness's pointer move (HarnessPointer, dev builds): what <see cref="OnPointerMoved"/> does.</summary>
+	internal void HarnessPointerMoved() => Controls?.NotifyActivity();
+
+	/// <summary>The overlay as XAML has it, for the harness's log: the view model's word, each bar's visibility, size and opacity.</summary>
+	internal string OverlayState()
+	{
+		static string Bar(FrameworkElement bar) => $"{bar.Visibility} {bar.ActualWidth:0}x{bar.ActualHeight:0} opacity {bar.Opacity:0.##}";
+		var focused = XamlRoot is { } root ? FocusManager.GetFocusedElement(root) : null;
+		var focus = focused switch
+		{
+			null => "nothing",
+			Control { Name.Length: > 0 } named => $"{named.GetType().Name} {named.Name} ({named.FocusState})",
+			Control control => $"{control.GetType().Name} ({control.FocusState})",
+			_ => focused.GetType().Name,
+		};
+		var island = XamlRoot?.ContentIsland is { } content ? Microsoft.UI.Input.InputFocusController.GetForIsland(content).HasFocus.ToString() : "?";
+		return $"controls {(Controls is { } c ? $"visible {c.ControlsVisible}, held by {c.HeldBy ?? "nothing"}, cursor hidden {c.CursorHidden}" : "none")}; player {Visibility} {ActualWidth:0}x{ActualHeight:0}; top {Bar(TopBar)}; bottom {Bar(BottomBar)}; focus {focus}; the island has the keyboard {island}";
+	}
 
 	[System.Runtime.InteropServices.DllImport("user32.dll")]
 	private static extern uint GetDoubleClickTime();

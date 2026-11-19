@@ -31,6 +31,11 @@ public static class HarnessPointer
 		DoubleClick = 2,
 		/// <summary>Press at the point, move to (the high word's x, the same y), let go.</summary>
 		Drag = 3,
+		/// <summary>
+		/// Nixie 1.4.0: the pointer moves over the player at the point (what the player's own PointerMoved does), and the
+		/// overlay's state is logged ("[harness] overlay ..."): the overlay stress of tools\ui-harness\offscreen\then-keys-matrix.ps1.
+		/// </summary>
+		Move = 4,
 	}
 
 	/// <summary>Whether the hook listens: never in a release package, otherwise only with <see cref="Variable"/> exactly 1.</summary>
@@ -114,6 +119,10 @@ public static class HarnessPointer
 					break;
 				case Kind.Drag:
 					await Drag(hit, at, new Windows.Foundation.Point(clientTo.X / scale, clientTo.Y / scale), content);
+					break;
+				case Kind.Move when Ancestor<MpvPlayerControls>(hit) is { } player:
+					player.HarnessPointerMoved();
+					Log().LogInformation("[harness] overlay {State}", player.OverlayState());
 					break;
 			}
 		}

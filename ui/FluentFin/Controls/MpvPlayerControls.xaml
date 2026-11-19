@@ -172,7 +172,6 @@
         x:Name="Root"
         Background="Black"
         DoubleTapped="OnVideoDoubleTapped"
-        PointerMoved="OnPointerMoved"
         PointerWheelChanged="OnPointerWheelChanged"
         Tapped="OnVideoTapped">
 
