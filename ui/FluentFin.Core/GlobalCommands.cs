@@ -127,33 +127,8 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 		await jellyfinClient.DeleteItem(dto);
 	}
 
-	[RelayCommand]
-	private void PinToSideBar(BaseItemDto library)
-	{
-		if (library is not { Id: not null, CollectionType: not null })
-		{
-			return;
-		}
-
-		var folder = new CustomNavigationViewItem
-		{
-			Key = typeof(LibraryViewModel).FullName!,
-			Name = library.Name!,
-			Parameter = library.Id.Value,
-			Glyph = library.CollectionType.Value switch
-			{
-				BaseItemDto_CollectionType.Tvshows => "\uE7F4",
-				BaseItemDto_CollectionType.Movies => "\uE8B2",
-				_ => null
-			},
-			Commands = [new CommandModel() { Name = "Unpin", DisplayName = "Unpin", Glyph = "\uE77A" }],
-			Persistent = true,
-		};
-
-		navigationViewService.AddNavigationItem(folder);
-		navigationViewService.SaveCustomViews();
-	}
-
+	// Nixie 1.4.0: no "Add to the top bar" (PinToSideBar): every library is a tab (the top bar stream deleted the pins). Unpin
+	// stays while saved pins and the command factory (CommandFactory "Unpin") still name it
 	[RelayCommand]
 	private void UnPinFromSideBar(CustomNavigationViewItem item)
 	{

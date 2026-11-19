@@ -52,8 +52,8 @@ public sealed class ButtonVerdictMergeTests
 	[Fact]
 	public void TheSmallerVerdicts()
 	{
-		// L33: the tile menu adds a top-bar tab
-		Assert.Contains(Load("FluentFin/Views/LibrariesLandingPage.xaml").Descendants(), e => (string?)e.Attribute("Text") == "Add to the top bar");
+		// L33: the tile menu added a top-bar tab; Nixie 1.4.0: every library is a tab, and the dead menu is gone
+		Assert.DoesNotContain(Load("FluentFin/Views/LibrariesLandingPage.xaml").Descendants(), e => (string?)e.Attribute("Text") == "Add to the top bar");
 		// A98: the user editor's number boxes have 32 x 32 spin buttons, as Settings' (A42)
 		var boxes = Load("FluentFin/Views/JellyfinSettings/UserProfileEditorPage.xaml").Descendants().Where(e => e.Name.LocalName == "NumberBox").ToList();
 		Assert.Equal(3, boxes.Count);

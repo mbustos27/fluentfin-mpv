@@ -17,8 +17,6 @@
     xmlns:lc="using:FluentFin.Controls"
     xmlns:local="using:FluentFin.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:root="using:FluentFin"
-    xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Core.ViewModels"
     x:Name="Page"
     Background="{ThemeResource PageGroundBrush}"
@@ -36,16 +34,8 @@
                     1.2.0 (1.1.3 layout audit, item 23): the art alone has the corners, 16:9 and filled without stretching, and the
                     name is a plain caption under it; 1.4.0: what the library holds beside the name
                 -->
+                <!--  1.4.0: no pin menu on a tile: every library is a tab of the bar (the pins are gone)  -->
                 <Grid RowSpacing="8">
-                    <Grid.ContextFlyout>
-                        <MenuFlyout>
-                            <MenuFlyoutItem
-                                Command="{x:Bind root:App.Commands.PinToSideBarCommand}"
-                                CommandParameter="{x:Bind Library}"
-                                Icon="{ui:FontIcon Glyph=&#xE718;}"
-                                Text="Add to the top bar" />
-                        </MenuFlyout>
-                    </Grid.ContextFlyout>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
