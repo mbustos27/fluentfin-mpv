@@ -149,8 +149,9 @@
             <SolidColorBrush x:Key="NixieCardHoverOverlayBrush" Color="#17FFFFFF" />
             <LinearGradientBrush x:Key="NixieCardStripScrimBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#00100306" />
-                <GradientStop Offset="0.3" Color="#B3100306" />
-                <GradientStop Offset="1" Color="#F2100306" />
+                <GradientStop Offset="0.35" Color="#CC100306" />
+                <GradientStop Offset="0.6" Color="#F7100306" />
+                <GradientStop Offset="1" Color="#FA100306" />
             </LinearGradientBrush>
             <SolidColorBrush x:Key="NixieOpenRimBrush" Color="#F96985" />
             <SolidColorBrush x:Key="NixieChipSelectedFillBrush" Color="#33FFFFFF" />
@@ -280,8 +281,9 @@
             <SolidColorBrush x:Key="NixieCardHoverOverlayBrush" Color="#17FFFFFF" />
             <LinearGradientBrush x:Key="NixieCardStripScrimBrush" StartPoint="0,0" EndPoint="0,1">
                 <GradientStop Offset="0" Color="#00100306" />
-                <GradientStop Offset="0.3" Color="#B3100306" />
-                <GradientStop Offset="1" Color="#F2100306" />
+                <GradientStop Offset="0.35" Color="#CC100306" />
+                <GradientStop Offset="0.6" Color="#F7100306" />
+                <GradientStop Offset="1" Color="#FA100306" />
             </LinearGradientBrush>
             <SolidColorBrush x:Key="NixieOpenRimBrush" Color="#BC1E47" />
             <SolidColorBrush x:Key="NixieChipSelectedFillBrush" Color="#1F2D0F16" />

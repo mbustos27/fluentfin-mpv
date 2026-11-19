@@ -149,7 +149,8 @@
                 <GradientStop Offset="0.2" Color="#1F000000" />
                 <GradientStop Offset="1" Color="#29000000" />
             </LinearGradientBrush>
-            <SolidColorBrush x:Key="EditorialFocusOuterBrush" Color="#BC1E47" />
+            <!--  1.4.0 style: the keyboard ring is the app's two tones in Light too (deep maroon around white, as SystemControlFocusVisual*), never the accent  -->
+            <SolidColorBrush x:Key="EditorialFocusOuterBrush" Color="#2D0F16" />
             <SolidColorBrush x:Key="EditorialFocusInnerBrush" Color="#FFFFFF" />
             <!--  the hero tile and the paused column stay dark (RequestedTheme Dark): these are the light theme's copies for any other text on art  -->
             <LinearGradientBrush x:Key="EditorialHeroScrimBrush" StartPoint="0,0" EndPoint="1,0">

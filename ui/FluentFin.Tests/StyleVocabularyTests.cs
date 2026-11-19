@@ -344,4 +344,25 @@ public sealed class StyleVocabularyTests
 			Assert.Contains("Converter={StaticResource NixieTextOnlyConverter}", (string?)copy.Attribute("Text"));
 		}
 	}
+
+	/// <summary>
+	/// C-m1, and the shots of this stream: the still's rims collapsed at rest and showed on focus in the same auto row, so the
+	/// row grew 8 px and the title dropped under its row-mates'. The art, its rims and the zoom are one group laid out at the
+	/// art's size whether or not the rims show, so the words never move.
+	/// </summary>
+	[Fact]
+	public void A_stills_words_never_move_when_its_rims_show()
+	{
+		var still = Ui("Themes/Cinematic/Controls/CinematicStill.xaml");
+		var zoom = Named(still, "ArtZoom");
+		Assert.Equal("-4", (string?)zoom.Attribute("Margin"));
+		Assert.Equal("{x:Bind RimWidth(ArtWidth, 8), Mode=OneWay}", (string?)zoom.Attribute("Width"));
+		Assert.Equal("{x:Bind RimWidth(ArtHeight, 8), Mode=OneWay}", (string?)zoom.Attribute("Height"));
+		foreach (var part in new[] { "Art", "RimInner", "RimOuter", "RestShadow" })
+		{
+			Assert.Same(zoom, Named(still, part).Parent);
+		}
+
+		Assert.NotSame(zoom, Named(still, "Words").Parent);
+	}
 }

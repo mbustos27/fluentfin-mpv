@@ -31,9 +31,17 @@
 
         <!--
             1.4.0 (the library UX review, C-m1, C-M7): the art and its rings zoom together, about their centre, by at most 8 px a
-            side (FocusZoom); the words under them never move. No pink glow: keyboard focus is the two-tone ring.
+            side (FocusZoom); the words under them never move. No pink glow: keyboard focus is the two-tone ring. The group is
+            the rims' size, pulled out by their 4 px on every side, so it lays out at the art's own size whether or not the rims
+            show: showing them moved the words 8 px down (the row grew to the rims' height).
         -->
-        <Grid x:Name="ArtZoom" VerticalAlignment="Top">
+        <Grid
+            x:Name="ArtZoom"
+            Width="{x:Bind RimWidth(ArtWidth, 8), Mode=OneWay}"
+            Height="{x:Bind RimWidth(ArtHeight, 8), Mode=OneWay}"
+            Margin="-4"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top">
         <Border
             x:Name="RestShadow"
             Width="{x:Bind ArtWidth, Mode=OneWay}"
