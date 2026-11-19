@@ -64,20 +64,6 @@
                 <lc:LibraryListRow Model="{x:Bind}" />
             </ItemContainer>
         </DataTemplate>
-        <!--  the A-Z letters: flat, at least 32 high (WCAG 2.5.8), the letter in view underlined in the accent  -->
-        <Style x:Key="CinematicLetterButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="MinHeight" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="FontSize" Value="14" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
     </Page.Resources>
 
     <!--
@@ -164,7 +150,6 @@
             Canvas.ZIndex="1">
             <lc:LetterBar
                 x:Name="Letters"
-                LetterStyle="{StaticResource CinematicLetterButtonStyle}"
                 TileWidth="30"
                 ViewModel="{x:Bind ViewModel}" />
             <ctkl:Shimmer

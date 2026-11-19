@@ -44,8 +44,18 @@ public sealed partial class BaseItemDtoCard : UserControl
 		InitializeComponent();
 		UndoToast.Listen(); // 1.2.0: the Undo after a whole series or season is marked
 		// 1.2.0: the card shows its item's watched and favourite state as the server has it, whichever surface changed it
-		Loaded += (_, _) => ItemUserData.Changed += OnUserDataChanged;
-		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
+		Loaded += (_, _) =>
+		{
+			ItemUserData.Changed += OnUserDataChanged;
+			CardFocus.Changed += OnCardFocusChanged;
+			ShowActions(_actions.KeyboardElsewhere(CardFocus.IsElsewhere(this)));
+		};
+		Unloaded += (_, _) =>
+		{
+			ItemUserData.Changed -= OnUserDataChanged;
+			CardFocus.Changed -= OnCardFocusChanged;
+			CardFocus.Release(this);
+		};
 
 		// fluentfin-mpv: keyboard access (ux-review A1); only keys nothing inside the card has handled
 		AddHandler(KeyDownEvent, new KeyEventHandler(Card_KeyDown), false);
@@ -140,8 +150,20 @@ public sealed partial class BaseItemDtoCard : UserControl
 		FocusRing.Visibility = ReferenceEquals(e.OriginalSource, this) && ShowsFocusRing(FocusState)
 			? Visibility.Visible
 			: Visibility.Collapsed;
-		ShowActions(_actions.GotFocus(byPointer: e.OriginalSource is Control { FocusState: FocusState.Pointer }));
+		var byPointer = e.OriginalSource is Control { FocusState: FocusState.Pointer };
+		ShowActions(_actions.GotFocus(byPointer));
+		// 1.4.0: the keyboard's card: a pointer resting on another one only brightens it (CardFocus)
+		if (byPointer)
+		{
+			CardFocus.Release(this);
+		}
+		else
+		{
+			CardFocus.Take(this);
+		}
 	}
+
+	private void OnCardFocusChanged(object? sender, EventArgs e) => ShowActions(_actions.KeyboardElsewhere(CardFocus.IsElsewhere(this)));
 
 	/// <summary>Whether focus given this way shows the card's ring (and its buttons and lift: <see cref="CardActions"/>): not for a click.</summary>
 	internal static bool ShowsFocusRing(FocusState state) => state is FocusState.Keyboard or FocusState.Programmatic;
@@ -153,38 +175,48 @@ public sealed partial class BaseItemDtoCard : UserControl
 			FocusRing.Visibility = Visibility.Collapsed;
 		}
 		ShowActions(_actions.LostFocus(FocusStaysWithCard));
+		if (!_actions.HasKeyboard)
+		{
+			CardFocus.Release(this);
+		}
 	}
 
 	/// <summary>
-	/// Seaglass: the lift. In GlassMode Full a spring takes the card to 1.05 of its size and deepens its shadow; otherwise
-	/// (Reduced, Solid, animations off) it keeps its size and only the shadow changes, so nothing moves.
+	/// Seaglass: the lift. In GlassMode Full a spring takes the ART to 1.05 of its size about its centre and deepens its shadow;
+	/// otherwise (Reduced, Solid, animations off) it keeps its size and only the shadow changes, so nothing moves. 1.4.0 (the
+	/// library UX review, DI-m6): the art alone grows, inside the room the card's 0.9 rest scale reserves, so the title and the
+	/// line under it never move or grow (the whole card grew 188 x 334 to 197 x 351 and dropped its caption 8 px).
 	/// </summary>
 	private void Lift(bool lifted)
 	{
-		var visual = ElementCompositionPreview.GetElementVisual(RootGrid);
-		var scale = lifted && SafeMotion.Allowed ? RestScale * LiftScale : RestScale;
-		if (SafeMotion.Allowed)
+		var scale = CardLift.ArtScale(lifted, SafeMotion.Allowed);
+		foreach (var element in new UIElement[] { ImageCanvas, ShadowHost })
 		{
-			var spring = visual.Compositor.CreateSpringVector3Animation();
-			spring.DampingRatio = 0.7f;
-			spring.Period = TimeSpan.FromMilliseconds(50);
-			spring.FinalValue = new Vector3(scale, scale, 1);
-			visual.StartAnimation("Scale", spring);
-		}
-		else
-		{
-			visual.StopAnimation("Scale");
-			visual.Scale = new Vector3(scale, scale, 1);
+			var visual = ElementCompositionPreview.GetElementVisual(element);
+			if (element is FrameworkElement fe)
+			{
+				visual.CenterPoint = new Vector3((float)fe.ActualWidth / 2, (float)fe.ActualHeight / 2, 0);
+			}
+
+			if (SafeMotion.Allowed)
+			{
+				var spring = visual.Compositor.CreateSpringVector3Animation();
+				spring.DampingRatio = 0.7f;
+				spring.Period = TimeSpan.FromMilliseconds(50);
+				spring.FinalValue = new Vector3(scale, scale, 1);
+				visual.StartAnimation("Scale", spring);
+			}
+			else
+			{
+				visual.StopAnimation("Scale");
+				visual.Scale = new Vector3(scale, scale, 1);
+			}
 		}
 
 		CardShadow.BlurRadius = lifted ? 24 : 8;
 		CardShadow.Opacity = lifted ? 0.5 : 0.25;
 		CardShadow.Offset = lifted ? "0,10" : "0,3";
 	}
-
-	/// <summary>A card sits at 0.9 of its slot (room for the lift and the shadow); the lift is 1.05 of that.</summary>
-	private const float RestScale = 0.9f;
-	private const float LiftScale = 1.05f;
 
 	private void Card_KeyDown(object sender, KeyRoutedEventArgs e)
 	{
@@ -269,7 +301,8 @@ public sealed partial class BaseItemDtoCard : UserControl
 		}
 
 		var show = _actions.Shown;
-		PlayButton.Visibility = ActionButtons.Visibility = HoverScrim.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+		ActionStrip.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+		HoverBrighten.Visibility = _actions.Brightened ? Visibility.Visible : Visibility.Collapsed;
 		Lift(show);
 
 		if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
@@ -316,15 +349,52 @@ public sealed partial class BaseItemDtoCard : UserControl
 }
 
 /// <summary>
+/// Nixie 1.4.0 (the library UX review, DI-m6, C-m1): how much a card's art grows when it lifts. The card rests at 0.9 of its
+/// slot (the room the growth takes); only the art grows, 1.05 about its centre, so the words never move. Without motion
+/// (Reduced, Solid, animations off) nothing grows.
+/// </summary>
+internal static class CardLift
+{
+	public const float RestScale = 0.9f;
+	public const float LiftScale = 1.05f;
+
+	/// <summary>The art's own scale (inside the card's rest scale): <see cref="LiftScale"/> while lifted and motion is allowed, else 1.</summary>
+	public static float ArtScale(bool lifted, bool motionAllowed) => lifted && motionAllowed ? LiftScale : 1f;
+
+	/// <summary>The art's growth on each side, as a share of its slot: half of what the lifted art adds, inside the rest scale's room.</summary>
+	public static double GrowthPerSide(bool motionAllowed) => RestScale * (ArtScale(true, motionAllowed) - 1) / 2;
+
+	/// <summary>The room the rest scale leaves on each side, as a share of the slot.</summary>
+	public static double RoomPerSide => (1 - RestScale) / 2;
+}
+
+/// <summary>
 /// fluentfin-mpv: when a card shows its buttons, apart from WinUI so it can be tested: while the pointer is over its image or
-/// the keyboard focus is in the card (ux-review A1). Each event returns whether <see cref="Shown"/> changed.
+/// the keyboard focus is in the card (ux-review A1). Each event returns whether <see cref="Shown"/> or <see cref="Brightened"/>
+/// changed. Nixie 1.4.0 (X9): one highlight per meaning. The keyboard's card shows its actions (and its ring); a pointer resting
+/// on another card while the keyboard is on a card only brightens it (<see cref="Brightened"/>): no actions, no lift.
 /// </summary>
 internal sealed class CardActions
 {
 	private bool _pointerOver;
 	private bool _focusWithin;
+	private bool _keyboardElsewhere;
 
+	/// <summary>The actions and the art's lift.</summary>
 	public bool Shown { get; private set; }
+
+	/// <summary>The hover's brighten alone: the pointer is over the card while the keyboard is on another one.</summary>
+	public bool Brightened { get; private set; }
+
+	/// <summary>Whether the keyboard's focus is in this card (on it or one of its buttons).</summary>
+	public bool HasKeyboard => _focusWithin;
+
+	/// <param name="elsewhere">Whether another card has the keyboard's focus (<see cref="CardFocus"/>).</param>
+	public bool KeyboardElsewhere(bool elsewhere)
+	{
+		_keyboardElsewhere = elsewhere;
+		return Update();
+	}
 
 	public bool PointerEntered()
 	{
@@ -380,13 +450,15 @@ internal sealed class CardActions
 
 	private bool Update()
 	{
-		var show = _pointerOver || _focusWithin;
-		if (show == Shown)
+		var show = _focusWithin || (_pointerOver && !_keyboardElsewhere);
+		var brighten = _pointerOver && !show;
+		if (show == Shown && brighten == Brightened)
 		{
 			return false;
 		}
 
 		Shown = show;
+		Brightened = brighten;
 		return true;
 	}
 }

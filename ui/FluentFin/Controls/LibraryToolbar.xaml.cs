@@ -57,7 +57,8 @@ public sealed partial class LibraryToolbar : UserControl
 
 	private void ApplyStyles()
 	{
-		var button = ButtonStyle ?? (Style)Application.Current.Resources["NixieCompactButtonStyle"];
+		// 1.4.0 style keys: the toolbar role (Compact 32 in every theme), the chip switch (a check and a neutral plate when on)
+		var button = ButtonStyle ?? (Style)Application.Current.Resources["NixieToolbarButtonStyle"];
 		SortButton.Style = button;
 		FilterButton.Style = button;
 		if (ToggleStyle is { } toggle)

@@ -23,20 +23,11 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <!--  Seaglass: the sort and filter bar is glass pills  -->
+        <!--  1.4.0 style: the toolbar is Compact 32 in every theme (Classic's Large 44 override is gone)  -->
         <Style
             x:Key="LibrarySortFilterButtonStyle"
-            BasedOn="{StaticResource GlassPillButtonStyle}"
-            TargetType="Button">
-            <Setter Property="Padding" Value="18,8" />
-        </Style>
-        <!--  the Unwatched switch at the bar's height  -->
-        <Style x:Key="LibraryToggleStyle" BasedOn="{StaticResource DefaultToggleButtonStyle}" TargetType="ToggleButton">
-            <Setter Property="MinHeight" Value="{StaticResource NixieButtonHeight}" />
-            <Setter Property="Padding" Value="18,8" />
-            <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
+            BasedOn="{StaticResource NixieToolbarButtonStyle}"
+            TargetType="Button" />
         <!--  the grid's card: the card inside is the keyboard stop and the element Narrator reads; the container is neither (ux-review A1)  -->
         <DataTemplate x:Key="CardTemplate" x:DataType="vm:BaseItemViewModel">
             <ItemContainer
@@ -129,7 +120,6 @@
                 Grid.Column="2"
                 VerticalAlignment="Center"
                 ButtonStyle="{StaticResource LibrarySortFilterButtonStyle}"
-                ToggleStyle="{StaticResource LibraryToggleStyle}"
                 ViewModel="{x:Bind ViewModel}"
                 Visibility="{x:Bind local:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}" />
         </Grid>

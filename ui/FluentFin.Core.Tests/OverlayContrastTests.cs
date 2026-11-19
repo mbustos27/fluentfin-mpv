@@ -93,10 +93,17 @@ public class OverlayContrastTests
 	[InlineData("FluentFin/Controls/BaseItemDtoCard.xaml")]
 	public void CardActionButtons_AreDarkThemedWithScrim(string file)
 	{
-		var buttons = FindByName(Load(file), "ActionButtons");
-
-		Assert.Equal("Dark", (string?)buttons.Attribute("RequestedTheme"));
-		Assert.All(buttons.Elements(), b => Assert.Equal("{StaticResource Black65O}", (string?)b.Attribute("Background")));
+		// 1.4.0: the strip (its scrim and the buttons) is dark in both themes; the buttons are the button system's roles on art:
+		// Play the Primary, the toggles and More on the badges' dark plate
+		var doc = Load(file);
+		var strip = FindByName(doc, "ActionStrip");
+		Assert.Equal("Dark", (string?)strip.Attribute("RequestedTheme"));
+		Assert.Equal("{ThemeResource NixieCardStripScrimBrush}", (string?)FindByName(doc, "HoverScrim").Attribute("Background"));
+		var buttons = FindByName(doc, "ActionButtons").Elements().ToList();
+		Assert.Equal("{StaticResource NixiePrimaryIconButtonStyle}", (string?)buttons[0].Attribute("Style"));
+		Assert.All(buttons.Skip(1), b => Assert.StartsWith("{StaticResource NixieCardIcon", (string?)b.Attribute("Style")));
+		Assert.All(buttons, b => Assert.Null(b.Attribute("Background")));
+		Assert.All(buttons, b => Assert.Equal("{StaticResource NixieCardGlyphSize}", (string?)b.Descendants().Single(e => e.Name.LocalName == "FontIcon").Attribute("FontSize")));
 	}
 
 	[Fact]
@@ -259,18 +266,19 @@ public class OverlayContrastTests
 	[Theory]
 	[InlineData("Dark")]
 	[InlineData("Light")]
-	public void EpisodeWatchedMark_IsTheAccentOnImage_WithACheckThatReadsOnIt(string theme)
+	public void EpisodeWatchedMark_IsTheNeutralMark_WithACheckThatReadsOnIt(string theme)
 	{
+		// 1.4.0 (the library UX review, X10): the dim neutral check on the dark plate, as on every card (never the accent); the
+		// check reads on the plate over the brightest still
 		var mark = FindByName(Load("FluentFin/Controls/EpisodeRow.xaml"), "WatchedMark");
-		var check = mark.Descendants(Presentation + "FontIcon").Single();
-		Assert.Equal("{ThemeResource NixieAccentOnImageBrush}", (string?)mark.Attribute("Background"));
-		Assert.Equal("{ThemeResource NixieOnAccentOnImageBrush}", (string?)check.Attribute("Foreground"));
+		Assert.Equal("{StaticResource NixieWatchedBadgeStyle}", (string?)mark.Attribute("Style"));
 
 		var dictionary = Load("FluentFin/Styles/Glass.xaml").Descendants(Presentation + "ResourceDictionary")
 			.Single(d => (string?)d.Attribute(Xaml + "Key") == theme);
-		var fill = Argb((string)Brush(dictionary, "NixieAccentOnImageBrush").Attribute("Color")!);
-		var ink = Argb((string)Brush(dictionary, "NixieOnAccentOnImageBrush").Attribute("Color")!);
-		var ratio = Contrast(Blend(ink.Color, ink.Alpha, fill.Color), fill.Color);
+		var plate = Argb((string)Brush(dictionary, "NixieBadgeFillBrush").Attribute("Color")!);
+		var ink = Argb((string)Brush(dictionary, "NixieWatchedGlyphBrush").Attribute("Color")!);
+		var fill = Blend(plate.Color, plate.Alpha, ParseColor("#FFFFFF"));
+		var ratio = Contrast(Blend(ink.Color, ink.Alpha, fill), fill);
 		Assert.True(ratio >= IconContrast, $"{theme}: the watched mark's check has {ratio:F2}:1 on the mark, needs {IconContrast}:1");
 	}
 

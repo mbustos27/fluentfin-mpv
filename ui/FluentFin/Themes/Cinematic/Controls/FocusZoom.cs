@@ -7,29 +7,38 @@ using Microsoft.UI.Xaml.Hosting;
 namespace FluentFin.Themes.Cinematic.Controls;
 
 /// <summary>
-/// Cinematic's focus: a 1.1x zoom about a point 40 % down the element (the art grows, its text below moves with it) on a
-/// spring, with the neon rim and the sheen the element draws itself. Only while motion is allowed (GlassMode Full with
-/// animations on): Reduced and Solid keep the size and show the rim alone, and nothing moves.
+/// Cinematic's focus: a zoom of the ART about its centre on a spring, with the neon rim and the sheen the element draws itself.
+/// Nixie 1.4.0 (the library UX review, C-m1): the whole tile grew 1.1x about a point 40 % down, so its title dropped 18 px below
+/// its row, its gaps shrank from 24 to 10 px and the last column ran past the A to Z. Now only the art (and its rings) grows,
+/// by at most <see cref="MaxGrowthPerSide"/> px a side, which the tile's margins reserve. Only while motion is allowed (GlassMode
+/// Full with animations on): Reduced and Solid keep the size and show the rim alone, and nothing moves.
 /// </summary>
 public static class FocusZoom
 {
+	/// <summary>The most the zoom may scale anything (a small still reaches the cap before the 8 px).</summary>
 	public const float Scale = 1.1f;
 
-	/// <summary>Where the zoom grows from, as a share of the element's size (the mockups' transform-origin 50 % 40 %).</summary>
-	public static readonly Vector2 Origin = new(0.5f, 0.4f);
+	/// <summary>The most the art grows on each side, in px: the room the still's margins keep (16 and 12 px).</summary>
+	public const double MaxGrowthPerSide = 8;
 
-	/// <summary>The size an element is drawn at: <see cref="Scale"/> while zoomed and motion is allowed, else 1.</summary>
-	public static float ScaleFor(bool zoomed, bool motionAllowed) => zoomed && motionAllowed ? Scale : 1f;
+	/// <summary>Where the zoom grows from, as a share of the element's size: its centre (the words below are not in it).</summary>
+	public static readonly Vector2 Origin = new(0.5f, 0.5f);
+
+	/// <summary>The size an element <paramref name="width"/> wide is drawn at: grown by at most 8 px a side while zoomed and motion is allowed, else 1.</summary>
+	public static float ScaleFor(bool zoomed, bool motionAllowed, double width) =>
+		zoomed && motionAllowed && width > 0 ? (float)Math.Min(Scale, 1 + 2 * MaxGrowthPerSide / width) : 1f;
 
 	public static void Apply(UIElement element, bool zoomed)
 	{
 		var visual = ElementCompositionPreview.GetElementVisual(element);
+		var width = 0.0;
 		if (element is FrameworkElement fe)
 		{
+			width = fe.ActualWidth;
 			visual.CenterPoint = new Vector3((float)fe.ActualWidth * Origin.X, (float)fe.ActualHeight * Origin.Y, 0);
 		}
 
-		var scale = ScaleFor(zoomed, SafeMotion.Allowed);
+		var scale = ScaleFor(zoomed, SafeMotion.Allowed, width);
 		if (SafeMotion.Allowed)
 		{
 			var spring = visual.Compositor.CreateSpringVector3Animation();

@@ -97,21 +97,6 @@
             Row="{StaticResource RowTemplate}"
             Section="{StaticResource SectionTemplate}" />
 
-        <!--  the A-Z jump's letters: flat, 32 high; the letter in view underlined in the accent  -->
-        <Style x:Key="LetterStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
-
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="MinHeight" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="FontSize" Value="15" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
     </Page.Resources>
 
     <Grid x:Name="Root">
@@ -233,7 +218,6 @@
             Margin="56,12,56,8">
             <lc:LetterBar
                 x:Name="Letters"
-                LetterStyle="{StaticResource LetterStyle}"
                 TileWidth="30"
                 ViewModel="{x:Bind ViewModel}" />
             <ctkl:Shimmer

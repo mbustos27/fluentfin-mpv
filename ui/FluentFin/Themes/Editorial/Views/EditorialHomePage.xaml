@@ -65,7 +65,7 @@
                                     </VisualState>
                                     <VisualState x:Name="Pressed">
                                         <VisualState.Setters>
-                                            <Setter Target="Fill.Background" Value="{ThemeResource EditorialRowSelectedBrush}" />
+                                            <Setter Target="Fill.Background" Value="{ThemeResource EditorialRowPressedBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Disabled" />

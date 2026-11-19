@@ -13,7 +13,7 @@ $arrow = Find-Ui -Name 'Scroll Continue Watching right' -Type 'Button'
 Check 'see all: the Continue Watching arrow is visible at rest' ([bool]$arrow)
 if ($arrow) { Invoke-Element $arrow | Out-Null; Settle 1500; Shot 'home-narrow-after-arrow' }
 [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080); Settle 1500
-$sa = Find-Ui -Name 'See all Continue Watching' -Type 'Button'
+$sa = Find-Ui -Name 'See all Continue Watching' -Type 'Hyperlink'
 Check 'see all: Continue Watching has a See all button' ([bool]$sa)
 if ($sa) {
     Invoke-Element $sa | Out-Null

@@ -80,7 +80,7 @@
             <Setter Property="Width" Value="38" />
             <Setter Property="Height" Value="42" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="CornerRadius" Value="8" />
             <Setter Property="UseSystemFocusVisuals" Value="True" />
             <Setter Property="FocusVisualMargin" Value="-3" />
             <Setter Property="FocusVisualPrimaryThickness" Value="2" />
@@ -121,6 +121,16 @@
                                         <VisualState.Setters>
                                             <Setter Target="Letter.Foreground" Value="{ThemeResource DriveInTileRestBrush}" />
                                             <Setter Target="Tile.BorderBrush" Value="Transparent" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <!--  Nixie 1.4.0: the letter in view (LetterBar sets it from its tile): the accent letter and edge  -->
+                                <VisualStateGroup x:Name="SelectionStates">
+                                    <VisualState x:Name="Unselected" />
+                                    <VisualState x:Name="Selected">
+                                        <VisualState.Setters>
+                                            <Setter Target="Letter.Foreground" Value="{ThemeResource NixieCurrentLetterForegroundBrush}" />
+                                            <Setter Target="Tile.BorderBrush" Value="{ThemeResource NixieCurrentLetterForegroundBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                 </VisualStateGroup>

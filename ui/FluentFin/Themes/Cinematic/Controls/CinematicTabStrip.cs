@@ -42,6 +42,20 @@ public sealed partial class CinematicTabStrip : UserControl
 		set => SetValue(TabFontSizeProperty, value);
 	}
 
+	public static readonly DependencyProperty TabStyleProperty =
+		DependencyProperty.Register(nameof(TabStyle), typeof(Style), typeof(CinematicTabStrip), new PropertyMetadata(null));
+
+	/// <summary>
+	/// Nixie 1.4.0 style (the library UX review, C-M7): the tabs' style; null: the Tab role (NixieTabButtonStyle, the underline,
+	/// for the seasons and the player's panel). The library's sections set CinematicSectionTabButtonStyle (Cards.xaml): a plate
+	/// and the weight, so the pink underline marks only where you are in the top bar.
+	/// </summary>
+	public Style? TabStyle
+	{
+		get => GetValue(TabStyleProperty) as Style;
+		set => SetValue(TabStyleProperty, value);
+	}
+
 	internal IReadOnlyList<CinematicTabButton> Buttons => _buttons;
 
 	/// <summary>
@@ -61,7 +75,11 @@ public sealed partial class CinematicTabStrip : UserControl
 		{
 			var tab = tabs[i];
 			var button = new CinematicTabButton(this, tab) { Content = tab.Label, FontSize = TabFontSize };
-			if (Application.Current.Resources.TryGetValue("NixieTabButtonStyle", out var style) && style is Style s)
+			if (TabStyle is { } own)
+			{
+				button.Style = own;
+			}
+			else if (Application.Current.Resources.TryGetValue("NixieTabButtonStyle", out var style) && style is Style s)
 			{
 				button.Style = s;
 			}

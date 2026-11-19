@@ -27,6 +27,12 @@ public static class ConfirmDialog
 			dialog.Style = style;
 		}
 
+		// 1.4.0: a delete's confirm carries the trash glyph (ButtonRoles.ConfirmStyleKey); its focus glows in the danger ink
+		if (ButtonRoles.Find(ButtonRoles.ConfirmStyleKey(prompt.ConfirmText)) is { } confirmStyle)
+		{
+			dialog.PrimaryButtonStyle = confirmStyle;
+		}
+
 		return dialog;
 	}
 

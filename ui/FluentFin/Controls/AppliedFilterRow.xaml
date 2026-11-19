@@ -13,12 +13,6 @@
     x:Name="Root"
     IsTabStop="False">
 
-    <UserControl.Resources>
-        <!--  a chip: the filter's words and a cross; the compact role's height and corners  -->
-        <Style x:Key="AppliedFilterChipStyle" BasedOn="{StaticResource NixieCompactButtonStyle}" TargetType="Button">
-            <Setter Property="Padding" Value="12,0,10,0" />
-        </Style>
-    </UserControl.Resources>
 
     <ctk:WrapPanel
         x:Name="Row"
@@ -47,7 +41,7 @@
                     <Button
                         AutomationProperties.Name="{x:Bind Name}"
                         Click="Chip_Click"
-                        Style="{StaticResource AppliedFilterChipStyle}"
+                        Style="{StaticResource NixieChipButtonStyle}"
                         Tag="{x:Bind}"
                         ToolTipService.ToolTip="{x:Bind Name}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -62,12 +56,12 @@
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <HyperlinkButton
+        <Button
             x:Name="ClearAllButton"
             VerticalAlignment="Center"
             AutomationProperties.Name="Clear all filters"
             Command="{x:Bind ViewModel.ClearFiltersCommand}"
             Content="Clear all"
-            Style="{StaticResource NixieLinkButtonStyle}" />
+            Style="{StaticResource NixieChipButtonStyle}" />
     </ctk:WrapPanel>
 </UserControl>

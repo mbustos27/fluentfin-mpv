@@ -135,20 +135,27 @@ public sealed class ItemLayoutXamlTests
 		Assert.Contains("{ThemeResource GlassImageScrimBrush}", scrims);
 		// the words straight on it; More info a glass pill (the one glass layer)
 		Assert.Same(root, FindByName(hero, "Words").Parent);
-		Assert.Equal("{StaticResource GlassPillButtonStyle}", (string?)FindByName(hero, "MoreInfoButton").Attribute("Style"));
+		Assert.Equal("{StaticResource NixieButtonStyle}", (string?)FindByName(hero, "MoreInfoButton").Attribute("Style"));
 		// a share of the window's height
 		Assert.Contains("HeroLayout.Height(XamlRoot?.Size.Height ?? 0, HeroLayout.HomeShare)", code);
 	}
 
 	[Fact]
-	public void CardBadge_IsTheAccentOnArtwork_AsTheEpisodeRowsMark()
+	public void CardMarks_AreTwoNeutralMarks_AndEveryWatchedMarkIsTheSame()
 	{
-		var badge = Load("FluentFin/Controls/BaseItemDtoCard.xaml").Descendants().Single(e => e.Name.LocalName == "InfoBadge");
-		var mark = FindByName(Load("FluentFin/Controls/EpisodeRow.xaml"), "WatchedMark");
-
-		Assert.Equal("{ThemeResource NixieAccentOnImageBrush}", (string?)badge.Attribute("Background"));
-		Assert.Equal("{ThemeResource NixieOnAccentOnImageBrush}", (string?)badge.Attribute("Foreground"));
-		Assert.Equal((string?)mark.Attribute("Background"), (string?)badge.Attribute("Background"));
+		// 1.4.0 (the library UX review, X10): one pink capsule meant both "watched" and "N to watch"; now a dim neutral check top
+		// right and a neutral square count top left, the same watched mark on every card, still and row, never the accent
+		var card = Load("FluentFin/Controls/BaseItemDtoCard.xaml");
+		Assert.DoesNotContain(card.Descendants(), e => e.Name.LocalName == "InfoBadge");
+		Assert.Equal("{StaticResource NixieCountChipStyle}", (string?)FindByName(card, "CountChip").Attribute("Style"));
+		foreach (var file in new[] { "FluentFin/Controls/BaseItemDtoCard.xaml", "FluentFin/Controls/EpisodeRow.xaml", "FluentFin/Themes/Cinematic/Controls/CinematicStill.xaml",
+			"FluentFin/Themes/Editorial/Controls/EditorialPoster.xaml", "FluentFin/Themes/Editorial/Controls/EditorialStill.xaml" })
+		{
+			var mark = FindByName(Load(file), "WatchedMark");
+			Assert.Equal("{StaticResource NixieWatchedBadgeStyle}", (string?)mark.Attribute("Style"));
+			Assert.Null(mark.Attribute("Background"));
+			Assert.Equal("{StaticResource NixieWatchedGlyphStyle}", (string?)mark.Descendants().Single(e => e.Name.LocalName == "FontIcon").Attribute("Style"));
+		}
 	}
 
 	[Fact]

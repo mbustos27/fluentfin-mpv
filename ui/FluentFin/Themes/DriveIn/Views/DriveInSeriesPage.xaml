@@ -95,11 +95,10 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="core:SeasonPill">
                                             <Button
-                                                Padding="4,4,4,2"
                                                 AutomationProperties.Name="{x:Bind AutomationName}"
                                                 Command="{Binding ElementName=Page, Path=ViewModel.SelectSeasonCommand}"
                                                 CommandParameter="{x:Bind Dto}"
-                                                Style="{StaticResource DriveInEntryButtonStyle}"
+                                                Style="{StaticResource DriveInSeasonTubeButtonStyle}"
                                                 ToolTipService.ToolTip="{x:Bind Name}">
                                                 <dc:SeasonTube Pill="{x:Bind}" />
                                             </Button>

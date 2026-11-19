@@ -274,57 +274,15 @@ public static class BaseItemDtoConverters
 		return new BitmapImage(uri.ToUri()) { DecodePixelWidth = Core.Imaging.ImageSizes.DecodeWidth(requestedType, height) };
 	}
 
-	public static int GetCardBadgeValue(BaseItemViewModel vm)
-	{
-		if (vm is null)
-		{
-			return -1;
-		}
+	// 1.4.0 (the library UX review, X10): two marks, never one capsule for both meanings (Core.ItemBadges)
 
-		var unwatchedCount = vm.UserData?.UnplayedItemCount ?? 0;
+	/// <summary>The dim neutral check, top right: watched, nothing left to watch.</summary>
+	public static Visibility WatchedMarkVisibility(BaseItemViewModel? vm) =>
+		ItemBadges.Watched(vm?.UserData?.Played, vm?.UserData?.UnplayedItemCount) ? Visibility.Visible : Visibility.Collapsed;
 
-		return unwatchedCount == 0 ? -1 : unwatchedCount;
-	}
+	/// <summary>The neutral square count, top left: how many are left to watch ("5", "99+").</summary>
+	public static string ToWatchText(BaseItemViewModel? vm) => ItemBadges.ToWatchText(vm?.UserData?.UnplayedItemCount);
 
-	public static IconSource? CardBadgeSource(BaseItemViewModel vm)
-	{
-		if (vm is null)
-		{
-			return null;
-		}
-
-		var unwatchedCount = vm.UserData?.UnplayedItemCount ?? 0;
-		var played = vm.UserData?.Played ?? false;
-
-		if (played && unwatchedCount == 0)
-		{
-			return new FontIconSource { Glyph = "\uF78C" };
-		}
-
-		return null;
-	}
-
-	public static Visibility IsCardBadgeVisible(BaseItemViewModel vm)
-	{
-		if (vm is null)
-		{
-			return Visibility.Collapsed;
-		}
-
-		var unwatchedCount = vm.UserData?.UnplayedItemCount ?? 0;
-		var played = vm.UserData?.Played ?? false;
-
-		if (played && unwatchedCount == 0)
-		{
-			return Visibility.Visible;
-		}
-
-		if (unwatchedCount > 0)
-		{
-			return Visibility.Visible;
-		}
-
-
-		return Visibility.Collapsed;
-	}
+	public static Visibility ToWatchVisibility(BaseItemViewModel? vm) =>
+		ItemBadges.ToWatch(vm?.UserData?.UnplayedItemCount) > 0 ? Visibility.Visible : Visibility.Collapsed;
 }

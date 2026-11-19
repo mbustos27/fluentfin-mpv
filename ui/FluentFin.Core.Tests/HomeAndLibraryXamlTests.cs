@@ -34,23 +34,29 @@ public sealed class HomeAndLibraryXamlTests
 	}
 
 	[Fact]
-	public void ARowsHeaderWithSeeAll_IsAButtonWithAChevron_ItsTitleStillAHeading()
+	public void ARowsHeaderWithSeeAll_IsOneLink_ItsTitleStillAHeading()
 	{
+		// 1.4.0 (the library UX review, X13): one See all in every theme, the Link role at the header's right (it was the title
+		// as a 179 x 40 button, Drive-in's 56 px marquee tile, Editorial's link and Cinematic's 40-high variant)
 		var doc = Load("FluentFin/Controls/ShelfRow.xaml");
-		var button = FindByName(doc, "SeeAllButton");
+		var link = FindByName(doc, "SeeAllButton");
 
-		Assert.Equal(Presentation + "Button", button.Name);
-		var chevron = button.Descendants(Presentation + "FontIcon").Single();
-		Assert.Equal("", (string?)chevron.Attribute("Glyph"));
-		Assert.Equal("Raw", (string?)chevron.Attribute("AutomationProperties.AccessibilityView")); // the name says it, not the glyph
-		var title = button.Descendants(Presentation + "TextBlock").Single();
+		Assert.Equal(Presentation + "HyperlinkButton", link.Name);
+		Assert.Equal("{StaticResource NixieLinkButtonStyle}", (string?)link.Attribute("Style"));
+		Assert.Equal("See all", (string?)link.Attribute("Content"));
+		Assert.Equal("1", (string?)link.Attribute("Grid.Column"));
+		var title = FindByName(doc, "TitleText");
 		Assert.Equal("Level2", (string?)title.Attribute("AutomationProperties.HeadingLevel"));
 		Assert.Equal("{x:Bind Header, Mode=OneWay}", (string?)title.Attribute("Text"));
-		Assert.Null(doc.Descendants().FirstOrDefault(e => (string?)e.Attribute("Content") == "See all")); // no second See all
+		Assert.Single(doc.Descendants(), e => (string?)e.Attribute("Content") == "See all"); // no second See all
 
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/ShelfRow.xaml.cs"));
 		Assert.Contains("AutomationProperties.SetName(SeeAllButton, RowPaging.SeeAllName(Header))", code);
-		Assert.Contains("TitleText.Visibility = HasSeeAll ? Visibility.Collapsed : Visibility.Visible", code);
+		// the title is never hidden by the row (a theme may draw its own in its place, and that must not be undone)
+		Assert.DoesNotContain("TitleText.Visibility", code);
+		// Drive-in's marquee is the title, never the See all
+		var driveIn = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Themes/DriveIn/Controls/DriveInRows.cs"));
+		Assert.DoesNotContain("seeAll.Content", driveIn);
 	}
 
 	[Fact]
@@ -155,8 +161,10 @@ public sealed class HomeAndLibraryXamlTests
 		// Nixie 1.4.0 (item 13): a letter with no titles rests: disabled (not a stop) and silent to Narrator; the mark is the tile's
 		Assert.Equal("{x:Bind HasTitles}", (string?)letter.Attribute("IsEnabled"));
 		Assert.Equal("{x:Bind local:LetterBar.ViewFor(HasTitles)}", (string?)letter.Attribute("AutomationProperties.AccessibilityView"));
-		Assert.Contains(letter.Descendants(), e => (string?)e.Attribute("Opacity") == "{x:Bind local:LetterBar.MarkOpacity(IsCurrent), Mode=OneWay}");
+		Assert.Equal("{x:Bind Letter}", (string?)letter.Attribute("Content")); // the letter role (NixieLetterButtonStyle) draws it
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/LetterBar.xaml.cs"));
+		Assert.Contains("VisualStateManager.GoToState(button, tile.IsCurrent ? \"Selected\" : \"Unselected\", false);", code);
+		Assert.Contains("(Style)Application.Current.Resources[\"NixieLetterButtonStyle\"]", code);
 		Assert.Contains("button.Height = Math.Max(TileHeight, 32);", code); // WCAG 2.5.8, and the review's 32
 		Assert.Contains("RowGrid.MinHeight = Math.Max(TileHeight, 32);", code); // the row's height kept, letters or directions
 	}

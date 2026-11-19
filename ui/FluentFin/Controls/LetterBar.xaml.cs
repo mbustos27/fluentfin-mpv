@@ -27,7 +27,7 @@ public sealed partial class LetterBar : UserControl
 	[GeneratedDependencyProperty]
 	public partial Style? LetterStyle { get; set; }
 
-	/// <summary>The theme's style for the two directions (ToggleButtons).</summary>
+	/// <summary>The theme's style for the two directions (choice chips: RadioButtons).</summary>
 	[GeneratedDependencyProperty]
 	public partial Style? DirectionStyle { get; set; }
 
@@ -95,7 +95,7 @@ public sealed partial class LetterBar : UserControl
 
 	partial void OnDirectionStyleChanged(Style? newValue)
 	{
-		AscendingButton.Style = newValue ?? (Style)Resources["LetterBarDirectionStyle"];
+		AscendingButton.Style = newValue ?? (Style)Application.Current.Resources["NixieChoiceChipStyle"];
 		DescendingButton.Style = AscendingButton.Style;
 	}
 
@@ -119,13 +119,15 @@ public sealed partial class LetterBar : UserControl
 			case nameof(LibraryViewModel.LetterTiles):
 				DispatcherQueue.TryEnqueue(Fit);
 				break;
+			case nameof(LibraryViewModel.CurrentLetter):
+				MarkAll();
+				break;
 		}
 	}
 
 	/// <summary>A resting letter is silent to Narrator (it is not a stop either: it is disabled).</summary>
 	public static AccessibilityView ViewFor(bool hasTitles) => hasTitles ? AccessibilityView.Content : AccessibilityView.Raw;
 
-	public static double MarkOpacity(bool current) => current ? 1 : 0;
 
 	public static Visibility PositionVisibility(string? text, int total) =>
 		!string.IsNullOrEmpty(text) && total >= LibraryBrowse.LettersFrom ? Visibility.Visible : Visibility.Collapsed;
@@ -145,7 +147,7 @@ public sealed partial class LetterBar : UserControl
 		}
 	}
 
-	private static void SetDirection(ToggleButton button, LibraryViewModel vm, SortOrder order)
+	private static void SetDirection(RadioButton button, LibraryViewModel vm, SortOrder order)
 	{
 		var words = LibraryBrowse.DirectionWords(vm.SortBy, order);
 		words = char.ToUpperInvariant(words[0]) + words[1..];
@@ -157,7 +159,7 @@ public sealed partial class LetterBar : UserControl
 
 	private void Direction_Click(object sender, RoutedEventArgs e)
 	{
-		if (sender is ToggleButton { Tag: SortOrder order } && ViewModel is { } vm)
+		if (sender is RadioButton { Tag: SortOrder order } && ViewModel is { } vm)
 		{
 			vm.UpdateSortOrder(order);
 		}
@@ -195,7 +197,7 @@ public sealed partial class LetterBar : UserControl
 			return;
 		}
 
-		button.Style = LetterStyle ?? (Style)Resources["LetterBarButtonStyle"];
+		button.Style = LetterStyle ?? (Style)Application.Current.Resources["NixieLetterButtonStyle"];
 		button.Width = _width;
 		button.Height = Math.Max(TileHeight, 32);
 		if (button.Tag is LetterTile tile)
@@ -203,6 +205,28 @@ public sealed partial class LetterBar : UserControl
 			// the place among the letters that have titles ("3 of 24"); a resting letter has none
 			AutomationProperties.SetPositionInSet(button, tile.Position);
 			AutomationProperties.SetSizeOfSet(button, tile.Size);
+			Mark(button, tile);
+		}
+	}
+
+	/// <summary>
+	/// The letter in view, from its tile (a recycled button is marked again when it is prepared): the letter role's Selected
+	/// state (bold accent text, the 1.4.0 style's "current place"), and Narrator's "current".
+	/// </summary>
+	private static void Mark(Button button, LetterTile tile)
+	{
+		VisualStateManager.GoToState(button, tile.IsCurrent ? "Selected" : "Unselected", false);
+		AutomationProperties.SetItemStatus(button, tile.IsCurrent ? "current" : "");
+	}
+
+	private void MarkAll()
+	{
+		for (var i = 0; i < (ViewModel?.LetterTiles.Count ?? 0); i++)
+		{
+			if (LetterRepeater.TryGetElement(i) is Button { Tag: LetterTile tile } button)
+			{
+				Mark(button, tile);
+			}
 		}
 	}
 

@@ -247,17 +247,17 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	{
 		if (_items.Count == 0 || index < 0)
 		{
+			MarkLetter(null);
 			CurrentLetter = null;
 			PositionText = "";
-			MarkLetter(null);
 			return;
 		}
 
 		_firstShown = index = Math.Min(index, _items.Count - 1);
 		var letter = SortBy == ItemSortBy.Name && !InPlaylistOrder ? LibraryBrowse.LetterOf(LibraryBrowse.SortKey(_items[index])) : null;
+		MarkLetter(letter); // the tiles first: a page marks its buttons when CurrentLetter changes
 		CurrentLetter = letter;
 		PositionText = LibraryBrowse.PositionText(letter, index, _items.Count);
-		MarkLetter(letter);
 	}
 
 	private void MarkLetter(string? letter)

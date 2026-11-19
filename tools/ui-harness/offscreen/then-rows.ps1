@@ -71,12 +71,12 @@ Press 0x27; Press 0x27
 $mem = Focus-Info
 Press 0x09 400   # Tab leaves the row (to Next Up's See all)
 $left = Focus-Info
-Check 'rows: Tab leaves the row after one stop' ($left -and $left.type -eq 'Button' -and $left.name -like 'See all*') ($left.name)
+Check 'rows: Tab leaves the row after one stop' ($left -and $left.type -eq 'Hyperlink' -and $left.name -like 'See all*') ($left.name)
 # the row remembers its last card: into the Next Up row, to its third card, out to its See all button, Tab back in: the third card
 $c = Card-Focus 'A Signal in Winter'
 Press 0x27; Press 0x27
 $third = Focus-Info
-$sa = Find-Ui -Name 'See all Next Up' -Type 'Button'
+$sa = Find-Ui -Name 'See all Next Up' -Type 'Hyperlink'
 [void][OffscreenUi]::SetFocus($sa); Start-Sleep -Milliseconds 500
 Press 0x09 700
 $back = Focus-Info
