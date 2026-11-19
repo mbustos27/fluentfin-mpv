@@ -12,6 +12,8 @@
   - A held Space, M, F or Shift+N does its job once; held arrows still seek and change the volume.
 - **Double click:** a double click on the video goes full screen (or back) and keeps playing or paused as it was, also on
   the dark fade at the top and bottom of the video; a double click on a control never goes full screen.
+- **Editorial's library:** the arrows go along the library (Right from a letter's last title no longer skips the next
+  one), and Page Up and Page Down move a page of rows, as in the other themes.
 
 ## 1.3.0
 
