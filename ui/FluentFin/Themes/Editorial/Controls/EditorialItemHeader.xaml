@@ -10,6 +10,7 @@
     x:Class="FluentFin.Themes.Editorial.Controls.EditorialItemHeader"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:lc="using:FluentFin.Controls"
     xmlns:journal="using:FluentFin.Plugins.Journal.Controls"
     xmlns:media="using:CommunityToolkit.WinUI.Media"
     xmlns:ui="using:CommunityToolkit.WinUI"
@@ -83,6 +84,8 @@
                 MaxWidth="900"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top">
+                <!--  Nixie 1.4.0 (topbar): the library this is in, when reached from another section ("Movies ›")  -->
+                <lc:TrailEyebrow Margin="0,0,0,6" />
                 <TextBlock x:Name="KickerText" Style="{StaticResource EditorialKickerTextBlockStyle}" />
                 <TextBlock
                     x:Name="TitleText"

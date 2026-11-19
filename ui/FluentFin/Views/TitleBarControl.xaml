@@ -51,6 +51,13 @@
             AutomationProperties.AccessibilityView="Raw"
             IsHitTestVisible="False" />
     <!--  the wordmark and the tabs in the left header, after Back: the TitleBar centres its Content; the middle stays the drag area  -->
+    <!--
+        Nixie 1.4.0 (item 4, the review's X8): the TitleBar itself is no Tab stop (it took the focus after navigation, with no
+        name and no ring); its Back, tabs, search and account still are.
+        Item 6 (the review's X14, CL-m1, DI-M8): a disabled Back keeps its slot but draws no tile (the dead control was the most
+        button-like thing in the bar), its arrow at 40 %; Back is 40 x 32, 16 px from the window's edge, with the bar's subtle
+        8-radius fill on hover and press (TitleBarControl.StyleBackButton); the account ends 22 px before the caption buttons.
+    -->
     <TitleBar
         x:Name="TitleBar"
         Height="48"
@@ -58,33 +65,75 @@
         BackRequested="TitleBar_BackRequested"
         IsBackButtonEnabled="{x:Bind ViewModel.CanGoBack, Mode=OneWay}"
         IsBackButtonVisible="{x:Bind ViewModel.IsBackButtonShown, Mode=OneWay}"
-        IsPaneToggleButtonVisible="False">
+        IsPaneToggleButtonVisible="False"
+        IsTabStop="False">
+        <TitleBar.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.ThemeDictionaries>
+                    <ResourceDictionary x:Key="Default">
+                        <StaticResource x:Key="TitleBarBackButtonBackgroundDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                        <SolidColorBrush
+                            x:Key="TitleBarBackButtonForegroundDisabled"
+                            Opacity="0.4"
+                            Color="{ThemeResource TextFillColorPrimary}" />
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="Light">
+                        <StaticResource x:Key="TitleBarBackButtonBackgroundDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                        <SolidColorBrush
+                            x:Key="TitleBarBackButtonForegroundDisabled"
+                            Opacity="0.4"
+                            Color="{ThemeResource TextFillColorPrimary}" />
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="HighContrast">
+                        <SolidColorBrush x:Key="TitleBarBackButtonBackgroundDisabled" Color="Transparent" />
+                        <SolidColorBrush x:Key="TitleBarBackButtonForegroundDisabled" Color="{ThemeResource SystemColorGrayTextColor}" />
+                    </ResourceDictionary>
+                </ResourceDictionary.ThemeDictionaries>
+                <x:Double x:Key="TitleBarMinDragRegionWidth">22</x:Double>
+            </ResourceDictionary>
+        </TitleBar.Resources>
         <TitleBar.LeftHeader>
             <StackPanel
                 x:Name="LeftHeaderPanel"
                 VerticalAlignment="Stretch"
                 Orientation="Horizontal"
                 SizeChanged="OnHeaderSizeChanged">
-                <!--  the wordmark: the glass stream's AppWordmark at title-bar size (plain, no glow); "Preview" on a test build  -->
-                <StackPanel
+                <!--
+                    the wordmark: the glass stream's AppWordmark at title-bar size (plain, no glow); "Preview" on a test build.
+                    Nixie 1.4.0 (CL-p3): a click on it goes Home (no Tab stop: the Home tab is the keyboard's); 16 px after
+                    Back's arrow, 24 to the first tab's label (the review's 16 / 24 / 24 / 8 rhythm)
+                -->
+                <Button
                     x:Name="Wordmark"
-                    Margin="12,0,8,0"
+                    Margin="4,0,0,0"
+                    Padding="0"
                     VerticalAlignment="Center"
-                    IsHitTestVisible="False"
-                    Orientation="Horizontal"
-                    Spacing="8">
-                    <lc:AppWordmark
-                        x:Name="WordmarkText"
-                        VerticalAlignment="Center"
-                        Size="15"
-                        Text="{x:Bind ViewModel.AppName}" />
-                    <TextBlock
-                        x:Name="SubtitleText"
-                        VerticalAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Style="{ThemeResource CaptionTextBlockStyle}"
-                        Text="{x:Bind ViewModel.Subtitle}" />
-                </StackPanel>
+                    AutomationProperties.Name="Home"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="OnWordmarkClick"
+                    IsTabStop="False"
+                    Style="{StaticResource DefaultButtonStyle}">
+                    <Button.Resources>
+                        <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                        <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                        <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                        <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    </Button.Resources>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <lc:AppWordmark
+                            x:Name="WordmarkText"
+                            VerticalAlignment="Center"
+                            Size="15"
+                            Text="{x:Bind ViewModel.AppName}" />
+                        <TextBlock
+                            x:Name="SubtitleText"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.Subtitle}" />
+                    </StackPanel>
+                </Button>
                 <lc:TopTabStrip
                     x:Name="Tabs"
                     Margin="12,0,0,0"
@@ -98,7 +147,12 @@
                 HorizontalAlignment="Right"
                 Orientation="Horizontal"
                 SizeChanged="OnHeaderSizeChanged"
-                Spacing="10">
+                Spacing="8">
+                <!--
+                    Nixie 1.4.0 (the trail rule): the search box (or its button) and its mark, the tabs' underline on its bottom edge
+                    while its results, or an item opened from it, show (TitleBarControl.ShowLit)
+                -->
+                <Grid x:Name="SearchHost" VerticalAlignment="Center">
                 <!--  narrow windows: search is a button that opens the box (it folds back when left empty)  -->
                 <!--  button review T5: a subtle 32 x 32 icon button, radius 8 (it rendered as a 40 x 44 ellipse); the role style at the merge  -->
                 <Button
@@ -112,7 +166,8 @@
                     BorderThickness="0"
                     Click="OnSearchIconClick"
                     CornerRadius="8"
-                    ToolTipService.ToolTip="Search (Ctrl+E)"
+                    ToolTipService.Placement="Bottom"
+                    ToolTipService.ToolTip="Search (Ctrl+F or /)"
                     Visibility="Collapsed">
                     <FontIcon FontSize="16" Glyph="&#xE721;" />
                 </Button>
@@ -126,6 +181,8 @@
                 AutomationProperties.Name="Search"
                 KeyboardAcceleratorPlacementMode="Hidden"
                 PlaceholderText="Search"
+                ToolTipService.Placement="Bottom"
+                ToolTipService.ToolTip="Search (Ctrl+F or /)"
                 QueryIcon="Find"
                 Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                 TextMemberPath="Name"
@@ -220,8 +277,20 @@
                     </ItemsPanelTemplate>
                 </AutoSuggestBox.ItemsPanel>
             </AutoSuggestBox>
+                <Border
+                    x:Name="SearchLit"
+                    Height="2"
+                    Margin="8,0,8,0"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Bottom"
+                    Background="{ThemeResource GlassTabUnderlineBrush}"
+                    CornerRadius="1"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed" />
+                </Grid>
                 <!--  fluentfin-mpv: a sign-out in progress (the mpv playback's stop and report, up to ~2 s, then the sign-out request)  -->
                 <StackPanel
+                    x:Name="SignOutPanel"
                     VerticalAlignment="Center"
                     Orientation="Horizontal"
                     Spacing="8"
@@ -255,13 +324,25 @@
                     Background="Transparent"
                     BorderThickness="0"
                     CornerRadius="16"
+                    ToolTipService.Placement="Bottom"
                     ToolTipService.ToolTip="{x:Bind core:ItemLabels.AccountTooltip(ViewModel.User.Name), Mode=OneWay}"
                     Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsAccountShown), Mode=OneWay}">
-                    <PersonPicture
-                        Width="30"
-                        Height="30"
-                        AutomationProperties.AccessibilityView="Raw"
-                        DisplayName="{x:Bind ViewModel.User.Name, Mode=OneWay}" />
+                    <Grid>
+                        <PersonPicture
+                            Width="30"
+                            Height="30"
+                            AutomationProperties.AccessibilityView="Raw"
+                            DisplayName="{x:Bind ViewModel.User.Name, Mode=OneWay}" />
+                        <!--  Nixie 1.4.0 (the trail rule): Settings lit, an accent ring on the account (TitleBarControl.ShowLit)  -->
+                        <Ellipse
+                            x:Name="AccountLit"
+                            Width="32"
+                            Height="32"
+                            IsHitTestVisible="False"
+                            Stroke="{ThemeResource GlassTabUnderlineBrush}"
+                            StrokeThickness="2"
+                            Visibility="Collapsed" />
+                    </Grid>
                     <Button.Flyout>
                         <Flyout
                             x:Name="AccountFlyout"

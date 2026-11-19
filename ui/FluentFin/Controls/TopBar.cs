@@ -28,27 +28,53 @@ public static class TopBar
 
 	public const double MinSearchWidth = 200, MaxSearchWidth = 360, MinOpenSearchWidth = 140, MaxOpenSearchWidth = 260;
 
-	/// <summary>The search button (narrow windows) and the space between the right header's items.</summary>
-	public const double SearchIconWidth = 32, Spacing = 10;
+	/// <summary>
+	/// The search button (narrow windows) and the space between the right header's items (Nixie 1.4.0: the review's 16 / 24 /
+	/// 24 / 8 rhythm: search to the account 8).
+	/// </summary>
+	public const double SearchIconWidth = 32, Spacing = 8;
 
 	/// <summary>The sections' menu button with its glyph only (its label given up in the narrowest windows).</summary>
 	public const double MenuGlyphWidth = 46;
 
 	/// <summary>
 	/// Review of 590eaf6: what the bar shows in <paramref name="available"/> view pixels, from the widths its parts measured.
-	/// It folded at a fixed 1100 px: with a long library name at 1120 px the account slid under Minimize and nothing was left
-	/// to drag. Wide: the wordmark, every tab and a search box of at least <see cref="MinSearchWidth"/> (as wide as the room
-	/// left, up to <see cref="MaxSearchWidth"/>). Else compact: the sections' menu button and a search button, giving up, as
-	/// the room shrinks, the wordmark, then the menu button's label (its glyph stays), then, only while the search box is open
-	/// from its button, the menu button itself; the open box gets the room left. Always: Back, the account,
-	/// <see cref="MinDragGap"/> and the caption buttons' inset.
+	/// Nixie 1.4.0 (the review's X6: libraries folded by count, MaxLibraryTabs, whatever the room), three steps by width only:
+	/// <list type="number">
+	/// <item>wide: the wordmark, every tab (<paramref name="row"/>) and a search box of at least <see cref="MinSearchWidth"/>
+	/// (as wide as the room left, up to <see cref="MaxSearchWidth"/>);</item>
+	/// <item>else the library tabs from the end move into "Libraries ▾" (<see cref="TopBarFit.ShownLibraries"/>), as few as
+	/// leave that search box its room;</item>
+	/// <item>only when Home, "Libraries ▾" and the search box do not fit: compact, the sections' menu button and a search
+	/// button, giving up, as the room shrinks, the wordmark, then the menu button's label (its glyph stays), then, only while
+	/// the search box is open from its button, the menu button itself; the open box gets the room left.</item>
+	/// </list>
+	/// Always: Back, the account, <see cref="MinDragGap"/> and the caption buttons' inset.
 	/// </summary>
-	public static TopBarFit Fit(double available, double captionInset, double back, double wordmark, double tabs, double menuButton, double account, bool search, bool searchOpen)
+	public static TopBarFit Fit(double available, double captionInset, double back, double wordmark, TopRowWidths row, double menuButton, double account, bool search, bool searchOpen)
 	{
 		var free = available - captionInset - MinDragGap - back - (account > 0 ? account + Spacing : 0);
-		if (free >= wordmark + tabs + (search ? MinSearchWidth + Spacing : 0))
+		var searchRoom = search ? MinSearchWidth + Spacing : 0;
+		var libraries = row.Libraries.Count;
+		var all = wordmark + row.Fixed + row.Libraries.Sum() + row.Plain;
+		if (free >= all + searchRoom)
 		{
-			return new TopBarFit(Compact: false, ShowWordmark: true, ShowSections: true, SearchWidth: search ? Math.Min(MaxSearchWidth, free - wordmark - tabs - Spacing) : 0);
+			return Wide(libraries, all);
+		}
+
+		var start = wordmark + row.Fixed + row.Folded;
+		var widths = new double[libraries + 1];
+		for (var k = 0; k < libraries; k++)
+		{
+			widths[k + 1] = widths[k] + row.Libraries[k];
+		}
+
+		for (var k = libraries - 1; k >= 0; k--)
+		{
+			if (free >= start + widths[k] + searchRoom)
+			{
+				return Wide(k, start + widths[k]);
+			}
 		}
 
 		var searchPart = !search ? 0 : searchOpen ? MinOpenSearchWidth + Spacing : SearchIconWidth + Spacing;
@@ -57,7 +83,27 @@ public static class TopBar
 		var showSections = !(search && searchOpen) || free >= MenuGlyphWidth + searchPart;
 		var left = (showWordmark ? wordmark : 0) + (!showSections ? 0 : showLabel ? menuButton : MenuGlyphWidth);
 		var box = search && searchOpen ? Math.Clamp(free - left - Spacing, MinOpenSearchWidth, MaxOpenSearchWidth) : 0;
-		return new TopBarFit(Compact: true, ShowWordmark: showWordmark, ShowSections: showSections, ShowSectionsLabel: showLabel, SearchWidth: box);
+		return new TopBarFit(Compact: true, ShowWordmark: showWordmark, ShowSections: showSections, SearchWidth: box, ShowSectionsLabel: showLabel, ShownLibraries: 0);
+
+		TopBarFit Wide(int count, double used) =>
+			new(Compact: false, ShowWordmark: true, ShowSections: true, SearchWidth: search ? Math.Min(MaxSearchWidth, free - used - Spacing) : 0, ShownLibraries: count);
+	}
+
+	/// <summary>The fit for a bar whose tabs never fold (<paramref name="tabs"/>: their width in a row).</summary>
+	public static TopBarFit Fit(double available, double captionInset, double back, double wordmark, double tabs, double menuButton, double account, bool search, bool searchOpen) =>
+		Fit(available, captionInset, back, wordmark, new TopRowWidths(tabs, [], 0, 0), menuButton, account, search, searchOpen);
+
+	/// <summary>
+	/// Nixie 1.4.0 (the review's A4, CL-p2, DI-p2, C-P7): how far the search box stands off the account so that it is centred
+	/// in the window (<paramref name="windowWidth"/>), when that leaves the tabs (ending at <paramref name="leftEnd"/>) a drag
+	/// gap of <see cref="MinDragGap"/>; else 0: pinned <see cref="Spacing"/> from the account. <paramref name="searchRight"/>
+	/// is where the pinned box ends. Centred or pinned, the same at every width.
+	/// </summary>
+	public static double SearchOffset(double windowWidth, double leftEnd, double searchWidth, double searchRight)
+	{
+		var centredLeft = (windowWidth - searchWidth) / 2;
+		var offset = searchRight - (centredLeft + searchWidth);
+		return offset > 0 && centredLeft >= leftEnd + MinDragGap ? Math.Floor(offset) : 0;
 	}
 
 	/// <summary>The most the bar adds to the room it keeps, after measuring a drag gap smaller than <see cref="MinDragGap"/>.</summary>
@@ -72,5 +118,14 @@ public static class TopBar
 		measuredGap < MinDragGap - 0.5 ? Math.Min(MaxSlack, current + Math.Ceiling(MinDragGap - measuredGap)) : current;
 }
 
-/// <summary>What the top bar shows at a width (<see cref="TopBar.Fit"/>).</summary>
-public readonly record struct TopBarFit(bool Compact, bool ShowWordmark, bool ShowSections, double SearchWidth, bool ShowSectionsLabel = true);
+/// <summary>
+/// What the top bar shows at a width (<see cref="TopBar.Fit"/>). Nixie 1.4.0: <see cref="ShownLibraries"/>, how many library
+/// tabs it has room for (the rest fold into "Libraries ▾").
+/// </summary>
+public readonly record struct TopBarFit(bool Compact, bool ShowWordmark, bool ShowSections, double SearchWidth, bool ShowSectionsLabel = true, int ShownLibraries = int.MaxValue);
+
+/// <summary>
+/// Nixie 1.4.0: the tabs' widths for <see cref="TopBar.Fit"/>: <see cref="Fixed"/> (Home, the plugins' sections, the strip's
+/// margin), each library's tab in order, "Libraries" as a plain tab, and folded ("Libraries ▾", or a lit library's name ▾).
+/// </summary>
+public readonly record struct TopRowWidths(double Fixed, IReadOnlyList<double> Libraries, double Plain, double Folded);

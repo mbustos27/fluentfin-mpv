@@ -31,7 +31,9 @@ public sealed class MergeWiringTests
 
 		var tabs = Code("FluentFin/Controls/TopTabStrip.xaml");
 		Assert.Contains("{ThemeResource NixieTabForegroundBrush}", tabs);
-		Assert.Contains("{ThemeResource NixieTabHoverLineBrush}", tabs);
+		// Nixie 1.4.0 (CL-m11): hover is a subtle fill, not a line where the underline goes
+		Assert.DoesNotContain("HoverLine", tabs);
+		Assert.Contains("{ThemeResource SubtleFillColorSecondaryBrush}", tabs);
 		Assert.Contains("{ThemeResource GlassTabUnderlineBrush}", tabs);
 	}
 

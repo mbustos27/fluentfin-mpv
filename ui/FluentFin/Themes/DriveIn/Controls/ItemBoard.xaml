@@ -22,6 +22,8 @@
 
     <dc:LetterBoard x:Name="Board" Padding="40,40,40,36">
         <StackPanel x:Name="Words" Spacing="0">
+            <!--  Nixie 1.4.0 (topbar): the library this is in, when reached from another section ("Movies ›")  -->
+            <controls:TrailEyebrow Margin="0,0,0,8" />
             <TextBlock
                 x:Name="KickerText"
                 Margin="0,0,0,14"

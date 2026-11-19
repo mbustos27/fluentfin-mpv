@@ -9,10 +9,13 @@
     IsTabStop="False">
 
     <!--
-        1.2.0 (the top bar, replacing the left rail): the sections as plain text tabs. The marked one has a short underline in
-        the theme's accent with a soft glow of it; hover brightens the text and shows a faint neutral line, a press dims it. No
-        pill, no box. One Tab stop (the marked tab), Left/Right (and Home/End) move between the tabs, Enter or Space opens one;
-        Narrator reads a tab list, each "tab item, n of m", selected or not (TopTabStrip.cs). Narrow windows: one menu button.
+        1.2.0 (the top bar, replacing the left rail): the sections as plain text tabs. The marked one has an underline in the
+        theme's accent with a soft glow of it. One Tab stop (the marked tab), Left/Right (and Home/End) move between the tabs,
+        Enter or Space opens one; Narrator reads a tab list, each "tab item, n of m", selected or not (TopTabStrip.cs). Narrow
+        windows: one menu button.
+        Nixie 1.4.0 (the review's CL-p1, CL-m11, X14): the underline is its label's width less 8 (at least 16), 3 px, 4 px
+        under the text; hover is a subtle 8-radius fill behind the tab, never a line where the underline goes; the tabs' labels
+        24 px apart (12 + 12 padding, no spacing); the folded "Libraries ▾" shows its chevron.
     -->
     <UserControl.Resources>
         <Style x:Key="TopTabButtonStyle" TargetType="local:TopTabButton">
@@ -20,91 +23,100 @@
             <Setter Property="Foreground" Value="{ThemeResource NixieTabForegroundBrush}" />
             <Setter Property="Padding" Value="12,0,12,0" />
             <Setter Property="MinHeight" Value="40" />
-            <Setter Property="MaxWidth" Value="200" />
+            <Setter Property="MaxWidth" Value="216" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="FontSize" Value="15" />
             <Setter Property="UseSystemFocusVisuals" Value="True" />
-            <Setter Property="FocusVisualMargin" Value="2,4,2,4" />
+            <Setter Property="FocusVisualMargin" Value="0,4,0,4" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="local:TopTabButton">
-                        <Grid
-                            x:Name="Root"
-                            Padding="{TemplateBinding Padding}"
-                            Background="Transparent">
-                            <!--  the marked tab's glow: the accent, soft, under its line (none in high contrast: the opacity is 0 there)  -->
+                        <Grid x:Name="Root" Background="Transparent">
+                            <!--  hover and press: a subtle fill, 32 px tall, radius 8 (the bar's other controls' own)  -->
                             <Border
-                                x:Name="Glow"
-                                Width="22"
-                                Height="3"
-                                Margin="0,0,0,5"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Bottom"
-                                CornerRadius="1.5"
-                                IsHitTestVisible="False"
-                                Opacity="0">
-                                <ui:Effects.Shadow>
-                                    <media:AttachedCardShadow
-                                        BlurRadius="10"
-                                        CornerRadius="2"
-                                        Opacity="{ThemeResource GlassShadowOpacity}"
-                                        Color="{ThemeResource NixieAccentColor}" />
-                                </ui:Effects.Shadow>
-                            </Border>
-                            <!--  hover: a faint neutral line where the marked tab's is  -->
-                            <Border
-                                x:Name="HoverLine"
-                                Width="22"
-                                Height="2"
-                                Margin="0,0,0,5"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Bottom"
-                                Background="{ThemeResource NixieTabHoverLineBrush}"
-                                CornerRadius="1"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
-                            <Border
-                                x:Name="Underline"
-                                Width="22"
-                                Height="3"
-                                Margin="0,0,0,5"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Bottom"
-                                Background="{ThemeResource GlassTabUnderlineBrush}"
-                                CornerRadius="1.5"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
-                            <!--  two labels in one cell (the cell is the bold one's width): nothing moves when the mark moves  -->
-                            <TextBlock
-                                x:Name="Label"
-                                VerticalAlignment="Center"
-                                Foreground="{TemplateBinding Foreground}"
-                                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
-                                TextLineBounds="Tight"
-                                TextTrimming="CharacterEllipsis" />
-                            <TextBlock
-                                x:Name="SelectedLabel"
-                                VerticalAlignment="Center"
-                                FontWeight="SemiBold"
-                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                Opacity="0"
-                                Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
-                                TextLineBounds="Tight"
-                                TextTrimming="CharacterEllipsis" />
+                                x:Name="Fill"
+                                Margin="0,4,0,4"
+                                Background="Transparent"
+                                CornerRadius="8"
+                                IsHitTestVisible="False" />
+                            <Grid Padding="{TemplateBinding Padding}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <!--  the marked tab's glow: the accent, soft, under its line (none in high contrast: the opacity is 0 there)  -->
+                                <Border
+                                    x:Name="Glow"
+                                    Height="3"
+                                    MinWidth="16"
+                                    Margin="4,0,4,8"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Bottom"
+                                    CornerRadius="1.5"
+                                    IsHitTestVisible="False"
+                                    Opacity="0">
+                                    <ui:Effects.Shadow>
+                                        <media:AttachedCardShadow
+                                            BlurRadius="10"
+                                            CornerRadius="2"
+                                            Opacity="{ThemeResource GlassShadowOpacity}"
+                                            Color="{ThemeResource NixieAccentColor}" />
+                                    </ui:Effects.Shadow>
+                                </Border>
+                                <Border
+                                    x:Name="Underline"
+                                    Height="3"
+                                    MinWidth="16"
+                                    Margin="4,0,4,8"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Bottom"
+                                    Background="{ThemeResource GlassTabUnderlineBrush}"
+                                    CornerRadius="1.5"
+                                    IsHitTestVisible="False"
+                                    Opacity="0" />
+                                <!--  two labels in one cell (the cell is the bold one's width): nothing moves when the mark moves  -->
+                                <TextBlock
+                                    x:Name="Label"
+                                    VerticalAlignment="Center"
+                                    Foreground="{TemplateBinding Foreground}"
+                                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                                    TextLineBounds="Tight"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    x:Name="SelectedLabel"
+                                    VerticalAlignment="Center"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                    Opacity="0"
+                                    Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}"
+                                    TextLineBounds="Tight"
+                                    TextTrimming="CharacterEllipsis" />
+                                <!--  Nixie 1.4.0: the folded "Libraries ▾" opens a menu: its chevron (TopTabButton.ShowsMenu)  -->
+                                <FontIcon
+                                    x:Name="Chevron"
+                                    Grid.Column="1"
+                                    Margin="6,1,0,0"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    FontSize="10"
+                                    Foreground="{TemplateBinding Foreground}"
+                                    Glyph="&#xE70D;"
+                                    IsHitTestVisible="False"
+                                    Visibility="Collapsed" />
+                            </Grid>
                             <VisualStateManager.VisualStateGroups>
                                 <VisualStateGroup x:Name="CommonStates">
                                     <VisualState x:Name="Normal" />
                                     <VisualState x:Name="PointerOver">
                                         <VisualState.Setters>
                                             <Setter Target="Label.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-                                            <Setter Target="HoverLine.Opacity" Value="1" />
+                                            <Setter Target="Fill.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Pressed">
                                         <VisualState.Setters>
-                                            <Setter Target="Label.Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
-                                            <Setter Target="SelectedLabel.Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-                                            <Setter Target="HoverLine.Opacity" Value="0.6" />
+                                            <Setter Target="Label.Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <Setter Target="Fill.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Disabled">
@@ -121,7 +133,7 @@
                                             <Setter Target="SelectedLabel.Opacity" Value="1" />
                                             <Setter Target="Underline.Opacity" Value="1" />
                                             <Setter Target="Glow.Opacity" Value="1" />
-                                            <Setter Target="HoverLine.Visibility" Value="Collapsed" />
+                                            <Setter Target="Chevron.Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                 </VisualStateGroup>
@@ -133,23 +145,28 @@
         </Style>
 
         <!--  narrow windows: the sections in a menu, behind one button naming the marked one; text only, as the tabs  -->
+        <!--  Nixie 1.4.0 (CL-m11): hover is the tabs' subtle fill; it never dims the label  -->
         <Style x:Key="TopMenuButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
-            <Setter Property="Padding" Value="10,0,10,0" />
+            <Setter Property="Padding" Value="12,0,12,0" />
             <Setter Property="MinHeight" Value="40" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="UseSystemFocusVisuals" Value="True" />
-            <Setter Property="FocusVisualMargin" Value="2,4,2,4" />
+            <Setter Property="FocusVisualMargin" Value="0,4,0,4" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Grid
-                            x:Name="Root"
-                            Padding="{TemplateBinding Padding}"
-                            Background="Transparent">
+                        <Grid x:Name="Root" Background="Transparent">
+                            <Border
+                                x:Name="Fill"
+                                Margin="0,4,0,4"
+                                Background="Transparent"
+                                CornerRadius="8"
+                                IsHitTestVisible="False" />
                             <ContentPresenter
                                 x:Name="Presenter"
+                                Padding="{TemplateBinding Padding}"
                                 VerticalAlignment="Center"
                                 Content="{TemplateBinding Content}"
                                 Foreground="{TemplateBinding Foreground}" />
@@ -158,12 +175,12 @@
                                     <VisualState x:Name="Normal" />
                                     <VisualState x:Name="PointerOver">
                                         <VisualState.Setters>
-                                            <Setter Target="Presenter.Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <Setter Target="Fill.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Pressed">
                                         <VisualState.Setters>
-                                            <Setter Target="Presenter.Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            <Setter Target="Fill.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
                                         </VisualState.Setters>
                                     </VisualState>
                                     <VisualState x:Name="Disabled" />
@@ -180,7 +197,7 @@
         <StackPanel
             x:Name="TabsPanel"
             Orientation="Horizontal"
-            Spacing="2"
+            Spacing="0"
             TabFocusNavigation="Once" />
         <Button
             x:Name="CompactButton"

@@ -118,6 +118,143 @@ public sealed class TopBarTests
 		Assert.False(TopBar.Fit(1120, Caption, Back, Wordmark, 12 + 6 * 80, LongMenu, Account, search: true, searchOpen: false).Compact);
 	}
 
+	// ---- Nixie 1.4.0 (the review's X6): the libraries fold by width, in three steps
+
+	/// <summary>Home and Diary with the strip's margin; nine library tabs of 90 px; "Libraries" 96, folded 112.</summary>
+	private static TopRowWidths Row(int libraries) => new(12 + 66 + 66, Enumerable.Repeat(90.0, libraries).ToList(), 96, 112);
+
+	[Theory]
+	// the user's bar: about 2000 px, five or six views; the review's 1920 and 2560; 1440 and 1100
+	[InlineData(2000, 6, 6)]
+	[InlineData(2560, 9, 9)]
+	[InlineData(1920, 9, 9)]
+	[InlineData(1440, 9, 6)]
+	[InlineData(1440, 5, 5)]
+	[InlineData(1100, 5, 2)]
+	[InlineData(1100, 9, 2)]
+	public void TheLibraries_FoldByWidth_FromTheEnd_LeavingTheSearchBoxItsRoom(double width, int libraries, int shown)
+	{
+		var fit = TopBar.Fit(width, Caption, Back, Wordmark, Row(libraries), LongMenu, Account, search: true, searchOpen: false);
+
+		Assert.False(fit.Compact);
+		Assert.Equal(shown, fit.ShownLibraries);
+		Assert.InRange(fit.SearchWidth, TopBar.MinSearchWidth, TopBar.MaxSearchWidth);
+		var row = Row(libraries);
+		var taken = Back + Wordmark + row.Fixed + row.Libraries.Take(shown).Sum() + (shown < libraries ? row.Folded : row.Plain)
+			+ fit.SearchWidth + TopBar.Spacing + Account + TopBar.Spacing + TopBar.MinDragGap + Caption;
+		Assert.True(taken <= width, $"{taken} px taken at {width}");
+	}
+
+	[Fact]
+	public void TheSectionsMenu_OnlyWhenHomeLibrariesAndSearchDoNotFit()
+	{
+		var row = Row(9);
+		// Home, "Libraries ▾", Diary and the smallest search box, just: still tabs, every library folded
+		var just = Back + Wordmark + row.Fixed + row.Folded + TopBar.MinSearchWidth + TopBar.Spacing + Account + TopBar.Spacing + TopBar.MinDragGap + Caption;
+		var fit = TopBar.Fit(just, Caption, Back, Wordmark, row, LongMenu, Account, search: true, searchOpen: false);
+		Assert.False(fit.Compact);
+		Assert.Equal(0, fit.ShownLibraries);
+
+		Assert.True(TopBar.Fit(just - 1, Caption, Back, Wordmark, row, LongMenu, Account, search: true, searchOpen: false).Compact);
+	}
+
+	[Fact]
+	public void TheFold_NeverShowsMoreLibrariesInANarrowerWindow()
+	{
+		var previous = int.MaxValue;
+		for (var width = 2560; width >= 500; width -= 10)
+		{
+			var fit = TopBar.Fit(width, Caption, Back, Wordmark, Row(9), LongMenu, Account, search: true, searchOpen: false);
+			var shown = fit.Compact ? -1 : fit.ShownLibraries;
+			Assert.True(shown <= previous, $"{width} px: {shown} after {previous}");
+			previous = shown;
+		}
+	}
+
+	[Theory]
+	// room: centred in the window; a long row of tabs: pinned beside the account
+	[InlineData(1920, 600, 360, 1720, 1720 - (1920 + 360) / 2)]
+	[InlineData(1920, 1100, 360, 1720, 0)]
+	[InlineData(1100, 500, 300, 900, 0)]
+	public void TheSearchBox_IsCentredWhenThereIsRoom_ElsePinnedToTheAccount(double window, double leftEnd, double search, double right, double offset)
+	{
+		Assert.Equal(offset, TopBar.SearchOffset(window, leftEnd, search, right));
+	}
+
+	// ---- Nixie 1.4.0, item 6 (the review's X14): the bar's geometry
+
+	[Fact]
+	public void Back_Is40By32_16PxFromTheEdge_CentredOnTheBarsLine()
+	{
+		// the TitleBar lays Back at its own left edge (measured live: then-topbar140.ps1)
+		Assert.Equal(16, TitleBarControl.BackMargin.Left);
+		Assert.Equal(32, TopBar.Height - TitleBarControl.BackMargin.Top - TitleBarControl.BackMargin.Bottom);
+		Assert.Equal(TopBar.Height / 2, TitleBarControl.BackMargin.Top + 16);
+	}
+
+	[Theory]
+	[InlineData(1920)]
+	[InlineData(1100)]
+	public void DriveInsSparkles_StayClearOfTheBar(double width)
+	{
+		// the review's DI-m1: a 30 px sparkle sat in the bar between the tabs and search, another beside Back at 1100
+		foreach (var (_, y, size) in FluentFin.Themes.DriveIn.Controls.DriveInScene.Sparkles(FluentFin.Themes.DriveIn.Controls.DriveInLayout.Home(width, compact: false)))
+		{
+			Assert.True(y - size >= TopBar.Height + 8, $"a sparkle at y {y}, {size} px, reaches {y - size}");
+		}
+
+		Assert.True(FluentFin.Themes.DriveIn.Controls.DriveInScene.IsUnderTheBar(60, 14));
+		Assert.False(FluentFin.Themes.DriveIn.Controls.DriveInScene.IsUnderTheBar(80, 14));
+	}
+
+	[Fact]
+	public void TheBar_TallCaptions_NoTileOnADeadBack_NoTabStopOnTheTitleBar_AndCinematicsIslandCentred()
+	{
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var code = File.ReadAllText(Path.Combine(root, "Views", "TitleBarControl.xaml.cs"));
+		// the caption buttons 48 px tall: their glyphs on y 24 with the bar's
+		Assert.Contains("App.MainWindow.AppWindow.TitleBar.PreferredHeightOption = CaptionHeightFor(ViewModel.IsPlayerPageShown);", code);
+		Assert.Equal(Microsoft.UI.Windowing.TitleBarHeightOption.Tall, TitleBarControl.CaptionHeightFor(playerPage: false));
+		// the player's own top bar is laid out under the standard caption buttons (its stream's)
+		Assert.Equal(Microsoft.UI.Windowing.TitleBarHeightOption.Standard, TitleBarControl.CaptionHeightFor(playerPage: true));
+		var bar = System.Xml.Linq.XDocument.Parse(File.ReadAllText(Path.Combine(root, "Views", "TitleBarControl.xaml")));
+		var titleBar = bar.Descendants().Single(e => e.Name.LocalName == "TitleBar" && (string?)e.Attribute(System.Xml.Linq.XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TitleBar");
+		// item 4: no Tab stop with no name and no ring
+		Assert.Equal("False", (string?)titleBar.Attribute("IsTabStop"));
+		// a disabled Back draws no tile, in every theme dictionary
+		var disabled = titleBar.Descendants().Where(e => (string?)e.Attribute(System.Xml.Linq.XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TitleBarBackButtonBackgroundDisabled").ToList();
+		Assert.Equal(3, disabled.Count);
+		Assert.All(disabled, e => Assert.True((string?)e.Attribute("ResourceKey") == "SubtleFillColorTransparentBrush" || (string?)e.Attribute("Color") == "Transparent"));
+		// the wordmark goes Home; search names its keys
+		Assert.Contains("_top.Open(home);", code[code.IndexOf("private void OnWordmarkClick", StringComparison.Ordinal)..]);
+		var xaml = File.ReadAllText(Path.Combine(root, "Views", "TitleBarControl.xaml"));
+		Assert.Equal(2, xaml.Split("ToolTipService.ToolTip=\"Search (Ctrl+F or /)\"").Length - 1);
+
+		var cinematic = System.Xml.Linq.XDocument.Parse(File.ReadAllText(Path.Combine(root, "Themes", "Cinematic", "Cinematic.xaml")));
+		var island = cinematic.Descendants().Single(e => (string?)e.Attribute(System.Xml.Linq.XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "Island");
+		var margin = ((string)island.Attribute("Margin")!).Split(',').Select(double.Parse).ToArray();
+		// y 2 to 46: centred on 24, as the bar's items and the caption buttons are
+		Assert.Equal(TopBar.Height / 2, (margin[1] + TopBar.Height - margin[3]) / 2);
+		var style = cinematic.Descendants().Single(e => (string?)e.Attribute(System.Xml.Linq.XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TopBarStyle");
+		Assert.Contains(style.Elements(), e => (string?)e.Attribute("Property") == "Padding" && (string?)e.Attribute("Value") == "0");
+		Assert.Contains(cinematic.Descendants(), e => (string?)e.Attribute(System.Xml.Linq.XName.Get("Key", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TopBarMenuPresenterStyle");
+	}
+
+	[Theory]
+	// the item pages' headers in every theme: Classic's hero, Drive-in's board, Cinematic's stage, Editorial's header
+	[InlineData("Controls/ItemHero.xaml")]
+	[InlineData("Themes/DriveIn/Controls/ItemBoard.xaml")]
+	[InlineData("Themes/Cinematic/Controls/CinematicItemStage.xaml")]
+	[InlineData("Themes/Editorial/Controls/EditorialItemHeader.xaml")]
+	public void EveryItemHeader_HostsTheEyebrow_BeforeItsTitle(string header)
+	{
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var xaml = File.ReadAllText(Path.Combine(root, header));
+		var eyebrow = xaml.IndexOf("TrailEyebrow", StringComparison.Ordinal);
+		Assert.True(eyebrow > 0, $"{header}: no TrailEyebrow");
+		Assert.True(eyebrow < xaml.IndexOf("HeadingLevel=\"Level1\"", StringComparison.Ordinal) || eyebrow < xaml.IndexOf("TitleArt", StringComparison.Ordinal), $"{header}: the eyebrow after the title");
+	}
+
 	[Fact]
 	public void AGapMeasuredShort_KeepsMoreRoom_UpToALimit_AndNeverLess()
 	{
@@ -194,7 +331,7 @@ public sealed class TopBarTests
 		Assert.Contains("App.MainWindow.SetTitleBar(TitleBar);", bar);
 		// and its clickable areas follow the headers (the TitleBar looks again only when the window is resized)
 		Assert.Contains(".SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Passthrough, [.. rects]);", bar);
-		Assert.Contains("foreach (var element in new FrameworkElement?[] { BackButton(), LeftHeaderPanel, RightHeaderPanel })", bar);
+		Assert.Contains("foreach (var element in new FrameworkElement?[] { BackButton(), LeftHeaderPanel, SearchHost, SignOutPanel, AccountButton })", bar);
 		var keys = File.ReadAllText(Path.Combine(root, "Services", "WindowShortcuts.cs"));
 		var settings = keys[keys.IndexOf("case AppShortcut.OpenSettings:", StringComparison.Ordinal)..];
 		Assert.StartsWith("case AppShortcut.OpenSettings:", settings);
@@ -202,7 +339,7 @@ public sealed class TopBarTests
 	}
 
 	[Fact]
-	public void TheShell_RereadsTheLibraries_AndKeepsEachPagesTab_AndAPinnedTabUnpins()
+	public void TheShell_RereadsTheLibraries_AndKeepsEachPagesTab_AndReturnsToTheTop()
 	{
 		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
 		var shell = File.ReadAllText(Path.Combine(root, "Views", "ShellPage.xaml.cs"));
@@ -213,16 +350,24 @@ public sealed class TopBarTests
 		Assert.Contains("_top.OnPageShown(KeyOf(e.SourcePageType), e.Parameter, NavigationFrame.BackStackDepth,", shell);
 		Assert.Contains("returning: e.NavigationMode is Microsoft.UI.Xaml.Navigation.NavigationMode.Back or Microsoft.UI.Xaml.Navigation.NavigationMode.Forward);", shell);
 
+		// Nixie 1.4.0 (the trail rule): the lit destination chosen again on its own page goes back to its top
+		Assert.Contains("_top.ReturnToTopRequested += OnReturnToTop;", shell);
+		Assert.Contains("navigation.ReloadForRefresh(_ => true);", shell);
+
 		var strip = File.ReadAllText(Path.Combine(root, "Controls", "TopTabStrip.xaml.cs"));
-		// review 2: a pinned tab's menu (right-click, the menu key) has Unpin
-		Assert.Contains("button.ContextFlyout = UnpinMenu(pin);", strip);
-		Assert.Contains("unpin.Click += (_, _) => _navigation?.RemoveNavigationItem(pin);", strip);
 		// review 6: a second load listens again
 		Assert.Contains("if (_attached && ReferenceEquals(_navigation, navigation))", strip);
 		// and the Libraries page's wording; Nixie 1.4.0: its dead pin menu is gone (every library is a tab)
 		var landing = File.ReadAllText(Path.Combine(root, "Views", "LibrariesLandingPage.xaml"));
 		Assert.DoesNotContain("Add to the top bar", landing);
 		Assert.DoesNotContain("side bar", landing, StringComparison.OrdinalIgnoreCase);
+		// Nixie 1.4.0: the pins are gone (every library is a tab); the menus check the lit destination and hand the keyboard to the page
+		Assert.DoesNotContain("Unpin", strip);
+		Assert.Contains("new RadioMenuFlyoutItem { Text = entry.Title, GroupName = \"TopDestinations\", IsChecked = _navigation?.Lit is { } lit && entry.Mark == lit };", strip);
+		Assert.Contains("HandFocusToPage();", strip);
+		// and the search box's list lights the search box
+		var search = File.ReadAllText(Path.Combine(root, "Behaviors", "GlobalSearchBoxBehavior.cs"));
+		Assert.Contains("App.GetService<Core.ViewModels.TopNavigation>().ChooseSearch();", search);
 	}
 
 	[Fact]

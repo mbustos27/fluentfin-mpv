@@ -1,4 +1,6 @@
+using FluentFin.Contracts.Services;
 using FluentFin.Controls;
+using FluentFin.Core.Services;
 using FluentFin.Core.ViewModels;
 using FluentFin.Services;
 using FluentFin.ViewModels;
@@ -13,6 +15,9 @@ namespace FluentFin.Views;
 public sealed partial class TitleBarControl : UserControl
 {
 	public TitleBarViewModel ViewModel { get; } = (TitleBarViewModel)App.GetService<ITitleBarViewModel>();
+
+	/// <summary>Nixie 1.4.0: the tabs' fold, and the lit destination (the search box's and the account's marks).</summary>
+	private readonly TopNavigation _top = App.GetService<TopNavigation>();
 
 	// fluentfin-mpv: no search while a player page is open (docs/research/ux-review.md V9); Seaglass 1.1.4: nor signed out
 	// (TitleBarViewModel.IsSearchShown)
@@ -58,6 +63,11 @@ public sealed partial class TitleBarControl : UserControl
 			{
 				ShowBackground();
 			}
+			else if (e.PropertyName is nameof(TitleBarViewModel.IsPlayerPageShown))
+			{
+				ApplyCaptionHeight();
+				QueueRelayout();
+			}
 			else if (e.PropertyName is nameof(TitleBarViewModel.IsBackButtonShown) or nameof(TitleBarViewModel.IsVisible))
 			{
 				// Back coming or going moves the headers without changing their size
@@ -66,6 +76,16 @@ public sealed partial class TitleBarControl : UserControl
 		};
 		ShowSearch();
 		ShowBackground();
+
+		// Nixie 1.4.0 (the trail rule): the search box and Settings are destinations: lit like a tab while they are
+		_top.PropertyChanged += OnTopChanged;
+		Unloaded += (_, _) => _top.PropertyChanged -= OnTopChanged;
+		Loaded += (_, _) =>
+		{
+			_top.PropertyChanged -= OnTopChanged;
+			_top.PropertyChanged += OnTopChanged;
+			ShowLit();
+		};
 
 		// Nixie 1.3.0: the active layout theme's TopBarStyle on the chrome, now and on every switch (the bar itself is kept)
 		ThemeResources.StyleTopBar(BarChrome);
@@ -87,6 +107,34 @@ public sealed partial class TitleBarControl : UserControl
 		}
 	}
 
+	private void OnTopChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName is nameof(TopNavigation.Lit))
+		{
+			DispatcherQueue.TryEnqueue(ShowLit);
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the review's X7, CL-m9): the search box wears the tabs' underline while its results (or an item opened from
+	/// it) show; the account button an accent ring while Settings (or a page opened from it) shows.
+	/// </summary>
+	private void ShowLit()
+	{
+		SearchLit.Visibility = _top.IsSearchLit ? Visibility.Visible : Visibility.Collapsed;
+		AccountLit.Visibility = _top.IsSettingsLit ? Visibility.Visible : Visibility.Collapsed;
+		// Narrator hears it as it hears the marked tab's "selected"
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(SearchBox, _top.IsSearchLit ? "Current" : "");
+		// the box's text field is what takes the keyboard (and what Narrator reads)
+		if (Find(SearchBox, "TextBox") is { } field)
+		{
+			Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(field, _top.IsSearchLit ? "Current" : "");
+		}
+
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(SearchIconButton, _top.IsSearchLit ? "Current" : "");
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(AccountButton, _top.IsSettingsLit ? "Settings is open" : "");
+	}
+
 	private void RegisterAsWindowTitleBar()
 	{
 		try
@@ -97,7 +145,60 @@ public sealed partial class TitleBarControl : UserControl
 		{
 			// the window keeps Windows' default caption strip
 		}
+
+		ApplyCaptionHeight();
 	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the review's X14: CL-M3, DI-M8, C-M10, E-m11): the caption buttons as tall as the 48 px bar, so their glyphs
+	/// share its centre line, y 24 (they were 32 px tall, centred 8 px above everything else). Over the player, whose own top
+	/// bar is laid out under them, they keep the standard height.
+	/// </summary>
+	private void ApplyCaptionHeight()
+	{
+		try
+		{
+			App.MainWindow.AppWindow.TitleBar.PreferredHeightOption = CaptionHeightFor(ViewModel.IsPlayerPageShown);
+		}
+		catch (Exception)
+		{
+			// the caption buttons keep their height
+		}
+	}
+
+	/// <summary>The caption buttons' height: the bar's (tall) on every page but the player's.</summary>
+	public static TitleBarHeightOption CaptionHeightFor(bool playerPage) => playerPage ? TitleBarHeightOption.Standard : TitleBarHeightOption.Tall;
+
+	/// <summary>Nixie 1.4.0 (CL-p3): the wordmark goes Home, as a logo does.</summary>
+	private void OnWordmarkClick(object sender, RoutedEventArgs e)
+	{
+		// as the Home tab: on Home, back to its top
+		if (_top.AllTabs.FirstOrDefault(t => t.Kind == TopTabKind.Home) is { } home)
+		{
+			_top.Open(home);
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (CL-m1, DI-M8, A3): Back is 40 x 32, 16 px in from the window's edge (it was 40 x 44 at 2 px), the bar's
+	/// other controls' subtle fill at radius 8 on hover and press; the wordmark 16 px after its arrow (4 px after the slot,
+	/// 16 from the edge when Back is not shown).
+	/// </summary>
+	private void StyleBackButton()
+	{
+		if (BackButton() is Control back && back.Margin != BackMargin)
+		{
+			back.Margin = BackMargin;
+			back.CornerRadius = new CornerRadius(8);
+		}
+
+		Wordmark.Margin = new Thickness(ViewModel.IsBackButtonShown ? 4 : 14, 0, 0, 0);
+		// an empty subtitle (every build but a test build's) takes no room: the wordmark to the first tab is the rhythm's 24
+		SubtitleText.Visibility = string.IsNullOrEmpty(SubtitleText.Text) ? Visibility.Collapsed : Visibility.Visible;
+	}
+
+	/// <summary>Back's slot: 16 from the edge (the TitleBar lays Back at its own left edge, measured); 8 above and below make it 32 tall, centred on 24.</summary>
+	public static readonly Thickness BackMargin = new(16, 8, 0, 8);
 
 	private bool _regionsQueued;
 
@@ -135,7 +236,8 @@ public sealed partial class TitleBarControl : UserControl
 
 			var scale = XamlRoot.RasterizationScale;
 			var rects = new List<Windows.Graphics.RectInt32>();
-			foreach (var element in new FrameworkElement?[] { BackButton(), LeftHeaderPanel, RightHeaderPanel })
+			// Nixie 1.4.0: the right header's parts one by one, so the room between a centred search box and the account drags
+			foreach (var element in new FrameworkElement?[] { BackButton(), LeftHeaderPanel, SearchHost, SignOutPanel, AccountButton })
 			{
 				if (element is { Visibility: Visibility.Visible, ActualWidth: > 0, ActualHeight: > 0 })
 				{
@@ -160,8 +262,8 @@ public sealed partial class TitleBarControl : UserControl
 
 	private FrameworkElement? _backButton;
 
-	/// <summary>The TitleBar's own Back button (its template's).</summary>
-	private FrameworkElement? BackButton() => _backButton ??= Find(TitleBar, "BackButton");
+	/// <summary>The TitleBar's own Back button (its template's PART_BackButton, loaded once Back is shown).</summary>
+	private FrameworkElement? BackButton() => _backButton ??= Find(TitleBar, "PART_BackButton");
 
 	private static FrameworkElement? Find(DependencyObject root, string name)
 	{
@@ -266,13 +368,20 @@ public sealed partial class TitleBarControl : UserControl
 			inset + _slack,
 			back: Math.Max(leftStart, ViewModel.IsBackButtonShown ? Math.Max(BackButton()?.ActualWidth ?? 0, 48) : 0),
 			wordmark: _wordmarkWidth > 0 ? _wordmarkWidth : 120,
-			tabs: navigation ? Tabs.FullWidth() : 0,
+			row: navigation ? Tabs.RowWidths() : new TopRowWidths(0, [], 0, 0),
 			menuButton: navigation ? Tabs.MenuButtonWidth() : 0,
 			account: ViewModel.IsAccountShown ? AccountButton.Width : 0,
 			search: ViewModel.IsSearchShown,
 			searchOpen: _searchOpen);
 
 		_compact = fit.Compact;
+		StyleBackButton();
+		// Nixie 1.4.0: the library tabs the bar has no room for fold into "Libraries ▾" (the row changes: TabsChanged, measured again)
+		if (navigation)
+		{
+			_top.Fold(fit.ShownLibraries);
+		}
+
 		Tabs.IsCompact = fit.Compact;
 		Tabs.IsMenuHidden = !fit.ShowSections;
 		Tabs.IsMenuLabelHidden = !fit.ShowSectionsLabel;
@@ -298,7 +407,9 @@ public sealed partial class TitleBarControl : UserControl
 			}
 
 			var leftEnd = LeftHeaderPanel.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(LeftHeaderPanel.ActualWidth, 0)).X;
-			var rightStart = RightHeaderPanel.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).X;
+			// the gap with the search box pinned to the account (where it stands when it is not centred)
+			var rightStart = RightHeaderPanel.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).X + SearchHost.Margin.Right;
+			CentreSearch(leftEnd);
 			var slack = TopBar.Slack(_slack, rightStart - leftEnd);
 			if (slack > _slack)
 			{
@@ -312,11 +423,32 @@ public sealed partial class TitleBarControl : UserControl
 		}
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (the review's A4, CL-p2, DI-p2, C-P7): the search box centred in the window while that leaves the tabs their
+	/// drag gap, else pinned 8 px from the account (TopBar.SearchOffset); the narrow window's button and open box stay pinned.
+	/// </summary>
+	private void CentreSearch(double leftEnd)
+	{
+		var offset = 0.0;
+		if (!_compact && SearchBox.Visibility == Visibility.Visible && AccountButton.Visibility == Visibility.Visible && AccountButton.ActualWidth > 0)
+		{
+			var accountLeft = AccountButton.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).X;
+			offset = TopBar.SearchOffset(ActualWidth, leftEnd, SearchBox.Width, accountLeft - TopBar.Spacing);
+		}
+
+		if (Math.Abs(SearchHost.Margin.Right - offset) >= 1)
+		{
+			SearchHost.Margin = new Thickness(0, 0, offset, 0);
+		}
+	}
+
 	private void ShowSearch()
 	{
 		var shown = ViewModel.IsSearchShown;
+		SearchHost.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
 		SearchBox.Visibility = shown && (!_compact || _searchOpen) ? Visibility.Visible : Visibility.Collapsed;
 		SearchIconButton.Visibility = shown && _compact && !_searchOpen ? Visibility.Visible : Visibility.Collapsed;
+		ShowLit();
 	}
 
 	/// <summary>Opens the search box (narrow windows) and gives it the keyboard; false when search is not offered here.</summary>

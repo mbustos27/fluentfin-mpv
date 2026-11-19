@@ -57,6 +57,8 @@
             HorizontalAlignment="Left"
             VerticalAlignment="Bottom"
             RequestedTheme="Dark">
+            <!--  Nixie 1.4.0 (topbar): the library this is in, when reached from another section ("Movies ›")  -->
+            <controls:TrailEyebrow Margin="0,0,0,6" />
             <TextBlock x:Name="KickerText" Style="{StaticResource CinematicKickerTextBlockStyle}" />
             <cc:CinematicTitleArt
                 x:Name="TitleArt"

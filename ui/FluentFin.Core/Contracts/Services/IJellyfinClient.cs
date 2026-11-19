@@ -71,6 +71,9 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<BaseItemDto?> GetItem(Guid id);
 
+		/// <summary>Nixie 1.4.0: the folders an item is in, nearest first (its library among them); empty on failure. Never throws.</summary>
+		Task<IReadOnlyList<BaseItemDto>> GetAncestors(Guid id);
+
 		/// <summary>
 		/// fluentfin-mpv: every episode of a series in play order (seasons in order, specials where the server places them),
 		/// in one request with the user data (played, resume point) and nothing else: no images, no extra fields. The mpv

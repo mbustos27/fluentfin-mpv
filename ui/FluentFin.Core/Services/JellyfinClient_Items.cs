@@ -53,6 +53,20 @@ public partial class JellyfinClient
 		}
 	}
 
+	// Nixie 1.4.0: the item's folders, for the top bar's eyebrow (the library an item is in)
+	public async Task<IReadOnlyList<BaseItemDto>> GetAncestors(Guid id)
+	{
+		try
+		{
+			return await _jellyfinApiClient.Items[id].Ancestors.GetAsync(x => x.QueryParameters.UserId = UserId) ?? [];
+		}
+		catch (Exception ex)
+		{
+			logger.LogDebug("Ancestors of {Id}: {Error}", id, ex.Message);
+			return [];
+		}
+	}
+
 	// Seaglass 1.1.4: was a POST of the whole item to /Items/{id} (the administrators' metadata editor, which never reads the
 	// user data: nothing was reset, and anyone else got a 403); now the user-data endpoint, as SetResumePosition
 	public async Task ResetProgress(Guid id) => await SetResumePosition(id, 0);

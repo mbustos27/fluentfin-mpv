@@ -206,6 +206,10 @@ class Library:
         big = self.int_of(os.environ.get("FAKESERVER_BIG_LIBRARY"), 0)
         if big > 0:
             self._big_library(big)
+        # 1.4.0 topbar: FAKESERVER_EXTRA_VIEWS=<n> adds n small movie libraries (the top bar's fold with 9 views)
+        extra = self.int_of(os.environ.get("FAKESERVER_EXTRA_VIEWS"), 0)
+        for name in self.EXTRA_VIEW_NAMES[:max(0, extra)]:
+            self._small_library(name, 8)
 
     # UXCAP (the library and collections review's captures): a "Collections" view (boxsets) of BoxSets made of the Movies library's titles
     COLLECTION_NAMES = ["The Harbor Collection", "Kestrel Bay Trilogy", "Midnight Stories", "The Northgate Saga",
@@ -261,6 +265,32 @@ class Library:
         """Nixie 1.4.0: the box sets an item is in (GET /Items/{id}/Collections, Jellyfin 10.11)."""
         return [self.items[b] for b, kids in self.children.items()
                 if b in self.items and self.items[b]["kind"] == "boxset" and not self.items[b].get("playlist") and item_id in kids]
+
+    # 1.4.0 topbar: the extra views' names (FAKESERVER_EXTRA_VIEWS), long and short, as real servers name them
+    EXTRA_VIEW_NAMES = ["Concerts", "Kids and Family", "Stand-up Specials", "Classics", "Home Videos", "4K Remasters"]
+
+    def _small_library(self, view_name, n):
+        saved = self.rng
+        self.rng = random.Random(sum(map(ord, view_name)))
+        try:
+            rng = self.rng
+            vid = _id("view", view_name)
+            start = self.now - datetime.timedelta(days=3 * 365)
+            self.items[vid] = {"Id": vid, "kind": "view", "Name": view_name, "collection": "movies", "parent": None,
+                               "view": vid, "created": start}
+            self.views.append(vid)
+            self.children[vid] = []
+            for _ in range(n):
+                name = self._name("movies")
+                mid = _id("movie", view_name, name)
+                item = self._common(mid, "movie", name, vid, vid, start + datetime.timedelta(days=rng.randint(0, 900)),
+                                    rng.randint(1950, 2026), rng.sample(GENRES, rng.randint(1, 3)), rng.choice(MOVIE_RATINGS))
+                item["showcase"] = None
+                self.items[mid] = item
+                self.children[vid].append(mid)
+            self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
+        finally:
+            self.rng = saved
 
     # UXCAP (the library and collections review's captures): a big movies library ("Archive") of n titles, for density and scrolling
     def _big_library(self, n):
