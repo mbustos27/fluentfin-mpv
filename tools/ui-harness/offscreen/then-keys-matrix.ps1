@@ -323,8 +323,22 @@ function KM-Ready([bool]$Paused) {
 
 # ==== B. browsing: the keys of each page, before the player (run with -Script home) =========================================
 function KB-Focus { $f = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id); if ($f) { $f | ConvertFrom-Json } else { $null } }
+# the focused element's UI Automation runtime id (tells two cards of the same title apart: Editorial's Home shows some twice)
+function KB-FocusId {
+    $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::HasKeyboardFocusProperty, $true)
+    $e = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, $cond)) | Where-Object { try { $_.Cached.ControlType -ne [System.Windows.Automation.ControlType]::Window } catch { $false } } | Select-Object -First 1
+    if ($e) { try { ($e.GetRuntimeId() -join '.') } catch { $null } } else { $null }
+}
 function KB-Desc($F) { if ($F) { "$($F.type) '$($F.name)'" } else { 'nothing' } }
-function KB-Same($A, $B) { $A -and $B -and $A.name -eq $B.name -and $A.type -eq $B.type }
+# the same element: its name and type, and its place (two shelves can show the same title: Editorial's Home)
+function KB-Same($A, $B) {
+    if (-not (KB-SameItem $A $B)) { return $false }
+    $ra = @($A.rect); $rb = @($B.rect)
+    if ($ra.Count -lt 2 -or $rb.Count -lt 2) { return $true }
+    [math]::Abs($ra[0] - $rb[0]) -lt 24 -and [math]::Abs($ra[1] - $rb[1]) -lt 24
+}
+# the same item (the place may have scrolled)
+function KB-SameItem($A, $B) { $A -and $B -and $A.name -eq $B.name -and $A.type -eq $B.type }
 # the first item of a list in the page (a card), under the top bar, on screen
 function KB-FirstCard([double]$MinY = 120) {
     $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)
@@ -333,11 +347,13 @@ function KB-FirstCard([double]$MinY = 120) {
 # a key that must move the focus (to another element); $Back: the element it must land on instead
 function KB-Moves([string]$Page, [string]$Chord, $Back) {
     $b = KB-Focus
+    $bId = KB-FocusId
     $sent = KM-Press $Chord
     $a = $null
     $ok = $sent -and [bool](Wait-Until {
             $script:kbNow = KB-Focus
-            if ($Back) { if (KB-Same $script:kbNow $Back) { $true } } elseif ($script:kbNow -and -not (KB-Same $script:kbNow $b)) { $true }
+            if ($Back) { if (KB-SameItem $script:kbNow $Back) { $true } }
+            elseif ($script:kbNow -and (-not (KB-Same $script:kbNow $b) -or ($bId -and (KB-FocusId) -ne $bId))) { $true }
         } -Seconds 3 -PollMs 150)
     $a = $script:kbNow
     KM-Row 'browsing' $Page "$Chord ($(if ($Back) { 'back' } else { 'moves the focus' }))" $ok "to $script:kmLastTarget; $(KB-Desc $b) -> $(KB-Desc $a)"
@@ -357,7 +373,8 @@ function KB-ArrowsAndEnds([string]$Page, $Start, [string[]]$Pairs) {
         $from = KB-Focus
         $moved = KB-Moves $Page $there $null
         if (-not $moved) { continue }
-        if ($there -in 'Right', 'End') { [void](KB-Moves $Page $back $from) }
+        if ($there -eq 'Right') { [void](KB-Moves $Page $back $from) }
+        elseif ($there -eq 'End') { [void](KB-Moves $Page $back $Start) }
         else { [void](KB-Moves $Page $back $null) }
     }
 }
@@ -373,22 +390,28 @@ if ($script:page -ne 'player') {
     # -- Home: a row's cards
     Open-Nav 'Home'; Start-Sleep -Seconds 3
     [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 0); Start-Sleep -Milliseconds 700
-    $kbStart = KB-Start 'Home' (KB-FirstCard)
+    $kbStart = KB-Start 'Home' (Wait-Until { KB-FirstCard } -Seconds 15 -PollMs 300)
     if ($kbStart) {
         KB-ArrowsAndEnds 'Home' $kbStart @('Right/Left', 'End/Home', 'Down/Up')
         [void](KB-Start 'Home' (Find-Ui -Name $kbStart.name -Type 'ListItem'))
         $kbOpened = $kbStart.name
         $sent = KM-Press 'Enter'
-        $ok = $sent -and [bool](Wait-Until { if (-not (Find-Ui -Name $kbOpened -Type 'ListItem')) { $true } } -Seconds 10 -PollMs 200)
-        KM-Row 'browsing' 'Home' 'Enter (opens the card)' $ok "to $script:kmLastTarget; '$kbOpened'"
+        # its page, or (Editorial) its details in place under the shelf
+        $kbHow = Wait-Until { if (Find-Ui -Name 'Full details' -Type 'Button' -Contains) { 'details' } elseif (-not (Find-Ui -Name $kbOpened -Type 'ListItem')) { 'page' } } -Seconds 10 -PollMs 200
+        KM-Row 'browsing' 'Home' 'Enter (opens the card)' ($sent -and [bool]$kbHow) "to $script:kmLastTarget; '$kbOpened': $kbHow"
         Start-Sleep -Seconds 2
-        if ($ok) { KB-Back 'Home' { Find-Ui -Name $kbOpened -Type 'ListItem' -OffscreenToo } }
+        if ($kbHow -eq 'page') { KB-Back 'Home' { Find-Ui -Name $kbOpened -Type 'ListItem' -OffscreenToo } }
+        elseif ($kbHow -eq 'details') {
+            [void](KM-Press 'Esc')
+            $kbShut = Wait-Until { if (-not (Find-Ui -Name 'Full details' -Type 'Button' -Contains)) { $true } } -Seconds 5 -PollMs 200
+            KM-Row 'browsing' 'Home' 'Esc (closes the details)' ([bool]$kbShut) "to $script:kmLastTarget"
+        }
     }
     # -- Library: the grid, the ends, the pages, the letter jump, a card and back
     Open-Library $fixture.movie.library
-    [void](Wait-Until { [OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $fixture.movie.name) } -Seconds 30 -PollMs 150)
+    [void](Wait-Until { Find-MediaCard $fixture.movie.name } -Seconds 30 -PollMs 150)
     Start-Sleep -Milliseconds 1500
-    $kbStart = KB-Start 'Library' ([OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $fixture.movie.name))
+    $kbStart = KB-Start 'Library' (Find-MediaCard $fixture.movie.name)
     if ($kbStart) {
         KB-ArrowsAndEnds 'Library' $kbStart @('Right/Left', 'Down/Up', 'PageDown/PageUp', 'End/Home')
         $kbJump = Find-Ui -Name 'Jump to C' -Type 'Button'
@@ -399,8 +422,11 @@ if ($script:page -ne 'player') {
             KM-Row 'browsing' 'Library' 'letter jump (Enter on "Jump to C")' ([bool]$kbLanded) "to $script:kmLastTarget; $(KB-Desc (KB-Focus))"
         }
         else { KM-Row 'browsing' 'Library' 'letter jump (Enter on "Jump to C")' $false 'no "Jump to C"' }
-        [void](KB-Start 'Library' ([OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $fixture.movie.name)))
+        [void](KB-Start 'Library' (Find-MediaCard $fixture.movie.name))
         [void](KM-Press 'Enter')
+        # (Editorial: its details in place first; Enter on their Full details opens the page)
+        $kbFull = Wait-Until { Find-Ui -Name 'Full details' -Type 'Button' -Contains } -Seconds 2 -PollMs 150
+        if ($kbFull) { [void][OffscreenUi]::SetFocus($kbFull); Start-Sleep -Milliseconds 300; [void](KM-Press 'Enter') }
         $kbMovie = Wait-ItemPage $fixture.movie.name 12
         KM-Row 'browsing' 'Library' 'Enter (opens the movie)' ([bool]$kbMovie) "to $script:kmLastTarget"
         if ($kbMovie) {
@@ -408,7 +434,7 @@ if ($script:page -ne 'player') {
             # -- Movie: Tab into the page, Back
             $kbB = KB-Focus; [void](KM-Press 'Tab'); Start-Sleep -Milliseconds 500
             KM-Row 'browsing' 'Movie' 'Tab (moves the focus)' (-not (KB-Same (KB-Focus) $kbB)) "$(KB-Desc $kbB) -> $(KB-Desc (KB-Focus))"
-            KB-Back 'Movie' { [OffscreenUi]::FindCard($script:hwnd, $script:ui.Id, $fixture.movie.name) }
+            KB-Back 'Movie' { Find-MediaCard $fixture.movie.name }
         }
     }
     # -- Series and Season: Tab, the episode rows, the menu key, the episode's page, Back
@@ -419,12 +445,24 @@ if ($script:page -ne 'player') {
     $kbRow = Find-EpisodeRow
     $kbStart = KB-Start 'Season' $kbRow
     if ($kbStart) {
-        $kbDown = KB-Moves 'Season' 'Down' $null
-        if ($kbDown) { [void](KB-Moves 'Season' 'Up' $kbStart) }
-        [void](KM-Press 'Apps'); $kbMenu = Wait-Ui -Name 'Episode details' -Type 'MenuItem' -Seconds 4
-        KM-Row 'browsing' 'Season' 'the menu key (opens the row''s menu)' ([bool]$kbMenu) "to $script:kmLastTarget"
+        # the episodes are a list down the page (Classic, Drive-in's SHOWTIMES board, Editorial) or a shelf across it
+        # (Cinematic's stills): the arrow along the list moves to the next episode and its opposite back
+        [void](KM-Press 'Down'); Start-Sleep -Milliseconds 600
+        $kbAlong = KB-Focus
+        $kbKeys = if ($kbAlong -and $kbAlong.type -eq 'ListItem' -and -not (KB-SameItem $kbAlong $kbStart)) { @('Down', 'Up') } else { @('Right', 'Left') }
+        $kbStart = KB-Start 'Season' (Find-EpisodeRow)
+        $kbNext = KB-Moves 'Season' "$($kbKeys[0])" $null
+        if ($kbNext) { [void](KB-Moves 'Season' "$($kbKeys[1])" $kbStart) }
+        # the menu key opens the episode's menu, "Episode details" first (a menu can be a window of its own: its item has the
+        # keyboard)
+        [void](KB-Start 'Season' (Find-EpisodeRow))
+        [void](KM-Press 'Apps')
+        $kbMenu = Wait-Until { $f = KB-Focus; if ($f -and $f.type -eq 'MenuItem') { $f } } -Seconds 4 -PollMs 150
+        KM-Row 'browsing' 'Season' 'the menu key (opens the episode''s menu)' ([bool]$kbMenu) "to $script:kmLastTarget; $(KB-Desc $kbMenu)"
+        if ($kbMenu -and $kbMenu.name -ne 'Episode details') {
+            foreach ($i in 1..6) { [void](KM-Press 'Down'); Start-Sleep -Milliseconds 250; if ((KB-Focus).name -eq 'Episode details') { break } }
+        }
         if ($kbMenu) {
-            [void][OffscreenUi]::SetFocus($kbMenu); Start-Sleep -Milliseconds 300
             [void](KM-Press 'Enter')
             $kbEp = Wait-ItemPage $fixture.episode.name 12
             KM-Row 'browsing' 'Episode' 'Enter on Episode details (opens it)' ([bool]$kbEp) "to $script:kmLastTarget"
@@ -671,8 +709,8 @@ foreach ($kmId in @('PlayPauseButton', 'SeekBar', 'VolumeButton', 'SpeedButton',
 $kmControls = @('PlayPauseButton', 'SeekBar', 'VolumeButton', 'TracksButton', 'NextButton', 'PreviousButton', 'SpeedButton', 'FullScreenButton', 'SkipBackButton', 'SkipForwardButton', 'BackButton')
 foreach ($kmId in $kmControls) {
     KM-Ready $true
-    $kmE = Find-Ui -Id $kmId
-    if (-not $kmE -or -not $kmE.Current.IsEnabled) { KM-Row 'paused, focus on a control' $kmId 'focus' $false 'not found or disabled'; continue }
+    $kmE = Wait-Ui -Id $kmId -Seconds 4
+    if (-not $kmE -or -not $kmE.Current.IsEnabled) { KM-Row 'paused, focus on a control' $kmId 'focus' $false "not found or disabled (bars shown: $(KM-Bars))"; continue }
     [void][OffscreenUi]::SetFocus($kmE); Start-Sleep -Milliseconds 300
     $kmOn = KM-FocusName
     foreach ($kmChord in @('Space', 'Space', 'Left', 'Right', 'Up', 'Down', 'M', 'M')) {
@@ -708,10 +746,11 @@ if ($kmNext) {
         $kmTile = Wait-Until { Find-Ui -Name $kmNext -Type 'ListItem' -Contains } -Seconds 15 -PollMs 200
         if ($kmTile) { [void](Invoke-Element $kmTile); Start-Sleep -Seconds 3 }
         KM-Row 'theme switch' "$kmTheme -> $kmNext" 'switched in Settings' ([bool]$kmTile) ''
-        # back to the season and play again
-        Step-Season $false
+        # back (the Back key) to the season page the player was left for, now in the new theme, and play again
+        [void](KM-Press 'BackKey')
+        $kmRow = Wait-Until { Find-EpisodeRow } -Seconds 12 -PollMs 300
+        if (-not $kmRow) { Step-Season $false; $kmRow = Find-EpisodeRow }
         $script:page = 'season'
-        $kmRow = Find-EpisodeRow
         if ($kmRow) {
             [void](Invoke-Element $kmRow)
             $kmShown = Wait-Until { Find-Ui -Id 'PlayPauseButton' } -Seconds 40 -PollMs 200

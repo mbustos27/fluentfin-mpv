@@ -38,6 +38,9 @@ $Reuse = @($Reuse | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $runner = Join-Path $PSScriptRoot 'run-offscreen.ps1'
 $then = Join-Path $PSScriptRoot 'offscreen\then-keys-matrix.ps1'
 
+# a run's rows (Windows PowerShell's ConvertFrom-Json writes a JSON array as one object: enumerated here)
+function Read-Rows([string]$File) { if (Test-Path $File) { @(Get-Content $File -Raw -Encoding utf8 | ConvertFrom-Json | ForEach-Object { $_ }) } else { @() } }
+
 $results = [ordered]@{}
 $built = $false
 foreach ($theme in $Themes) {
@@ -46,7 +49,7 @@ foreach ($theme in $Themes) {
     $kept = Join-Path $runOut 'keys-matrix\keys-matrix.json'
     if ($Reuse -contains $theme -and (Test-Path $kept)) {
         Write-Host "== ${theme}: the rows of the earlier run ($kept)"
-        $results[$theme] = @(Get-Content $kept -Raw -Encoding utf8 | ConvertFrom-Json)
+        $results[$theme] = Read-Rows $kept
         continue
     }
     $data = Join-Path $Out "data-$theme"
@@ -59,7 +62,7 @@ foreach ($theme in $Themes) {
     & $runner @runArgs | Out-Host
     $built = $true
     $rowsFile = Join-Path $runOut 'keys-matrix\keys-matrix.json'
-    $results[$theme] = if (Test-Path $rowsFile) { @(Get-Content $rowsFile -Raw -Encoding utf8 | ConvertFrom-Json) } else { @() }
+    $results[$theme] = Read-Rows $rowsFile
 }
 Remove-Item Env:NIXIE_LAYOUT -ErrorAction SilentlyContinue
 
