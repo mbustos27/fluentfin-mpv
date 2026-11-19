@@ -10,6 +10,9 @@
   not Play) or the card it was on (not a card out of view). On a slow server, if you move first (a key, a click, the wheel,
   the search box), the refresh leaves the keyboard where you put it. R on a closed list box (Audio, Subtitles) picks the
   entry starting with R instead of refreshing; F5 and Ctrl+R still refresh there.
+- **After "Choose a look", the old Home lets go.** Classic's, Cinematic's and Editorial's Home listen to the page's data
+  only while shown, as Drive-in's did: the Home you left could close the new one's "Removed from Continue Watching ·
+  Undo" under your pointer.
 
 ## 1.3.1
 

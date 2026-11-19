@@ -261,6 +261,34 @@ public sealed class ThemeSwitchTests
 		return new ThemeService(settings, [new OptionsTheme(LayoutThemeId.DriveIn), new OptionsTheme(LayoutThemeId.Cinematic), new OptionsTheme(LayoutThemeId.Editorial), new ClassicTheme()], null);
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m6): "Choose a look" hands Home's view model to the new theme's Home, so the view model outlives
+	/// the page. Every theme's Home listens to it (and to its rows, Up next and genres) only while shown: subscribed on Loaded,
+	/// let go on Unloaded, never in the constructor, where the old page kept listening and its notice timer closed the new
+	/// page's Undo.
+	/// </summary>
+	[Theory]
+	[InlineData("HomePage", "Views", "HomePage.xaml.cs")]
+	[InlineData("DriveInHomePage", "Themes", "DriveIn", "Views", "DriveInHomePage.xaml.cs")]
+	[InlineData("CinematicHomePage", "Themes", "Cinematic", "Views", "CinematicHomePage.xaml.cs")]
+	[InlineData("EditorialHomePage", "Themes", "Editorial", "Views", "EditorialHomePage.xaml.cs")]
+	public void EveryHome_ListensToItsViewModel_OnlyWhileShown(string page, params string[] path)
+	{
+		var code = Source(path).Replace("\r\n", "\n");
+		var start = code.IndexOf($"public {page}()", StringComparison.Ordinal);
+		Assert.True(start > 0, page);
+		var ctor = code[start..code.IndexOf("\n\t}\n", start, StringComparison.Ordinal)];
+		var loaded = ctor.IndexOf("Loaded += (_, _) =>", StringComparison.Ordinal);
+		var unloaded = ctor.IndexOf("Unloaded += (_, _) =>", StringComparison.Ordinal);
+		Assert.True(loaded > 0 && unloaded > 0, page);
+
+		// outside the Loaded and Unloaded handlers, the constructor subscribes to nothing of the view model's
+		var outside = System.Text.RegularExpressions.Regex.Replace(ctor, @"(Un)?[Ll]oaded \+= \(_, _\) =>\n\t\t\{.*?\n\t\t\};", "", System.Text.RegularExpressions.RegexOptions.Singleline);
+		Assert.DoesNotMatch(@"ViewModel(\.\w+)*\.\w+ \+=", outside);
+		// and each subscription is let go on Unloaded
+		Assert.Matches(@"Unloaded \+= \(_, _\) =>\n\t\t\{[^}]*(-=|Listen\(false\)|Unwatch\(\))", ctor);
+	}
+
 	private static string Source(params string[] parts) => File.ReadAllText(Path.Combine([FlyleafEngineTests.RepoRoot, "FluentFin", .. parts]));
 
 	private sealed class FakeViewModel;
