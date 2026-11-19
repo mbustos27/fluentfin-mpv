@@ -55,6 +55,7 @@ public static class WindowShortcuts
 		if (shortcut != AppShortcut.Refresh && !AppShortcuts.IsModifierKey((int)e.Key))
 		{
 			PageRefresh.UserActed("a key");
+			Views.ItemPagePlace.UserActedAt = Environment.TickCount64; // 1.4.0: an item page's arrival focus yields too
 		}
 
 		// Nixie 1.4.0 (bug hunt M1): the theatre is modal. Its keys are decided here, before any page handler or key
@@ -94,6 +95,7 @@ public static class WindowShortcuts
 		}
 
 		PageRefresh.UserActed("a click");
+		Views.ItemPagePlace.UserActedAt = Environment.TickCount64;
 		var kind = e.GetCurrentPoint(root).Properties.PointerUpdateKind;
 		if (AppMouse.For(kind == PointerUpdateKind.XButton1Pressed, kind == PointerUpdateKind.XButton2Pressed) is { } shortcut)
 		{

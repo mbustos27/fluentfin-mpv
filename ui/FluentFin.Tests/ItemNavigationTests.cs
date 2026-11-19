@@ -107,6 +107,22 @@ public sealed class ItemNavigationTests
 		Assert.Equal(step, ItemPagePlace.ArrivalFocus(loaded, primaryReady, focusInPage, openPopups).ToString());
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (the integration's checks: Drive-in's documentary page ended on Back): once Play has the focus, a navigation
+	/// that takes it back out of the page a moment later (the page before unloaded after the new one drew) gives it back, at
+	/// most three times; never over a menu or after the user pressed a key or clicked.
+	/// </summary>
+	[Theory]
+	[InlineData(false, 0, false, 0, true)]    // the focus went back to the top bar's Back by itself: Play again
+	[InlineData(true, 0, false, 0, false)]    // still in the page
+	[InlineData(false, 1, false, 0, false)]   // a menu or a flyout has it
+	[InlineData(false, 0, true, 0, false)]    // the user pressed a key or clicked (Shift+Tab to Back)
+	[InlineData(false, 0, false, 3, false)]   // three times already: something else wants it
+	public void TheArrivalFocus_ComesBackOnce_WhenTheNavigationTookIt(bool focusInPage, int openPopups, bool userActed, int times, bool again)
+	{
+		Assert.Equal(again, ItemPagePlace.FocusAgain(focusInPage, openPopups, userActed, times));
+	}
+
 	/// <summary>Nixie 1.4.0: every theme's Movie and Episode page gives its Play as the Primary its arrival focuses.</summary>
 	[Theory]
 	[InlineData(@"Views\MoviePage.xaml.cs")]

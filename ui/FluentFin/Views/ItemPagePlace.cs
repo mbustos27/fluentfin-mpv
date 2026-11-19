@@ -121,9 +121,30 @@ internal sealed class ItemPagePlace
 		return null;
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0: when the user last pressed a key or clicked (WindowShortcuts), so the arrival's focus never takes the
+	/// keyboard back from where the user put it.
+	/// </summary>
+	internal static long UserActedAt;
+
+	/// <summary>How long after the Primary took the focus it is given back if the navigation's own focus handling moved it out of the page.</summary>
+	private static readonly TimeSpan Settled = TimeSpan.FromMilliseconds(1500);
+
+	/// <summary>
+	/// Nixie 1.4.0: whether the Primary takes the focus again a moment after it took it: the navigation's own focus handling
+	/// moved it out of the page (to the top bar's Back, the first stop of the window, when the page before was unloaded after
+	/// the new one drew; a page that loaded quickly lost its Play that way), nothing is open over the page, and the user has
+	/// not pressed a key or clicked since.
+	/// </summary>
+	internal static bool FocusAgain(bool focusInPage, int openPopups, bool userActedSince, int times) =>
+		!focusInPage && openPopups == 0 && !userActedSince && times < 3;
+
 	private void FocusPrimaryWhenDrawn()
 	{
 		var deadline = DateTime.UtcNow + Patience;
+		DateTime? placedAt = null;
+		long placedTick = 0;
+		var again = 0;
 		_timer?.Stop();
 		_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
 		_timer.Tick += (_, _) =>
@@ -141,12 +162,31 @@ internal sealed class ItemPagePlace
 			var primary = _primary?.Invoke();
 			var ready = primary is { IsLoaded: true, IsEnabled: true, Visibility: Visibility.Visible } && primary.ActualWidth > 0;
 			var current = FocusManager.GetFocusedElement(root) as DependencyObject;
-			switch (ArrivalFocus(_loaded(), ready, current is not null && IsInPage(current) && !ReferenceEquals(current, _scroller), VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count))
+			var inPage = current is not null && IsInPage(current) && !ReferenceEquals(current, _scroller);
+			var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count;
+			if (placedAt is { } at)
+			{
+				// placed: watch a moment for the navigation taking it back out of the page
+				if (DateTime.UtcNow - at > Settled || !ready)
+				{
+					_timer?.Stop();
+				}
+				else if (FocusAgain(inPage, popups, UserActedAt > placedTick, again))
+				{
+					again++;
+					primary!.Focus(FocusState.Programmatic);
+				}
+
+				return;
+			}
+
+			switch (ArrivalFocus(_loaded(), ready, inPage, popups))
 			{
 				case ArrivalStep.Focus:
 					// Programmatic: the ring shows when the keyboard brought the user here, not after a click
 					primary!.Focus(FocusState.Programmatic);
-					_timer?.Stop();
+					placedAt = DateTime.UtcNow;
+					placedTick = Environment.TickCount64;
 					return;
 				case ArrivalStep.Leave:
 					_timer?.Stop();
