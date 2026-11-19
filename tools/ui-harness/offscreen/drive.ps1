@@ -412,7 +412,8 @@ function Step-SignIn([bool]$Capture) {
 function Step-Home {
     if ($script:page -ne 'home') { Open-Nav 'Home'; $script:page = 'home' }
     $since = $script:signedInAt
-    $views = @($fixture.views)
+    # Nixie 1.4.0 (shared stream): Home has no "New in Collections" or "New in Playlists" row (FAKESERVER_COLLECTIONS's views)
+    $views = @($fixture.views | Where-Object { $_ -notin @('Collections', 'Playlists') })
     # Nixie 1.3.0: a row counts under any of its names in the layout themes (Drive-in's sign says "Coming up", Cinematic's
     # and Editorial's list "Up next", which Editorial also gives Continue Watching's items)
     $groups = @(, @('Continue Watching', 'Continue watching', 'Up next', 'UP NEXT')) + @(, @('Next Up', 'Coming up', 'Coming Up', 'COMING UP', 'Up next', 'UP NEXT')) +
