@@ -70,9 +70,12 @@ public sealed class ButtonVerdictMergeTests
 	public void TheLibraryStreamsVerdicts()
 	{
 		var library = Load("FluentFin/Views/LibraryPage.xaml");
-		Assert.Contains(library.Descendants(), e => (string?)e.Attribute("Text") == "{x:Bind local:LibraryPage.SortLabel(ViewModel.SortName), Mode=OneWay}"); // L15
-		Assert.Contains(library.Descendants(), e => (string?)e.Attribute("Text") == "Descending"); // L24
-		Assert.Equal("{StaticResource NixieCompactButtonStyle}", (string?)library.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "ClearFiltersButton").Attribute("Style")); // L26
+		// Nixie 1.4.0: the bar is the shared toolbar; the Sort button shows the sort in use and its direction (L15, item 8),
+		// and its menu still has the direction as a second group (L24), in the key's words (LibraryToolbar.SortMenu_Opening)
+		var bar = Load("FluentFin/Controls/LibraryToolbar.xaml");
+		Assert.Contains(bar.Descendants(), e => (string?)e.Attribute("Text") == "{x:Bind ViewModel.SortText, Mode=OneWay}"); // L15
+		Assert.Contains("SortMenu.Items.Add(new MenuFlyoutSeparator());", Code("FluentFin/Controls/LibraryToolbar.xaml.cs")); // L24
+		Assert.Equal("{StaticResource NixieCompactButtonStyle}", (string?)bar.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "ClearFiltersButton").Attribute("Style")); // L26
 		Assert.DoesNotContain(library.Descendants(), e => (string?)e.Attribute("Style") == "{StaticResource LetterButtonStyle}" && e.Attribute("ToolTipService.ToolTip") is not null); // L30
 		var menu = Code("FluentFin/Converters/JellyfinFlyoutConverter.cs");
 		Assert.Contains("\"\uEB51\"", menu); // L36: add to favourites (the file writes glyphs as the characters themselves)

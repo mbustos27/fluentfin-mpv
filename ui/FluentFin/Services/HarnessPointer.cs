@@ -149,6 +149,12 @@ public static class HarnessPointer
 		{
 			invoke.Invoke();
 		}
+		// Nixie 1.4.0 (the library stream): a switch (a ToggleButton has no Invoke) turns, as a click turns it
+		else if (target is ButtonBase { IsEnabled: true } toggle
+			&& FrameworkElementAutomationPeer.CreatePeerForElement(toggle)?.GetPattern(PatternInterface.Toggle) is Microsoft.UI.Xaml.Automation.Provider.IToggleProvider turn)
+		{
+			turn.Toggle();
+		}
 
 		if (player is not null)
 		{

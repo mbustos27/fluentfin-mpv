@@ -21,12 +21,24 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 	public static readonly DependencyProperty PosterWidthProperty =
 		DependencyProperty.Register(nameof(PosterWidth), typeof(double), typeof(EditorialLibraryPage), new PropertyMetadata(EditorialLibrary.PosterWidth));
 
-	/// <summary>The posters' width: the row's width shared out (about 136 px, twelve across at 1920).</summary>
+	/// <summary>The posters' width: the row's width shared out (about 136 px at the medium density).</summary>
 	public double PosterWidth
 	{
 		get => (double)GetValue(PosterWidthProperty);
 		set => SetValue(PosterWidthProperty, value);
 	}
+
+	public static readonly DependencyProperty PosterHeightProperty =
+		DependencyProperty.Register(nameof(PosterHeight), typeof(double), typeof(EditorialLibraryPage), new PropertyMetadata(EditorialLibrary.PosterWidth * 1.5));
+
+	/// <summary>The posters' art height (2:3), for the placeholders.</summary>
+	public double PosterHeight
+	{
+		get => (double)GetValue(PosterHeightProperty);
+		set => SetValue(PosterHeightProperty, value);
+	}
+
+	public static IReadOnlyList<int> Slots(int count) => [.. Enumerable.Range(0, count)];
 
 	// the lines the grid shows; opening or closing details inserts or removes their one line, so the rows stay (and the focus)
 	private readonly System.Collections.ObjectModel.ObservableCollection<EditorialLibraryLine> _lines = [];
@@ -35,8 +47,13 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 	private int _lastIndex;
 	private bool _rebuildQueued;
 	private FocusState _jumpFocus = FocusState.Keyboard;
+	private bool _jumped;
 	private bool _focusOnLoad;
 	private bool _toTop;
+	private bool _compact;
+	private double _gridWidth;
+	private string _typed = "";
+	private long _typedAt;
 
 	public EditorialLibraryPage()
 	{
@@ -46,44 +63,59 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		{
 			switch (e.PropertyName)
 			{
-				case nameof(LibraryViewModel.Facets) or nameof(LibraryViewModel.ActiveFilters) or nameof(LibraryViewModel.CountText):
+				case nameof(LibraryViewModel.Facets) or nameof(LibraryViewModel.AppliedFilters) or nameof(LibraryViewModel.CountText):
 					UpdateChips();
 					break;
 				case nameof(LibraryViewModel.SortBy) or nameof(LibraryViewModel.Order):
-					_toTop = true;
-					UpdateSortMenu();
+					_toTop = !ViewModel.IsLoading;
 					QueueRebuild();
 					break;
 				case nameof(LibraryViewModel.FocusRequest) or nameof(LibraryViewModel.IsLoading):
 					FocusRequested();
 					break;
+				case nameof(LibraryViewModel.Density):
+					Fit(_gridWidth);
+					break;
 			}
 		};
 		ViewModel.Filter.PropertyChanged += (_, _) =>
 		{
-			// a narrower or wider library starts at its top (the old place would land mid-section)
-			_toTop = true;
+			// a narrower or wider library starts at its top (the old place would land mid-library)
+			_toTop = !ViewModel.IsLoading;
 			UpdateChips();
 		};
+		// R or F5 (a new view model for the same library): the sort, the filters and the poster are put back, as for Back
+		ViewModel.ReloadedInPlace = () => App.GetService<Contracts.Services.INavigationService>() is NavigationService { LastNavigationWasRefresh: true };
 		Lines.ElementPrepared += Lines_ElementPrepared;
-		GridScroller.ViewChanged += (_, _) => UpdateBar();
+		GridScroller.ViewChanged += (_, _) =>
+		{
+			UpdateBar();
+			// Nixie 1.4.0 (the UX review's E-M5, item 12): scrolled, the head folds to one compact line; at the top it opens
+			var compact = GridScroller.VerticalOffset > (_compact ? 8 : 40);
+			if (compact != _compact)
+			{
+				_compact = compact;
+				Layout(ActualWidth);
+			}
+		};
 		GridScroller.SizeChanged += (_, e) => Fit(e.NewSize.Width - GridScroller.Padding.Left - GridScroller.Padding.Right);
+		ChipScroller.ViewChanged += (_, _) => ShowChipCue();
+		ChipScroller.SizeChanged += (_, _) => ShowChipCue();
 		// Nixie 1.3.1: before the posters' rows see the key (they moved the focus by the arrows' geometry first, so Right from a
 		// letter's last title went to the nearest poster below and right, skipping the next title)
 		GridList.AddHandler(PreviewKeyDownEvent, new KeyEventHandler(Grid_KeyDown), true);
 		GridList.GettingFocus += GridList_GettingFocus;
-		LetterRepeater.ElementPrepared += (_, e) =>
+		GridList.CharacterReceived += GridList_CharacterReceived;
+		Letters.Jumped += (_, e) =>
 		{
-			AutomationProperties.SetPositionInSet(e.Element, e.Index + 1);
-			AutomationProperties.SetSizeOfSet(e.Element, ViewModel.Letters.Count);
-			UpdateBar();
+			_jumpFocus = e.FocusState;
+			_jumped = true;
 		};
 		SizeChanged += (_, e) => Layout(e.NewSize.Width);
 		Loaded += (_, _) =>
 		{
 			AmbientBackdrop.Set(null);
 			Layout(ActualWidth);
-			UpdateSortMenu();
 			UpdateChips();
 			QueueRebuild();
 			if (_focusOnLoad)
@@ -94,7 +126,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		};
 	}
 
-	// ---- the head: the summary, the sort, the chips -------------------------------------------------------------------
+	// ---- the head: the summary, the chips; folded to one line once the grid scrolls ------------------------------------
 
 	private void Layout(double width)
 	{
@@ -105,20 +137,25 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 		var narrow = width < 1400;
 		var margin = narrow ? 40 : 56;
-		Head.Padding = new Thickness(margin, narrow ? 16 : 22, margin, 0);
+		Head.Padding = new Thickness(margin, _compact ? 10 : narrow ? 16 : 22, margin, 0);
 		GridScroller.Padding = new Thickness(margin, 0, margin, 0);
-		SectionBar.Padding = new Thickness(margin, 10, margin, 0);
-		Skeleton.Padding = new Thickness(margin, 74, margin, 0);
-		TitleText.FontSize = narrow ? 64 : 88;
-		TitleText.LineHeight = narrow ? 64 : 84;
+		Skeleton.Margin = new Thickness(margin, 8, margin, 0);
+		AppliedFilters.Margin = new Thickness(margin, _compact ? 6 : 12, margin, 0);
+		LetterRow.Margin = new Thickness(margin, _compact ? 6 : 12, margin, 8);
+		TitleText.FontSize = _compact ? 34 : narrow ? 64 : 88;
+		TitleText.LineHeight = _compact ? 38 : narrow ? 64 : 84;
 		Arc.Width = narrow ? 190 : 250;
+		Arc.Visibility = _compact ? Visibility.Collapsed : Visibility.Visible;
+		SummaryText.Margin = new Thickness(0, 0, 0, _compact ? 6 : 26);
+		SortFilterBar.Margin = new Thickness(0, 0, 0, _compact ? 2 : 22);
+		ChipRow.Visibility = _compact || ViewModel.EditorialTotal == 0 ? Visibility.Collapsed : Visibility.Visible;
 	}
 
 	public static string Upper(string? title) => (title ?? "").Trim().ToUpper(System.Globalization.CultureInfo.CurrentCulture);
 
 	private readonly List<EditorialTabButton> _chips = [];
 
-	/// <summary>The chips: All, then each genre with its count; the picked one lit. Unwatched and Favourites are switches.</summary>
+	/// <summary>The chips: All, then each genre with its count against the other filters; the one genre picked lit (several: none).</summary>
 	private void UpdateChips()
 	{
 		SummaryText.Text = ViewModel.EditorialSummary();
@@ -142,18 +179,15 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			var (label, count) = i == 0 ? ("All", ViewModel.EditorialTotal) : (genres[i - 1].Value, genres[i - 1].Count);
 			_chips[i].Content = ChipContent(label, count);
 			_chips[i].IsSelected = i == 0 ? ViewModel.Filter.Genres.Count == 0 : ViewModel.EditorialGenre == genres[i - 1].Value;
+			// Nixie 1.4.0: a genre that would leave nothing is greyed, not hidden (its count follows the other filters)
+			_chips[i].IsEnabled = i == 0 || genres[i - 1].IsAvailable;
 			AutomationProperties.SetName(_chips[i], i == 0 ? $"All, {count} titles" : genres[i - 1].Name);
 			AutomationProperties.SetPositionInSet(_chips[i], i + 1);
 			AutomationProperties.SetSizeOfSet(_chips[i], _chips.Count);
 		}
 
-		UnwatchedChip.Content = ChipContent("Unwatched", ViewModel.EditorialUnwatched);
-		UnwatchedChip.IsChecked = ViewModel.Filter.Unwatched;
-		AutomationProperties.SetName(UnwatchedChip, $"Unwatched only, {ViewModel.EditorialUnwatched} titles");
-		FavoritesChip.Content = ChipContent("Favorites", null);
-		FavoritesChip.IsChecked = ViewModel.Filter.Favorites;
-		AutomationProperties.SetName(FavoritesChip, "Favorites only");
-		ChipScroller.Visibility = ViewModel.EditorialTotal > 0 ? Visibility.Visible : Visibility.Collapsed;
+		Layout(ActualWidth);
+		DispatcherQueue.TryEnqueue(ShowChipCue);
 	}
 
 	private static StackPanel ChipContent(string label, int? count)
@@ -165,7 +199,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			panel.Children.Add(new TextBlock
 			{
 				Text = n.ToString("N0", System.Globalization.CultureInfo.CurrentCulture),
-				FontSize = 12,
+				FontSize = 13,
 				VerticalAlignment = VerticalAlignment.Center,
 				Foreground = (Brush)Application.Current.Resources["GlassTextSecondaryBrush"],
 			});
@@ -174,29 +208,27 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		return panel;
 	}
 
-	private void UnwatchedChip_Click(object sender, RoutedEventArgs e) => ViewModel.Filter.Unwatched = UnwatchedChip.IsChecked == true;
-
-	private void FavoritesChip_Click(object sender, RoutedEventArgs e) => ViewModel.Filter.Favorites = FavoritesChip.IsChecked == true;
-
-	/// <summary>The sort menu: the keys, then the direction (the shared Library's).</summary>
-	private void UpdateSortMenu()
+	/// <summary>Nixie 1.4.0 (the UX review's E-M1): the chips' row says it goes on (a fade and a chevron), and the chevron turns back at its end.</summary>
+	private void ShowChipCue()
 	{
-		SortMenu.Items.Clear();
-		foreach (var key in new[] { ItemSortBy.Name, ItemSortBy.DateCreated, ItemSortBy.PremiereDate, ItemSortBy.CommunityRating, ItemSortBy.CriticRating, ItemSortBy.DatePlayed, ItemSortBy.PlayCount, ItemSortBy.Runtime })
-		{
-			var item = new RadioMenuFlyoutItem { Text = LibraryBrowse.SortName(key), GroupName = "EditorialSort", IsChecked = ViewModel.SortBy == key };
-			item.Click += (_, _) => ViewModel.UpdateSortByCommand.Execute(key);
-			SortMenu.Items.Add(item);
-		}
-
-		SortMenu.Items.Add(new MenuFlyoutSeparator());
-		foreach (var order in new[] { SortOrder.Ascending, SortOrder.Descending })
-		{
-			var item = new RadioMenuFlyoutItem { Text = order == SortOrder.Ascending ? "Ascending" : "Descending", GroupName = "EditorialOrder", IsChecked = ViewModel.Order == order };
-			item.Click += (_, _) => ViewModel.UpdateSortOrderCommand.Execute(order);
-			SortMenu.Items.Add(item);
-		}
+		var more = ChipScroller.ScrollableWidth > 1;
+		var atEnd = ChipScroller.HorizontalOffset >= ChipScroller.ScrollableWidth - 1;
+		ChipFade.Visibility = more && !atEnd ? Visibility.Visible : Visibility.Collapsed;
+		ChipMore.Visibility = more ? Visibility.Visible : Visibility.Collapsed;
+		ChipMoreGlyph.Glyph = atEnd ? "\uE76B" : "\uE76C";
+		var name = atEnd ? "Back to the first genres" : "More genres";
+		AutomationProperties.SetName(ChipMore, name);
+		ToolTipService.SetToolTip(ChipMore, name);
 	}
+
+	private void ChipMore_Click(object sender, RoutedEventArgs e)
+	{
+		var atEnd = ChipScroller.HorizontalOffset >= ChipScroller.ScrollableWidth - 1;
+		ChipScroller.ChangeView(atEnd ? 0 : ChipScroller.HorizontalOffset + ChipScroller.ViewportWidth * 0.8, null, null, !SafeMotion.Allowed);
+	}
+
+	/// <summary>More filters: the shared Filter panel (years, ratings, tags, several genres).</summary>
+	private void MoreFilters_Click(object sender, RoutedEventArgs e) => SortFilterBar.OpenFilter();
 
 	// ---- the grid's lines ----------------------------------------------------------------------------------------------
 
@@ -207,9 +239,14 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			return;
 		}
 
-		// a narrow window's posters are smaller (the concept's 122 px at 1100), so the row still holds seven
-		var columns = EditorialLibrary.Columns(width, width < 1300 ? 122 : EditorialLibrary.PosterWidth);
+		_gridWidth = width;
+		// a narrow window's posters are smaller (the concept's 122 px at 1100), so the row still holds seven; small and large a step either way
+		var medium = width < 1300 ? 122 : EditorialLibrary.PosterWidth;
+		var poster = LibraryDensities.Width(ViewModel.Density, medium);
+		var columns = EditorialLibrary.Columns(width, poster);
 		PosterWidth = Math.Floor((width - (columns - 1) * EditorialLibrary.Gap) / columns);
+		PosterHeight = Math.Round(PosterWidth * 1.5);
+		SkeletonLayout.MinItemWidth = PosterWidth;
 		if (columns != _columns)
 		{
 			_columns = columns;
@@ -217,7 +254,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 	}
 
-	// Nixie 1.3.1: a playlist in its own order has no letter sections
+	// Nixie 1.4.0: the letters tag the first title of each (sorted by title; a playlist in its own order has none)
 	private bool ByLetter => ViewModel.SortBy == ItemSortBy.Name && !ViewModel.InPlaylistOrder;
 
 	private void QueueRebuild()
@@ -231,7 +268,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		DispatcherQueue.TryEnqueue(Rebuild);
 	}
 
-	/// <summary>The lines again (the titles, the width, the sort or the open details changed).</summary>
+	/// <summary>The lines again (the titles, the width, the sort or the open details changed): rows flowing across letters.</summary>
 	private void Rebuild()
 	{
 		_rebuildQueued = false;
@@ -240,7 +277,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			return;
 		}
 
-		var lines = EditorialLibrary.Lines(ViewModel.Items, _columns, ByLetter, _opened, ViewModel.Items.Count > 0 ? KindOf(ViewModel.Items[0]) : null);
+		var lines = EditorialLibrary.Flow(ViewModel.Items, _columns, ByLetter, _opened);
 		_lines.Clear();
 		foreach (var line in lines)
 		{
@@ -251,8 +288,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		{
 			Lines.ItemsSource = _lines;
 		}
-		SectionBar.Visibility = ByLetter && _lines.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-		Lines.Margin = new Thickness(0, ByLetter ? 0 : 12, 0, 40);
+
 		if (_toTop)
 		{
 			_toTop = false;
@@ -261,13 +297,6 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 		UpdateBar();
 	}
-
-	private static BaseItemDto_CollectionType? KindOf(BaseItemViewModel item) => item.Dto.Type switch
-	{
-		BaseItemDto_Type.Movie => BaseItemDto_CollectionType.Movies,
-		BaseItemDto_Type.Series => BaseItemDto_CollectionType.Tvshows,
-		_ => null,
-	};
 
 	private void Lines_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
 	{
@@ -279,38 +308,27 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 	}
 
-	/// <summary>The bar shows the section under it: its letter, its count, and the letter underlined in the A-Z.</summary>
+	/// <summary>The letter in view (the poster the keyboard is on, else the first row in view) marked in the A to Z, and where the view is.</summary>
 	private void UpdateBar()
 	{
-		if (!ByLetter || _lines.Count == 0)
+		if (ViewModel.IsLoading || _lines.Count == 0)
 		{
 			return;
 		}
 
-		// the first row (drawn) that reaches below the bar: its letter is the section under the bar
-		var top = GridScroller.VerticalOffset + SectionBar.Height;
-		string? letter = null;
-		for (var i = 0; i < _lines.Count && letter is null; i++)
+		if (XamlRoot is { } root && FocusManager.GetFocusedElement(root) is EditorialPoster { Item: { } focused } poster && IsInside(poster, Lines))
 		{
-			if (_lines[i] is EditorialRowLine row && Lines.TryGetElement(i) is FrameworkElement element && element.ActualOffset.Y + element.ActualHeight > top)
-			{
-				letter = row.Letter;
-			}
-		}
-
-		var current = _lines.OfType<EditorialSectionLine>().FirstOrDefault(s => letter is null || s.Letter == letter);
-		if (current is null)
-		{
+			ViewModel.ShowingFrom(IndexOf(focused));
 			return;
 		}
 
-		BarLetter.Text = current.Letter;
-		BarCaption.Text = current.Caption;
-		for (var i = 0; i < ViewModel.Letters.Count; i++)
+		var top = GridScroller.VerticalOffset;
+		for (var i = 0; i < _lines.Count; i++)
 		{
-			if (LetterRepeater.TryGetElement(i) is Button { Content: Grid grid } && grid.Children.Count > 1)
+			if (_lines[i] is EditorialRowLine row && Lines.TryGetElement(i) is FrameworkElement element && element.ActualOffset.Y + element.ActualHeight * 0.5 > top)
 			{
-				grid.Children[1].Opacity = ViewModel.Letters[i].Letter == current.Letter ? 1 : 0;
+				ViewModel.ShowingFrom(row.FirstIndex);
+				return;
 			}
 		}
 	}
@@ -468,7 +486,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 
 		var top = poster.TransformToVisual(GridScroller).TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
-		var clear = SectionBar.Visibility == Visibility.Visible ? SectionBar.Height + 10 : 10;
+		const double clear = 10;
 		var bottom = top + poster.ActualHeight;
 		double? to = top < clear ? GridScroller.VerticalOffset - (clear - top)
 			: bottom > GridScroller.ViewportHeight - 10 ? GridScroller.VerticalOffset + (bottom - GridScroller.ViewportHeight + 10) : null;
@@ -533,11 +551,12 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			return;
 		}
 
-		// Up from the first row: out of the grid, to the A-Z or the chips
+		// Up from the first row: out of the grid, to the A-Z (the letter in view) or the chips
 		if (key == "Up" && EditorialLibrary.Move(_lines, index, ViewModel.Items.Count, "Up") is null)
 		{
-			_ = (SectionBar.Visibility == Visibility.Visible && LetterRepeater.TryGetElement(0) is Control letter && letter.Focus(FocusState.Keyboard))
-				|| (_chips.FirstOrDefault(c => c.IsSelected) ?? _chips.FirstOrDefault())?.Focus(FocusState.Keyboard) == true;
+			_ = (Letters.Visibility == Visibility.Visible && Letters.FocusCurrent(FocusState.Keyboard))
+				|| (ChipRow.Visibility == Visibility.Visible && (_chips.FirstOrDefault(c => c.IsSelected) ?? _chips.FirstOrDefault())?.Focus(FocusState.Keyboard) == true)
+				|| SortFilterBar.Focus(FocusState.Keyboard);
 			return;
 		}
 
@@ -550,6 +569,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 				GridScroller.ChangeView(null, 0, null, disableAnimation: true);
 				GridScroller.UpdateLayout();
 			}
+
+			DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, UpdateBar);
 
 			if (!FocusIndex(target, FocusState.Keyboard))
 			{
@@ -599,18 +620,42 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		return false;
 	}
 
-	// ---- A-Z, Back ---------------------------------------------------------------------------------------------------
-
-	private void Letter_Click(object sender, RoutedEventArgs e)
+	/// <summary>Nixie 1.4.0 (item 4): letters typed on a poster (within a second of each other) go to the first title they start; one letter again goes on.</summary>
+	private void GridList_CharacterReceived(UIElement sender, CharacterReceivedRoutedEventArgs e)
 	{
-		if (sender is Button { Tag: LetterJump jump } button)
+		if (char.IsControl(e.Character) || e.OriginalSource is not EditorialPoster { Item: { } item })
 		{
-			_jumpFocus = button.FocusState is FocusState.Keyboard ? FocusState.Keyboard : FocusState.Programmatic;
-			ViewModel.JumpToCommand.Execute(jump);
+			return;
+		}
+
+		var now = Environment.TickCount64;
+		if (now - _typedAt > 1000)
+		{
+			_typed = "";
+		}
+
+		if (e.Character == ' ' && _typed.Length == 0)
+		{
+			return; // Space presses the poster
+		}
+
+		_typedAt = now;
+		_typed += e.Character;
+		var current = IndexOf(item);
+		var query = _typed.Length > 1 && _typed.All(c => char.ToUpperInvariant(c) == char.ToUpperInvariant(_typed[0])) ? _typed[..1] : _typed;
+		if (ViewModel.TypeAhead(query, query.Length == 1 ? current + 1 : Math.Max(current, 0)) is { } target)
+		{
+			e.Handled = true;
+			if (!FocusIndex(target, FocusState.Keyboard))
+			{
+				DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => FocusIndex(target, FocusState.Keyboard));
+			}
 		}
 	}
 
-	/// <summary>The title a jump or a Back asked for: its section to the top, the title focused (once the lines are there).</summary>
+	// ---- A-Z, arrival, Back ------------------------------------------------------------------------------------------
+
+	/// <summary>The title a jump, the arrival or a Back asked for: a jump's row to the top, the title focused (once the lines are there).</summary>
 	private void FocusRequested()
 	{
 		if (ViewModel.IsLoading || (ViewModel.FocusRequest < 0 && ViewModel.ReturnOffset is null))
@@ -634,7 +679,11 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			Lines.UpdateLayout();
 			var index = ViewModel.FocusRequest;
 			ViewModel.FocusRequest = -1;
-			var state = _jumpFocus;
+			var arrival = ViewModel.ArrivalFocus;
+			ViewModel.ArrivalFocus = false;
+			var jumped = _jumped;
+			_jumped = false;
+			var state = arrival ? FocusState.Programmatic : _jumpFocus;
 			_jumpFocus = FocusState.Keyboard;
 			if (ViewModel.ReturnOffset is { } offset)
 			{
@@ -643,13 +692,11 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 				GridScroller.ChangeView(null, Math.Min(offset, GridScroller.ScrollableHeight), null, disableAnimation: true);
 				GridScroller.UpdateLayout();
 			}
-			else if (index >= 0 && ByLetter && index < ViewModel.Items.Count
-				&& EditorialLibrary.SectionOf(_lines, LibraryBrowse.LetterOf(LibraryBrowse.SortKey(ViewModel.Items[index]))) is >= 0 and var section
-				&& Lines.GetOrCreateElement(section) is FrameworkElement heading)
+			else if (jumped && index >= 0 && Find(index) is { } at && Lines.GetOrCreateElement(at.Line) is FrameworkElement row)
 			{
-				// the letter's section heading to the top, under the bar (it takes the heading's place there)
+				// the letter's row to the top of the grid (Nixie 1.4.0: rows flow on, the letter's title may be mid-row)
 				Lines.UpdateLayout();
-				GridScroller.ChangeView(null, Math.Min(heading.ActualOffset.Y, GridScroller.ScrollableHeight), null, disableAnimation: true);
+				GridScroller.ChangeView(null, Math.Min(row.ActualOffset.Y, GridScroller.ScrollableHeight), null, disableAnimation: true);
 				GridScroller.UpdateLayout();
 			}
 
@@ -666,6 +713,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 	{
 		ViewModel.ComingBack = e.NavigationMode is NavigationMode.Back or NavigationMode.Forward;
 		_jumpFocus = FocusState.Keyboard;
+		_jumped = false;
 		base.OnNavigatedTo(e);
 	}
 

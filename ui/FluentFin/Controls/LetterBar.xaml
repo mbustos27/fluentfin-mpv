@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Nixie 1.4.0 (the UX review's X16, item 13): the row under a library's toolbar, in every theme, its height always kept (a
+    sort never moves the grid). Sorted by title with 48 titles or more: the A to Z, # and A to Z in one shape (a letter no title
+    starts with is dimmed, skipped by the arrows and silent to Narrator), the letter in view marked from the tile (never a
+    recycled button), at least 32 high, on one row (the tiles narrow to fit). Under any other sort, or fewer titles: the two
+    directions in words ("Oldest first", "Newest first"). At the end, where the view is ("M · 324 of 1,000").
+-->
+<UserControl
+    x:Class="FluentFin.Controls.LetterBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:FluentFin.Controls"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Root"
+    IsTabStop="False">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Controls/LibraryToggleResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        <!--  the letters' default: flat (no glass per letter), the button's own hover and press, radius 8  -->
+        <Style x:Key="LetterBarButtonStyle" BasedOn="{StaticResource DefaultButtonStyle}" TargetType="Button">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="{StaticResource GlassChipCornerRadius}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{ThemeResource GlassTextPrimaryBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="LetterBarDirectionStyle" BasedOn="{StaticResource DefaultToggleButtonStyle}" TargetType="ToggleButton">
+            <Setter Property="MinHeight" Value="{StaticResource NixieCompactButtonHeight}" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{ThemeResource NixieButtonFillBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource NixieButtonForegroundBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource NixieButtonBorderBrush}" />
+            <Setter Property="BorderThickness" Value="{StaticResource GlassStrokeThickness}" />
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
+            <Setter Property="FocusVisualMargin" Value="-3" />
+        </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid x:Name="RowGrid" ColumnSpacing="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!--  one Tab stop, the arrows along it; a list named "Jump to a letter" of buttons "Jump to M"  -->
+        <local:RowList
+            x:Name="LetterList"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="Jump to a letter"
+            TabFocusNavigation="Once"
+            XYFocusKeyboardNavigation="Enabled">
+            <ItemsRepeater x:Name="LetterRepeater" ItemsSource="{x:Bind ViewModel.LetterTiles, Mode=OneWay}">
+                <ItemsRepeater.Layout>
+                    <StackLayout x:Name="LetterLayout" Orientation="Horizontal" Spacing="2" />
+                </ItemsRepeater.Layout>
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LetterTile">
+                        <Button
+                            AutomationProperties.AccessibilityView="{x:Bind local:LetterBar.ViewFor(HasTitles)}"
+                            AutomationProperties.Name="{x:Bind Name}"
+                            Click="Letter_Click"
+                            IsEnabled="{x:Bind HasTitles}"
+                            Tag="{x:Bind}">
+                            <Grid>
+                                <TextBlock
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Text="{x:Bind Letter}" />
+                                <Border
+                                    Width="14"
+                                    Height="3"
+                                    Margin="0,0,0,-6"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Bottom"
+                                    Background="{ThemeResource NixieAccentBrush}"
+                                    CornerRadius="1.5"
+                                    Opacity="{x:Bind local:LetterBar.MarkOpacity(IsCurrent), Mode=OneWay}" />
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+        </local:RowList>
+
+        <!--  any other sort: its two directions, in its words  -->
+        <StackPanel
+            x:Name="Directions"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            Orientation="Horizontal"
+            Spacing="8"
+            Visibility="Collapsed">
+            <ToggleButton
+                x:Name="AscendingButton"
+                Click="Direction_Click"
+                Style="{StaticResource LetterBarDirectionStyle}" />
+            <ToggleButton
+                x:Name="DescendingButton"
+                Click="Direction_Click"
+                Style="{StaticResource LetterBarDirectionStyle}" />
+        </StackPanel>
+
+        <!--  where the view is (large libraries)  -->
+        <TextBlock
+            x:Name="PositionLine"
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+            Style="{StaticResource BodyTextBlockStyle}"
+            Text="{x:Bind ViewModel.PositionText, Mode=OneWay}"
+            TextTrimming="CharacterEllipsis"
+            TextWrapping="NoWrap"
+            Visibility="{x:Bind local:LetterBar.PositionVisibility(ViewModel.PositionText, ViewModel.TotalCount), Mode=OneWay}" />
+    </Grid>
+</UserControl>

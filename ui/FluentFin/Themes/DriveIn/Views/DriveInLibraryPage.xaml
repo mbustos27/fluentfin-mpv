@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!--
     Drive-in: the Library. A letter-board header on a strip of the dusk sky (never behind the posters): the library's name on
-    a large marquee, its count in nixie tubes ("312 FEATURES ON THE LOT"), Sort and Filter; then the A to Z as letter tiles
-    (every letter, those no title starts with resting, dimmed and not a stop); then the posters on the plain ground, eight a
-    row on a wide window. The grid's keyboard and Narrator model, the jump, the sort and the filter are the shared Library's
-    (LibraryViewModel, CardGrid, BaseItemDtoCard).
+    a large marquee, its count in nixie tubes ("312 FEATURES ON THE LOT"), the shared toolbar; then the A to Z as letter tiles
+    (every letter, those no title starts with resting, dimmed and not a stop; on one row at any width); then the filters on,
+    and the posters on the plain ground at their 2:3 at every width. Nixie 1.4.0: once the grid scrolls, the sky folds to a
+    band (a compact marquee and tubes). The grid's keyboard and Narrator model, the jump, the sort and the filter are the
+    shared Library's (LibraryViewModel, LibraryGridHost, CardGrid, BaseItemDtoCard).
 -->
 <Page
     x:Class="FluentFin.Themes.DriveIn.Views.DriveInLibraryPage"
@@ -28,25 +29,44 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <!--  the Filter menu's rows: a kind's heading, or one of its check boxes  -->
-        <DataTemplate x:Key="FilterHeaderTemplate" x:DataType="vm:FilterFacet">
-            <TextBlock
-                Margin="0,16,0,4"
-                AutomationProperties.HeadingLevel="Level3"
-                Style="{StaticResource BodyStrongTextBlockStyle}"
-                Text="{x:Bind Title}" />
+        <!--  the grid's poster (the card is the stop and the Narrator element), the list's row, and a placeholder in the poster's shape  -->
+        <DataTemplate x:Key="CardTemplate" x:DataType="vm:BaseItemViewModel">
+            <ItemContainer
+                AutomationProperties.AccessibilityView="Raw"
+                CornerRadius="8"
+                IsTabStop="False"
+                Style="{StaticResource BareItemContainerStyle}">
+                <lc:BaseItemDtoCard
+                    dc:DriveInRows.Nixie="True"
+                    BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 352)}"
+                    ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 352)}"
+                    Model="{x:Bind}" />
+            </ItemContainer>
         </DataTemplate>
-        <DataTemplate x:Key="FilterOptionTemplate" x:DataType="vm:FilterOption">
-            <CheckBox
-                MinHeight="32"
-                AutomationProperties.Name="{x:Bind Name}"
-                Content="{x:Bind Label}"
-                IsChecked="{x:Bind IsChecked, Mode=TwoWay}" />
+        <DataTemplate x:Key="RowTemplate" x:DataType="vm:BaseItemViewModel">
+            <ItemContainer
+                AutomationProperties.AccessibilityView="Raw"
+                IsTabStop="False"
+                Style="{StaticResource BareItemContainerStyle}">
+                <lc:LibraryListRow Model="{x:Bind}" />
+            </ItemContainer>
         </DataTemplate>
-        <views:FilterRowTemplateSelector
-            x:Key="FilterRowTemplates"
-            Header="{StaticResource FilterHeaderTemplate}"
-            Option="{StaticResource FilterOptionTemplate}" />
+        <DataTemplate x:Key="SkeletonCardTemplate">
+            <Grid
+                ui:VisualExtensions.NormalizedCenterPoint="0.5, 0.5"
+                ui:VisualExtensions.Scale="0.9"
+                RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <ctkl:Shimmer CornerRadius="8" />
+                <StackPanel Grid.Row="1" Spacing="6">
+                    <ctkl:Shimmer Width="130" Height="14" HorizontalAlignment="Left" CornerRadius="4" />
+                    <ctkl:Shimmer Width="60" Height="12" HorizontalAlignment="Left" CornerRadius="4" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
         <!--  Drive-in: the sort and filter buttons are the compact Secondary role on the letter board's sky  -->
         <Style
             x:Key="LibrarySortFilterButtonStyle"
@@ -125,13 +145,14 @@
     <Grid x:Name="LibraryRoot" Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!--  the header on its strip of sky  -->
+        <!--  the header on its strip of sky (Nixie 1.4.0: it folds to a band once the grid scrolls)  -->
         <Grid x:Name="Header">
             <dc:DriveInScene x:Name="Sky" Layer="Back" />
-            <Grid x:Name="HeaderContent" Padding="96,40,96,18" RowSpacing="22">
+            <Grid x:Name="HeaderContent" Padding="96,56,96,18" RowSpacing="22">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -170,229 +191,65 @@
                             Text="{x:Bind vm:DriveInLibrary.CountLabel(ViewModel.DriveInCollectionType), Mode=OneWay}"
                             TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <StackPanel
+                    <!--  Nixie 1.4.0: the shared toolbar (Unwatched, Sort in words, the direction, Filter, View) in the compact role  -->
+                    <lc:LibraryToolbar
                         x:Name="SortFilterBar"
                         Grid.Column="2"
                         VerticalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="8"
-                        Visibility="{x:Bind views:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}">
-                    <Button
-                        x:Name="SortButton"
-                        AutomationProperties.Name="{x:Bind ViewModel.SortButtonName, Mode=OneWay}"
-                        Style="{StaticResource LibrarySortFilterButtonStyle}"
-                        ToolTipService.ToolTip="Sort">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon FontSize="15" Glyph="&#xE8CB;" />
-                            <TextBlock Text="{x:Bind views:LibraryPage.SortLabel(ViewModel.SortName), Mode=OneWay}" />
-                        </StackPanel>
-                        <Button.Flyout>
-                            <MenuBarItemFlyout>
-                                <RadioMenuFlyoutItem
-                                    Command="{x:Bind ViewModel.UpdateSortByCommand}"
-                                    CommandParameter="{x:Bind jm:ItemSortBy.Name}"
-                                    GroupName="Library_SortItem"
-                                    IsChecked="{x:Bind views:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.Name), Mode=OneWay}"
-                                    Text="Name" />
-                                <RadioMenuFlyoutItem
-                                    Command="{x:Bind ViewModel.UpdateSortByCommand}"
-                                    CommandParameter="{x:Bind jm:ItemSortBy.CommunityRating}"
-                                    GroupName="Library_SortItem"
-                                    IsChecked="{x:Bind views:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.CommunityRating), Mode=OneWay}"
-                                    Text="Community rating" />
-                                <RadioMenuFlyoutItem
-                                    Command="{x:Bind ViewModel.UpdateSortByCommand}"
-                                    CommandParameter="{x:Bind jm:ItemSortBy.CriticRating}"
-                                    GroupName="Library_SortItem"
-                                    IsChecked="{x:Bind views:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.CriticRating), Mode=OneWay}"
-                                    Text="Critic rating" />
-                                <RadioMenuFlyoutItem
-                                    Command="{x:Bind ViewModel.UpdateSortByCommand}"
-                                    CommandParameter="{x:Bind jm:ItemSortBy.DateCreated}"
-                                    GroupName="Library_SortItem"
-                                    IsChecked="{x:Bind views:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.DateCreated), Mode=OneWay}"
-                                    Text="Date added" />
-                                <RadioMenuFlyoutItem
-                                    Command="{x:Bind ViewModel.UpdateSortByCommand}"
-                                    CommandParameter="{x:Bind jm:ItemSortBy.DatePlayed}"
-                                    GroupName="Library_SortItem"
-                                    IsChecked="{x:Bind views:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.DatePlayed), Mode=OneWay}"
-                                    Text="Date played" />
-                                <RadioMenuFlyoutItem
-                                    Command="{x:Bind ViewModel.UpdateSortByCommand}"
-                                    CommandParameter="{x:Bind jm:ItemSortBy.PlayCount}"
-                                    GroupName="Library_SortItem"
-                                    IsChecked="{x:Bind views:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.PlayCount), Mode=OneWay}"
-                                    Text="Play count" />
-                                <RadioMenuFlyoutItem
-                                    Command="{x:Bind ViewModel.UpdateSortByCommand}"
-                                    CommandParameter="{x:Bind jm:ItemSortBy.PremiereDate}"
-                                    GroupName="Library_SortItem"
-                                    IsChecked="{x:Bind views:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.PremiereDate), Mode=OneWay}"
-                                    Text="Release date" />
-                                <RadioMenuFlyoutItem
-                                    Command="{x:Bind ViewModel.UpdateSortByCommand}"
-                                    CommandParameter="{x:Bind jm:ItemSortBy.Runtime}"
-                                    GroupName="Library_SortItem"
-                                    IsChecked="{x:Bind views:LibraryPage.IsSort(ViewModel.SortBy, jm:ItemSortBy.Runtime), Mode=OneWay}"
-                                    Text="Runtime" />
-                                <!--  1.2.0 (the button review, L24): the direction in the same menu, a second group (it was a round button beside Sort)  -->
-                                <MenuFlyoutSeparator />
-                                <RadioMenuFlyoutItem
-                                    Command="{x:Bind ViewModel.UpdateSortOrderCommand}"
-                                    CommandParameter="{x:Bind jm:SortOrder.Ascending}"
-                                    GroupName="Library_SortOrder"
-                                    IsChecked="{x:Bind views:LibraryPage.IsOrder(ViewModel.Order, jm:SortOrder.Ascending), Mode=OneWay}"
-                                    Text="Ascending" />
-                                <RadioMenuFlyoutItem
-                                    Command="{x:Bind ViewModel.UpdateSortOrderCommand}"
-                                    CommandParameter="{x:Bind jm:SortOrder.Descending}"
-                                    GroupName="Library_SortOrder"
-                                    IsChecked="{x:Bind views:LibraryPage.IsOrder(ViewModel.Order, jm:SortOrder.Descending), Mode=OneWay}"
-                                    Text="Descending" />
-                            </MenuBarItemFlyout>
-                        </Button.Flyout>
-                    </Button>
-                    <Button
-                        x:Name="FilterButton"
-                        AutomationProperties.Name="{x:Bind ViewModel.FilterButtonName, Mode=OneWay}"
-                        Style="{StaticResource LibrarySortFilterButtonStyle}"
-                        ToolTipService.ToolTip="Filter">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon FontSize="15" Glyph="&#xE71C;" />
-                            <TextBlock Text="{x:Bind ViewModel.FilterText, Mode=OneWay}" />
-                        </StackPanel>
-                        <Button.Flyout>
-                            <Flyout Placement="BottomEdgeAlignedRight">
-                                <Grid
-                                    x:Name="FilterPanel"
-                                    Width="340"
-                                    MaxHeight="560"
-                                    RowSpacing="8">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="*" />
-                                    </Grid.RowDefinitions>
-                                    <Grid ColumnSpacing="8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock
-                                            VerticalAlignment="Center"
-                                            AutomationProperties.HeadingLevel="Level2"
-                                            Style="{StaticResource SubtitleTextBlockStyle}"
-                                            Text="Filter" />
-                                        <Button
-                                            x:Name="ClearFiltersButton"
-                                            Grid.Column="1"
-                                            Command="{x:Bind ViewModel.ClearFiltersCommand}"
-                                            Content="Clear filters"
-                                            IsEnabled="{x:Bind views:LibraryPage.AnyOn(ViewModel.ActiveFilters), Mode=OneWay}"
-                                            Style="{StaticResource NixieCompactButtonStyle}" />
-                                    </Grid>
-                                    <ScrollViewer Grid.Row="1" Padding="0,0,12,0">
-                                        <StackPanel>
-                                        <!--  layout audit, item 15: what jellyfin-web and Plex offer first  -->
-                                        <TextBlock
-                                            Margin="0,4,0,4"
-                                            AutomationProperties.HeadingLevel="Level3"
-                                            Style="{StaticResource BodyStrongTextBlockStyle}"
-                                            Text="Show" />
-                                        <CheckBox
-                                            x:Name="UnwatchedBox"
-                                            MinHeight="32"
-                                            Content="Unwatched only"
-                                            IsChecked="{x:Bind ViewModel.Filter.Unwatched, Mode=TwoWay}" />
-                                        <CheckBox
-                                            x:Name="FavoritesBox"
-                                            MinHeight="32"
-                                            Margin="0,0,0,12"
-                                            Content="Favorites only"
-                                            IsChecked="{x:Bind ViewModel.Filter.Favorites, Mode=TwoWay}" />
-                                        <!--
-                                            the review, item 5: one virtualised list of the kinds' headings and their check
-                                            boxes (a library's genres, years, ratings and tags can be hundreds; nested
-                                            ItemsControls made every one of them when the menu opened)
-                                        -->
-                                        <ItemsRepeater
-                                            x:Name="FilterRepeater"
-                                            ItemTemplate="{StaticResource FilterRowTemplates}"
-                                            ItemsSource="{x:Bind ViewModel.FilterRows, Mode=OneWay}">
-                                            <ItemsRepeater.Layout>
-                                                <StackLayout />
-                                            </ItemsRepeater.Layout>
-                                        </ItemsRepeater>
-                                        </StackPanel>
-                                    </ScrollViewer>
-                                </Grid>
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
-                    </StackPanel>
+                        ButtonStyle="{StaticResource LibrarySortFilterButtonStyle}"
+                        ViewModel="{x:Bind ViewModel}"
+                        Visibility="{x:Bind views:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}" />
                 </Grid>
 
-                <!--  the A to Z: one Tab stop, the arrows along it; "Jump to M"  -->
-                <lc:RowList
-                    x:Name="LetterList"
-                    Grid.Row="1"
-                    HorizontalContentAlignment="Stretch"
-                    AutomationProperties.Name="Jump to a letter"
-                    TabFocusNavigation="Once"
-                    Visibility="{x:Bind views:LibraryPage.LettersVisibility(ViewModel.Letters, ViewModel.State.Status), Mode=OneWay}"
-                    XYFocusKeyboardNavigation="Enabled">
-                    <ItemsRepeater x:Name="LetterRepeater" ItemsSource="{x:Bind vm:DriveInLibrary.Tiles(ViewModel.Letters), Mode=OneWay}">
-                        <ItemsRepeater.Layout>
-                            <UniformGridLayout
-                                MinColumnSpacing="6"
-                                MinItemHeight="42"
-                                MinItemWidth="38"
-                                MinRowSpacing="6"
-                                Orientation="Horizontal" />
-                        </ItemsRepeater.Layout>
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="vm:LetterTile">
-                                <Button
-                                    AutomationProperties.Name="{x:Bind Name}"
-                                    Click="Letter_Click"
-                                    Content="{x:Bind Letter}"
-                                    IsEnabled="{x:Bind HasTitles}"
-                                    Style="{StaticResource DriveInLetterTileStyle}"
-                                    Tag="{x:Bind Jump}" />
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
-                </lc:RowList>
+                <!--
+                    Nixie 1.4.0 (item 13): the shared A to Z on the board's tiles: # and A to Z in one shape, the absent ones resting,
+                    the letter in view marked, on one row at any width (the tiles narrow below 1300 px); under another sort, the
+                    two directions; "M · 324 of 1,000" at its end. Its height is kept while loading.
+                -->
+                <Grid x:Name="LetterRow" Grid.Row="1" MinHeight="42">
+                    <lc:LetterBar
+                        x:Name="Letters"
+                        LetterStyle="{StaticResource DriveInLetterTileStyle}"
+                        MinTileWidth="28"
+                        ReadoutBrush="{ThemeResource DriveInHeaderTextBrush}"
+                        TileHeight="42"
+                        TileSpacing="4"
+                        TileWidth="38"
+                        ViewModel="{x:Bind ViewModel}" />
+                    <ctkl:Shimmer
+                        x:Name="LetterPlaceholder"
+                        Height="42"
+                        HorizontalAlignment="Stretch"
+                        CornerRadius="8"
+                        Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
+                </Grid>
             </Grid>
         </Grid>
 
-        <!--  the posters on the plain ground: the shared grid's model (CardGrid)  -->
-        <ScrollView x:Name="GridScroller" Grid.Row="1" Padding="96,24,96,24">
+        <!--  Nixie 1.4.0 (item 2): what is filtered, on the plain ground under the sky  -->
+        <lc:AppliedFilterRow
+            x:Name="AppliedFilters"
+            Grid.Row="1"
+            Margin="96,16,96,0"
+            ViewModel="{x:Bind ViewModel}" />
+
+        <!--  the posters on the plain ground: the shared grid's model (CardGrid); letters typed on a poster go to its title  -->
+        <ScrollView x:Name="GridScroller" Grid.Row="2" Padding="88,24,88,24">
             <lc:RowList
                 x:Name="GridList"
                 HorizontalContentAlignment="Stretch"
                 AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
                 TabFocusNavigation="Once">
-                <ItemsRepeater x:Name="GridRepeater" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
-                    <ItemsRepeater.ItemTemplate>
-                        <DataTemplate x:DataType="vm:BaseItemViewModel">
-                            <ItemContainer
-                                AutomationProperties.AccessibilityView="Raw"
-                                CornerRadius="8"
-                                IsTabStop="False"
-                                Style="{StaticResource BareItemContainerStyle}">
-                                <lc:BaseItemDtoCard
-                                    dc:DriveInRows.Nixie="True"
-                                    BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 352)}"
-                                    ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 352)}"
-                                    Model="{x:Bind}" />
-                            </ItemContainer>
-                        </DataTemplate>
-                    </ItemsRepeater.ItemTemplate>
+                <ItemsRepeater
+                    x:Name="GridRepeater"
+                    ItemTemplate="{StaticResource CardTemplate}"
+                    ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
                     <ItemsRepeater.Layout>
+                        <!--  Nixie 1.4.0 (the UX review's DI-M7): Uniform, so a poster keeps its 2:3 at every width (Fill cut 13 % at 1100)  -->
                         <UniformGridLayout
+                            x:Name="GridLayout"
                             ItemsJustification="Start"
-                            ItemsStretch="Fill"
+                            ItemsStretch="Uniform"
                             MinColumnSpacing="8"
                             MinItemHeight="372"
                             MinItemWidth="206"
@@ -403,33 +260,26 @@
             </lc:RowList>
         </ScrollView>
 
-        <!--  loading: the grid's placeholders  -->
+        <!--  loading: placeholders laid out by a copy of the grid's own layout, where the posters will stand  -->
         <ItemsRepeater
-            Grid.Row="1"
-            Margin="96,24,96,0"
+            x:Name="SkeletonRepeater"
+            Grid.Row="2"
+            Margin="88,24,88,0"
+            AutomationProperties.AccessibilityView="Raw"
+            IsHitTestVisible="False"
+            ItemTemplate="{StaticResource SkeletonCardTemplate}"
             ItemsSource="{x:Bind c:Converters.GetDummyItemSource(24)}"
             Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
-            <DataTemplate>
-                <ctkl:Shimmer
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch"
-                    ui:VisualExtensions.NormalizedCenterPoint="0.5, 0.5"
-                    ui:VisualExtensions.Scale="0.9" />
-            </DataTemplate>
             <ItemsRepeater.Layout>
-                <UniformGridLayout
-                    ItemsJustification="Start"
-                    ItemsStretch="Fill"
-                    MinColumnSpacing="8"
-                    MinItemHeight="372"
-                    MinItemWidth="206"
-                    MinRowSpacing="8"
-                    Orientation="Horizontal" />
+                <UniformGridLayout x:Name="SkeletonLayout" Orientation="Horizontal" />
             </ItemsRepeater.Layout>
         </ItemsRepeater>
 
+        <!--  Nixie 1.4.0 (item 2): a filter that leaves nothing says so (the tubes read 0)  -->
+        <lc:LibraryNoMatchesView Grid.Row="2" ViewModel="{x:Bind ViewModel}" />
+
         <lc:LoadStateView
-            Grid.Row="1"
+            Grid.Row="2"
             State="{x:Bind ViewModel.State}"
             VerticalContentAlignment="Center" />
     </Grid>

@@ -293,4 +293,29 @@ public sealed class LibraryFilterModelTests
 		Assert.Equal(new LibraryView(density, layout, art), LibraryViews.Decode(text));
 		Assert.Equal(new LibraryView(density, layout, art), LibraryViews.Decode(LibraryViews.Encode(new LibraryView(density, layout, art))));
 	}
+
+	// R or F5 mid-filter (a new view model for the same library): the sort and the filters come back, as for Back; a plain
+	// visit starts fresh
+	[Fact]
+	public async Task ARefresh_PutsTheSortAndTheFiltersBack_AFreshVisitDoesNot()
+	{
+		var library = new BaseItemDto { Id = Guid.NewGuid(), Name = "Movies", CollectionType = BaseItemDto_CollectionType.Movies };
+		var user = Guid.NewGuid();
+		var client = new Mock<IJellyfinClient>();
+		client.SetupGet(x => x.UserId).Returns(user);
+		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [.. Sample()] });
+		var vm = new LibraryViewModel(client.Object);
+		await vm.OnNavigatedTo(library);
+		vm.Filter.Unwatched = true;
+		vm.UpdateSortBy(ItemSortBy.DateCreated);
+		vm.LeftAt(vm.Items[1]);
+
+		var refreshed = new LibraryViewModel(client.Object) { ReloadedInPlace = () => true };
+		await refreshed.OnNavigatedTo(library);
+		Assert.Equal((true, ItemSortBy.DateCreated, SortOrder.Descending, 1, false), (refreshed.Filter.Unwatched, refreshed.SortBy, refreshed.Order, refreshed.FocusRequest, refreshed.ArrivalFocus));
+
+		var fresh = new LibraryViewModel(client.Object) { ReloadedInPlace = () => false };
+		await fresh.OnNavigatedTo(library);
+		Assert.Equal((false, ItemSortBy.Name, 0, true), (fresh.Filter.Unwatched, fresh.SortBy, fresh.FocusRequest, fresh.ArrivalFocus));
+	}
 }

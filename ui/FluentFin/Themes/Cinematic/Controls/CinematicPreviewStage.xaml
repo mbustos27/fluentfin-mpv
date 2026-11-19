@@ -49,8 +49,10 @@
             AutomationProperties.Name="Preview"
             RequestedTheme="Dark">
             <TextBlock x:Name="KickerText" Style="{StaticResource CinematicKickerTextBlockStyle}" />
+            <!--  Nixie 1.4.0 (the UX review's C-M4): the previewed title is a heading  -->
             <cc:CinematicTitleArt
                 x:Name="TitleArt"
+                AutomationProperties.HeadingLevel="Level2"
                 MaxWidth="900"
                 Margin="0,10,0,0"
                 HorizontalAlignment="Left"

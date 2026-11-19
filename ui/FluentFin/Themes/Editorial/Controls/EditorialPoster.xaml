@@ -138,7 +138,7 @@
             <TextBlock
                 x:Name="TitleText"
                 FontFamily="{StaticResource GlassTextFontFamily}"
-                FontSize="14"
+                FontSize="15"
                 FontWeight="SemiBold"
                 Foreground="{ThemeResource GlassTextPrimaryBrush}"
                 TextTrimming="CharacterEllipsis"
@@ -146,7 +146,7 @@
             <TextBlock
                 x:Name="MetaText"
                 FontFamily="{StaticResource GlassTextFontFamily}"
-                FontSize="13"
+                FontSize="14"
                 Foreground="{ThemeResource GlassTextSecondaryBrush}"
                 TextTrimming="CharacterEllipsis"
                 TextWrapping="NoWrap" />

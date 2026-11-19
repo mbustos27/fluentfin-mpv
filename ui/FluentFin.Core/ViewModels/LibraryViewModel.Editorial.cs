@@ -27,16 +27,18 @@ public partial class LibraryViewModel
 	public string? EditorialGenre => Filter.Genres.Count == 1 ? Filter.Genres[0] : null;
 
 	/// <summary>
-	/// A chip. Nixie 1.4.0 (the UX review's E-M3, item 2): the genre chips are the shared filter's genres, picked and unpicked
-	/// one by one (OR within: Comedy or Drama), as the Filter panel's boxes; All takes every genre off.
+	/// A chip: only that genre (null: All, every genre). Nixie 1.4.0: the chips stay one genre at a time (a tab list); several
+	/// genres (OR) are picked in the shared Filter panel ("More filters"), and then no genre chip is lit.
 	/// </summary>
 	public void EditorialPickGenre(string? genre)
 	{
-		if (genre is null)
+		if (genre == EditorialGenre && (genre is not null || Filter.Genres.Count == 0))
 		{
-			Filter.Genres.Clear();
+			return;
 		}
-		else if (!Filter.Genres.Remove(genre))
+
+		Filter.Genres.Clear();
+		if (genre is not null)
 		{
 			Filter.Genres.Add(genre);
 		}
@@ -55,14 +57,20 @@ public sealed record EditorialSectionLine(string Letter, string Caption, int Fir
 }
 
 /// <summary>A row of posters; <paramref name="FirstIndex"/>: the first one's place in the library as shown.</summary>
-public sealed record EditorialRowLine(IReadOnlyList<BaseItemViewModel> Items, int FirstIndex, string Letter, int Total = 0) : EditorialLibraryLine
+public sealed record EditorialRowLine(IReadOnlyList<BaseItemViewModel> Items, int FirstIndex, string Letter, int Total = 0, IReadOnlyList<string?>? Tags = null) : EditorialLibraryLine
 {
-	/// <summary>The row's posters with their place in the library as shown (Narrator's "n of m").</summary>
-	public IReadOnlyList<EditorialCell> Cells => [.. Items.Select((item, i) => new EditorialCell(item, FirstIndex + i + 1, Total))];
+	/// <summary>The row's posters with their place in the library as shown (Narrator's "n of m"), and their letter tags.</summary>
+	public IReadOnlyList<EditorialCell> Cells => [.. Items.Select((item, i) => new EditorialCell(item, FirstIndex + i + 1, Total) { Tag = Tags is { } tags && i < tags.Count ? tags[i] : null })];
 }
 
 /// <summary>A poster of a row, with its place: <paramref name="Position"/> of <paramref name="Size"/>.</summary>
-public sealed record EditorialCell(BaseItemViewModel Item, int Position, int Size);
+public sealed record EditorialCell(BaseItemViewModel Item, int Position, int Size)
+{
+	/// <summary>Nixie 1.4.0 (the UX review's E-M5, item 12): the letter of the first title of a letter, on its poster ("M"); else null.</summary>
+	public string? Tag { get; init; }
+
+	public bool HasTag => !string.IsNullOrEmpty(Tag);
+}
 
 /// <summary>The opened poster's details, under its row.</summary>
 public sealed record EditorialDetailsLine(BaseItemViewModel Item) : EditorialLibraryLine;
@@ -122,6 +130,44 @@ public static class EditorialLibrary
 			lines.Add(new EditorialSectionLine(letter, Count(end - start, kind), start));
 			AddRows(start, end, letter);
 			start = end;
+		}
+
+		return lines;
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's E-M5, item 12): the grid's lines with the rows flowing across letters (each letter started a
+	/// row: 1 to 11 posters a row, 4 collections on a screen), the first title of each letter tagged with it when
+	/// <paramref name="tagLetters"/> (sorted by title); <paramref name="opened"/>'s details follow its row.
+	/// </summary>
+	public static IReadOnlyList<EditorialLibraryLine> Flow(IReadOnlyList<BaseItemViewModel> items, int columns, bool tagLetters, Guid? opened)
+	{
+		var lines = new List<EditorialLibraryLine>();
+		columns = Math.Max(1, columns);
+		string? previous = null;
+		for (var i = 0; i < items.Count; i += columns)
+		{
+			var row = new List<BaseItemViewModel>();
+			var tags = new List<string?>();
+			for (var j = i; j < Math.Min(items.Count, i + columns); j++)
+			{
+				row.Add(items[j]);
+				string? tag = null;
+				if (tagLetters)
+				{
+					var letter = LibraryBrowse.LetterOf(LibraryBrowse.SortKey(items[j]));
+					tag = letter != previous ? letter : null;
+					previous = letter;
+				}
+
+				tags.Add(tag);
+			}
+
+			lines.Add(new EditorialRowLine(row, i, tagLetters ? LibraryBrowse.LetterOf(LibraryBrowse.SortKey(row[0])) : "", items.Count, tags));
+			if (opened is { } id && row.FirstOrDefault(x => x.Id == id) is { } item)
+			{
+				lines.Add(new EditorialDetailsLine(item));
+			}
 		}
 
 		return lines;

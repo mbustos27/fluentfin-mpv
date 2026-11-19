@@ -53,9 +53,11 @@ public sealed class CinematicStageTests
 
 		Assert.DoesNotContain("Stage.Current is null &&", page);
 		Assert.Contains("ViewModel.Items).CollectionChanged += (_, _) => QueueStage();", page);
-		Assert.Contains("GridScroller.ViewChanged += (_, _) => QueueStage();", page);
+		Assert.Contains("GridScroller.ViewChanged += (_, _) =>\n\t\t{\n\t\t\tQueueStage();", page.Replace("\r\n", "\n"));
 		Assert.Contains("PointerEnteredEvent", page);
 		Assert.Contains("Stage.ShowNothing();", page);
-		Assert.Contains("MarkLetter(_markedLetter);", page);
+		// Nixie 1.4.0: the letter in view is marked by the shared A to Z from the tile (LetterTile.IsCurrent), never a recycled button
+		Assert.DoesNotContain("MarkLetter(", page);
+		Assert.Contains("new LibraryGridHost(this, ViewModel, GridScroller, GridRepeater, _grid, Letters)", page);
 	}
 }

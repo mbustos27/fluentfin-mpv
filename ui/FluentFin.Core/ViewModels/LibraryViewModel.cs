@@ -148,6 +148,16 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	[ObservableProperty]
 	public partial string CountText { get; set; } = "";
 
+	/// <summary>Nixie 1.4.0: the library's own count, filters or not ("368 movies"): the head's, while the applied-filter row says what is shown.</summary>
+	[ObservableProperty]
+	public partial string LibraryCountText { get; set; } = "";
+
+	/// <summary>
+	/// Nixie 1.4.0: whether this visit is the page loaded again in place (R, F5: a new view model for the same library), set by
+	/// the page: the sort, the filters and the card are put back as for Back (they were lost to a refresh).
+	/// </summary>
+	public Func<bool>? ReloadedInPlace { get; set; }
+
 	// ---- Nixie 1.4.0 (the UX review's X4, item 2): the filters on, said; their counts honest; nothing left, said ----------
 
 	/// <summary>Every filter on, one chip each ("Unwatched ✕", "Comedy ✕"), for the applied-filter row.</summary>
@@ -362,6 +372,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		var all = _itemsCache.Count;
 		var shown = TotalCount;
 		CountText = all == 0 ? "" : LibraryBrowse.CountText(shown, all, _library?.CollectionType);
+		LibraryCountText = all == 0 ? "" : LibraryBrowse.CountText(all, all, _library?.CollectionType);
 		ShowingText = all == 0 ? "" : LibraryBrowse.ShowingText(shown, all, _library?.CollectionType);
 		NoMatches = all > 0 && shown == 0 && !IsLoading;
 		NoMatchesText = NoMatches ? LibraryNoMatches.Title(Filter, _library?.CollectionType) : "";
@@ -621,7 +632,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			Facets = FilterFacet.From(result.Items, Filter);
 
 			var cameBack = false;
-			if (ComingBack && dto.Id is { } library && LibraryPlaces.Recall(JellyfinClient.UserId, library) is { } place)
+			if ((ComingBack || ReloadedInPlace?.Invoke() == true) && dto.Id is { } library && LibraryPlaces.Recall(JellyfinClient.UserId, library) is { } place)
 			{
 				ComingBack = false;
 				cameBack = true;
