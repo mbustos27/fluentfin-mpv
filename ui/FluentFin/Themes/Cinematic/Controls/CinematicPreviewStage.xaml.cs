@@ -98,6 +98,18 @@ public sealed partial class CinematicPreviewStage : UserControl
 		_settle.Start();
 	}
 
+	/// <summary>
+	/// Nixie 1.3.1 (the UX review's C-B1): nothing to preview (no title matches the filter): the stage goes, with its Play, so it
+	/// never offers a title the grid does not show.
+	/// </summary>
+	public void ShowNothing()
+	{
+		_settle.Stop();
+		_pending = null;
+		_shown = null;
+		Visibility = Visibility.Collapsed;
+	}
+
 	/// <summary>The keyboard to the stage's Play.</summary>
 	public bool FocusPrimary(FocusState state) => Visibility == Visibility.Visible && PlayButton.Focus(state);
 

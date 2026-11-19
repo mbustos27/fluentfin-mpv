@@ -48,12 +48,11 @@ public sealed partial class CinematicLibraryPage : Page
 			{
 				case nameof(LibraryViewModel.TotalCount):
 					_grid.SetPlace(0, ViewModel.TotalCount);
-					PreviewFirst();
-					ShowPlace();
+					QueueStage();
 					break;
 				case nameof(LibraryViewModel.FocusRequest) or nameof(LibraryViewModel.IsLoading):
 					FocusRequested();
-					PreviewFirst();
+					QueueStage();
 					break;
 				case nameof(LibraryViewModel.SortBy) or nameof(LibraryViewModel.Order) or nameof(LibraryViewModel.CountText) or nameof(LibraryViewModel.Title):
 					ShowTabs();
@@ -63,19 +62,28 @@ public sealed partial class CinematicLibraryPage : Page
 		};
 		ViewModel.Filter.PropertyChanged += (_, _) => ShowTabs();
 
-		// the preview follows the grid's focus (the still the keyboard or a click is on)
-		GridRepeater.GotFocus += (_, e) =>
+		// Nixie 1.3.1 (the UX review's C-B1): the stage shows the still the pointer rests on, else the one the keyboard is on in
+		// the grid, else the first one in view, and it follows every sort, filter, section, load and scroll; with nothing
+		// left to show it goes, Play with it (StageTarget). The place line and the letter mark follow the first title in view.
+		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, _) => QueueStage();
+		GridRepeater.GotFocus += (_, _) => QueueStage();
+		GridRepeater.LostFocus += (_, _) => QueueStage();
+		GridRepeater.AddHandler(PointerEnteredEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) =>
 		{
-			if (e.OriginalSource is CinematicStill { Model.Dto: { } dto })
-			{
-				Stage.Show(dto);
-				ShowPlace(dto);
-			}
+			_hovered = StillOf(e.OriginalSource as DependencyObject)?.Model?.Dto?.Id;
+			QueueStage();
+		}), true);
+		GridRepeater.PointerExited += (_, _) =>
+		{
+			_hovered = null;
+			QueueStage();
 		};
+		GridScroller.ViewChanged += (_, _) => QueueStage();
 		LetterRepeater.ElementPrepared += (_, e) =>
 		{
 			AutomationProperties.SetPositionInSet(e.Element, e.Index + 1);
 			AutomationProperties.SetSizeOfSet(e.Element, ViewModel.Letters.Count);
+			MarkLetter(_markedLetter); // a letter made after the mark was set gets it too
 		};
 		SizeChanged += (_, _) => Layout();
 		Stage.WordsSizeChanged += (_, _) => Layout();
@@ -140,13 +148,130 @@ public sealed partial class CinematicLibraryPage : Page
 		}
 	}
 
-	private void PreviewFirst()
+	private Guid? _hovered;
+	private bool _stageQueued;
+	private string? _markedLetter;
+
+	/// <summary>
+	/// Nixie 1.3.1: what the stage shows: the still the pointer rests on, else the one the keyboard is on in the grid, else
+	/// (the keyboard on the stage's own buttons) the title it shows, else the first in view, else the first of the list; only
+	/// a title the grid shows (filtered out: never), null when it shows none.
+	/// </summary>
+	public static BaseItemDto? StageTarget(IReadOnlyList<BaseItemViewModel> items, Guid? hovered, Guid? focused, int firstVisible, Guid? kept = null)
 	{
-		if (Stage.Current is null && !ViewModel.IsLoading && ViewModel.Items.Count > 0)
+		if (items.Count == 0)
 		{
-			Stage.Show(ViewModel.Items[0].Dto);
-			ShowPlace(ViewModel.Items[0].Dto);
+			return null;
 		}
+
+		foreach (var wanted in new[] { hovered, focused, kept })
+		{
+			if (wanted is { } id && items.FirstOrDefault(x => x.Id == id) is { } item)
+			{
+				return item.Dto;
+			}
+		}
+
+		return items[firstVisible >= 0 && firstVisible < items.Count ? firstVisible : 0].Dto;
+	}
+
+	/// <summary>The stage and the place line again, once this turn's changes (a sort, a filter, a scroll) are laid out.</summary>
+	private void QueueStage()
+	{
+		if (_stageQueued)
+		{
+			return;
+		}
+
+		_stageQueued = true;
+		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+		{
+			_stageQueued = false;
+			RefreshStage();
+		});
+	}
+
+	private void RefreshStage()
+	{
+		if (ViewModel.IsLoading)
+		{
+			return;
+		}
+
+		var items = ViewModel.Items;
+		var first = FirstVisibleIndex();
+		var kept = XamlRoot is { } root && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) is DependencyObject on && IsWithin(on, Stage) ? Stage.Current?.Id : null;
+		var target = StageTarget(items, _hovered, FocusedInGrid(), first, kept);
+		if (target is null)
+		{
+			Stage.ShowNothing();
+		}
+		else
+		{
+			Stage.Show(target);
+		}
+
+		ShowPlace(first >= 0 && first < items.Count ? items[first].Dto : target);
+	}
+
+	/// <summary>The title of the still the keyboard is on, when it is in the grid.</summary>
+	private Guid? FocusedInGrid() =>
+		XamlRoot is { } root && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) is DependencyObject focused
+			&& StillOf(focused) is { Model.Dto.Id: { } id } still && IsWithin(still, GridRepeater) ? id : null;
+
+	private static CinematicStill? StillOf(DependencyObject? element)
+	{
+		for (var node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+		{
+			if (node is CinematicStill still)
+			{
+				return still;
+			}
+		}
+
+		return null;
+	}
+
+	private static bool IsWithin(DependencyObject element, DependencyObject container)
+	{
+		for (var node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, container))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>The index of the first still in view (its foot below the view's top), -1 when none is drawn.</summary>
+	private int FirstVisibleIndex()
+	{
+		var best = -1;
+		var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(GridRepeater);
+		for (var i = 0; i < count; i++)
+		{
+			if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(GridRepeater, i) is not FrameworkElement { ActualHeight: > 0 } element
+				|| GridRepeater.GetElementIndex(element) is not (>= 0 and var index))
+			{
+				continue;
+			}
+
+			try
+			{
+				var top = element.TransformToVisual(GridScroller).TransformPoint(default).Y;
+				if (top + element.ActualHeight * 0.5 > 0 && top < GridScroller.ViewportHeight && (best < 0 || index < best))
+				{
+					best = index;
+				}
+			}
+			catch (ArgumentException)
+			{
+			}
+		}
+
+		return best;
 	}
 
 	// ---- the sections: tabs over the shared filter and sort --------------------------------------------------------
@@ -200,12 +325,12 @@ public sealed partial class CinematicLibraryPage : Page
 		ShowTabs();
 	}
 
-	/// <summary>"B · 23 movies · Name, A to Z": the focused title's letter (sorted by name), the count, the sort.</summary>
+	/// <summary>"B · 23 movies · Name, A to Z": the first title in view's letter (sorted by name), the count, the sort.</summary>
 	private void ShowPlace(BaseItemDto? focused = null)
 	{
 		focused ??= Stage.Current;
 		var parts = new List<string>();
-		var letter = ViewModel.SortBy == ItemSortBy.Name && focused?.Name is { Length: > 0 } name ? char.ToUpperInvariant(name.TrimStart()[0]) : (char?)null;
+		var letter = ViewModel.SortBy == ItemSortBy.Name && !ViewModel.InPlaylistOrder && focused?.Name is { Length: > 0 } name ? char.ToUpperInvariant(name.TrimStart()[0]) : (char?)null;
 		if (letter is { } l)
 		{
 			parts.Add(char.IsLetter(l) ? l.ToString() : "#");
@@ -216,7 +341,8 @@ public sealed partial class CinematicLibraryPage : Page
 			parts.Add(ViewModel.CountText);
 		}
 
-		parts.Add($"{ViewModel.SortName}, {(ViewModel.Order == SortOrder.Ascending ? ViewModel.SortBy == ItemSortBy.Name ? "A to Z" : "low to high" : ViewModel.SortBy == ItemSortBy.Name ? "Z to A" : "high to low")}");
+		parts.Add(ViewModel.InPlaylistOrder ? ViewModel.SortName
+			: $"{ViewModel.SortName}, {(ViewModel.Order == SortOrder.Ascending ? ViewModel.SortBy == ItemSortBy.Name ? "A to Z" : "low to high" : ViewModel.SortBy == ItemSortBy.Name ? "Z to A" : "high to low")}");
 		PlaceText.Text = string.Join(" · ", parts);
 		MarkLetter(letter is { } c ? (char.IsLetter(c) ? c.ToString() : "#") : null);
 	}
@@ -224,6 +350,7 @@ public sealed partial class CinematicLibraryPage : Page
 	/// <summary>The letter of the title in focus is underlined in the A-Z jump.</summary>
 	private void MarkLetter(string? letter)
 	{
+		_markedLetter = letter;
 		for (var i = 0; i < ViewModel.Letters.Count; i++)
 		{
 			if (LetterRepeater.TryGetElement(i) is Button { Content: Grid { Children: [_, Border mark] } } button && button.Tag is LetterJump jump)
