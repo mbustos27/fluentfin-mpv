@@ -23,6 +23,8 @@ param(
     [string]$Cache,
     [string[]]$Themes = @('Classic', 'DriveIn', 'Cinematic', 'Editorial'),
     [string]$Table,
+    # themes whose rows an earlier run left in -Out are read, not run again (the table still has all of -Themes)
+    [string[]]$Reuse = @(),
     [int]$TimeoutSeconds = 2400
 )
 
@@ -32,6 +34,7 @@ $Out = [IO.Path]::GetFullPath($Out)
 if (-not $Table) { $Table = Join-Path $repo 'shots\keys-matrix.md' }
 New-Item -ItemType Directory -Force $Out, (Split-Path $Table) | Out-Null
 $Themes = @($Themes | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
+$Reuse = @($Reuse | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $runner = Join-Path $PSScriptRoot 'run-offscreen.ps1'
 $then = Join-Path $PSScriptRoot 'offscreen\then-keys-matrix.ps1'
 
@@ -40,6 +43,12 @@ $built = $false
 foreach ($theme in $Themes) {
     $env:NIXIE_LAYOUT = $theme
     $runOut = Join-Path $Out $theme
+    $kept = Join-Path $runOut 'keys-matrix\keys-matrix.json'
+    if ($Reuse -contains $theme -and (Test-Path $kept)) {
+        Write-Host "== ${theme}: the rows of the earlier run ($kept)"
+        $results[$theme] = @(Get-Content $kept -Raw -Encoding utf8 | ConvertFrom-Json)
+        continue
+    }
     $data = Join-Path $Out "data-$theme"
     foreach ($dir in @($runOut, $data)) { if (Test-Path $dir) { Remove-Item -Recurse -Force $dir } }
     $runArgs = @{ DataDir = $data; Out = $runOut; Script = 'home'; Then = $then; NoA11y = $true; TimeoutSeconds = $TimeoutSeconds }

@@ -66,16 +66,17 @@ public static class KeysMatrix {
       if (shift) { st[0x10] = 0x80; st[0xA0] = 0x80; }
       if (alt) { st[0x12] = 0x80; st[0xA4] = 0x80; }
       SetKeyboardState(st);
+      Thread.Sleep(60);
     }
     try {
       uint scan = MapVirtualKey((uint)vk, 0);
       uint down = alt ? 0x0104u : 0x0100u, up = alt ? 0x0105u : 0x0101u;
       uint l = 1u | (scan << 16) | (alt ? (1u << 29) : 0u) | (repeat ? (1u << 30) : 0u);
       PostMessage(target, down, (IntPtr)vk, (IntPtr)(long)l);
-      Thread.Sleep(mods ? 150 : 30);
+      Thread.Sleep(mods ? 500 : 30);   // held until the UI thread has surely read it (a busy thread read a plain N once)
       uint lu = 1u | (scan << 16) | (alt ? (1u << 29) : 0u) | (1u << 30) | (1u << 31);
       PostMessage(target, up, (IntPtr)vk, (IntPtr)(long)lu);
-      if (mods) Thread.Sleep(150);
+      if (mods) Thread.Sleep(300);
     } finally {
       if (mods) {
         var clear = (byte[])before.Clone();
