@@ -346,7 +346,7 @@ public sealed partial class DriveInHomePage : Page
 		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Continue Watching", [.. ViewModel.ContinueItems]));
 
 	private void NextUpSeeAll(object sender, EventArgs e) =>
-		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Next Up", [.. ViewModel.NextUpItems]));
+		App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<ItemGridViewModel>(new ItemGridRequest("Up next", [.. ViewModel.NextUpItems]));
 
 	private void RecentSeeAll(object sender, EventArgs e)
 	{

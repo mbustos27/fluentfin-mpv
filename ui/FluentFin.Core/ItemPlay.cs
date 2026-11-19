@@ -6,7 +6,9 @@ namespace FluentFin.Core;
 /// 1.2.0: what an item page's Play button says. <see cref="Label"/> is the visible text, <see cref="Name"/> what
 /// Narrator reads and the tooltip shows (it starts with the label), <see cref="Progress"/> the resume bar (0-100) or null.
 /// </summary>
-public sealed record PlayTarget(string Label, string Name, double? Progress)
+/// <param name="EpisodeId">Nixie 1.4.0 (the UX review's X12, C-m10): the episode a series' or a season's Play starts while it
+/// is up next (not when every episode is watched): the episode lists mark it "Up next" in every theme.</param>
+public sealed record PlayTarget(string Label, string Name, double? Progress, Guid? EpisodeId = null)
 {
 	/// <summary>Before the episodes are known, or when they could not be loaded: plain "Play".</summary>
 	public static PlayTarget Plain { get; } = new("Play", "Play", null);
@@ -75,10 +77,10 @@ public static class ItemPlay
 			var percent = Percent(episode);
 			var label = Join("Resume", which);
 			var name = string.Join(", ", new[] { Join("Resume", title), percent is { } p ? ItemLabels.WatchedPercent(p) : "" }.Where(x => x.Length > 0));
-			return new PlayTarget(label, name, percent);
+			return new PlayTarget(label, name, percent, episode.Id);
 		}
 
-		return new PlayTarget(Join("Play", which), Join("Play", title), null);
+		return new PlayTarget(Join("Play", which), Join("Play", title), null, episode.Id);
 	}
 
 	/// <summary>How far into the item its resume point is (0-100), from the server's percentage or the ticks; null when unknown.</summary>

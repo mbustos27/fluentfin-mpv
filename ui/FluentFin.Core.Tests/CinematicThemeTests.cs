@@ -188,7 +188,7 @@ public sealed class CinematicThemeTests : IDisposable
 	{
 		Assert.Equal("Continue watching · Film", CinematicLabels.Kicker(new BaseItemDto { Type = BaseItemDto_Type.Movie }, isResume: true));
 		Assert.Equal("New · Series", CinematicLabels.Kicker(new BaseItemDto { Type = BaseItemDto_Type.Series }, isResume: false));
-		Assert.Equal("Next up · Series", CinematicLabels.Kicker(new BaseItemDto { Type = BaseItemDto_Type.Episode }, isResume: false));
+		Assert.Equal("Up next · Series", CinematicLabels.Kicker(new BaseItemDto { Type = BaseItemDto_Type.Episode }, isResume: false));
 	}
 
 	[Fact]

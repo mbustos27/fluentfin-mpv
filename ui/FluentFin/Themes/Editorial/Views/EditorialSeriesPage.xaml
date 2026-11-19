@@ -79,6 +79,7 @@
                     <StackPanel Spacing="12" Visibility="{x:Bind ViewModel.HasEpisodeSection, Mode=OneWay}">
                         <ec:EditorialEpisodeGrid
                             x:Name="EpisodeGrid"
+                            controls:UpNextMark.EpisodeId="{x:Bind ViewModel.PlayTarget.EpisodeId, Mode=OneWay}"
                             Episodes="{x:Bind ViewModel.Episodes, Mode=OneWay}"
                             Title="{x:Bind local:EditorialSeriesPage.SeasonTitle(ViewModel.SelectedSeason), Mode=OneWay}" />
                         <!--  the grid's words when the season's episodes could not be loaded (with Try again) or it has none  -->

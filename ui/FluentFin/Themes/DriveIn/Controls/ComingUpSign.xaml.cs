@@ -16,7 +16,7 @@ using Windows.UI;
 
 namespace FluentFin.Themes.DriveIn.Controls;
 
-/// <summary>Drive-in: the motel sign (see ComingUpSign.xaml): NOW SHOWING, and the Coming up board of Next Up.</summary>
+/// <summary>Drive-in: the motel sign (see ComingUpSign.xaml): NOW SHOWING, and the Up next board (Next Up; an entry opens its episode).</summary>
 public sealed partial class ComingUpSign : UserControl
 {
 	public static readonly DependencyProperty ItemsProperty =
@@ -173,8 +173,9 @@ public sealed partial class ComingUpSign : UserControl
 
 		if (wide)
 		{
-			// what a click does, drawn (the whole entry is the button): the button system's 32 px square
-			var play = new Border
+			// what a click does, drawn (the whole entry is the button): the button system's 32 px square. Nixie 1.4.0 (the UX
+			// review's X12): an entry opens its episode, as Home's next-up item does in every theme, so a chevron, not Play
+			var cue = new Border
 			{
 				Width = 32,
 				Height = 32,
@@ -183,11 +184,11 @@ public sealed partial class ComingUpSign : UserControl
 				BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)),
 				Background = new SolidColorBrush(Color.FromArgb(28, 255, 255, 255)),
 				VerticalAlignment = VerticalAlignment.Center,
-				Child = new FontIcon { Glyph = "", FontSize = 14 },
+				Child = new FontIcon { Glyph = "", FontSize = 14 },
 			};
-			AutomationProperties.SetAccessibilityView(play, AccessibilityView.Raw);
-			Grid.SetColumn(play, 2);
-			grid.Children.Add(play);
+			AutomationProperties.SetAccessibilityView(cue, AccessibilityView.Raw);
+			Grid.SetColumn(cue, 2);
+			grid.Children.Add(cue);
 		}
 
 		var button = new Button
@@ -197,11 +198,11 @@ public sealed partial class ComingUpSign : UserControl
 			Padding = wide ? new Thickness(12, 9, 12, 9) : new Thickness(10, 7, 10, 7),
 			Tag = dto,
 		};
-		var name = DriveInHome.ComingUpName(dto);
+		var name = DriveInHome.UpNextName(dto);
 		AutomationProperties.SetName(button, name);
 		ToolTipService.SetToolTip(button, name);
 		button.ContextFlyout = new JellyfinFlyoutConverter { IncludePlay = true }.Convert(dto, typeof(object), null!, "") as FlyoutBase;
-		button.Click += (_, _) => _ = App.Commands.PlayDto(dto);
+		button.Click += (_, _) => App.Commands.DisplayDto(dto);
 		return button;
 	}
 

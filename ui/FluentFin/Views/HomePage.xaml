@@ -122,7 +122,7 @@
                     <TextBlock
                         Margin="{StaticResource SmallTopBottomMargin}"
                         Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                        Text="Next Up" />
+                        Text="Up next" />
                     <StackPanel Orientation="Horizontal">
                         <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
                         <ctkl:Shimmer Style="{StaticResource WideCardPlaceholder}" />
@@ -135,7 +135,7 @@
 
                 <lc:ShelfRow
                     x:Name="NextUpRow"
-                    Header="Next Up"
+                    Header="Up next"
                     HasSeeAll="True"
                     ItemsSource="{x:Bind ViewModel.NextUpItems, Mode=OneWay}"
                     SeeAll="NextUpSeeAll"

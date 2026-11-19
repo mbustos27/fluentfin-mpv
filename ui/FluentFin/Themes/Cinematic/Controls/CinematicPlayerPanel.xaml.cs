@@ -31,7 +31,11 @@ public sealed partial class CinematicPlayerPanel : UserControl
 	public static readonly IReadOnlyList<(string Label, int Percent)> Sizes = [("Small", 80), ("Medium", SubtitleSizes.Default), ("Large", 130)];
 
 	private MpvControlsViewModel? _controls;
+	private MpvPlayerControls? _player;
 	private Part? _open;
+
+	/// <summary>Nixie 1.4.0: where the keyboard was when the bar's Audio and subtitles button opened the panel; it goes back there.</summary>
+	private WeakReference<Control>? _returnTo;
 	private bool _menuHeld;
 	private BaseItemDto? _item;
 	private string? _itemFor;
@@ -63,9 +67,13 @@ public sealed partial class CinematicPlayerPanel : UserControl
 			if (node is MpvPlayerControls player)
 			{
 				_controls = player.Controls;
+				_player = player;
 				break;
 			}
 		}
+
+		// Nixie 1.4.0 (the UX review's C-m9): the bar's Audio and subtitles button opens this panel's part, not a second UI
+		_player?.UseThemeTracksPanel(OpenTracksFromBar);
 
 		if (_controls is not null)
 		{
@@ -78,6 +86,8 @@ public sealed partial class CinematicPlayerPanel : UserControl
 
 	private void Detach()
 	{
+		_player?.UseThemeTracksPanel(null);
+		_player = null;
 		if (_controls is not null)
 		{
 			_controls.PropertyChanged -= OnControlsChanged;
@@ -178,8 +188,35 @@ public sealed partial class CinematicPlayerPanel : UserControl
 		}
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0: the bar's Audio and subtitles button: the Audio and subtitles part opens (or closes again) with the keyboard
+	/// in it, as the shared flyout takes it; closing gives it back to where it was (the player, or the button).
+	/// </summary>
+	internal void OpenTracksFromBar()
+	{
+		if (_open == Part.Tracks)
+		{
+			Close(returnFocus: true);
+			return;
+		}
+
+		var returnTo = XamlRoot is { } root && FocusManager.GetFocusedElement(root) is Control focused ? focused : null;
+		_ = ShowFromBar(returnTo);
+	}
+
+	private async Task ShowFromBar(Control? returnTo)
+	{
+		await Show(Part.Tracks);
+		_returnTo = returnTo is null ? null : new WeakReference<Control>(returnTo);
+		if (_open == Part.Tracks && (AudioList.Children.OfType<Button>().FirstOrDefault() ?? SubtitleList.Children.OfType<Button>().FirstOrDefault()) is { } first)
+		{
+			first.Focus(FocusState.Programmatic);
+		}
+	}
+
 	private async Task Show(Part part)
 	{
+		_returnTo = null;
 		_open = part;
 		if (!_menuHeld)
 		{
@@ -208,7 +245,14 @@ public sealed partial class CinematicPlayerPanel : UserControl
 		}
 
 		ShowTabs();
-		if (returnFocus)
+		var back = _returnTo;
+		_returnTo = null;
+		if (returnFocus && back?.TryGetTarget(out var target) == true && target.IsLoaded)
+		{
+			// opened by the bar's button: the keyboard goes back where it was, as after the shared flyout
+			target.Focus(FocusState.Programmatic);
+		}
+		else if (returnFocus)
 		{
 			Tabs.FocusSelected(FocusState.Keyboard);
 		}

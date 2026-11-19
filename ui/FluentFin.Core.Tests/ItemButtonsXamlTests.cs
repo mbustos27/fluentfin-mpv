@@ -167,7 +167,9 @@ public sealed class ItemButtonsXamlTests
 		var code = Code("FluentFin/Views/ItemPagePlace.cs");
 
 		Assert.Contains("PagePlaces.ForReturn(_key, e.NavigationMode is NavigationMode.Back or NavigationMode.Forward)", code);
-		Assert.Contains("PagePlaces.Save(_key, new PagePlace(_scroller.VerticalOffset, item, path, fromKeyboard, selectedSeasonId));", code);
+		Assert.Contains("PagePlaces.Save(_key, new PagePlace(_scroller.VerticalOffset, item, path, fromKeyboard, selectedSeasonId, name));", code);
+		// Nixie 1.4.0 (DI-M5): a named control (the page's Play) is found again by its name first
+		Assert.Contains("place.FocusedName is { } name && _page.FindName(name) is Control { IsLoaded: true } named ? named", code);
 		Assert.Contains("_scroller.ChangeView(null, offset, null, disableAnimation: true);", code);
 		// as it was given (items review, item 5: ItemNavigationTests)
 		Assert.Contains("control.Focus(RestoreAs(place.FocusFromKeyboard))", code);

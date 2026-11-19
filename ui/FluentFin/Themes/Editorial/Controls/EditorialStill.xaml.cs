@@ -14,7 +14,7 @@ using Windows.System;
 namespace FluentFin.Themes.Editorial.Controls;
 
 /// <summary>Editorial's episode still (see EditorialStill.xaml).</summary>
-public sealed partial class EditorialStill : UserControl
+public sealed partial class EditorialStill : UserControl, FluentFin.Controls.IUpNextMarked
 {
 	public static readonly DependencyProperty EpisodeProperty =
 		DependencyProperty.Register(nameof(Episode), typeof(BaseItemDto), typeof(EditorialStill), new PropertyMetadata(null, (d, _) => ((EditorialStill)d).Apply()));
@@ -29,7 +29,11 @@ public sealed partial class EditorialStill : UserControl
 	public EditorialStill()
 	{
 		InitializeComponent();
-		Loaded += (_, _) => ItemUserData.Changed += OnUserDataChanged;
+		Loaded += (_, _) =>
+		{
+			ItemUserData.Changed += OnUserDataChanged;
+			UpdateUpNext();
+		};
 		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
 		AddHandler(KeyDownEvent, new KeyEventHandler(OnKeyDown), false);
 		GotFocus += (_, e) =>
@@ -73,9 +77,23 @@ public sealed partial class EditorialStill : UserControl
 		set => SetValue(EpisodeProperty, value);
 	}
 
+	/// <summary>Nixie 1.4.0: the episode the page's Play starts (UpNextMark).</summary>
+	internal bool IsUpNext { get; private set; }
+
+	public void UpdateUpNext()
+	{
+		var upNext = FluentFin.Controls.UpNextMark.IsUpNext(this, Episode?.Id);
+		if (upNext != IsUpNext)
+		{
+			IsUpNext = upNext;
+			ApplyUserData();
+		}
+	}
+
 	private void Apply()
 	{
 		var dto = Episode;
+		IsUpNext = FluentFin.Controls.UpNextMark.IsUpNext(this, dto?.Id);
 		NumberText.Text = EditorialCards.StillNumber(dto);
 		TitleText.Text = dto?.Name?.Trim() ?? "";
 		SynopsisText.Text = dto?.Overview?.Trim() ?? "";
@@ -100,7 +118,8 @@ public sealed partial class EditorialStill : UserControl
 	private void ApplyUserData()
 	{
 		var dto = Episode;
-		MetaText.Text = EditorialCards.StillMeta(dto);
+		// Nixie 1.4.0 (the UX review's X12): the episode the season's Play starts says so first
+		MetaText.Text = IsUpNext ? string.Join(" · ", new[] { FluentFin.Controls.UpNextMark.Label, EditorialCards.StillMeta(dto) }.Where(x => x.Length > 0)) : EditorialCards.StillMeta(dto);
 		WatchedMark.Visibility = EditorialCards.Watched(dto) ? Visibility.Visible : Visibility.Collapsed;
 		var progress = EditorialCards.Progress(dto);
 		ProgressTrack.Visibility = progress > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -204,7 +223,7 @@ internal sealed partial class EditorialStillAutomationPeer(EditorialStill owner)
 	protected override string GetNameCore()
 	{
 		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? ItemLabels.EpisodeRowName(owner.Episode) : name;
+		return string.IsNullOrEmpty(name) ? FluentFin.Controls.UpNextMark.Spoken(ItemLabels.EpisodeRowName(owner.Episode), owner.IsUpNext) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;

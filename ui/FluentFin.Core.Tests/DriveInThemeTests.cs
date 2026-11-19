@@ -91,13 +91,14 @@ public sealed class DriveInThemeTests
 		Assert.DoesNotContain(NotifyCollectionChangedAction.Remove, actions);
 	}
 
-	// ---- the Coming up sign ---------------------------------------------------------------------------------------------
+	// ---- the Up next sign ---------------------------------------------------------------------------------------------
 
 	[Fact]
-	public void ASignEntry_IsNamedForWhatItPlays()
+	public void ASignEntry_IsNamedForWhatItShows_TheCodeInTheAppsOneShape()
 	{
-		Assert.Equal("Play A Signal in Winter, season 2, episode 1", DriveInHome.ComingUpName(Episode("A Signal in Winter", 2, 1)));
-		Assert.Equal("Play Blue Mesa", DriveInHome.ComingUpName(Movie("Blue Mesa")));
+		// Nixie 1.4.0: an entry opens its episode (Home's next-up item opens in every theme), named as a card is
+		Assert.Equal("A Signal in Winter S2 E1 Static", DriveInHome.UpNextName(Episode("A Signal in Winter", 2, 1)));
+		Assert.Equal("Blue Mesa", DriveInHome.UpNextName(Movie("Blue Mesa")));
 		Assert.Equal("A Signal in Winter", DriveInHome.EntryTitle(Episode("A Signal in Winter", 2, 1)));
 		Assert.Equal("Static", DriveInHome.EntryDetail(Episode("A Signal in Winter", 2, 1)));
 		Assert.Equal("", DriveInHome.EntryDetail(Movie("Blue Mesa")));
@@ -116,9 +117,9 @@ public sealed class DriveInThemeTests
 	// ---- the numbers in tubes ---------------------------------------------------------------------------------------------
 
 	[Theory]
-	[InlineData(1, 3, null, "S1·E03")]
-	[InlineData(12, 104, null, "S12·E104")]
-	[InlineData(2, 5, 6, "S2·E05-06")]
+	[InlineData(1, 3, null, "S1 E03")]
+	[InlineData(12, 104, null, "S12 E104")]
+	[InlineData(2, 5, 6, "S2 E05-06")]
 	[InlineData(null, 7, null, "E07")]
 	[InlineData(3, null, null, "")]
 	public void AnEpisodeCode_InTubes(int? season, int? episode, int? end, string expected) =>
@@ -178,6 +179,14 @@ public sealed class DriveInThemeTests
 		Assert.Same(e4, DriveInItems.NextEpisode([e1, e2, e4], e4));
 		Assert.Null(DriveInItems.NextEpisode([e1], null));
 		Assert.Null(DriveInItems.NextEpisode([], null));
+	}
+
+	[Fact]
+	public void TheSeasonSummary_IsEmpty_BeforeTheEpisodesCome()
+	{
+		// Nixie 1.4.0: Back from the player bound it with no list yet (an unhandled exception in every overlay stress run)
+		Assert.Equal("", DriveInItems.SeasonSummary(null));
+		Assert.Equal("", DriveInItems.SeasonSummary([]));
 	}
 
 	[Fact]

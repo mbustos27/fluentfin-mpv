@@ -12,7 +12,7 @@ using Path = Microsoft.UI.Xaml.Shapes.Path;
 namespace FluentFin.Themes.DriveIn.Controls;
 
 /// <summary>
-/// Drive-in: a number in nixie tubes ("44", "1:12", "S1·E03", "0:50:52"). Each digit sits in its own tube (a warm dark glass
+/// Drive-in: a number in nixie tubes ("44", "1:12", "S1 E03", "0:50:52"). Each digit sits in its own tube (a warm dark glass
 /// cell with a faint unlit 8 behind, and a honeycomb mesh on the larger sizes); letters and separators glow outside the
 /// tubes. The glyphs are made at run time (<see cref="NixieGlyphs"/>) and lit by a stroke stack, never a blur effect: small
 /// tubes (under 30 px) get only a tight halo (the theme rule for text under 24 px), larger ones a glow and a halo.

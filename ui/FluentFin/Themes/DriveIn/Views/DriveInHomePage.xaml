@@ -123,11 +123,11 @@
                             Visibility="Collapsed" />
                     </StackPanel>
 
-                    <!--  Coming up as a row: when there is no sign (Compact Home, a narrow window)  -->
+                    <!--  Up next as a row: when there is no sign (Compact Home, a narrow window)  -->
                     <lc:ShelfRow
                         x:Name="ComingUpRow"
                         dc:DriveInRows.Marquee="True"
-                        Header="Coming Up"
+                        Header="Up next"
                         HasSeeAll="True"
                         ItemTemplate="{StaticResource DriveInStill}"
                         ItemsSource="{x:Bind ViewModel.NextUpItems, Mode=OneWay}"

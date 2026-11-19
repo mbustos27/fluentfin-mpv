@@ -33,13 +33,33 @@ public sealed class ItemLayoutXamlTests
 	}
 
 	[Fact]
-	public void EpisodePage_SaysNextUp_InSentenceCase_AndItsSectionIsHiddenWithoutOne()
+	public void EpisodePage_SaysUpNext_InSentenceCase_AndItsSectionIsHiddenWithoutOne()
 	{
+		// Nixie 1.4.0 (the UX review's X12): one label for the next episode everywhere, "Up next" (it was also "Next up",
+		// "Next Up" and "Coming up")
 		var doc = Load("FluentFin/Views/EpisodePage.xaml");
-		var heading = doc.Descendants().Single(e => e.Name.LocalName == "TextBlock" && (string?)e.Attribute("Text") == "Next up");
+		var heading = doc.Descendants().Single(e => e.Name.LocalName == "TextBlock" && (string?)e.Attribute("Text") == "Up next");
 
 		Assert.Equal("{x:Bind ViewModel.HasNextEpisode, Mode=OneWay}", (string?)heading.Parent!.Attribute("Visibility"));
-		Assert.DoesNotContain(doc.Descendants(), e => (string?)e.Attribute("Text") is "Up next" or "Next Up");
+		Assert.DoesNotContain(doc.Descendants(), e => (string?)e.Attribute("Text") is "Next up" or "Next Up");
+	}
+
+	/// <summary>Nixie 1.4.0 (X12): every theme's Home and episode page says "Up next", never "Next Up", "Next up" or "Coming up".</summary>
+	[Theory]
+	[InlineData("FluentFin/Views/HomePage.xaml")]
+	[InlineData("FluentFin/Views/EpisodePage.xaml")]
+	[InlineData("FluentFin/Themes/DriveIn/Views/DriveInHomePage.xaml")]
+	[InlineData("FluentFin/Themes/DriveIn/Controls/ComingUpSign.xaml")]
+	[InlineData("FluentFin/Themes/DriveIn/Views/DriveInEpisodePage.xaml")]
+	[InlineData("FluentFin/Themes/Cinematic/Views/CinematicHomePage.xaml")]
+	[InlineData("FluentFin/Themes/Cinematic/Views/CinematicEpisodePage.xaml")]
+	[InlineData("FluentFin/Themes/Editorial/Views/EditorialHomePage.xaml")]
+	[InlineData("FluentFin/Themes/Editorial/Views/EditorialEpisodePage.xaml")]
+	public void TheNextEpisode_IsUpNext_Everywhere(string file)
+	{
+		var words = Load(file).Descendants().SelectMany(e => e.Attributes()).Where(a => a.Name.LocalName is "Text" or "Header" or "AutomationProperties.Name").Select(a => a.Value).ToList();
+		Assert.DoesNotContain(words, w => w.Equals("Next up", StringComparison.OrdinalIgnoreCase) || w.Equals("Coming up", StringComparison.OrdinalIgnoreCase));
+		Assert.Contains(words, w => w.Equals("Up next", StringComparison.OrdinalIgnoreCase));
 	}
 
 	[Fact]

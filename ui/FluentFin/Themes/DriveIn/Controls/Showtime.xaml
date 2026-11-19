@@ -139,7 +139,7 @@
                         FontSize="12"
                         FontWeight="SemiBold"
                         Foreground="{ThemeResource DriveInKickerBrush}"
-                        Text="NEXT"
+                        Text="UP NEXT"
                         Visibility="Collapsed" />
                     <Border
                         x:Name="WatchedMark"

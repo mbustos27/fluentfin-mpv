@@ -61,8 +61,11 @@ public sealed record EditorialUpNextEntry(BaseItemViewModel Item, string Number,
 {
 	public bool HasProgress => Progress > 0;
 
-	/// <summary>What Narrator reads for the line (it plays when invoked): "Resume Iron Lighthouses S3 E4 The Lamp Room, 31 min left".</summary>
-	public string Name => $"{ItemLabels.PlayAction(Item.Dto)}, {(IsResume ? EditorialHome.TimeLeft(Item.Dto) is { Length: > 0 } left ? left : "in progress" : "next episode")}";
+	/// <summary>
+	/// What Narrator reads for the line, what it shows: "Iron Lighthouses S3 E4 The Lamp Room, 31 min left". Nixie 1.4.0 (the UX
+	/// review's X12): the line opens its item, as Home's next-up item does in every theme (in 1.3.0 it played it).
+	/// </summary>
+	public string Name => $"{ItemLabels.ActionTarget(Item.Dto)}, {(IsResume ? EditorialHome.TimeLeft(Item.Dto) is { Length: > 0 } left ? left : "in progress" : "next episode")}";
 }
 
 /// <summary>Editorial: the pure parts of the Home view (tested in EditorialThemeTests).</summary>
@@ -171,7 +174,7 @@ public static class EditorialHome
 		};
 	}
 
-	/// <summary>The hero's line over the title: "Continue watching · Film", "Continue watching · S1 E3", "New · Series", "Next up · S2 E1".</summary>
+	/// <summary>The hero's line over the title: "Continue watching · Film", "Continue watching · S1 E3", "New · Series", "Up next · S2 E1".</summary>
 	public static string Kicker(BaseItemDto? dto, bool resume, bool nextUp)
 	{
 		var what = dto?.Type switch
@@ -181,7 +184,7 @@ public static class EditorialHome
 			BaseItemDto_Type.Episode => ItemLabels.EpisodeCode(dto) is { Length: > 0 } code ? code : "Episode",
 			_ => "",
 		};
-		var why = resume ? "Continue watching" : nextUp ? "Next up" : "New";
+		var why = resume ? "Continue watching" : nextUp ? "Up next" : "New";
 		return what.Length > 0 ? $"{why} · {what}" : why;
 	}
 

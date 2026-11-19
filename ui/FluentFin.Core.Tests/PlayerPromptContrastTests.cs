@@ -32,22 +32,60 @@ public sealed class PlayerPromptContrastTests
 		return (At(0) / 255.0, (At(2), At(4), At(6)));
 	}
 
+	/// <summary>Glass.xaml's dark dictionary's brush (the Nixie templates' hover and press overlays, the Primary's fill and ink).</summary>
+	private static (double A, (double R, double G, double B) Rgb) GlassBrush(string key)
+	{
+		var doc = XDocument.Load(AppVersionTestsFindUp(Path.Combine("ui", "FluentFin", "Styles", "Glass.xaml")));
+		var dark = doc.Descendants(Presentation + "ResourceDictionary").Single(d => (string?)d.Attribute(Xaml + "Key") == "Dark");
+		var element = dark.Elements().Single(b => (string?)b.Attribute(Xaml + "Key") == key);
+		if (element.Name == Presentation + "StaticResource")
+		{
+			return GlassBrush((string)element.Attribute("ResourceKey")!);
+		}
+
+		var hex = ((string)element.Attribute("Color")!).TrimStart('#');
+		if (hex.Length == 6)
+		{
+			hex = "FF" + hex;
+		}
+
+		byte At(int i) => byte.Parse(hex.AsSpan(i, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+		return (At(0) / 255.0, (At(2), At(4), At(6)));
+	}
+
 	[Theory]
-	[InlineData("PlayerPromptFill")]
-	[InlineData("PlayerPromptFillHover")]
-	[InlineData("PlayerPromptFillPressed")]
-	public void Pill_text_keeps_4_5_to_1_over_a_white_and_a_black_frame(string key)
+	[InlineData(null)]
+	[InlineData("NixieHoverOverlayBrush")]
+	[InlineData("NixiePressedOverlayBrush")]
+	public void Prompt_text_keeps_4_5_to_1_over_a_white_and_a_black_frame(string? overlay)
 	{
 		var doc = Controls();
-		var (alpha, fill) = Brush(doc, key);
+		var (alpha, fill) = Brush(doc, "PlayerPromptFill");
 		var text = Brush(doc, "PlayerGlassForeground");
 		Assert.Equal(1.0, text.A);
 
 		foreach (var (name, frame) in new[] { ("white", White), ("black", Black) })
 		{
-			var ratio = Contrast(text.Rgb, Blend(fill, alpha, frame));
-			Assert.True(ratio >= TextContrast, $"{key}: {ratio:F2}:1 over a {name} frame, needs {TextContrast}:1");
+			var under = Blend(fill, alpha, frame);
+			if (overlay is not null)
+			{
+				// the Nixie template draws its hover and press as an overlay over the button's own fill
+				var (overAlpha, over) = GlassBrush(overlay);
+				under = Blend(over, overAlpha, under);
+			}
+
+			var ratio = Contrast(text.Rgb, under);
+			Assert.True(ratio >= TextContrast, $"{overlay ?? "rest"}: {ratio:F2}:1 over a {name} frame, needs {TextContrast}:1");
 		}
+	}
+
+	[Fact]
+	public void The_prompt_fill_is_the_palettes_deep_wine_not_a_teal()
+	{
+		// Nixie 1.4.0 (the UX review's CL-M11): #EB101C20 was a teal-black found nowhere else in the wine palette
+		var (_, fill) = Brush(Controls(), "PlayerPromptFill");
+		var (_, deep) = GlassBrush("NixieDeepBrush");
+		Assert.Equal(deep, fill);
 	}
 
 	[Fact]
@@ -59,27 +97,72 @@ public sealed class PlayerPromptContrastTests
 		Assert.True(Contrast(White, Blend(fill, alpha, White)) < TextContrast);
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (the UX review's X12, plan item 9): the next-episode family on the button system. Next is the Primary; Skip,
+	/// Watch credits and Keep watching are Secondary on the dense fill; every prompt is 44 high, on the Nixie templates
+	/// (their hover, press and focus glow), centred on one line.
+	/// </summary>
 	[Theory]
-	[InlineData("NextPill")]
-	[InlineData("SkipSegmentButton")]
-	public void Both_pills_use_the_dense_fill_also_under_the_pointer(string name)
+	[InlineData("NextPill", "PlayerPromptPrimaryStyle", "NixiePrimaryButtonStyle")]
+	[InlineData("SkipSegmentButton", "PlayerPromptStyle", "NixieButtonStyle")]
+	[InlineData("CancelNextButton", "PlayerPromptStyle", "NixieButtonStyle")]
+	public void Each_prompt_is_on_its_role_44_high_on_one_centre_line(string name, string style, string role)
 	{
-		var pill = Controls().Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == name);
-		Assert.Equal("{StaticResource PlayerPromptPill}", (string?)pill.Attribute("Style"));
-		var resources = pill.Element(Presentation + "Button.Resources")!.Elements(Presentation + "StaticResource")
-			.ToDictionary(x => (string)x.Attribute(Xaml + "Key")!, x => (string)x.Attribute("ResourceKey")!);
-		Assert.Equal("PlayerPromptFill", resources["ButtonBackground"]);
-		Assert.Equal("PlayerPromptFillHover", resources["ButtonBackgroundPointerOver"]);
-		Assert.Equal("PlayerPromptFillPressed", resources["ButtonBackgroundPressed"]);
+		var doc = Controls();
+		var prompt = doc.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == name);
+		Assert.Equal($"{{StaticResource {style}}}", (string?)prompt.Attribute("Style"));
+		Assert.Null(prompt.Attribute("Height"));
+		Assert.Null(prompt.Attribute("VerticalAlignment"));
+		Assert.Null(prompt.Element(Presentation + "Button.Resources"));
+		var definition = doc.Descendants(Presentation + "Style").Single(e => (string?)e.Attribute(Xaml + "Key") == style);
+		Assert.Equal($"{{StaticResource {role}}}", (string?)definition.Attribute("BasedOn"));
+		string? Setter(string property) => (string?)definition.Elements(Presentation + "Setter").SingleOrDefault(e => (string?)e.Attribute("Property") == property)?.Attribute("Value");
+		Assert.Equal("44", Setter("Height"));
+		Assert.Equal("Center", Setter("VerticalAlignment"));
+		Assert.Null(Setter("CornerRadius"));
+		Assert.Null(Setter("Template"));
+		if (role == "NixieButtonStyle")
+		{
+			Assert.Equal("{ThemeResource PlayerPromptFill}", Setter("Background"));
+		}
 	}
 
 	[Fact]
-	public void The_Next_pill_shows_near_the_end_not_with_the_bars()
+	public void The_Next_prompt_shows_near_the_end_not_with_the_bars()
 	{
 		var pill = Controls().Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "NextPill");
 		Assert.Equal("{x:Bind VisibleIf(Controls.IsNextPromptVisible), Mode=OneWay}", (string?)pill.Attribute("Visibility"));
 		// its name says what it does and what plays, without the seconds (a name that changed every second would be read again)
 		Assert.Equal("{x:Bind Controls.NextPromptName, Mode=OneWay}", (string?)pill.Attribute(XName.Get("AutomationProperties.Name")));
+		// the title is in the name and the tooltip, not a second line (the 69 px card); a leading skip-next icon
+		Assert.DoesNotContain(pill.Descendants(), e => ((string?)e.Attribute("Text"))?.Contains("NextItemTitle", StringComparison.Ordinal) == true);
+		Assert.Equal("{x:Bind NextHint(Controls.NextToolTip), Mode=OneWay}", (string?)pill.Attribute(XName.Get("ToolTipService.ToolTip")));
+		var parts = pill.Descendants().Where(e => e.Name == Presentation + "FontIcon" || (string?)e.Attribute(Xaml + "Name") == "NextPillText").ToList();
+		Assert.Equal(Presentation + "FontIcon", parts[0].Name);
+		Assert.Equal("E893", ((int)((string)parts[0].Attribute("Glyph")!)[0]).ToString("X4", CultureInfo.InvariantCulture));
+	}
+
+	[Fact]
+	public void The_countdown_is_a_3_px_line_in_the_ink_on_a_lighter_track()
+	{
+		// C-P4: 1.3.1's 2 px accent line on a dark track was nearly invisible over bright video
+		var doc = Controls();
+		var bar = doc.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "NextCountdownBar");
+		Assert.Equal("3", (string?)bar.Attribute("Height"));
+		Assert.Equal("{x:Bind VisibleIf(Controls.IsCountingDown), Mode=OneWay}", (string?)bar.Attribute("Visibility"));
+		var fill = bar.Descendants().Single(e => (string?)e.Attribute(Xaml + "Name") == "NextCountdownFill");
+		Assert.Equal("{ThemeResource NixiePrimaryForegroundBrush}", (string?)fill.Attribute("Background"));
+		Assert.Equal("{x:Bind Controls.NextCountdownProgress, Mode=OneWay}", (string?)fill.Descendants(Presentation + "ScaleTransform").Single().Attribute("ScaleX"));
+
+		// over the Primary's fill the track is lighter than it, and the ink's line keeps 3:1 on both (WCAG 1.4.11)
+		var (primaryAlpha, primary) = GlassBrush("NixiePrimaryFillBrush");
+		Assert.Equal(1.0, primaryAlpha);
+		var (trackAlpha, track) = Brush(doc, "PlayerPromptTrack");
+		var trackOnFill = Blend(track, trackAlpha, primary);
+		Assert.True(Luminance(trackOnFill) > Luminance(primary));
+		var (_, ink) = GlassBrush("NixiePrimaryForegroundBrush");
+		Assert.True(Contrast(ink, trackOnFill) >= 3, $"the line on its track: {Contrast(ink, trackOnFill):F2}:1");
+		Assert.True(Contrast(ink, primary) >= 4.5, $"the label on the Primary: {Contrast(ink, primary):F2}:1");
 	}
 
 	private static string AppVersionTestsFindUp(string relative)

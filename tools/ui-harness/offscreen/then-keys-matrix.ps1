@@ -202,7 +202,7 @@ function KM-FocusName { $f = KM-Focus; if ($f) { if ($f.automationId) { $f.autom
 $kmKeys = @{
     'Space' = 0x20; 'Enter' = 0x0D; 'Esc' = 0x1B; 'Tab' = 0x09; 'Left' = 0x25; 'Up' = 0x26; 'Right' = 0x27; 'Down' = 0x28; 'Home' = 0x24
     'End' = 0x23; 'PageUp' = 0x21; 'PageDown' = 0x22; 'Backspace' = 0x08; 'F11' = 0x7A; '[' = 0xDB; ']' = 0xDD; 'BackKey' = 0xA6
-    '0' = 0x30; '5' = 0x35; '9' = 0x39; 'Numpad3' = 0x63; 'Apps' = 0x5D; '/' = 0xBF
+    '0' = 0x30; '5' = 0x35; '9' = 0x39; 'Numpad3' = 0x63; 'Apps' = 0x5D; '/' = 0xBF; 'F1' = 0x70
 }
 function KM-Vk([string]$Name) { if ($kmKeys.ContainsKey($Name)) { $kmKeys[$Name] } else { [int][char]$Name.ToUpperInvariant() } }
 
@@ -641,6 +641,11 @@ function KM-OvWaitDrawn([double]$Seconds = 2.5) {
 # after a transition: a pointer move shows the bars, drawn; playing, they hide by themselves (and are no longer drawn); a key
 # shows them again, drawn; and they hide again
 function KM-OvCase([string]$After) {
+    # the window minimized by anything but the activation case is a finding of its own (then put back, so the case still runs)
+    if ([KmOverlay]::IsIconic($script:hwnd)) {
+        KM-Row 'overlay' $After 'the window is not minimized' $false 'it was: restored'
+        [void][KmOverlay]::ShowWindow($script:hwnd, 9); Start-Sleep -Milliseconds 1200
+    }
     KM-OvMove
     $s = KM-OvWaitDrawn
     if (-not ($s.Ui -and $s.Drawn)) { $s = KM-Overlay "$After-move" }
@@ -735,6 +740,31 @@ function KM-OvSpaceFirst {
     }
 }
 
+# Nixie 1.4.0 (the bug hunt's m1): F1's shortcut sheet over the player is modal: every player key under it changes nothing,
+# and Esc closes the sheet only (then the player's Esc as before)
+function KM-SheetSection {
+    foreach ($kmFull in @($false, $true)) {
+        $case = if ($kmFull) { 'the shortcut sheet open, full screen' } else { 'the shortcut sheet open, windowed' }
+        KM-Ready $true
+        if ($kmFull) { [void](KM-Press 'F'); [void](Wait-WindowState $script:hwnd $true 6); Start-Sleep -Milliseconds 800 }
+        [void](KM-Press 'F1')
+        $open = [bool](Wait-Until { Find-Ui -Name 'Keyboard shortcuts' } -Seconds 4 -PollMs 150)
+        KM-Row 'dialog over the player' $case 'F1 opens it' $open "focus $(KM-FocusName)"
+        if (-not $open) { KM-SetWindowed; continue }
+        foreach ($kmChord in @('F', 'M', '0', '5', 'K', 'J', 'L', 'Left', 'Up', 'S', 'Shift+N')) {
+            $t = [KeysMatrix]::Get('media-title')
+            KM-KeyIsNotThePlayers 'dialog over the player' $case $kmChord { ([KeysMatrix]::Get('media-title') -eq $t) -and [bool](Find-Ui -Name 'Keyboard shortcuts') }
+        }
+        $kmB = KM-State -NoUi
+        [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 700
+        $kmA = KM-State -NoUi
+        KM-Row 'dialog over the player' $case 'Esc closes the sheet only' ((-not (Find-Ui -Name 'Keyboard shortcuts')) -and $kmA.Full -eq $kmB.Full -and $kmA.Paused -eq $kmB.Paused) "full $($kmB.Full)->$($kmA.Full), paused $($kmB.Paused)->$($kmA.Paused)"
+        [void](KM-Key 'dialog over the player' "$case, then closed" 'M')
+        [void](KM-Key 'dialog over the player' "$case, then closed" 'M')
+        KM-SetWindowed
+    }
+}
+
 function KM-OverlaySection {
     # first: the user's repro (the player opened again for each); NIXIE_OVERLAY_PART=space runs it alone
     KM-OvSpaceFirst
@@ -756,7 +786,7 @@ function KM-OverlaySection {
     [void](KM-Press 'F'); [void](Wait-WindowState $script:hwnd $true 5); Start-Sleep -Milliseconds 800; KM-OvCase 'F into full screen'
     [void](KM-Press 'Esc'); [void](Wait-WindowState $script:hwnd $false 5); Start-Sleep -Milliseconds 800; KM-OvCase 'Esc out of full screen'
     # the menus: opened by a click, closed by Esc
-    foreach ($id in 'VolumeButton', 'SpeedButton', 'TracksButton') {
+    foreach ($id in 'VolumeButton', 'SpeedButton', 'TracksButton', 'ChaptersButton') {
         KM-SetPaused $false; KM-ShowBars
         if (KM-Click $id) { Start-Sleep -Milliseconds 500; [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 600; KM-OvCase "$id's menu opened and closed" }
         else { KM-Row 'overlay' "$id's menu" 'opened' $false 'the button is not shown' }
@@ -808,6 +838,7 @@ function KM-OverlaySection {
 }
 
 if ($env:NIXIE_MATRIX_ONLY -eq 'overlay') {
+    if ($env:NIXIE_OVERLAY_PART -ne 'space') { KM-SheetSection }
     KM-OverlaySection
     [KeysMatrix]::Close()
     [IO.File]::WriteAllText((Join-Path $kmDir 'keys-matrix.json'), (ConvertTo-Json -InputObject @($kmRows) -Depth 4), [Text.UTF8Encoding]::new($false))
@@ -920,7 +951,9 @@ KM-Ready $true
 [void](KM-Key 'after the mouse' '6. click Volume, Esc, then' 'Space')
 
 # ==== 5. panels: the tracks panel (a flyout) and the volume flyout, then Cinematic's tabs panel ===========================================
-foreach ($kmPanel in @(@{ Button = 'TracksButton'; Inside = 'SubtitleTracks'; Name = 'tracks panel' }, @{ Button = 'VolumeButton'; Inside = 'MuteButton'; Name = 'volume flyout' }, @{ Button = 'SpeedButton'; Inside = ''; Name = 'speed menu' }))) {
+# Nixie 1.4.0: in Cinematic the bar's Audio and subtitles button opens its player panel's part (one UI for the job), not the flyout
+$kmTracksInside = if ($kmTheme -eq 'Cinematic') { 'TracksSubtitlesHeading' } else { 'SubtitleTracks' }
+foreach ($kmPanel in @(@{ Button = 'TracksButton'; Inside = $kmTracksInside; Name = 'tracks panel' }, @{ Button = 'VolumeButton'; Inside = 'MuteButton'; Name = 'volume flyout' }, @{ Button = 'SpeedButton'; Inside = ''; Name = 'speed menu' }, @{ Button = 'ChaptersButton'; Inside = ''; Name = 'chapters menu (1.4.0)' })) {
     KM-Ready $true
     if (-not (KM-Click $kmPanel.Button)) { KM-Row 'panels' $kmPanel.Name 'open' $false 'its button is not shown'; continue }
     # (the speed menu is a window of its own, outside the main window's UI Automation tree: its item has the keyboard)
@@ -1031,7 +1064,8 @@ $kmE = Find-Ui -Id 'PlayPauseButton'; [void][OffscreenUi]::SetFocus($kmE); Start
 [void](KM-Key 'paused, focus on a control' 'PlayPauseButton' 'Space')
 KM-SetPaused $true
 
-# ==== 9 (defined above): the overlay after each transition, before the theme switch ===========================================
+# ==== 9 (defined above): F1's sheet over the player is modal; the overlay after each transition, before the theme switch ======
+KM-SheetSection
 KM-OverlaySection
 
 # ==== 8. the Back key leaves; a theme switch mid-session, then the player again =========================================================

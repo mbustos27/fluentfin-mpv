@@ -89,6 +89,7 @@ public sealed partial class MpvPlayerControls : UserControl
 			self.UpdateCursor();
 			self.ReportBottomBar();
 			self.PlaceSkipButton();
+			self.RefreshChapters();
 		}
 	}
 
@@ -127,6 +128,12 @@ public sealed partial class MpvPlayerControls : UserControl
 		if (e.PropertyName == nameof(MpvControlsViewModel.ControlsVisible))
 		{
 			PlaceSkipButton();
+		}
+
+		if (e.PropertyName is nameof(MpvControlsViewModel.Title) or nameof(MpvControlsViewModel.ControlsVisible) && !string.Equals(_chaptersFor, Controls?.ItemId, StringComparison.OrdinalIgnoreCase))
+		{
+			// another item (its title came): its chapters
+			RefreshChapters();
 		}
 
 		if (e.PropertyName == nameof(MpvControlsViewModel.CursorHidden))
@@ -632,7 +639,7 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	// -- the Skip button's place -----------------------------------------------------------------------------------------
 
-	/// <summary>The Skip button's distance from the right edge (the bottom bar's own padding) and, bars hidden, from the bottom.</summary>
+	/// <summary>The prompts' least distance from the right edge (a framed bar's) and, bars hidden, their distance from the bottom.</summary>
 	private const double SkipEdgeRight = 32, SkipEdgeBottom = 24;
 
 	/// <summary>Its gap above the bottom bar's controls while they show.</summary>
@@ -652,7 +659,7 @@ public sealed partial class MpvPlayerControls : UserControl
 			_barControlsHeight = BarTopAbove(BottomBar.ActualHeight, BottomBar.Margin, BottomBar.Padding, BottomBar.BorderThickness);
 		}
 
-		var margin = PromptMargin(Controls is { ControlsVisible: true }, _barControlsHeight, BottomBar.Margin, BottomBar.BorderThickness);
+		var margin = PromptMargin(Controls is { ControlsVisible: true }, _barControlsHeight, BottomBar.Margin, BottomBar.Padding, BottomBar.BorderThickness);
 		if (PillRow.Margin != margin)
 		{
 			PillRow.Margin = margin;
@@ -670,12 +677,14 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	/// <summary>
 	/// The prompts' row (Skip, Next): above the bar while it shows (<paramref name="barTop"/> and a gap), a small margin from
-	/// the foot while it is hidden; its right edge at the bar's own side: a framed bar's edge, else the scrim's padding.
+	/// the foot while it is hidden; its right edge at the bar's own side: a framed bar's edge, else the theme's bar padding.
+	/// Nixie 1.4.0 (the UX review's CL-m14, E-m7, C-M12): the padding is the theme's (Editorial 48, Cinematic 96), so the row
+	/// ends where Full screen and the time left end; in 1.3.1 it was 32 in every theme and overhung the bar by 16 to 64 px.
 	/// </summary>
-	internal static Thickness PromptMargin(bool barsShown, double barTop, Thickness barMargin, Thickness barBorder)
+	internal static Thickness PromptMargin(bool barsShown, double barTop, Thickness barMargin, Thickness barPadding, Thickness barBorder)
 	{
 		var bottom = barsShown && barTop > 0 ? barTop + SkipGapAboveBar : SkipEdgeBottom;
-		var right = barBorder.Right > 0 ? Math.Max(SkipEdgeRight, barMargin.Right) : barMargin.Right + SkipEdgeRight;
+		var right = barBorder.Right > 0 ? Math.Max(SkipEdgeRight, barMargin.Right) : barMargin.Right + Math.Max(barPadding.Right, 0);
 		return new Thickness(0, 0, right, bottom);
 	}
 
@@ -1093,6 +1102,25 @@ public sealed partial class MpvPlayerControls : UserControl
 		}
 	}
 
+	// -- Nixie 1.4.0: a theme's own tracks panel (the UX review's C-m9) ---------------------------------------------------
+
+	private Action? _themeTracks;
+
+	/// <summary>
+	/// A layout theme's own audio and subtitles panel (Cinematic's player panel): the bar's Audio and subtitles button opens it
+	/// instead of the shared flyout, so one screen has one UI for the job. Null gives the button its flyout back.
+	/// </summary>
+	public void UseThemeTracksPanel(Action? open)
+	{
+		_themeTracks = open;
+		TracksButton.Flyout = open is null ? TracksMenu : null;
+	}
+
+	/// <summary>Whether the bar's tracks button opens a theme's panel now (the shared flyout otherwise).</summary>
+	internal bool TracksOpenThemePanel => _themeTracks is not null;
+
+	private void OnTracksClick(object sender, RoutedEventArgs e) => _themeTracks?.Invoke();
+
 	private void OnMenuOpened(object? sender, object e) => Controls?.MenuOpened(true);
 
 	private void OnMenuClosed(object? sender, object e) => Controls?.MenuOpened(false);
@@ -1208,6 +1236,42 @@ public sealed partial class MpvPlayerControls : UserControl
 		{
 			_ = controls.StepSubtitleDelay(steps);
 			Announce(DelayName(controls.SubtitleDelay), "SubtitleDelay");
+		}
+	}
+
+	// -- Nixie 1.4.0: the Chapters menu -----------------------------------------------------------------------------------
+
+	private IReadOnlyList<Jellyfin.Sdk.Generated.Models.ChapterInfo> _chapters = [];
+	private string? _chaptersFor;
+
+	/// <summary>The playing item's chapters, asked for once per item (PlayingItem): the button enabled with them, disabled without.</summary>
+	private async void RefreshChapters()
+	{
+		var id = Controls?.ItemId;
+		_chaptersFor = id;
+		var item = await PlayingItem.Get(id);
+		if (!string.Equals(Controls?.ItemId, id, StringComparison.OrdinalIgnoreCase))
+		{
+			return;
+		}
+
+		_chapters = item?.Chapters?.Where(c => c.StartPositionTicks is >= 0).ToList() ?? [];
+		ChaptersButton.IsEnabled = _chapters.Count > 0;
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(ChaptersButton, PlayerChapters.ButtonName(_chapters.Count));
+		ToolTipService.SetToolTip(ChaptersButton, PlayerChapters.ToolTip(_chapters.Count));
+	}
+
+	/// <summary>The Chapters menu as it opens: one radio item per chapter, the one playing checked; a click goes there.</summary>
+	private void OnChaptersMenuOpening(object? sender, object e)
+	{
+		ChaptersMenu.Items.Clear();
+		foreach (var chapter in PlayerChapters.From(_chapters, Controls?.PositionTicks ?? 0))
+		{
+			var item = new RadioMenuFlyoutItem { Text = chapter.Label, IsChecked = chapter.IsCurrent, GroupName = "chapters" };
+			Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(item, chapter.SpokenName);
+			var start = chapter.StartTicks;
+			item.Click += (_, _) => _ = Controls?.SeekTo(start);
+			ChaptersMenu.Items.Add(item);
 		}
 	}
 

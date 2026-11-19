@@ -142,7 +142,7 @@
                         <TextBlock
                             AutomationProperties.HeadingLevel="Level2"
                             Style="{StaticResource EditorialShelfTitleTextBlockStyle}"
-                            Text="Next up" />
+                            Text="Up next" />
                         <ec:EditorialStill
                             Width="420"
                             HorizontalAlignment="Left"

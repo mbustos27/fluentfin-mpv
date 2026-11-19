@@ -27,13 +27,15 @@
                 <SolidColorBrush x:Key="PlayerGlassForeground" Color="#FFFFFFFF" />
                 <SolidColorBrush x:Key="PlayerHoverTimeFill" Color="#E6170508" />
                 <!--
-                    1.2.0: the backing of the pills over the video (Next, Skip): dense, so their text keeps 4.5:1 over
-                    any picture (PlayerPromptContrastTests: over a white frame and a black one). The bars' light fill
-                    (PlayerGlassFill, 20 % white) left white text at about 1.6:1 over a white frame.
+                    1.2.0: the backing of the prompts over the video (Skip, Watch credits, Keep watching): dense, so their text
+                    keeps 4.5:1 over any picture (PlayerPromptContrastTests: over a white frame and a black one, also under
+                    the template's hover and press overlays). The bars' light fill (PlayerGlassFill, 20 % white) left white
+                    text at about 1.6:1 over a white frame. Nixie 1.4.0 (the UX review's CL-M11): the palette's deep wine
+                    (NixieDeepColor, as Cinematic's player panel), not 1.2.0's teal-black #EB101C20 found nowhere else in it.
                 -->
-                <SolidColorBrush x:Key="PlayerPromptFill" Color="#EB101C20" />
-                <SolidColorBrush x:Key="PlayerPromptFillHover" Color="#F0213338" />
-                <SolidColorBrush x:Key="PlayerPromptFillPressed" Color="#F5091215" />
+                <SolidColorBrush x:Key="PlayerPromptFill" Color="#EB170508" />
+                <!--  Nixie 1.4.0 (C-P4): the countdown's track on the Primary's fill, lighter than it, under the ink's 3 px line  -->
+                <SolidColorBrush x:Key="PlayerPromptTrack" Color="#73FFFFFF" />
             </ResourceDictionary>
             <ResourceDictionary x:Key="HighContrast">
                 <SolidColorBrush x:Key="PlayerGlassFill" Color="{ThemeResource SystemColorWindowColor}" />
@@ -42,8 +44,7 @@
                 <SolidColorBrush x:Key="PlayerGlassForeground" Color="{ThemeResource SystemColorWindowTextColor}" />
                 <SolidColorBrush x:Key="PlayerHoverTimeFill" Color="{ThemeResource SystemColorWindowColor}" />
                 <SolidColorBrush x:Key="PlayerPromptFill" Color="{ThemeResource SystemColorWindowColor}" />
-                <SolidColorBrush x:Key="PlayerPromptFillHover" Color="{ThemeResource SystemColorHighlightColor}" />
-                <SolidColorBrush x:Key="PlayerPromptFillPressed" Color="{ThemeResource SystemColorHighlightColor}" />
+                <SolidColorBrush x:Key="PlayerPromptTrack" Color="{ThemeResource SystemColorWindowColor}" />
             </ResourceDictionary>
         </ResourceDictionary.ThemeDictionaries>
         <!--
@@ -120,23 +121,27 @@
             <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
             <Setter Property="Foreground" Value="{ThemeResource PlayerGlassForeground}" />
         </Style>
-        <Style x:Key="PlayerPill" BasedOn="{StaticResource PlayerButton}" TargetType="Button">
-            <Setter Property="Width" Value="NaN" />
-            <Setter Property="CornerRadius" Value="{StaticResource GlassButtonCornerRadius}" />
-            <Setter Property="MinWidth" Value="120" />
-            <Setter Property="Padding" Value="18,0" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="FontSize" Value="15" />
-        </Style>
         <!--
-            1.2.0: the pills over the video (Next near the end, Skip) on the dense PlayerPromptFill. Each pill also sets
-            ButtonBackground* in its own resources: the template's pointer-over and pressed fills come from there, not from the
-            style (the bars' light ones above would come back under the pointer).
+            Nixie 1.4.0 (the UX review's X12, plan item 9): the prompts over the video are on the button system, 44 high, radius 8,
+            with the Nixie templates' hover, press and focus glow. "Next episode" is the Primary (the outcome that will happen
+            carries the accent); Skip intro, Skip credits, Watch credits and Keep watching are Secondary on the dense
+            PlayerPromptFill (the palette's deep wine, readable over any picture). In 1.3.1 they were PlayerPromptPill on WinUI's
+            own template, the Next card 69 high and on the same teal-black fill as its cancel.
         -->
-        <Style x:Key="PlayerPromptPill" BasedOn="{StaticResource PlayerPill}" TargetType="Button">
+        <Style x:Key="PlayerPromptStyle" BasedOn="{StaticResource NixieButtonStyle}" TargetType="Button">
+            <Setter Property="Height" Value="44" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="18,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Background" Value="{ThemeResource PlayerPromptFill}" />
-            <!--  1.2.0 (button review P22): the button system's radius 8, not a pill  -->
-            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Foreground" Value="{ThemeResource PlayerGlassForeground}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+        </Style>
+        <Style x:Key="PlayerPromptPrimaryStyle" BasedOn="{StaticResource NixiePrimaryButtonStyle}" TargetType="Button">
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Padding" Value="18,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
         </Style>
         <!--  the one primary action: play/pause, in the accent  -->
         <Style x:Key="PlayerPlayButton" BasedOn="{StaticResource PlayerButton}" TargetType="Button">
@@ -176,6 +181,117 @@
         Tapped="OnVideoTapped">
 
         <SwapChainPanel x:Name="VideoPanel" />
+
+        <!--
+            Skip intro / Skip credits (docs/BRIDGE.md section 5 segments) and the Next episode prompt, bottom right, just above the
+            bottom bar's controls while they show, a small margin from the bottom while they are hidden (the row's Margin is
+            set by PlaceSkipButton: its right edge at the theme's bar padding, its foot above the bar's visible top). Never
+            focused by themselves: Space stays play. Skip stays for the whole offer, also while the bars are hidden.
+            1.2.0: the Next prompt comes near the end (MpvControlsViewModel.NextPromptAt: the credits, else the last 30 to 40 s),
+            also while the bars are hidden, as Skip does; Previous and Next are in the transport row. Neither holds the bars up
+            under the pointer: each collapses when pressed, and an element that collapses under the pointer need not get its
+            PointerExited (the bars would stay up).
+            Nixie 1.4.0 (the UX review's X8 and X12): first in the tree, so Tab reaches the prompts first while they show (the
+            player's Tab order runs left to right: the prompts, Back, the seek bar, the transport row); drawn over the bars
+            (Canvas.ZIndex). Every prompt is 44 high and centred on one line.
+        -->
+        <StackPanel
+            x:Name="PillRow"
+            Canvas.ZIndex="1"
+            Margin="0,0,32,24"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Orientation="Horizontal"
+            Spacing="12">
+            <!--
+                button review P20: not "Cancel", as it keeps this item on: "Watch credits" in marked credits, else "Keep watching"
+            -->
+            <Button
+                x:Name="CancelNextButton"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="{x:Bind Controls.CancelNextName, Mode=OneWay}"
+                Click="OnCancelNextClick"
+                Style="{StaticResource PlayerPromptStyle}"
+                ToolTipService.ToolTip="{x:Bind Controls.CancelNextName, Mode=OneWay}"
+                Visibility="{x:Bind VisibleIf(Controls.IsCountingDown), Mode=OneWay}">
+                <TextBlock x:Name="CancelNextText" Text="{x:Bind Controls.CancelNextText, Mode=OneWay}" />
+            </Button>
+            <!--
+                1.2.0 (the interaction audit, item 7): the Next prompt counts down when the next item plays by itself ("Next
+                episode in 8"), with Keep watching (or Watch credits) beside it; a click plays it now. Its name starts with what it
+                says ("Next episode in 8: <title>"; button review P21). Nixie 1.4.0: the Primary, a leading skip-next icon, the
+                title in its tooltip and name (no second line), and the countdown as its own fill: a 3 px line in the foreground
+                ink on a lighter track along its foot (in 1.3.1 a 2 px accent line on a dark track, nearly invisible over video).
+                MinWidth: "in 10" and "in 9" are the same width, so the row does not jump as it counts.
+            -->
+            <Button
+                x:Name="NextPill"
+                MinWidth="212"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.AcceleratorKey="Shift+N"
+                AutomationProperties.Name="{x:Bind Controls.NextPromptName, Mode=OneWay}"
+                Click="OnNextClick"
+                Style="{StaticResource PlayerPromptPrimaryStyle}"
+                ToolTipService.ToolTip="{x:Bind NextHint(Controls.NextToolTip), Mode=OneWay}"
+                Visibility="{x:Bind VisibleIf(Controls.IsNextPromptVisible), Mode=OneWay}">
+                <Grid>
+                    <StackPanel
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="10">
+                        <FontIcon
+                            VerticalAlignment="Center"
+                            FontSize="16"
+                            Glyph="&#xE893;" />
+                        <TextBlock
+                            x:Name="NextPillText"
+                            VerticalAlignment="Center"
+                            Typography.NumeralAlignment="Tabular"
+                            Text="{x:Bind Controls.NextPromptText, Mode=OneWay}" />
+                    </StackPanel>
+                    <Grid
+                        x:Name="NextCountdownBar"
+                        Height="3"
+                        Margin="0,0,0,5"
+                        VerticalAlignment="Bottom"
+                        AutomationProperties.AccessibilityView="Raw"
+                        IsHitTestVisible="False"
+                        Visibility="{x:Bind VisibleIf(Controls.IsCountingDown), Mode=OneWay}">
+                        <Border Background="{ThemeResource PlayerPromptTrack}" CornerRadius="1.5" />
+                        <Border
+                            x:Name="NextCountdownFill"
+                            Background="{ThemeResource NixiePrimaryForegroundBrush}"
+                            CornerRadius="1.5"
+                            RenderTransformOrigin="0,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="{x:Bind Controls.NextCountdownProgress, Mode=OneWay}" />
+                            </Border.RenderTransform>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Button>
+            <Button
+                x:Name="SkipSegmentButton"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.AcceleratorKey="S"
+                AutomationProperties.Name="{x:Bind Controls.SkipText, Mode=OneWay}"
+                Click="OnSkipSegmentClick"
+                Style="{StaticResource PlayerPromptStyle}"
+                ToolTipService.ToolTip="{x:Bind SkipToolTip(Controls.SkipText, Controls.SkipSourceNote), Mode=OneWay}"
+                Visibility="{x:Bind VisibleIf(Controls.IsSkipVisible), Mode=OneWay}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <FontIcon
+                        VerticalAlignment="Center"
+                        FontSize="16"
+                        Glyph="&#xEB9D;" />
+                    <TextBlock
+                        x:Name="SkipSegmentText"
+                        VerticalAlignment="Center"
+                        Text="{x:Bind Controls.SkipText, Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+        </StackPanel>
 
         <!--
             Nixie 1.3.1: every control of the bars and the pills takes no focus from a click (AllowFocusOnInteraction False;
@@ -520,6 +636,29 @@
                     Orientation="Horizontal"
                     Spacing="8">
                     <!--
+                        Nixie 1.4.0 (the UX review's E-M10, plan item 14): the item's chapters, in every theme (Editorial had no way
+                        to them, Cinematic only its panel's tab): a menu of the chapters with their times, the one playing
+                        checked; a click goes there. Disabled, and saying so, when the item has none (the bar does not shift).
+                    -->
+                    <Button
+                        x:Name="ChaptersButton"
+                        AllowFocusOnInteraction="False"
+                        AutomationProperties.Name="Chapters, none"
+                        IsEnabled="False"
+                        Style="{StaticResource PlayerButton}"
+                        ToolTipService.ToolTip="No chapters">
+                        <FontIcon FontSize="20" Glyph="&#xE8FD;" />
+                        <Button.Flyout>
+                            <MenuFlyout
+                                x:Name="ChaptersMenu"
+                                Closed="OnMenuClosed"
+                                MenuFlyoutPresenterStyle="{StaticResource PlayerMenuPresenter}"
+                                Opened="OnMenuOpened"
+                                Opening="OnChaptersMenuOpening"
+                                Placement="Top" />
+                        </Button.Flyout>
+                    </Button>
+                    <!--
                         1.2.0: the playback speed, a menu of 0.5x to 2x; the button shows the speed itself ("1×", "1.5×"),
                         so a changed speed is always in sight with the bars.
                     -->
@@ -562,6 +701,7 @@
                         AllowFocusOnInteraction="False"
                         AutomationProperties.HelpText="B changes the audio track, C turns subtitles on or off, V changes them"
                         AutomationProperties.Name="Audio and subtitles"
+                        Click="OnTracksClick"
                         IsEnabled="{x:Bind Controls.HasTrackChoice, Mode=OneWay}"
                         Style="{StaticResource PlayerButton}"
                         ToolTipService.ToolTip="{x:Bind TracksToolTip(Controls.HasTrackChoice), Mode=OneWay}">
@@ -774,136 +914,5 @@
             </StackPanel>
         </Border>
 
-        <!--
-            Skip intro / Skip credits (docs/BRIDGE.md section 5 segments) and the Next episode pill, bottom right, just above the
-            bottom bar's controls while they show, a small margin from the bottom while they are hidden (the row's Margin is
-            set by PlaceSkipButton). Last in the tree, so they are on top of the bars' scrim. Never focused by themselves:
-            Space stays play. Skip stays for the whole offer, also while the bars are hidden.
-            1.2.0: the Next pill is the prompt near the end (MpvControlsViewModel.NextPromptAt: the credits, else the last
-            30 to 40 s), also while the bars are hidden, as Skip is; Previous and Next are in the transport row. Both pills are on
-            the dense PlayerPromptFill (readable over any picture). Neither holds the bars up under the pointer: each collapses
-            when pressed, and an element that collapses under the pointer need not get its PointerExited (the bars would stay up).
-        -->
-        <StackPanel
-            x:Name="PillRow"
-            Margin="0,0,32,24"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Bottom"
-            Orientation="Horizontal"
-            Spacing="12">
-            <!--
-                1.2.0 (the interaction audit, item 7): the Next prompt counts down when the next item plays by itself ("Next
-                episode in 8", a bar filling), with Keep watching (or Watch credits) beside it; a click plays it now. Its name starts
-                with what it says ("Next episode in 8: <title>"; button review P21).
-            -->
-            <!--
-                button review P20: not "Cancel", as it keeps this item on: "Watch credits" in marked credits, else "Keep watching";
-                44 high, at the prompt's foot
-            -->
-            <Button
-                x:Name="CancelNextButton"
-                AllowFocusOnInteraction="False"
-                VerticalAlignment="Bottom"
-                AutomationProperties.Name="{x:Bind Controls.CancelNextName, Mode=OneWay}"
-                Click="OnCancelNextClick"
-                Style="{StaticResource PlayerPromptPill}"
-                MinWidth="0"
-                ToolTipService.ToolTip="{x:Bind Controls.CancelNextName, Mode=OneWay}"
-                Visibility="{x:Bind VisibleIf(Controls.IsCountingDown), Mode=OneWay}">
-                <Button.Resources>
-                    <StaticResource x:Key="ButtonBackground" ResourceKey="PlayerPromptFill" />
-                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="PlayerPromptFillHover" />
-                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="PlayerPromptFillPressed" />
-                </Button.Resources>
-                <TextBlock x:Name="CancelNextText" Text="{x:Bind Controls.CancelNextText, Mode=OneWay}" />
-            </Button>
-            <Button
-                x:Name="NextPill"
-                AllowFocusOnInteraction="False"
-                Height="NaN"
-                MinHeight="44"
-                Padding="18,8"
-                AutomationProperties.AcceleratorKey="Shift+N"
-                AutomationProperties.Name="{x:Bind Controls.NextPromptName, Mode=OneWay}"
-                Click="OnNextClick"
-                Style="{StaticResource PlayerPromptPill}"
-                ToolTipService.ToolTip="{x:Bind NextHint(Controls.NextToolTip), Mode=OneWay}"
-                Visibility="{x:Bind VisibleIf(Controls.IsNextPromptVisible), Mode=OneWay}">
-                <Button.Resources>
-                    <StaticResource x:Key="ButtonBackground" ResourceKey="PlayerPromptFill" />
-                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="PlayerPromptFillHover" />
-                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="PlayerPromptFillPressed" />
-                </Button.Resources>
-                <Grid MinWidth="200" RowSpacing="2">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        x:Name="NextPillText"
-                        VerticalAlignment="Center"
-                        Typography.NumeralAlignment="Tabular"
-                        Text="{x:Bind Controls.NextPromptText, Mode=OneWay}" />
-                    <FontIcon
-                        Grid.Column="1"
-                        Margin="12,0,0,0"
-                        VerticalAlignment="Center"
-                        FontSize="14"
-                        Glyph="&#xE893;" />
-                    <TextBlock
-                        x:Name="NextPillTitle"
-                        Grid.Row="1"
-                        Grid.ColumnSpan="2"
-                        MaxWidth="360"
-                        FontSize="13"
-                        FontWeight="Normal"
-                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
-                        MaxLines="1"
-                        Text="{x:Bind Controls.NextItemTitle, Mode=OneWay}"
-                        TextTrimming="CharacterEllipsis"
-                        Visibility="{x:Bind VisibleIfText(Controls.NextItemTitle), Mode=OneWay}" />
-                    <ProgressBar
-                        x:Name="NextCountdownBar"
-                        Grid.Row="2"
-                        Grid.ColumnSpan="2"
-                        Margin="0,6,0,0"
-                        AutomationProperties.AccessibilityView="Raw"
-                        Maximum="1"
-                        Minimum="0"
-                        Value="{x:Bind Controls.NextCountdownProgress, Mode=OneWay}"
-                        Visibility="{x:Bind VisibleIf(Controls.IsCountingDown), Mode=OneWay}" />
-                </Grid>
-            </Button>
-            <Button
-                x:Name="SkipSegmentButton"
-                AllowFocusOnInteraction="False"
-                AutomationProperties.AcceleratorKey="S"
-                AutomationProperties.Name="{x:Bind Controls.SkipText, Mode=OneWay}"
-                Click="OnSkipSegmentClick"
-                Style="{StaticResource PlayerPromptPill}"
-                ToolTipService.ToolTip="{x:Bind SkipToolTip(Controls.SkipText, Controls.SkipSourceNote), Mode=OneWay}"
-                Visibility="{x:Bind VisibleIf(Controls.IsSkipVisible), Mode=OneWay}">
-                <Button.Resources>
-                    <StaticResource x:Key="ButtonBackground" ResourceKey="PlayerPromptFill" />
-                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="PlayerPromptFillHover" />
-                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="PlayerPromptFillPressed" />
-                </Button.Resources>
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <FontIcon
-                        VerticalAlignment="Center"
-                        FontSize="14"
-                        Glyph="&#xEB9D;" />
-                    <TextBlock
-                        x:Name="SkipSegmentText"
-                        VerticalAlignment="Center"
-                        Text="{x:Bind Controls.SkipText, Mode=OneWay}" />
-                </StackPanel>
-            </Button>
-        </StackPanel>
     </Grid>
 </UserControl>

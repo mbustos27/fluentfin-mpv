@@ -57,11 +57,12 @@ public sealed class EditorialThemeTests
 	}
 
 	[Fact]
-	public void UpNextLine_TellsNarratorWhatItPlays()
+	public void UpNextLine_TellsNarratorWhatItShows()
 	{
 		var line = EditorialHome.UpNext([Vm(Episode("The Iron Circus", 1, 3, "Sawdust", 52, 8))], [], null)[0];
 
-		Assert.Equal("Resume The Iron Circus S1 E3 Sawdust, 44 min left", line.Name);
+		// Nixie 1.4.0: the line opens its item (as Home's next-up item does in every theme), so its name is not "Resume ..."
+		Assert.Equal("The Iron Circus S1 E3 Sawdust, 44 min left", line.Name);
 	}
 
 	[Fact]
@@ -93,7 +94,7 @@ public sealed class EditorialThemeTests
 		film.OfficialRating = "R";
 
 		Assert.Equal("Continue watching · Film", EditorialHome.Kicker(film, resume: true, nextUp: false));
-		Assert.Equal("Next up · S2 E1", EditorialHome.Kicker(Episode("A Signal in Winter", 2, 1, "Thaw"), resume: false, nextUp: true));
+		Assert.Equal("Up next · S2 E1", EditorialHome.Kicker(Episode("A Signal in Winter", 2, 1, "Thaw"), resume: false, nextUp: true));
 		Assert.Equal("1997 · R · 1h 58m · Thriller", EditorialHome.HeroMeta(film));
 		Assert.Equal("1997 · R · 1h 58m · Thriller, Drama", EditorialHome.HeroMeta(film, genres: 2));
 	}

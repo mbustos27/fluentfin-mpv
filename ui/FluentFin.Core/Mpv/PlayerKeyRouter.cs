@@ -27,6 +27,12 @@ public enum PlayerFocus
 
 	/// <summary>A text box, password box, search box, number box or editable combo box: every key is the text's.</summary>
 	TextInput,
+
+	/// <summary>
+	/// Nixie 1.4.0 (the bug hunt's m1): a dialog over the player (F1's shortcut sheet, a confirmation): every key is the
+	/// dialog's, and the player underneath changes nothing (in 1.3.1 F, M, 0-9, K and Shift+N acted under the sheet).
+	/// </summary>
+	Modal,
 }
 
 /// <summary>Where a key goes.</summary>
@@ -81,7 +87,7 @@ public static class PlayerKeyRouter
 	/// </summary>
 	public static PlayerKeyDecision Route(int key, bool control, bool shift, bool alt, bool repeat, bool videoShown, PlayerFocus focus)
 	{
-		if (!videoShown || focus == PlayerFocus.TextInput || key == MpvControlsViewModel.Keys.Escape)
+		if (!videoShown || focus is PlayerFocus.TextInput or PlayerFocus.Modal || key == MpvControlsViewModel.Keys.Escape)
 		{
 			return PlayerKeyDecision.Element;
 		}

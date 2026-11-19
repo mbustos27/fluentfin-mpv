@@ -140,6 +140,7 @@
                             <!--  the season's episodes: a shelf of stills (one Tab stop, Left/Right; Narrator's list "Episodes")  -->
                             <lc:ShelfRow
                                 x:Name="EpisodeShelf"
+                                controls:UpNextMark.EpisodeId="{x:Bind ViewModel.PlayTarget.EpisodeId, Mode=OneWay}"
                                 Margin="80,0,0,0"
                                 Header="Episodes"
                                 ItemTemplate="{StaticResource EpisodeLarge}"

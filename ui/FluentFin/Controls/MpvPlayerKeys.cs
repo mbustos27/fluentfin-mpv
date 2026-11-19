@@ -69,6 +69,20 @@ public static class MpvPlayerKeys
 		return element is ButtonBase or ToggleSwitch && element is not Control { FocusState: FocusState.Pointer } ? PlayerFocus.Button : PlayerFocus.Player;
 	}
 
+	/// <summary>A dialog is open in the window (a ContentDialog's popup): the player's keys stand down under it.</summary>
+	public static bool HasOpenDialog(XamlRoot root)
+	{
+		foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
+		{
+			if (popup.IsOpen && popup.Child is ContentDialog)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	private static bool InArrowOwner(DependencyObject element)
 	{
 		for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
@@ -124,7 +138,10 @@ public static class MpvPlayerKeys
 
 		var root = view.XamlRoot;
 		var focused = root is null ? e.OriginalSource : FocusManager.GetFocusedElement(root) ?? e.OriginalSource;
-		var decision = Decide(e.Key, e.KeyStatus.WasKeyDown, videoShown, FocusOf(focused, root?.Content));
+		// Nixie 1.4.0 (the bug hunt's m1): with a dialog open over the player (F1's sheet, a confirmation) every key is the
+		// dialog's; Escape and F1 close the sheet as before (its own keys, then the window's)
+		var focus = root is not null && HasOpenDialog(root) ? PlayerFocus.Modal : FocusOf(focused, root?.Content);
+		var decision = Decide(e.Key, e.KeyStatus.WasKeyDown, videoShown, focus);
 		switch (decision.Route)
 		{
 			case PlayerKeyRoute.Player when decision.Action is { } action:

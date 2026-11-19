@@ -17,7 +17,7 @@ namespace FluentFin.Themes.DriveIn.Controls;
 /// <item>a row's title becomes a marquee board (<see cref="MarqueeSign"/>: still the level-2 heading, still "See all
 /// &lt;row&gt;" when the row has one), with an optional line beside it ("5 in progress");</item>
 /// <item>a card in progress gets its time left in nixie tubes on the artwork ("31 MIN LEFT"), and an episode's code under
-/// its title in tubes ("S3·E04 The Lamp Room").</item>
+/// its title in tubes ("S3 E04 The Lamp Room").</item>
 /// </list>
 /// The parts are found by the names the shared XAML gives them (<see cref="RowParts"/>, <see cref="CardParts"/>;
 /// DriveInThemeTests fails if they are renamed); a part that is not found is left as it is.

@@ -27,7 +27,7 @@ public sealed class PlayerKeysContractTests
 	public static readonly string[] ClickedWithoutFocus =
 	[
 		"BackButton", "SeekBar", "VolumeButton", "PreviousButton", "SkipBackButton", "PlayPauseButton", "SkipForwardButton", "NextButton",
-		"SpeedButton", "TracksButton", "FullScreenButton", "CancelNextButton", "NextPill", "SkipSegmentButton",
+		"SpeedButton", "TracksButton", "FullScreenButton", "CancelNextButton", "NextPill", "SkipSegmentButton", "ChaptersButton",
 	];
 
 	/// <summary>What a theme's PlayerTopBarStyle and PlayerBottomBarStyle may set: looks and layout, and the themes' own dressing.</summary>

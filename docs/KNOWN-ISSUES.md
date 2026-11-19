@@ -90,8 +90,9 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   fluentfin-controls harness posts there (Space, F, Escape through the page's key path).
 
 ## Nixie 1.3.0: the layout themes
-- **Editorial's paused side column comes in a later release**, with its segmented chapter scrubber: both need a slot in
-  the shared player that 1.3.0 does not have, so Editorial's player has its two bars only.
+- **Editorial has no paused side column** (synopsis, cast and chapters beside a paused video), nor its segmented chapter
+  scrubber: the theme no longer promises them (1.4.0). Its player is the shared one; chapters are in the bar's Chapters
+  menu in every theme (1.4.0).
 - **Back after a switch lands at a page's start.** A switch keeps the place on the page it happens on (Settings, or Home
   under "Choose a look"). The pages behind it are rebuilt in the new layout when Back reaches them, so Home comes back
   with the focus on the Home tab and its rows at their start, as Classic's Home always does after Back (seen off-screen:
