@@ -36,6 +36,11 @@ public sealed partial class CinematicLibraryPage : Page
 			switch (e.PropertyName)
 			{
 				case nameof(LibraryViewModel.TotalCount) or nameof(LibraryViewModel.FocusRequest) or nameof(LibraryViewModel.IsLoading):
+					if (e.PropertyName == nameof(LibraryViewModel.IsLoading))
+					{
+						Layout(); // the stage's room while loading (Layout), and back to its words after
+					}
+
 					QueueStage();
 					break;
 				case nameof(LibraryViewModel.SortBy) or nameof(LibraryViewModel.Order) or nameof(LibraryViewModel.AppliedFilters):
@@ -140,6 +145,9 @@ public sealed partial class CinematicLibraryPage : Page
 	/// screen), its words under the library's name, the header line on the night ground under them; three rows of stills at
 	/// 1080. Scrolled, it is a 96 px band (the name only). The grid shows stills, posters or the list (View).
 	/// </summary>
+	/// <summary>The stage's words' height when last shown, wide and narrow (a typical title's until then).</summary>
+	private static readonly double[] s_words = [180, 168];
+
 	private void Layout()
 	{
 		var height = ActualHeight;
@@ -157,7 +165,20 @@ public sealed partial class CinematicLibraryPage : Page
 		Stage.SetLayout(narrow, top);
 		Stage.SetBand(_band);
 		// the stage's own rows: under the name, its words; the header line right under them; the art fades past it
-		var stageRow = _band ? 96 : Math.Min(Math.Round(height * 0.34), top + Stage.WordsHeight + 12);
+		// Nixie 1.4.0 (item 15: the placeholders where the stills land): while the library loads the stage has no words yet, and
+		// the grid dropped 170-180 px when they came; their room is kept meanwhile (the last height they had, else a typical one)
+		var words = Stage.WordsHeight;
+		if (words > 0)
+		{
+			s_words[narrow ? 1 : 0] = words;
+		}
+		else if (ViewModel.IsLoading || ViewModel.TotalCount > 0)
+		{
+			// loading, or loaded with titles whose words are still being drawn (no shrink and grow on the way)
+			words = s_words[narrow ? 1 : 0];
+		}
+
+		var stageRow = _band ? 96 : Math.Min(Math.Round(height * 0.34), top + words + 12);
 		StageRow.Height = new GridLength(Math.Max(96, stageRow));
 		// the art ends where the header line starts: the sections and the toolbar sit on the night ground, never on art (C-M2)
 		Stage.ArtHeight = Math.Max(96, stageRow) + 8;

@@ -60,7 +60,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		InitializeComponent();
 		// Nixie 1.4.0 (item 15): the first poster's time ([perf]) and the placeholders' cells against the posters', in the log
 		// (the artwork: a poster's 2:3 art against the placeholder's; their captions differ in lines, not in place)
-		LibraryProbe.Attach(this, Skeleton, Lines, i => LibraryProbe.RectOf(SkeletonArt(i), this), i => LibraryProbe.RectOf(PosterAt(i)?.ArtElement, this), logFirstCard: true);
+		// (the keyboard's poster is lifted and scaled: its art measured from the poster's own place, not as drawn)
+		LibraryProbe.Attach(this, Skeleton, Lines, i => LibraryProbe.RectOf(SkeletonArt(i), this), i => PosterArtAt(i), logFirstCard: true);
 		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, _) => QueueRebuild();
 		ViewModel.PropertyChanged += (_, e) =>
 		{
@@ -712,6 +713,12 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			ViewModel.FocusRequest = target;
 		}
 	}
+
+	/// <summary>Nixie 1.4.0 (item 15, LibraryProbe): the <paramref name="index"/>th poster's art box: the poster's place, the art's size.</summary>
+	private Windows.Foundation.Rect? PosterArtAt(int index) =>
+		PosterAt(index) is { } poster && LibraryProbe.RectOf(poster, this) is { } at
+			? new Windows.Foundation.Rect(at.X, at.Y, at.Width, poster.ArtElement.ActualHeight)
+			: null;
 
 	/// <summary>Nixie 1.4.0 (item 15, LibraryProbe): the art placeholder of the <paramref name="index"/>th skeleton cell.</summary>
 	private FrameworkElement? SkeletonArt(int index) =>
