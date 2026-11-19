@@ -457,7 +457,7 @@ if ($script:page -ne 'player') {
     $kbStart = KB-Start 'Home' (Wait-Until { KB-FirstCard } -Seconds 15 -PollMs 300)
     if ($kbStart) {
         KB-ArrowsAndEnds 'Home' $kbStart @('Right/Left', 'End/Home', 'Down/Up')
-        [void](KB-Start 'Home' (Find-Ui -Name $kbStart.name -Type 'ListItem'))
+        [void](KB-Start 'Home' (Find-Ui -Name $kbStart.name -Type 'ListItem' -OffscreenToo))   # 1.4.0: Cinematic's Up from the second row goes to the hero, the row out of view
         $kbOpened = $kbStart.name
         $sent = KM-Press 'Enter'
         # its page, or (Editorial) its details in place under the shelf
