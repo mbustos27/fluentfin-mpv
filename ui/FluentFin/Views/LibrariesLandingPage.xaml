@@ -35,7 +35,11 @@
                     name is a plain caption under it; 1.4.0: what the library holds beside the name
                 -->
                 <!--  1.4.0: no pin menu on a tile: every library is a tab of the bar (the pins are gone)  -->
-                <Grid RowSpacing="8">
+                <!--
+                    1.4.0 integration (seen in then-140-checks' shots, every theme): the container's focus ring is drawn on its
+                    edge, through the caption's first letter and under its baseline; the caption sits inside it, 8 px in and up
+                -->
+                <Grid Padding="0,0,0,8" RowSpacing="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
@@ -46,7 +50,11 @@
                             Source="{x:Bind c:BaseItemDtoConverters.GetImage(Library, jm:ImageType.Primary, 270)}"
                             Stretch="UniformToFill" />
                     </Grid>
-                    <TextBlock Grid.Row="1" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
+                    <TextBlock
+                        Grid.Row="1"
+                        Margin="8,0,8,0"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap">
                         <Run
                             FontWeight="SemiBold"
                             Foreground="{ThemeResource GlassTextPrimaryBrush}"

@@ -42,8 +42,11 @@ public static class PageGridMetrics
 		return columns < 2 ? least : Math.Max(least, Math.Floor((width - (columns * item)) / (columns - 1) * 100) / 100);
 	}
 
-	/// <summary>A Libraries tile: its 16:9 art and its caption; tiles grow up to the wide size when a row has room.</summary>
-	public const double MinTileWidth = 320, MaxTileWidth = 480, TileSpacing = 16, TileCaption = 30;
+	/// <summary>
+	/// A Libraries tile: its 16:9 art and its caption; tiles grow up to the wide size when a row has room. The caption's 30 and
+	/// 8 more under it (1.4.0 integration: inside the tile's focus ring, which is drawn on its edge).
+	/// </summary>
+	public const double MinTileWidth = 320, MaxTileWidth = 480, TileSpacing = 16, TileCaption = 38;
 
 	/// <summary>
 	/// The columns and the tile width for <paramref name="count"/> tiles in <paramref name="width"/>: as many columns as fit,
