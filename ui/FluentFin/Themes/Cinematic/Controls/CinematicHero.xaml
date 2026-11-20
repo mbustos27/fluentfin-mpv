@@ -164,12 +164,21 @@
             </StackPanel>
         </StackPanel>
 
-        <!--  the pager: pause, then a thumbnail per slide (a dot per slide in a narrow window); one Tab stop, Left/Right  -->
+        <!--
+            the pager: pause, then a thumbnail per slide (a dot per slide in a narrow window); one Tab stop, Left/Right.
+            1.4.0 contrast (the review's C-M2, plan item 3): on a plate, the stills' badge fill: it sits where the side scrim has
+            gone, so over bright art the pause glyph read 4.09:1 and the narrow window's white dots vanished
+        -->
         <StackPanel
             x:Name="Pager"
             Margin="0,0,48,252"
+            Padding="6"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
+            Background="{ThemeResource CinematicBadgeFillBrush}"
+            BorderBrush="{ThemeResource CinematicBadgeStrokeBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
             Orientation="Horizontal"
             RequestedTheme="Dark"
             Spacing="10"

@@ -102,6 +102,13 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
   the spacing is even (16, 24, 24, 8). The search box is centred in the window when there is room, otherwise it sits beside
   the account; its tooltip names Ctrl+F and /. The Nixie wordmark goes Home. Cinematic's floating bar is centred, with its
   menu on the same glass; Drive-in's sparkles stay out of the bar. The bar itself is no longer a Tab stop with nothing on it.
+- **Drive-in's top bar reads in Light; Cinematic's controls on artwork get a plate.** By day Drive-in's bar is the same
+  light glass with dark text over Home, the libraries and a film's art as over the Libraries page (it was a mauve band with
+  light text, 2 to 3.2:1); by night it is denser where a film's picture runs under it. The search box is a plate of its own
+  in the bar's colours, so what you type reads over any picture (in Light, over a hero, it read 1.2 to 3.8:1), and the light
+  bar stays light over dark artwork. Cinematic's slideshow controls on Home sit on a plate. Every label of the bar, the
+  library toolbar and the header above the grid is measured at 4.5:1 or more over white and black artwork, in all four
+  themes, Light and Dark.
 
 **Highlights and buttons**
 

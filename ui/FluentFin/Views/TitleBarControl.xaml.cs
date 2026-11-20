@@ -90,6 +90,10 @@ public sealed partial class TitleBarControl : UserControl
 		// Nixie 1.3.0: the active layout theme's TopBarStyle on the chrome, now and on every switch (the bar itself is kept)
 		ThemeResources.StyleTopBar(BarChrome);
 		ThemeResources.Applied += OnThemeApplied;
+		// Nixie 1.4.0 (DI-B1): the new theme's bar may keep its daytime look over a hero (TopBarChrome.HeroInLight)
+		BarChrome.HeroInLightChanged += (_, _) => ShowBackground();
+		Loaded += (_, _) => ShowBackground();
+		Unloaded += (_, _) => ForgetAppRoot();
 	}
 
 	/// <summary>
@@ -501,10 +505,49 @@ public sealed partial class TitleBarControl : UserControl
 	/// </summary>
 	private void ShowBackground()
 	{
-		var under = ViewModel.IsContentUnderBar;
+		// Nixie 1.4.0 (the review's DI-B1): a theme whose bar keeps its daytime look over a hero (TopBarChrome.HeroInLight
+		// false: Drive-in) shows it there in the light theme, the bar's parts in the app's theme
+		var under = TopBarChrome.ShowsHero(ViewModel.IsContentUnderBar, BarChrome.HeroInLight, AppIsLight());
 		BarChrome.IsOverHero = under; // Nixie 1.3.0: the chrome's state (TopBarChrome: OverContent or OverHero), in the theme's look
 		RequestedTheme = under ? ElementTheme.Dark : ElementTheme.Default;
 	}
+
+	// 1.4.0 contrast
+	private FrameworkElement? _appRoot;
+
+	/// <summary>The app's own theme (the window's content: Settings' choice, or Windows'), not the bar's.</summary>
+	private bool AppIsLight()
+	{
+		var root = App.MainWindow?.Content as FrameworkElement;
+		if (!ReferenceEquals(root, _appRoot))
+		{
+			if (_appRoot is not null)
+			{
+				_appRoot.ActualThemeChanged -= OnAppThemeChanged;
+			}
+
+			_appRoot = root;
+			if (root is not null)
+			{
+				root.ActualThemeChanged += OnAppThemeChanged;
+			}
+		}
+
+		return root?.ActualTheme == ElementTheme.Light;
+	}
+
+	private void OnAppThemeChanged(FrameworkElement sender, object args) => ShowBackground();
+
+	/// <summary>A bar taken away (a sign-out's new shell) stops listening to the window's theme.</summary>
+	private void ForgetAppRoot()
+	{
+		if (_appRoot is not null)
+		{
+			_appRoot.ActualThemeChanged -= OnAppThemeChanged;
+			_appRoot = null;
+		}
+	}
+	// end 1.4.0 contrast
 
 	/// <summary>The caption buttons' theme for the app's: light or dark; in high contrast, Windows' own.</summary>
 	public static TitleBarTheme CaptionThemeFor(ElementTheme actual, bool highContrast) =>

@@ -59,6 +59,34 @@ public sealed partial class TopBarChrome : Control
 	/// <summary>The state for <see cref="IsOverHero"/>.</summary>
 	public static string StateFor(bool overHero) => overHero ? "OverHero" : "OverContent";
 
+	// 1.4.0 contrast
+	public static readonly DependencyProperty HeroInLightProperty =
+		DependencyProperty.Register(nameof(HeroInLight), typeof(bool), typeof(TopBarChrome), new PropertyMetadata(true, (d, _) => ((TopBarChrome)d).HeroInLightChanged?.Invoke(d, EventArgs.Empty)));
+
+	/// <summary>
+	/// Nixie 1.4.0 (the library review's DI-B1, plan item 3): whether the bar takes its hero look (its OverHero state, the bar's
+	/// parts in the dark theme) over a hero in the light theme too: true by default (1.2.0's dark scrim with light text, in
+	/// both themes). A theme's TopBarStyle sets it false when its bar over a hero is its bar over content by day: Drive-in's
+	/// noon bar is the same light glass with dark text over the libraries, Home and an item's art as over the Libraries page
+	/// (it was the dusk bar's mauve over the noon sky, with the dark theme's text: 1.99 to 3.18:1).
+	/// </summary>
+	public bool HeroInLight
+	{
+		get => (bool)GetValue(HeroInLightProperty);
+		set => SetValue(HeroInLightProperty, value);
+	}
+
+	/// <summary>Raised when <see cref="HeroInLight"/> changes (a theme switch restyled the chrome): the bar decides its look again.</summary>
+	public event EventHandler? HeroInLightChanged;
+
+	/// <summary>
+	/// Whether the bar shows its hero look (the OverHero state, its parts in the dark theme): over a page whose art runs under it
+	/// (<paramref name="underBar"/>), unless the app is light (<paramref name="appIsLight"/>) and the theme's bar keeps its
+	/// look over content there (<paramref name="heroInLight"/> false).
+	/// </summary>
+	public static bool ShowsHero(bool underBar, bool heroInLight, bool appIsLight) => underBar && (heroInLight || !appIsLight);
+	// end 1.4.0 contrast
+
 	/// <summary>Whether the theme's ornament is drawn: never over the player.</summary>
 	public static bool ShowsOrnament(bool overPlayer) => !overPlayer;
 
