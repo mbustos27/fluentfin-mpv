@@ -194,8 +194,9 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
   in the player no prompt over the time or the seek bar and its labels at 4.5:1.
 - Editorial has no list view (View offers its poster sizes only).
 - Drive-in's chapter bulbs on the console come later; its Chapters menu is in the bar.
-- Two checks are by hand, not off-screen: open the player and press Space before any click, then move the mouse (the
-  controls must come back); and Esc inside YouTube's own player in the trailer theatre.
+- Three checks are by hand, not off-screen: open the player and press Space before any click, then move the mouse (the
+  controls must come back); Esc inside YouTube's own player in the trailer theatre; and one real trailer plays in the
+  theatre, with sound.
 
 ## 1.3.1
 

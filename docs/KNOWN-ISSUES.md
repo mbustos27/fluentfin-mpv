@@ -113,6 +113,23 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   on the A to Z's R, and on the A to Z a letter key presses that letter.
 - **The skeleton and [perf] probes** (`LibraryProbe`) log one line per library opened; they measure, they never change
   the layout.
+- **For 1.4.1, from the outside-services bug hunt** (`docseports\Bug hunt 2026-11-19 (outside services).md`; none blocks
+  1.4.0):
+  - **M1: a certificate Windows trusts but Mozilla's list does not: sign-in works, playback fails.** The UI checks the
+    server's chain against the Windows store, the backend against certifi's bundle, so a home or private CA (or an
+    HTTPS-inspecting antivirus root) browses but nothing plays (`SSLError: CERTIFICATE_VERIFY_FAILED`). Fix: `truststore`
+    in the frozen backend (`truststore.inject_into_ssl()` in `backend_entry.py` and the bridge's main).
+  - **m1: split-season anime get the wrong part's skip times, or none** ("Look intros up online"): a TVDB season with more
+    than one MAL entry (Attack on Titan's Season 3 and 3 Part II) is looked up as the first (`intro_online.py`
+    `mal_id_for`). Fix: no answer when a season maps to several entries, or for season 0.
+  - **m2: mpv's controls offer "Search online" for subtitles,** which fails (uosc's `ziggy` is not shipped), and the
+    vendored uosc still carries its OpenSubtitles key. Fix: patch `download_command` out of the subtitles opener.
+  - **m3: renaming the GitHub repository would silently end one-click updates** in every installed copy (the release
+    check accepts only `/mbustos27/fluentfin-mpv/` downloads). Never rename or transfer the repository without a release
+    that accepts both paths first.
+  - **m4: the fake server accepts legacy auth** (`X-Emby-Token`, `api_key`) that Jellyfin 12 refuses, and reports 10.10.7:
+    a regression to a legacy form would pass every harness run. Fix: a strict-auth mode by default in the harness.
+  - The sub-path and trailing-slash server run never happened; it goes in the next hunt.
 
 ## Nixie 1.3.0: the layout themes
 - **Editorial has no paused side column** (synopsis, cast and chapters beside a paused video), nor its segmented chapter
