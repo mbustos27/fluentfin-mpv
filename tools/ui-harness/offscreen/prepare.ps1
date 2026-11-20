@@ -121,3 +121,107 @@ function Get-HarnessBuildArgs([string]$Repo, [string]$BuildDir) {
     @('build', (Join-Path $Repo 'ui\FluentFin\FluentFin.csproj'), '-c', 'Debug', '-p:Platform=x64', '--artifacts-path', $BuildDir,
         '-nodeReuse:false', '-p:UseSharedCompilation=false', '-nologo', '-v:q')
 }
+
+# --- Nixie 1.4.x (sg-parallel): off-screen runs at once on this machine ---------------------------------------------------
+# Bug hunt m10's "three runs at once all ended minimized" was never the parallel runs: the primary monitor dropped off the
+# bus in that second (drive.ps1's Resolve-WindowsMinimize). Runs go N at a time (NIXIE_HARNESS_PARALLEL, default 3: about
+# 1-1.5 GB each), and a run starts only while the machine has the memory for it (Wait-HarnessMemory).
+# The lock is N named mutexes, one per slot: slot 1 is Local\NixieHarnessOffscreenRun (Nixie 1.4.0's one-at-a-time lock, so a
+# run of an older checkout holds one of the N), slot n is Local\NixieHarnessOffscreenRun.<n>. Mutexes, not a semaphore: a
+# run that dies (killed, its terminal closed) gives its slot back as an abandoned mutex; a semaphore's count would stay taken.
+$HarnessRunLockName = 'Local\NixieHarnessOffscreenRun'
+
+# how many runs go at once: NIXIE_HARNESS_PARALLEL (1 to 8), else 3
+function Get-HarnessRunSlots([string]$Value = $env:NIXIE_HARNESS_PARALLEL) {
+    if (-not "$Value".Trim()) { return 3 }
+    $n = 0
+    if (-not [int]::TryParse("$Value".Trim(), [ref]$n) -or $n -lt 1 -or $n -gt 8) { throw "NIXIE_HARNESS_PARALLEL=${Value}: give 1 to 8 (off-screen runs at once on this machine)" }
+    $n
+}
+
+function Get-HarnessRunSlotName([int]$Slot, [string]$Name = $HarnessRunLockName) { if ($Slot -le 1) { $Name } else { "$Name.$Slot" } }
+
+# Takes a free slot of $Slots, waiting up to $Wait for one: { Slot, Mutex } (give it back with Exit-HarnessRunSlot, on the same
+# thread), or $null when none came free. A slot a dead run left (an abandoned mutex) is taken.
+function Enter-HarnessRunSlot([int]$Slots, [TimeSpan]$Wait, [string]$Name = $HarnessRunLockName) {
+    $mutexes = @(for ($i = 1; $i -le $Slots; $i++) { New-Object System.Threading.Mutex($false, (Get-HarnessRunSlotName $i $Name)) })
+    $index = [Threading.WaitHandle]::WaitTimeout
+    try { $index = [Threading.WaitHandle]::WaitAny([Threading.WaitHandle[]]$mutexes, $Wait) }
+    catch {
+        $abandoned = @($_.Exception, $_.Exception.InnerException) | Where-Object { $_ -is [Threading.AbandonedMutexException] } | Select-Object -First 1
+        if (-not $abandoned) { foreach ($m in $mutexes) { $m.Dispose() }; throw }
+        $index = $abandoned.MutexIndex
+    }
+    for ($i = 0; $i -lt $mutexes.Count; $i++) { if ($i -ne $index) { $mutexes[$i].Dispose() } }
+    if ($index -eq [Threading.WaitHandle]::WaitTimeout -or $index -lt 0 -or $index -ge $mutexes.Count) { return $null }
+    [pscustomobject]@{ Slot = $index + 1; Slots = $Slots; Mutex = $mutexes[$index] }
+}
+
+function Exit-HarnessRunSlot($Lock) {
+    if (-not $Lock -or -not $Lock.Mutex) { return }
+    try { $Lock.Mutex.ReleaseMutex() } finally { $Lock.Mutex.Dispose(); $Lock.Mutex = $null }
+}
+
+# the machine's available memory, GB: Ram (physical: free and standby) and Commit (what can still be committed before the
+# commit limit; a run that cannot commit fails, whatever the RAM)
+function Get-HarnessMemory {
+    if (-not ('HarnessMemoryStatus' -as [type])) {
+        Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class HarnessMemoryStatus {
+  [StructLayout(LayoutKind.Sequential)] struct MEMORYSTATUSEX { public uint dwLength, dwMemoryLoad; public ulong ullTotalPhys, ullAvailPhys, ullTotalPageFile, ullAvailPageFile, ullTotalVirtual, ullAvailVirtual, ullAvailExtendedVirtual; }
+  [DllImport("kernel32.dll", SetLastError = true)] static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX m);
+  public static double[] Get() {
+    var m = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX)) };
+    if (!GlobalMemoryStatusEx(ref m)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    return new[] { m.ullAvailPhys / 1073741824.0, m.ullAvailPageFile / 1073741824.0 };
+  }
+}
+"@
+    }
+    $v = [HarnessMemoryStatus]::Get()
+    [pscustomobject]@{ Ram = [Math]::Round($v[0], 1); Commit = [Math]::Round($v[1], 1) }
+}
+
+# how much memory a run waits for: NIXIE_HARNESS_MIN_FREE_GB (a number, 0 to turn the wait off), else 3
+function Get-HarnessMinFreeGB([string]$Value = $env:NIXIE_HARNESS_MIN_FREE_GB) {
+    if (-not "$Value".Trim()) { return 3.0 }
+    $n = 0.0
+    if (-not [double]::TryParse("$Value".Trim(), [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$n) -or $n -lt 0) { throw "NIXIE_HARNESS_MIN_FREE_GB=${Value}: give a number of GB (0 turns the wait off)" }
+    $n
+}
+
+# Waits while the available RAM or commit is under $MinGB, until $Until: the last reading, with Ok. $OnWait runs once, with
+# the reading, when it has to wait. $Probe and $Sleep stand in for the machine in the tests.
+function Wait-HarnessMemory([double]$MinGB, [DateTime]$Until, [scriptblock]$OnWait = {}, [scriptblock]$Probe = { Get-HarnessMemory },
+    [scriptblock]$Sleep = { Start-Sleep -Seconds 5 }) {
+    $said = $false
+    while ($true) {
+        $m = & $Probe
+        $ok = $m.Ram -ge $MinGB -and $m.Commit -ge $MinGB
+        if ($ok -or [DateTime]::UtcNow -ge $Until.ToUniversalTime()) { return [pscustomobject]@{ Ok = $ok; Ram = $m.Ram; Commit = $m.Commit } }
+        if (-not $said) { & $OnWait $m; $said = $true }
+        & $Sleep
+    }
+}
+
+# One build or test-video build at a time in a folder (the default -Cache is shared by every checkout): runs $Body holding the
+# folder's own named mutex, waiting up to $Wait for it.
+function Get-HarnessFolderLockName([string]$Folder) {
+    $sha = [Security.Cryptography.SHA1]::Create()
+    try { $hash = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes([IO.Path]::GetFullPath($Folder).TrimEnd('\').ToLowerInvariant())) | Select-Object -First 8 | ForEach-Object { $_.ToString('x2') }) }
+    finally { $sha.Dispose() }
+    "Local\NixieHarnessFolder-$hash"
+}
+function Use-HarnessFolderLock([string]$Folder, [TimeSpan]$Wait, [scriptblock]$Body) {
+    $m = New-Object System.Threading.Mutex($false, (Get-HarnessFolderLockName $Folder))
+    $held = $false
+    try {
+        try { $held = $m.WaitOne($Wait) }
+        catch { if (@($_.Exception, $_.Exception.InnerException) | Where-Object { $_ -is [Threading.AbandonedMutexException] }) { $held = $true } else { throw } }
+        if (-not $held) { throw "another off-screen run kept $Folder busy for $([int]$Wait.TotalMinutes) min" }
+        & $Body
+    }
+    finally { if ($held) { $m.ReleaseMutex() }; $m.Dispose() }
+}

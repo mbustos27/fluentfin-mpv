@@ -104,5 +104,29 @@ Check "Step-Library looks for the showcase film with Find-MediaCard (Editorial's
 $shot = [regex]::Match($driveText, '(?s)function Shot\(.*?\r?\n\}').Value
 Check 'Shot refuses a minimized window before it saves anything' ($shot.IndexOf('ShotRefusal') -ge 0 -and $shot.IndexOf('ShotRefusal') -lt $shot.IndexOf('::Shot('))
 
+# --- sg-parallel (bug hunt m10's cause): a monitor dropping off the bus minimizes the window; the run says so and restores it --
+$lg = '\\.\DISPLAY18 0,0 2560x1440 primary'; $left = '\\.\DISPLAY19 -1920,357 1920x1080'; $right = '\\.\DISPLAY17 2560,235 1920x1080'
+$removal = '09:00:20.452 DISPLAY\GSM5B7F\7&a2a444a&7&UID516'
+$v = [OffscreenUi]::MonitorLossVerdict($true, $lg, @($left, $right), @($removal))
+Check 'minimized, and its monitor went away (m10, 09:00:20): the monitor is the cause, named' ($v -match 'DISPLAY18' -and $v -match 'went away' -and $v -match 'GSM5B7F') "$v"
+$v = [OffscreenUi]::MonitorLossVerdict($true, $lg, @($left, $right), @())
+Check 'its monitor gone with no Kernel-PnP line (the log unreadable): still the cause' ($v -match 'DISPLAY18')
+$v = [OffscreenUi]::MonitorLossVerdict($true, $lg, @($lg, $left, $right), @($removal))
+Check 'its monitor dropped off and came back before the check: the removal is the cause' ($v -match 'dropped off' -and $v -match 'GSM5B7F') "$v"
+Check 'minimized with every monitor there and none dropped off (the app''s or a test''s own minimize): not explained, left to fail' ($null -eq [OffscreenUi]::MonitorLossVerdict($true, $lg, @($lg, $left, $right), @()))
+Check 'not minimized: nothing to explain, whatever the monitors did' ($null -eq [OffscreenUi]::MonitorLossVerdict($false, $lg, @($left), @($removal)))
+Check 'a window on no known monitor yet, minimized, nothing dropped off: not explained' ($null -eq [OffscreenUi]::MonitorLossVerdict($true, $null, @($lg), @()))
+$mons = @([OffscreenUi]::Monitors())
+Check 'this machine''s monitors are listed, one of them primary' ($mons.Count -ge 1 -and @($mons | Where-Object { $_ -match ' primary$' }).Count -eq 1) ($mons -join '; ')
+$resolve = [regex]::Match($driveText, '(?s)function Resolve-WindowsMinimize\(.*?\r?\n\}').Value
+Check 'drive.ps1 restores only a window a monitor explains (MonitorLossVerdict before Restore)' ($resolve.IndexOf('MonitorLossVerdict') -ge 0 -and $resolve.IndexOf('MonitorLossVerdict') -lt $resolve.IndexOf('::Restore('))
+Check 'Shot asks Resolve-WindowsMinimize before it refuses a minimized window' ($shot.IndexOf('Resolve-WindowsMinimize') -ge 0 -and $shot.IndexOf('Resolve-WindowsMinimize') -lt $shot.IndexOf('ShotRefusal'))
+$loop = [regex]::Match($driveText, '(?s)foreach \(\$step in \$wanted\) \{.*?switch').Value
+Check 'each step starts by asking Resolve-WindowsMinimize' ($loop -match 'Resolve-WindowsMinimize')
+Check 'result.json has the display: the monitors, the window''s, what dropped off, the events' ($driveText -match 'display = \$script:display' -and $driveText -match '\$script:display\.removals = ')
+$km = [IO.File]::ReadAllText((Join-Path (Split-Path $Uia) 'then-keys-matrix.ps1'))
+$kmCase = [regex]::Match($km, '(?s)function KM-OvCase\(.*?IsIconic').Value
+Check 'the keys matrix asks Resolve-WindowsMinimize before it calls a minimized window a finding' ($kmCase -match 'Resolve-WindowsMinimize')
+
 Write-Host ("{0} failed" -f $script:failed)
 if ($script:failed) { exit 1 }

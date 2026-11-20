@@ -695,7 +695,9 @@ function KM-OvWaitDrawn([double]$Seconds = 2.5) {
 # after a transition: a pointer move shows the bars, drawn; playing, they hide by themselves (and are no longer drawn); a key
 # shows them again, drawn; and they hide again
 function KM-OvCase([string]$After) {
-    # the window minimized by anything but the activation case is a finding of its own (then put back, so the case still runs)
+    # the window minimized by anything but the activation case is a finding of its own (then put back, so the case still runs);
+    # sg-parallel: by a monitor going away, drive.ps1's Resolve-WindowsMinimize says so and restores it instead
+    [void](Resolve-WindowsMinimize "keys-matrix overlay $After")
     if ([KmOverlay]::IsIconic($script:hwnd)) {
         KM-Row 'overlay' $After 'the window is not minimized' $false 'it was: restored'
         [void][KmOverlay]::ShowWindow($script:hwnd, 9); Start-Sleep -Milliseconds 1200

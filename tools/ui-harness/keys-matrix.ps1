@@ -10,6 +10,8 @@
   2026-11-18), double clicks, the Back key, and a theme switch mid-session. Each run's rows are in
   <Out>\<theme>\keys-matrix\keys-matrix.json; the table, one column per theme, goes to -Table (default
   <repo>\shots\keys-matrix.md, not committed). Silent (ao=null) and off-screen like every run-offscreen.ps1 run.
+  -Parallel (sg-parallel) starts the themes' runs at once, each its own process; run-offscreen.ps1's slots
+  (NIXIE_HARNESS_PARALLEL, default 3) and its memory wait decide how many go together.
 
 .EXAMPLE
   .\keys-matrix.ps1 -Out C:\scratch\keys -Exe C:\scratch\build\bin\FluentFin\debug\Nixie.exe -Python C:\...\python.exe
@@ -25,7 +27,10 @@ param(
     [string]$Table,
     # themes whose rows an earlier run left in -Out are read, not run again (the table still has all of -Themes)
     [string[]]$Reuse = @(),
-    [int]$TimeoutSeconds = 2400
+    [int]$TimeoutSeconds = 2400,
+    # sg-parallel: the themes' runs at once, each its own process (run-offscreen.ps1's slots, NIXIE_HARNESS_PARALLEL, decide how
+    # many go together; its console in <Out>\<theme>.console.txt). Needs -Exe or an earlier -Build's exe, not -Build.
+    [switch]$Parallel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,8 +46,10 @@ $then = Join-Path $PSScriptRoot 'offscreen\then-keys-matrix.ps1'
 # a run's rows (Windows PowerShell's ConvertFrom-Json writes a JSON array as one object: enumerated here)
 function Read-Rows([string]$File) { if (Test-Path $File) { @(Get-Content $File -Raw -Encoding utf8 | ConvertFrom-Json | ForEach-Object { $_ }) } else { @() } }
 
+if ($Parallel -and $Build) { throw "-Parallel runs the themes at once: build first (-Build without -Parallel, or run-offscreen.ps1 -Build) and pass -Exe" }
 $results = [ordered]@{}
 $built = $false
+$going = [ordered]@{}   # -Parallel: theme -> its run's process (started here; waited for below)
 foreach ($theme in $Themes) {
     $env:NIXIE_LAYOUT = $theme
     $runOut = Join-Path $Out $theme
@@ -54,17 +61,36 @@ foreach ($theme in $Themes) {
     }
     $data = Join-Path $Out "data-$theme"
     foreach ($dir in @($runOut, $data)) { if (Test-Path $dir) { Remove-Item -Recurse -Force $dir } }
-    $runArgs = @{ DataDir = $data; Out = $runOut; Script = 'home'; Then = $then; NoA11y = $true; TimeoutSeconds = $TimeoutSeconds }
+    $runArgs = [ordered]@{ DataDir = $data; Out = $runOut; Script = 'home'; Then = $then; TimeoutSeconds = $TimeoutSeconds }
     if ($Exe) { $runArgs.Exe = $Exe } elseif ($Build -and -not $built) { $runArgs.Build = $true }
     if ($Python) { $runArgs.Python = $Python }
     if ($Cache) { $runArgs.Cache = $Cache }
     Write-Host "== $theme -> $runOut"
-    & $runner @runArgs | Out-Host
+    if ($Parallel) {
+        # its own powershell.exe, NIXIE_LAYOUT inherited from here; -QueueMinutes covers a wait for a slot behind the others
+        $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $runner + '"'), '-NoA11y', '-QueueMinutes', [string][Math]::Max(30, [int]($TimeoutSeconds / 60) * $Themes.Count))
+        foreach ($k in $runArgs.Keys) { $argList += "-$k"; $argList += ('"' + [string]$runArgs[$k] + '"') }
+        $going[$theme] = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList $argList -PassThru -WindowStyle Hidden `
+            -RedirectStandardOutput (Join-Path $Out "$theme.console.txt") -RedirectStandardError (Join-Path $Out "$theme.console-err.txt")
+        $null = $going[$theme].Handle   # (Windows PowerShell keeps the exit code only for a process whose handle was opened)
+        continue
+    }
+    & $runner @runArgs -NoA11y | Out-Host
     $built = $true
     $rowsFile = Join-Path $runOut 'keys-matrix\keys-matrix.json'
     $results[$theme] = Read-Rows $rowsFile
 }
 Remove-Item Env:NIXIE_LAYOUT -ErrorAction SilentlyContinue
+foreach ($theme in @($going.Keys)) {
+    $p = $going[$theme]
+    $p.WaitForExit()
+    Write-Host "== $theme ended (exit $($p.ExitCode)); its console: $(Join-Path $Out "$theme.console.txt")"
+    $results[$theme] = Read-Rows (Join-Path (Join-Path $Out $theme) 'keys-matrix\keys-matrix.json')
+}
+if ($going.Count) {
+    # the table's columns in -Themes' order, as a serial run has them
+    $ordered = [ordered]@{}; foreach ($theme in $Themes) { if ($results.Contains($theme)) { $ordered[$theme] = $results[$theme] } }; $results = $ordered
+}
 
 # the table: one line per (section, case, key) in the order first seen, one column per theme; a cell is PASS, FAIL, or
 # PASS n/m when the same check ran more than once (a key pressed twice in a case)

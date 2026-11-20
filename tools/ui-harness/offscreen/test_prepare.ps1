@@ -116,5 +116,108 @@ Check 'the build has its own artifacts folder (not the checkout''s bin/obj)' (($
 Check 'the build leaves no MSBuild node or compiler server running' (($a -contains '-nodeReuse:false') -and ($a -contains '-p:UseSharedCompilation=false'))
 Check 'the build is the x64 app project' (($a -contains '-p:Platform=x64') -and ($a[1] -like '*ui\FluentFin\FluentFin.csproj'))
 
+# --- sg-parallel: runs at once (the slot lock), the memory wait, one build per folder ------------------------------------
+# Another holder of a lock is a thread of this process (a mutex is re-entrant on the thread that holds it). Every lock here
+# has a name of this test's own, never a real run's.
+if (-not ('SlotTestHolder' -as [type])) {
+    Add-Type @"
+using System;
+using System.Threading;
+public sealed class SlotTestHolder {
+  readonly ManualResetEvent _taken = new ManualResetEvent(false), _go = new ManualResetEvent(false);
+  readonly Thread _t;
+  // takes the named mutex on a thread of its own and holds it until Let(), or for releaseAfterMs (when > 0); abandon: the
+  // thread ends without releasing it (a run that died)
+  public SlotTestHolder(string name, bool abandon, int releaseAfterMs) {
+    _t = new Thread(() => {
+      var m = new Mutex(false, name);
+      try { m.WaitOne(); } catch (AbandonedMutexException) { }
+      _taken.Set();
+      if (releaseAfterMs > 0) _go.WaitOne(releaseAfterMs); else _go.WaitOne();
+      if (!abandon) m.ReleaseMutex();
+    }) { IsBackground = true };
+    _t.Start();
+    if (!_taken.WaitOne(5000)) throw new TimeoutException("the holder did not take " + name);
+  }
+  public void Let() { _go.Set(); _t.Join(5000); }
+  // whether another thread can take the named mutex now (it gives it back at once)
+  public static bool Free(string name) {
+    bool free = false;
+    var t = new Thread(() => { using (var m = new Mutex(false, name)) { try { free = m.WaitOne(0); } catch (AbandonedMutexException) { free = true; } if (free) m.ReleaseMutex(); } });
+    t.Start(); t.Join(5000);
+    return free;
+  }
+}
+"@
+}
+$lockName = "Local\NixieHarnessTest-$([guid]::NewGuid().ToString('N'))"
+function Slot([int]$N) { Get-HarnessRunSlotName $N $lockName }
+$holders = New-Object System.Collections.ArrayList
+function Hold([string]$Name, [switch]$Abandon, [int]$ReleaseAfterMs = 0) { $h = New-Object SlotTestHolder($Name, [bool]$Abandon, $ReleaseAfterMs); [void]$holders.Add($h); $h }
+try {
+    Check 'runs at once: 3 by default' ((Get-HarnessRunSlots '') -eq 3)
+    Check 'NIXIE_HARNESS_PARALLEL=1 is one at a time, 8 the most' ((Get-HarnessRunSlots '1') -eq 1 -and (Get-HarnessRunSlots ' 8 ') -eq 8)
+    foreach ($bad in '0', '9', '-1', 'two', '2.5') { Check "NIXIE_HARNESS_PARALLEL=$bad is refused" (Throws { Get-HarnessRunSlots $bad } '*1 to 8*') }
+    Check 'slot 1 is Nixie 1.4.0''s one-at-a-time lock (a run of an older checkout holds one slot)' ((Get-HarnessRunSlotName 1) -eq 'Local\NixieHarnessOffscreenRun' -and (Get-HarnessRunSlotName 2) -eq 'Local\NixieHarnessOffscreenRun.2')
+
+    $l = Enter-HarnessRunSlot 3 ([TimeSpan]::Zero) $lockName
+    Check 'nothing held: slot 1' ($l -and $l.Slot -eq 1) "$($l.Slot)"
+    Exit-HarnessRunSlot $l
+    Check 'Exit-HarnessRunSlot gives the slot back (another thread takes it)' ([SlotTestHolder]::Free((Slot 1)))
+
+    $old = Hold (Slot 1)
+    Check 'an older checkout''s run (the 1.4.0 lock) and NIXIE_HARNESS_PARALLEL=1: none free' ($null -eq (Enter-HarnessRunSlot 1 ([TimeSpan]::Zero) $lockName))
+    $l = Enter-HarnessRunSlot 3 ([TimeSpan]::Zero) $lockName
+    Check 'an older checkout''s run and 3 slots: slot 2' ($l -and $l.Slot -eq 2) "$($l.Slot)"
+    Exit-HarnessRunSlot $l
+
+    $h2 = Hold (Slot 2); $h3 = Hold (Slot 3)
+    Check 'three runs going and 3 slots: a fourth gets none at once' ($null -eq (Enter-HarnessRunSlot 3 ([TimeSpan]::Zero) $lockName))
+    $h2.Let()
+    $l = Enter-HarnessRunSlot 3 ([TimeSpan]::Zero) $lockName
+    Check 'a slot given back is taken' ($l -and $l.Slot -eq 2) "$($l.Slot)"
+    # (this thread already holds slot 2, and a mutex is re-entrant on its thread: another run holds it for the next check)
+    Exit-HarnessRunSlot $l; [void](Hold (Slot 2))
+    $h3.Let(); [void](Hold (Slot 3) -ReleaseAfterMs 600)    # slot 3 taken again, and given back after 0.6 s
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $l2 = Enter-HarnessRunSlot 3 ([TimeSpan]::FromSeconds(5)) $lockName
+    Check 'a run waiting for a slot gets the first given back, and not before' ($l2 -and $l2.Slot -eq 3 -and $sw.ElapsedMilliseconds -ge 300) "slot $($l2.Slot) after $($sw.ElapsedMilliseconds) ms"
+    Exit-HarnessRunSlot $l2
+    foreach ($h in $holders) { $h.Let() }
+
+    [void](Hold (Slot 1) -Abandon -ReleaseAfterMs 1)
+    Start-Sleep -Milliseconds 300
+    $l = Enter-HarnessRunSlot 1 ([TimeSpan]::Zero) $lockName
+    Check 'the slot of a run that died (an abandoned mutex) is taken, not lost' ($l -and $l.Slot -eq 1) "$($l.Slot)"
+    Exit-HarnessRunSlot $l
+    Check 'and given back again' ([SlotTestHolder]::Free((Slot 1)))
+}
+finally { foreach ($h in $holders) { $h.Let() } }
+
+# the memory wait, on readings made up here
+Check 'memory: 3 GB by default; 0 turns the wait off; a number of GB' ((Get-HarnessMinFreeGB '') -eq 3 -and (Get-HarnessMinFreeGB '0') -eq 0 -and (Get-HarnessMinFreeGB '2.5') -eq 2.5)
+foreach ($bad in '-1', 'lots') { Check "NIXIE_HARNESS_MIN_FREE_GB=$bad is refused" (Throws { Get-HarnessMinFreeGB $bad } '*number of GB*') }
+$script:readings = @(@{ Ram = 1.0; Commit = 9.0 }, @{ Ram = 2.9; Commit = 9.0 }, @{ Ram = 6.0; Commit = 9.0 })
+$script:read = 0; $script:slept = 0; $script:said = @()
+$w = Wait-HarnessMemory 3 ([DateTime]::UtcNow.AddMinutes(5)) -OnWait { param($m) $script:said += "$($m.Ram)" } -Probe { $script:readings[[Math]::Min($script:read++, 2)] } -Sleep { $script:slept++ }
+Check 'under 3 GB of RAM: it waits until there is, says so once' ($w.Ok -and $w.Ram -eq 6 -and $script:slept -eq 2 -and $script:said.Count -eq 1 -and $script:said[0] -eq '1') "ok $($w.Ok), $($script:slept) waits, said $($script:said -join ',')"
+Check 'RAM enough but the commit under 3 GB: it waits too' ((Throws { Wait-HarnessMemory 3 ([DateTime]::UtcNow.AddMinutes(5)) -Probe { @{ Ram = 8.0; Commit = 2.0 } } -Sleep { throw 'waited' } -OnWait {} } 'waited'))
+$script:slept = 0
+$w = Wait-HarnessMemory 3 ([DateTime]::UtcNow.AddSeconds(-1)) -Probe { @{ Ram = 1.0; Commit = 1.0 } } -Sleep { $script:slept++ } -OnWait {}
+Check 'still short when the queue time is up: not Ok, and no more waiting' (-not $w.Ok -and $script:slept -eq 0)
+$w = Wait-HarnessMemory 0 ([DateTime]::UtcNow) -Probe { @{ Ram = 0.1; Commit = 0.1 } } -Sleep { throw 'waited' } -OnWait {}
+Check 'NIXIE_HARNESS_MIN_FREE_GB=0: never waits' ($w.Ok)
+$m = Get-HarnessMemory
+Check 'this machine''s memory is read (GB of RAM and commit available)' ($m.Ram -gt 0 -and $m.Commit -gt 0) "RAM $($m.Ram) GB, commit $($m.Commit) GB"
+
+# one build (or test-video build) at a time in a folder
+$folder = Join-Path $Out 'folder-lock'
+Check 'a folder''s lock returns what its body made' ((Use-HarnessFolderLock $folder ([TimeSpan]::Zero) { 'made' }) -eq 'made')
+Check 'the same folder however it is written: one lock' ((Get-HarnessFolderLockName ($folder + '\')) -eq (Get-HarnessFolderLockName $folder.ToUpperInvariant()) -and (Get-HarnessFolderLockName $folder) -ne (Get-HarnessFolderLockName "$folder-2"))
+$busy = New-Object SlotTestHolder((Get-HarnessFolderLockName $folder), $false, 0)
+try { Check 'a folder another run is building in: it waits, then says so' (Throws { Use-HarnessFolderLock $folder ([TimeSpan]::FromMilliseconds(200)) { 'built' } } '*kept*busy*') }
+finally { $busy.Let() }
+Check 'and the lock is given back after the body (also when it throws)' ((Throws { Use-HarnessFolderLock $folder ([TimeSpan]::Zero) { throw 'boom' } } 'boom') -and [SlotTestHolder]::Free((Get-HarnessFolderLockName $folder)))
+
 Write-Host ("{0} failed" -f $script:failed)
 if ($script:failed) { exit 1 }
