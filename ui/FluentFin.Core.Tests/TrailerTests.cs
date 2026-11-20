@@ -83,6 +83,7 @@ public sealed class TrailerTests
 		Assert.DoesNotContain("\r", Trailers.WrapperScript);
 		// it subscribes to the player's state changes and errors (YouTube sends them only then), and marks the user's touch
 		Assert.Contains("func: 'addEventListener', args: [n]", Trailers.WrapperScript);
+		Assert.Contains("if (!s.ready) { s.ready = true; subscribe(); }", Trailers.WrapperScript);
 		Assert.Contains("['onReady', 'onStateChange', 'onError']", Trailers.WrapperScript);
 		Assert.Contains("document.activeElement === f) { s.touched = true; }", Trailers.WrapperScript);
 		Assert.Equal(page.Replace(Id, "ZZZZZZZZZZZ"), Trailers.WrapperHtml("ZZZZZZZZZZZ"));
