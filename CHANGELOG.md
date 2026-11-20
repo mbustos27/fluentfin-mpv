@@ -171,6 +171,9 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
 
 **Verified, and the known limits**
 
+- The release build runs every test of both suites, the libmpv tests included (they were skipped), and stops if any test
+  did not run.
+
 - Every theme runs the keyboard matrix, the streams' harness scripts and the review's measurements as checks
   (`then-140-checks.ps1`): the top bar on one line, the loading placeholders where the cards land, every library's items
   opening, the focus named after every navigation, Narrator's names carrying the numbers on screen, the empty states, and

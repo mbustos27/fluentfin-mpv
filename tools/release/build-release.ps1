@@ -227,6 +227,18 @@ $libmpvInfo = Get-Content $libmpvCheck -Raw | ConvertFrom-Json
 # tools\backend-bench\hidden_run.py, APPDATA/LOCALAPPDATA in dist\.work; mpv on PATH, which test discovery needs). A
 # test that fails is run once more on its own: the UI suites have timing tests that fail under load (KNOWN-ISSUES);
 # one that fails again stops the build, and one that passes is named in the output.
+#   Nixie 1.4.0 (bug hunt m2): every test of both suites runs, or the release stops: FluentFin.Tests is built with the
+#   release's own libmpv folder next to it (-p:LibmpvDir) and FLUENTFIN_MPV_REQUIRE_LIBMPV=1 (the libmpv probe tests fail
+#   instead of skipping), and a results file with any test not run (NotExecuted) is a failure (Get-NotExecuted).
+# The names of the tests a TRX results file says were not run (outcome NotExecuted: skipped); none when every test ran.
+function Get-NotExecuted([string]$trx) {
+    $doc = [xml](Get-Content $trx -Raw)
+    $names = @($doc.SelectNodes("//*[local-name()='UnitTestResult'][@outcome='NotExecuted']") | ForEach-Object { ($_.GetAttribute('testName') -split '\(')[0] } | Sort-Object -Unique)
+    $counters = $doc.SelectSingleNode("//*[local-name()='Counters']")
+    $counted = if ($counters -and $counters.GetAttribute('notExecuted')) { [int]$counters.GetAttribute('notExecuted') } else { 0 }
+    if ($names.Count -eq 0 -and $counted -gt 0) { $names = @("$counted test(s) the counters name NotExecuted") }
+    $names
+}
 function Invoke-UiTests([string]$project, [string[]]$extra) {
     # dotnet test writes failures to stderr; under 'Stop', PowerShell 5.1 would end the script at the first one
     $ErrorActionPreference = 'Continue'
@@ -236,9 +248,17 @@ function Invoke-UiTests([string]$project, [string[]]$extra) {
     if (Test-Path $trx) { Remove-Item $trx }
     $out = @(& $dotnet test $project @extra -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers -v:q -nologo `
             --results-directory $results --logger "trx;LogFileName=$(Split-Path $trx -Leaf)" 2>&1 | ForEach-Object { "$_" })
+    $code = $LASTEXITCODE
     $summary = $out | Where-Object { $_ -match '^(Passed|Failed)!' }
     Write-Host "  $(Split-Path $project -Leaf): $summary"
-    if ($LASTEXITCODE -eq 0) { return }
+    # Nixie 1.4.0 (bug hunt m2: the release candidate's FluentFin.Tests skipped the 7 libmpv probe tests, and the gate let it
+    # through): a release runs every test; one not run (skipped) stops it as a failure does
+    if (Test-Path $trx) {
+        $notRun = @(Get-NotExecuted $trx)
+        if ($notRun.Count -gt 0) { throw "$project : $($notRun.Count) test(s) were not run (a release runs them all): $(($notRun | Select-Object -First 10) -join ', ')" }
+    }
+    elseif ($code -eq 0) { throw "$project : no results file ($trx), so no proof that every test ran" }
+    if ($code -eq 0) { return }
     $failed = @()
     if (Test-Path $trx) {
         $failed = @(([xml](Get-Content $trx -Raw)).TestRun.Results.UnitTestResult | Where-Object { $_.outcome -eq 'Failed' } |
@@ -256,7 +276,11 @@ if ($SkipTests) {
 else {
     Step 'tests (UI suites, backend bridge tests)'
     Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Core.Tests') @()
-    Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Tests') @('-p:Platform=x64')
+    # the libmpv probe tests run against the release's libmpv folder (bug hunt m2: without it they were skipped)
+    $savedRequire = $env:FLUENTFIN_MPV_REQUIRE_LIBMPV
+    $env:FLUENTFIN_MPV_REQUIRE_LIBMPV = '1'
+    try { Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Tests') @('-p:Platform=x64', "-p:LibmpvDir=$LibmpvDir") }
+    finally { $env:FLUENTFIN_MPV_REQUIRE_LIBMPV = $savedRequire }
     $mpvCmd = Get-Command mpv.exe -ErrorAction SilentlyContinue
     if (-not $mpvCmd) { throw 'the backend tests need mpv on PATH (winget install mpv-player.mpv-CI.MSVC)' }
     $mpvExe = $mpvCmd.Source
