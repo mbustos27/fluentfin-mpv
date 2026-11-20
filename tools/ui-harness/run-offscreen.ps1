@@ -196,7 +196,7 @@ $minFree = Get-HarnessMinFreeGB
 $queueUntil = [DateTime]::UtcNow.AddMinutes($QueueMinutes)
 $runLock = Enter-HarnessRunSlot $slots ([TimeSpan]::Zero)
 if (-not $runLock) {
-    Write-Host "$slots off-screen runs are going on this machine (NIXIE_HARNESS_PARALLEL): this one waits for one of them (at most $QueueMinutes min)"
+    Write-Host "all $slots off-screen run slots on this machine are taken (NIXIE_HARNESS_PARALLEL): this one waits for one (at most $QueueMinutes min)"
     $runLock = Enter-HarnessRunSlot $slots ([TimeSpan]::FromMinutes($QueueMinutes))
     if (-not $runLock) { throw "the other off-screen runs kept the harness for $QueueMinutes min" }
 }
