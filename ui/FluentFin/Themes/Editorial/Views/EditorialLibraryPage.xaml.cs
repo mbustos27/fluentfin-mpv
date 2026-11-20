@@ -43,6 +43,9 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 	// the lines the grid shows; opening or closing details inserts or removes their one line, so the rows stay (and the focus)
 	private readonly System.Collections.ObjectModel.ObservableCollection<EditorialLibraryLine> _lines = [];
 	private int _columns;
+	// Nixie 1.4.0 (the release's layout cycle): the posters' width, read by each row as it is drawn (EditorialGridMetrics)
+	private readonly EditorialGridMetrics _metrics = new();
+	private int _viewTicket;
 	private Guid? _opened;
 	private int _lastIndex;
 	private bool _rebuildQueued;
@@ -247,7 +250,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 	/// <summary>Nixie 1.4.0 (the UX review's E-M1): the chips' row says it goes on (a fade and a chevron), and the chevron turns back at its end.</summary>
 	private void ShowChipCue()
 	{
-		var more = ChipScroller.ScrollableWidth > 1;
+		// (the chevron's room after the last chip is not more to see)
+		var more = ChipScroller.ScrollableWidth - ChipList.Margin.Right > 1;
 		var atEnd = ChipScroller.HorizontalOffset >= ChipScroller.ScrollableWidth - 1;
 		ChipFade.Visibility = more && !atEnd ? Visibility.Visible : Visibility.Collapsed;
 		ChipMore.Visibility = more ? Visibility.Visible : Visibility.Collapsed;
@@ -283,6 +287,16 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		PosterWidth = Math.Floor((width - (columns - 1) * EditorialLibrary.Gap) / columns);
 		PosterHeight = Math.Round(PosterWidth * 1.5);
 		SkeletonLayout.MinItemWidth = PosterWidth;
+		if (_metrics.PosterWidth != PosterWidth)
+		{
+			// the rows drawn from now on read it as they are made; the posters drawn already (and those kept for reuse) change now
+			_metrics.PosterWidth = PosterWidth;
+			foreach (var drawn in Posters(Lines))
+			{
+				drawn.PosterWidth = PosterWidth;
+			}
+		}
+
 		if (columns != _columns)
 		{
 			_columns = columns;
@@ -317,7 +331,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		// and the focus fell to the title bar
 		var keep = XamlRoot is { } root && FocusManager.GetFocusedElement(root) is EditorialPoster { Item: { } kept } poster && IsInside(poster, Lines)
 			? (Item: kept, State: poster.FocusState) : default;
-		var lines = EditorialLibrary.Flow(ViewModel.Items, _columns, ByLetter, _opened);
+		var lines = EditorialLibrary.Flow(ViewModel.Items, _columns, ByLetter, _opened, _metrics);
 		_lines.Clear();
 		foreach (var line in lines)
 		{
@@ -360,7 +374,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		if (args.Element is InlineDetailsRow details && details.Tag is null)
 		{
 			details.Tag = this;
-			details.CloseRequested += (_, _) => CloseDetails(returnFocus: true);
+			details.CloseRequested += (sender, _) => WhenInView(OpenedIndex(), sender as FrameworkElement, () => CloseDetails(returnFocus: true));
 			details.UpRequested += (_, _) => FocusIndex(_lastIndex, FocusState.Keyboard);
 		}
 	}
@@ -403,6 +417,19 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 
 		var byKeyboard = poster.FocusState is FocusState.Keyboard;
+		// Nixie 1.4.0 (the release's layout cycle): a poster out of view (Narrator's Invoke; Enter on a poster the scroll bar
+		// left far above) is brought into view first; its details open, or close, once the grid is laid out there
+		WhenInView(index, poster, () => Toggle(item, byKeyboard));
+	}
+
+	private void Toggle(BaseItemViewModel item, bool byKeyboard)
+	{
+		var index = IndexOf(item);
+		if (index >= 0)
+		{
+			_lastIndex = index;
+		}
+
 		if (IsOpen(item))
 		{
 			CloseDetails(returnFocus: byKeyboard);
@@ -447,6 +474,107 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 			details.Loaded += FocusWhenLoaded;
 		});
+	}
+
+	/// <summary>The opened details' title's place in the library as shown, or -1.</summary>
+	private int OpenedIndex()
+	{
+		for (var i = 0; _opened is { } id && i < ViewModel.Items.Count; i++)
+		{
+			if (ViewModel.Items[i].Id == id)
+			{
+				return i;
+			}
+		}
+
+		return -1;
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the release's layout cycle): runs <paramref name="change"/> (details opened or closed: a line in or out of the
+	/// grid) at once when <paramref name="shown"/> (the poster or the details it comes from) shows in the view, at least in part.
+	/// Else title <paramref name="index"/>'s row comes to the top of the view first, and the change waits until the grid is laid
+	/// out there (a line put in or taken out far from the view moved the whole grid while the view was elsewhere). A newer
+	/// request, or leaving the page, drops a waiting one.
+	/// </summary>
+	private void WhenInView(int index, FrameworkElement? shown, Action change)
+	{
+		var ticket = ++_viewTicket;
+		if (index < 0 || Find(index) is not { } at || (shown is not null && Shows(shown)))
+		{
+			change();
+			return;
+		}
+
+		BringRowToTop(at.Line);
+		var tries = 0;
+		var lastOffset = double.NaN;
+		void WhenLaidOut()
+		{
+			if (ticket != _viewTicket || !IsLoaded)
+			{
+				return;
+			}
+
+			// laid out and still: the view at the same place twice running, the row in it (a row just made sits in the view
+			// for a pass before the grid has scrolled to its real place)
+			GridScroller.UpdateLayout();
+			var still = Math.Abs(GridScroller.VerticalOffset - lastOffset) < 0.5;
+			lastOffset = GridScroller.VerticalOffset;
+			if (still && Find(index) is { } now && Lines.TryGetElement(now.Line) is FrameworkElement row && Shows(row))
+			{
+				change();
+				return;
+			}
+
+			if (++tries < 12)
+			{
+				if (tries == 6 && Find(index) is { } again)
+				{
+					BringRowToTop(again.Line); // the view moved on meanwhile (the wheel): once more
+				}
+
+				DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, WhenLaidOut);
+				return;
+			}
+
+			// it never came into view: nothing changes (opening it far from the view is what hung the window)
+			Serilog.Log.Warning("[library] Editorial: title {Index}'s details not changed: its row did not come into view", index);
+		}
+
+		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, WhenLaidOut);
+	}
+
+	/// <summary>Whether <paramref name="element"/> (in the grid) shows in its view, at least in part.</summary>
+	private bool Shows(FrameworkElement element)
+	{
+		if (!element.IsLoaded || element.XamlRoot is null || !IsInside(element, Lines))
+		{
+			return false;
+		}
+
+		var top = element.TransformToVisual(GridScroller).TransformPoint(default).Y;
+		return EditorialLibrary.PartlyInView(top, element.ActualHeight, GridScroller.ViewportHeight);
+	}
+
+	/// <summary>
+	/// Line <paramref name="line"/> to the top of the view, without animation: a line laid out in its place, by its place; one not
+	/// drawn, or one the grid only keeps for the keyboard (parked out of the way at no size), is made in its place and brought
+	/// in the repeater's own way (its place is known only once the grid has scrolled there).
+	/// </summary>
+	private void BringRowToTop(int line)
+	{
+		if (Lines.TryGetElement(line) is FrameworkElement { ActualHeight: > 0 } row)
+		{
+			GridScroller.ChangeView(null, EditorialLibrary.RowToTop(row.ActualOffset.Y + Lines.Margin.Top, GridScroller.ScrollableHeight), null, disableAnimation: true);
+			return;
+		}
+
+		if (Lines.GetOrCreateElement(line) is FrameworkElement made)
+		{
+			made.UpdateLayout();
+			made.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false, VerticalAlignmentRatio = 0 });
+		}
 	}
 
 	/// <summary>Each drawn poster shows whether its details are the open ones (the ring and the notch).</summary>
@@ -580,6 +708,15 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 
 		var index = IndexOf(item);
+		// Nixie 1.4.0: Esc on the poster whose details are open closes them (the keyboard can be on the poster with its details
+		// open: Up from them, or the grid moved it there when a far scroll let the details go), the poster keeps the keyboard
+		if (e.Key is VirtualKey.Escape or VirtualKey.GamepadB && IsOpen(item) && index >= 0)
+		{
+			e.Handled = true;
+			WhenInView(index, e.OriginalSource as FrameworkElement, () => CloseDetails(returnFocus: true));
+			return;
+		}
+
 		var key = e.Key switch
 		{
 			VirtualKey.Left or VirtualKey.GamepadDPadLeft => "Left",

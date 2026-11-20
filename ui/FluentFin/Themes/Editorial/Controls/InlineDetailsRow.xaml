@@ -20,20 +20,32 @@
         BorderBrush="{ThemeResource EditorialPanelStrokeBrush}"
         BorderThickness="1"
         CornerRadius="8">
+        <!--
+            Nixie 1.4.0 (the release's layout cycle): the panel is sized by layout alone, nothing from its own SizeChanged. The
+            backdrop's column is 55 % of the panel, 760 at most; the words set the height and the backdrop (a brush: no size of
+            its own, so it never grows the panel) fills it.
+        -->
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="45*" />
+            <ColumnDefinition Width="55*" MaxWidth="760" />
+        </Grid.ColumnDefinitions>
+
         <!--  the backdrop on the right, fading into the panel from the left  -->
-        <Grid
+        <Border
             x:Name="ArtArea"
-            Height="212"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Top"
+            Grid.Column="1"
             AutomationProperties.AccessibilityView="Raw"
+            CornerRadius="0,7,7,0"
             IsHitTestVisible="False">
-            <Image x:Name="Backdrop" Stretch="UniformToFill" />
-            <Border Background="{ThemeResource EditorialPanelArtFadeBrush}" />
-        </Grid>
+            <Border.Background>
+                <ImageBrush x:Name="Backdrop" Stretch="UniformToFill" />
+            </Border.Background>
+            <Border Background="{ThemeResource EditorialPanelArtFadeBrush}" CornerRadius="0,7,7,0" />
+        </Border>
 
         <StackPanel
             x:Name="Words"
+            Grid.ColumnSpan="2"
             MaxWidth="900"
             Margin="32,22,64,24"
             HorizontalAlignment="Left"
@@ -153,6 +165,7 @@
 
         <Button
             x:Name="CloseButton"
+            Grid.Column="1"
             AutomationProperties.Name="Close the details"
             Margin="0,12,12,0"
             HorizontalAlignment="Right"

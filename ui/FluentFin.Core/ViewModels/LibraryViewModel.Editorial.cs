@@ -59,8 +59,18 @@ public sealed record EditorialSectionLine(string Letter, string Caption, int Fir
 /// <summary>A row of posters; <paramref name="FirstIndex"/>: the first one's place in the library as shown.</summary>
 public sealed record EditorialRowLine(IReadOnlyList<BaseItemViewModel> Items, int FirstIndex, string Letter, int Total = 0, IReadOnlyList<string?>? Tags = null) : EditorialLibraryLine
 {
-	/// <summary>The row's posters with their place in the library as shown (Narrator's "n of m"), and their letter tags.</summary>
-	public IReadOnlyList<EditorialCell> Cells => [.. Items.Select((item, i) => new EditorialCell(item, FirstIndex + i + 1, Total) { Tag = Tags is { } tags && i < tags.Count ? tags[i] : null })];
+	/// <summary>Nixie 1.4.0: the grid's poster size as it is when the row is drawn (null: the medium width).</summary>
+	public EditorialGridMetrics? Metrics { get; init; }
+
+	/// <summary>
+	/// The row's posters with their place in the library as shown (Narrator's "n of m"), their letter tags, and the posters'
+	/// width now (read each time the row is drawn).
+	/// </summary>
+	public IReadOnlyList<EditorialCell> Cells => [.. Items.Select((item, i) => new EditorialCell(item, FirstIndex + i + 1, Total)
+	{
+		Tag = Tags is { } tags && i < tags.Count ? tags[i] : null,
+		PosterWidth = Metrics?.PosterWidth ?? EditorialLibrary.PosterWidth,
+	})];
 }
 
 /// <summary>A poster of a row, with its place: <paramref name="Position"/> of <paramref name="Size"/>.</summary>
@@ -70,6 +80,20 @@ public sealed record EditorialCell(BaseItemViewModel Item, int Position, int Siz
 	public string? Tag { get; init; }
 
 	public bool HasTag => !string.IsNullOrEmpty(Tag);
+
+	/// <summary>Nixie 1.4.0: the poster's width when its row was drawn (EditorialGridMetrics).</summary>
+	public double PosterWidth { get; init; } = EditorialLibrary.PosterWidth;
+}
+
+/// <summary>
+/// Nixie 1.4.0 (the release's layout cycle): the width the Library grid's posters have now, one object the page owns and each
+/// row reads as it is drawn, so a poster has its width before it is first measured. A binding to the page reached a new poster
+/// only once it was in the window: every row the grid made was measured 12 px taller than it then became, and a far scroll (the
+/// scroll bar, Narrator) sent the grid's layout round for 30 s (a LayoutCycleException) and left the window unusable.
+/// </summary>
+public sealed class EditorialGridMetrics
+{
+	public double PosterWidth { get; set; } = EditorialLibrary.PosterWidth;
 }
 
 /// <summary>The opened poster's details, under its row.</summary>
@@ -138,9 +162,10 @@ public static class EditorialLibrary
 	/// <summary>
 	/// Nixie 1.4.0 (the UX review's E-M5, item 12): the grid's lines with the rows flowing across letters (each letter started a
 	/// row: 1 to 11 posters a row, 4 collections on a screen), the first title of each letter tagged with it when
-	/// <paramref name="tagLetters"/> (sorted by title); <paramref name="opened"/>'s details follow its row.
+	/// <paramref name="tagLetters"/> (sorted by title); <paramref name="opened"/>'s details follow its row. The rows read their
+	/// posters' width from <paramref name="metrics"/> as they are drawn.
 	/// </summary>
-	public static IReadOnlyList<EditorialLibraryLine> Flow(IReadOnlyList<BaseItemViewModel> items, int columns, bool tagLetters, Guid? opened)
+	public static IReadOnlyList<EditorialLibraryLine> Flow(IReadOnlyList<BaseItemViewModel> items, int columns, bool tagLetters, Guid? opened, EditorialGridMetrics? metrics = null)
 	{
 		var lines = new List<EditorialLibraryLine>();
 		columns = Math.Max(1, columns);
@@ -163,7 +188,7 @@ public static class EditorialLibrary
 				tags.Add(tag);
 			}
 
-			lines.Add(new EditorialRowLine(row, i, tagLetters ? LibraryBrowse.LetterOf(LibraryBrowse.SortKey(row[0])) : "", items.Count, tags));
+			lines.Add(new EditorialRowLine(row, i, tagLetters ? LibraryBrowse.LetterOf(LibraryBrowse.SortKey(row[0])) : "", items.Count, tags) { Metrics = metrics });
 			if (opened is { } id && row.FirstOrDefault(x => x.Id == id) is { } item)
 			{
 				lines.Add(new EditorialDetailsLine(item));
@@ -198,6 +223,16 @@ public static class EditorialLibrary
 
 		return null;
 	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the release's layout cycle): whether something from <paramref name="top"/> down <paramref name="height"/> (in
+	/// the view's own coordinates) shows, at least in part, in a view <paramref name="viewport"/> high.
+	/// </summary>
+	public static bool PartlyInView(double top, double height, double viewport) =>
+		viewport > 0 && height >= 0 && top < viewport && top + height > 0;
+
+	/// <summary>The grid's offset that puts a row whose top is <paramref name="rowTop"/> (in the grid) where the first row sits: 8 px under the view's top.</summary>
+	public static double RowToTop(double rowTop, double scrollable) => Math.Clamp(rowTop - 8, 0, Math.Max(0, scrollable));
 
 	/// <summary>The line of the section heading of <paramref name="letter"/>, or -1.</summary>
 	public static int SectionOf(IReadOnlyList<EditorialLibraryLine> lines, string letter)
