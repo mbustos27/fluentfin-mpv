@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.Web.WebView2.Core;
+using System.Text;
 using Windows.System;
 using Windows.UI;
 
@@ -24,8 +25,13 @@ namespace FluentFin.Controls;
 /// <para>
 /// The video is a WebView2 made for each trailer and closed with the window (the sound stops at once), locked down: its own
 /// user-data folder under Nixie's data folder, no DevTools in a release, no host objects, no web messages, no context menu,
-/// no permissions, no downloads; it may load only the privacy-enhanced embed (<see cref="Trailers.Navigation"/>), a YouTube
-/// link ("Watch on YouTube") and any new window open in the system browser.
+/// no permissions, no downloads. Nixie 1.4.0 (YouTube's Error 153 on every trailer): its top page is Nixie's own wrapper
+/// (<see cref="Trailers.WrapperHtml"/> at <see cref="Trailers.WrapperUri"/>, answered here through the resource filter: nothing
+/// on disk, nothing from the network) holding the privacy-enhanced embed as a frame, so YouTube sees an embedding origin and
+/// a Referer it accepts. It may load only that page and, in frames, the embed (<see cref="Trailers.Navigation"/>); a link the
+/// user clicks in YouTube's player opens in the browser, nothing opens it by itself. The app reads the player's state from the
+/// wrapper (<see cref="Trailers.ReadPoll"/>, by script: the page has no way to send the app anything) and, when YouTube
+/// refuses the trailer or it doesn't start, shows Nixie's own message instead (<see cref="TrailerMessageView"/>).
 /// </para>
 /// </summary>
 public sealed partial class TrailerTheater : Grid
@@ -33,16 +39,11 @@ public sealed partial class TrailerTheater : Grid
 	/// <summary>The window's theatre (MainWindow's), null before the window is up.</summary>
 	public static TrailerTheater? Current { get; private set; }
 
-	/// <summary>
-	/// The client the embed is told it plays in (YouTube asks embedded players for a Referer; a desktop app has no page of its
-	/// own, so it names itself the way an app id does). Generic: nothing about the user or the machine.
-	/// </summary>
-	internal const string Referer = "https://app.nixie.windows/";
-
 	private readonly Border _dim;
 	private readonly TrailerFrame _frame;
 	private readonly TrailerWindowState _state;
 	private WebView2? _web;
+	private TrailerMessageView? _message;
 	private Uri _embedBase = Trailers.DefaultEmbedBase;
 	private ILogger? _log;
 	private long _generation;
@@ -107,29 +108,67 @@ public sealed partial class TrailerTheater : Grid
 	/// </summary>
 	public bool Open(string videoId, string? title, Control? returnTo, FocusState how)
 	{
-		var playerOpen = PlayerOpen();
-		if (!_state.TryOpen(title, returnTo, playerOpen))
+		if (!Trailers.IsVideoId(videoId) || !Begin(title, returnTo))
+		{
+			return false;
+		}
+
+		var generation = _generation;
+		_embedBase = EmbedBase();
+		var embed = Trailers.EmbedUri(videoId, _embedBase);
+		Log()?.LogInformation("[trailer] theatre opened (embed {Host} in Nixie's page {Page}, {Theme} frame)", embed.Host, Trailers.WrapperHost, FrameKind());
+
+		ClearContent();
+		_web = new WebView2 { DefaultBackgroundColor = Color.FromArgb(255, 0, 0, 0) };
+		AutomationProperties.SetName(_web, _state.AutomationName);
+		_frame.Content = _web;
+		Show(generation, how);
+		_ = LoadAsync(_web, generation, videoId);
+		return true;
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0: opens the theatre with Nixie's message instead of a trailer (a trailer on another site: "This trailer can't
+	/// play in Nixie", with Open in browser). False when it cannot (the player is open, the window is not up).
+	/// </summary>
+	public bool OpenMessage(TrailerMessage message, string? title, Control? returnTo, FocusState how)
+	{
+		if (!Begin(title, returnTo))
+		{
+			return false;
+		}
+
+		var generation = _generation;
+		Log()?.LogInformation("[trailer] theatre opened (Nixie's message, {Theme} frame)", FrameKind());
+		ShowMessage(message, "a trailer on another site");
+		Show(generation, how);
+		return true;
+	}
+
+	/// <summary>Opens the window's state for a trailer (false while the player is open); a new generation either way it opens.</summary>
+	private bool Begin(string? title, Control? returnTo)
+	{
+		if (!_state.TryOpen(title, returnTo, PlayerOpen()))
 		{
 			Log()?.LogInformation("[trailer] not opened: the player is open");
 			return false;
 		}
 
-		var generation = ++_generation;
-		_embedBase = EmbedBase();
-		var embed = Trailers.EmbedUri(videoId, _embedBase);
-		Log()?.LogInformation("[trailer] theatre opened (embed {Host}, {Theme} frame)", embed.Host, ThemeResources.Find(TrailerFrame.TemplateKey) is null ? "shared" : "the theme's");
+		++_generation;
+		return true;
+	}
 
+	private static string FrameKind() => ThemeResources.Find(TrailerFrame.TemplateKey) is null ? "shared" : "the theme's";
+
+	/// <summary>Shows the window (frame, dim, the keyboard moving in) around whatever its content is now.</summary>
+	private void Show(long generation, FocusState how)
+	{
 		_dim.Background = DimBrush();
 		_frame.ApplyTheme();
 		_frame.Title = _state.Title;
 		AutomationProperties.SetName(_frame, _state.AutomationName);
 		AutomationProperties.SetName(this, _state.AutomationName);
 		WatchPlayer();
-
-		CloseWeb();
-		_web = new WebView2 { DefaultBackgroundColor = Color.FromArgb(255, 0, 0, 0) };
-		AutomationProperties.SetName(_web, _state.AutomationName);
-		_frame.Content = _web;
 
 		Visibility = Visibility.Visible;
 		Contain();
@@ -145,16 +184,13 @@ public sealed partial class TrailerTheater : Grid
 		{
 			if (generation == _generation && _state.IsOpen && !WithinTheater())
 			{
-				var took = _frame.FocusClose(focusHow) || (_web?.Focus(FocusState.Programmatic) ?? false);
+				var took = _message?.FocusClose(focusHow) ?? (_frame.FocusClose(focusHow) || (_web?.Focus(FocusState.Programmatic) ?? false));
 				Log()?.LogInformation("[trailer] keyboard into the window: {Took}, now on {Focused}", took, FocusedName());
 			}
 		}
 
 		MoveIn();
 		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, MoveIn);
-
-		_ = LoadAsync(_web, embed, generation, videoId);
-		return true;
 	}
 
 	/// <summary>Closes the window: the web view is closed (the sound stops at once) and the keyboard goes back.</summary>
@@ -169,7 +205,7 @@ public sealed partial class TrailerTheater : Grid
 		// first: closing the web view and collapsing move the keyboard out, on its way back to the Trailer button
 		Release();
 		CaptionBack();
-		CloseWeb();
+		ClearContent();
 		Visibility = Visibility.Collapsed;
 		Log()?.LogInformation("[trailer] theatre closed");
 		_state.Close();
@@ -343,6 +379,22 @@ public sealed partial class TrailerTheater : Grid
 		return false;
 	}
 
+	/// <summary>Empties the screen: the web view closed (the sound stops at once), the message gone.</summary>
+	private void ClearContent()
+	{
+		CloseWeb();
+		if (_message is { } message)
+		{
+			_message = null;
+			message.LinkRequested -= OnMessageLink;
+			message.CloseRequested -= OnMessageClose;
+			if (ReferenceEquals(_frame.Content, message))
+			{
+				_frame.Content = null;
+			}
+		}
+	}
+
 	private void CloseWeb()
 	{
 		if (_web is not { } web)
@@ -351,7 +403,11 @@ public sealed partial class TrailerTheater : Grid
 		}
 
 		_web = null;
-		_frame.Content = null;
+		if (ReferenceEquals(_frame.Content, web))
+		{
+			_frame.Content = null;
+		}
+
 		try
 		{
 			web.Close();
@@ -362,13 +418,65 @@ public sealed partial class TrailerTheater : Grid
 		}
 	}
 
-	private async Task LoadAsync(WebView2 web, Uri embed, long generation, string videoId)
+	/// <summary>
+	/// Nixie 1.4.0: Nixie's message in the screen's place, instead of the trailer (or of YouTube's error page): the web view
+	/// closes, the keyboard goes to the message's Close (never to the button that opens the browser), Narrator reads it.
+	/// </summary>
+	private void ShowMessage(TrailerMessage message, string why)
+	{
+		var view = new TrailerMessageView(message);
+		view.LinkRequested += OnMessageLink;
+		view.CloseRequested += OnMessageClose;
+		CloseWeb();
+		if (_message is { } old)
+		{
+			old.LinkRequested -= OnMessageLink;
+			old.CloseRequested -= OnMessageClose;
+		}
+
+		_message = view;
+		_frame.Content = view;
+		Log()?.LogInformation("[trailer] Nixie's message ({Why}): {Text} [{Link}]", why, message.AutomationText, message.LinkText);
+		var generation = _generation;
+		void Focus()
+		{
+			if (generation == _generation && _state.IsOpen && ReferenceEquals(_message, view))
+			{
+				var took = view.FocusClose(FocusState.Programmatic);
+				Log()?.LogInformation("[trailer] keyboard to the message's Close: {Took}, now on {Focused}", took, FocusedName());
+			}
+		}
+
+		view.Loaded += (_, _) =>
+		{
+			Focus();
+			view.Announce();
+		};
+		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Focus);
+	}
+
+	private async void OnMessageLink(object? sender, EventArgs e)
+	{
+		if (sender is TrailerMessageView view)
+		{
+			await TrailerBrowser.Open(view.Message.Link, $"the user picked {view.Message.LinkText}", Log());
+		}
+	}
+
+	private void OnMessageClose(object? sender, EventArgs e) => Close();
+
+	private async Task LoadAsync(WebView2 web, long generation, string videoId)
 	{
 		try
 		{
 			var folder = Path.Combine(App.GetService<KnownFolders>().ApplicationData, "WebView2");
 			Directory.CreateDirectory(folder);
-			var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, folder, new CoreWebView2EnvironmentOptions());
+			var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, folder, new CoreWebView2EnvironmentOptions
+			{
+				// the user's click on Trailer is the gesture: the embed starts at once (autoplay=1) instead of waiting for a
+				// second click inside YouTube's player (the web view's own policy: no media with sound before a click in it)
+				AdditionalBrowserArguments = Trailers.BrowserArguments,
+			});
 			await web.EnsureCoreWebView2Async(environment);
 			if (generation != _generation || web != _web)
 			{
@@ -377,40 +485,132 @@ public sealed partial class TrailerTheater : Grid
 
 			var core = web.CoreWebView2;
 			Lock(core.Settings);
-			core.NavigationStarting += OnNavigationStarting;
+			if (TrailerBrowser.HarnessOn())
+			{
+				core.IsMuted = true; // a harness run never makes a sound (its live YouTube check included)
+			}
+
+			// Nixie's own page, answered here: the one address of its host gets the wrapper, anything else there a 404
+			var html = Trailers.WrapperHtml(videoId, _embedBase);
+			var headers = Trailers.WrapperHeaders(_embedBase);
+			core.AddWebResourceRequestedFilter(Trailers.WrapperFilter, CoreWebView2WebResourceContext.All);
+			core.WebResourceRequested += (_, e) =>
+			{
+				Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var target);
+				e.Response = Trailers.IsWrapper(target) && e.Request.Method == "GET"
+					? environment.CreateWebResourceResponse(new MemoryStream(Encoding.UTF8.GetBytes(html)).AsRandomAccessStream(), 200, "OK", headers)
+					: environment.CreateWebResourceResponse(null, 404, "Not Found", "Content-Type: text/plain");
+			};
+			core.NavigationStarting += (_, e) => OnNavigationStarting(e, frame: false);
+			core.FrameNavigationStarting += (_, e) => OnNavigationStarting(e, frame: true);
+			// the player is watched (it plays, or Nixie's message says why not) once Nixie's page is up: its DOM, not its load,
+			// which waits for YouTube's whole frame (live, up to 20 s while the trailer already played)
+			var watching = false;
+			void Watch(CoreWebView2 sender)
+			{
+				if (!watching && generation == _generation && _state.IsOpen)
+				{
+					watching = true;
+					_ = WatchAsync(web, sender, generation, videoId);
+				}
+			}
+
+			core.DOMContentLoaded += (sender, _) => Watch(sender);
 			// the web view takes the keyboard when its page loads: give it back to Close (Tab reaches the video), once
 			var first = true;
-			core.NavigationCompleted += (_, _) =>
+			core.NavigationCompleted += (sender, e) =>
 			{
 				if (first && generation == _generation && _state.IsOpen)
 				{
 					first = false;
-					Log()?.LogInformation("[trailer] page loaded; the keyboard was on {Focused}", FocusedName());
+					Log()?.LogInformation("[trailer] page loaded{Failed}; the keyboard was on {Focused}", e.IsSuccess ? "" : $" (failed: {e.WebErrorStatus})", FocusedName());
 					_frame.FocusClose(FocusState.Programmatic);
 					DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
 					{
-						if (generation == _generation && _state.IsOpen)
+						if (generation == _generation && _state.IsOpen && _message is null)
 						{
 							var took = _frame.FocusClose(FocusState.Programmatic);
 							Log()?.LogInformation("[trailer] keyboard to Close after the page loaded: {Took}, now on {Focused}", took, FocusedName());
 						}
 					});
+					Watch(sender);
 				}
 			};
 			core.NewWindowRequested += OnNewWindowRequested;
 			core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
 			core.DownloadStarting += (_, e) => e.Cancel = true;
-			var request = environment.CreateWebResourceRequest(embed.AbsoluteUri, "GET", null, $"Referer: {Referer}");
-			core.NavigateWithWebResourceRequest(request);
+			core.Navigate(Trailers.WrapperUri.AbsoluteUri);
 		}
 		catch (Exception ex)
 		{
-			// no WebView2 runtime, or it failed to start: the trailer opens in the browser instead, as before 1.3.1
-			Log()?.LogWarning(ex, "[trailer] the theatre's web view could not start; opening the trailer in the browser");
-			if (generation == _generation)
+			// no WebView2 runtime, or it failed to start: Nixie's message, with Watch on YouTube (the browser only if picked)
+			Log()?.LogWarning(ex, "[trailer] the theatre's web view could not start");
+			if (generation == _generation && _state.IsOpen)
 			{
-				Close();
-				await Launcher.LaunchUriAsync(new Uri($"https://www.youtube.com/watch?v={videoId}"));
+				ShowMessage(Trailers.NoPlayer(videoId), "the web view did not start");
+			}
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0: watches the player through the wrapper (<see cref="Trailers.ReadPoll"/>, <see cref="Trailers.Judge"/>) while
+	/// this trailer is on: each change of its state is logged; an error, or no start within <see cref="Trailers.StartLimit"/>,
+	/// puts Nixie's message in its place.
+	/// </summary>
+	private async Task WatchAsync(WebView2 web, CoreWebView2 core, long generation, string videoId)
+	{
+		var since = System.Diagnostics.Stopwatch.StartNew();
+		var started = false;
+		var answered = false;
+		TrailerPoll? last = null;
+		while (generation == _generation && web == _web)
+		{
+			await Task.Delay(started ? 1000 : 300);
+			if (generation != _generation || web != _web)
+			{
+				return;
+			}
+
+			TrailerPoll? poll = null;
+			try
+			{
+				poll = Trailers.ReadPoll(await core.ExecuteScriptAsync("JSON.stringify(window.nixieTrailer || null)"));
+			}
+			catch (Exception)
+			{
+				// the page is between states (or the web view is closing): the next round, or the limit, decides
+			}
+
+			if (generation != _generation || web != _web)
+			{
+				return;
+			}
+
+			if (poll is not null && poll != last)
+			{
+				last = poll;
+				Log()?.LogInformation("[trailer] the player: ready {Ready}, state {State}, error {Error} ({Ms} ms)", poll.Ready, poll.State, poll.Error, since.ElapsedMilliseconds);
+			}
+
+			// the player answered: from now it has the start limit to start (Trailers.Judge)
+			if (poll is { Ready: true } && !answered)
+			{
+				answered = true;
+				since.Restart();
+			}
+
+			switch (Trailers.Judge(poll, since.Elapsed, started))
+			{
+				case TrailerVerdict.Started when !started:
+					started = true;
+					Log()?.LogInformation("[trailer] the player started (state {State})", poll?.State);
+					break;
+				case TrailerVerdict.Refused:
+					ShowMessage(Trailers.Refused(poll!.Error, videoId), $"YouTube refused it: error {poll.Error}");
+					return;
+				case TrailerVerdict.NotStarted:
+					ShowMessage(Trailers.NotStarted(videoId), $"not started: {(answered ? $"{Trailers.StartLimit.TotalSeconds:0} s after the player answered" : $"no answer within {Trailers.AnswerLimit.TotalSeconds:0} s")}, state {last?.State ?? -2}");
+					return;
 			}
 		}
 	}
@@ -431,21 +631,21 @@ public sealed partial class TrailerTheater : Grid
 		settings.IsBuiltInErrorPageEnabled = true;
 	}
 
-	private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs e)
+	private void OnNavigationStarting(CoreWebView2NavigationStartingEventArgs e, bool frame)
 	{
 		Uri.TryCreate(e.Uri, UriKind.Absolute, out var target);
-		switch (Trailers.Navigation(target, _embedBase))
+		switch (Trailers.Navigation(target, _embedBase, frame, e.IsUserInitiated))
 		{
 			case TrailerNavigation.Allow:
 				return;
 			case TrailerNavigation.OpenInBrowser:
 				e.Cancel = true;
-				Log()?.LogInformation("[trailer] a YouTube link opens in the browser");
-				_ = Launcher.LaunchUriAsync(target!);
+				_ = TrailerBrowser.Open(target, "a YouTube link the user clicked in the player", Log());
 				return;
 			default:
 				e.Cancel = true;
-				Log()?.LogInformation("[trailer] navigation to {Host} blocked", target?.Host ?? "(not a web address)");
+				Log()?.LogInformation("[trailer] {Where} navigation to {Host} blocked{User}", frame ? "a frame's" : "the page's",
+					target?.Host is { Length: > 0 } host ? host : target?.Scheme ?? "(not a web address)", e.IsUserInitiated ? " (clicked)" : "");
 				return;
 		}
 	}
@@ -453,10 +653,14 @@ public sealed partial class TrailerTheater : Grid
 	private void OnNewWindowRequested(CoreWebView2 sender, CoreWebView2NewWindowRequestedEventArgs e)
 	{
 		e.Handled = true;
-		if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var target) && Trailers.OpensInBrowser(target))
+		Uri.TryCreate(e.Uri, UriKind.Absolute, out var target);
+		if (Trailers.OpensInBrowser(target, e.IsUserInitiated))
 		{
-			Log()?.LogInformation("[trailer] a new window opens in the browser");
-			_ = Launcher.LaunchUriAsync(target);
+			_ = TrailerBrowser.Open(target, "a link the user clicked in the player", Log());
+		}
+		else
+		{
+			Log()?.LogInformation("[trailer] a new window refused ({Host}{User})", target?.Host ?? "not a web address", e.IsUserInitiated ? "" : ", not the user's click");
 		}
 	}
 

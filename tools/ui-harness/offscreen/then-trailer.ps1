@@ -32,6 +32,15 @@ function TR-Open([string]$How) {
     Check "trailer ($How): Enter on Trailer opens the theatre window" ([bool]$trOpened) "$trOpened"
     $trLoaded = Wait-Until { @(Get-Requests $trAt | Where-Object { $_.path -like '/__harness/trailer/*' }) | Select-Object -First 1 } -Seconds 20 -PollMs 200
     Check "trailer ($How): the theatre loads the harness's embed page (not YouTube)" ([bool]$trLoaded) $(if ($trLoaded) { "$($trLoaded.path)?$(($trLoaded.query.PSObject.Properties | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join '&')" })
+    # Nixie 1.4.0 (YouTube's Error 153): the embed is a frame in Nixie's own page (Sec-Fetch-Dest iframe, cross-site; 1.3.1
+    # loaded it as the page itself: document), told that page's origin. Its Referer is the page's origin for https YouTube;
+    # to the harness's http stand-in the policy (strict-origin-when-cross-origin, https to http) sends none.
+    if ($trLoaded) {
+        Check "trailer ($How): the embed is a frame of Nixie's page https://io.github.mbustos27.nixie (an iframe, told the origin, no Referer to http)" `
+            ("$($trLoaded.report.dest)" -eq 'iframe' -and "$($trLoaded.report.site)" -eq 'cross-site' -and "$($trLoaded.query.origin)" -eq 'https://io.github.mbustos27.nixie' `
+                -and "$($trLoaded.query.enablejsapi)" -eq '1' -and "$($trLoaded.report.referer)" -eq '') `
+            "Sec-Fetch-Dest '$($trLoaded.report.dest)', Sec-Fetch-Site '$($trLoaded.report.site)', origin '$($trLoaded.query.origin)', enablejsapi '$($trLoaded.query.enablejsapi)', Referer '$($trLoaded.report.referer)'"
+    }
     $trIn = Wait-Until { @(TR-Log $trAt | Where-Object { $_ -match 'keyboard to Close after the page loaded: True, now on Button Close trailer' }) | Select-Object -First 1 } -Seconds 8 -PollMs 200
     Check "trailer ($How): the keyboard moves into the window (Close trailer), also after the page loads" ([bool]$trIn) ((TR-Log $trAt) -join ' | ')
     Start-Sleep -Milliseconds 500
@@ -45,11 +54,17 @@ function TR-Closed([string]$How, [double]$Since) {
     Check "trailer: after $How, the keyboard is back on the Trailer button" ([bool]$trBack) "$([OffscreenUi]::Focused($script:hwnd, $script:ui.Id))"
 }
 
+# NIXIE_TRAILER_ONLY=message runs only the 1.4.0 message checks below (the Light shots: the rest is the same in both)
+if ($env:NIXIE_TRAILER_ONLY -ne 'message') {   # (the block is not indented: a small diff for the streams merging this file)
 # the shots first, at both sizes (the page under it dimmed)
 foreach ($trSize in @(@(1920, 1080), @(1100, 900))) {
     [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, $trSize[0], $trSize[1])
     Start-Sleep -Milliseconds 1500
+    $trAt0 = Get-Epoch
     if (TR-Open "$($trSize[0])") {
+        # Nixie 1.4.0: the app hears the player (the stand-in speaks the IFrame Player API's messages): playing, no message
+        $trPlaying = Wait-Until { @(TR-Log $trAt0 | Where-Object { $_ -match 'the player: ready True, state 1, error 0' }) | Select-Object -First 1 } -Seconds 10 -PollMs 200
+        Check "trailer ($($trSize[0])): the app hears the player playing through Nixie's page (state 1, no error, no message)" ([bool]$trPlaying -and -not @(TR-Log $trAt0 | Where-Object { $_ -match "Nixie's message" }).Count) ((TR-Log $trAt0) -join ' | ')
         Start-Sleep -Milliseconds 3500
         Shot "$trTag-$($trSize[0])"
         $trAt = Get-Epoch
@@ -159,3 +174,125 @@ foreach ($trSize in @(@(1920, 1080), @(1100, 700))) {
         Check "trailer ($($trSize[0])x$($trSize[1])): after it closes, the top bar drags the window again" ($trAfter -eq 2) "after: $trAfter"
     }
 }
+}   # NIXIE_TRAILER_ONLY
+
+# ---- Nixie 1.4.0: Nixie's own message when a trailer can't play, and the browser only when the user picks it. The stand-in
+# answers error 150, error 153 or nothing at all (POST /__harness/trailer {"mode"}), or the trailer is on another site
+# ({"url"}). Each time: Nixie's message (the reason, its Narrator name, the way to watch it elsewhere, Close with the
+# keyboard), no browser, and the way out on Enter, Esc and a click; the user's own pick of Watch on YouTube is the one way the
+# browser opens (logged; under the harness never launched). Keyboard first and mouse first.
+if (-not (Get-Command CK-Key -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'chord-keys.ps1') }
+function TR-SetTrailer([string]$Mode, [string]$Url) {
+    $trWas = (Invoke-Server '/__harness/trailer').url
+    [void](Invoke-Server '/__harness/trailer' 'POST' @{ mode = $Mode; url = $Url })
+    if ("$trWas" -ne "$Url") {
+        # the link changed: R loads the movie page again
+        $trAt = Get-Epoch
+        Key 0x52
+        [void](Wait-Until { @(Get-Requests $trAt | Where-Object { $_.auth -and $_.path -match [regex]::Escape($fixture.movie.id) }) | Select-Object -First 1 } -Seconds 10 -PollMs 200)
+        Start-Sleep -Seconds 2
+    }
+}
+function TR-NoBrowser([string]$How, [double]$Since) {
+    $trOpened = @(TR-Log $Since | Where-Object { $_ -match 'the browser (opens|would open)' })
+    Check "trailer ($How): no browser was opened" ($trOpened.Count -eq 0) ($trOpened -join ' | ')
+}
+function TR-Message([string]$How, [string]$Reason, [string]$Link, [double]$Since, [string]$ShotName) {
+    $trSaid = Wait-Until { @(TR-Log $Since | Where-Object { $_ -like "Nixie's message*" }) | Select-Object -First 1 } -Seconds 25 -PollMs 200
+    Check "trailer ($How): Nixie's message instead of the trailer" ([bool]($trSaid -and $trSaid -like "*This trailer can't play in Nixie. $Reason*")) "$trSaid"
+    $trName = "This trailer can't play in Nixie. $Reason"
+    $trPanel = Wait-Ui -Name $trName -Seconds 6
+    Check "trailer ($How): Narrator's name of the message is what it says ('$trName')" ([bool]$trPanel)
+    $trLink = Wait-Ui -Name $Link -Type 'Button' -Seconds 4
+    Check "trailer ($How): the message offers '$Link' (a button)" ([bool]$trLink)
+    $trOnClose = Wait-Until { $f = CK-Focus; if ($f -match "^Button 'Close'") { $f } } -Seconds 4 -PollMs 150
+    Check "trailer ($How): the keyboard is on the message's Close (never on the button that opens the browser)" ([bool]$trOnClose) "$(CK-Focus)"
+    if ($ShotName) { Start-Sleep -Milliseconds 600; Shot $ShotName }
+    TR-NoBrowser $How $Since
+    return $trLink
+}
+
+# keyboard first: error 150 (the owner allows it only on YouTube); Enter on the message's Close closes it
+TR-SetTrailer 'error150' ''
+[OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080)
+Start-Sleep -Milliseconds 1200
+$trAt = Get-Epoch
+if (TR-Open 'error 150, keyboard first') {
+    [void](TR-Message 'error 150' "Its owner doesn't allow it to play outside YouTube, or it was removed." 'Watch on YouTube' $trAt "$trTag-message-150-1920")
+    $trAt = Get-Epoch
+    Key 0x0D
+    TR-Closed "Enter on the message's Close (error 150)" $trAt
+}
+# error 153 (YouTube refused the player): Tab to Watch on YouTube, Enter: the user's pick, the one way the browser opens
+TR-SetTrailer 'error153' ''
+$trAt = Get-Epoch
+if (TR-Open 'error 153') {
+    [void](TR-Message 'error 153' 'YouTube refused to play it here.' 'Watch on YouTube' $trAt '')
+    CK-Key 'Shift+Tab'
+    Start-Sleep -Milliseconds 300
+    $trOnLink = CK-Focus
+    $trAt2 = Get-Epoch
+    Key 0x0D
+    $trPicked = Wait-Until { @(TR-Log $trAt2 | Where-Object { $_ -match 'the browser would open www\.youtube\.com \(the user picked Watch on YouTube; the harness: not launched\)' }) | Select-Object -First 1 } -Seconds 5 -PollMs 150
+    Check 'trailer (error 153): Enter on Watch on YouTube is the user''s pick: the browser opens YouTube (the harness: logged, not launched)' ([bool]$trPicked) "on $trOnLink; $((TR-Log $trAt2) -join ' | ')"
+    Check 'trailer (error 153): the theatre stays open after the pick' (-not @(TR-Log $trAt2 | Where-Object { $_ -eq 'theatre closed' }).Count)
+    $trAt = Get-Epoch
+    Key 0x1B
+    TR-Closed 'Esc (error 153)' $trAt
+}
+# the stand-in never answers: after the answer limit (15 s from Nixie's page), Nixie's message
+TR-SetTrailer 'hang' ''
+[OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1100, 900)
+Start-Sleep -Milliseconds 1200
+$trAt = Get-Epoch
+if (TR-Open 'never starts') {
+    [void](TR-Message 'never starts' "YouTube didn't start it." 'Watch on YouTube' $trAt "$trTag-message-hang-1100")
+    $trAt = Get-Epoch
+    Key 0x1B
+    TR-Closed 'Esc (never starts)' $trAt
+}
+# another site (vimeo.com), mouse first: a click on Trailer opens the theatre with the message at once (no web view); a click
+# on Open vimeo.com in browser is the user's pick; a click on Close closes it
+TR-SetTrailer 'play' 'https://vimeo.com/76979871'
+[OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080)
+Start-Sleep -Milliseconds 1200
+$trButton = TR-Button
+Check 'trailer (another site): the Trailer button stays (there is a trailer)' ([bool]$trButton)
+if ($trButton) {
+    $trAt = Get-Epoch
+    CK-Click $trButton
+    $trOpened = Wait-Until { @(TR-Log $trAt | Where-Object { $_ -like 'theatre opened (Nixie''s message*' }) | Select-Object -First 1 } -Seconds 10 -PollMs 200
+    Check 'trailer (another site, mouse first): a click on Trailer opens the theatre with Nixie''s message' ([bool]$trOpened) ((TR-Log $trAt) -join ' | ')
+    $trLink = TR-Message 'another site' "It's on vimeo.com, which Nixie can't play." 'Open vimeo.com in browser' $trAt "$trTag-message-site-1920"
+    if ($trLink) {
+        $trAt2 = Get-Epoch
+        CK-Click $trLink
+        $trPicked = Wait-Until { @(TR-Log $trAt2 | Where-Object { $_ -match 'the browser would open vimeo\.com \(the user picked Open vimeo\.com in browser; the harness: not launched\)' }) | Select-Object -First 1 } -Seconds 5 -PollMs 150
+        Check 'trailer (another site): a click on Open vimeo.com in browser is the user''s pick (logged, not launched)' ([bool]$trPicked) ((TR-Log $trAt2) -join ' | ')
+    }
+    $trClose = Find-Ui -Id 'CloseButton'
+    if ($trClose) {
+        $trAt = Get-Epoch
+        CK-Click $trClose
+        $trGone = Wait-Until { @(TR-Log $trAt | Where-Object { $_ -eq 'theatre closed' }) | Select-Object -First 1 } -Seconds 5 -PollMs 150
+        Check 'trailer (another site): a click on the message''s Close closes it' ([bool]$trGone)
+    }
+    else { Check 'trailer (another site): the message has a Close button' $false }
+    # a held Enter on Trailer (auto-repeat) opens it once and leaves it open: the repeats never press the message's Close
+    $trButton = TR-Button
+    [void][OffscreenUi]::SetFocus($trButton)
+    Start-Sleep -Milliseconds 400
+    $trAt = Get-Epoch
+    CK-Key 'Enter' -NoUp
+    for ($trI = 0; $trI -lt 8; $trI++) { Start-Sleep -Milliseconds 60; CK-Key 'Enter' -Repeat -NoUp }
+    CK-Up 'Enter'
+    Start-Sleep -Milliseconds 1200
+    $trOpens = @(TR-Log $trAt | Where-Object { $_ -like 'theatre opened*' }).Count
+    $trCloses = @(TR-Log $trAt | Where-Object { $_ -eq 'theatre closed' }).Count
+    Check 'trailer (another site): a held Enter on Trailer opens the theatre once and it stays open' ($trOpens -eq 1 -and $trCloses -eq 0) "opened $trOpens, closed $trCloses; $((TR-Log $trAt) -join ' | ')"
+    TR-NoBrowser 'a held Enter' $trAt
+    $trAt = Get-Epoch
+    Key 0x1B
+    TR-Closed 'Esc (another site, after a held Enter)' $trAt
+}
+[void](Invoke-Server '/__harness/trailer' 'POST' @{ mode = 'play'; url = '' })

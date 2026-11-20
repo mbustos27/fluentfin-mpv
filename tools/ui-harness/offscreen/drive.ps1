@@ -796,7 +796,12 @@ try {
     Say "fake server $($script:serverUrl): $($fixture.counts.movie) movies, $($fixture.counts.series) series, $($fixture.counts.episode) episodes; latency $Latency ms $(if ($LatencyRule) { '+ ' + ($LatencyRule -join ' ') })"
 
     # Nixie 1.3.1: a trailer plays from the fake server's page, never from YouTube (honoured by dev builds under the harness only)
-    $env:NIXIE_TRAILER_EMBED_BASE = "$($script:serverUrl)/__harness/trailer/"
+    # Nixie 1.4.0: except in the opt-in live check (NIXIE_LIVE_YOUTUBE=1, then-trailer-live.ps1): real YouTube, muted
+    if ($env:NIXIE_LIVE_YOUTUBE -eq '1') {
+        Remove-Item Env:NIXIE_TRAILER_EMBED_BASE -ErrorAction SilentlyContinue
+        Say 'NIXIE_LIVE_YOUTUBE=1: trailers from real YouTube (then-trailer-live.ps1), the web view muted'
+    }
+    else { $env:NIXIE_TRAILER_EMBED_BASE = "$($script:serverUrl)/__harness/trailer/" }
     # Nixie 1.3.1: the update check (when a run turns it on) asks the fake server's release answer, never GitHub
     $env:NIXIE_UPDATE_API = "$($script:serverUrl)/__harness/release/latest"
 

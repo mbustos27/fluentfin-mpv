@@ -73,7 +73,12 @@ def release_answer(version):
 
 
 # Nixie 1.3.1: the trailer embed's stand-in (GET /__harness/trailer/<id>): a still frame of a "film" with a play bar, made of
-# CSS only (no script, nothing loaded from anywhere), so the theatre window's screenshots show a picture where the video goes
+# CSS only (nothing loaded from anywhere), so the theatre window's screenshots show a picture where the video goes.
+# Nixie 1.4.0: it is a frame in the app's own wrapper page now (as YouTube's embed is), and speaks the IFrame Player API's
+# messages the way YouTube's does: when the wrapper says it is listening, it answers ready, then as the mode says (POST
+# /__harness/trailer {"mode"}): "play" playing (state 3, then 1), "error150"/"error153" that error, "hang" nothing at all.
+# It posts only to the origin the embed was given (origin=), as YouTube does: a wrong origin hears nothing.
+TRAILER_MODES = ("play", "error150", "error153", "hang")
 TRAILER_PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>Harness trailer {id}</title><style>
 html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Segoe UI,sans-serif}
 .f{position:absolute;inset:0;background:linear-gradient(180deg,#1c0512 0%,#500723 38%,#c9305a 62%,#f5b3a6 78%,#3a0f1f 79%,#12040a 100%)}
@@ -83,8 +88,42 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Segoe
 .b{position:absolute;left:0;right:0;bottom:0;height:12%;background:linear-gradient(transparent,rgba(0,0,0,.8))}
 .p{position:absolute;left:3%;right:3%;bottom:5%;height:.5vw;background:rgba(255,255,255,.35)}
 .p i{display:block;width:34%;height:100%;background:#f96985}
+.e{position:absolute;inset:0;background:#000;color:#fff;font-size:2vw;display:flex;align-items:center;justify-content:center}
 </style></head><body><div class="f"></div><div class="s"></div>
-<div class="t"><span class="k">HARNESS TRAILER &middot; {id}</span>A Quiet Harbor</div><div class="b"></div><div class="p"><i></i></div></body></html>"""
+<div class="t"><span class="k">HARNESS TRAILER &middot; {id}</span>A Quiet Harbor</div><div class="b"></div><div class="p"><i></i></div>{error}
+<script>
+(function () {
+  var mode = "{mode}", q = new URLSearchParams(location.search), origin = q.get("origin");
+  if (!origin) { return; }
+  function post(m) { m.id = 1; m.channel = "widget"; parent.postMessage(JSON.stringify(m), origin); }
+  var told = false;
+  window.addEventListener("message", function (e) {
+    if (e.source !== parent) { return; }
+    var d; try { d = JSON.parse(e.data); } catch (x) { return; }
+    if (!d || d.event !== "listening" || told || mode === "hang") { return; }
+    told = true;
+    post({ event: "initialDelivery", info: { playerState: -1 } });
+    post({ event: "onReady" });
+    setTimeout(function () {
+      if (mode === "play") {
+        post({ event: "onStateChange", info: 3 });
+        post({ event: "onStateChange", info: 1 });
+        post({ event: "infoDelivery", info: { playerState: 1, currentTime: 0.5 } });
+      } else {
+        post({ event: "onError", info: mode === "error150" ? 150 : 153 });
+      }
+    }, 300);
+  });
+})();
+</script></body></html>"""
+
+
+def trailer_page(vid, mode):
+    """The stand-in for the embed of `vid` in `mode` (TRAILER_MODES): the id escaped, the mode one of the fixed ones."""
+    mode = mode if mode in TRAILER_MODES else "play"
+    error = ('<div class="e">Harness stand-in: YouTube error %s</div>' % mode[5:]) if mode.startswith("error") else ""
+    return (TRAILER_PAGE.replace("{id}", html.escape(vid[:32])).replace("{mode}", mode).replace("{error}", error)).encode("utf-8")
+
 
 TICKS = library.TICKS
 TOKEN_RE = re.compile(r'Token="([^"]*)"')
@@ -142,6 +181,8 @@ class Server:
         self.encode_subtitle = False    # POST /__harness/streams: the last embedded subtitle burnt in (a restart to pick)
         # Nixie 1.3.1: the version GET /__harness/release/latest answers (the app's update check in a harness run)
         self.release_version = os.environ.get("FAKESERVER_RELEASE") or "0.0.1"
+        # Nixie 1.4.0: how the trailer stand-in answers (POST /__harness/trailer {"mode"}: TRAILER_MODES)
+        self.trailer_mode = "play"
         self.seq = 0
         self.counts = collections.Counter()
         self.unhandled = collections.Counter()
@@ -936,9 +977,20 @@ class Server:
                     return self._json(200, {"version": outer.release_version})
                 if low.startswith("/__harness/trailer/") and method in ("GET", "HEAD"):
                     # Nixie 1.3.1: the stand-in for YouTube's embed page (NIXIE_TRAILER_EMBED_BASE points the app here):
-                    # a still "trailer" card, no script, nothing fetched from anywhere
-                    vid = html.escape(low.rsplit("/", 1)[-1][:32])
-                    return self._send(200, TRAILER_PAGE.replace("{id}", vid).encode("utf-8"), "text/html; charset=utf-8")
+                    # a still "trailer" card, nothing fetched from anywhere; 1.4.0: it answers the wrapper as the mode says
+                    self.extra = {"referer": self.headers.get("Referer") or "", "dest": self.headers.get("Sec-Fetch-Dest") or "",
+                                  "site": self.headers.get("Sec-Fetch-Site") or "", "mode": outer.trailer_mode}
+                    return self._send(200, trailer_page(urllib.parse.unquote(self.path.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]), outer.trailer_mode), "text/html; charset=utf-8")
+                if low == "/__harness/trailer" and method in ("GET", "POST"):
+                    # Nixie 1.4.0: how the stand-in answers ("mode": TRAILER_MODES) and the showcase movie's trailer link
+                    # ("url": a web address, "" back to the harness's YouTube id; the live check's real ids, another site)
+                    body = self._body() if method == "POST" else {}
+                    if body.get("mode") in TRAILER_MODES:
+                        outer.trailer_mode = body["mode"]
+                    if "url" in body:
+                        url = str(body.get("url") or "")
+                        outer.lib.trailer_url = url if re.match(r"^https?://[^\s\"<>]+$", url) else None
+                    return self._json(200, {"mode": outer.trailer_mode, "url": outer.lib.trailer_url})
                 if low == "/__harness/shutdown" and method == "POST":
                     self._json(200, {"ok": True})
                     outer.stop()

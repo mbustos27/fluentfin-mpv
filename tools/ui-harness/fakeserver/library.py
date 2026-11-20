@@ -75,6 +75,8 @@ class Library:
         self.runtime = runtime_ticks
         #: how long the end credits (the Outro segment) run, to the end; POST /__harness/segments changes it
         self.outro_seconds = 40
+        #: Nixie 1.4.0: the showcase movie's trailer link instead of the harness's YouTube id (POST /__harness/trailer {"url"})
+        self.trailer_url = None
         self.now = now or datetime.datetime(2026, 11, 14, 20, 0, 0)
         self.lock = threading.RLock()
         self.items = {}          # id -> item dict
@@ -634,7 +636,8 @@ class Library:
             d["Taglines"] = [item["tagline"]] if item.get("tagline") else []
             # Nixie 1.3.1: the showcase movie has a YouTube trailer (the app plays it in its theatre window from the fake
             # server's own page, GET /__harness/trailer/<id>: no run ever contacts YouTube)
-            d["RemoteTrailers"] = [{"Url": "https://www.youtube.com/watch?v=" + TRAILER_ID, "Name": "Trailer"}]                 if item.get("showcase") == "movie" else []
+            d["RemoteTrailers"] = [{"Url": self.trailer_url or "https://www.youtube.com/watch?v=" + TRAILER_ID, "Name": "Trailer"}] \
+                if item.get("showcase") == "movie" else []
             d["LockedFields"] = []
             d["LockData"] = False
             d["Path"] = self.path(item)

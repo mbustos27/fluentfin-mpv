@@ -68,7 +68,7 @@ public static class WindowShortcuts
 		// it from wherever the keyboard is, its own controls get Tab, Enter, Space and the arrows, and the rest is held back.
 		if (Controls.TrailerTheater.Current is { IsOpen: true } theater)
 		{
-			switch (Trailers.KeyOverTheater((int)e.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift), Down(VirtualKey.Menu)))
+			switch (Trailers.KeyOverTheater((int)e.Key, Down(VirtualKey.Control), Down(VirtualKey.Shift), Down(VirtualKey.Menu), e.KeyStatus.WasKeyDown))
 			{
 				case TheaterKey.Close:
 					e.Handled = true;
