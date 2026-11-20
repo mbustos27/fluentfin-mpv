@@ -1,22 +1,27 @@
 # Nixie roadmap
 
-Updated 2026-11-20 (1.4.1 released). These are the planned releases in order, with the backburner ideas placed where they fit. Nothing past
-1.4.1 has a date. Version numbers past 1.5 are a guide. Sizes are for one dev stream: S up to 2 days, M about a week,
-L 2 to 3 weeks, XL months.
+Updated 2026-11-20 (1.4.1 released; 1.5 split after the second review). These are the planned releases in order, with
+the backburner ideas placed where they fit. Nothing past 1.4.1 has a date. Version numbers past 1.6 are a guide. Sizes
+are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL months.
 
 | Release | Name | What | Status |
 |---|---|---|---|
 | 1.4.0 | Consistency | The library layer for all four themes, plus the contrast floor and big libraries | **Released** 2026-11-20 |
 | 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
-| 1.5 | Collections | Better search and a responsive updater (both musts), the 1.4.0 follow-up fixes, favourite libraries in the top bar and smart collections, built together | Next (L, parallel streams) |
-| 1.5.1 | Theme polish | Drive-in's look on the shared pages, Editorial's list view | Planned (M) |
-| 1.6 | Discover | Trending, awards and finer genres from outside sources, opt-in | Planned (M–L) |
-| 1.7 | Player | Pop-out player, chapter extras | From the backburner (M–L) |
-| 1.8 | Social | Friends and suggestions through the shared server, the Diary fixes | Research first (L) |
+| **1.5** | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Now** (M–L, in progress) |
+| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page | Next (L) |
+| 1.6.1 | Theme polish | Drive-in's look on the shared pages, Editorial's list view | Planned (M) |
+| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | Planned (M–L) |
+| 1.8 | Player | Pop-out player, chapter extras | From the backburner (M–L) |
+| 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research first (L) |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | Research first (XL if go) |
-| TV 1.0 | Google TV | A separate app with all three themes, alongside 1.5 | Plan written |
+| TV 1.0 | Google TV | A separate app with all three themes: phase 0 alongside 1.5, the rest alongside 1.6 | Plan written |
 
-**Hotfixes:** a Blocker found in 1.4.0 ships right away as 1.4.x. Everything else waits for 1.5.
+**Split (owner, 2026-11-20: "Yes, split it"):** the second review found 1.5 too big at about 40 items, with four streams
+editing the same files. 1.5 now ships search, the updater and the fixes; the top bar, tidy names, collections and the
+Collection page become 1.6.
+
+**Hotfixes:** a Blocker ships right away as a 1.x.y hotfix. Everything else waits for the next planned release.
 
 ## 1.4.1: Continue Watching (released 2026-11-20)
 - **A rewatched show comes back.** Up next now asks for rewatches. Jellyfin 12.4 keeps an episode marked watched while
@@ -55,10 +60,8 @@ The full list is CHANGELOG `## 1.4.0`:
 - Esc inside YouTube's player;
 - a real trailer plays.
 
-## 1.5: Collections
-The 1.4.0 follow-ups and the collections work touch the same pages (the Collection page, its cards and chips, the top
-bar's Collections destination, the fake server), so they're built together in parallel streams and ship as one
-release. Each stream owns its files, as in 1.4.0.
+## 1.5: Search and updates (now)
+Three parallel streams (search, the updater, fixes), each owning its files, as in 1.4.0. The musts go first.
 
 **Search stream (a must for 1.5, owner 2026-11-19: "search is pretty bad")**
 
@@ -149,10 +152,26 @@ The plan:
 - **Privacy:**
   - stop the backend's `checkip.amazonaws.com` lookup on every play (an upstream jellyfin-mpv-shim habit). Ask the
     server for its own address instead, or drop the check;
-  - take stock of what the bundled Jellyseerr plugin calls before 1.6 promises "nothing about you leaves the PC".
+  - take stock of what the bundled Jellyseerr plugin calls before 1.7 promises "nothing about you leaves the PC".
 - **Real playlists and a transcode through Nixie itself** on the test servers. The servers' own smoke checks pass, but
   Nixie's playlist page (the old X2 Blocker) has never run against a real server.
 - **Checked:** a reverse proxy on a sub-path, and an address ending in "/".
+
+**Test tooling, in place:**
+- off-screen test runs 3 at a time;
+- local Jellyfin test servers 10.11 and 12 (`tools\qa-servers\`);
+- the fake server refuses what Jellyfin 12 refuses, and gets one owner, since the desktop streams and the TV app all
+  change it.
+
+**New checks from 1.5 on** (see "Every release"):
+- real-server checks;
+- the upgrade test in Windows Sandbox;
+- accessibility by hand;
+- the performance baseline.
+
+## 1.6: Collections
+The top bar, tidy names, collections and the Collection page touch the same pages (the Collection page, its cards and
+chips, the top bar's Collections destination, the fake server), so they're built together.
 
 **Top bar stream** (decided 2026-11-19):
 - favourite libraries in the top bar, starting from the pins 1.3 users made, which are still stored
@@ -181,23 +200,13 @@ The plan:
   - room for titles in Drive-in and Editorial (L2, C4, LB4);
   - a long Play label no longer pushes Shuffle off the line (C6);
   - no "6 films" three times (C2).
+- **"Save as playlist":** an explicit button that copies a Nixie collection to the server as the user's own playlist.
 
-**Test tooling, first:**
-- off-screen test runs 3 at a time (`wip/harness-parallel`);
-- local Jellyfin test servers (10.11 and 12), approved 2026-11-19 and being installed (`tools\qa-servers\`);
-- the fake server refuses what Jellyfin 12 refuses, and gets one owner, since the desktop streams and the TV app all
-  change it.
-
-**New checks from 1.5 on** (see "Every release"):
-- real-server checks;
-- the upgrade test;
-- accessibility by hand.
-
-## 1.5.1: Theme polish
+## 1.6.1: Theme polish
 - **Drive-in's own look** on the Libraries and Collection pages.
 - **Editorial's list view** (from the backburner).
 
-## 1.6: Discover
+## 1.7: Discover
 Plan phases 2 and 3. Each source is off until the user turns it on. Nixie fetches public lists and matches them on the
 PC. It never sends the library or the watch history. Each source gets its current terms checked, a live check beside
 its test fake, and Nixie's own message when it refuses.
@@ -205,16 +214,16 @@ its test fake, and Nixie's own message when it refuses.
 - **TMDb's daily export files:** franchise and keyword names. No key.
 - **Wikidata:** awards and finer genres. No key. Its query endpoint moves by June 2027, so the endpoint is a setting.
 - **Trakt:** trending, popular, anticipated and box office, with the Client ID only and no sign-in. The registration
-  made 2026-11-19 will lapse unused; a live check doesn't count as use. Register again when 1.6 starts (a few
+  made 2026-11-19 will lapse unused; a live check doesn't count as use. Register again when 1.7 starts (a few
   minutes).
 - **TMDb trending,** with each user's own token at first.
 
-## 1.7: Player (from the backburner)
+## 1.8: Player (from the backburner)
 - **A pop-out picture-in-picture player** (WinUI compact overlay with the libmpv swap chain). Confirm the idea first.
 - **Drive-in's chapter bulbs.**
 - **Editorial's paused side column** with a chapter scrubber.
 
-## 1.8: Social (research first)
+## 1.9: Social (research first)
 - **The journal's social side:** friends, and suggesting shows to each other, **through the shared server** (for
   example shared playlists), so nothing about what you watch leaves it. A Trakt sign-in for friends anywhere would send
   watch history off the PC and need an https redirect on a domain the project controls, so it's only an explicit
@@ -232,7 +241,7 @@ its test fake, and Nixie's own message when it refuses.
   - start-up time and memory are no worse than today.
 - **Otherwise no rewrite.**
 
-## Nixie for Google TV (a separate app, alongside 1.5)
+## Nixie for Google TV (a separate app: phase 0 alongside 1.5, the rest alongside 1.6)
 Plan: `docs\reports\Nixie Google TV architecture.md`, which replaces the earlier draft (`Nixie Google TV plan.md`).
 All three themes are in 1.0, because adding layouts to finished screens is the main risk. It builds from 1.4.0's
 behaviour.
@@ -252,7 +261,8 @@ That's about 19–25 agent-days.
   test slots.
 - Heavy phases start after the weekly usage reset (24 November).
 
-## Decided for 1.5 (2026-11-20, the owner: "Make 1.5 choices")
+## Decided for 1.5 and 1.6 (2026-11-20, the owner: "Make 1.5 choices")
+Since the split, rewatching, tidy names, favourites and the Made by Nixie rows ship in 1.6; the rest ship in 1.5.
 - **Release pace:** one planned release at a time, about weekly at most; a Blocker ships right away as a hotfix.
   Nothing else ships in between, so update notices stay rare.
 - **The upgrade test runs in Windows Sandbox** (this PC runs Windows 11 Pro), never in the owner's account. Sandbox is
@@ -276,14 +286,14 @@ That's about 19–25 agent-days.
 - **Made by Nixie Home rows:** "Highly rated, not watched" and "Unfinished series" are on by default, plus a seasonal row
   in season. Each can be turned off in Settings, and the other kinds rotate one a day.
 
-## Decided for 1.6
-- **TMDb:** each user brings their own token at first. An app-wide key is reconsidered once people use it.
-- **Save as playlist:** yes, as an explicit button that copies a Nixie collection to the server as the user's own
+## Decided for 1.6 and 1.7
+- **TMDb (1.7):** each user brings their own token at first. An app-wide key is reconsidered once people use it.
+- **Save as playlist (1.6):** yes, as an explicit button that copies a Nixie collection to the server as the user's own
   playlist (an ordinary user can). Nothing is written to the server otherwise.
 
 ## Still open (later releases)
-- The pop-out player's meaning (1.7).
-- Friends through the server only, or a Trakt exception (1.8).
+- The pop-out player's meaning (1.8).
+- Friends through the server only, or a Trakt exception (1.9).
 - Rust: go or no-go after the spike (2.0).
 
 ## Every release
