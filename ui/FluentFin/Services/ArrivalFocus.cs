@@ -45,11 +45,15 @@ public static class ArrivalFocus
 	private static long _arrivedAt;
 	private static ArrivalKind _kind;
 
+	// where the keyboard was when the page came (the navigation left it there): a search box the user chose a suggestion in
+	private static WeakReference<object>? _focusedAtArrival;
+
 	/// <summary>The user pressed a key (not a refresh key or a modifier alone), clicked or turned the wheel.</summary>
 	public static void UserActed() => UserActedAt = Environment.TickCount64;
 
 	/// <summary>The navigation showed <paramref name="page"/> (NavigationService, as each page arrives).</summary>
-	public static void Arrived(Page? page, ArrivalKind kind)
+	/// <param name="root">The frame's XamlRoot, for where the keyboard is as the page comes.</param>
+	public static void Arrived(Page? page, ArrivalKind kind, XamlRoot? root = null)
 	{
 		if (page is null)
 		{
@@ -58,6 +62,7 @@ public static class ArrivalFocus
 
 		_page = new WeakReference<Page>(page);
 		_arrivedAt = Environment.TickCount64;
+		_focusedAtArrival = (root ?? page.XamlRoot) is { } at && FocusManager.GetFocusedElement(at) is { } focused ? new WeakReference<object>(focused) : null;
 		_kind = kind;
 	}
 
@@ -105,12 +110,21 @@ public static class ArrivalFocus
 
 		var root = page.XamlRoot;
 		var focused = root is null ? null : FocusManager.GetFocusedElement(root);
+		var leftThere = focused is not null && _focusedAtArrival?.TryGetTarget(out var at) == true && ReferenceEquals(at, focused);
 		return YieldReason(
 			MovedSince(kind.Value, _arrivedAt, UserActedAt, PageRefresh.UserMovedSinceRefresh),
-			TextInput.IsTextInput(focused),
+			InTextInputByTheUser(TextInput.IsTextInput(focused), leftThere),
 			OpenPopups(root),
 			Shown(page));
 	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (review of wip/140-fix2: a search suggestion chosen with Enter opened the film with the keyboard still in the
+	/// emptied box, and Play no longer took it): a text box counts as the user's place only when the keyboard went there after
+	/// the page came. Still in the box the navigation left it in (the search box a suggestion was chosen in), it is the
+	/// arrival's to take, as it is anywhere else the navigation left it.
+	/// </summary>
+	public static bool InTextInputByTheUser(bool focusInTextInput, bool whereTheNavigationLeftIt) => focusInTextInput && !whereTheNavigationLeftIt;
 
 	/// <summary>
 	/// The arrival's focus: <paramref name="focus"/> runs unless <see cref="WhyNot"/> names a reason, which is logged instead.
@@ -157,9 +171,16 @@ public static class ArrivalFocus
 	public static bool Shown(Page page) =>
 		App.GetService<INavigationService>() is NavigationService { Frame.Content: { } shown } && ReferenceEquals(shown, page);
 
-	/// <summary>Menus, flyouts and dialogs open over the window (tooltips do not count).</summary>
+	/// <summary>Menus, flyouts and dialogs open over the window (tooltips and the undo notice do not count).</summary>
 	public static int OpenPopups(XamlRoot? root) =>
-		root is null ? 0 : VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count(p => p.IsOpen && p.Child is not ToolTip);
+		root is null ? 0 : VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count(p => CountsAsMenu(p.IsOpen, p.Child, p.Tag));
+
+	/// <summary>
+	/// Whether an open popup holds the keys as a menu does: not a tooltip, and (review of wip/140-fix2) not the 10 s undo notice
+	/// at the bottom of the window (UndoToast), which a page opened while it shows would otherwise wait out.
+	/// </summary>
+	public static bool CountsAsMenu(bool isOpen, object? child, object? tag) =>
+		isOpen && child is not ToolTip && !Equals(tag, Controls.UndoToast.NoticeTag);
 
 	private static object? Focused(Page page) => page.XamlRoot is { } root ? FocusManager.GetFocusedElement(root) : null;
 

@@ -21,6 +21,9 @@ internal static class UndoToast
 {
 	public static readonly TimeSpan ShowFor = TimeSpan.FromSeconds(10);
 
+	/// <summary>The notice's popup's Tag: it is not a menu (Services.ArrivalFocus.CountsAsMenu), a page's arrival does not wait it out.</summary>
+	public const string NoticeTag = "NixieUndoNotice";
+
 	private static bool s_listening;
 	private static Popup? s_popup;
 	private static DispatcherTimer? s_timer;
@@ -89,7 +92,7 @@ internal static class UndoToast
 		AutomationProperties.SetName(card, message);
 		AutomationProperties.SetLiveSetting(card, AutomationLiveSetting.Polite);
 
-		var popup = new Popup { Child = card, XamlRoot = root.XamlRoot };
+		var popup = new Popup { Child = card, XamlRoot = root.XamlRoot, Tag = NoticeTag };
 		card.SizeChanged += (_, _) =>
 		{
 			popup.HorizontalOffset = Math.Max(0, (root.ActualWidth - card.ActualWidth) / 2);

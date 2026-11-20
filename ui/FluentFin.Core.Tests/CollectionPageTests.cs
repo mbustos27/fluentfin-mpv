@@ -173,11 +173,18 @@ public sealed class CollectionPageTests
 		await fresh.OnNavigatedTo(set);
 		Assert.Equal((CollectionOrder.Collection, false, 6), (fresh.Order, fresh.HideWatched, fresh.Entries.Count));
 
-		// ...which is now what Back finds
+		// (review of wip/140-fix2, 6) opening it anew saves nothing: Back to the earlier visit still finds its Order
 		var (back, _, _) = Page(set, films);
 		back.KeepsPlace = () => true;
 		await back.OnNavigatedTo(set);
-		Assert.Equal((CollectionOrder.Collection, false), (back.Order, back.HideWatched));
+		Assert.Equal((CollectionOrder.ReleaseDate, true), (back.Order, back.HideWatched));
+
+		// a change on the visit opened anew is the place from then on
+		fresh.SetOrder(CollectionOrder.DateAdded);
+		var (later, _, _) = Page(set, films);
+		later.KeepsPlace = () => true;
+		await later.OnNavigatedTo(set);
+		Assert.Equal((CollectionOrder.DateAdded, false), (later.Order, later.HideWatched));
 
 		// another collection is its own
 		var other = new BaseItemDto { Id = Guid.NewGuid(), Type = BaseItemDto_Type.BoxSet, Name = "Winter Films" };
@@ -187,8 +194,8 @@ public sealed class CollectionPageTests
 		Assert.Equal((CollectionOrder.Collection, false), (elsewhere.Order, elsewhere.HideWatched));
 
 		// another user's place is not this one's
-		CollectionPlaces.Remember(Guid.NewGuid(), set.Id!.Value, new CollectionPlace(CollectionOrder.DateAdded, true));
-		Assert.Equal(new CollectionPlace(CollectionOrder.Collection, false), CollectionPlaces.Recall(Guid.Empty, set.Id!.Value));
+		CollectionPlaces.Remember(Guid.NewGuid(), set.Id!.Value, new CollectionPlace(CollectionOrder.Name, true));
+		Assert.Equal(new CollectionPlace(CollectionOrder.DateAdded, false), CollectionPlaces.Recall(Guid.Empty, set.Id!.Value));
 	}
 
 	[Fact]

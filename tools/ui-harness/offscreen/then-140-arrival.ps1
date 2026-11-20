@@ -66,7 +66,7 @@ $arFilm = { Open-Library $fixture.movie.library; Start-Sleep -Seconds 3; Open-Ca
 $arFilmIn = { Wait-ItemPage $fixture.movie.name 0.2 }
 $arLibrary = { Open-Library $fixture.movie.library }
 $arLibraryIn = { Find-MediaCard $fixture.movie.name }
-$arOnly = if ($env:AR_ONLY) { $env:AR_ONLY -split ',' } else { @('untouched', 'collection', 'film', 'library', 'colstate', 'rlock') }
+$arOnly = if ($env:AR_ONLY) { $env:AR_ONLY -split ',' } else { @('untouched', 'collection', 'film', 'library', 'filmback', 'suggest', 'colstate', 'rlock') }
 
 [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1600, 1000); Start-Sleep -Milliseconds 1500
 
@@ -95,6 +95,34 @@ if ($arOnly -contains 'library') {
     # the bug hunt's m4: the first poster took the keyboard on a slow library
     Open-Nav 'Home'; Start-Sleep -Seconds 2
     AR-Slow 'library' 'keyboard' $arItems $arLibrary $arLibraryIn
+}
+if ($arOnly -contains 'filmback') {
+    # (review of wip/140-fix2) Back to a slow film: Ctrl+F and a letter while it loads; its place (Play, a card) used to take
+    # the keyboard out of the box when the page came in, and the next R refreshed it (the hunt's M1 again)
+    Open-Nav 'Home'; Start-Sleep -Seconds 2
+    & $arFilm
+    [void](Wait-Until { & $arFilmIn } -Seconds 15 -PollMs 200); Start-Sleep -Seconds 2
+    Open-Nav 'Home'; Start-Sleep -Seconds 3
+    AR-Slow 'film, Back to it' 'keyboard' $arItem { CK-Key 'Alt+Left' } $arFilmIn
+}
+if ($arOnly -contains 'suggest') {
+    # (review of wip/140-fix2) a search suggestion chosen with Down and Enter: the film opens with the keyboard on Play (the
+    # emptied box kept it, Enter then did nothing and letters typed into the box)
+    Open-Nav 'Home'; Start-Sleep -Seconds 2
+    CK-Key 'Ctrl+F'; Start-Sleep -Milliseconds 400
+    $query = $fixture.movie.name.Substring(0, [Math]::Min(9, $fixture.movie.name.Length)).TrimEnd()
+    foreach ($ch in $query.ToCharArray()) { if ($ch -eq ' ') { CK-Key 'Space' } else { CK-Key "$ch" }; Start-Sleep -Milliseconds 60 }
+    $listed = Wait-Until { Find-Ui -Name $fixture.movie.name -Type 'ListItem' -Contains } -Seconds 10 -PollMs 200
+    $at = Get-Epoch
+    CK-Key 'Down'; Start-Sleep -Milliseconds 400
+    CK-Key 'Enter'
+    $opened = Wait-ItemPage $fixture.movie.name 15
+    $onPlay = Wait-Until { $f = CK-Focus; if ($f -match "^Button '(Play|Resume)") { $f } } -Seconds 6 -PollMs 200
+    $before = AR-Text
+    CK-Key 'Q'; Start-Sleep -Milliseconds 700
+    $after = AR-Text
+    Check "search: a suggestion chosen with Down and Enter opens the film with the keyboard on Play; a letter then does not type into the box" ([bool]$listed -and [bool]$opened -and [bool]$onPlay -and $before -eq '' -and $after -eq '') "typed '$query'; listed $([bool]$listed); opened $([bool]$opened); focus $(CK-Focus); box '$before' then '$after'; $((CK-Log $at '\[focus\]') -join ' | ')"
+    AR-Reset
 }
 if ($arOnly -contains 'colstate') {
     # the bug hunt's M2: R and Back on a Collection page reset its Order and Hide watched

@@ -57,7 +57,7 @@ public sealed class ArrivalFocusTests
 		var nav = Source("Services", "NavigationService.cs");
 		var recorded = nav.IndexOf("ArrivalFocus.Arrived(frame.Content as Page, refresh ? ArrivalKind.Refreshed", StringComparison.Ordinal);
 		Assert.True(recorded > 0 && recorded < nav.IndexOf("await navigationAware.OnNavigatedTo(e.Parameter);", StringComparison.Ordinal));
-		Assert.Contains("ArrivalFocus.Arrived(frame.Content as Page, ArrivalKind.ThemeSwitched);", nav);
+		Assert.Contains("ArrivalFocus.Arrived(frame.Content as Page, ArrivalKind.ThemeSwitched, frame.XamlRoot);", nav);
 	}
 
 	/// <summary>Every page that focuses on arrival asks the one rule.</summary>
@@ -81,13 +81,69 @@ public sealed class ArrivalFocusTests
 		// a tooltip is not a menu: a poster's "Play ..." tooltip still up kept Play from taking the keyboard (Editorial)
 		Assert.DoesNotContain("GetOpenPopupsForXamlRoot(root).Count", item);
 		Assert.Equal(2, item.Split("Services.ArrivalFocus.OpenPopups(root)").Length - 1);
-		Assert.Contains("p.IsOpen && p.Child is not ToolTip", Source("Services", "ArrivalFocus.cs"));
+		Assert.Contains("isOpen && child is not ToolTip", Source("Services", "ArrivalFocus.cs"));
 
 		// the libraries: every theme's page through the view model (Editorial's page included, which sets its own rule too)
 		Assert.Contains("Core.ViewModels.LibraryViewModel.LoadFocusYields = Services.ArrivalFocus.LibraryYields;", Source("App.xaml.cs"));
 		Assert.DoesNotContain("vm.FocusYields =", Source("Controls", "LibraryGridHost.cs"));
 		var library = Source("Services", "ArrivalFocus.cs");
 		Assert.Contains("WhyNot(page, restore: true)", library);
+	}
+
+	/// <summary>
+	/// Review of wip/140-fix2, 1: a search suggestion chosen with Enter opens its page with the keyboard still in the emptied
+	/// box. That box is where the navigation left it, not where the user went: the arrival takes the keyboard (Play), as it
+	/// did before the one rule. A box the user went to after the page came keeps it (the hunt's M1).
+	/// </summary>
+	[Fact]
+	public void TheBoxASuggestionWasChosenIn_IsNotTheUsersPlace_ABoxTheyWentToIs()
+	{
+		Assert.False(ArrivalFocus.InTextInputByTheUser(focusInTextInput: true, whereTheNavigationLeftIt: true));
+		Assert.True(ArrivalFocus.InTextInputByTheUser(focusInTextInput: true, whereTheNavigationLeftIt: false));
+		Assert.False(ArrivalFocus.InTextInputByTheUser(focusInTextInput: false, whereTheNavigationLeftIt: false));
+
+		var rule = Source("Services", "ArrivalFocus.cs");
+		Assert.Contains("InTextInputByTheUser(TextInput.IsTextInput(focused), leftThere)", rule);
+		Assert.Contains("_focusedAtArrival = (root ?? page.XamlRoot) is { } at && FocusManager.GetFocusedElement(at) is { } focused", rule);
+		var nav = Source("Services", "NavigationService.cs");
+		Assert.Contains("ArrivalKind.Returned : ArrivalKind.Opened, frame.XamlRoot);", nav);
+		Assert.Contains("ArrivalFocus.Arrived(frame.Content as Page, ArrivalKind.ThemeSwitched, frame.XamlRoot);", nav);
+	}
+
+	/// <summary>
+	/// Review of wip/140-fix2, 2 and 3: Back to an item page puts its place back (Play, a card) by the one rule too, and so do
+	/// the Home pages' Back and Drive-in Home's arrival (it only looked for a text box: a key, a click, the wheel, R and a theme
+	/// switch did not stop it).
+	/// </summary>
+	[Fact]
+	public void BackToAnItemPage_AndHome_AskTheOneRule()
+	{
+		var item = Source("Views", "ItemPagePlace.cs");
+		var restore = item[item.IndexOf("private void Restore(PagePlace place)", StringComparison.Ordinal)..];
+		restore = restore[..restore.IndexOf("private DependencyObject? Target(", StringComparison.Ordinal)];
+		Assert.Contains("FocusRestore(userThere || Services.ArrivalFocus.WhyNot(_page) is not null, Services.ArrivalFocus.OpenPopups(root))", restore);
+
+		var driveIn = Source("Themes", "DriveIn", "Views", "DriveInHomePage.xaml.cs");
+		var arrival = driveIn[driveIn.IndexOf("private void TryArrivalFocus()", StringComparison.Ordinal)..];
+		arrival = arrival[..arrival.IndexOf("protected override void OnNavigatedFrom", StringComparison.Ordinal)];
+		Assert.Contains("if (FluentFin.Services.ArrivalFocus.WhyNot(this) is not null)", arrival);
+		Assert.DoesNotContain("TextInput.IsTextInput", arrival);
+
+		foreach (var home in new[] { Source("Views", "HomePage.xaml.cs"), driveIn, Source("Themes", "Cinematic", "Views", "CinematicHomePage.xaml.cs"), Source("Themes", "Editorial", "Views", "EditorialHomePage.xaml.cs") })
+		{
+			Assert.Contains("if (place.Row is { } header && place.ItemId is { } id && FluentFin.Services.ArrivalFocus.WhyNot(this) is null)", home);
+		}
+	}
+
+	/// <summary>Review of wip/140-fix2, 4: the 10 s undo notice is not a menu; a page opened while it shows still takes the keyboard.</summary>
+	[Fact]
+	public void TheUndoNotice_IsNotAMenu()
+	{
+		Assert.True(ArrivalFocus.CountsAsMenu(isOpen: true, child: null, tag: null));
+		Assert.False(ArrivalFocus.CountsAsMenu(isOpen: true, child: null, tag: FluentFin.Controls.UndoToast.NoticeTag));
+		Assert.False(ArrivalFocus.CountsAsMenu(isOpen: false, child: null, tag: null));
+		Assert.Contains("new Popup { Child = card, XamlRoot = root.XamlRoot, Tag = NoticeTag }", Source("Controls", "UndoToast.cs"));
+		Assert.Contains("Count(p => CountsAsMenu(p.IsOpen, p.Child, p.Tag))", Source("Services", "ArrivalFocus.cs"));
 	}
 
 	/// <summary>After R or a theme switch the page's own arrival never takes the keyboard: their restore puts it back.</summary>

@@ -201,7 +201,8 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 
 		_placeKnown = true;
 		Update();
-		Remember();
+		// (not remembered here: a collection opened anew would put its defaults over the place an earlier visit left, and Back
+		// to that visit lost its Order; the place is the user's changes, OnOrderChanged and OnHideWatchedChanged)
 
 		if (_serverOrder.Count == 0)
 		{

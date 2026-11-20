@@ -341,7 +341,7 @@ public class NavigationService : INavigationService
 				_pendingThemeReload = null;
 				ViewModelHandoff.Clear();
 				LastNavigationWasThemeReload = true;
-				ArrivalFocus.Arrived(frame.Content as Page, ArrivalKind.ThemeSwitched); // Nixie 1.4.0 (bug hunt M1): the arrival focus's one rule
+				ArrivalFocus.Arrived(frame.Content as Page, ArrivalKind.ThemeSwitched, frame.XamlRoot); // Nixie 1.4.0 (bug hunt M1): the arrival focus's one rule
 				if (frame.BackStack.Count > 0)
 				{
 					frame.BackStack.RemoveAt(frame.BackStack.Count - 1);
@@ -359,7 +359,7 @@ public class NavigationService : INavigationService
 			LastNavigationWasRefresh = refresh;
 			// Nixie 1.4.0 (bug hunt M1, m4): when and how the page came, for its arrival focus (it yields to a user who moved since)
 			ArrivalFocus.Arrived(frame.Content as Page, refresh ? ArrivalKind.Refreshed
-				: e.NavigationMode is NavigationMode.Back or NavigationMode.Forward ? ArrivalKind.Returned : ArrivalKind.Opened);
+				: e.NavigationMode is NavigationMode.Back or NavigationMode.Forward ? ArrivalKind.Returned : ArrivalKind.Opened, frame.XamlRoot);
 			if (refresh)
 			{
 				_pendingRefresh = null;

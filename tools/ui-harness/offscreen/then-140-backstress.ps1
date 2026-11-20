@@ -99,5 +99,11 @@ for ($i = 0; $i -lt $bsTimes; $i++) {
     if ($i % 10 -eq 9) { $o = Find-Ui -Id 'OrderButton'; Say "backstress: $bsDone cycles, $bsFilms films opened and left; focus $(CK-Focus); order '$(if ($o) { $o.Current.Name })'" }
 }
 BS-Latency 0
-$guarded = @(CK-Log ($bsStart.ToUniversalTime() - [datetime]'1970-01-01').TotalSeconds '^\[ui\]|^\[first-chance\]')
-Check "backstress: $bsDone of $bsTimes cycles ($bsFilms films opened and left by Back), the app still there" ($bsDone -eq $bsTimes -and $bsFilms -ge $bsTimes * 0.8) "page opened again $($script:bsReopened) times; $($guarded.Count) guarded or first-chance line(s): $(($guarded | Select-Object -First 5) -join ' | ')"
+$bsSince = ($bsStart.ToUniversalTime() - [datetime]'1970-01-01').TotalSeconds
+$guarded = @(CK-Log $bsSince '^\[ui\] ')
+$unhandled = @(CK-Log $bsSince '^Unhandled exception')
+$trail = @(CK-Log $bsSince '^\[first-chance\]')
+Check "backstress: $bsDone of $bsTimes cycles ($bsFilms films opened and left by Back), the app still there" ($bsDone -eq $bsTimes -and $bsFilms -ge $bsTimes * 0.8) "page opened again $($script:bsReopened) times; $($trail.Count) first-chance line(s): $(($trail | Select-Object -First 3) -join ' | ')"
+# (review of wip/140-fix2) the guard must not hide the crash: a queued callback that failed ("[ui] ... failed") or an exception
+# XAML raised (a layout cycle) fails the run, the app alive or not
+Check 'backstress: no queued work failed ([ui]) and no unhandled exception (a layout cycle)' ($guarded.Count -eq 0 -and $unhandled.Count -eq 0) "$($guarded.Count) [ui] line(s), $($unhandled.Count) unhandled: $((@($guarded) + @($unhandled) | Select-Object -First 5) -join ' | ')"

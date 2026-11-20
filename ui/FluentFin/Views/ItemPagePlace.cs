@@ -283,7 +283,10 @@ internal sealed class ItemPagePlace
 			else if (!focused && _page.XamlRoot is { } root)
 			{
 				var current = FocusManager.GetFocusedElement(root) as DependencyObject;
-				switch (FocusRestore(current is not null && IsInPage(current) && !ReferenceEquals(current, _scroller), Services.ArrivalFocus.OpenPopups(root)))
+				// Nixie 1.4.0 (review of wip/140-fix2: Back to a slow film, then Ctrl+F and a letter: its card or Play took the
+				// keyboard out of the box when the page came in, the hunt's M1 again): the app's one arrival rule too
+				var userThere = current is not null && IsInPage(current) && !ReferenceEquals(current, _scroller);
+				switch (FocusRestore(userThere || Services.ArrivalFocus.WhyNot(_page) is not null, Services.ArrivalFocus.OpenPopups(root)))
 				{
 					case FocusStep.Leave:
 						focused = true;
