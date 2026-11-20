@@ -133,8 +133,23 @@ internal sealed class CardGrid
 		UpdatePlaces();
 	}
 
-	private void Source_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
-		_list.DispatcherQueue.TryEnqueue(UpdatePlaces);
+	// Nixie 1.4.1: once per burst (a big library's page inserts its titles one by one: a thousand changes, one update)
+	private bool _placesQueued;
+
+	private void Source_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+	{
+		if (_placesQueued)
+		{
+			return;
+		}
+
+		_placesQueued = true;
+		_list.DispatcherQueue.TryEnqueue(() =>
+		{
+			_placesQueued = false;
+			UpdatePlaces();
+		});
+	}
 
 	// ---- Narrator ----------------------------------------------------------------------------------------------------
 

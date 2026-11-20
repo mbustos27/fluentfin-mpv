@@ -49,33 +49,72 @@ public sealed class SeriesEpisodes : IDisposable
 	/// <summary>A view model made without the app's (tests, a page of its own): kept for the page's life, never stale by itself.</summary>
 	internal static SeriesEpisodes ForOnePage(IJellyfinClient client) => new(client, () => 0, TimeProvider.System, subscribe: false);
 
+	/// <summary>
+	/// Nixie 1.4.1: the request on its way per series, with the change count it was asked at: a second asker meanwhile (the
+	/// page's own early start, the Editorial pages' refresh on every change) shares it rather than asking for the whole
+	/// series again.
+	/// </summary>
+	private readonly Dictionary<Guid, (Task<IReadOnlyList<BaseItemDto>?> Answer, int Changes)> _asking = [];
+
 	/// <summary>The series' episodes in play order; null when they could not be loaded.</summary>
 	public async Task<IReadOnlyList<BaseItemDto>?> Get(Guid seriesId)
 	{
+		TaskCompletionSource<IReadOnlyList<BaseItemDto>?>? mine = null;
+		Task<IReadOnlyList<BaseItemDto>?>? shared = null;
+		// counted before asking: a change reported while the answer is on its way leaves it stale at once
+		var changes = _changes();
 		lock (_lock)
 		{
-			if (_entries.TryGetValue(seriesId, out var entry) && entry.Changes == _changes() && _time.GetElapsedTime(entry.ReadAt) < FreshFor)
+			if (_entries.TryGetValue(seriesId, out var entry) && entry.Changes == changes && _time.GetElapsedTime(entry.ReadAt) < FreshFor)
 			{
 				return entry.Episodes;
 			}
+
+			if (_asking.TryGetValue(seriesId, out var asking) && asking.Changes == changes)
+			{
+				shared = asking.Answer;
+			}
+			else
+			{
+				mine = new TaskCompletionSource<IReadOnlyList<BaseItemDto>?>(TaskCreationOptions.RunContinuationsAsynchronously);
+				_asking[seriesId] = (mine.Task, changes);
+			}
 		}
 
-		// counted before asking: a change reported while the answer is on its way leaves it stale at once
-		var changes = _changes();
-		var readAt = _time.GetTimestamp();
-		var result = await _client.GetSeriesEpisodes(seriesId);
-		if (result?.Items is not { } items)
+		if (shared is not null || mine is null)
 		{
-			return null;
+			return shared is null ? null : await shared;
 		}
 
-		var episodes = items.ToList();
-		lock (_lock)
+		IReadOnlyList<BaseItemDto>? episodes = null;
+		try
 		{
-			_entries[seriesId] = new Entry(episodes, readAt, changes);
-		}
+			var readAt = _time.GetTimestamp();
+			var result = await _client.GetSeriesEpisodes(seriesId);
+			if (result?.Items is { } items)
+			{
+				var list = items.ToList();
+				episodes = list;
+				lock (_lock)
+				{
+					_entries[seriesId] = new Entry(list, readAt, changes);
+				}
+			}
 
-		return episodes;
+			return episodes;
+		}
+		finally
+		{
+			// those who shared it hear the same (null when it failed, as for a failed answer)
+			mine.TrySetResult(episodes);
+			lock (_lock)
+			{
+				if (_asking.TryGetValue(seriesId, out var asking) && asking.Answer == mine.Task)
+				{
+					_asking.Remove(seriesId);
+				}
+			}
+		}
 	}
 
 	/// <summary>Whether the series' kept episodes include this item (an episode of it).</summary>

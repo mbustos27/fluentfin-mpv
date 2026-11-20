@@ -1,11 +1,14 @@
 ﻿using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DynamicData;
 using DynamicData.Binding;
 using FluentFin.Contracts.ViewModels;
 using FluentFin.Core.Contracts.Services;
+using FluentFin.Core.Services;
 using Jellyfin.Sdk.Generated.Models;
 using ReactiveUI;
 
@@ -13,7 +16,12 @@ namespace FluentFin.Core.ViewModels;
 
 public partial class LibraryViewModel : ObservableObject, INavigationAware
 {
-	private readonly SourceCache<BaseItemViewModel, Guid> _itemsCache = new(x => x.Id ?? Guid.Empty);
+	// Nixie 1.4.1 (big libraries): every title loaded, by id (a title a later page brings again is kept once) and in the
+	// server's order; the grid's list is made from them here (it was DynamicData's SortAndBind, which reset the grid for any
+	// batch over 25 titles: each page would have redrawn every card and dropped the keyboard's card)
+	private readonly Dictionary<Guid, BaseItemViewModel> _byId = [];
+	private readonly List<BaseItemViewModel> _all = [];
+	private readonly ShownItems _shown = [];
 	private readonly ReadOnlyObservableCollection<BaseItemViewModel> _items;
 
 
@@ -21,44 +29,80 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	{
 		JellyfinClient = jellyfinClient;
 		_localSettings = localSettings;
+		_items = new(_shown);
 
 		// tie-break so equal keys (e.g. unrated, never played) keep a stable order
 		// Nixie 1.3.1: a playlist keeps its own order until a sort is picked (InPlaylistOrder)
-		var comparer = this.WhenAnyValue(x => x.SortBy, x => x.Order, x => x.InPlaylistOrder)
-						   .Select(x => (IComparer<BaseItemViewModel>)(x.Item3 ? PlaylistComparer() : GetComparer((x.Item1, x.Item2))).ThenByAscending(LibraryBrowse.SortKey).ThenByAscending(i => i.Id ?? Guid.Empty))
-						   .Do(x =>
-						   {
-							   _comparer = x; // Seaglass 1.1.4: the A-Z jump orders the library the same way
-							   UpdateBrowse();
-						   });
-
-		var filter = this.WhenAnyValue(x => x.Filter)
-			.WhereNotNull()
-			.SelectMany(x => x.WhenAnyPropertyChanged())
-			.Where(x => x is not null)
-			.Select(x => (Func<BaseItemViewModel, bool>)x!.IsVisible);
+		this.WhenAnyValue(x => x.SortBy, x => x.Order, x => x.InPlaylistOrder)
+			.Select(x => (IComparer<BaseItemViewModel>)(x.Item3 ? PlaylistComparer() : GetComparer((x.Item1, x.Item2))).ThenByAscending(LibraryBrowse.SortKey).ThenByAscending(i => i.Id ?? Guid.Empty))
+			.Subscribe(x =>
+			{
+				_comparer = x; // Seaglass 1.1.4: the A-Z jump orders the library the same way
+				UserMoved();
+				Show();
+				UpdateBrowse();
+			});
 
 		Filter.WhenAnyPropertyChanged()
 			.Subscribe(x =>
 			{
-				_itemsCache.Refresh();
+				UserMoved();
+				Show();
 				FiltersChanged();
 			});
+	}
 
-		// Seaglass 1.1.4 (layout audit, item 6): one continuously scrolling grid, as every streaming app has, not pages of 100
-		// under a numbered pager: the library is one request already (every title, sorted and filtered here), and the grid
-		// (an ItemsRepeater) draws only the cards near the view
-		_itemsCache
-			.Connect()
-			.RefCount()
-			.Filter(Filter.IsVisible)
-			.SortAndBind(out _items, comparer)
-			.Subscribe(_ =>
+	// Seaglass 1.1.4 (layout audit, item 6): one continuously scrolling grid, as every streaming app has, not pages of 100
+	// under a numbered pager: every title is here (Nixie 1.4.1: read from the server a page at a time, LibraryPageReader),
+	// sorted and filtered here, and the grid (an ItemsRepeater) draws only the cards near the view
+
+	/// <summary>The grid's titles again from every title loaded: those the filters let through, in the sort's order.</summary>
+	private void Show()
+	{
+		_shown.SyncTo(Ordered());
+		// Seaglass scrolling: the cards in the (filtered) library, for Narrator's "n of m"
+		TotalCount = _shown.Count;
+	}
+
+	/// <summary>Titles read from the server, kept once each by id; returns those new to the library.</summary>
+	private List<BaseItemViewModel> Add(IEnumerable<BaseItemDto> dtos)
+	{
+		var added = new List<BaseItemViewModel>();
+		foreach (var dto in dtos)
+		{
+			var key = dto.Id ?? Guid.Empty;
+			if (_byId.ContainsKey(key))
 			{
-				// Seaglass scrolling: the cards in the (filtered) library, for Narrator's "n of m"
-				TotalCount = _items.Count;
-				UpdateBrowse();
-			});
+				continue; // a page brought a title again (the library changed between pages; a playlist lists one twice)
+			}
+
+			var item = BaseItemViewModel.FromDto(dto);
+			_byId[key] = item;
+			_all.Add(item);
+			added.Add(item);
+		}
+
+		return added;
+	}
+
+	/// <summary>
+	/// Nixie 1.4.1: a page after the first: its titles go into the grid where the sort puts them, one by one (each card
+	/// already drawn stays, and so does the keyboard on it); the Filter menu's counts, the counts and the A to Z follow.
+	/// </summary>
+	private void AddPage(IReadOnlyList<BaseItemDto> page)
+	{
+		var shown = Add(page).Where(Filter.IsVisible).ToList();
+		if (_comparer is { } comparer)
+		{
+			shown.Sort(comparer);
+		}
+
+		_shown.InsertSorted(shown, _comparer);
+		FollowRequest();
+		TotalCount = _shown.Count;
+		Recount();
+		UpdateBrowse();
+		PlaceArrived();
 	}
 
 	/// <summary>Nixie 1.3.1: each item's place in the playlist (the server's order), while a playlist is shown.</summary>
@@ -173,7 +217,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	public partial IReadOnlyList<AppliedFilter> AppliedFilters { get; set; } = [];
 
 	/// <summary>The applied-filter row shows (a filter is on, over a library that has titles).</summary>
-	public bool HasAppliedFilters => AppliedFilters.Count > 0 && _itemsCache.Count > 0;
+	public bool HasAppliedFilters => AppliedFilters.Count > 0 && _all.Count > 0;
 
 	/// <summary>The applied-filter row's count line (a polite live region): "Showing 223 of 320 movies".</summary>
 	[ObservableProperty]
@@ -204,6 +248,108 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		}
 	}
 
+	// ---- Nixie 1.4.1 (big libraries): the rest of the library, read after the first page --------------------------------
+
+	/// <summary>
+	/// The pages after the first are still being read: the grid has the first titles, and the counts say how many of how
+	/// many ("Loading… 1,200 of 25,842 movies"); the sorts, the filters and the A to Z work on the titles in so far.
+	/// </summary>
+	[ObservableProperty]
+	public partial bool IsLoadingMore { get; private set; }
+
+	/// <summary>A page failed every try: the library is shown as far as it came, and the counts say the rest did not load (R reads it again).</summary>
+	[ObservableProperty]
+	public partial bool LoadStopped { get; private set; }
+
+	/// <summary>The pages after the first, while they are read (done at once when there are none). Tests wait for it.</summary>
+	public Task RestLoaded { get; private set; } = Task.CompletedTask;
+
+	/// <summary>Coming back (Back, R) to a title not in yet: how long more pages are read before the grid shows, so the place comes back as it was.</summary>
+	internal TimeSpan PlaceWait { get; set; } = TimeSpan.FromSeconds(3);
+
+	/// <summary>The library's size as the server counted it (the counts say it while the rest loads).</summary>
+	private int? _serverTotal;
+
+	/// <summary>The load in progress: a new load (Retry, R) or leaving the page stops it, and its pages are not wanted.</summary>
+	private CancellationTokenSource? _loading;
+
+	/// <summary>Back or R to a title whose page has not come yet: it gets the focus when it comes, unless the user moved meanwhile.</summary>
+	private LibraryPlace? _pendingPlace;
+
+	private bool _puttingBack;
+
+	/// <summary>The user scrolled, jumped, sorted or filtered: a place still coming is not put back over them.</summary>
+	private void UserMoved()
+	{
+		if (!_puttingBack)
+		{
+			_pendingPlace = null;
+		}
+	}
+
+	/// <summary>The title of a place still coming is in: the grid goes as far down as it was, and the card gets the focus.</summary>
+	private void PlaceArrived()
+	{
+		if (_pendingPlace is not { ItemId: { } id } place || !_byId.TryGetValue(id, out var item))
+		{
+			return;
+		}
+
+		_pendingPlace = null;
+		var index = _shown.IndexOf(item);
+		if (index >= 0)
+		{
+			ReturnOffset = place.Offset;
+			ShowIndex(index);
+		}
+	}
+
+	/// <summary>Every page read after the first, each into the grid as it comes; then the Filter menu's lists from every title.</summary>
+	private async Task ReadRestAsync(LibraryPageReader reader, CancellationTokenSource loading)
+	{
+		var cancellationToken = loading.Token;
+		try
+		{
+			while (await reader.ReadNextAsync(cancellationToken) is { } page)
+			{
+				if (cancellationToken.IsCancellationRequested)
+				{
+					return;
+				}
+
+				AddPage(page);
+			}
+		}
+		catch (OperationCanceledException)
+		{
+			return; // left, or loaded again: this load's pages are not wanted
+		}
+		catch (Exception ex) when (ReferenceEquals(_loading, loading))
+		{
+			// never "Loading…" for ever: the library as far as it came, said so
+			Debug.WriteLine($"Library: the rest stopped: {ex}");
+			IsLoadingMore = false;
+			LoadStopped = true;
+			UpdateBrowse();
+			return;
+		}
+
+		if (ReferenceEquals(_loading, loading))
+		{
+			RestRead(reader);
+		}
+	}
+
+	/// <summary>The reader stopped: every title is in (or a page failed every try): the counts say so, and the Filter menu lists every value.</summary>
+	private void RestRead(LibraryPageReader reader)
+	{
+		IsLoadingMore = false;
+		LoadStopped = reader.HasFailed;
+		_pendingPlace = null; // its title is not in the library any more: the user stays where they are
+		Facets = FilterFacet.From([.. _all.Select(x => x.Dto)], Filter);
+		FiltersChanged();
+	}
+
 	private void FiltersChanged()
 	{
 		ActiveFilters = LibraryBrowse.ActiveFilters(Filter);
@@ -215,7 +361,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	/// <summary>The Filter menu's counts and the Unwatched switch's, against the other filters on.</summary>
 	private void Recount()
 	{
-		var items = _itemsCache.Items.ToList();
+		var items = _all;
 		foreach (var facet in Facets)
 		{
 			facet.Recount(items, Filter);
@@ -252,6 +398,11 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	/// <summary>The page says which title is first in view (on every scroll): the A to Z marks its letter, the readout says where.</summary>
 	public void ShowingFrom(int index)
 	{
+		if (index > 0 && index != _firstShown)
+		{
+			UserMoved(); // scrolled down, or the keyboard went on: a place still coming is not put back over them
+		}
+
 		if (_items.Count == 0 || index < 0)
 		{
 			MarkLetter(null);
@@ -367,28 +518,47 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		OnPropertyChanged(nameof(OtherDirectionWords));
 	}
 
-	/// <summary>The whole library as the grid shows it across its pages: filtered and in the sort's order.</summary>
+	/// <summary>The whole library as the grid shows it: filtered and in the sort's order.</summary>
 	private List<BaseItemViewModel> Ordered()
 	{
-		var items = _itemsCache.Items.Where(Filter.IsVisible);
+		var items = _all.Where(Filter.IsVisible);
 		return _comparer is { } comparer ? [.. items.Order(comparer)] : [.. items];
 	}
 
 	private void UpdateBrowse()
 	{
-		var all = _itemsCache.Count;
+		var all = _all.Count;
 		var shown = TotalCount;
-		CountText = all == 0 ? "" : LibraryBrowse.CountText(shown, all, _library?.CollectionType);
-		LibraryCountText = all == 0 ? "" : LibraryBrowse.CountText(all, all, _library?.CollectionType);
-		ShowingText = all == 0 ? "" : LibraryBrowse.ShowingText(shown, all, _library?.CollectionType);
-		NoMatches = all > 0 && shown == 0 && !IsLoading;
+		var kind = _library?.CollectionType;
+		// Nixie 1.4.1: while the rest loads, or after it stopped, the counts say how many of the server's count are in
+		var whole = Math.Max(all, _serverTotal ?? all);
+		if (all == 0)
+		{
+			CountText = LibraryCountText = ShowingText = "";
+		}
+		else if (IsLoadingMore || (LoadStopped && whole > all))
+		{
+			LibraryCountText = IsLoadingMore ? LibraryBrowse.LoadingText(all, whole, kind) : LibraryBrowse.StoppedText(all, whole, kind);
+			CountText = shown == all ? LibraryCountText : LibraryBrowse.PartCountText(shown, all, kind, IsLoadingMore);
+			ShowingText = $"Showing {LibraryBrowse.PartCountText(shown, all, kind, IsLoadingMore)}";
+		}
+		else
+		{
+			CountText = LibraryBrowse.CountText(shown, all, kind);
+			LibraryCountText = LibraryBrowse.CountText(all, all, kind);
+			ShowingText = LibraryBrowse.ShowingText(shown, all, kind);
+		}
+
+		// Nixie 1.4.1: no "nothing matches" while more titles may still match
+		NoMatches = all > 0 && shown == 0 && !IsLoading && !IsLoadingMore;
 		NoMatchesText = NoMatches ? LibraryNoMatches.Title(Filter, _library?.CollectionType) : "";
 		OnPropertyChanged(nameof(HasAppliedFilters));
 
 		// Nixie 1.4.0 (item 13): the A to Z from 48 titles shown, sorted by title; else the row holds the two directions
+		// (Nixie 1.4.1: from the grid's own list, which is the library filtered and in the sort's order: no second sort)
 		var byName = SortBy == ItemSortBy.Name && !InPlaylistOrder;
 		LetterRow = all == 0 || shown == 0 ? LetterRowMode.None : byName && shown >= LibraryBrowse.LettersFrom ? LetterRowMode.Letters : LetterRowMode.Directions;
-		var letters = byName && all > 0 ? LibraryBrowse.Letters(Ordered().Select(LibraryBrowse.SortKey)) : [];
+		var letters = byName && all > 0 ? LibraryBrowse.Letters(_shown.Select(LibraryBrowse.SortKey)) : [];
 		if (!letters.SequenceEqual(Letters))
 		{
 			Letters = letters;
@@ -413,16 +583,30 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			return;
 		}
 
+		UserMoved();
 		// the same letter again goes on to its next run of titles (a key the sort does not keep together), then round
-		var run = _lastJump is { } last && last.Letter == jump.Letter ? (last.Run + 1) % jump.Runs.Count : 0;
+		var run =_lastJump is { } last && last.Letter == jump.Letter ? (last.Run + 1) % jump.Runs.Count : 0;
 		_lastJump = (jump.Letter, run);
 		ShowIndex(jump.Runs[run]);
 	}
 
 	private (string Letter, int Run)? _lastJump;
 
+	/// <summary>Nixie 1.4.1: the card of the request not yet taken: a page's titles inserted before it move the request with it.</summary>
+	private BaseItemViewModel? _requested;
+
+	/// <summary>The request still waiting for the page follows its card, which a page's titles may have pushed further on.</summary>
+	private void FollowRequest()
+	{
+		if (FocusRequest >= 0 && _requested is { } card && _shown.IndexOf(card) is >= 0 and var index && index != FocusRequest)
+		{
+			FocusRequest = index;
+		}
+	}
+
 	private void ShowIndex(int index)
 	{
+		_requested = index >= 0 && index < _shown.Count ? _shown[index] : null;
 		// the same card again still asks the page to focus it
 		if (FocusRequest == index)
 		{
@@ -452,17 +636,33 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	/// <summary>Back in the library: its sort and filters as they were, the grid as far down, and the card that was left gets the focus.</summary>
 	private void PutBack(LibraryPlace place)
 	{
-		SortBy = place.SortBy;
-		Order = place.Order;
-		Replace(Filter.Genres, place.Genres);
-		Replace(Filter.Tags, place.Tags);
-		Replace(Filter.Years, place.Years);
-		Replace(Filter.OfficialRatings, place.OfficialRatings);
+		_puttingBack = true;
+		try
+		{
+			SortBy = place.SortBy;
+			Order = place.Order;
+			Replace(Filter.Genres, place.Genres);
+			Replace(Filter.Tags, place.Tags);
+			Replace(Filter.Years, place.Years);
+			Replace(Filter.OfficialRatings, place.OfficialRatings);
 
-		Filter.Unwatched = place.Unwatched;
-		Filter.Favorites = place.Favorites;
+			Filter.Unwatched = place.Unwatched;
+			Filter.Favorites = place.Favorites;
+		}
+		finally
+		{
+			_puttingBack = false;
+		}
 
-		var index = place.ItemId is { } id ? Ordered().FindIndex(x => x.Id == id) : -1;
+		var item = place.ItemId is { } id ? _byId.GetValueOrDefault(id) : null;
+		if (item is null && place.ItemId is not null && IsLoadingMore)
+		{
+			// Nixie 1.4.1: its page has not come yet: it is put back when it comes (the grid is not scrolled meanwhile)
+			_pendingPlace = place;
+			return;
+		}
+
+		var index = item is null ? -1 : _shown.IndexOf(item);
 		ReturnOffset = place.Offset;
 		if (index >= 0)
 		{
@@ -503,6 +703,15 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 	/// <summary>The Filter menu's rows, in one list for a virtualised repeater (the review, item 5): each kind, then its values.</summary>
 	public IReadOnlyList<object> FilterRows { get; private set; } = [];
+
+	partial void OnFacetsChanged(IReadOnlyList<FilterFacet> oldValue, IReadOnlyList<FilterFacet> newValue)
+	{
+		// Nixie 1.4.1: the lists made again (every title in, a Retry) stop following the filter's picks
+		foreach (var facet in oldValue ?? [])
+		{
+			facet.Detach();
+		}
+	}
 
 	partial void OnFacetsChanged(IReadOnlyList<FilterFacet> value)
 	{
@@ -578,7 +787,12 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	}
 
 
-	public Task OnNavigatedFrom() => Task.CompletedTask;
+	public Task OnNavigatedFrom()
+	{
+		// Nixie 1.4.1: the rest of a big library is not asked for once the page is left
+		_loading?.Cancel();
+		return Task.CompletedTask;
+	}
 
 	/// <summary>
 	/// Nixie 1.4.0 (the bug hunt's M2): the library loaded again from the server in place, keeping its sort, its filters, its
@@ -626,7 +840,16 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	/// <summary>fluentfin-mpv: says how it went (a failure, an empty library), for <see cref="State"/>.</summary>
 	private async Task<LoadOutcome> Initialize(BaseItemDto dto)
 	{
+		// Nixie 1.4.1: a load still reading pages (a Retry, R) stops: its pages are not wanted
+		_loading?.Cancel();
+		var loading = _loading = new CancellationTokenSource();
+		var cancellationToken = loading.Token;
 		IsLoading = true;
+		IsLoadingMore = false;
+		LoadStopped = false;
+		_serverTotal = null;
+		_pendingPlace = null;
+		RestLoaded = Task.CompletedTask;
 		Title = dto.Name ?? "";
 		_library = dto;
 		ReadView();
@@ -634,27 +857,32 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 		try
 		{
-			// Seaglass 1.1.4: one request. The Filter menu's lists were a second one, asked for after the items, and the grid
-			// waited for it (one round trip late); they are now made from the items themselves
+			// Seaglass 1.1.4: the Filter menu's lists were a second request, asked for after the items, and the grid waited for
+			// it (one round trip late); they are made from the items themselves. Nixie 1.4.1: a library comes a page at a time
+			// (LibraryPageReader): the first page shows at once, the rest follows (ReadRestAsync); a playlist is one request
 			var playlist = dto.Type == BaseItemDto_Type.Playlist && dto.Id is not null;
-			var result = playlist ? await JellyfinClient.GetPlaylistItems(dto.Id!.Value) : await JellyfinClient.GetItems(dto);
+			var reader = playlist ? null : new LibraryPageReader(JellyfinClient, dto);
+			var first = playlist ? (await JellyfinClient.GetPlaylistItems(dto.Id!.Value))?.Items : await reader!.ReadFirstAsync(cancellationToken);
+			cancellationToken.ThrowIfCancellationRequested();
 
-			if (result is null or { Items: null })
+			if (first is null)
 			{
 				return LoadMessages.CouldNotLoad(playlist ? "this playlist" : "this library");
 			}
 
 			// Nixie 1.3.1: a playlist in its own order: each item's place, then the order (before the items, so they come sorted)
-			_playlistPlaces = playlist ? result.Items.Select((x, i) => (x.Id, i)).Where(x => x.Id is not null).GroupBy(x => x.Id!.Value).ToDictionary(g => g.Key, g => g.First().i) : [];
+			_playlistPlaces = playlist ? first.Select((x, i) => (x.Id, i)).Where(x => x.Id is not null).GroupBy(x => x.Id!.Value).ToDictionary(g => g.Key, g => g.First().i) : [];
 			InPlaylistOrder = playlist;
+			_serverTotal = reader?.Total;
+			IsLoadingMore = reader is { IsDone: false };
 
 			// a Retry starts from what the server has now
-			_itemsCache.Edit(cache =>
-			{
-				cache.Clear();
-				cache.AddOrUpdate(result.Items.Select(BaseItemViewModel.FromDto));
-			});
-			Facets = FilterFacet.From(result.Items, Filter);
+			_byId.Clear();
+			_all.Clear();
+			Add(first);
+			Show();
+			// from the first page while the rest loads (their counts follow each page), from every title once all are in
+			Facets = FilterFacet.From(first, Filter);
 
 			var cameBack = false;
 			if ((ComingBack || ReloadedInPlace?.Invoke() == true) && dto.Id is { } library && LibraryPlaces.Recall(JellyfinClient.UserId, library) is { } place)
@@ -666,19 +894,40 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 			FiltersChanged();
 
+			// Nixie 1.4.1: Back or R to a title further on: a few more pages before the grid shows (it shows at once otherwise),
+			// so the card comes back where it was rather than the grid jumping to it later
+			if (reader is not null && _pendingPlace is not null)
+			{
+				var waiting = Stopwatch.StartNew();
+				while (_pendingPlace is not null && waiting.Elapsed < PlaceWait && await reader.ReadNextAsync(cancellationToken) is { } page)
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+					AddPage(page);
+				}
+			}
+
 			// Nixie 1.4.0 (the UX review's X8, item 4): a library opened anew gives its first poster the focus (Back: the one left)
-			if (!cameBack && result.Items.Count > 0 && FocusRequest < 0)
+			if (!cameBack && _all.Count > 0 && FocusRequest < 0)
 			{
 				ArrivalFocus = true;
 				ShowIndex(0);
 			}
 
-			if (result.Items.Count == 0 && playlist)
+			if (reader is { IsDone: false, HasFailed: false })
+			{
+				RestLoaded = ReadRestAsync(reader, loading);
+			}
+			else if (reader is not null && IsLoadingMore)
+			{
+				RestRead(reader); // every page came while the place was awaited (or one failed)
+			}
+
+			if (_all.Count == 0 && playlist)
 			{
 				return LoadOutcome.Empty("This playlist is empty", $"Items added to it on {LoadMessages.ServerName()} appear here.");
 			}
 
-			if (result.Items.Count == 0)
+			if (_all.Count == 0)
 			{
 				return LoadOutcome.Empty("This library is empty", $"Movies and shows added to it on {LoadMessages.ServerName()} appear here.");
 			}
@@ -687,9 +936,122 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		}
 		finally
 		{
-			IsLoading = false;
-			UpdateBrowse();
+			// a load that was replaced leaves the page to the one that replaced it
+			if (ReferenceEquals(_loading, loading))
+			{
+				IsLoading = false;
+				UpdateBrowse();
+			}
 		}
+	}
+}
+
+/// <summary>
+/// Nixie 1.4.1: the library grid's list. A new sort or filter makes it anew (one reset, as DynamicData's binding did for
+/// more than 25 changes; a small library's changes still go one by one, so they animate); a page's titles are inserted
+/// where the sort puts them (a binary search: the cards drawn stay drawn, and the keyboard's card keeps the keyboard).
+/// </summary>
+internal sealed class ShownItems : ObservableCollection<BaseItemViewModel>
+{
+	/// <summary>DynamicData's reset threshold, kept: up to this many on either side, the changes go one by one.</summary>
+	private const int OneByOneUpTo = 25;
+
+	/// <summary>The list becomes <paramref name="target"/>.</summary>
+	public void SyncTo(IReadOnlyList<BaseItemViewModel> target)
+	{
+		if (Count > OneByOneUpTo || target.Count > OneByOneUpTo)
+		{
+			ResetTo(target);
+			return;
+		}
+
+		var keep = new HashSet<BaseItemViewModel>(target, ReferenceEqualityComparer.Instance);
+		for (var i = Count - 1; i >= 0; i--)
+		{
+			if (!keep.Contains(this[i]))
+			{
+				RemoveAt(i);
+			}
+		}
+
+		for (var i = 0; i < target.Count; i++)
+		{
+			if (i < Count && ReferenceEquals(this[i], target[i]))
+			{
+				continue;
+			}
+
+			var at = IndexOf(target[i]);
+			if (at >= 0)
+			{
+				Move(at, i);
+			}
+			else
+			{
+				Insert(i, target[i]);
+			}
+		}
+	}
+
+	/// <summary>The list becomes <paramref name="target"/>, said once (a reset).</summary>
+	public void ResetTo(IReadOnlyList<BaseItemViewModel> target)
+	{
+		CheckReentrancy();
+		Items.Clear();
+		foreach (var item in target)
+		{
+			Items.Add(item);
+		}
+
+		OnPropertyChanged(new PropertyChangedEventArgs(nameof(Count)));
+		OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));
+		OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+	}
+
+	/// <summary>
+	/// <paramref name="sorted"/> (in the sort's order) inserted where <paramref name="comparer"/> puts each, after any equal
+	/// one; at the end without a sort. A card whose sort key changed in place (watched from its menu, sorted by date played)
+	/// leaves the list a little out of order: the search still ends somewhere in it, never fails.
+	/// </summary>
+	public void InsertSorted(IReadOnlyList<BaseItemViewModel> sorted, IComparer<BaseItemViewModel>? comparer)
+	{
+		if (sorted.Count == 0)
+		{
+			return;
+		}
+
+		if (Count == 0)
+		{
+			ResetTo(sorted);
+			return;
+		}
+
+		var from = 0;
+		foreach (var item in sorted)
+		{
+			var at = comparer is null ? Count : After(item, comparer, from);
+			Insert(at, item);
+			from = at + 1;
+		}
+	}
+
+	private int After(BaseItemViewModel item, IComparer<BaseItemViewModel> comparer, int from)
+	{
+		int low = Math.Min(from, Count), high = Count;
+		while (low < high)
+		{
+			var middle = low + ((high - low) / 2);
+			if (comparer.Compare(this[middle], item) <= 0)
+			{
+				low = middle + 1;
+			}
+			else
+			{
+				high = middle;
+			}
+		}
+
+		return low;
 	}
 }
 

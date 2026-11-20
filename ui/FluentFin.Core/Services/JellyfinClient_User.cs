@@ -15,7 +15,7 @@ public partial class JellyfinClient
 				var query = x.QueryParameters;
 				query.Limit = 12;
 				// Seaglass: the hero shows the overview and the logo of what it features
-				query.Fields = [ItemFields.PrimaryImageAspectRatio, ItemFields.Overview];
+				query.Fields = [ItemFields.Overview];
 				query.ImageTypeLimit = 1;
 				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb, ImageType.Logo];
 				query.EnableTotalRecordCount = false;
@@ -39,7 +39,7 @@ public partial class JellyfinClient
 			{
 				var query = x.QueryParameters;
 				query.Limit = 24;
-				query.Fields = [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated, ItemFields.Path, ItemFields.MediaSourceCount];
+				query.Fields = [ItemFields.DateCreated, ItemFields.Path, ItemFields.MediaSourceCount];
 				query.UserId = UserId;
 				query.ImageTypeLimit = 1;
 				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb];

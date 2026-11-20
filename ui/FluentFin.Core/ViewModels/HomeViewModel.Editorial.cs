@@ -485,8 +485,9 @@ public static class EditorialGenreSource
 				return kept.Items;
 			}
 
-			var answer = await client.GetItems(library);
-			if (answer?.Items is not { } items)
+			// Nixie 1.4.1: a page at a time, as the Library page (a whole 25,842-movie library in one request timed out)
+			var items = await new Services.LibraryPageReader(client, library).ReadAllAsync();
+			if (items is null)
 			{
 				return kept.Items ?? []; // failed: what was kept, if anything
 			}

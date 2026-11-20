@@ -106,6 +106,13 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		ItemUserData.Changed += OnUserDataChanged;
 		await State.RunAsync(async () =>
 		{
+			// Nixie 1.4.1: the seasons, the series' episodes (Play's label) and More like this need only the series' id: asked
+			// with the series itself (each waited for the one before; More like this, often the slowest, came last of all).
+			// Shown in the same order.
+			var seasons = JellyfinClient.GetItems(dto);
+			var similar = JellyfinClient.GetSimilarItems(dto);
+			_ = _seriesEpisodes.Get(id); // shared with UpdatePlayTarget's (SeriesEpisodes keeps one request per series)
+
 			await UpdateSeries(id);
 			if (Dto?.Id != id)
 			{
@@ -115,7 +122,7 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 			// 1.2.0: asked alongside the seasons; the list opens on the season Play starts in, so Play's label and the list agree
 			// (the server's Next Up, the episode after the last one watched, only when the episodes cannot be read)
 			var play = UpdatePlayTarget(id);
-			await UpdateSeasons(dto);
+			await UpdateSeasons(dto, seasons);
 			await play;
 			if (_startSeasonId is null)
 			{
@@ -123,7 +130,7 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 			}
 
 			await ShowSeason(ReturnSeason() ?? FirstSeason());
-			await UpdateSimilar(dto);
+			await UpdateSimilar(dto, similar);
 			return LoadOutcome.Loaded;
 		});
 	}
@@ -295,9 +302,9 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		NextUp = BaseItemViewModel.FromDto(response.Items[0]);
 	}
 
-	private async Task UpdateSimilar(BaseItemDto dto)
+	private async Task UpdateSimilar(BaseItemDto dto, Task<BaseItemDtoQueryResult?>? asked = null)
 	{
-		var response = await JellyfinClient.GetSimilarItems(dto);
+		var response = await (asked ?? JellyfinClient.GetSimilarItems(dto));
 
 		if (response is null or { Items: null })
 		{
@@ -307,9 +314,9 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		Similar = [.. response.Items.Select(BaseItemViewModel.FromDto)];
 	}
 
-	private async Task UpdateSeasons(BaseItemDto dto)
+	private async Task UpdateSeasons(BaseItemDto dto, Task<BaseItemDtoQueryResult?>? asked = null)
 	{
-		var response = await JellyfinClient.GetItems(dto);
+		var response = await (asked ?? JellyfinClient.GetItems(dto));
 
 		if (response is null or { Items: null })
 		{

@@ -172,7 +172,7 @@ public sealed class EditorialThemeTests
 		var client = new Mock<IJellyfinClient>();
 		client.SetupGet(c => c.BaseUrl).Returns("http://test");
 		client.SetupGet(c => c.UserId).Returns(Guid.NewGuid());
-		client.Setup(c => c.GetItems(library, false)).ReturnsAsync(new BaseItemDtoQueryResult { Items = [Movie("a", genres: ["Drama"])] });
+		client.SetupLibrary([Movie("a", genres: ["Drama"])]);
 
 		var now = DateTimeOffset.Parse("2026-11-17T20:00:00Z");
 		EditorialGenreSource.Now = () => now;
@@ -180,11 +180,11 @@ public sealed class EditorialThemeTests
 		{
 			Assert.Single(await EditorialGenreSource.Titles(client.Object, [library]));
 			Assert.Single(await EditorialGenreSource.Titles(client.Object, [library]));
-			client.Verify(c => c.GetItems(library, false), Times.Once);
+			client.VerifyLibraryLoads(Times.Once);
 
 			now += EditorialGenreSource.FreshFor;
 			await EditorialGenreSource.Titles(client.Object, [library]);
-			client.Verify(c => c.GetItems(library, false), Times.Exactly(2));
+			client.VerifyLibraryLoads(Times.Exactly(2));
 		}
 		finally
 		{

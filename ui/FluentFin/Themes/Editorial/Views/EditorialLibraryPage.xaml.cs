@@ -62,7 +62,17 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		// (the artwork: a poster's 2:3 art against the placeholder's; their captions differ in lines, not in place)
 		// (the keyboard's poster is lifted and scaled: its art measured from the poster's own place, not as drawn)
 		LibraryProbe.Attach(this, Skeleton, Lines, i => LibraryProbe.RectOf(SkeletonArt(i), this), i => PosterArtAt(i), logFirstCard: true);
-		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, _) => QueueRebuild();
+		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, e) =>
+		{
+			// Nixie 1.4.1: a big library's later pages insert titles before the poster the keyboard was on: its place follows
+			// (Back and R come back to the poster, not to whatever moved into its place)
+			if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && e.NewStartingIndex >= 0 && e.NewStartingIndex <= _lastIndex)
+			{
+				_lastIndex += e.NewItems?.Count ?? 1;
+			}
+
+			QueueRebuild();
+		};
 		ViewModel.PropertyChanged += (_, e) =>
 		{
 			switch (e.PropertyName)

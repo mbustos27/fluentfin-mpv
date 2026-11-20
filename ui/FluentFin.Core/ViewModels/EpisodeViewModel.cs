@@ -114,19 +114,22 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 
 		await State.RunAsync(async () =>
 		{
+			// Nixie 1.4.1: the season's episodes ("Up next") asked with the episode itself, from what the page was opened with
+			// (it waited for the episode); shown after it, as before
+			var season = dto.SeasonId is { } openedSeason ? jellyfinClient.GetItems(new BaseItemDto { Id = openedSeason, Type = BaseItemDto_Type.Season }) : null;
 			await UpdateEpisode(id);
 			if (Dto?.Id != id)
 			{
 				return LoadMessages.CouldNotLoad("this episode");
 			}
 
-			await UpdateNextEpisode(id);
+			await UpdateNextEpisode(id, season, dto.SeasonId);
 			return LoadOutcome.Loaded;
 		});
 	}
 
 	// Seaglass: a season that cannot be listed leaves "Up next" out; the episode itself is still shown
-	private async Task UpdateNextEpisode(Guid id)
+	private async Task UpdateNextEpisode(Guid id, Task<BaseItemDtoQueryResult?>? asked = null, Guid? askedFor = null)
 	{
 		NextEpisode = null;
 		if (Dto?.SeasonId is not { } seasonId)
@@ -134,7 +137,7 @@ public partial class EpisodeViewModel(IJellyfinClient jellyfinClient, GlobalComm
 			return;
 		}
 
-		var response = await jellyfinClient.GetItems(new BaseItemDto { Id = seasonId, Type = BaseItemDto_Type.Season });
+		var response = await (asked is not null && askedFor == seasonId ? asked : jellyfinClient.GetItems(new BaseItemDto { Id = seasonId, Type = BaseItemDto_Type.Season }));
 		NextEpisode = ItemSiblings.NextEpisode(response?.Items, id);
 	}
 

@@ -23,7 +23,19 @@ namespace FluentFin.Core.Contracts.Services
 
 		Task<BaseItemDtoQueryResult?> GetNextUp(BaseItemDto dto);
 
+		/// <summary>
+		/// Every child of <paramref name="parent"/> in one request: for the small ones (a season's episodes, a series' seasons,
+		/// a box set). A library is read a page at a time (<see cref="GetLibraryItems"/>, <see cref="FluentFin.Core.Services.LibraryPageReader"/>).
+		/// </summary>
 		Task<BaseItemDtoQueryResult?> GetItems(BaseItemDto parent, bool recursive = false);
+
+		/// <summary>
+		/// Nixie 1.4.1: one page of a library's titles, by sort name: <paramref name="limit"/> from <paramref name="startIndex"/>,
+		/// with the fields the library page shows and filters by, and the library's size when <paramref name="withTotal"/>.
+		/// Null when it failed or was cancelled (logged). A whole library in one request took over 100 s on a server with
+		/// 25,842 movies and timed out, so a library is never asked for at once.
+		/// </summary>
+		Task<BaseItemDtoQueryResult?> GetLibraryItems(BaseItemDto library, int startIndex, int limit, bool withTotal = false, CancellationToken cancellationToken = default);
 
 		Task ResetProgress(Guid id);
 

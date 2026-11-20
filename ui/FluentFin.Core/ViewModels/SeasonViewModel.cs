@@ -92,6 +92,12 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		ItemUserData.Changed += OnUserDataChanged;
 		await State.RunAsync(async () =>
 		{
+			// Nixie 1.4.1: the episodes and the series' seasons (the pills) are asked with the season itself, from what the page
+			// was opened with (each waited for the one before); shown in the same order. Play's label still starts once the
+			// season is in: it reads the series the server says the season is in.
+			var episodes = jellyfinClient.GetItems(dto);
+			var pills = dto.SeriesId is { } openedSeries ? jellyfinClient.GetItems(new BaseItemDto { Id = openedSeries, Type = BaseItemDto_Type.Series }) : null;
+
 			await UpdateSeason(id);
 			if (Dto?.Id != id)
 			{
@@ -100,8 +106,8 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 
 			// 1.2.0: asked alongside the episodes, so the page does not wait for it
 			var play = UpdatePlayTarget(id);
-			await UpdateEpisodes(dto);
-			await UpdateSeasonPills();
+			await UpdateEpisodes(dto, episodes);
+			await UpdateSeasonPills(pills, dto.SeriesId);
 			await play;
 			return LoadOutcome.Loaded;
 		});
@@ -125,7 +131,7 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 	public partial List<SeasonPill> SeasonPills { get; set; } = [];
 
 	// Seaglass: a series that cannot be listed leaves the picker out; the season itself is still shown
-	private async Task UpdateSeasonPills()
+	private async Task UpdateSeasonPills(Task<BaseItemDtoQueryResult?>? asked = null, Guid? askedFor = null)
 	{
 		if (Dto?.SeriesId is not { } seriesId || Dto.Id is not { } id)
 		{
@@ -133,7 +139,8 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 			return;
 		}
 
-		var response = await jellyfinClient.GetItems(new BaseItemDto { Id = seriesId, Type = BaseItemDto_Type.Series });
+		// Nixie 1.4.1: the request started with the page's, when it asked for this series
+		var response = await (asked is not null && askedFor == seriesId ? asked : jellyfinClient.GetItems(new BaseItemDto { Id = seriesId, Type = BaseItemDto_Type.Series }));
 		SeasonPills = ItemSiblings.SeasonPills(response?.Items, id);
 	}
 
@@ -171,10 +178,10 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		Dto = season;
 	}
 
-	private async Task UpdateEpisodes(BaseItemDto dto)
+	private async Task UpdateEpisodes(BaseItemDto dto, Task<BaseItemDtoQueryResult?>? asked = null)
 	{
 		var ticket = _list.Next();
-		var response = await jellyfinClient.GetItems(dto);
+		var response = await (asked ?? jellyfinClient.GetItems(dto));
 
 		if (response is null or { Items: null } || !_list.Is(ticket))
 		{

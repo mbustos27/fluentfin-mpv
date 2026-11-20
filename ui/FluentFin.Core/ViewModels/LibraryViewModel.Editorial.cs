@@ -11,10 +11,23 @@ namespace FluentFin.Core.ViewModels;
 public partial class LibraryViewModel
 {
 	/// <summary>Every title of the library (unfiltered), for the "All" chip.</summary>
-	public int EditorialTotal => _itemsCache.Count;
+	public int EditorialTotal => _all.Count;
 
-	/// <summary>"312 films · 41 unwatched · 18 added this month" (over the whole library).</summary>
-	public string EditorialSummary() => EditorialLibrary.Summary([.. _itemsCache.Items], _library?.CollectionType, DateTimeOffset.UtcNow);
+	/// <summary>
+	/// "312 films · 41 unwatched · 18 added this month" (over the whole library). Nixie 1.4.1: while the rest of a big library
+	/// loads, "Loading… 1,200 of 25,842 films"; when it stopped, "1,200 of 25,842 films · the rest didn't load".
+	/// </summary>
+	public string EditorialSummary()
+	{
+		var whole = Math.Max(_all.Count, _serverTotal ?? 0);
+		if (_all.Count > 0 && (IsLoadingMore || (LoadStopped && whole > _all.Count)))
+		{
+			var count = EditorialLibrary.Count(whole, _library?.CollectionType);
+			return IsLoadingMore ? $"Loading… {_all.Count:N0} of {count}" : $"{_all.Count:N0} of {count} · the rest didn't load";
+		}
+
+		return EditorialLibrary.Summary(_all, _library?.CollectionType, DateTimeOffset.UtcNow);
+	}
 
 	/// <summary>The genre chips: the library's genres with how many titles have each, A to Z (the Filter menu's own counts).</summary>
 	public IReadOnlyList<FilterOption> EditorialGenreChips() =>
