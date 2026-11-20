@@ -166,6 +166,8 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
   comes in. Before, a slow collection moved it from the search box to Play, and the next letter you typed refreshed the
   page.
 - **A collection keeps its Order and Hide watched** across R and Back, as a library keeps its sort and filters.
+- **R works again at once** when the place it would put back is not there (the keyboard on the top bar, a film watched on
+  another device): it no longer ignored every R for six seconds.
 
 **Verified, and the known limits**
 

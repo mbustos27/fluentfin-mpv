@@ -53,6 +53,11 @@ public static class PageRefresh
 	/// Nixie 1.4.0 (bug hunt M4: R, R 150 ms apart loaded the page twice and the second took its place from the page still
 	/// loading, the keyboard ending on the TitleBar): whether a refresh is still under way on the page shown (<paramref name="samePage"/>):
 	/// its place not yet back (<paramref name="running"/>), and the user has not moved since. Another R then joins it (<see cref="Run"/>).
+	/// <para>
+	/// Nixie 1.4.0 (bug hunt m1: a place that could not be found kept the restore running, and every R for 6 s joined it and
+	/// did nothing): only while the refresh is still coming in (<paramref name="running"/> is <see cref="RefreshRestore.Settling"/>:
+	/// its page loading, or loaded half a second ago at most). Once it is in, R loads it again.
+	/// </para>
 	/// </summary>
 	public static bool Coalesces(bool running, bool samePage, string? userMoved) => running && samePage && userMoved is null;
 
@@ -92,7 +97,7 @@ public static class PageRefresh
 			return false;
 		}
 
-		if (Coalesces(_pending?.IsRunning == true, ReferenceEquals(_pending?.Page, shown), _userMoved))
+		if (Coalesces(_pending?.Settling == true, ReferenceEquals(_pending?.Page, shown), _userMoved))
 		{
 			App.GetService<ILogger<NavigationService>>().LogInformation("Refresh: one is already loading this page; this key joins it");
 			return true;

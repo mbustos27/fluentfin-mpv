@@ -66,7 +66,7 @@ $arFilm = { Open-Library $fixture.movie.library; Start-Sleep -Seconds 3; Open-Ca
 $arFilmIn = { Wait-ItemPage $fixture.movie.name 0.2 }
 $arLibrary = { Open-Library $fixture.movie.library }
 $arLibraryIn = { Find-MediaCard $fixture.movie.name }
-$arOnly = if ($env:AR_ONLY) { $env:AR_ONLY -split ',' } else { @('untouched', 'collection', 'film', 'library', 'colstate') }
+$arOnly = if ($env:AR_ONLY) { $env:AR_ONLY -split ',' } else { @('untouched', 'collection', 'film', 'library', 'colstate', 'rlock') }
 
 [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1600, 1000); Start-Sleep -Milliseconds 1500
 
@@ -131,5 +131,29 @@ if ($arOnly -contains 'colstate') {
     $focus = CK-Focus
     Check "collection: Back from a film keeps Order and Hide watched, and the keyboard on its card" ($back -eq $before -and $focus -like "*'$film'*") "before: $before || after Back from '$film': $back; focus $focus"
     Shot 'collection-after-back'
+}
+if ($arOnly -contains 'rlock') {
+    # the bug hunt's m1: R with no place to put back (the keyboard on the top bar's tab, where invoking it leaves it) kept the
+    # restore running its whole 6 s, and each R meanwhile joined it and did nothing; R, R 150 ms apart still loads once (M4)
+    Open-Nav 'Home'; Start-Sleep -Seconds 2
+    Open-Library $fixture.movie.library
+    [void](Wait-Until { & $arLibraryIn } -Seconds 15 -PollMs 200); Start-Sleep -Seconds 3
+    # the keyboard on the library's own tab in the top bar (out of the page: no card for the refresh to put it back on)
+    $tab = Find-Ui -Name $fixture.movie.library -Type 'TabItem'
+    if (-not $tab) { $tab = Find-Ui -Name $fixture.movie.library -Type 'ListItem' }
+    if ($tab) { [void][OffscreenUi]::SetFocus($tab); Start-Sleep -Milliseconds 600 }
+    $where = CK-Focus
+    $at = Get-Epoch
+    foreach ($n in 1..3) { CK-Key 'R'; Start-Sleep -Milliseconds 2500 }
+    Start-Sleep -Seconds 2
+    $loads = AR-Refreshes $at
+    $joins = @(CK-Log $at 'this key joins it').Count
+    Check "R three times 2.5 s apart (the keyboard on $where): three loads, none joined" ($loads -eq 3 -and $joins -eq 0) "loads $loads, joins $joins; $((CK-Log $at '^Refresh: ') -join ' | ')"
+    Start-Sleep -Seconds 2
+    $at = Get-Epoch
+    CK-Key 'R'; Start-Sleep -Milliseconds 150; CK-Key 'R'
+    Start-Sleep -Seconds 4
+    $loads = AR-Refreshes $at
+    Check 'R, R 150 ms apart: one load (the second joins it)' ($loads -eq 1) "loads $loads; $((CK-Log $at '^Refresh: ') -join ' | ')"
 }
 AR-Latency
