@@ -333,8 +333,23 @@ class Library:
                                "view": vid, "created": start}
             self.views.append(vid)
             self.children[vid] = []
+            # 1.4.0 integration (the big-library stream: the owner's 25,842 films): past the generator's few thousand names,
+            # sequels ("The Silent Harbor 2"), so FAKESERVER_BIG_LIBRARY=25000 works; a smaller library is as it was
+            sequels, bases = None, None
             for _ in range(n):
-                name = self._name("movies")
+                if sequels is None:
+                    try:
+                        name = self._name("movies")
+                    except RuntimeError:
+                        sequels, bases = {}, sorted(self._names)
+                if sequels is not None:
+                    base = rng.choice(bases)
+                    sequels[base] = sequels.get(base, 1) + 1
+                    name = "%s %d" % (base, sequels[base])
+                    while name in self._names:
+                        sequels[base] += 1
+                        name = "%s %d" % (base, sequels[base])
+                    self._names.add(name)
                 created = start + datetime.timedelta(seconds=rng.uniform(0, span))
                 year = rng.randint(1930, 2026)
                 mid = _id("movie", "Archive", name)
