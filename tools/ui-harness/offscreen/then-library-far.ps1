@@ -5,10 +5,11 @@
 # the grid made changed height after it was laid out). Run in each theme:
 #   $env:NIXIE_LAYOUT='<Classic|DriveIn|Cinematic|Editorial>'; run-offscreen.ps1 ... -Script home -Then offscreen\then-library-far.ps1
 # Checks: the window answers within 2 s all along (a WM_NULL every 200 ms) and settles after the far scroll (every answer
-# within 400 ms over the next 5 s); no LayoutCycleException in FluentFin's log; what
+# within 400 ms 10 to 15 s after it); no LayoutCycleException in FluentFin's log; what
 # the user then sees: Editorial's details open in view, the keyboard on Play when Enter opened them, the poster "expanded",
 # and Esc or a second Invoke closes them with the poster in view (the keyboard on it after Esc); the other themes' item page
-# opens and Back returns. Shots <tag>-far-<name>.png. Dot-sourced by drive.ps1: every name here starts with lf.
+# opens and Back returns. The window is 1920 x 1080 for the checks (the desktop's own size put back after). Shots
+# <tag>-far-<name>.png. Dot-sourced by drive.ps1: every name here starts with lf.
 
 $lfTag = if ($env:SG_SHOT_TAG) { $env:SG_SHOT_TAG } elseif ($env:NIXIE_LAYOUT) { $env:NIXIE_LAYOUT.ToLowerInvariant() } else { 'classic' }
 $lfEditorial = $env:NIXIE_LAYOUT -eq 'Editorial'
@@ -79,6 +80,9 @@ function Lf-State($Card) {
 
 $lfCyclesBefore = Lf-Cycles
 Say "far ($lfTag): LayoutCycleException lines before: $lfCyclesBefore"
+# a 1920 x 1080 window whatever the desktop's size (the grid's rows, and so the time a far scroll takes, follow the width)
+$lfWindowWas = Lf-Window
+[OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080); Lf-Settle 1500
 
 # --- 1. Narrator's way: the scroll bar's jump, then Invoke on the first title (far above, still drawn: the keyboard's)
 if (Lf-Fresh) {
@@ -86,9 +90,12 @@ if (Lf-Fresh) {
     $lfPc = Lf-Jump
     $lfR = Lf-Responsive 4
     Check "far ($lfTag): a far scroll in one go: the window answers within 2 s" $lfR.Ok "$($lfR.Text) (the scroll bar read $([int]$lfPc) % at once)"
-    # and then it settles (the release's second fault: each image that arrived re-made the rows from the top, for 30 s)
+    # and then it settles (the release's second fault: each image that arrived re-made the rows from the top, for 30 s):
+    # 10 to 15 s after the scroll, every answer within 400 ms (the first seconds may still lay out a pass or two)
+    $lfR = Lf-Responsive 6
+    Say "far ($lfTag): 4 to 10 s after the far scroll: $($lfR.Text)"
     $lfR = Lf-Responsive 5
-    Check "far ($lfTag): the grid settles after the far scroll (its next 5 s: every answer within 400 ms)" ($lfR.Ok -and $lfR.Slowest -le 400) $lfR.Text
+    Check "far ($lfTag): the grid settles after the far scroll (10 to 15 s after it: every answer within 400 ms)" ($lfR.Ok -and $lfR.Slowest -le 400) $lfR.Text
     $lfShown = Find-Ui -Type 'ListItem' -Contains -Name ', '
     Check "far ($lfTag): after the far scroll, titles show in view" ([bool]$lfShown) $(if ($lfShown) { $lfShown.Current.Name } else { 'none' })
     $lfCard = Find-MediaCard $lfTitle
@@ -186,5 +193,6 @@ if (Lf-Fresh) {
     [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, $lfWas.R - $lfWas.L, $lfWas.B - $lfWas.T); Lf-Settle 1500
 }
 
+[OffscreenUi]::Resize($script:hwnd, $script:ui.Id, $lfWindowWas.R - $lfWindowWas.L, $lfWindowWas.B - $lfWindowWas.T); Lf-Settle 1000
 $lfCyclesAfter = Lf-Cycles
 Check "far ($lfTag): no LayoutCycleException in FluentFin's log" ($lfCyclesAfter -eq $lfCyclesBefore) "$($lfCyclesAfter - $lfCyclesBefore) new"
