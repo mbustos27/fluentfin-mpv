@@ -223,21 +223,40 @@ chips, the top bar's Collections destination, the fake server), so they're built
   - no "6 films" three times (C2).
 - **"Save as playlist":** an explicit button that copies a Nixie collection to the server as the user's own playlist.
 
-**Skip repeated extras (proposed for 1.6, 2026-11-20; research in progress):**
+**Skip repeated extras (proposed for 1.6, 2026-11-20; plan written):**
 - **What the owner sees:** on their server, "What We Do in the Shadows" episodes carry FX network extras (bumpers,
   promos) baked into the files. The owner: "we need a way to like cut a general bit i guess or learn what we skip".
 - **What Nixie has today:**
-  - it already skips the server's own "Commercial" segments, off by default;
-  - the owner's server likely marks none, and the owner isn't an admin there, so a server plugin (Intro Skipper) is out.
-- **Proposed** (a small stream of its own, beside the collections work; the player and backend, so no shared files):
-  - a per-show **"Skip this part every episode"** the user marks once in the player;
-  - **learned skips:** after the user skips the same stretch in two episodes of a show, Nixie offers to skip it every
-    time.
-- **Heavier option, 1.8 if those aren't enough:** matching the extras' audio, for extras that sit at a different time in
-  each episode.
-- **Plan:** `docs\reports\Nixie repeated extras skip plan.md`, being written.
-- **Question for the owner:** where the extras sit (start, end, or mid-episode) and whether they're the same length each
-  time.
+  - **it already learns one skip:** a forward jump of 30 to 150 s in an episode's first 10 minutes is offered as "Skip
+    intro" on that season's later episodes. Nothing shorter or longer, nothing at the end or mid-episode, one per
+    season, and none once the server, the chapters or the online lookup gave an intro;
+  - it reads the server's own "Commercial" and "Preview" segments, but they're off with no switch in Settings, and the
+    owner's server likely marks none. The owner isn't an admin there, so a server plugin (Intro Skipper) is out.
+- **Recommended** (a stream of its own: the player, Settings and the backend's skip files, none of the collections
+  work's):
+  - **Step 0 (S):** a Settings switch for the server's ad and preview segments, and file chapters named like
+    "Commercial" or "Ad break" count as ads.
+  - **Skip rules (M):**
+    - a per-show **"Skip this part every episode"** the user marks once in the player, measured from the start or
+      before the end;
+    - **learned skips:** after the same skip in two episodes of a show, Nixie asks "Skip this every episode?";
+    - kept on the PC per server, user and show, shown with the Skip pill every theme already has;
+    - Settings' "Learn intros from my skips" becomes "Learn skips from my seeks", with a list of rules to forget.
+  - **The bridge** (`docs\BRIDGE.md`): commands to list, add and forget rules, a `skip_suggestion` event, and a
+    `"rule"` segment source.
+- **Release fit:** step 0 in 1.6; skip rules beside 1.6 as their own stream, or in 1.8 Player if 1.6 is full.
+- **Matching by audio (1.8, only if needed):** for extras at a different time in each episode. Scanning whole episodes
+  would download gigabytes from a server that isn't the owner's, so it's out. Learning while watching, from what mpv
+  has already downloaded, is a two-day spike first (S), then L.
+- **Plan:** `docs\reports\Nixie repeated extras skip plan.md`.
+- **Questions for the owner:**
+  - where the extras sit: before the episode, after it, or mid-episode where the ad breaks were;
+  - the same clip and length every episode, or different promos, and about how long;
+  - whether the player's Chapters list shows a chapter at each break;
+  - a Skip button, or skip by itself;
+  - one rule for the whole show, or per season;
+  - 1.6 or 1.8;
+  - if the extras move around, whether the audio spike is worth it.
 
 ## 1.6.1: Theme polish
 - **Drive-in's own look** on the Libraries and Collection pages.
@@ -329,8 +348,8 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   playlist (an ordinary user can). Nothing is written to the server otherwise.
 
 ## Still open (later releases)
-- Skip repeated extras: per-show and learned skips in 1.6, or matching by audio in 1.8 (waits on its plan and the
-  owner's answer about where the extras sit).
+- Skip repeated extras: skip rules beside 1.6 or in 1.8, and whether the audio spike is needed (the plan is written;
+  waits on the owner's answers: where the extras sit, the same length each time, a button or skip by itself).
 - The pop-out player's meaning (1.8).
 - Friends through the server only, or a Trakt exception (1.9).
 - Rust: go or no-go after the spike (2.0).
