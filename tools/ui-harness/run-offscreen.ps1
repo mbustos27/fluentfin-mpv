@@ -15,8 +15,13 @@
     tools\backend-bench\hidden_run.py: the fake server (tools\ui-harness\fakeserver, 127.0.0.1 only), FluentFin, its
     backend and mpv. When the run ends (or -TimeoutSeconds runs out) the job ends whatever is left; nothing else is
     ever ended. APPDATA and LOCALAPPDATA point into -Out\env for the run, and whatever lands there is listed at the end.
-  - One run at a time on this machine (Nixie 1.4.0): a run waits up to -QueueMinutes (30) for the one before it to end.
-    Runs at once each ended with FluentFin's window minimized and every later check failing.
+  - Up to NIXIE_HARNESS_PARALLEL runs at once on this machine (1 to 8, default 3), each started only while the machine has
+    NIXIE_HARNESS_MIN_FREE_GB (default 3; 0 = no wait) of RAM and of commit available: a run waits up to -QueueMinutes (30)
+    for a slot and the memory. Slot 1 is Nixie 1.4.0's one-at-a-time lock, so a run of an older checkout counts as one.
+  - A monitor that drops off the bus (powered off, gone to standby) makes Windows minimize the windows on it, on the private
+    desktops too, and FluentFin's opens maximized on the primary one (bug hunt m10's "160 x 28" runs, once blamed on runs at
+    once). drive.ps1 says so in drive.log, result.json (display.events) and this script's output, restores the window and
+    goes on; the checks around it keep whatever they found. result.json's display lists the monitors and any that dropped off.
   - Sign-in: -SignIn quickconnect (default): FluentFin's Quick Connect, the code it shows approved through the fake
     server's harness endpoint; the server issues a fresh random token. No password is typed. -SignIn password types the
     fake server's generated test credentials (fakeserver\credentials.json) instead. Never a real server or account.
@@ -74,7 +79,7 @@ param(
     [switch]$GlassFollowsActivity,
     [int]$TabStops = 60,
     [int]$TimeoutSeconds = 900,
-    # Nixie 1.4.0 (bug hunt m10): how long a run waits for the off-screen run before it (one at a time on this machine)
+    # how long a run waits for a slot (NIXIE_HARNESS_PARALLEL runs at once on this machine) and then for the memory
     [int]$QueueMinutes = 30
 )
 
@@ -110,10 +115,13 @@ if (-not $Exe) {
     if (-not $dotnet) { throw "dotnet.exe is not on PATH" }
     New-Item -ItemType Directory -Force $Out, $BuildDir | Out-Null
     $buildLog = Join-Path $Out 'build.log'
-    Write-Host "building FluentFin into $BuildDir (log $buildLog)"
-    & $Python -B -I $hidden --log $buildLog --timeout 1800 --desktop "ffh-build-$PID" -- $dotnet @(Get-HarnessBuildArgs $repo $BuildDir) | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw "the build failed (see $buildLog)" }
-    $Exe = Find-HarnessBuiltExe $BuildDir
+    # sg-parallel: one build at a time into a build folder (runs at once may share -Cache's)
+    $Exe = Use-HarnessFolderLock $BuildDir ([TimeSpan]::FromMinutes(30)) {
+        Write-Host "building FluentFin into $BuildDir (log $buildLog)"
+        & $Python -B -I $hidden --log $buildLog --timeout 1800 --desktop "ffh-build-$PID" -- $dotnet @(Get-HarnessBuildArgs $repo $BuildDir) | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw "the build failed (see $buildLog)" }
+        Find-HarnessBuiltExe $BuildDir
+    }
     if (-not $Exe) { throw "the build made no Nixie.exe under $BuildDir\bin\FluentFin (see $buildLog)" }
 }
 
@@ -133,12 +141,17 @@ New-Item -ItemType Directory -Force $Out, $DataDir, $Cache | Out-Null
 # the test video (cached: building it takes about a minute), made off-screen
 $media = Join-Path $Cache 'media'
 $mediaJson = Join-Path $media 'media.json'
-$needMedia = -not (Test-Path $mediaJson) -or -not ((Get-Content $mediaJson -Raw | ConvertFrom-Json).silent)
-if ($needMedia) {
-    Write-Host "building the test video into $media (mpv's encoder, off-screen, silent)"
-    & $Python -B -I $hidden --log (Join-Path $Out 'media-build.log') --timeout 900 --desktop "ffh-media-$PID" -- `
-        $Python -B -I (Join-Path $PSScriptRoot 'fakeserver\media.py') --mpv $mpvExe --out $media | Out-Host
-    if (-not (Test-Path $mediaJson)) { throw "the test video was not built (see $Out\media-build.log)" }
+function Test-MediaNeeded { -not (Test-Path $mediaJson) -or -not ((Get-Content $mediaJson -Raw | ConvertFrom-Json).silent) }
+if (Test-MediaNeeded) {
+    # sg-parallel: one run builds it; a run that waited for that one finds it made
+    Use-HarnessFolderLock $media ([TimeSpan]::FromMinutes(20)) {
+        if (Test-MediaNeeded) {
+            Write-Host "building the test video into $media (mpv's encoder, off-screen, silent)"
+            & $Python -B -I $hidden --log (Join-Path $Out 'media-build.log') --timeout 900 --desktop "ffh-media-$PID" -- `
+                $Python -B -I (Join-Path $PSScriptRoot 'fakeserver\media.py') --mpv $mpvExe --out $media | Out-Host
+            if (-not (Test-Path $mediaJson)) { throw "the test video was not built (see $Out\media-build.log)" }
+        }
+    }
 }
 
 # the run's own data folder: the backend command, the mpv player, -Setting values, only loopback saved servers, and mpv
@@ -173,19 +186,26 @@ $glassEnv = if ($GlassFollowsActivity) { @() } else { @('--env', 'FLUENTFIN_MPV_
 # Nixie 1.3.1: the harness's mouse (posted clicks never reach WinUI off-screen): a dev build takes a registered window message
 # and clicks through its own code (ui\FluentFin\Services\HarnessPointer.cs; a release package never listens)
 $pointerEnv = @('--env', 'NIXIE_HARNESS_POINTER=1')
-# Nixie 1.4.0 (bug hunt m10): one off-screen run at a time on this machine. Three at once (each on its own private desktop
-# and data folder) all ended with FluentFin's window minimized, 160 x 28, about 10 s after sign-in, and every later check
-# failed ("full screen: F did nothing"); the same runs one after another passed. A run waits here for the one before it.
-$runLock = New-Object System.Threading.Mutex($false, 'Local\NixieHarnessOffscreenRun')
-function Enter-RunLock([TimeSpan]$Wait) {
-    try { $runLock.WaitOne($Wait) }
-    catch { if ($_.Exception -is [Threading.AbandonedMutexException] -or $_.Exception.InnerException -is [Threading.AbandonedMutexException]) { $true } else { throw } }
-}
-if (-not (Enter-RunLock ([TimeSpan]::Zero))) {
-    Write-Host "another off-screen run is going on this machine: this one waits for it (at most $QueueMinutes min)"
-    if (-not (Enter-RunLock ([TimeSpan]::FromMinutes($QueueMinutes)))) { $runLock.Dispose(); throw "another off-screen run kept the harness for $QueueMinutes min" }
+# Nixie 1.4.x (sg-parallel): N off-screen runs at once on this machine (NIXIE_HARNESS_PARALLEL, default 3; offscreen\prepare.ps1's
+# Enter-HarnessRunSlot), each started only while the machine has NIXIE_HARNESS_MIN_FREE_GB (3) of RAM and of commit available.
+# Nixie 1.4.0 ran one at a time after bug hunt m10 (three at once all ended minimized): that was the primary monitor dropping
+# off the bus, which minimizes the windows on it on every desktop, one run or three (offscreen\drive.ps1's
+# Resolve-WindowsMinimize). A run waits up to -QueueMinutes for a slot and then for the memory.
+$slots = Get-HarnessRunSlots
+$minFree = Get-HarnessMinFreeGB
+$queueUntil = [DateTime]::UtcNow.AddMinutes($QueueMinutes)
+$runLock = Enter-HarnessRunSlot $slots ([TimeSpan]::Zero)
+if (-not $runLock) {
+    Write-Host "$slots off-screen runs are going on this machine (NIXIE_HARNESS_PARALLEL): this one waits for one of them (at most $QueueMinutes min)"
+    $runLock = Enter-HarnessRunSlot $slots ([TimeSpan]::FromMinutes($QueueMinutes))
+    if (-not $runLock) { throw "the other off-screen runs kept the harness for $QueueMinutes min" }
 }
 try {
+    $memory = Wait-HarnessMemory $minFree $queueUntil -OnWait {
+        param($m) Write-Host "available memory: $($m.Ram) GB of RAM, $($m.Commit) GB of commit (under $minFree GB, NIXIE_HARNESS_MIN_FREE_GB): this run waits for memory (at most until the $QueueMinutes min are up)"
+    }
+    if (-not $memory.Ok) { throw "available memory stayed under $minFree GB (RAM $($memory.Ram) GB, commit $($memory.Commit) GB) for $QueueMinutes min" }
+    Write-Host "off-screen slot $($runLock.Slot) of $slots; available memory: $($memory.Ram) GB of RAM, $($memory.Commit) GB of commit"
     & $Python -B -I $hidden --log (Join-Path $Out 'hidden_run.log') --timeout $TimeoutSeconds --desktop "ffh-ui-$PID" `
         --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" @glassEnv @pointerEnv `
         --env "PATH=$mpvDir;$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0" `
@@ -193,13 +213,16 @@ try {
     $code = $LASTEXITCODE
 }
 finally {
-    $runLock.ReleaseMutex()
-    $runLock.Dispose()
+    Exit-HarnessRunSlot $runLock
 }
 
 $resultFile = Join-Path $Out 'result.json'
 if (Test-Path $resultFile) {
     $result = Get-Content $resultFile -Raw | ConvertFrom-Json
+    # sg-parallel: Windows minimized the window because a monitor went away (the run restored it and went on)
+    foreach ($e in @($result.display.events | Where-Object { $_ })) {
+        Write-Warning ("ENVIRONMENT ({0}): Windows minimized FluentFin's window: {1}; restored: {2}. Checks around it may have failed for that reason: run it again" -f $e.where, $e.why, $e.restored)
+    }
     Write-Host "`n--- timings (ms)"
     $result.timings.PSObject.Properties | ForEach-Object { Write-Host ("  {0,-28} {1}" -f $_.Name, $_.Value) }
     Write-Host "--- checks"
