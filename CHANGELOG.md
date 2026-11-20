@@ -208,8 +208,13 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
   trailer now plays inside a small page of Nixie's own (answered by the app itself, nothing downloaded), which tells YouTube
   who is playing it, the way YouTube asks apps to.
 - **Nixie's own message when YouTube won't play one.** If its owner allows it only on YouTube, it was removed, YouTube
-  refuses the player, or it doesn't start within a few seconds, the theatre says "This trailer can't play in Nixie" and
-  why, with Watch on YouTube and Close (the keyboard on Close). Narrator reads it.
+  refuses the player, or nothing at all happens for about 20 seconds (an ad that plays first is left to play), the theatre
+  says "This trailer can't play in Nixie" and why, with Watch on YouTube and Close (the keyboard on Close). Narrator reads
+  it.
+- **The keyboard stays where you put it in the theatre.** Once you Tab or click into the video, the page finishing its load
+  no longer moves the keyboard back to Close (a Space meant for the player closed the theatre), and a held Enter that
+  closed it no longer opens it again from Trailer.
+- **The theatre keeps nothing.** Its web view is private: YouTube's cookies and stored data end when it closes.
 - **No browser unless you choose it.** The Trailer button never opens the browser by itself any more: a trailer on
   another site opens the theatre with the same message and an Open in browser button naming the site ("It's on
   vimeo.com, which Nixie can't play"). The browser opens only from that button, or from a link you click inside
