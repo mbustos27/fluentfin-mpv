@@ -12,10 +12,10 @@ namespace FluentFin.Core.Services;
 /// <para>
 /// The first page is <see cref="FirstPageSize"/> titles, with the library's size. Each page after it is sized from how
 /// long the one before took: a page faster than <see cref="PageTarget"/> makes the next one larger (up to twice), one
-/// slower than <see cref="SlowPage"/> halves it, and between them it holds (a server whose every request costs about the
-/// same, whatever its size, is not read in ever smaller pages); between <see cref="MinPageSize"/> and
-/// <see cref="MaxPageSize"/>, so no request asks for more than <see cref="MaxPageSize"/>. The last page is a short one
-/// (or an empty one), whatever the first page's count said: titles added meanwhile are read too. A page that fails or takes longer than
+/// slower than <see cref="SlowPage"/> halves it, and between them a larger one is tried, kept growing only while the time
+/// does not grow with it (<see cref="Grow"/>); between <see cref="MinPageSize"/> and <see cref="MaxPageSize"/>, so no
+/// request asks for more than <see cref="MaxPageSize"/>. The end is an empty page, or a short one once the first page's
+/// count is reached (titles added meanwhile are read too). A page that fails or takes longer than
 /// <see cref="PageTimeout"/> is asked again, half as large, after a pause, <see cref="Tries"/> times in all; then the
 /// reader stops (<see cref="HasFailed"/>) and what came stays.
 /// </para>
@@ -171,14 +171,47 @@ public sealed class LibraryPageReader(IJellyfinClient client, BaseItemDto librar
 		return Math.Clamp(next, MinPageSize, MaxPageSize);
 	}
 
+	/// <summary>
+	/// The next size after a page: <see cref="NextSize"/>, but between the target and a slow page (where it would hold) a
+	/// larger page is tried once, and pages go on growing while twice the titles do not take half again as long: a server
+	/// whose requests cost the same whatever their size is read in large pages, not a hundred at a time.
+	/// </summary>
+	internal static int Grow(int size, TimeSpan took, int lastSize, TimeSpan lastTook, ref bool triedLarger)
+	{
+		var next = NextSize(size, took);
+		if (next != size || took < PageTarget || took > SlowPage)
+		{
+			return next;
+		}
+
+		if (lastSize > 0 && size > lastSize && took.TotalSeconds < lastTook.TotalSeconds * 1.5)
+		{
+			return Math.Min(MaxPageSize, size * 2); // twice the titles, about the same time: the cost is the request's
+		}
+
+		if (!triedLarger)
+		{
+			triedLarger = true;
+			return Math.Min(MaxPageSize, size * 2);
+		}
+
+		return size;
+	}
+
+	private int _lastSize;
+	private TimeSpan _lastTook;
+	private bool _triedLarger;
+
 	private void Took(int count, int asked, TimeSpan took, IReadOnlyList<BaseItemDto> items)
 	{
 		var start = Next;
 		Next += count;
-		Size = NextSize(asked, took);
-		// done: a short page or an empty one (the first page's count only says how many to expect: titles added since are
-		// read too, and one removed does not end it early)
-		IsDone = count == 0 || count < asked;
+		Size = Grow(asked, took, _lastSize, _lastTook, ref _triedLarger);
+		(_lastSize, _lastTook) = (asked, took);
+		// done: an empty page, or a short one with the server's count reached (or none said). The count only says how many
+		// to expect: titles added since are read too (a full page at the count asks once more), and a short page under the
+		// count (a title removed, a proxy's short answer) asks once more from where it ended
+		IsDone = count == 0 || (count < asked && (Total is not { } expected || Next >= expected));
 		// a server that leaves StartIndex out answers the first titles again: stop rather than read them for ever
 		var first = items.Count > 0 ? items[0].Id : null;
 		if (!IsDone && start > 0 && first is not null && first == _lastFirst)

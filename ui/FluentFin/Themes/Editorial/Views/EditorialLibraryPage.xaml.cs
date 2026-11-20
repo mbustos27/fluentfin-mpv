@@ -334,28 +334,41 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		var keep = XamlRoot is { } root && FocusManager.GetFocusedElement(root) is EditorialPoster { Item: { } kept } poster && IsInside(poster, Lines)
 			? (Item: kept, State: poster.FocusState) : default;
 		var lines = EditorialLibrary.Flow(ViewModel.Items, _columns, ByLetter, _opened);
-		var from = 0;
-		if (_pageArrived && !_toTop && Lines.ItemsSource is not null)
+		if (_pageArrived && ViewModel.IsLoadingMore && !_toTop && Lines.ItemsSource is not null)
 		{
-			// Nixie 1.4.1: a big library's page: the lines before the first one it changed stay as they are (drawn, and the
-			// keyboard's poster or the open details keep the keyboard); the rest is made again. Each line was made anew on
-			// every page, and the keyboard fell to the title bar every couple of seconds while the library loaded.
-			while (from < _lines.Count && from < lines.Count && SameLine(_lines[from], lines[from]))
+			// Nixie 1.4.1: a big library's page, while more are coming: a line it left as it was stays (drawn, and the
+			// keyboard's poster or the open details keep the keyboard); only a line it changed is replaced, in its place. Each
+			// line was made anew on every page, and the keyboard fell to the title bar every couple of seconds while the
+			// library loaded. (The last page's rebuild is whole: each poster's "n of m" counts every title.)
+			var common = Math.Min(_lines.Count, lines.Count);
+			for (var i = 0; i < common; i++)
 			{
-				from++;
+				if (!SameLine(_lines[i], lines[i]))
+				{
+					_lines[i] = lines[i];
+				}
+			}
+
+			for (var i = _lines.Count - 1; i >= lines.Count; i--)
+			{
+				_lines.RemoveAt(i);
+			}
+
+			for (var i = common; i < lines.Count; i++)
+			{
+				_lines.Add(lines[i]);
+			}
+		}
+		else
+		{
+			_lines.Clear();
+			foreach (var line in lines)
+			{
+				_lines.Add(line);
 			}
 		}
 
 		_pageArrived = false;
-		for (var i = _lines.Count - 1; i >= from; i--)
-		{
-			_lines.RemoveAt(i);
-		}
-
-		for (var i = from; i < lines.Count; i++)
-		{
-			_lines.Add(lines[i]);
-		}
 
 		if (keep.Item is not null && XamlRoot is { } still && FocusManager.GetFocusedElement(still) is EditorialPoster { Item: var now } && ReferenceEquals(now, keep.Item))
 		{

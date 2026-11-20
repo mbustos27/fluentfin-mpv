@@ -310,6 +310,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		if (!_puttingBack)
 		{
 			_pendingPlace = null;
+			LateFocus = false; // a jump made before the page took the late place's request is the user's, focused as ever
 		}
 	}
 
@@ -647,6 +648,8 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 	private void ShowIndex(int index)
 	{
+		// the card too when the index is the one asked already (OnFocusRequestChanged does not run for the same value)
+		_requested = index >= 0 && index < _shown.Count ? _shown[index] : null;
 		// the same card again still asks the page to focus it
 		if (FocusRequest == index)
 		{
@@ -862,10 +865,11 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		{
 			// fluentfin-mpv: a library opened by id (the jump list) that cannot be looked up says so, with Retry
 			// Nixie 1.4.1: leaving while the library is looked up stops it too (it went on to read the whole library)
-			_loading?.Cancel();
-			var lookup = _loading = new CancellationTokenSource();
 			await State.RunAsync(async () =>
 			{
+				// each run its own (Retry and R run this again: the last run's was cancelled by the load it started)
+				_loading?.Cancel();
+				var lookup = _loading = new CancellationTokenSource();
 				IsLoading = true;
 				try
 				{
