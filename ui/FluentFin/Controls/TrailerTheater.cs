@@ -503,8 +503,20 @@ public sealed partial class TrailerTheater : Grid
 			};
 			core.NavigationStarting += (_, e) => OnNavigationStarting(e, frame: false);
 			core.FrameNavigationStarting += (_, e) => OnNavigationStarting(e, frame: true);
-			// the web view takes the keyboard when its page loads: give it back to Close (Tab reaches the video), once; then the
-			// player is watched (it plays, or Nixie's message says why not)
+			// the player is watched (it plays, or Nixie's message says why not) once Nixie's page is up: its DOM, not its load,
+			// which waits for YouTube's whole frame (live, up to 20 s while the trailer already played)
+			var watching = false;
+			void Watch(CoreWebView2 sender)
+			{
+				if (!watching && generation == _generation && _state.IsOpen)
+				{
+					watching = true;
+					_ = WatchAsync(web, sender, generation, videoId);
+				}
+			}
+
+			core.DOMContentLoaded += (sender, _) => Watch(sender);
+			// the web view takes the keyboard when its page loads: give it back to Close (Tab reaches the video), once
 			var first = true;
 			core.NavigationCompleted += (sender, e) =>
 			{
@@ -521,7 +533,7 @@ public sealed partial class TrailerTheater : Grid
 							Log()?.LogInformation("[trailer] keyboard to Close after the page loaded: {Took}, now on {Focused}", took, FocusedName());
 						}
 					});
-					_ = WatchAsync(web, sender, generation, videoId);
+					Watch(sender);
 				}
 			};
 			core.NewWindowRequested += OnNewWindowRequested;
@@ -549,6 +561,7 @@ public sealed partial class TrailerTheater : Grid
 	{
 		var since = System.Diagnostics.Stopwatch.StartNew();
 		var started = false;
+		var answered = false;
 		TrailerPoll? last = null;
 		while (generation == _generation && web == _web)
 		{
@@ -579,6 +592,13 @@ public sealed partial class TrailerTheater : Grid
 				Log()?.LogInformation("[trailer] the player: ready {Ready}, state {State}, error {Error} ({Ms} ms)", poll.Ready, poll.State, poll.Error, since.ElapsedMilliseconds);
 			}
 
+			// the player answered: from now it has the start limit to start (Trailers.Judge)
+			if (poll is { Ready: true } && !answered)
+			{
+				answered = true;
+				since.Restart();
+			}
+
 			switch (Trailers.Judge(poll, since.Elapsed, started))
 			{
 				case TrailerVerdict.Started when !started:
@@ -589,7 +609,7 @@ public sealed partial class TrailerTheater : Grid
 					ShowMessage(Trailers.Refused(poll!.Error, videoId), $"YouTube refused it: error {poll.Error}");
 					return;
 				case TrailerVerdict.NotStarted:
-					ShowMessage(Trailers.NotStarted(videoId), $"not started within {Trailers.StartLimit.TotalSeconds:0} s: ready {last?.Ready ?? false}, state {last?.State ?? -2}");
+					ShowMessage(Trailers.NotStarted(videoId), $"not started: {(answered ? $"{Trailers.StartLimit.TotalSeconds:0} s after the player answered" : $"no answer within {Trailers.AnswerLimit.TotalSeconds:0} s")}, state {last?.State ?? -2}");
 					return;
 			}
 		}

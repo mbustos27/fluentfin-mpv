@@ -336,8 +336,14 @@ public static partial class Trailers
 	/// </summary>
 	public const string BrowserArguments = "--autoplay-policy=no-user-gesture-required";
 
-	/// <summary>How long the player has to start (or say why it won't) once the wrapper has loaded.</summary>
+	/// <summary>How long the player has to start (or say why it won't) once it has answered.</summary>
 	public static TimeSpan StartLimit { get; } = TimeSpan.FromSeconds(8);
+
+	/// <summary>
+	/// How long YouTube's player has to answer at all once Nixie's page is up (its frame still loading over a slow line: live,
+	/// a page's own load took up to 20 s while the trailer already played, so the clock does not wait for the page's load).
+	/// </summary>
+	public static TimeSpan AnswerLimit { get; } = TimeSpan.FromSeconds(15);
 
 	/// <summary>
 	/// The wrapper's state as the app reads it (<c>ExecuteScriptAsync</c> of <c>JSON.stringify(window.nixieTrailer)</c>, which
@@ -379,10 +385,11 @@ public static partial class Trailers
 
 	/// <summary>
 	/// What the theatre makes of the latest poll: an error from the player (any code) is a refusal; a player that is playing,
-	/// buffering, paused or ended has started; one that hasn't, <see cref="StartLimit"/> after the wrapper loaded, didn't start
-	/// (YouTube never answered, or answered with an error page it doesn't report). Before that: waiting.
+	/// buffering, paused or ended has started. One that hasn't didn't start: <see cref="StartLimit"/> after it answered (an
+	/// error page it doesn't report), or <see cref="AnswerLimit"/> after Nixie's page was up when it never answered. Before
+	/// that: waiting. <paramref name="since"/> runs from Nixie's page being up, and again from the player's first answer.
 	/// </summary>
-	public static TrailerVerdict Judge(TrailerPoll? poll, TimeSpan sinceLoaded, bool startedBefore)
+	public static TrailerVerdict Judge(TrailerPoll? poll, TimeSpan since, bool startedBefore)
 	{
 		if (poll is { Error: > 0 })
 		{
@@ -394,7 +401,7 @@ public static partial class Trailers
 			return TrailerVerdict.Started;
 		}
 
-		return sinceLoaded >= StartLimit ? TrailerVerdict.NotStarted : TrailerVerdict.Waiting;
+		return since >= (poll is { Ready: true } ? StartLimit : AnswerLimit) ? TrailerVerdict.NotStarted : TrailerVerdict.Waiting;
 	}
 
 	/// <summary>The heading of every message the theatre shows instead of a trailer.</summary>
@@ -406,7 +413,8 @@ public static partial class Trailers
 	/// </summary>
 	public static TrailerMessage Refused(int code, string videoId) => new(CantPlayHeading, code switch
 	{
-		101 or 150 => "Its owner doesn't allow it to play outside YouTube.",
+		// YouTube answers 150 for a video it no longer has too (live, 2026-11-19), so the reason says both
+		101 or 150 => "Its owner doesn't allow it to play outside YouTube, or it was removed.",
 		100 => "It was removed from YouTube, or made private.",
 		_ => "YouTube refused to play it here.",
 	}, WatchOnYouTube, WatchUri(videoId));

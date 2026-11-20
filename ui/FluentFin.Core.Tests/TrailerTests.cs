@@ -271,7 +271,9 @@ public sealed class TrailerTests
 	public void ThePlayer_Starts_OrIsRefused_OrDoesntStartInTime()
 	{
 		var limit = Trailers.StartLimit;
+		var answer = Trailers.AnswerLimit;
 		Assert.Equal(TimeSpan.FromSeconds(8), limit);
+		Assert.Equal(TimeSpan.FromSeconds(15), answer);
 
 		Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(null, TimeSpan.FromSeconds(1), startedBefore: false));
 		Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(new TrailerPoll(true, -1, 0), limit - TimeSpan.FromMilliseconds(1), false));
@@ -280,14 +282,23 @@ public sealed class TrailerTests
 			Assert.Equal(TrailerVerdict.Started, Trailers.Judge(new TrailerPoll(true, state, 0), TimeSpan.FromSeconds(30), false));
 		}
 
-		// unstarted, cued or nothing at the limit: it didn't start (autoplay is the embed's, so a ready player plays)
-		foreach (var poll in new TrailerPoll?[] { null, new(false, -2, 0), new(true, -1, 0), new(true, 5, 0) })
+		// answered, unstarted or cued at the start limit: it didn't start (autoplay is allowed, so a ready player plays)
+		foreach (var poll in new TrailerPoll[] { new(true, -1, 0), new(true, 5, 0), new(true, -2, 0) })
 		{
 			Assert.Equal(TrailerVerdict.NotStarted, Trailers.Judge(poll, limit, false));
 		}
 
+		// never answered: its frame may still be loading over a slow line, so it gets the longer answer limit
+		foreach (var poll in new TrailerPoll?[] { null, new(false, -2, 0), new(false, -1, 0) })
+		{
+			Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(poll, limit, false));
+			Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(poll, answer - TimeSpan.FromMilliseconds(1), false));
+			Assert.Equal(TrailerVerdict.NotStarted, Trailers.Judge(poll, answer, false));
+		}
+
 		// an error is a refusal whenever it comes, also after it started; once started, the limit no longer counts
 		Assert.Equal(TrailerVerdict.Refused, Trailers.Judge(new TrailerPoll(true, -1, 153), TimeSpan.Zero, false));
+		Assert.Equal(TrailerVerdict.Refused, Trailers.Judge(new TrailerPoll(false, -2, 150), TimeSpan.Zero, false));
 		Assert.Equal(TrailerVerdict.Refused, Trailers.Judge(new TrailerPoll(true, 1, 5), TimeSpan.FromMinutes(2), true));
 		Assert.Equal(TrailerVerdict.Started, Trailers.Judge(new TrailerPoll(true, 5, 0), TimeSpan.FromMinutes(2), true));
 		Assert.Equal(TrailerVerdict.Started, Trailers.Judge(null, TimeSpan.FromMinutes(2), true));
@@ -295,8 +306,8 @@ public sealed class TrailerTests
 
 	/// <summary>Nixie 1.4.0: the error codes of the IFrame Player API, in Nixie's words, each with Watch on YouTube.</summary>
 	[Theory]
-	[InlineData(101, "Its owner doesn't allow it to play outside YouTube.")]
-	[InlineData(150, "Its owner doesn't allow it to play outside YouTube.")]
+	[InlineData(101, "Its owner doesn't allow it to play outside YouTube, or it was removed.")]
+	[InlineData(150, "Its owner doesn't allow it to play outside YouTube, or it was removed.")]
 	[InlineData(100, "It was removed from YouTube, or made private.")]
 	[InlineData(153, "YouTube refused to play it here.")]
 	[InlineData(2, "YouTube refused to play it here.")]

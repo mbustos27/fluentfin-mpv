@@ -105,7 +105,9 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `https://io.github.mbustos27.nixie` (YouTube's form for an app's identity). If YouTube changes what it accepts again,
   trailers show Nixie's message ("YouTube refused to play it here") with Watch on YouTube, rather than YouTube's error page.
   The app learns the player's state by reading Nixie's page every 300 ms (1 s once it plays); the page has no way to call
-  the app.
+  the app. YouTube reports a video it no longer has with the same code as one its owner keeps on YouTube (150), so that
+  message says both. No real video that refuses embedding was found for the live check (five official music videos all
+  played); the message was checked live with a missing video's 150, and off-screen with the harness's 150 and 153.
 - **R in a grid is Refresh first** (the coordinator's rule; the user asked for R to refresh): a first R refreshes, so a
   title that starts with R cannot be typed. Within a second of another letter R is a letter of the title. The R titles are
   on the A to Z's R, and on the A to Z a letter key presses that letter.
