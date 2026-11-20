@@ -19,7 +19,8 @@ public sealed class LibraryLoadFocusTests
 		var items = Enumerable.Range(0, count).Select(i => new BaseItemDto { Id = Guid.NewGuid(), Name = $"T{i:D3}", Type = BaseItemDto_Type.Movie }).ToList();
 		var client = new Mock<IJellyfinClient>();
 		client.SetupGet(x => x.UserId).Returns(Guid.NewGuid());
-		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = items });
+		// 1.4.0 integration (the big-library stream): a library is read a page at a time
+		client.SetupLibrary(items);
 		return client.Object;
 	}
 

@@ -1,11 +1,14 @@
 # Changelog
 
-## Unreleased (1.4.x)
+## 1.4.0
+
+The consistency release. The library and collections review found that the library layer under the four themes was never
+finished, and that the worst faults were shared by all four; 1.4.0 finishes it once, for every theme.
 
 **Big libraries load**
 
 - **A library of any size opens at once.** A library was asked for whole, in one request; on a server with 25,842 movies
-  the server took over 100 seconds, the app gave up, and the Movies page stayed empty (1.3.1 and 1.4.0 alike). Now the
+  the server took over 100 seconds, the app gave up, and the Movies page stayed empty (1.3.1). Now the
   first hundred titles come first and show at once, and the rest follow page by page, one request at a time, each page
   sized from how fast the server answered the last (never more than 1,000 titles). The head says how far it has got
   ("Loading… 1,200 of 25,842 movies"); Drive-in's tubes count up. Sort, Filter and the A to Z work on the titles in so far
@@ -23,11 +26,6 @@
   every change), are one request.
 - No list asks for each image's aspect ratio any more: nothing in the app reads it, and the server may open each image to
   measure it.
-
-## 1.4.0
-
-The consistency release. The library and collections review found that the library layer under the four themes was never
-finished, and that the worst faults were shared by all four; 1.4.0 finishes it once, for every theme.
 
 **Libraries**
 
