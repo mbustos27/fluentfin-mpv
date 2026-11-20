@@ -234,11 +234,34 @@ That's about 19–25 agent-days.
   test slots.
 - Heavy phases start after the weekly usage reset (24 November).
 
-## Waiting on the owner
-- **The upgrade test:** turn on Windows Sandbox (your action), or set up a spare Windows account.
-- **Release pace:** weekly releases plus Blocker hotfixes? Update checks are on by default, so daily releases mean
-  daily notices.
-- The TMDb key, and "Save as playlist" (1.6).
+## Decided for 1.5 (2026-11-20, the owner: "Make 1.5 choices")
+- **Release pace:** one planned release at a time, about weekly at most; a Blocker ships right away as a hotfix.
+  Nothing else ships in between, so update notices stay rare.
+- **The upgrade test runs in Windows Sandbox** (this PC runs Windows 11 Pro), never in the owner's account. The owner
+  turns Sandbox on once. Until then, each release lists the upgrade test as not run.
+- **The updater:**
+  - checks every 4 hours while Nixie is open, and when the window comes back after an hour or more away (focus or
+    waking from sleep);
+  - the installed copy downloads an update in the background as soon as it finds one;
+  - it installs only when you click "Restart to update", or when you've ticked "Install when I close Nixie" (off by
+    default);
+  - the portable zip can't update itself, so it shows the update with a link to the release page.
+- **Search:** a best match first, then groups ordered by their best match, with weak matches behind "Show N more". No
+  people results until a person has a page in Nixie.
+- **Rewatching in Up next:** on by default, with a Settings switch ("Include shows I'm rewatching") to turn it off.
+- **Tidy names:** collection and library names are tidied ("[HUB] Trending Movies" reads "Trending Movies").
+  Playlists keep their names, since people name those themselves.
+- **Favourites in the top bar:** start from the pins people made in 1.3. With no pins, the first three libraries in the
+  server's order. A star on each library (in "Libraries ▾" and on the Libraries page) adds or removes it.
+- **Made by Nixie Home rows:** "Highly rated, not watched" and "Unfinished series" are on by default, plus a seasonal row
+  in season. Each can be turned off in Settings, and the other kinds rotate one a day.
+
+## Decided for 1.6
+- **TMDb:** each user brings their own token at first. An app-wide key is reconsidered once people use it.
+- **Save as playlist:** yes, as an explicit button that copies a Nixie collection to the server as the user's own
+  playlist (an ordinary user can). Nothing is written to the server otherwise.
+
+## Still open (later releases)
 - The pop-out player's meaning (1.7).
 - Friends through the server only, or a Trakt exception (1.8).
 - Rust: go or no-go after the spike (2.0).
