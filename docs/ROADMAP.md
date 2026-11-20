@@ -76,11 +76,16 @@ order (`JellyfinClient.Search`, `SearchResultsViewModel`). The UX review's CL-m9
   - Episodes lead to their show.
 - **Weak matches stay out of the way:** show the strong matches, then "N weaker matches" on request, not 295 films.
 - **Type chips:** All, Shows, Movies, Episodes, Collections.
+- **Ask the server better before ranking** (review 2026-11-20). Re-ranking the server's first 100 per type can't
+  surface a title the server never returned, so query Shows and `/Search/Hints` first, merge them, then rank.
 - **Find out why the server returns 295 films:** compare `/Items` and `/Search/Hints` on the local test servers (10.11
-  and 12), and use whichever ranks better.
+  and 12). The test servers hold about 1,100 items, so first seed a few thousand titles there, including near-misses
+  like "It's Always Fair Weather".
+- **People:** a person result opens a "With <name>" list, a library filtered by that person, until the person
+  collections arrive. People search for actors.
 - **Tests:**
   - a fixture of tricky titles (apostrophes, "The", numbers, unicode, one-word titles);
-  - a live check on the test servers;
+  - a live check on the test servers, with the large seeded library;
   - search keeps its keyboard rules (Ctrl+F, /, Down into the suggestions, Enter, Esc).
 
 **Updater stream (a must for 1.5, owner 2026-11-20: "definitely add to the roadmap a more responsive in app updater")**
@@ -103,15 +108,23 @@ The plan:
   - **Downloading:** a progress bar with MB done of total, speed, time left, and Cancel.
   - **Then:** "Checking the download…", "Ready to install", "Installing…", each named as it happens.
 - **Get it ready in the background:** download as soon as an update is found (a setting), with the same progress where it
-  shows (Settings, the notice), and check it against its `.sha256`.
-- **One click:** "Restart to update" closes Nixie, installs quietly (the per-user installer needs no admin prompt), and
-  reopens Nixie where you were. Or install it when you close Nixie.
+  shows (Settings, the notice). Check it against its `.sha256` **and** against the digest GitHub's API reports for that
+  asset, since the hash file sits beside the installer. There's no code signing.
+- **One click:** "Restart to update" closes Nixie, installs quietly, and reopens Nixie where you were. "Install when I
+  close Nixie" stays an opt-in, off by default. That the per-user installer needs no admin prompt is unproven until the
+  Sandbox test shows it.
 - **Afterwards:** "Updated to 1.x · What's new", with the release notes in the app.
 - **Failures** say what went wrong, with Retry, and the release page as a fallback.
 - **Tests:**
   - a fake release that appears while Nixie is open is found within the new interval;
   - progress, a checksum mismatch, and a resumed download;
   - the install-and-reopen handoff proven in Windows Sandbox (on since 2026-11-20), never in the owner's account.
+- **The new updater can't update itself into 1.5** (review 2026-11-20). 1.4.1 users reach 1.5 through the old flow,
+  which closes Nixie without reopening it. The Sandbox test covers both legs:
+  - 1.4.1 to 1.5, the old flow;
+  - 1.5 to a test build numbered higher, the new flow.
+
+  The first real-world use of the new flow is 1.5 to 1.5.1, so watch it.
 
 **Fixes stream** (bug hunts and the library review):
 - **Private certificates:** a server with a private or company certificate plays, not only browses. Check both the
@@ -133,6 +146,12 @@ The plan:
   to handle Alt+key (`WM_MENUCHAR`). Nixie should swallow it. Found 2026-11-19 while tracing system sounds during
   keyboard-matrix runs; not yet confirmed.
 - **The button review's leftovers** in KNOWN-ISSUES.
+- **Privacy:**
+  - stop the backend's `checkip.amazonaws.com` lookup on every play (an upstream jellyfin-mpv-shim habit). Ask the
+    server for its own address instead, or drop the check;
+  - take stock of what the bundled Jellyseerr plugin calls before 1.6 promises "nothing about you leaves the PC".
+- **Real playlists and a transcode through Nixie itself** on the test servers. The servers' own smoke checks pass, but
+  Nixie's playlist page (the old X2 Blocker) has never run against a real server.
 - **Checked:** a reverse proxy on a sub-path, and an address ending in "/".
 
 **Top bar stream** (decided 2026-11-19):
@@ -245,13 +264,15 @@ That's about 19–25 agent-days.
   - it installs only when you click "Restart to update", or when you've ticked "Install when I close Nixie" (off by
     default);
   - the portable zip can't update itself, so it shows the update with a link to the release page.
-- **Search:** a best match first, then groups ordered by their best match, with weak matches behind "Show N more". No
-  people results until a person has a page in Nixie.
+- **Search:** a best match first, then groups ordered by their best match, with weak matches behind "Show N more".
+  Person results open a "With <name>" list (changed after the 2026-11-20 review: people search for actors).
 - **Rewatching in Up next:** on by default, with a Settings switch ("Include shows I'm rewatching") to turn it off.
 - **Tidy names:** collection and library names are tidied ("[HUB] Trending Movies" reads "Trending Movies").
   Playlists keep their names, since people name those themselves.
-- **Favourites in the top bar:** start from the pins people made in 1.3. With no pins, the first three libraries in the
-  server's order. A star on each library (in "Libraries ▾" and on the Libraries page) adds or removes it.
+- **Favourites in the top bar:** start from the pins people made in 1.3. With no pins, the Movies and Shows libraries
+  (by their kind), then the most opened, never just the server's order. On a server whose first libraries are
+  "[HUB] Trending …", that order would fill the bar with hubs. A star on each library (in "Libraries ▾" and on the
+  Libraries page) adds or removes it. Diary moves from the content tabs into the account menu (T4).
 - **Made by Nixie Home rows:** "Highly rated, not watched" and "Unfinished series" are on by default, plus a seasonal row
   in season. Each can be turned off in Settings, and the other kinds rotate one a day.
 
@@ -281,6 +302,10 @@ That's about 19–25 agent-days.
   - the admin actions.
 - **The upgrade test** (from 1.5): Seaglass to Nixie, and the previous release to this one, in a sandbox, never the
   owner's account.
+- **A baseline:** start-up time, first Home paint, and memory after browsing, measured the same way each release. It
+  shows regressions, and gives the Rust spike something real to beat.
+- **Hand checks are recorded:** each release's checks by hand get a pass or fail line in KNOWN-ISSUES or the release
+  notes. 1.4.0's three (Space before any click, Esc in YouTube's player, a real trailer) are still unrecorded.
 - **Accessibility by hand, every minor release:**
   - Narrator by ear;
   - 125 and 150 % scaling;
