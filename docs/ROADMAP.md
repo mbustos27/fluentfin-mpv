@@ -1,13 +1,13 @@
 # Nixie roadmap
 
-Updated 2026-11-20. These are the planned releases in order, with the backburner ideas placed where they fit. Nothing past
+Updated 2026-11-20 (1.4.1 released). These are the planned releases in order, with the backburner ideas placed where they fit. Nothing past
 1.4.1 has a date. Version numbers past 1.5 are a guide. Sizes are for one dev stream: S up to 2 days, M about a week,
 L 2 to 3 weeks, XL months.
 
 | Release | Name | What | Status |
 |---|---|---|---|
 | 1.4.0 | Consistency | The library layer for all four themes, plus the contrast floor and big libraries | **Released** 2026-11-20 |
-| **1.4.1** | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Now**, both fixes done and reviewed |
+| 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
 | 1.5 | Collections | Better search and a responsive updater (both musts), the 1.4.0 follow-up fixes, favourite libraries in the top bar and smart collections, built together | Next (L, parallel streams) |
 | 1.5.1 | Theme polish | Drive-in's look on the shared pages, Editorial's list view | Planned (M) |
 | 1.6 | Discover | Trending, awards and finer genres from outside sources, opt-in | Planned (M–L) |
@@ -18,7 +18,7 @@ L 2 to 3 weeks, XL months.
 
 **Hotfixes:** a Blocker found in 1.4.0 ships right away as 1.4.x. Everything else waits for 1.5.
 
-## 1.4.1: Continue Watching (now)
+## 1.4.1: Continue Watching (released 2026-11-20)
 - **A rewatched show comes back.** Up next now asks for rewatches. Jellyfin 12.4 keeps an episode marked watched while
   it's rewatched, so in-progress watched items stay in Continue Watching. A show appears once across both rows.
 - **Home updates the moment the player closes,** then confirms with the server.
