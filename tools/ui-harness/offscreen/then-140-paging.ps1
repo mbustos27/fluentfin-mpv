@@ -45,10 +45,16 @@ function PgSettle([int]$Ms = 800) { Start-Sleep -Milliseconds $Ms }
 function PgKey([int]$Vk) { [void][PgW]::Key($script:hwnd, $Vk); PgSettle 450 }
 function PgFocus { $f = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id); if ($f) { $f | ConvertFrom-Json } else { $null } }
 function PgDesc($F) { if ($F) { "$($F.type) '$($F.name)'" } else { 'nothing' } }
-# the head's count ("Loading... 1,200 of 25,000 films", then "25,000 films"), not the A to Z's readout ("A · 129 of 25,000")
+# the head's count ("Loading... 1,200 of 25,000 films", then "25,000 films"), not the A to Z's readout ("A . 129 of 25,000")
 function PgCount {
     $t = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text))) |
-        ForEach-Object { try { $_.Current.Name } catch { '' } } | Where-Object { $_ -match '\b(films|movies)\b' -and $_ -notmatch [char]0x00B7 }) | Select-Object -First 1
+        ForEach-Object { try { $_.Current.Name } catch { '' } } | Where-Object { $_ -match '\d[\d,]* (films|movies)\b' -and $_ -notmatch ('^\S{1,2} ' + [char]0x00B7) }) | Select-Object -First 1
+    "$t"
+}
+# the A to Z's readout ("A . 129 of 25,000": the titles in so far while pages arrive)
+function PgReadout {
+    $t = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text))) |
+        ForEach-Object { try { $_.Current.Name } catch { '' } } | Where-Object { $_ -match ('^\S{1,2} ' + [char]0x00B7 + ' [\d,]+ of [\d,]+$') }) | Select-Object -First 1
     "$t"
 }
 function PgCards { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) | Where-Object { try { -not $_.Current.IsOffscreen -and $_.Current.BoundingRectangle.Top -gt 140 -and $_.Current.Name } catch { $false } }) }
@@ -73,7 +79,12 @@ $pgFirst = Wait-Until { if (@(PgCards).Count -ge 3) { $true } } -Seconds 20 -Pol
 $pgFirstMs = [int]((Get-Epoch) - $pgOpened) * 1000
 $pgLoadingText = Wait-Until { $c = PgCount; if ($c -match 'Loading') { $c } } -Seconds 6 -PollMs 200
 Check "paging ($pgTag): the first posters show while the rest load" ([bool]$pgFirst) "after about $pgFirstMs ms"
-Check "paging ($pgTag): the head counts the titles in (Loading... n of $pgTotal)" ([bool]$pgLoadingText -and $pgLoadingText -match [regex]::Escape($pgTotal)) "$pgLoadingText"
+# (Cinematic's library has no count line under its stage: the A to Z's readout counts the titles in so far there)
+$pgCountLine = $env:NIXIE_LAYOUT -ne 'Cinematic'
+if ($pgCountLine) {
+    Check "paging ($pgTag): the head counts the titles in (Loading... n of $pgTotal)" ([bool]$pgLoadingText -and $pgLoadingText -match [regex]::Escape($pgTotal)) "$pgLoadingText"
+}
+else { Say "paging ($pgTag): no count line in this theme; the A to Z's readout: $(PgReadout)" }
 Shot "$pgTag-paging-loading"
 
 # 2. the A to Z while pages arrive: the row is there and works on the titles in so far (sorted by name, the first pages
@@ -86,8 +97,13 @@ if ($pgA) {
     Check "paging ($pgTag): the A to Z while pages arrive (Enter on A: an A title)" ([bool]$pgOnA) "$(PgDesc (PgFocus)); $(PgCount)"
 }
 else { Check "paging ($pgTag): the A to Z while pages arrive (Enter on A: an A title)" $false "no 'Jump to A' ($(PgCount))" }
-$pgRestingW = -not (Find-Ui -Name 'Jump to W' -Type 'Button')
-Check "paging ($pgTag): while the A titles load, W (no title in yet) rests" $pgRestingW "$(PgCount)"
+$pgNow = PgCount
+if ($pgNow -match 'Loading' -and $pgNow -match '^Loading\D+([\d,]+) of' -and [int]($Matches[1] -replace ',', '') -lt [int]($pgBig / 4)) {
+    # (only while a quarter or less is in: sorted by name, the W titles are in the last pages)
+    $pgRestingW = -not (Find-Ui -Name 'Jump to W' -Type 'Button')
+    Check "paging ($pgTag): while the A titles load, W (no title in yet) rests" $pgRestingW "$pgNow"
+}
+else { Say "paging ($pgTag): W's rest not checked, the library is mostly in already ($pgNow)" }
 
 # 3. R while pages arrive keeps the poster the keyboard is on
 $pgCard = PgFocus
@@ -117,6 +133,7 @@ else { Check "paging ($pgTag): R, then / and a letter: 6 s later the keyboard is
 # 5. End and Home on the growing grid (Editorial's far-scroll follow): the window answers, no layout cycle
 $pgCards = PgCards
 if ($pgCards.Count) { [void][OffscreenUi]::SetFocus($pgCards[0]); PgSettle 400 }
+Say "paging ($pgTag): End from $(PgDesc (PgFocus))"
 $pgEndAt = Get-Epoch
 PgKey 0x23   # End
 $pgSlow = 0
@@ -125,12 +142,22 @@ PgKey 0x24   # Home
 foreach ($i in 1..10) { if (-not [PgW]::Answers($script:hwnd, 2000)) { $pgSlow++ }; Start-Sleep -Milliseconds 500 }
 $pgCycles = @(PgErrors $pgEndAt | Where-Object { $_ -match 'LayoutCycle' })
 Check "paging ($pgTag): End and Home on a growing grid: the window answers, no layout cycle" ($pgSlow -eq 0 -and $pgCycles.Count -eq 0) "$pgSlow slow answers (2 s); $($pgCycles.Count) layout cycle(s); $(PgDesc (PgFocus))"
+# Home: the library's first title has the keyboard, and it is the first poster in view (the grid at its top)
+$pgHome = Wait-Until {
+    $f = PgFocus
+    $first = @(PgCards | Sort-Object { $_.Current.BoundingRectangle.Top }, { $_.Current.BoundingRectangle.Left }) | Select-Object -First 1
+    if ($f -and $f.type -eq 'ListItem' -and $first -and $f.name -eq $first.Current.Name) { $f }
+} -Seconds 8 -PollMs 300
+Check "paging ($pgTag): Home after End on a growing grid: the keyboard on the first poster, at the top" ([bool]$pgHome) "now $(PgDesc (PgFocus))"
 Shot "$pgTag-paging-home"
 
 # 6. every page in the end, at full speed again
 [void](Invoke-Server '/__harness/latency' 'POST' @{ rules = @() })
-$pgDone = Wait-Until { $c = PgCount; if ($c -and $c -notmatch 'Loading' -and $c -match [regex]::Escape($pgTotal)) { $c } } -Seconds 120 -PollMs 500
-Check "paging ($pgTag): every page comes in ($pgTotal)" ([bool]$pgDone) "$(PgCount)"
+$pgDone = Wait-Until {
+    if ($pgCountLine) { $c = PgCount; if ($c -and $c -notmatch 'Loading' -and $c -match [regex]::Escape($pgTotal)) { $c } }
+    else { $r = PgReadout; if ($r -match (' of ' + [regex]::Escape($pgTotal) + '$')) { $r } }
+} -Seconds 120 -PollMs 500
+Check "paging ($pgTag): every page comes in ($pgTotal)" ([bool]$pgDone) "$(if ($pgCountLine) { PgCount } else { PgReadout })"
 $pgW = Wait-Until { Find-Ui -Name 'Jump to W' -Type 'Button' } -Seconds 10 -PollMs 300
 Check "paging ($pgTag): with every page in, the A to Z has W" ([bool]$pgW) ''
 $pgErr = @(PgErrors $pgStart)
