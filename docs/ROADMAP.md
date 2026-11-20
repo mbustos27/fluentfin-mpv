@@ -8,7 +8,7 @@ L 2 to 3 weeks, XL months.
 |---|---|---|---|
 | 1.4.0 | Consistency | The library layer for all four themes, plus the contrast floor and big libraries | **Released** 2026-11-20 |
 | **1.4.1** | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Now**, both fixes done and reviewed |
-| 1.5 | Collections | Better search (a must), the 1.4.0 follow-up fixes, favourite libraries in the top bar and smart collections, built together | Next (L, parallel streams) |
+| 1.5 | Collections | Better search and a responsive updater (both musts), the 1.4.0 follow-up fixes, favourite libraries in the top bar and smart collections, built together | Next (L, parallel streams) |
 | 1.5.1 | Theme polish | Drive-in's look on the shared pages, Editorial's list view | Planned (M) |
 | 1.6 | Discover | Trending, awards and finer genres from outside sources, opt-in | Planned (M–L) |
 | 1.7 | Player | Pop-out player, chapter extras | From the backburner (M–L) |
@@ -82,6 +82,37 @@ order (`JellyfinClient.Search`, `SearchResultsViewModel`). The UX review's CL-m9
   - a fixture of tricky titles (apostrophes, "The", numbers, unicode, one-word titles);
   - a live check on the test servers;
   - search keeps its keyboard rules (Ctrl+F, /, Down into the suggestions, Enter, Esc).
+
+**Updater stream (a must for 1.5, owner 2026-11-20: "definitely add to the roadmap a more responsive in app updater")**
+
+What it does today:
+- **Checking:** 20 s after start, then once every 24 hours while Nixie is open (`UpdateNoticeService`,
+  `UpdateGate.Interval`), so a release published while Nixie is open waits up to a day.
+- **"Download and install":** downloads the whole installer before showing anything, runs msiexec with its full window,
+  and closes Nixie without reopening it.
+
+The plan:
+- **Find updates sooner:**
+  - every few hours while Nixie is open;
+  - when the window comes back after a while (focus, waking from sleep);
+  - within GitHub's 60 requests an hour, honouring its Retry-After.
+- **Show every step** (owner: "things like download progress time and other things otherwise now you just click check
+  update and wait"):
+  - **Check now:** says it's checking ("Checking for updates…"), then answers at once: "You're up to date · checked just
+    now", "1.4.2 is available · 187 MB", or the reason it couldn't check.
+  - **Downloading:** a progress bar with MB done of total, speed, time left, and Cancel.
+  - **Then:** "Checking the download…", "Ready to install", "Installing…", each named as it happens.
+- **Get it ready in the background:** download as soon as an update is found (a setting), with the same progress where it
+  shows (Settings, the notice), and check it against its `.sha256`.
+- **One click:** "Restart to update" closes Nixie, installs quietly (the per-user installer needs no admin prompt), and
+  reopens Nixie where you were. Or install it when you close Nixie.
+- **Afterwards:** "Updated to 1.x · What's new", with the release notes in the app.
+- **Failures** say what went wrong, with Retry, and the release page as a fallback.
+- **Tests:**
+  - a fake release that appears while Nixie is open is found within the new interval;
+  - progress, a checksum mismatch, and a resumed download;
+  - the install-and-reopen handoff proven in Windows Sandbox (once the owner turns it on), never in the owner's
+    account.
 
 **Fixes stream** (bug hunts and the library review):
 - **Private certificates:** a server with a private or company certificate plays, not only browses. Check both the
