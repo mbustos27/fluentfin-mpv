@@ -30,7 +30,9 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   the app's update check; FAKESERVER_RELEASE sets the version at start, 0.0.1 by default),
   GET /__harness/summary, POST /__harness/latency, POST /__harness/streams, POST /__harness/shutdown,
   GET /__harness/quickconnect (the codes waiting, never their secrets), POST /__harness/quickconnect/approve,
-  POST /__harness/libraries {"rename": {"old": "new"}, "add": ["name"]} (the views change; clients hear LibraryChanged).
+  POST /__harness/libraries {"rename": {"old": "new"}, "add": ["name"]} (the views change; clients hear LibraryChanged),
+  POST /__harness/art {"art": "white"|"black"|""} (Nixie 1.4.0: every image one flat colour from now on, as FAKESERVER_ART
+  sets it at start; the image tags change with it, so a client that reads an item again asks for the new picture).
 """
 
 import argparse
@@ -298,6 +300,8 @@ class Server:
         """FAKESERVER_PHOTO_DIR=<folder of .jpg>: photographic art (the JPEG as it is, one per item) for Primary, Backdrop and Thumb, so
         the UI can be judged on real pictures (faces, scenes) instead of the generated colour blocks. None when unset."""
         folder = os.environ.get("FAKESERVER_PHOTO_DIR")
+        if imagegen.ART:   # Nixie 1.4.0: the flat art (FAKESERVER_ART) wins
+            return None
         # UXCAP (the library and collections review's captures): FAKESERVER_PHOTO_KINDS limits the photos to some image types (e.g. Backdrop,Thumb)
         kinds = [k.strip() for k in os.environ.get("FAKESERVER_PHOTO_KINDS", "Primary,Backdrop,Thumb").split(",") if k.strip()]
         if not folder or kind not in ("Primary", "Backdrop", "Thumb") or kind not in kinds:
@@ -326,7 +330,7 @@ class Server:
             scale = min((mw or bw) / bw, (mh or bh) / bh)
         scale = min(1.0, scale) if scale > 0 else 1.0
         w, h = max(1, round(bw * scale)), max(1, round(bh * scale))
-        key = (item["Id"], kind, index, w, h)
+        key = (item["Id"], kind, index, w, h, imagegen.ART)
         with self.lock:
             data = self.image_cache.get(key)
             if data is not None:
@@ -961,6 +965,12 @@ class Server:
                     if not entry or not uid:
                         return self._json(404, {"error": "no such code waiting" if not entry else "no such user"})
                     return self._json(200, {"code": code, "user": outer.users[uid]["name"]})
+                if low == "/__harness/art" and method == "POST":
+                    # Nixie 1.4.0 (the contrast floor): every image white or black from now on ("": the items' own art)
+                    try:
+                        return self._json(200, {"art": imagegen.set_art(str(self._body().get("art") or ""))})
+                    except ValueError as e:
+                        return self._json(400, {"error": str(e)})
                 if low == "/__harness/libraries" and method == "POST":
                     # the libraries change on the server: {"rename": {"Shows": "Television Shows"}, "add": ["Concerts"]};
                     # every connected client hears LibraryChanged, as from Jellyfin, so it reads its views again

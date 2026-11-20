@@ -17,6 +17,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -224,6 +225,40 @@ class ServerTests(unittest.TestCase):
         self.assertEqual((1920, 1080), imagegen.png_size(self.request("/Items/%s/Images/Backdrop" % movie, raw=True)[1]))
         self.assertEqual((480, 270), imagegen.png_size(self.request("/Items/%s/Images/Backdrop/0?maxWidth=480" % movie, raw=True)[1]))
         self.assertEqual(404, self.request("/Items/%s/Images/Primary" % ("0" * 32), raw=True)[0])
+
+    def test_flat_art_is_one_colour_and_changes_the_image_tags(self):
+        # Nixie 1.4.0 (the contrast floor): POST /__harness/art makes every image white or black, the worst case under a
+        # label; the tags change with it (a client reading the item again asks for the new picture); "" puts the art back
+        def first_pixels(data):
+            pos, idat = 8, b""
+            while pos < len(data):
+                n, kind = struct.unpack(">I4s", data[pos:pos + 8])
+                if kind == b"IDAT":
+                    idat += data[pos + 8:pos + 8 + n]
+                pos += 12 + n
+            raw = zlib.decompress(idat)
+            width = imagegen.png_size(data)[0]
+            return set(raw[1 + 3 * x:4 + 3 * x] for x in range(0, width, 37))
+        movie = self.get("/__harness/fixture")["movie"]["id"]
+        def tag():
+            return self.get("/Items/%s?userId=%s" % (movie, self.srv.user_id))["ImageTags"]["Primary"]
+        own = tag()
+        try:
+            for art, rgb in (("white", b"\xff\xff\xff"), ("black", b"\x00\x00\x00")):
+                status, body, _ = self.request("/__harness/art", "POST", {"art": art})
+                self.assertEqual((200, art), (status, body["art"]))
+                now = tag()
+                self.assertNotEqual(own, now)
+                for kind in ("Primary", "Backdrop", "Thumb"):
+                    status, data, _ = self.request("/Items/%s/Images/%s?maxWidth=300&tag=%s" % (movie, kind, now), raw=True)
+                    self.assertEqual(200, status)
+                    self.assertEqual({rgb}, first_pixels(data), kind)
+            self.assertEqual(400, self.request("/__harness/art", "POST", {"art": "grey"})[0])
+        finally:
+            self.request("/__harness/art", "POST", {"art": ""})
+        self.assertEqual(own, tag())
+        status, data, _ = self.request("/Items/%s/Images/Primary?maxWidth=300" % movie, raw=True)
+        self.assertTrue(first_pixels(data).isdisjoint({b"\xff\xff\xff", b"\x00\x00\x00"}))   # the item's own gradient again
 
     def test_latency_rule_only_where_it_matches(self):
         t = time.perf_counter()

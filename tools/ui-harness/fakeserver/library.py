@@ -56,6 +56,11 @@ def _id(*parts):
 
 
 def _tag(item_id, kind):
+    # Nixie 1.4.0: an image's tag (its kind is capitalised: Primary, Backdrop, Chapter3) changes with the flat art
+    # (imagegen.ART), so a client asks for the new picture; "etag" and "src" never do
+    if kind[:1].isupper():
+        import imagegen
+        kind += imagegen.art_key()
     return hashlib.md5(("tag:%s:%s" % (item_id, kind)).encode()).hexdigest()
 
 

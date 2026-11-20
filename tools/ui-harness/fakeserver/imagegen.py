@@ -8,6 +8,7 @@ repetition, a cache of shaded rows), so a 1000x1500 poster takes a few tens of m
 import functools
 import hashlib
 import math
+import os
 import struct
 import zlib
 
@@ -82,8 +83,34 @@ for _ch, _rows in _FONT.items():
 _B83 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~"
 
 
+# Nixie 1.4.0 (the contrast floor): every image one flat colour, the worst case any artwork can be under a label drawn on
+# it: FAKESERVER_ART=white or black (or POST /__harness/art {"art": ...} while running); unset or "": the items' own art.
+# Logos keep their title (title art, not a backdrop).
+FLAT_ART = {"white": (255, 255, 255), "black": (0, 0, 0)}
+ART = (os.environ.get("FAKESERVER_ART") or "").strip().lower()
+if ART not in FLAT_ART:
+    ART = ""
+
+
+def set_art(art):
+    """The art from now on ("white", "black", or "" for the items' own); a ValueError for anything else."""
+    global ART
+    art = (art or "").strip().lower()
+    if art and art not in FLAT_ART:
+        raise ValueError("art: white, black or empty")
+    ART = art
+    return ART
+
+
+def art_key():
+    """What the image tags carry so that a client asks again when the art changes: "" for the items' own art."""
+    return ":" + ART if ART else ""
+
+
 def palette(key):
     """Two colours (top, bottom) and an ink colour, the same for every image of one item."""
+    if ART:
+        return FLAT_ART[ART], FLAT_ART[ART], FLAT_ART[ART]
     h = hashlib.md5(key.encode("utf-8")).digest()
     hue = h[0] / 255.0
     top = _hsv(hue, 0.55 + h[1] / 255.0 * 0.3, 0.55 + h[2] / 255.0 * 0.3)
@@ -123,7 +150,11 @@ def render(key, title, subtitle, width, height, alpha=False):
     """PNG bytes, width x height: the item's gradient, a band in the lower part, the title (and a smaller subtitle).
     alpha: RGBA with a transparent background (logos)."""
     width, height = max(1, int(width)), max(1, int(height))
+    if ART and not alpha:
+        return _png(width, height, (b"\x00" + bytes(FLAT_ART[ART]) * width) * height, 3)
     top, bottom, ink = palette(key)
+    if alpha:
+        ink = (245, 245, 240)   # a logo keeps its light title whatever the art (the flat art is the pictures')
     channels = 4 if alpha else 3
     # text layout: the scale makes ~14 characters fill the width, at most 4 lines, and fits the height
     scale = max(1, min(width // (6 * 14), height // (8 * 9)))
@@ -251,6 +282,10 @@ def blurhash(key, x_components=1, y_components=3):
     return out
 
 
-@functools.lru_cache(maxsize=65536)
 def blurhash_cached(key):
+    return _blurhash_cached(key, ART)
+
+
+@functools.lru_cache(maxsize=65536)
+def _blurhash_cached(key, art):
     return blurhash(key)
