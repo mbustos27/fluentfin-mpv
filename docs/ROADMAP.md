@@ -249,14 +249,17 @@ chips, the top bar's Collections destination, the fake server), so they're built
   would download gigabytes from a server that isn't the owner's, so it's out. Learning while watching, from what mpv
   has already downloaded, is a two-day spike first (S), then L.
 - **Plan:** `docs\reports\Nixie repeated extras skip plan.md`.
-- **Questions for the owner:**
-  - where the extras sit: before the episode, after it, or mid-episode where the ad breaks were;
+- **The owner answered (2026-11-20): the extras sit before and after the episode**, not mid-episode.
+  - So the skip rules cover them: two rules per show, one measured from the start and one from before the end.
+  - The audio-matching spike isn't needed for this case.
+  - Today's learned skip can't catch either part: it only looks in the first 10 minutes, for jumps of 30 to 150 s, and
+    stops once an intro is known.
+- **Still to ask the owner:**
   - the same clip and length every episode, or different promos, and about how long;
   - whether the player's Chapters list shows a chapter at each break;
   - a Skip button, or skip by itself;
   - one rule for the whole show, or per season;
-  - 1.6 or 1.8;
-  - if the extras move around, whether the audio spike is worth it.
+  - 1.6 or 1.8.
 
 ## 1.6.1: Theme polish
 - **Drive-in's own look** on the Libraries and Collection pages.
@@ -348,8 +351,9 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   playlist (an ordinary user can). Nothing is written to the server otherwise.
 
 ## Still open (later releases)
-- Skip repeated extras: skip rules beside 1.6 or in 1.8, and whether the audio spike is needed (the plan is written;
-  waits on the owner's answers: where the extras sit, the same length each time, a button or skip by itself).
+- Skip repeated extras: skip rules beside 1.6 or in 1.8. The extras sit before and after the episode (the owner,
+  2026-11-20), so no audio spike is needed. Still to ask: the same length each time, a button or skip by itself, one
+  rule per show or per season.
 - The pop-out player's meaning (1.8).
 - Friends through the server only, or a Trakt exception (1.9).
 - Rust: go or no-go after the spike (2.0).
