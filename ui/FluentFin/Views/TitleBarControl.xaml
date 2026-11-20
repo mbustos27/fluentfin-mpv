@@ -194,15 +194,36 @@
                     type"). The text clears when you leave for another page (TitleBarViewModel.OnPageShown).
                 -->
                 <!--  Seaglass: the search box is glass: the frosted brush and the lit edge, the stronger glass while typing (1.2.0: a field's corners, not a pill's)  -->
+                <!--
+                    1.4.0 contrast (the review's plan item 3): the field is its own dense plate in the bar's theme. It aliased the
+                    app's glass brushes, which resolve in the app's theme: over a hero in Light the bar's text turned the dark
+                    theme's while the field stayed the light glass (the placeholder 2.99 to 3.81:1, a typed word 1.35:1); and the
+                    thin acrylic let bright art through (it samples the art behind the bar, not the bar). The dusk and noon tints
+                    of GlassPanelStrongBrush at 88 % (94 % while typing): 4.5:1 or more over white and black art
+                -->
                 <AutoSuggestBox.Resources>
                     <ResourceDictionary>
                         <ResourceDictionary.ThemeDictionaries>
                             <ResourceDictionary x:Key="Default">
-                                <StaticResource x:Key="TextControlBackground" ResourceKey="GlassPanelBrush" />
-                                <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="GlassPanelBrush" />
-                                <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="GlassPanelStrongBrush" />
+                                <SolidColorBrush x:Key="TextControlBackground" Color="#E034181D" />
+                                <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#E034181D" />
+                                <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#F034181D" />
                                 <StaticResource x:Key="TextControlBorderBrush" ResourceKey="GlassStrokeBrush" />
                                 <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="GlassStrokeBrush" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Light">
+                                <SolidColorBrush x:Key="TextControlBackground" Color="#E0FFF3F1" />
+                                <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#E0FFF3F1" />
+                                <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#F0FFF3F1" />
+                                <StaticResource x:Key="TextControlBorderBrush" ResourceKey="GlassStrokeBrush" />
+                                <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="GlassStrokeBrush" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="HighContrast">
+                                <SolidColorBrush x:Key="TextControlBackground" Color="{ThemeResource SystemColorWindowColor}" />
+                                <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="{ThemeResource SystemColorWindowColor}" />
+                                <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="{ThemeResource SystemColorWindowColor}" />
+                                <SolidColorBrush x:Key="TextControlBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                                <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
                             </ResourceDictionary>
                         </ResourceDictionary.ThemeDictionaries>
                     </ResourceDictionary>

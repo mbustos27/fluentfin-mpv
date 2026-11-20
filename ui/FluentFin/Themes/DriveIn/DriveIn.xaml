@@ -28,9 +28,14 @@
             <SolidColorBrush x:Key="DriveInTileRestBrush" Color="#A88F92" />
             <SolidColorBrush x:Key="DriveInFocusRingBrush" Color="#FFF4EE" />
             <SolidColorBrush x:Key="DriveInFocusGlowBrush" Color="#F96985" />
+            <!--
+                1.4.0 contrast (plan item 3): dense enough that the bar's labels keep 4.5:1 over a white picture under it (a
+                film's backdrop runs under the bar's right half); at #A3 to #7A the account read 4.41:1 there. The dusk sky still
+                glows through
+            -->
             <LinearGradientBrush x:Key="DriveInSkyBarBrush" StartPoint="0.5,0" EndPoint="0.5,1">
-                <GradientStop Offset="0" Color="#A31C0512" />
-                <GradientStop Offset="1" Color="#7A1A050E" />
+                <GradientStop Offset="0" Color="#D91C0512" />
+                <GradientStop Offset="1" Color="#C21A050E" />
             </LinearGradientBrush>
             <SolidColorBrush x:Key="DriveInSkyBarStrokeBrush" Color="#1FFFFFFF" />
             <SolidColorBrush x:Key="DriveInPageTextBrush" Color="#F8EFF0" />
@@ -76,7 +81,11 @@
             <SolidColorBrush x:Key="DriveInTileRestBrush" Color="#A88F92" />
             <SolidColorBrush x:Key="DriveInFocusRingBrush" Color="#FFF4EE" />
             <SolidColorBrush x:Key="DriveInFocusGlowBrush" Color="#F96985" />
-            <!--  over a hero the bar's text is the dark theme's (TopBarChrome): a dense dusk bar over the noon sky, so it keeps 4.5:1  -->
+            <!--
+                1.4.0 contrast (DI-B1): unused by day. The bar keeps its noon glass with the light theme's text over the sky too
+                (TopBarStyle's HeroInLight); this brush was never drawn as written: the bar's dark theme drew the night's brush
+                over the noon sky (a mauve #7D6C71 under the dark theme's text, 1.99 to 3.18:1)
+            -->
             <LinearGradientBrush x:Key="DriveInSkyBarBrush" StartPoint="0.5,0" EndPoint="0.5,1">
                 <GradientStop Offset="0" Color="#D91C0512" />
                 <GradientStop Offset="1" Color="#C21C0512" />
@@ -160,6 +169,12 @@
     <Style x:Key="TopBarStyle" TargetType="lc:TopBarChrome">
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Padding" Value="0" />
+        <!--
+            1.4.0 contrast (the review's DI-B1): by day the bar is one scheme on every page, the noon glass with the light
+            theme's text, over Home's sky, the libraries and an item's art as over the Libraries page; the dusk bar over the sky
+            is the night's (the dusk bar's mauve over the noon sky carried the dark theme's text at 1.99 to 3.18:1)
+        -->
+        <Setter Property="HeroInLight" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="lc:TopBarChrome">

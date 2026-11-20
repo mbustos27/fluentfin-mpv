@@ -233,13 +233,17 @@
             <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#FFFFFF" />
             <!--  behind a dialog: a dusk smoke, not WinUI's grey (high contrast keeps WinUI's own)  -->
             <SolidColorBrush x:Key="ContentDialogSmokeFill" Color="#59500723" />
-            <!--  the top bar (see Dark)  -->
+            <!--
+                the top bar (see Dark). 1.4.0 contrast (plan item 3): its luminosity held near the noon tint's (0.85, was 0.45) and
+                more tint (0.5, was 0.28), so dark art behind the bar (an item's backdrop, the window's soft artwork) leaves it light:
+                over black art the bar went #706B6B (the account 3.75:1) and the wordmark 4.13:1
+            -->
             <AcrylicBrush
                 x:Key="GlassTitleBarBrush"
                 FallbackColor="#F0FCEAE8"
                 TintColor="#FCEAE8"
-                TintLuminosityOpacity="0.45"
-                TintOpacity="0.28" />
+                TintLuminosityOpacity="0.85"
+                TintOpacity="0.5" />
             <SolidColorBrush x:Key="GlassTitleBarSolidBrush" Color="#FCEAE8" />
             <SolidColorBrush x:Key="GlassTitleBarStrokeBrush" Color="#1F500723" />
             <SolidColorBrush x:Key="GlassTabUnderlineBrush" Color="#BC1E47" />
