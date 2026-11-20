@@ -34,6 +34,9 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
   rows run on across letters, each letter tagged on its first title, its heading folds to one line as you scroll, and its
   titles are a size larger. Drive-in's sky folds to a band as you scroll.
 - **Loading looks like the page it loads,** the header and letter row in place and the posters where they will be.
+- **Editorial's library keeps up with a long scroll.** Its posters have their size before their pictures arrive, a
+  poster's details open only when it is in view, and after a scroll far from the poster the keyboard was on, the keyboard
+  moves to a poster in view (the grid no longer stalls while it rebuilds the rows it passed).
 
 **Collections and playlists**
 
