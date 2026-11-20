@@ -30,8 +30,13 @@ public static class WindowShortcuts
 	{
 		root.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(OnPreviewKeyDown), false);
 		root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnPointerPressed), true);
-		// Nixie 1.4.0 (bug hunt M3): the wheel is the user moving too (a refresh's place restore stops)
-		root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler((_, _) => PageRefresh.UserActed("the wheel")), true);
+		// Nixie 1.4.0 (bug hunt M3): the wheel is the user moving too (a refresh's place restore stops); and (bug hunt m6) a
+		// page's arrival focus leaves the keyboard alone (a user reading down a slow film page with the wheel kept their place)
+		root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler((_, _) =>
+		{
+			PageRefresh.UserActed("the wheel");
+			ArrivalFocus.UserActed();
+		}), true);
 	}
 
 	// -- keys ------------------------------------------------------------------------------------------------------------
@@ -55,7 +60,7 @@ public static class WindowShortcuts
 		if (shortcut != AppShortcut.Refresh && !AppShortcuts.IsModifierKey((int)e.Key))
 		{
 			PageRefresh.UserActed("a key");
-			Views.ItemPagePlace.UserActedAt = Environment.TickCount64; // 1.4.0: an item page's arrival focus yields too
+			ArrivalFocus.UserActed(); // 1.4.0 (bug hunt M1): a page's arrival focus yields too
 		}
 
 		// Nixie 1.4.0 (bug hunt M1): the theatre is modal. Its keys are decided here, before any page handler or key
@@ -95,7 +100,7 @@ public static class WindowShortcuts
 		}
 
 		PageRefresh.UserActed("a click");
-		Views.ItemPagePlace.UserActedAt = Environment.TickCount64;
+		ArrivalFocus.UserActed();
 		var kind = e.GetCurrentPoint(root).Properties.PointerUpdateKind;
 		if (AppMouse.For(kind == PointerUpdateKind.XButton1Pressed, kind == PointerUpdateKind.XButton2Pressed) is { } shortcut)
 		{

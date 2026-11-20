@@ -156,7 +156,23 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
 - **Update checks survive a clock change.** When GitHub asks Nixie to wait, the wait is kept for a day at most, a wait
   that a clock set back put days ahead counts as over, and Check now says which day ("wait until tomorrow at 09:00").
 
+**Fixes from the second bug hunt**
+
+- **No crash on Back to a collection.** Back from a film to its collection, with that film past the first in the grid,
+  could close Nixie ("Layout cycle detected" as the page came back). The page now puts the keyboard on the card once its
+  grid is drawn, and a failure in work the window had queued is logged instead of closing the app.
+- **A page never takes the keyboard back from you.** If you move while a collection, a library, the Libraries page or a
+  film is loading (Ctrl+F and a few letters, a click, the wheel), the page leaves the keyboard where you put it when it
+  comes in. Before, a slow collection moved it from the search box to Play, and the next letter you typed refreshed the
+  page.
+- **A collection keeps its Order and Hide watched** across R and Back, as a library keeps its sort and filters.
+- **R works again at once** when the place it would put back is not there (the keyboard on the top bar, a film watched on
+  another device): it no longer ignored every R for six seconds.
+
 **Verified, and the known limits**
+
+- The release build runs every test of both suites, the libmpv tests included (they were skipped), and stops if any test
+  did not run.
 
 - Every theme runs the keyboard matrix, the streams' harness scripts and the review's measurements as checks
   (`then-140-checks.ps1`): the top bar on one line, the loading placeholders where the cards land, every library's items

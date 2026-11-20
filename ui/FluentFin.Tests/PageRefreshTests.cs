@@ -28,14 +28,51 @@ public sealed class PageRefreshTests
 	{
 		var host = Source("Controls", "LibraryGridHost.cs");
 		var editorial = Source("Themes", "Editorial", "Views", "EditorialLibraryPage.xaml.cs");
-		foreach (var page in new[] { host, editorial })
-		{
-			Assert.Contains("{ LastNavigationWasRefresh: true } && Services.PageRefresh.UserMovedSinceRefresh".Replace("Services.", page == editorial ? "" : "Services."), page);
-		}
-
+		// Nixie 1.4.0 (bug hunt m4): the rule is the app's one (ArrivalFocus.LibraryYields, through LibraryViewModel.FocusYields);
+		// Editorial's page still sets its own as well (asked too)
+		Assert.Contains("{ LastNavigationWasRefresh: true } && PageRefresh.UserMovedSinceRefresh", editorial);
 		Assert.Equal(2, host.Split("_vm.FocusYields?.Invoke() != true").Length - 1);      // the card at once, and after the scroll back
 		Assert.Contains("index >= 0 && ViewModel.FocusYields?.Invoke() != true", editorial);
 		Assert.Contains("public static bool UserMovedSinceRefresh => _userMoved is not null;", Source("Services", "PageRefresh.cs"));
+		// after R, the poster put back yields as R's restore does: a key, a click or the wheel since R
+		Assert.Contains("kind == ArrivalKind.Refreshed ? (movedSinceRefresh ?", Source("Services", "ArrivalFocus.cs"));
+		Assert.Equal("a key, a click or the wheel since R", FluentFin.Services.ArrivalFocus.MovedSince(FluentFin.Services.ArrivalKind.Refreshed, 0, 0, movedSinceRefresh: true));
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m1: R with the keyboard on the top bar's tab, its place not to be found: the restore ran its whole
+	/// 6 s and every R meanwhile joined it and did nothing): an R joins a refresh only while it is still coming in (its page
+	/// loading, or loaded half a second ago at most); once the page has settled, the restore gives up what is not in it at
+	/// once (the rows, the keyboard's item: the Primary then), and the next R loads the page again.
+	/// </summary>
+	[Fact]
+	public void ARefreshWhosePlaceIsGone_EndsAtLoad_AndTheNextRRefreshes()
+	{
+		var now = new DateTime(2026, 11, 19, 16, 0, 0, DateTimeKind.Utc);
+		Assert.True(ThemeAnchors.StillComing(loading: true, loadedAt: null, now));
+		Assert.True(ThemeAnchors.StillComing(loading: null, loadedAt: now.AddSeconds(-5), now));   // a page that does not say: as before
+		Assert.True(ThemeAnchors.StillComing(loading: false, loadedAt: null, now));                // loaded, not yet seen by the restore
+		Assert.True(ThemeAnchors.StillComing(loading: false, loadedAt: now.AddMilliseconds(-200), now)); // R, R 150 ms apart: one load (M4)
+		Assert.False(ThemeAnchors.StillComing(loading: false, loadedAt: now.AddMilliseconds(-600), now));
+
+		// the keyboard not in the page: the rows are done when placed, or once the page has settled
+		Assert.False(ThemeAnchors.RowsDone(rows: 2, placed: 1, settled: false));
+		Assert.True(ThemeAnchors.RowsDone(rows: 2, placed: 1, settled: true));
+		Assert.True(ThemeAnchors.RowsDone(rows: 2, placed: 2, settled: false));
+		// the keyboard's item gone from every list (watched elsewhere, finished on a phone): the Primary at once
+		Assert.True(ThemeAnchors.ItemGone(settled: true, inLists: false));
+		Assert.False(ThemeAnchors.ItemGone(settled: true, inLists: true));
+		Assert.False(ThemeAnchors.ItemGone(settled: false, inLists: false));
+
+		var run = Source("Services", "PageRefresh.cs");
+		Assert.Contains("if (Coalesces(_pending?.Settling == true, ReferenceEquals(_pending?.Page, shown), _userMoved))", run);
+		var anchors = Source("Helpers", "ThemeAnchors.cs").Replace("\r\n", "\n");
+		Assert.Contains("public bool Settling => IsRunning && ThemeAnchors.StillComing(ThemeAnchors.IsLoading(Page), LoadedAt, DateTime.UtcNow);", anchors);
+		var tick = anchors[anchors.IndexOf("public RefreshRestore RestoreAfterRefresh", StringComparison.Ordinal)..];
+		Assert.Contains("var done = TryRestoreByPlace(page, last, settled);", tick);
+		var tryRestore = anchors[anchors.IndexOf("private bool TryRestoreByPlace", StringComparison.Ordinal)..];
+		Assert.Contains("return RowsDone(RowPlaces.Count, placed, settled);", tryRestore);
+		Assert.Contains("ItemGone(settled, sources.Any(", tryRestore);
 	}
 
 	[Fact]
@@ -123,7 +160,7 @@ public sealed class PageRefreshTests
 
 		var anchors = Source("Helpers", "ThemeAnchors.cs").Replace("\r\n", "\n");
 		var tick = anchors[anchors.IndexOf("public RefreshRestore RestoreAfterRefresh", StringComparison.Ordinal)..];
-		Assert.True(tick.IndexOf("yieldTo?.Invoke()", StringComparison.Ordinal) < tick.IndexOf("TryRestoreByPlace(page, last)", StringComparison.Ordinal));
+		Assert.True(tick.IndexOf("yieldTo?.Invoke()", StringComparison.Ordinal) < tick.IndexOf("TryRestoreByPlace(page, last, settled)", StringComparison.Ordinal));
 	}
 
 	/// <summary>

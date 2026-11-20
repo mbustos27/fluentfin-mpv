@@ -45,8 +45,9 @@ internal sealed class LibraryGridHost
 		// R or F5 (a new view model for the same library): the sort, the filters and the card are put back, as for Back
 		// (R and F5 keep the place; the lit tab chosen again starts at the top: LastRefreshKeepsPlace false)
 		vm.ReloadedInPlace = () => App.GetService<Contracts.Services.INavigationService>() is Services.NavigationService { LastNavigationWasRefresh: true, LastRefreshKeepsPlace: true };
-		// after R, a user who moved first keeps the keyboard where they put it (the refresh's own restore yields the same way)
-		vm.FocusYields = () => App.GetService<Contracts.Services.INavigationService>() is Services.NavigationService { LastNavigationWasRefresh: true } && Services.PageRefresh.UserMovedSinceRefresh;
+		// after R, a user who moved first keeps the keyboard where they put it (the refresh's own restore yields the same way);
+		// Nixie 1.4.0 (bug hunt m4): and on arrival and Back too: the app's one arrival rule (LibraryViewModel.FocusYields asks
+		// Services.ArrivalFocus.LibraryYields for the load's focus), so the page sets no rule of its own
 		vm.PropertyChanged += (_, e) =>
 		{
 			switch (e.PropertyName)
@@ -116,7 +117,8 @@ internal sealed class LibraryGridHost
 			return;
 		}
 
-		_page.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+		// Nixie 1.4.0 (bug hunt M3): through the guard: a failure here is logged, it cannot end the app
+		Services.UiDispatch.Enqueue(_page.DispatcherQueue, "the library's focus", () =>
 		{
 			if (_vm.IsLoading)
 			{
@@ -155,7 +157,7 @@ internal sealed class LibraryGridHost
 			{
 				_grid.FocusAndHold(index, state, atTop: jumped);
 			}
-		});
+		}, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
 	}
 
 	private void Scroller_ScrollCompleted(ScrollView sender, ScrollingScrollCompletedEventArgs args)

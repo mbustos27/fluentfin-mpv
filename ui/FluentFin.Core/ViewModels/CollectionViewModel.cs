@@ -13,6 +13,42 @@ public sealed record CollectionEntry(BaseItemViewModel Item, int Position, bool 
 }
 
 /// <summary>
+/// Nixie 1.4.0 (bug hunt M2): a Collection page's view: its Order and Hide watched. R (a new view model for the same page)
+/// and Back reset them to the defaults; they are kept here, per user and collection, for the session, and put back when the
+/// page comes back (Back, Forward) or is loaded again in place (R, F5), as the library keeps its sort and filters
+/// (<see cref="LibraryPlaces"/>). A collection opened anew starts in its own order, every item shown.
+/// </summary>
+public sealed record CollectionPlace(CollectionOrder Order, bool HideWatched);
+
+public static class CollectionPlaces
+{
+	private const int Kept = 32;
+	private static readonly Lock s_lock = new();
+	private static readonly List<(Guid User, Guid Collection, CollectionPlace Place)> s_places = [];
+
+	public static void Remember(Guid user, Guid collection, CollectionPlace place)
+	{
+		lock (s_lock)
+		{
+			s_places.RemoveAll(x => x.User == user && x.Collection == collection);
+			s_places.Add((user, collection, place));
+			if (s_places.Count > Kept)
+			{
+				s_places.RemoveAt(0);
+			}
+		}
+	}
+
+	public static CollectionPlace? Recall(Guid user, Guid collection)
+	{
+		lock (s_lock)
+		{
+			return s_places.LastOrDefault(x => x.User == user && x.Collection == collection).Place;
+		}
+	}
+}
+
+/// <summary>
 /// Nixie 1.4.0 (the UX review's plan item 1; X1, X2, CL-M4, CL-B1): the shared Collection page. A box set opens here, in its
 /// own order (the server's DisplayOrder, release date when unset), with its art, its title, "6 films · 1979–2016 · 1 of 6
 /// watched" and a progress bar, a three-line overview, Play or Resume from the first film not watched (in collection order),
@@ -107,6 +143,16 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 	/// <summary>Loading, empty and failed, worded, with Retry.</summary>
 	public LoadState State { get; } = new("this collection");
 
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M2): whether this visit comes back to the collection (Back, Forward) or loads it again in place
+	/// (R, F5), so its Order and Hide watched are put back (<see cref="CollectionPlaces"/>); set by the page, asked once the
+	/// server has answered. Unset or false: a collection opened anew, in its own order.
+	/// </summary>
+	public Func<bool>? KeepsPlace { get; set; }
+
+	// the view is kept from the first time it is shown on (not the defaults a new view model starts with)
+	private bool _placeKnown;
+
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 
 	public async Task OnNavigatedTo(object parameter)
@@ -145,7 +191,18 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 		}
 
 		_serverOrder = [.. result.Items];
+		if (KeepsPlace?.Invoke() == true && known.Id is { } set && CollectionPlaces.Recall(JellyfinClient.UserId, set) is { } place)
+		{
+			// Back or R: the order and Hide watched as the user left them (each change shows the cards again: Update below once)
+			_placeKnown = false;
+			Order = place.Order;
+			HideWatched = place.HideWatched;
+		}
+
+		_placeKnown = true;
 		Update();
+		// (not remembered here: a collection opened anew would put its defaults over the place an earlier visit left, and Back
+		// to that visit lost its Order; the place is the user's changes, OnOrderChanged and OnHideWatchedChanged)
 
 		if (_serverOrder.Count == 0)
 		{
@@ -159,9 +216,26 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 	private Task<BaseItemDtoQueryResult?> ItemsOf(BaseItemDto dto) =>
 		dto.Type == BaseItemDto_Type.Playlist && dto.Id is { } id ? JellyfinClient.GetPlaylistItems(id) : JellyfinClient.GetItems(dto);
 
-	partial void OnOrderChanged(CollectionOrder value) => Update();
+	partial void OnOrderChanged(CollectionOrder value)
+	{
+		Update();
+		Remember();
+	}
 
-	partial void OnHideWatchedChanged(bool value) => Update();
+	partial void OnHideWatchedChanged(bool value)
+	{
+		Update();
+		Remember();
+	}
+
+	/// <summary>Nixie 1.4.0 (bug hunt M2): the view as it is now, for Back and R (<see cref="CollectionPlaces"/>).</summary>
+	private void Remember()
+	{
+		if (_placeKnown && Collection?.Id is { } set)
+		{
+			CollectionPlaces.Remember(JellyfinClient.UserId, set, new CollectionPlace(Order, HideWatched));
+		}
+	}
 
 	private void Update()
 	{

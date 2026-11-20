@@ -346,6 +346,10 @@ public partial class App : Application
 		try
 		{
 			PerfLog.Startup(GetService<ILogger<App>>(), "launched");
+			// Nixie 1.4.0 (bug hunt M3): what threw on the UI thread is in the log before a crash can end the app
+			Services.FirstChanceTrail.Start();
+			// Nixie 1.4.0 (bug hunt m4): every theme's library page gives its load's focus by the app's one arrival rule
+			Core.ViewModels.LibraryViewModel.LoadFocusYields = Services.ArrivalFocus.LibraryYields;
 			await Host.StartAsync();
 
 			Locator.SetServiceProvider(Host.Services);

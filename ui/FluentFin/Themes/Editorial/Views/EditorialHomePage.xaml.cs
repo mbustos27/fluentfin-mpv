@@ -557,7 +557,9 @@ public sealed partial class EditorialHomePage : Page
 			t.Stop();
 			PageScroller.ChangeView(null, Math.Min(place.Offset, PageScroller.ScrollableHeight), null, disableAnimation: true);
 			PageScroller.UpdateLayout();
-			if (place.Row is { } header && place.ItemId is { } id)
+			// Nixie 1.4.0 (review of wip/140-fix2): Back's card takes the keyboard by the app's one arrival rule (not once the user
+			// moved while Home came back, nor out of a text box they went to)
+			if (place.Row is { } header && place.ItemId is { } id && FluentFin.Services.ArrivalFocus.WhyNot(this) is null)
 			{
 				ShelfRow.Shown.FirstOrDefault(r => r.Header == header && IsMine(r))?
 					.FocusItem(x => x is BaseItemViewModel vm && vm.Id == id, FocusState.Programmatic);

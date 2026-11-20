@@ -177,7 +177,7 @@ public sealed class ThemeAnchors
 	{
 		if (page.IsLoaded)
 		{
-			page.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => Restore(page));
+			Services.UiDispatch.Enqueue(page.DispatcherQueue, "the place after a theme switch", () => Restore(page), Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
 			return;
 		}
 
@@ -185,7 +185,7 @@ public sealed class ThemeAnchors
 		{
 			page.Loaded -= OnLoaded;
 			// after the first layout pass, when the rows have realized their items
-			page.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => Restore(page));
+			Services.UiDispatch.Enqueue(page.DispatcherQueue, "the place after a theme switch", () => Restore(page), Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
 		}
 
 		page.Loaded += OnLoaded;
@@ -254,6 +254,7 @@ public sealed class ThemeAnchors
 	public RefreshRestore RestoreAfterRefresh(Page page, TimeSpan within, Action<string>? log = null, Func<string?>? yieldTo = null)
 	{
 		var started = DateTime.UtcNow;
+		DateTime? loadedAt = null;
 		var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
 		var restore = new RefreshRestore(page, timer, started, log);
 		timer.Tick += (_, _) =>
@@ -264,17 +265,23 @@ public sealed class ThemeAnchors
 				return;
 			}
 
-			var last = DateTime.UtcNow - started >= within;
+			var now = DateTime.UtcNow;
+			var last = now - started >= within;
 			if (!page.IsLoaded && !last)
 			{
 				return;
 			}
 
-			var done = TryRestoreByPlace(page, last);
+			// Nixie 1.4.0 (bug hunt m1: with the place gone, R was locked out for the whole 6 s): once the page has loaded and
+			// settled, what is not in it is not waited for
+			loadedAt = IsLoading(page) == false ? loadedAt ?? now : null;
+			restore.LoadedAt = loadedAt;
+			var settled = loadedAt is { } at && now - at >= SettleAfterLoad;
+			var done = TryRestoreByPlace(page, last, settled);
 			if (done || last)
 			{
 				timer.Stop();
-				log?.Invoke($"the place {(done ? "kept" : "not found")} after {(int)(DateTime.UtcNow - started).TotalMilliseconds} ms (keyboard {(HadFocus ? Focused is null ? FocusedControl is { } c ? $"on {c}" : "on the page, on no item" : "on an item" : "not in the page")}, {RowPlaces.Count} row(s))");
+				log?.Invoke($"the place {(done ? _gone ? "not in the loaded page, given up" : "kept" : "not found")} after {(int)(DateTime.UtcNow - started).TotalMilliseconds} ms (keyboard {(HadFocus ? Focused is null ? FocusedControl is { } c ? $"on {c}" : "on the page, on no item" : "on an item" : "not in the page")}, {RowPlaces.Count} row(s))");
 			}
 		};
 		timer.Start();
@@ -283,8 +290,68 @@ public sealed class ThemeAnchors
 
 	private bool _interimOnPrimary;
 
-	/// <summary>One try of <see cref="RestoreAfterRefresh"/>: true when the place is back.</summary>
-	private bool TryRestoreByPlace(Page page, bool last)
+	// the place was given up because it is not in the loaded page (for the log)
+	private bool _gone;
+
+	/// <summary>Nixie 1.4.0 (bug hunt m1): how long a loaded page is given for its lists to fill before what is not there is given up.</summary>
+	public static readonly TimeSpan SettleAfterLoad = TimeSpan.FromMilliseconds(500);
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m1): whether the page is still loading, by its view model's load states (each public LoadState, and
+	/// an IsLoading flag); null when its view model says nothing of either (the restore then waits its whole time, as before).
+	/// </summary>
+	public static bool? IsLoading(Page page)
+	{
+		var viewModel = page.GetType().GetProperty("ViewModel")?.GetValue(page);
+		if (viewModel is null)
+		{
+			return null;
+		}
+
+		bool? loading = null;
+		foreach (var property in viewModel.GetType().GetProperties())
+		{
+			if (property.GetIndexParameters().Length > 0)
+			{
+				continue;
+			}
+
+			if (property.PropertyType == typeof(LoadState) && property.GetValue(viewModel) is LoadState state)
+			{
+				loading = (loading ?? false) || state.Status is LoadStatus.Idle or LoadStatus.Loading;
+			}
+			else if (property.Name == "IsLoading" && property.PropertyType == typeof(bool) && property.GetValue(viewModel) is bool busy)
+			{
+				loading = (loading ?? false) || busy;
+			}
+		}
+
+		return loading;
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m1: R with the keyboard on the top bar's tab, its rows' place not found, ran the whole 6 s): with the
+	/// keyboard not in the page, the rows are done when each is placed, or once the page has loaded and settled (a row not
+	/// placed by then is not there: its item gone, or not a row a refresh can find again).
+	/// </summary>
+	public static bool RowsDone(int rows, int placed, bool settled) => placed >= rows || settled;
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m1): whether a refresh's page is still coming in: loading (or not saying), not yet seen loaded by the
+	/// restore, or seen loaded less than <see cref="SettleAfterLoad"/> before <paramref name="now"/>.
+	/// </summary>
+	public static bool StillComing(bool? loading, DateTime? loadedAt, DateTime now) =>
+		loading != false || loadedAt is not { } at || now - at < SettleAfterLoad;
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m1): whether the item the keyboard was on is given up: the page has loaded and settled and the item
+	/// is in none of its lists (a Continue Watching item finished on a phone). The keyboard then goes where the time running out
+	/// would have put it (the Primary), at once.
+	/// </summary>
+	public static bool ItemGone(bool settled, bool inLists) => settled && !inLists;
+
+	/// <summary>One try of <see cref="RestoreAfterRefresh"/>: true when the place is back (or, once the page has settled, given up).</summary>
+	private bool TryRestoreByPlace(Page page, bool last, bool settled = false)
 	{
 		page.UpdateLayout();
 		var lists = Lists(page).ToList();
@@ -322,13 +389,21 @@ public sealed class ThemeAnchors
 
 		if (!HadFocus)
 		{
-			return placed >= RowPlaces.Count;
+			_gone = settled && placed < RowPlaces.Count;
+			return RowsDone(RowPlaces.Count, placed, settled);
 		}
 
 		if (Focused is not null && FindItem(page, Focused) is { } control && control.Focus(FocusState.Keyboard))
 		{
 			control.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
 			return true;
+		}
+
+		if (Focused is not null && !last && ItemGone(settled, sources.Any(source => source is IEnumerable items && IndexOf(items, Focused) >= 0)))
+		{
+			// the item is not in the loaded page: the Primary now, not after the whole wait
+			_gone = true;
+			last = true;
 		}
 
 		if (Focused is null && FocusedControl is { } anchor && !last)
@@ -605,6 +680,16 @@ public sealed class RefreshRestore(Page page, DispatcherTimer timer, DateTime st
 
 	/// <summary>Whether it is still looking for the place.</summary>
 	public bool IsRunning => timer.IsEnabled;
+
+	/// <summary>Nixie 1.4.0 (bug hunt m1): when the refreshed page was seen loaded (null while it loads).</summary>
+	public DateTime? LoadedAt { get; set; }
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m1): whether the refresh is still coming in: running, and its page still loading or loaded less than
+	/// <see cref="ThemeAnchors.SettleAfterLoad"/> ago. Another R then joins it (R, R 150 ms apart: bug hunt M4); after that
+	/// R loads the page again, even while the place is still looked for (a place that cannot be found locked R out for 6 s).
+	/// </summary>
+	public bool Settling => IsRunning && ThemeAnchors.StillComing(ThemeAnchors.IsLoading(Page), LoadedAt, DateTime.UtcNow);
 
 	/// <summary>Stops looking (the user moved, or the page was left), and says why in the log.</summary>
 	public void Stop(string why)

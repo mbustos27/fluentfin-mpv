@@ -1,6 +1,8 @@
+using System.ComponentModel;
 using System.Globalization;
 using FluentFin.Converters;
 using FluentFin.Core.ViewModels;
+using FluentFin.Services;
 using Jellyfin.Sdk.Generated.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -33,11 +35,25 @@ public sealed partial class CollectionPage : Page
 		GridRepeater.ElementPrepared += (_, e) =>
 		{
 			SetPlace(e.Element, e.Index);
-			if (_itemWidth <= 0 && e.Element is FrameworkElement card)
+			if (_itemWidth <= 0 && !_widthQueued && e.Element is FrameworkElement)
 			{
-				card.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-				_itemWidth = card.DesiredSize.Width;
-				LayoutGrid();
+				// Nixie 1.4.0 (bug hunt M3): the poster's width is measured, and the grid's spacing set, after the repeater's
+				// layout pass, not inside it (one of the crash's suspects; not its cause, but a layout changed inside its own
+				// pass is how layout cycles start)
+				_widthQueued = true;
+				var card = e.Element;
+				UiDispatch.Enqueue(DispatcherQueue, "the Collection grid's spacing", () =>
+				{
+					_widthQueued = false;
+					if (_itemWidth > 0)
+					{
+						return;
+					}
+
+					card.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+					_itemWidth = card.DesiredSize.Width;
+					LayoutGrid();
+				}, Microsoft.UI.Dispatching.DispatcherQueuePriority.High);
 			}
 		};
 		PageContent.SizeChanged += (_, _) =>
@@ -53,42 +69,12 @@ public sealed partial class CollectionPage : Page
 			AutomationProperties.SetSizeOfSet(e.Element, ViewModel.Letters.Count);
 		};
 
-		ViewModel.State.PropertyChanged += (_, e) =>
+		// Nixie 1.4.0 (bug hunt M2): Back, Forward and R keep the page's Order and Hide watched (CollectionPlaces)
+		ViewModel.KeepsPlace = () => ArrivalFocus.KindOf(this) switch
 		{
-			if (e.PropertyName == nameof(LoadState.Status) && ViewModel.State.IsLoaded && !_focusedOnArrival)
-			{
-				// arriving, the focus is in the page (the UX review's item 4), once the page is drawn: back from a film, on its card;
-				// else on the one Primary; with nothing to play (an album of songs), on the first card
-				_focusedOnArrival = true;
-				DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-				{
-					var back = _returnTo is { } id ? IndexOf(id) : -1;
-					if (back >= 0)
-					{
-						FocusCard(back);
-					}
-					else if (PlayButton.IsLoaded && PlayButton.IsEnabled)
-					{
-						PlayButton.Focus(FocusState.Programmatic);
-					}
-					else if (ViewModel.Entries.Count > 0)
-					{
-						FocusCard(0);
-					}
-				});
-			}
-		};
-
-		ViewModel.PropertyChanged += (_, e) =>
-		{
-			if (e.PropertyName == nameof(CollectionViewModel.FocusRequest) && ViewModel.FocusRequest >= 0)
-			{
-				FocusCard(ViewModel.FocusRequest);
-			}
-			else if (e.PropertyName == nameof(CollectionViewModel.Entries))
-			{
-				DispatcherQueue.TryEnqueue(UpdatePlaces);
-			}
+			ArrivalKind.Returned or ArrivalKind.ThemeSwitched => true,
+			ArrivalKind.Refreshed => App.GetService<Contracts.Services.INavigationService>() is NavigationService { LastRefreshKeepsPlace: true },
+			_ => false,
 		};
 	}
 
@@ -97,17 +83,88 @@ public sealed partial class CollectionPage : Page
 		_focusedOnArrival = false;
 		var set = e.Parameter is BaseItemDto { Id: { } given } ? given : e.Parameter as Guid?;
 		_returnTo = e.NavigationMode is NavigationMode.Back or NavigationMode.Forward && set is { } key && LeftFrom.TryGetValue(key, out var item) ? item : null;
+		// Nixie 1.4.0 (bug hunt m8): the page follows its view model while it is shown, and lets go when it is left (it was held
+		// from the constructor on: a page left behind would still focus cards)
+		ViewModel.State.PropertyChanged -= OnStateChanged;
+		ViewModel.PropertyChanged -= OnViewModelChanged;
+		ViewModel.State.PropertyChanged += OnStateChanged;
+		ViewModel.PropertyChanged += OnViewModelChanged;
 		base.OnNavigatedTo(e);
+		if (ViewModel.State.IsLoaded)
+		{
+			// a view model handed over already loaded (a theme switch) has no Status change to wait for
+			OnStateChanged(ViewModel.State, new PropertyChangedEventArgs(nameof(LoadState.Status)));
+		}
 	}
 
 	protected override void OnNavigatedFrom(NavigationEventArgs e)
 	{
+		ViewModel.State.PropertyChanged -= OnStateChanged;
+		ViewModel.PropertyChanged -= OnViewModelChanged;
 		if (ViewModel.Collection?.Id is { } set && _lastEntry is { } item)
 		{
 			LeftFrom[set] = item;
 		}
 
 		base.OnNavigatedFrom(e);
+	}
+
+	private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(LoadState.Status) && ViewModel.State.IsLoaded && !_focusedOnArrival)
+		{
+			// arriving, the focus is in the page (the UX review's item 4), once the page is drawn: back from a film, on its card;
+			// else on the one Primary; with nothing to play (an album of songs), on the first card
+			_focusedOnArrival = true;
+			UiDispatch.Enqueue(DispatcherQueue, "the Collection page's arrival focus", FocusOnArrival, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+		}
+	}
+
+	private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(CollectionViewModel.FocusRequest) && ViewModel.FocusRequest >= 0)
+		{
+			FocusCard(ViewModel.FocusRequest);
+		}
+		else if (e.PropertyName == nameof(CollectionViewModel.Entries))
+		{
+			UiDispatch.Enqueue(DispatcherQueue, "the Collection cards' places", UpdatePlaces);
+		}
+	}
+
+	/// <summary>
+	/// The arrival's focus, by the app's one rule (<see cref="ArrivalFocus"/>): never while the user has moved since the page
+	/// came (Ctrl+F and a letter in the search box while a slow collection loaded: bug hunt M1), nor after R (its restore
+	/// puts the keyboard back).
+	/// </summary>
+	private void FocusOnArrival()
+	{
+		if (!IsLoaded)
+		{
+			// loaded before it was drawn (a quick server): once it is
+			void OnLoaded(object sender, RoutedEventArgs e)
+			{
+				Loaded -= OnLoaded;
+				UiDispatch.Enqueue(DispatcherQueue, "the Collection page's arrival focus", FocusOnArrival, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+			}
+
+			Loaded += OnLoaded;
+			return;
+		}
+
+		var back = _returnTo is { } id ? IndexOf(id) : -1;
+		if (back >= 0)
+		{
+			ArrivalFocus.TryTake(this, "the card Back returns to", () => FocusCard(back));
+		}
+		else if (PlayButton.IsLoaded && PlayButton.IsEnabled)
+		{
+			ArrivalFocus.TryTake(this, "Play", () => PlayButton.Focus(FocusState.Programmatic));
+		}
+		else if (ViewModel.Entries.Count > 0)
+		{
+			ArrivalFocus.TryTake(this, "the first card", () => FocusCard(0));
+		}
 	}
 
 	private int IndexOf(Guid item)
@@ -142,6 +199,7 @@ public sealed partial class CollectionPage : Page
 	}
 
 	private double _itemWidth;
+	private bool _widthQueued;
 
 	/// <summary>
 	/// The grid's columns fill its row: as many of the theme's posters as fit with at least 16 px between them, the space left
@@ -226,21 +284,46 @@ public sealed partial class CollectionPage : Page
 		}
 	}
 
-	private void FocusCard(int index)
+	/// <summary>
+	/// The card at <paramref name="index"/> gets the keyboard, brought into view; false when it cannot (the page not drawn, the
+	/// grid not holding that many cards). Nixie 1.4.0 (bug hunt M3): never asks the repeater for a card it does not have, and a
+	/// failure is logged, not thrown (thrown from a queued callback, it ended the app).
+	/// </summary>
+	private bool FocusCard(int index)
 	{
-		if (index < 0 || index >= ViewModel.Entries.Count)
+		if (!CanFocusCard(index, ViewModel.Entries.Count, GridRepeater.ItemsSourceView?.Count ?? -1, IsLoaded && GridRepeater.IsLoaded))
 		{
-			return;
+			return false;
 		}
 
 		ViewModel.FocusRequest = -1;
-		if (GridRepeater.GetOrCreateElement(index) is UIElement element)
+		try
 		{
-			GridRepeater.UpdateLayout();
-			element.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
-			CardOf(element)?.Focus(FocusState.Keyboard);
+			// Nixie 1.4.0 (bug hunt M3, reproduced: Back to a collection, its card past the first, the page just loaded): the
+			// grid lays its cards out first and the card is taken from those. Asked for before the grid had laid any out
+			// (GetOrCreateElement making it an anchor outside what the repeater had realized), the next layout pass never
+			// settled ("Layout cycle detected", 150 ms after the card took the keyboard) and the app ended (0xc000027b in
+			// CoreMessagingXP). GetOrCreateElement only for a card the grid has not made (far down a long playlist), as CardGrid does.
+			UpdateLayout();
+			var element = GridRepeater.TryGetElement(index) ?? GridRepeater.GetOrCreateElement(index);
+			if (element is not null)
+			{
+				GridRepeater.UpdateLayout();
+				element.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = false });
+				return CardOf(element)?.Focus(FocusState.Keyboard) == true;
+			}
 		}
+		catch (Exception ex)
+		{
+			UiDispatch.Failed($"the Collection page's card {index + 1} of {ViewModel.Entries.Count} taking the keyboard", ex);
+		}
+
+		return false;
 	}
+
+	/// <summary>Whether a card can be asked of the grid: a place among the entries, the grid holding them, both drawn.</summary>
+	internal static bool CanFocusCard(int index, int entries, int inGrid, bool drawn) =>
+		drawn && index >= 0 && index < entries && index < inGrid;
 
 	private void SetPlace(UIElement element, int index)
 	{

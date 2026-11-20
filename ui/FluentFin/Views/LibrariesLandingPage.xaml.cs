@@ -1,5 +1,6 @@
 using FluentFin.Core.Theming;
 using FluentFin.Core.ViewModels;
+using FluentFin.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -21,20 +22,19 @@ namespace FluentFin.Views
 			{
 				if (e.PropertyName == nameof(LoadState.Status) && ViewModel.State.IsLoaded && !_focused)
 				{
-					// arriving, the focus is on the first tile, not left in the top bar (the review's X8)
+					// arriving, the focus is on the first tile, not left in the top bar (the review's X8); Nixie 1.4.0 (bug hunt m4):
+					// by the app's one arrival rule, never once the user has moved since the page came (ArrivalFocus)
 					_focused = true;
-					DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, FocusFirstTile);
+					UiDispatch.Enqueue(DispatcherQueue, "the Libraries page's arrival focus",
+						() => ArrivalFocus.TryTake(this, "the first tile", FocusFirstTile), Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
 				}
 			};
 		}
 
-		private void FocusFirstTile()
+		private bool FocusFirstTile()
 		{
 			var view = ViewModel.Media.Count > 0 ? MediaView : CollectionsView;
-			if (FindContainer(view) is Control first)
-			{
-				first.Focus(FocusState.Programmatic);
-			}
+			return FindContainer(view) is Control first && first.Focus(FocusState.Programmatic);
 		}
 
 		private static Control? FindContainer(DependencyObject root)
