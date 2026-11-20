@@ -9,8 +9,8 @@ are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL month
 | 1.4.0 | Consistency | The library layer for all four themes, plus the contrast floor and big libraries | **Released** 2026-11-20 |
 | 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
 | **1.5** | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Now** (M–L, in progress) |
-| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page | Next (L) |
-| 1.6.1 | Theme polish | Drive-in's look on the shared pages, Editorial's list view | Planned (M) |
+| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view) | Next (L) |
+| 1.6.1 | Fixes | The first fix release: clears the fix queue in KNOWN-ISSUES | After 1.6 |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | Planned (M–L) |
 | 1.8 | Player | Pop-out player, chapter extras | From the backburner (M–L) |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research first (L) |
@@ -22,6 +22,23 @@ editing the same files. 1.5 now ships search, the updater and the fixes; the top
 Collection page become 1.6.
 
 **Hotfixes:** a Blocker ships right away as a 1.x.y hotfix. Everything else waits for the next planned release.
+
+## Release rules (from 1.6; the owner, 2026-11-20: "yes")
+The owner noticed that fixes kept pushing features down the road, and that releases were mostly fixes. 1.5's running
+fix streams finish as planned. From 1.6:
+1. **Two kinds of release:**
+   - **feature releases** (1.6, 1.7, …) carry their planned features only;
+   - **fix releases** (1.6.1, 1.6.2, …) clear the fix queue between feature releases.
+2. **Every finding is triaged** (reviews, bug hunts, the owner's reports):
+   - a **Blocker** ships right away as a hotfix;
+   - a **Major in the feature's own new code** is fixed before that feature merges;
+   - **everything else**, including old bugs a review or hunt turns up, goes to the **fix queue** (a section in
+     KNOWN-ISSUES) for the next fix release, and doesn't hold the feature.
+3. **Features get usage first.** When usage is short, fixes outside the feature wait, not the feature.
+4. **A release ships with its known Minors listed** in KNOWN-ISSUES, instead of fixing them all first.
+
+**In practice:** reviewers and the pre-release hunt label each finding Blocker, Major-in-new-code or queue; streams fix
+only the first two; the integrator moves queue items into KNOWN-ISSUES' fix queue.
 
 ## 1.4.1: Continue Watching (released 2026-11-20)
 - **A rewatched show comes back.** Up next now asks for rewatches. Jellyfin 12.4 keeps an episode marked watched while
@@ -202,7 +219,12 @@ The plan:
 
 ## 1.6: Collections
 The top bar, tidy names, collections and the Collection page touch the same pages (the Collection page, its cards and
-chips, the top bar's Collections destination, the fake server), so they're built together.
+chips, the top bar's Collections destination, the fake server), so they're built together. Theme polish joins them
+(release rules, 2026-11-20), since it's on the same pages.
+
+**Theme polish** (was 1.6.1):
+- **Drive-in's own look** on the Libraries and Collection pages.
+- **Editorial's list view** (from the backburner).
 
 **Top bar stream** (decided 2026-11-19):
 - favourite libraries in the top bar, starting from the pins 1.3 users made, which are still stored
@@ -277,9 +299,9 @@ chips, the top bar's Collections destination, the fake server), so they're built
   - one rule for the whole show, or per season;
   - 1.6 or 1.8.
 
-## 1.6.1: Theme polish
-- **Drive-in's own look** on the Libraries and Collection pages.
-- **Editorial's list view** (from the backburner).
+## 1.6.1: Fixes (the first fix release)
+- Clears the fix queue in KNOWN-ISSUES: the Minors and old bugs that 1.6's reviews and hunt put there, and the owner's
+  reports. No features.
 
 ## 1.7: Discover
 Plan phases 2 and 3. Each source is off until the user turns it on. Nixie fetches public lists and matches them on the
