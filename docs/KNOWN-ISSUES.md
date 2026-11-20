@@ -113,7 +113,7 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   on the A to Z's R, and on the A to Z a letter key presses that letter.
 - **The skeleton and [perf] probes** (`LibraryProbe`) log one line per library opened; they measure, they never change
   the layout.
-- **For 1.4.1, from the outside-services bug hunt** (`docseports\Bug hunt 2026-11-19 (outside services).md`; none blocks
+- **For 1.4.1, from the outside-services bug hunt** (`docs\reports\Bug hunt 2026-11-19 (outside services).md`; none blocks
   1.4.0):
   - **M1: a certificate Windows trusts but Mozilla's list does not: sign-in works, playback fails.** The UI checks the
     server's chain against the Windows store, the backend against certifi's bundle, so a home or private CA (or an
