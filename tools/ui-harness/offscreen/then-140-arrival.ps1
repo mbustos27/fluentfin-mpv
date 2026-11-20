@@ -112,16 +112,22 @@ if ($arOnly -contains 'suggest') {
     CK-Key 'Ctrl+F'; Start-Sleep -Milliseconds 400
     $query = $fixture.movie.name.Substring(0, [Math]::Min(9, $fixture.movie.name.Length)).TrimEnd()
     foreach ($ch in $query.ToCharArray()) { if ($ch -eq ' ') { CK-Key 'Space' } else { CK-Key "$ch" }; Start-Sleep -Milliseconds 60 }
-    $listed = Wait-Until { Find-Ui -Name $fixture.movie.name -Type 'ListItem' -Contains } -Seconds 10 -PollMs 200
+    # the suggestion itself ("A Quiet Harbor, 2008, movie"), not a card of the page under it with the same title
+    $sgCond = New-Object System.Windows.Automation.AndCondition(
+        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, [int]$script:ui.Id)),
+        (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)))
+    $listed = Wait-Until { [OffscreenUi]::Where($script:hwnd, $script:ui.Id, $sgCond) | Where-Object { try { $_.Cached.Name -like "$($fixture.movie.name)*, movie" } catch { $false } } | Select-Object -First 1 } -Seconds 12 -PollMs 250
     $at = Get-Epoch
-    CK-Key 'Down'; Start-Sleep -Milliseconds 400
+    CK-Key 'Down'
+    # Down puts the row's name in the box (nothing opens until Enter)
+    $picked = Wait-Until { $t = AR-Text; if ($t -and $t -ne $query.ToLowerInvariant() -and $t -ne $query) { $t } } -Seconds 3 -PollMs 150
     CK-Key 'Enter'
     $opened = Wait-ItemPage $fixture.movie.name 15
     $onPlay = Wait-Until { $f = CK-Focus; if ($f -match "^Button '(Play|Resume)") { $f } } -Seconds 6 -PollMs 200
     $before = AR-Text
     CK-Key 'Q'; Start-Sleep -Milliseconds 700
     $after = AR-Text
-    Check "search: a suggestion chosen with Down and Enter opens the film with the keyboard on Play; a letter then does not type into the box" ([bool]$listed -and [bool]$opened -and [bool]$onPlay -and $before -eq '' -and $after -eq '') "typed '$query'; listed $([bool]$listed); opened $([bool]$opened); focus $(CK-Focus); box '$before' then '$after'; $((CK-Log $at '\[focus\]') -join ' | ')"
+    Check "search: a suggestion chosen with Down and Enter opens the film with the keyboard on Play; a letter then does not type into the box" ([bool]$listed -and [bool]$opened -and [bool]$onPlay -and $before -eq '' -and $after -eq '') "typed '$query'; listed $([bool]$listed); Down put '$picked' in the box; opened $([bool]$opened); focus $(CK-Focus); box '$before' then '$after'; $((CK-Log $at '\[focus\]') -join ' | ')"
     AR-Reset
 }
 if ($arOnly -contains 'colstate') {
