@@ -36,8 +36,9 @@ function TL-Ocr([string]$File) {
         $null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
         $null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
         $null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics, ContentType = WindowsRuntime]
+        $null = [Windows.Globalization.Language, Windows.Globalization, ContentType = WindowsRuntime]
         $tlAsTask = @([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
-        $tlAwait = { param($Op, [Type]$T) $t = $tlAsTask.MakeGenericMethod($T).Invoke($null, @($Op)); [void]$t.Wait(20000); $t.Result }
+        $tlAwait = { param($Op, [Type]$ResultType) $tlTask = $tlAsTask.MakeGenericMethod($ResultType).Invoke($null, @($Op)); [void]$tlTask.Wait(20000); $tlTask.Result }
         $tlFile = & $tlAwait ([Windows.Storage.StorageFile]::GetFileFromPathAsync($File)) ([Windows.Storage.StorageFile])
         $tlStream = & $tlAwait ($tlFile.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])
         $tlDecoder = & $tlAwait ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($tlStream)) ([Windows.Graphics.Imaging.BitmapDecoder])
@@ -65,6 +66,11 @@ function TL-Play([string]$Id, [string]$Kind) {
     Key 0x0D
     $tlOpened = Wait-Until { @(TL-Log $tlAt | Where-Object { $_ -like 'theatre opened*' }) | Select-Object -First 1 } -Seconds 10 -PollMs 200
     Check "trailer live ($tlPhase) ${Id}: Enter on Trailer opens the theatre" ([bool]$tlOpened) "$tlOpened"
+    # what YouTube shows before the start limit (8 s) could put Nixie's message there
+    Start-Sleep -Seconds 4
+    Shot "live-$tlPhase-$Kind-$Id-early"
+    $tlEarly = TL-Ocr $shots["live-$tlPhase-$Kind-$Id-early"]
+    Say "trailer live ($tlPhase) ${Id}: OCR of the early shot (4 s): $(($tlEarly -replace '\s+', ' ').Trim())"
     if ($tlPhase -eq 'after') {
         $tlEnd = Wait-Until { @(TL-Log $tlAt | Where-Object { $_ -match 'the player: ready True, state 1, error 0|Nixie''s message' }) | Select-Object -First 1 } -Seconds 25 -PollMs 250
         Start-Sleep -Seconds 2
@@ -78,20 +84,20 @@ function TL-Play([string]$Id, [string]$Kind) {
     $tlRefused = @($tlLines | Where-Object { $_ -match 'Nixie''s message \(YouTube refused it: error (\d+)\)' } | ForEach-Object { [int]$Matches[1] }) | Select-Object -First 1
     $tlPlaying = [bool](@($tlLines | Where-Object { $_ -match 'the player: ready True, state 1, error 0' }).Count)
     $tlBrowser = @($tlLines | Where-Object { $_ -match 'the browser (opens|would open)' })
-    $tl153 = $tlText -match '153|configuration error'
+    $tl153 = ($tlText -match '153|configuration error') -or ($tlEarly -match '153|configuration error')
     if ($tlPhase -eq 'before') {
         Say "trailer live (before) ${Id}: YouTube's Error 153 on the shot (OCR): $tl153"
     }
     elseif ($Kind -eq 'plays') {
         Check "trailer live (after) ${Id}: the player reaches playing (state 1) with no error and no message" ($tlPlaying -and -not $tlRefused -and -not ($tlLines -match 'Nixie''s message')) ($tlLines -join ' | ')
-        Check "trailer live (after) ${Id}: no Error 153 on the shot (OCR)" (-not $tl153) "$tlText"
+        Check "trailer live (after) ${Id}: no Error 153 on the shots (OCR)" (-not $tl153) "early: $tlEarly; later: $tlText"
     }
     Check "trailer live ($tlPhase) ${Id}: no browser launched" ($tlBrowser.Count -eq 0) ($tlBrowser -join ' | ')
     $tlAt2 = Get-Epoch
     Key 0x1B
     [void](Wait-Until { @(TL-Log $tlAt2 | Where-Object { $_ -eq 'theatre closed' }) | Select-Object -First 1 } -Seconds 5 -PollMs 150)
     Start-Sleep -Milliseconds 800
-    return [pscustomobject]@{ id = $Id; kind = $Kind; playing = $tlPlaying; refused = $tlRefused; ocr153 = $tl153 }
+    return [pscustomobject]@{ id = $Id; kind = $Kind; playing = $tlPlaying; refused = $tlRefused; message = [bool](@($tlLines | Where-Object { $_ -like "Nixie's message*" }).Count); ocr153 = $tl153 }
 }
 
 [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080)
@@ -107,6 +113,12 @@ foreach ($tlId in $tlBlocked) {
 if ($tlPhase -eq 'after' -and $tlBlocked) {
     Check 'trailer live (after): an id that disallows embedding shows Nixie''s message (error 101 or 150)' ([bool]$tlFoundBlocked) (($tlResults | Where-Object kind -eq 'blocked' | ForEach-Object { "$($_.id): refused $($_.refused), playing $($_.playing)" }) -join '; ')
 }
+# an id YouTube doesn't have (NIXIE_LIVE_GONE_IDS): Nixie's message too (YouTube's own code for it, logged)
+foreach ($tlId in @($(if ($env:NIXIE_LIVE_GONE_IDS) { $env:NIXIE_LIVE_GONE_IDS } else { '' }) -split ',' | Where-Object { $_ -match '^[A-Za-z0-9_-]{11}$' })) {
+    $tlR = TL-Play $tlId 'gone'
+    $tlResults += $tlR
+    if ($tlPhase -eq 'after') { Check "trailer live (after) ${tlId}: a video YouTube doesn't have shows Nixie's message" ($tlR.message -and -not $tlR.playing) "refused $($tlR.refused), message $($tlR.message), playing $($tlR.playing)" }
+}
 [void](Invoke-Server '/__harness/trailer' 'POST' @{ url = '' })
 [IO.File]::WriteAllText((Join-Path $Out "trailer-live-$tlPhase.json"), (ConvertTo-Json -InputObject @($tlResults) -Depth 4), [Text.UTF8Encoding]::new($false))
-Say "trailer live ($tlPhase): $(($tlResults | ForEach-Object { "$($_.id) [$($_.kind)] playing=$($_.playing) refused=$($_.refused) ocr153=$($_.ocr153)" }) -join '; ')"
+Say "trailer live ($tlPhase): $(($tlResults | ForEach-Object { "$($_.id) [$($_.kind)] playing=$($_.playing) refused=$($_.refused) message=$($_.message) ocr153=$($_.ocr153)" }) -join '; ')"

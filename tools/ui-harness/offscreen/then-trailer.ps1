@@ -32,11 +32,14 @@ function TR-Open([string]$How) {
     Check "trailer ($How): Enter on Trailer opens the theatre window" ([bool]$trOpened) "$trOpened"
     $trLoaded = Wait-Until { @(Get-Requests $trAt | Where-Object { $_.path -like '/__harness/trailer/*' }) | Select-Object -First 1 } -Seconds 20 -PollMs 200
     Check "trailer ($How): the theatre loads the harness's embed page (not YouTube)" ([bool]$trLoaded) $(if ($trLoaded) { "$($trLoaded.path)?$(($trLoaded.query.PSObject.Properties | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join '&')" })
-    # Nixie 1.4.0 (YouTube's Error 153): the embed is a frame in Nixie's own page, told its origin and sent it as the Referer
+    # Nixie 1.4.0 (YouTube's Error 153): the embed is a frame in Nixie's own page (Sec-Fetch-Dest iframe, cross-site; 1.3.1
+    # loaded it as the page itself: document), told that page's origin. Its Referer is the page's origin for https YouTube;
+    # to the harness's http stand-in the policy (strict-origin-when-cross-origin, https to http) sends none.
     if ($trLoaded) {
-        Check "trailer ($How): the embed is a frame of Nixie's page (Referer and origin= are https://io.github.mbustos27.nixie)" `
-            ("$($trLoaded.report.referer)" -eq 'https://io.github.mbustos27.nixie/' -and "$($trLoaded.query.origin)" -eq 'https://io.github.mbustos27.nixie' -and "$($trLoaded.query.enablejsapi)" -eq '1') `
-            "Referer '$($trLoaded.report.referer)', origin '$($trLoaded.query.origin)', enablejsapi '$($trLoaded.query.enablejsapi)'"
+        Check "trailer ($How): the embed is a frame of Nixie's page https://io.github.mbustos27.nixie (an iframe, told the origin, no Referer to http)" `
+            ("$($trLoaded.report.dest)" -eq 'iframe' -and "$($trLoaded.report.site)" -eq 'cross-site' -and "$($trLoaded.query.origin)" -eq 'https://io.github.mbustos27.nixie' `
+                -and "$($trLoaded.query.enablejsapi)" -eq '1' -and "$($trLoaded.report.referer)" -eq '') `
+            "Sec-Fetch-Dest '$($trLoaded.report.dest)', Sec-Fetch-Site '$($trLoaded.report.site)', origin '$($trLoaded.query.origin)', enablejsapi '$($trLoaded.query.enablejsapi)', Referer '$($trLoaded.report.referer)'"
     }
     $trIn = Wait-Until { @(TR-Log $trAt | Where-Object { $_ -match 'keyboard to Close after the page loaded: True, now on Button Close trailer' }) | Select-Object -First 1 } -Seconds 8 -PollMs 200
     Check "trailer ($How): the keyboard moves into the window (Close trailer), also after the page loads" ([bool]$trIn) ((TR-Log $trAt) -join ' | ')
@@ -267,7 +270,7 @@ if ($trButton) {
         $trPicked = Wait-Until { @(TR-Log $trAt2 | Where-Object { $_ -match 'the browser would open vimeo\.com \(the user picked Open vimeo\.com in browser; the harness: not launched\)' }) | Select-Object -First 1 } -Seconds 5 -PollMs 150
         Check 'trailer (another site): a click on Open vimeo.com in browser is the user''s pick (logged, not launched)' ([bool]$trPicked) ((TR-Log $trAt2) -join ' | ')
     }
-    $trClose = Find-Ui -Name 'Close' -Type 'Button'
+    $trClose = Find-Ui -Id 'CloseButton'
     if ($trClose) {
         $trAt = Get-Epoch
         CK-Click $trClose

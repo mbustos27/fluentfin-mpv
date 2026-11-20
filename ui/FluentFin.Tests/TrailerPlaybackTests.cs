@@ -154,6 +154,9 @@ public sealed class TrailerPlaybackTests
 		Assert.DoesNotContain("PostWebMessage", source);
 		Assert.DoesNotContain("Referer", source.Replace("a Referer it accepts", ""));
 		Assert.Contains("core.IsMuted = true", source);
+		// the user's click on Trailer starts it: no second click inside YouTube's player (it sat unstarted, state -1, live)
+		Assert.Contains("AdditionalBrowserArguments = Trailers.BrowserArguments", source);
+		Assert.Equal("--autoplay-policy=no-user-gesture-required", FluentFin.Core.Trailers.BrowserArguments);
 		Assert.Contains("AddWebResourceRequestedFilter(Trailers.WrapperFilter", source);
 		Assert.Contains("FrameNavigationStarting", source);
 		Assert.Contains("e.IsUserInitiated", source);
@@ -174,6 +177,7 @@ public sealed class TrailerPlaybackTests
 		Assert.All(buttons, b => Assert.Equal("{StaticResource NixieButtonStyle}", (string?)b.Attribute("Style")));
 		Assert.All(buttons, b => Assert.Null(b.Attribute("CornerRadius")));
 		Assert.Equal("Close", (string?)buttons[1].Attribute("Content"));
+		Assert.Equal("Close", (string?)buttons[1].Attribute("AutomationProperties.Name"));
 		Assert.Equal("Dark", (string?)xaml.Root!.Attribute("RequestedTheme"));
 		Assert.Contains(xaml.Descendants(), e => (string?)e.Attribute("AutomationProperties.LiveSetting") == "Assertive");
 		Assert.DoesNotContain("NixiePrimary", xaml.ToString());

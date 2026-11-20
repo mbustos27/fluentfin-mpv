@@ -56,6 +56,7 @@
                     Style="{StaticResource NixieButtonStyle}" />
                 <Button
                     x:Name="CloseButton"
+                    AutomationProperties.Name="Close"
                     Click="CloseButton_Click"
                     Content="Close"
                     Style="{StaticResource NixieButtonStyle}" />

@@ -978,7 +978,8 @@ class Server:
                 if low.startswith("/__harness/trailer/") and method in ("GET", "HEAD"):
                     # Nixie 1.3.1: the stand-in for YouTube's embed page (NIXIE_TRAILER_EMBED_BASE points the app here):
                     # a still "trailer" card, nothing fetched from anywhere; 1.4.0: it answers the wrapper as the mode says
-                    self.extra = {"referer": self.headers.get("Referer") or "", "mode": outer.trailer_mode}
+                    self.extra = {"referer": self.headers.get("Referer") or "", "dest": self.headers.get("Sec-Fetch-Dest") or "",
+                                  "site": self.headers.get("Sec-Fetch-Site") or "", "mode": outer.trailer_mode}
                     return self._send(200, trailer_page(urllib.parse.unquote(self.path.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1]), outer.trailer_mode), "text/html; charset=utf-8")
                 if low == "/__harness/trailer" and method in ("GET", "POST"):
                     # Nixie 1.4.0: how the stand-in answers ("mode": TRAILER_MODES) and the showcase movie's trailer link

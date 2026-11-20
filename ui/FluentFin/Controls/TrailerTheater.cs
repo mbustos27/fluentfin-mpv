@@ -471,7 +471,12 @@ public sealed partial class TrailerTheater : Grid
 		{
 			var folder = Path.Combine(App.GetService<KnownFolders>().ApplicationData, "WebView2");
 			Directory.CreateDirectory(folder);
-			var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, folder, new CoreWebView2EnvironmentOptions());
+			var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, folder, new CoreWebView2EnvironmentOptions
+			{
+				// the user's click on Trailer is the gesture: the embed starts at once (autoplay=1) instead of waiting for a
+				// second click inside YouTube's player (the web view's own policy: no media with sound before a click in it)
+				AdditionalBrowserArguments = Trailers.BrowserArguments,
+			});
 			await web.EnsureCoreWebView2Async(environment);
 			if (generation != _generation || web != _web)
 			{

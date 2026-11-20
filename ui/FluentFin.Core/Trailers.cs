@@ -330,6 +330,12 @@ public static partial class Trailers
 	public static bool OpensInBrowser(Uri? target, bool userInitiated = true) =>
 		userInitiated && target is { IsAbsoluteUri: true, Scheme: "https" or "http" } && string.IsNullOrEmpty(target.UserInfo);
 
+	/// <summary>
+	/// The theatre's web view's browser arguments: a trailer starts without a click inside the page (the user's click on the
+	/// Trailer button asked for it). Without it the embed waits, unstarted, for a click on YouTube's own play button.
+	/// </summary>
+	public const string BrowserArguments = "--autoplay-policy=no-user-gesture-required";
+
 	/// <summary>How long the player has to start (or say why it won't) once the wrapper has loaded.</summary>
 	public static TimeSpan StartLimit { get; } = TimeSpan.FromSeconds(8);
 
