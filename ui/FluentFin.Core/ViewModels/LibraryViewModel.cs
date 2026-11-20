@@ -162,8 +162,32 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	/// Nixie 1.4.0 (integration): whether the place put back after R leaves the keyboard alone (the user moved first: a key in
 	/// the search box, Down), as the refresh's own restore does; the page asks it before focusing the card. Scrolling back
 	/// still happens.
+	/// <para>
+	/// Nixie 1.4.0 (bug hunt m4: a slow library's first poster took the keyboard out of the search box): for the focus the
+	/// load asks for (the arrival's first poster, Back's or R's poster) it is also the app's one arrival rule
+	/// (<see cref="LoadFocusYields"/>, every theme's library page alike); never for an A to Z jump, which the user asked for.
+	/// The page's own rule, when it sets one, is asked too.
+	/// </para>
 	/// </summary>
-	public Func<bool>? FocusYields { get; set; }
+	public Func<bool>? FocusYields
+	{
+		get => () => FocusYieldsNow(_focusFromLoad, _pageFocusYields?.Invoke() == true, LoadFocusYields?.Invoke(this) == true);
+		set => _pageFocusYields = value;
+	}
+
+	/// <summary>Nixie 1.4.0 (bug hunt m4): whether the focus asked for leaves the keyboard alone: only a load's, by either rule.</summary>
+	public static bool FocusYieldsNow(bool fromLoad, bool pageRule, bool arrivalRule) => fromLoad && (pageRule || arrivalRule);
+
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt m4): the app's one arrival rule for a library's load focus (the app sets it: ArrivalFocus): true when
+	/// the keyboard stays where it is (the user moved since the page came, a text box has it, the page was left).
+	/// </summary>
+	public static Func<LibraryViewModel, bool>? LoadFocusYields { get; set; }
+
+	private Func<bool>? _pageFocusYields;
+
+	// the focus asked for came from the load (the arrival, Back, R), not from an A to Z jump
+	private bool _focusFromLoad;
 
 	// ---- Nixie 1.4.0 (the UX review's X4, item 2): the filters on, said; their counts honest; nothing left, said ----------
 
@@ -421,16 +445,38 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 	private (string Letter, int Run)? _lastJump;
 
-	private void ShowIndex(int index)
+	/// <param name="fromLoad">Nixie 1.4.0 (bug hunt m4): the load asks (the arrival, Back, R), not the user (a jump): the
+	/// arrival rule applies (<see cref="FocusYields"/>).</param>
+	private void ShowIndex(int index, bool fromLoad = false)
 	{
-		// the same card again still asks the page to focus it
-		if (FocusRequest == index)
+		_loadAsking = fromLoad;
+		_focusFromLoad = fromLoad;
+		try
 		{
-			OnPropertyChanged(nameof(FocusRequest));
+			// the same card again still asks the page to focus it
+			if (FocusRequest == index)
+			{
+				OnPropertyChanged(nameof(FocusRequest));
+			}
+			else
+			{
+				FocusRequest = index;
+			}
 		}
-		else
+		finally
 		{
-			FocusRequest = index;
+			_loadAsking = false;
+		}
+	}
+
+	private bool _loadAsking;
+
+	// a card asked for by anyone but the load (a page's type-to-jump sets FocusRequest itself) is the user's
+	partial void OnFocusRequestChanged(int value)
+	{
+		if (value >= 0)
+		{
+			_focusFromLoad = _loadAsking;
 		}
 	}
 
@@ -466,7 +512,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		ReturnOffset = place.Offset;
 		if (index >= 0)
 		{
-			ShowIndex(index);
+			ShowIndex(index, fromLoad: true);
 		}
 	}
 
@@ -670,7 +716,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			if (!cameBack && result.Items.Count > 0 && FocusRequest < 0)
 			{
 				ArrivalFocus = true;
-				ShowIndex(0);
+				ShowIndex(0, fromLoad: true);
 			}
 
 			if (result.Items.Count == 0 && playlist)

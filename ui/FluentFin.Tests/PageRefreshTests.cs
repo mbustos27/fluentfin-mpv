@@ -28,14 +28,15 @@ public sealed class PageRefreshTests
 	{
 		var host = Source("Controls", "LibraryGridHost.cs");
 		var editorial = Source("Themes", "Editorial", "Views", "EditorialLibraryPage.xaml.cs");
-		foreach (var page in new[] { host, editorial })
-		{
-			Assert.Contains("{ LastNavigationWasRefresh: true } && Services.PageRefresh.UserMovedSinceRefresh".Replace("Services.", page == editorial ? "" : "Services."), page);
-		}
-
+		// Nixie 1.4.0 (bug hunt m4): the rule is the app's one (ArrivalFocus.LibraryYields, through LibraryViewModel.FocusYields);
+		// Editorial's page still sets its own as well (asked too)
+		Assert.Contains("{ LastNavigationWasRefresh: true } && PageRefresh.UserMovedSinceRefresh", editorial);
 		Assert.Equal(2, host.Split("_vm.FocusYields?.Invoke() != true").Length - 1);      // the card at once, and after the scroll back
 		Assert.Contains("index >= 0 && ViewModel.FocusYields?.Invoke() != true", editorial);
 		Assert.Contains("public static bool UserMovedSinceRefresh => _userMoved is not null;", Source("Services", "PageRefresh.cs"));
+		// after R, the poster put back yields as R's restore does: a key, a click or the wheel since R
+		Assert.Contains("kind == ArrivalKind.Refreshed ? (movedSinceRefresh ?", Source("Services", "ArrivalFocus.cs"));
+		Assert.Equal("a key, a click or the wheel since R", FluentFin.Services.ArrivalFocus.MovedSince(FluentFin.Services.ArrivalKind.Refreshed, 0, 0, movedSinceRefresh: true));
 	}
 
 	[Fact]

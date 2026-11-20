@@ -161,6 +161,10 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
 - **No crash on Back to a collection.** Back from a film to its collection, with that film past the first in the grid,
   could close Nixie ("Layout cycle detected" as the page came back). The page now puts the keyboard on the card once its
   grid is drawn, and a failure in work the window had queued is logged instead of closing the app.
+- **A page never takes the keyboard back from you.** If you move while a collection, a library, the Libraries page or a
+  film is loading (Ctrl+F and a few letters, a click, the wheel), the page leaves the keyboard where you put it when it
+  comes in. Before, a slow collection moved it from the search box to Play, and the next letter you typed refreshed the
+  page.
 
 **Verified, and the known limits**
 

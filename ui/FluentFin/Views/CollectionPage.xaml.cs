@@ -124,7 +124,11 @@ public sealed partial class CollectionPage : Page
 		}
 	}
 
-	/// <summary>The arrival's focus, once the page is drawn (Nixie 1.4.0, bug hunt M3: queued through the guard).</summary>
+	/// <summary>
+	/// The arrival's focus, by the app's one rule (<see cref="ArrivalFocus"/>): never while the user has moved since the page
+	/// came (Ctrl+F and a letter in the search box while a slow collection loaded: bug hunt M1), nor after R (its restore
+	/// puts the keyboard back).
+	/// </summary>
 	private void FocusOnArrival()
 	{
 		if (!IsLoaded)
@@ -143,15 +147,15 @@ public sealed partial class CollectionPage : Page
 		var back = _returnTo is { } id ? IndexOf(id) : -1;
 		if (back >= 0)
 		{
-			FocusCard(back);
+			ArrivalFocus.TryTake(this, "the card Back returns to", () => FocusCard(back));
 		}
 		else if (PlayButton.IsLoaded && PlayButton.IsEnabled)
 		{
-			PlayButton.Focus(FocusState.Programmatic);
+			ArrivalFocus.TryTake(this, "Play", () => PlayButton.Focus(FocusState.Programmatic));
 		}
 		else if (ViewModel.Entries.Count > 0)
 		{
-			FocusCard(0);
+			ArrivalFocus.TryTake(this, "the first card", () => FocusCard(0));
 		}
 	}
 

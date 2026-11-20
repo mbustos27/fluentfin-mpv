@@ -122,12 +122,6 @@ internal sealed class ItemPagePlace
 	}
 
 	/// <summary>
-	/// Nixie 1.4.0: when the user last pressed a key or clicked (WindowShortcuts), so the arrival's focus never takes the
-	/// keyboard back from where the user put it.
-	/// </summary>
-	internal static long UserActedAt;
-
-	/// <summary>
 	/// How long after the Primary took the focus it is given back if it left the page by itself: the navigation's own focus
 	/// handling, or the page drawing its actions again once its artwork came (Drive-in's board, a documentary's page: Play was
 	/// unloaded and the focus went to the top bar's Back).
@@ -149,9 +143,6 @@ internal sealed class ItemPagePlace
 	/// </summary>
 	private static readonly TimeSpan ArrivalPatience = TimeSpan.FromSeconds(15);
 
-	/// <summary>A key or click this soon after the arrival is the one that opened the page, not the user moving on.</summary>
-	private const long ArrivalGraceMs = 400;
-
 	private static string Describe(DependencyObject? element) =>
 		element is FrameworkElement { Name.Length: > 0 } named ? $"{element.GetType().Name} {named.Name}" : element?.GetType().Name ?? "nothing";
 
@@ -161,7 +152,6 @@ internal sealed class ItemPagePlace
 	private void FocusPrimaryWhenDrawn()
 	{
 		var deadline = DateTime.UtcNow + ArrivalPatience;
-		var arrivedTick = Environment.TickCount64;
 		DateTime? placedAt = null;
 		long placedTick = 0;
 		var again = 0;
@@ -183,16 +173,19 @@ internal sealed class ItemPagePlace
 			var ready = primary is { IsLoaded: true, IsEnabled: true, Visibility: Visibility.Visible } && primary.ActualWidth > 0;
 			var current = FocusManager.GetFocusedElement(root) as DependencyObject;
 			var inPage = current is not null && IsInPage(current) && !ReferenceEquals(current, _scroller);
-			var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count;
+			// Nixie 1.4.0: menus, flyouts and dialogs; not a tooltip (a poster's "Play ..." tooltip still up as a keyboard user's
+			// Enter opened the film kept Play from taking the keyboard: seen in Editorial)
+			var popups = Services.ArrivalFocus.OpenPopups(root);
 			if (placedAt is { } at)
 			{
 				// placed: watch a while for the focus leaving the page by itself (Play, drawn again, is not ready for a moment);
 				// the user's first key or click ends the watch
-				if (DateTime.UtcNow - at > Settled || UserActedAt > placedTick)
+				if (DateTime.UtcNow - at > Settled || Services.ArrivalFocus.UserActedAt > placedTick)
 				{
 					_timer?.Stop();
 				}
-				else if (ready && FocusAgain(inPage, popups, UserActedAt > placedTick, again))
+				// (Nixie 1.4.0, bug hunt M1: never out of a text box, however the keyboard got there)
+				else if (ready && FocusAgain(inPage || Services.TextInput.IsTextInput(current), popups, Services.ArrivalFocus.UserActedAt > placedTick, again))
 				{
 					again++;
 					Log($"[focus] {_page.GetType().Name}: Play again (the focus had gone to {Describe(current)})");
@@ -202,8 +195,11 @@ internal sealed class ItemPagePlace
 				return;
 			}
 
-			// the user moved on (a key, a click) while the page loaded: leave the focus where they put it
-			switch (ArrivalFocus(_loaded(), ready, inPage || UserActedAt > arrivedTick + ArrivalGraceMs, popups))
+			// the user moved on (a key, a click, the wheel) while the page loaded, the keyboard is in a text box, or R or a theme
+			// switch brought the page (their restore puts the keyboard back): leave the focus where it is (Services.ArrivalFocus,
+			// every page's one arrival rule)
+			var why = Services.ArrivalFocus.WhyNot(_page);
+			switch (ArrivalFocus(_loaded(), ready, inPage || why is not null, popups))
 			{
 				case ArrivalStep.Focus:
 					// Programmatic: the ring shows when the keyboard brought the user here, not after a click
@@ -213,7 +209,7 @@ internal sealed class ItemPagePlace
 					placedTick = Environment.TickCount64;
 					return;
 				case ArrivalStep.Leave:
-					Log($"[focus] {_page.GetType().Name}: arrival leaves the keyboard on {Describe(current)} (in the page {inPage}, menus {popups}, a key or click since {UserActedAt > arrivedTick + ArrivalGraceMs})");
+					Log($"[focus] {_page.GetType().Name}: arrival leaves the keyboard on {Describe(current)} (in the page {inPage}, menus {popups}, {why ?? "nothing else"})");
 					_timer?.Stop();
 					return;
 			}
@@ -287,7 +283,7 @@ internal sealed class ItemPagePlace
 			else if (!focused && _page.XamlRoot is { } root)
 			{
 				var current = FocusManager.GetFocusedElement(root) as DependencyObject;
-				switch (FocusRestore(current is not null && IsInPage(current) && !ReferenceEquals(current, _scroller), VisualTreeHelper.GetOpenPopupsForXamlRoot(root).Count))
+				switch (FocusRestore(current is not null && IsInPage(current) && !ReferenceEquals(current, _scroller), Services.ArrivalFocus.OpenPopups(root)))
 				{
 					case FocusStep.Leave:
 						focused = true;
