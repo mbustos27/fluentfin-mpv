@@ -24,6 +24,33 @@ public static class ItemSiblings
 		return ordered.Count < 2 ? [] : [.. ordered.Select(s => new SeasonPill(s, s.Id == current))];
 	}
 
+	/// <summary>
+	/// Nixie 1.4.1: the seasons either side of <paramref name="current"/> in the pills' order (the one before, the one after),
+	/// to be asked ahead: the next click is most often one of them. Empty when <paramref name="current"/> is not a pill.
+	/// </summary>
+	public static IReadOnlyList<BaseItemDto> Around(IEnumerable<BaseItemDto>? seasons, Guid current)
+	{
+		var pills = SeasonPills(seasons, current);
+		var at = pills.FindIndex(p => p.IsCurrent);
+		if (at < 0)
+		{
+			return [];
+		}
+
+		var around = new List<BaseItemDto>(2);
+		if (at + 1 < pills.Count)
+		{
+			around.Add(pills[at + 1].Dto); // the next first: asked first
+		}
+
+		if (at > 0)
+		{
+			around.Add(pills[at - 1].Dto);
+		}
+
+		return around;
+	}
+
 	/// <summary>The episode that follows <paramref name="current"/> in its season; null for the last one or when it is not listed.</summary>
 	public static BaseItemDto? NextEpisode(IEnumerable<BaseItemDto>? episodes, Guid current)
 	{

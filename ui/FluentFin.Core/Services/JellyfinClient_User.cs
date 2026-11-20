@@ -31,6 +31,9 @@ public partial class JellyfinClient
 
 	internal const int NextUpDays = 365;
 
+	/// <summary>sg-cw: Next Up (Home's and a series' own) includes shows being watched again.</summary>
+	internal const bool NextUpRewatching = true;
+
 	public async Task<BaseItemDtoQueryResult?> GetNextUp()
 	{
 		try
@@ -48,7 +51,11 @@ public partial class JellyfinClient
 				// maxDaysForNextUp, 365 by default); "now" left out every show watched before now, so Next Up stayed empty
 				query.NextUpDateCutoff = Time.GetUtcNow().AddDays(-NextUpDays);
 				query.EnableResumable = false;
-				query.EnableRewatching = false;
+				// sg-cw: a show you watch again comes back: with rewatching the server also offers the episode after the one
+				// last played even when it is watched (QA servers 10.11.11 and 12.4.0: a fully watched show whose first
+				// episode was played again was in no row without it). Jellyfin web keeps its own "rewatching in Next Up"
+				// switch in the browser (userSettings.set(..., enableOnServer: false)), so there is no server setting to follow.
+				query.EnableRewatching = NextUpRewatching;
 			});
 		}
 		catch (Exception ex)

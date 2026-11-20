@@ -1,7 +1,10 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using FluentFin.Core.Contracts.Services;
+using FluentFin.Core.Services;
 using Jellyfin.Sdk.Generated.Models;
+using Microsoft.Kiota.Serialization.Json;
 
 namespace FluentFin.Core.ViewModels;
 
@@ -41,21 +44,99 @@ public static class ContinueWatchingRules
 	/// <summary>
 	/// What the row shows of the server's resume list: all of it, less what is marked watched (a saved page, or a server's
 	/// answer racing a "mark as watched": the server itself drops an item past its "max resume" share, 90 % by default), and
-	/// less what has not been played for <paramref name="hideAfterDays"/> days.
+	/// less what has not been played for <paramref name="hideAfterDays"/> days. sg-cw: "marked watched" is watched with no
+	/// resume point: Jellyfin 12 keeps an episode watched while it is watched again (10.11 unmarks it at the start), so a
+	/// show being rewatched is watched and in progress at once, and stays.
 	/// </summary>
 	public static IReadOnlyList<BaseItemDto> Visible(IReadOnlyList<BaseItemDto> answer, DateTimeOffset now, int hideAfterDays) =>
-		answer.Any(x => x.UserData?.Played == true || IsStale(x, now, hideAfterDays))
-			? [.. answer.Where(x => x.UserData?.Played != true && !IsStale(x, now, hideAfterDays))]
+		answer.Any(x => IsWatchedNotInProgress(x) || IsStale(x, now, hideAfterDays))
+			? [.. answer.Where(x => !IsWatchedNotInProgress(x) && !IsStale(x, now, hideAfterDays))]
 			: answer;
+
+	/// <summary>sg-cw: marked watched and with no resume point (a watched item being watched again has one: Jellyfin 12).</summary>
+	public static bool IsWatchedNotInProgress(BaseItemDto dto) =>
+		dto.UserData?.Played == true && dto.UserData.PlaybackPositionTicks is null or <= 0;
+
+	/// <summary>
+	/// sg-cw: the server's resume list with the plays the mpv player just ended (and the server's answer does not have yet) put
+	/// in: one that left a resume point at the front, at its new place (its card made from <paramref name="recordOf"/>'s record
+	/// when the list has none; skipped without one); one watched, or stopped before 5 %, out. A play the rules cannot tell
+	/// (<see cref="PlayGuess.Unknown"/>) changes nothing. The list itself is the server's answer, unchanged (the saved page).
+	/// </summary>
+	public static IReadOnlyList<BaseItemDto> WithPlays(IReadOnlyList<BaseItemDto> answer, IEnumerable<RecentPlay> plays, Func<Guid, BaseItemDto?> recordOf)
+	{
+		List<BaseItemDto>? list = null;
+		foreach (var play in plays.OrderBy(x => x.At))
+		{
+			switch (play.Guess)
+			{
+				case PlayGuess.Resumable when ((list ?? answer).FirstOrDefault(x => x.Id == play.ItemId) ?? recordOf(play.ItemId)) is { } record:
+					list ??= [.. answer];
+					list.RemoveAll(x => x.Id == play.ItemId);
+					list.Insert(0, WithPosition(record, play));
+					break;
+				case PlayGuess.Watched or PlayGuess.NoResumePoint when (list ?? answer).Any(x => x.Id == play.ItemId):
+					list ??= [.. answer];
+					list.RemoveAll(x => x.Id == play.ItemId);
+					break;
+			}
+		}
+
+		return list ?? answer;
+	}
+
+	/// <summary>sg-cw: Next Up without the episodes the mpv player just played to the end (the server's answer has the next ones once it has the play).</summary>
+	public static IReadOnlyList<BaseItemDto> NextUpWithoutPlays(IReadOnlyList<BaseItemDto> nextUp, IEnumerable<RecentPlay> plays)
+	{
+		var watched = plays.Where(x => x.Guess == PlayGuess.Watched).Select(x => x.ItemId).ToHashSet();
+		return watched.Count == 0 || !nextUp.Any(x => x.Id is { } id && watched.Contains(id)) ? nextUp : [.. nextUp.Where(x => x.Id is not { } id || !watched.Contains(id))];
+	}
+
+	/// <summary>A copy of the item's record (never the server's own: the saved page and the card compare them) at the play's position.</summary>
+	internal static BaseItemDto WithPosition(BaseItemDto dto, RecentPlay play)
+	{
+		using var writer = new JsonSerializationWriter();
+		writer.WriteObjectValue(null, dto);
+		using var document = JsonDocument.Parse(writer.GetSerializedContent());
+		var copy = new JsonParseNode(document.RootElement).GetObjectValue(BaseItemDto.CreateFromDiscriminatorValue) ?? new BaseItemDto { Id = dto.Id, Name = dto.Name, Type = dto.Type };
+		copy.UserData ??= new UserItemDataDto { ItemId = play.ItemId };
+		copy.UserData.PlaybackPositionTicks = play.PositionTicks;
+		copy.UserData.PlayedPercentage = play.Percent;
+		copy.UserData.LastPlayedDate = play.At;
+		return copy;
+	}
 
 	/// <summary>
 	/// Next Up without what Continue Watching shows: a server older than Jellyfin 10.9 ignores <c>enableResumable=false</c> and
-	/// lists the episode in progress in both rows.
+	/// lists the episode in progress in both rows. sg-cw (the review of wip/continue-watching): one show once on Home. Next
+	/// Up asked with rewatching lists the episode after the one watched again too (QA servers: 12.4 put S1 E1 in Continue
+	/// Watching and S1 E2 up next; with S1 E2 played again to the end, both servers listed S1 E3 and S2 E2), so Next Up leaves
+	/// out a show Continue Watching has, and keeps one episode of a show: the server's first, the one watched toward most
+	/// recently (it sorts them by when their show was last watched), as the hero keeps one slide per show (HeroSlide.Key).
 	/// </summary>
 	public static IReadOnlyList<BaseItemDto> NextUpWithout(IReadOnlyList<BaseItemDto> nextUp, IEnumerable<BaseItemDto> continueWatching)
 	{
-		var shown = continueWatching.Select(x => x.Id).OfType<Guid>().ToHashSet();
-		return shown.Count == 0 ? nextUp : [.. nextUp.Where(x => x.Id is not { } id || !shown.Contains(id))];
+		var items = new HashSet<Guid>();
+		var shows = new HashSet<Guid>();
+		foreach (var dto in continueWatching)
+		{
+			if (dto.Id is { } id)
+			{
+				items.Add(id);
+			}
+
+			if (dto.SeriesId is { } series)
+			{
+				shows.Add(series);
+			}
+		}
+
+		var listed = new HashSet<Guid>();
+		bool Keep(BaseItemDto dto) =>
+			!(dto.Id is { } id && items.Contains(id)) && !(dto.SeriesId is { } series && (shows.Contains(series) || !listed.Add(series)));
+
+		var kept = nextUp.Where(Keep).ToList();
+		return kept.Count == nextUp.Count ? nextUp : kept;
 	}
 
 	/// <summary>

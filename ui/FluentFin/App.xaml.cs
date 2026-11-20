@@ -210,6 +210,7 @@ public partial class App : Application
 
 			services.AddSingleton<HomeCache>(); // fluentfin-mpv: the last home page, shown at once (HomeViewModel)
 			services.AddSingleton<SeriesEpisodes>(); // 1.2.0: a series' episodes for Play's label, kept (series and season pages)
+			services.AddSingleton<RecentPlays>(); // sg-cw: what the mpv player just played, on Home and the item pages at once
 
 			// Views and ViewModels
 			services.AddTransient<ShellViewModel>();
@@ -363,6 +364,9 @@ public partial class App : Application
 
 			// a hung mpv window would freeze our input too (the queues of the two processes are attached)
 			GetService<MpvVideoHost>().Unresponsive += reason => GetService<IMpvBackend>().Kill(reason);
+
+			// sg-cw: listening before the first play (it follows the backend's events)
+			GetService<RecentPlays>();
 
 			// Seaglass: the saved Glass choice, and the glass brushes following GlassMode
 			GlassSetting.Apply(GetService<ISettings>());

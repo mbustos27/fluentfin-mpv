@@ -50,7 +50,9 @@ public static class ItemLabels
 
 		var data = item.UserData;
 		var unplayed = data?.UnplayedItemCount ?? 0;
-		if (data?.Played == true && unplayed == 0)
+		// sg-cw: an episode watched again on Jellyfin 12 is watched and in progress at once: its card shows the progress bar,
+		// and its name says so (a Continue Watching card named "watched")
+		if (data?.Played == true && unplayed == 0 && !(data.PlaybackPositionTicks > 0 && data.PlayedPercentage is > 0 and < 100))
 		{
 			Add("watched");
 		}

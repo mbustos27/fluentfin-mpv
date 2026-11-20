@@ -56,6 +56,9 @@ $drive = Parse (Join-Path $Dir 'drive.ps1')
 $params = @($drive.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })
 $failed = 0
 $scripts = @(Get-ChildItem -LiteralPath $Dir -Filter '*.ps1' | Where-Object { $_.Name -like 'then-*.ps1' -or $_.Name -like 'before-*.ps1' -or $_.Name -eq 'states-common.ps1' } | Sort-Object Name)
+# sg-qa (1.5): the QA servers' -Then scripts are dot-sourced by drive.ps1 the same way
+$qaDir = Join-Path $Dir '..\..\qa-servers'
+if (Test-Path -LiteralPath $qaDir) { $scripts += @(Get-ChildItem -LiteralPath $qaDir -Filter 'then-*.ps1' | Sort-Object Name) }
 if ($scripts.Count -eq 0 -or $params.Count -eq 0) { Write-Host "FAIL nothing to check: $($scripts.Count) scripts, $($params.Count) parameters"; exit 1 }
 foreach ($file in $scripts) {
     $ast = Parse $file.FullName

@@ -74,7 +74,7 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 			// the series or the season shown: all of its episodes changed
 			if ((series || e.ItemId == SelectedSeason?.Id) && SelectedSeason is { } shown)
 			{
-				await ShowSeason(shown);
+				await ShowSeason(shown, fresh: true); // as the server has it now (not the season's kept list)
 			}
 
 			await play;
@@ -254,13 +254,15 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 			?? seasons.OrderBy(s => s.IndexNumber is 0 ? int.MaxValue : s.IndexNumber ?? int.MaxValue).FirstOrDefault();
 	}
 
-	[RelayCommand]
+	// Nixie 1.4.1: concurrent, so the pills stay enabled while a season loads: a quick second click was dropped (the buttons
+	// bound to the command were disabled until the first answer came), and the latest click wins (ShowSeason's ticket)
+	[RelayCommand(AllowConcurrentExecutions = true)]
 	private Task SelectSeason(BaseItemDto? season) => season is null ? Task.CompletedTask : ShowSeason(season);
 
 	[RelayCommand]
 	private Task RetrySeason() => ShowSeason(SelectedSeason);
 
-	private async Task ShowSeason(BaseItemDto? season)
+	private async Task ShowSeason(BaseItemDto? season, bool fresh = false)
 	{
 		var ticket = _list.Next();
 		if (season?.Id is not { } id)
@@ -277,10 +279,12 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		SelectedSeason = season;
 		SeasonPills = ItemSiblings.SeasonPills(Seasons?.Select(x => x.Dto), id);
 		IsLoadingEpisodes = true;
-		var response = await JellyfinClient.GetItems(season);
+		// Nixie 1.4.1: kept per season (SeriesEpisodes.GetList): a season seen or asked ahead shows at once; a page's refresh
+		// after a change asks again (fresh). The seasons either side are asked now, so the next click shows at once too.
+		var response = await _seriesEpisodes.GetList(season, fresh);
 		if (!_list.Is(ticket))
 		{
-			return;
+			return; // a later click: its own neighbours are asked ahead, not these
 		}
 
 		var name = season.Name?.Trim() is { Length: > 0 } n ? n : "This season";
@@ -288,6 +292,8 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		EpisodesFailed = response?.Items is null;
 		EpisodesMessage = EpisodesFailed ? $"Couldn't load the episodes of {name}." : Episodes.Count == 0 ? $"{name} has no episodes yet." : "";
 		IsLoadingEpisodes = false;
+		// shown first, then the seasons either side asked ahead
+		_seriesEpisodes.Prefetch(ItemSiblings.Around(Seasons?.Select(x => x.Dto), id));
 	}
 
 	private async Task UpdateNextUp(BaseItemDto dto)

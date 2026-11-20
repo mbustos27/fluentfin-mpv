@@ -53,7 +53,10 @@ param(
     [string]$Before,
     [switch]$NoA11y,
     [int]$TabStops = 60,
-    [int]$CloseSeconds = 20
+    [int]$CloseSeconds = 20,
+    # sg-qa (1.5): a local QA Jellyfin server's URL (run-offscreen.ps1 -QaServer): tools\qa-servers\qaproxy.py stands in
+    # for the fake server (the same request log and /__harness/ endpoints) in front of it
+    [string]$QaUpstream
 )
 
 $ErrorActionPreference = 'Stop'
@@ -786,6 +789,11 @@ try {
     $ready = Join-Path $Out 'server\ready.json'
     $serverArgs = @('-B', '-I', (Join-Path $PSScriptRoot '..\fakeserver\server.py'), '--out', (Join-Path $Out 'server'), '--media', $Media,
         '--ready-file', $ready, '--latency', $Latency) + @($LatencyRule | ForEach-Object { '--latency-rule'; $_ })
+    if ($QaUpstream) {
+        # sg-qa: the QA server's logging tap instead (no latency injection there)
+        $serverArgs = @('-B', '-I', (Join-Path $PSScriptRoot '..\..\qa-servers\qaproxy.py'), '--upstream', $QaUpstream,
+            '--out', (Join-Path $Out 'server'), '--ready-file', $ready)
+    }
     $quoted = @($serverArgs | ForEach-Object { if ("$_" -match '[\s"]') { '"' + ("$_" -replace '"', '\"') + '"' } else { "$_" } })
     $server = Start-Process -FilePath $Python -ArgumentList $quoted -PassThru -WindowStyle Hidden `
         -RedirectStandardOutput (Join-Path $Out 'server\stdout.txt') -RedirectStandardError (Join-Path $Out 'server\stderr.txt')

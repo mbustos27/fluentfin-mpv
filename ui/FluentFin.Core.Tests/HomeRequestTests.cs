@@ -147,6 +147,23 @@ public sealed class HomeRequestTests : IAsyncLifetime
 	}
 
 	[Fact]
+	public async Task NextUp_IncludesShowsWatchedAgain_OnHomeAndOnASeriesPage()
+	{
+		// sg-cw: on the QA servers (Jellyfin 10.11.11 and 12.4.0) a fully watched show whose first episode was played again
+		// is in Next Up (its second episode) only with enableRewatching=true
+		await SignIn();
+
+		await _client.GetNextUp();
+		await _client.GetNextUp(new BaseItemDto { Id = Shows, Type = BaseItemDto_Type.Series });
+
+		var asked = _server.ApiRequests.Where(x => x.Path == "/Shows/NextUp").ToList();
+		Assert.Equal(2, asked.Count);
+		Assert.All(asked, x => Assert.Equal("true", x.Query["enableRewatching"]));
+		Assert.Equal("false", asked[0].Query["enableResumable"]); // Home: an episode in progress is Continue Watching's
+		Assert.Equal(Shows, Guid.Parse(asked[1].Query["seriesId"]!));
+	}
+
+	[Fact]
 	public async Task Views_AreReadOnce_AndAgainOnlyAfterTheirLifetime()
 	{
 		await SignIn();

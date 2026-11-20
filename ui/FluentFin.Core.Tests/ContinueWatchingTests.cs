@@ -264,7 +264,9 @@ public sealed class ContinueWatchingTests : IDisposable
 	[Fact]
 	public async Task AnItemMarkedWatched_IsNotShown_EvenIfTheAnswerStillListsIt()
 	{
-		var done = Item("Done", daysAgo: 1);
+		// sg-cw: marked watched means no resume point too (Jellyfin's mark clears it); watched WITH one is an episode being
+		// watched again on Jellyfin 12.4, which stays (RewatchTests.AnEpisodeWatchedAgain_IsInContinueWatching_...)
+		var done = Item("Done", position: 0, daysAgo: 1);
 		done.UserData!.Played = true;
 		Answer([Item("Yesterday", daysAgo: 1), done]);
 

@@ -168,22 +168,33 @@ public sealed class ItemPageRefreshTests
 	[Fact]
 	public async Task TwoRefreshesOfTheSameSeason_TheOlderAnswerArrivingLast_DoesNotWin()
 	{
-		var vm = await OpenSeries();
-		var id = _seasons[1].Id!.Value;
+		// Nixie 1.4.1: two clicks on one season share one request (SeriesEpisodes.GetList), so two loads of the same season are
+		// two refreshes: the series marked watched, then unmarked, each asking the shown season again (fresh)
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var vm = await OpenSeries(kept: kept);
+		var season = vm.SelectedSeason!;
+		var id = season.Id!.Value;
 		var older = new TaskCompletionSource<BaseItemDtoQueryResult?>();
 		var newer = new TaskCompletionSource<BaseItemDtoQueryResult?>();
 		_slow[id] = new Queue<TaskCompletionSource<BaseItemDtoQueryResult?>>([older, newer]);
-		List<BaseItemDto> oldList = [_episodes[id][0]];
+		var calls = () => _client.Invocations.Count(i => i.Method.Name == nameof(IJellyfinClient.GetItems) && ((BaseItemDto)i.Arguments[0]).Id == id);
+		var before = calls();
 
-		var first = vm.SelectSeasonCommand.ExecuteAsync(_seasons[1]);
-		var second = vm.SelectSeasonCommand.ExecuteAsync(_seasons[1]);
-		newer.SetResult(new BaseItemDtoQueryResult { Items = _episodes[id] });
-		await second;
-		older.SetResult(new BaseItemDtoQueryResult { Items = oldList });
-		await first;
+		var series = new BaseItemDto { Id = SeriesId, Type = BaseItemDto_Type.Series, Name = "Lost" };
+		await Commands().SetWatched(series, true);
+		await Commands().SetWatched(series, false);
+		await WaitUntil(() => calls() == before + 2, "two list refreshes");
+		List<BaseItemDto> newList = [.. _episodes[id].Take(2)];
+		newer.SetResult(new BaseItemDtoQueryResult { Items = newList });
+		await WaitUntil(() => vm.Episodes == newList, "the newer list");
+		older.SetResult(new BaseItemDtoQueryResult { Items = [_episodes[id][0]] });
+		await Task.Delay(100);
 
-		Assert.Same(_episodes[id], vm.Episodes);
+		Assert.Same(newList, vm.Episodes);
 		Assert.False(vm.IsLoadingEpisodes);
+		// and the kept list is the newer answer too (Back to this season, or its page, shows it)
+		Assert.Same(newList, (await kept.GetList(season))?.Items);
+		Assert.Equal(before + 2, calls());
 	}
 
 	[Fact]
@@ -219,18 +230,19 @@ public sealed class ItemPageRefreshTests
 	public async Task ASeasonThatFailsToLoad_KeepsThePicker_AndOffersTryAgain()
 	{
 		var vm = await OpenSeries();
-		var id = _seasons[1].Id!.Value;
+		// the third season: the second is asked ahead while the first is shown (Nixie 1.4.1), so its failure would be a prefetch's
+		var id = _seasons[2].Id!.Value;
 		var failed = new TaskCompletionSource<BaseItemDtoQueryResult?>();
 		failed.SetResult(null);
 		_slow[id] = new Queue<TaskCompletionSource<BaseItemDtoQueryResult?>>([failed]);
 
-		await vm.SelectSeasonCommand.ExecuteAsync(_seasons[1]);
+		await vm.SelectSeasonCommand.ExecuteAsync(_seasons[2]);
 
 		Assert.True(vm.HasEpisodeSection);
 		Assert.Equal(3, vm.SeasonPills.Count);
 		Assert.Empty(vm.Episodes);
 		Assert.True(vm.EpisodesFailed);
-		Assert.Equal("Couldn't load the episodes of Season 2.", vm.EpisodesMessage);
+		Assert.Equal("Couldn't load the episodes of Season 3.", vm.EpisodesMessage);
 
 		await vm.RetrySeasonCommand.ExecuteAsync(null);
 

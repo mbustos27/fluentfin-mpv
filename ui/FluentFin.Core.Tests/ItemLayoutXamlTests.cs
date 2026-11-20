@@ -123,7 +123,9 @@ public sealed class ItemLayoutXamlTests
 		var list = first.Descendants().Single(e => e.Name.LocalName == "EpisodeList");
 		Assert.Equal("{x:Bind ViewModel.Episodes, Mode=OneWay}", (string?)list.Attribute("ItemsSource"));
 		Assert.Contains(list.Descendants(), e => e.Name.LocalName == "EpisodeRow");
-		var picker = first.Descendants().Single(e => e.Name.LocalName == "ItemsRepeater");
+		// Nixie 1.4.1: an ItemsControl (new buttons for each list of pills: the ItemsRepeater kept the first season marked)
+		var picker = first.Descendants().Single(e => (string?)e.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "SeasonPicker");
+		Assert.Equal("ItemsControl", picker.Name.LocalName);
 		Assert.Equal("{x:Bind ViewModel.SeasonPills, Mode=OneWay}", (string?)picker.Attribute("ItemsSource"));
 		var pill = picker.Descendants().Single(e => e.Name.LocalName == "Button");
 		Assert.Equal("{Binding ElementName=Page, Path=ViewModel.SelectSeasonCommand}", (string?)pill.Attribute("Command"));

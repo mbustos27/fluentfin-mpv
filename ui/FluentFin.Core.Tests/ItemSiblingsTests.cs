@@ -64,7 +64,9 @@ public sealed class ItemSiblingsTests
 		await vm.OnNavigatedTo(current);
 		Assert.Equal([false, true], vm.SeasonPills.Select(p => p.IsCurrent));
 
+		// a new page (Nixie 1.4.1: a page keeps the lists it read, so the failure is a new page's, as in the app)
 		client.Setup(x => x.GetItems(It.Is<BaseItemDto>(p => p.Id == SeriesId), false)).ReturnsAsync((BaseItemDtoQueryResult?)null);
+		vm = new SeasonViewModel(client.Object);
 		await vm.OnNavigatedTo(current);
 		Assert.Empty(vm.SeasonPills);
 		Assert.Single(vm.Episodes);

@@ -33,8 +33,20 @@ public sealed partial class EditorialStill : UserControl, FluentFin.Controls.IUp
 		{
 			ItemUserData.Changed += OnUserDataChanged;
 			UpdateUpNext();
+			if (_decodedWidth == 0)
+			{
+				ApplyImage(); // back in the window without its picture asked (it left while waiting for a width)
+			}
 		};
-		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
+		Unloaded += (_, _) =>
+		{
+			ItemUserData.Changed -= OnUserDataChanged;
+			if (_waitingForWidth)
+			{
+				LayoutUpdated -= AfterLayout;
+				_waitingForWidth = false;
+			}
+		};
 		AddHandler(KeyDownEvent, new KeyEventHandler(OnKeyDown), false);
 		GotFocus += (_, e) =>
 		{
@@ -66,8 +78,11 @@ public sealed partial class EditorialStill : UserControl, FluentFin.Controls.IUp
 				Art.Height = FocusGlow.Height = height;
 				FocusRing.Height = height + 8;
 				FocusGlow.VerticalAlignment = VerticalAlignment.Top;
-				ApplyImage();
 			}
+
+			// Nixie 1.4.1: on every size change (it ignores a change under 64 px): a still waits for its width before it asks,
+			// and a first width whose height rounds to the XAML's 190 changed no height, so it never asked
+			ApplyImage();
 		};
 	}
 
@@ -99,12 +114,31 @@ public sealed partial class EditorialStill : UserControl, FluentFin.Controls.IUp
 		SynopsisText.Text = dto?.Overview?.Trim() ?? "";
 		SynopsisText.Visibility = SynopsisText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		_decodedWidth = 0;
+		// Nixie 1.4.1: another episode: its picture, not the last one's (a reused still kept the season before's picture while
+		// it waited for a width)
+		Picture.Source = null;
 		ApplyImage();
 		ApplyUserData();
 	}
 
+	private bool _waitingForWidth;
+
 	private void ApplyImage()
 	{
+		// Nixie 1.4.1: not before the still has its width: it asked at 450 first, then again at its drawn width (633, 873), so
+		// every still of a season was downloaded twice. Without a width yet it asks after the next layout that gives it one (a
+		// reused still whose size then does not change gets no SizeChanged)
+		if (ActualWidth <= 0)
+		{
+			if (!_waitingForWidth && Episode is not null)
+			{
+				_waitingForWidth = true;
+				LayoutUpdated += AfterLayout;
+			}
+
+			return;
+		}
+
 		var width = (int)Math.Round(Math.Max(ActualWidth, 300) * 1.5);
 		if (Episode is not { } dto || Math.Abs(width - _decodedWidth) < 64)
 		{
@@ -113,6 +147,19 @@ public sealed partial class EditorialStill : UserControl, FluentFin.Controls.IUp
 
 		_decodedWidth = width;
 		Picture.Source = ItemArtworkConverters.Thumb(dto, width);
+	}
+
+	// one layout that gives the still a width: it asks then, once (LayoutUpdated comes for every layout pass in the window)
+	private void AfterLayout(object? sender, object e)
+	{
+		if (ActualWidth <= 0)
+		{
+			return;
+		}
+
+		LayoutUpdated -= AfterLayout;
+		_waitingForWidth = false;
+		ApplyImage();
 	}
 
 	private void ApplyUserData()

@@ -25,6 +25,10 @@
   - Sign-in: -SignIn quickconnect (default): FluentFin's Quick Connect, the code it shows approved through the fake
     server's harness endpoint; the server issues a fresh random token. No password is typed. -SignIn password types the
     fake server's generated test credentials (fakeserver\credentials.json) instead. Never a real server or account.
+  - -QaServer 10.11|12 (or NIXIE_QA_SERVER; 1.5): a local QA Jellyfin server (tools\qa-servers, docs\QA-SERVERS.md)
+    instead of the fake one, started hidden once the run holds the lock and stopped after it if the run started it.
+    tools\qa-servers\qaproxy.py stands in front of it with the fake server's request log and /__harness/ endpoints;
+    Quick Connect is approved by its ordinary test user. Sign-in is Quick Connect only, no latency injection.
   - Silent: the test video's audio tracks are digital silence and the run's mpv-backend\mpv.conf says ao=null (no audio
     device is opened; FluentFin's in-process mpv reads the same mpv.conf).
   - The driver (offscreen\drive.ps1) uses UI Automation patterns, and where there is none, key/mouse messages posted to
@@ -80,7 +84,11 @@ param(
     [int]$TabStops = 60,
     [int]$TimeoutSeconds = 900,
     # how long a run waits for a slot (NIXIE_HARNESS_PARALLEL runs at once on this machine) and then for the memory
-    [int]$QueueMinutes = 30
+    [int]$QueueMinutes = 30,
+    # sg-qa (1.5): run against a local QA Jellyfin server (tools\qa-servers, docs\QA-SERVERS.md) instead of the fake one:
+    # 10.11 (127.0.0.1:8196) or 12 (127.0.0.1:8296), or NIXIE_QA_SERVER. Started hidden if it is not running and stopped
+    # again after the run; requests go through tools\qa-servers\qaproxy.py, which logs them as the fake server does
+    [ValidateSet('', '10.11', '12')][string]$QaServer = $env:NIXIE_QA_SERVER
 )
 
 $ErrorActionPreference = 'Stop'
@@ -141,8 +149,17 @@ New-Item -ItemType Directory -Force $Out, $DataDir, $Cache | Out-Null
 # the test video (cached: building it takes about a minute), made off-screen
 $media = Join-Path $Cache 'media'
 $mediaJson = Join-Path $media 'media.json'
+# sg-qa: a QA server plays its own seeded media; never a password typed (Quick Connect, approved by its test user)
+$qaStarted = $false
+$qaUpstream = $null
+if ($QaServer) {
+    if ($SignIn -ne 'quickconnect') { throw "-QaServer signs in with Quick Connect only (no password is typed)" }
+    . (Join-Path $repo 'tools\qa-servers\qa-common.ps1')
+    if (-not (Test-Path -LiteralPath (Join-Path (Get-QaDir $QaServer) 'seeded\seed.json'))) { throw "QA server $QaServer is not seeded: tools\qa-servers\seed.ps1 -Version $QaServer" }
+    $qaUpstream = Get-QaUrl $QaServer   # started below, once this run holds an off-screen slot
+}
 function Test-MediaNeeded { -not (Test-Path $mediaJson) -or -not ((Get-Content $mediaJson -Raw | ConvertFrom-Json).silent) }
-if (Test-MediaNeeded) {
+if (-not $QaServer -and (Test-MediaNeeded)) {
     # sg-parallel: one run builds it; a run that waited for that one finds it made
     Use-HarnessFolderLock $media ([TimeSpan]::FromMinutes(20)) {
         if (Test-MediaNeeded) {
@@ -180,6 +197,7 @@ if ($LatencyRule.Count) {
 }
 if ($Then) { $driveArgs += @('-Then', $Then) }
 if ($Before) { $driveArgs += @('-Before', $Before) }
+if ($qaUpstream) { $driveArgs += @('-QaUpstream', $qaUpstream) }
 if ($NoA11y) { $driveArgs += '-NoA11y' }
 Write-Host "running off-screen (desktop ffh-ui-$PID; log $Out\drive.log)"
 $glassEnv = if ($GlassFollowsActivity) { @() } else { @('--env', 'FLUENTFIN_MPV_GLASS_ALWAYS_ACTIVE=1') }
@@ -206,6 +224,11 @@ try {
     }
     if (-not $memory.Ok) { throw "available memory stayed under $minFree GB (RAM $($memory.Ram) GB, commit $($memory.Commit) GB) for $QueueMinutes min" }
     Write-Host "off-screen slot $($runLock.Slot) of $slots; available memory: $($memory.Ram) GB of RAM, $($memory.Commit) GB of commit"
+    if ($QaServer) {
+        $qaState = Get-QaState $QaServer
+        if (-not ($qaState -and $qaState.Running)) { [void](Start-QaServer $QaServer $Python); $qaStarted = $true }
+        Write-Host "QA server $QaServer at $qaUpstream$(if ($qaStarted) { ' (started for this run, stopped after it)' })"
+    }
     & $Python -B -I $hidden --log (Join-Path $Out 'hidden_run.log') --timeout $TimeoutSeconds --desktop "ffh-ui-$PID" `
         --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" @glassEnv @pointerEnv `
         --env "PATH=$mpvDir;$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\WindowsPowerShell\v1.0" `
@@ -214,6 +237,7 @@ try {
 }
 finally {
     Exit-HarnessRunSlot $runLock
+    if ($qaStarted) { Write-Host "QA server ${QaServer}: $(Stop-QaServer $QaServer)" }
 }
 
 $resultFile = Join-Path $Out 'result.json'

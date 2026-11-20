@@ -217,6 +217,12 @@ class Library:
         extra = self.int_of(os.environ.get("FAKESERVER_EXTRA_VIEWS"), 0)
         for name in self.EXTRA_VIEW_NAMES[:max(0, extra)]:
             self._small_library(name, 8)
+        # season speed: FAKESERVER_BIG_SERIES=<seasons>x<episodes> (or <seasons>, 20 episodes each) adds a second showcase
+        # series to Shows, BIG_SERIES_NAME, for switching between many long seasons (tools\ui-harness\offscreen\
+        # then-season-switch.ps1); "A Signal in Winter" stays the first card and the showcase
+        big_series = self.big_series_size(os.environ.get("FAKESERVER_BIG_SERIES"))
+        if big_series:
+            self._big_series(*big_series)
 
     # UXCAP (the library and collections review's captures): a "Collections" view (boxsets) of BoxSets made of the Movies library's titles
     COLLECTION_NAMES = ["The Harbor Collection", "Kestrel Bay Trilogy", "Midnight Stories", "The Northgate Saga",
@@ -366,7 +372,58 @@ class Library:
         finally:
             self.rng = saved
 
-    def _series(self, vid, view_name, name, created, year, showcase):
+    # season speed: the big series (FAKESERVER_BIG_SERIES); its name sorts right after "A Signal in Winter"
+    BIG_SERIES_NAME = "A Tide of Seasons"
+
+    @classmethod
+    def big_series_size(cls, value):
+        """FAKESERVER_BIG_SERIES's (seasons, episodes): "10x20", or "10" for 20 episodes each; None when unset or not
+        positive (each count at most 99)."""
+        text = (value or "").strip().lower()
+        if not text:
+            return None
+        seasons, _, episodes = text.partition("x")
+        s, e = cls.int_of(seasons, 0), cls.int_of(episodes, 20) if episodes else 20
+        return (min(s, 99), min(e, 99)) if s > 0 and e > 0 else None
+
+    def _big_series(self, seasons, episodes):
+        """Many long seasons, every episode with a name of its own in the series (a row shows which season it is) and a
+        Primary image; nothing watched, so the page opens on Season 1. Made after everything else with a random source of
+        its own (the default fixture is unchanged), old enough to stay out of Home's "New in Shows"."""
+        saved = self.rng
+        self.rng = random.Random(5150)
+        try:
+            vid = _id("view", "Shows")
+            # never a film's or a show's name (a card of one on the page must not read as an episode)
+            names = ["The %s %s" % (a, n) for a in ADJECTIVES for n in NOUNS if "The %s %s" % (a, n) not in self._names]
+            self.rng.shuffle(names)
+            taken = iter(names)
+
+            def unique(_):
+                try:
+                    return next(taken)
+                except StopIteration:   # more than 900 episodes: numbered
+                    return "Chapter %d" % self.rng.randrange(10 ** 6)
+
+            self._series(vid, "Shows", self.BIG_SERIES_NAME, self.now - datetime.timedelta(days=3000), 2010, "big_series",
+                         seasons=seasons, episodes=episodes, episode_name=unique)
+            self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
+        finally:
+            self.rng = saved
+
+    def big_series_fixture(self):
+        """The big series for GET /__harness/fixture: its seasons in order, each with its episodes' ids and names; None
+        when FAKESERVER_BIG_SERIES is off."""
+        sid = next((i for i, item in self.items.items() if item.get("showcase") == "big_series"), None)
+        if not sid:
+            return None
+        return {"id": sid, "name": self.items[sid]["Name"], "library": "Shows",
+                "seasons": [{"id": s, "name": self.items[s]["Name"], "index": self.items[s]["index"],
+                             "episodes": [{"id": e, "name": self.items[e]["Name"], "index": self.items[e]["index"]}
+                                          for e in self.children[s]]}
+                            for s in self.children[sid]]}
+
+    def _series(self, vid, view_name, name, created, year, showcase, seasons=None, episodes=None, episode_name=None):
         rng = self.rng
         sid = _id("series", view_name, name)
         genres = rng.sample(["Animation"] + GENRES if view_name == "Anime" else GENRES, rng.randint(1, 3))
@@ -378,7 +435,8 @@ class Library:
         self.items[sid] = series
         self.children[vid].append(sid)
         self.children[sid] = []
-        seasons = 3 if showcase else rng.choice([1, 1, 2, 2, 3, 3, 4, 5, 6])
+        if seasons is None:
+            seasons = 3 if showcase else rng.choice([1, 1, 2, 2, 3, 3, 4, 5, 6])
         for s in range(1, seasons + 1):
             season_id = _id("season", sid, s)
             season_year = min(2026, year + s - 1)
@@ -388,10 +446,10 @@ class Library:
                                      "genres": [], "tags": [], "rating": series["rating"], "people": [], "studios": []}
             self.children[sid].append(season_id)
             self.children[season_id] = []
-            for e in range(1, (8 if showcase else rng.randint(6, 13)) + 1):
+            for e in range(1, (episodes or (8 if showcase else rng.randint(6, 13))) + 1):
                 eid = _id("episode", season_id, e)
-                ep_name = rng.choice(["The %s", "%s", "A %s Apart", "Under the %s", "After the %s",
-                                      "The %s Problem"]) % rng.choice(NOUNS)
+                ep_name = episode_name(e) if episode_name else \
+                    rng.choice(["The %s", "%s", "A %s Apart", "Under the %s", "After the %s", "The %s Problem"]) % rng.choice(NOUNS)
                 ep_created = created + datetime.timedelta(days=(s - 1) * 120 + e * 7)
                 if ep_created > self.now:
                     ep_created = self.now - datetime.timedelta(hours=rng.randint(1, 500))
@@ -475,7 +533,9 @@ class Library:
                                  "first": self.items[self.children[b][0]]["Name"]}
                                 for v in self.views if self.items[v].get("collection") == "boxsets" for b in self.children[v]],
                 "big": [{"name": self.items[v]["Name"], "count": len(self.children[v])} for v in self.views
-                        if self.items[v]["Name"] == "Archive"]}
+                        if self.items[v]["Name"] == "Archive"],
+                # season speed: the big series (FAKESERVER_BIG_SERIES), None when off
+                "big_series": self.big_series_fixture()}
 
     def episodes_of(self, series_id, season_id=None):
         out = []
@@ -828,25 +888,34 @@ class Library:
         pool.sort(key=lambda i: self.user[i["Id"]].get("last_played") or datetime.datetime(1970, 1, 1), reverse=True)
         return {"Items": [self.dto(i) for i in pool[:limit]], "TotalRecordCount": len(pool), "StartIndex": 0}
 
-    def next_up(self, limit=24, series_id=None):
+    def next_up(self, limit=24, series_id=None, rewatching=False):
         rows = []
+        never = datetime.datetime(1970, 1, 1)
         for s in self.items.values():
             if s["kind"] != "series" or (series_id and s["Id"] != norm_id(series_id)):
                 continue
             eps = self.episodes_of(s["Id"])
+            ud = [self.user.get(e["Id"]) or {} for e in eps]
             last = None
             for k, e in enumerate(eps):
-                if (self.user.get(e["Id"]) or {}).get("played"):
+                if ud[k].get("played"):
                     last = k
+            # sg-cw: EnableRewatching, as Jellyfin's TVSeriesManager: also the next *watched* episode after the one last
+            # played (by date), so a show watched again comes back; both candidates sorted by their last-played date
+            if rewatching and last is not None:
+                played = [k for k in range(len(eps)) if ud[k].get("played")]
+                recent = max(played, key=lambda k: (ud[k].get("last_played") or never, k))
+                again = next((k for k in range(recent + 1, len(eps)) if ud[k].get("played") and not ud[k].get("position")), None)
+                if again is not None:
+                    rows.append((ud[recent].get("last_played") or never, eps[again]))
             if last is None or last + 1 >= len(eps):
                 if series_id and last is None and eps:
-                    rows.append((datetime.datetime(1970, 1, 1), eps[0]))
+                    rows.append((never, eps[0]))
                 continue
             nxt = eps[last + 1]
-            if (self.user.get(nxt["Id"]) or {}).get("position"):
+            if ud[last + 1].get("position"):
                 continue   # resumable: in Continue Watching instead (EnableResumable=false)
-            when = (self.user.get(eps[last]["Id"]) or {}).get("last_played") or datetime.datetime(1970, 1, 1)
-            rows.append((when, nxt))
+            rows.append((ud[last].get("last_played") or never, nxt))
         rows.sort(key=lambda r: r[0], reverse=True)
         return {"Items": [self.dto(e) for _, e in rows[:limit]], "TotalRecordCount": len(rows), "StartIndex": 0}
 

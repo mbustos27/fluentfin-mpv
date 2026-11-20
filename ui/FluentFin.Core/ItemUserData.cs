@@ -43,6 +43,14 @@ public static class ItemUserData
 	/// </summary>
 	public static event EventHandler<UndoOffer>? UndoOffered;
 
+	/// <summary>
+	/// sg-cw: the server changed an item's user data without one of these toggles (the mpv player's backend reported a play
+	/// of it, docs/BRIDGE.md §6): <paramref name="userData"/> is what the server has now, and every surface showing the item
+	/// updates (cards, rows, the series and season pages' Play and "Up next"). Raised on the calling thread (the UI thread).
+	/// </summary>
+	public static void Publish(Guid itemId, UserItemDataDto userData) =>
+		Changed?.Invoke(null, new ItemUserDataChangedEventArgs(itemId, userData, failed: false));
+
 	/// <returns>Whether the server took it.</returns>
 	public static Task<bool> SetPlayedAsync(IJellyfinClient client, BaseItemDto dto, bool played) =>
 		dto is { Type: BaseItemDto_Type.Series or BaseItemDto_Type.Season, Id: { } id }

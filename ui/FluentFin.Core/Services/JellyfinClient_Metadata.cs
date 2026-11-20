@@ -276,6 +276,7 @@ public partial class JellyfinClient
 				}
 				query.Fields = [ItemFields.MediaSourceCount];
 				query.UserId = UserId;
+				query.EnableRewatching = NextUpRewatching; // sg-cw: as Home's (GetNextUp)
 			});
 		}
 		catch (Exception ex)

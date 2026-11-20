@@ -483,6 +483,51 @@ class ServerTests(unittest.TestCase):
         self.request("/UserItems/%s/UserData" % item["Id"], "POST", {"PlaybackPositionTicks": was}, token=self.token)
         self.assertIn(item["Id"], [i["Id"] for i in self.get("/UserItems/Resume?Limit=50")["Items"]])
 
+    def test_a_series_watched_again_comes_back_in_next_up_only_with_rewatching(self):
+        # sg-cw: as Jellyfin 10.11 and 12 (QA servers): a fully watched show whose first episode is played again is in
+        # Next Up (its second episode) only with EnableRewatching; its first, stopped midway, is in Continue Watching
+        fx = self.get("/__harness/fixture")
+        series = fx["series"]["id"]
+        status, marked, _ = self.request("/__harness/played", "POST", {"series": series, "played": True})
+        self.assertEqual(200, status)
+        eps = marked["episodes"]
+        self.assertGreaterEqual(len(eps), 3)
+        self.assertEqual([1, 1], [eps[0]["season"], eps[0]["index"]])
+        try:
+            def next_up(rewatching):
+                q = "/Shows/NextUp?Limit=24" + ("&EnableRewatching=true" if rewatching else "")
+                return [i["Id"] for i in self.get(q)["Items"] if i.get("SeriesId") == series]
+            self.assertEqual([], next_up(False))
+            self.assertEqual([], next_up(True))   # nothing played again yet: nothing after the one last played
+            runtime = self.srv.lib.runtime
+            self.request("/Sessions/Playing", "POST", {"ItemId": eps[0]["id"], "PositionTicks": 0, "PlaySessionId": "rw1"}, token=self.token)
+            self.request("/Sessions/Playing/Stopped", "POST", {"ItemId": eps[0]["id"], "PositionTicks": runtime // 4,
+                                                               "PlaySessionId": "rw1"}, token=self.token)
+            self.assertEqual([], next_up(False))
+            self.assertEqual([eps[1]["id"]], next_up(True))
+            resume = {i["Id"]: i["UserData"] for i in self.get("/UserItems/Resume?Limit=50")["Items"]}
+            self.assertEqual(runtime // 4, resume[eps[0]["id"]]["PlaybackPositionTicks"])
+        finally:
+            self.request("/__harness/played", "POST", {"series": series, "played": False})
+            self.srv.lib._seed_user_data()
+
+    def test_lag_applies_a_stopped_report_after_it_was_answered(self):
+        # sg-cw: a server that has not caught up with a Stopped report when the client asks again
+        movie = self.get("/__harness/fixture")["movie"]["id"]
+        runtime = self.srv.lib.runtime
+        self.assertEqual(200, self.request("/__harness/lag", "POST", {"stopped_ms": 400})[0])
+        try:
+            self.request("/Sessions/Playing/Stopped", "POST", {"ItemId": movie, "PositionTicks": runtime // 5,
+                                                               "PlaySessionId": "lag1"}, token=self.token)
+            self.assertNotEqual(runtime // 5, self.get("/Items/" + movie)["UserData"]["PlaybackPositionTicks"])
+            deadline = time.time() + 5
+            while time.time() < deadline and self.get("/Items/" + movie)["UserData"]["PlaybackPositionTicks"] != runtime // 5:
+                time.sleep(0.05)
+            self.assertEqual(runtime // 5, self.get("/Items/" + movie)["UserData"]["PlaybackPositionTicks"])
+        finally:
+            self.request("/__harness/lag", "POST", {"stopped_ms": 0})
+            self.request("/UserItems/%s/UserData" % movie, "POST", {"PlaybackPositionTicks": 0}, token=self.token)
+
     def test_unknown_endpoint_is_404_and_listed(self):
         self.assertEqual(404, self.request("/No/Such/Thing", token=self.token)[0])
         self.assertIn("GET /No/Such/Thing", self.get("/__harness/summary")["unhandled"])
@@ -499,6 +544,66 @@ class ServerTests(unittest.TestCase):
         with open(os.path.join(self.srv.out, "summary.json"), encoding="utf-8") as f:
             summary = f.read()
         self.assertNotIn(self.token, summary)
+
+
+class LatencyRuleQueryTests(unittest.TestCase):
+    def test_a_rule_with_an_escaped_question_mark_reads_the_query_others_the_path_alone(self):
+        srv = server.Server.__new__(server.Server)
+        srv.latency = 5.0
+        srv.rules = [(__import__("re").compile(r, __import__("re").I), ms) for r, ms in
+                     [(r"^/Items\?.*ParentId=", 300.0), (r"/Items/[^/]+/Images/", 80.0), (r"ParentId", 999.0)]]
+        self.assertEqual(300.0, srv.delay_for("/Items", "SortBy=SortName&parentId=abc&Fields=Overview"))
+        self.assertEqual(5.0, srv.delay_for("/Items", "Ids=abc"), "a list without a parent: the default")
+        self.assertEqual(5.0, srv.delay_for("/Items/abc", "parentId=abc"), "one item: the path is not /Items")
+        self.assertEqual(80.0, srv.delay_for("/Items/abc/Images/Primary", "maxWidth=352&tag=x"))
+        # a rule without "\?" never sees the query (as before)
+        self.assertEqual(5.0, srv.delay_for("/Shows/x/Episodes", "ParentId=abc"))
+
+
+class BigSeriesTests(unittest.TestCase):
+    def test_the_size_is_seasons_x_episodes_or_seasons_alone(self):
+        self.assertEqual((10, 20), library.Library.big_series_size("10x20"))
+        self.assertEqual((8, 20), library.Library.big_series_size(" 8 "))
+        self.assertEqual((3, 5), library.Library.big_series_size("3X5"))
+        for off in (None, "", "0", "x20", "abc", "4x0", "-2x5"):
+            self.assertIsNone(library.Library.big_series_size(off), off)
+
+    def test_off_by_default_and_the_default_fixture_is_unchanged(self):
+        old = os.environ.pop("FAKESERVER_BIG_SERIES", None)
+        try:
+            plain = library.Library("server", "user", 600)
+            os.environ["FAKESERVER_BIG_SERIES"] = "10x20"
+            big = library.Library("server", "user", 600)
+        finally:
+            os.environ.pop("FAKESERVER_BIG_SERIES", None)
+            if old is not None:
+                os.environ["FAKESERVER_BIG_SERIES"] = old
+        self.assertIsNone(plain.showcase()["big_series"])
+        # every item of the default library is the same in the big one (names, ids, user data), the showcase first in Shows
+        for iid, item in plain.items.items():
+            self.assertEqual(item["Name"], big.items[iid]["Name"], iid)
+        self.assertEqual(plain.user, big.user)
+        self.assertEqual({k: v for k, v in plain.showcase().items() if k != "big_series"},
+                         {k: v for k, v in big.showcase().items() if k != "big_series"})
+        shows = library._id("view", "Shows")
+        self.assertEqual(plain.children[shows][0], big.children[shows][0])
+        self.assertEqual(library.Library.BIG_SERIES_NAME, big.items[big.children[shows][1]]["Name"])
+        fx = big.showcase()["big_series"]
+        self.assertEqual(["Season %d" % s for s in range(1, 11)], [s["name"] for s in fx["seasons"]])
+        names = [e["name"] for s in fx["seasons"] for e in s["episodes"]]
+        self.assertEqual(200, len(names))
+        self.assertEqual(200, len(set(names)), "every episode has a name of its own in the series")
+        others = {i["Name"] for i in big.items.values() if i["kind"] in ("movie", "series", "boxset")}
+        self.assertFalse(set(names) & others, "no episode is named as a film or a show")
+        # nothing watched (the page opens on Season 1), every episode with a Primary image, old enough for no Home row
+        episodes = big.episodes_of(fx["id"])
+        self.assertFalse(any((big.user.get(e["Id"]) or {}).get("played") for e in episodes))
+        self.assertTrue(all("Primary" in big.dto(e)["ImageTags"] for e in episodes))
+        self.assertNotIn(fx["id"], [d["Id"] for d in big.latest(shows)])
+        # the season's list, as the app asks for it
+        season2 = fx["seasons"][1]
+        listed = big.query({"parentid": [season2["id"]], "sortby": ["SortName"]})["Items"]
+        self.assertEqual([e["name"] for e in season2["episodes"]], [d["Name"] for d in listed])
 
 
 class LibraryViewsTests(unittest.TestCase):

@@ -49,6 +49,156 @@ public sealed class SeriesEpisodes : IDisposable
 	/// <summary>A view model made without the app's (tests, a page of its own): kept for the page's life, never stale by itself.</summary>
 	internal static SeriesEpisodes ForOnePage(IJellyfinClient client) => new(client, () => 0, TimeProvider.System, subscribe: false);
 
+	// ---- Nixie 1.4.1 (season switching): a season's episodes and a series' seasons, as their pages list them -------------
+
+	private sealed record ListEntry(BaseItemDtoQueryResult Answer, long ReadAt, (int Server, int Toggles) Version);
+
+	private readonly Dictionary<Guid, ListEntry> _lists = [];
+	private readonly Dictionary<Guid, (Task<BaseItemDtoQueryResult?> Answer, (int Server, int Toggles) Version)> _askingLists = [];
+
+	/// <summary>
+	/// Toggles made in the app (<see cref="Apply"/>): each one drops the kept lists, and an answer asked before it is not kept.
+	/// A toggle elsewhere (an episode's own page, a library card, an Undo) changed episodes the kept lists also hold, and the
+	/// server's own notice of it (the change count) comes later, or never without its websocket.
+	/// </summary>
+	private int _toggles;
+
+	/// <summary>The most lists kept (each a season of a few dozen episodes): the oldest go first.</summary>
+	internal const int MostLists = 64;
+
+	private (int Server, int Toggles) ListVersion() => (_changes(), _toggles);
+
+	/// <summary>
+	/// A season's episodes (or a series' seasons) as <see cref="IJellyfinClient.GetItems"/> lists them, kept under the same
+	/// rules as the series' episodes (the change count, <see cref="FreshFor"/>), and dropped by any toggle (<see cref="Apply"/>): a season seen
+	/// again, or asked ahead (<see cref="Prefetch"/>), shows at once; every click asked the server again (300 ms or more on a
+	/// real server), the series page's and the season pages' alike. A list asked again while on its way shares the request.
+	/// <paramref name="fresh"/>: asked again whatever is kept (a page's own refresh after a change). Null when it failed
+	/// (not kept).
+	/// </summary>
+	public async Task<BaseItemDtoQueryResult?> GetList(BaseItemDto parent, bool fresh = false)
+	{
+		if (parent.Id is not { } id)
+		{
+			return await _client.GetItems(parent);
+		}
+
+		TaskCompletionSource<BaseItemDtoQueryResult?>? mine = null;
+		Task<BaseItemDtoQueryResult?>? shared = null;
+		(int Server, int Toggles) version;
+		long readAt;
+		lock (_lock)
+		{
+			version = ListVersion();
+			if (!fresh && _lists.TryGetValue(id, out var entry) && entry.Version == version && _time.GetElapsedTime(entry.ReadAt) < FreshFor)
+			{
+				return entry.Answer;
+			}
+
+			if (!fresh && _askingLists.TryGetValue(id, out var asking) && asking.Version == version)
+			{
+				shared = asking.Answer;
+			}
+			else
+			{
+				mine = new TaskCompletionSource<BaseItemDtoQueryResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
+				_askingLists[id] = (mine.Task, version);
+			}
+
+			readAt = _time.GetTimestamp();
+		}
+
+		if (shared is not null || mine is null)
+		{
+			return shared is null ? null : await shared;
+		}
+
+		BaseItemDtoQueryResult? answer = null;
+		try
+		{
+			answer = await _client.GetItems(parent);
+			if (answer?.Items is not null)
+			{
+				lock (_lock)
+				{
+					// kept only when nothing changed since it was asked (a toggle, the server's notice: it may predate them), and
+					// not over a newer answer (two refreshes whose answers came the other way round)
+					if (ListVersion() == version && (!_lists.TryGetValue(id, out var kept) || kept.ReadAt < readAt))
+					{
+						_lists[id] = new ListEntry(answer, readAt, version);
+						Trim();
+					}
+				}
+			}
+
+			return answer;
+		}
+		finally
+		{
+			mine.TrySetResult(answer);
+			lock (_lock)
+			{
+				if (_askingLists.TryGetValue(id, out var asking) && asking.Answer == mine.Task)
+				{
+					_askingLists.Remove(id);
+				}
+			}
+		}
+	}
+
+	/// <summary>
+	/// The lists of <paramref name="parents"/> asked now if not kept (the seasons either side of the one shown), so a click to
+	/// one of them shows at once. Nothing is waited for; a failure is only not kept.
+	/// </summary>
+	public void Prefetch(IEnumerable<BaseItemDto> parents)
+	{
+		foreach (var parent in parents)
+		{
+			_ = GetList(parent);
+		}
+	}
+
+	/// <summary>Whether a fresh list of <paramref name="parentId"/> is kept (tests).</summary>
+	internal bool HasList(Guid parentId)
+	{
+		lock (_lock)
+		{
+			return _lists.TryGetValue(parentId, out var entry) && entry.Version == ListVersion() && _time.GetElapsedTime(entry.ReadAt) < FreshFor;
+		}
+	}
+
+	/// <summary>How many lists are kept (tests).</summary>
+	internal int ListCount
+	{
+		get
+		{
+			lock (_lock)
+			{
+				return _lists.Count;
+			}
+		}
+	}
+
+	// under _lock: the stale ones go, then the oldest, down to MostLists
+	private void Trim()
+	{
+		if (_lists.Count <= MostLists)
+		{
+			return;
+		}
+
+		var version = ListVersion();
+		foreach (var stale in _lists.Where(x => x.Value.Version != version || _time.GetElapsedTime(x.Value.ReadAt) >= FreshFor).Select(x => x.Key).ToList())
+		{
+			_lists.Remove(stale);
+		}
+
+		foreach (var oldest in _lists.OrderBy(x => x.Value.ReadAt).Take(Math.Max(0, _lists.Count - MostLists)).Select(x => x.Key).ToList())
+		{
+			_lists.Remove(oldest);
+		}
+	}
+
 	/// <summary>
 	/// Nixie 1.4.1: the request on its way per series, with the change count it was asked at: a second asker meanwhile (the
 	/// page's own early start, the Editorial pages' refresh on every change) shares it rather than asking for the whole
@@ -129,8 +279,22 @@ public sealed class SeriesEpisodes : IDisposable
 	/// <summary>A toggle the server took: the kept episodes follow its answer. The same change twice changes nothing more.</summary>
 	public void Apply(ItemUserDataChangedEventArgs change)
 	{
+		if (change.Failed)
+		{
+			return;
+		}
+
+		// Nixie 1.4.1: any toggle the server took (an Undo's episodes too) drops the kept season and series lists: they may hold
+		// a copy of what changed (a toggle on an episode's own page, a library card, another season), and an answer on its way
+		// is not kept (it may predate the toggle). The next click asks again; the page shown asks its own season again.
+		lock (_lock)
+		{
+			_toggles++;
+			_lists.Clear();
+		}
+
 		// an Undo's series or season: its episodes came one by one (Partial), each as the server has it, so none is marked here
-		if (change.Failed || change.Mixed)
+		if (change.Mixed)
 		{
 			return;
 		}
@@ -141,6 +305,7 @@ public sealed class SeriesEpisodes : IDisposable
 			{
 				Patch(entry.Episodes, seriesId, change.ItemId, change.UserData);
 			}
+
 		}
 	}
 

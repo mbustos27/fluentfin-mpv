@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.4.1
+
+Continue Watching that keeps up with what you watch, and seasons that switch at once.
+
+**Continue Watching and Up next**
+
+- **A show you watch again comes back.** Up next on Home and on the show's page now includes a show you are rewatching:
+  the episode after the one you just watched, even though you saw it before. On Jellyfin 12, an episode you are watching
+  again stays in Continue Watching with its progress (Jellyfin 12 keeps it marked watched meanwhile, and Nixie hid every
+  watched item there). Marking it watched still takes it out.
+- **One show, once.** Up next leaves out a show Continue Watching already has, and lists one episode per show: the one
+  you were watching toward most recently.
+- **Home keeps up with the player.** Home used to catch up only after R. What you just watched now moves the moment the
+  player closes (to the front of Continue Watching with its new progress, or out of it and of Up next once finished),
+  then Home checks with the server, so the next episode follows within a second or so. A show's and a season's page
+  update their Play and Up next the same way.
+
+**Season switching**
+
+- **Seasons switch at once.** A season you have seen, or the ones either side of it (asked ahead while you look), shows
+  without asking the server again. Clicking quickly through seasons no longer drops a click, and the last season you
+  click is the one that stays.
+- **Classic's and Drive-in's season buttons keep the keyboard:** Enter or Space on one leaves the keyboard on the new
+  current season, and Classic's season row marks the season shown (Narrator says "current season").
+- **Editorial downloads each episode still once** (it asked for every one twice).
+
 ## 1.4.0
 
 The consistency release. The library and collections review found that the library layer under the four themes was never

@@ -17,7 +17,10 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
 - Media: media.py's test video (built with --mpv into --media when missing).
 - Latency: --latency for every request, --latency-rule REGEX=MS for the paths matching REGEX (first match wins,
   'hang' = never answer, 'status:NNN' = answer that status (400-599) at once, 'empty' = 200 with no items); also
-  POST /__harness/latency {"default": ms, "rules": [["regex", ms], ...]} while running.
+  POST /__harness/latency {"default": ms, "rules": [["regex", ms], ...]} while running. A REGEX with "\\?" in it is
+  matched against the path and its query string, unquoted ('^/Items\\?.*ParentId=' = the item lists of one parent).
+- FAKESERVER_BIG_SERIES=<seasons>x<episodes> (e.g. 10x20): a second showcase series in Shows, "A Tide of Seasons", every
+  episode named uniquely in it; the fixture's "big_series" lists its seasons and episodes (null when off).
 - Segments: POST /__harness/segments {"outro_seconds": N}: the end credits (Outro) run the last N seconds (40).
 - Streams: POST /__harness/streams {"encode_subtitle": true} serves the last embedded subtitle as burnt in
   ("Encode"), so picking it renegotiates the stream (a track change that can fail, with a PlaybackInfo rule).
@@ -33,6 +36,9 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   POST /__harness/libraries {"rename": {"old": "new"}, "add": ["name"]} (the views change; clients hear LibraryChanged),
   POST /__harness/art {"art": "white"|"black"|""} (Nixie 1.4.0: every image one flat colour from now on, as FAKESERVER_ART
   sets it at start; the image tags change with it, so a client that reads an item again asks for the new picture).
+  POST /__harness/played {"series": id, "played": true} (sg-cw: the test user marks a series watched; answers its
+  episodes), POST /__harness/lag {"stopped_ms": N} (sg-cw: Stopped reports applied N ms after they are answered).
+- Next Up honours EnableRewatching (sg-cw), as Jellyfin's TVSeriesManager does.
 """
 
 import argparse
@@ -223,6 +229,7 @@ class Server:
         self.sessions = []          # PlaySessionIds issued
         self.reports = []           # playback reports: kind, item, position, play session, client
         self.sockets = []
+        self.stopped_lag = 0.0      # sg-cw: POST /__harness/lag: a Stopped report is applied this many seconds after it is answered
         self.image_cache = collections.OrderedDict()
         self.started = time.time()
         self.log_file = open(os.path.join(out, "requests.jsonl"), "a", encoding="utf-8")
@@ -240,9 +247,11 @@ class Server:
         self.write_summary()
         threading.Thread(target=self.httpd.shutdown, daemon=True).start()
 
-    def delay_for(self, path):
+    def delay_for(self, path, query=""):
+        # season speed: a rule with "\?" in its regex is matched against the path and its query string, unquoted
+        # ("/Items?ParentId=..."), so it can pick out one kind of list request; any other rule against the path alone
         for rx, ms in self.rules:
-            if rx.search(path):
+            if rx.search(path + "?" + query if "\\?" in rx.pattern else path):
                 return ms
         return self.latency
 
@@ -520,7 +529,7 @@ class Server:
                 delay = 0.0
                 fault = None
                 if not path.lower().startswith("/__harness/"):
-                    rule = outer.delay_for(path)
+                    rule = outer.delay_for(path, urllib.parse.unquote(parsed.query))
                     if rule == "hang":
                         delay = -1.0
                     elif isinstance(rule, str):
@@ -801,7 +810,8 @@ class Server:
                     return self._json(200, lib.query(self.q))
                 if low == "/shows/nextup":
                     self.route = "nextup"
-                    return self._json(200, lib.next_up(int(self._one("limit", "24")), self._one("seriesid")))
+                    return self._json(200, lib.next_up(int(self._one("limit", "24")), self._one("seriesid"),
+                                                       rewatching=str(self._one("enablerewatching", "")).lower() == "true"))
                 mm = match(r"/shows/" + ID + r"/seasons")
                 if mm:
                     self.route = "seasons"
@@ -1037,6 +1047,24 @@ class Server:
                         url = str(body.get("url") or "")
                         outer.lib.trailer_url = url if re.match(r"^https?://[^\s\"<>]+$", url) else None
                     return self._json(200, {"mode": outer.trailer_mode, "url": outer.lib.trailer_url, "slow": outer.trailer_slow})
+                if low == "/__harness/played" and method == "POST":
+                    # sg-cw: {"series": id, "played": true}: the test user marks a whole series (or any item) watched or not,
+                    # as from another device (clients hear UserDataChanged); answers its episodes for the driver
+                    body = self._body()
+                    item = outer.lib.set_played(str(body.get("series") or body.get("id") or ""), bool(body.get("played", True)))
+                    if not item:
+                        return self._json(404, {"error": "no such item"})
+                    name = outer.creds["username"].lower()
+                    uid = next((u for u, v in outer.users.items() if v["name"].lower() == name), None)
+                    eps = outer.lib.episodes_of(item["Id"]) if item["kind"] == "series" else []
+                    outer.push_user_data(uid, [item] + eps)
+                    return self._json(200, {"episodes": [{"id": e["Id"], "name": e["Name"], "season": e["parent_index"],
+                                                          "index": e["index"], "runtime": outer.lib.runtime / 1e7}
+                                                         for e in eps]})
+                if low == "/__harness/lag" and method == "POST":
+                    # sg-cw: {"stopped_ms": N}: Stopped reports are answered at once and applied N ms later (0: at once)
+                    outer.stopped_lag = max(0.0, float(self._body().get("stopped_ms") or 0) / 1000.0)
+                    return self._json(200, {"stopped_ms": int(outer.stopped_lag * 1000)})
                 if low == "/__harness/shutdown" and method == "POST":
                     self._json(200, {"ok": True})
                     outer.stop()
@@ -1164,9 +1192,19 @@ class Server:
                 with outer.lock:
                     outer.reports.append(dict(entry, t=round(time.time(), 3)))
                 if kind in ("Playing", "Progress", "Stopped") and item_id:
-                    item = outer.lib.report(item_id, position, stopped=kind == "Stopped")
-                    if item and kind != "Progress":
-                        outer.push_user_data(self.uid, [item])
+                    uid = self.uid
+
+                    def apply():
+                        item = outer.lib.report(item_id, position, stopped=kind == "Stopped")
+                        if item and kind != "Progress":
+                            outer.push_user_data(uid, [item])
+                    # sg-cw: a server that has not caught up with a Stopped report when it is asked again
+                    if kind == "Stopped" and outer.stopped_lag > 0:
+                        timer = threading.Timer(outer.stopped_lag, apply)
+                        timer.daemon = True
+                        timer.start()
+                    else:
+                        apply()
                 return self._send(204)
 
             def _file(self, path, ctype):

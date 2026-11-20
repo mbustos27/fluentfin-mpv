@@ -89,6 +89,17 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `InputSiteWindowClass` child (the thread's focus window), not its `DesktopChildSiteBridge`; the
   fluentfin-controls harness posts there (Space, F, Escape through the page's key path).
 
+## Nixie 1.4.1: Continue Watching and season switching
+- **Season switching, what is left** (`then-season-switch.ps1` on the fake server's 10x20 series, four themes):
+  - **Episode stills come 0.4 to 0.9 s after the rows.** A season kept or asked ahead shows its rows with no request, but
+    the stills of its episodes are asked only once their rows are drawn.
+  - **Drive-in's rows take longest to build** (the gate allows a kept season 900 ms in Drive-in, 700 in Classic, 400 in
+    Editorial and 350 in Cinematic): its episode rows are heavier, and the time is the app's own, not the server's.
+  - **A new season page waits for its item.** A season's own page (series > Season N details, or a pill there) asks for
+    the season first and shows its episodes after, even when they are kept.
+  - **A far season costs a round trip.** Only the seasons either side of the one shown are asked ahead: a jump to one
+    further away (Season 1 to Season 9) waits for the server once.
+
 ## Nixie 1.4.0: the consistency release
 - **Editorial has no list view.** Its View menu offers the poster sizes only; the other three themes have the list.
 - **Drive-in's chapter bulbs come later.** Drive-in has the Chapters menu in the player's bar like every theme, but no
@@ -113,8 +124,8 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   on the A to Z's R, and on the A to Z a letter key presses that letter.
 - **The skeleton and [perf] probes** (`LibraryProbe`) log one line per library opened; they measure, they never change
   the layout.
-- **For 1.4.1, from the outside-services bug hunt** (`docs\reports\Bug hunt 2026-11-19 (outside services).md`; none blocks
-  1.4.0):
+- **Still open, from the outside-services bug hunt** (`docs\reports\Bug hunt 2026-11-19 (outside services).md`; none blocks
+  1.4.0; planned for 1.4.1, they wait for the next release: 1.4.1 has Continue Watching and season switching only):
   - **M1: a certificate Windows trusts but Mozilla's list does not: sign-in works, playback fails.** The UI checks the
     server's chain against the Windows store, the backend against certifi's bundle, so a home or private CA (or an
     HTTPS-inspecting antivirus root) browses but nothing plays (`SSLError: CERTIFICATE_VERIFY_FAILED`). Fix: `truststore`

@@ -19,6 +19,9 @@ public sealed partial class DriveInSeriesPage : Page
 	{
 		InitializeComponent();
 		SizeChanged += (_, e) => Body.Padding = new Thickness(ItemStage.MarginFor(e.NewSize.Width), 8, ItemStage.MarginFor(e.NewSize.Width), 56);
+		// Nixie 1.4.1: the season tubes are made anew for each season shown: the current one gets the keyboard back (it fell
+		// to "Season N details")
+		FluentFin.Controls.SeasonPillFocus.Keep(this, ViewModel, SeasonTubes);
 	}
 
 	/// <summary>The episode Play starts among the shown season's (NEXT on the board, its time left beside Play).</summary>
