@@ -69,7 +69,12 @@ Three parallel streams (search, the updater, fixes), each owning its files, as i
     for "it's always sunny", so the owner's server must run a looser search plugin (`docs\research\search.md`);
   - the test servers now hold a "QA Search" library of 3,035 films and 29 shows;
   - its live check passes 12 of 12 on both test servers.
-- The updater is near done: it's running its checks and screenshots.
+- The search review found no Blocker but three Majors, which the search stream is fixing before the merge:
+  - "star" put *Starman* above *Star Wars* (word breaks);
+  - the test servers' smoke check broke on the new library;
+  - checks reported but never rerun.
+- **The updater is done** (9 commits, in review; 15:15). All ten items are in, including the Sandbox test script,
+  which so far has only run as a dry run. The keyboard check passes in all four themes.
 - The fixes stream finished the backend and privacy items in its first half hour:
   - private certificates;
   - split-season anime;
