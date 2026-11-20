@@ -38,11 +38,11 @@
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="vm:LetterTile">
                         <Button
-                            AutomationProperties.AccessibilityView="{x:Bind local:LetterBar.ViewFor(HasTitles)}"
-                            AutomationProperties.Name="{x:Bind Name}"
+                            AutomationProperties.AccessibilityView="{x:Bind local:LetterBar.ViewFor(HasTitles), Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
                             Click="Letter_Click"
                             Content="{x:Bind Letter}"
-                            IsEnabled="{x:Bind HasTitles}"
+                            IsEnabled="{x:Bind HasTitles, Mode=OneWay}"
                             Tag="{x:Bind}" />
                     </DataTemplate>
                 </ItemsRepeater.ItemTemplate>

@@ -128,7 +128,12 @@ public sealed partial class LetterBar : UserControl
 				ShowMode();
 				break;
 			case nameof(LibraryViewModel.LetterTiles):
-				DispatcherQueue.TryEnqueue(Fit);
+				// (1.4.0 integration: the same tiles set again in place while a big library loads: their places for Narrator anew)
+				DispatcherQueue.TryEnqueue(() =>
+				{
+					Fit();
+					Restyle();
+				});
 				break;
 			case nameof(LibraryViewModel.CurrentLetter):
 				MarkAll();

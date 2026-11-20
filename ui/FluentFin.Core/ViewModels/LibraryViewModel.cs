@@ -631,7 +631,15 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		var tiles = LetterRow == LetterRowMode.Letters ? Letters : [];
 		if (LetterTiles.Count == 0 && tiles.Count > 0 || !LetterTiles.Where(t => t.HasTitles).Select(t => t.Jump).SequenceEqual(tiles))
 		{
-			LetterTiles = tiles.Count == 0 ? [] : LibraryBrowse.Tiles(tiles);
+			// Nixie 1.4.0 integration: the same letters keep their tiles (the buttons, and the keyboard on one, stay while pages arrive)
+			if (tiles.Count > 0 && LetterTiles.Count > 0 && LibraryBrowse.UpdateTiles(LetterTiles, tiles))
+			{
+				OnPropertyChanged(nameof(LetterTiles));
+			}
+			else
+			{
+				LetterTiles = tiles.Count == 0 ? [] : LibraryBrowse.Tiles(tiles);
+			}
 		}
 
 		ShowingFrom(Math.Min(_firstShown, Math.Max(0, _items?.Count - 1 ?? 0)));

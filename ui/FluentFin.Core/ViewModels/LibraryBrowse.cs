@@ -191,6 +191,30 @@ public static class LibraryBrowse
 	/// Nixie 1.4.0 (item 13): the A to Z in every theme: # and A to Z always, in one shape (a letter no title starts with is
 	/// dimmed, skipped by the arrows and silent to Narrator), then any other key the titles have (Б, 漢).
 	/// </summary>
+	/// <summary>
+	/// Nixie 1.4.0 integration (the big-library stream with the A to Z): the tiles of <paramref name="letters"/> set into the
+	/// existing <paramref name="tiles"/> when they are the same letters in the same order (every page of a big library moved
+	/// the jumps and made the tiles anew, so the keyboard on a letter fell out of the A to Z each time); false when the
+	/// letters themselves changed, and the tiles must be made anew.
+	/// </summary>
+	public static bool UpdateTiles(IReadOnlyList<LetterTile> tiles, IReadOnlyList<LetterJump> letters)
+	{
+		var fresh = Tiles(letters);
+		if (fresh.Count != tiles.Count || !fresh.Select(t => t.Letter).SequenceEqual(tiles.Select(t => t.Letter)))
+		{
+			return false;
+		}
+
+		for (var i = 0; i < tiles.Count; i++)
+		{
+			tiles[i].Jump = fresh[i].Jump;
+			tiles[i].Position = fresh[i].Position;
+			tiles[i].Size = fresh[i].Size;
+		}
+
+		return true;
+	}
+
 	public static IReadOnlyList<LetterTile> Tiles(IReadOnlyList<LetterJump> letters)
 	{
 		var byLetter = letters.ToDictionary(l => l.Letter, StringComparer.OrdinalIgnoreCase);

@@ -157,10 +157,11 @@ public sealed class HomeAndLibraryXamlTests
 		Assert.Equal("Once", (string?)list.Attribute("TabFocusNavigation"));
 		Assert.Equal("Enabled", (string?)list.Attribute("XYFocusKeyboardNavigation"));
 		var letter = list.Descendants(Presentation + "Button").Single();
-		Assert.Equal("{x:Bind Name}", (string?)letter.Attribute("AutomationProperties.Name"));
+		// (1.4.0 integration: OneWay, the tiles are set again in place while a big library loads)
+		Assert.Equal("{x:Bind Name, Mode=OneWay}", (string?)letter.Attribute("AutomationProperties.Name"));
 		// Nixie 1.4.0 (item 13): a letter with no titles rests: disabled (not a stop) and silent to Narrator; the mark is the tile's
-		Assert.Equal("{x:Bind HasTitles}", (string?)letter.Attribute("IsEnabled"));
-		Assert.Equal("{x:Bind local:LetterBar.ViewFor(HasTitles)}", (string?)letter.Attribute("AutomationProperties.AccessibilityView"));
+		Assert.Equal("{x:Bind HasTitles, Mode=OneWay}", (string?)letter.Attribute("IsEnabled"));
+		Assert.Equal("{x:Bind local:LetterBar.ViewFor(HasTitles), Mode=OneWay}", (string?)letter.Attribute("AutomationProperties.AccessibilityView"));
 		Assert.Equal("{x:Bind Letter}", (string?)letter.Attribute("Content")); // the letter role (NixieLetterButtonStyle) draws it
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/LetterBar.xaml.cs"));
 		Assert.Contains("VisualStateManager.GoToState(button, tile.IsCurrent ? \"Selected\" : \"Unselected\", false);", code);

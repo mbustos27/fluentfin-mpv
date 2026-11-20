@@ -19,7 +19,21 @@ public sealed partial class LetterTile(string letter, LetterJump? jump) : Commun
 {
 	public string Letter { get; } = letter;
 
-	public LetterJump? Jump { get; } = jump;
+	private LetterJump? _jump = jump;
+
+	/// <summary>Nixie 1.4.0 integration: set again in place while a big library's pages arrive (LibraryBrowse.UpdateTiles).</summary>
+	public LetterJump? Jump
+	{
+		get => _jump;
+		internal set
+		{
+			if (SetProperty(ref _jump, value))
+			{
+				OnPropertyChanged(nameof(HasTitles));
+				OnPropertyChanged(nameof(Name));
+			}
+		}
+	}
 
 	public bool HasTitles => Jump is not null;
 
