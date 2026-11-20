@@ -116,7 +116,8 @@ internal sealed class LibraryGridHost
 			return;
 		}
 
-		_page.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+		// Nixie 1.4.0 (bug hunt M3): through the guard: a failure here is logged, it cannot end the app
+		Services.UiDispatch.Enqueue(_page.DispatcherQueue, "the library's focus", () =>
 		{
 			if (_vm.IsLoading)
 			{
@@ -155,7 +156,7 @@ internal sealed class LibraryGridHost
 			{
 				_grid.FocusAndHold(index, state, atTop: jumped);
 			}
-		});
+		}, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
 	}
 
 	private void Scroller_ScrollCompleted(ScrollView sender, ScrollingScrollCompletedEventArgs args)

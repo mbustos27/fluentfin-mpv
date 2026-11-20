@@ -1,5 +1,6 @@
 using FluentFin.Core.Theming;
 using FluentFin.Core.ViewModels;
+using FluentFin.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -23,7 +24,7 @@ namespace FluentFin.Views
 				{
 					// arriving, the focus is on the first tile, not left in the top bar (the review's X8)
 					_focused = true;
-					DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, FocusFirstTile);
+					UiDispatch.Enqueue(DispatcherQueue, "the Libraries page's arrival focus", FocusFirstTile, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
 				}
 			};
 		}

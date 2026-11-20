@@ -156,6 +156,12 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
 - **Update checks survive a clock change.** When GitHub asks Nixie to wait, the wait is kept for a day at most, a wait
   that a clock set back put days ahead counts as over, and Check now says which day ("wait until tomorrow at 09:00").
 
+**Fixes from the second bug hunt**
+
+- **No crash on Back to a collection.** Back from a film to its collection, with that film past the first in the grid,
+  could close Nixie ("Layout cycle detected" as the page came back). The page now puts the keyboard on the card once its
+  grid is drawn, and a failure in work the window had queued is logged instead of closing the app.
+
 **Verified, and the known limits**
 
 - Every theme runs the keyboard matrix, the streams' harness scripts and the review's measurements as checks

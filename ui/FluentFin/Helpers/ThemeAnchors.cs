@@ -177,7 +177,7 @@ public sealed class ThemeAnchors
 	{
 		if (page.IsLoaded)
 		{
-			page.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => Restore(page));
+			Services.UiDispatch.Enqueue(page.DispatcherQueue, "the place after a theme switch", () => Restore(page), Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
 			return;
 		}
 
@@ -185,7 +185,7 @@ public sealed class ThemeAnchors
 		{
 			page.Loaded -= OnLoaded;
 			// after the first layout pass, when the rows have realized their items
-			page.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => Restore(page));
+			Services.UiDispatch.Enqueue(page.DispatcherQueue, "the place after a theme switch", () => Restore(page), Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
 		}
 
 		page.Loaded += OnLoaded;

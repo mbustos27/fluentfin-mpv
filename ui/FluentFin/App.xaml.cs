@@ -346,6 +346,8 @@ public partial class App : Application
 		try
 		{
 			PerfLog.Startup(GetService<ILogger<App>>(), "launched");
+			// Nixie 1.4.0 (bug hunt M3): what threw on the UI thread is in the log before a crash can end the app
+			Services.FirstChanceTrail.Start();
 			await Host.StartAsync();
 
 			Locator.SetServiceProvider(Host.Services);
