@@ -34,6 +34,18 @@ public sealed class EditorialLibraryLayoutTests
 	}
 
 	[Fact]
+	public void APostersPicture_HasItsSize_BeforeItsImageArrives()
+	{
+		// the picture grew from nothing as its image opened, which laid the grid out again: after a far scroll each image that
+		// arrived re-made the rows from the top for about 30 s (the window stalled up to 2 s at a time)
+		var code = File.ReadAllText(App("Themes", "Editorial", "Controls", "EditorialPoster.xaml.cs"));
+		var resize = code[code.IndexOf("private void Resize()", StringComparison.Ordinal)..];
+		resize = resize[..resize.IndexOf("ApplyImage();", StringComparison.Ordinal)];
+		Assert.Contains("Picture.Width = PosterWidth;", resize);
+		Assert.Contains("Picture.Height = ArtHeight;", resize);
+	}
+
+	[Fact]
 	public void TheDetailsPanel_IsSizedByLayoutAlone()
 	{
 		Assert.DoesNotContain("SizeChanged", File.ReadAllText(App("Themes", "Editorial", "Controls", "InlineDetailsRow.xaml.cs")));

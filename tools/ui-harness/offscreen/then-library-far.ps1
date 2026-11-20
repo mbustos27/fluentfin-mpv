@@ -4,7 +4,8 @@
 # LayoutCycleException and left the window unusable (the rows' posters got their width only once in the window, so every row
 # the grid made changed height after it was laid out). Run in each theme:
 #   $env:NIXIE_LAYOUT='<Classic|DriveIn|Cinematic|Editorial>'; run-offscreen.ps1 ... -Script home -Then offscreen\then-library-far.ps1
-# Checks: the window answers within 2 s all along (a WM_NULL every 200 ms); no LayoutCycleException in FluentFin's log; what
+# Checks: the window answers within 2 s all along (a WM_NULL every 200 ms) and settles after the far scroll (every answer
+# within 400 ms over the next 5 s); no LayoutCycleException in FluentFin's log; what
 # the user then sees: Editorial's details open in view, the keyboard on Play when Enter opened them, the poster "expanded",
 # and Esc or a second Invoke closes them with the poster in view (the keyboard on it after Esc); the other themes' item page
 # opens and Back returns. Shots <tag>-far-<name>.png. Dot-sourced by drive.ps1: every name here starts with lf.
@@ -38,7 +39,7 @@ function Lf-Responsive([double]$Seconds = 5) {
         if ($a -lt 0) { $missed++ } elseif ($a -gt $slowest) { $slowest = $a }
         Start-Sleep -Milliseconds 200
     }
-    [pscustomobject]@{ Ok = ($missed -eq 0 -and $n -gt 0); Text = "$n answers asked, $missed not within 2 s, slowest $slowest ms" }
+    [pscustomobject]@{ Ok = ($missed -eq 0 -and $n -gt 0); Slowest = $slowest; Text = "$n answers asked, $missed not within 2 s, slowest $slowest ms" }
 }
 function Lf-Cycles {
     $n = 0
@@ -85,6 +86,9 @@ if (Lf-Fresh) {
     $lfPc = Lf-Jump
     $lfR = Lf-Responsive 4
     Check "far ($lfTag): a far scroll in one go: the window answers within 2 s" $lfR.Ok "$($lfR.Text) (the scroll bar read $([int]$lfPc) % at once)"
+    # and then it settles (the release's second fault: each image that arrived re-made the rows from the top, for 30 s)
+    $lfR = Lf-Responsive 5
+    Check "far ($lfTag): the grid settles after the far scroll (its next 5 s: every answer within 400 ms)" ($lfR.Ok -and $lfR.Slowest -le 400) $lfR.Text
     $lfShown = Find-Ui -Type 'ListItem' -Contains -Name ', '
     Check "far ($lfTag): after the far scroll, titles show in view" ([bool]$lfShown) $(if ($lfShown) { $lfShown.Current.Name } else { 'none' })
     $lfCard = Find-MediaCard $lfTitle
