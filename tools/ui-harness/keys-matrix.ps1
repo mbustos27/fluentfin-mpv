@@ -61,14 +61,17 @@ foreach ($theme in $Themes) {
     }
     $data = Join-Path $Out "data-$theme"
     foreach ($dir in @($runOut, $data)) { if (Test-Path $dir) { Remove-Item -Recurse -Force $dir } }
-    $runArgs = [ordered]@{ DataDir = $data; Out = $runOut; Script = 'home'; Then = $then; TimeoutSeconds = $TimeoutSeconds }
+    # sg-parallel: a run waiting for a slot is not served in arrival order (a mutex wait), so with every stream running 3 at a
+    # time a theme's run may wait long: as long as the themes' runs themselves take (at least 30 min)
+    $runArgs = [ordered]@{ DataDir = $data; Out = $runOut; Script = 'home'; Then = $then; TimeoutSeconds = $TimeoutSeconds
+        QueueMinutes = [Math]::Max(30, [int]($TimeoutSeconds / 60) * $Themes.Count) }
     if ($Exe) { $runArgs.Exe = $Exe } elseif ($Build -and -not $built) { $runArgs.Build = $true }
     if ($Python) { $runArgs.Python = $Python }
     if ($Cache) { $runArgs.Cache = $Cache }
     Write-Host "== $theme -> $runOut"
     if ($Parallel) {
         # its own powershell.exe, NIXIE_LAYOUT inherited from here; -QueueMinutes covers a wait for a slot behind the others
-        $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $runner + '"'), '-NoA11y', '-QueueMinutes', [string][Math]::Max(30, [int]($TimeoutSeconds / 60) * $Themes.Count))
+        $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $runner + '"'), '-NoA11y')
         foreach ($k in $runArgs.Keys) { $argList += "-$k"; $argList += ('"' + [string]$runArgs[$k] + '"') }
         $going[$theme] = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList $argList -PassThru -WindowStyle Hidden `
             -RedirectStandardOutput (Join-Path $Out "$theme.console.txt") -RedirectStandardError (Join-Path $Out "$theme.console-err.txt")
