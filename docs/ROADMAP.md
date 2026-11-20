@@ -63,6 +63,27 @@ The full list is CHANGELOG `## 1.4.0`:
 ## 1.5: Search and updates (now)
 Three parallel streams (search, the updater, fixes), each owning its files, as in 1.4.0. The musts go first.
 
+**Progress (2026-11-20, 13:30):**
+- Search and the updater are near done: each has 4–5 commits, and is running its checks and screenshots.
+- The fixes stream finished the backend and privacy items in its first half hour:
+  - private certificates;
+  - split-season anime;
+  - "Search online";
+  - chapters retry;
+  - BH-140-m5;
+  - no `checkip` call;
+  - the Jellyseerr inventory.
+
+  BH-140-m8 had already been fixed in 1.4.0.
+- To ship sooner (owner: "Yes, split it"), the rest of fixes runs in three streams:
+  - **fixes:** the Alt ding, T5, the rewatching switch, the button leftovers;
+  - **season:** the season-speed leftovers;
+  - **qacheck:** real playlists and a transcode on the test servers, the sub-path and trailing-slash checks, the fake
+    server's strict auth.
+- **The Alt ding went first.** Off-screen test runs were making Windows' error sound on the owner's PC.
+- **Usage:** the owner resets the weekly limit by hand when it reaches 100%.
+- **Target:** late on 2026-11-20, or 2026-11-21.
+
 **Search stream (a must for 1.5, owner 2026-11-19: "search is pretty bad")**
 
 On the owner's server, "it's always sunny" gives "Movies (100 of 295)": a fixed Movies group first, full of unrelated
@@ -202,6 +223,22 @@ chips, the top bar's Collections destination, the fake server), so they're built
   - no "6 films" three times (C2).
 - **"Save as playlist":** an explicit button that copies a Nixie collection to the server as the user's own playlist.
 
+**Skip repeated extras (proposed for 1.6, 2026-11-20; research in progress):**
+- **What the owner sees:** on their server, "What We Do in the Shadows" episodes carry FX network extras (bumpers,
+  promos) baked into the files. The owner: "we need a way to like cut a general bit i guess or learn what we skip".
+- **What Nixie has today:**
+  - it already skips the server's own "Commercial" segments, off by default;
+  - the owner's server likely marks none, and the owner isn't an admin there, so a server plugin (Intro Skipper) is out.
+- **Proposed** (a small stream of its own, beside the collections work; the player and backend, so no shared files):
+  - a per-show **"Skip this part every episode"** the user marks once in the player;
+  - **learned skips:** after the user skips the same stretch in two episodes of a show, Nixie offers to skip it every
+    time.
+- **Heavier option, 1.8 if those aren't enough:** matching the extras' audio, for extras that sit at a different time in
+  each episode.
+- **Plan:** `docs\reports\Nixie repeated extras skip plan.md`, being written.
+- **Question for the owner:** where the extras sit (start, end, or mid-episode) and whether they're the same length each
+  time.
+
 ## 1.6.1: Theme polish
 - **Drive-in's own look** on the Libraries and Collection pages.
 - **Editorial's list view** (from the backburner).
@@ -292,6 +329,8 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   playlist (an ordinary user can). Nothing is written to the server otherwise.
 
 ## Still open (later releases)
+- Skip repeated extras: per-show and learned skips in 1.6, or matching by audio in 1.8 (waits on its plan and the
+  owner's answer about where the extras sit).
 - The pop-out player's meaning (1.8).
 - Friends through the server only, or a Trakt exception (1.9).
 - Rust: go or no-go after the spike (2.0).
