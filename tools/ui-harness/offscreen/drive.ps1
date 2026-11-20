@@ -102,8 +102,51 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 function Ms([double]$From, [double]$To) { if ($From -and $To) { [int][Math]::Round(($To - $From) * 1000) } else { $null } }
 function Safe-Name([string]$Name) { ($Name -replace '[^A-Za-z0-9._-]+', '-').Trim('-').ToLowerInvariant() }
 
+# --- the monitors (Nixie 1.4.x, sg-parallel: bug hunt m10's cause) -----------------------------------------------------
+# Windows 11 minimizes the windows on a monitor that drops off the bus (a DisplayPort monitor powering off or going to
+# standby), on the harness's private desktops too: every m10 "160 x 28" run was the primary monitor's Kernel-PnP 1010
+# "surprise removed" in the same second, alone or three runs at once. When FluentFin's window is found minimized and its
+# monitor went away (or a monitor dropped off since it was last seen shown), the run says so in drive.log and in
+# result.json's display.events, restores the window and goes on; the checks keep whatever they found. A minimize nothing
+# like that explains is left alone: Shot's refusal fails the run.
+$script:display = [ordered]@{ monitors = @([OffscreenUi]::Monitors()); window_monitor = $null; events = New-Object System.Collections.ArrayList }
+$script:shownSeen = $null     # when the window was last seen shown (epoch s), and its monitor then
+$script:shownMonitor = $null
+# the Kernel-PnP removals of monitors since a time (epoch s): "HH:mm:ss.fff DISPLAY\..."; none when the log has none or is unreadable
+function Get-DisplayRemovals([double]$Since) {
+    try {
+        $start = [DateTimeOffset]::FromUnixTimeMilliseconds([long]($Since * 1000)).LocalDateTime
+        @(Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-Kernel-PnP/Device Management'; Id = 1010; StartTime = $start } -ErrorAction Stop |
+            Where-Object { "$($_.Properties[0].Value)" -like 'DISPLAY\*' } | Sort-Object TimeCreated |
+            ForEach-Object { "{0:HH:mm:ss.fff} {1}" -f $_.TimeCreated, $_.Properties[0].Value })
+    } catch { @() }
+}
+# $true when the window was minimized by a monitor going away and is shown again
+function Resolve-WindowsMinimize([string]$Where) {
+    if ($script:hwnd -eq [IntPtr]::Zero -or -not $script:ui -or $script:ui.HasExited) { return $false }
+    if (-not [OffscreenUi]::IsIconic($script:hwnd)) {
+        $script:shownSeen = Get-Epoch; $script:shownMonitor = [OffscreenUi]::MonitorOf($script:hwnd)
+        return $false
+    }
+    $since = if ($script:shownSeen) { $script:shownSeen - 2 } else { $runStarted }
+    $now = @([OffscreenUi]::Monitors())
+    $why = [OffscreenUi]::MonitorLossVerdict($true, $script:shownMonitor, $now, @(Get-DisplayRemovals $since))
+    if (-not $why) { return $false }
+    [void][OffscreenUi]::Restore($script:hwnd, $script:ui.Id)
+    $shown = [bool](Wait-Until { if (-not [OffscreenUi]::IsIconic($script:hwnd) -and $null -eq [OffscreenUi]::ShotRefusal($script:hwnd)) { $true } } -Seconds 8 -PollMs 100)
+    if ($shown) { Start-Sleep -Milliseconds 800 }
+    $envEvent = [ordered]@{ at = Get-Epoch; where = $Where; why = $why; restored = $shown; window_monitor = [OffscreenUi]::MonitorOf($script:hwnd); monitors = $now }
+    [void]$script:display.events.Add($envEvent)
+    Say ("ENVIRONMENT ({0}): Windows minimized FluentFin's window: {1}. {2}; checks around it may have failed for that reason" -f $Where, $why,
+        $(if ($shown) { "Restored, now on $($envEvent.window_monitor)" } else { 'It could not be restored' }))
+    if ($shown) { $script:shownSeen = Get-Epoch; $script:shownMonitor = $envEvent.window_monitor }
+    $shown
+}
+
 # --- captures -------------------------------------------------------------------------------------------------------
 function Shot([string]$Name) {
+    # sg-parallel: minimized because its monitor went away: restored first (Resolve-WindowsMinimize)
+    [void](Resolve-WindowsMinimize "shot $Name")
     # Nixie 1.4.0 (bug hunt m10): a minimized window fails the run, loudly, instead of a 160 x 28 picture
     if ([OffscreenUi]::ShotRefusal($script:hwnd) -is [string]) {
         Check "shot ${Name}: the window is shown (not minimized)" $false ([OffscreenUi]::ShotRefusal($script:hwnd))
@@ -666,7 +709,10 @@ function Start-App([string]$Timing) {
     if (-not $found) { throw "FluentFin showed no window within 60 s" }
     $script:hwnd = [IntPtr]$found
     $timings[$Timing] = Ms $script:launchedAt (Get-Epoch)
-    Say "window after $($timings[$Timing]) ms"
+    # sg-parallel: the monitor it opened on (the primary: when that one drops off the bus, Windows minimizes the window)
+    $script:shownSeen = Get-Epoch; $script:shownMonitor = [OffscreenUi]::MonitorOf($script:hwnd)
+    if (-not $script:display.window_monitor) { $script:display.window_monitor = $script:shownMonitor }
+    Say "window after $($timings[$Timing]) ms, on $($script:shownMonitor) (monitors: $($script:display.monitors -join '; '))"
 }
 
 # a user saved with the run's one saved server, as "Remember me" saves one, so that the next start signs itself in
@@ -765,6 +811,8 @@ try {
     if ($Before) { Say "-Before $Before"; . $Before }
     Step-SignIn ($wanted -contains 'login')
     foreach ($step in $wanted) {
+        # sg-parallel: a step starts on a shown window when only a monitor going away minimized it
+        if ($step -notin @('login', 'close')) { [void](Resolve-WindowsMinimize "before $step") }
         switch -Regex ($step) {
             '^(login|close)$' { break }
             '^home$' { Step-Home; break }
@@ -788,7 +836,7 @@ try {
             '^wait:(.+)$' { Start-Sleep -Milliseconds ([int]([double]$Matches[1] * 1000)); break }
         }
     }
-    if ($Then) { Say "-Then $Then"; . $Then }
+    if ($Then) { [void](Resolve-WindowsMinimize '-Then'); Say "-Then $Then"; . $Then }
     if ($wanted -contains 'close') { Step-Close }
 }
 catch {
@@ -825,7 +873,10 @@ finally {
     }
     if ($appErrors) { Say ("FluentFin logged {0} error(s) during the run, first: {1}" -f $appErrors.Count, $appErrors[0]) }
     $failed = @($checks.Keys | Where-Object { -not $checks[$_].ok })
-    $result = [ordered]@{ started = $runStarted; desktop = $desktop; server = $script:serverUrl; sign_in = $SignIn; player_controls = $PlayerControls;
+    # sg-parallel: every monitor that dropped off during the run, minimizing the window or not
+    $script:display.removals = @(Get-DisplayRemovals $runStarted)
+    if ($script:display.removals.Count) { Say "monitors that dropped off the bus during the run (Kernel-PnP): $($script:display.removals -join '; ')" }
+    $result = [ordered]@{ started = $runStarted; desktop = $desktop; display = $script:display; server = $script:serverUrl; sign_in = $SignIn; player_controls = $PlayerControls;
         latency_ms = $Latency; latency_rules = $LatencyRule; steps = $wanted; timings = $timings; checks = $checks; shots = $shots; uia = $dumps; failed = $failed
         app_errors = [ordered]@{ count = $appErrors.Count; distinct = @($appErrors | ForEach-Object { $_ -replace '\d+', '#' } | Sort-Object -Unique | Select-Object -First 10) }
         uia_searches = [ordered]@{ count = [OffscreenUi]::Searches; total_ms = [OffscreenUi]::SearchMs; slowest_ms = [OffscreenUi]::SlowestSearchMs; retried = [OffscreenUi]::Retries } }

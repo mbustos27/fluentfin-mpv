@@ -182,6 +182,51 @@ public static class OffscreenUi {
   }
   public static string ShotRefusal(IntPtr main) { RECT r; GetWindowRect(main, out r); return ShotRefusal(IsIconic(main), r.R - r.L, r.B - r.T); }
 
+  // Nixie 1.4.x (sg-parallel, bug hunt m10's cause): the monitors, and which one FluentFin's window is on. Windows 11 minimizes
+  // the windows on a monitor that drops off the bus (a DisplayPort monitor powering off or going to standby), on every desktop:
+  // the harness's private ones too. Each m10 minimize was a Kernel-PnP 1010 "DISPLAY\... surprise removed" of the primary
+  // monitor, the one FluentFin's window opens maximized on, in the same second.
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct MONITORINFOEX { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szDevice; }
+  delegate bool MonitorEnumProc(IntPtr hMon, IntPtr hdc, IntPtr rect, IntPtr data);
+  [DllImport("user32.dll")] static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clip, MonitorEnumProc proc, IntPtr data);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool GetMonitorInfoW(IntPtr hMon, ref MONITORINFOEX info);
+  [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
+  [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+  // "<device> x,y wxh[ primary]", e.g. "\\.\DISPLAY18 0,0 2560x1440 primary"; null for no monitor
+  static string MonitorText(IntPtr hMon) {
+    if (hMon == IntPtr.Zero) return null;
+    var mi = new MONITORINFOEX { cbSize = Marshal.SizeOf(typeof(MONITORINFOEX)) };
+    if (!GetMonitorInfoW(hMon, ref mi)) return null;
+    var r = mi.rcMonitor;
+    return string.Format("{0} {1},{2} {3}x{4}{5}", mi.szDevice, r.L, r.T, r.R - r.L, r.B - r.T, (mi.dwFlags & 1) != 0 ? " primary" : "");
+  }
+  public static string[] Monitors() {
+    var l = new List<string>();
+    EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (h, dc, r, d) => { var t = MonitorText(h); if (t != null) l.Add(t); return true; }, IntPtr.Zero);
+    return l.ToArray();
+  }
+  // the monitor the window is on (a minimized one: where it is restored to); null when it is on none
+  public static string MonitorOf(IntPtr h) { return MonitorText(MonitorFromWindow(h, 0)); }
+  static string Device(string monitor) { return string.IsNullOrEmpty(monitor) ? "" : monitor.Split(' ')[0]; }
+  // why the window is minimized, when a monitor explains it; null otherwise (not minimized, or minimized by something else: the
+  // app, a test's own minimize, and then the run's checks say so). lastMonitor: the window's monitor when it was last seen
+  // shown; now: Monitors(); removals: the Kernel-PnP "DISPLAY\..." removals since then.
+  public static string MonitorLossVerdict(bool iconic, string lastMonitor, string[] now, string[] removals) {
+    if (!iconic) return null;
+    now = now ?? new string[0]; removals = removals ?? new string[0];
+    var dev = Device(lastMonitor);
+    if (dev.Length > 0 && !now.Any(m => Device(m) == dev))
+      return string.Format("its monitor {0} went away (monitors now: {1}){2}", lastMonitor, now.Length == 0 ? "none" : string.Join("; ", now),
+        removals.Length == 0 ? "" : "; Kernel-PnP: " + string.Join("; ", removals));
+    if (removals.Length > 0) return "a monitor dropped off the bus while it was shown (Kernel-PnP: " + string.Join("; ", removals) + ")";
+    return null;
+  }
+  // restores FluentFin's window (SW_RESTORE: maximized again when it was, on a monitor that is there)
+  public static bool Restore(IntPtr main, int pid) {
+    if (ProcessOf(main) != (uint)pid) throw new InvalidOperationException("not FluentFin's window");
+    return ShowWindow(main, 9);
+  }
+
   public static string Shot(IntPtr main, int pid, string file) {
     if (ProcessOf(main) != (uint)pid) throw new InvalidOperationException("not FluentFin's window");
     RECT r; GetWindowRect(main, out r);
