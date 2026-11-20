@@ -91,7 +91,16 @@ Three parallel streams (search, the updater, fixes), each owning its files, as i
   - the test servers' smoke check broke on the new library;
   - checks reported but never rerun.
 - **The updater is done** (9 commits, in review; 15:15). All ten items are in, including the Sandbox test script,
-  which so far has only run as a dry run. The keyboard check passes in all four themes.
+  which so far has only run as a dry run. The keyboard check passes in all four themes. Its review found no Blocker and
+  a sound download path. The one Major is fixed: a failed install turned back into "ready" and reinstalled silently at
+  every close.
+- **The fixes stream is done** (in review; 15:45):
+  - the Alt ding is gone: Alt+Enter and Alt+X now get a silent answer;
+  - T5 is fixed at launch and after a page change;
+  - the rewatching switch;
+  - the button leftovers.
+
+  Season and qacheck are still running. Weekly usage is 97%.
 - The fixes stream finished the backend and privacy items in its first half hour:
   - private certificates;
   - split-season anime;
