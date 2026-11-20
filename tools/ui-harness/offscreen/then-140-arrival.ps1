@@ -66,7 +66,7 @@ $arFilm = { Open-Library $fixture.movie.library; Start-Sleep -Seconds 3; Open-Ca
 $arFilmIn = { Wait-ItemPage $fixture.movie.name 0.2 }
 $arLibrary = { Open-Library $fixture.movie.library }
 $arLibraryIn = { Find-MediaCard $fixture.movie.name }
-$arOnly = if ($env:AR_ONLY) { $env:AR_ONLY -split ',' } else { @('untouched', 'collection', 'film', 'library') }
+$arOnly = if ($env:AR_ONLY) { $env:AR_ONLY -split ',' } else { @('untouched', 'collection', 'film', 'library', 'colstate') }
 
 [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1600, 1000); Start-Sleep -Milliseconds 1500
 
@@ -95,5 +95,41 @@ if ($arOnly -contains 'library') {
     # the bug hunt's m4: the first poster took the keyboard on a slow library
     Open-Nav 'Home'; Start-Sleep -Seconds 2
     AR-Slow 'library' 'keyboard' $arItems $arLibrary $arLibraryIn
+}
+if ($arOnly -contains 'colstate') {
+    # the bug hunt's M2: R and Back on a Collection page reset its Order and Hide watched
+    function AR-Order([string]$Name) {
+        $o = Find-Ui -Id 'OrderButton'
+        if ($o) { [void](Invoke-Element $o); $m = Wait-Ui -Name $Name -Type 'MenuItem' -Seconds 5; if ($m) { [void](Invoke-Element $m) } else { CK-Key 'Esc' } }
+        Start-Sleep -Milliseconds 800
+    }
+    function AR-Hide { $h = Find-Ui -Id 'HideWatchedBox'; if ($h) { try { $h.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState } catch { '?' } } else { '(none)' } }
+    function AR-View { "order '$((Find-Ui -Id 'OrderButton').Current.Name)', hide watched $(AR-Hide)" }
+    Open-Nav 'Home'; Start-Sleep -Seconds 2
+    & $arCollection
+    [void](Wait-Until { & $arCollectionIn } -Seconds 15 -PollMs 200); Start-Sleep -Seconds 1
+    AR-Order 'Name'
+    $h = Find-Ui -Id 'HideWatchedBox'; if ($h) { try { $h.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle() } catch { } }
+    Start-Sleep -Milliseconds 800
+    $before = AR-View
+    $card = Find-Ui -Name 'Painted Forests' -Type 'ListItem' -Contains
+    if ($card) { [void][OffscreenUi]::SetFocus($card); Start-Sleep -Milliseconds 400 }
+    $at = Get-Epoch
+    CK-Key 'R'
+    [void](Wait-Until { if (@(CK-Log $at '^Refresh: the place').Count) { $true } } -Seconds 10 -PollMs 200); Start-Sleep -Seconds 1
+    $after = AR-View
+    Check 'collection: R keeps Order and Hide watched' ($before -match "Order: Name" -and $after -eq $before) "before: $before || after R: $after; focus $(CK-Focus)"
+    # a film, then Back
+    $card = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) |
+        Where-Object { try { $_.Cached.Name -match ', \d{4}' -and -not $_.Cached.IsOffscreen } catch { $false } }) | Select-Object -Last 1
+    $film = if ($card) { $card.Current.Name } else { '(none)' }
+    if ($card) { [void][OffscreenUi]::SetFocus($card); Start-Sleep -Milliseconds 300; CK-Key 'Enter' }
+    [void](Wait-Until { if (-not (Find-Ui -Id 'OrderButton')) { $true } } -Seconds 10 -PollMs 200); Start-Sleep -Seconds 2
+    CK-Key 'Alt+Left'
+    [void](Wait-Until { Find-Ui -Id 'OrderButton' } -Seconds 15 -PollMs 200); Start-Sleep -Seconds 2
+    $back = AR-View
+    $focus = CK-Focus
+    Check "collection: Back from a film keeps Order and Hide watched, and the keyboard on its card" ($back -eq $before -and $focus -like "*'$film'*") "before: $before || after Back from '$film': $back; focus $focus"
+    Shot 'collection-after-back'
 }
 AR-Latency

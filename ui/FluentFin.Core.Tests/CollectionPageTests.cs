@@ -136,6 +136,61 @@ public sealed class CollectionPageTests
 		Assert.Equal("Order: Name", vm.OrderLabel);
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (bug hunt M2: R and Back on a Collection page reset Order and Hide watched): a new view model for the same
+	/// collection (R makes one, and Back a new page) puts them back when the page says it comes back or reloads in place; a
+	/// collection opened anew starts in its own order, every film shown; another collection, or another user, has its own.
+	/// </summary>
+	[Fact]
+	public async Task ARefreshOrBack_KeepsOrderAndHideWatched_AFreshVisitDoesNot()
+	{
+		var set = new BaseItemDto { Id = Guid.NewGuid(), Type = BaseItemDto_Type.BoxSet, Name = "Copper and Glass" };
+		var films = CopperAndGlass(watched: 1979);
+		var (vm, _, _) = Page(set, films);
+		await vm.OnNavigatedTo(set);
+		vm.SetOrder(CollectionOrder.Name);
+		vm.HideWatched = true;
+
+		// R (or Back): the page says so
+		var (again, _, _) = Page(set, films);
+		again.KeepsPlace = () => true;
+		await again.OnNavigatedTo(set);
+		Assert.Equal((CollectionOrder.Name, true, "Order: Name"), (again.Order, again.HideWatched, again.OrderLabel));
+		Assert.Equal(["Forest of Brightwater", "The Machine and the Mirror", "The Mirror and the Engine", "Painted Forests", "The Silent Letter"],
+			again.Entries.Select(e => e.Item.Dto.Name));
+		Assert.Equal("5 of 6 films", again.ShownText);
+
+		// a change on the page kept is kept too (a second R)
+		again.SetOrder(CollectionOrder.ReleaseDate);
+		var (third, _, _) = Page(set, films);
+		third.KeepsPlace = () => true;
+		await third.OnNavigatedTo(set);
+		Assert.Equal((CollectionOrder.ReleaseDate, true), (third.Order, third.HideWatched));
+
+		// opened anew: the collection's own order, every film
+		var (fresh, _, _) = Page(set, films);
+		fresh.KeepsPlace = () => false;
+		await fresh.OnNavigatedTo(set);
+		Assert.Equal((CollectionOrder.Collection, false, 6), (fresh.Order, fresh.HideWatched, fresh.Entries.Count));
+
+		// ...which is now what Back finds
+		var (back, _, _) = Page(set, films);
+		back.KeepsPlace = () => true;
+		await back.OnNavigatedTo(set);
+		Assert.Equal((CollectionOrder.Collection, false), (back.Order, back.HideWatched));
+
+		// another collection is its own
+		var other = new BaseItemDto { Id = Guid.NewGuid(), Type = BaseItemDto_Type.BoxSet, Name = "Winter Films" };
+		var (elsewhere, _, _) = Page(other, films);
+		elsewhere.KeepsPlace = () => true;
+		await elsewhere.OnNavigatedTo(other);
+		Assert.Equal((CollectionOrder.Collection, false), (elsewhere.Order, elsewhere.HideWatched));
+
+		// another user's place is not this one's
+		CollectionPlaces.Remember(Guid.NewGuid(), set.Id!.Value, new CollectionPlace(CollectionOrder.DateAdded, true));
+		Assert.Equal(new CollectionPlace(CollectionOrder.Collection, false), CollectionPlaces.Recall(Guid.Empty, set.Id!.Value));
+	}
+
 	[Fact]
 	public async Task HideWatched_OnAWatchedSet_SaysSo()
 	{

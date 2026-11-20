@@ -68,6 +68,14 @@ public sealed partial class CollectionPage : Page
 			AutomationProperties.SetPositionInSet(e.Element, e.Index + 1);
 			AutomationProperties.SetSizeOfSet(e.Element, ViewModel.Letters.Count);
 		};
+
+		// Nixie 1.4.0 (bug hunt M2): Back, Forward and R keep the page's Order and Hide watched (CollectionPlaces)
+		ViewModel.KeepsPlace = () => ArrivalFocus.KindOf(this) switch
+		{
+			ArrivalKind.Returned or ArrivalKind.ThemeSwitched => true,
+			ArrivalKind.Refreshed => App.GetService<Contracts.Services.INavigationService>() is NavigationService { LastRefreshKeepsPlace: true },
+			_ => false,
+		};
 	}
 
 	protected override void OnNavigatedTo(NavigationEventArgs e)

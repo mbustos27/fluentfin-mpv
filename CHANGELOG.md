@@ -165,6 +165,7 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
   film is loading (Ctrl+F and a few letters, a click, the wheel), the page leaves the keyboard where you put it when it
   comes in. Before, a slow collection moved it from the search box to Play, and the next letter you typed refreshed the
   page.
+- **A collection keeps its Order and Hide watched** across R and Back, as a library keeps its sort and filters.
 
 **Verified, and the known limits**
 
