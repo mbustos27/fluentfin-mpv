@@ -33,9 +33,6 @@ public sealed partial class InlineDetailsRow : UserControl
 		Loaded += (_, _) => ItemUserData.Changed += OnUserDataChanged;
 		Unloaded += (_, _) => ItemUserData.Changed -= OnUserDataChanged;
 		AddHandler(KeyDownEvent, new KeyEventHandler(OnKeyDown), true);
-		SizeChanged += (_, e) => ArtArea.Width = Math.Min(760, e.NewSize.Width * 0.55);
-		// the words set the panel's height; the artwork fills it (left alone, a picture would grow the panel to its own height)
-		Words.SizeChanged += (_, e) => ArtArea.Height = Math.Max(Panel.MinHeight - 2, e.NewSize.Height + Words.Margin.Top + Words.Margin.Bottom);
 	}
 
 	/// <summary>The item shown (null: nothing).</summary>
@@ -94,7 +91,7 @@ public sealed partial class InlineDetailsRow : UserControl
 		OverviewText.Visibility = OverviewText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		PeopleText.Text = EditorialCards.People(dto);
 		PeopleText.Visibility = PeopleText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-		Backdrop.Source = ItemArtworkConverters.Backdrop(dto, 1280);
+		Backdrop.ImageSource = ItemArtworkConverters.Backdrop(dto, 1280);
 		TrailerButton.Visibility = Services.TrailerPlayback.ButtonVisibility(dto);
 		PlayText.Text = ItemLabels.ResumePosition(dto) is not null && dto?.Type is not (BaseItemDto_Type.Series or BaseItemDto_Type.Season) ? "Resume" : "Play";
 		AutomationProperties.SetName(PlayButton, ItemLabels.PlayAction(dto));

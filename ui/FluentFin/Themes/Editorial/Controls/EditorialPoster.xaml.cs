@@ -113,6 +113,10 @@ public sealed partial class EditorialPoster : UserControl
 	{
 		Width = PosterWidth;
 		Art.Height = ArtHeight;
+		// Nixie 1.4.0 (the release's layout cycle): the picture has its size before its image arrives (it grew from nothing as
+		// the image opened, which laid the Library's grid out again: after a far scroll, every image re-made its rows for 30 s)
+		Picture.Width = PosterWidth;
+		Picture.Height = ArtHeight;
 		FocusRing.Height = ArtHeight + 8;
 		FocusRing.VerticalAlignment = VerticalAlignment.Top;
 		OpenRim.Height = ArtHeight + 6;

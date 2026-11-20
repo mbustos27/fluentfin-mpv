@@ -572,6 +572,70 @@ public sealed class EditorialLibraryTests
 		Assert.Null(Move(0, "PageUp", 3));             // nothing above the first row (the bar above takes Up, not Page Up)
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (the release's layout cycle): a row's posters have the grid's width when the row is drawn, not a pass later
+	/// (a binding to the page reached a new poster only once it was in the window, so every row changed height after it was
+	/// laid out, and a far scroll hung the window); a width set after the lines were made reaches the rows drawn from then on.
+	/// </summary>
+	[Fact]
+	public void TheRowsCells_CarryThePostersWidth_WhenTheRowIsDrawn()
+	{
+		var metrics = new EditorialGridMetrics { PosterWidth = 122 };
+		var lines = EditorialLibrary.Flow(Titles, columns: 3, tagLetters: true, opened: Titles[1].Id, metrics);
+		var rows = lines.OfType<EditorialRowLine>().ToList();
+
+		Assert.Equal(3, rows.Count);
+		Assert.All(rows.SelectMany(r => r.Cells), c => Assert.Equal(122, c.PosterWidth));
+
+		metrics.PosterWidth = 150; // the window widened after the lines were made: the next drawing of a row has it
+		Assert.All(rows.SelectMany(r => r.Cells), c => Assert.Equal(150, c.PosterWidth));
+
+		// no metrics (a caller that has none): the medium width, as the poster's own default
+		Assert.All(EditorialLibrary.Flow(Titles, 3, true, null).OfType<EditorialRowLine>().SelectMany(r => r.Cells), c => Assert.Equal(EditorialLibrary.PosterWidth, c.PosterWidth));
+		// the rest of the lines as before: the details after the opened title's row, the letters tagged
+		Assert.IsType<EditorialDetailsLine>(lines[1]);
+		Assert.Equal(["A", "B", null], rows[0].Cells.Select(c => c.Tag));
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the release's layout cycle): details open or close at once only for a poster that shows; one scrolled out
+	/// (Narrator's Invoke, Enter on a poster the scroll bar left far above) has its row brought to where the first row sits.
+	/// </summary>
+	[Fact]
+	public void DetailsChange_OnlyInView_ElseTheRowComesToTheTop()
+	{
+		const double view = 894;
+		Assert.True(EditorialLibrary.PartlyInView(0, 252, view));
+		Assert.True(EditorialLibrary.PartlyInView(-251, 252, view));     // its last pixel shows
+		Assert.False(EditorialLibrary.PartlyInView(-252, 252, view));    // just above the view
+		Assert.True(EditorialLibrary.PartlyInView(893, 252, view));      // its first pixel shows
+		Assert.False(EditorialLibrary.PartlyInView(894, 252, view));     // just below
+		Assert.False(EditorialLibrary.PartlyInView(-3986, 252, view));   // the repro: the first title, 56 % down a 320-film library
+		Assert.False(EditorialLibrary.PartlyInView(10, 252, 0));         // a view not laid out yet shows nothing
+
+		Assert.Equal(0, EditorialLibrary.RowToTop(8, 7000));             // the first row: the grid's top
+		Assert.Equal(3692, EditorialLibrary.RowToTop(3700, 7000));       // 8 px under the view's top, as the first row
+		Assert.Equal(7000, EditorialLibrary.RowToTop(9000, 7000));       // never past the end
+		Assert.Equal(0, EditorialLibrary.RowToTop(500, -1));             // nothing to scroll
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the release's layout cycle): the keyboard follows a far scroll. Its poster within a view of the view (in it,
+	/// or less than a view above or below) stays; further away the keyboard goes to the first poster in view.
+	/// </summary>
+	[Fact]
+	public void TheKeyboardsPoster_StaysWithinAView_ElseTheKeyboardFollowsTheScroll()
+	{
+		const double view = 894, poster = 252;
+		Assert.True(EditorialLibrary.WithinAViewOf(10, poster, view));        // in view
+		Assert.True(EditorialLibrary.WithinAViewOf(-893, poster, view));      // less than a view above (the wheel, a few notches)
+		Assert.True(EditorialLibrary.WithinAViewOf(1787, poster, view));      // less than a view below (Page Down's next page)
+		Assert.False(EditorialLibrary.WithinAViewOf(-894 - poster, poster, view)); // a view above and more: it follows
+		Assert.False(EditorialLibrary.WithinAViewOf(1788, poster, view));     // a view below and more
+		Assert.False(EditorialLibrary.WithinAViewOf(-3986, poster, view));    // the repro: the first title, 56 % down 320 films
+		Assert.False(EditorialLibrary.WithinAViewOf(10, poster, 0));          // no view yet: nothing to stay within
+	}
+
 	[Fact]
 	public void TheColumns_TwelveAcrossAt1920()
 	{

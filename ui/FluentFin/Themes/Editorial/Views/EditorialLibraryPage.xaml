@@ -64,7 +64,7 @@
                                 AutomationProperties.PositionInSet="{x:Bind Position}"
                                 AutomationProperties.SizeOfSet="{x:Bind Size}"
                                 Item="{x:Bind Item}"
-                                PosterWidth="{Binding ElementName=Page, Path=PosterWidth}" />
+                                PosterWidth="{x:Bind PosterWidth}" />
                             <!--  Nixie 1.4.0: the first title of a letter carries it (the rows flow on across letters)  -->
                             <Border
                                 Margin="6,6,0,0"
@@ -151,11 +151,14 @@
                     Visibility="{x:Bind shared:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}" />
             </Grid>
 
-            <!--  the genre chips (counts against the other filters), All first; the row says when it scrolls on; More filters  -->
+            <!--
+                the genre chips (counts against the other filters), All first; the row says when it scrolls on; More filters.
+                Nixie 1.4.0 (the release's layout cycle): the chevron lies over the row's end (the row keeps room for it after its
+                last chip), so showing it never resizes the row it is shown for
+            -->
             <Grid x:Name="ChipRow" ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <ScrollViewer
@@ -164,7 +167,10 @@
                     HorizontalScrollMode="Enabled"
                     VerticalScrollBarVisibility="Disabled"
                     VerticalScrollMode="Disabled">
-                    <ec:EditorialTabList x:Name="ChipList" AutomationProperties.Name="Genres">
+                    <ec:EditorialTabList
+                        x:Name="ChipList"
+                        Margin="0,0,40,0"
+                        AutomationProperties.Name="Genres">
                         <StackPanel x:Name="ChipStack" Orientation="Horizontal" Spacing="8" />
                     </ec:EditorialTabList>
                 </ScrollViewer>
@@ -185,7 +191,8 @@
                 </Border>
                 <Button
                     x:Name="ChipMore"
-                    Grid.Column="1"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
                     AutomationProperties.Name="More genres"
                     Click="ChipMore_Click"
                     IsTabStop="False"
@@ -196,7 +203,7 @@
                 </Button>
                 <HyperlinkButton
                     x:Name="MoreFilters"
-                    Grid.Column="2"
+                    Grid.Column="1"
                     VerticalAlignment="Center"
                     Click="MoreFilters_Click"
                     Content="More filters"
