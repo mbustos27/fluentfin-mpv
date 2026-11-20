@@ -66,7 +66,19 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		// (the artwork: a poster's 2:3 art against the placeholder's; their captions differ in lines, not in place)
 		// (the keyboard's poster is lifted and scaled: its art measured from the poster's own place, not as drawn)
 		LibraryProbe.Attach(this, Skeleton, Lines, i => LibraryProbe.RectOf(SkeletonArt(i), this), i => PosterArtAt(i), logFirstCard: true);
-		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, _) => QueueRebuild();
+		((System.Collections.Specialized.INotifyCollectionChanged)ViewModel.Items).CollectionChanged += (_, e) =>
+		{
+			// Nixie 1.4.1: a big library's later pages insert titles before the poster the keyboard was on: its place follows
+			// (Back and R come back to the poster, not to whatever moved into its place)
+			if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && e.NewStartingIndex >= 0 && e.NewStartingIndex <= _lastIndex)
+			{
+				_lastIndex += e.NewItems?.Count ?? 1;
+			}
+
+			// a page's titles: only the lines from the first one they changed are made again (Rebuild)
+			_pageArrived |= ViewModel.UpdatingFromPage;
+			QueueRebuild();
+		};
 		ViewModel.PropertyChanged += (_, e) =>
 		{
 			switch (e.PropertyName)
@@ -88,6 +100,10 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 					break;
 				case nameof(LibraryViewModel.Density):
 					Fit(_gridWidth);
+					break;
+				case nameof(LibraryViewModel.IsLoadingMore) when !ViewModel.IsLoadingMore:
+					// Nixie 1.4.1: every page in: the lines once more, whole (each poster's "n of m" counts every title)
+					QueueRebuild();
 					break;
 			}
 		};
@@ -338,10 +354,45 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		var keep = XamlRoot is { } root && FocusManager.GetFocusedElement(root) is EditorialPoster { Item: { } kept } poster && IsInside(poster, Lines)
 			? (Item: kept, State: poster.FocusState) : default;
 		var lines = EditorialLibrary.Flow(ViewModel.Items, _columns, ByLetter, _opened, _metrics);
-		_lines.Clear();
-		foreach (var line in lines)
+		if (_pageArrived && ViewModel.IsLoadingMore && !_toTop && Lines.ItemsSource is not null)
 		{
-			_lines.Add(line);
+			// Nixie 1.4.1: a big library's page, while more are coming: a line it left as it was stays (drawn, and the
+			// keyboard's poster or the open details keep the keyboard); only a line it changed is replaced, in its place. Each
+			// line was made anew on every page, and the keyboard fell to the title bar every couple of seconds while the
+			// library loaded. (The last page's rebuild is whole: each poster's "n of m" counts every title.)
+			var common = Math.Min(_lines.Count, lines.Count);
+			for (var i = 0; i < common; i++)
+			{
+				if (!SameLine(_lines[i], lines[i]))
+				{
+					_lines[i] = lines[i];
+				}
+			}
+
+			for (var i = _lines.Count - 1; i >= lines.Count; i--)
+			{
+				_lines.RemoveAt(i);
+			}
+
+			for (var i = common; i < lines.Count; i++)
+			{
+				_lines.Add(lines[i]);
+			}
+		}
+		else
+		{
+			_lines.Clear();
+			foreach (var line in lines)
+			{
+				_lines.Add(line);
+			}
+		}
+
+		_pageArrived = false;
+
+		if (keep.Item is not null && XamlRoot is { } still && FocusManager.GetFocusedElement(still) is EditorialPoster { Item: var now } && ReferenceEquals(now, keep.Item))
+		{
+			keep = default; // its line stayed: it has the keyboard still, where it is (no scroll back to it)
 		}
 
 		if (Lines.ItemsSource is null)
@@ -374,6 +425,19 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 		UpdateBar();
 	}
+
+	/// <summary>Nixie 1.4.1: the same line, as a page's rebuild sees it: the same posters in the same place (their "n of m" aside: it is redone once every page is in).</summary>
+	private static bool SameLine(EditorialLibraryLine a, EditorialLibraryLine b) => (a, b) switch
+	{
+		(EditorialRowLine x, EditorialRowLine y) => x.FirstIndex == y.FirstIndex && x.Letter == y.Letter
+			&& x.Items.Count == y.Items.Count && x.Items.Zip(y.Items).All(p => ReferenceEquals(p.First, p.Second))
+			&& (x.Tags ?? []).SequenceEqual(y.Tags ?? []),
+		(EditorialDetailsLine x, EditorialDetailsLine y) => ReferenceEquals(x.Item, y.Item),
+		_ => a == b,
+	};
+
+	/// <summary>The rebuild queued comes from a page arriving (only its changed lines are made again).</summary>
+	private bool _pageArrived;
 
 	private void Lines_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
 	{
@@ -999,6 +1063,11 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			ViewModel.FocusRequest = -1;
 			var arrival = ViewModel.ArrivalFocus;
 			ViewModel.ArrivalFocus = false;
+			// Nixie 1.4.1: a place put back late takes the keyboard only from the grid or from nothing (else it only scrolls)
+			var late = ViewModel.LateFocus;
+			ViewModel.LateFocus = false;
+			var elsewhere = late && XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject focused
+				&& !ReferenceEquals(focused, this) && !IsInside(focused, GridScroller);
 			var jumped = _jumped;
 			_jumped = false;
 			var state = arrival ? FocusState.Programmatic : _jumpFocus;
@@ -1018,7 +1087,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 				GridScroller.UpdateLayout();
 			}
 
-			if (index >= 0 && ViewModel.FocusYields?.Invoke() != true)
+			if (index >= 0 && ViewModel.FocusYields?.Invoke() != true && !elsewhere)
 			{
 				FocusIndex(index, state);
 			}

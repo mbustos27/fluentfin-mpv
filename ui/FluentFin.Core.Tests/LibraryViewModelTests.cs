@@ -19,7 +19,7 @@ public sealed class LibraryViewModelTests
 			.ToList();
 
 		var client = new Mock<IJellyfinClient>();
-		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = dtos });
+		client.SetupLibrary(dtos);
 		var vm = new LibraryViewModel(client.Object);
 		await vm.OnNavigatedTo(new BaseItemDto());
 		Assert.Equal(250, vm.Items.Count);
@@ -39,7 +39,7 @@ public sealed class LibraryViewModelTests
 		var dtos = new[] { ("The Matrix", "matrix"), ("Alien", "alien"), ("Zodiac", "zodiac"), ("Brazil", "") }
 			.Select(t => new BaseItemDto { Id = Guid.NewGuid(), Name = t.Item1, SortName = t.Item2 == "" ? null : t.Item2 }).ToList();
 		var client = new Mock<IJellyfinClient>();
-		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = dtos });
+		client.SetupLibrary(dtos);
 		var vm = new LibraryViewModel(client.Object);
 
 		await vm.OnNavigatedTo(new BaseItemDto());
@@ -80,7 +80,7 @@ public sealed class LibraryViewModelTests
 		Assert.Equal(["Zulu", "Alpha", "Mike", "Bravo"], vm.Items.Select(x => x.Name));
 		Assert.Equal("Playlist order", vm.SortName);
 		Assert.Empty(vm.Letters);
-		client.Verify(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>()), Times.Never);
+		client.VerifyLibraryLoads(Times.Never);
 
 		vm.UpdateSortBy(ItemSortBy.Name);
 		Assert.Equal(["Alpha", "Bravo", "Mike", "Zulu"], vm.Items.Select(x => x.Name));
@@ -91,7 +91,7 @@ public sealed class LibraryViewModelTests
 	public async Task TheTitleIsTheLibrarysName()
 	{
 		var client = new Mock<IJellyfinClient>();
-		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [new BaseItemDto { Id = Guid.NewGuid(), Name = "A" }] });
+		client.SetupLibrary([new BaseItemDto { Id = Guid.NewGuid(), Name = "A" }]);
 		var vm = new LibraryViewModel(client.Object);
 
 		await vm.OnNavigatedTo(new BaseItemDto { Name = "Documentaries" });
@@ -105,7 +105,7 @@ public sealed class LibraryViewModelTests
 		// Seaglass scrolling: Narrator's "n of m" for a card is its place in the library
 		var dtos = Enumerable.Range(0, 250).Select(i => new BaseItemDto { Id = Guid.NewGuid(), Name = $"Item {i:D3}", Genres = i % 2 == 0 ? ["Drama"] : [] }).ToList();
 		var client = new Mock<IJellyfinClient>();
-		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = dtos });
+		client.SetupLibrary(dtos);
 		var vm = new LibraryViewModel(client.Object);
 		await vm.OnNavigatedTo(new BaseItemDto());
 

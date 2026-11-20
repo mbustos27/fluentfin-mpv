@@ -99,16 +99,42 @@ public static class LibraryBrowse
 	/// <summary>"368 movies", "1 show", "12 of 368 movies" when filters hide some.</summary>
 	public static string CountText(int shown, int total, BaseItemDto_CollectionType? collection)
 	{
-		var (one, many) = collection switch
-		{
-			BaseItemDto_CollectionType.Movies => ("movie", "movies"),
-			BaseItemDto_CollectionType.Tvshows => ("show", "shows"),
-			_ => ("item", "items"),
-		};
-
+		var (one, many) = Words(collection);
 		return shown == total
 			? $"{total:N0} {(total == 1 ? one : many)}"
 			: $"{shown:N0} of {total:N0} {(total == 1 ? one : many)}";
+	}
+
+	private static (string One, string Many) Words(BaseItemDto_CollectionType? collection) => collection switch
+	{
+		BaseItemDto_CollectionType.Movies => ("movie", "movies"),
+		BaseItemDto_CollectionType.Tvshows => ("show", "shows"),
+		_ => ("item", "items"),
+	};
+
+	/// <summary>Nixie 1.4.1 (big libraries): while the rest loads: "Loading… 1,200 of 25,842 movies".</summary>
+	public static string LoadingText(int loaded, int total, BaseItemDto_CollectionType? collection)
+	{
+		var (one, many) = Words(collection);
+		return $"Loading… {loaded:N0} of {total:N0} {(total == 1 ? one : many)}";
+	}
+
+	/// <summary>Nixie 1.4.1: a page failed every try: "1,200 of 25,842 movies · the rest didn't load".</summary>
+	public static string StoppedText(int loaded, int total, BaseItemDto_CollectionType? collection)
+	{
+		var (one, many) = Words(collection);
+		return $"{loaded:N0} of {total:N0} {(total == 1 ? one : many)} · the rest didn't load";
+	}
+
+	/// <summary>
+	/// Nixie 1.4.1: filters on over a library not all in: "12 of 1,200 movies so far" while it loads, "12 of 1,200 loaded
+	/// movies" when it stopped.
+	/// </summary>
+	public static string PartCountText(int shown, int loaded, BaseItemDto_CollectionType? collection, bool loading)
+	{
+		var (one, many) = Words(collection);
+		var words = loaded == 1 ? one : many;
+		return loading ? $"{shown:N0} of {loaded:N0} {words} so far" : $"{shown:N0} of {loaded:N0} loaded {words}";
 	}
 
 	/// <summary>Nixie 1.4.0 (item 2): the applied-filter row's count line: "Showing 223 of 320 movies".</summary>
@@ -351,19 +377,27 @@ public static class LibraryPlaces
 /// </summary>
 public sealed class FilterFacet
 {
+	private readonly ObservableCollection<string> _picked;
+
 	private FilterFacet(FilterGroup group, string title, IReadOnlyList<FilterOption> options, ObservableCollection<string> picked)
 	{
 		Group = group;
 		Title = title;
 		Options = options;
-		picked.CollectionChanged += (_, _) =>
-		{
-			foreach (var option in options)
-			{
-				option.Refresh();
-			}
-		};
+		_picked = picked;
+		picked.CollectionChanged += Picked_CollectionChanged;
 	}
+
+	private void Picked_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+	{
+		foreach (var option in Options)
+		{
+			option.Refresh();
+		}
+	}
+
+	/// <summary>Nixie 1.4.1: replaced by new lists: no longer follows the picks (each list made again was kept alive by them).</summary>
+	public void Detach() => _picked.CollectionChanged -= Picked_CollectionChanged;
 
 	public FilterGroup Group { get; }
 

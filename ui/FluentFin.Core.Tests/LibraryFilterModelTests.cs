@@ -27,7 +27,7 @@ public sealed class LibraryFilterModelTests
 	{
 		var client = new Mock<IJellyfinClient>();
 		client.SetupGet(x => x.UserId).Returns(Guid.NewGuid());
-		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [.. items] });
+		client.SetupLibrary([.. items]);
 		var vm = new LibraryViewModel(client.Object, settings);
 		await vm.OnNavigatedTo(library ?? Movies);
 		return vm;
@@ -303,7 +303,7 @@ public sealed class LibraryFilterModelTests
 		var user = Guid.NewGuid();
 		var client = new Mock<IJellyfinClient>();
 		client.SetupGet(x => x.UserId).Returns(user);
-		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [.. Sample()] });
+		client.SetupLibrary([.. Sample()]);
 		var vm = new LibraryViewModel(client.Object);
 		await vm.OnNavigatedTo(library);
 		vm.Filter.Unwatched = true;
@@ -326,7 +326,7 @@ public sealed class LibraryFilterModelTests
 		var library = new BaseItemDto { Id = Guid.NewGuid(), Name = "Movies", CollectionType = BaseItemDto_CollectionType.Movies };
 		var client = new Mock<IJellyfinClient>();
 		client.SetupGet(x => x.UserId).Returns(Guid.NewGuid());
-		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [.. Sample()] });
+		client.SetupLibrary([.. Sample()]);
 		var vm = new LibraryViewModel(client.Object);
 		await vm.OnNavigatedTo(library);
 		vm.UpdateSortBy(ItemSortBy.PremiereDate);
@@ -336,7 +336,7 @@ public sealed class LibraryFilterModelTests
 
 		await vm.RefreshAsync(on, 120);
 
-		client.Verify(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>()), Times.Exactly(2));
+		client.VerifyLibraryLoads(Times.Exactly(2));
 		Assert.Equal((ItemSortBy.PremiereDate, SortOrder.Descending, "Showing 3 of 5 movies"), (vm.SortBy, vm.Order, vm.ShowingText));
 		Assert.Equal(["Comedy"], vm.Filter.Genres);
 		Assert.Equal((1, on.Id, 120d), (vm.FocusRequest, vm.Items[vm.FocusRequest].Id, vm.ReturnOffset ?? 0));

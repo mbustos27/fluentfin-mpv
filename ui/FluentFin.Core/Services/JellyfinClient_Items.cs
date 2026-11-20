@@ -17,7 +17,7 @@ public partial class JellyfinClient
 				query.SortBy = [ItemSortBy.SortName];
 				query.SortOrder = [SortOrder.Ascending];
 				// Nixie 1.3.1: SortName too, which the library sorts and files its A-Z by
-				query.Fields = [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated, ItemFields.Overview, ItemFields.Tags, ItemFields.Genres, ItemFields.SortName];
+				query.Fields = [ItemFields.DateCreated, ItemFields.Overview, ItemFields.Tags, ItemFields.Genres, ItemFields.SortName];
 				query.ImageTypeLimit = 1;
 				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb];
 				query.ParentId = parent.Id;
@@ -36,6 +36,51 @@ public partial class JellyfinClient
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.4.1: what a library's card, its sorts and its filters read: no PrimaryImageAspectRatio (nothing reads it; the
+	/// server may open each image to measure it).
+	/// </summary>
+	internal static readonly ItemFields[] LibraryFields = [ItemFields.DateCreated, ItemFields.Overview, ItemFields.Tags, ItemFields.Genres, ItemFields.SortName];
+
+	public async Task<BaseItemDtoQueryResult?> GetLibraryItems(BaseItemDto library, int startIndex, int limit, bool withTotal = false, CancellationToken cancellationToken = default)
+	{
+		try
+		{
+			return await _jellyfinApiClient.Items.GetAsync(x =>
+			{
+				var query = x.QueryParameters;
+				// the year after the sort name, so titles with one sort name keep one order from page to page
+				query.SortBy = [ItemSortBy.SortName, ItemSortBy.ProductionYear];
+				query.SortOrder = [SortOrder.Ascending, SortOrder.Ascending];
+				query.Fields = LibraryFields;
+				query.ImageTypeLimit = 1;
+				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb];
+				query.ParentId = library.Id;
+				query.IncludeItemTypes = library.CollectionType switch
+				{
+					BaseItemDto_CollectionType.Movies => [BaseItemKind.Movie],
+					BaseItemDto_CollectionType.Tvshows => [BaseItemKind.Series],
+					_ => null
+				};
+				// as GetItems: a movie or show inside a plain folder is listed too
+				query.Recursive = query.IncludeItemTypes is not null;
+				query.StartIndex = Math.Max(0, startIndex);
+				query.Limit = Math.Max(1, limit);
+				query.EnableTotalRecordCount = withTotal;
+			}, cancellationToken);
+		}
+		catch (Exception) when (cancellationToken.IsCancellationRequested)
+		{
+			// left, a new load, or the page's own time ran out (the reader says which)
+			return null;
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "Library page {Start}+{Limit} of {Library}", startIndex, limit, library.Id);
 			return null;
 		}
 	}
@@ -117,7 +162,7 @@ public partial class JellyfinClient
 			{
 				var query = x.QueryParameters;
 				query.UserId = UserId;
-				query.Fields = [ItemFields.PrimaryImageAspectRatio, ItemFields.DateCreated, ItemFields.Overview, ItemFields.Tags, ItemFields.Genres, ItemFields.SortName];
+				query.Fields = [ItemFields.DateCreated, ItemFields.Overview, ItemFields.Tags, ItemFields.Genres, ItemFields.SortName];
 				query.ImageTypeLimit = 1;
 				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb];
 			});

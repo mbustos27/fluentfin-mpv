@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased (1.4.x)
+
+**Big libraries load**
+
+- **A library of any size opens at once.** A library was asked for whole, in one request; on a server with 25,842 movies
+  the server took over 100 seconds, the app gave up, and the Movies page stayed empty (1.3.1 and 1.4.0 alike). Now the
+  first hundred titles come first and show at once, and the rest follow page by page, one request at a time, each page
+  sized from how fast the server answered the last (never more than 1,000 titles). The head says how far it has got
+  ("Loading… 1,200 of 25,842 movies"); Drive-in's tubes count up. Sort, Filter and the A to Z work on the titles in so far
+  and are whole once every page is in. A page that keeps failing stops the rest, and the head says so ("1,200 of 25,842
+  movies · the rest didn't load"); R tries again. Leaving the page stops the rest.
+- **Back and R in a big library** come back to the poster you left: if its page is not in yet, the grid waits a moment for
+  it, and otherwise shows at once and goes to the poster when it comes, unless you moved meanwhile.
+- **Editorial's Home genre strip** reads libraries the same way (it sent the same whole-library request).
+
+**Faster item pages**
+
+- The season, series and episode pages ask for their lists together with the item: a season's episodes and the series'
+  seasons, a series' seasons, episodes and More like this, an episode's season for Up next. Each waited for the one before.
+- A series' episodes, asked twice while the first answer is on its way (Editorial's series and season pages asked again on
+  every change), are one request.
+- No list asks for each image's aspect ratio any more: nothing in the app reads it, and the server may open each image to
+  measure it.
+
 ## 1.4.0
 
 The consistency release. The library and collections review found that the library layer under the four themes was never

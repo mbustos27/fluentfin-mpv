@@ -195,7 +195,7 @@ public sealed class PageStateTests : IDisposable
 	public async Task Library_ThatCannotBeLoaded_Fails_ThenRetryLoadsIt()
 	{
 		var answers = new Queue<BaseItemDtoQueryResult?>([null, Items(3)]);
-		_client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(() => answers.Dequeue());
+		_client.SetupLibrary(() => answers.Dequeue()?.Items);
 		var vm = new LibraryViewModel(_client.Object);
 
 		await vm.OnNavigatedTo(new BaseItemDto { Id = Guid.NewGuid() });
@@ -211,7 +211,7 @@ public sealed class PageStateTests : IDisposable
 	[Fact]
 	public async Task Library_ThatIsEmpty_SaysSo()
 	{
-		_client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(Items(0));
+		_client.SetupLibrary(Items(0).Items!);
 		var vm = new LibraryViewModel(_client.Object);
 
 		await vm.OnNavigatedTo(new BaseItemDto { Id = Guid.NewGuid() });
@@ -230,14 +230,14 @@ public sealed class PageStateTests : IDisposable
 
 		Assert.True(vm.State.IsFailed);
 		Assert.False(vm.IsLoading);
-		_client.Verify(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>()), Times.Never);
+		_client.VerifyLibraryLoads(Times.Never);
 	}
 
 	[Fact]
 	public async Task Library_ARetryAfterItLoaded_ShowsWhatTheServerHasNow()
 	{
 		var answers = new Queue<BaseItemDtoQueryResult?>([Items(3), Items(1)]);
-		_client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(() => answers.Dequeue());
+		_client.SetupLibrary(() => answers.Dequeue()?.Items);
 		var vm = new LibraryViewModel(_client.Object);
 		await vm.OnNavigatedTo(new BaseItemDto { Id = Guid.NewGuid() });
 

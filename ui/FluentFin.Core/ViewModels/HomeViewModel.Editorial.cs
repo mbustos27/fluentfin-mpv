@@ -485,18 +485,40 @@ public static class EditorialGenreSource
 				return kept.Items;
 			}
 
-			var answer = await client.GetItems(library);
-			if (answer?.Items is not { } items)
+			// Nixie 1.4.1: a page at a time, as the Library page (a whole 25,842-movie library in one request timed out); a
+			// big library takes a while, and Home opened again meanwhile shares the read on its way rather than starting another
+			var reading = s_reading.GetOrAdd(key, _ => ReadAsync(client, library, key));
+			IReadOnlyList<BaseItemDto>? items;
+			try
 			{
-				return kept.Items ?? []; // failed: what was kept, if anything
+				items = await reading;
+			}
+			finally
+			{
+				s_reading.TryRemove(KeyValuePair.Create(key, reading)); // this read, done (not a newer one)
 			}
 
-			s_titles[key] = (Now(), items);
-			return items;
+			return items ?? kept.Items ?? []; // failed: what was kept, if anything
 		}));
 
 		return [.. lists.SelectMany(x => x)];
 	}
+
+	private static readonly ConcurrentDictionary<(string Server, Guid User, Guid Library), Task<IReadOnlyList<BaseItemDto>?>> s_reading = new();
+
+	private static async Task<IReadOnlyList<BaseItemDto>?> ReadAsync(IJellyfinClient client, BaseItemDto library, (string Server, Guid User, Guid Library) key)
+	{
+		var items = await new Services.LibraryPageReader(client, library).ReadAllAsync();
+		if (items is not null)
+		{
+			s_titles[key] = (Now(), items);
+		}
+
+		return items;
+	}
+
+	/// <summary>Tests: a read of this library is on its way.</summary>
+	internal static bool IsReading(string server, Guid user, Guid library) => s_reading.ContainsKey((server, user, library));
 
 	public static void RememberPick(Guid user, string genre) => s_picked[user] = genre;
 
@@ -507,5 +529,6 @@ public static class EditorialGenreSource
 	{
 		s_titles.Clear();
 		s_picked.Clear();
+		s_reading.Clear();
 	}
 }

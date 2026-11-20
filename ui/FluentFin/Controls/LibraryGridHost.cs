@@ -27,6 +27,7 @@ internal sealed class LibraryGridHost
 	private bool _focusOnLoad;
 	private int _returnScroll = -1;
 	private (int Index, FocusState State) _returnFocus = (-1, FocusState.Keyboard);
+	private bool _returnLate;
 	private bool _viewQueued;
 
 	public LibraryGridHost(Page page, LibraryViewModel vm, ScrollView scroller, ItemsRepeater repeater, CardGrid grid, LetterBar? letters = null)
@@ -137,6 +138,8 @@ internal sealed class LibraryGridHost
 			_vm.FocusRequest = -1; // done: a Retry later does not take the focus again
 			var arrival = _vm.ArrivalFocus;
 			_vm.ArrivalFocus = false;
+			var late = _vm.LateFocus;
+			_vm.LateFocus = false;
 			var jumped = _jumped;
 			_jumped = false;
 			var state = arrival ? FocusState.Programmatic : _jumpFocus;
@@ -149,11 +152,12 @@ internal sealed class LibraryGridHost
 				_scroller.UpdateLayout();
 				_returnScroll = _scroller.ScrollTo(0, Math.Min(offset, _scroller.ScrollableHeight), new ScrollingScrollOptions(ScrollingAnimationMode.Disabled, ScrollingSnapPointsMode.Ignore));
 				_returnFocus = (index, state);
+				_returnLate = late;
 				return;
 			}
 
 			_vm.ReturnOffset = null;
-			if (index >= 0 && _vm.FocusYields?.Invoke() != true)
+			if (index >= 0 && _vm.FocusYields?.Invoke() != true && !(late && FocusIsElsewhere()))
 			{
 				_grid.FocusAndHold(index, state, atTop: jumped);
 			}
@@ -168,13 +172,39 @@ internal sealed class LibraryGridHost
 		}
 
 		_returnScroll = -1;
-		if (_returnFocus.Index >= 0 && _vm.FocusYields?.Invoke() != true)
+		var late = _returnLate;
+		_returnLate = false;
+		if (_returnFocus.Index >= 0 && _vm.FocusYields?.Invoke() != true && !(late && FocusIsElsewhere()))
 		{
 			_repeater.UpdateLayout();
 			_grid.FocusAndHold(_returnFocus.Index, _returnFocus.State);
 		}
 
 		_returnFocus = (-1, FocusState.Keyboard);
+	}
+
+	/// <summary>
+	/// Nixie 1.4.1: the keyboard is on something outside the grid (the search box, the toolbar, the title bar): a place put
+	/// back late (<see cref="LibraryViewModel.LateFocus"/>) only scrolls the grid. Nothing focused, the page itself or the
+	/// grid is not elsewhere.
+	/// </summary>
+	private bool FocusIsElsewhere()
+	{
+		if (_page.XamlRoot is not { } root || Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) is not DependencyObject focused
+			|| ReferenceEquals(focused, _page))
+		{
+			return false;
+		}
+
+		for (var node = focused; node is not null; node = VisualTreeHelper.GetParent(node))
+		{
+			if (ReferenceEquals(node, _scroller))
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/// <summary>The grid to its top; a card that had the keyboard hands it to the first card (its own may have gone or moved).</summary>

@@ -25,7 +25,7 @@ public sealed class LibraryBrowseTests
 
 	private LibraryViewModel Library(IEnumerable<BaseItemDto> items)
 	{
-		_client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [.. items] });
+		_client.SetupLibrary([.. items]);
 		return new LibraryViewModel(_client.Object);
 	}
 
@@ -164,7 +164,7 @@ public sealed class LibraryBrowseTests
 		await vm.OnNavigatedTo(Movies);
 
 		Assert.False(vm.IsLoading);
-		_client.Verify(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>()), Times.Once);
+		_client.VerifyLibraryLoads(Times.Once);
 		_client.Verify(x => x.GetFilters(It.IsAny<BaseItemDto>()), Times.Never);
 		Assert.Equal(["Comedy (1)", "Drama (2)"], vm.Facets.Single(f => f.Title == "Genres").Options.Select(o => o.Label));
 	}
@@ -276,7 +276,7 @@ public sealed class LibraryReviewTests
 	{
 		var client = new Mock<IJellyfinClient>();
 		client.SetupGet(x => x.UserId).Returns(Guid.NewGuid());
-		client.Setup(x => x.GetItems(It.IsAny<BaseItemDto>(), It.IsAny<bool>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [.. items] });
+		client.SetupLibrary([.. items]);
 		var vm = new LibraryViewModel(client.Object);
 		await vm.OnNavigatedTo(new BaseItemDto { Id = Guid.NewGuid(), Name = "Movies", CollectionType = BaseItemDto_CollectionType.Movies });
 		return vm;
