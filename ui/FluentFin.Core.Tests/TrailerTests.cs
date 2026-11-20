@@ -85,7 +85,8 @@ public sealed class TrailerTests
 		Assert.Contains("func: 'addEventListener', args: [n]", Trailers.WrapperScript);
 		Assert.Contains("if (!s.ready) { s.ready = true; subscribe(); }", Trailers.WrapperScript);
 		Assert.Contains("['onReady', 'onStateChange', 'onError']", Trailers.WrapperScript);
-		Assert.Contains("document.activeElement === f) { s.touched = true; }", Trailers.WrapperScript);
+		Assert.Contains("function touch() { if (document.activeElement === f) { s.touched = true; } }", Trailers.WrapperScript);
+		Assert.Contains("setInterval(touch, 250);", Trailers.WrapperScript);
 		Assert.Equal(page.Replace(Id, "ZZZZZZZZZZZ"), Trailers.WrapperHtml("ZZZZZZZZZZZ"));
 		// the id is checked, never written into the page as it came
 		Assert.Throws<ArgumentException>(() => Trailers.WrapperHtml("\"><script>x"));

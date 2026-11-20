@@ -216,9 +216,9 @@ public static partial class Trailers
 		  }
 		  var tries = 0, t = setInterval(function () { if (s.ready || ++tries > 120) { clearInterval(t); } else { listen(); } }, 250);
 		  f.addEventListener('load', listen);
-		  window.addEventListener('blur', function () {
-		    setTimeout(function () { if (document.activeElement === f) { s.touched = true; } }, 0);
-		  });
+		  function touch() { if (document.activeElement === f) { s.touched = true; } }
+		  window.addEventListener('blur', function () { setTimeout(touch, 0); });
+		  setInterval(touch, 250);
 		  window.addEventListener('message', function (e) {
 		    if (e.origin !== o || e.source !== f.contentWindow) { return; }
 		    var d;

@@ -83,7 +83,8 @@ def release_answer(version):
 # else, so the harness's 150/153 checks fail. "ad" stands for a pre-roll ad: answered, unstarted (-1) for 12 s, then playing.
 # {"slow": n} makes the page's own load take n s (an image it waits for), as YouTube's frame often does. On every load it
 # asks GET /__harness/trailer-seen when its storage still holds the mark of an earlier load (the app's web view is
-# InPrivate: no earlier load is ever seen).
+# InPrivate: no earlier load is ever seen). Like YouTube's player it has a control the keyboard can reach (Pause), so a Tab
+# into the theatre's video stays there.
 TRAILER_MODES = ("play", "error150", "error153", "hang", "ad")
 TRAILER_PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>Harness trailer {id}</title><style>
 html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Segoe UI,sans-serif}
@@ -95,8 +96,10 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Segoe
 .p{position:absolute;left:3%;right:3%;bottom:5%;height:.5vw;background:rgba(255,255,255,.35)}
 .p i{display:block;width:34%;height:100%;background:#f96985}
 .e{position:absolute;inset:0;background:#000;color:#fff;font-size:2vw;display:flex;align-items:center;justify-content:center}
+.c{position:absolute;left:3%;bottom:9%;padding:.4vw 1.2vw;border:0;border-radius:.4vw;background:rgba(0,0,0,.6);color:#fff;font:600 1.2vw Segoe UI,sans-serif}
 </style></head><body><div class="f"></div><div class="s"></div>
-<div class="t"><span class="k">HARNESS TRAILER &middot; {id}</span>A Quiet Harbor</div><div class="b"></div><div class="p"><i></i></div>{error}{slow}
+<div class="t"><span class="k">HARNESS TRAILER &middot; {id}</span>A Quiet Harbor</div><div class="b"></div><div class="p"><i></i></div>
+<button class="c" type="button">Pause</button>{error}{slow}
 <script>
 (function () {
   try {
