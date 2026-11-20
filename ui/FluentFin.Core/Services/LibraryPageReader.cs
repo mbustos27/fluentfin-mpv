@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using FluentFin.Core.Contracts.Services;
 using Jellyfin.Sdk.Generated.Models;
+using Microsoft.Extensions.Logging;
 
 namespace FluentFin.Core.Services;
 
@@ -10,9 +11,11 @@ namespace FluentFin.Core.Services;
 /// stayed empty); a page of a hundred comes back at once, so the first cards show, and the rest follows page by page.
 /// <para>
 /// The first page is <see cref="FirstPageSize"/> titles, with the library's size. Each page after it is sized from how
-/// long the one before took, aiming at <see cref="PageTarget"/> (at most twice or half the last, between
-/// <see cref="MinPageSize"/> and <see cref="MaxPageSize"/>): a fast server is read in a few large pages, a slow one in many
-/// small ones, and no request asks for more than <see cref="MaxPageSize"/>. A page that fails or takes longer than
+/// long the one before took: a page faster than <see cref="PageTarget"/> makes the next one larger (up to twice), one
+/// slower than <see cref="SlowPage"/> halves it, and between them it holds (a server whose every request costs about the
+/// same, whatever its size, is not read in ever smaller pages); between <see cref="MinPageSize"/> and
+/// <see cref="MaxPageSize"/>, so no request asks for more than <see cref="MaxPageSize"/>. The last page is a short one
+/// (or an empty one), whatever the first page's count said: titles added meanwhile are read too. A page that fails or takes longer than
 /// <see cref="PageTimeout"/> is asked again, half as large, after a pause, <see cref="Tries"/> times in all; then the
 /// reader stops (<see cref="HasFailed"/>) and what came stays.
 /// </para>
@@ -30,6 +33,9 @@ public sealed class LibraryPageReader(IJellyfinClient client, BaseItemDto librar
 	/// <summary>How long a page should take: pages grow or shrink toward it.</summary>
 	public static readonly TimeSpan PageTarget = TimeSpan.FromSeconds(2);
 
+	/// <summary>A page slower than this halves the next one.</summary>
+	public static readonly TimeSpan SlowPage = TimeSpan.FromSeconds(6);
+
 	/// <summary>How many times a page is asked before the reader stops.</summary>
 	public const int Tries = 3;
 
@@ -41,6 +47,12 @@ public sealed class LibraryPageReader(IJellyfinClient client, BaseItemDto librar
 
 	/// <summary>The pause before try <c>n + 1</c>: 1 s, then 2 s (tests shorten it).</summary>
 	internal Func<int, CancellationToken, Task> Pause { get; init; } = (tried, cancellationToken) => Task.Delay(TimeSpan.FromSeconds(tried), cancellationToken);
+
+	/// <summary>Where each page, each try again and the end go (the app's log: a page's time is what a big server costs).</summary>
+	public ILogger? Log { get; init; }
+
+	private readonly Stopwatch _reading = new();
+	private Guid? _lastFirst;
 
 	/// <summary>Where the next page starts (the titles read so far, as the server counts them).</summary>
 	public int Next { get; private set; }
@@ -66,16 +78,18 @@ public sealed class LibraryPageReader(IJellyfinClient client, BaseItemDto librar
 	/// </summary>
 	public async Task<IReadOnlyList<BaseItemDto>?> ReadFirstAsync(CancellationToken cancellationToken = default)
 	{
+		_reading.Restart();
 		var (answer, took) = await AskAsync(0, FirstPageSize, withTotal: true, cancellationToken).ConfigureAwait(false);
 		cancellationToken.ThrowIfCancellationRequested();
 		if (answer?.Items is not { } items)
 		{
 			HasFailed = true;
+			Log?.LogWarning("Library {Library}: the first page failed or took over {Seconds} s", library.Name, PageTimeout.TotalSeconds);
 			return null;
 		}
 
 		Total = answer.TotalRecordCount is >= 0 and var total && (total > 0 || items.Count == 0) ? total : null;
-		Took(items.Count, FirstPageSize, took);
+		Took(items.Count, FirstPageSize, took, items);
 		return items;
 	}
 
@@ -98,15 +112,17 @@ public sealed class LibraryPageReader(IJellyfinClient client, BaseItemDto librar
 			cancellationToken.ThrowIfCancellationRequested();
 			if (answer?.Items is { } items)
 			{
-				Took(items.Count, size, took);
+				Took(items.Count, size, took, items);
 				return items;
 			}
 
 			// failed or too slow: smaller, after a pause
 			Size = Math.Max(MinPageSize, size / 2);
+			Log?.LogWarning("Library {Library}: the page from {Start} ({Size} titles) failed or took over {Seconds} s (try {Try} of {Tries})", library.Name, Next, size, PageTimeout.TotalSeconds, tried, Tries);
 			if (tried >= Tries)
 			{
 				HasFailed = true;
+				Log?.LogWarning("Library {Library}: stopped at {Read} of {Total} titles", library.Name, Next, Total?.ToString() ?? "?");
 				return null;
 			}
 
@@ -132,24 +148,51 @@ public sealed class LibraryPageReader(IJellyfinClient client, BaseItemDto librar
 	}
 
 	/// <summary>
-	/// The next page's size from the last one's: <paramref name="size"/> titles took <paramref name="took"/>; toward
-	/// <see cref="PageTarget"/>, at most twice or half as many, between <see cref="MinPageSize"/> and <see cref="MaxPageSize"/>.
+	/// The next page's size from the last one's: <paramref name="size"/> titles took <paramref name="took"/>. Faster than
+	/// <see cref="PageTarget"/>: larger, toward it, at most twice; slower than <see cref="SlowPage"/>: half; else the same.
+	/// Between <see cref="MinPageSize"/> and <see cref="MaxPageSize"/>.
 	/// </summary>
 	public static int NextSize(int size, TimeSpan took)
 	{
-		var seconds = Math.Max(took.TotalSeconds, 0.001);
-		var aimed = size * PageTarget.TotalSeconds / seconds;
-		var next = (int)Math.Round(Math.Clamp(aimed, size / 2.0, size * 2.0));
+		int next;
+		if (took < PageTarget)
+		{
+			next = (int)Math.Round(Math.Min(size * 2.0, size * PageTarget.TotalSeconds / Math.Max(took.TotalSeconds, 0.001)));
+		}
+		else if (took > SlowPage)
+		{
+			next = size / 2;
+		}
+		else
+		{
+			next = size; // a server whose requests cost the same whatever their size is not asked ever smaller pages
+		}
+
 		return Math.Clamp(next, MinPageSize, MaxPageSize);
 	}
 
-	private void Took(int count, int asked, TimeSpan took)
+	private void Took(int count, int asked, TimeSpan took, IReadOnlyList<BaseItemDto> items)
 	{
+		var start = Next;
 		Next += count;
 		Size = NextSize(asked, took);
-		// done: nothing came, or the server's count is reached; without a count, a short page is the last (with one, a short
-		// page goes on: the next page from where it ended, until the count or an empty page)
-		IsDone = count == 0 || (Total is { } total ? Next >= total : count < asked);
+		// done: a short page or an empty one (the first page's count only says how many to expect: titles added since are
+		// read too, and one removed does not end it early)
+		IsDone = count == 0 || count < asked;
+		// a server that leaves StartIndex out answers the first titles again: stop rather than read them for ever
+		var first = items.Count > 0 ? items[0].Id : null;
+		if (!IsDone && start > 0 && first is not null && first == _lastFirst)
+		{
+			IsDone = true;
+			Log?.LogWarning("Library {Library}: the page from {Start} began with the same title as the one before; stopped", library.Name, start);
+		}
+
+		_lastFirst = first ?? _lastFirst;
+		Log?.LogDebug("Library {Library}: titles {From} to {To} in {Ms} ms (next page {Size})", library.Name, start, Next, (int)took.TotalMilliseconds, Size);
+		if (IsDone)
+		{
+			Log?.LogInformation("Library {Library}: {Read} titles in {Requests} requests, {Seconds:0.0} s", library.Name, Next, Requests, _reading.Elapsed.TotalSeconds);
+		}
 	}
 
 	private async Task<(BaseItemDtoQueryResult? Answer, TimeSpan Took)> AskAsync(int start, int limit, bool withTotal, CancellationToken cancellationToken)

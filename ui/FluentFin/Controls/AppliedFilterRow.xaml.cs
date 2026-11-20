@@ -46,9 +46,9 @@ public sealed partial class AppliedFilterRow : UserControl
 				Show();
 				break;
 			case nameof(LibraryViewModel.ShowingText):
-				// the count line is a polite live region: Narrator hears the new count (Nixie 1.4.1: not each page of a big
-				// library as it loads; the count once every page is in)
-				if (Visibility == Visibility.Visible && ViewModel?.IsLoadingMore != true && FrameworkElementAutomationPeer.FromElement(ShowingLine) is { } peer)
+				// the count line is a polite live region: Narrator hears the new count (Nixie 1.4.1: not for each page of a big
+				// library as it arrives; for the user's own change, and once every page is in)
+				if (Visibility == Visibility.Visible && ViewModel?.UpdatingFromPage != true && FrameworkElementAutomationPeer.FromElement(ShowingLine) is { } peer)
 				{
 					peer.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
 				}

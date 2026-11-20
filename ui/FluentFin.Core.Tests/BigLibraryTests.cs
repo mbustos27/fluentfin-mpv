@@ -171,7 +171,12 @@ public sealed class BigLibraryTests : IAsyncLifetime
 		Assert.True(opened.Elapsed < TimeSpan.FromSeconds(3), $"the first page took {opened.Elapsed}");
 		Assert.Equal((false, true, LibraryPageReader.FirstPageSize, "A Title 00000", "Loading… 100 of 30,000 movies", 0, true), first);
 
-		await ui.Invoke(() => watching = true);
+		var filterChanges = 0;
+		await ui.Invoke(() =>
+		{
+			vm.PropertyChanged += (_, e) => filterChanges += e.PropertyName == nameof(LibraryViewModel.AppliedFilters) ? 1 : 0;
+			return watching = true;
+		});
 		await Within(await ui.Invoke(() => vm.RestLoaded), TimeSpan.FromSeconds(60));
 
 		var all = await ui.Invoke(() => (vm.IsLoadingMore, vm.LoadStopped, vm.Items.Count, vm.TotalCount, vm.LibraryCountText, vm.CountText));
@@ -190,6 +195,8 @@ public sealed class BigLibraryTests : IAsyncLifetime
 		Assert.Equal(40, tags);
 		// pages were inserted into the grid, never a reset (each would redraw every card and drop the keyboard's card)
 		Assert.Equal(0, resets);
+		// and no page, nor the end, looks like a filter change (the pages would start the grid at its top)
+		Assert.Equal(0, filterChanges);
 
 		// no request asked for the whole library; each was a bounded page, one at a time, by sort name, without the unused field
 		Assert.Equal(0, _refused);
@@ -335,26 +342,109 @@ public sealed class BigLibraryTests : IAsyncLifetime
 	}
 
 	[Fact]
+	public async Task BackToACard_WaitsAtMostPlaceWait_ThenItsPageComesLate_AndSaysSo()
+	{
+		// every page after the first takes 1 s: Back's wait (300 ms here) is over before the next page is in
+		_delay = (start, _) => start == 0 ? TimeSpan.FromMilliseconds(5) : TimeSpan.FromSeconds(1);
+		var card = IdOf(350);
+		LibraryPlaces.Remember(UserId, MoviesId, new LibraryPlace(ItemSortBy.Name, SortOrder.Ascending, [], [], [], [], card, 7_000, false, false));
+		using var ui = new UiThread();
+		var back = await ui.Invoke(() => new LibraryViewModel(_client) { ComingBack = true, PlaceWait = TimeSpan.FromMilliseconds(300) });
+
+		var opened = Stopwatch.StartNew();
+		await ui.Run(() => back.OnNavigatedTo(Movies));
+		opened.Stop();
+		Assert.True(opened.Elapsed < TimeSpan.FromSeconds(0.9), $"Back waited {opened.Elapsed}");
+		Assert.Equal((false, -1), await ui.Invoke(() => (back.IsLoading, back.FocusRequest)));
+
+		// the page left on its way goes on; the card comes with the third page, late: the page focuses it only from the grid
+		var waited = Stopwatch.StartNew();
+		while (await ui.Invoke(() => back.FocusRequest) < 0 && waited.Elapsed < TimeSpan.FromSeconds(10))
+		{
+			await Task.Delay(50);
+		}
+
+		var (index, late, id) = await ui.Invoke(() => (back.FocusRequest, back.LateFocus, back.FocusRequest >= 0 ? back.Items[back.FocusRequest].Id : null));
+		Assert.Equal((350, true, (Guid?)card), (index, late, id));
+		await ui.Run(back.OnNavigatedFrom);
+		// the rest, stopped, ends on the test's UI thread before it goes
+		await Within(await ui.Invoke(() => back.RestLoaded), TimeSpan.FromSeconds(10));
+	}
+
+	[Fact]
+	public async Task AFocusRequestThePageMakes_FollowsItsCard_AsPagesInsertBeforeIt()
+	{
+		_delay = (start, _) => TimeSpan.FromMilliseconds(start == 0 ? 5 : 40);
+		using var ui = new UiThread();
+		var vm = await ui.Invoke(() => new LibraryViewModel(_client));
+		await ui.Run(() => vm.OnNavigatedTo(Movies));
+
+		// Z to A: every page brings titles before those in; the page asks for a card itself (Editorial does)
+		var card = await ui.Invoke(() =>
+		{
+			vm.UpdateSortOrder(SortOrder.Descending);
+			vm.FocusRequest = 5;
+			return vm.Items[5];
+		});
+		await Within(await ui.Invoke(() => vm.RestLoaded), TimeSpan.FromSeconds(60));
+
+		var (index, at) = await ui.Invoke(() => (vm.FocusRequest, vm.Items.IndexOf(card)));
+		Assert.True(index > 5, $"still {index}");
+		Assert.Equal(at, index);
+	}
+
+	[Fact]
+	public async Task TheCountLine_IsReadOutForTheUsersChange_NotForEachPage()
+	{
+		_delay = (start, _) => TimeSpan.FromMilliseconds(start == 0 ? 5 : 60);
+		using var ui = new UiThread();
+		var vm = await ui.Invoke(() => new LibraryViewModel(_client));
+		var changes = new List<bool>();
+		await ui.Invoke(() =>
+		{
+			vm.PropertyChanged += (_, e) =>
+			{
+				if (e.PropertyName == nameof(LibraryViewModel.ShowingText))
+				{
+					changes.Add(vm.UpdatingFromPage);
+				}
+			};
+			return 0;
+		});
+		await ui.Run(() => vm.OnNavigatedTo(Movies));
+
+		var users = await ui.Invoke(() =>
+		{
+			changes.Clear();
+			vm.Filter.Unwatched = true;
+			return changes.ToList();
+		});
+		Assert.Equal([false], users); // the user's: read out
+		await Within(await ui.Invoke(() => vm.RestLoaded), TimeSpan.FromSeconds(60));
+
+		// each page's: not read out; the last one, when every page is in: read out
+		Assert.True(changes.Count > 3);
+		Assert.All(changes.Skip(1).SkipLast(1), fromPage => Assert.True(fromPage));
+		Assert.False(changes[^1]);
+		Assert.Equal("Showing 20,000 of 30,000 movies", await ui.Invoke(() => vm.ShowingText));
+	}
+
+	[Fact]
 	public async Task EditorialHome_GenreStrip_ReadsABigLibraryInPages()
 	{
-		EditorialGenreSource.Clear();
-		try
-		{
-			var titles = await Within(EditorialGenreSource.Titles(_client, [Movies]), TimeSpan.FromSeconds(60));
+		// (kept per server: this fake server's address is its own, so nothing another test keeps is read; no Clear, which
+		// would wipe what EditorialThemeTests keeps while it runs)
+		var titles = await Within(EditorialGenreSource.Titles(_client, [Movies]), TimeSpan.FromSeconds(60));
 
-			Assert.Equal(Size, titles.Count);
-			Assert.Equal(0, _refused);
-			Assert.All(_pages, p => Assert.InRange(p.Limit, LibraryPageReader.MinPageSize, LibraryPageReader.MaxPageSize));
-		}
-		finally
-		{
-			EditorialGenreSource.Clear();
-		}
+		Assert.Equal(Size, titles.Count);
+		Assert.Equal(0, _refused);
+		Assert.All(_pages, p => Assert.InRange(p.Limit, LibraryPageReader.MinPageSize, LibraryPageReader.MaxPageSize));
 	}
 
 	[Theory]
 	[InlineData(100, 0.1, 200)] // fast: twice as many
 	[InlineData(100, 2.0, 100)] // on target: the same
+	[InlineData(1000, 3.0, 1000)] // slower than the target but not slow (a server whose every request costs the same): held
 	[InlineData(400, 8.0, 200)] // slow: half
 	[InlineData(800, 0.1, 1000)] // never over the most
 	[InlineData(60, 30.0, 50)] // never under the least

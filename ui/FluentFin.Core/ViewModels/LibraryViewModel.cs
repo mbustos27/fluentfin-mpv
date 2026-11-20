@@ -10,6 +10,7 @@ using FluentFin.Contracts.ViewModels;
 using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.Services;
 using Jellyfin.Sdk.Generated.Models;
+using Microsoft.Extensions.Logging;
 using ReactiveUI;
 
 namespace FluentFin.Core.ViewModels;
@@ -24,11 +25,14 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	private readonly ShownItems _shown = [];
 	private readonly ReadOnlyObservableCollection<BaseItemViewModel> _items;
 
+	/// <summary>Nixie 1.4.1: where a big library's pages are logged (each page's time, a try again, the end).</summary>
+	private readonly ILogger<LibraryViewModel>? _logger;
 
-	public LibraryViewModel(IJellyfinClient jellyfinClient, ILocalSettingsService? localSettings = null)
+	public LibraryViewModel(IJellyfinClient jellyfinClient, ILocalSettingsService? localSettings = null, ILogger<LibraryViewModel>? logger = null)
 	{
 		JellyfinClient = jellyfinClient;
 		_localSettings = localSettings;
+		_logger = logger;
 		_items = new(_shown);
 
 		// tie-break so equal keys (e.g. unrated, never played) keep a stable order
@@ -97,13 +101,35 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			shown.Sort(comparer);
 		}
 
-		_shown.InsertSorted(shown, _comparer);
-		FollowRequest();
-		TotalCount = _shown.Count;
-		Recount();
-		UpdateBrowse();
+		UpdatingFromPage = true;
+		try
+		{
+			_shown.InsertSorted(shown, _comparer);
+			FollowRequest();
+			TotalCount = _shown.Count;
+			Recount();
+			UpdateBrowse();
+		}
+		finally
+		{
+			UpdatingFromPage = false;
+		}
+
 		PlaceArrived();
 	}
+
+	/// <summary>
+	/// Nixie 1.4.1: what changes now comes from a page arriving, not from the user (the applied-filter row's live count is
+	/// not read out for each page; it is for the user's own filter change, loading or not).
+	/// </summary>
+	public bool UpdatingFromPage { get; private set; }
+
+	/// <summary>
+	/// Nixie 1.4.1: the card asked for now is a place put back late (its page came after the grid showed): the page focuses
+	/// it only when the keyboard is in the grid or nowhere; anywhere else (the search box, the toolbar) the grid only
+	/// scrolls to it. The page reads it with <see cref="FocusRequest"/>, as <see cref="ArrivalFocus"/>.
+	/// </summary>
+	public bool LateFocus { get; set; }
 
 	/// <summary>Nixie 1.3.1: each item's place in the playlist (the server's order), while a playlist is shown.</summary>
 	private Dictionary<Guid, int> _playlistPlaces = [];
@@ -299,19 +325,22 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		var index = _shown.IndexOf(item);
 		if (index >= 0)
 		{
+			LateFocus = !IsLoading; // while the grid still waits (Back's few pages), it is the place as ever
 			ReturnOffset = place.Offset;
 			ShowIndex(index);
 		}
 	}
 
 	/// <summary>Every page read after the first, each into the grid as it comes; then the Filter menu's lists from every title.</summary>
-	private async Task ReadRestAsync(LibraryPageReader reader, CancellationTokenSource loading)
+	private async Task ReadRestAsync(LibraryPageReader reader, CancellationTokenSource loading, Task<IReadOnlyList<BaseItemDto>?>? onItsWay = null)
 	{
 		var cancellationToken = loading.Token;
 		try
 		{
-			while (await reader.ReadNextAsync(cancellationToken) is { } page)
+			// the page Back's wait left on its way first, then the next ones
+			while (await (onItsWay ?? reader.ReadNextAsync(cancellationToken)) is { } page)
 			{
+				onItsWay = null;
 				if (cancellationToken.IsCancellationRequested)
 				{
 					return;
@@ -347,13 +376,22 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		LoadStopped = reader.HasFailed;
 		_pendingPlace = null; // its title is not in the library any more: the user stays where they are
 		Facets = FilterFacet.From([.. _all.Select(x => x.Dto)], Filter);
-		FiltersChanged();
+		// the filters did not change (FiltersChanged would say they did, and the grid would go to its top)
+		Recount();
+		UpdateBrowse();
 	}
 
 	private void FiltersChanged()
 	{
 		ActiveFilters = LibraryBrowse.ActiveFilters(Filter);
-		AppliedFilters = Filter.Applied();
+		// Nixie 1.4.1: a new list only when the filters did change: the pages take a changed list for a new set of titles
+		// and start the grid at its top
+		var applied = Filter.Applied();
+		if (!applied.SequenceEqual(AppliedFilters))
+		{
+			AppliedFilters = applied;
+		}
+
 		Recount();
 		UpdateBrowse();
 	}
@@ -604,9 +642,11 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		}
 	}
 
+	// whoever asks (a jump, Back, the arrival, a page keeping its poster across a rebuild), the card asked for is remembered
+	partial void OnFocusRequestChanged(int value) => _requested = value >= 0 && value < _shown.Count ? _shown[value] : null;
+
 	private void ShowIndex(int index)
 	{
-		_requested = index >= 0 && index < _shown.Count ? _shown[index] : null;
 		// the same card again still asks the page to focus it
 		if (FocusRequest == index)
 		{
@@ -821,12 +861,16 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		else if(parameter is Guid id)
 		{
 			// fluentfin-mpv: a library opened by id (the jump list) that cannot be looked up says so, with Retry
+			// Nixie 1.4.1: leaving while the library is looked up stops it too (it went on to read the whole library)
+			_loading?.Cancel();
+			var lookup = _loading = new CancellationTokenSource();
 			await State.RunAsync(async () =>
 			{
 				IsLoading = true;
 				try
 				{
 					var dto = await JellyfinClient.GetItem(id);
+					lookup.Token.ThrowIfCancellationRequested();
 					return dto is null ? LoadMessages.CouldNotLoad("this library") : await Initialize(dto);
 				}
 				finally
@@ -861,7 +905,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			// it (one round trip late); they are made from the items themselves. Nixie 1.4.1: a library comes a page at a time
 			// (LibraryPageReader): the first page shows at once, the rest follows (ReadRestAsync); a playlist is one request
 			var playlist = dto.Type == BaseItemDto_Type.Playlist && dto.Id is not null;
-			var reader = playlist ? null : new LibraryPageReader(JellyfinClient, dto);
+			var reader = playlist ? null : new LibraryPageReader(JellyfinClient, dto) { Log = _logger };
 			var first = playlist ? (await JellyfinClient.GetPlaylistItems(dto.Id!.Value))?.Items : await reader!.ReadFirstAsync(cancellationToken);
 			cancellationToken.ThrowIfCancellationRequested();
 
@@ -896,14 +940,31 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 			// Nixie 1.4.1: Back or R to a title further on: a few more pages before the grid shows (it shows at once otherwise),
 			// so the card comes back where it was rather than the grid jumping to it later
+			// (at most PlaceWait: a page still on its way then goes on in the background, ReadRestAsync)
+			Task<IReadOnlyList<BaseItemDto>?>? onItsWay = null;
 			if (reader is not null && _pendingPlace is not null)
 			{
 				var waiting = Stopwatch.StartNew();
-				while (_pendingPlace is not null && waiting.Elapsed < PlaceWait && await reader.ReadNextAsync(cancellationToken) is { } page)
+				while (_pendingPlace is not null && !reader.IsDone && !reader.HasFailed && waiting.Elapsed < PlaceWait)
 				{
+					var next = reader.ReadNextAsync(cancellationToken);
+					var left = PlaceWait - waiting.Elapsed;
+					if (left <= TimeSpan.Zero || await Task.WhenAny(next, Task.Delay(left, cancellationToken)) != next)
+					{
+						onItsWay = next;
+						break;
+					}
+
 					cancellationToken.ThrowIfCancellationRequested();
+					if (await next is not { } page)
+					{
+						break;
+					}
+
 					AddPage(page);
 				}
+
+				cancellationToken.ThrowIfCancellationRequested();
 			}
 
 			// Nixie 1.4.0 (the UX review's X8, item 4): a library opened anew gives its first poster the focus (Back: the one left)
@@ -913,9 +974,9 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 				ShowIndex(0);
 			}
 
-			if (reader is { IsDone: false, HasFailed: false })
+			if (onItsWay is not null || reader is { IsDone: false, HasFailed: false })
 			{
-				RestLoaded = ReadRestAsync(reader, loading);
+				RestLoaded = ReadRestAsync(reader!, loading, onItsWay);
 			}
 			else if (reader is not null && IsLoadingMore)
 			{

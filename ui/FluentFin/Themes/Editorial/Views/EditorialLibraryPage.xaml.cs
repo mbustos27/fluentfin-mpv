@@ -71,6 +71,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 				_lastIndex += e.NewItems?.Count ?? 1;
 			}
 
+			// a page's titles: only the lines from the first one they changed are made again (Rebuild)
+			_pageArrived |= ViewModel.UpdatingFromPage;
 			QueueRebuild();
 		};
 		ViewModel.PropertyChanged += (_, e) =>
@@ -94,6 +96,10 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 					break;
 				case nameof(LibraryViewModel.Density):
 					Fit(_gridWidth);
+					break;
+				case nameof(LibraryViewModel.IsLoadingMore) when !ViewModel.IsLoadingMore:
+					// Nixie 1.4.1: every page in: the lines once more, whole (each poster's "n of m" counts every title)
+					QueueRebuild();
 					break;
 			}
 		};
@@ -328,10 +334,32 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		var keep = XamlRoot is { } root && FocusManager.GetFocusedElement(root) is EditorialPoster { Item: { } kept } poster && IsInside(poster, Lines)
 			? (Item: kept, State: poster.FocusState) : default;
 		var lines = EditorialLibrary.Flow(ViewModel.Items, _columns, ByLetter, _opened);
-		_lines.Clear();
-		foreach (var line in lines)
+		var from = 0;
+		if (_pageArrived && !_toTop && Lines.ItemsSource is not null)
 		{
-			_lines.Add(line);
+			// Nixie 1.4.1: a big library's page: the lines before the first one it changed stay as they are (drawn, and the
+			// keyboard's poster or the open details keep the keyboard); the rest is made again. Each line was made anew on
+			// every page, and the keyboard fell to the title bar every couple of seconds while the library loaded.
+			while (from < _lines.Count && from < lines.Count && SameLine(_lines[from], lines[from]))
+			{
+				from++;
+			}
+		}
+
+		_pageArrived = false;
+		for (var i = _lines.Count - 1; i >= from; i--)
+		{
+			_lines.RemoveAt(i);
+		}
+
+		for (var i = from; i < lines.Count; i++)
+		{
+			_lines.Add(lines[i]);
+		}
+
+		if (keep.Item is not null && XamlRoot is { } still && FocusManager.GetFocusedElement(still) is EditorialPoster { Item: var now } && ReferenceEquals(now, keep.Item))
+		{
+			keep = default; // its line stayed: it has the keyboard still, where it is (no scroll back to it)
 		}
 
 		if (Lines.ItemsSource is null)
@@ -364,6 +392,19 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 		UpdateBar();
 	}
+
+	/// <summary>Nixie 1.4.1: the same line, as a page's rebuild sees it: the same posters in the same place (their "n of m" aside: it is redone once every page is in).</summary>
+	private static bool SameLine(EditorialLibraryLine a, EditorialLibraryLine b) => (a, b) switch
+	{
+		(EditorialRowLine x, EditorialRowLine y) => x.FirstIndex == y.FirstIndex && x.Letter == y.Letter
+			&& x.Items.Count == y.Items.Count && x.Items.Zip(y.Items).All(p => ReferenceEquals(p.First, p.Second))
+			&& (x.Tags ?? []).SequenceEqual(y.Tags ?? []),
+		(EditorialDetailsLine x, EditorialDetailsLine y) => ReferenceEquals(x.Item, y.Item),
+		_ => a == b,
+	};
+
+	/// <summary>The rebuild queued comes from a page arriving (only its changed lines are made again).</summary>
+	private bool _pageArrived;
 
 	private void Lines_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
 	{
@@ -788,6 +829,11 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			ViewModel.FocusRequest = -1;
 			var arrival = ViewModel.ArrivalFocus;
 			ViewModel.ArrivalFocus = false;
+			// Nixie 1.4.1: a place put back late takes the keyboard only from the grid or from nothing (else it only scrolls)
+			var late = ViewModel.LateFocus;
+			ViewModel.LateFocus = false;
+			var elsewhere = late && XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject focused
+				&& !ReferenceEquals(focused, this) && !IsInside(focused, GridScroller);
 			var jumped = _jumped;
 			_jumped = false;
 			var state = arrival ? FocusState.Programmatic : _jumpFocus;
@@ -807,7 +853,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 				GridScroller.UpdateLayout();
 			}
 
-			if (index >= 0 && ViewModel.FocusYields?.Invoke() != true)
+			if (index >= 0 && ViewModel.FocusYields?.Invoke() != true && !elsewhere)
 			{
 				FocusIndex(index, state);
 			}
