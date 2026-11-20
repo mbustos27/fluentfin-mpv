@@ -213,11 +213,25 @@ class ServerTests(unittest.TestCase):
         # Nixie 1.4.0: the harness's error and never-starts pages, and another site's link (the theatre's message)
         fx = self.get("/__harness/fixture")
         try:
-            for mode in ("error150", "error153", "hang", "play"):
+            for mode in ("error150", "error153", "hang", "ad", "play"):
                 self.assertEqual(mode, self.request("/__harness/trailer", "POST", {"mode": mode})[1]["mode"])
                 _, page, _ = self.request("/__harness/trailer/%s" % library.TRAILER_ID, raw=True)
                 self.assertIn(('var mode = "%s"' % mode).encode(), page)
                 self.assertEqual(mode.startswith("error"), b"YouTube error" in page)
+            # like YouTube, it answers state changes and errors only to a page that subscribed to them
+            self.assertIn(b'subs[need]', page)
+            self.assertIn(b'd.func === "addEventListener"', page)
+            self.assertNotIn(b"infoDelivery", page)
+            # slow: the page's own load waits for an image the server answers after that long
+            self.assertEqual(2, self.request("/__harness/trailer", "POST", {"slow": 2})[1]["slow"])
+            _, page, _ = self.request("/__harness/trailer/%s" % library.TRAILER_ID, raw=True)
+            self.assertIn(b'src="/__harness/trailer-slow?s=2"', page)
+            t0 = time.time()
+            status, gif, _ = self.request("/__harness/trailer-slow?s=2", raw=True)
+            self.assertEqual(200, status)
+            self.assertGreaterEqual(time.time() - t0, 1.9)
+            self.request("/__harness/trailer", "POST", {"slow": 0})
+            self.assertEqual(204, self.request("/__harness/trailer-seen", raw=True)[0])
             self.request("/__harness/trailer", "POST", {"mode": "evil\"<script>"})
             _, page, _ = self.request("/__harness/trailer/%s" % library.TRAILER_ID, raw=True)
             self.assertIn(b'var mode = "play"', page)

@@ -29,6 +29,8 @@ public static class WindowShortcuts
 	public static void Attach(UIElement root)
 	{
 		root.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(OnPreviewKeyDown), false);
+		// Nixie 1.4.0 (review): the key that closed the theatre comes up (its held repeats no longer reopen it)
+		root.AddHandler(UIElement.PreviewKeyUpEvent, new KeyEventHandler((_, e) => Controls.TrailerTheater.Repeats.KeyUp((int)e.Key)), true);
 		root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnPointerPressed), true);
 		// Nixie 1.4.0 (bug hunt M3): the wheel is the user moving too (a refresh's place restore stops)
 		root.AddHandler(UIElement.PointerWheelChangedEvent, new PointerEventHandler((_, _) => PageRefresh.UserActed("the wheel")), true);
@@ -56,6 +58,13 @@ public static class WindowShortcuts
 		{
 			PageRefresh.UserActed("a key");
 			Views.ItemPagePlace.UserActedAt = Environment.TickCount64; // 1.4.0: an item page's arrival focus yields too
+		}
+
+		// Nixie 1.4.0 (review): a held Enter that closed the theatre on its Close: its repeats land on Trailer and reopened it
+		if (Controls.TrailerTheater.Repeats.Swallow((int)e.Key, e.KeyStatus.WasKeyDown))
+		{
+			e.Handled = true;
+			return;
 		}
 
 		// Nixie 1.4.0 (bug hunt M1): the theatre is modal. Its keys are decided here, before any page handler or key

@@ -198,13 +198,15 @@ public static partial class Trailers
 	/// The wrapper's one script (inline, the same text for every trailer: the Content-Security-Policy allows exactly it, by its
 	/// hash). It speaks the IFrame Player API's message protocol with the embed (the protocol YouTube's own iframe_api script
 	/// uses, so no script is loaded from anywhere): it says it is listening until the player answers, asks for the player's
-	/// state changes and errors, and keeps the latest in <c>window.nixieTrailer</c> ({ready, state, error}) for the app to
-	/// read (<see cref="ReadPoll"/>). Messages count only from the embed's own frame and origin, and only numbers are kept.
+	/// state changes and errors, and keeps the latest in <c>window.nixieTrailer</c> ({ready, state, error, touched}) for the
+	/// app to read (<see cref="ReadPoll"/>). Messages count only from the embed's own frame and origin, and only numbers are
+	/// kept. Nixie 1.4.0 (review): <c>touched</c> is set when the keyboard goes into YouTube's player (the user clicked or
+	/// tabbed into it: the page loses focus to the frame), so the app never takes the keyboard back from there.
 	/// </summary>
 	public static string WrapperScript { get; } = """
 		(function () {
 		  var f = document.getElementById('player'), o = new URL(f.src).origin;
-		  var s = window.nixieTrailer = { ready: false, state: -2, error: 0 };
+		  var s = window.nixieTrailer = { ready: false, state: -2, error: 0, touched: false };
 		  function send(m) { try { f.contentWindow.postMessage(JSON.stringify(m), o); } catch (e) { } }
 		  function listen() { send({ event: 'listening', id: 1, channel: 'widget' }); }
 		  function subscribe() {
@@ -214,6 +216,9 @@ public static partial class Trailers
 		  }
 		  var tries = 0, t = setInterval(function () { if (s.ready || ++tries > 120) { clearInterval(t); } else { listen(); } }, 250);
 		  f.addEventListener('load', listen);
+		  window.addEventListener('blur', function () {
+		    setTimeout(function () { if (document.activeElement === f) { s.touched = true; } }, 0);
+		  });
 		  window.addEventListener('message', function (e) {
 		    if (e.origin !== o || e.source !== f.contentWindow) { return; }
 		    var d;
@@ -336,14 +341,13 @@ public static partial class Trailers
 	/// </summary>
 	public const string BrowserArguments = "--autoplay-policy=no-user-gesture-required";
 
-	/// <summary>How long the player has to start (or say why it won't) once it has answered.</summary>
-	public static TimeSpan StartLimit { get; } = TimeSpan.FromSeconds(8);
-
 	/// <summary>
-	/// How long YouTube's player has to answer at all once Nixie's page is up (its frame still loading over a slow line: live,
-	/// a page's own load took up to 20 s while the trailer already played, so the clock does not wait for the page's load).
+	/// How long the theatre waits, from Nixie's page being up, for any sign of YouTube's player before it says the trailer
+	/// didn't start: no answer, no state, no error (live, a page's own load took up to 20 s while the trailer already played,
+	/// so the clock does not wait for the page's load). Nixie 1.4.0 (review): only total silence counts: a player that
+	/// answered and sits unstarted (a pre-roll ad, a slow start) is left to play, and so is one the user has touched.
 	/// </summary>
-	public static TimeSpan AnswerLimit { get; } = TimeSpan.FromSeconds(15);
+	public static TimeSpan QuietLimit { get; } = TimeSpan.FromSeconds(20);
 
 	/// <summary>
 	/// The wrapper's state as the app reads it (<c>ExecuteScriptAsync</c> of <c>JSON.stringify(window.nixieTrailer)</c>, which
@@ -375,7 +379,8 @@ public static partial class Trailers
 			var ready = root.TryGetProperty("ready", out var r) && r.ValueKind == JsonValueKind.True;
 			var state = root.TryGetProperty("state", out var st) && st.ValueKind == JsonValueKind.Number && st.TryGetInt32(out var sv) ? sv : -2;
 			var error = root.TryGetProperty("error", out var er) && er.ValueKind == JsonValueKind.Number && er.TryGetInt32(out var ev) ? ev : 0;
-			return new TrailerPoll(ready, state, error);
+			var touched = root.TryGetProperty("touched", out var to) && to.ValueKind == JsonValueKind.True;
+			return new TrailerPoll(ready, state, error, touched);
 		}
 		catch (JsonException)
 		{
@@ -385,11 +390,11 @@ public static partial class Trailers
 
 	/// <summary>
 	/// What the theatre makes of the latest poll: an error from the player (any code) is a refusal; a player that is playing,
-	/// buffering, paused or ended has started. One that hasn't didn't start: <see cref="StartLimit"/> after it answered (an
-	/// error page it doesn't report), or <see cref="AnswerLimit"/> after Nixie's page was up when it never answered. Before
-	/// that: waiting. <paramref name="since"/> runs from Nixie's page being up, and again from the player's first answer.
+	/// buffering, paused or ended has started. It didn't start only when nothing at all happened for <see cref="QuietLimit"/>
+	/// (no answer, no state, no error) and the user did nothing with the player (<paramref name="userActed"/>, or the page's
+	/// <c>touched</c>). Anything else: waiting (an ad before the trailer reports unstarted for as long as it runs).
 	/// </summary>
-	public static TrailerVerdict Judge(TrailerPoll? poll, TimeSpan since, bool startedBefore)
+	public static TrailerVerdict Judge(TrailerPoll? poll, TimeSpan since, bool startedBefore, bool userActed = false)
 	{
 		if (poll is { Error: > 0 })
 		{
@@ -401,7 +406,8 @@ public static partial class Trailers
 			return TrailerVerdict.Started;
 		}
 
-		return since >= (poll is { Ready: true } ? StartLimit : AnswerLimit) ? TrailerVerdict.NotStarted : TrailerVerdict.Waiting;
+		var silent = poll is null or { Ready: false, State: -2, Touched: false };
+		return silent && !userActed && since >= QuietLimit ? TrailerVerdict.NotStarted : TrailerVerdict.Waiting;
 	}
 
 	/// <summary>The heading of every message the theatre shows instead of a trailer.</summary>
@@ -419,7 +425,7 @@ public static partial class Trailers
 		_ => "YouTube refused to play it here.",
 	}, WatchOnYouTube, WatchUri(videoId));
 
-	/// <summary>Nixie's message for a YouTube trailer that didn't start within <see cref="StartLimit"/>.</summary>
+	/// <summary>Nixie's message for a YouTube trailer whose player gave no sign within <see cref="QuietLimit"/>.</summary>
 	public static TrailerMessage NotStarted(string videoId) =>
 		new(CantPlayHeading, "YouTube didn't start it.", WatchOnYouTube, WatchUri(videoId));
 
@@ -526,12 +532,13 @@ public static partial class Trailers
 /// <param name="Ready">The player answered.</param>
 /// <param name="State">Its state: -2 none yet, -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued.</param>
 /// <param name="Error">Its error code (0 none): 2, 5, 100, 101, 150, 153.</param>
-public sealed record TrailerPoll(bool Ready, int State, int Error);
+/// <param name="Touched">The keyboard went into YouTube's player (the user clicked or tabbed into it).</param>
+public sealed record TrailerPoll(bool Ready, int State, int Error, bool Touched = false);
 
 /// <summary>Nixie 1.4.0: what the theatre makes of the player (<see cref="Trailers.Judge"/>).</summary>
 public enum TrailerVerdict
 {
-	/// <summary>Not started yet, within <see cref="Trailers.StartLimit"/>.</summary>
+	/// <summary>Not started yet (a sign of the player, the user's touch, or within <see cref="Trailers.QuietLimit"/>).</summary>
 	Waiting,
 
 	/// <summary>Playing (or buffering, paused, ended): YouTube's player is the user's.</summary>
@@ -540,7 +547,7 @@ public enum TrailerVerdict
 	/// <summary>The player reported an error: Nixie's message instead (<see cref="Trailers.Refused"/>).</summary>
 	Refused,
 
-	/// <summary>Nothing started within the limit: Nixie's message instead (<see cref="Trailers.NotStarted"/>).</summary>
+	/// <summary>No sign of the player within the limit: Nixie's message instead (<see cref="Trailers.NotStarted"/>).</summary>
 	NotStarted,
 }
 
@@ -575,6 +582,46 @@ public enum TrailerStepKind
 
 /// <summary>Nixie 1.4.0: a step of the Trailer button (<see cref="Trailers.Plan"/>).</summary>
 public sealed record TrailerStep(TrailerStepKind Kind, string? VideoId = null, TrailerMessage? Message = null);
+
+/// <summary>
+/// Nixie 1.4.0 (review): a held Enter or Space that closed the theatre (on its Close) must not reopen it: its auto-repeat
+/// lands on the Trailer button the keyboard went back to. Armed when the theatre closes; a repeat of Enter or Space is then
+/// swallowed until that key comes up, or any fresh press (the user's own) disarms it.
+/// </summary>
+public sealed class TheaterRepeatGuard
+{
+	private const int Enter = 0x0D, Space = 0x20;
+	private bool _armed;
+
+	/// <summary>The theatre closed.</summary>
+	public void Arm() => _armed = true;
+
+	/// <summary>Whether a key down is swallowed: a repeat of Enter or Space after the theatre closed.</summary>
+	public bool Swallow(int virtualKey, bool repeat)
+	{
+		if (!_armed)
+		{
+			return false;
+		}
+
+		if (!repeat)
+		{
+			_armed = false;
+			return false;
+		}
+
+		return virtualKey is Enter or Space;
+	}
+
+	/// <summary>A key came up: Enter's or Space's ends the hold.</summary>
+	public void KeyUp(int virtualKey)
+	{
+		if (virtualKey is Enter or Space)
+		{
+			_armed = false;
+		}
+	}
+}
 
 /// <summary>Nixie 1.4.0 (bug hunt M1): what a key does while the theatre window is open (<see cref="Trailers.KeyOverTheater"/>).</summary>
 public enum TheaterKey

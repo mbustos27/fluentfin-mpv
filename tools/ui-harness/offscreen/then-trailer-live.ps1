@@ -10,7 +10,8 @@
 # For each id the fake server's showcase movie gets that trailer (POST /__harness/trailer {"url"}), R loads the page again,
 # Enter on Trailer opens the theatre, and the app's [trailer] log says what the player did. "after": each playable id reaches
 # playing (the IFrame Player API's state 1) with no error, and a blocked one shows Nixie's message. "before" (a build without
-# the wrapper, no state to log): the theatre is captured and read with Windows' OCR; the shot is the evidence either way.
+# the wrapper, no state to log): the theatre is captured and read with Windows' OCR, which must find YouTube's Error 153.
+# A shot OCR cannot read fails its check either way.
 # Dot-sourced by drive.ps1: every name here starts with TL.
 
 if ($env:NIXIE_LIVE_YOUTUBE -ne '1') { Say 'trailer live: NIXIE_LIVE_YOUTUBE is not 1, skipped (it asks real YouTube: opt-in only)'; return }
@@ -29,7 +30,8 @@ function TL-Log([double]$Since) {
     })
 }
 
-# Windows' own OCR of a shot (Windows.Media.Ocr; best effort: a failure is said, not a check)
+# Windows' own OCR of a shot (Windows.Media.Ocr). Nixie 1.4.0 (review): a failure, or a shot it reads nothing on, fails the
+# checks that rest on it (TL-OcrRead): an unread shot is never a pass
 function TL-Ocr([string]$File) {
     try {
         Add-Type -AssemblyName System.Runtime.WindowsRuntime
@@ -51,6 +53,10 @@ function TL-Ocr([string]$File) {
     }
     catch { return "(OCR failed: $($_.Exception.Message))" }
 }
+
+# OCR that read the shot: not a failure, and the window's own words on it (the top bar's "Movies"), so an empty or garbled
+# read never counts as "no Error 153"
+function TL-OcrRead([string]$Text) { $Text -and $Text -notlike '(OCR failed*' -and $Text -match 'Movies' }
 
 function TL-Play([string]$Id, [string]$Kind) {
     [void](Invoke-Server '/__harness/trailer' 'POST' @{ url = "https://www.youtube.com/watch?v=$Id" })
@@ -85,12 +91,13 @@ function TL-Play([string]$Id, [string]$Kind) {
     $tlPlaying = [bool](@($tlLines | Where-Object { $_ -match 'the player: ready True, state 1, error 0' }).Count)
     $tlBrowser = @($tlLines | Where-Object { $_ -match 'the browser (opens|would open)' })
     $tl153 = ($tlText -match '153|configuration error') -or ($tlEarly -match '153|configuration error')
+    $tlRead = (TL-OcrRead $tlText) -and (TL-OcrRead $tlEarly)
     if ($tlPhase -eq 'before') {
-        Say "trailer live (before) ${Id}: YouTube's Error 153 on the shot (OCR): $tl153"
+        Check "trailer live (before) ${Id}: YouTube's Error 153 on the shots (OCR)" ($tlRead -and $tl153) "early: $tlEarly; later: $tlText"
     }
     elseif ($Kind -eq 'plays') {
         Check "trailer live (after) ${Id}: the player reaches playing (state 1) with no error and no message" ($tlPlaying -and -not $tlRefused -and -not ($tlLines -match 'Nixie''s message')) ($tlLines -join ' | ')
-        Check "trailer live (after) ${Id}: no Error 153 on the shots (OCR)" (-not $tl153) "early: $tlEarly; later: $tlText"
+        Check "trailer live (after) ${Id}: no Error 153 on the shots (OCR read both, and neither says 153)" ($tlRead -and -not $tl153) "early: $tlEarly; later: $tlText"
     }
     Check "trailer live ($tlPhase) ${Id}: no browser launched" ($tlBrowser.Count -eq 0) ($tlBrowser -join ' | ')
     $tlAt2 = Get-Epoch
