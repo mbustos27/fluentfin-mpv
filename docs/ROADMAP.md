@@ -64,7 +64,12 @@ The full list is CHANGELOG `## 1.4.0`:
 Three parallel streams (search, the updater, fixes), each owning its files, as in 1.4.0. The musts go first.
 
 **Progress (2026-11-20, 13:30):**
-- Search and the updater are near done: each has 4–5 commits, and is running its checks and screenshots.
+- **Search is done** (7 commits, in review; 14:45):
+  - the why: Jellyfin 12.4 caps a search's total at 3 times its limit, and its built-in search can't match 300 films
+    for "it's always sunny", so the owner's server must run a looser search plugin (`docs\research\search.md`);
+  - the test servers now hold a "QA Search" library of 3,035 films and 29 shows;
+  - its live check passes 12 of 12 on both test servers.
+- The updater is near done: it's running its checks and screenshots.
 - The fixes stream finished the backend and privacy items in its first half hour:
   - private certificates;
   - split-season anime;
