@@ -262,7 +262,7 @@ That's about 19–25 agent-days.
 - Heavy phases start after the weekly usage reset (24 November).
 
 ## Decided for 1.5 and 1.6 (2026-11-20, the owner: "Make 1.5 choices")
-Since the split, rewatching, tidy names, favourites and the Made by Nixie rows ship in 1.6; the rest ship in 1.5.
+Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. Rewatching has been on since 1.4.1, and its Settings switch rides 1.5 with the rest.
 - **Release pace:** one planned release at a time, about weekly at most; a Blocker ships right away as a hotfix.
   Nothing else ships in between, so update notices stay rare.
 - **The upgrade test runs in Windows Sandbox** (this PC runs Windows 11 Pro), never in the owner's account. Sandbox is
