@@ -237,8 +237,8 @@ That's about 19–25 agent-days.
 ## Decided for 1.5 (2026-11-20, the owner: "Make 1.5 choices")
 - **Release pace:** one planned release at a time, about weekly at most; a Blocker ships right away as a hotfix.
   Nothing else ships in between, so update notices stay rare.
-- **The upgrade test runs in Windows Sandbox** (this PC runs Windows 11 Pro), never in the owner's account. The owner
-  turns Sandbox on once. Until then, each release lists the upgrade test as not run.
+- **The upgrade test runs in Windows Sandbox** (this PC runs Windows 11 Pro), never in the owner's account. Sandbox is
+  on (2026-11-20). Its window shows on the desktop while the test runs, so it comes with a heads-up and plays no media.
 - **The updater:**
   - checks every 4 hours while Nixie is open, and when the window comes back after an hour or more away (focus or
     waking from sleep);
