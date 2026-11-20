@@ -254,8 +254,14 @@ chips, the top bar's Collections destination, the fake server), so they're built
   - The audio-matching spike isn't needed for this case.
   - Today's learned skip can't catch either part: it only looks in the first 10 minutes, for jumps of 30 to 150 s, and
     stops once an intro is known.
+- **The owner's second answer (2026-11-20):** the extras' length **varies a bit** from episode to episode. A rule with a
+  fixed end would land a little early, showing some promo, or a little late, cutting the episode. So the rules get a
+  margin (proposed, adds about S):
+  - **a Skip button by default,** not skipping by itself, so the viewer sees where it lands;
+  - **the end snaps** to the nearest black frame or silence within a few seconds of the rule's end. It reads only that
+    stretch of the file (a few MB), never the whole episode;
+  - **each correction teaches the rule:** a seek back or forward right after a skip moves the rule's end.
 - **Still to ask the owner:**
-  - the same clip and length every episode, or different promos, and about how long;
   - whether the player's Chapters list shows a chapter at each break;
   - a Skip button, or skip by itself;
   - one rule for the whole show, or per season;
@@ -352,8 +358,9 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
 
 ## Still open (later releases)
 - Skip repeated extras: skip rules beside 1.6 or in 1.8. The extras sit before and after the episode (the owner,
-  2026-11-20), so no audio spike is needed. Still to ask: the same length each time, a button or skip by itself, one
-  rule per show or per season.
+  2026-11-20), so no audio spike is needed. Their length varies a bit, so the rules get a margin: a Skip button, an end
+  that snaps to a black frame or silence, and corrections that teach the rule. Still to ask: whether Chapters shows
+  them, a button or skip by itself, one rule per show or per season.
 - The pop-out player's meaning (1.8).
 - Friends through the server only, or a Trakt exception (1.9).
 - Rust: go or no-go after the spike (2.0).
