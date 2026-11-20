@@ -46,6 +46,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 	// Nixie 1.4.0 (the release's layout cycle): the posters' width, read by each row as it is drawn (EditorialGridMetrics)
 	private readonly EditorialGridMetrics _metrics = new();
 	private int _viewTicket;
+	private bool _followPending;
 	private Guid? _opened;
 	private int _lastIndex;
 	private bool _rebuildQueued;
@@ -102,8 +103,13 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		// after R, a user who moved first keeps the keyboard where they put it (the refresh's own restore yields the same way)
 		ViewModel.FocusYields = () => App.GetService<Contracts.Services.INavigationService>() is NavigationService { LastNavigationWasRefresh: true } && PageRefresh.UserMovedSinceRefresh;
 		Lines.ElementPrepared += Lines_ElementPrepared;
-		GridScroller.ViewChanged += (_, _) =>
+		GridScroller.ViewChanged += (_, e) =>
 		{
+			if (!e.IsIntermediate)
+			{
+				FollowFarScroll();
+			}
+
 			UpdateBar();
 			// Nixie 1.4.0 (the UX review's E-M5, item 12): scrolled, the head folds to one compact line; at the top it opens
 			var compact = GridScroller.VerticalOffset > (_compact ? 8 : 40);
@@ -543,6 +549,84 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		}
 
 		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, WhenLaidOut);
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (the release's layout cycle): the keyboard follows a far scroll. When the view settles more than a view away
+	/// from the poster the keyboard is on (the scroll bar, Narrator, the wheel: a scroll the keyboard did not make), the keyboard
+	/// goes to the first poster in view, as it was (the keyboard's, or the program's). The grid keeps the keyboard's row drawn
+	/// wherever the view goes; the first row kept far above made every later layout pass lay out all the rows from the top again
+	/// (each image that arrived: 1 to 2 s frozen, for up to 30 s). Keys move the keyboard and the view together, so they never
+	/// leave it a view away.
+	/// </summary>
+	private void FollowFarScroll()
+	{
+		// the poster the keyboard was on when the view moved; checked once the grid is laid out at the new place (when the view
+		// reports the change its content has not moved yet), before any later pass: not on a callback for when it is idle (a
+		// grid laying its rows out again is never idle: one came 5 s late), nor after a forced layout (the keyboard fell to the
+		// title bar's Back)
+		if (_followPending || XamlRoot is not { } root || FocusManager.GetFocusedElement(root) is not EditorialPoster { Item: not null } focused
+			|| !IsInside(focused, Lines))
+		{
+			return;
+		}
+
+		_followPending = true;
+		var state = focused.FocusState is FocusState.Unfocused ? FocusState.Programmatic : focused.FocusState;
+		void LaidOut(object? sender, object e)
+		{
+			GridScroller.LayoutUpdated -= LaidOut;
+			_followPending = false;
+			var now = FocusManager.GetFocusedElement(root) as DependencyObject;
+			// that poster is far now (or gone), and the keyboard is still on it or fell out of the grid with it (nobody put it
+			// elsewhere in the grid)
+			var far = !WithinAView(focused) && (ReferenceEquals(now, focused) || now is null || !IsInside(now, GridList));
+			if (far && IsLoaded && FirstPosterInView() is { } first)
+			{
+				first.Focus(state);
+			}
+		}
+
+		GridScroller.LayoutUpdated += LaidOut;
+	}
+
+	/// <summary>Whether <paramref name="element"/> (in the grid) lies within one view of the view (a poster kept far away for the keyboard is parked at no size: not).</summary>
+	private bool WithinAView(FrameworkElement element)
+	{
+		if (!element.IsLoaded || element.XamlRoot is null || element.ActualHeight <= 0)
+		{
+			return false;
+		}
+
+		var top = element.TransformToVisual(GridScroller).TransformPoint(default).Y;
+		return EditorialLibrary.WithinAViewOf(top, element.ActualHeight, GridScroller.ViewportHeight);
+	}
+
+	/// <summary>The first poster of the first row whose top shows in the view (else of the first row that shows at all).</summary>
+	private EditorialPoster? FirstPosterInView()
+	{
+		FrameworkElement? partly = null;
+		var partlyIndex = -1;
+		for (var i = 0; i < _lines.Count; i++)
+		{
+			if (_lines[i] is not EditorialRowLine line || Lines.TryGetElement(i) is not FrameworkElement { ActualHeight: > 0 } row || !Shows(row))
+			{
+				continue;
+			}
+
+			if (row.TransformToVisual(GridScroller).TransformPoint(default).Y >= -1)
+			{
+				return PosterOf(row, line.FirstIndex);
+			}
+
+			if (partly is null)
+			{
+				partly = row;
+				partlyIndex = line.FirstIndex;
+			}
+		}
+
+		return partly is null ? null : PosterOf(partly, partlyIndex);
 	}
 
 	/// <summary>Whether <paramref name="element"/> (in the grid) shows in its view, at least in part.</summary>

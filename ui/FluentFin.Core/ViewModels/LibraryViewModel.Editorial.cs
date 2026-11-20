@@ -231,6 +231,14 @@ public static class EditorialLibrary
 	public static bool PartlyInView(double top, double height, double viewport) =>
 		viewport > 0 && height >= 0 && top < viewport && top + height > 0;
 
+	/// <summary>
+	/// Nixie 1.4.0 (the release's layout cycle): whether something from <paramref name="top"/> down <paramref name="height"/> (in
+	/// the view's own coordinates) lies within one view of a view <paramref name="viewport"/> high: in it, or less than a view
+	/// above or below. Further away, the keyboard's poster no longer goes with the view (the keyboard follows the scroll).
+	/// </summary>
+	public static bool WithinAViewOf(double top, double height, double viewport) =>
+		viewport > 0 && height >= 0 && top < 2 * viewport && top + height > -viewport;
+
 	/// <summary>The grid's offset that puts a row whose top is <paramref name="rowTop"/> (in the grid) where the first row sits: 8 px under the view's top.</summary>
 	public static double RowToTop(double rowTop, double scrollable) => Math.Clamp(rowTop - 8, 0, Math.Max(0, scrollable));
 

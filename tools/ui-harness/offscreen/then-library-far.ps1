@@ -6,9 +6,10 @@
 #   $env:NIXIE_LAYOUT='<Classic|DriveIn|Cinematic|Editorial>'; run-offscreen.ps1 ... -Script home -Then offscreen\then-library-far.ps1
 # Checks: the window answers within 2 s all along (a WM_NULL every 200 ms) and settles after the far scroll (every answer
 # within 400 ms 10 to 15 s after it); no LayoutCycleException in FluentFin's log; what
-# the user then sees: Editorial's details open in view, the keyboard on Play when Enter opened them, the poster "expanded",
-# and Esc or a second Invoke closes them with the poster in view (the keyboard on it after Esc); the other themes' item page
-# opens and Back returns. The window is 1920 x 1080 for the checks (the desktop's own size put back after). Shots
+# the user then sees: in Editorial the keyboard follows a far scroll to the first poster in view (Narrator's Invoke then
+# reaches a title drawn out of view; Enter opens what is in view), details open in view, the keyboard on Play when Enter
+# opened them, the poster "expanded", and Esc or a second Invoke closes them with the poster in view (the keyboard on it
+# after Esc); the other themes' item page opens and Back returns. The window is 1920 x 1080 for the checks (the desktop's own size put back after). Shots
 # <tag>-far-<name>.png. Dot-sourced by drive.ps1: every name here starts with lf.
 
 $lfTag = if ($env:SG_SHOT_TAG) { $env:SG_SHOT_TAG } elseif ($env:NIXIE_LAYOUT) { $env:NIXIE_LAYOUT.ToLowerInvariant() } else { 'classic' }
@@ -71,7 +72,22 @@ function Lf-Shows($Element) {
     $w = Lf-Window
     -not $lfR.IsEmpty -and $lfR.Top -ge $w.T -and $lfR.Bottom -le $w.B
 }
-function Lf-Details { Find-Ui -Name "Details of $lfTitle" -Type 'Group' -Contains -OffscreenToo }
+function Lf-Details([string]$Name = $lfTitle) { Find-Ui -Name "Details of $Name" -Type 'Group' -Contains -OffscreenToo }
+# the focused element (Lf-Focus) shows inside the window
+function Lf-FocusShows($F) {
+    if (-not $F -or -not $F.rect) { return $false }
+    $w = Lf-Window
+    $F.rect[3] -gt 0 -and $F.rect[1] -ge $w.T -and ($F.rect[1] + $F.rect[3]) -le $w.B
+}
+# a title's name from its card's ("Lonely Mirrors, 2020, watched": Lonely Mirrors)
+function Lf-TitleOf([string]$Name) { ($Name -split ', ')[0] }
+# a title drawn but out of view (what Narrator's cursor can reach past the screen), or null
+function Lf-DrawnOutOfView {
+    foreach ($e in [OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)))) {
+        try { if ($e.Cached.IsOffscreen -and $e.Cached.Name -like '*, *') { return $e } } catch {}
+    }
+    $null
+}
 function Lf-State($Card) {
     $p = $null
     try { if ($Card.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$p)) { return "$($p.Current.ExpandCollapseState)" } } catch {}
@@ -98,19 +114,27 @@ if (Lf-Fresh) {
     Check "far ($lfTag): the grid settles after the far scroll (10 to 15 s after it: every answer within 400 ms)" ($lfR.Ok -and $lfR.Slowest -le 400) $lfR.Text
     $lfShown = Find-Ui -Type 'ListItem' -Contains -Name ', '
     Check "far ($lfTag): after the far scroll, titles show in view" ([bool]$lfShown) $(if ($lfShown) { $lfShown.Current.Name } else { 'none' })
+    if ($lfEditorial) {
+        # Nixie 1.4.0: the keyboard follows a far scroll (to the first poster in view), as it was: here the program's
+        $lfF = Lf-Focus
+        Check "far ($lfTag): the keyboard follows the far scroll: on a poster in view" ($lfF -and $lfF.class -eq 'EditorialPoster' -and (Lf-FocusShows $lfF) -and -not $lfF.name.StartsWith($lfTitle)) "keyboard on $(Lf-Desc $lfF)"
+    }
+    # Narrator's Invoke on a title past the screen: the first title, if the grid still draws it, else any drawn out of view
     $lfCard = Find-MediaCard $lfTitle
+    if (-not $lfCard -or -not $lfCard.Current.IsOffscreen) { $lfCard = Lf-DrawnOutOfView }
     if (-not $lfCard) {
-        Say "far ($lfTag): '$lfTitle' is not drawn after the far scroll (the grid let it go): the Invoke path does not apply"
+        Say "far ($lfTag): no title is drawn out of view after the far scroll: the Invoke path does not apply"
     } else {
+        $lfTitle = Lf-TitleOf $lfCard.Current.Name
         Say "far ($lfTag): '$lfTitle' drawn, out of view: $([bool]$lfCard.Current.IsOffscreen)"
         [OffscreenUi]::InvokeAsync([OffscreenUi]::InvokePatternOf($lfCard))
         $lfR = Lf-Responsive 5
-        Check "far ($lfTag): Invoke on a title far above: the window answers within 2 s" $lfR.Ok $lfR.Text
+        Check "far ($lfTag): Invoke on a title out of view: the window answers within 2 s" $lfR.Ok $lfR.Text
         if ($lfEditorial) {
             $lfD = Wait-Until { Lf-Details } -Seconds 6 -PollMs 200
-            Check "far ($lfTag): Invoke on a title far above: its details open, in view" (Lf-Shows $lfD) $(if ($lfD) { $lfD.Current.Name } else { 'no details' })
+            Check "far ($lfTag): Invoke on a title out of view: its details open, in view" (Lf-Shows $lfD) $(if ($lfD) { $lfD.Current.Name } else { 'no details' })
             $lfCard = Find-MediaCard $lfTitle
-            Check "far ($lfTag): Invoke on a title far above: the poster shows, and says expanded" ((Lf-Shows $lfCard) -and (Lf-State $lfCard) -eq 'Expanded') "state '$(Lf-State $lfCard)'"
+            Check "far ($lfTag): Invoke on a title out of view: the poster shows, and says expanded" ((Lf-Shows $lfCard) -and (Lf-State $lfCard) -eq 'Expanded') "state '$(Lf-State $lfCard)'"
             Lf-Shot 'invoked'
             # the way out: Invoke again (Narrator's collapse), after another far scroll
             [void](Lf-Jump 70)
@@ -127,7 +151,7 @@ if (Lf-Fresh) {
             }
         } else {
             $lfPage = Wait-ItemPage $lfTitle 15
-            Check "far ($lfTag): Invoke on a title far above: its page opens" ([bool]$lfPage) ''
+            Check "far ($lfTag): Invoke on a title out of view: its page opens" ([bool]$lfPage) ''
             if ($lfPage) { Key 0xA6; Lf-Settle 2500 }
             $lfBack = Wait-Until { Find-MediaCard $lfTitle } -Seconds 8 -PollMs 200
             $lfR = Lf-Responsive 3
@@ -139,6 +163,7 @@ if (Lf-Fresh) {
 }
 
 # --- 2. the keyboard's way: Home (the first title, by the keyboard), the scroll bar's jump, then Enter; Esc from far below
+$lfTitle = $fixture.movie.name
 if (Lf-Fresh) {
     Key 0x24; Lf-Settle 800   # Home
     $lfF = Lf-Focus
@@ -149,35 +174,52 @@ if (Lf-Fresh) {
     Check "far ($lfTag): keyboard first, a far scroll: the window answers within 2 s" $lfR.Ok $lfR.Text
     if (-not $lfOnFirst) {
         Say "far ($lfTag): Home did not put the keyboard on '$lfTitle': the Enter path does not apply"
+    } elseif ($lfEditorial) {
+        # Nixie 1.4.0: the keyboard follows the far scroll (as it was: the keyboard's), Enter opens what is in view
+        Lf-Settle 700
+        $lfF = Lf-Focus
+        $lfFollowed = $lfF -and $lfF.class -eq 'EditorialPoster' -and (Lf-FocusShows $lfF) -and -not $lfF.name.StartsWith($lfTitle)
+        Check "far ($lfTag): keyboard first, the keyboard follows the far scroll: on a poster in view" $lfFollowed "keyboard on $(Lf-Desc $lfF)"
+        if ($lfFollowed) {
+            $lfHere = Lf-TitleOf $lfF.name
+            Key 0x0D; Lf-Settle 300
+            $lfR = Lf-Responsive 4
+            Check "far ($lfTag): Enter on the poster the keyboard followed to: the window answers within 2 s" $lfR.Ok $lfR.Text
+            $lfD = Wait-Until { Lf-Details $lfHere } -Seconds 6 -PollMs 200
+            $lfF = Lf-Focus
+            Check "far ($lfTag): Enter there: its details open in view, the keyboard on Play" ((Lf-Shows $lfD) -and $lfF -and $lfF.automationId -eq 'PlayButton') "$(if ($lfD) { $lfD.Current.Name } else { 'no details' }); keyboard on $(Lf-Desc $lfF)"
+            Lf-Shot 'entered'
+            # far below with the keyboard in the details: the keyboard follows again, Enter there opens that poster's details
+            # (the ones far above close), Esc closes them: the keyboard back on the poster, in view
+            [void](Lf-Jump 85)
+            $lfR = Lf-Responsive 4
+            Check "far ($lfTag): from the details, a far scroll: the window answers within 2 s" $lfR.Ok $lfR.Text
+            $lfF = Lf-Focus
+            $lfFollowed = $lfF -and $lfF.class -eq 'EditorialPoster' -and (Lf-FocusShows $lfF)
+            Check "far ($lfTag): from the details, the keyboard follows the far scroll: on a poster in view" $lfFollowed "keyboard on $(Lf-Desc $lfF)"
+            if ($lfFollowed) {
+                $lfThere = Lf-TitleOf $lfF.name
+                Key 0x0D; Lf-Settle 300
+                $lfD = Wait-Until { Lf-Details $lfThere } -Seconds 6 -PollMs 200
+                Check "far ($lfTag): Enter there: its details open in view, the ones far above close" ((Lf-Shows $lfD) -and -not (Lf-Details $lfHere)) "$(if ($lfD) { $lfD.Current.Name } else { 'no details' })"
+                Key 0x1B; Lf-Settle 300
+                $lfR = Lf-Responsive 3
+                $lfGone = Wait-Until { -not (Lf-Details $lfThere) } -Seconds 5 -PollMs 200
+                $lfF = Lf-Focus
+                Check "far ($lfTag): Esc: the details close, the keyboard back on the poster, in view; the window answering" ([bool]$lfGone -and $lfF -and $lfF.name.StartsWith($lfThere) -and (Lf-FocusShows $lfF) -and $lfR.Ok) "keyboard on $(Lf-Desc $lfF); $($lfR.Text)"
+                Lf-Shot 'escaped'
+            }
+        }
     } else {
         Key 0x0D; Lf-Settle 300   # Enter on the title the keyboard was left on, far above
         $lfR = Lf-Responsive 5
         Check "far ($lfTag): Enter on the keyboard's title far above: the window answers within 2 s" $lfR.Ok $lfR.Text
-        if ($lfEditorial) {
-            $lfD = Wait-Until { Lf-Details } -Seconds 6 -PollMs 200
-            $lfF = Lf-Focus
-            Check "far ($lfTag): Enter far above: its details open in view, the keyboard on Play" ((Lf-Shows $lfD) -and $lfF -and $lfF.automationId -eq 'PlayButton') "$(if ($lfD) { $lfD.Current.Name } else { 'no details' }); keyboard on $(Lf-Desc $lfF)"
-            Lf-Shot 'entered'
-            # the way out by the keyboard, from far below: Esc (the grid may have moved the keyboard from Play to the poster
-            # when the far scroll let the details go: Esc there closes them too)
-            [void](Lf-Jump 80)
-            Say "far ($lfTag): far below, the keyboard is on $(Lf-Desc (Lf-Focus))"
-            Key 0x1B; Lf-Settle 300
-            $lfR = Lf-Responsive 4
-            Check "far ($lfTag): Esc in the details from far below: the window answers within 2 s" $lfR.Ok $lfR.Text
-            $lfGone = Wait-Until { -not (Lf-Details) } -Seconds 5 -PollMs 200
-            $lfF = Lf-Focus
-            $lfCard = Find-MediaCard $lfTitle
-            Check "far ($lfTag): Esc from far below: the details close, the keyboard back on the poster, in view" ([bool]$lfGone -and $lfF -and $lfF.name.StartsWith($lfTitle) -and (Lf-Shows $lfCard)) "keyboard on $(Lf-Desc $lfF)"
-            Lf-Shot 'escaped'
-        } else {
-            $lfPage = Wait-ItemPage $lfTitle 15
-            Check "far ($lfTag): Enter on the keyboard's title far above: its page opens" ([bool]$lfPage) ''
-            if ($lfPage) { Key 0xA6; Lf-Settle 2500 }
-            $lfBack = Wait-Until { Find-MediaCard $lfTitle } -Seconds 8 -PollMs 200
-            $lfR = Lf-Responsive 3
-            Check "far ($lfTag): Back from that page: the library, the window answering" ([bool]$lfBack -and $lfR.Ok) $lfR.Text
-        }
+        $lfPage = Wait-ItemPage $lfTitle 15
+        Check "far ($lfTag): Enter on the keyboard's title far above: its page opens" ([bool]$lfPage) ''
+        if ($lfPage) { Key 0xA6; Lf-Settle 2500 }
+        $lfBack = Wait-Until { Find-MediaCard $lfTitle } -Seconds 8 -PollMs 200
+        $lfR = Lf-Responsive 3
+        Check "far ($lfTag): Back from that page: the library, the window answering" ([bool]$lfBack -and $lfR.Ok) $lfR.Text
     }
 } else {
     Check "far ($lfTag): the library opens again" $false $lfTitle

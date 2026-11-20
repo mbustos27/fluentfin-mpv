@@ -619,6 +619,23 @@ public sealed class EditorialLibraryTests
 		Assert.Equal(0, EditorialLibrary.RowToTop(500, -1));             // nothing to scroll
 	}
 
+	/// <summary>
+	/// Nixie 1.4.0 (the release's layout cycle): the keyboard follows a far scroll. Its poster within a view of the view (in it,
+	/// or less than a view above or below) stays; further away the keyboard goes to the first poster in view.
+	/// </summary>
+	[Fact]
+	public void TheKeyboardsPoster_StaysWithinAView_ElseTheKeyboardFollowsTheScroll()
+	{
+		const double view = 894, poster = 252;
+		Assert.True(EditorialLibrary.WithinAViewOf(10, poster, view));        // in view
+		Assert.True(EditorialLibrary.WithinAViewOf(-893, poster, view));      // less than a view above (the wheel, a few notches)
+		Assert.True(EditorialLibrary.WithinAViewOf(1787, poster, view));      // less than a view below (Page Down's next page)
+		Assert.False(EditorialLibrary.WithinAViewOf(-894 - poster, poster, view)); // a view above and more: it follows
+		Assert.False(EditorialLibrary.WithinAViewOf(1788, poster, view));     // a view below and more
+		Assert.False(EditorialLibrary.WithinAViewOf(-3986, poster, view));    // the repro: the first title, 56 % down 320 films
+		Assert.False(EditorialLibrary.WithinAViewOf(10, poster, 0));          // no view yet: nothing to stay within
+	}
+
 	[Fact]
 	public void TheColumns_TwelveAcrossAt1920()
 	{
