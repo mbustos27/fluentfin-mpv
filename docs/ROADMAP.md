@@ -111,8 +111,7 @@ The plan:
 - **Tests:**
   - a fake release that appears while Nixie is open is found within the new interval;
   - progress, a checksum mismatch, and a resumed download;
-  - the install-and-reopen handoff proven in Windows Sandbox (once the owner turns it on), never in the owner's
-    account.
+  - the install-and-reopen handoff proven in Windows Sandbox (on since 2026-11-20), never in the owner's account.
 
 **Fixes stream** (bug hunts and the library review):
 - **Private certificates:** a server with a private or company certificate plays, not only browses. Check both the
