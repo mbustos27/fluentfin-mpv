@@ -200,10 +200,35 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertTrue(headers["Content-Type"].startswith("text/html"))
         self.assertIn(b"HARNESS TRAILER", page)
-        self.assertNotIn(b"<script", page)
-        self.assertNotIn(b"http", page.split(b"<style>")[1])
+        self.assertIn(library.TRAILER_ID.encode(), page)
+        # Nixie 1.4.0: one inline script (the IFrame Player API's messages), nothing loaded from anywhere
+        self.assertEqual(1, page.count(b"<script"))
+        self.assertNotIn(b"<script src", page)
+        self.assertNotIn(b"http", page.split(b"<style>")[1].split(b"</style>")[0])
+        self.assertIn(b'var mode = "play"', page)
         status, page, _ = self.request("/__harness/trailer/%3Cb%3Ex", raw=True)
         self.assertNotIn(b"<b>x", page)
+
+    def test_the_trailer_stand_in_answers_as_its_mode_says_and_the_link_can_change(self):
+        # Nixie 1.4.0: the harness's error and never-starts pages, and another site's link (the theatre's message)
+        fx = self.get("/__harness/fixture")
+        try:
+            for mode in ("error150", "error153", "hang", "play"):
+                self.assertEqual(mode, self.request("/__harness/trailer", "POST", {"mode": mode})[1]["mode"])
+                _, page, _ = self.request("/__harness/trailer/%s" % library.TRAILER_ID, raw=True)
+                self.assertIn(('var mode = "%s"' % mode).encode(), page)
+                self.assertEqual(mode.startswith("error"), b"YouTube error" in page)
+            self.request("/__harness/trailer", "POST", {"mode": "evil\"<script>"})
+            _, page, _ = self.request("/__harness/trailer/%s" % library.TRAILER_ID, raw=True)
+            self.assertIn(b'var mode = "play"', page)
+            self.request("/__harness/trailer", "POST", {"url": "https://vimeo.com/76979871"})
+            movie = self.get("/Items/%s?userId=%s" % (fx["movie"]["id"], self.srv.user_id))
+            self.assertEqual(["https://vimeo.com/76979871"], [t["Url"] for t in movie["RemoteTrailers"]])
+            self.request("/__harness/trailer", "POST", {"url": "javascript:alert(1)"})
+            movie = self.get("/Items/%s?userId=%s" % (fx["movie"]["id"], self.srv.user_id))
+            self.assertEqual(["https://www.youtube.com/watch?v=" + library.TRAILER_ID], [t["Url"] for t in movie["RemoteTrailers"]])
+        finally:
+            self.request("/__harness/trailer", "POST", {"mode": "play", "url": ""})
 
     def test_stream_serves_ranges(self):
         fx = self.get("/__harness/fixture")

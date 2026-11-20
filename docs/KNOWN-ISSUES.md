@@ -99,6 +99,13 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
     hears every pointer move and polls the cursor every 250 ms, and logs a line if the case recurs;
   - **Esc inside YouTube's player in the trailer theatre:** the web view has the keyboard there, and Esc must still close
     the theatre.
+  - **One real trailer plays in the theatre, with sound** (off-screen runs are muted; `then-trailer-live.ps1` is the opt-in
+    off-screen check against real YouTube, `NIXIE_LIVE_YOUTUBE=1`).
+- **Trailers depend on YouTube's embed rules.** The theatre plays a trailer inside Nixie's own page at
+  `https://io.github.mbustos27.nixie` (YouTube's form for an app's identity). If YouTube changes what it accepts again,
+  trailers show Nixie's message ("YouTube refused to play it here") with Watch on YouTube, rather than YouTube's error page.
+  The app learns the player's state by reading Nixie's page every 300 ms (1 s once it plays); the page has no way to call
+  the app.
 - **R in a grid is Refresh first** (the coordinator's rule; the user asked for R to refresh): a first R refreshes, so a
   title that starts with R cannot be typed. Within a second of another letter R is a letter of the title. The R titles are
   on the A to Z's R, and on the A to Z a letter key presses that letter.

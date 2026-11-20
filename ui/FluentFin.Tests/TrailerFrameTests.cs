@@ -129,9 +129,12 @@ public sealed class TrailerFrameTests
 		Assert.Contains("settings.AreDevToolsEnabled = !AppVersion.IsReleasePackage;", code);
 		Assert.Contains("settings.AreHostObjectsAllowed = false;", code);
 		Assert.Contains("settings.IsWebMessageEnabled = false;", code);
-		Assert.Contains("core.NavigationStarting += OnNavigationStarting;", code);
+		// Nixie 1.4.0: the page's navigations and its frames' both go through the allow-list, with who started them
+		Assert.Contains("core.NavigationStarting += (_, e) => OnNavigationStarting(e, frame: false);", code);
+		Assert.Contains("core.FrameNavigationStarting += (_, e) => OnNavigationStarting(e, frame: true);", code);
 		Assert.Contains("core.NewWindowRequested += OnNewWindowRequested;", code);
-		Assert.Contains("Trailers.Navigation(target, _embedBase)", code);
+		Assert.Contains("Trailers.Navigation(target, _embedBase, frame, e.IsUserInitiated)", code);
+		Assert.Contains("Trailers.OpensInBrowser(target, e.IsUserInitiated)", code);
 		// its own user-data folder under Nixie's data folder, and closed with the window (the sound stops at once)
 		Assert.Contains("KnownFolders>().ApplicationData, \"WebView2\")", code);
 		Assert.Contains("web.Close();", code);

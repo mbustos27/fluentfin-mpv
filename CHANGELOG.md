@@ -156,6 +156,20 @@ finished, and that the worst faults were shared by all four; 1.4.0 finishes it o
 - **Update checks survive a clock change.** When GitHub asks Nixie to wait, the wait is kept for a day at most, a wait
   that a clock set back put days ahead counts as over, and Check now says which day ("wait until tomorrow at 09:00").
 
+**Trailers**
+
+- **YouTube trailers play again.** Every YouTube trailer showed YouTube's "Video player configuration error" (Error 153)
+  in the theatre: YouTube now plays an embedded video only for a player it can identify, and the theatre gave it none. The
+  trailer now plays inside a small page of Nixie's own (answered by the app itself, nothing downloaded), which tells YouTube
+  who is playing it, the way YouTube asks apps to.
+- **Nixie's own message when YouTube won't play one.** If its owner allows it only on YouTube, it was removed, YouTube
+  refuses the player, or it doesn't start within a few seconds, the theatre says "This trailer can't play in Nixie" and
+  why, with Watch on YouTube and Close (the keyboard on Close). Narrator reads it.
+- **No browser unless you choose it.** The Trailer button never opens the browser by itself any more: a trailer on
+  another site opens the theatre with the same message and an Open in browser button naming the site ("It's on
+  vimeo.com, which Nixie can't play"). The browser opens only from that button, or from a link you click inside
+  YouTube's player. A held Enter on Trailer opens the theatre once (it used to press Close and open it again).
+
 **Verified, and the known limits**
 
 - Every theme runs the keyboard matrix, the streams' harness scripts and the review's measurements as checks
