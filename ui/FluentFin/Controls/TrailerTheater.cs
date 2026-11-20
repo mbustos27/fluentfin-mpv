@@ -44,6 +44,21 @@ public sealed partial class TrailerTheater : Grid
 	private readonly TrailerWindowState _state;
 	private WebView2? _web;
 	private TrailerMessageView? _message;
+
+	/// <summary>
+	/// Nixie 1.4.0 (review): the user moved the keyboard inside the theatre since it opened (Tab into the video, a click in
+	/// it): the page finishing its load then never takes it back to Close (a Space meant for the player closed the theatre).
+	/// </summary>
+	private bool _keyboardMoved;
+
+	/// <summary>The theatre's own focus calls are under way (they are not the user's moves).</summary>
+	private bool _placing;
+
+	/// <summary>
+	/// Nixie 1.4.0 (review): a held Enter that closed the theatre on its Close must not reopen it from Trailer
+	/// (<see cref="WindowShortcuts"/> asks it about each key).
+	/// </summary>
+	public static TheaterRepeatGuard Repeats { get; } = new();
 	private Uri _embedBase = Trailers.DefaultEmbedBase;
 	private ILogger? _log;
 	private long _generation;
@@ -155,6 +170,7 @@ public sealed partial class TrailerTheater : Grid
 		}
 
 		++_generation;
+		_keyboardMoved = false;
 		return true;
 	}
 
@@ -184,7 +200,7 @@ public sealed partial class TrailerTheater : Grid
 		{
 			if (generation == _generation && _state.IsOpen && !WithinTheater())
 			{
-				var took = _message?.FocusClose(focusHow) ?? (_frame.FocusClose(focusHow) || (_web?.Focus(FocusState.Programmatic) ?? false));
+				var took = Place(() => _message?.FocusClose(focusHow) ?? (_frame.FocusClose(focusHow) || (_web?.Focus(FocusState.Programmatic) ?? false)));
 				Log()?.LogInformation("[trailer] keyboard into the window: {Took}, now on {Focused}", took, FocusedName());
 			}
 		}
@@ -208,6 +224,7 @@ public sealed partial class TrailerTheater : Grid
 		ClearContent();
 		Visibility = Visibility.Collapsed;
 		Log()?.LogInformation("[trailer] theatre closed");
+		Repeats.Arm();
 		_state.Close();
 	}
 
@@ -351,8 +368,20 @@ public sealed partial class TrailerTheater : Grid
 
 	private void OnRootGettingFocus(UIElement sender, GettingFocusEventArgs args)
 	{
-		if (!_state.IsOpen || args.NewFocusedElement is not DependencyObject target || IsInside(target))
+		if (!_state.IsOpen || args.NewFocusedElement is not DependencyObject target)
 		{
+			return;
+		}
+
+		if (IsInside(target))
+		{
+			// the user moved it inside (Tab, the arrows, a click): from now the theatre leaves the keyboard where the user put it
+			if (!_placing && !_keyboardMoved && args.FocusState is FocusState.Keyboard or FocusState.Pointer && WithinTheater())
+			{
+				_keyboardMoved = true;
+				Log()?.LogInformation("[trailer] the user moved the keyboard inside the theatre (to {Target})", (target as FrameworkElement)?.GetType().Name ?? target.GetType().Name);
+			}
+
 			return;
 		}
 
@@ -442,7 +471,7 @@ public sealed partial class TrailerTheater : Grid
 		{
 			if (generation == _generation && _state.IsOpen && ReferenceEquals(_message, view))
 			{
-				var took = view.FocusClose(FocusState.Programmatic);
+				var took = Place(() => view.FocusClose(FocusState.Programmatic));
 				Log()?.LogInformation("[trailer] keyboard to the message's Close: {Took}, now on {Focused}", took, FocusedName());
 			}
 		}
@@ -477,13 +506,18 @@ public sealed partial class TrailerTheater : Grid
 				// second click inside YouTube's player (the web view's own policy: no media with sound before a click in it)
 				AdditionalBrowserArguments = Trailers.BrowserArguments,
 			});
-			await web.EnsureCoreWebView2Async(environment);
+			// Nixie 1.4.0 (review): InPrivate, so YouTube's cookies and storage end with the web view (kept in the WebView2
+			// folder they were a lasting identifier of this install); the folder keeps only the browser's own files
+			var controller = environment.CreateCoreWebView2ControllerOptions();
+			controller.IsInPrivateModeEnabled = true;
+			await web.EnsureCoreWebView2Async(environment, controller);
 			if (generation != _generation || web != _web)
 			{
 				return; // closed meanwhile (Close closed the web view)
 			}
 
 			var core = web.CoreWebView2;
+			Log()?.LogInformation("[trailer] the web view is {Mode}", core.Profile.IsInPrivateModeEnabled ? "InPrivate (nothing kept)" : "NOT InPrivate");
 			Lock(core.Settings);
 			if (TrailerBrowser.HarnessOn())
 			{
@@ -516,25 +550,49 @@ public sealed partial class TrailerTheater : Grid
 			}
 
 			core.DOMContentLoaded += (sender, _) => Watch(sender);
-			// the web view takes the keyboard when its page loads: give it back to Close (Tab reaches the video), once
+			// the web view takes the keyboard when its page loads: give it back to Close (Tab reaches the video), once, unless the
+			// user has moved it since the theatre opened (Nixie 1.4.0, review: the load can come 20 s in, and a Space meant for
+			// the player then pressed Close)
 			var first = true;
-			core.NavigationCompleted += (sender, e) =>
+			core.NavigationCompleted += async (sender, e) =>
 			{
-				if (first && generation == _generation && _state.IsOpen)
+				if (!first || generation != _generation || !_state.IsOpen)
 				{
-					first = false;
-					Log()?.LogInformation("[trailer] page loaded{Failed}; the keyboard was on {Focused}", e.IsSuccess ? "" : $" (failed: {e.WebErrorStatus})", FocusedName());
-					_frame.FocusClose(FocusState.Programmatic);
-					DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-					{
-						if (generation == _generation && _state.IsOpen && _message is null)
-						{
-							var took = _frame.FocusClose(FocusState.Programmatic);
-							Log()?.LogInformation("[trailer] keyboard to Close after the page loaded: {Took}, now on {Focused}", took, FocusedName());
-						}
-					});
-					Watch(sender);
+					return;
 				}
+
+				first = false;
+				Watch(sender);
+				var touched = false;
+				try
+				{
+					touched = Trailers.ReadPoll(await sender.ExecuteScriptAsync("JSON.stringify(window.nixieTrailer || null)"))?.Touched == true;
+				}
+				catch (Exception)
+				{
+				}
+
+				if (generation != _generation || !_state.IsOpen || _message is not null)
+				{
+					return;
+				}
+
+				if (_keyboardMoved || touched)
+				{
+					Log()?.LogInformation("[trailer] page loaded{Failed}; the keyboard stays where the user put it ({Focused})", e.IsSuccess ? "" : $" (failed: {e.WebErrorStatus})", FocusedName());
+					return;
+				}
+
+				Log()?.LogInformation("[trailer] page loaded{Failed}; the keyboard was on {Focused}", e.IsSuccess ? "" : $" (failed: {e.WebErrorStatus})", FocusedName());
+				Place(() => _frame.FocusClose(FocusState.Programmatic));
+				DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+				{
+					if (generation == _generation && _state.IsOpen && _message is null && !_keyboardMoved)
+					{
+						var took = Place(() => _frame.FocusClose(FocusState.Programmatic));
+						Log()?.LogInformation("[trailer] keyboard to Close after the page loaded: {Took}, now on {Focused}", took, FocusedName());
+					}
+				});
 			};
 			core.NewWindowRequested += OnNewWindowRequested;
 			core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
@@ -554,14 +612,13 @@ public sealed partial class TrailerTheater : Grid
 
 	/// <summary>
 	/// Nixie 1.4.0: watches the player through the wrapper (<see cref="Trailers.ReadPoll"/>, <see cref="Trailers.Judge"/>) while
-	/// this trailer is on: each change of its state is logged; an error, or no start within <see cref="Trailers.StartLimit"/>,
-	/// puts Nixie's message in its place.
+	/// this trailer is on: each change of its state is logged; an error, or no sign of the player at all within
+	/// <see cref="Trailers.QuietLimit"/> while the user did nothing with it, puts Nixie's message in its place.
 	/// </summary>
 	private async Task WatchAsync(WebView2 web, CoreWebView2 core, long generation, string videoId)
 	{
 		var since = System.Diagnostics.Stopwatch.StartNew();
 		var started = false;
-		var answered = false;
 		TrailerPoll? last = null;
 		while (generation == _generation && web == _web)
 		{
@@ -589,17 +646,10 @@ public sealed partial class TrailerTheater : Grid
 			if (poll is not null && poll != last)
 			{
 				last = poll;
-				Log()?.LogInformation("[trailer] the player: ready {Ready}, state {State}, error {Error} ({Ms} ms)", poll.Ready, poll.State, poll.Error, since.ElapsedMilliseconds);
+				Log()?.LogInformation("[trailer] the player: ready {Ready}, state {State}, error {Error}, touched {Touched} ({Ms} ms)", poll.Ready, poll.State, poll.Error, poll.Touched, since.ElapsedMilliseconds);
 			}
 
-			// the player answered: from now it has the start limit to start (Trailers.Judge)
-			if (poll is { Ready: true } && !answered)
-			{
-				answered = true;
-				since.Restart();
-			}
-
-			switch (Trailers.Judge(poll, since.Elapsed, started))
+			switch (Trailers.Judge(poll, since.Elapsed, started, _keyboardMoved))
 			{
 				case TrailerVerdict.Started when !started:
 					started = true;
@@ -609,7 +659,7 @@ public sealed partial class TrailerTheater : Grid
 					ShowMessage(Trailers.Refused(poll!.Error, videoId), $"YouTube refused it: error {poll.Error}");
 					return;
 				case TrailerVerdict.NotStarted:
-					ShowMessage(Trailers.NotStarted(videoId), $"not started: {(answered ? $"{Trailers.StartLimit.TotalSeconds:0} s after the player answered" : $"no answer within {Trailers.AnswerLimit.TotalSeconds:0} s")}, state {last?.State ?? -2}");
+					ShowMessage(Trailers.NotStarted(videoId), $"no sign of the player within {Trailers.QuietLimit.TotalSeconds:0} s");
 					return;
 			}
 		}
@@ -762,6 +812,14 @@ public sealed partial class TrailerTheater : Grid
 			Back();
 			Log()?.LogInformation("[trailer] keyboard back: now on {Focused}", FocusedName());
 		});
+	}
+
+	/// <summary>Runs one of the theatre's own focus calls (not counted as the user's move).</summary>
+	private bool Place(Func<bool> focus)
+	{
+		_placing = true;
+		try { return focus(); }
+		finally { _placing = false; }
 	}
 
 	private string FocusedName() =>

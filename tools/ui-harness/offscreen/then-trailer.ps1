@@ -198,7 +198,7 @@ function TR-NoBrowser([string]$How, [double]$Since) {
     Check "trailer ($How): no browser was opened" ($trOpened.Count -eq 0) ($trOpened -join ' | ')
 }
 function TR-Message([string]$How, [string]$Reason, [string]$Link, [double]$Since, [string]$ShotName) {
-    $trSaid = Wait-Until { @(TR-Log $Since | Where-Object { $_ -like "Nixie's message*" }) | Select-Object -First 1 } -Seconds 25 -PollMs 200
+    $trSaid = Wait-Until { @(TR-Log $Since | Where-Object { $_ -like "Nixie's message*" }) | Select-Object -First 1 } -Seconds 32 -PollMs 200
     Check "trailer ($How): Nixie's message instead of the trailer" ([bool]($trSaid -and $trSaid -like "*This trailer can't play in Nixie. $Reason*")) "$trSaid"
     $trName = "This trailer can't play in Nixie. $Reason"
     $trPanel = Wait-Ui -Name $trName -Seconds 6
@@ -240,7 +240,7 @@ if (TR-Open 'error 153') {
     Key 0x1B
     TR-Closed 'Esc (error 153)' $trAt
 }
-# the stand-in never answers: after the answer limit (15 s from Nixie's page), Nixie's message
+# the stand-in never answers: after the quiet limit (20 s from Nixie's page, no sign of the player), Nixie's message
 TR-SetTrailer 'hang' ''
 [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1100, 900)
 Start-Sleep -Milliseconds 1200
@@ -291,8 +291,70 @@ if ($trButton) {
     $trCloses = @(TR-Log $trAt | Where-Object { $_ -eq 'theatre closed' }).Count
     Check 'trailer (another site): a held Enter on Trailer opens the theatre once and it stays open' ($trOpens -eq 1 -and $trCloses -eq 0) "opened $trOpens, closed $trCloses; $((TR-Log $trAt) -join ' | ')"
     TR-NoBrowser 'a held Enter' $trAt
+    # Nixie 1.4.0 (review): a held Enter on the message's Close closes it once; its repeats land on Trailer and must not
+    # reopen it (until the key comes up)
+    $trOnClose = Wait-Until { $f = CK-Focus; if ($f -match "^Button 'Close'") { $f } } -Seconds 4 -PollMs 150
+    $trAt = Get-Epoch
+    CK-Key 'Enter' -NoUp
+    for ($trI = 0; $trI -lt 8; $trI++) { Start-Sleep -Milliseconds 60; CK-Key 'Enter' -Repeat -NoUp }
+    CK-Up 'Enter'
+    Start-Sleep -Milliseconds 1200
+    $trOpens = @(TR-Log $trAt | Where-Object { $_ -like 'theatre opened*' }).Count
+    $trCloses = @(TR-Log $trAt | Where-Object { $_ -eq 'theatre closed' }).Count
+    Check 'trailer (another site): a held Enter on the message''s Close closes the theatre once, and its repeats do not reopen it' `
+        ([bool]$trOnClose -and $trCloses -eq 1 -and $trOpens -eq 0) "on $trOnClose; opened $trOpens, closed $trCloses; $((TR-Log $trAt) -join ' | ')"
+    if ($trOpens) { $trAt = Get-Epoch; Key 0x1B; TR-Closed 'Esc (after the held Enter reopened it)' $trAt }
+    else {
+        $trBack = Wait-Until { $f = CK-Focus; if ($f -match "'Watch trailer'") { $f } } -Seconds 4 -PollMs 150
+        Check 'trailer (another site): after the held Enter, the keyboard is back on Trailer' ([bool]$trBack) "$(CK-Focus)"
+    }
+}
+
+# Nixie 1.4.0 (review): a pre-roll ad (the player answers, then sits unstarted for 12 s) is left to play: no "didn't start"
+TR-SetTrailer 'ad' ''
+$trAt = Get-Epoch
+if (TR-Open 'a pre-roll ad') {
+    $trPlayed = Wait-Until { @(TR-Log $trAt | Where-Object { $_ -match 'the player: ready True, state 1, error 0' }) | Select-Object -First 1 } -Seconds 25 -PollMs 250
+    $trSaid = @(TR-Log $trAt | Where-Object { $_ -like "Nixie's message*" })
+    Check 'trailer (a pre-roll ad, unstarted 12 s): the trailer plays after it, no "didn''t start" message' ([bool]$trPlayed -and $trSaid.Count -eq 0) ((TR-Log $trAt) -join ' | ')
     $trAt = Get-Epoch
     Key 0x1B
-    TR-Closed 'Esc (another site, after a held Enter)' $trAt
+    TR-Closed 'Esc (a pre-roll ad)' $trAt
 }
+
+# Nixie 1.4.0 (review): the page finishing its load late (YouTube's frame often takes long) never takes the keyboard back
+# from where the user put it: Tab into the video before the load, then Space is the player's, the theatre stays open
+TR-SetTrailer 'play' ''
+[void](Invoke-Server '/__harness/trailer' 'POST' @{ slow = 6 })
+$trButton = TR-Button
+if ($trButton) {
+    [void][OffscreenUi]::SetFocus($trButton)
+    Start-Sleep -Milliseconds 300
+    $trAt = Get-Epoch
+    Key 0x0D
+    [void](Wait-Until { @(TR-Log $trAt | Where-Object { $_ -match 'keyboard into the window: True' }) | Select-Object -First 1 } -Seconds 10 -PollMs 150)
+    Start-Sleep -Milliseconds 600
+    CK-Key 'Tab'
+    $trMoved = Wait-Until { @(TR-Log $trAt | Where-Object { $_ -like 'the user moved the keyboard inside the theatre*' }) | Select-Object -First 1 } -Seconds 4 -PollMs 150
+    $trLoaded = Wait-Until { @(TR-Log $trAt | Where-Object { $_ -like 'page loaded*' }) | Select-Object -First 1 } -Seconds 20 -PollMs 200
+    Start-Sleep -Milliseconds 800
+    $trAt2 = Get-Epoch
+    CK-Key 'Space'
+    Start-Sleep -Milliseconds 1500
+    $trClosedBySpace = @(TR-Log $trAt2 | Where-Object { $_ -eq 'theatre closed' }).Count
+    Check 'trailer (a slow page): Tab into the video before the page loads; the load leaves the keyboard there, and Space does not close the theatre' `
+        ([bool]$trMoved -and $trLoaded -like '*stays where the user put it*' -and $trClosedBySpace -eq 0 -and -not @(TR-Log $trAt | Where-Object { $_ -like 'keyboard to Close after the page loaded*' }).Count) `
+        "moved: $trMoved; loaded: $trLoaded; closed by Space: $trClosedBySpace; $((TR-Log $trAt) -join ' | ')"
+    if (-not $trClosedBySpace) { $trAt = Get-Epoch; Key 0x1B; TR-Closed 'Esc (a slow page, the keyboard in the video)' $trAt }
+}
+[void](Invoke-Server '/__harness/trailer' 'POST' @{ slow = 0 })
+
+# Nixie 1.4.0 (review): the web view is InPrivate: YouTube's (here the stand-in's) storage never outlives a trailer. The
+# stand-in marks its storage on each load and asks /__harness/trailer-seen when it finds an earlier mark
+$trSeen = @(Get-Requests 0 | Where-Object { $_.path -eq '/__harness/trailer-seen' })
+$trLoads = @(Get-Requests 0 | Where-Object { $_.path -like '/__harness/trailer/*' })
+$trPrivate = @(TR-Log 0 | Where-Object { $_ -like 'the web view is *' })
+Check 'trailer: the web view is InPrivate, and no trailer saw an earlier one''s storage' `
+    ($trLoads.Count -ge 2 -and $trSeen.Count -eq 0 -and $trPrivate.Count -ge 2 -and -not ($trPrivate -match 'NOT InPrivate')) `
+    "$($trLoads.Count) loads, $($trSeen.Count) saw an earlier mark; $(($trPrivate | Select-Object -Unique) -join ', ')"
 [void](Invoke-Server '/__harness/trailer' 'POST' @{ mode = 'play'; url = '' })

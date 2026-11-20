@@ -81,6 +81,12 @@ public sealed class TrailerTests
 		Assert.DoesNotContain("<link", page);
 		Assert.DoesNotContain("import", Trailers.WrapperScript);
 		Assert.DoesNotContain("\r", Trailers.WrapperScript);
+		// it subscribes to the player's state changes and errors (YouTube sends them only then), and marks the user's touch
+		Assert.Contains("func: 'addEventListener', args: [n]", Trailers.WrapperScript);
+		Assert.Contains("if (!s.ready) { s.ready = true; subscribe(); }", Trailers.WrapperScript);
+		Assert.Contains("['onReady', 'onStateChange', 'onError']", Trailers.WrapperScript);
+		Assert.Contains("function touch() { if (document.activeElement === f) { s.touched = true; } }", Trailers.WrapperScript);
+		Assert.Contains("setInterval(touch, 250);", Trailers.WrapperScript);
 		Assert.Equal(page.Replace(Id, "ZZZZZZZZZZZ"), Trailers.WrapperHtml("ZZZZZZZZZZZ"));
 		// the id is checked, never written into the page as it came
 		Assert.Throws<ArgumentException>(() => Trailers.WrapperHtml("\"><script>x"));
@@ -243,12 +249,14 @@ public sealed class TrailerTests
 
 	[Theory]
 	[InlineData("\"{\\\"ready\\\":true,\\\"state\\\":1,\\\"error\\\":0}\"", true, 1, 0)]
+	[InlineData("\"{\\\"ready\\\":true,\\\"state\\\":1,\\\"error\\\":0,\\\"touched\\\":true}\"", true, 1, 0, true)]
+	[InlineData("\"{\\\"ready\\\":true,\\\"state\\\":1,\\\"error\\\":0,\\\"touched\\\":1}\"", true, 1, 0)]
 	[InlineData("\"{\\\"ready\\\":true,\\\"state\\\":-1,\\\"error\\\":150}\"", true, -1, 150)]
 	[InlineData("\"{\\\"ready\\\":false,\\\"state\\\":-2,\\\"error\\\":0}\"", false, -2, 0)]
 	[InlineData("\"{\\\"state\\\":\\\"1\\\",\\\"error\\\":\\\"x\\\"}\"", false, -2, 0)]
 	[InlineData("\"{}\"", false, -2, 0)]
-	public void ThePoll_ReadsOnlyTheThreeNumbers(string result, bool ready, int state, int error) =>
-		Assert.Equal(new TrailerPoll(ready, state, error), Trailers.ReadPoll(result));
+	public void ThePoll_ReadsOnlyItsFourFields(string result, bool ready, int state, int error, bool touched = false) =>
+		Assert.Equal(new TrailerPoll(ready, state, error, touched), Trailers.ReadPoll(result));
 
 	[Theory]
 	[InlineData(null)]
@@ -267,33 +275,35 @@ public sealed class TrailerTests
 	public void AnOverlongPoll_IsNotRead() =>
 		Assert.Null(Trailers.ReadPoll("\"" + new string(' ', 5000) + "\""));
 
+	/// <summary>
+	/// Nixie 1.4.0 (review): "didn't start" only after 20 s of total silence (no answer, no state, no error) while the user did
+	/// nothing with the player. A player that answered and sits unstarted (a pre-roll ad) is left to play, however long.
+	/// </summary>
 	[Fact]
-	public void ThePlayer_Starts_OrIsRefused_OrDoesntStartInTime()
+	public void ThePlayer_Starts_OrIsRefused_OrSaysNothingAtAllFor20s()
 	{
-		var limit = Trailers.StartLimit;
-		var answer = Trailers.AnswerLimit;
-		Assert.Equal(TimeSpan.FromSeconds(8), limit);
-		Assert.Equal(TimeSpan.FromSeconds(15), answer);
+		var quiet = Trailers.QuietLimit;
+		Assert.Equal(TimeSpan.FromSeconds(20), quiet);
 
 		Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(null, TimeSpan.FromSeconds(1), startedBefore: false));
-		Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(new TrailerPoll(true, -1, 0), limit - TimeSpan.FromMilliseconds(1), false));
 		foreach (var state in new[] { 0, 1, 2, 3 })
 		{
 			Assert.Equal(TrailerVerdict.Started, Trailers.Judge(new TrailerPoll(true, state, 0), TimeSpan.FromSeconds(30), false));
 		}
 
-		// answered, unstarted or cued at the start limit: it didn't start (autoplay is allowed, so a ready player plays)
-		foreach (var poll in new TrailerPoll[] { new(true, -1, 0), new(true, 5, 0), new(true, -2, 0) })
+		// total silence: waiting until the limit, then "didn't start"
+		foreach (var poll in new TrailerPoll?[] { null, new(false, -2, 0) })
 		{
-			Assert.Equal(TrailerVerdict.NotStarted, Trailers.Judge(poll, limit, false));
+			Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(poll, quiet - TimeSpan.FromMilliseconds(1), false));
+			Assert.Equal(TrailerVerdict.NotStarted, Trailers.Judge(poll, quiet, false));
+			// the user did something with the player (moved the keyboard into it): never "didn't start"
+			Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(poll, TimeSpan.FromMinutes(5), false, userActed: true));
 		}
 
-		// never answered: its frame may still be loading over a slow line, so it gets the longer answer limit
-		foreach (var poll in new TrailerPoll?[] { null, new(false, -2, 0), new(false, -1, 0) })
+		// a sign of the player (it answered, a state, the user's touch inside it): left to play, however long (a pre-roll ad)
+		foreach (var poll in new TrailerPoll[] { new(true, -1, 0), new(true, 5, 0), new(true, -2, 0), new(false, -1, 0), new(false, 5, 0), new(false, -2, 0, Touched: true) })
 		{
-			Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(poll, limit, false));
-			Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(poll, answer - TimeSpan.FromMilliseconds(1), false));
-			Assert.Equal(TrailerVerdict.NotStarted, Trailers.Judge(poll, answer, false));
+			Assert.Equal(TrailerVerdict.Waiting, Trailers.Judge(poll, TimeSpan.FromMinutes(5), false));
 		}
 
 		// an error is a refusal whenever it comes, also after it started; once started, the limit no longer counts
@@ -302,6 +312,36 @@ public sealed class TrailerTests
 		Assert.Equal(TrailerVerdict.Refused, Trailers.Judge(new TrailerPoll(true, 1, 5), TimeSpan.FromMinutes(2), true));
 		Assert.Equal(TrailerVerdict.Started, Trailers.Judge(new TrailerPoll(true, 5, 0), TimeSpan.FromMinutes(2), true));
 		Assert.Equal(TrailerVerdict.Started, Trailers.Judge(null, TimeSpan.FromMinutes(2), true));
+	}
+
+	/// <summary>
+	/// Nixie 1.4.0 (review): a held Enter that closed the theatre on its Close: its repeats (which land on Trailer) are
+	/// swallowed until Enter comes up; a fresh press is the user's again.
+	/// </summary>
+	[Fact]
+	public void AHeldEnterThatClosedTheTheatre_DoesNotReopenIt_UntilTheKeyComesUp()
+	{
+		const int Enter = 0x0D, Space = 0x20, Down = 0x28;
+		var guard = new TheaterRepeatGuard();
+
+		Assert.False(guard.Swallow(Enter, repeat: true)); // not armed: nothing swallowed
+		guard.Arm();
+		Assert.True(guard.Swallow(Enter, repeat: true));
+		Assert.True(guard.Swallow(Space, repeat: true));
+		Assert.False(guard.Swallow(Down, repeat: true)); // another held key goes on
+		Assert.True(guard.Swallow(Enter, repeat: true)); // still armed
+		guard.KeyUp(Enter);
+		Assert.False(guard.Swallow(Enter, repeat: true));
+
+		guard.Arm();
+		Assert.False(guard.Swallow(Enter, repeat: false)); // a fresh press: the user's own
+		Assert.False(guard.Swallow(Enter, repeat: true));
+
+		guard.Arm();
+		guard.KeyUp(Down);
+		Assert.True(guard.Swallow(Space, repeat: true));
+		guard.KeyUp(Space);
+		Assert.False(guard.Swallow(Space, repeat: true));
 	}
 
 	/// <summary>Nixie 1.4.0: the error codes of the IFrame Player API, in Nixie's words, each with Watch on YouTube.</summary>

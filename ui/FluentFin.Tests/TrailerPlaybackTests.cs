@@ -144,10 +144,19 @@ public sealed class TrailerPlaybackTests
 		var source = File.ReadAllText(App("Controls", "TrailerTheater.cs"));
 
 		foreach (var setting in new[] { "AreHostObjectsAllowed = false", "IsWebMessageEnabled = false", "AreDefaultContextMenusEnabled = false",
-			"AreDevToolsEnabled = !AppVersion.IsReleasePackage", "e.State = CoreWebView2PermissionState.Deny", "e.Cancel = true" })
+			"AreDevToolsEnabled = !AppVersion.IsReleasePackage" })
 		{
 			Assert.Contains(setting, source);
 		}
+
+		// the permission and download handlers themselves (a bare "e.Cancel = true" also matched the navigation handlers)
+		Assert.Single(System.Text.RegularExpressions.Regex.Matches(source, @"core\.PermissionRequested \+= \(_, e\) => e\.State = CoreWebView2PermissionState\.Deny;"));
+		Assert.Single(System.Text.RegularExpressions.Regex.Matches(source, @"core\.DownloadStarting \+= \(_, e\) => e\.Cancel = true;"));
+		Assert.Single(System.Text.RegularExpressions.Regex.Matches(source, @"DownloadStarting"));
+
+		// Nixie 1.4.0 (review): InPrivate, so YouTube's stored data never outlives the web view (a lasting per-install id)
+		Assert.Contains("controller.IsInPrivateModeEnabled = true;", source);
+		Assert.Contains("await web.EnsureCoreWebView2Async(environment, controller);", source);
 
 		Assert.DoesNotContain("AddHostObjectToScript", source);
 		Assert.DoesNotContain("WebMessageReceived", source);
