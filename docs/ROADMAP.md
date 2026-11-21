@@ -293,6 +293,12 @@ chips, the top bar's Collections destination, the fake server), so they're built
   - **Position rules can't catch it,** and today's learned skip misleads: it offers the last episode's spot during the
     cold open, and a skip elsewhere never corrects it that season. The fix (S; the 1.6.1 fix queue, or closed by the
     skip stream's rewrite): skips 10 s or more apart mark the show "moves", and its fixed spot is no longer offered.
+  - **Evidence (the owner, 2026-11-20):** "Skip intro" shows on Sunny today, "but its sometimes right at the
+    beginning", where pressing it skips the cold open. Most likely the learned skip (a forward jump near 0:00 in an
+    earlier episode of that season); chapters, TheIntroDB or the server can also put an intro at 0:00. The pill's
+    tooltip tells them apart, as does whether it shows before any skip in a season, and Settings > "Forget learned
+    intros" removes a learned one. Workaround until 1.6.1: forget learned intros, and turn learning off. It heads the
+    1.6.1 queue, not a hotfix: it's a button that never skips by itself, and seeking back undoes it.
   - **Try first, no build:** turn on "Look up intros online". TheIntroDB has Sunny with a time per episode (checked:
     S1E1 1:44–2:12, S5E3 1:37–2:08, S12E1 2:07–2:31), but its times are for its own copy, so a bumper before the
     episode in the owner's files would make them early. A constant shift can be taught by one correction (S).
@@ -321,7 +327,7 @@ chips, the top bar's Collections destination, the fake server), so they're built
   - whether the player's Chapters list shows a chapter at the extras or at Sunny's theme;
   - a Skip button, or skip by itself;
   - one rule for the whole show, or per season;
-  - whether "Skip intro" shows on Sunny today, and what its tooltip says;
+  - Sunny's 0:00 "Skip intro": what its tooltip says, and whether it's gone after "Forget learned intros";
   - with "Look up intros online" on, whether it lands on Sunny's title card;
   - a fingerprint tool in the installer, and temporary files while watching: OK?
 
