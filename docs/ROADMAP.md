@@ -100,7 +100,18 @@ Three parallel streams (search, the updater, fixes), each owning its files, as i
   - the rewatching switch;
   - the button leftovers.
 
-  Season and qacheck are still running. Weekly usage is 97%.
+  Its review found two Majors, being fixed: the rewatching switch took up to 5 minutes to reach Home, and a server
+  behind a reverse proxy counted as local. Local or remote is now decided from the server's address alone.
+- **Search and the updater are merged** into the 1.5 branch, and it builds clean (16:40).
+- **Qacheck is done** (in review):
+  - a playlist now plays as a playlist on both test servers (Play used to queue the first episode's show);
+  - the sub-path and trailing-slash cases pass;
+  - the fake server refuses the old token forms.
+
+  Found, not fixed (the track code): a track change during a transcode reports a second start.
+- **Season is done** (in review): season switching is about twice as fast, with pictures arriving with the rows. For
+  example, Drive-in's next season went from 448 ms rows and 1.24 s pictures to 290 ms for both.
+- Weekly usage is 98%.
 - The fixes stream finished the backend and privacy items in its first half hour:
   - private certificates;
   - split-season anime;
