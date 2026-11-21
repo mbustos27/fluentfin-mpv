@@ -16,7 +16,7 @@ are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL month
 | 1.8 | Player | Pop-out player, chapter extras | From the backburner (M–L) |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research first (L) |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | Research first (XL if go) |
-| TV 1.0 | Google TV | A separate app with all three themes: phase 0 alongside 1.5, the rest alongside 1.6 | Plan written |
+| TV 1.0 | Google TV | A separate app with all three themes; no home-screen Continue watching (the TV filters it) | Phase 0 done 2026-11-21 (but the release key); phase 1 after the usage reset |
 
 **Split (owner, 2026-11-20: "Yes, split it"):** the second review found 1.5 too big at about 40 items, with four streams
 editing the same files. 1.5 now ships search, the updater and the fixes; the top bar, tidy names, collections and the
@@ -490,8 +490,8 @@ its test fake, and Nixie's own message when it refuses.
   - start-up time and memory are no worse than today.
 - **Otherwise no rewrite.**
 
-## Nixie for Google TV (a separate app: phase 0 alongside 1.6, started 2026-11-21)
-Phase 0 needs about 30 minutes of the owner's time (the release key, a test on their TV); the stream asks before then.
+## Nixie for Google TV (a separate app: phase 0 done 2026-11-21 but the release key)
+Phase 0 needed about 30 minutes of the owner's time: the TV test is done; the release key waits until a release.
 **Downloads approved** (the owner, 2026-11-21: "it can download whatever is needed"): Android SDK components, system
 images, the NDK if needed, and Gradle/Maven dependencies, from official sources only (sdkmanager, Google's Maven, Maven
 Central, the Gradle plugin portal, the projects' own GitHub releases), each one logged with its size. Not covered: the
@@ -509,6 +509,25 @@ behaviour.
 | **4. Harden and release** | Low-memory check on the Chromecast, release script, update checker, a review, the owner's couch pass | 3–4 agent-days, 1–2 h of the owner's time |
 
 That's about 19–25 agent-days.
+
+**Phase 0 (2026-11-21): done but the release key.** The repo `Dev\nixie-tv` (local, no remote): the planned modules,
+flavors, the TV manifest, a nixie-tube banner and icon, a debug build with the Watch Next test and a device-facts
+probe, `nixie-release` (the release checks, Rust), and test-server profiles for Jellyfin 12, 10.11 and 10.10. The
+owner ran the TV steps the same day:
+- **The TV:** an onn. 4K Plus Streaming (Android 14, the Google TV launcher), paired over wireless debugging.
+- **The debug banner shows** in Your apps.
+- **Watch Next doesn't show:** the app added its test program, but the launcher logged "Watch next verification data
+  is empty" and filtered it out. So, as the plan says, **home-screen Continue watching is dropped for 1.0**, and
+  Google's partner-only Engage isn't attempted. Continue Watching inside Nixie is unaffected.
+- **The box's facts** (`testing\devices\onn-4k-plus.json`):
+  - **32-bit ARM only** (armeabi-v7a): any native library needs a 32-bit ARM build, which the build and the release
+    checker already require;
+  - 1.9 GB of memory, 256 MB per app;
+  - 4K at 59.94 with HDR10, HLG and HDR10+;
+  - hardware AVC, HEVC, VP9, AV1, Dolby Vision, MPEG-2 and VC-1;
+  - passthrough AC3, E-AC3 with Atmos, TrueHD and AC-4, but no DTS.
+- **Still the owner's, when a release needs them:** creating the release key, its two backups, and signing and
+  installing the first signed build.
 
 **Fitting it on this PC:**
 - The emulator and Gradle need about 6–8 GB of the roughly 10 GB free, so the emulator takes one of the 3 off-screen
