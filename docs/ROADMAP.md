@@ -127,8 +127,13 @@ Three parallel streams (search, the updater, fixes), each owning its files, as i
   - "With <name>" opening on Back;
   - a home server reached by name counting as remote;
   - a test-only install switch working in release builds.
-- **A two-hour fix round** takes the new Minors, Classic's notice and, if it fits, Enter, Enter. The refused sign-in and
-  search missing home videos go to the 1.6.1 fix queue. The release build waits for the fix round.
+- **The owner: "Ship now, queue them"** (2026-11-20, 18:30). 1.5.0 ships without the fix round:
+  - all 11 hunt findings go to KNOWN-ISSUES' fix queue for 1.6.1, and the noticeable ones are listed as known issues in
+    the 1.5.0 notes;
+  - the fix round had already committed fixes for 8 of them (m1–m6, m8, M1 and M3) before it stopped, but not finished
+    their tests. They're kept on `wip/150-huntfix` as the start of 1.6.1;
+  - M2 (a refused sign-in) and m7 (search and home videos) have no fix yet.
+- **Next:** the final pass, the baseline, the release build, the Sandbox upgrade test, then publish.
 - The fixes stream finished the backend and privacy items in its first half hour:
   - private certificates;
   - split-season anime;
@@ -362,6 +367,12 @@ chips, the top bar's Collections destination, the fake server), so they're built
 ## 1.6.1: Fixes (the first fix release)
 - Clears the fix queue in KNOWN-ISSUES: the Minors and old bugs that 1.6's reviews and hunt put there, and the owner's
   reports. No features.
+- **Already queued from 1.5.0:**
+  - the 1.5 bug hunt's 11 findings. Fixes for 8 of them wait, untested, on `wip/150-huntfix`: finish their tests and
+    merge;
+  - the reviews' leftovers (Display's date-added choice, show-level anime ids for later seasons, sentence case for row
+    names);
+  - Sunny's "Skip intro" at 0:00.
 
 ## 1.7: Discover
 Plan phases 2 and 3. Each source is off until the user turns it on. Nixie fetches public lists and matches them on the
