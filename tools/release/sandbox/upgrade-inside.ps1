@@ -87,7 +87,9 @@ if ($DryRun) {
 # --- the checks ----------------------------------------------------------------------------------------------------------
 $checks = New-Object System.Collections.Generic.List[object]
 $notes = [ordered]@{}
-function Check([string]$Name, [bool]$Ok, [string]$Detail = '') { $checks.Add([pscustomobject]@{ name = $Name; ok = $Ok; detail = $Detail }); Write-Host "$(if ($Ok) { 'ok  ' } else { 'FAIL' }) $Name $Detail" }
+# progress.log: one line per step and check as it happens (opened and closed each time, so it can be copied mid-run)
+function Step([string]$What) { Add-Content -LiteralPath (Join-Path $Results 'progress.log') -Value ('{0:HH:mm:ss} {1}' -f (Get-Date), $What) -ErrorAction SilentlyContinue }
+function Check([string]$Name, [bool]$Ok, [string]$Detail = '') { $checks.Add([pscustomobject]@{ name = $Name; ok = $Ok; detail = $Detail }); $line = "$(if ($Ok) { 'ok  ' } else { 'FAIL' }) $Name $Detail"; Write-Host $line; Step $line }
 function Wait-For([scriptblock]$Test, [int]$Seconds) { $end = (Get-Date).AddSeconds($Seconds); while ((Get-Date) -lt $end) { $r = & $Test; if ($r) { return $r }; Start-Sleep -Milliseconds 500 }; $null }
 function Get-Installed {
     # the installed Nixie's version, through the Windows Installer (read only)
@@ -102,10 +104,16 @@ function Get-LogLines([string]$Log) {
 }
 function Start-Nixie([string[]]$Arguments) {
     $exe = Join-Path $env:LOCALAPPDATA 'Programs\Nixie\app\Nixie.exe'
-    Start-Process -FilePath $exe -ArgumentList $Arguments -PassThru
+    Step "start Nixie $($Arguments -join ' ')"
+    # Windows PowerShell's Start-Process refuses an empty -ArgumentList (the 1.5.0 release run stopped there)
+    if ($Arguments -and $Arguments.Count) { Start-Process -FilePath $exe -ArgumentList $Arguments -PassThru } else { Start-Process -FilePath $exe -PassThru }
 }
 function Stop-Nixie($Process) {
-    if ($Process -and -not $Process.HasExited) { [void]$Process.CloseMainWindow(); if (-not $Process.WaitForExit(20000)) { $Process.Kill() } }
+    if ($Process -and -not $Process.HasExited) {
+        Step "close Nixie (pid $($Process.Id))"
+        [void]$Process.CloseMainWindow()
+        if (-not $Process.WaitForExit(20000)) { Step 'it did not close in 20 s: ended'; try { $Process.Kill() } catch { Step "could not end it: $($_.Exception.Message)" } }
+    }
 }
 function Get-NixieProcesses([datetime]$After) {
     $app = Join-Path $env:LOCALAPPDATA 'Programs\Nixie\app\Nixie.exe'
@@ -115,39 +123,66 @@ function Snapshot([string]$Folder) { if (Test-Path $Folder) { @(Get-ChildItem -L
 
 if (-not $AsTester) {
     # --- as the Sandbox's account: the standard user, then the legs as that user ----------------------------------------
-    $me = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
-    $isAdmin = $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    $notes.sandbox_account = "$env:USERNAME (administrator: $isAdmin)"
-    New-Item -ItemType Directory -Force $work | Out-Null
-    Copy-Item -LiteralPath $test.Path, "$($test.Path).sha256" -Destination $work
+    # The 1.5.0 release run ended here after copying one log, with no results.json, done.json or shutdown. Now: a transcript
+    # straight into the mapped results folder, the tester's own process watched (not its children, which a Nixie or helper
+    # left running would hold) with its results copied across every 10 seconds, and results.json, done.json and the
+    # shutdown whatever happens.
+    try { Start-Transcript -LiteralPath (Join-Path $Results 'outer-transcript.txt') -Force | Out-Null } catch { }
     $testerResults = Join-Path $work 'results'
-    New-Item -ItemType Directory -Force $testerResults | Out-Null
-    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Root 'scripts\upgrade-inside.ps1'), '-AsTester', '-Root', $Root,
-        '-NewMsi', $NewMsi, '-PreviousMsi', $PreviousMsi, '-TestMsi', $TestMsi, '-Results', $testerResults)
-    if ($isAdmin) {
-        # a standard user that lives only in this Sandbox; its password is random and never leaves it
-        $bytes = New-Object byte[] 24
-        [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-        $password = [Convert]::ToBase64String($bytes) + 'a1!'
-        $secure = ConvertTo-SecureString $password -AsPlainText -Force
-        New-LocalUser -Name 'nixietest' -Password $secure -PasswordNeverExpires -AccountNeverExpires | Out-Null
-        Add-LocalGroupMember -Group 'Users' -Member 'nixietest' -ErrorAction SilentlyContinue
-        icacls $work /grant 'nixietest:(OI)(CI)M' | Out-Null
-        $cred = New-Object System.Management.Automation.PSCredential('nixietest', $secure)
-        $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Credential $cred -LoadUserProfile -WorkingDirectory $work -PassThru -Wait
-        $notes.tester = "nixietest (made here, standard user), exit $($p.ExitCode)"
+    try {
+        $me = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+        $isAdmin = $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        $notes.sandbox_account = "$env:USERNAME (administrator: $isAdmin)"
+        New-Item -ItemType Directory -Force $work | Out-Null
+        Copy-Item -LiteralPath $test.Path, "$($test.Path).sha256" -Destination $work
+        New-Item -ItemType Directory -Force $testerResults | Out-Null
+        $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Root 'scripts\upgrade-inside.ps1'), '-AsTester', '-Root', $Root,
+            '-NewMsi', $NewMsi, '-PreviousMsi', $PreviousMsi, '-TestMsi', $TestMsi, '-Results', $testerResults)
+        if ($isAdmin) {
+            # a standard user that lives only in this Sandbox; its password is random and never leaves it
+            $bytes = New-Object byte[] 24
+            [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+            $password = [Convert]::ToBase64String($bytes) + 'a1!'
+            $secure = ConvertTo-SecureString $password -AsPlainText -Force
+            New-LocalUser -Name 'nixietest' -Password $secure -PasswordNeverExpires -AccountNeverExpires | Out-Null
+            Add-LocalGroupMember -Group 'Users' -Member 'nixietest' -ErrorAction SilentlyContinue
+            icacls $work /grant 'nixietest:(OI)(CI)M' | Out-Null
+            $cred = New-Object System.Management.Automation.PSCredential('nixietest', $secure)
+            $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -Credential $cred -LoadUserProfile -WorkingDirectory $work -PassThru
+            $who = 'nixietest (made here, standard user)'
+        }
+        else {
+            $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WorkingDirectory $work -PassThru
+            $who = "$env:USERNAME (already a standard user)"
+        }
+        $notes.tester = "$who, pid $($p.Id)"
+        Write-Host "tester started: $($notes.tester)"
+        $deadline = (Get-Date).AddMinutes(35)
+        while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
+            Copy-Item -Path (Join-Path $testerResults '*') -Destination $Results -Recurse -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 10
+        }
+        if ($p.HasExited) {
+            $code = try { $p.ExitCode } catch { 'unknown' }
+            $notes.tester = "$who, exit $code"
+        }
+        else { $notes.tester = "$who, still running after 35 minutes"; Check 'the legs finished within 35 minutes' $false }
     }
-    else {
-        $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WorkingDirectory $work -PassThru -Wait
-        $notes.tester = "$env:USERNAME (already a standard user), exit $($p.ExitCode)"
+    catch { Check 'the outer script ran to the end' $false "$($_.Exception.Message) (line $($_.InvocationInfo.ScriptLineNumber))" }
+    finally {
+        Copy-Item -Path (Join-Path $testerResults '*') -Destination $Results -Recurse -Force -ErrorAction SilentlyContinue
+        $r = $null
+        try { if (Test-Path (Join-Path $Results 'results.json')) { $r = Get-Content -Raw (Join-Path $Results 'results.json') | ConvertFrom-Json } }
+        catch { Check "the tester's results.json reads" $false $_.Exception.Message }
+        if (-not $r) { Check 'the legs ran and wrote their results' $false "$($notes.tester)"; $r = [pscustomobject]@{ checks = @() } }
+        $r | Add-Member -NotePropertyName checks -NotePropertyValue (@($r.checks) + @($checks)) -Force
+        $r | Add-Member -NotePropertyName outer -NotePropertyValue $notes -Force
+        try { $r | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 (Join-Path $Results 'results.json') }
+        catch { Write-Host "results.json not written: $($_.Exception.Message)" }
+        @{ finished = (Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $Results 'done.json')
+        try { Stop-Transcript | Out-Null } catch { }
+        if (-not $NoShutdown) { shutdown.exe /s /t 15 /c 'Nixie upgrade test done' }
     }
-    Copy-Item -Path (Join-Path $testerResults '*') -Destination $Results -Recurse -Force -ErrorAction SilentlyContinue
-    $r = if (Test-Path (Join-Path $Results 'results.json')) { Get-Content -Raw (Join-Path $Results 'results.json') | ConvertFrom-Json } else { $null }
-    if (-not $r) { Check 'the legs ran and wrote their results' $false $notes.tester; $r = [pscustomobject]@{ checks = @($checks) } }
-    $r | Add-Member -NotePropertyName outer -NotePropertyValue $notes -Force
-    $r | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 (Join-Path $Results 'results.json')
-    @{ finished = (Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $Results 'done.json')
-    if (-not $NoShutdown) { shutdown.exe /s /t 15 /c 'Nixie upgrade test done' }
     exit 0
 }
 
@@ -169,6 +204,7 @@ try {
     [IO.File]::WriteAllText((Join-Path $seaglass 'LocalSettings.json'), "{ `"UpgradeTestMarker`": `"$marker`", `"CheckForUpdates`": false }", [Text.UTF8Encoding]::new($false))
     $seaglassBefore = Snapshot $seaglass
 
+    Step "leg 1: install $($previous.Version)"
     $log = Join-Path $Results 'leg1-previous.log'
     $exit = (Start-Process msiexec.exe -ArgumentList @('/i', "`"$($previous.Path)`"", '/qn', '/norestart', '/l*v', "`"$log`"") -Wait -PassThru).ExitCode
     Check "leg 1: the previous MSI ($($previous.Version)) installs as a standard user (exit 0)" ($exit -eq 0) "exit $exit"
@@ -182,6 +218,7 @@ try {
     Stop-Nixie $old
 
     $beforeUpgrade = Get-Date
+    Step "leg 1: install $($new.Version) over it (the old flow)"
     $log = Join-Path $Results 'leg1-upgrade.log'
     $exit = (Start-Process msiexec.exe -ArgumentList @('/i', "`"$($new.Path)`"", '/passive', '/norestart', '/l*v', "`"$log`"") -Wait -PassThru).ExitCode
     Check "leg 1: $($new.Version) installs over $($previous.Version) (exit 0)" ($exit -eq 0) "exit $exit"
@@ -201,6 +238,7 @@ try {
     Stop-Nixie $one
 
     # ---- leg 2: Restart to update, driven by Nixie's own switch
+    Step "leg 2: Restart to update to $($test.Version)"
     $testCopy = Join-Path $work (Split-Path -Leaf $test.Path)
     $leg2At = Get-Date
     $first = Start-Nixie @('--install-update', "`"$testCopy`"")
@@ -220,7 +258,7 @@ try {
     if ($reopened) { Stop-Nixie (Get-Process -Id $reopened.ProcessId -ErrorAction SilentlyContinue) }
 }
 catch {
-    Check 'the legs ran to the end' $false $_.Exception.Message
+    Check 'the legs ran to the end' $false "$($_.Exception.Message) (line $($_.InvocationInfo.ScriptLineNumber))"
 }
 
 $result = [ordered]@{ versions = [ordered]@{ previous = $previous.Version; new = $new.Version; test = $test.Version }; started = $started.ToUniversalTime().ToString('o')
