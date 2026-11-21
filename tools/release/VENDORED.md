@@ -89,6 +89,9 @@ DVDs aren't supported. The build stops on the real library, a stub lacking a fun
 `backend\fluentfin\VENDORED.md` and `THIRD-PARTY.md` there. The build checks every file `uosc-files.txt` lists is in the
 frozen backend, and THIRD-PARTY-NOTICES.txt carries THIRD-PARTY.md and the licence texts.
 
+uosc ships patched (each patch marked `FluentFin MPV`, listed in `backend\fluentfin\VENDORED.md`): no self-update, the
+bar's height for the subtitles, and (1.5) no subtitle "Search online" and no OpenSubtitles key (BH-140X-m2).
+
 ## Not shipped
 
 - **mpv.exe.** Only mpv's own controls need it (FluentFin's controls use libmpv inside FluentFin); the user installs mpv

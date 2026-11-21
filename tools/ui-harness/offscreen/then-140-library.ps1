@@ -181,7 +181,7 @@ function Lb-Boxes {
     @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, $cond) | ForEach-Object { try { $_.Current.Name } catch { try { $_.Cached.Name } catch { '' } } } | Where-Object { $_ })
 }
 if (Lb-IsOn (Lb-Toggle 'Unwatched')) { [void](Invoke-Element (Lb-Toggle 'Unwatched')); Lb-Settle 800 }
-[void](Invoke-Element (Find-Ui -Name 'Filter, ' -Type 'Button' -Contains)); Lb-Settle 900
+[void](Invoke-Element (Find-Ui -Name 'Filter (' -Type 'Button' -Contains)); Lb-Settle 900
 $lbFav = Wait-Until { Find-Ui -Name 'Favorites only' -Type 'CheckBox' } -Seconds 3
 if ($lbFav) { [void](Invoke-Element $lbFav); Lb-Settle 700 }
 $lbAll = @(Lb-Boxes)

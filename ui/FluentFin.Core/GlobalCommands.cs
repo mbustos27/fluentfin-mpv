@@ -52,11 +52,54 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 		}
 	}
 
+	// 1.5 qacheck
+	/// <summary>
+	/// 1.5 (the first run against a real server): a playlist's Play plays the playlist, in its own order from
+	/// <paramref name="start"/>, so Next and the item's end go on to the playlist's next item. Through <see cref="Play"/> the
+	/// first item alone decided the queue: an episode brought its whole series (Shift+N played its next episode, not the
+	/// playlist's next item). With the mpv player only (FluentFin's own players keep <see cref="Play"/>); a remote session
+	/// gets the playlist from that item. <paramref name="items"/> are what the page plays (the items it can play).
+	/// </summary>
+	public async Task PlayInOrder(IReadOnlyList<BaseItemDto> items, int start, bool fromBeginning = false)
+	{
+		if (start < 0 || start >= items.Count)
+		{
+			return;
+		}
+
+		var item = items[start];
+		var playable = items.Select((x, i) => (x, i)).Where(p => p.x.Id.HasValue).ToList();
+		var at = playable.FindIndex(p => p.i == start);
+		if (at < 0 || settings.MediaPlayer != MediaPlayerType.Mpv)
+		{
+			await Play(item, null, streamsPicked: false, fromBeginning: fromBeginning);
+			return;
+		}
+
+		if (!string.IsNullOrEmpty(SessionInfo.RemoteSessionId) && SessionInfo.SessionId != SessionInfo.RemoteSessionId)
+		{
+			await jellyfinClient.PlayOnSession(SessionInfo.RemoteSessionId, [.. playable.Skip(at).Select(p => p.x.Id)]);
+			return;
+		}
+
+		PerfLog.PlayPressed();
+		var ticks = fromBeginning ? 0 : item.UserData?.PlaybackPositionTicks ?? 0;
+		navigationService.NavigateTo("FluentFin.ViewModels.VideoPlayerViewModel", new Mpv.QueuePlayRequest(item,
+			Mpv.BridgePlayRequest.FromPlaylist(playable.Select(p => p.x.Id!.Value), at, ticks, selection: null)));
+	}
+	// end 1.5 qacheck
+
 	[RelayCommand]
 	public async Task ResetWatchProgress(Guid id)
 	{
 		await jellyfinClient.ResetProgress(id);
 	}
+
+	// 1.5 fixes
+	/// <summary>1.5 (the button review's L38): the item menu's Reset watch progress, with an Undo (<see cref="ItemUserData.ResetProgressAsync"/>).</summary>
+	[RelayCommand]
+	public Task ResetWatchProgressOf(BaseItemDto dto) => ItemUserData.ResetProgressAsync(jellyfinClient, dto);
+	// END 1.5 fixes
 
 	// 1.2.0: through ItemUserData, which puts the server's answer into the item's copy (so the next toggle goes the
 	// other way and the menu says the right thing) and tells every card, hero and row; before, a second click sent the first
@@ -83,12 +126,15 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 	public static Type? PageFor(BaseItemDto_Type? type) => type switch
 	{
 		BaseItemDto_Type.Movie => typeof(MovieViewModel),
-		// a trailer: the item page, whose Play plays it alone (MpvQueue). A home video or a music video has no player queue yet
-		// (MpvQueue answers nothing for them): it says so rather than opening a page whose Play would do nothing
-		BaseItemDto_Type.Trailer => typeof(MovieViewModel),
+		// a trailer: the item page, whose Play plays it alone (MpvQueue). 1.5 (BH-140-m5): a home video and a music video too
+		// (MpvQueue plays each alone since 1.4.0; they said "can't open")
+		BaseItemDto_Type.Trailer or BaseItemDto_Type.Video or BaseItemDto_Type.MusicVideo => typeof(MovieViewModel),
 		BaseItemDto_Type.Series => typeof(SeriesViewModel),
 		BaseItemDto_Type.Season => typeof(SeasonViewModel),
 		BaseItemDto_Type.Episode => typeof(EpisodeViewModel),
+		// 1.5 search (people search for actors): a person opens "With <name>", their films and shows, until the person
+		// collections arrive
+		BaseItemDto_Type.Person => typeof(PersonItemsViewModel),
 		// Nixie 1.4.0 (the UX review's plan item 1, X1): a box set opens the shared Collection page, in its own order; a
 		// playlist too, as an ordered list (1.3.1 opened both as the library page); an album as the list of what it holds
 		BaseItemDto_Type.BoxSet or BaseItemDto_Type.Playlist or BaseItemDto_Type.MusicAlbum or BaseItemDto_Type.PhotoAlbum => typeof(CollectionViewModel),

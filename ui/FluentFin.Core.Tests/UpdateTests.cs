@@ -89,14 +89,16 @@ public sealed class UpdateTests : IDisposable
 	public void IsNewer_FollowsSemanticVersions(string? candidate, string current, bool expected) =>
 		Assert.Equal(expected, UpdateVersion.IsNewer(candidate, current));
 
-	// --- the once-a-day gate
+	// --- the gate: Nixie 1.5, every 4 hours (it was once a day)
 	[Fact]
-	public void Gate_AsksOncePerDay()
+	public void Gate_AsksEveryFourHours()
 	{
 		var now = new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.Zero);
+		Assert.Equal(TimeSpan.FromHours(4), UpdateGate.Interval);
 		Assert.True(UpdateGate.IsDue(null, now));
-		Assert.False(UpdateGate.IsDue(now.AddHours(-23), now));
+		Assert.False(UpdateGate.IsDue(now.AddHours(-3.9), now));
 		Assert.False(UpdateGate.IsDue(now, now));
+		Assert.True(UpdateGate.IsDue(now.AddHours(-4), now));
 		Assert.True(UpdateGate.IsDue(now.AddHours(-24), now));
 		Assert.True(UpdateGate.IsDue(now.AddDays(-9), now));
 		// the clock was set back after a check: ask again (and store the real time) rather than wait for years
@@ -272,9 +274,9 @@ public sealed class UpdateTests : IDisposable
 		Assert.Null(coordinator.Notice);
 	}
 
-	// Nixie 1.3.1 (the user: "it should check when we open"): every start asks once, then once a day while the app stays open
+	// Nixie 1.3.1 (the user: "it should check when we open"): every start asks once; Nixie 1.5: then every 4 hours while it stays open
 	[Fact]
-	public async Task Coordinator_On_AsksAtEveryStart_OnceARun_ThenOncePerDay_AndTheNoticeShows()
+	public async Task Coordinator_On_AsksAtEveryStart_OnceARun_ThenEveryFourHours_AndTheNoticeShows()
 	{
 		var (settings, state) = FakeSettings(enabled: true);
 		var now = new DateTimeOffset(2026, 11, 20, 8, 0, 0, TimeSpan.Zero);
@@ -288,7 +290,7 @@ public sealed class UpdateTests : IDisposable
 
 		now = now.AddMinutes(1);
 		await first.TickAsync();          // the same run, a minute later: no second start check
-		now = now.AddHours(5);
+		now = now.AddHours(3);
 		await first.TickAsync();
 		Assert.Single(handler.Requests);
 
@@ -300,7 +302,7 @@ public sealed class UpdateTests : IDisposable
 		await restarted.TickAsync();
 		Assert.Equal(2, handler.Requests.Count);
 
-		now = now.AddHours(22);           // a day after its start check, the app still open
+		now = now.AddHours(2);            // 4 hours after its start check, the app still open
 		await restarted.TickAsync();
 		Assert.Equal(3, handler.Requests.Count);
 		Assert.Contains("1.2.0", state());

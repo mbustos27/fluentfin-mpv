@@ -139,6 +139,10 @@ foreach ($v in $versions) {
         Add-Row $v 'libraries listed' (-not @($want | Where-Object { $views -notcontains $_ })) ($views -join ', ')
 
         $all = (Invoke-Qa $v "/Items?userId=$($user.UserId)&recursive=true&includeItemTypes=Movie,Episode,BoxSet,Playlist&fields=ProviderIds,Tags,Path,MediaStreams" -Token $user.Token -Device $device).Json.Items
+        # 1.5 search: the QA Search libraries' titles come from .nfo files only (no TMDb ids, no Tags, no media streams of
+        # their own): the checks below are about the seeded media, so they leave out everything under search-media
+        $searchMedia = (Join-Path $script:QaRoot 'search-media') + [IO.Path]::DirectorySeparatorChar
+        $all = @($all | Where-Object { -not ($_.Path -and $_.Path.StartsWith($searchMedia, [StringComparison]::OrdinalIgnoreCase)) })
         $movies = @($all | Where-Object { $_.Type -eq 'Movie' })
         $byPath = { param($like) @($all | Where-Object { $_.Path -like $like }) | Select-Object -First 1 }
         $multi = & $byPath '*Twilight Zone (1959) - S01E01.mkv'

@@ -381,7 +381,8 @@ class FakePM:
             video = self._video
             if video is None:
                 return False
-            self.play(video)
+            # 1.5: the same viewing goes on, as progress (no second Playing)
+            self.play(video, no_initial_timeline=True)
             return True
 
     def start_action_thread(self):
@@ -686,7 +687,14 @@ class FakePM:
                     # just before its Playing: the shim's own sub-pos (its
                     # "bottom" setting), over whatever was there.
                     self._player.sub_pos = 100.0
-                    self.send_timeline_initial()
+                    if kwargs.get("no_initial_timeline"):
+                        # `send_timeline()`: a progress report, which
+                        # should_send_timeline (still off here) holds back
+                        # until the next tick.
+                        self._note("report_progress_next",
+                                   getattr(video, "item_id", None))
+                    else:
+                        self.send_timeline_initial()
                     self.should_send_timeline = True
                     # `_play_media` ends with an unconditional
                     # set_paused(False).
@@ -1479,6 +1487,21 @@ class SetControlsTest(BridgeCase):
         pm.play(FakeVideo(B))
         self.assertEqual(self.osc_calls(), [])
         self.assertEqual(pm._player.sub_pos, 100.0)
+
+    def test_a_restart_lifts_the_subtitles_again(self):
+        # 1.5: a restart (a track change on a transcode) sends no Playing, so
+        # the wrapper of send_timeline_initial that lifts them does not run;
+        # the play hook does it instead, after the start's own sub-pos.
+        self.connect_server()
+        pm = self.runtime.pm
+        self.send("set_controls", {"controls": "ui", "subtitleInset": 0.2})
+        pm.play(FakeVideo(A))
+        self.assertEqual(pm._player.sub_pos, 80.0)
+        pm.on_negotiate = lambda: setattr(
+            pm._video, "playback_info", {"PlaySessionId": "ps-restarted"})
+        self.assertTrue(pm.restart_playback())
+        self.assertEqual(pm._player.sub_pos, 80.0,
+                         "above the bar after the restart too")
 
     def test_a_lost_mpv_is_handed_to_the_shim(self):
         self.connect_server()
@@ -4380,6 +4403,30 @@ class ReportedEventTest(BridgeCase):
         self.stop()
         self.assertEqual(self.reported(), [(A, old, "failed"),
                                            (A, "ps-restarted", "sent")])
+
+    def test_a_restart_is_one_viewing_on_the_server(self):
+        """1.5 (QA servers 10.11.11 and 12.4.0: two starts, one finish per
+        viewing): `restart_playback` -- the real one's call, with
+        ``no_initial_timeline`` -- sends no second Playing; the viewing goes
+        on under the new id, whose end is reported once, and the session it
+        left is closed for the UI (``failed``) without a Stopped."""
+        a = self.play(A)
+        old = self.session(a)
+        self.pm.on_negotiate = lambda: setattr(
+            a, "playback_info", {"PlaySessionId": "ps-restarted"})
+        self.assertTrue(self.pm.restart_playback())
+        self.assertIs(self.pm._video, a)
+        journal = self.runtime.journal
+        self.assertEqual([e[1] for e in journal if e[0] == "report_playing"],
+                         [A], "one Playing: the restart's goes as progress")
+        self.assertEqual(
+            [e[1] for e in journal if e[0] == "report_progress_next"], [A])
+        self.assertEqual(self.reported(), [(A, old, "failed")])
+        self.stop()
+        self.assertEqual(self.reported(), [(A, old, "failed"),
+                                           (A, "ps-restarted", "sent")])
+        self.assertEqual([s["PlaySessionId"] for s in a.client.jellyfin.stops],
+                         ["ps-restarted"], "one Stopped, the new session's")
 
     def test_a_switch(self):
         """The old client is retired: a healthy old server still takes the

@@ -81,6 +81,21 @@ namespace FluentFin.Core.Contracts.Services
 		/// <summary>Seaglass 1.1.4: the matches of these types only (the search results page, one request per type).</summary>
 		Task<BaseItemDtoQueryResult?> Search(string searchTerm, IReadOnlyList<BaseItemKind> kinds, int limit = 100);
 
+		// 1.5 search (JellyfinClient_Search.cs; docs/research/search.md): the other search shapes the server offers, and a
+		// person's titles. Each is null on a failure and never throws.
+		/// <summary>Nixie 1.5: /Search/Hints (every kind, people included, under one limit; the server's own order).</summary>
+		Task<SearchHintResult?> SearchHints(string searchTerm, int limit);
+
+		/// <summary>Nixie 1.5: /Persons?searchTerm= (people, with what the cards need).</summary>
+		Task<BaseItemDtoQueryResult?> SearchPeople(string searchTerm, int limit);
+
+		/// <summary>Nixie 1.5: these items by id, with the titles search ranks on (the hints' items).</summary>
+		Task<BaseItemDtoQueryResult?> GetSearchItems(IReadOnlyList<Guid> ids);
+
+		/// <summary>Nixie 1.5: the films and shows a person is in, newest first ("With Ava Abara").</summary>
+		Task<BaseItemDtoQueryResult?> GetPersonItems(Guid personId);
+		// end 1.5 search
+
 		Task<BaseItemDto?> GetItem(Guid id);
 
 		/// <summary>Nixie 1.4.0: the folders an item is in, nearest first (its library among them); empty on failure. Never throws.</summary>
@@ -272,6 +287,11 @@ namespace FluentFin.Core.Contracts.Services
 		Task SaveMetadata(Metadata metadata);
 
 		Task SaveConfiguration(ServerConfiguration configuration);
+
+		// 1.5 fixes
+		/// <summary>1.5 (the button review's S22): <see cref="SaveConfiguration"/> that says whether the server took it.</summary>
+		Task<bool> TrySaveConfiguration(ServerConfiguration configuration);
+		// END 1.5 fixes
 
 		Task<TranscodingSettings?> GetTranscodeOptions();
 

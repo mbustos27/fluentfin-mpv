@@ -12,6 +12,8 @@ import random
 import threading
 import uuid
 
+import search as search_mod   # 1.5 search
+
 TICKS = 10_000_000
 
 ADJECTIVES = ["Silent", "Crimson", "Hidden", "Last", "Broken", "Golden", "Distant", "Frozen", "Burning", "Quiet",
@@ -91,6 +93,10 @@ class Library:
         self.user = {}           # item id -> user data dict (played, position, favorite, play_count, last_played)
         self.rng = random.Random(seed)
         self._names = set()
+        # 1.5 search: how /Items?searchTerm=, /Search/Hints and /Persons match (search.py): Jellyfin 12.4's built-in
+        # provider, or "loose" (any word, as a search plugin may answer; FAKESERVER_SEARCH_MODE)
+        import os
+        self.search = search_mod.Search(os.environ.get("FAKESERVER_SEARCH_MODE", "stock"))
         self._build()
 
     # ---------------------------------------------------------------- generation
@@ -223,6 +229,49 @@ class Library:
         big_series = self.big_series_size(os.environ.get("FAKESERVER_BIG_SERIES"))
         if big_series:
             self._big_series(*big_series)
+        # 1.5 search: FAKESERVER_SEARCH=sunny adds the search titles (a show and its near-misses, a person)
+        if os.environ.get("FAKESERVER_SEARCH") == "sunny":
+            self._search_fixture()
+
+    # 1.5 search: "it's always sunny" as the owner typed it, among films that share its words
+    SEARCH_FILMS = ["It's Always Fair Weather", "Always", "Sunny", "It", "It's a Wonderful Life", "Little Miss Sunshine",
+                    "Sunny Side Up", "Always Be My Maybe", "It Follows", "Philadelphia", "The Philadelphia Story",
+                    "Amélie", "M*A*S*H", "Se7en", "WALL·E"]
+    SEARCH_WORDS = ["Harbor", "Engine", "Lantern", "Orchard", "Station", "Signal", "Window", "Weather", "Summer",
+                    "Mirror", "Garden", "Highway"]
+    SEARCH_PERSON = "Sunny Holm"
+
+    def _search_fixture(self):
+        rng = random.Random(150)
+        movies, shows = _id("view", "Movies"), _id("view", "Shows")
+        person = {"Id": _id("person", self.SEARCH_PERSON), "Name": self.SEARCH_PERSON, "Type": "Person", "kind": "person",
+                  "created": self.now, "parent": None, "view": None}
+        self.people[person["Id"]] = person
+        self.items[person["Id"]] = person
+        names = list(self.SEARCH_FILMS)
+        for word in self.SEARCH_WORDS:
+            names += ["Sunny %s" % word, "Always %s" % word, "It Came from the %s" % word]
+        for n, name in enumerate(names):
+            mid = _id("movie", "Movies", "search", name)
+            created = self.now - datetime.timedelta(days=rng.randint(30, 900))
+            item = self._common(mid, "movie", name, movies, movies, created, rng.randint(1934, 2025),
+                                rng.sample(GENRES, rng.randint(1, 2)), rng.choice(MOVIE_RATINGS))
+            item["showcase"] = None
+            if name == "Amélie":
+                item["original"] = "Le Fabuleux Destin d'Amélie Poulain"
+            if n % 7 == 0:
+                item["people"].insert(0, {"Name": person["Name"], "Id": person["Id"], "Role": "Herself", "Type": "Actor",
+                                          "PrimaryImageTag": _tag(person["Id"], "Primary")})
+            self.items[mid] = item
+            self.children[movies].append(mid)
+        gang = ["The Gang Gets Started", "The Gang Finds a Dead Guy", "Charlie Gets Crippled", "The Gang Goes Jihad",
+                "Hundred Dollar Baby", "The Gang Gives Back"]
+        self._series(shows, "Shows", "It's Always Sunny in Philadelphia", self.now - datetime.timedelta(days=40), 2005,
+                     None, seasons=2, episodes=6, episode_name=lambda e: gang[(e - 1) % len(gang)])
+        self._series(shows, "Shows", "Sunny Days", self.now - datetime.timedelta(days=60), 2017, None, seasons=1,
+                     episodes=3, episode_name=lambda e: ["Always Sunny", "It's a Sunny Day", "Rain"][e - 1])
+        for vid in (movies, shows):
+            self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
 
     # UXCAP (the library and collections review's captures): a "Collections" view (boxsets) of BoxSets made of the Movies library's titles
     COLLECTION_NAMES = ["The Harbor Collection", "Kestrel Bay Trilogy", "Midnight Stories", "The Northgate Saga",
@@ -651,6 +700,8 @@ class Library:
              "SortName": self.sort_name(item), "Type": "Playlist" if item.get("playlist") else types[kind], "LocationType": "FileSystem",
              "IsFolder": kind in ("view", "series", "season", "boxset"), "ImageTags": {}, "BackdropImageTags": [],
              "ImageBlurHashes": {}}
+        if item.get("original"):   # 1.5 search: the original title (fields=OriginalTitle)
+            d["OriginalTitle"] = item["original"]
         if kind == "person":
             d.update(ImageTags={"Primary": _tag(iid, "Primary")}, PrimaryImageAspectRatio=2 / 3,
                      ImageBlurHashes={"Primary": {_tag(iid, "Primary"): blurhash(iid + "Primary")}})
@@ -724,6 +775,34 @@ class Library:
             if kind in ("movie", "episode"):
                 d["Chapters"] = self.chapters(item)
         return d
+
+    # 1.5 season: Jellyfin sends only the image types a request asks for (EnableImageTypes; EnableImages=false: none): an
+    # item's own ImageTags and backdrops, and those it inherits from its show (ParentLogo..., ParentBackdrop..., ParentThumb...).
+    # Without the parameter, every type (Jellyfin's default). This fake sent the show's logo tag in every list, so it never
+    # showed that a list asked without Logo gave a season page a header that changed a moment after opening (review M1).
+    PARENT_IMAGES = {"logo": ("ParentLogoItemId", "ParentLogoImageTag"), "backdrop": ("ParentBackdropItemId", "ParentBackdropImageTags"),
+                     "thumb": ("ParentThumbItemId", "ParentThumbImageTag")}
+
+    @classmethod
+    def keep_image_types(cls, d, query):
+        enable = [v.lower() for v in query.get("enableimages", [])]
+        asked = [t.strip().lower() for v in query.get("enableimagetypes", []) for t in v.split(",") if t.strip()]
+        if "false" in enable:
+            asked, limited = [], True
+        else:
+            limited = bool(asked)
+        if not limited or not isinstance(d, dict):
+            return d
+        d["ImageTags"] = {k: v for k, v in (d.get("ImageTags") or {}).items() if k.lower() in asked}
+        d["ImageBlurHashes"] = {k: v for k, v in (d.get("ImageBlurHashes") or {}).items() if k.lower() in asked}
+        if "backdrop" not in asked:
+            d["BackdropImageTags"] = []
+        for kind, fields in cls.PARENT_IMAGES.items():
+            if kind not in asked:
+                for field in fields:
+                    d.pop(field, None)
+        return d
+    # end 1.5 season
 
     def path(self, item):
         kind = item["kind"]
@@ -805,8 +884,12 @@ class Library:
         if exclude:
             gone = {kind_of.get(t) for t in exclude}
             pool = [i for i in pool if i["kind"] not in gone]
-        if term:
-            pool = [i for i in pool if term in i["Name"].lower()]
+        # 1.5 search: matched as 12.4 matches (search.py), not as one plain substring of the name
+        raw_term = one("searchterm") or ""
+        # 1.5 search: a person's titles (/Items?personIds=)
+        person_ids = {norm_id(p) for p in many("personids")}
+        if person_ids:
+            pool = [i for i in pool if any(norm_id(p.get("Id")) in person_ids for p in i.get("people") or [])]
         for key, field in (("genres", "genres"), ("tags", "tags")):
             values = {x for v in q.get(key, []) for x in v.split("|") if x}
             if values:
@@ -832,13 +915,55 @@ class Library:
         if one("namestartswith"):
             prefix = one("namestartswith").lower()
             pool = [i for i in pool if self.sort_name(i).lstrip().startswith(prefix)]
-        if not (all(i["kind"] == "view" for i in pool) and not many("sortby")):   # views keep their order
-            pool = self.sort(pool, many("sortby"), (one("sortorder") or "Ascending").split(",")[0])
-        total = len(pool)
         start = self.int_of(one("startindex"), 0)
         limit = self.int_of(one("limit"), None)
+        if term:
+            # 1.5 search: by score, then sort name (12.4 ignores sortBy when searching); at most three times the limit
+            pool = self.search.rank(pool, raw_term, self.sort_name, limit)
+        elif not (all(i["kind"] == "view" for i in pool) and not many("sortby")):   # views keep their order
+            pool = self.sort(pool, many("sortby"), (one("sortorder") or "Ascending").split(",")[0])
+        total = len(pool)
         page = pool[start:start + limit if limit is not None else None]
-        return {"Items": [self.dto(i) for i in page], "TotalRecordCount": total, "StartIndex": start}
+        # 1.5 search (review m5): SortName and OriginalTitle only when asked for (fields=), as Jellyfin answers: a client
+        # that stops asking for them sees them go
+        fields = {f.lower() for f in many("fields")}
+        return {"Items": [self.with_fields(self.dto(i), fields) for i in page], "TotalRecordCount": total, "StartIndex": start}
+
+    @staticmethod
+    def with_fields(d, fields):
+        """1.5 search: a /Items answer's item: the optional fields Jellyfin sends only when asked for."""
+        if "sortname" not in fields:
+            d.pop("SortName", None)
+        if "originaltitle" not in fields:
+            d.pop("OriginalTitle", None)
+        return d
+
+    # 1.5 search ---------------------------------------------------------------------------------------------------
+    def hints(self, q):
+        """GET /Search/Hints: None for a missing term (the server's 400), else its answer (one limit, people in)."""
+        term = (q.get("searchterm") or [""])[0]
+        if not term.strip():
+            return None
+        include_people = (q.get("includepeople") or ["true"])[0].lower() != "false"
+        kinds = {"movie", "series", "season", "episode", "boxset"} | ({"person"} if include_people else set())
+        pool = [i for i in self.items.values() if i["kind"] in kinds]
+        limit = self.int_of((q.get("limit") or [None])[0], None)
+        ranked = self.search.rank(pool, term, self.sort_name, None)
+        if limit is not None:
+            ranked = ranked[:limit]
+        return {"SearchHints": [search_mod.hint(self, i) for i in ranked], "TotalRecordCount": len(ranked)}
+
+    def persons(self, q):
+        """GET /Persons: people whose name holds the term (all of them without one)."""
+        term = (q.get("searchterm") or [""])[0]
+        pool = list(self.people.values())
+        if term.strip():
+            c = search_mod.clean(term)
+            pool = [p for p in pool if c and c in search_mod.clean(p["Name"])]
+        pool.sort(key=lambda p: p["Name"].lower())
+        limit = self.int_of((q.get("limit") or [None])[0], None)
+        page = pool[:limit] if limit is not None else pool
+        return {"Items": [self.dto(p) for p in page], "TotalRecordCount": len(pool), "StartIndex": 0}
 
     @staticmethod
     def int_of(value, default):

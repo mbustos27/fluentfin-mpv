@@ -1,4 +1,4 @@
-namespace FluentFin.Tests;
+﻿namespace FluentFin.Tests;
 
 /// <summary>
 /// Seaglass: the update notice is opt-in and can only name this repository. Upstream FluentFin's updater (WindowsUpdateService)
@@ -23,62 +23,96 @@ public sealed class UpdateNoticeSourceTests
 		}
 	}
 
+	private static string Source(params string[] path) => File.ReadAllText(Path.Combine([FlyleafEngineTests.RepoRoot, .. path]));
+
 	[Fact]
 	public void TheNoticeIsStartedByTheApp_AndShownByTheShell_AndNotWhileItIsOff()
 	{
-		var app = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "App.xaml.cs"));
+		var app = Source("FluentFin", "App.xaml.cs");
 		Assert.Contains("AddSingleton<UpdateNoticeService>", app);
 		Assert.DoesNotContain("AddHostedService<WindowsUpdateService>", app);
 
-		var shell = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "ShellPage.xaml"));
-		Assert.Contains("Download and install", shell);
-		Assert.Contains("Release notes", shell);
+		// Nixie 1.5: the shell hosts the notice control and gives it room when it comes and goes
+		var shell = Source("FluentFin", "Views", "ShellPage.xaml");
+		Assert.Contains("<controls:UpdateNotice x:Name=\"UpdateBar\" OpenChanged=\"OnUpdateBarOpenChanged\" />", shell);
+		Assert.Contains("private void OnUpdateBarOpenChanged(object? sender, EventArgs e) => UpdateInsets();", Source("FluentFin", "Views", "ShellPage.xaml.cs"));
+		// on Settings, whose Updates group says the same with the same action, the notice steps aside (one Primary per view)
+		Assert.Contains("UpdateBar.HiddenHere = e.SourcePageType == typeof(JellyfinSettings.SettingsPage);", Source("FluentFin", "Views", "ShellPage.xaml.cs"));
+		Assert.Contains("var open = !_hiddenHere && Shows(status, _updates.Coordinator.Notice);", Source("FluentFin", "Controls", "UpdateNotice.xaml.cs"));
 
 		// the service asks the coordinator, which checks the setting before any request
-		var coordinator = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin.Core", "Updates", "UpdateFlow.cs"));
+		var coordinator = Source("FluentFin.Core", "Updates", "UpdateFlow.cs");
 		var tick = coordinator[coordinator.IndexOf("public async Task TickAsync", StringComparison.Ordinal)..];
-		Assert.True(tick.IndexOf("settings.CheckForUpdates", StringComparison.Ordinal) < tick.IndexOf("checker.CheckAsync", StringComparison.Ordinal));
+		Assert.True(tick.IndexOf("settings.CheckForUpdates", StringComparison.Ordinal) < tick.IndexOf("SingleAsync(", StringComparison.Ordinal));
+		var returned = coordinator[coordinator.IndexOf("public async Task<UpdateCheckResult?> ReturnedAsync", StringComparison.Ordinal)..];
+		Assert.True(returned.IndexOf("settings.CheckForUpdates", StringComparison.Ordinal) < returned.IndexOf("SingleAsync(", StringComparison.Ordinal));
 	}
 
 	[Fact]
-	public void SettingsOffersTheToggle()
+	public void SettingsOffersTheToggle_CheckNow_AndInstallWhenIClose_OffByDefault()
 	{
-		var page = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "SettingsPage.xaml"));
+		var page = Source("FluentFin", "Controls", "UpdateSettingsPanel.xaml");
 		Assert.Contains("Header=\"Check for updates\"", page);
-		Assert.Contains("ViewModel.CheckForUpdates", page);
-		// Nixie 1.3.1: Check now, and the text says the check is on by default and what it sends
+		Assert.Contains("IsOn=\"{x:Bind CheckForUpdates, Mode=TwoWay}\"", page);
+		// Nixie 1.3.1: Check now, and the text says the check is on by default and what it sends; 1.5: how often
 		Assert.Contains("Content=\"Check now\"", page);
 		Assert.Contains("Nothing is sent but the request for the latest release", page);
+		Assert.Contains("every 4 hours, and when you come back to it", page);
 		Assert.Contains("On by default.", page);
-		var code = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "SettingsPage.xaml.cs"));
-		Assert.Contains("Coordinator.CheckNowAsync()", code);
+		Assert.Contains("Header=\"Install when I close Nixie\"", page);
+		Assert.False(Core.Settings.SettingKeys.InstallUpdatesOnClose.Default.Value);
+		// the status line is a live region and Narrator hears each step
+		Assert.Contains("x:Name=\"UpdateStatusTitle\"", page);
+		Assert.Contains("AutomationProperties.LiveSetting=\"Polite\"", page);
+		var code = Source("FluentFin", "Controls", "UpdateSettingsPanel.xaml.cs");
+		Assert.Contains("await Updates.Center.CheckNowAsync();", code);
 		Assert.Contains("CheckNowButton.IsEnabled = false;", code);
 		Assert.Contains("RaiseNotificationEvent", code);
+		Assert.Contains("<controls:UpdateSettingsPanel x:Name=\"UpdatesGroup\" />", Source("FluentFin", "Views", "SettingsPage.xaml"));
 	}
 
-	// Nixie 1.3.1: the notice names the version and offers Download and install, Release notes and Dismiss; it only tells
+	// Nixie 1.5: the notice names each step, one row, one Primary; it never installs by itself
 	[Fact]
-	public void TheNotice_OffersInstallNotesAndDismiss_AndNeverInstallsByItself()
+	public void TheNotice_IsOneRow_NamesEachStep_AndNeverInstallsByItself()
 	{
-		var shell = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "ShellPage.xaml"));
-		Assert.Contains("Content=\"Dismiss\"", shell);
-		var code = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Views", "ShellPage.xaml.cs"));
-		Assert.Contains("UpdateTitle.Text = $\"{Core.AppIdentity.Name} {notice.Version} is available\";", code);
-		// one row (Nixie 1.3.1): the title, Download and install, Release notes and Dismiss side by side, centred
-		var bar = shell[shell.IndexOf("x:Name=\"UpdateBar\"", StringComparison.Ordinal)..];
-		bar = bar[..bar.IndexOf("</Border>", StringComparison.Ordinal)];
-		Assert.Contains("Orientation=\"Horizontal\"", bar);
-		Assert.True(bar.IndexOf("UpdateTitle", StringComparison.Ordinal) < bar.IndexOf("UpdateInstallButton", StringComparison.Ordinal)
-			&& bar.IndexOf("UpdateInstallButton", StringComparison.Ordinal) < bar.IndexOf("Release notes", StringComparison.Ordinal)
-			&& bar.IndexOf("Release notes", StringComparison.Ordinal) < bar.IndexOf("Content=\"Dismiss\"", StringComparison.Ordinal));
-		Assert.DoesNotContain("<InfoBar", bar);
-		Assert.Contains("_updates.Coordinator.Dismiss()", code);
-		// InstallAsync only from the buttons' click handlers
-		var service = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "Services", "UpdateNoticeService.cs"));
-		Assert.DoesNotContain("InstallAsync(", service[service.IndexOf("private async Task RunAsync", StringComparison.Ordinal)..]);
+		var notice = Source("FluentFin", "Controls", "UpdateNotice.xaml");
+		Assert.Contains("Content=\"Dismiss\"", notice);
+		Assert.Contains("Content=\"Cancel\"", notice);
+		Assert.Contains("AutomationProperties.Name=\"Download progress\"", notice);
+		Assert.DoesNotContain("<InfoBar", notice);
+		// title, detail (trims), progress, then the buttons: Primary, link, Cancel, Dismiss
+		Assert.True(notice.IndexOf("x:Name=\"UpdateTitle\"", StringComparison.Ordinal) < notice.IndexOf("x:Name=\"UpdateDetail\"", StringComparison.Ordinal)
+			&& notice.IndexOf("x:Name=\"UpdateDetail\"", StringComparison.Ordinal) < notice.IndexOf("x:Name=\"UpdateProgress\"", StringComparison.Ordinal)
+			&& notice.IndexOf("x:Name=\"UpdateProgress\"", StringComparison.Ordinal) < notice.IndexOf("x:Name=\"UpdatePrimaryButton\"", StringComparison.Ordinal)
+			&& notice.IndexOf("x:Name=\"UpdatePrimaryButton\"", StringComparison.Ordinal) < notice.IndexOf("x:Name=\"UpdateLinkButton\"", StringComparison.Ordinal)
+			&& notice.IndexOf("x:Name=\"UpdateLinkButton\"", StringComparison.Ordinal) < notice.IndexOf("x:Name=\"UpdateDismissButton\"", StringComparison.Ordinal));
+		Assert.Contains("TextTrimming=\"CharacterEllipsis\"", notice);
+		var code = Source("FluentFin", "Controls", "UpdateNotice.xaml.cs");
+		Assert.Contains("UpdateView.ForNotice(status)", code);
+		Assert.Contains("RaiseNotificationEvent", code);
+		// installs only from a click: RestartToUpdate from UpdateActions (the buttons), or as Nixie closes with the setting on
+		var service = Source("FluentFin", "Services", "UpdateNoticeService.cs");
+		var loop = service[service.IndexOf("private async Task RunAsync", StringComparison.Ordinal)..service.IndexOf("public async Task StopAsync", StringComparison.Ordinal)];
+		Assert.DoesNotContain("Hand(", loop);
+		Assert.DoesNotContain("RestartToUpdate(", loop);
+		var stop = service[service.IndexOf("public async Task StopAsync", StringComparison.Ordinal)..];
+		Assert.Contains("Settings.InstallOnClose && Center.Status.Phase == UpdatePhase.Ready && !Coordinator.IsDismissed(Center.Status.Release?.Version)", stop);
+		Assert.Contains("Hand(reopen: false, quiet: true", stop);
+		var actions = Source("FluentFin", "Services", "UpdateActions.cs");
+		Assert.Contains("updates.RestartToUpdate(CurrentPlace());", actions);
 		// a test run asks the fake server, never GitHub, and turns the check off unless it asks for it
 		Assert.Contains("UpdateSource.ApiFor(", service);
 		var prepare = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "..", "tools", "ui-harness", "offscreen", "prepare.ps1"));
 		Assert.Contains("-NotePropertyName CheckForUpdates -NotePropertyValue $false", prepare);
+	}
+
+	/// <summary>Nixie 1.5: the release notes' links open in the browser only on a click, and only http(s) ones.</summary>
+	[Fact]
+	public void WhatsNew_OpensLinksOnlyOnAClick_AndOnlyWebOnes()
+	{
+		var actions = Source("FluentFin", "Services", "UpdateActions.cs");
+		Assert.Contains("link.Click += (_, _) => OpenLink(url);", actions);
+		Assert.Contains("if (ReleaseNotes.SafeLink(url) is { } safe)", actions);
+		Assert.DoesNotContain("NavigateUri", actions);
 	}
 }

@@ -205,44 +205,33 @@ public sealed class SearchTests
 		Assert.IsType<SearchAction.Nothing>(SearchSuggestions.OnSubmitted(null, "   "));
 	}
 
-	// ---- the results page
+	// ---- the results page (Nixie 1.5: ranked on the PC; SearchRankingTests has the ranking itself)
 
 	[Fact]
-	public void TheResults_AreGroupedMoviesShowsEpisodes_WithoutPeopleOrEmptyGroups()
-	{
-		var groups = SearchResults.Group(
-		[
-			Item("E1", BaseItemDto_Type.Episode),
-			Item("S1", BaseItemDto_Type.Series),
-			Item("Someone", BaseItemDto_Type.Person),
-			Item("M1", BaseItemDto_Type.Movie),
-			Item("E2", BaseItemDto_Type.Episode),
-		]);
-
-		Assert.Equal(["Movies", "Shows", "Episodes"], groups.Select(g => g.Title));
-		Assert.Equal(["E1", "E2"], groups[2].Items.Select(i => i.Name));
-		Assert.Equal("Episodes (2)", groups[2].Heading);
-		Assert.Equal(["Movies"], SearchResults.Group([Item("M1", BaseItemDto_Type.Movie)]).Select(g => g.Title));
-	}
-
-	[Fact]
-	public async Task TheResultsPage_SearchesItsQuery_AndShowsTheGroups()
+	public async Task TheResultsPage_SearchesEachKind_AndOrdersTheGroupsByTheirBestMatch()
 	{
 		var client = new Mock<IJellyfinClient>();
-		// one request per type: a shared limit let 100 episodes crowd the movies and shows out (seen live)
-		client.Setup(x => x.Search("quiet", It.Is<IReadOnlyList<BaseItemKind>>(k => k.Single() == BaseItemKind.Movie), 100)).ReturnsAsync(Result(Item("Quiet Night", BaseItemDto_Type.Movie)));
-		client.Setup(x => x.Search("quiet", It.Is<IReadOnlyList<BaseItemKind>>(k => k.Single() == BaseItemKind.Series), 100)).ReturnsAsync(Result(Item("Quiet Brightwater", BaseItemDto_Type.Series)));
-		client.Setup(x => x.Search("quiet", It.Is<IReadOnlyList<BaseItemKind>>(k => k.Single() == BaseItemKind.Episode), 100))
-			.ReturnsAsync(new BaseItemDtoQueryResult { Items = [.. Enumerable.Range(1, 100).Select(i => Item($"Quiet {i}", BaseItemDto_Type.Episode))], TotalRecordCount = 163 });
+		void Answer(BaseItemKind kind, BaseItemDtoQueryResult result) =>
+			client.Setup(x => x.Search("quiet", It.Is<IReadOnlyList<BaseItemKind>>(k => k.Single() == kind), 100)).ReturnsAsync(result);
+		Answer(BaseItemKind.Movie, Result(Item("A Quiet Night", BaseItemDto_Type.Movie)));
+		Answer(BaseItemKind.Series, Result(Item("Quiet", BaseItemDto_Type.Series)));
+		// the server's capped total (12.x: three times the limit) is never shown as a count of matches
+		Answer(BaseItemKind.Episode, new BaseItemDtoQueryResult { Items = [.. Enumerable.Range(1, 100).Select(i => Item($"The Quiet {i}", BaseItemDto_Type.Episode))], TotalRecordCount = 295 });
+		Answer(BaseItemKind.BoxSet, Result());
 		var vm = new SearchResultsViewModel(client.Object);
 
 		await vm.OnNavigatedTo("  quiet ");
 
 		Assert.Equal("Results for “quiet”", vm.Title);
 		Assert.True(vm.Results.IsLoaded);
-		// the server's count when it has more than the page asked for
-		Assert.Equal(["Movies (1)", "Shows (1)", "Episodes (100 of 163)"], vm.CardGroups.Select(g => g.Heading));
-		Assert.Equal("Quiet Night", vm.CardGroups[0].Items.Single().Dto.Name);
+		// the show's whole title leads as the top result; then the groups by their best match (not Movies first)
+		Assert.Equal("Quiet", vm.TopResult?.Dto.Name);
+		Assert.Equal("Show", vm.TopResultKind);
+		Assert.Equal(["Episodes (100)", "Movies (1)"], vm.CardGroups.Select(g => g.Heading));
+		Assert.DoesNotContain(vm.CardGroups, g => g.Name == "Shows"); // its one show is the top result
+		Assert.Equal(["All", "Shows", "Movies", "Episodes"], vm.Chips.Select(c => c.Label));
+		Assert.Equal("All, 102 results", vm.Chips[0].Name);
+		Assert.True(vm.Chips[0].IsSelected);
 	}
 
 	[Fact]
@@ -256,9 +245,11 @@ public sealed class SearchTests
 		await vm.OnNavigatedTo("zzz");
 		Assert.True(vm.Results.IsEmpty);
 		Assert.Equal("No results for “zzz”", vm.Results.Title);
+		Assert.Empty(vm.Chips);
 
 		await vm.OnNavigatedTo("down");
 		Assert.True(vm.Results.IsFailed);
+		Assert.Empty(vm.CardGroups);
 
 		await vm.OnNavigatedTo("   ");
 		Assert.True(vm.Results.IsEmpty);
@@ -268,10 +259,12 @@ public sealed class SearchTests
 	[Fact]
 	public void TheSearch_AsksForWhatOpensAPage()
 	{
-		// people have no page in Seaglass (a person row opened nothing); the box suggests movies and shows, the results page
-		// adds the episodes, each type asked for on its own
+		// the box suggests movies and shows; the results page asks for each kind on its own (people too, since the second
+		// review: a person opens "With <name>"), with the titles the PC ranks on
 		Assert.Equal([BaseItemKind.Movie, BaseItemKind.Series], JellyfinClient.SuggestionKinds);
-		Assert.Equal([BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Episode], SearchResults.Kinds);
+		Assert.Equal([BaseItemKind.Series, BaseItemKind.Movie, BaseItemKind.Episode, BaseItemKind.BoxSet, BaseItemKind.Person], Search.SearchKinds.All.Select(k => k.ServerKind));
+		Assert.Equal(typeof(PersonItemsViewModel), GlobalCommands.PageFor(BaseItemDto_Type.Person));
+		Assert.Equal([ItemFields.OriginalTitle, ItemFields.SortName], JellyfinClient.SearchFields);
 	}
 
 	// ---- the wiring (read from the files, as SettingsAndRailXamlTests does)
@@ -292,6 +285,17 @@ public sealed class SearchTests
 		Assert.Contains("NavigateTo<SearchResultsViewModel>(results.Query)", behavior, StringComparison.Ordinal);
 
 		Assert.Contains("Configure<SearchResultsViewModel, SearchResultsPage>();", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Services/PageService.cs")), StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public void APersonsCard_HasNoPlayWatchedOrFavourite()
+	{
+		// review (m9): People are search results now; the card's hover strip offered "Mark as watched" on a person
+		var card = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/BaseItemDtoCard.xaml.cs"));
+		Assert.Contains("private bool IsPerson => Model?.Dto?.Type == Jellyfin.Sdk.Generated.Models.BaseItemDto_Type.Person;", card, StringComparison.Ordinal);
+		Assert.Contains("PlayButton.Visibility = MarkWatchedButton.Visibility = AddToFavoriteButton.Visibility = person ? Visibility.Collapsed : Visibility.Visible;", card, StringComparison.Ordinal);
+		var listed = card[card.IndexOf("internal IEnumerable<UIElement> VisibleActions()", StringComparison.Ordinal)..];
+		Assert.True(listed.IndexOf("if (!IsPerson)", StringComparison.Ordinal) < listed.IndexOf("yield return MarkWatchedButton;", StringComparison.Ordinal));
 	}
 
 	private static string RepoRoot { get; } = FindRepoRoot();

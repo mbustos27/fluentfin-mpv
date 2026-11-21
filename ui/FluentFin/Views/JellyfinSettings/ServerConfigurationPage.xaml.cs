@@ -20,6 +20,10 @@ public partial class ServerConfigurationPage : UserControl
 	[GeneratedDependencyProperty]
 	public partial string? SectionName { get; set; }
 
+	/// <summary>1.5 (the button review's S22): what the last Save did ("Saved", or why not), beside Save.</summary>
+	[GeneratedDependencyProperty]
+	public partial string? SaveStatus { get; set; }
+
 	public ServerConfigurationPage()
 	{
 		InitializeComponent();

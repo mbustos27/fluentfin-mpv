@@ -63,6 +63,7 @@ public class PageService : IPageService, IPageRegistration
 		Configure<EpisodeViewModel, EpisodePage>();
 		// Seaglass 1.1.4: Enter in the title bar's search
 		Configure<SearchResultsViewModel, SearchResultsPage>();
+		Configure<PersonItemsViewModel, PersonItemsPage>(); // 1.5 search: "With <name>", what a person result opens
 
 		// Dashboard Pages
 		Configure<DashboardViewModel, DashboardPage>();

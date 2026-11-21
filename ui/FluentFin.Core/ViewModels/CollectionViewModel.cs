@@ -259,11 +259,50 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 
 	/// <summary>Play or Resume: the first film not watched, in collection order.</summary>
 	[RelayCommand]
-	public Task Play() => Next.Item is { } item ? commands.Play(item, null, streamsPicked: false) : Task.CompletedTask;
+	public Task Play()
+	{
+		if (Next.Item is not { } item)
+		{
+			return Task.CompletedTask;
+		}
+
+		// 1.5 qacheck: a playlist plays as itself, in its own order from that item (an episode in it brought its series)
+		if (IsPlaylist)
+		{
+			var queue = CollectionBrowse.Ordered(_serverOrder, CollectionOrder.Collection, IsPlaylist, OwnDisplayOrder).Where(CollectionBrowse.IsPlayable).ToList();
+			return commands.PlayInOrder(queue, queue.IndexOf(item), fromBeginning: Next.Again);
+		}
+
+		return commands.Play(item, null, streamsPicked: false);
+	}
 
 	/// <summary>Shuffle: a film not watched yet, at random (any film when all are watched).</summary>
 	[RelayCommand]
-	public Task Shuffle() => CollectionBrowse.Shuffle(_serverOrder, Pick) is { } item ? commands.Play(item, null, streamsPicked: false) : Task.CompletedTask;
+	public Task Shuffle()
+	{
+		if (CollectionBrowse.Shuffle(_serverOrder, Pick) is not { } item)
+		{
+			return Task.CompletedTask;
+		}
+
+		// 1.5 qacheck: a playlist's Shuffle plays the playlist, the item picked first and the rest in a random order (an
+		// episode picked brought its series)
+		if (IsPlaylist)
+		{
+			var rest = _serverOrder.Where(x => CollectionBrowse.IsPlayable(x) && !ReferenceEquals(x, item)).ToList();
+			var queue = new List<BaseItemDto> { item };
+			while (rest.Count > 0)
+			{
+				var at = Math.Clamp(Pick(rest.Count), 0, rest.Count - 1);
+				queue.Add(rest[at]);
+				rest.RemoveAt(at);
+			}
+
+			return commands.PlayInOrder(queue, 0);
+		}
+
+		return commands.Play(item, null, streamsPicked: false);
+	}
 
 	[RelayCommand]
 	public void SetOrder(CollectionOrder order) => Order = order;

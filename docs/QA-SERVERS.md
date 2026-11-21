@@ -59,6 +59,21 @@ test servers.
 - **Music videos:** two.
 - **Box set:** "QA Box Set", the admin's, with Big Buck Bunny and Sintel.
 - **Playlist:** "QA Playlist", qa-user's own, with an episode, a movie and a music video.
+- **QA Search** (Nixie 1.5, the search stream): two libraries of their own, "QA Search" (3,035 films) and "QA Search
+  Shows" (29 shows, 96 episodes), for search at a realistic size.
+  - `search_seed.py` makes them in `<root>\search-media` (outside `media`, which `media.py` keeps to its own list).
+    Each title is a .strm file pointing at Sintel's test pattern, so it plays, beside an .nfo with its name, original
+    and sort titles, year and cast.
+  - The cast is forty generated people ("Sunny Holm", "Otto Always").
+  - The libraries are added with every internet metadata and image fetcher off, so no title is looked up anywhere. The
+    scan takes under a minute.
+  - Near-misses sit around the titles people type: "It's Always Sunny in Philadelphia" (two seasons) beside "It's
+    Always Fair Weather", "Always", "Sunny", "It", "It's a Wonderful Life", "Little Miss Sunshine", "Philadelphia" and
+    a show "Sunny Days" with an episode "Always Sunny".
+  - The rest of the fixture: M\*A\*S\*H, Se7en, WALL·E, Amélie with its French original title, Spirited Away with
+    its Japanese one, and "Star Wars: A New Hope" sorted as "Star Wars 4".
+  - The other films are generated from word lists with a fixed seed (the same 3,000 every time).
+  - **Other checks leave out the libraries whose names start "QA Search"** when they count titles.
 
 The server settings: Quick Connect on, server name "Nixie QA <version>", en-US, and metadata in English for the US.
 Every file is a test pattern with silent audio. The film titles are there only so the metadata lookup finds real
@@ -72,6 +87,7 @@ tools\qa-servers\qa.ps1 start -Version 12         # hidden; waits until ready; c
 tools\qa-servers\qa.ps1 stop                      # both
 tools\qa-servers\qa.ps1 reset -Version all        # back to the seeded snapshot (restarted if it was running)
 tools\qa-servers\seed.ps1 [-Version 10.11|12|all] # rebuild from nothing (media made only if missing or changed)
+tools\qa-servers\seed.ps1 -SearchOnly            # (re)add just the QA Search libraries on seeded servers, snapshot again
 tools\qa-servers\smoke.ps1 [-Version ...]         # 10 API checks per server, pass/fail table, no tokens
 ```
 
@@ -96,8 +112,35 @@ tools\ui-harness\run-offscreen.ps1 -QaServer 12 -DataDir <scratch>\data -Out <sc
 stops with the Back key. It then checks the video showed, the movie page came back, mpv opened no audio device, and the
 server heard one Playing and one Stopped, both from the backend, at about 10 s.
 
-**Tests of the tools' own logic** (the `network.xml` gate, the proxy's routes, redaction and forwarding, the media
-spec) need no server: `tools\qa-servers\test_qa.py`, run off-screen like any Python test here.
+**A playlist, a transcode and a track change (1.5).** `then-qa-playlist.ps1` (with `-Script wait:1`) runs three parts,
+`NIXIE_QA_PARTS=playlist,tears,audio` by default:
+- *playlist*: qa-user's "QA Playlist" from the Playlists library; its page shows its three items; Play starts the first
+  one not watched; Shift+N plays the playlist's next item; the Back key returns to the playlist's page.
+- *tears*: Tears of Steel from Movies, played and left (direct play or a transcode, said which).
+- *audio*: the multi-track episode; B changes the audio track while it plays; the backend reports the new track, the
+  Audio and subtitles panel shows it chosen, and on a transcode the backend asked PlaybackInfo and a new stream for it.
+
+Each part ends with what the server recorded, read as qa-admin through the tools: its activity log has one "is playing"
+and one "has finished playing" per item. Add `-Before tools\qa-servers\before-qa-transcode.ps1` to make the run's
+backend transcode everything (the shim's own `always_transcode`, in the run's `mpv-backend\conf.json`): Nixie direct-plays
+every QA file otherwise, Tears of Steel too (mpv plays HEVC Main 10 and DTS), so a track change is a restart only then.
+
+**Behind a reverse proxy on a sub-path, and an address ending in "/" (1.5).** `subpath-probe.ps1 -Exe <Nixie.exe>
+-Out <scratch> [-Version 10.11|12|all] [-Cases subpath,subpath-slash,slash]` makes one off-screen run per case.
+`NIXIE_QA_BASE_PATH=/jellyfin` makes `qaproxy.py` stand in for nginx's `location /jellyfin/ { proxy_pass
+http://server/; }`: a path under `/jellyfin` goes on without it, anything else is the proxy's 404, logged
+`"prefixed": false`. `before-qa-slash.ps1` types the address with a "/" at its end. `then-qa-subpath.ps1` plays the movie
+for 6 s, then checks the tap's log: nothing outside the sub-path, no path with "//", no failed request but the ones every
+ordinary user gets, and images, the backend and the stream all through it.
+
+**Legacy authorization (1.5, BH-140X-m4).** `live-auth.ps1` (opt-in, read-only) sends qa-user's token in every form a
+client may use and prints what each server answers next to what the fake server's strict mode answers. The fake server
+is strict by default (`--auth strict`, version 12.4.0) and every off-screen run fails a check if anything sent a form
+Jellyfin 12 refuses; `NIXIE_FAKE_LEGACY_AUTH=1` gives the old behaviour (every form, 10.11.11). The tap logs each
+request's form (`auth_form`) the same way.
+
+**Tests of the tools' own logic** (the `network.xml` gate, the proxy's routes, redaction and forwarding, the sub-path,
+the auth forms, the media spec) need no server: `tools\qa-servers\test_qa.py`, run off-screen like any Python test here.
 
 ## Upgrading a server
 
@@ -146,10 +189,36 @@ Never take a pre-release (`preview`, `unstable`) without the owner's yes.
   - An ordinary user can read `GET /System/Configuration` (200 on both), with `MinResumePct`, `MaxResumePct` and
     `MinResumeDurationSeconds`: Nixie reads them to place a play the moment it ends.
 
+## Seen through Nixie itself (2026-11-20, 1.5 qacheck)
+
+- **A playlist played its first episode's show.** Play on "QA Playlist" (an episode, a film, a music video) queued the
+  episode's whole series, so Shift+N went to the show's next episode. Fixed in 1.5: a playlist's Play queues the playlist
+  in its own order (`GlobalCommands.PlayInOrder`). The server then recorded one start and one finish per item.
+- **Nixie direct-plays every QA file**, Tears of Steel too: the backend's profile lets mpv play HEVC Main 10 and DTS. A
+  transcode needs a lower quality, a server or user rule, or the shim's `always_transcode` (`before-qa-transcode.ps1`).
+- **A track change on a transcode was a second start on the server.** B on the transcoded multi-track episode restarts
+  the transcode on the new track (a PlaybackInfo naming it and a new `master.m3u8` with its `AudioStreamIndex`; the video
+  goes on). The backend sent Playing for the new play session and, as upstream jellyfin-mpv-shim does, no Stopped for the
+  old one: both servers' activity logs said "is playing" twice and "has finished playing" once for one viewing. Fixed in
+  1.5: the restart goes on as progress under the new id (`restart_playback`'s `no_initial_timeline`), one start and one
+  finish, the resume point and watched state as Jellyfin's rule makes them (`then-qa-playlist.ps1`'s audio part).
+- **Behind `/jellyfin`, typed with or without a "/" at its end:** every request of the app, its backend and mpv stayed
+  under the sub-path, none had "//" in its path, and sign-in, Home, a library, the movie page, its images and 6 s of
+  playback worked on 12.4.0 and 10.11.11 (`subpath-probe.ps1`). The address is saved as typed.
+- **Two runs at once against one server sign each other out.** Nixie's device id is the PC's, and Jellyfin ends a
+  device's older session when the same user signs in from it again: a second run's sign-in as qa-user turned the first
+  run's token into 401s (its library "Couldn't load"). The tap now signs in with a device id of its own per process;
+  Nixie's own cannot differ, so a run that meets a 401 mid-way while another stream used the same server is run again.
+- **"Part of" is 12 only.** 10.11.11 answers 404 to `GET /Items/{id}/Collections`, the movie page's "Part of" (the
+  code's comment says 10.11): Nixie leaves the line out quietly there.
+- **Legacy authorization.** 12.4.0 answers 401 to the token in `X-Emby-Authorization`, `X-Emby-Token`,
+  `X-MediaBrowser-Token`, the `Emby` scheme of `Authorization`, and `api_key`; 200 to `Authorization: MediaBrowser ...
+  Token="..."` and to `ApiKey` (any case: `apikey` too). 10.11.11 takes them all (`live-auth.ps1`). Nixie, its backend and
+  mpv used only the two forms 12 reads in every run.
+
 ## Not covered yet
 
-The outside-services hunt's untested cases still need setting up:
-- a reverse proxy on a sub-path (`qaproxy.py` could take a base path);
-- an address ending in "/";
+The outside-services hunt's untested cases still need setting up (the sub-path and the "/" at the end: 1.5's
+`subpath-probe.ps1` above):
 - TLS with a private certificate. Jellyfin's HTTPS needs a certificate and the HTTPS port in `network.xml`, and making
   Windows trust a private CA is a system change: ask the owner first.

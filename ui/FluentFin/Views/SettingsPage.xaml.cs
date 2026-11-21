@@ -65,66 +65,7 @@ public sealed partial class SettingsPage : Page
 
 	private void OnKeyboardShortcutsClick(object sender, RoutedEventArgs e) => FluentFin.Services.WindowShortcuts.ShowHelp(XamlRoot);
 
-	// Nixie 1.3.1: Check now: asks at once (the setting on or off), says what it found here, and Narrator reads it
-	private Core.Updates.ReleaseInfo? _checkedRelease;
-
-	private async void OnCheckNowClick(object sender, RoutedEventArgs e)
-	{
-		var updates = App.GetService<FluentFin.Services.UpdateNoticeService>();
-		CheckNowButton.IsEnabled = false;
-		CheckNowRetryButton.Visibility = Visibility.Collapsed;
-		CheckNowInstallButton.Visibility = Visibility.Collapsed;
-		CheckNowNotesButton.Visibility = Visibility.Collapsed;
-		CheckNowResult.Visibility = Visibility.Visible;
-		CheckNowRing.IsActive = true;
-		CheckNowRing.Visibility = Visibility.Visible;
-		CheckNowText.Text = Core.Updates.UpdateCheckMessage.Checking;
-		Core.Updates.UpdateCheckMessage message;
-		try
-		{
-			message = Core.Updates.UpdateCheckMessage.For(await updates.Coordinator.CheckNowAsync(), AppVersion.Current);
-		}
-		catch (Exception)
-		{
-			message = new Core.Updates.UpdateCheckMessage("Couldn't check: the check did not finish", true, true);
-		}
-
-		CheckNowRing.IsActive = false;
-		CheckNowRing.Visibility = Visibility.Collapsed;
-		CheckNowText.Text = message.Text;
-		_checkedRelease = message.Release;
-		if (message.Release is { } release)
-		{
-			CheckNowInstallButton.Content = FluentFin.Services.UpdateNoticeService.IsMsiInstall() && release.HasInstaller ? "Download and install" : "Open the download page";
-			CheckNowInstallButton.Visibility = Visibility.Visible;
-			CheckNowNotesButton.Visibility = Visibility.Visible;
-		}
-
-		CheckNowRetryButton.Visibility = message.CanRetry ? Visibility.Visible : Visibility.Collapsed;
-		CheckNowButton.IsEnabled = true;
-		var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(CheckNowText)
-			?? Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(CheckNowText);
-		peer?.RaiseNotificationEvent(Microsoft.UI.Xaml.Automation.Peers.AutomationNotificationKind.ActionCompleted,
-			Microsoft.UI.Xaml.Automation.Peers.AutomationNotificationProcessing.ImportantMostRecent, message.Text, "NixieUpdateCheck");
-	}
-
-	private async void OnCheckNowInstallClick(object sender, RoutedEventArgs e)
-	{
-		if (_checkedRelease is { } release)
-		{
-			CheckNowInstallButton.IsEnabled = false;
-			await App.GetService<FluentFin.Services.UpdateNoticeService>().InstallAsync(release, () => CheckNowText.Text = $"{AppIdentity.Name} will close to update");
-			CheckNowInstallButton.IsEnabled = true;
-		}
-	}
-
-	private void OnCheckNowNotesClick(object sender, RoutedEventArgs e)
-	{
-		if (_checkedRelease is { } release)
-		{
-			FluentFin.Services.UpdateNoticeService.OpenPage(release.PageUrl);
-		}
-	}
+	// 1.5 updater: Check now and every step of an update are in Controls\UpdateSettingsPanel
 
 	// fluentfin-mpv: where the next settings live, so changing them here is no surprise elsewhere
 	public string ServerPreferencesCaption() =>

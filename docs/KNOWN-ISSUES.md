@@ -5,6 +5,61 @@ The final pre-commit reviews found nothing of medium severity or above left open
 below is low severity, an accepted cost of the contract, or not verified yet. Each entry
 says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
+## Fix queue (next fix release)
+Found by the 1.5 reviews (2026-11-20); not fixed in 1.5.
+- **Libraries > Display's "Date added behavior for new content" is never sent.** The choice is written into the
+  library metadata options (`LibrariesDisplayViewModel.cs:37`, `UseFileCreationTimeForDateAdded`), but Save sends only the
+  server configuration, and the page says "Saved".
+- **Online intro lookups use a show-level id for seasons 2 and up.** When the server has a MyAnimeList, AniList or AniDB
+  id on the series, `intro_online.py` `mal_id_for` (lines 235-243) uses it for every season, so Season 2's episodes are
+  looked up as Season 1's (the wrong times, or none). Only the TVDB/TMDb mapping is per season.
+- **Home's row names are not in sentence case** (button review L6): "Continue Watching" and "Next Up" style names where the
+  rest of the app says "Continue watching". Held back in 1.5 because the harness finds rows by name (`then-search.ps1`,
+  `drive.ps1`'s Home step, the keys matrix): rename the rows and the scripts' names together.
+- **"/" can, rarely, type itself into the search box it opens** (found at the 1.5 integration). Once in about 60 presses
+  (1 of 29 keys-matrix runs across the 1.5 streams; 0 of 30 in a targeted off-screen repro) the search sent "/Signal":
+  the "/" that focused the box was also typed into it. `WindowShortcuts` handles "/" in
+  PreviewKeyDown and focuses the box at once (`TitleBarControl.FocusSearch`); the key's character (WM_CHAR, made by
+  TranslateMessage after the key-down, as for a real keyboard) usually does not reach the box, but sometimes does. Ctrl+F
+  and Ctrl+E make no character. Fix: when "/" opens the box, swallow that key press's character (or focus the box once
+  the character has been dispatched); the keys matrix should check the box is empty after "/".
+
+From the 1.5.0 bug hunt (`docs\reports\Bug hunt 2026-11-20 (1.5.0).md`; the owner shipped 1.5.0 with them queued; the
+fixes already started for them wait for the next release):
+- **BH-150-M1:** in Classic, Home's "Some of Home couldn't be loaded" notice is drawn under the top bar: its text runs
+  through the tabs and its Try again sits under the search box (`HomePage.xaml`; the other themes are fine).
+- **BH-150-M2:** a sign-in the server stops accepting looks like a dead server: every page says "Check that the server is
+  running" and Try again never works; nothing offers "sign in again". Two copies on one PC (two Windows accounts as the
+  same user, an installed and a portable copy) sign each other out, because the device id is the PC's.
+- **BH-150-M3:** Enter on a show's card opens it with the keyboard on the top bar's Back, so a second Enter goes back to
+  the library (the series and season pages have no first focus; Classic with real keys, seen in Drive-in and Cinematic).
+- **BH-150-m1:** Reset watch progress changes nothing on screen: the card keeps its progress bar and "Resume at", the menu
+  still offers Reset, and Undo changes nothing either, until the page reloads (`ItemUserData.ResetProgressAsync`).
+- **BH-150-m2:** "With <name>" opens with the keyboard on Back, its tooltip over the title, not on the first poster.
+- **BH-150-m3:** "With <name>" asks only for films and shows: a guest star credited on episodes only gets "has no films or
+  shows with them".
+- **BH-150-m4:** "With <name>" posters are stretched to fill the row and cropped, the year line cut (Editorial, a very wide
+  window).
+- **BH-150-m5:** a home server reached by a local name (split DNS, a router name such as `nas.home`, a hosts-file entry)
+  now counts as remote and gets the 10 Mbps remote cap: 1.5's "from the address alone" also dropped the name lookup
+  (`utils.address_is_local`).
+- **BH-150-m6:** `Nixie.exe --install-update <msi>` (the Sandbox test's hook) works in release builds: any local launch
+  installs an MSI with a matching `.sha256` beside it, with no question.
+- **BH-150-m7:** search never finds home videos, music videos or audio (`SearchKinds.All` asks shows, films, episodes,
+  collections and people).
+- **BH-150-m8:** the update check does not pin GitHub's API version (`X-GitHub-Api-Version`), so its answer is shaped by
+  GitHub's default of the day.
+
+## Hand checks, recorded
+From 1.5, one line per check and release: pass, fail, or not run. They need a real desktop and real hands (off-screen
+runs post keys and cannot move the real cursor or hear sound).
+- **1.5.0**
+  - Space before any click in the player, then move the mouse (the controls must come back): not run, for the owner.
+  - Esc inside YouTube's player in the trailer theatre (the theatre must close): not run, for the owner.
+  - One real trailer plays in the theatre, with sound: not run, for the owner.
+  - Restart to update on a real install (the Sandbox upgrade test, `upgrade-test-sandbox.ps1`, covers it off the owner's
+    account): not run, for the owner.
+
 ## Never verified
 - **Parts of a real Jellyfin server.** The automated tests use fake servers and fake tokens.
   The user's own server (remote, HTTPS, signed in as a user who is not an administrator) has
@@ -89,16 +144,48 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   `InputSiteWindowClass` child (the thread's focus window), not its `DesktopChildSiteBridge`; the
   fluentfin-controls harness posts there (Space, F, Escape through the page's key path).
 
+## Nixie 1.5.0: search, updates, fixes
+- **The release's final pass** (2026-11-20, off-screen, a Debug x64 build of the merged tree, the fake server's strict
+  auth on in every run): the keys matrix 538/538 in Classic, Drive-in and Editorial and 576/576 in Cinematic; the
+  contrast matrix's 16 runs, 4,129 labels, none under its floor; 41 theme runs (then-140-checks, arrival, then-search in
+  four themes and Cinematic Light, then-update in four themes with the full flow and Restart to update, the season
+  switch with its latency rules, rewatch, paging, T5, the Alt keys, Classic's states) all green but the skeleton check
+  below; on the QA servers (10.11.11 and 12.4.0) then-search-live 14/14, the playlist and transcode run 44/44 and the
+  smoke 20/20 on each; FluentFin.Core.Tests 4,560 and FluentFin.Tests 1,548, all passed; the end-to-end harness 26/26,
+  the transitions check 4/4 and the bridge smoke 75/75; the backend suite with only the 8 environment failures v1.4.1
+  has too (`test_audio_settings` 6, `test_mpvtk_pilfont` 2) once the 8 modules the suite's 300 s limit cut under that
+  load were run again alone: 7 passed (`test_shell_library` 314, `test_live_tv` 258, `test_shell_settings` 170,
+  `test_shell_books` 147, `test_list_page` 126, `test_dpi_matrix` 25, `test_playlist_edit` 8), and `test_shell_playback`
+  passed 119 of its 165 tests before a 20-minute limit, none failing (its layout sweeps rebuild the player bar hundreds
+  of times; it and the shell it tests are unchanged since v1.4.1).
+  The bug hunt ran beside it; its findings are in the Fix queue above, none fixed in 1.5.0.
+- **Cinematic's library placeholders can stand off the grid.** then-140-checks' skeleton check (Cinematic, 1920 wide)
+  failed in the final pass and again alone: on the first visit to Movies the placeholders stood 21 px below the cards
+  that replaced them, so the cards move up as they land. The app logs the same mismatch ("[layout] library skeleton:
+  differs from the grid", 11 to 76 px apart) 3 or 4 times a run, in 1.4.1's runs too, where the check's own visit
+  happened to match. The other themes and Cinematic at 1100 wide match.
+- **UI timing tests under load:** a few FluentFin.Tests timing tests (`JobProcessTests.ExitedAt` most often; the updater
+  stream saw five while the keys matrix ran beside them) can fail on a busy PC and pass alone. All 1,548 passed in the
+  final pass beside three harness runs; the release build runs a failed test once more on its own.
+- **Season switching, what is left after 1.5** (`then-season-switch.ps1` on the fake server's 10x20 series, four themes,
+  with its latency rules; the 1.5 season stream measured before and after):
+  - **The stills of a season not asked ahead still come after its rows,** 0.1 to 0.3 s now (0.5 to 1.1 s before 1.5).
+    WinUI starts a picture's download only once its row is laid out and drawn; pictures now come 6 at a time (WinINet gave
+    the app 2). The seasons either side of the one shown have their stills asked ahead (into WinINet's cache, which WinUI
+    reads), so a click to one of them shows its pictures with its rows; a far season (Season 1 to 9) and a season page
+    opened from far away do not, and neither does Editorial (it sizes its stills to its layout, so it cannot ask ahead).
+  - **Drive-in's rows are still the slowest to build,** though no longer by much: its tube numbers are made of far fewer
+    objects (the same drawing), which took most of its GC pauses away; a rare one still lands in a switch.
+  - **A season page shows the season it was opened with first:** its name, overview and pictures from the pill or link,
+    with the picker and the kept rows, and the server's season replaces it a moment later (cast and details come then). A
+    link that carries only the season's id shows the rows first and the header when the season comes.
+  - **A far season can still cost a round trip.** A show of at most 12 seasons has every season asked ahead, one at a
+    time (1.5); a longer one asks only the seasons either side, so a jump further away waits for the server once. After an
+    episode is played (or five minutes), a season further away is not asked ahead again (that was up to 11 requests a
+    time): it is asked when shown, one round trip.
+
 ## Nixie 1.4.1: Continue Watching and season switching
-- **Season switching, what is left** (`then-season-switch.ps1` on the fake server's 10x20 series, four themes):
-  - **Episode stills come 0.4 to 0.9 s after the rows.** A season kept or asked ahead shows its rows with no request, but
-    the stills of its episodes are asked only once their rows are drawn.
-  - **Drive-in's rows take longest to build** (the gate allows a kept season 900 ms in Drive-in, 700 in Classic, 400 in
-    Editorial and 350 in Cinematic): its episode rows are heavier, and the time is the app's own, not the server's.
-  - **A new season page waits for its item.** A season's own page (series > Season N details, or a pill there) asks for
-    the season first and shows its episodes after, even when they are kept.
-  - **A far season costs a round trip.** Only the seasons either side of the one shown are asked ahead: a jump to one
-    further away (Season 1 to Season 9) waits for the server once.
+- Season switching: what is left after 1.5 is under Nixie 1.5.0 above.
 
 ## Nixie 1.4.0: the consistency release
 - **Editorial has no list view.** Its View menu offers the poster sizes only; the other three themes have the list.
@@ -126,21 +213,27 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   the layout.
 - **Still open, from the outside-services bug hunt** (`docs\reports\Bug hunt 2026-11-19 (outside services).md`; none blocks
   1.4.0; planned for 1.4.1, they wait for the next release: 1.4.1 has Continue Watching and season switching only):
-  - **M1: a certificate Windows trusts but Mozilla's list does not: sign-in works, playback fails.** The UI checks the
+  - **M1 (fixed in 1.5: truststore in the backend; libmpv's stream and a transcode's playlists and segments already
+    read the Windows store through libcurl's native CA, and FFmpeg's GnuTLS, used only for what libcurl does not open,
+    trusts the same stores; pinned by `LibmpvTlsTests`): a certificate Windows trusts but Mozilla's list does not: sign-in
+    works, playback fails.** The UI checks the
     server's chain against the Windows store, the backend against certifi's bundle, so a home or private CA (or an
     HTTPS-inspecting antivirus root) browses but nothing plays (`SSLError: CERTIFICATE_VERIFY_FAILED`). Fix: `truststore`
     in the frozen backend (`truststore.inject_into_ssl()` in `backend_entry.py` and the bridge's main).
-  - **m1: split-season anime get the wrong part's skip times, or none** ("Look intros up online"): a TVDB season with more
+  - **m1 (fixed in 1.5: no answer for a split season or season 0; ARM has no episode offsets): split-season anime get the wrong part's skip times, or none** ("Look intros up online"): a TVDB season with more
     than one MAL entry (Attack on Titan's Season 3 and 3 Part II) is looked up as the first (`intro_online.py`
     `mal_id_for`). Fix: no answer when a season maps to several entries, or for season 0.
-  - **m2: mpv's controls offer "Search online" for subtitles,** which fails (uosc's `ziggy` is not shipped), and the
+  - **m2 (fixed in 1.5: patched out with the key): mpv's controls offer "Search online" for subtitles,** which fails (uosc's `ziggy` is not shipped), and the
     vendored uosc still carries its OpenSubtitles key. Fix: patch `download_command` out of the subtitles opener.
-  - **m3: renaming the GitHub repository would silently end one-click updates** in every installed copy (the release
+  - **m3 (fixed in 1.5: the updater follows GitHub's redirect, `UpdateSource.Repository`; 1.1 to 1.4 still do not,
+    docs\RELEASE.md section 5): renaming the GitHub repository would silently end one-click updates** in every installed copy (the release
     check accepts only `/mbustos27/fluentfin-mpv/` downloads). Never rename or transfer the repository without a release
     that accepts both paths first.
-  - **m4: the fake server accepts legacy auth** (`X-Emby-Token`, `api_key`) that Jellyfin 12 refuses, and reports 10.10.7:
+  - **m4 (fixed in 1.5: strict auth is the fake server's default, `--auth strict`; every run checks no request used a
+    legacy form): the fake server accepts legacy auth** (`X-Emby-Token`, `api_key`) that Jellyfin 12 refuses, and reports 10.10.7:
     a regression to a legacy form would pass every harness run. Fix: a strict-auth mode by default in the harness.
-  - The sub-path and trailing-slash server run never happened; it goes in the next hunt.
+  - The sub-path and trailing-slash server run (done in 1.5: `tools\qa-servers\subpath-probe.ps1` against both QA servers,
+    behind `/jellyfin` and with a "/" typed at the end).
 
 ## Nixie 1.3.0: the layout themes
 - **Editorial has no paused side column** (synopsis, cast and chapters beside a paused video), nor its segmented chapter
@@ -198,11 +291,13 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   pages' plain words ("English (5.1)") need the channel count, which the bridge's track list does not carry yet.
 - **There is no in-app theme setting:** the app follows Windows' light or dark choice (`NIXIE_THEME` forces one for
   screenshots).
-- **Button review verdicts left for a later release:** an off switch for Home's N and C keys (L1, L2) and Ctrl+Z in the
-  shortcuts sheet (L3); sentence case for the row names ("Continue watching", L6: the harness finds rows by name); the
-  Filter button's name as "Filter (2 on)" (L25); an Undo after Reset watch progress (L38); a visible hint on the
-  disabled Sign in (S2, Narrator has it); "Refresh" for an empty folder in the picker (S19); Select and Save disabled
-  while loading or unchanged (S20, S22).
+- **Button review verdicts left for a later release:** done in 1.5: the off switch for Home's N and C keys (L1, L2),
+  Ctrl+Z in the shortcuts sheet (L3), the Filter button's name "Filter (2 on)" (L25), an Undo after Reset watch progress
+  (L38), a visible hint on the disabled Sign in (S2), "Refresh" for an empty folder in the picker (S19), Select disabled
+  while loading or failed (S20) and Save disabled until something changed, with "Saved" or why not (S22; the NFO and
+  transcoding pages keep their own Save, always on). Still open: sentence case for the row names ("Continue watching",
+  L6: "Next Up" became "Up next" in 1.4.0; the rest waits because the search stream's then-search.ps1 finds the row by
+  name).
 - **Tests that can fail under load and pass alone:** `ItemUndoTests` can take an Undo offer from `ItemToggleTests` running
   at the same time (the offer is a static event); `JobProcessTests.ExitedAt` and a few bridge timing tests. The release
   build runs a failed test once more on its own.
@@ -401,9 +496,13 @@ says where it lives so it can be picked up later. Entries marked "fixed" say wha
   build by design: don't run them while you are using the dev build.
 
 ## Privacy note (upstream behaviour, unchanged)
-- The shim asks `checkip.amazonaws.com` for the public IPv4 address on each play when the
-  server address is a public IPv4 (its `is_local` check). Not changed in the baseline;
-  removing it was left out of the optimization plan on purpose.
+- Fixed in 1.5: the shim asked `checkip.amazonaws.com` for the public IPv4 address on each play when the
+  server address was a public IPv4 (its `is_local` check). It now decides from the server's address alone: loopback,
+  private and link-local addresses, a single-label name and `.local`, `.lan`, `.home.arpa`, `.internal` names are local;
+  anything else is remote, with no lookup and no request.
+- **A home server reached by its public name (or public address) counts as remote** since 1.5, so its plays keep the
+  remote bitrate cap: the backend's `remote_kbps` (10,000 kbps by default) in `conf.json` in the data folder's
+  `mpv-backend` folder. Raise it there if that is wrong for you (Nixie has no setting for it in its own Settings).
 
 ## Release package (`tools\release`, docs\RELEASE.md)
 - **Not code-signed**: SmartScreen warns on the first start ("More info", "Run anyway"), and

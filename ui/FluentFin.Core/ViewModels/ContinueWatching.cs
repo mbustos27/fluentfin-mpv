@@ -48,14 +48,19 @@ public static class ContinueWatchingRules
 	/// resume point: Jellyfin 12 keeps an episode watched while it is watched again (10.11 unmarks it at the start), so a
 	/// show being rewatched is watched and in progress at once, and stays.
 	/// </summary>
-	public static IReadOnlyList<BaseItemDto> Visible(IReadOnlyList<BaseItemDto> answer, DateTimeOffset now, int hideAfterDays) =>
-		answer.Any(x => IsWatchedNotInProgress(x) || IsStale(x, now, hideAfterDays))
-			? [.. answer.Where(x => !IsWatchedNotInProgress(x) && !IsStale(x, now, hideAfterDays))]
+	/// <param name="includeRewatching">1.5: Settings' "Include shows I'm rewatching"; off, an item marked watched is left out even
+	/// with a resume point (the rewatch case), as before 1.4.1.</param>
+	public static IReadOnlyList<BaseItemDto> Visible(IReadOnlyList<BaseItemDto> answer, DateTimeOffset now, int hideAfterDays, bool includeRewatching = true) =>
+		answer.Any(x => IsWatchedNotInProgress(x, includeRewatching) || IsStale(x, now, hideAfterDays))
+			? [.. answer.Where(x => !IsWatchedNotInProgress(x, includeRewatching) && !IsStale(x, now, hideAfterDays))]
 			: answer;
 
-	/// <summary>sg-cw: marked watched and with no resume point (a watched item being watched again has one: Jellyfin 12).</summary>
-	public static bool IsWatchedNotInProgress(BaseItemDto dto) =>
-		dto.UserData?.Played == true && dto.UserData.PlaybackPositionTicks is null or <= 0;
+	/// <summary>
+	/// sg-cw: marked watched and with no resume point (a watched item being watched again has one: Jellyfin 12). 1.5: with
+	/// <paramref name="includeRewatching"/> off, any item marked watched.
+	/// </summary>
+	public static bool IsWatchedNotInProgress(BaseItemDto dto, bool includeRewatching = true) =>
+		dto.UserData?.Played == true && (!includeRewatching || dto.UserData.PlaybackPositionTicks is null or <= 0);
 
 	/// <summary>
 	/// sg-cw: the server's resume list with the plays the mpv player just ended (and the server's answer does not have yet) put

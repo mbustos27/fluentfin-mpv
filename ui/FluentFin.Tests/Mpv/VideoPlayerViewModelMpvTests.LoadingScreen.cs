@@ -70,6 +70,28 @@ public sealed partial class VideoPlayerViewModelMpvTests
 	}
 
 	[Fact]
+	public async Task TheLoadingScreen_NamesAPlaylistsFirstItem_AndPlaysItsQueue()
+	{
+		// 1.5 qacheck: a playlist's Play opens the page with the queue its page built (GlobalCommands.PlayInOrder)
+		var movie = Movie();
+		movie.ProductionYear = 1999;
+		var queue = new BridgePlayRequest(["a1", BridgePlayRequest.ToBridgeId(movie.Id!.Value), "a3"], 1, 0, null, null, null);
+		var vm = CreateViewModel();
+		var gate = new TaskCompletionSource();
+		_backend.StartGate = gate.Task;
+
+		var navigating = vm.OnNavigatedTo(new QueuePlayRequest(movie, queue));
+		await BridgeClientTests.WaitUntil(() => _backend.Starts == 1);
+
+		Assert.Equal(("A movie", "1999"), (vm.MpvStartingTitle, vm.MpvStartingSubtitle));
+		Assert.Same(movie, vm.MpvStartingItem);
+		gate.SetResult();
+		await navigating;
+		// the page's queue as built, from its start (no item fetched, no series asked for)
+		Assert.True(System.Text.Json.Nodes.JsonNode.DeepEquals(BridgeCommands.Play(queue), _backend.Args("play")));
+	}
+
+	[Fact]
 	public async Task TheLoadingScreen_NamesASeriesOrSeason_WithoutTheirYears()
 	{
 		var show = new FakeLibrary(_client).AddSeries(seasons: 2, episodesPerSeason: 2);

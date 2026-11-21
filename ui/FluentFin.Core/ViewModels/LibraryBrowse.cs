@@ -88,12 +88,14 @@ public static class LibraryBrowse
 	/// <summary>The Filter button's words: "Filter", or "Filter (2)" with two on.</summary>
 	public static string FilterText(int active) => active > 0 ? $"Filter ({active})" : "Filter";
 
-	/// <summary>What Narrator hears for the Filter button: "Filter, 2 on".</summary>
+	/// <summary>
+	/// What Narrator hears for the Filter button: "Filter (2 on)". 1.5 (the button review's L25): it starts with the words the
+	/// button shows ("Filter (2)"), so a speech user can say what they see.
+	/// </summary>
 	public static string FilterButtonName(int active) => active switch
 	{
-		0 => "Filter, none on",
-		1 => "Filter, 1 on",
-		_ => $"Filter, {active} on",
+		0 => "Filter (none on)",
+		_ => $"Filter ({active} on)",
 	};
 
 	/// <summary>"368 movies", "1 show", "12 of 368 movies" when filters hide some.</summary>

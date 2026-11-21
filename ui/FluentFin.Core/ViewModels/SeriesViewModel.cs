@@ -27,8 +27,13 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 	/// <summary>fluentfin-mpv: this series could not be loaded: said on the page, with Retry (docs/research/ux-review.md §3.11).</summary>
 	public LoadState State { get; } = new("this series");
 
+	// Nixie 1.5 (season stream, review m3): the page was left: a season answering late asks nothing ahead (it took over the
+	// shown page's asking ahead)
+	private bool _left;
+
 	public Task OnNavigatedFrom()
 	{
+		_left = true;
 		ItemUserData.Changed -= OnUserDataChanged;
 		return Task.CompletedTask;
 	}
@@ -104,6 +109,7 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 
 		ItemUserData.Changed -= OnUserDataChanged;
 		ItemUserData.Changed += OnUserDataChanged;
+		_left = false;
 		await State.RunAsync(async () =>
 		{
 			// Nixie 1.4.1: the seasons, the series' episodes (Play's label) and More like this need only the series' id: asked
@@ -292,8 +298,12 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		EpisodesFailed = response?.Items is null;
 		EpisodesMessage = EpisodesFailed ? $"Couldn't load the episodes of {name}." : Episodes.Count == 0 ? $"{name} has no episodes yet." : "";
 		IsLoadingEpisodes = false;
-		// shown first, then the seasons either side asked ahead
-		_seriesEpisodes.Prefetch(ItemSiblings.Around(Seasons?.Select(x => x.Dto), id));
+		// shown first, then the seasons either side asked ahead (Nixie 1.5: then a small show's others, in turn), unless the page
+		// was left meanwhile
+		if (!_left)
+		{
+			_seriesEpisodes.PrefetchSeasons(Seasons?.Select(x => x.Dto), id);
+		}
 	}
 
 	private async Task UpdateNextUp(BaseItemDto dto)

@@ -246,7 +246,8 @@ public sealed class HomeAndLibraryXamlTests
 		Assert.DoesNotContain("Play", code[code.IndexOf("private void NextUpInvoked", StringComparison.Ordinal)..code.IndexOf("// Seaglass scrolling: \"See all\"", StringComparison.Ordinal)]);
 
 		var home = Core.Shortcuts.ShortcutCatalog.Sections.Single(s => s.Title == "Home page").Entries;
-		Assert.Equal(["Go to the Next Up row (Enter plays)", "Go to the Continue Watching row (Enter plays)"], home.Select(e => e.Description));
+		Assert.Equal(["Go to the Next Up row (Enter plays)", "Go to the Continue Watching row (Enter plays)",
+			"Undo the last removal from Continue Watching, while its notice shows"], home.Select(e => e.Description)); // 1.5: Ctrl+Z (L3)
 		Assert.Contains("no\nlonger play anything", File.ReadAllText(Path.Combine(RepoRoot, "../docs/SHORTCUTS.md")).Replace("\r\n", "\n"));
 	}
 

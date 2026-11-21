@@ -223,7 +223,15 @@ def aniskip_url(mal_id, episode, length_s):
 def mal_id_for(ids, season, version, fetch, now):
     """The MyAnimeList id of the season: the one in the provider ids when a
     plugin set it, else ARM's mapping of the show's public id (one GET,
-    only the id)."""
+    only the id).
+
+    None for specials (season 0), and for a season ARM maps to more than
+    one entry (BH-140X-m1): Attack on Titan's TVDB Season 3 is MAL 35760
+    (Season 3) and 38524 (Season 3 Part 2), and ARM gives no episode
+    offsets, so the episode cannot pick its part. The first entry's times
+    were another episode's, or none at all; no Skip button is better."""
+    if season == 0:
+        return None
     direct = ids.get("MyAnimeList") or ids.get("Mal")
     if direct and str(direct).isdigit():
         return int(direct)
@@ -240,10 +248,14 @@ def mal_id_for(ids, season, version, fetch, now):
             data = _cached_json("arm", ARM + path + "?id="
                                 + urllib.parse.quote(str(ids[key])),
                                 version, fetch, now)
-            for entry in data if isinstance(data, list) else ():
-                if (isinstance(entry, dict) and entry.get(field) == season
-                        and entry.get("myanimelist")):
-                    return int(entry["myanimelist"])
+            found = {int(entry["myanimelist"])
+                     for entry in (data if isinstance(data, list) else ())
+                     if isinstance(entry, dict) and entry.get(field) == season
+                     and entry.get("myanimelist")}
+            if len(found) > 1:
+                return None
+            if found:
+                return found.pop()
     return None
 
 

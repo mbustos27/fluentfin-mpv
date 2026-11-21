@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:behaviors="using:FluentFin.Behaviors"
     xmlns:cc="using:CommunityToolkit.WinUI.Converters"
+    xmlns:controls="using:FluentFin.Controls"
     xmlns:i="using:Microsoft.Xaml.Interactivity"
     xmlns:ui="using:CommunityToolkit.WinUI"
     Loaded="OnLoaded">
@@ -19,75 +20,24 @@
     -->
     <!--
         Seaglass: the update notice (Settings > Check for updates; on by default since 1.3.1): quiet, above the page, never over
-        the player: "Nixie 1.3.2 is available", Download and install, Release notes and Dismiss (that version is not offered
-        again). It only tells: nothing is downloaded before the click. Narrator hears it once.
+        the player. Nixie 1.5: every step of an update (UpdateNotice.xaml): found, downloading with its progress, checking,
+        ready (Restart to update), a failure with why, and "Updated to" afterwards. Narrator hears each step once.
     -->
     <Grid x:Name="ContentRoot">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+        <!--  1.5 updater  -->
         <!--
-            Nixie 1.3.1: one row, vertically centred: "Nixie x is available" · Download and install (or Open the download page) ·
-            Release notes · Dismiss (the InfoBar put Release notes and Dismiss on a second line). 1.4.0 style: the install is
-            the Primary Compact (the accent is the action alone; the icon is neutral), Release notes the Link role, Dismiss Subtle.
-            The host hides it under the player; the bar itself shows while there is a notice (ShellPage.ShowUpdateNotice), and
-            Narrator hears it once.
+            Nixie 1.5 (the updater stream): the notice is its own control (Controls\UpdateNotice.xaml): every step of an update,
+            one row, one Primary. The host hides it under the player; it shows itself while there is something to say, and the
+            shell gives it room (OpenChanged, UpdateInsets).
         -->
         <Grid Visibility="{x:Bind Chrome.IsNavigationVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <Border
-                x:Name="UpdateBar"
-                Padding="16,8,16,8"
-                AutomationProperties.LandmarkType="Custom"
-                AutomationProperties.LocalizedLandmarkType="Notice"
-                AutomationProperties.Name="Update notice"
-                Background="{ThemeResource InfoBarInformationalSeverityBackgroundBrush}"
-                BorderBrush="{ThemeResource InfoBarBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
-                Visibility="Collapsed">
-                <StackPanel
-                    VerticalAlignment="Center"
-                    Orientation="Horizontal"
-                    Spacing="12">
-                    <FontIcon
-                        VerticalAlignment="Center"
-                        AutomationProperties.AccessibilityView="Raw"
-                        FontSize="16"
-                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
-                        Glyph="&#xE946;" />
-                    <TextBlock
-                        x:Name="UpdateTitle"
-                        VerticalAlignment="Center"
-                        FontWeight="SemiBold"
-                        Foreground="{ThemeResource GlassTextPrimaryBrush}"
-                        TextTrimming="CharacterEllipsis" />
-                    <!--  button review A25: Narrator reads the visible label (it said "Download and install" over "Open the download page")  -->
-                    <Button
-                        x:Name="UpdateInstallButton"
-                        VerticalAlignment="Center"
-                        Click="OnUpdateInstallClick"
-                        Content="Download and install"
-                        Style="{StaticResource NixiePrimaryCompactButtonStyle}" />
-                    <!--  button review A26: a link with a 32 px hit area; 1.4.0 style: the Link role (NixieLinkButtonStyle, 32 high)  -->
-                    <HyperlinkButton
-                        VerticalAlignment="Center"
-                        AutomationProperties.Name="Release notes"
-                        Click="OnUpdateNotesClick"
-                        Content="Release notes"
-                        Style="{StaticResource NixieLinkButtonStyle}" />
-                    <!--  Dismiss: that version is not offered again  -->
-                    <Button
-                        x:Name="UpdateDismissButton"
-                        MinHeight="32"
-                        VerticalAlignment="Center"
-                        Click="OnUpdateDismissClick"
-                        Content="Dismiss"
-                        Style="{StaticResource NixieSubtleButtonStyle}"
-                        ToolTipService.ToolTip="Don't offer this version again" />
-                </StackPanel>
-            </Border>
+            <controls:UpdateNotice x:Name="UpdateBar" OpenChanged="OnUpdateBarOpenChanged" />
         </Grid>
+        <!--  end 1.5 updater  -->
         <Frame
             x:Name="NavigationFrame"
             Grid.Row="1"

@@ -17,11 +17,17 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 	private readonly Latest _list = new();
 	private readonly Latest _play = new();
 
+	// Nixie 1.5 (season stream, review m2, m3): the newest load (a Retry, or the page opened again, replaces an older one: only
+	// the newest may clear the page or ask ahead), and whether the page was left (a left page asks nothing ahead)
+	private readonly Latest _load = new();
+	private bool _left;
+
 	/// <summary>fluentfin-mpv: this season could not be loaded: said on the page, with Retry (docs/research/ux-review.md §3.11).</summary>
 	public LoadState State { get; } = new("this season");
 
 	public Task OnNavigatedFrom()
 	{
+		_left = true;
 		ItemUserData.Changed -= OnUserDataChanged;
 		return Task.CompletedTask;
 	}
@@ -90,26 +96,56 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 
 		ItemUserData.Changed -= OnUserDataChanged;
 		ItemUserData.Changed += OnUserDataChanged;
+		_left = false;
 		await State.RunAsync(async () =>
 		{
+			var load = _load.Next();
 			// Nixie 1.4.1: the episodes and the series' seasons (the pills) are asked with the season itself, from what the page
 			// was opened with (each waited for the one before); shown in the same order. Play's label still starts once the
 			// season is in: it reads the series the server says the season is in.
 			var episodes = _seriesEpisodes.GetList(dto); // Nixie 1.4.1: kept per season (a season seen, or asked ahead, shows at once)
 			var pills = dto.SeriesId is { } openedSeries ? _seriesEpisodes.GetList(new BaseItemDto { Id = openedSeries, Type = BaseItemDto_Type.Series }) : null;
 
-			await UpdateSeason(id);
-			if (Dto?.Id != id)
+			// Nixie 1.5: the page does not wait for its own item (one round trip) to show what it already has: the season it was
+			// opened with (a pill's or a link's: its name, overview and pictures), and its episodes and the series' seasons as soon
+			// as they are in (at once when kept: seen, or asked ahead). All of them together, so nothing above the rows grows over
+			// them a moment later (the header, the picker); the server's season replaces the one opened with when it comes.
+			if (Dto?.Id != id && !string.IsNullOrWhiteSpace(dto.Name))
 			{
+				Dto = dto;
+			}
+
+			var shownEpisodes = UpdateEpisodes(dto, episodes);
+			var shownPills = pills is not null && Dto?.Id == id ? UpdateSeasonPills(pills, dto.SeriesId) : null;
+			var found = await UpdateSeason(id);
+			if (!_load.Is(load))
+			{
+				// a newer load (Retry, the page opened again) shows the page now: this one changes nothing (review m2: its
+				// failure cleared a page the newer one had loaded)
+				return LoadOutcome.Loaded;
+			}
+
+			if (!found || Dto?.Id != id)
+			{
+				// a page that cannot load its season shows only the message, as before: nothing under it
+				_list.Next();
+				Episodes = null!;
+				SeasonPills = [];
+				Dto = null!;
 				return LoadMessages.CouldNotLoad("this season");
 			}
 
 			// 1.2.0: asked alongside the episodes, so the page does not wait for it
 			var play = UpdatePlayTarget(id);
-			await UpdateEpisodes(dto, episodes);
-			await UpdateSeasonPills(pills, dto.SeriesId);
-			// Nixie 1.4.1: the seasons either side asked now (kept), so a pill to one of them opens its page with its episodes in
-			_seriesEpisodes.Prefetch(ItemSiblings.Around(SeasonPills.Select(p => p.Dto), id));
+			await shownEpisodes;
+			await (shownPills ?? UpdateSeasonPills(pills, dto.SeriesId));
+			// Nixie 1.4.1: the seasons either side asked now (kept), so a pill to one of them opens its page with its episodes in;
+			// Nixie 1.5: then, for a small show, the others in turn (SeriesEpisodes.PrefetchSeasons). Not from a page left, or a
+			// load replaced, meanwhile (review m3: it took over the shown page's asking ahead)
+			if (!_left && _load.Is(load))
+			{
+				_seriesEpisodes.PrefetchSeasons(SeasonPills.Select(p => p.Dto), id);
+			}
 			await play;
 			return LoadOutcome.Loaded;
 		});
@@ -143,6 +179,11 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 
 		// Nixie 1.4.1: the request started with the page's, when it asked for this series
 		var response = await (asked is not null && askedFor == seriesId ? asked : _seriesEpisodes.GetList(new BaseItemDto { Id = seriesId, Type = BaseItemDto_Type.Series }));
+		if (Dto?.Id != id)
+		{
+			return; // Nixie 1.5: the page's season could not be loaded meanwhile (it shows only the message)
+		}
+
 		SeasonPills = ItemSiblings.SeasonPills(response?.Items, id);
 	}
 
@@ -168,16 +209,22 @@ public partial class SeasonViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		}
 	}
 
-	private async Task UpdateSeason(Guid id)
+	// whether the server answered with the season (Nixie 1.5: the page may show the one it was opened with meanwhile)
+	private async Task<bool> UpdateSeason(Guid id)
 	{
 		var ticket = _item.Next();
 		var season = await jellyfinClient.GetItem(id);
-		if (season is null || !_item.Is(ticket))
+		if (season is null)
 		{
-			return;
+			return false;
 		}
 
-		Dto = season;
+		if (_item.Is(ticket))
+		{
+			Dto = season;
+		}
+
+		return true;
 	}
 
 	private async Task UpdateEpisodes(BaseItemDto dto, Task<BaseItemDtoQueryResult?>? asked = null)

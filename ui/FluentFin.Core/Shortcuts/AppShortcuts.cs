@@ -163,6 +163,8 @@ public static class ShortcutCatalog
 		[
 			new("N", "Go to the Next Up row (Enter plays)", ShortcutScope.Page),
 			new("C", "Go to the Continue Watching row (Enter plays)", ShortcutScope.Page),
+			// 1.5 (the button review's L3): it was only on the notice's tooltip
+			new("Ctrl+Z", "Undo the last removal from Continue Watching, while its notice shows", ShortcutScope.Page),
 		]),
 		// Nixie 1.4.0: R refreshes; while you're typing a title, R is a letter; R titles: the A to Z bar
 		new("Library grids",

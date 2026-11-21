@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="FluentFin.Views.PersonItemsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Page"
+    Background="{ThemeResource PageGroundBrush}"
+    mc:Ignorable="d">
+
+    <!--
+        Nixie 1.5 (search; people search for actors): what a person in the search results opens: "With Ava Abara", the films
+        and shows they are in, newest first, as posters on the theme's page grid. One Tab stop for the grid (the Library's
+        grid model: arrows both ways, Home/End). Loading, nothing found and a failure: LoadStateView.
+    -->
+    <Grid
+        x:Name="PersonRoot"
+        Padding="36,72,36,24"
+        lc:PageGrid.Apply="True"
+        Background="Transparent"
+        RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            x:Name="PersonTitle"
+            AutomationProperties.HeadingLevel="Level1"
+            AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+            Style="{StaticResource PageHeaderStyle}"
+            Text="{x:Bind lc:PageGrid.Title(ViewModel.Title), Mode=OneWay}"
+            TextTrimming="CharacterEllipsis"
+            TextWrapping="NoWrap" />
+
+        <ScrollView
+            x:Name="PersonScroller"
+            Grid.Row="1"
+            Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.Results.IsLoaded), Mode=OneWay}">
+            <lc:RowList
+                x:Name="PersonList"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+                TabFocusNavigation="Once">
+                <ItemsRepeater x:Name="PersonRepeater" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BaseItemViewModel">
+                            <ItemContainer
+                                AutomationProperties.AccessibilityView="Raw"
+                                CornerRadius="{StaticResource GlassCardCornerRadius}"
+                                IsTabStop="False"
+                                Style="{StaticResource BareItemContainerStyle}">
+                                <lc:BaseItemDtoCard
+                                    BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 352)}"
+                                    ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 352)}"
+                                    JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
+                                    Model="{x:Bind}" />
+                            </ItemContainer>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                    <ItemsRepeater.Layout>
+                        <UniformGridLayout
+                            ItemsJustification="Start"
+                            ItemsStretch="Fill"
+                            MinColumnSpacing="8"
+                            MinItemHeight="390"
+                            MinItemWidth="220"
+                            MinRowSpacing="8"
+                            Orientation="Horizontal" />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
+            </lc:RowList>
+        </ScrollView>
+
+        <lc:LoadStateView
+            Grid.Row="1"
+            LoadingText="Loading…"
+            ShowsLoading="True"
+            State="{x:Bind ViewModel.Results}"
+            VerticalContentAlignment="Center" />
+    </Grid>
+</Page>

@@ -204,6 +204,40 @@ class NoSelfUpdateTest(unittest.TestCase):
         self.assertNotIn("require", update)
 
 
+class NoSubtitleSearchTest(unittest.TestCase):
+    """BH-140X-m2: uosc's Subtitles menu offered "Search online", which runs
+    ziggy (not vendored: it only failed) with uosc's OpenSubtitles key,
+    sending the search and the file to api.opensubtitles.com, a host no
+    privacy note lists. The action, the binding's work and the key are gone."""
+
+    def setUp(self):
+        self.uosc = pathlib.Path(fluentfin_bar.uosc_dir())
+        self.main = (self.uosc / "main.lua").read_text(encoding="utf-8")
+
+    def test_no_menu_offers_a_download(self):
+        self.assertNotIn("download_command =", self.main)
+        self.assertNotIn("'script-binding uosc/download-subtitles'", self.main)
+
+    def test_the_binding_does_not_reach_the_downloader(self):
+        binding = self.main[self.main.index(
+            "bind_command('download-subtitles'"):]
+        binding = binding[:binding.index("end)")]
+        self.assertNotIn("open_subtitle_downloader", binding)
+
+    def test_no_opensubtitles_key_ships(self):
+        for path in self.uosc.rglob("*.lua"):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                self.assertNotIn("open_subtitles_api_key =", text)
+                self.assertNotIn("b0rd16N0bp7DETMpO4pYZwIqmQkZbYQr", text)
+
+    def test_ziggy_is_not_vendored(self):
+        listed = (pathlib.Path(fluentfin_bar.ASSETS).parent
+                  / "uosc-files.txt").read_text(encoding="utf-8")
+        self.assertNotIn("ziggy", listed)
+        self.assertFalse(list(self.uosc.rglob("ziggy*")))
+
+
 class LicencesTest(unittest.TestCase):
     """What ships with the bar carries its licences: uosc's LGPL-2.1 and
     Material Symbols' Apache-2.0 (uosc's icon font); the release archive

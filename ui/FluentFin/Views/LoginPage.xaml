@@ -125,6 +125,15 @@
                             <TextBlock Text="Sign in" />
                         </StackPanel>
                     </Button>
+                    <!--  1.5 (the button review's S2): why Sign in is off, on screen too (Narrator has it in the button's help text)  -->
+                    <TextBlock
+                        x:Name="SignInHint"
+                        Margin="0,-4,0,0"
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="Type a username to sign in"
+                        Visibility="{x:Bind local:LoginPage.SignInHintVisibility(ViewModel.Username, ViewModel.IsSigningIn), Mode=OneWay}" />
                     <Button
                         HorizontalAlignment="Stretch"
                         AutomationProperties.Name="Use Quick Connect"

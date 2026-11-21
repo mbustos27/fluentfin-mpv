@@ -51,6 +51,38 @@ public static class ItemSiblings
 		return around;
 	}
 
+	/// <summary>
+	/// Nixie 1.5: the seasons beyond the ones either side of <paramref name="current"/> (<see cref="Around"/>), nearest first
+	/// (the one after before the one before), for a show of at most <paramref name="most"/> seasons: a far jump (Season 1 to
+	/// Season 9) waited for the server once. Empty for a longer show (each season is a request) or when
+	/// <paramref name="current"/> is not a pill.
+	/// </summary>
+	public static IReadOnlyList<BaseItemDto> Further(IEnumerable<BaseItemDto>? seasons, Guid current, int most)
+	{
+		var pills = SeasonPills(seasons, current);
+		var at = pills.FindIndex(p => p.IsCurrent);
+		if (at < 0 || pills.Count > most)
+		{
+			return [];
+		}
+
+		var further = new List<BaseItemDto>(Math.Max(0, pills.Count - 3));
+		for (var distance = 2; distance < pills.Count; distance++)
+		{
+			if (at + distance < pills.Count)
+			{
+				further.Add(pills[at + distance].Dto);
+			}
+
+			if (at - distance >= 0)
+			{
+				further.Add(pills[at - distance].Dto);
+			}
+		}
+
+		return further;
+	}
+
 	/// <summary>The episode that follows <paramref name="current"/> in its season; null for the last one or when it is not listed.</summary>
 	public static BaseItemDto? NextEpisode(IEnumerable<BaseItemDto>? episodes, Guid current)
 	{

@@ -97,6 +97,28 @@ public sealed class JellyfinClientMpvRequestTests : IAsyncLifetime
 	}
 
 	[Fact]
+	public async Task ASeriesSeasons_AreAskedWithTheirLogos_ForTheSeasonPageHeader()
+	{
+		// Nixie 1.5 (season stream, review M1): a season page opened from a pill first shows the pill's season, from this list;
+		// without Logo among the image types Jellyfin leaves out the show's logo (ParentLogoImageTag), and the header showed
+		// the name as text, then the logo a moment later
+		var seriesId = Guid.NewGuid();
+		_server.Respond("/Items", 200, """{"Items":[],"TotalRecordCount":0}""");
+		await LogIn();
+		var before = _server.ApiRequests.Count;
+
+		await _client.GetItems(new BaseItemDto { Id = seriesId, Type = BaseItemDto_Type.Series });
+
+		var request = Assert.Single(_server.ApiRequests.Skip(before));
+		Assert.Equal("/Items", request.Path, ignoreCase: true);
+		Assert.Equal(seriesId, Guid.Parse(request.Query["parentId"]!));
+		var types = request.Query["enableImageTypes"]!.Split(',');
+		Assert.Contains("Logo", types);
+		Assert.Contains("Backdrop", types);
+		Assert.Contains("Primary", types);
+	}
+
+	[Fact]
 	public async Task SeriesEpisodes_IsOneRequest_WithTheUserAndUserData_AndNoImagesOrFields()
 	{
 		var seriesId = Guid.NewGuid();

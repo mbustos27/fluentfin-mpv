@@ -47,6 +47,10 @@ public sealed partial class LoginPage
 	/// <summary>Whether the theme's sign-in backdrop is shown: the theme has one and high contrast is off.</summary>
 	public static bool ShowsThemeBackdrop(bool themeHasOne, bool highContrast) => themeHasOne && !highContrast;
 
+	/// <summary>1.5 (the button review's S2): "Type a username to sign in" shows while Sign in is off for want of a username.</summary>
+	public static Microsoft.UI.Xaml.Visibility SignInHintVisibility(string? username, bool signingIn) =>
+		string.IsNullOrWhiteSpace(username) && !signingIn ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
 	private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
 	{
 		if (e.PropertyName == nameof(LoginViewModel.SplashScreen))

@@ -47,6 +47,9 @@ public sealed partial class MainWindow : WindowEx
 
 		// Nixie 1.3.1: the off-screen harness's clicks (dev builds only, NIXIE_HARNESS_POINTER=1)
 		HarnessPointer.Attach(this);
+
+		// 1.5: Alt chords (Alt+Enter) end without Windows' error sound (WM_MENUCHAR)
+		MenuCharSilencer.Attach(this, "main");
 	}
 
 	/// <summary>

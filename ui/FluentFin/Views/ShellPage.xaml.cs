@@ -18,16 +18,13 @@ public sealed partial class ShellPage : Page
 	// fluentfin-mpv: no navigation pane while a player page is open (docs/research/ux-review.md V9)
 	public PlayerChrome Chrome { get; } = App.GetService<PlayerChrome>();
 
-	// Seaglass: the opt-in update notice (Core/Updates, Services/UpdateNoticeService)
+	// Seaglass: the opt-in update notice (Core/Updates, Services/UpdateNoticeService; Nixie 1.5: Controls/UpdateNotice)
 	private readonly UpdateNoticeService _updates = App.GetService<UpdateNoticeService>();
 
 	public ShellPage()
 	{
 		ViewModel = App.GetService<ShellViewModel>();
 		InitializeComponent();
-		_updates.Coordinator.NoticeChanged += OnUpdateNoticeChanged;
-		Unloaded += (_, _) => _updates.Coordinator.NoticeChanged -= OnUpdateNoticeChanged;
-		ShowUpdateNotice();
 
 		ViewModel.NavigationService.Frame = NavigationFrame;
 
@@ -180,6 +177,9 @@ public sealed partial class ShellPage : Page
 
 	private void OnFrameNavigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
 	{
+		// 1.5 updater: Settings' Updates group says what the notice says, with the same action: the notice steps aside there
+		UpdateBar.HiddenHere = e.SourcePageType == typeof(JellyfinSettings.SettingsPage);
+
 		// Nixie 1.3.0: a theme switch showing the same page in the new theme's view: the bar keeps its search text and its
 		// tab; only where the page starts can change (the new view may run under the bar)
 		// Nixie 1.3.1: a refresh (R, F5) too: the same page loaded again
@@ -196,6 +196,11 @@ public sealed partial class ShellPage : Page
 		{
 			_lookChecked = true;
 			DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () => await ChooseLookStep.OfferAsync(XamlRoot));
+			// 1.5 updater: after "Restart to update", back to the page Nixie was on (once)
+			if (_updates.TakeResume() is { } resume)
+			{
+				DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, async () => await UpdateActions.ResumeAsync(resume));
+			}
 		}
 
 		// 1.2.0: the tab this page marks, and where it starts
@@ -213,70 +218,9 @@ public sealed partial class ShellPage : Page
 		UpdateInsets();
 	}
 
-	private void OnUpdateNoticeChanged() => DispatcherQueue.TryEnqueue(ShowUpdateNotice);
+	/// <summary>Whether the update notice shows (1.3.0: its room comes and goes with it, UpdateBarTop).</summary>
+	private bool UpdateBarOpen => UpdateBar.IsOpen;
 
-	/// <summary>Whether the update bar shows (1.3.0: its room comes and goes with it, UpdateBarTop).</summary>
-	private bool UpdateBarOpen
-	{
-		get => UpdateBar.Visibility == Microsoft.UI.Xaml.Visibility.Visible;
-		set
-		{
-			var visibility = value ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
-			if (UpdateBar.Visibility != visibility)
-			{
-				UpdateBar.Visibility = visibility;
-				UpdateInsets();
-			}
-		}
-	}
-
-	// Nixie 1.3.1: Narrator hears each version's notice once
-	private static string? s_announcedUpdate;
-
-	private void ShowUpdateNotice()
-	{
-		if (_updates.Coordinator.Notice is not { } notice)
-		{
-			UpdateBarOpen = false;
-			return;
-		}
-
-		UpdateTitle.Text = $"{Core.AppIdentity.Name} {notice.Version} is available";
-		UpdateInstallButton.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
-		UpdateInstallButton.Content = UpdateNoticeService.IsMsiInstall() && notice.HasInstaller ? "Download and install" : "Open the download page";
-		UpdateBarOpen = true;
-		if (s_announcedUpdate != notice.Version)
-		{
-			s_announcedUpdate = notice.Version;
-			var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(UpdateTitle)
-				?? Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(UpdateTitle);
-			peer?.RaiseNotificationEvent(Microsoft.UI.Xaml.Automation.Peers.AutomationNotificationKind.Other,
-				Microsoft.UI.Xaml.Automation.Peers.AutomationNotificationProcessing.ImportantMostRecent, UpdateTitle.Text, "NixieUpdateNotice");
-		}
-	}
-
-	private async void OnUpdateInstallClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-	{
-		if (_updates.Coordinator.Notice is { } notice)
-		{
-			UpdateInstallButton.IsEnabled = false;
-			await _updates.InstallAsync(notice, () =>
-			{
-				UpdateTitle.Text = $"{Core.AppIdentity.Name} will close to update";
-				UpdateInstallButton.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
-			});
-			UpdateInstallButton.IsEnabled = true;
-		}
-	}
-
-	private void OnUpdateNotesClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-	{
-		if (_updates.Coordinator.Notice is { } notice)
-		{
-			UpdateNoticeService.OpenPage(notice.PageUrl);
-		}
-	}
-
-	// Nixie 1.3.1: Dismiss: that version is not offered again
-	private void OnUpdateDismissClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _updates.Coordinator.Dismiss();
+	// Nixie 1.5: the notice (Controls\UpdateNotice) came or went: the page below it moves
+	private void OnUpdateBarOpenChanged(object? sender, EventArgs e) => UpdateInsets();
 }

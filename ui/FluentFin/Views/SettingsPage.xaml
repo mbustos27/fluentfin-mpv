@@ -119,6 +119,14 @@
                             ItemsSource="{x:Bind ContinueWatching.Choices}"
                             SelectedItem="{x:Bind ContinueWatching.Selected, Mode=TwoWay}" />
                     </ctk:SettingsCard>
+                    <!--  1.5 fixes: rewatching in Up next and Continue Watching (the owner's 1.5 choice: on by default), on this PC only  -->
+                    <ctk:SettingsCard
+                        Description="Up next and Continue Watching show the next episode of a show you're watching again. Only on this PC."
+                        Header="Include shows I'm rewatching"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE8EE;}">
+                        <ToggleSwitch AutomationProperties.Name="Include shows I'm rewatching" IsOn="{x:Bind ViewModel.IncludeRewatching, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                    <!--  END 1.5 fixes  -->
 
                 </StackPanel>
                 <!--  fluentfin-mpv: Settings > Playback (docs/research/ux-review.md T1)  -->
@@ -439,10 +447,13 @@
                         </ctk:SettingsExpander.Items>
                     </ctk:SettingsExpander>
                 </StackPanel>
+                <!--  1.5 updater: Settings > Updates (Controls\UpdateSettingsPanel.xaml): the check, every step of an update, Install when I close Nixie  -->
+                <controls:UpdateSettingsPanel x:Name="UpdatesGroup" />
+                <!--  end 1.5 updater  -->
                 <!--
                     Seaglass 1.1.3: Settings > About, last (UX review, prioritised fixes 1, 6 and 9): the version, the licence, the two
                     projects it is built from, Contribute and Report a problem (they left the rail; clickable cards are buttons, so Enter
-                    and Space work), and Check for updates and the shortcut sheet, which sat under Playback.
+                    and Space work), and the shortcut sheet, which sat under Playback (Nixie 1.5: Check for updates has its own group above, Updates).
                 -->
                 <StackPanel Spacing="4">
                     <TextBlock
@@ -460,61 +471,6 @@
                             Content="License"
                             NavigateUri="{x:Bind vm:SettingsViewModel.LicenseUri}" />
                     </ctk:SettingsCard>
-                    <!--
-                        Seaglass: the update notice. Nixie 1.3.1: on by default; it asks GitHub when Nixie opens and once a day, and
-                        only tells (nothing is downloaded before a click). Check now asks at once, on or off, and says what it found
-                        here (the same Download and install and Release notes as the notice), Narrator too.
-                    -->
-                    <ctk:SettingsCard
-                        Description="Each time Nixie opens, and once a day while it stays open, it asks GitHub whether a newer version is out, and tells you. Nothing is sent but the request for the latest release, and nothing is downloaded until you choose to. On by default."
-                        Header="Check for updates"
-                        HeaderIcon="{ui:FontIcon Glyph=&#xE895;}">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <Button
-                                x:Name="CheckNowButton"
-                                Click="OnCheckNowClick"
-                                Content="Check now"
-                                Style="{StaticResource NixieCompactButtonStyle}" />
-                            <ToggleSwitch AutomationProperties.Name="Check for updates" IsOn="{x:Bind ViewModel.CheckForUpdates, Mode=TwoWay}" />
-                        </StackPanel>
-                    </ctk:SettingsCard>
-                    <!--  Nixie 1.3.1: what Check now found  -->
-                    <StackPanel
-                        x:Name="CheckNowResult"
-                        Margin="56,4,16,8"
-                        Orientation="Horizontal"
-                        Spacing="12"
-                        Visibility="Collapsed">
-                        <ProgressRing
-                            x:Name="CheckNowRing"
-                            Width="16"
-                            Height="16"
-                            IsActive="False" />
-                        <TextBlock
-                            x:Name="CheckNowText"
-                            VerticalAlignment="Center"
-                            AutomationProperties.LiveSetting="Polite"
-                            Style="{StaticResource BodyTextBlockStyle}"
-                            TextWrapping="Wrap" />
-                        <Button
-                            x:Name="CheckNowInstallButton"
-                            Click="OnCheckNowInstallClick"
-                            Content="Download and install"
-                            Style="{StaticResource NixieCompactButtonStyle}"
-                            Visibility="Collapsed" />
-                        <HyperlinkButton
-                            x:Name="CheckNowNotesButton"
-                            MinHeight="32"
-                            Click="OnCheckNowNotesClick"
-                            Content="Release notes"
-                            Visibility="Collapsed" />
-                        <Button
-                            x:Name="CheckNowRetryButton"
-                            Click="OnCheckNowClick"
-                            Content="Retry"
-                            Style="{StaticResource NixieCompactButtonStyle}"
-                            Visibility="Collapsed" />
-                    </StackPanel>
                     <!--  Seaglass: the shortcut sheet (also on ? anywhere, and in the player)  -->
                     <ctk:SettingsCard
                         Click="OnKeyboardShortcutsClick"
@@ -522,6 +478,14 @@
                         Header="Keyboard shortcuts"
                         HeaderIcon="{ui:FontIcon Glyph=&#xE765;}"
                         IsClickEnabled="True" />
+                    <!--  1.5 fixes (the button review's L1, L2; WCAG 2.1.4): single-letter keys can be turned off  -->
+                    <ctk:SettingsCard
+                        Description="N goes to Up next and C to Continue Watching. Turn off if you press them by accident (speech input, for example)."
+                        Header="Letter keys on Home"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE8D2;}">
+                        <ToggleSwitch AutomationProperties.Name="Letter keys on Home" IsOn="{x:Bind ViewModel.HomeLetterKeys, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                    <!--  END 1.5 fixes  -->
                     <ctk:SettingsCard
                         x:Name="ReportProblemCard"
                         ActionIcon="{ui:FontIcon Glyph=&#xE8A7;}"

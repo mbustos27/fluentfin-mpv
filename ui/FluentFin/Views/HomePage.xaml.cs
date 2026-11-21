@@ -287,7 +287,7 @@ public sealed partial class HomePage : Page
 
 	private void NextUpInvoked(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args)
 	{
-		if (FluentFin.Services.TextInput.IsTextInput(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot)))
+		if (FluentFin.Services.HomeLetterKeys.Ignore(XamlRoot)) // 1.5 (L1, L2): the switch, then typing
 		{
 			return; // typing: N and C are letters then
 		}
@@ -298,7 +298,7 @@ public sealed partial class HomePage : Page
 
 	private void ContinueInvoked(Microsoft.UI.Xaml.Input.KeyboardAccelerator sender, Microsoft.UI.Xaml.Input.KeyboardAcceleratorInvokedEventArgs args)
 	{
-		if (FluentFin.Services.TextInput.IsTextInput(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(XamlRoot)))
+		if (FluentFin.Services.HomeLetterKeys.Ignore(XamlRoot)) // 1.5 (L1, L2): the switch, then typing
 		{
 			return;
 		}

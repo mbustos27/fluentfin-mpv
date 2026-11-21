@@ -229,12 +229,16 @@ public sealed class ItemPageRefreshTests
 	[Fact]
 	public async Task ASeasonThatFailsToLoad_KeepsThePicker_AndOffersTryAgain()
 	{
-		var vm = await OpenSeries();
-		// the third season: the second is asked ahead while the first is shown (Nixie 1.4.1), so its failure would be a prefetch's
+		// the third season fails when asked ahead (Nixie 1.5: a small show asks every season ahead), so it is not kept, and again
+		// when clicked
 		var id = _seasons[2].Id!.Value;
+		var failedAhead = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		failedAhead.SetResult(null);
 		var failed = new TaskCompletionSource<BaseItemDtoQueryResult?>();
 		failed.SetResult(null);
-		_slow[id] = new Queue<TaskCompletionSource<BaseItemDtoQueryResult?>>([failed]);
+		_slow[id] = new Queue<TaskCompletionSource<BaseItemDtoQueryResult?>>([failedAhead, failed]);
+		var vm = await OpenSeries();
+		Assert.Single(_slow[id]); // the one asked ahead failed
 
 		await vm.SelectSeasonCommand.ExecuteAsync(_seasons[2]);
 
@@ -254,8 +258,8 @@ public sealed class ItemPageRefreshTests
 	[Fact]
 	public async Task ASeasonWithNoEpisodes_SaysSo_WithoutTryAgain()
 	{
+		_episodes[_seasons[2].Id!.Value] = []; // as the server lists it when asked ahead too
 		var vm = await OpenSeries();
-		_episodes[_seasons[2].Id!.Value] = [];
 
 		await vm.SelectSeasonCommand.ExecuteAsync(_seasons[2]);
 

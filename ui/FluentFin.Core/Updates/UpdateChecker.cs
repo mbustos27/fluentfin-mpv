@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
-using System.Security.Cryptography;
 
 namespace FluentFin.Core.Updates;
 
@@ -48,9 +47,11 @@ public sealed class UpdateChecker(HttpClient http, string currentVersion, Uri? a
 
 			if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
 			{
+				// Nixie 1.5: a 403 that is not the rate limit is GitHub refusing the request (a missing User-Agent is one)
 				return RateLimit(response, now) is { } until
 					? new UpdateCheckResult(UpdateCheckStatus.RateLimited, RetryAfter: until)
-					: new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: $"GitHub answered {(int)response.StatusCode}");
+					: new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: response.StatusCode == HttpStatusCode.Forbidden
+						? "GitHub refused the request (403)" : $"GitHub answered {(int)response.StatusCode}");
 			}
 
 			if (!response.IsSuccessStatusCode)
@@ -58,7 +59,9 @@ public sealed class UpdateChecker(HttpClient http, string currentVersion, Uri? a
 				return new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: $"GitHub answered {(int)response.StatusCode}");
 			}
 
-			var release = ReleaseInfo.Parse(await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false));
+			// Nixie 1.5 (BH-140X-m3): GitHub answers a renamed or moved repository's API through a redirect (to
+			// /repositories/<id>/...): only then is the release taken from the repository its page names
+			var release = ReleaseInfo.Parse(await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false), Redirected(Api, response.RequestMessage?.RequestUri));
 			if (release is null)
 			{
 				return new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: "GitHub's answer could not be read");
@@ -81,6 +84,15 @@ public sealed class UpdateChecker(HttpClient http, string currentVersion, Uri? a
 			return new UpdateCheckResult(UpdateCheckStatus.Failed, Reason: "the check did not finish");
 		}
 	}
+
+	/// <summary>
+	/// Nixie 1.5 (BH-140X-m3): whether the answer came from another address than the one asked, on the same https (or the
+	/// harness's loopback) origin: GitHub's own redirect for a renamed repository. A redirect to another host never counts.
+	/// </summary>
+	public static bool Redirected(Uri asked, Uri? answered) =>
+		answered is { } final && final.IsAbsoluteUri && final.Scheme == asked.Scheme
+		&& string.Equals(final.Host, asked.Host, StringComparison.OrdinalIgnoreCase) && final.Port == asked.Port
+		&& !string.Equals(final.AbsolutePath, asked.AbsolutePath, StringComparison.Ordinal);
 
 	/// <summary>When GitHub says to wait: a 403 or 429 with Retry-After, or with no requests remaining and the time the limit resets; else null.</summary>
 	internal static DateTimeOffset? RateLimit(HttpResponseMessage response, DateTimeOffset now)
@@ -105,92 +117,11 @@ public sealed class UpdateChecker(HttpClient http, string currentVersion, Uri? a
 	}
 }
 
-public sealed class UpdateException(string message) : Exception(message);
-
-/// <summary>
-/// Seaglass: "Download and install". Takes the release's installer and its .sha256 (only from this repository's releases) into a
-/// folder of its own, checks the installer's SHA-256 against the file, and only then returns the installer's path.
-/// A file that does not match is deleted and nothing runs.
-/// </summary>
-public sealed class UpdateDownloader(HttpClient http, string folder)
+/// <param name="Integrity">
+/// Nixie 1.5 (review m4): the release's own files refused it (its checksum file, GitHub's digest, a download that never
+/// matches, a host that is not GitHub): fetching it again gets the same, so that version is not fetched again by itself.
+/// </param>
+public sealed class UpdateException(string message, bool integrity = false) : Exception(message)
 {
-	private const int MaxHashFileBytes = 4096;
-
-	public async Task<string> DownloadAsync(ReleaseInfo release, CancellationToken cancellation = default)
-	{
-		if (!release.HasInstaller || !UpdateSource.IsDownload(release.MsiUrl) || !UpdateSource.IsDownload(release.Sha256Url)
-			|| release.MsiName is not { } name || name != Path.GetFileName(name) || !name.EndsWith(".msi", StringComparison.Ordinal))
-		{
-			throw new UpdateException($"This release has no installer from the {AppIdentity.Name} releases.");
-		}
-
-		Directory.CreateDirectory(folder);
-		var hashText = await FetchTextAsync(release.Sha256Url!, cancellation).ConfigureAwait(false);
-		var expected = Sha256File.Parse(hashText, name) ?? throw new UpdateException("The checksum file is not a SHA-256 for this installer.");
-
-		var target = Path.Combine(folder, name);
-		var part = target + ".part";
-		try
-		{
-			using (var response = await http.GetAsync(release.MsiUrl, HttpCompletionOption.ResponseHeadersRead, cancellation).ConfigureAwait(false))
-			{
-				response.EnsureSuccessStatusCode();
-				if (!UpdateSource.IsDownloadHost(response.RequestMessage?.RequestUri))
-				{
-					throw new UpdateException("The installer was served from somewhere that is not GitHub, so it was not used.");
-				}
-
-				await using var source = await response.Content.ReadAsStreamAsync(cancellation).ConfigureAwait(false);
-				await using var output = new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None);
-				await source.CopyToAsync(output, cancellation).ConfigureAwait(false);
-			}
-
-			if (!Matches(part, expected))
-			{
-				throw new UpdateException("The downloaded installer does not match its checksum, so it was not run.");
-			}
-
-			File.Move(part, target, overwrite: true);
-			return target;
-		}
-		finally
-		{
-			if (File.Exists(part))
-			{
-				File.Delete(part);
-			}
-		}
-	}
-
-	public static bool Matches(string file, string expectedSha256)
-	{
-		using var stream = File.OpenRead(file);
-		return string.Equals(Convert.ToHexString(SHA256.HashData(stream)), expectedSha256, StringComparison.OrdinalIgnoreCase);
-	}
-
-	private async Task<string> FetchTextAsync(string url, CancellationToken cancellation)
-	{
-		using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellation).ConfigureAwait(false);
-		response.EnsureSuccessStatusCode();
-		if (!UpdateSource.IsDownloadHost(response.RequestMessage?.RequestUri))
-		{
-			throw new UpdateException("The checksum was served from somewhere that is not GitHub, so it was not used.");
-		}
-
-		await using var stream = await response.Content.ReadAsStreamAsync(cancellation).ConfigureAwait(false);
-		var buffer = new byte[MaxHashFileBytes + 1];
-		var read = 0;
-		while (read < buffer.Length)
-		{
-			var n = await stream.ReadAsync(buffer.AsMemory(read), cancellation).ConfigureAwait(false);
-			if (n == 0)
-			{
-				break;
-			}
-
-			read += n;
-		}
-
-		return read > MaxHashFileBytes ? throw new UpdateException("The checksum file is too big.") : System.Text.Encoding.UTF8.GetString(buffer, 0, read);
-	}
+	public bool Integrity { get; } = integrity;
 }

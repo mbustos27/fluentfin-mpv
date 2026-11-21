@@ -86,6 +86,21 @@ public sealed class RewatchTests : IDisposable
 		Assert.EndsWith("44% watched", ItemLabels.CardName(home.ContinueItems[0])); // not "watched": its bar shows 44 %
 	}
 
+	// 1.5 fixes: Settings' "Include shows I'm rewatching" off: an episode watched again (watched, with a resume point) is out
+	[Fact]
+	public async Task WithRewatchingLeftOut_AnEpisodeWatchedAgain_IsNotInContinueWatching()
+	{
+		_settings.Setup(x => x.ReadSetting(Settings.SettingKeys.LeaveOutRewatching.Name, It.IsAny<bool>())).Returns(true);
+		var again = Episode("Pilot", 1, played: true, position: 20 * Minute);
+		_resume = () => [again, Episode("Other", 2, position: 5 * Minute)];
+
+		var home = await Home();
+
+		Assert.Equal(["Other"], Names(home.ContinueItems));
+		Assert.Equal(["Other"], ContinueWatchingRules.Visible([again, Episode("Other", 2, position: 5 * Minute)], DateTimeOffset.UtcNow, 0, includeRewatching: false).Select(x => x.Name));
+		Assert.Equal(2, ContinueWatchingRules.Visible([again, Episode("Other", 2, position: 5 * Minute)], DateTimeOffset.UtcNow, 0).Count);
+	}
+
 	[Fact]
 	public async Task TheServersMessages_KeepAnEpisodeWatchedAgain_AndAWatchedMarkWithNoResumePointTakesItOut()
 	{

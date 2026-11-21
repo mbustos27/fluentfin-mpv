@@ -130,6 +130,64 @@ code, folders and registry keys; the old one named SeaglassUpgradeCheck and the 
 rename's paths are exercised) so the script itself can be checked on a PC that has Nixie installed. Exit 0 passed,
 1 failed, 2 skipped.
 
+## 4c. The upgrade test in Windows Sandbox (from 1.5)
+
+    .\tools\release\upgrade-test-sandbox.ps1 -Out <scratch folder outside the repo> [-PreviousMsi <Nixie-1.4.1-win-x64.msi>] [-DryRun]
+
+The release's upgrade test, run by the coordinating session at release (Windows Sandbox is on on the build PC). **Its
+window shows on the desktop, so tell the owner first.** Nothing is installed in this account: everything happens in a
+throwaway Sandbox, and the inside script (`tools\release\sandbox\upgrade-inside.ps1`) refuses to run anywhere else.
+Agents run it only with `-DryRun` (writes the `.wsb` and `plan.json`, starts nothing); `tools\release\tests\test_upgrade_sandbox.py`
+checks the dry runs and the refusals.
+
+- **In:** `dist\` (this release's MSI), the previous release's MSI (`dist\Nixie-1.4.1-win-x64.msi`, or `-PreviousMsi
+  <path>`: download it from its GitHub release first, with its `.sha256`, and check it), and a test build numbered higher (`-TestVersion`, default
+  the patch number + 90: this release's own files in an MSI WiX builds here, never published), all mapped
+  **read-only**; one results folder (`<Out>\results`) read-write. Networking, the GPU, audio and video input, the
+  clipboard and printers are off: no step needs GitHub.
+- **Leg 1, the old flow:** a Seaglass data folder, the previous MSI, the previous Nixie started once (it copies the
+  Seaglass folder to Nixie), then this release over it as 1.4.1's updater installs it (msiexec /i with Nixie closed;
+  nothing reopens it): the installed version, the Nixie data folder kept, the Seaglass folder untouched, this release
+  starting.
+- **Leg 2, the new flow:** this release's Restart to update, driven by `Nixie.exe --install-update <msi>` (no clicks),
+  to the test build: Nixie closes, the launcher's helper installs quietly (`msiexec /passive`, logged to
+  `Updates\install.log`) and opens Nixie again, without the switch.
+- **No administrator:** the legs run as a standard user the script makes inside the Sandbox; `results.json` records
+  its integrity level (whoami: medium), every msiexec exit code and the logs' privilege lines.
+- Results in `<Out>\results\results.json` (and the logs); the Sandbox shuts itself down. Exit 0 passed, 1 failed or no
+  results, 2 bad inputs, 3 Sandbox missing or already running.
+
+## 4d. The baseline (from 1.5)
+
+Each release measures start-up, Home's first paint and memory the same way, beside the release before it, so a change
+in any of them shows up at the release that made it:
+
+    .\tools\ui-harness\baseline.ps1 -Out <scratch> -Exe <this build's Nixie.exe>,<the last release's Nixie.exe> `
+        -Backend .\backend,<the last release's backend> -Label <version>,<last version> -Runs 5
+
+- **The builds:** both are the harness's Debug x64 build (`--artifacts-path`, with `LibmpvDir`), the last release's from
+  its tag (`git archive v<last> | tar -x -C <scratch>`), each run with its own backend checkout. Release builds start
+  faster than these: compare the two rows with each other, not with a release build.
+- **The runs:** off-screen against the fake server (strict auth), the default layout theme, a new data folder each run,
+  5 runs per build, the builds taking turns, nothing else running on the PC; the median of each.
+- **Start-up:** process start (as Windows recorded it) to the main window shown (`window_ms`); the app's own
+  `[perf] startup: window shown` line beside it.
+- **First Home paint:** the server's answer to the sign-in to Home's first cards on screen (`home_first_cards_ms`).
+- **Memory:** Nixie.exe's private bytes after a fixed browse: Home, Movies, the showcase film, Back, Shows, the showcase
+  series, its Season 1 page, Back, then 5 s.
+
+**1.5.0 beside 1.4.1** (2026-11-20 on the build PC, Windows 11 x64; Debug x64 builds of 364f8b0 and v1.4.1; all
+10 runs passed every check, strict auth included). Medians, with the 5 runs' range:
+
+| Build | Start-up: window shown (ms) | The app's own "window shown" (ms) | First Home paint (ms) | Private bytes (MB) |
+|---|---|---|---|---|
+| 1.4.1 | 962 (939 to 985) | 967 | 1,132 (1,077 to 1,198) | 575 (569 to 582) |
+| 1.5.0 | 1,016 (976 to 1,046) | 1,014 | 1,138 (1,049 to 1,242) | 584 (582 to 587) |
+
+1.5.0 opens its window about 50 ms later (its fastest run is slower than 1.4.1's median; not traced to one change),
+paints Home as fast (the ranges overlap), and holds about 9 MB more after the browse. None of it is a release gate; the
+next release measures itself beside this one.
+
 ## 5. Publish (the coordinating session, after review)
 
 1. Tag the commit the zip was built from: `git tag -a v<version> -m "Nixie <version>"`, push the tag.
@@ -144,6 +202,16 @@ rename's paths are exercised) so the script itself can be checked on a PC that h
    update to Nixie from the app. Without it they are told about the release and download it from its page.
 3. The package's README.txt links the source at `https://github.com/mbustos27/fluentfin-mpv/tree/v<version>`: the tag
    must exist under that name.
+4. **The updater reads the release** (1.5): the installer and its `.sha256` must be assets of the release itself, named
+   `Nixie-<version>-win-x64.msi`; GitHub's API reports each asset's SHA-256 (`digest`), and Nixie 1.5 refuses an installer
+   whose `.sha256` disagrees with it. The release body is what "What's new" shows (simple Markdown: headings, bullets,
+   links). Keep publishing the `Seaglass-<version>-win-x64.msi` copy (the build makes it): older updaters only take
+   that name.
+5. **Never rename or transfer the repository lightly** (bug hunt BH-140X-m3). Nixie 1.5 and later follow GitHub's
+   redirect to the new name (`UpdateSource.Repository`, one constant that `tools\release` names too; a test pins them
+   together), but 1.1 to 1.4 only accept `/mbustos27/fluentfin-mpv/`: renamed, they fall back to opening the release
+   page with no word why. If a rename is ever wanted, wait until most people run 1.5 or later, then change the constant,
+   `build-release.ps1`'s source link and the installer's links together.
 
 ## Moving a pinned dependency
 

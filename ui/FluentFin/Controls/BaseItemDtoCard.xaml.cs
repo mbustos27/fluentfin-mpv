@@ -75,6 +75,9 @@ public sealed partial class BaseItemDtoCard : UserControl
 		App.Commands.DisplayDto(Model.Dto);
 	}
 
+	// 1.5 search: a person's card (search's People, "With <name>")
+	private bool IsPerson => Model?.Dto?.Type == Jellyfin.Sdk.Generated.Models.BaseItemDto_Type.Person;
+
 	/// <summary>fluentfin-mpv: the action buttons Narrator lists under the card while they show.</summary>
 	internal IEnumerable<UIElement> VisibleActions()
 	{
@@ -83,9 +86,14 @@ public sealed partial class BaseItemDtoCard : UserControl
 			yield break;
 		}
 
-		yield return PlayButton;
-		yield return MarkWatchedButton;
-		yield return AddToFavoriteButton;
+		// 1.5 search: a person has no Play, Watched or Favourite on its card
+		if (!IsPerson)
+		{
+			yield return PlayButton;
+			yield return MarkWatchedButton;
+			yield return AddToFavoriteButton;
+		}
+
 		// Seaglass 1.1.3: not when the menu is empty (the button is hidden then: CardMenuVisibility)
 		if (MoreButton.Visibility == Visibility.Visible)
 		{
@@ -300,7 +308,11 @@ public sealed partial class BaseItemDtoCard : UserControl
 			return;
 		}
 
-		var show = _actions.Shown;
+		// 1.5 search (review m9): a person (search's People) has nothing to play, watch or mark: no Play, Watched or
+		// Favourite on its card, and no strip at all when its menu is empty too
+		var person = IsPerson;
+		PlayButton.Visibility = MarkWatchedButton.Visibility = AddToFavoriteButton.Visibility = person ? Visibility.Collapsed : Visibility.Visible;
+		var show = _actions.Shown && (!person || MoreButton.Visibility == Visibility.Visible);
 		ActionStrip.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
 		HoverBrighten.Visibility = _actions.Brightened ? Visibility.Visible : Visibility.Collapsed;
 		Lift(show);

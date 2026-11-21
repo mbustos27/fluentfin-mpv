@@ -58,6 +58,9 @@ public sealed partial class MpvControlsOverlay : Window
 
 		AppWindow.Closing += OnClosing;
 		owner.Closed += OnOwnerClosed;
+
+		// 1.5: Alt+Enter over the video ends without Windows' error sound, as on the main window (WM_MENUCHAR)
+		Services.MenuCharSilencer.Attach(this, "player controls");
 	}
 
 	public nint Handle => _hwnd;

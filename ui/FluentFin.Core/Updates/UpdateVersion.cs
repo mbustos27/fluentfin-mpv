@@ -93,14 +93,21 @@ public readonly record struct UpdateVersion(int Major, int Minor, int Patch, str
 	public override string ToString() => Pre.Length == 0 ? $"{Major}.{Minor}.{Patch}" : $"{Major}.{Minor}.{Patch}-{Pre}";
 }
 
-/// <summary>Seaglass: the once-a-day rule of the update check.</summary>
+/// <summary>
+/// Seaglass: the once-a-day rule of the update check. Nixie 1.5 (the owner: "a more responsive in app updater"): every
+/// <see cref="Interval"/> (4 hours) while Nixie is open, and when the window comes back after <see cref="ReturnAfter"/> or more
+/// away (<see cref="ShouldCheckOnReturn"/>), at most one attempt an hour: a few requests a day, far inside GitHub's 60 an hour.
+/// </summary>
 public static class UpdateGate
 {
-	public static readonly TimeSpan Interval = TimeSpan.FromHours(24);
+	public static readonly TimeSpan Interval = TimeSpan.FromHours(4);
+
+	/// <summary>Nixie 1.5: how long the window must have been away (inactive, or the PC asleep) for its return to check.</summary>
+	public static readonly TimeSpan ReturnAfter = TimeSpan.FromHours(1);
 
 	/// <summary>
-	/// Whether a check may go out now: never checked, or the last one was a day ago. A last check in the future (the clock was
-	/// set back) is not a reason to wait: the check that follows stores the real time.
+	/// Whether a check may go out now: never checked, or the last one was <see cref="Interval"/> ago. A last check in the future
+	/// (the clock was set back) is not a reason to wait: the check that follows stores the real time.
 	/// </summary>
 	public static bool IsDue(DateTimeOffset? lastCheck, DateTimeOffset now) =>
 		lastCheck is not { } last || last > now || now - last >= Interval;
@@ -135,9 +142,16 @@ public static class UpdateGate
 
 	/// <summary>
 	/// Nixie 1.3.1: whether the automatic check asks now. At the run's start (<paramref name="atStart"/>), unless the last attempt
-	/// failed within the hour; later in the run, once a day (<see cref="IsDue"/>), at most one attempt an hour. Never while
-	/// GitHub asked to wait.
+	/// failed within the hour; later in the run, every <see cref="Interval"/> (<see cref="IsDue"/>), at most one attempt an hour.
+	/// Never while GitHub asked to wait.
 	/// </summary>
+	/// <summary>
+	/// Nixie 1.5: whether the window's return after <paramref name="away"/> asks now: away for <see cref="ReturnAfter"/> or more,
+	/// GitHub not asking to wait, and no attempt in the last hour (<see cref="AttemptAllowed"/>; a check while away counts).
+	/// </summary>
+	public static bool ShouldCheckOnReturn(UpdateState state, DateTimeOffset now, TimeSpan away) =>
+		away >= ReturnAfter && !Waiting(state, now) && AttemptAllowed(state.LastAttempt, now);
+
 	public static bool ShouldCheck(UpdateState state, DateTimeOffset now, bool atStart) =>
 		!Waiting(state, now)
 		&& (atStart

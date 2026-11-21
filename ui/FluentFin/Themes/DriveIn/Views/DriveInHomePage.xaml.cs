@@ -322,7 +322,7 @@ public sealed partial class DriveInHomePage : Page
 
 	private void NextUpInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
 	{
-		if (FluentFin.Services.TextInput.IsTextInput(FocusManager.GetFocusedElement(XamlRoot)))
+		if (FluentFin.Services.HomeLetterKeys.Ignore(XamlRoot)) // 1.5 (L1, L2): the switch, then typing
 		{
 			return;
 		}
@@ -333,7 +333,7 @@ public sealed partial class DriveInHomePage : Page
 
 	private void ContinueInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
 	{
-		if (FluentFin.Services.TextInput.IsTextInput(FocusManager.GetFocusedElement(XamlRoot)))
+		if (FluentFin.Services.HomeLetterKeys.Ignore(XamlRoot)) // 1.5 (L1, L2): the switch, then typing
 		{
 			return;
 		}

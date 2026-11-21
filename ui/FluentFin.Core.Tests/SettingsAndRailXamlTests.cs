@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 using FluentFin.Core.ViewModels;
 
 namespace FluentFin.Core.Tests;
@@ -169,10 +169,19 @@ public sealed class SettingsAndRailXamlTests
 		var about = Group("About").Descendants(Toolkit + "SettingsCard").Select(c => (string?)c.Attribute("Header")).ToList();
 		var playback = Group("Playback").Descendants(Toolkit + "SettingsCard").Select(c => (string?)c.Attribute("Header")).ToList();
 
-		Assert.Contains("Check for updates", about);
 		Assert.Contains("Keyboard shortcuts", about);
 		Assert.DoesNotContain("Check for updates", playback);
 		Assert.DoesNotContain("Keyboard shortcuts", playback);
+		// Nixie 1.5: Check for updates has its own group, Updates (Controls\UpdateSettingsPanel), just above About
+		var settings = Load(Settings);
+		var panel = settings.Descendants().Single(e => e.Name.LocalName == "UpdateSettingsPanel");
+		var aboutHeading = settings.Descendants().Single(e => e.Name.LocalName == "TextBlock" && (string?)e.Attribute("Text") == "About");
+		Assert.True(panel.IsBefore(aboutHeading));
+		var updates = XDocument.Load(Path.Combine(RepoRoot, "FluentFin/Controls/UpdateSettingsPanel.xaml"));
+		var headers = updates.Descendants(Toolkit + "SettingsCard").Select(c => (string?)c.Attribute("Header")).ToList();
+		Assert.Equal(["Check for updates", "Install when I close Nixie"], headers);
+		Assert.Contains(updates.Descendants(), e => e.Name.LocalName == "TextBlock" && (string?)e.Attribute("Text") == "Updates"
+			&& (string?)e.Attribute(XName.Get("AutomationProperties.HeadingLevel")) == "Level2");
 	}
 
 	[Fact]

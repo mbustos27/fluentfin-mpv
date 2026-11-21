@@ -15,10 +15,39 @@
 
     <!--
         Seaglass 1.1.4 (interaction audit, item 2): Enter in the title bar's search opens this page: every match for the query,
-        grouped by type (movies, shows, episodes), the query in the title. Each group is one Tab stop (the cards' arrows move
-        inside it), named for Narrator, its heading a level-2 heading. Loading, no results and a failed search: LoadStateView.
+        grouped by type, the query in the title. Each group is one Tab stop (the cards' arrows move inside it), named for
+        Narrator, its heading a level-2 heading. Loading, no results and a failed search: LoadStateView.
+        Nixie 1.5 (search): ranked on the PC. The top result (an exact or near-exact title of any kind) leads; the groups
+        follow in the order of their best match; each group shows its strong matches and keeps the weaker ones behind
+        "Show N more"; the chips (All, Shows, Movies, Episodes, Collections; radius 8, one lit) show one kind at a time.
     -->
     <!--  Nixie 1.4.0 (the UX review's plan item 13): on the theme's page grid (its gutter, its title y, its title style and ground)  -->
+    <Page.Resources>
+        <DataTemplate x:Key="SearchCardTemplate" x:DataType="vm:BaseItemViewModel">
+            <!--  the card is the keyboard stop and the element Narrator reads; the container is neither  -->
+            <ItemContainer
+                AutomationProperties.AccessibilityView="Raw"
+                CornerRadius="{StaticResource GlassCardCornerRadius}"
+                IsTabStop="False"
+                Style="{StaticResource BareItemContainerStyle}">
+                <lc:BaseItemDtoCard
+                    BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 352)}"
+                    ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 352)}"
+                    JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
+                    Model="{x:Bind}" />
+            </ItemContainer>
+        </DataTemplate>
+        <UniformGridLayout
+            x:Key="SearchCardLayout"
+            ItemsJustification="Start"
+            ItemsStretch="Fill"
+            MinColumnSpacing="8"
+            MinItemHeight="390"
+            MinItemWidth="220"
+            MinRowSpacing="8"
+            Orientation="Horizontal" />
+    </Page.Resources>
+
     <Grid
         x:Name="ResultsRoot"
         Padding="36,72,36,24"
@@ -26,6 +55,7 @@
         Background="Transparent"
         RowSpacing="16">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
@@ -39,68 +69,140 @@
             TextTrimming="CharacterEllipsis"
             TextWrapping="NoWrap" />
 
+        <!--
+            Nixie 1.5: the type chips. One Tab stop (the lit chip, or the first); Left, Right, Home and End move between them
+            (KindChips_KeyDown); Space or Enter lights one, as do a click and Narrator's select (SearchChip.IsSelected). Narrator
+            reads each as "Movies, 12 results, radio button, 3 of 5".
+        -->
+        <ItemsControl
+            x:Name="KindChips"
+            Grid.Row="1"
+            AutomationProperties.Name="Result types"
+            IsTabStop="False"
+            ItemsSource="{x:Bind ViewModel.Chips, Mode=OneWay}"
+            PreviewKeyDown="KindChips_KeyDown"
+            TabFocusNavigation="Once"
+            Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.Results.IsLoaded), Mode=OneWay}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="8" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:SearchChip">
+                    <RadioButton
+                        AutomationProperties.Name="{x:Bind Name}"
+                        Content="{x:Bind Label}"
+                        GroupName="SearchKindChips"
+                        IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                        Style="{StaticResource NixieChoiceChipStyle}" />
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
         <ScrollView
             x:Name="ResultsScroller"
-            Grid.Row="1"
+            Grid.Row="2"
             Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.Results.IsLoaded), Mode=OneWay}">
-            <!--  an ItemsControl, not a repeater: Tab must reach every group (HomePage's rows, the scrolling stream)  -->
-            <ItemsControl
-                x:Name="ResultGroups"
-                IsTabStop="False"
-                ItemsSource="{x:Bind ViewModel.CardGroups, Mode=OneWay}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Spacing="28" />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:SearchResultGroup">
-                        <StackPanel Spacing="12">
+            <StackPanel Spacing="28">
+                <!--  Nixie 1.5: the top result (All only): its card, and beside it its title, kind and year, and why it matched  -->
+                <StackPanel
+                    x:Name="TopResultSection"
+                    Spacing="12"
+                    Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.HasTopResult), Mode=OneWay}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                        Text="Top result" />
+                    <Grid ColumnSpacing="28">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="228" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <lc:RowList
+                            x:Name="TopResultRow"
+                            HorizontalContentAlignment="Stretch"
+                            AutomationProperties.Name="Top result"
+                            TabFocusNavigation="Once">
+                            <ItemsRepeater
+                                ItemTemplate="{StaticResource SearchCardTemplate}"
+                                ItemsSource="{x:Bind One(ViewModel.TopResult), Mode=OneWay}"
+                                Layout="{StaticResource SearchCardLayout}" />
+                        </lc:RowList>
+                        <StackPanel
+                            x:Name="TopResultDetails"
+                            Grid.Column="1"
+                            MaxWidth="720"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Spacing="10">
+                            <!--  a section title's face at a title's size: the page title stays the theme's own (PageHeaderStyle)  -->
                             <TextBlock
-                                AutomationProperties.HeadingLevel="Level2"
+                                x:Name="TopResultTitleText"
+                                FontSize="34"
+                                MaxLines="2"
                                 Style="{StaticResource GlassSectionTitleTextBlockStyle}"
-                                Text="{x:Bind Heading}" />
-                            <lc:RowList
-                                HorizontalContentAlignment="Stretch"
-                                AutomationProperties.Name="{x:Bind Name}"
-                                TabFocusNavigation="Once">
-                                <ItemsRepeater ItemsSource="{x:Bind Items}">
-                                    <ItemsRepeater.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:BaseItemViewModel">
-                                            <!--  the card is the keyboard stop and the element Narrator reads; the container is neither  -->
-                                            <ItemContainer
-                                                AutomationProperties.AccessibilityView="Raw"
-                                                CornerRadius="{StaticResource GlassCardCornerRadius}"
-                                                IsTabStop="False"
-                                                Style="{StaticResource BareItemContainerStyle}">
-                                                <lc:BaseItemDtoCard
-                                                    BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 352)}"
-                                                    ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 352)}"
-                                                    JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
-                                                    Model="{x:Bind}" />
-                                            </ItemContainer>
-                                        </DataTemplate>
-                                    </ItemsRepeater.ItemTemplate>
-                                    <ItemsRepeater.Layout>
-                                        <UniformGridLayout
-                                            ItemsJustification="Start"
-                                            ItemsStretch="Fill"
-                                            MinColumnSpacing="8"
-                                            MinItemHeight="390"
-                                            MinItemWidth="220"
-                                            MinRowSpacing="8"
-                                            Orientation="Horizontal" />
-                                    </ItemsRepeater.Layout>
-                                </ItemsRepeater>
-                            </lc:RowList>
+                                Text="{x:Bind ViewModel.TopResultTitle, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="WrapWholeWords" />
+                            <TextBlock
+                                FontSize="16"
+                                Style="{StaticResource GlassMetaTextBlockStyle}"
+                                Text="{x:Bind ViewModel.TopResultMeta, Mode=OneWay}" />
+                            <TextBlock
+                                FontSize="15"
+                                Style="{StaticResource GlassMetaTextBlockStyle}"
+                                Text="{x:Bind ViewModel.TopResultNote, Mode=OneWay}"
+                                TextWrapping="WrapWholeWords"
+                                Visibility="{x:Bind Shows(ViewModel.TopResultNote), Mode=OneWay}" />
                         </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                    </Grid>
+                </StackPanel>
+
+                <!--  an ItemsControl, not a repeater: Tab must reach every group (HomePage's rows, the scrolling stream)  -->
+                <ItemsControl
+                    x:Name="ResultGroups"
+                    IsTabStop="False"
+                    ItemsSource="{x:Bind ViewModel.CardGroups, Mode=OneWay}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="28" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SearchResultGroup">
+                            <StackPanel Spacing="12">
+                                <TextBlock
+                                    AutomationProperties.HeadingLevel="Level2"
+                                    Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                                    Text="{x:Bind Heading}" />
+                                <lc:RowList
+                                    HorizontalContentAlignment="Stretch"
+                                    AutomationProperties.Name="{x:Bind Name}"
+                                    TabFocusNavigation="Once"
+                                    Visibility="{x:Bind c:Converters.BooleanToVisibility(HasCards), Mode=OneWay}">
+                                    <ItemsRepeater
+                                        ItemTemplate="{StaticResource SearchCardTemplate}"
+                                        ItemsSource="{x:Bind Items, Mode=OneWay}"
+                                        Layout="{StaticResource SearchCardLayout}" />
+                                </lc:RowList>
+                                <!--  Nixie 1.5: the weaker matches, on request; then "Show fewer"  -->
+                                <Button
+                                    AutomationProperties.Name="{x:Bind MoreName, Mode=OneWay}"
+                                    Command="{x:Bind ToggleMoreCommand}"
+                                    Content="{x:Bind MoreText, Mode=OneWay}"
+                                    Style="{StaticResource NixieCompactButtonStyle}"
+                                    Visibility="{x:Bind c:Converters.BooleanToVisibility(HasMore)}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
         </ScrollView>
 
         <lc:LoadStateView
             Grid.Row="1"
+            Grid.RowSpan="2"
             LoadingText="Searching…"
             ShowsLoading="True"
             State="{x:Bind ViewModel.Results}"

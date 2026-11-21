@@ -14,6 +14,56 @@ namespace FluentFin.Core.ViewModels
 		[ObservableProperty]
 		public partial List<JellyfinConfigItemViewModel> Items { get; set; } = [];
 
+		// 1.5 fixes (the button review's S22): Save is on only when something differs from what the server has (or the last
+		// Save failed), and says how it went: "Saved", or that the server did not take it
+		private bool _saving;
+		private bool _unsaved;
+
+		/// <summary>What the last Save did: "Saved", a failure in words, or empty (nothing saved yet, or changed since).</summary>
+		[ObservableProperty]
+		public partial string SaveStatus { get; set; } = "";
+
+		public const string SavedText = "Saved";
+
+		public const string NotSavedText = "Couldn't save: the server didn't take the changes. Check that it is running, then save again.";
+
+		/// <summary>Something to save: a value differs from the server's, or the last Save failed.</summary>
+		public bool CanSave => !_saving && (_unsaved || Items.Any(x => x.IsChanged));
+
+		partial void OnItemsChanged(List<JellyfinConfigItemViewModel> oldValue, List<JellyfinConfigItemViewModel> newValue)
+		{
+			foreach (var item in (oldValue ?? []).SelectMany(x => x.AndChildren()))
+			{
+				item.PropertyChanged -= OnItemChanged;
+			}
+
+			foreach (var item in (newValue ?? []).SelectMany(x => x.AndChildren()))
+			{
+				item.PropertyChanged += OnItemChanged;
+			}
+
+			_unsaved = false;
+			SaveStatus = "";
+			SaveCommand.NotifyCanExecuteChanged();
+		}
+
+		private void OnItemChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+		{
+			if (e.PropertyName != nameof(JellyfinConfigItemViewModel.IsChanged))
+			{
+				return;
+			}
+
+			if (!_saving)
+			{
+				SaveStatus = "";
+			}
+
+			OnPropertyChanged(nameof(CanSave));
+			SaveCommand.NotifyCanExecuteChanged();
+		}
+		// END 1.5 fixes
+
 		public Task OnNavigatedFrom() => Task.CompletedTask;
 
 		public async Task OnNavigatedTo(object parameter)
@@ -30,7 +80,7 @@ namespace FluentFin.Core.ViewModels
 
 		protected abstract List<JellyfinConfigItemViewModel> CreateItems(ServerConfiguration config);
 
-		[RelayCommand]
+		[RelayCommand(CanExecute = nameof(CanSave))]
 		private async Task Save()
 		{
 			if (_configuration is null)
@@ -38,12 +88,26 @@ namespace FluentFin.Core.ViewModels
 				return;
 			}
 
-			foreach (var item in Items)
+			_saving = true;
+			SaveCommand.NotifyCanExecuteChanged();
+			try
 			{
-				item.Save();
-			}
+				foreach (var item in Items)
+				{
+					item.Save();
+				}
 
-			await _jellyfinClient.SaveConfiguration(_configuration);
+				// 1.5 fixes: whether the server took it (SaveConfiguration logs a failure and says nothing)
+				var took = await _jellyfinClient.TrySaveConfiguration(_configuration);
+				_unsaved = !took;
+				SaveStatus = took ? SavedText : NotSavedText;
+			}
+			finally
+			{
+				_saving = false;
+				OnPropertyChanged(nameof(CanSave));
+				SaveCommand.NotifyCanExecuteChanged();
+			}
 		}
 
 		[RelayCommand]

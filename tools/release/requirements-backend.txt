@@ -1,6 +1,7 @@
 # The bundled backend's runtime packages (tools\release\build-release.ps1 installs them into its build venv with
 # pip --require-hashes --only-binary :all:, from PyPI only). The versions are the dev venv's (backend\.venv), the set
 # every test ran against; the hashes are the sha256 digests PyPI publishes for the cp314 win_amd64 / any wheels.
+# truststore (1.5): certificates checked against the Windows store, as the UI does (BH-140X-M1; backend_entry.py).
 # Not here: pystray and pypresence (backend[all] extras the bridge never imports: no tray, no Discord presence).
 # Regenerate after a version change from https://pypi.org/pypi/<name>/<version>/json (urls[].digests.sha256).
 certifi==2026.10.23 --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1
@@ -12,5 +13,6 @@ python-mpv==1.0.8 --hash=sha256:b5296403e990fb7348df4ca2211937a030f524bf638657bd
 python-mpv-jsonipc==1.5.0 --hash=sha256:f9ce720a07a005c6e37b3eacccffe220ad73cf5d5b0aa9dd77dbe8578be4f249
 pywin32==312 --hash=sha256:a4dd3a848290ef724347b19f301045831d8e802fa4464f491b98b1e0a081432e
 requests==2.34.2 --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
+truststore==0.10.5 --hash=sha256:9aaaedaefaf06d8b206278cf8b5012bc897f485a874503501e12d776df78951c
 urllib3==2.8.0 --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
 websocket-client==1.9.2 --hash=sha256:e1a673830a9c7bfa47b1cd3d5e4178f4c9651d80a4eab02c9c23a1c3ec6250ce

@@ -174,8 +174,8 @@ local config_defaults = {
 }
 config = {
 	version = uosc_version,
-	open_subtitles_api_key = 'b0rd16N0bp7DETMpO4pYZwIqmQkZbYQr',
-	open_subtitles_agent = 'uosc v' .. uosc_version,
+	-- FluentFin MPV: no OpenSubtitles key or agent: subtitle search is not
+	-- offered (ziggy is not vendored; VENDORED.md).
 	-- sets max rendering frequency in case the
 	-- native rendering frequency could not be detected
 	render_delay = 1 / 60,
@@ -845,7 +845,12 @@ bind_command('keybinds', function()
 		open_command_menu({type = 'keybinds', items = get_keybinds_items(), search_style = 'palette'})
 	end
 end)
-bind_command('download-subtitles', open_subtitle_downloader)
+-- FluentFin MPV: no subtitle search online. It ran ziggy (not vendored) with
+-- an OpenSubtitles key, sending the search and the file to opensubtitles.com.
+bind_command('download-subtitles', function()
+	msg.warn('Subtitle search online is not part of FluentFin MPV.')
+end)
+-- END FluentFin MPV
 bind_command('load-subtitles', create_track_loader_menu_opener({
 	prop = 'sub',
 	title = t('Load subtitles'),
@@ -871,7 +876,7 @@ bind_command('subtitles', create_select_tracklist_type_menu_opener({
 	enable_prop = 'sub-visibility',
 	secondary = {prop = 'secondary-sid', icon = 'vertical_align_top', enable_prop = 'secondary-sub-visibility'},
 	load_command = 'script-binding uosc/load-subtitles',
-	download_command = 'script-binding uosc/download-subtitles',
+	-- FluentFin MPV: no download_command, so no "Search online" (see download-subtitles)
 }))
 bind_command('audio', create_select_tracklist_type_menu_opener({
 	title = t('Audio'), type = 'audio', prop = 'aid', load_command = 'script-binding uosc/load-audio',

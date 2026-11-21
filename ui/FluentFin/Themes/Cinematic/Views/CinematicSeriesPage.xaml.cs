@@ -19,6 +19,9 @@ public sealed partial class CinematicSeriesPage : Page
 	private ItemPagePlace? _place;
 	private readonly CinematicItemPageLayout _layout;
 
+	// Nixie 1.5: the episode stills' decoded width in the template shown, which the seasons either side are asked ahead at
+	private int _stillWidth;
+
 	public CinematicSeriesPage()
 	{
 		CinematicResources.Ensure();
@@ -29,6 +32,7 @@ public sealed partial class CinematicSeriesPage : Page
 			TabsRow.Margin = new Thickness(side - 8, 0, 48, 6);
 			EpisodeShelf.Margin = new Thickness(side - (narrow ? 12 : 16), 0, 0, 0);
 			EpisodeShelf.ItemTemplate = (DataTemplate)Resources[narrow ? "EpisodeSmall" : "EpisodeLarge"];
+			_stillWidth = narrow ? CinematicSeriesSupport.SmallStillWidth : CinematicSeriesSupport.LargeStillWidth;
 			CinematicShelf.HideHeader(EpisodeShelf);
 			Body.Margin = new Thickness(side, 24, 48, 56);
 		});
@@ -40,6 +44,8 @@ public sealed partial class CinematicSeriesPage : Page
 			}
 		};
 		ShowTabs();
+		// Nixie 1.5: the seasons either side get their stills asked ahead, as the stills ask them (the template's width)
+		FluentFin.Services.StillsAhead.Follow(this, episode => _stillWidth > 0 ? CinematicArtwork.StillPath(episode, _stillWidth, episodeOwnFirst: true) : null);
 	}
 
 	public static string KickerFor(BaseItemDto? dto, List<BaseItemViewModel>? seasons) =>

@@ -1,5 +1,128 @@
 # Changelog
 
+## 1.5.0
+
+Search that puts what you typed first, updates you can watch happen, seasons that switch with their pictures, and fixes.
+
+**Search**
+
+- **The best match comes first.** A title you type in full, or the start of one, leads the results page as its top
+  result, whatever it is: a show, a film, an episode, a collection or a person. The groups follow in the order of their
+  best match, so "it's always sunny" shows the show first rather than a Movies group full of other films.
+- **Search reads titles the way you type them.** Apostrophes, punctuation, accents and capitals don't matter ("its" finds
+  "It's", "wall-e" finds "WALL·E", "amelie" finds "Amélie"), a leading "The" or "A" doesn't get in the way, and original
+  and sort titles count too. Words in another order, or one word too many, still find the title ("night dead").
+- **Weaker matches wait.** Each group shows its close matches, then "Show 12 more" (or "Show 295 weaker matches" when
+  nothing in it is close) opens the rest, and "Show fewer" folds them again. A group's count is what Nixie found.
+- **Chips show one kind at a time:** All, Shows, Movies, Episodes, Collections and People. The chip you pick stays when
+  you come back to the results or press R, and a new search starts on All. Left and Right move between the chips.
+- **People are in.** Search finds actors, and a person opens "With <name>": their films and shows, newest first.
+- **An episode brings its show.** A show whose episode matches is listed with the shows, ranked by that episode.
+- The suggestions under the search box are ranked the same way.
+
+**Updates you can watch happen**
+
+- **Nixie finds an update sooner:** when it opens, every 4 hours while it stays open, and when you come back to it after
+  an hour or more away (or the PC wakes from sleep). It still asks GitHub only for the latest release, a few times a
+  day at most, and waits when GitHub asks it to.
+- **Every step is named as it happens,** in Settings > Updates and in the notice above the page: "Checking for updates…",
+  then at once "You're up to date · checked just now", "Nixie 1.5.1 is available · 187 MB", or why it couldn't check
+  (no connection, GitHub refused, asked to wait until 14:05), with Retry. Narrator hears each step once, not every
+  progress tick.
+- **The installed copy downloads an update in the background** as soon as it finds one (not on a metered connection),
+  with a progress bar, the megabytes done of the total, the speed and the time left, and Cancel. A stopped download
+  carries on from where it stopped. The download is checked against its `.sha256` and against the digest GitHub keeps
+  for it; a download that doesn't match is fetched again once, then refused with a reason.
+- **Restart to update:** one click closes Nixie, installs the update quietly (no administrator needed) and opens Nixie
+  again on the page you were on. **Install when I close Nixie** (Settings > Updates, off by default) installs a ready
+  update as you close it instead.
+- **After an update, "Updated to Nixie 1.5.x · What's new"** shows the release notes in the app; their links open in
+  your browser only when you click one. An update that didn't install says why, with Retry and the release page.
+- **The portable (unzipped) copy** can't update itself, so it shows each new version with a link to its release page.
+- Updates keep working if the project's GitHub repository is ever renamed (they follow GitHub's redirect, and only
+  GitHub's).
+
+**Fixes**
+
+- **No more Windows "ding" on Alt shortcuts.** Alt+Enter (full screen) and other Alt keys made Windows play its error
+  sound, because Nixie's window has no menu bar to answer them. Nixie now answers them itself, quietly.
+- **A server with a private certificate plays.** A home or company certificate that Windows trusts signed in and browsed,
+  but playback failed: the player's helper checked certificates against its own list instead of the Windows store. It
+  now uses the Windows store too, like the rest of Nixie and the video stream itself.
+- **Anime split into parts get no wrong skip times.** With "Look intros up online" on, a season that MyAnimeList splits
+  into parts (Attack on Titan's Season 3 and Season 3 Part 2) took the first part's skip times for every episode, and
+  specials took the main show's. Nixie now offers no online Skip for those rather than the wrong one.
+- **mpv's own controls no longer offer "Search online" for subtitles.** It never worked (the tool it needs is not
+  included), and the subtitle site's key that came with the controls is gone.
+- **Chapters come back after a network blip.** If the server didn't answer as an episode started, its Chapters button
+  stayed disabled until another item played. Nixie now asks again when the controls next show.
+- **Changing the audio or subtitles of a transcoded video no longer counts as a second viewing.** The player told the
+  server a new playback had started and never ended the first, so the server's activity log, and play counts kept by
+  plugins, showed the same viewing twice. The server now hears one start and one end.
+- **"Include shows I'm rewatching" in Settings** (Appearance, on by default). Up next and Continue Watching show the next
+  episode of a show you're watching again, as since 1.4.1; turn it off to leave rewatches out of both.
+- **N and C on Home can be turned off** (Settings > About > "Letter keys on Home"), for anyone who presses them by
+  accident or uses speech input. Ctrl+Z, which undoes a removal from Continue Watching, is now on the shortcut sheet (?).
+- **Reset watch progress can be undone**, like a removal from Continue Watching.
+- **The Filter button's name starts with what it shows** ("Filter (2 on)"), so speech input can say it.
+- **The sign-in page says why Sign in is off** ("Type a username to sign in").
+- **The server's folder picker** says Refresh for an empty folder, and Select this folder waits until the folder is listed.
+- **The server settings pages' Save** is on only when something changed, and says "Saved" or why it couldn't save.
+- **Home's tab no longer wears a focus box at launch** or after a page change you didn't make with the keyboard. Nixie
+  opened with Home both underlined and boxed before any key was pressed; the box now shows only once you use the keyboard.
+- **No more address lookup at Amazon.** Playing from a server with a public address made the player's helper ask
+  checkip.amazonaws.com for your public address, every time, to guess whether the server was at home. It now decides from
+  the server's address alone and asks no one. A home server reached by its public name now counts as remote, as any
+  public address does (its plays keep the remote quality limit).
+
+**Seasons**
+
+- **Episode pictures keep up with the episodes.** Pictures came from your server 2 at a time (the limit Windows gives a
+  program unless it asks for more), so a season's stills filled in up to a second after its episodes. Nixie now asks for
+  6 at a time, as browsers do: posters and backdrops everywhere come sooner too.
+- **The seasons next to the one you're looking at have their pictures ready.** Nixie already fetched their episodes
+  ahead; it now fetches their stills too, in the background, so switching to the next or previous season shows its
+  pictures with its episodes (Classic, Drive-in and Cinematic; Editorial sizes its stills to the window).
+- **Any season of a show switches at once.** For a show of up to 12 seasons, Nixie fetches every season's episodes
+  ahead while you look (the ones either side first, then the others one at a time), so jumping from Season 1 to Season
+  9 no longer waits for the server. Longer shows fetch the seasons either side, as before.
+- **A season's own page opens at once.** Season N details, or another season from there, showed a blank page until the
+  server sent the season itself. The page now shows the season's name, picture, seasons row and episodes straight away
+  when Nixie has them, and fills in the rest as it comes.
+- **Drive-in's showtimes board switches faster.** Its glowing tube numbers are now made of far fewer parts, so changing
+  season no longer stalls for a moment now and then. They look exactly the same.
+
+**Playlists**
+
+- **Playlists of home videos and music videos play.** Their Play button was disabled, Shuffle did nothing and each card
+  said Nixie couldn't open it. Play and Shuffle now play them, and a card opens the video's page.
+- **A playlist plays as a playlist.** Play on a playlist that starts with an episode played that episode's whole show:
+  Next and the end of the episode went on to the show's next episode instead of the playlist's next item. Play now plays
+  the playlist in its own order, from the first item you haven't watched, and Shuffle plays the whole playlist in a
+  random order. (Found on a real Jellyfin 12 server.)
+
+**Verified**
+
+- Off-screen in all four themes: the keyboard matrix (2,190 checks), the contrast floor (4,129 labels), and the search,
+  update, season and Continue Watching scripts. On real Jellyfin 10.11 and 12.4 test servers: search, a playlist, and a
+  transcoded video's audio change.
+- Not checked by hand for this release (they need a real desktop): Space before any click in the player and then a
+  mouse move, Esc inside YouTube's player, a trailer with sound, and Restart to update on a real install.
+
+**Known issues in 1.5.0** (queued for the next fix release)
+
+- In Classic, Home's "Some of Home couldn't be loaded" notice is drawn under the top bar, where it can't be read and its
+  Try again sits under the search box.
+- When the server stops accepting your sign-in (signed in again elsewhere on this PC, or signed out by an administrator),
+  Nixie says to check that the server is running instead of asking you to sign in again. Account > Sign out, then sign
+  in, gets you back.
+- Enter on a show's card opens the show with the keyboard on the Back button, so pressing Enter again goes back.
+- "With <name>" opens with the keyboard on Back, and misses people credited only on episodes (guest stars).
+- A home server reached by a local name (such as `nas.home`, or a name your router resolves to your network) counts as
+  remote, so its plays keep the remote quality limit.
+- Reset watch progress takes effect on the server, but the screen keeps the old progress until the page reloads.
+- Search doesn't find home videos or music videos (open them from their library).
+
 ## 1.4.1
 
 Continue Watching that keeps up with what you watch, and seasons that switch at once.

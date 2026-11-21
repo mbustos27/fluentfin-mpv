@@ -155,7 +155,7 @@ public sealed partial class CinematicItemStage : UserControl
 	private void Apply()
 	{
 		var dto = Dto;
-		BackdropImage.Source = CinematicArt.Backdrop(dto, BackdropWidth);
+		BackdropImage.Source = ItemArtworkConverters.Keep(BackdropImage.Source, CinematicArt.Backdrop(dto, BackdropWidth));
 		KickerText.Text = (Kicker ?? CinematicLabels.ItemKicker(dto)).ToUpper(System.Globalization.CultureInfo.CurrentCulture);
 		KickerText.Visibility = KickerText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 

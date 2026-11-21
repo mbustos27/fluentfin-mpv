@@ -30,10 +30,12 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
 - Control (127.0.0.1 only, no auth): GET /__harness/fixture (the showcase items the UI harness navigates to),
   GET /__harness/trailer/<id> (Nixie 1.3.1: a still page standing in for YouTube's trailer embed),
   GET /__harness/release/latest and POST /__harness/release {"version"} (Nixie 1.3.1: GitHub's latest-release answer for
-  the app's update check; FAKESERVER_RELEASE sets the version at start, 0.0.1 by default),
+  the app's update check; FAKESERVER_RELEASE sets the version at start, 0.0.1 by default; Nixie 1.5: as strict as GitHub,
+  with the installer to download, a rename, rate limits and failures: release.py),
   GET /__harness/summary, POST /__harness/latency, POST /__harness/streams, POST /__harness/shutdown,
   GET /__harness/quickconnect (the codes waiting, never their secrets), POST /__harness/quickconnect/approve,
   POST /__harness/libraries {"rename": {"old": "new"}, "add": ["name"]} (the views change; clients hear LibraryChanged),
+  POST /__harness/search {"mode": "stock" | "loose"} (1.5: search as 12.4's built-in provider, or any word as a plugin),
   POST /__harness/art {"art": "white"|"black"|""} (Nixie 1.4.0: every image one flat colour from now on, as FAKESERVER_ART
   sets it at start; the image tags change with it, so a client that reads an item again asks for the new picture).
   POST /__harness/played {"series": id, "played": true} (sg-cw: the test user marks a series watched; answers its
@@ -68,17 +70,8 @@ import imagegen  # noqa: E402
 import library  # noqa: E402
 import media as media_mod  # noqa: E402
 import admin  # noqa: E402  (Nixie 1.2.0: the administration endpoints)
-
-def release_answer(version):
-    """Nixie 1.3.1: GitHub's latest-release answer for this repository at `version` (its page and assets on github.com,
-    which the app only opens or downloads on a click; a harness run never clicks them)."""
-    base = "https://github.com/mbustos27/fluentfin-mpv/releases"
-    msi = "Nixie-%s-win-x64.msi" % version
-    return {"tag_name": "v" + version, "name": "Nixie " + version, "draft": False, "prerelease": False,
-            "html_url": "%s/tag/v%s" % (base, version), "body": "Harness release " + version,
-            "assets": [{"name": msi, "browser_download_url": "%s/download/v%s/%s" % (base, version, msi)},
-                       {"name": msi + ".sha256", "browser_download_url": "%s/download/v%s/%s.sha256" % (base, version, msi)}]}
-
+import release as release_mod  # noqa: E402  # 1.5 updater: the fake GitHub release (release.py)
+from release import release_answer  # noqa: E402,F401  # 1.5 updater: kept importable from here
 
 # Nixie 1.3.1: the trailer embed's stand-in (GET /__harness/trailer/<id>): a still frame of a "film" with a play bar, made of
 # CSS only (nothing loaded from anywhere), so the theatre window's screenshots show a picture where the video goes.
@@ -169,7 +162,49 @@ TOKEN_RE = re.compile(r'Token="([^"]*)"')
 CLIENT_RE = re.compile(r'Client="([^"]*)"')
 SECRET_KEYS = {"api_key", "apikey", "token", "x-emby-token", "pw", "password", "secret"}
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-VERSION = "10.10.7"
+# 1.5 qacheck (BH-140X-m4): how the token may be sent. "strict", the default, as Jellyfin 12 (EnableLegacyAuthorization off,
+# its default from v12; tools\qa-servers\live-auth.ps1 checks it against 12.4.0): only "Authorization: MediaBrowser ...
+# Token=..." and the ApiKey query parameter; X-Emby-Authorization, X-Emby-Token, X-MediaBrowser-Token, the "Emby" scheme
+# and api_key are not read (a request with only those is anonymous: 401 where a token is needed). "legacy" reads them all,
+# as 10.x does by default, for a run that needs the old forms (run-offscreen.ps1: NIXIE_FAKE_LEGACY_AUTH=1).
+AUTH_STRICT, AUTH_LEGACY = "strict", "legacy"
+VERSIONS = {AUTH_STRICT: "12.4.0", AUTH_LEGACY: "10.11.11"}
+
+
+def auth_token(headers, query, mode):
+    """(token or None, the form it came in, Client= of the header read). Forms: "header" (Authorization: MediaBrowser),
+    "apikey" (?ApiKey=), "none", or "legacy:<form>" for one only a legacy server reads (strict mode then gives no token).
+    query: lower-cased keys (the server's own parse; ASP.NET reads query keys case-insensitively, so apikey is ApiKey)."""
+    auth = headers.get("Authorization") or ""
+    scheme = auth.split(" ", 1)[0].lower() if auth else ""
+    if auth and scheme == "mediabrowser":
+        m = TOKEN_RE.search(auth)
+        cm = CLIENT_RE.search(auth)
+        if m and m.group(1):
+            return m.group(1), "header", cm.group(1) if cm else ""
+    if (query.get("apikey") or [""])[0]:
+        cm = CLIENT_RE.search(auth) if scheme == "mediabrowser" else None
+        return query["apikey"][0], "apikey", cm.group(1) if cm else ""
+    legacy = []
+    if auth and scheme != "mediabrowser" and TOKEN_RE.search(auth):
+        legacy.append(("scheme-" + scheme, TOKEN_RE.search(auth).group(1), CLIENT_RE.search(auth)))
+    x = headers.get("X-Emby-Authorization") or ""
+    if x and TOKEN_RE.search(x):
+        legacy.append(("x-emby-authorization", TOKEN_RE.search(x).group(1), CLIENT_RE.search(x)))
+    for h in ("X-Emby-Token", "X-MediaBrowser-Token"):
+        if headers.get(h):
+            legacy.append((h.lower(), headers.get(h), None))
+    if (query.get("api_key") or [""])[0]:
+        legacy.append(("query-api_key", query["api_key"][0], None))
+    client_m = CLIENT_RE.search(auth) or CLIENT_RE.search(x)
+    client = client_m.group(1) if client_m else ""
+    if legacy:
+        form, token, cm = legacy[0]
+        if mode == AUTH_LEGACY:
+            return token, "legacy:" + form, (cm.group(1) if cm else client)
+        return None, "legacy:" + form, "" if scheme != "mediabrowser" else client
+    return None, "none", client if mode == AUTH_LEGACY or scheme == "mediabrowser" else ""
+
 
 BASE_SIZES = {  # (kind, image type) -> (width, height); None kind = any
     ("movie", "Primary"): (1000, 1500), ("series", "Primary"): (1000, 1500), ("season", "Primary"): (1000, 1500),
@@ -197,8 +232,12 @@ def rule_value(value):
 
 class Server:
     def __init__(self, out, media_meta, credentials, latency=0.0, rules=(), jitter=0.0, port=0, seed=20261115,
-                 admin=True):
+                 admin=True, auth=AUTH_STRICT):
         self.out = out
+        if auth not in VERSIONS:
+            raise ValueError("auth must be %s or %s" % (AUTH_STRICT, AUTH_LEGACY))
+        self.auth = auth            # 1.5 qacheck: AUTH_STRICT (Jellyfin 12) or AUTH_LEGACY
+        self.version = VERSIONS[auth]
         os.makedirs(out, exist_ok=True)
         self.media = media_meta
         self.creds = credentials
@@ -219,7 +258,8 @@ class Server:
         self.jitter = jitter
         self.encode_subtitle = False    # POST /__harness/streams: the last embedded subtitle burnt in (a restart to pick)
         # Nixie 1.3.1: the version GET /__harness/release/latest answers (the app's update check in a harness run)
-        self.release_version = os.environ.get("FAKESERVER_RELEASE") or "0.0.1"
+        # 1.5 updater: the whole fake release (release.py): the installer, a rename, rate limits, failures
+        self.release = release_mod.FakeRelease(os.environ.get("FAKESERVER_RELEASE") or "0.0.1")
         # Nixie 1.4.0: how the trailer stand-in answers (POST /__harness/trailer {"mode"}: TRAILER_MODES)
         self.trailer_mode = "play"
         self.trailer_slow = 0
@@ -518,14 +558,10 @@ class Server:
                 if method in ("POST", "PUT", "DELETE"):
                     n = int(self.headers.get("Content-Length") or 0)
                     self.body_bytes = self.rfile.read(n) if n else b""
-                auth = self.headers.get("Authorization") or self.headers.get("X-Emby-Authorization") or ""
-                m = TOKEN_RE.search(auth)
-                token = (m.group(1) if m else None) or self.headers.get("X-Emby-Token") or \
-                    self.headers.get("X-MediaBrowser-Token") or (self.q.get("api_key") or self.q.get("apikey") or [None])[0]
+                # 1.5 qacheck: the forms Jellyfin 12 reads (strict), or every form (legacy): auth_token
+                token, self.auth_form, self.client = auth_token(self.headers, self.q, outer.auth)
                 self.token_given = bool(token)
                 self.uid = outer.tokens.get(token) if token else None
-                cm = CLIENT_RE.search(auth)
-                self.client = cm.group(1) if cm else ""
                 delay = 0.0
                 fault = None
                 if not path.lower().startswith("/__harness/"):
@@ -557,7 +593,7 @@ class Server:
                     entry = {"t": round(time.time(), 4), "method": method, "path": path, "query": self._redacted(),
                              "status": self.status, "bytes": self.sent, "ms": round((time.perf_counter() - t0) * 1000, 1),
                              "delay_ms": round(delay, 1), "client": self.client, "ua": self.headers.get("User-Agent") or "",
-                             "auth": self.uid is not None, "route": self.route}
+                             "auth": self.uid is not None, "route": self.route, "auth_form": self.auth_form}
                     if self.unhandled:
                         entry["unhandled"] = True
                         entry["pattern"] = re.sub(r"[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}",
@@ -632,7 +668,7 @@ class Server:
                 if low == "/system/info/public":
                     self.route = "public-info"
                     return self._json(200, {"LocalAddress": outer.url, "ServerName": "Harness Jellyfin (fake)",
-                                            "Version": VERSION, "ProductName": "Jellyfin Server",
+                                            "Version": outer.version, "ProductName": "Jellyfin Server",
                                             "OperatingSystem": "", "Id": outer.server_id,
                                             "StartupWizardCompleted": True})
                 if low == "/system/ping":
@@ -688,6 +724,10 @@ class Server:
                     self.route = "image"
                     data = imagegen.render("splash", "Harness Jellyfin", "fake server - test data", 1920, 1080)
                     return self._send(200, data, "image/png")
+                # 1.5 qacheck: what needs a token is what Jellyfin asks one for (10.11.11 and 12.4.0, measured
+                # 2026-11-20, tools\qa-servers\live-auth.ps1): images, a static stream and a subtitle file answer
+                # without one; trickplay (401) and the socket (403) refuse it. The token, when given, is read in the
+                # mode's forms (auth_token). A fake stricter than the server would hide nothing and break runs.
                 mm = match(r"/items/" + ID + r"/images/([a-z]+)(?:/(\d+))?")
                 if mm and method in ("GET", "HEAD"):
                     self.route = "image"
@@ -713,6 +753,8 @@ class Server:
                 mm = match(r"/videos/" + ID + r"/trickplay/(\d+)/(\d+)\.jpg")
                 if mm:
                     self.route = "trickplay"
+                    if not self._need_auth():
+                        return
                     t = outer.media.get("trickplay") or {}
                     sheet = os.path.join(t.get("dir", ""), "%s.jpg" % mm.group(3))
                     if str(t.get("width")) != mm.group(2) or not os.path.exists(sheet):
@@ -732,7 +774,7 @@ class Server:
                 lib = outer.lib
                 if low == "/system/info":
                     self.route = "system-info"
-                    return self._json(200, {"ServerName": "Harness Jellyfin (fake)", "Version": VERSION,
+                    return self._json(200, {"ServerName": "Harness Jellyfin (fake)", "Version": outer.version,
                                             "Id": outer.server_id, "OperatingSystem": "Windows", "HasPendingRestart": False,
                                             "IsShuttingDown": False, "SupportsLibraryMonitor": True,
                                             "WebSocketPortNumber": outer.port, "CanSelfRestart": False,
@@ -807,7 +849,21 @@ class Server:
                     return self._json(200, f)
                 if low == "/items" or match(r"/users/" + ID + r"/items"):
                     self.route = "items"
-                    return self._json(200, lib.query(self.q))
+                    # 1.5 season: only the image types asked for (Library.keep_image_types)
+                    found = lib.query(self.q)
+                    for d in (found.get("Items") or []) if isinstance(found, dict) else []:
+                        library.Library.keep_image_types(d, self.q)
+                    return self._json(200, found)
+                # 1.5 search: the other search shapes (library.py hints/persons, search.py); an empty hints term is a 400
+                if low == "/search/hints":
+                    self.route = "search-hints"
+                    found = lib.hints(self.q)
+                    if found is None:
+                        return self._send(400, b"Value cannot be null. (Parameter 'SearchTerm')", "text/plain")
+                    return self._json(200, found)
+                if low == "/persons":
+                    self.route = "persons"
+                    return self._json(200, lib.persons(self.q))
                 if low == "/shows/nextup":
                     self.route = "nextup"
                     return self._json(200, lib.next_up(int(self._one("limit", "24")), self._one("seriesid"),
@@ -976,16 +1032,19 @@ class Server:
                 return self._json(404, None)
 
             def _token_value(self):
-                auth = self.headers.get("Authorization") or self.headers.get("X-Emby-Authorization") or ""
-                m = TOKEN_RE.search(auth)
-                return (m.group(1) if m else None) or self.headers.get("X-Emby-Token") or \
-                    (self.q.get("api_key") or self.q.get("apikey") or [None])[0]
+                return auth_token(self.headers, self.q, outer.auth)[0]
 
             # ---------------- handlers
             def _harness(self, method, low):
                 if low == "/__harness/fixture":
                     return self._json(200, dict(outer.lib.showcase(), server=outer.url, username=outer.creds["username"],
                                                 counts=outer.lib.counts()))
+                # 1.5 search: {"mode": "stock" | "loose"}: how search matches from now on (search.py)
+                if low == "/__harness/search" and method == "POST":
+                    body = self._body()
+                    if "mode" in body:
+                        outer.lib.search = library.search_mod.Search(str(body["mode"]))
+                    return self._json(200, {"mode": outer.lib.search.mode})
                 if low == "/__harness/summary":
                     outer.write_summary()
                     return self._json(200, outer.summary())
@@ -1012,15 +1071,10 @@ class Server:
                     if "outro_seconds" in body:
                         outer.lib.outro_seconds = float(body["outro_seconds"])
                     return self._json(200, {"outro_seconds": outer.lib.outro_seconds})
-                if low == "/__harness/release/latest" and method in ("GET", "HEAD"):
-                    # Nixie 1.3.1: the stand-in for GitHub's latest-release API (NIXIE_UPDATE_API points the app here): the
-                    # version FAKESERVER_RELEASE names (or POST /__harness/release {"version"}), 0.0.1 by default (up to date)
-                    return self._json(200, release_answer(outer.release_version))
-                if low == "/__harness/release" and method == "POST":
-                    version = str(self._body().get("version") or "")
-                    if re.fullmatch(r"\d+\.\d+\.\d+", version):
-                        outer.release_version = version
-                    return self._json(200, {"version": outer.release_version})
+                # 1.5 updater: GitHub's latest-release API, the installer and its .sha256, and their settings (release.py)
+                if low.startswith("/__harness/release") and outer.release.handle(
+                        self, method, urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)):
+                    return
                 if low.startswith("/__harness/trailer/") and method in ("GET", "HEAD"):
                     # Nixie 1.3.1: the stand-in for YouTube's embed page (NIXIE_TRAILER_EMBED_BASE points the app here):
                     # a still "trailer" card, nothing fetched from anywhere; 1.4.0: it answers the wrapper as the mode says
@@ -1119,7 +1173,9 @@ class Server:
                         "AppVersion": entry["version"], "DateAdded": entry["added"]}
 
             def _quick_initiate(self):
-                auth = self.headers.get("Authorization") or self.headers.get("X-Emby-Authorization") or ""
+                # 1.5 qacheck: X-Emby-Authorization only on a legacy server (Jellyfin 12 does not read it)
+                auth = self.headers.get("Authorization") or \
+                    (self.headers.get("X-Emby-Authorization") if outer.auth == AUTH_LEGACY else "") or ""
 
                 def field(name):
                     m = re.search(name + r'="([^"]*)"', auth)
@@ -1252,7 +1308,7 @@ class Server:
 
             def _websocket(self):
                 if self.uid is None:
-                    return self._json(401, None)
+                    return self._json(403, None)       # as Jellyfin answers a socket without a token
                 key = self.headers.get("Sec-WebSocket-Key")
                 if not key or "websocket" not in (self.headers.get("Upgrade") or "").lower():
                     return self._json(400, None)
@@ -1375,6 +1431,9 @@ def main(argv=None):
     ap.add_argument("--ready-file", help="written with {url, port, pid} once listening")
     ap.add_argument("--seed", type=int, default=20261115)
     ap.add_argument("--not-admin", action="store_true", help="the test user is not an administrator")
+    # 1.5 qacheck (BH-140X-m4)
+    ap.add_argument("--auth", choices=[AUTH_STRICT, AUTH_LEGACY], default=AUTH_STRICT,
+                    help="strict (default): only the token forms Jellyfin 12 reads, and version 12.4.0; legacy: every form, 10.11.11")
     a = ap.parse_args(argv)
     meta_path = os.path.join(a.media, "media.json")
     if not os.path.exists(meta_path):
@@ -1391,7 +1450,7 @@ def main(argv=None):
         except ValueError as ex:
             ap.error("--latency-rule %s: %s" % (r, ex))
     srv = Server(os.path.abspath(a.out), meta, load_credentials(a.credentials), a.latency, rules, a.jitter, a.port,
-                 a.seed, admin=not a.not_admin)
+                 a.seed, admin=not a.not_admin, auth=a.auth)
     if a.ready_file:
         tmp = a.ready_file + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:

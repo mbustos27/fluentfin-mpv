@@ -26,6 +26,15 @@ internal static class NativeMethods
 
 	public static void ShowError(string title, string message)
 	{
+		// 1.5: under the off-screen harness (a dev build, NIXIE_HARNESS_POINTER=1) the box would be on a private desktop nobody
+		// sees, play Windows' error sound on the owner's speakers and hold the process until the run's job ends it: it goes to
+		// stderr instead (the harness keeps it)
+		if (Services.HarnessPointer.Listens(Environment.GetEnvironmentVariable(Services.HarnessPointer.Variable), Core.AppVersion.IsReleasePackage))
+		{
+			Console.Error.WriteLine($"{title}: {message}");
+			return;
+		}
+
 		const uint MB_ICONERROR = 0x10;
 		MessageBox(IntPtr.Zero, message, title, MB_ICONERROR);
 	}

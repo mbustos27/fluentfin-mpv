@@ -11,6 +11,12 @@ public abstract class JellyfinConfigItemViewModel : ObservableObject
 
 	public abstract void Save();
 	public abstract void Reset();
+
+	/// <summary>1.5 (the button review's S22): the value shown differs from the server's (what Save would send).</summary>
+	public virtual bool IsChanged => false;
+
+	/// <summary>1.5: this item and, for a group, every item in it: what the page watches for changes.</summary>
+	public virtual IEnumerable<JellyfinConfigItemViewModel> AndChildren() => [this];
 }
 
 public class JellyfinConfigItemViewModel<T> : JellyfinConfigItemViewModel
@@ -30,8 +36,11 @@ public class JellyfinConfigItemViewModel<T> : JellyfinConfigItemViewModel
 
 			field = value;
 			OnPropertyChanged();
+			OnPropertyChanged(nameof(IsChanged));
 		}
 	}
+
+	public override bool IsChanged => !EqualityComparer<T>.Default.Equals(Value, _getValue());
 
 	public JellyfinConfigItemViewModel(Func<T> getValue, Action<T> setValue)
 	{
@@ -61,8 +70,12 @@ public partial class JellyfinSelectableConfigItemViewModel : JellyfinConfigItemV
 			}
 			field = value;
 			OnPropertyChanged();
+			OnPropertyChanged(nameof(IsChanged));
 		}
 	}
+
+	public override bool IsChanged => !Equals(SelectedValue, _getValue());
+
 	public IEnumerable<object> Values { get; set; } = [];
 
 	public string DisplayMemberPath { get; set; }
@@ -86,6 +99,10 @@ public class JellyfinTextBlockConfigItemViewModel(Func<string> getValue, Action<
 public class JellyfinGroupedConfigItemViewModel : JellyfinConfigItemViewModel
 {
 	public List<JellyfinConfigItemViewModel> Items { get; set; } = [];
+
+	public override bool IsChanged => Items.Any(x => x.IsChanged);
+
+	public override IEnumerable<JellyfinConfigItemViewModel> AndChildren() => [this, .. Items.SelectMany(x => x.AndChildren())];
 
 	public override void Save()
 	{

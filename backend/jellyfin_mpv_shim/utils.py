@@ -116,48 +116,46 @@ def synchronous(tlockname: str):
 
 
 def is_local_domain(client: "JellyfinClient_type"):
-    # With Jellyfin, it is significantly more likely the user will be using
-    # an address that is a hairpin NAT. We want to detect this and avoid
-    # imposing limits in this case.
+    # FluentFin MPV (1.5, privacy and the review of 1.5): decided from the
+    # server's address alone. Upstream resolved the name, then settled IPv4
+    # hairpin NAT by asking checkip.amazonaws.com for this machine's public
+    # address on every play, and asked the server's /System/Endpoint for
+    # IPv6. The outside lookup is gone for privacy, and the endpoint call
+    # with it: behind a reverse proxy the server sees only the proxy's LAN
+    # address and calls every play local, which lifted the remote bitrate
+    # cap (`remote_kbps`) from plays that were remote. A home server reached
+    # by its public name now counts as remote, as any public address does.
+    # END FluentFin MPV
     url = client.config.data.get("auth.server", "")
-    domain = urllib.parse.urlparse(url).hostname
+    return address_is_local(urllib.parse.urlparse(url).hostname)
 
-    addr_info = socket.getaddrinfo(domain, 8096)[0]
-    ip = addr_info[4][0]
-    if ipaddress.ip_address(ip).is_private:
-        return True
 
-    if addr_info[0] == socket.AddressFamily.AF_INET:
-        # IPv4 hairpin NAT: compare against our own WAN IP. We don't trust the
-        # server's view of the client because reverse proxies routinely lie
-        # (every connection looks like 127.0.0.1 / the proxy's IP).
-        try:
-            wan_ip = requests.get(
-                "https://checkip.amazonaws.com/", timeout=(3, 10)
-            ).text.strip("\r\n")
-            return ip == wan_ip
-        except Exception:
-            log.warning(
-                "checkip.amazonaws.com is unavailable. Assuming potential WAN ip is remote.",
-                exc_info=True,
-            )
-            return False
+#: FluentFin MPV: name endings that are never public (mDNS, RFC 8375's
+#: home.arpa, and the private-use names routers hand out).
+LOCAL_NAME_ENDINGS = (".local", ".lan", ".home.arpa", ".internal", ".localhost")
 
-    # IPv6: home networks typically use globally-routable prefixes, so the
-    # is_private check above misses real LAN connections. Fall back to the
-    # server's /System/Endpoint, which compares against the admin-configured
-    # local network subnets. Less robust than the IPv4 path (a misconfigured
-    # reverse proxy could lie) but the only signal available without enumerating
-    # local interface addresses.
-    try:
-        endpoint = client.jellyfin.get_endpoint_info()
-        return bool(endpoint.get("IsInNetwork"))
-    except Exception:
-        log.warning(
-            "Could not query /System/Endpoint for IPv6 locality. Assuming remote.",
-            exc_info=True,
-        )
+
+def address_is_local(host):
+    """FluentFin MPV: is the server at ``host`` on this network, from the
+    address as written: loopback, private and link-local addresses (IPv4 and
+    IPv6, an IPv4-mapped IPv6 address as its IPv4), a single-label name
+    (``localhost``, a machine name) or a name ending in one of
+    `LOCAL_NAME_ENDINGS`. Anything else -- a public address or a public host
+    name -- is remote. Nothing is resolved and nothing is asked."""
+    if not host:
         return False
+    host = host.strip("[]").rstrip(".").lower()
+    try:
+        ip = ipaddress.ip_address(host.split("%", 1)[0])
+    except ValueError:
+        ip = None
+    if ip is not None:
+        if ip.version == 6 and ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        return ip.is_loopback or ip.is_private or ip.is_link_local
+    if "." not in host:
+        return True
+    return host.endswith(LOCAL_NAME_ENDINGS)
 
 
 def resolved_host_is_private(address):
@@ -170,11 +168,10 @@ def resolved_host_is_private(address):
     **This is the half of `is_local_domain` that a name lookup can settle**,
     and it is the half that matters for split-horizon DNS: a self-hoster's
     own domain resolves to a LAN address at home and a public one away, so
-    nothing about the spelling of the URL can answer it. `is_local_domain`
-    goes further -- hairpin NAT, and an IPv6 fallback that asks the server
-    -- because it is deciding a *bitrate*, where being wrong costs a
-    transcode. Callers who only want to describe the connection should stop
-    here rather than make an outbound request to a third party.
+    nothing about the spelling of the URL can answer it. (FluentFin MPV:
+    `is_local_domain` now goes the other way and reads only the address as
+    written -- no lookup, no outbound request -- so that a server behind a
+    reverse proxy keeps its remote bitrate cap.)
 
     **Blocking, and there is no bounding it** -- ``getaddrinfo`` takes no
     timeout, and ``socket.setdefaulttimeout`` does not reach it on glibc. It

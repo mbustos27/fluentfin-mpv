@@ -49,8 +49,10 @@ public sealed partial class SeasonTube : StackPanel
 	{
 		var pill = Pill;
 		var number = DriveInItems.SeasonTube(pill?.Dto);
-		_tube.Text = number ?? "";
+		// Nixie 1.5 (season speed): lit or not before its number, so the tube's cells are made once (a tube not picked was
+		// made lit, then again unlit, for each season shown)
 		_tube.IsLit = pill?.IsCurrent == true;
+		_tube.Text = number ?? "";
 		_tube.Visibility = number is null ? Visibility.Collapsed : Visibility.Visible;
 		_label.Text = number is null ? DriveInItems.SeasonLabel(pill?.Dto) : "";
 		_label.Visibility = number is null ? Visibility.Visible : Visibility.Collapsed;

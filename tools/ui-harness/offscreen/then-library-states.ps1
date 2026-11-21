@@ -12,7 +12,7 @@ function Ls-Bar {
     [ordered]@{
         sort = [bool](Find-Ui -Name 'Sort: ' -Type 'Button' -Contains)
         direction = [bool](Find-Ui -Name ', switch to ' -Type 'Button' -Contains)
-        filter = [bool](Find-Ui -Name 'Filter, ' -Type 'Button' -Contains)
+        filter = [bool](Find-Ui -Name 'Filter (' -Type 'Button' -Contains)
         letters = [bool](Find-Ui -Name 'Jump to a letter' -Type 'List')
         pager = [bool]((Find-Ui -Name 'Next page' -Type 'Button') -or (Find-Ui -Name 'Page' -Type 'ComboBox' -Contains))
     }

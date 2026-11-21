@@ -188,6 +188,85 @@ class Online(unittest.TestCase):
         self.assertFalse([c for c in fake.calls if "haglund" in c[0]])
 
 
+# ARM's answer for Attack on Titan (TVDB 267440), recorded 2026-11-20 (only
+# the fields mal_id_for reads): Season 3 and 4 are split into parts, Season 0
+# is the OVAs and films.
+ARM_AOT = [
+    {"myanimelist": 16498, "thetvdb-season": 1, "themoviedb-season": 1},
+    {"myanimelist": 18397, "thetvdb-season": 0, "themoviedb-season": 0},
+    {"myanimelist": None, "thetvdb-season": 0, "themoviedb-season": 0},
+    {"myanimelist": 25777, "thetvdb-season": 2, "themoviedb-season": 2},
+    {"myanimelist": 35760, "thetvdb-season": 3, "themoviedb-season": 3},
+    {"myanimelist": 36702, "thetvdb-season": 0, "themoviedb-season": 0},
+    {"myanimelist": 38524, "thetvdb-season": 3, "themoviedb-season": 3},
+    {"myanimelist": 40028, "thetvdb-season": 4, "themoviedb-season": 4},
+    {"myanimelist": 42091, "thetvdb-season": 0, "themoviedb-season": None},
+    {"myanimelist": 48583, "thetvdb-season": 4, "themoviedb-season": 4},
+    {"myanimelist": 51535, "thetvdb-season": 4, "themoviedb-season": 4},
+]
+
+
+class SplitSeasons(unittest.TestCase):
+    """BH-140X-m1: a season ARM maps to several MAL entries, or specials,
+    get no AniSkip answer rather than another part's times."""
+
+    def setUp(self):
+        net.reset()
+        net._PAUSED.clear()
+
+    def mal(self, season, ids=None):
+        fake = Fake([("arm.haglund.dev/api/v2/(thetvdb|themoviedb)",
+                      ARM_AOT)])
+        return net.mal_id_for(ids or {"Tvdb": "267440"}, season, "1", fake,
+                              0), fake
+
+    def test_a_season_with_one_entry_has_its_id(self):
+        self.assertEqual(16498, self.mal(1)[0])
+        self.assertEqual(25777, self.mal(2)[0])
+        self.assertEqual(25777, self.mal(2, {"Tmdb": "1429"})[0])
+
+    def test_a_season_in_parts_has_none(self):
+        self.assertIsNone(self.mal(3)[0])        # 35760 and 38524
+        self.assertIsNone(self.mal(4)[0])        # 40028, 48583, 51535
+        self.assertIsNone(self.mal(3, {"Tmdb": "1429"})[0])
+
+    def test_specials_have_none_and_ask_nobody(self):
+        found, fake = self.mal(0)
+        self.assertIsNone(found)
+        self.assertEqual([], fake.calls)
+        found, fake = self.mal(0, {"MyAnimeList": "16498"})
+        self.assertIsNone(found)
+
+    def test_one_entry_listed_twice_is_still_one(self):
+        fake = Fake([("arm.haglund.dev/api/v2/thetvdb",
+                      [{"myanimelist": 7, "thetvdb-season": 1},
+                       {"myanimelist": 7, "thetvdb-season": 1}])])
+        self.assertEqual(7, net.mal_id_for({"Tvdb": "1"}, 1, "1", fake, 0))
+
+    def test_part_two_episode_asks_aniskip_nothing(self):
+        """The report's case: S3E13 is Part 2's first episode, and was asked
+        as 35760/13 (the wrong part's credits, no intro)."""
+        fake = Fake([("theintrodb", (404, {}, b"{}")),
+                     ("aniskip", ANISKIP_200),
+                     ("arm.haglund.dev/api/v2/thetvdb", ARM_AOT)])
+        episode = dict(EPISODE, ParentIndexNumber=3, IndexNumber=13)
+        anime = {"ids": {"Tvdb": "267440"}, "genres": ["Anime"]}
+
+        self.assertEqual([], net.lookup(episode, anime, "1", fake))
+        self.assertFalse([c for c in fake.calls if "aniskip" in c[0]])
+
+    def test_a_whole_season_episode_still_asks_aniskip(self):
+        fake = Fake([("theintrodb", (404, {}, b"{}")),
+                     ("aniskip", ANISKIP_200),
+                     ("arm.haglund.dev/api/v2/thetvdb", ARM_AOT)])
+        episode = dict(EPISODE, ParentIndexNumber=2, IndexNumber=4)
+        anime = {"ids": {"Tvdb": "267440"}, "genres": ["Anime"]}
+
+        self.assertEqual(2, len(net.lookup(episode, anime, "1", fake)))
+        url = [c[0] for c in fake.calls if "aniskip" in c[0]][0]
+        self.assertIn("/v2/skip-times/25777/4?", url)
+
+
 class Vid:
     def __init__(self, item):
         self.item, self.intros = item, []

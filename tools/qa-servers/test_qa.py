@@ -1,5 +1,5 @@
 """Tests of the QA server tools' own logic (no Jellyfin needed): serve.py's network.xml gate, qaproxy.py's routing,
-redaction and forwarding (against a stub upstream on 127.0.0.1), and media.py's spec.
+redaction and forwarding (against a stub upstream on 127.0.0.1), media.py's spec, and search_seed.py's titles.
 
     python -I -B tools\\qa-servers\\test_qa.py
 """
@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import media  # noqa: E402
+import search_seed  # noqa: E402
 import qaproxy  # noqa: E402
 import serve  # noqa: E402
 
@@ -82,6 +83,18 @@ class Routes(unittest.TestCase):
         }
         for path, want in cases.items():
             self.assertEqual(qaproxy.route_of(path), want, path)
+
+    def test_the_auth_form_of_each_request(self):
+        # 1.5 qacheck (BH-140X-m4): the forms Jellyfin 12 refuses are "legacy:..." (drive.ps1 fails a run that used one)
+        mb = 'MediaBrowser Client="Nixie", Token="t"'
+        for headers, q, want in (({"Authorization": mb}, {}, "header"), ({}, {"apikey": ["t"]}, "apikey"),
+                                 ({"Authorization": 'MediaBrowser Client="Nixie"'}, {}, "none"),
+                                 ({"Authorization": 'Emby Token="t"'}, {}, "legacy:scheme-emby"),
+                                 ({"X-Emby-Authorization": mb}, {}, "legacy:x-emby-authorization"),
+                                 ({"X-Emby-Token": "t"}, {}, "legacy:x-emby-token"),
+                                 ({"X-MediaBrowser-Token": "t"}, {}, "legacy:x-mediabrowser-token"),
+                                 ({}, {"api_key": ["t"]}, "legacy:query-api_key")):
+            self.assertEqual(want, qaproxy.auth_form(headers, q), (headers, q))
 
     def test_only_a_local_upstream(self):
         with self.assertRaises(SystemExit):
@@ -241,6 +254,18 @@ class Forwarding(unittest.TestCase):
             s.close()
         self.assertTrue(got.endswith(b"abc"))
 
+    def test_a_leading_double_slash_is_kept_and_logged(self):
+        # 1.5 qacheck: http.server folds "//x" into "/x" itself; the tap reads the request line, so a client that joins
+        # "http://host/" and "/System/Info/Public" by string is seen (and forwarded) as it sent it
+        s = socket.create_connection(("127.0.0.1", self.port), timeout=10)
+        s.sendall(b"GET //System/Info/Public HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+        while s.recv(4096):
+            pass
+        s.close()
+        time.sleep(0.2)
+        e = [x for x in self.log() if x["path"] == "//System/Info/Public"]
+        self.assertTrue(e and e[-1]["double_slash"])
+
     def test_harness_endpoint_unknown(self):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         c.request("GET", "/__harness/release/latest")
@@ -248,6 +273,75 @@ class Forwarding(unittest.TestCase):
         r.read()
         self.assertEqual(r.status, 404)
         c.close()
+
+
+class SubPath(unittest.TestCase):
+    """1.5 qacheck: --base-path /jellyfin stands in for a reverse proxy on a sub-path (subpath-probe.ps1)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.up = ThreadingHTTPServer(("127.0.0.1", 0), Stub)
+        cls.up.daemon_threads = True
+        threading.Thread(target=cls.up.serve_forever, daemon=True).start()
+        cls.out = tempfile.mkdtemp(prefix="qa-tap-sub-")
+        cls.tap = qaproxy.Tap("http://127.0.0.1:%d" % cls.up.server_address[1], cls.out, "unused", base_path="jellyfin/")
+        cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), qaproxy.make_handler(cls.tap))
+        cls.srv.daemon_threads = True
+        cls.tap.server = cls.srv
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.up.shutdown()
+        cls.tap.log_file.close()
+
+    def get(self, path):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        c.request("GET", path)
+        r = c.getresponse()
+        body = r.read()
+        c.close()
+        return r.status, body
+
+    def entries(self, path):
+        time.sleep(0.1)
+        with open(os.path.join(self.out, "requests.jsonl"), encoding="utf-8") as f:
+            return [e for e in map(json.loads, f) if e["path"] == path]
+
+    def test_the_base_path_is_normalised(self):
+        self.assertEqual(self.tap.base_path, "/jellyfin")
+        self.assertEqual(qaproxy.Tap("http://127.0.0.1:1", self.out, "x").base_path, "")
+
+    def test_under_the_sub_path_goes_on_without_it(self):
+        item = "0123456789abcdef0123456789abcdef"
+        status, body = self.get("/jellyfin/Items/%s/Images/Primary?fillHeight=300&api_key=SECRET" % item)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["path"], "/Items/%s/Images/Primary?fillHeight=300&api_key=SECRET" % item)
+        e = self.entries("/Items/%s/Images/Primary" % item)[-1]
+        self.assertTrue(e["prefixed"])
+        self.assertEqual(e["route"], "image")
+        self.assertNotIn("SECRET", json.dumps(e))
+
+    def test_outside_the_sub_path_is_the_proxys_404(self):
+        before = len(Stub.seen)
+        status, _ = self.get("/System/Info/Public")
+        self.assertEqual(status, 404)
+        self.assertEqual(len(Stub.seen), before, "nothing outside the sub-path reaches the server")
+        self.assertFalse(self.entries("/System/Info/Public")[-1]["prefixed"])
+
+    def test_a_double_slash_is_logged(self):
+        # forwarded as it came (the stub, Python's http.server, folds a leading "//" itself; Jellyfin does not)
+        status, body = self.get("/jellyfin//System/Info/Public")
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(body)["path"].endswith("/System/Info/Public"))
+        self.assertTrue(self.entries("//System/Info/Public")[-1]["double_slash"])
+
+    def test_the_harness_endpoints_answer_under_it(self):
+        status, body = self.get("/jellyfin/__harness/summary")
+        self.assertEqual(status, 200)
+        self.assertIn("by_route", json.loads(body))
 
 
 class MediaSpec(unittest.TestCase):
@@ -270,6 +364,53 @@ class MediaSpec(unittest.TestCase):
         text = media.srt("eng", "x", 70)
         self.assertIn("00:01:06,000 --> 00:01:09,000", text)
         self.assertEqual(text.count(" --> "), 14)
+
+
+class SearchSeed(unittest.TestCase):
+    """Nixie 1.5: the QA Search titles are the same every run, a few thousand, with the near-misses and safe file names."""
+
+    def test_the_spec(self):
+        a = search_seed.spec("C:/media/x.mkv")
+        self.assertEqual(a, search_seed.spec("C:/media/x.mkv"))   # a fixed seed: the same titles every run
+        strm = [p for p in a if p.endswith(".strm")]
+        films = [p for p in strm if p.startswith("Movies/")]
+        self.assertGreaterEqual(len(films), 3000)
+        self.assertTrue(all(a[p] == "C:/media/x.mkv\n" for p in strm))
+        for name in ("It's Always Fair Weather", "Always", "Sunny", "It", "It's a Wonderful Life", "Little Miss Sunshine"):
+            self.assertTrue(any("<title>%s</title>" % name in a[p] for p in a if p.endswith(".nfo")), name)
+        show = "Shows/It's Always Sunny in Philadelphia (2005)"
+        self.assertIn("<title>It's Always Sunny in Philadelphia</title>", a[show + "/tvshow.nfo"])
+        self.assertEqual(13, len([p for p in strm if p.startswith(show + "/")]))
+        # Windows-safe names; the .nfo keeps the real title (escaped)
+        self.assertIn("Movies/M-A-S-H (1970)/M-A-S-H (1970).nfo", a)
+        self.assertIn("<title>M*A*S*H</title>", a["Movies/M-A-S-H (1970)/M-A-S-H (1970).nfo"])
+        self.assertIn("<sorttitle>Star Wars 4</sorttitle>", a["Movies/Star Wars- A New Hope (1977)/Star Wars- A New Hope (1977).nfo"])
+        self.assertFalse([p for p in a if any(c in p.replace("/", "") for c in '<>:"\\|?*')])
+        # forty people at most (each new person is looked up by the server's people refresh)
+        cast = {line for text in a.values() for line in text.splitlines() if "<actor>" in line}
+        self.assertLessEqual(len(cast), 40)
+
+    def test_write_is_idempotent_and_removes_strays(self):
+        with tempfile.TemporaryDirectory() as out:
+            argv = sys.argv
+            try:
+                sys.argv = ["search_seed.py", "--out", out, "--target", os.path.join(out, "x.mkv")]
+                # review (m8): a folder holding other files and no search.json is refused, nothing deleted
+                with open(os.path.join(out, "keep.txt"), "w") as f:
+                    f.write("x")
+                self.assertEqual(2, search_seed.main())
+                self.assertTrue(os.path.exists(os.path.join(out, "keep.txt")))
+                os.remove(os.path.join(out, "keep.txt"))
+                self.assertEqual(0, search_seed.main())                 # an empty folder: written
+                with open(os.path.join(out, "stray.txt"), "w") as f:
+                    f.write("x")
+                self.assertEqual(0, search_seed.main())                 # its own folder (search.json): strays go
+                self.assertFalse(os.path.exists(os.path.join(out, "stray.txt")))
+                before = json.load(open(os.path.join(out, "search.json"), encoding="utf-8"))
+                self.assertEqual(0, search_seed.main())
+                self.assertEqual(before, json.load(open(os.path.join(out, "search.json"), encoding="utf-8")))
+            finally:
+                sys.argv = argv
 
 
 if __name__ == "__main__":

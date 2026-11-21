@@ -130,10 +130,10 @@ public sealed partial class ItemHero : UserControl
 	private void Apply()
 	{
 		var dto = Dto;
-		BackdropImage.Source = ItemArtworkConverters.Backdrop(dto, BackdropWidth);
+		BackdropImage.Source = ItemArtworkConverters.Keep(BackdropImage.Source, ItemArtworkConverters.Backdrop(dto, BackdropWidth));
 
 		var logo = ItemArtworkConverters.Logo(dto, 480);
-		LogoImage.Source = logo;
+		LogoImage.Source = ItemArtworkConverters.Keep(LogoImage.Source, logo);
 		var title = ItemMeta.HeroTitle(dto);
 		LogoImage.Visibility = HeadingVisibility(hasLogo: logo is not null, title, forLogo: true);
 		TitleText.Text = title;

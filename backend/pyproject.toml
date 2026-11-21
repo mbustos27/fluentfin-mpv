@@ -45,10 +45,15 @@ systray = ["pystray"]
 # unknown extra is only a warning — the install would silently lack the tray.
 gui = ["pystray"]
 discord = ["pypresence"]
+# FluentFin MPV: the bridge checks server certificates against the system's
+# store (jellyfin_mpv_shim/system_trust.py; the release pins it in
+# tools/release/requirements-backend.txt). Optional: without it, certifi.
+bridge = ["truststore"]
 all = [
     "pystray",
     "pypresence",
     "pywin32; sys_platform == 'win32'",
+    "truststore",  # FluentFin MPV
 ]
 
 [project.scripts]

@@ -65,6 +65,9 @@ public sealed partial class EpisodeRow : UserControl, IUpNextMarked
 		UpNextBadge.Visibility = IsUpNext ? Visibility.Visible : Visibility.Collapsed;
 	}
 
+	/// <summary>The thumbnail's decoded width (176 DIP at 200 %), which its picture is asked at (Nixie 1.5: StillsAhead too).</summary>
+	internal const int ThumbWidth = 352;
+
 	/// <summary>What Enter (and Narrator's Invoke) does: play the episode.</summary>
 	internal void Play()
 	{
@@ -115,7 +118,7 @@ public sealed partial class EpisodeRow : UserControl, IUpNextMarked
 		if (_thumbFor is { } dto && EpisodeThumbs.IsNear(_viewport, ActualHeight))
 		{
 			_thumbFor = null;
-			Thumb.Source = ItemArtworkConverters.Thumb(dto, 352);
+			Thumb.Source = ItemArtworkConverters.Thumb(dto, ThumbWidth);
 		}
 	}
 

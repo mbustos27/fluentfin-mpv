@@ -79,7 +79,6 @@ public sealed class SeasonSwitchTests
 		var vm = await OpenSeries();
 		Assert.Equal(_seasons[0].Id, vm.SelectedSeason?.Id);
 		Assert.Equal(1, ListsAsked(_seasons[1])); // asked ahead
-		Assert.Equal(0, ListsAsked(_seasons[2]));
 
 		var switching = vm.SelectSeasonCommand.ExecuteAsync(_seasons[1]);
 		Assert.True(switching.IsCompleted); // kept: shown at once, no wait for the server
@@ -87,7 +86,346 @@ public sealed class SeasonSwitchTests
 
 		Assert.Equal(_episodes[_seasons[1].Id!.Value].Select(e => e.Id), vm.Episodes.Select(e => e.Id));
 		Assert.Equal(1, ListsAsked(_seasons[1])); // not asked again
-		Assert.Equal(1, ListsAsked(_seasons[2])); // and now the one after it, ahead
+		Assert.Equal(1, ListsAsked(_seasons[2])); // the one after it, ahead (Nixie 1.5: a small show's, already in turn), once
+	}
+
+	// ---- Nixie 1.5: a far season (Season 1 to Season 9) asked ahead too, for a small show -------------------------------
+
+	[Fact]
+	public void FurtherSeasons_AreTheOthersNearestFirst_ForASmallShowOnly()
+	{
+		var ids = (int[] at) => at.Select(i => _seasons[i].Id).ToArray();
+		Assert.Equal(ids([2, 3, 4]), ItemSiblings.Further(_seasons, _seasons[0].Id!.Value, 12).Select(s => s.Id));
+		Assert.Equal(ids([4, 0]), ItemSiblings.Further(_seasons, _seasons[2].Id!.Value, 12).Select(s => s.Id)); // after, then before
+		Assert.Equal(ids([2, 1, 0]), ItemSiblings.Further(_seasons, _seasons[4].Id!.Value, 12).Select(s => s.Id));
+		Assert.Empty(ItemSiblings.Further(_seasons, _seasons[0].Id!.Value, 4)); // more seasons than asked ahead: none
+		Assert.Equal(3, ItemSiblings.Further(_seasons, _seasons[0].Id!.Value, 5).Count); // as many as the most: all
+		Assert.Empty(ItemSiblings.Further(_seasons, Guid.NewGuid(), 12));
+		Assert.Empty(ItemSiblings.Further(_seasons.Take(2), _seasons[0].Id!.Value, 12)); // the one either side is Around's
+		Assert.Empty(ItemSiblings.Further(null, _seasons[0].Id!.Value, 12));
+	}
+
+	[Fact]
+	public async Task ASmallShow_AsksEverySeasonAhead_TheOnesEitherSideFirst_ThenOneAtATime()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var next = _held[_seasons[1].Id!.Value] = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		kept.PrefetchSeasons(_seasons, _seasons[0].Id!.Value);
+		Assert.Equal(1, ListsAsked(_seasons[1]));
+		Assert.Equal(0, ListsAsked(_seasons[2])); // waits for the one either side
+
+		var third = _held[_seasons[2].Id!.Value] = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		next.SetResult(new BaseItemDtoQueryResult { Items = [.. _episodes[_seasons[1].Id!.Value]] });
+		await WaitFor(() => ListsAsked(_seasons[2]) == 1);
+		Assert.Equal(0, ListsAsked(_seasons[3])); // one at a time
+
+		third.SetResult(new BaseItemDtoQueryResult { Items = [.. _episodes[_seasons[2].Id!.Value]] });
+		await WaitFor(() => kept.HasList(_seasons[4].Id!.Value));
+		Assert.All(_seasons.Skip(1), s => Assert.Equal(1, ListsAsked(s)));
+		Assert.Equal(0, ListsAsked(_seasons[0])); // the one shown is the page's own
+	}
+
+	[Fact]
+	public async Task AFarSeason_OfASmallShow_ShowsWithoutWaitingForTheServer()
+	{
+		var vm = await OpenSeries();
+		var asked = ListsAsked(_seasons[4]);
+		Assert.Equal(1, asked);
+
+		var switching = vm.SelectSeasonCommand.ExecuteAsync(_seasons[4]); // Season 1 to Season 5
+		Assert.True(switching.IsCompleted);
+		await switching;
+
+		Assert.Equal(_episodes[_seasons[4].Id!.Value].Select(e => e.Id), vm.Episodes.Select(e => e.Id));
+		Assert.Equal(asked, ListsAsked(_seasons[4]));
+	}
+
+	[Fact]
+	public void ALongShow_AsksOnlyTheSeasonsEitherSide()
+	{
+		var seasons = Enumerable.Range(1, SeriesEpisodes.MostSeasonsAhead + 1)
+			.Select(n => new BaseItemDto { Id = Guid.NewGuid(), Type = BaseItemDto_Type.Season, Name = $"Season {n}", IndexNumber = n, SeriesId = SeriesId })
+			.ToList();
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+
+		kept.PrefetchSeasons(seasons, seasons[5].Id!.Value);
+
+		Assert.Equal([seasons[4].Id, seasons[6].Id], seasons.Where(s => ListsAsked(s) > 0).Select(s => s.Id));
+	}
+
+	[Fact]
+	public async Task ANewerAskAhead_StopsTheOlderOneBeforeItsNextRequest()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var third = _held[_seasons[2].Id!.Value] = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		kept.PrefetchSeasons(_seasons, _seasons[0].Id!.Value); // 2 at once, then 3 (held), 4, 5
+		await WaitFor(() => ListsAsked(_seasons[2]) == 1);
+
+		// another show opened meanwhile: its own asking ahead is the latest
+		var other = new BaseItemDto { Id = Guid.NewGuid(), Type = BaseItemDto_Type.Season, Name = "Season 1", IndexNumber = 1 };
+		kept.PrefetchSeasons([other], other.Id!.Value);
+		third.SetResult(new BaseItemDtoQueryResult { Items = [.. _episodes[_seasons[2].Id!.Value]] });
+		await Task.Delay(100);
+
+		Assert.Equal(0, ListsAsked(_seasons[3]));
+		Assert.Equal(0, ListsAsked(_seasons[4]));
+	}
+
+	[Fact]
+	public async Task AFailedAskAhead_IsNotKept_AndTheTurnGoesOn()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var third = _held[_seasons[2].Id!.Value] = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		kept.PrefetchSeasons(_seasons, _seasons[0].Id!.Value);
+		await WaitFor(() => ListsAsked(_seasons[2]) == 1);
+		third.SetResult(null); // the server failed this one
+
+		await WaitFor(() => kept.HasList(_seasons[4].Id!.Value));
+		Assert.False(kept.HasList(_seasons[2].Id!.Value));
+		Assert.True(kept.HasList(_seasons[3].Id!.Value));
+	}
+
+	// ---- Nixie 1.5: the seasons either side tell the pages their episodes, for their stills to be asked ahead -------------
+
+	[Fact]
+	public async Task TheSeasonsEitherSide_TellTheirEpisodes_NotTheFurtherOnes_NorAFailure()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var told = new List<Guid?>();
+		kept.NextToShownKept += (_, episodes) => told.Add(episodes[0].SeasonId);
+		var before = _held[_seasons[1].Id!.Value] = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+
+		kept.PrefetchSeasons(_seasons, _seasons[2].Id!.Value); // Season 3 shown: 4 and 2 either side, 5 and 1 further
+		await WaitFor(() => kept.HasList(_seasons[3].Id!.Value));
+		Assert.Equal([_seasons[3].Id], told); // the one after it, at once; the one before still on its way
+
+		before.SetResult(null); // the one before fails: nothing to tell
+		await WaitFor(() => kept.HasList(_seasons[0].Id!.Value));
+		Assert.Equal([_seasons[3].Id], told); // nor the further ones
+	}
+
+	[Fact]
+	public async Task ASeasonEitherSide_ThatAnswersAfterANewerAskAhead_TellsNothing()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var told = 0;
+		kept.NextToShownKept += (_, _) => told++;
+		var next = _held[_seasons[1].Id!.Value] = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		kept.PrefetchSeasons(_seasons, _seasons[0].Id!.Value);
+
+		var other = new BaseItemDto { Id = Guid.NewGuid(), Type = BaseItemDto_Type.Season, Name = "Season 1", IndexNumber = 1 };
+		kept.PrefetchSeasons([other], other.Id!.Value); // another show opened meanwhile
+		next.SetResult(new BaseItemDtoQueryResult { Items = [.. _episodes[_seasons[1].Id!.Value]] });
+		await WaitFor(() => kept.HasList(_seasons[1].Id!.Value));
+
+		Assert.Equal(0, told);
+	}
+
+	[Fact]
+	public void AKeptSeasonEitherSide_TellsAtOnce()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var told = new List<Guid?>();
+		kept.NextToShownKept += (_, episodes) => told.Add(episodes[0].SeasonId);
+
+		kept.PrefetchSeasons(_seasons, _seasons[0].Id!.Value);
+		told.Clear();
+		kept.PrefetchSeasons(_seasons, _seasons[2].Id!.Value); // 4 and 2, both kept by the first ask
+
+		Assert.Equal([_seasons[3].Id, _seasons[1].Id], told);
+	}
+
+	// ---- Nixie 1.5: a season page shows its kept episodes before its own item answers -----------------------------------
+
+	[Fact]
+	public async Task ASeasonPage_ShowsKeptEpisodes_WhileItsSeasonIsOnItsWay()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var season = _seasons[2];
+		await kept.GetList(season);
+		await kept.GetList(new BaseItemDto { Id = SeriesId, Type = BaseItemDto_Type.Series }); // the series' seasons, kept too
+		var item = new TaskCompletionSource<BaseItemDto?>();
+		_client.Setup(x => x.GetItem(season.Id!.Value)).Returns(item.Task);
+
+		var page = new SeasonViewModel(_client.Object, kept);
+		var opening = page.OnNavigatedTo(season);
+
+		// at once, together: the season it was opened with (the header), the picker and the rows
+		Assert.False(opening.IsCompleted);
+		Assert.Same(season, page.Dto);
+		Assert.Equal(_seasons.Count, page.SeasonPills.Count);
+		Assert.Equal(season.Id, page.SeasonPills.Single(p => p.IsCurrent).Dto.Id);
+		Assert.Equal(_episodes[season.Id!.Value].Select(e => e.Id), page.Episodes?.Select(e => e.Id));
+		Assert.True(page.State.IsLoading);
+
+		// the server's season replaces the one opened with
+		var fromServer = new BaseItemDto { Id = season.Id, Type = BaseItemDto_Type.Season, Name = season.Name, IndexNumber = season.IndexNumber, SeriesId = SeriesId, Overview = "As the server has it" };
+		item.SetResult(fromServer);
+		await opening;
+		Assert.True(page.State.IsLoaded);
+		Assert.Same(fromServer, page.Dto);
+		Assert.Equal(_episodes[season.Id!.Value].Select(e => e.Id), page.Episodes.Select(e => e.Id));
+		Assert.Equal(1, ListsAsked(season));
+	}
+
+	[Fact]
+	public async Task ASeasonPage_OpenedWithItsIdAlone_ShowsKeptRows_AndItsSeasonOnceIn()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var season = _seasons[2];
+		await kept.GetList(season);
+		var item = new TaskCompletionSource<BaseItemDto?>();
+		_client.Setup(x => x.GetItem(season.Id!.Value)).Returns(item.Task);
+
+		var page = new SeasonViewModel(_client.Object, kept);
+		var opening = page.OnNavigatedTo(new BaseItemDto { Id = season.Id, Type = BaseItemDto_Type.Season }); // a bare link
+
+		Assert.Null(page.Dto); // nothing to show of it yet (a blank header, as before)
+		Assert.Equal(_episodes[season.Id!.Value].Select(e => e.Id), page.Episodes?.Select(e => e.Id));
+
+		item.SetResult(season);
+		await opening;
+		Assert.Same(season, page.Dto);
+		Assert.Equal(season.Id, page.SeasonPills.Single(p => p.IsCurrent).Dto.Id); // the picker from the server's season
+	}
+
+	[Fact]
+	public async Task ASeasonPage_WhoseSeasonFails_ShowsTheMessageWithoutRows()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var season = _seasons[2];
+		await kept.GetList(season);
+		_client.Setup(x => x.GetItem(season.Id!.Value)).ReturnsAsync((BaseItemDto?)null);
+
+		var page = new SeasonViewModel(_client.Object, kept);
+		await page.OnNavigatedTo(season);
+
+		Assert.True(page.State.IsFailed);
+		Assert.Null(page.Episodes);
+		Assert.Null(page.Dto);
+		Assert.Empty(page.SeasonPills);
+	}
+
+	[Fact]
+	public async Task ASeasonPage_WhoseSeasonFailsBeforeItsEpisodes_ShowsNoLateRows()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var season = _seasons[2];
+		var list = _held[season.Id!.Value] = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		var seasons = _held[SeriesId] = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		_client.Setup(x => x.GetItem(season.Id!.Value)).ReturnsAsync((BaseItemDto?)null);
+
+		var page = new SeasonViewModel(_client.Object, kept);
+		var opening = page.OnNavigatedTo(season);
+		await WaitFor(() => page.State.IsFailed);
+		// the rows and the picker answer after the failure: neither shows under the message
+		list.SetResult(new BaseItemDtoQueryResult { Items = [.. _episodes[season.Id!.Value]] });
+		seasons.SetResult(new BaseItemDtoQueryResult { Items = [.. _seasons] });
+		await opening;
+		await Task.Delay(50);
+
+		Assert.True(page.State.IsFailed);
+		Assert.Null(page.Episodes);
+		Assert.Null(page.Dto);
+		Assert.Empty(page.SeasonPills);
+	}
+
+	// ---- Nixie 1.5 review: m2 (only the newest load clears), m3 (a left page asks nothing ahead), m4 (further seasons once) --
+
+	[Fact]
+	public async Task AReplacedLoadThatFails_DoesNotClearThePageTheNewerOneLoaded()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var season = _seasons[2];
+		var first = new TaskCompletionSource<BaseItemDto?>();
+		var calls = 0;
+		_client.Setup(x => x.GetItem(season.Id!.Value)).Returns(() => ++calls == 1 ? first.Task : Task.FromResult<BaseItemDto?>(season));
+
+		var page = new SeasonViewModel(_client.Object, kept);
+		var older = page.OnNavigatedTo(season);
+		await page.OnNavigatedTo(season); // the page opened again (or Retry): this load wins
+		Assert.True(page.State.IsLoaded);
+
+		first.SetResult(null); // the older load's season fails, last
+		await older;
+
+		Assert.True(page.State.IsLoaded);
+		Assert.Equal(season.Id, page.Dto?.Id);
+		Assert.Equal(_episodes[season.Id!.Value].Select(e => e.Id), page.Episodes?.Select(e => e.Id));
+		Assert.NotEmpty(page.SeasonPills);
+	}
+
+	[Fact]
+	public async Task ASeasonPageLeft_BeforeItsSeasonAnswers_AsksNothingAhead()
+	{
+		using var kept = new SeriesEpisodes(_client.Object, () => 0, TimeProvider.System, subscribe: false);
+		var season = _seasons[2];
+		var item = new TaskCompletionSource<BaseItemDto?>();
+		_client.Setup(x => x.GetItem(season.Id!.Value)).Returns(item.Task);
+
+		var page = new SeasonViewModel(_client.Object, kept);
+		var opening = page.OnNavigatedTo(season);
+		await page.OnNavigatedFrom();
+		item.SetResult(season);
+		await opening;
+		await Task.Delay(50);
+
+		Assert.All(_seasons.Where(s => s.Id != season.Id), s => Assert.Equal(0, ListsAsked(s)));
+	}
+
+	[Fact]
+	public async Task ASeriesPageLeft_BeforeItsSeasonAnswers_AsksNothingAhead()
+	{
+		// the opening asks every season ahead: the fourth fails (not kept), the fifth is still on its way
+		var fourth = _held[_seasons[3].Id!.Value] = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		fourth.SetResult(null);
+		var fifth = _held[_seasons[4].Id!.Value] = new TaskCompletionSource<BaseItemDtoQueryResult?>();
+		var vm = await OpenSeries();
+
+		var switching = vm.SelectSeasonCommand.ExecuteAsync(_seasons[4]); // waits for the fifth's list
+		await vm.OnNavigatedFrom(); // the page is left meanwhile
+		var asked = ListsAsked(_seasons[3]);
+		fifth.SetResult(new BaseItemDtoQueryResult { Items = [.. _episodes[_seasons[4].Id!.Value]] });
+		await switching;
+		await Task.Delay(50);
+
+		Assert.Equal(asked, ListsAsked(_seasons[3])); // the fourth, either side of the fifth, is not asked ahead
+	}
+
+	[Fact]
+	public async Task OutOfDateFurtherSeasons_AreNotAskedAheadAgain_TheOnesEitherSideAre()
+	{
+		var changes = 0;
+		using var kept = new SeriesEpisodes(_client.Object, () => changes, TimeProvider.System, subscribe: false);
+		kept.PrefetchSeasons(_seasons, _seasons[0].Id!.Value); // 2 either side, then 3, 4, 5
+		await WaitFor(() => kept.HasList(_seasons[4].Id!.Value));
+		Assert.All(_seasons.Skip(1), s => Assert.Equal(1, ListsAsked(s)));
+
+		changes++; // an episode played (the server's notice): every kept list is out of date
+		kept.PrefetchSeasons(_seasons, _seasons[0].Id!.Value);
+		await WaitFor(() => kept.HasList(_seasons[1].Id!.Value));
+		await Task.Delay(50);
+
+		Assert.Equal(2, ListsAsked(_seasons[1])); // either side: asked again (the next click shows at once)
+		Assert.All(_seasons.Skip(2), s => Assert.Equal(1, ListsAsked(s))); // further away: not again until shown
+
+		// a toggle in the app: out of date too, not gone (a further season is not asked ahead again for it)
+		kept.Apply(new ItemUserDataChangedEventArgs(_episodes[_seasons[3].Id!.Value][0].Id!.Value, new UserItemDataDto { Played = true }, failed: false));
+		kept.PrefetchSeasons(_seasons, _seasons[0].Id!.Value);
+		await WaitFor(() => kept.HasList(_seasons[1].Id!.Value));
+		await Task.Delay(50);
+		Assert.All(_seasons.Skip(2), s => Assert.Equal(1, ListsAsked(s)));
+		Assert.False(kept.HasList(_seasons[3].Id!.Value)); // out of date: shown, it is asked again
+	}
+
+	private static async Task WaitFor(Func<bool> condition)
+	{
+		for (var waited = 0; !condition() && waited < 100; waited++)
+		{
+			await Task.Delay(20);
+		}
+
+		Assert.True(condition());
 	}
 
 	[Fact]

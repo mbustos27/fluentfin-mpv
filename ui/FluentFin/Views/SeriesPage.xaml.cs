@@ -13,6 +13,8 @@ public sealed partial class SeriesPage : Page
 		InitializeComponent();
 		// Nixie 1.4.1: the pills are made anew for each season shown: the current one gets the keyboard back (SeasonPillFocus)
 		FluentFin.Controls.SeasonPillFocus.Keep(this, ViewModel, SeasonPicker);
+		// Nixie 1.5: the seasons either side get their stills asked ahead, as the rows ask them (EpisodeRow)
+		FluentFin.Services.StillsAhead.Follow(this, episode => FluentFin.Core.ItemArtwork.ThumbPath(episode, FluentFin.Controls.EpisodeRow.ThumbWidth));
 	}
 
 	// 1.2.0: Back (or Forward) to this page gives its scroll position and focus back (ItemPagePlace)

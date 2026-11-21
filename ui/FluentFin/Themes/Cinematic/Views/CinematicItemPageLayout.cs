@@ -59,4 +59,7 @@ public static class CinematicSeriesSupport
 	public static List<BaseItemViewModel> Wrap(List<BaseItemDto>? episodes) => episodes is null ? [] : [.. episodes.Select(BaseItemViewModel.FromDto)];
 
 	public static string Summary(List<BaseItemDto>? episodes) => CinematicLabels.SeasonSummary(episodes);
+
+	/// <summary>Nixie 1.5: the episode stills' DecodeWidth in the series and season pages' EpisodeLarge and EpisodeSmall (StillsAhead).</summary>
+	public const int LargeStillWidth = 600, SmallStillWidth = 520;
 }

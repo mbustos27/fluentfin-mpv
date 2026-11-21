@@ -203,9 +203,42 @@ public sealed class StatesTests
 	public void TheFolderPicker_SaysWhyAFolderShowsNothing()
 	{
 		Assert.Equal("No folders here", ServerFolders.Title(ServerFolderStatus.Empty));
-		Assert.Contains("try again", ServerFolders.Message(ServerFolderStatus.Empty), StringComparison.Ordinal);
+		Assert.Contains("refresh", ServerFolders.Message(ServerFolderStatus.Empty), StringComparison.Ordinal); // 1.5 (S19)
+		Assert.Contains("try again", ServerFolders.Message(ServerFolderStatus.Failed), StringComparison.Ordinal);
 		Assert.Equal("Couldn't read this folder", ServerFolders.Title(ServerFolderStatus.Failed));
 		Assert.Equal("", ServerFolders.Title(ServerFolderStatus.Loaded));
 		Assert.Equal("Current folder: /media", ServerFolders.PathLabel("/media"));
+	}
+
+	// 1.5 (the button review's S19, S20): an empty folder's button is Refresh (nothing failed); Select this folder only on a
+	// folder the server listed (empty included), never while it is listed or after the listing failed
+	[Theory]
+	[InlineData(ServerFolderStatus.Loading, "Try again", false)]
+	[InlineData(ServerFolderStatus.Loaded, "Try again", true)]
+	[InlineData(ServerFolderStatus.Empty, "Refresh", true)]
+	[InlineData(ServerFolderStatus.Failed, "Try again", false)]
+	public void TheFolderPicker_SaysRefreshForAnEmptyFolder_AndSelectsOnlyAListedOne(ServerFolderStatus status, string retry, bool canSelect)
+	{
+		Assert.Equal(retry, ServerFolders.RetryLabel(status));
+		Assert.Equal(canSelect, ServerFolders.CanSelect("/media", status));
+		Assert.False(ServerFolders.CanSelect("", status));
+	}
+
+	// 1.5 (the button review's S2): the disabled Sign in says why, on screen
+	[Theory]
+	[InlineData("", false, Microsoft.UI.Xaml.Visibility.Visible)]
+	[InlineData("   ", false, Microsoft.UI.Xaml.Visibility.Visible)]
+	[InlineData("alice", false, Microsoft.UI.Xaml.Visibility.Collapsed)]
+	[InlineData("", true, Microsoft.UI.Xaml.Visibility.Collapsed)]
+	public void TheSignInHint_ShowsWhileThereIsNoUsername(string username, bool signingIn, Microsoft.UI.Xaml.Visibility shown) =>
+		Assert.Equal(shown, FluentFin.Views.LoginPage.SignInHintVisibility(username, signingIn));
+
+	// 1.5 (the button review's L1, L2): Home's N and C do nothing when Settings turns them off
+	[Fact]
+	public void HomesLetterKeys_FollowTheSwitch()
+	{
+		Assert.True(FluentFin.Services.HomeLetterKeys.Ignore(switchedOff: true, focused: null));
+		Assert.False(FluentFin.Services.HomeLetterKeys.Ignore(switchedOff: false, focused: null));
+		Assert.False(FluentFin.Services.HomeLetterKeys.Ignore(switchedOff: false, focused: "not a text box"));
 	}
 }

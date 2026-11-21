@@ -38,6 +38,12 @@
 # dropped clicks (Classic, Drive-in), every "kept" request check and, under the latency rules, the kept time limits. The
 # table goes to drive.log, result.json (timings.season_switch) and season-switch.json; one shot per switch,
 # <tag>-<part>-<n>-s<season>.png. Dot-sourced by drive.ps1: every name here starts with ss / Ss- ($out is its -Out).
+# Nixie 1.5 (the season stream): a show of at most 12 seasons asks every season ahead, in turn, so 1>9 and the season page's
+# first switch to 6 are "far, asked ahead" (kept: no list request; a longer big series, e.g. 13x20, keeps them "new"); the
+# table's img1< is when the first picture was asked (ms after the last click) and x the most pictures at once, and a switch
+# of 6 pictures or more (not a click-through) FAILs when they come 2 at a time (WinINet's default for a program; the build
+# before 1.5 does). The seasons either side of the one shown have their stills asked ahead (StillsAhead, 2 at a time, a
+# second after their list): their switches show the pictures kept.
 
 $ssTheme = if ($env:NIXIE_LAYOUT) { $env:NIXIE_LAYOUT } else { 'Classic' }
 $ssTag = if ($env:SG_SHOT_TAG) { $env:SG_SHOT_TAG } else { $ssTheme.ToLowerInvariant() }
@@ -492,6 +498,8 @@ function Ss-Switch([string]$Part, [string]$Label, [int]$From, [int[]]$Clicks, [i
         rows_ms = $rowsMs; clean_ms = $(if ($cleanFrame) { Ms $last $cleanFrame.End })
         images_ms = $(if ($imagesDone) { [Math]::Max([int](Ms $last $imagesDone), [int]$rowsMs) } elseif ($rowsMs) { $rowsMs })
         cached = ((-not $images) -and [bool]$rowsFrame); images_n = $images.Count; image_sizes = ($widths -join ' '); images_in_flight = $imgFlight
+        # Nixie 1.5: when the first of them was asked (ms after the last click): with the rows, or after them
+        images_first_asked_ms = $(if ($images) { Ms $last (($images | ForEach-Object { Ss-Start $_ } | Measure-Object -Minimum).Minimum) })
         image_server_ms = $(if ($images) { [Math]::Round((($images | ForEach-Object { [double]$_.ms - [double]$_.delay_ms } | Measure-Object -Maximum).Maximum), 1) })
         list_asked_ms = $(if ($list) { Ms $last (Ss-Start $list) }); list_answered_ms = $(if ($list) { Ms $last $list.t })
         ui_after_answer_ms = $(if ($list -and $rowsMs) { $rowsMs - (Ms $last $list.t) })
@@ -543,6 +551,12 @@ function Ss-Switch([string]$Part, [string]$Label, [int]$From, [int[]]$Clicks, [i
         Check "season switch ($ssTag) ${Part} ${Label}: Season $target's list is kept (seen or asked ahead): no request for it" ($listAfter.Count -eq 0) $(if ($listAfter) {
             "asked $($listAfter.Count) time(s), answered $((@($listAfter | ForEach-Object { Ms $last $_.t })) -join ', ') ms after the click" } else { 'none' })
     }
+    # Nixie 1.5: the pictures come more than 2 at a time (WinINet gives a program 2 connections to a server unless told; a
+    # season's stills came 2 by 2, 0.4 to 0.9 s after its rows). Not after a click-through: the last season's stills may be
+    # on their way from the page before, which asks the seasons either side's ahead 2 at a time (StillsAhead) by design
+    if ($images.Count -ge 6 -and $Expect -ne 'fast') {
+        Check "season switch ($ssTag) ${Part} ${Label}: Season $target's pictures come more than 2 at a time" ($imgFlight -gt 2) "$imgFlight at once, $($images.Count) pictures"
+    }
     $timeOk = $rowsMs -and $rowsMs -le $row.limit_rows_ms -and ($null -eq $row.images_ms -or $row.images_ms -le $row.limit_images_ms)
     Check "season switch ($ssTag) ${Part} ${Label}: in time (${Expect}: rows within $($row.limit_rows_ms) ms, pictures within $($row.limit_images_ms) ms)" ([bool]$timeOk) (
         "rows $(if ($rowsMs) { $rowsMs } else { 'never' }) ms, pictures $($row.images_ms) ms$(if ($row.cached) { ' (kept)' })")
@@ -577,6 +591,15 @@ Start-Sleep -Seconds 3   # its pictures, More like this
 $ssP1 = Ss-Pill 2
 Check "season switch ($ssTag): the series page has its season pills" ([bool]$ssP1) $(if ($ssP1) { "'$($ssP1.Name)' at $($ssP1.Rect -join ',')" } else { (@(Ss-Pills | ForEach-Object { $_.Name }) -join ', ') })
 if (-not $ssP1) { Dump-Tree "$ssTag-season-switch-no-pills"; return }
+# Nixie 1.5 (review M1): the series' seasons are asked with their logos: a season page opened from a pill first shows the
+# pill's season, and without Logo among the image types Jellyfin (and the fake server, 1.5) leaves out the show's logo, so
+# the header showed the name as text, then the logo a moment later, moving what is under it
+Ss-ReadRequests
+$ssSeasonsAsked = @($script:ssReqs | Where-Object { $_.route -eq 'items' -and $_.query.PSObject.Properties['parentid'] -and (Ss-Norm $_.query.parentid[0]) -eq $ssSeriesId })
+$ssSeasonsTypes = @($ssSeasonsAsked | ForEach-Object { if ($_.query.PSObject.Properties['enableimagetypes']) { @($_.query.enableimagetypes) -join ',' } else { '(all)' } } | Sort-Object -Unique)
+Check "season switch ($ssTag): the series' seasons are asked with their logos (a season page's header from a pill)" (
+    $ssSeasonsAsked.Count -gt 0 -and -not @($ssSeasonsTypes | Where-Object { $_ -ne '(all)' -and $_ -notmatch '(^|,)Logo(,|$)' }).Count) $(
+    if ($ssSeasonsAsked) { "image types: $($ssSeasonsTypes -join ' | ')" } else { 'the seasons were never asked' })
 
 # (the page opened on Season 1 asks Season 2 ahead; Season 2 shown asks 3 ahead, and so on: "ahead" switches are kept too)
 Ss-Switch 'series' '1>2 (ahead)' 1 @(2) -Expect kept
@@ -585,8 +608,11 @@ Ss-Switch 'series' '3>2 (seen)' 3 @(2) -Expect kept
 Ss-Switch 'series' '2>1 (seen)' 2 @(1) -Expect kept
 Ss-Switch 'series' '1>2>3>4 fast' 1 @(2, 3, 4) -GapMs 75 -Expect fast
 Ss-Switch 'series' '4>1 (seen)' 4 @(1) -Expect kept
-# a season far from any shown (nothing asked it ahead): the server's list, then the pictures
-Ss-Switch 'series' '1>9 (new)' 1 @(9) -Expect new
+# a season far from the one shown: Nixie 1.5 asks every season of a show of at most 12 (SeriesEpisodes.MostSeasonsAhead) ahead,
+# in turn, so it is kept by now; a longer show (FAKESERVER_BIG_SERIES=13x20) asks only the seasons either side: the server's
+# list, then the pictures
+$ssAllAhead = @($ssBs.seasons).Count -le 12
+if ($ssAllAhead) { Ss-Switch 'series' '1>9 (far, asked ahead)' 1 @(9) -Expect kept } else { Ss-Switch 'series' '1>9 (new)' 1 @(9) -Expect new }
 Ss-Switch 'series' '9>1 (seen)' 9 @(1) -Expect kept
 
 # --- the keyboard on the series page's pills: Enter, then Space, on a pill that has the keyboard. The season shows, and the
@@ -643,8 +669,10 @@ if ($ssLink) {
         Check "season switch ($ssTag): the season page has its season pills" ([bool]$ssSp) $(if (-not $ssSp) { (@(Ss-Pills | ForEach-Object { $_.Name }) -join ', ') })
         if ($ssSp) {
             # seasons the series page never showed (their pictures not kept yet), then back to ones seen on this page
-            # (the series page kept 1-5 and 8-10: 6 is new; its page asks 7 ahead)
-            Ss-Switch 'season' "$ssLinkSeason>6 (new)" $ssLinkSeason @(6) -PageToPage -Expect new
+            # (the series page showed 1-4 and 9: 6 is far, asked ahead for a show of at most 12 seasons, else new; its page
+            # asks 7 ahead)
+            if ($ssAllAhead) { Ss-Switch 'season' "$ssLinkSeason>6 (far, asked ahead)" $ssLinkSeason @(6) -PageToPage -Expect kept }
+            else { Ss-Switch 'season' "$ssLinkSeason>6 (new)" $ssLinkSeason @(6) -PageToPage -Expect new }
             Ss-Switch 'season' '6>7 (ahead)' 6 @(7) -PageToPage -Expect kept
             Ss-Switch 'season' '7>6 (seen)' 7 @(6) -PageToPage -Expect kept
             Ss-Switch 'season' "6>$ssLinkSeason (seen)" 6 @($ssLinkSeason) -PageToPage -Expect kept
@@ -658,7 +686,7 @@ if ($ssLink) {
 $timings.season_switch = @($ssRows)
 [IO.File]::WriteAllText((Join-Path $Out 'season-switch.json'), (ConvertTo-Json -InputObject @($ssRows) -Depth 4), [Text.UTF8Encoding]::new($false))
 Say ("season switch ({0}), latency {1} ms{2}:" -f $ssTag, $Latency, $(if ($LatencyRule) { ' + ' + ($LatencyRule -join ' ') }))
-Say ("  {0,-7} {1,-18} {2,7} {3,7} {4,7} {5,-6} {6,5} {7,6} {8,6} {9,5} {10}" -f 'part', 'switch', 'rows', 'clean', 'images', 'kept', 'imgs', 'list<', 'list>', 'reqs', 'seasons seen')
+Say ("  {0,-7} {1,-24} {2,7} {3,7} {4,7} {5,-6} {6,5} {7,5} {8,4} {9,6} {10,6} {11,5} {12}" -f 'part', 'switch', 'rows', 'clean', 'images', 'kept', 'imgs', 'img1<', 'x', 'list<', 'list>', 'reqs', 'seasons seen')
 foreach ($r in $ssRows) {
-    Say ("  {0,-7} {1,-18} {2,7} {3,7} {4,7} {5,-6} {6,5} {7,6} {8,6} {9,5} {10}" -f $r.part, $r.label, $r.rows_ms, $r.clean_ms, $r.images_ms, $r.cached, $r.images_n, $r.list_asked_ms, $r.list_answered_ms, $r.requests, $r.seasons_seen)
+    Say ("  {0,-7} {1,-24} {2,7} {3,7} {4,7} {5,-6} {6,5} {7,5} {8,4} {9,6} {10,6} {11,5} {12}" -f $r.part, $r.label, $r.rows_ms, $r.clean_ms, $r.images_ms, $r.cached, $r.images_n, $r.images_first_asked_ms, $r.images_in_flight, $r.list_asked_ms, $r.list_answered_ms, $r.requests, $r.seasons_seen)
 }

@@ -177,6 +177,22 @@ public sealed class ItemNavigationTests
 		Assert.Equal(loads, EpisodeThumbs.IsNear(view, 120));
 	}
 
+	/// <summary>
+	/// Nixie 1.5 (season speed): pictures come 6 at a time, not WinINet's 2 for a program (a season's 20 stills came 2 at a
+	/// time, 0.4 to 0.9 s after its rows), set before anything shows a picture.
+	/// </summary>
+	[Fact]
+	public void Pictures_ComeSixAtATime_SetBeforeTheFirstPicture()
+	{
+		FluentFin.Services.ImageDownloads.AllowMoreAtOnce(Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+		Assert.Equal(FluentFin.Services.ImageDownloads.AtOnce, FluentFin.Services.ImageDownloads.Current());
+
+		var app = File.ReadAllText(Path.Combine(FlyleafEngineTests.RepoRoot, "FluentFin", "App.xaml.cs"));
+		var set = app.IndexOf("ImageDownloads.AllowMoreAtOnce(", StringComparison.Ordinal);
+		Assert.True(set > 0, "App never sets it");
+		Assert.True(set < app.IndexOf("await Host.StartAsync()", StringComparison.Ordinal), "set after the host starts");
+	}
+
 	private static Rect Parse(string text)
 	{
 		var v = text.Split(',').Select(double.Parse).ToArray();

@@ -122,6 +122,92 @@ public sealed class DriveInThemeTests
 		Assert.Throws<FormatException>(() => NixieGlyphs.Parse("M0,0 X1,1"));
 	}
 
+	/// <summary>
+	/// Nixie 1.5 (season speed): a glyph without dots is drawn from its markup, one geometry WinUI parses, instead of a
+	/// PathGeometry built figure by figure: the same wire, scaled and placed as before (read back with the glyphs' own
+	/// parser), never with an exponent markup cannot read.
+	/// </summary>
+	[Fact]
+	public void TheGlyphsMarkup_IsTheSameWire_ScaledAndPlaced()
+	{
+		foreach (var c in NixieGlyphs.Supported.Where(c => NixieGlyphs.For(c)!.Dots.Count == 0 && NixieGlyphs.For(c)!.Strokes.Count > 0))
+		{
+			var glyph = NixieGlyphs.For(c)!;
+			foreach (var (height, x, y) in new[] { (NixieGlyphs.BoxHeight, 0d, 0d), (40 * NixieReadout.GlyphShare, 3.25, 8.4), (52 * NixieReadout.GlyphShare, 1e-17, 0.1) })
+			{
+				var markup = NixieGlyphs.Markup(glyph, height, x, y);
+				Assert.DoesNotContain("E", markup.Replace("M", "").Replace("L", "").Replace("C", "").Replace("Z", ""), StringComparison.OrdinalIgnoreCase);
+				var back = NixieGlyphs.Parse(markup);
+				var k = height / NixieGlyphs.BoxHeight;
+				Assert.Equal(glyph.Strokes.Count, back.Count);
+				for (var i = 0; i < back.Count; i++)
+				{
+					Assert.Equal(glyph.Strokes[i].Closed, back[i].Closed);
+					Assert.Equal(glyph.Strokes[i].Segments.Count, back[i].Segments.Count);
+					var expected = new[] { glyph.Strokes[i].Start }.Concat(glyph.Strokes[i].Segments.SelectMany(p => p)).ToList();
+					var actual = new[] { back[i].Start }.Concat(back[i].Segments.SelectMany(p => p)).ToList();
+					Assert.Equal(expected.Count, actual.Count);
+					for (var j = 0; j < expected.Count; j++)
+					{
+						// (a Point holds floats: the drawing's own precision, before and after)
+						Assert.Equal(x + expected[j].X * k, actual[j].X, 1e-4);
+						Assert.Equal(y + expected[j].Y * k, actual[j].Y, 1e-4);
+					}
+				}
+			}
+		}
+	}
+
+	/// <summary>Nixie 1.5: only wires without dots are drawn from markup: a space has none (empty markup is no geometry) and a dot is filled.</summary>
+	[Fact]
+	public void OnlyWiresWithoutDots_AreDrawnFromMarkup()
+	{
+		Assert.All("0123456789SEH-–−/", c => Assert.True(NixieGlyphs.DrawsFromMarkup(NixieGlyphs.For(c)!), $"{c}"));
+		Assert.All(" :·.", c => Assert.False(NixieGlyphs.DrawsFromMarkup(NixieGlyphs.For(c)!), $"'{c}'"));
+	}
+
+	/// <summary>
+	/// Nixie 1.5 (season speed): what the showtimes board and the season tubes are made of, per season shown. The readout's
+	/// wires come from markup (one geometry each) and share their brushes; a season tube is lit or not before its number is
+	/// set, so its cells are made once (a tube not picked was made lit, then again unlit).
+	/// </summary>
+	[Fact]
+	public void TheReadouts_AreMadeOnce_FromMarkup_WithSharedBrushes()
+	{
+		var readout = File.ReadAllText(FindUp(Path.Combine("ui", "FluentFin", "Themes", "DriveIn", "Controls", "NixieReadout.cs")));
+		Assert.Contains("Data = NixieGlyphs.WireGeometry(", readout, StringComparison.Ordinal);
+		Assert.DoesNotContain("new LineGeometry", readout, StringComparison.Ordinal);
+		Assert.DoesNotContain("Stroke = new SolidColorBrush(color)", readout, StringComparison.Ordinal);
+
+		var tube = File.ReadAllText(FindUp(Path.Combine("ui", "FluentFin", "Themes", "DriveIn", "Controls", "SeasonTube.cs")));
+		var lit = tube.IndexOf("_tube.IsLit =", StringComparison.Ordinal);
+		var text = tube.IndexOf("_tube.Text =", StringComparison.Ordinal);
+		Assert.True(lit > 0 && text > 0 && lit < text, "a season tube sets its number before it is lit or not: made twice");
+	}
+
+	/// <summary>Nixie 1.5: the large tubes' mesh is the same lines, two per step across the tube and beyond it, as one markup.</summary>
+	[Fact]
+	public void TheMeshMarkup_IsTheSameLines()
+	{
+		const double w = 34, h = 52;
+		var lines = NixieGlyphs.Parse(NixieReadout.MeshMarkup(w, h));
+		var step = Math.Max(3.5, h / 11);
+		var expected = 0;
+		for (var start = -h; start < w + h; start += step)
+		{
+			expected += 2;
+		}
+
+		Assert.Equal(expected, lines.Count);
+		Assert.All(lines, line =>
+		{
+			var end = Assert.Single(line.Segments)[0];
+			Assert.False(line.Closed);
+			Assert.Equal(h, Math.Abs(end.Y - line.Start.Y), 1e-4);
+			Assert.Equal(h * Math.Tan(Math.PI / 6), end.X - line.Start.X, 1e-4);
+		});
+	}
+
 	[Fact]
 	public void SmallTubes_GetATightHaloOnly()
 	{

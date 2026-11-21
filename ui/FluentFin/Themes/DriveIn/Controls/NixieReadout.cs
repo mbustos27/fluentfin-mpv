@@ -163,48 +163,76 @@ public sealed partial class NixieReadout : StackPanel
 			if (!highContrast && NixieGlyphs.For('8') is { } eight)
 			{
 				var ghostX = (cellWidth - eight.Advance / NixieGlyphs.BoxHeight * glyphHeight) / 2;
-				cell.Children.Add(Wire(NixieGlyphs.Geometry(eight, glyphHeight, ghostX, y), Ghost, core, lit ? 1 : 0.45));
+				cell.Children.Add(Wire(eight, glyphHeight, ghostX, y, Ghost, core, lit ? 1 : 0.45));
 			}
 		}
 
 		if (highContrast)
 		{
-			cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), SystemColor("SystemColorWindowTextColor", Core), core, 1));
+			cell.Children.Add(Wire(glyph, glyphHeight, x, y, SystemColor("SystemColorWindowTextColor", Core), core, 1, shared: false));
 		}
 		else if (light && !glyph.InTube)
 		{
-			cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Ink, core, 1));
+			cell.Children.Add(Wire(glyph, glyphHeight, x, y, Ink, core, 1));
 		}
 		else if (!lit)
 		{
-			cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Rest, core, 1));
+			cell.Children.Add(Wire(glyph, glyphHeight, x, y, Rest, core, 1));
 		}
 		else
 		{
 			if (halo > 0)
 			{
-				cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Halo, halo, 0.12));
+				cell.Children.Add(Wire(glyph, glyphHeight, x, y, Halo, halo, 0.12));
 			}
 
-			cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), Glow, glow, h < SmallBelow ? 0.5 : 0.42));
-			cell.Children.Add(Wire(NixieGlyphs.Geometry(glyph, glyphHeight, x, y), h < SmallBelow ? Lit : Core, core, 1));
+			cell.Children.Add(Wire(glyph, glyphHeight, x, y, Glow, glow, h < SmallBelow ? 0.5 : 0.42));
+			cell.Children.Add(Wire(glyph, glyphHeight, x, y, h < SmallBelow ? Lit : Core, core, 1));
 		}
 
 		return cell;
 	}
 
-	private static Path Wire(Geometry geometry, Color color, double thickness, double opacity) => new()
+	/// <summary>
+	/// One layer of a glyph's stroke stack. Nixie 1.5 (season speed, the same drawing): a glyph without dots is one geometry
+	/// from its markup with no fill (<see cref="NixieGlyphs.WireGeometry"/>: its open wires were never filled), and the
+	/// colours are brushes shared by every readout on the thread (<paramref name="shared"/>), not two new ones per layer.
+	/// </summary>
+	private static Path Wire(NixieGlyphs.Glyph glyph, double glyphHeight, double x, double y, Color color, double thickness, double opacity, bool shared = true)
 	{
-		Data = geometry,
-		Stroke = new SolidColorBrush(color),
-		Fill = color == default ? null : new SolidColorBrush(color),
-		StrokeThickness = thickness,
-		StrokeStartLineCap = PenLineCap.Round,
-		StrokeEndLineCap = PenLineCap.Round,
-		StrokeLineJoin = PenLineJoin.Round,
-		Opacity = opacity,
-		IsHitTestVisible = false,
-	};
+		var dots = glyph.Dots.Count > 0;
+		var brush = shared ? SharedBrush(color) : new SolidColorBrush(color);
+		return new()
+		{
+			Data = NixieGlyphs.WireGeometry(glyph, glyphHeight, x, y),
+			Stroke = brush,
+			Fill = dots && color != default ? brush : null,
+			StrokeThickness = thickness,
+			StrokeStartLineCap = PenLineCap.Round,
+			StrokeEndLineCap = PenLineCap.Round,
+			StrokeLineJoin = PenLineJoin.Round,
+			Opacity = opacity,
+			IsHitTestVisible = false,
+		};
+	}
+
+	// Nixie 1.5: the readouts' brushes, one per colour, per thread (a brush belongs to the thread that made it)
+	[ThreadStatic]
+	private static Dictionary<Color, SolidColorBrush>? t_brushes;
+
+	[ThreadStatic]
+	private static (Brush Body, Brush Rim)? t_tubeBrushes;
+
+	private static SolidColorBrush SharedBrush(Color color)
+	{
+		var brushes = t_brushes ??= [];
+		if (!brushes.TryGetValue(color, out var brush))
+		{
+			brushes[color] = brush = new SolidColorBrush(color);
+		}
+
+		return brush;
+	}
 
 	private static Border Tube(double h, double w, bool highContrast)
 	{
@@ -220,6 +248,13 @@ public sealed partial class NixieReadout : StackPanel
 			};
 		}
 
+		// Nixie 1.5: the glass's two brushes are the same for every tube: made once per thread, shared
+		var (body, rim) = t_tubeBrushes ??= TubeBrushes();
+		return new Border { CornerRadius = new CornerRadius(radius), BorderThickness = new Thickness(1), BorderBrush = rim, Background = body };
+	}
+
+	private static (Brush Body, Brush Rim) TubeBrushes()
+	{
 		var body = new RadialGradientBrush
 		{
 			Center = new Windows.Foundation.Point(0.5, 0.3),
@@ -234,31 +269,41 @@ public sealed partial class NixieReadout : StackPanel
 		rim.GradientStops.Add(new GradientStop { Offset = 0, Color = Color.FromArgb(90, 0xFF, 0xDC, 0xC8) });
 		rim.GradientStops.Add(new GradientStop { Offset = 0.5, Color = Color.FromArgb(40, 0xFF, 0xA0, 0x78) });
 		rim.GradientStops.Add(new GradientStop { Offset = 1, Color = Color.FromArgb(24, 0xFF, 0xA0, 0x78) });
-		return new Border { CornerRadius = new CornerRadius(radius), BorderThickness = new Thickness(1), BorderBrush = rim, Background = body };
+		return (body, rim);
 	}
 
-	/// <summary>The anode's honeycomb: two sets of fine diagonals at ±60 degrees, faint, inside the tube.</summary>
+	/// <summary>
+	/// The anode's honeycomb: two sets of fine diagonals at ±60 degrees, faint, inside the tube. Nixie 1.5: one geometry from
+	/// its markup (<see cref="MeshMarkup"/>), not some 60 line geometries per tube; the same lines.
+	/// </summary>
 	private static Path Mesh(double w, double h)
 	{
-		var lines = new GeometryGroup();
-		var step = Math.Max(3.5, h / 11);
-		var slope = Math.Tan(Math.PI / 6); // 60 degrees from the horizontal: dx per dy
-		for (var start = -h; start < w + h; start += step)
-		{
-			lines.Children.Add(new LineGeometry { StartPoint = new(start, 0), EndPoint = new(start + h * slope, h) });
-			lines.Children.Add(new LineGeometry { StartPoint = new(start, h), EndPoint = new(start + h * slope, 0) });
-		}
-
 		return new Path
 		{
-			Data = lines,
-			Stroke = new SolidColorBrush(Color.FromArgb(255, 0xFF, 0xBE, 0x96)),
+			Data = (Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(typeof(Geometry), MeshMarkup(w, h)),
+			Stroke = SharedBrush(Color.FromArgb(255, 0xFF, 0xBE, 0x96)),
 			StrokeThickness = 0.6,
 			Opacity = 0.06,
 			Margin = new Thickness(3),
 			Clip = new RectangleGeometry { Rect = new(0, 0, Math.Max(0, w - 6), Math.Max(0, h - 6)) },
 			IsHitTestVisible = false,
 		};
+	}
+
+	/// <summary>The mesh's lines as path markup: from (start, 0) down to the right and from (start, h) up to the right.</summary>
+	internal static string MeshMarkup(double w, double h)
+	{
+		var text = new System.Text.StringBuilder(2048);
+		var step = Math.Max(3.5, h / 11);
+		var slope = Math.Tan(Math.PI / 6); // 60 degrees from the horizontal: dx per dy
+		static string N(double v) => NixieGlyphs.Number(v);
+		for (var start = -h; start < w + h; start += step)
+		{
+			text.Append(text.Length > 0 ? " M" : "M").Append(N(start)).Append(",0 L").Append(N(start + h * slope)).Append(',').Append(N(h));
+			text.Append(" M").Append(N(start)).Append(',').Append(N(h)).Append(" L").Append(N(start + h * slope)).Append(",0");
+		}
+
+		return text.ToString();
 	}
 
 	private static bool IsHighContrast()

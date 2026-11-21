@@ -28,7 +28,7 @@ function Card-Inside($f, $g) { $f -and $g -and $f.Y -ge $g.Rect[1] - 1 -and ($f.
 function Describe($f) { if ($f) { "{0} [{1} {2}] {3} of {4} at {5:0},{6:0}" -f $f.Name, $f.Type, $f.Class, $f.Pos, $f.Size, $f.X, $f.Y } else { 'no focus' } }
 
 $total = 320
-# Seaglass 1.1.4: the Filter button says how many filters are on ("Filter, none on"), and the A-Z jump sits between the bar
+# Seaglass 1.1.4: the Filter button says how many filters are on ("Filter (none on)"), and the A-Z jump sits between the bar
 # and the grid (one Tab stop): one Tab into the grid is from it, not from Filter. $beforeGrid is that stop.
 $filter = Wait-Ui -Name 'Filter' -Type 'Button' -Contains -Seconds 10
 Check 'library: the Filter button is there' ([bool]$filter)

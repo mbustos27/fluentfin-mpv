@@ -1,82 +1,11 @@
 ﻿# Seaglass 1.1.4 (interaction audit, item 2): the title bar's search, live. Run with -Script wait:1 -Then offscreen\then-search.ps1
 # (signed in, on Home). The arrows move through the rows without opening anything and the box shows the row's name; Narrator's
 # names are "name, year, type"; Enter on a row opens it and clears the box; Enter on the text opens the results page, grouped
-# by type, the query kept there; the box clears when a result is opened from it. SEAGLASS_THEME / -Setting Glass / SG_SHOT_TAG
+# by type, the query kept there; the box clears when a result is opened from it. Nixie 1.5 (with FAKESERVER_SEARCH=sunny):
+# the top result, the groups by best match, "Show N more", the chips and people, each with its way out (keyboard, mouse,
+# R, Back, a new search), shots at 1920 and 1100. SEAGLASS_THEME / -Setting Glass / SG_SHOT_TAG
 # as then-scroll-shots.ps1. Dot-sourced by drive.ps1: no variable here may reuse one of its names.
-Add-Type -Namespace SgSearch -Name W -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool PostMessage(System.IntPtr h, uint m, System.IntPtr w, System.IntPtr l);'
-$srTag = if ($env:SG_SHOT_TAG) { $env:SG_SHOT_TAG } else { 'run' }
-# The search list is a popup window of its own, which a PrintWindow of the main window leaves out: SrShot prints each visible
-# window of the app's own process (checked by process id) and draws it over the main window where it sits (as the layout
-# audit's walk did).
-if (-not ('SgPopShot' -as [type])) {
-    Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
-using System; using System.Collections.Generic; using System.Drawing; using System.Drawing.Imaging; using System.Runtime.InteropServices; using System.Text;
-public static class SgPopShot {
-  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
-  delegate bool EnumProc(IntPtr h, IntPtr l);
-  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc p, IntPtr l);
-  [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumProc p, IntPtr l);
-  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
-  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
-  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
-  [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
-  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
-  static uint Pid(IntPtr h) { uint p; GetWindowThreadProcessId(h, out p); return p; }
-  static string Cls(IntPtr h) { var s = new StringBuilder(256); GetClassName(h, s, 256); return s.ToString(); }
-  static Bitmap Print(IntPtr h, int w, int hh) {
-    var b = new Bitmap(w, hh, PixelFormat.Format32bppArgb);
-    using (var g = Graphics.FromImage(b)) { var dc = g.GetHdc(); try { PrintWindow(h, dc, 2); } finally { g.ReleaseHdc(dc); } }
-    return b;
-  }
-  public static string Shot(IntPtr main, int pid, string file) {
-    if (Pid(main) != (uint)pid) throw new InvalidOperationException("not FluentFin's window");
-    RECT r; GetWindowRect(main, out r);
-    int w = r.R - r.L, h = r.B - r.T;
-    var pops = new List<IntPtr>();
-    EnumWindows((x, l) => { if (x != main && Pid(x) == (uint)pid && IsWindowVisible(x)) pops.Add(x); return true; }, IntPtr.Zero);
-    EnumChildWindows(main, (x, l) => { if (Pid(x) == (uint)pid && IsWindowVisible(x) && Cls(x).Contains("Popup") && !pops.Contains(x)) pops.Add(x); return true; }, IntPtr.Zero);
-    var drawn = new List<string>();
-    using (var bmp = Print(main, w, h)) using (var g = Graphics.FromImage(bmp)) {
-      foreach (var p in pops) {
-        RECT pr; if (!GetWindowRect(p, out pr)) continue;
-        int pw = pr.R - pr.L, ph = pr.B - pr.T;
-        if (pw < 8 || ph < 8 || pw > 4 * w || ph > 4 * h) continue;
-        if (pr.R <= r.L || pr.L >= r.R || pr.B <= r.T || pr.T >= r.B) continue;
-        using (var pb = Print(p, pw, ph)) g.DrawImage(pb, pr.L - r.L, pr.T - r.T, pw, ph);
-        drawn.Add(string.Format("{0} {1}x{2}", Cls(p), pw, ph));
-      }
-      bmp.Save(file, ImageFormat.Png);
-    }
-    return string.Format("{0}x{1}, popups: {2}", w, h, drawn.Count == 0 ? "none" : string.Join("; ", drawn));
-  }
-}
-'@
-}
-function SrShot([string]$Name) {
-    $script:shotN++
-    $srFile = Join-Path $Out ("shots\{0:00}-{1}.png" -f $script:shotN, $Name)
-    $srInfo = [SgPopShot]::Shot($script:hwnd, $script:ui.Id, $srFile)
-    $shots[$Name] = $srFile
-    Say "shot $Name -> $srFile ($srInfo)"
-}
-function SrSettle([int]$Ms = 1000) { Start-Sleep -Milliseconds $Ms }
-function SrBox { Find-Ui -Name 'Search' -Type 'Edit' -Contains }
-function SrText { $b = SrBox; if ($b) { try { ($b.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)).Current.Value } catch { $null } } }
-function SrRows { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'ListViewItem')))) }
-function SrHome { [bool](Find-Ui -Name 'Continue Watching' -Type 'Text' -OffscreenToo) }
-# '/' focuses the box (WindowShortcuts) when it does not have the keyboard already (then '/' would be typed): UI Automation
-# otherwise; the characters go as WM_CHAR to the window WinUI reads keys from
-function SrType([string]$Text, [switch]$Slash) {
-    if ($Slash) { Key 0xBF } else { $b = SrBox; if ($b) { [void][OffscreenUi]::SetFocus($b) } }
-    SrSettle 500
-    # an empty box first (a results page keeps its query in it); set through UI Automation: no search starts for it
-    $b = SrBox
-    if ($b -and (SrText)) { try { ([System.Windows.Automation.ValuePattern]$b.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)).SetValue(''); SrSettle 300 } catch { } }
-    $kw = [OffscreenUi]::KeyWindow($script:hwnd, $script:ui.Id)
-    foreach ($ch in $Text.ToCharArray()) { [void][SgSearch.W]::PostMessage($kw, 0x0102, [IntPtr][int]$ch, [IntPtr]1); Start-Sleep -Milliseconds 80 }
-    SrSettle 300
-}
-
+. (Join-Path $PSScriptRoot 'search-common.ps1')   # the search scripts' helpers (SrType, SrShot, SrChips, ...)
 [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080); SrSettle 1500
 [void](Wait-Until { if (SrHome) { $true } } -Seconds 20 -PollMs 200)
 
@@ -153,3 +82,102 @@ $srBack = @(Find-Ui -Name 'Back' -Type 'Button') | Where-Object { ([OffscreenUi]
 if ($srBack) { [void](Invoke-Element $srBack) } else { Say 'search: no Back button in the title bar' }
 $srBackText = Wait-Until { if ((SrText) -eq 'quiet') { 'quiet' } } -Seconds 10 -PollMs 200
 Check 'search: Back to the first results page puts its query back in the box' ($srBackText -eq 'quiet') "text: '$(SrText)'"
+
+# ---- Nixie 1.5 (search): best match first, chips, "Show N more", people, and each one's way out. Needs the fake server's
+# search titles (FAKESERVER_SEARCH=sunny); the section answers as a loose search plugin does (POST /__harness/search
+# {"mode":"loose"}), as the owner's 12.4 server gave "it's always sunny" 295 films.
+$srLoose = if ($env:FAKESERVER_SEARCH -eq 'sunny') { try { (Invoke-Server '/__harness/search' 'POST' @{ mode = 'loose' }).mode } catch { $null } }
+if ($srLoose -eq 'loose') {
+    [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080); SrSettle 1200
+    Open-Nav 'Home'; SrSettle 1200
+    SrSearch "it's always sunny"
+    $srTop = Find-Ui -Name $srSunny -Type 'Text'
+    $srTopHead = Find-Ui -Name 'Top result' -Type 'Text'
+    $srHeads = SrHeadings
+    Say "search 1.5: groups $($srHeads -join ', '); chips $((SrChips | ForEach-Object { $_.Current.Name }) -join ' | ')"
+    Check 'search 1.5: the show leads as the top result, above every group (not Movies first)' ([bool]$srTop -and [bool]$srTopHead -and ($srHeads.Count -eq 0 -or [OffscreenUi]::RectOf($srTop).Top -lt [OffscreenUi]::RectOf((SrTexts | Where-Object { $_.Current.Name -eq $srHeads[0] } | Select-Object -First 1)).Top)) "top: $([bool]$srTop), groups: $($srHeads -join ', ')"
+    $srMovies = SrMore 'movies'
+    Check 'search 1.5: the weak films wait behind "Show N weaker matches" (no film cards until asked)' ([bool]$srMovies -and $srMovies.Current.Name -match '^Show \d+ more movies, weaker matches$' -and $srMovies.Current.Name -ne '' -and -not (SrList 'Movies')) "button: '$(if ($srMovies) { $srMovies.Current.Name })', list shown: $([bool](SrList 'Movies'))"
+    Check 'search 1.5: one chip lit, All' (((SrLit) -join ',') -eq 'All') "lit: $((SrLit) -join ',')"
+    SrShot "$srTag-search150-sunny-1920"
+
+    # the pointer first: a click (Invoke) on "Show N weaker matches", then the keyboard's way out (Space on "Show fewer") and
+    # back in (Enter)
+    if ($srMovies) {
+        SrClick $srMovies; SrSettle 1500
+        $srFewer = SrMore 'movies'
+        Check 'search 1.5: a click on Show N more opens the films, the button now Show fewer' ([bool](SrList 'Movies') -and $srFewer -and $srFewer.Current.Name -eq 'Show fewer movies') "list: $([bool](SrList 'Movies')), button: '$(if ($srFewer) { $srFewer.Current.Name })'"
+        SrShot "$srTag-search150-more-1920"
+        [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1100, 900); SrSettle 1800
+        SrShot "$srTag-search150-more-1100"
+        [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1920, 1080); SrSettle 1500
+        $srFewer = SrMore 'movies'
+        if ($srFewer) { [void][OffscreenUi]::SetFocus($srFewer); SrSettle 400; Key 0x20; SrSettle 1200 }
+        $srAgain = SrMore 'movies'
+        Check 'search 1.5: Space on Show fewer folds the films away again, the keyboard still on the button' ($srAgain -and $srAgain.Current.Name -match '^Show \d+ more movies' -and -not (SrList 'Movies') -and (SrFocused) -match 'Show \d+ more movies') "button: '$(if ($srAgain) { $srAgain.Current.Name })', focus: $(SrFocused)"
+        Key 0x0D; SrSettle 1200
+        Check 'search 1.5: Enter on Show N more opens them again' ([bool](SrList 'Movies')) "focus: $(SrFocused)"
+    }
+
+    # the chips, keyboard first: the lit chip takes the keyboard, Right moves, Space lights one; one lit at a time
+    $srAll = SrChip 'All'
+    if ($srAll) {
+        [void][OffscreenUi]::SetFocus($srAll); SrSettle 400
+        Key 0x27; SrSettle 500
+        $srNext = SrFocused
+        Key 0x20; SrSettle 1500
+        $srLit = @(SrLit)
+        Check 'search 1.5: Right then Space on the chips lights the next kind, alone, and hides the top result' ($srLit.Count -eq 1 -and $srLit[0] -ne 'All' -and $srNext -match "^.*$($srLit[0])" -and -not (Find-Ui -Name 'Top result' -Type 'Text')) "focus after Right: $srNext; lit: $($srLit -join ',')"
+        $srOne = @(SrHeadings)
+        Check 'search 1.5: a kind shows its one group' ($srOne.Count -eq 1 -and $srOne[0] -like "$($srLit[0]) (*") "groups: $((SrHeadings) -join ', ')"
+        # the pointer: a click (Select) on Movies
+        $srMovieChip = SrChip 'Movies'
+        if ($srMovieChip) { SrClick $srMovieChip; SrSettle 1500 }
+        Check 'search 1.5: a click on the Movies chip lights it alone' (((SrLit) -join ',') -eq 'Movies' -and (SrHeadings) -join ',' -like 'Movies (*') "lit: $((SrLit) -join ','); groups: $((SrHeadings) -join ', ')"
+        SrShot "$srTag-search150-movies-chip-1920"
+        # R (the keyboard on a chip, not in the box): the page loads again, the chip stays lit
+        $srMovieChip = SrChip 'Movies'
+        if ($srMovieChip) { [void][OffscreenUi]::SetFocus($srMovieChip); SrSettle 300 }
+        Key 0x52; SrSettle 3000
+        Check 'search 1.5: R reloads the page with the Movies chip still lit' (((SrLit) -join ',') -eq 'Movies' -and (SrText) -eq "it's always sunny") "lit: $((SrLit) -join ','), box: '$(SrText)'"
+        # the way back: All (Narrator's select), the top result again
+        $srAll = SrChip 'All'
+        if ($srAll) { [void](Invoke-Element $srAll); SrSettle 1500 }
+        Check 'search 1.5: All brings the top result and every group back' (((SrLit) -join ',') -eq 'All' -and [bool](Find-Ui -Name 'Top result' -Type 'Text') -and (SrHeadings).Count -ge 2) "lit: $((SrLit) -join ','); groups: $((SrHeadings) -join ', ')"
+        # a new search starts on All
+        $srMovieChip = SrChip 'Movies'
+        if ($srMovieChip) { [void](Invoke-Element $srMovieChip); SrSettle 1000 }
+        SrSearch "it's always sunny"
+        Check 'search 1.5: searching again starts on All' (((SrLit) -join ',') -eq 'All') "lit: $((SrLit) -join ',')"
+    }
+
+    # people: a person result opens "With <name>", and Back returns
+    SrSearch 'sunny'
+    $srPeople = SrChip 'People'
+    Check 'search 1.5: people come back, with a People chip' ([bool]$srPeople) "chips: $((SrChips | ForEach-Object { $_.Current.Name }) -join ' | ')"
+    if ($srPeople) {
+        [void](Invoke-Element $srPeople); SrSettle 1500
+        $srPerson = Wait-Until { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) | Where-Object { $_.Current.Name -like 'Sunny Holm*' }) | Select-Object -First 1 } -Seconds 8 -PollMs 200
+        if (-not $srPerson) { Dump-Tree "$srTag-search150-people" }
+        if ($srPerson) {
+            [void](Invoke-Element $srPerson)
+            $srWith = Wait-Ui -Name 'With Sunny Holm' -Type 'Text' -Seconds 15
+            SrSettle 2000
+            $srWithCards = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.ClassName -match 'BaseItemDtoCard' })
+            Check 'search 1.5: a person opens "With <name>", their films and shows' ([bool]$srWith -and $srWithCards.Count -gt 0) "cards: $($srWithCards.Count)"
+            SrShot "$srTag-search150-person-1920"
+            Key 0xA6
+            [void](Wait-Ui -Name 'Results for' -Type 'Text' -Contains -Seconds 15); SrSettle 1500
+            Check 'search 1.5: Back returns to the results with People still lit' (((SrLit) -join ',') -eq 'People') "lit: $((SrLit) -join ',')"
+        }
+        else { Check 'search 1.5: the People group has Sunny Holm' $false }
+    }
+    [void](Invoke-Server '/__harness/search' 'POST' @{ mode = 'stock' })
+
+    # review (m5): an original title leads too, which needs the search to ask for it (fields=OriginalTitle: the fake sends
+    # it only when asked, as Jellyfin does)
+    SrSearch 'le fabuleux destin'
+    $srOriginal = Find-Ui -Name 'Original title: Le Fabuleux Destin' -Type 'Text' -Contains
+    Check 'search 1.5: an original title finds its film as the top result, and says so' ([bool]$srOriginal -and [bool](Find-Ui -Name 'Top result' -Type 'Text')) "groups: $((SrHeadings) -join ', ')"
+}
+else { Say 'search 1.5: skipped (needs FAKESERVER_SEARCH=sunny and the fake server)' }

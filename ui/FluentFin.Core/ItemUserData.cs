@@ -136,6 +136,78 @@ public static class ItemUserData
 		return all;
 	}
 
+	// 1.5 fixes
+	/// <summary>
+	/// 1.5 (the button review's L38): "Reset watch progress" offers an Undo, as Remove from Continue Watching and marking a
+	/// series do: the Undo puts the resume point back where it was. Where it was is the server's, asked just before the reset
+	/// (the review of 1.5, m6: the card's copy can be stale); no Undo when there was none, the server could not say, or it
+	/// refused the reset. The Undo does nothing (false) when the item was played since the reset: a newer resume point or a
+	/// newer last-played date is not overwritten with the old one.
+	/// </summary>
+	/// <returns>Whether the server took it.</returns>
+	public static async Task<bool> ResetProgressAsync(IJellyfinClient client, BaseItemDto dto)
+	{
+		if (dto.Id is not { } id)
+		{
+			return false;
+		}
+
+		var before = await TryGetUserData(client, id);
+		var ticks = before?.PlaybackPositionTicks ?? 0;
+		var lastPlayed = before?.LastPlayedDate;
+		bool took;
+		try
+		{
+			took = await client.SetResumePosition(id, 0);
+		}
+		catch (Exception)
+		{
+			took = false;
+		}
+
+		if (took && ticks > 0)
+		{
+			// the baseline for "played since": the item as the reset left it (in case the server dates the reset as a play)
+			lastPlayed = (await TryGetUserData(client, id))?.LastPlayedDate ?? lastPlayed;
+			UndoOffered?.Invoke(null, new UndoOffer(UndoOffer.ResetSaid(dto), async () =>
+			{
+				var now = await TryGetUserData(client, id);
+				if (now is null || PlayedSince(now, lastPlayed))
+				{
+					return false;
+				}
+
+				try
+				{
+					return await client.SetResumePosition(id, ticks);
+				}
+				catch (Exception)
+				{
+					return false;
+				}
+			}));
+		}
+
+		return took;
+	}
+
+	/// <summary>The review of 1.5 (m6): the item was played after the reset: it has a resume point again, or a newer last play.</summary>
+	public static bool PlayedSince(UserItemDataDto now, DateTimeOffset? lastPlayedAtReset) =>
+		now.PlaybackPositionTicks is > 0 || (now.LastPlayedDate is { } at && (lastPlayedAtReset is not { } then || at > then));
+
+	private static async Task<UserItemDataDto?> TryGetUserData(IJellyfinClient client, Guid id)
+	{
+		try
+		{
+			return (await client.GetItem(id))?.UserData;
+		}
+		catch (Exception)
+		{
+			return null;
+		}
+	}
+	// END 1.5 fixes
+
 	/// <returns>Whether the server took it.</returns>
 	public static Task<bool> SetFavoriteAsync(IJellyfinClient client, BaseItemDto dto, bool favorite) =>
 		SetAsync(dto, () => client.SetIsFavorite(dto, favorite));
@@ -177,4 +249,7 @@ public sealed record UndoOffer(string Message, Func<Task<bool>> Undo)
 	/// <summary>"Marked 8 episodes of Season 1 of Lost as watched."</summary>
 	public static string Said(BaseItemDto dto, bool played, int episodes) =>
 		$"Marked {episodes} {(episodes == 1 ? "episode" : "episodes")} of {ItemLabels.ActionTarget(dto)} as {(played ? "watched" : "unwatched")}.";
+
+	/// <summary>1.5: "Reset the watch progress of Lost, S1 E4."</summary>
+	public static string ResetSaid(BaseItemDto dto) => $"Reset the watch progress of {ItemLabels.ActionTarget(dto)}.";
 }

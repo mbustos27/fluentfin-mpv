@@ -254,7 +254,7 @@ public class AccessibilityXamlTests
 	}
 
 	// Seaglass 1.1.4: the Library's Sort and Filter show the sort in use and the filters on, and their names say it with more
-	// words ("Sort: Name, ascending", "Filter, 2 on"): the view model's (LibraryBrowseTests)
+	// words ("Sort: Name, ascending", "Filter (2 on)"): the view model's (LibraryBrowseTests)
 	[Theory]
 	[InlineData("FluentFin/Views/SelectServerPage.xaml", "Find servers", "Find servers", "Connect", "Connect")]
 	public void ButtonsShowingAnIconAndAText_AreNamedAfterTheText(string page, string firstName, string firstText, string secondName, string secondText)

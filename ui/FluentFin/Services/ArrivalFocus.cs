@@ -51,6 +51,10 @@ public static class ArrivalFocus
 	/// <summary>The user pressed a key (not a refresh key or a modifier alone), clicked or turned the wheel.</summary>
 	public static void UserActed() => UserActedAt = Environment.TickCount64;
 
+	/// <summary>1.5 (T5): when the last page arrived (Environment.TickCount64; 0 before the first): the top bar's tabs drop the
+	/// focus box from a focus the page change put on them.</summary>
+	public static long ArrivedAt => _arrivedAt;
+
 	/// <summary>The navigation showed <paramref name="page"/> (NavigationService, as each page arrives).</summary>
 	/// <param name="root">The frame's XamlRoot, for where the keyboard is as the page comes.</param>
 	public static void Arrived(Page? page, ArrivalKind kind, XamlRoot? root = null)

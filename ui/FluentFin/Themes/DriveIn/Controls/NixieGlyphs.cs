@@ -75,6 +75,75 @@ public static class NixieGlyphs
 		return group;
 	}
 
+	/// <summary>
+	/// Nixie 1.5 (season speed): the glyph's wire as path markup (absolute M, L, C and Z), scaled and placed as
+	/// <see cref="Geometry"/> places it. WinUI's own parser makes it one geometry (<see cref="WireGeometry"/>), where a
+	/// PathGeometry built in code is an object per figure and per segment (Drive-in's showtimes board made about 3,000 of
+	/// them for a season of 20 episodes). The dots are not in it: a glyph with dots keeps <see cref="Geometry"/>.
+	/// </summary>
+	public static string Markup(Glyph glyph, double height, double x, double y)
+	{
+		var k = height / BoxHeight;
+		var text = new System.Text.StringBuilder(glyph.Strokes.Count * 64);
+		void Add(Point p) => text.Append(Number(x + p.X * k)).Append(',').Append(Number(y + p.Y * k));
+		foreach (var stroke in glyph.Strokes)
+		{
+			text.Append(text.Length > 0 ? " M" : "M");
+			Add(stroke.Start);
+			foreach (var segment in stroke.Segments)
+			{
+				text.Append(segment.Length == 1 ? " L" : " C");
+				for (var i = 0; i < segment.Length; i++)
+				{
+					if (i > 0)
+					{
+						text.Append(' ');
+					}
+
+					Add(segment[i]);
+				}
+			}
+
+			if (stroke.Closed)
+			{
+				text.Append(" Z");
+			}
+		}
+
+		return text.ToString();
+	}
+
+	/// <summary>A coordinate for path markup: no exponent (markup has none), to a ten-millionth of a pixel.</summary>
+	internal static string Number(double value) => value.ToString("0.#######", CultureInfo.InvariantCulture);
+
+	/// <summary>
+	/// Whether <paramref name="glyph"/> is drawn from its markup (<see cref="WireGeometry"/>): wires and no dots. A space has
+	/// nothing to draw (empty markup is no geometry WinUI can read) and a dot is filled: both keep <see cref="Geometry"/>.
+	/// </summary>
+	public static bool DrawsFromMarkup(Glyph glyph) => glyph.Dots.Count == 0 && glyph.Strokes.Count > 0;
+
+	/// <summary>
+	/// The wire of a glyph without dots as one geometry, from <see cref="Markup"/>: its figures are filled, as markup's are, so
+	/// its shape has no fill (<see cref="Geometry"/>'s figures are open wires that are never filled: the same drawing). Any
+	/// other glyph, or markup WinUI refuses, gets <see cref="Geometry"/>.
+	/// </summary>
+	public static Geometry WireGeometry(Glyph glyph, double height, double x, double y)
+	{
+		if (!DrawsFromMarkup(glyph))
+		{
+			return Geometry(glyph, height, x, y);
+		}
+
+		try
+		{
+			return (Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(typeof(Geometry), Markup(glyph, height, x, y));
+		}
+		catch (ArgumentException)
+		{
+			return Geometry(glyph, height, x, y);
+		}
+	}
+
 	// ---- the cathodes -------------------------------------------------------------------------------------------------
 
 	private static Dictionary<char, Glyph> Build()

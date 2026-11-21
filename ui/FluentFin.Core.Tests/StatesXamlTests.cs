@@ -72,7 +72,7 @@ public class StatesXamlTests
 		Assert.Equal("Folders", (string?)ByName(doc, "FolderList").Attribute("AutomationProperties.Name"));
 		Assert.Equal("Level1", (string?)Text(doc, "Choose a folder on the server").Attribute("AutomationProperties.HeadingLevel"));
 		Assert.Equal("Polite", (string?)ByName(doc, "MessageTitle").Attribute("AutomationProperties.LiveSetting"));
-		Assert.Equal("Try again", (string?)ByName(doc, "RetryButton").Attribute("Content"));
+		Assert.Equal("{x:Bind RetryLabel(Status), Mode=OneWay}", (string?)ByName(doc, "RetryButton").Attribute("Content")); // 1.5 (S19): Refresh for an empty folder
 		Assert.Equal("Parent folder", (string?)ByName(doc, "UpButton").Attribute("AutomationProperties.Name"));
 		// Cancel and the window's close pick nothing: only Select this folder sets the result
 		var input = Code("FluentFin/Dialogs/UserInput/ServerFolderInput.cs");

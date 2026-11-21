@@ -1,0 +1,111 @@
+<!--
+    Nixie 1.5 (the updater stream): Settings > Updates. The check (on by default) with Check now; what the updater is doing now,
+    every step named as it happens ("Checking for updates…", "You're up to date · checked just now", "Nixie 1.5.1 is available
+    · 187 MB", "Downloading Nixie 1.5.1" with its progress bar and "84 MB of 187 MB · 6.2 MB/s · about 20 s left", "Checking the
+    download…", "Nixie 1.5.1 is ready to install", a failure with why); its one Primary is the step's action (Download, Restart
+    to update, Retry, Open the release page); and Install when I close Nixie (off by default; a portable copy says why it has
+    none). The status line is a polite live region: Narrator hears each step, never the progress numbers.
+-->
+<UserControl
+    x:Class="FluentFin.Controls.UpdateSettingsPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <StackPanel Spacing="4">
+        <TextBlock
+            Margin="1,28,0,6"
+            AutomationProperties.HeadingLevel="Level2"
+            Style="{StaticResource BodyStrongTextBlockStyle}"
+            Text="Updates" />
+        <ctk:SettingsCard
+            x:Name="CheckForUpdatesCard"
+            Description="While Nixie is open it asks GitHub whether a newer version is out: when it opens, every 4 hours, and when you come back to it. Nothing is sent but the request for the latest release. The installed copy then downloads the update in the background and installs it only when you say. On by default."
+            Header="Check for updates"
+            HeaderIcon="{ui:FontIcon Glyph=&#xE895;}">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <Button
+                    x:Name="CheckNowButton"
+                    Click="OnCheckNowClick"
+                    Content="Check now"
+                    Style="{StaticResource NixieCompactButtonStyle}" />
+                <ToggleSwitch AutomationProperties.Name="Check for updates" IsOn="{x:Bind CheckForUpdates, Mode=TwoWay}" />
+            </StackPanel>
+        </ctk:SettingsCard>
+        <!--  what the updater is doing now  -->
+        <!--  a StackPanel: its spacing skips the parts that are collapsed (a Grid's row spacing did not)  -->
+        <StackPanel
+            x:Name="UpdateStatusPanel"
+            Margin="56,6,16,10"
+            Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <ProgressRing
+                    x:Name="UpdateStatusRing"
+                    Width="16"
+                    Height="16"
+                    IsActive="False"
+                    Visibility="Collapsed" />
+                <FontIcon
+                    x:Name="UpdateStatusIcon"
+                    AutomationProperties.AccessibilityView="Raw"
+                    FontSize="16"
+                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                    Glyph="&#xE946;" />
+                <TextBlock
+                    x:Name="UpdateStatusTitle"
+                    VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite"
+                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+            <TextBlock
+                x:Name="UpdateStatusDetail"
+                Margin="26,0,0,0"
+                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                Style="{StaticResource BodyTextBlockStyle}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+            <ProgressBar
+                x:Name="UpdateStatusProgress"
+                Margin="26,0,0,0"
+                MaxWidth="480"
+                HorizontalAlignment="Left"
+                Width="480"
+                AutomationProperties.Name="Download progress"
+                Maximum="100"
+                Minimum="0"
+                Visibility="Collapsed" />
+            <StackPanel
+                x:Name="UpdateStatusButtons"
+                Margin="26,4,0,0"
+                Orientation="Horizontal"
+                Spacing="12"
+                Visibility="Collapsed">
+                <Button
+                    x:Name="UpdatePrimaryButton"
+                    Click="OnPrimaryClick"
+                    Style="{StaticResource NixiePrimaryCompactButtonStyle}"
+                    Visibility="Collapsed" />
+                <Button
+                    x:Name="UpdateCancelButton"
+                    Click="OnCancelClick"
+                    Content="Cancel"
+                    Style="{StaticResource NixieCompactButtonStyle}"
+                    Visibility="Collapsed" />
+                <HyperlinkButton
+                    x:Name="UpdateLinkButton"
+                    Click="OnLinkClick"
+                    Style="{StaticResource NixieLinkButtonStyle}"
+                    Visibility="Collapsed" />
+            </StackPanel>
+        </StackPanel>
+        <ctk:SettingsCard
+            x:Name="InstallOnCloseCard"
+            Description="{x:Bind Updates.Settings.InstallOnCloseDescription}"
+            Header="Install when I close Nixie"
+            HeaderIcon="{ui:FontIcon Glyph=&#xE7E8;}"
+            IsEnabled="{x:Bind Updates.Settings.CanSelfUpdate}">
+            <ToggleSwitch AutomationProperties.Name="Install when I close Nixie" IsOn="{x:Bind Updates.Settings.InstallOnClose, Mode=TwoWay}" />
+        </ctk:SettingsCard>
+    </StackPanel>
+</UserControl>

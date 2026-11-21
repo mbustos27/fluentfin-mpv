@@ -36,6 +36,8 @@ TOKEN_RE = re.compile(r'Token="([^"]*)"')
 ID = r"([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
 SHOWCASE = {"movie": ("Movies", "Big Buck Bunny"), "series": ("Shows", "The Twilight Zone"),
             "anime": ("Anime", "Spy x Family")}
+PLAYLIST = "QA Playlist"                      # 1.5 qacheck: seed.ps1's playlist (qa-user's own)
+TRANSCODE = ("Movies", "Tears of Steel")      # 1.5 qacheck: HEVC Main 10 with DTS audio
 
 ROUTES = [  # (regex on the lower-case path, route): the fake server's names where the harness reads them
     (r"/system/info/public", "public-info"), (r"/system/ping", "ping"),
@@ -60,6 +62,28 @@ ROUTES = [  # (regex on the lower-case path, route): the fake server's names whe
 ROUTES = [(re.compile(r"(?:" + rx + r")/?$"), name) for rx, name in ROUTES]
 
 
+def auth_form(headers, q):
+    """1.5 qacheck (BH-140X-m4): how a request sent its token, as the fake server logs it: "header" (Authorization:
+    MediaBrowser ... Token=), "apikey" (?ApiKey=, any case), "none", or "legacy:<form>" for one Jellyfin 12 refuses."""
+    auth = headers.get("Authorization") or ""
+    mediabrowser = auth.split(" ", 1)[0].lower() == "mediabrowser"
+    m = TOKEN_RE.search(auth)
+    if mediabrowser and m and m.group(1):
+        return "header"
+    if (q.get("apikey") or [""])[0]:
+        return "apikey"
+    if auth and not mediabrowser and TOKEN_RE.search(auth):
+        return "legacy:scheme-" + auth.split(" ", 1)[0].lower()
+    if TOKEN_RE.search(headers.get("X-Emby-Authorization") or ""):
+        return "legacy:x-emby-authorization"
+    for h in ("X-Emby-Token", "X-MediaBrowser-Token"):
+        if headers.get(h):
+            return "legacy:" + h.lower()
+    if (q.get("api_key") or [""])[0]:
+        return "legacy:query-api_key"
+    return "none"
+
+
 def route_of(low):
     for rx, name in ROUTES:
         if rx.match(low):
@@ -68,7 +92,7 @@ def route_of(low):
 
 
 class Tap:
-    def __init__(self, upstream, out, credentials):
+    def __init__(self, upstream, out, credentials, base_path=""):
         u = urllib.parse.urlsplit(upstream)
         if u.scheme != "http" or u.hostname not in ("127.0.0.1", "localhost"):
             raise SystemExit("qaproxy: --upstream must be http://127.0.0.1:<port> (a local QA server)")
@@ -84,6 +108,8 @@ class Tap:
         self._fixture = None
         self.url = None
         self.server = None
+        # 1.5 qacheck: a reverse proxy on a sub-path ("/jellyfin"): only paths under it are forwarded, without it
+        self.base_path = ("/" + base_path.strip("/")) if base_path.strip("/") else ""
 
     def record(self, entry):
         with self.lock:
@@ -103,8 +129,10 @@ class Tap:
     # --- the harness's own calls to the server, as the ordinary test user (the token stays in this process) ---
     def _call(self, method, path, body=None, token=None):
         conn = http.client.HTTPConnection(self.up_host, self.up_port, timeout=30)
-        auth = 'MediaBrowser Client="Nixie QA harness", Device="qa-harness-tap", DeviceId="nixie-qa-harness-tap", ' \
-               'Version="1.0"' + (', Token="%s"' % token if token else "")
+        # 1.5 qacheck: a device id of this tap's own: Jellyfin ends a device's older session when it signs in again, and
+        # two runs at once with one id signed each other's tap out
+        auth = 'MediaBrowser Client="Nixie QA harness", Device="qa-harness-tap", DeviceId="nixie-qa-harness-tap-%d", ' \
+               'Version="1.0"' % os.getpid() + (', Token="%s"' % token if token else "")
         data = json.dumps(body).encode("utf-8") if body is not None else None
         headers = {"Authorization": auth, "Accept": "application/json"}
         if data is not None:
@@ -165,7 +193,33 @@ class Tap:
                          "episode": episode, "anime": found.get("anime"), "documentary": None,
                          "views": [v["Name"] for v in views], "collections": [], "big": [],
                          "server": self.url, "upstream": self.upstream, "username": name, "counts": counts}
+        # 1.5 qacheck: then-qa-playlist.ps1's items: qa-user's "QA Playlist" in its order (with what the user has
+        # watched, as the run began) and the film that needs a transcode
+        self._fixture.update(self._qacheck_items(uid, token, by_name))
         return self._fixture
+
+    def _qacheck_items(self, uid, token, by_name):
+        found = {"playlist": None, "transcode": None}
+        _, res = self._call("GET", "/Items?userId=%s&parentId=%s&includeItemTypes=Playlist&limit=50" % (
+            uid, by_name.get("Playlists", "")), token=token)
+        pl = next((p for p in (res or {}).get("Items") or [] if p.get("Name") == PLAYLIST), None)
+        if pl:
+            _, res = self._call("GET", "/Playlists/%s/Items?userId=%s&fields=MediaStreams" % (pl["Id"], uid), token=token)
+            items = [{"id": i["Id"], "name": i["Name"], "type": i.get("Type"), "series": i.get("SeriesName"),
+                      "played": bool((i.get("UserData") or {}).get("Played"))} for i in (res or {}).get("Items") or []]
+            found["playlist"] = {"id": pl["Id"], "name": pl["Name"], "library": "Playlists", "items": items}
+        lib, title = TRANSCODE
+        _, res = self._call("GET", "/Items?userId=%s&parentId=%s&recursive=true&includeItemTypes=Movie&searchTerm=%s&limit=5" % (
+            uid, by_name.get(lib, ""), urllib.parse.quote(title)), token=token)
+        items = (res or {}).get("Items") or []
+        if items:
+            found["transcode"] = {"id": items[0]["Id"], "name": items[0]["Name"], "library": lib}
+        episode = self._fixture.get("episode")
+        if episode:
+            # the showcase episode's audio tracks (Jellyfin's indexes, in the order a track menu lists them)
+            _, res = self._call("GET", "/Items/%s?userId=%s&fields=MediaStreams" % (episode["id"], uid), token=token)
+            episode["audio"] = [s["Index"] for s in (res or {}).get("MediaStreams") or [] if s.get("Type") == "Audio"]
+        return found
 
     def approve(self, code):
         token, uid, _ = self.user()
@@ -200,8 +254,23 @@ def make_handler(tap):
         def _handle(self):
             t0 = time.perf_counter()
             started = time.time()
-            parsed = urllib.parse.urlsplit(self.path)
+            # the target as sent: http.server folds a leading "//" into "/" (gh-87389), which Jellyfin does not, and an
+            # address typed with a "/" at its end, joined by string, sends exactly that (1.5 qacheck)
+            words = (self.requestline or "").split()
+            target = words[1] if len(words) >= 2 and words[1].startswith("/") else self.path
+            raw_path, _, raw_query = target.partition("?")
+            parsed = urllib.parse.SplitResult("", "", raw_path, raw_query, "")
             path = urllib.parse.unquote(parsed.path)
+            # 1.5 qacheck: behind a sub-path, as nginx's `location /jellyfin/ { proxy_pass http://server/; }`: a path
+            # under it goes on without it, anything else is the proxy's 404 (logged "prefixed": false)
+            self.up_path, prefixed = target, None
+            if tap.base_path:
+                bp = tap.base_path
+                prefixed = path == bp or path.startswith(bp + "/")
+                if prefixed:
+                    path = path[len(bp):] or "/"
+                    raw = parsed.path[len(bp):] or "/"
+                    self.up_path = raw + ("?" + parsed.query if parsed.query else "")
             low = (path.rstrip("/") or "/").lower()
             q = {k.lower(): v for k, v in urllib.parse.parse_qs(parsed.query, keep_blank_values=True).items()}
             auth = self.headers.get("Authorization") or self.headers.get("X-Emby-Authorization") or ""
@@ -213,6 +282,9 @@ def make_handler(tap):
             try:
                 if route == "harness":
                     self._harness(low)
+                elif prefixed is False:
+                    self._read_body()
+                    self._send(404, b"not under the proxy's path", "text/plain")
                 elif (self.headers.get("Upgrade") or "").lower() == "websocket":
                     self._websocket()
                 else:
@@ -232,9 +304,13 @@ def make_handler(tap):
                          "query": {k: (["<redacted>"] if k in SECRET_KEYS else v) for k, v in q.items()},
                          "status": self.status, "bytes": self.sent, "ms": round((time.perf_counter() - t0) * 1000, 1),
                          "delay_ms": 0.0, "client": cm.group(1) if cm else "", "ua": self.headers.get("User-Agent") or "",
-                         "auth": given, "route": route}
+                         "auth": given, "route": route, "auth_form": auth_form(self.headers, q)}
                 if self.extra:
                     entry["report"] = self.extra
+                if prefixed is not None:
+                    entry["prefixed"] = prefixed
+                if "//" in path:
+                    entry["double_slash"] = True
                 tap.record(entry)
 
         def _send(self, code, body=b"", ctype=None):
@@ -302,12 +378,21 @@ def make_handler(tap):
                                   "subtitle": b.get("SubtitleStreamIndex")}
                 except ValueError:
                     pass
+            if route == "playbackinfo" and body:
+                # 1.5 qacheck: the tracks and the source a PlaybackInfo asked for (a track change on a transcode asks again)
+                try:
+                    b = json.loads(body)
+                    self.extra = {"kind": "PlaybackInfo", "audio": b.get("AudioStreamIndex"),
+                                  "subtitle": b.get("SubtitleStreamIndex"), "source": b.get("MediaSourceId"),
+                                  "start": b.get("StartTimeTicks")}
+                except ValueError:
+                    pass
             headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP and k.lower() != "content-length"}
             if body or self.command in ("POST", "PUT", "PATCH"):
                 headers["Content-Length"] = str(len(body))
             conn = http.client.HTTPConnection(tap.up_host, tap.up_port, timeout=300)
             try:
-                conn.putrequest(self.command, self.path, skip_host=True, skip_accept_encoding=True)
+                conn.putrequest(self.command, self.up_path, skip_host=True, skip_accept_encoding=True)
                 for k, v in headers.items():
                     conn.putheader(k, v)
                 conn.endheaders(body if body else None)
@@ -349,7 +434,7 @@ def make_handler(tap):
         def _websocket(self):
             up = socket.create_connection((tap.up_host, tap.up_port), timeout=30)
             try:
-                head = "%s %s HTTP/1.1\r\n" % (self.command, self.path) + \
+                head = "%s %s HTTP/1.1\r\n" % (self.command, self.up_path) + \
                        "".join("%s: %s\r\n" % (k, v) for k, v in self.headers.items()) + "\r\n"
                 up.sendall(head.encode("latin-1"))
                 buf = b""
@@ -405,13 +490,15 @@ def main():
     ap.add_argument("--credentials", default=os.path.join(
         os.environ.get("NIXIE_QA_ROOT") or os.path.join(os.path.expanduser("~"), "Dev", "jellyfin-qa"), "qa-credentials.json"))
     ap.add_argument("--port", type=int, default=0)
+    # 1.5 qacheck: stand in for a reverse proxy on a sub-path (e.g. /jellyfin): tools\qa-servers\subpath-probe.ps1
+    ap.add_argument("--base-path", default="")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    tap = Tap(a.upstream, a.out, a.credentials)
+    tap = Tap(a.upstream, a.out, a.credentials, a.base_path)
     server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(tap))
     server.daemon_threads = True
     tap.server = server
-    tap.url = "http://127.0.0.1:%d" % server.server_address[1]
+    tap.url = "http://127.0.0.1:%d%s" % (server.server_address[1], tap.base_path)
     tap.user()          # fail early, before the harness starts the app, if the test user cannot sign in
     tmp = a.ready_file + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:

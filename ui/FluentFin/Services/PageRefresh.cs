@@ -38,6 +38,7 @@ public static class PageRefresh
 		typeof(SeriesViewModel),
 		typeof(SeasonViewModel),
 		typeof(SearchResultsViewModel),
+		typeof(PersonItemsViewModel), // 1.5 search
 		typeof(DiaryViewModel),
 	];
 

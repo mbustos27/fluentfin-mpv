@@ -113,7 +113,7 @@
                     x:Name="RetryButton"
                     HorizontalAlignment="Center"
                     Click="Retry_Click"
-                    Content="Try again"
+                    Content="{x:Bind RetryLabel(Status), Mode=OneWay}"
                     Style="{StaticResource NixieButtonStyle}"
                     Visibility="{x:Bind RetryVisibility(Status), Mode=OneWay}" />
             </StackPanel>
@@ -133,7 +133,7 @@
                 x:Name="SelectButton"
                 Click="OnCloseWindow"
                 Content="Select this folder"
-                IsEnabled="{x:Bind CanSelect(CurrentFolder), Mode=OneWay}"
+                IsEnabled="{x:Bind CanSelect(CurrentFolder, Status), Mode=OneWay}"
                 Style="{StaticResource NixiePrimaryCompactButtonStyle}" />
             <Button
                 Click="OnCancel"

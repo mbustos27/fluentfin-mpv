@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 using FluentFin.Core.Theming;
 
 namespace FluentFin.Tests;
@@ -313,11 +313,18 @@ public sealed class StyleVocabularyTests
 			Assert.Equal("{StaticResource DriveInSeasonTubeButtonStyle}", (string?)tube.Parent!.Attribute("Style"));
 		}
 
-		var shell = Ui("Views/ShellPage.xaml");
-		Assert.Equal("{StaticResource NixiePrimaryCompactButtonStyle}", (string?)Named(shell, "UpdateInstallButton").Attribute("Style"));
-		var notes = shell.Descendants().Single(e => e.Name.LocalName == "HyperlinkButton" && (string?)e.Attribute("Content") == "Release notes");
-		Assert.Equal("{StaticResource NixieLinkButtonStyle}", (string?)notes.Attribute("Style"));
-		Assert.DoesNotContain(Named(shell, "UpdateBar").Descendants(), e => ((string?)e.Attribute("Foreground"))?.Contains("Accent") == true);
+		// Nixie 1.5: the notice is its own control; its step's action is the Primary Compact, the notes or page the Link role
+		var notice = Ui("Controls/UpdateNotice.xaml");
+		Assert.Equal("{StaticResource NixiePrimaryCompactButtonStyle}", (string?)Named(notice, "UpdatePrimaryButton").Attribute("Style"));
+		Assert.Equal("{StaticResource NixieLinkButtonStyle}", (string?)Named(notice, "UpdateLinkButton").Attribute("Style"));
+		Assert.Equal("{StaticResource NixieSubtleButtonStyle}", (string?)Named(notice, "UpdateCancelButton").Attribute("Style"));
+		Assert.Equal("{StaticResource NixieSubtleButtonStyle}", (string?)Named(notice, "UpdateDismissButton").Attribute("Style"));
+		Assert.DoesNotContain(Named(notice, "UpdateBarBorder").Descendants(), e => ((string?)e.Attribute("Foreground"))?.Contains("Accent") == true);
+		// one Primary in each: the notice and Settings' Updates group
+		Assert.Single(notice.Descendants(), e => ((string?)e.Attribute("Style"))?.Contains("NixiePrimary", StringComparison.Ordinal) == true);
+		var panel = Ui("Controls/UpdateSettingsPanel.xaml");
+		Assert.Single(panel.Descendants(), e => ((string?)e.Attribute("Style"))?.Contains("NixiePrimary", StringComparison.Ordinal) == true);
+		Assert.DoesNotContain(Ui("Views/SettingsPage.xaml").Descendants(), e => ((string?)e.Attribute("Style"))?.Contains("NixiePrimary", StringComparison.Ordinal) == true);
 	}
 
 	/// <summary>The player's transport is on the Nixie templates; the pills on the Secondary template; Play/Pause the 60 px hero.</summary>

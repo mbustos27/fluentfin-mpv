@@ -148,7 +148,7 @@ public partial class JellyfinFlyoutConverter : IValueConverter
 			ItemMenuCommand.Play => (App.Commands.PlayDtoCommand, dto),
 			ItemMenuCommand.ToggleWatched => (App.Commands.ToggleWatchedCommand, dto),
 			ItemMenuCommand.ToggleFavorite => (App.Commands.ToggleFavoriteCommand, dto),
-			ItemMenuCommand.ResetWatchProgress => (App.Commands.ResetWatchProgressCommand, dto.Id),
+			ItemMenuCommand.ResetWatchProgress => (App.Commands.ResetWatchProgressOfCommand, dto), // 1.5: with an Undo (L38)
 			ItemMenuCommand.RemoveFromContinueWatching => (s_removeFromContinueWatching, dto),
 			ItemMenuCommand.MediaInfo => (App.Dialogs.MediaInfoDialogCommand, dto),
 			ItemMenuCommand.EditMetadata => (App.Dialogs.EditMetadataDialogCommand, dto),

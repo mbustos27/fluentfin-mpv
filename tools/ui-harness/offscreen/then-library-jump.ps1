@@ -32,8 +32,8 @@ function Jf-Letter([string]$Name) {
 # --- the bar
 $sortBtn = Wait-Ui -Name 'Sort: ' -Type 'Button' -Contains -Seconds 10
 Check 'library bar: the Sort button says the sort in use, to Narrator ("Sort: Name, ascending")' ($sortBtn -and $sortBtn.Current.Name -eq 'Sort: Name, ascending') $(if ($sortBtn) { $sortBtn.Current.Name })
-$filterBtn = Find-Ui -Name 'Filter, ' -Type 'Button' -Contains
-Check 'library bar: the Filter button says how many filters are on ("Filter, none on")' ($filterBtn -and $filterBtn.Current.Name -eq 'Filter, none on') $(if ($filterBtn) { $filterBtn.Current.Name })
+$filterBtn = Find-Ui -Name 'Filter (' -Type 'Button' -Contains
+Check 'library bar: the Filter button says how many filters are on ("Filter (none on)")' ($filterBtn -and $filterBtn.Current.Name -eq 'Filter (none on)') $(if ($filterBtn) { $filterBtn.Current.Name })
 function Jf-Count {
     $textCond = New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, [System.Windows.Automation.ControlType]::Text)
     @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, $textCond)) | Where-Object { $_.Cached.Name -match '^\d[\d,]* (of \d[\d,]* )?movies$' } | Select-Object -First 1
@@ -121,7 +121,7 @@ if ($orderBtn) {
 }
 
 # --- the Filter menu: lists of check boxes with counts, Clear filters; the button counts them
-$filterBtn = Find-Ui -Name 'Filter, ' -Type 'Button' -Contains
+$filterBtn = Find-Ui -Name 'Filter (' -Type 'Button' -Contains
 if ($filterBtn) {
     [void](Invoke-Element $filterBtn); Start-Sleep -Milliseconds 900
     $boxCond = New-Object System.Windows.Automation.PropertyCondition($A::ControlTypeProperty, [System.Windows.Automation.ControlType]::CheckBox)
@@ -144,8 +144,8 @@ if ($filterBtn) {
         $tp = $null
         if ($boxes[0].TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$tp)) { $tp.Toggle() }
         Start-Sleep -Milliseconds 900
-        $filterBtn = Find-Ui -Name 'Filter, ' -Type 'Button' -Contains
-        Check 'filter: a box ticked: the button says "Filter, 1 on"' ($filterBtn -and $filterBtn.Current.Name -eq 'Filter, 1 on') $(if ($filterBtn) { $filterBtn.Current.Name })
+        $filterBtn = Find-Ui -Name 'Filter (' -Type 'Button' -Contains
+        Check 'filter: a box ticked: the button says "Filter (1 on)"' ($filterBtn -and $filterBtn.Current.Name -eq 'Filter (1 on)') $(if ($filterBtn) { $filterBtn.Current.Name })
         $count2 = Jf-Count
         Check 'filter: ... and the count says how many are left ("n of 320 movies")' ($count2 -and $count2.Cached.Name -match '^\d[\d,]* of \d[\d,]* movies$') $(if ($count2) { $count2.Cached.Name })
         Shot 'library-filter-2-one-on'
@@ -158,8 +158,8 @@ if ($filterBtn) {
             $clear = @($root.FindAll([System.Windows.Automation.TreeScope]::Children, $pidCond) | ForEach-Object { $_.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $nameCond) } | Where-Object { $_ }) | Select-Object -First 1
         }
         if ($clear) { [void](Invoke-Element $clear); Start-Sleep -Milliseconds 800 }
-        $filterBtn = Find-Ui -Name 'Filter, ' -Type 'Button' -Contains
-        Check 'filter: Clear filters: "Filter, none on" again' ($filterBtn -and $filterBtn.Current.Name -eq 'Filter, none on') $(if ($filterBtn) { $filterBtn.Current.Name })
+        $filterBtn = Find-Ui -Name 'Filter (' -Type 'Button' -Contains
+        Check 'filter: Clear filters: "Filter (none on)" again' ($filterBtn -and $filterBtn.Current.Name -eq 'Filter (none on)') $(if ($filterBtn) { $filterBtn.Current.Name })
     }
     Key 0x1B; Start-Sleep -Milliseconds 500
 }

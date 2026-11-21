@@ -15,17 +15,24 @@
      a full scan (the server's own TMDb lookup: public data, no account), the box set "QA Box Set" (admin) and the
      playlist "QA Playlist" (qa-user's own), then stopped and copied to <version>\seeded (data, config, seed.json).
   The server is left stopped unless -LeaveRunning.
+  4. Nixie 1.5 (search): the "QA Search" titles, about 3,000 films and 29 shows made by search_seed.py as .strm + .nfo pairs
+     in <root>\search-media (titles, original and sort titles, years and a cast of forty from the .nfo files), in two
+     libraries of their own, "QA Search" (films) and "QA Search Shows", added with every internet metadata and image
+     fetcher off: no title is looked up anywhere. Other checks leave out the libraries whose names start "QA Search".
+     -SearchOnly adds (or rebuilds) just these on a seeded server and snapshots it again, without wiping anything.
 
 .EXAMPLE
   .\seed.ps1                 # both servers
   .\seed.ps1 -Version 12 -LeaveRunning
+  .\seed.ps1 -SearchOnly     # the QA Search libraries only, on both seeded servers
 #>
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [ValidateSet('10.11', '12', 'all')][string]$Version = 'all',
     [string]$Python,
     [switch]$LeaveRunning,
-    [int]$ScanMinutes = 20
+    [int]$ScanMinutes = 20,
+    [switch]$SearchOnly
 )
 . (Join-Path $PSScriptRoot 'qa-common.ps1')
 $versions = Resolve-QaVersions $Version
@@ -75,6 +82,84 @@ function Wait-QaIdle([string]$V, [string]$Token, [double]$Since, [int]$Minutes) 
         if ($ended -and -not $running) { return $true }
     }
     $false
+}
+
+# --- 4. the QA Search titles (Nixie 1.5, the search stream) --------------------------------------------------------------
+$searchMedia = Join-Path $script:QaRoot 'search-media'
+$searchTarget = Join-Path $script:QaRoot 'media\Movies\Sintel (2010)\Sintel (2010).mkv'
+$searchLibraries = @(
+    @{ Name = 'QA Search'; Type = 'movies'; Folder = 'Movies'; Kinds = @('Movie') },
+    @{ Name = 'QA Search Shows'; Type = 'tvshows'; Folder = 'Shows'; Kinds = @('Series', 'Season', 'Episode') }
+)
+function New-QaSearchMedia {
+    & $py -B -I (Join-Path $PSScriptRoot 'search_seed.py') --out $searchMedia --target $searchTarget | ForEach-Object { Say $_ }
+    if ($LASTEXITCODE -ne 0) { throw 'search_seed.py failed' }
+}
+# the libraries (again, when they exist), fetchers off, one scan; returns their counts
+function Add-QaSearchLibraries([string]$V, [string]$Token) {
+    $existing = @((Invoke-Qa $V '/Library/VirtualFolders' -Token $Token).Json | Where-Object { $_.Name -like 'QA Search*' })
+    foreach ($lib in $existing) {
+        [void](Need (Invoke-Qa $V ('/Library/VirtualFolders?name={0}&refreshLibrary=false' -f [Uri]::EscapeDataString($lib.Name)) 'DELETE' -Token $Token) "remove $($lib.Name)")
+    }
+    foreach ($lib in $searchLibraries) {
+        $typeOptions = @($lib.Kinds | ForEach-Object { [ordered]@{ Type = $_; MetadataFetchers = @(); MetadataFetcherOrder = @(); ImageFetchers = @(); ImageFetcherOrder = @(); ImageOptions = @() } })
+        $opts = [ordered]@{
+            PathInfos = @(@{ Path = (Join-Path $searchMedia $lib.Folder) })
+            EnableRealtimeMonitor = $false; EnablePhotos = $false; EnableInternetProviders = $false
+            EnableChapterImageExtraction = $false; ExtractChapterImagesDuringLibraryScan = $false
+            EnableTrickplayImageExtraction = $false; ExtractTrickplayImagesDuringLibraryScan = $false
+            SaveLocalMetadata = $false; SaveSubtitlesWithMedia = $false; SaveLyricsWithMedia = $false; SaveTrickplayWithMedia = $false
+            MetadataSavers = @(); AutomaticallyAddToCollection = $false; EnableEmbeddedTitles = $false
+            LocalMetadataReaderOrder = @('Nfo'); DisabledLocalMetadataReaders = @()
+            PreferredMetadataLanguage = 'en'; MetadataCountryCode = 'US'; TypeOptions = $typeOptions
+        }
+        $q = '/Library/VirtualFolders?name={0}&collectionType={1}&refreshLibrary=false' -f [Uri]::EscapeDataString($lib.Name), $lib.Type
+        [void](Need (Invoke-Qa $V $q 'POST' @{ LibraryOptions = $opts } -Token $Token) "add library $($lib.Name)")
+    }
+    $since = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    [void](Need (Invoke-Qa $V '/Library/Refresh' 'POST' -Token $Token) 'Library/Refresh (QA Search)')
+    Say "${V}: QA Search libraries added; scanning (local .nfo files only)"
+    if (-not (Wait-QaIdle $V $Token $since $ScanMinutes)) { throw "${V}: the QA Search scan did not finish within $ScanMinutes min" }
+    $views = @((Invoke-Qa $V '/Library/VirtualFolders' -Token $Token).Json | Where-Object { $_.Name -like 'QA Search*' })
+    $counts = [ordered]@{}
+    foreach ($view in $views) {
+        foreach ($kind in 'Movie', 'Series', 'Episode') {
+            $n = (Invoke-Qa $V ("/Items?parentId={0}&recursive=true&includeItemTypes={1}&limit=0" -f $view.ItemId, $kind) -Token $Token).Json.TotalRecordCount
+            if ($n) { $counts[$kind] = $n }
+        }
+    }
+    Say "${V}: QA Search: $(($counts.Keys | ForEach-Object { "$($counts[$_]) $_" }) -join ', ')"
+    $counts
+}
+function Save-QaSnapshot([string]$V, $Seed) {
+    $snap = Join-Path (Get-QaDir $V) 'seeded'
+    foreach ($d in 'data', 'config') {
+        $p = Join-Path $snap $d
+        if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
+    }
+    New-Item -ItemType Directory -Force $snap | Out-Null
+    foreach ($d in 'data', 'config') { Copy-Item -LiteralPath (Join-Path (Get-QaDir $V) $d) -Destination (Join-Path $snap $d) -Recurse }
+    [IO.File]::WriteAllText((Join-Path $snap 'seed.json'), ($Seed | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
+    Say "${V}: snapshotted to $snap ($('{0:N0}' -f ((Get-ChildItem -LiteralPath $snap -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)) MB)"
+}
+New-QaSearchMedia
+
+if ($SearchOnly) {
+    foreach ($v in $versions) {
+        $seedFile = Join-Path (Get-QaDir $v) 'seeded\seed.json'
+        if (-not (Test-Path -LiteralPath $seedFile)) { throw "${v} is not seeded: run seed.ps1 -Version $v first" }
+        $st = Get-QaState $v
+        $wasRunning = [bool]($st -and $st.Running)
+        if (-not $wasRunning) { [void](Start-QaServer $v $Python) }
+        $admin = Connect-Qa $v 'admin' 'qa-seed'
+        $counts = Add-QaSearchLibraries $v $admin.Token
+        $seed = Get-Content -LiteralPath $seedFile -Raw | ConvertFrom-Json
+        $seed | Add-Member -NotePropertyName search -NotePropertyValue ([ordered]@{ libraries = @($searchLibraries | ForEach-Object { $_.Name }); counts = $counts; added = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') }) -Force
+        [void](Stop-QaServer $v)
+        Save-QaSnapshot $v $seed
+        if ($wasRunning -or $LeaveRunning) { [void](Start-QaServer $v $Python); Say "${v}: running again on $(Get-QaUrl $v)" }
+    }
+    return
 }
 
 foreach ($v in $versions) {
@@ -168,11 +253,15 @@ foreach ($v in $versions) {
     Start-Sleep -Seconds 3
     [void](Wait-QaIdle $v $admin.Token 0 5)
 
+    # --- the QA Search titles (Nixie 1.5) ---
+    $searchCounts = Add-QaSearchLibraries $v $admin.Token
+
     # --- what the smoke checks rely on (no secrets) ---
     $tmdb = @($movies | ForEach-Object { [ordered]@{ name = $_.Name; tmdb = $_.ProviderIds.Tmdb; collection = $_.ProviderIds.TmdbCollection; tags = @($_.Tags).Count } })
     $seed = [ordered]@{ seeded = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss'); version = $info.Version; url = (Get-QaUrl $v)
         counts = [ordered]@{}; movies = $tmdb; box_set = $box.Id; playlist = $pl.Id; playlist_items = 3
         libraries = @($libraries | ForEach-Object { $_.Name }) }
+    $seed.search = [ordered]@{ libraries = @($searchLibraries | ForEach-Object { $_.Name }); counts = $searchCounts }
     foreach ($g in ($items | Group-Object Type)) { $seed.counts[$g.Name] = $g.Count }
     $missing = @($tmdb | Where-Object { -not $_.tmdb } | ForEach-Object { $_.name })
     if ($missing) { Say "${v}: WARNING no TMDb id for: $($missing -join ', ')" }

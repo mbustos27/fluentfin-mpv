@@ -39,10 +39,20 @@ public static class ServerFolders
 
 	public static string Message(ServerFolderStatus status) => status switch
 	{
-		ServerFolderStatus.Empty => "This folder has no folders in it, or the server can't read it. Select this folder, go up, or try again.",
+		ServerFolderStatus.Empty => "This folder has no folders in it, or the server can't read it. Select this folder, go up, or refresh.",
 		ServerFolderStatus.Failed => "The server didn't list this folder. Check that it is running, then try again.",
 		_ => "",
 	};
+
+	/// <summary>1.5 (the button review's S19): "Refresh" for a folder that came back empty (nothing failed), else "Try again".</summary>
+	public static string RetryLabel(ServerFolderStatus status) => status == ServerFolderStatus.Empty ? "Refresh" : "Try again";
+
+	/// <summary>
+	/// 1.5 (the button review's S20): Select this folder works only on a folder the server listed: not while it is being
+	/// listed, nor when listing it failed (an empty folder can be chosen: its message says so).
+	/// </summary>
+	public static bool CanSelect(string? path, ServerFolderStatus status) =>
+		!string.IsNullOrEmpty(path) && status is not (ServerFolderStatus.Loading or ServerFolderStatus.Failed);
 
 	/// <summary>What Narrator hears for the path line ("Current folder: /media/movies").</summary>
 	public static string PathLabel(string? path) => string.IsNullOrEmpty(path) ? "No folder" : $"Current folder: {path}";
@@ -194,7 +204,9 @@ public sealed partial class ServerFolderPicker : UserControl
 
 	public bool CanGoUp(string path) => ServerFolders.ParentOf(path) is not null;
 
-	public bool CanSelect(string path) => !string.IsNullOrEmpty(path);
+	public bool CanSelect(string path, ServerFolderStatus status) => ServerFolders.CanSelect(path, status);
+
+	public string RetryLabel(ServerFolderStatus status) => ServerFolders.RetryLabel(status);
 
 	public string PathLabel(string path) => ServerFolders.PathLabel(path);
 

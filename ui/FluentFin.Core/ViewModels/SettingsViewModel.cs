@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -315,6 +315,41 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 			}
 		}
 	}
+
+	// 1.5 fixes
+	/// <summary>
+	/// Kept on this PC: the switch over <see cref="SettingKeys.LeaveOutRewatching"/>. Home and a show's page follow it on their
+	/// next visit: the saved Home page is marked stale (the review's M1: Home served it for up to 5 minutes), so the next visit
+	/// asks the server again with the new choice.
+	/// </summary>
+	public bool IncludeRewatching
+	{
+		get => !settings.LeaveOutRewatching;
+		set
+		{
+			if (settings.LeaveOutRewatching == value)
+			{
+				settings.LeaveOutRewatching = !value;
+				homeCache?.MarkStale();
+				OnPropertyChanged();
+			}
+		}
+	}
+
+	/// <summary>Kept on this PC: Home's N and C keys (the switch over <see cref="SettingKeys.HomeLetterKeysOff"/>); at once.</summary>
+	public bool HomeLetterKeys
+	{
+		get => !settings.HomeLetterKeysOff;
+		set
+		{
+			if (settings.HomeLetterKeysOff == value)
+			{
+				settings.HomeLetterKeysOff = !value;
+				OnPropertyChanged();
+			}
+		}
+	}
+	// END 1.5 fixes
 
 	/// <summary>Kept on this PC: see <see cref="SettingKeys.ShowSkipPrompt"/>.</summary>
 	public bool ShowSkipPrompt

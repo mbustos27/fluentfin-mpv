@@ -35,7 +35,7 @@ thumbfast (MPL-2.0).
 
 | Not vendored | Why |
 |---|---|
-| `scripts/uosc/bin/ziggy-*` (darwin, linux, windows.exe) | Executables. uosc calls them only for its self-updater, subtitle downloads and clipboard paths, none of which FluentFin's bar exposes; without them those paths log an error |
+| `scripts/uosc/bin/ziggy-*` (darwin, linux, windows.exe) | Executables. uosc calls them only for its self-updater, subtitle downloads and clipboard paths; the first two are patched out (below), and the clipboard paths log an error |
 | `scripts/uosc/intl/*.json` | Translations. The bar is configured with `languages=en`; a missing locale file is read as "no translation" |
 | `scripts/uosc/char-conv/zh.json` | Chinese romanisation for menu search; loaded only for a `zh` language |
 | `script-opts/uosc.conf` | Defaults for reference only; FluentFin's options are sent as `script-opts` (`jellyfin_mpv_shim/fluentfin_bar.py`, `uosc_script_opts`); a `script-opts/uosc.conf` of the user's in the config folder replaces them |
@@ -49,6 +49,7 @@ Each is marked `FluentFin MPV` in the file.
 | File | Change | Why |
 |---|---|---|
 | `scripts/uosc/main.lua`, `bind_command('update', ...)` and the "Update uosc" menu entry | `update` logs that uosc is pinned and does nothing; the menu entry is gone | The self-updater is not vendored (above) |
+| `scripts/uosc/main.lua`, the `subtitles` opener, `bind_command('download-subtitles', ...)` and `config` | No `download_command` (so no "Search online" in the Subtitles menu); `download-subtitles` logs that it is not available; uosc's OpenSubtitles API key and agent are removed (1.5, BH-140X-m2) | ziggy is not vendored, so the action only failed; vendored, it would have sent the search and the file to api.opensubtitles.com with uosc's key |
 | `scripts/uosc/main.lua`, `update_margins` | Publishes `user-data/fluentfin/bar`: the bottom bar's share of the window height as shown now (proximity reveals included; uosc's own margins count only a persistent bar), 0 when hidden | `fluentfin.lua` raises the subtitles above the bar from it, and takes its first value as "uosc is running" |
 
 ## Not uosc's

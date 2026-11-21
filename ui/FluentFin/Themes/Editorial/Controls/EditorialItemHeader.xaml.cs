@@ -142,8 +142,8 @@ public sealed partial class EditorialItemHeader : UserControl
 	private void Apply()
 	{
 		var dto = Dto;
-		BackdropImage.Source = ItemArtworkConverters.Backdrop(dto, 1920);
-		PosterImage.Source = BaseItemDtoConverters.GetImage(dto, ImageType.Primary, 486);
+		BackdropImage.Source = ItemArtworkConverters.Keep(BackdropImage.Source, ItemArtworkConverters.Backdrop(dto, 1920));
+		PosterImage.Source = ItemArtworkConverters.Keep(PosterImage.Source, BaseItemDtoConverters.GetImage(dto, ImageType.Primary, 486));
 		PosterFrame.Visibility = dto is null ? Visibility.Collapsed : Visibility.Visible;
 		// an episode's page is the episode's: its own name is the title (its show and number are the kicker)
 		var episode = dto?.Type == BaseItemDto_Type.Episode;

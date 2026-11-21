@@ -321,12 +321,40 @@ public sealed class CollectionPageTests
 		// the types a library view returns open a page
 		foreach (var type in new[] { BaseItemDto_Type.Movie, BaseItemDto_Type.Series, BaseItemDto_Type.Season, BaseItemDto_Type.Episode, BaseItemDto_Type.BoxSet,
 			BaseItemDto_Type.Playlist, BaseItemDto_Type.Folder, BaseItemDto_Type.CollectionFolder,
-			BaseItemDto_Type.MusicAlbum, BaseItemDto_Type.PhotoAlbum, BaseItemDto_Type.Trailer })
+			BaseItemDto_Type.MusicAlbum, BaseItemDto_Type.PhotoAlbum, BaseItemDto_Type.Trailer, BaseItemDto_Type.Video, BaseItemDto_Type.MusicVideo })
 		{
 			Assert.NotNull(GlobalCommands.PageFor(type));
 		}
 
 		Assert.Equal("Nixie can't open Song here", GlobalCommands.CannotOpenText(new BaseItemDto { Name = "Song", Type = BaseItemDto_Type.Audio }).Title);
+	}
+
+	// 1.5 (BH-140-m5): a playlist of home videos or music videos has Play and Shuffle, they play, and their cards open a page
+	[Theory]
+	[InlineData(BaseItemDto_Type.Video, "3 videos")]
+	[InlineData(BaseItemDto_Type.MusicVideo, "3 music videos")]
+	public async Task APlaylistOfVideos_PlaysAndShuffles_AndItsCardsOpen(BaseItemDto_Type type, string count)
+	{
+		var list = new BaseItemDto { Id = Guid.NewGuid(), Type = BaseItemDto_Type.Playlist, Name = "Summer 2019" };
+		var items = new[] { "Beach", "Fireworks", "Lake" }.Select((n, i) => new BaseItemDto
+		{
+			Id = Guid.NewGuid(), Name = n, Type = type, UserData = new UserItemDataDto { Played = i == 0 },
+		}).ToList();
+		var (vm, _, navigation) = Page(list, items);
+		await vm.OnNavigatedTo(list);
+
+		Assert.True(vm.CanPlay);
+		Assert.Equal("Play Fireworks", vm.PlayLabel);
+		Assert.StartsWith(count, vm.Summary, StringComparison.Ordinal);
+
+		await vm.Play();
+		navigation.Verify(x => x.NavigateTo("FluentFin.ViewModels.VideoPlayerViewModel", items[1], false), Times.Once);
+
+		vm.Pick = n => n - 1;
+		await vm.Shuffle();
+		navigation.Verify(x => x.NavigateTo("FluentFin.ViewModels.VideoPlayerViewModel", items[2], false), Times.Once);
+
+		Assert.Equal(typeof(MovieViewModel), GlobalCommands.PageFor(type));
 	}
 
 	// the bug hunt's m4: a playlist's own order is always offered, and is the way back

@@ -270,7 +270,8 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		_continueAnswer = items;
 		// sg-cw: with what the mpv player just played, until the server's answers have it
 		var withPlays = _plays.Count == 0 ? items : ContinueWatchingRules.WithPlays(items, _plays.Values, RecordOf);
-		var visible = ContinueWatchingRules.Visible(withPlays, _time.GetUtcNow(), HideContinueWatchingAfterDays);
+		var visible = ContinueWatchingRules.Visible(withPlays, _time.GetUtcNow(), HideContinueWatchingAfterDays,
+			includeRewatching: localSettings?.ReadSetting(Settings.SettingKeys.LeaveOutRewatching) is not true); // 1.5 fixes
 		// Seaglass 1.1.4: the row's item records, before their cards are made: a card's menu asks whose row it is in
 		foreach (var dto in visible)
 		{

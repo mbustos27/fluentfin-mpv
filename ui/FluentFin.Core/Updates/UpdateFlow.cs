@@ -156,13 +156,40 @@ public sealed class UpdateCoordinator(Settings.ISettings settings, UpdateChecker
 			return;
 		}
 
-		await CheckAndRememberAsync(state, now, cancellation).ConfigureAwait(false);
+		await SingleAsync(state, now, cancellation).ConfigureAwait(false);
 	}
+
+	/// <summary>
+	/// Nixie 1.5: the window came back after <paramref name="away"/> (it was inactive, or the PC slept). With the setting on, asks
+	/// when it was away for <see cref="UpdateGate.ReturnAfter"/> or more and the hour's one attempt is free
+	/// (<see cref="UpdateGate.ShouldCheckOnReturn"/>); null when nothing was asked.
+	/// </summary>
+	public async Task<UpdateCheckResult?> ReturnedAsync(TimeSpan away, CancellationToken cancellation = default)
+	{
+		if (!settings.CheckForUpdates)
+		{
+			return null;
+		}
+
+		var state = UpdateState.Parse(settings.UpdateState);
+		var now = clock();
+		return UpdateGate.ShouldCheckOnReturn(state, now, away) ? await SingleAsync(state, now, cancellation).ConfigureAwait(false) : null;
+	}
+
+	/// <summary>
+	/// Nixie 1.5: a Check now within this long of the last answer says that answer again, sent nothing ("checked just now"), so a
+	/// row of clicks never spends GitHub's hourly 60.
+	/// </summary>
+	public static readonly TimeSpan CheckNowReuse = TimeSpan.FromSeconds(15);
+
+	private UpdateCheckResult? _lastResult;
+	private DateTimeOffset _lastResultAt;
 
 	/// <summary>
 	/// Nixie 1.3.1: Settings' "Check now". Asks at once, the setting on or off (the user asked), except while GitHub asked to
 	/// wait (answered RateLimited with that time, nothing sent). What it finds is remembered as a check; with the setting on,
-	/// a newer release shows in the shell's bar too.
+	/// a newer release shows in the shell's bar too. Nixie 1.5: a check already on its way is joined, never sent twice, and an
+	/// answer from the last <see cref="CheckNowReuse"/> is said again.
 	/// </summary>
 	public async Task<UpdateCheckResult> CheckNowAsync(CancellationToken cancellation = default)
 	{
@@ -173,7 +200,66 @@ public sealed class UpdateCoordinator(Settings.ISettings settings, UpdateChecker
 			return new UpdateCheckResult(UpdateCheckStatus.RateLimited, RetryAfter: state.RetryAfter);
 		}
 
-		return await CheckAndRememberAsync(state, now, cancellation).ConfigureAwait(false);
+		lock (_flightLock)
+		{
+			if (_inFlight is null && _lastResult is { Status: UpdateCheckStatus.Available or UpdateCheckStatus.UpToDate } last
+				&& now >= _lastResultAt && now - _lastResultAt < CheckNowReuse)
+			{
+				return last;
+			}
+		}
+
+		return await SingleAsync(state, now, cancellation).ConfigureAwait(false);
+	}
+
+	private readonly object _flightLock = new();
+	private Task<UpdateCheckResult>? _inFlight;
+
+	/// <summary>Nixie 1.5: whether a request is on its way now.</summary>
+	public bool IsChecking
+	{
+		get
+		{
+			lock (_flightLock)
+			{
+				return _inFlight is not null;
+			}
+		}
+	}
+
+	/// <summary>Nixie 1.5: never two checks at once: a timer tick, a return and Check now share the one on its way.</summary>
+	private async Task<UpdateCheckResult> SingleAsync(UpdateState state, DateTimeOffset now, CancellationToken cancellation)
+	{
+		Task<UpdateCheckResult> flight;
+		lock (_flightLock)
+		{
+			flight = _inFlight ??= RunAsync();
+		}
+
+		return await flight.ConfigureAwait(false);
+
+		async Task<UpdateCheckResult> RunAsync()
+		{
+			try
+			{
+				await Task.Yield();
+				var result = await CheckAndRememberAsync(state, now, cancellation).ConfigureAwait(false);
+				lock (_flightLock)
+				{
+					_lastResult = result;
+					_lastResultAt = now;
+				}
+
+				return result;
+			}
+			finally
+			{
+				lock (_flightLock)
+				{
+					_inFlight = null;
+				}
+			}
+		}
 	}
 
 	private async Task<UpdateCheckResult> CheckAndRememberAsync(UpdateState state, DateTimeOffset now, CancellationToken cancellation)
@@ -216,6 +302,9 @@ public sealed class UpdateCoordinator(Settings.ISettings settings, UpdateChecker
 			Notice = null;
 		}
 	}
+
+	/// <summary>Nixie 1.5 (review m2): whether <paramref name="version"/> was dismissed (it is not downloaded or installed by itself).</summary>
+	public bool IsDismissed(string? version) => version is not null && UpdateState.Parse(settings.UpdateState).Dismissed == version;
 
 	private void Show(UpdateState state) =>
 		Notice = state.Release is { } r && UpdateVersion.IsNewer(r.Version, currentVersion) && r.Version != state.Dismissed ? r.Validated() : null;

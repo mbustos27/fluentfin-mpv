@@ -455,7 +455,7 @@ public sealed partial class EditorialHomePage : Page
 	/// <summary>N: the keyboard to Up next's first next episode (never playing: a single letter must not start a video).</summary>
 	private void NextUpInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
 	{
-		if (TextInput.IsTextInput(FocusManager.GetFocusedElement(XamlRoot)))
+		if (FluentFin.Services.HomeLetterKeys.Ignore(XamlRoot)) // 1.5 (L1, L2): the switch, then typing
 		{
 			return;
 		}
@@ -466,7 +466,7 @@ public sealed partial class EditorialHomePage : Page
 	/// <summary>C: the keyboard to what is in progress: the hero's Resume, else Up next's first.</summary>
 	private void ContinueInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
 	{
-		if (TextInput.IsTextInput(FocusManager.GetFocusedElement(XamlRoot)))
+		if (FluentFin.Services.HomeLetterKeys.Ignore(XamlRoot)) // 1.5 (L1, L2): the switch, then typing
 		{
 			return;
 		}

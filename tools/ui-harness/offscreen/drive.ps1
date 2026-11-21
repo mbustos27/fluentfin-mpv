@@ -407,7 +407,8 @@ function Step-SignIn([bool]$Capture) {
     if (-not $url) { throw "no server page (TxtUrl) within 30 s" }
     # let the page's entrance and the backdrop's 600 ms fade finish first (a shot taken at once caught the title at 4.2:1)
     if ($Capture) { Start-Sleep -Milliseconds 1200; Capture-Page 'server' }
-    Set-ElementValue $url $script:serverUrl
+    # 1.5 qacheck: the address as a user types it (a -Before script sets $script:signInAddress: one ending in "/")
+    Set-ElementValue $url $(if ($script:signInAddress) { $script:signInAddress } else { $script:serverUrl })
     # the server page's "Connect" (1.2.0, the button review's S13; "Next" before)
     $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Connect'); if (-not $next) { $next = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Next') }
     $nextAt = Get-Epoch
@@ -441,7 +442,11 @@ function Step-SignIn([bool]$Capture) {
         if (-not $password -or -not $userBox) { throw "no username or password box on the sign-in page" }
         Set-ElementValue $userBox $creds.username
         Set-ElementValue $password $creds.password   # the fake server's generated test password (never a real one)
-        [void](Invoke-Element ([OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Login')))
+        # the sign-in page's Primary is "Sign in" ("Login" before 1.1.4): the password sign-in failed on a null button
+        $signInButton = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Sign in')
+        if (-not $signInButton) { $signInButton = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Login') }
+        if (-not $signInButton) { throw "no Sign in button on the sign-in page" }
+        [void](Invoke-Element $signInButton)
         Say "signed in with the fixture's test credentials"
     }
     $auth = Wait-Until { @(Get-Requests $at | Where-Object { $_.route -eq 'authenticate' -and $_.status -eq 200 }) | Select-Object -First 1 } -Seconds 30 -PollMs 100
@@ -789,10 +794,15 @@ try {
     $ready = Join-Path $Out 'server\ready.json'
     $serverArgs = @('-B', '-I', (Join-Path $PSScriptRoot '..\fakeserver\server.py'), '--out', (Join-Path $Out 'server'), '--media', $Media,
         '--ready-file', $ready, '--latency', $Latency) + @($LatencyRule | ForEach-Object { '--latency-rule'; $_ })
+    # 1.5 qacheck (BH-140X-m4): the fake server reads the token only as Jellyfin 12 does (Authorization: MediaBrowser, ApiKey)
+    # and says 12.4.0; NIXIE_FAKE_LEGACY_AUTH=1 for a run that needs the old forms (X-Emby-*, api_key) and 10.11.11
+    $serverArgs += @('--auth', $(if ($env:NIXIE_FAKE_LEGACY_AUTH -eq '1') { 'legacy' } else { 'strict' }))
     if ($QaUpstream) {
         # sg-qa: the QA server's logging tap instead (no latency injection there)
         $serverArgs = @('-B', '-I', (Join-Path $PSScriptRoot '..\..\qa-servers\qaproxy.py'), '--upstream', $QaUpstream,
             '--out', (Join-Path $Out 'server'), '--ready-file', $ready)
+        # 1.5 qacheck: behind a reverse proxy on a sub-path (NIXIE_QA_BASE_PATH=/jellyfin; tools\qa-servers\subpath-probe.ps1)
+        if ($env:NIXIE_QA_BASE_PATH) { $serverArgs += @('--base-path', $env:NIXIE_QA_BASE_PATH) }
     }
     $quoted = @($serverArgs | ForEach-Object { if ("$_" -match '[\s"]') { '"' + ("$_" -replace '"', '\"') + '"' } else { "$_" } })
     $server = Start-Process -FilePath $Python -ArgumentList $quoted -PassThru -WindowStyle Hidden `
@@ -885,6 +895,16 @@ finally {
         }
     }
     if ($appErrors) { Say ("FluentFin logged {0} error(s) during the run, first: {1}" -f $appErrors.Count, $appErrors[0]) }
+    # 1.5 qacheck (BH-140X-m4): nothing of Nixie's (the app, its backend, mpv) sent the token in a form Jellyfin 12 refuses
+    try {
+        $legacyAuth = @(Get-Requests 0 | Where-Object { $_.PSObject.Properties['auth_form'] -and "$($_.auth_form)" -like 'legacy:*' })
+        Check 'auth: no request used a form Jellyfin 12 refuses (X-Emby-*, the Emby scheme, api_key)' ($legacyAuth.Count -eq 0) `
+            $(if ($legacyAuth) { "$($legacyAuth.Count): " + ((@($legacyAuth | Select-Object -First 5) | ForEach-Object { "$($_.method) $($_.path) $($_.auth_form) ($(Get-Origin $_))" }) -join '; ') })
+    }
+    catch {
+        # an unreadable request log proves nothing: the run fails rather than pass the check unread
+        Check 'auth: no request used a form Jellyfin 12 refuses (X-Emby-*, the Emby scheme, api_key)' $false "the request log could not be read: $($_.Exception.Message)"
+    }
     $failed = @($checks.Keys | Where-Object { -not $checks[$_].ok })
     # sg-parallel: every monitor that dropped off during the run, minimizing the window or not
     $script:display.removals = @(Get-DisplayRemovals $runStarted)

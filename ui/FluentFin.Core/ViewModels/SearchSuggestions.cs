@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Reactive.Linq;
+using FluentFin.Core.Search;
 using Jellyfin.Sdk.Generated.Models;
 
 namespace FluentFin.Core.ViewModels;
@@ -106,15 +107,19 @@ public static class SearchSuggestions
 			return [new SearchMessage(query, FailedTitle, "Choose this to try again.", CanRetry: true)];
 		}
 
-		if (result.Items is not { Count: > 0 } items)
+		// Nixie 1.5 (search): ranked as the results page ranks (FluentFin.Core.Search): strong matches first, and the weak
+		// ones only when nothing matches strongly; the server's order was shown as it came
+		var ranked = SearchRanking.Suggest(query, result.Items);
+		if (ranked.Count == 0)
 		{
 			return [new SearchMessage(query, $"No results for “{query}”", "Check the spelling, or try fewer words.", CanRetry: false)];
 		}
 
-		List<object> rows = [.. items.Take(Shown).Select(x => new SearchSuggestion(x))];
-		if (items.Count > Shown)
+		List<object> rows = [.. ranked.Take(Shown).Select(x => new SearchSuggestion(x))];
+		var all = result.Items!.Count(x => SearchKinds.KindOf(x.Type) is not null);
+		if (all > rows.Count)
 		{
-			rows.Add(new SearchSeeAll(query, items.Count));
+			rows.Add(new SearchSeeAll(query, all));
 		}
 
 		return rows;
@@ -174,47 +179,4 @@ public static class SearchLabels
 	/// ("Series", and a collection would read "BoxSet").
 	/// </summary>
 	public static string KindTitle(BaseItemDto_Type? type) => Kind(type) is { Length: > 0 } kind ? char.ToUpperInvariant(kind[0]) + kind[1..] : "";
-}
-
-/// <summary>Seaglass 1.1.4: one group of the search results page ("Movies" and its items).</summary>
-public sealed record SearchGroup(string Title, IReadOnlyList<BaseItemDto> Items, int? Total = null)
-{
-	public int Count => Items.Count;
-
-	/// <summary>"Movies (3)", or "Movies (100 of 163)" when the server has more than the page asked for.</summary>
-	public string Heading => Total is { } total && total > Count ? $"{Title} ({Count} of {total})" : $"{Title} ({Count})";
-}
-
-/// <summary>Seaglass 1.1.4: the results page's groups: movies, then shows, then episodes; empty groups left out.</summary>
-public static class SearchResults
-{
-	private static readonly (BaseItemDto_Type Type, string Title)[] Order =
-	[
-		(BaseItemDto_Type.Movie, "Movies"),
-		(BaseItemDto_Type.Series, "Shows"),
-		(BaseItemDto_Type.Episode, "Episodes"),
-	];
-
-	/// <summary>What the page asks the server for, one request each (types with a page in Seaglass).</summary>
-	public static IReadOnlyList<BaseItemKind> Kinds { get; } = [BaseItemKind.Movie, BaseItemKind.Series, BaseItemKind.Episode];
-
-	/// <summary>
-	/// The items by type, in the server's order within a group. Types without a page in Seaglass (people) are left out: a
-	/// result that opens nothing is not offered.
-	/// </summary>
-	public static IReadOnlyList<SearchGroup> Group(IEnumerable<BaseItemDto>? items, IReadOnlyDictionary<BaseItemDto_Type, int>? totals = null)
-	{
-		var all = items?.ToList() ?? [];
-		return [.. Order
-			.Select(x => new SearchGroup(x.Title, [.. all.Where(i => i.Type == x.Type)], totals is not null && totals.TryGetValue(x.Type, out var total) ? total : null))
-			.Where(g => g.Count > 0)];
-	}
-
-	/// <summary>The server's count of matches of a kind (its TotalRecordCount), for the group's heading.</summary>
-	public static BaseItemDto_Type TypeOf(BaseItemKind kind) => kind switch
-	{
-		BaseItemKind.Movie => BaseItemDto_Type.Movie,
-		BaseItemKind.Series => BaseItemDto_Type.Series,
-		_ => BaseItemDto_Type.Episode,
-	};
 }

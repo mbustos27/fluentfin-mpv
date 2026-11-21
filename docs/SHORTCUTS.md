@@ -38,7 +38,9 @@ key, global or a page's own (Ctrl+F, /, R, F1, Alt+Home, Ctrl+, N, C, Ctrl+Z), d
 its top band included, closes it.
 
 Home page only: N goes to the Next Up row, C to the Continue Watching row (they ignore typing too). Since 1.1.4 they no
-longer play anything: a single letter must never start a video (Enter on the focused card does).
+longer play anything: a single letter must never start a video (Enter on the focused card does). 1.5: Settings > About >
+"Letter keys on Home" turns N and C off (WCAG 2.1.4), and Ctrl+Z (undo the last removal from Continue Watching, while its
+notice shows) is on the "?" sheet.
 
 ## Library grids (1.4.0)
 
@@ -50,6 +52,14 @@ longer play anything: a single letter must never start a video (Enter on the foc
 | A letter (or a digit) on the A to Z | Presses that letter (# for a digit): its row goes to the top, its first title gets the keyboard. R there is the letter, not Refresh |
 | Enter on a letter of the A to Z | That letter's row goes to the top, its first title gets the keyboard |
 | Ctrl+Up on a Cinematic still | The stage's Play |
+
+## Search results (1.5)
+
+| Key | Does |
+|---|---|
+| Left, Right, Home, End on a chip | Move between the chips (All, Shows, Movies, Episodes, Collections, People); they stop at either end |
+| Space, Enter on a chip | Shows that kind only (All shows every group again). The chip stays lit after Back and R; a new search starts on All |
+| Space, Enter on "Show N more" | Opens the group's weaker matches; on "Show fewer" folds them again |
 
 ## Player keys (only while the video is shown)
 

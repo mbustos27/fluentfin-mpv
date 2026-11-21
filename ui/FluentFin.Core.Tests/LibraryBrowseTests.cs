@@ -63,14 +63,14 @@ public sealed class LibraryBrowseTests
 	{
 		var vm = Library([Movie("A", "Drama"), Movie("B", "Comedy")]);
 		await vm.OnNavigatedTo(Movies);
-		Assert.Equal(("Filter", "Filter, none on"), (vm.FilterText, vm.FilterButtonName));
+		Assert.Equal(("Filter", "Filter (none on)"), (vm.FilterText, vm.FilterButtonName));
 
 		vm.Filter.Genres.Add("Drama");
-		Assert.Equal(("Filter (1)", "Filter, 1 on"), (vm.FilterText, vm.FilterButtonName));
+		Assert.Equal(("Filter (1)", "Filter (1 on)"), (vm.FilterText, vm.FilterButtonName));
 
 		vm.Filter.Years.Add("2020");
 		vm.Filter.Tags.Add("4K");
-		Assert.Equal(("Filter (3)", "Filter, 3 on"), (vm.FilterText, vm.FilterButtonName));
+		Assert.Equal(("Filter (3)", "Filter (3 on)"), (vm.FilterText, vm.FilterButtonName));
 	}
 
 	[Fact]

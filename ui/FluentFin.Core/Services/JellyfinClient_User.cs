@@ -31,8 +31,11 @@ public partial class JellyfinClient
 
 	internal const int NextUpDays = 365;
 
-	/// <summary>sg-cw: Next Up (Home's and a series' own) includes shows being watched again.</summary>
-	internal const bool NextUpRewatching = true;
+	/// <summary>
+	/// sg-cw: Next Up (Home's and a series' own) includes shows being watched again; 1.5: unless Settings' "Include shows I'm
+	/// rewatching" is off (<see cref="Settings.SettingKeys.LeaveOutRewatching"/>).
+	/// </summary>
+	internal bool NextUpRewatching => !settings.LeaveOutRewatching;
 
 	public async Task<BaseItemDtoQueryResult?> GetNextUp()
 	{

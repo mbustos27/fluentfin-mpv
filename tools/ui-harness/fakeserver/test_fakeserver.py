@@ -111,7 +111,9 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(401, status)
         self.assertEqual(401, self.request("/Users/Me")[0])
         self.assertEqual(401, self.request("/Users/Me", token="0" * 32)[0])
-        self.assertEqual(200, self.request("/Users/Me?api_key=" + self.token)[0])
+        # 1.5 qacheck: strict by default, as Jellyfin 12 (AuthTests): ApiKey, not api_key
+        self.assertEqual(200, self.request("/Users/Me?ApiKey=" + self.token)[0])
+        self.assertEqual(401, self.request("/Users/Me?api_key=" + self.token)[0])
 
     def test_views_items_paging_and_search(self):
         views = self.get("/UserViews?userId=" + self.srv.user_id)
@@ -143,7 +145,7 @@ class ServerTests(unittest.TestCase):
     def test_series_seasons_episodes(self):
         fx = self.get("/__harness/fixture")
         series = fx["series"]["id"]
-        seasons = self.get("/Items?parentId=" + series)
+        seasons = self.get("/Items?parentId=%s&fields=SortName" % series)   # 1.5 search: /Items sends SortName when asked
         self.assertEqual(["Season 1", "Season 2", "Season 3"], [s["Name"] for s in seasons["Items"]])
         self.assertEqual(seasons["Items"], self.get("/Shows/%s/Seasons" % series)["Items"])
         episodes = self.get("/Items?parentId=" + fx["season"]["id"])
@@ -173,7 +175,9 @@ class ServerTests(unittest.TestCase):
         self.assertIn(b"[Francais] 1 - 00:01", srt[1])
         segments = self.get("/MediaSegments/" + item["Id"])["Items"]
         self.assertEqual(["Intro", "Outro"], [s["Type"] for s in segments])
-        self.assertEqual(200, self.request("/Videos/%s/Trickplay/320/0.jpg" % item["Id"], raw=True)[0])
+        # 1.5 qacheck: trickplay needs a token, as Jellyfin's does (live-auth.ps1)
+        self.assertEqual(401, self.request("/Videos/%s/Trickplay/320/0.jpg" % item["Id"], raw=True)[0])
+        self.assertEqual(200, self.request("/Videos/%s/Trickplay/320/0.jpg" % item["Id"], raw=True, token=self.token)[0])
 
     def test_the_release_answer_stands_in_for_github_and_its_version_can_be_set(self):
         # Nixie 1.3.1: the app's update check asks this in a harness run (NIXIE_UPDATE_API), never GitHub
@@ -189,6 +193,101 @@ class ServerTests(unittest.TestCase):
         self.request("/__harness/release", "POST", {"version": "not a version"})
         self.assertEqual("v1.3.2", self.get("/__harness/release/latest")["tag_name"])
         self.request("/__harness/release", "POST", {"version": "0.0.1"})
+
+    # ---- 1.5 updater: the fake release is as strict as GitHub (release.py)
+    def _release(self, **settings):
+        status, state, _ = self.request("/__harness/release", "POST", settings)
+        self.assertEqual(200, status)
+        return state
+
+    def _bare(self, path, headers=None):
+        """A request with exactly these headers: urllib's own User-Agent left out unless given."""
+        import http.client
+        host, port = self.srv.url.split("//", 1)[1].split(":")
+        conn = http.client.HTTPConnection(host, int(port), timeout=10)
+        conn.putrequest("GET", path, skip_accept_encoding=True)
+        for k, v in (headers or {}).items():
+            conn.putheader(k, v)
+        conn.endheaders()
+        r = conn.getresponse()
+        body = r.read()
+        conn.close()
+        return r.status, body, r
+
+    def test_the_release_api_refuses_a_request_without_a_user_agent_as_github_does(self):
+        status, body, _ = self._bare("/__harness/release/latest")
+        self.assertEqual(403, status)
+        self.assertIn(b"User-Agent", body)
+        status, _, r = self._bare("/__harness/release/latest", {"User-Agent": "Nixie/1.5.0"})
+        self.assertEqual(200, status)
+        self.assertEqual("60", r.getheader("x-ratelimit-limit"))
+        self.assertEqual("core", r.getheader("x-ratelimit-resource"))
+        self.assertTrue(int(r.getheader("x-ratelimit-reset")) > time.time())
+
+    def test_the_release_api_counts_down_its_hourly_limit_then_answers_403_with_none_left(self):
+        try:
+            self._release(limit=3, reset_limit=True)
+            remaining = [self.request("/__harness/release/latest")[2]["x-ratelimit-remaining"] for _ in range(3)]
+            self.assertEqual(["2", "1", "0"], remaining)
+            status, _, headers = self.request("/__harness/release/latest")
+            self.assertEqual(403, status)
+            self.assertEqual("0", headers["x-ratelimit-remaining"])
+            self._release(mode="retry-after", limit=60, reset_limit=True)
+            status, _, headers = self.request("/__harness/release/latest")
+            self.assertEqual((429, "90"), (status, headers["Retry-After"]))
+            self._release(mode="refuse")
+            status, _, headers = self.request("/__harness/release/latest")
+            self.assertEqual(403, status)
+            self.assertNotEqual("0", headers["x-ratelimit-remaining"])
+        finally:
+            self._release(mode="ok", limit=60, reset_limit=True)
+
+    def test_a_renamed_repository_answers_through_githubs_redirect_with_the_new_name(self):
+        try:
+            self._release(version="1.5.1", repository="mbustos27/nixie", reset_limit=True)
+            status, body, r = self._bare("/__harness/release/latest", {"User-Agent": "Nixie/1.5.0"})
+            self.assertEqual(301, status)
+            self.assertEqual("/__harness/release/repositories/4242/latest", r.getheader("Location"))
+            latest = self.get("/__harness/release/latest")          # urllib follows it, as HttpClient does
+            self.assertEqual("https://github.com/mbustos27/nixie/releases/tag/v1.5.1", latest["html_url"])
+            self.assertEqual("https://api.github.com/repos/mbustos27/nixie/releases/1", latest["url"])
+            self.assertTrue(all(a["browser_download_url"].startswith("https://github.com/mbustos27/nixie/releases/download/v1.5.1/")
+                                for a in latest["assets"]))
+        finally:
+            self._release(version="0.0.1", repository="mbustos27/fluentfin-mpv")
+
+    def test_the_installer_downloads_with_ranges_its_checksum_and_githubs_digest_agree(self):
+        import hashlib
+        try:
+            self._release(version="1.5.1", size=300_000, kbps=100_000, digest="ok", mismatch=False)
+            latest = self.get("/__harness/release/latest")
+            msi = latest["assets"][0]
+            self.assertEqual(300_000, msi["size"])
+            base = "/__harness/release/download/v1.5.1/Nixie-1.5.1-win-x64.msi"
+            status, whole, _ = self.request(base, raw=True)
+            self.assertEqual((200, 300_000), (status, len(whole)))
+            digest = hashlib.sha256(whole).hexdigest()
+            self.assertEqual("sha256:" + digest, msi["digest"])
+            status, sha, _ = self.request(base + ".sha256", raw=True)
+            self.assertEqual("%s *Nixie-1.5.1-win-x64.msi\n" % digest, sha.decode())
+            status, tail, headers = self.request(base, raw=True, headers={"Range": "bytes=100000-"})
+            self.assertEqual(206, status)
+            self.assertEqual("bytes 100000-299999/300000", headers["Content-Range"])
+            self.assertEqual(whole[100000:], tail)
+            self.assertEqual(416, self.request(base, raw=True, headers={"Range": "bytes=300000-"})[0])
+            self.assertEqual(404, self.request("/__harness/release/download/v1.5.0/Nixie-1.5.0-win-x64.msi", raw=True)[0])
+            # the mismatch, no digest, a wrong digest, and a cut connection
+            self._release(mismatch=True, digest="none")
+            self.assertNotIn(digest, self.request(base + ".sha256", raw=True)[1].decode())
+            self.assertNotIn("digest", self.get("/__harness/release/latest")["assets"][0])
+            self._release(digest="wrong")
+            self.assertEqual("sha256:" + "0" * 64, self.get("/__harness/release/latest")["assets"][0]["digest"])
+            self._release(cut_at=65536, mismatch=False, digest="ok")
+            with self.assertRaises(Exception):
+                self.request(base, raw=True)                         # stops after 64 KB: urllib says the read was short
+            self.assertEqual(200, self.request(base, raw=True)[0])  # the cut is once
+        finally:
+            self._release(version="0.0.1", size=24 * 1024 * 1024, kbps=8192, digest="ok", mismatch=False, cut_at=0)
 
     def test_the_showcase_movie_has_a_youtube_trailer_served_by_the_harness(self):
         # Nixie 1.3.1: the theatre window plays it from the fake server's page, never from YouTube
@@ -254,6 +353,27 @@ class ServerTests(unittest.TestCase):
         self.assertEqual("bytes 1000-1999/%d" % self.meta["size"], headers["Content-Range"])
         status, data, headers = self.request("/Videos/%s/stream.mkv" % fx["movie"]["id"], method="HEAD", raw=True)
         self.assertEqual((200, b"", str(self.meta["size"])), (status, data, headers["Content-Length"]))
+
+    # 1.5 season: a list sends only the image types it asks for, as Jellyfin does (Library.keep_image_types)
+    def test_a_list_sends_only_the_image_types_asked_for(self):
+        series = self.get("/__harness/fixture")["series"]["id"]
+        def seasons(extra):
+            return self.get("/Items?parentId=%s%s" % (series, extra))["Items"]
+        every = seasons("")[0]
+        self.assertIn("ParentLogoImageTag", every)
+        self.assertIn("ParentBackdropImageTags", every)
+        no_logo = seasons("&enableImageTypes=Primary,Backdrop,Banner,Thumb&imageTypeLimit=1")[0]
+        self.assertNotIn("ParentLogoImageTag", no_logo)
+        self.assertNotIn("ParentLogoItemId", no_logo)
+        self.assertTrue(no_logo["ParentBackdropImageTags"])
+        self.assertIn("Primary", no_logo["ImageTags"])
+        with_logo = seasons("&enableImageTypes=Primary&enableImageTypes=Logo")[0]
+        self.assertIn("ParentLogoImageTag", with_logo)
+        self.assertNotIn("ParentBackdropImageTags", with_logo)
+        self.assertEqual([], with_logo["BackdropImageTags"])
+        none = seasons("&enableImages=false")[0]
+        self.assertEqual({}, none["ImageTags"])
+        self.assertNotIn("ParentLogoImageTag", none)
 
     def test_images_have_real_sizes_and_are_resized(self):
         fx = self.get("/__harness/fixture")
@@ -354,7 +474,7 @@ class ServerTests(unittest.TestCase):
         movie = fx["movie"]["id"]
         sock = socket.create_connection(("127.0.0.1", self.srv.port), timeout=10)
         key = base64.b64encode(os.urandom(16)).decode()
-        sock.sendall(("GET /socket?api_key=%s&deviceId=t1 HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"
+        sock.sendall(("GET /socket?ApiKey=%s&deviceId=t1 HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"
                       "Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n"
                       % (self.token, key)).encode())
         reader = sock.makefile("rb")
@@ -545,6 +665,104 @@ class ServerTests(unittest.TestCase):
             summary = f.read()
         self.assertNotIn(self.token, summary)
 
+    def test_what_needs_a_token_is_what_jellyfin_asks_one_for(self):
+        # 1.5 qacheck (live-auth.ps1, 10.11.11 and 12.4.0): an image, a static stream and a subtitle file answer without a
+        # token; trickplay is 401 and the socket 403 without one; with ApiKey (any case) they answer
+        fx = self.get("/__harness/fixture")
+        movie = fx["movie"]["id"]
+        self.assertEqual(200, self.request("/Items/%s/Images/Primary" % movie, raw=True)[0])
+        self.assertEqual(200, self.request("/Videos/%s/stream?static=true" % movie, raw=True,
+                                           headers={"Range": "bytes=0-1023"})[0] // 100 * 100)
+        self.assertEqual(401, self.request("/Videos/%s/Trickplay/320/0.jpg" % movie, raw=True)[0])
+        self.assertEqual(200, self.request("/Videos/%s/Trickplay/320/0.jpg?ApiKey=%s" % (movie, self.token), raw=True)[0])
+        for query, want in (("", b" 403 "), ("&apikey=" + self.token, b" 101 ")):
+            sock = socket.create_connection(("127.0.0.1", self.srv.port), timeout=10)
+            key = base64.b64encode(os.urandom(16)).decode()
+            sock.sendall(("GET /socket?deviceId=t1%s HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"
+                          "Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n"
+                          % (query, key)).encode())
+            line = sock.makefile("rb").readline()
+            sock.close()
+            self.assertIn(want, line, query or "no token")
+
+    def test_strict_by_default_says_12_and_logs_the_form(self):
+        # 1.5 qacheck (BH-140X-m4): the version a v12 server reports, and each request's auth form in the log
+        self.assertEqual("12.4.0", self.get("/System/Info/Public")["Version"])
+        self.request("/Users/Me", token=self.token)
+        self.request("/Users/Me", headers={"X-Emby-Token": self.token})
+        with open(os.path.join(self.srv.out, "requests.jsonl"), encoding="utf-8") as f:
+            me = [json.loads(line) for line in f if '"/Users/Me"' in line]
+        self.assertEqual("header", me[-2]["auth_form"])
+        self.assertTrue(me[-2]["auth"])
+        self.assertEqual("legacy:x-emby-token", me[-1]["auth_form"])
+        self.assertFalse(me[-1]["auth"])
+
+
+class AuthTests(unittest.TestCase):
+    """1.5 qacheck (BH-140X-m4): the token forms, strict (Jellyfin 12, the default) and legacy (10.x). The strict answers
+    are the ones tools\\qa-servers\\live-auth.ps1 got from a real 12.4.0 (2026-11-20)."""
+
+    TOKEN = "a" * 32
+    MB = 'MediaBrowser Client="Nixie", Device="d", DeviceId="i", Version="1"'
+
+    def form(self, headers, query, mode=server.AUTH_STRICT):
+        return server.auth_token(headers, {k.lower(): v for k, v in query.items()}, mode)
+
+    def test_strict_reads_the_two_forms_jellyfin_12_reads(self):
+        t = self.TOKEN
+        self.assertEqual((t, "header", "Nixie"), self.form({"Authorization": self.MB + ', Token="%s"' % t}, {}))
+        self.assertEqual((t, "apikey", ""), self.form({}, {"ApiKey": [t]}))
+        # query keys are case-insensitive in ASP.NET: apikey is ApiKey (live-auth.ps1: 200 on 12.4.0)
+        self.assertEqual((t, "apikey", ""), self.form({}, {"apikey": [t]}))
+        # the client's name still comes from the header next to an ApiKey
+        self.assertEqual((t, "apikey", "Nixie"), self.form({"Authorization": self.MB}, {"ApiKey": [t]}))
+        self.assertEqual((None, "none", "Nixie"), self.form({"Authorization": self.MB}, {}))
+
+    def test_strict_refuses_every_legacy_form(self):
+        t = self.TOKEN
+        for headers, query, form in (
+                ({"X-Emby-Authorization": self.MB + ', Token="%s"' % t}, {}, "legacy:x-emby-authorization"),
+                ({"Authorization": 'Emby Client="Nixie", Token="%s"' % t}, {}, "legacy:scheme-emby"),
+                ({"X-Emby-Token": t}, {}, "legacy:x-emby-token"),
+                ({"X-MediaBrowser-Token": t}, {}, "legacy:x-mediabrowser-token"),
+                ({}, {"api_key": [t]}, "legacy:query-api_key")):
+            token, got, _ = self.form(headers, query)
+            self.assertIsNone(token, form)
+            self.assertEqual(form, got)
+            # the legacy server reads each of them
+            self.assertEqual((t, form), self.form(headers, query, server.AUTH_LEGACY)[:2])
+
+    def test_a_legacy_server_answers_the_old_forms_and_says_10_11(self):
+        tmp = tempfile.mkdtemp(prefix="ffh-legacy-")
+        srv = server.Server(os.path.join(tmp, "out"), make_media(os.path.join(tmp, "media")), CREDS, auth=server.AUTH_LEGACY)
+        threading.Thread(target=srv.serve, daemon=True).start()
+        try:
+            def call(path, method="GET", body=None, headers=None):
+                req = urllib.request.Request(srv.url + path, method=method, data=None if body is None else json.dumps(body).encode())
+                for k, v in (headers or {}).items():
+                    req.add_header(k, v)
+                if body is not None:
+                    req.add_header("Content-Type", "application/json")
+                try:
+                    with urllib.request.urlopen(req, timeout=10) as r:
+                        return r.status, json.loads(r.read() or b"null")
+                except urllib.error.HTTPError as e:
+                    return e.code, None
+            _, info = call("/System/Info/Public")
+            self.assertEqual("10.11.11", info["Version"])
+            _, auth = call("/Users/AuthenticateByName", "POST", {"Username": CREDS["username"], "Pw": CREDS["password"]},
+                           {"X-Emby-Authorization": AUTH})
+            token = auth["AccessToken"]
+            self.assertEqual(200, call("/Users/Me?api_key=" + token)[0])
+            self.assertEqual(200, call("/Users/Me", headers={"X-Emby-Token": token})[0])
+            with self.assertRaises(ValueError):
+                server.Server(os.path.join(tmp, "out2"), make_media(os.path.join(tmp, "media2")), CREDS, auth="loose")
+        finally:
+            srv.httpd.shutdown()
+            srv.httpd.server_close()
+            srv.log_file.close()
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 class LatencyRuleQueryTests(unittest.TestCase):
     def test_a_rule_with_an_escaped_question_mark_reads_the_query_others_the_path_alone(self):
@@ -604,6 +822,128 @@ class BigSeriesTests(unittest.TestCase):
         season2 = fx["seasons"][1]
         listed = big.query({"parentid": [season2["id"]], "sortby": ["SortName"]})["Items"]
         self.assertEqual([e["name"] for e in season2["episodes"]], [d["Name"] for d in listed])
+
+
+class SearchTests(unittest.TestCase):
+    """1.5 search: the fake answers as Jellyfin 12.4 (docs/research/search.md): one cleaned substring, scored, capped."""
+
+    @classmethod
+    def setUpClass(cls):
+        old = {k: os.environ.pop(k, None) for k in ("FAKESERVER_SEARCH", "FAKESERVER_SEARCH_MODE")}
+        try:
+            cls.plain = library.Library("server", "user", 600)
+            os.environ["FAKESERVER_SEARCH"] = "sunny"
+            cls.lib = library.Library("server", "user", 600)
+        finally:
+            for k, v in old.items():
+                os.environ.pop(k, None)
+                if v is not None:
+                    os.environ[k] = v
+
+    def names(self, term, kind="Movie,Series", **more):
+        q = {"searchterm": [term], "recursive": ["true"], "includeitemtypes": [kind]}
+        q.update({k: [str(v)] for k, v in more.items()})
+        return [i["Name"] for i in self.lib.query(q)["Items"]]
+
+    def test_off_by_default_the_default_fixture_is_unchanged(self):
+        for iid, item in self.plain.items.items():
+            self.assertEqual(item["Name"], self.lib.items[iid]["Name"], iid)
+        self.assertEqual(self.plain.user, self.lib.user)
+        self.assertEqual("stock", self.plain.search.mode)
+
+    def test_one_substring_in_the_order_typed_apostrophes_and_punctuation_as_spaces(self):
+        self.assertEqual(["It's Always Sunny in Philadelphia"], self.names("it's always sunny"))
+        self.assertEqual(["It's Always Sunny in Philadelphia"], self.names("it\u2019s always sunny"))
+        self.assertEqual([], self.names("sunny always"))           # words out of order: nothing
+        self.assertEqual(["WALL\u00b7E"], self.names("wall-e"))
+        self.assertEqual(["Am\u00e9lie"], self.names("AMELIE"))
+        # the original title, as LIKE: the accents are taken off the term only, so the accented title is not found
+        self.assertEqual(["Am\u00e9lie"], self.names("fabuleux destin"))
+        self.assertEqual([], self.names("destin d'am\u00e9lie"))
+        # "M*A*S*H" is "m a s h": "mash" finds nothing
+        self.assertEqual([], self.names("mash"))
+
+    def test_scored_then_sort_name_whatever_the_sort_asked(self):
+        # 12.4: a word start (75) beats the exact title after "The" (50); sortBy is ignored while searching
+        names = self.names("philadelphia", "Movie", sortby="ProductionYear", sortorder="Descending")
+        self.assertEqual("Philadelphia", names[0])
+        self.assertLess(names.index("The Philadelphia Story"), len(names))
+
+    def test_the_total_is_capped_at_three_times_the_limit(self):
+        q = {"searchterm": ["a"], "recursive": ["true"], "includeitemtypes": ["Movie"]}
+        every = self.lib.query(dict(q, limit=["1000"]))["TotalRecordCount"]
+        self.assertGreater(every, 30)
+        capped = self.lib.query(dict(q, limit=["10"]))
+        self.assertEqual(30, capped["TotalRecordCount"])
+        self.assertEqual(10, len(capped["Items"]))
+        self.assertEqual(100, self.lib.query(q)["TotalRecordCount"])          # no limit: the providers' 100
+
+    def test_a_term_with_nothing_left_matches_by_like(self):
+        q = {"searchterm": ["%"], "recursive": ["true"], "includeitemtypes": ["Series"], "limit": ["1000"]}
+        self.assertEqual(len([i for i in self.lib.items.values() if i["kind"] == "series"]), self.lib.query(q)["TotalRecordCount"])
+
+    def test_hints_people_persons_and_person_ids(self):
+        hints = self.lib.hints({"searchterm": ["sunny"], "limit": ["60"]})
+        types = {h["Type"] for h in hints["SearchHints"]}
+        self.assertTrue({"Movie", "Series", "Person"} <= types, types)
+        self.assertLessEqual(len(hints["SearchHints"]), 60)
+        self.assertEqual(hints["TotalRecordCount"], len(hints["SearchHints"]))
+        self.assertNotIn("Person", {h["Type"] for h in self.lib.hints({"searchterm": ["sunny"], "includepeople": ["false"]})["SearchHints"]})
+        self.assertIsNone(self.lib.hints({"searchterm": ["  "]}))           # the server's 400
+        people = self.lib.persons({"searchterm": ["sunny holm"]})
+        self.assertEqual(["Sunny Holm"], [p["Name"] for p in people["Items"]])
+        pid = people["Items"][0]["Id"]
+        films = self.lib.query({"personids": [pid], "recursive": ["true"], "includeitemtypes": ["Movie,Series"]})
+        self.assertTrue(films["Items"])
+        self.assertTrue(all(any(p["Id"] == pid for p in self.lib.items[i["Id"]]["people"]) for i in films["Items"]))
+
+    def test_sort_and_original_titles_only_when_asked_for(self):
+        q = {"searchterm": ["amelie"], "recursive": ["true"], "includeitemtypes": ["Movie"]}
+        bare = self.lib.query(q)["Items"]
+        self.assertTrue(bare)
+        self.assertFalse([i for i in bare if "SortName" in i or "OriginalTitle" in i])
+        asked = self.lib.query(dict(q, fields=["OriginalTitle,SortName"]))["Items"]
+        amelie = [i for i in asked if i["Name"] == "Amélie"][0]
+        self.assertEqual("Le Fabuleux Destin d'Amélie Poulain", amelie["OriginalTitle"])
+        self.assertIn("SortName", amelie)
+
+    def test_loose_mode_answers_any_word_as_a_search_plugin(self):
+        os.environ["FAKESERVER_SEARCH"] = "sunny"
+        try:
+            loose = library.Library("server", "user", 600)
+        finally:
+            os.environ.pop("FAKESERVER_SEARCH", None)
+        loose.search = library.search_mod.Search("loose")
+        q = {"searchterm": ["it's always sunny"], "recursive": ["true"], "includeitemtypes": ["Movie"], "limit": ["100"]}
+        films = loose.query(q)
+        self.assertGreater(films["TotalRecordCount"], 20)               # the owner's "Movies (100 of 295)"
+        self.assertTrue(any(i["Name"].startswith("Always ") for i in films["Items"]))
+
+
+class SearchRouteTests(unittest.TestCase):
+    """The routes: /Search/Hints (400 without a term, 401 without a token), /Persons, the harness switch."""
+    setUpClass = classmethod(ServerTests.setUpClass.__func__)
+    tearDownClass = classmethod(ServerTests.tearDownClass.__func__)
+    request = classmethod(ServerTests.request.__func__)
+    login = classmethod(ServerTests.login.__func__)
+    get = ServerTests.get
+
+    def test_hints_route_and_refusals(self):
+        self.assertEqual(400, self.request("/Search/Hints?searchTerm=", token=self.token)[0])
+        self.assertEqual(401, self.request("/Search/Hints?searchTerm=harbor")[0])
+        found = self.get("/Search/Hints?searchTerm=harbor&limit=5")
+        self.assertLessEqual(len(found["SearchHints"]), 5)
+        self.assertEqual(401, self.request("/Persons?searchTerm=a")[0])
+        self.assertIn("Items", self.get("/Persons?searchTerm=a&limit=3"))
+        # an unknown parameter is dropped, as the real server drops it (200, the same answer)
+        self.assertEqual(self.get("/Items?searchTerm=harbor&recursive=true&includeItemTypes=Movie")["TotalRecordCount"],
+                         self.get("/Items?searchTerm=harbor&recursive=true&includeItemTypes=Movie&nixieBogus=1")["TotalRecordCount"])
+
+    def test_the_harness_switch(self):
+        status, body, _ = self.request("/__harness/search", "POST", {"mode": "loose"})
+        self.assertEqual((200, "loose"), (status, body["mode"]))
+        status, body, _ = self.request("/__harness/search", "POST", {"mode": "stock"})
+        self.assertEqual("stock", body["mode"])
 
 
 class LibraryViewsTests(unittest.TestCase):

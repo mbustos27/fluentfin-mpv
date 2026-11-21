@@ -10,6 +10,8 @@ public sealed partial class SeasonPage : Page
 	public SeasonPage()
 	{
 		InitializeComponent();
+		// Nixie 1.5: the seasons either side get their stills asked ahead, as the rows ask them (EpisodeRow)
+		FluentFin.Services.StillsAhead.Follow(this, episode => FluentFin.Core.ItemArtwork.ThumbPath(episode, FluentFin.Controls.EpisodeRow.ThumbWidth));
 	}
 
 	// 1.2.0: Back (or Forward) to this page gives its scroll position and focus back (ItemPagePlace)

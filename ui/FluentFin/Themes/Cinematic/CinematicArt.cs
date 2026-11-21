@@ -12,9 +12,9 @@ namespace FluentFin.Themes.Cinematic;
 /// </summary>
 public static class CinematicArt
 {
+	// 1.5 qacheck: one join for every address (a sub-path, a "/" at its end)
 	private static BitmapImage? Load(string? path, int decodeWidth) =>
-		path is null || string.IsNullOrEmpty(SessionInfo.BaseUrl) ? null
-		: new BitmapImage { DecodePixelWidth = decodeWidth, UriSource = new Uri(SessionInfo.BaseUrl.TrimEnd('/') + path) };
+		ServerAddress.Join(SessionInfo.BaseUrl, path) is { } uri ? new BitmapImage { DecodePixelWidth = decodeWidth, UriSource = uri } : null;
 
 	/// <summary>A shelf's still: a film's or a show's wide picture; an episode's show's.</summary>
 	public static BitmapImage? Still(BaseItemDto? dto, int width) => Load(CinematicArtwork.StillPath(dto, width), width);

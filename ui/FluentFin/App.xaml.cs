@@ -233,6 +233,7 @@ public partial class App : Application
 			// dashboard view models
 			services.AddTransient<DashboardViewModel>();
 			services.AddTransient<SearchResultsViewModel>(); // Seaglass 1.1.4: the search results page
+			services.AddTransient<PersonItemsViewModel>(); // 1.5 search: "With <name>", what a person result opens
 			services.AddTransient<GeneralSettingsViewModel>();
 			services.AddTransient<UsersViewModel>();
 			services.AddTransient<UserEditorViewModel>();
@@ -349,6 +350,8 @@ public partial class App : Application
 			PerfLog.Startup(GetService<ILogger<App>>(), "launched");
 			// Nixie 1.4.0 (bug hunt M3): what threw on the UI thread is in the log before a crash can end the app
 			Services.FirstChanceTrail.Start();
+			// 1.5 season: pictures 6 at a time, not WinINet's 2 (a season's stills came 0.4 to 0.9 s after its rows)
+			Services.ImageDownloads.AllowMoreAtOnce(GetService<ILogger<App>>());
 			// Nixie 1.4.0 (bug hunt m4): every theme's library page gives its load's focus by the app's one arrival rule
 			Core.ViewModels.LibraryViewModel.LoadFocusYields = Services.ArrivalFocus.LibraryYields;
 			await Host.StartAsync();

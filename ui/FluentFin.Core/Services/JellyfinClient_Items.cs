@@ -19,7 +19,10 @@ public partial class JellyfinClient
 				// Nixie 1.3.1: SortName too, which the library sorts and files its A-Z by
 				query.Fields = [ItemFields.DateCreated, ItemFields.Overview, ItemFields.Tags, ItemFields.Genres, ItemFields.SortName];
 				query.ImageTypeLimit = 1;
-				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb];
+				// Nixie 1.5 (season stream): the logo too (an item's own, or its show's for a season): a season page opened from a
+				// pill shows the pill's season at once, and without it Jellyfin left out the show's logo, so the header showed the
+				// name as text, then the logo a moment later, moving what is under it
+				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Banner, ImageType.Thumb, ImageType.Logo];
 				query.ParentId = parent.Id;
 				query.IncludeItemTypes = parent.CollectionType switch
 				{

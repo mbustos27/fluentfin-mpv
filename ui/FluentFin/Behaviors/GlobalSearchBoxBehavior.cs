@@ -32,7 +32,9 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 
 		// fluentfin-mpv: "no results" and a failed search (with a retry) are shown instead of nothing, and a newer query's
 		// answer is never replaced by an older one that came back late (SearchSuggestions)
-		_disposable = SearchSuggestions.Pipeline(_textChangedSubject, _searchNow, _jellyfinClient.Search, TimeSpan.FromMilliseconds(500), _drop)
+		// Nixie 1.5 (search): the suggestions ask as the results page does (the longest word again when the whole query finds
+		// nothing) and are ranked as it ranks (SearchSuggestions.For)
+		_disposable = SearchSuggestions.Pipeline(_textChangedSubject, _searchNow, query => Core.Search.SearchRunner.Suggest(_jellyfinClient, query), TimeSpan.FromMilliseconds(500), _drop)
 			.Subscribe(update =>
 			{
 				AssociatedObject.DispatcherQueue.TryEnqueue(() =>
@@ -76,6 +78,7 @@ public partial class GlobalSearchBoxBehavior : Behavior<AutoSuggestBox>
 			case SearchAction.ShowResults results:
 				Drop();
 				sender.IsSuggestionListOpen = false;
+				SearchPageMemory.Forget(results.Query); // Nixie 1.5: a new search starts on All, its groups folded
 				App.GetService<INavigationService>().NavigateTo<SearchResultsViewModel>(results.Query);
 				break;
 		}

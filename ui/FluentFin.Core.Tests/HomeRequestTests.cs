@@ -34,6 +34,7 @@ public sealed class HomeRequestTests : IAsyncLifetime
 
 	// the client's: told of each sign-in and sign-out
 	private readonly HomeCache _homeCache;
+	private ISettings _settings = Mock.Of<ISettings>(); // 1.5 fixes: what Settings says (LeaveOutRewatching)
 
 	static HomeRequestTests() => ReactiveUI.Builder.RxAppBuilder.CreateReactiveUIBuilder().BuildApp();
 
@@ -76,7 +77,7 @@ public sealed class HomeRequestTests : IAsyncLifetime
 
 	private async Task SignIn()
 	{
-		_client ??= new JellyfinClient(new CoreListLogger<JellyfinClient>(), Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(), Mock.Of<IDeviceProfileFactory>(), Mock.Of<ISettings>(), _homeCache) { Time = _clock };
+		_client ??= new JellyfinClient(new CoreListLogger<JellyfinClient>(), Mock.Of<IObserver<IOutboundWebSocketMessage>>(), Mock.Of<IJumpListService>(), Mock.Of<IDeviceProfileFactory>(), _settings, _homeCache) { Time = _clock };
 		await _client.Initialize(_server.BaseUrl, new AuthenticationResult
 		{
 			AccessToken = FakeToken,
@@ -161,6 +162,44 @@ public sealed class HomeRequestTests : IAsyncLifetime
 		Assert.All(asked, x => Assert.Equal("true", x.Query["enableRewatching"]));
 		Assert.Equal("false", asked[0].Query["enableResumable"]); // Home: an episode in progress is Continue Watching's
 		Assert.Equal(Shows, Guid.Parse(asked[1].Query["seriesId"]!));
+	}
+
+	// 1.5 fixes: Settings' "Include shows I'm rewatching" off asks Next Up without them, on Home and on a series page
+	[Fact]
+	public async Task NextUp_LeavesShowsWatchedAgainOut_WhenSettingsSaySo()
+	{
+		_settings = Mock.Of<ISettings>(x => x.LeaveOutRewatching == true);
+		await SignIn();
+
+		await _client.GetNextUp();
+		await _client.GetNextUp(new BaseItemDto { Id = Shows, Type = BaseItemDto_Type.Series });
+
+		var asked = _server.ApiRequests.Where(x => x.Path == "/Shows/NextUp").ToList();
+		Assert.Equal(2, asked.Count);
+		Assert.All(asked, x => Assert.Equal("false", x.Query["enableRewatching"]));
+	}
+
+	// the review of wip/150-fixes (M1): the switch reaches Home at its next visit, not when the saved page expires
+	[Fact]
+	public async Task TheRewatchingSwitch_ReachesHome_AtItsNextVisit()
+	{
+		var settings = new Mock<ISettings>();
+		settings.SetupProperty(x => x.LeaveOutRewatching, false);
+		_settings = settings.Object;
+		await SignIn();
+
+		using var ui = new UiThread();
+		using var cache = new HomeCache(_folder, new System.Reactive.Subjects.Subject<IOutboundWebSocketMessage>(), new CoreListLogger<HomeCache>(), _clock);
+		var home = await ui.Invoke(() => NewHome(cache));
+		await ui.Run(() => home.OnNavigatedTo(null!));
+		Assert.Equal(["true"], _server.ApiRequests.Where(x => x.Path == "/Shows/NextUp").Select(x => x.Query["enableRewatching"]));
+
+		var page = new SettingsViewModel(_settings, Mock.Of<Mpv.IMpvBackend>(), _client!, cache) { IncludeRewatching = false };
+		var home2 = await ui.Invoke(() => NewHome(cache));
+		await ui.Run(() => home2.OnNavigatedTo(null!));
+
+		Assert.False(page.IncludeRewatching);
+		Assert.Equal(["true", "false"], _server.ApiRequests.Where(x => x.Path == "/Shows/NextUp").Select(x => x.Query["enableRewatching"]));
 	}
 
 	[Fact]

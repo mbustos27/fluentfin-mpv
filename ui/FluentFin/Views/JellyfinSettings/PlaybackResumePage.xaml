@@ -14,6 +14,7 @@
         Items="{x:Bind ViewModel.Items, Mode=OneWay}"
         ResetCommand="{x:Bind ViewModel.ResetCommand}"
         SaveCommand="{x:Bind ViewModel.SaveCommand}"
+        SaveStatus="{x:Bind ViewModel.SaveStatus, Mode=OneWay}"
         SectionName="Resume" />
 
 </Page>

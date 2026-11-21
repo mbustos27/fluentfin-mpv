@@ -115,7 +115,7 @@ public sealed partial class ItemStage : Grid
 	{
 		var dto = Dto;
 		_board.Dto = dto;
-		_backdrop.Source = ItemArtworkConverters.Backdrop(dto, 1920);
+		_backdrop.Source = ItemArtworkConverters.Keep(_backdrop.Source, ItemArtworkConverters.Backdrop(dto, 1920));
 		_credits.Inlines.Clear();
 		void Line(string label, string names)
 		{

@@ -18,6 +18,8 @@ public sealed partial class DriveInSeasonPage : Page
 	{
 		InitializeComponent();
 		SizeChanged += (_, e) => Body.Padding = new Thickness(ItemStage.MarginFor(e.NewSize.Width), 8, ItemStage.MarginFor(e.NewSize.Width), 56);
+		// Nixie 1.5: the seasons either side get their stills asked ahead, as the showtimes ask them
+		FluentFin.Services.StillsAhead.Follow(this, episode => FluentFin.Core.ItemArtwork.ThumbPath(episode, Showtime.ThumbWidth));
 	}
 
 	/// <summary>The episode Play starts in this season (NEXT on the board, its time left beside Play).</summary>

@@ -133,7 +133,7 @@ public sealed partial class CinematicTitleArt : Grid
 	{
 		var title = Title ?? CinematicLabels.TitleArtText(Dto);
 		var logo = UseLogo && Dto is { } dto ? ItemArtworkConverters.Logo(dto, LogoDecodeWidth) : null;
-		_logo.Source = logo;
+		_logo.Source = ItemArtworkConverters.Keep(_logo.Source, logo);
 		_logo.MaxHeight = LogoMaxHeight;
 		_logo.Visibility = logo is null ? Visibility.Collapsed : Visibility.Visible;
 		_text.Visibility = logo is null && title.Length > 0 ? Visibility.Visible : Visibility.Collapsed;

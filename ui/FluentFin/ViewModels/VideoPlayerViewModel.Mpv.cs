@@ -227,6 +227,10 @@ public partial class VideoPlayerViewModel
 			{
 				request = remote;
 			}
+			else if (parameter is QueuePlayRequest queue)
+			{
+				request = queue.Queue; // 1.5 qacheck: a playlist's queue, built by its page
+			}
 			else if (parameter is BaseItemDto { Id: not null } or PlaybackRequest { Dto.Id: not null })
 			{
 				OnStep(MpvStartStep.LoadingQueue);
@@ -294,6 +298,7 @@ public partial class VideoPlayerViewModel
 		{
 			PlaybackRequest picked => picked.Dto,
 			BaseItemDto dto => dto,
+			QueuePlayRequest queue => queue.First, // 1.5 qacheck: a playlist's first item
 			_ => null,
 		};
 
@@ -352,6 +357,7 @@ public partial class VideoPlayerViewModel
 		MpvSelfTestRequest => "the self-test",
 		PlayQueueUpdate => "a SyncPlay queue (not played with mpv)",
 		BridgePlayRequest remote => $"a remote play of {remote.ItemIds.Count} item(s) from index {remote.StartIndex}",
+		QueuePlayRequest queue => $"a page's queue of {queue.Queue.ItemIds.Count} item(s) from index {queue.Queue.StartIndex}, {queue.First.Type} {queue.First.Id:N} first",
 		PlaybackRequest picked => $"{picked.Dto.Type} {picked.Dto.Id:N}{(picked.Selection is null ? "" : " with streams picked on its page")}{(picked.FromBeginning ? " from the beginning" : "")}",
 		BaseItemDto item => $"{item.Type} {item.Id:N}",
 		null => "nothing",

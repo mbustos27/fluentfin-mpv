@@ -1527,13 +1527,23 @@ class Bridge:
                     stale = self._superseded_job()
                 if pm._video is video and pm._play_epoch != epoch:
                     # A new play session of this video (a restart, the same
-                    # item played again): its Playing has gone out, so its
-                    # end is owed a report, whatever the last one got --
-                    # even from a server that reuses the PlaySessionId.
+                    # item played again): open on the server -- its Playing
+                    # has gone out, or (a restart, ``restart_playback``'s
+                    # ``no_initial_timeline``) its progress goes on under
+                    # the new id -- so its end is owed a report, whatever
+                    # the last one got, even from a server that reuses the
+                    # PlaySessionId.
                     session = _play_session(video)
                     self._reported.forget(video, session)
                     self._released.forget(video, session)
                     self._session_phase(video, bridge_state.PlaySessions.OPENED)
+                    if not start.get("initial") and self.controls.ui:
+                        # A restart sends no Playing, so the wrapper of
+                        # `send_timeline_initial` did not put the controls'
+                        # subtitle position back over the one the start
+                        # wrote (`update_subtitle_visuals`): here instead.
+                        self._apply_controls(pm, at_load=True,
+                                             item_started=True)
                     # The quality this stream was negotiated with, for a
                     # later change that cannot be applied (`_put_back`).
                     try:
@@ -1686,6 +1696,9 @@ class Bridge:
             # Recorded first, and under that lock, so a hook deciding that
             # a start never opened (`_settle_sessions`) cannot race it.
             self._session_phase(pm._video, bridge_state.PlaySessions.OPENED)
+            start = getattr(self._local, "start", None)
+            if start is not None:
+                start["initial"] = True     # the controls below, not the hook's
             try:
                 return original_initial(*args, **kwargs)
             finally:
@@ -1927,8 +1940,9 @@ class Bridge:
         """After a ``play()``: the sessions it leaves with nothing to come.
 
         - A restart (a track change on a transcode, a quality change)
-          renegotiates on the same video, and upstream sends no Stopped for
-          the session it replaces (``restart_playback``): that one is
+          renegotiates on the same video, and the viewing goes on under the
+          new id as progress, with no Stopped for the session it replaces
+          and no second Playing (``restart_playback``): that one is
           ``failed`` -- abandoned -- as soon as a new PlaybackInfo has
           replaced its id, whether the new session then opens, is
           cancelled, finds no stream or fails to load, so a UI still
@@ -3347,6 +3361,10 @@ def main(argv=None):
     os.makedirs(config_dir, exist_ok=True)
     preseed_shim_args(config_dir)
     configure_logging(options.log_file)
+    # The Windows store, as the UI and libmpv use (BH-140X-M1): before any
+    # request, so no connection is made with certifi's list.
+    from . import system_trust
+    system_trust.use_system_trust()
 
     runtime = ShimRuntime(config_dir)
     runtime.load_settings()

@@ -5086,7 +5086,18 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         # exact aid/sid (e.g. a just-selected burn-in subtitle). Don't re-derive
         # tracks from memory or we'd revert the very change that forced this
         # restart.
-        self.play(video, current_time, apply_memory=False)
+        #
+        # FluentFin MPV: ``no_initial_timeline`` -- the same viewing goes on,
+        # so the server hears it as progress under the PlaySessionId the
+        # restart negotiated, not as a second Playing. Upstream sent Playing
+        # again and never a Stopped for the session it left: one viewing was
+        # two starts and one finish on the server (its activity log, the
+        # Playback Reporting plugin's play counts; measured on 10.11.11 and
+        # 12.4.0: QA-SERVERS.md in the repository's docs). The old transcode
+        # is ended by the negotiation itself (`get_playback_url`), and the
+        # final Stopped names the new session, which ends its transcode.
+        self.play(video, current_time, no_initial_timeline=True,
+                  apply_memory=False)
         return True
 
     @synchronous("_lock")

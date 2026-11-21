@@ -71,11 +71,12 @@ public static class CollectionBrowse
 
 	/// <summary>
 	/// What Play and Shuffle can start: a film, an episode, a show, a video; not a collection inside the collection, a folder or
-	/// a playlist (the player has nothing to queue for them: they open their own page instead).
+	/// a playlist (the player has nothing to queue for them: they open their own page instead). 1.5 (BH-140-m5): a home video
+	/// and a music video too (the player plays each alone, MpvQueue), so a playlist of them has Play and Shuffle.
 	/// </summary>
 	public static bool IsPlayable(BaseItemDto item) =>
 		item.Type is BaseItemDto_Type.Movie or BaseItemDto_Type.Episode or BaseItemDto_Type.Series or BaseItemDto_Type.Season
-			or BaseItemDto_Type.Trailer;
+			or BaseItemDto_Type.Trailer or BaseItemDto_Type.Video or BaseItemDto_Type.MusicVideo;
 
 	/// <summary>The display order an album keeps: its discs and tracks.</summary>
 	public const string TrackOrder = "IndexNumber";
@@ -98,6 +99,7 @@ public static class CollectionBrowse
 			BaseItemDto_Type.Series => ("show", "shows"),
 			BaseItemDto_Type.Episode => ("episode", "episodes"),
 			BaseItemDto_Type.MusicVideo => ("music video", "music videos"),
+			BaseItemDto_Type.Video => ("video", "videos"),
 			BaseItemDto_Type.Audio => ("song", "songs"),
 			_ => ("item", "items"),
 		};

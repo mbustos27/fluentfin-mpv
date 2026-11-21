@@ -50,6 +50,9 @@ public sealed partial class Showtime : UserControl
 
 	public BaseItemDto? Dto { get => GetValue(DtoProperty) as BaseItemDto; set => SetValue(DtoProperty, value); }
 
+	/// <summary>The still's decoded width (168 DIP at 200 %), which its picture is asked at (Nixie 1.5: StillsAhead too).</summary>
+	internal const int ThumbWidth = 336;
+
 	internal void Play()
 	{
 		if (Dto is { } dto)
@@ -83,7 +86,7 @@ public sealed partial class Showtime : UserControl
 		if (_thumbFor is { } dto && EpisodeThumbs.IsNear(_viewport, ActualHeight))
 		{
 			_thumbFor = null;
-			Thumb.Source = ItemArtworkConverters.Thumb(dto, 336);
+			Thumb.Source = ItemArtworkConverters.Thumb(dto, ThumbWidth);
 		}
 	}
 

@@ -40,6 +40,15 @@
                 VerticalAlignment="Center"
                 Orientation="Horizontal"
                 Spacing="10">
+                <!--  1.5 (the button review's S22): what Save did; Narrator says it as it changes  -->
+                <TextBlock
+                    x:Name="SaveStatusText"
+                    MaxWidth="360"
+                    VerticalAlignment="Center"
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{x:Bind SaveStatus, Mode=OneWay}"
+                    TextWrapping="WrapWholeWords" />
                 <Button
                     AutomationProperties.Name="Save"
                     Command="{x:Bind SaveCommand, Mode=OneWay}"

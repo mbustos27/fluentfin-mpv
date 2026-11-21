@@ -28,6 +28,7 @@ public sealed partial class TopTabStrip : UserControl
 		AutomationProperties.SetName(this, "Sections");
 		AutomationProperties.SetAutomationId(this, "TopTabs");
 		TabsPanel.GettingFocus += OnTabsGettingFocus;
+		TabsPanel.GotFocus += OnTabsGotFocus;
 		TabsPanel.KeyDown += OnTabsKeyDown;
 		Loaded += (_, _) => Attach(_navigation ?? App.GetService<TopNavigation>());
 		Unloaded += (_, _) => Detach();
@@ -203,7 +204,7 @@ public sealed partial class TopTabStrip : UserControl
 			return;
 		}
 
-		var hadFocus = _buttons.Any(b => b.FocusState != FocusState.Unfocused);
+		var hadFocus = _buttons.FirstOrDefault(b => b.FocusState != FocusState.Unfocused)?.FocusState;
 		TabsPanel.Children.Clear();
 		_buttons.Clear();
 		for (var i = 0; i < tabs.Count; i++)
@@ -217,12 +218,73 @@ public sealed partial class TopTabStrip : UserControl
 		}
 
 		Mark();
-		if (hadFocus)
+		if (hadFocus is { } state)
 		{
-			(Marked() ?? _buttons.FirstOrDefault())?.Focus(FocusState.Keyboard);
+			// 1.5 (T5): keyboard focus stays keyboard focus; any other comes back without the box (RefocusState). At launch the
+			// window's first focus is Home's tab, and the libraries arriving rebuild the tabs: given back as keyboard focus, Home
+			// wore the focus box over its lit underline though no key had been pressed.
+			(Marked() ?? _buttons.FirstOrDefault())?.Focus(RefocusState(state, Services.ArrivalFocus.UserActedAt));
 		}
 
 		TabsChanged?.Invoke(this, EventArgs.Empty);
+	}
+
+	/// <summary>
+	/// 1.5 (T5): the focus a rebuilt tab gets from the one it replaced: keyboard focus the user's keys made stays keyboard
+	/// focus (the box shows); anything else comes back as pointer focus (no box). Before the user's first key or click
+	/// (<paramref name="userActedAt"/> 0) even keyboard focus is the window's own (its first focus, at launch, is keyboard
+	/// focus), and programmatic focus is not enough: WinUI draws the box for both then (seen off-screen, then-t5-launch.ps1).
+	/// </summary>
+	public static FocusState RefocusState(FocusState had, long userActedAt) =>
+		had == FocusState.Keyboard && userActedAt != 0 ? FocusState.Keyboard : FocusState.Pointer;
+
+	/// <summary>How long after a page arrives a focus put on a tab is the page change's, not the user's (ms).</summary>
+	public const long PageChangeFocusMs = 1500;
+
+	/// <summary>
+	/// The review of 1.5 (m5): a key or click this soon before a page arrived is what changed the page (Backspace, Esc, Alt+Left,
+	/// Enter on a card): the focus that page change puts on a tab is the user's, and keeps its box (ms).
+	/// </summary>
+	public const long KeyCausedPageMs = 1500;
+
+	/// <summary>
+	/// 1.5 (T5): whether a tab that just got keyboard or programmatic focus should drop the box: the window gave it that
+	/// focus itself, with no key or click of the user's on the way:
+	/// <list type="bullet">
+	/// <item>at launch, before the user's first key or click (<paramref name="userActedAt"/> 0): the window's first focus;</item>
+	/// <item>just after a page change (<paramref name="arrivedAt"/>, <see cref="PageChangeFocusMs"/>) the user's keys or clicks
+	/// did not make: none since it, and none in the <see cref="KeyCausedPageMs"/> before it (the coordinator, from the updater
+	/// stream's runs: Home kept its box after a page change): the focus falling back to a tab when the page it was in went
+	/// away.</item>
+	/// </list>
+	/// A key or click that changed the page (Backspace, Esc, Alt+Left) or came after it makes the focus the user's: the box
+	/// shows as WinUI decides, so a keyboard Back that lands on a tab shows where the keyboard is.
+	/// </summary>
+	public static bool DropsLaunchBox(FocusState state, long userActedAt, long arrivedAt = 0, long now = 0) =>
+		state is FocusState.Programmatic or FocusState.Keyboard
+		&& (userActedAt == 0
+			|| (arrivedAt != 0 && now - arrivedAt <= PageChangeFocusMs && arrivedAt - userActedAt > KeyCausedPageMs));
+
+	/// <summary>
+	/// 1.5 (T5): at launch, and when a page change leaves the focus on a tab, the window puts it there itself, and
+	/// WinUI draws the focus box (over Home's lit underline at launch) though nothing was pressed: the tab keeps the focus
+	/// (Tab and the arrows go on from it), without the box.
+	/// </summary>
+	private void OnTabsGotFocus(object sender, RoutedEventArgs e)
+	{
+		if (e.OriginalSource is TopTabButton tab && DropsBoxNow(tab))
+		{
+			DispatcherQueue.TryEnqueue(() =>
+			{
+				if (DropsBoxNow(tab))
+				{
+					tab.Focus(FocusState.Pointer);
+				}
+			});
+		}
+
+		static bool DropsBoxNow(TopTabButton tab) =>
+			DropsLaunchBox(tab.FocusState, Services.ArrivalFocus.UserActedAt, Services.ArrivalFocus.ArrivedAt, Environment.TickCount64);
 	}
 
 	/// <summary>A tab's button shows <paramref name="tab"/>: its label, the chevron of the folded tab, Narrator's name and "n of m".</summary>

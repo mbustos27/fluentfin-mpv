@@ -135,34 +135,7 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		]
 		: [GeneralCommandType.DisplayMessage];
 
-	/// <summary>
-	/// Seaglass 1.1.4: what the title bar's box suggests: movies and shows (people have no page in Seaglass, so a person's row
-	/// opened nothing; episodes, which would crowd them out, are on the results page).
-	/// </summary>
-	public static BaseItemKind[] SuggestionKinds { get; } = [BaseItemKind.Movie, BaseItemKind.Series];
-
-	public Task<BaseItemDtoQueryResult?> Search(string searchTerm) => Search(searchTerm, SuggestionKinds);
-
-	/// <summary>Seaglass 1.1.4: the matches of these types only (the results page asks for each type on its own).</summary>
-	public async Task<BaseItemDtoQueryResult?> Search(string searchTerm, IReadOnlyList<BaseItemKind> kinds, int limit = 100)
-	{
-		try
-		{
-			return await _jellyfinApiClient.Items.GetAsync(x =>
-			{
-				var query = x.QueryParameters;
-				query.SearchTerm = searchTerm;
-				query.Recursive = true;
-				query.Limit = limit;
-				query.IncludeItemTypes = [.. kinds];
-			});
-		}
-		catch (Exception ex)
-		{
-			logger.LogError(ex, @"Unhandled exception");
-			return null;
-		}
-	}
+	// Nixie 1.5 (search): SuggestionKinds and Search moved to JellyfinClient_Search.cs
 
 	public async Task Logout()
 	{
@@ -376,18 +349,23 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		}
 	}
 
-	public async Task SaveConfiguration(ServerConfiguration configuration)
+	public async Task SaveConfiguration(ServerConfiguration configuration) => await TrySaveConfiguration(configuration);
+
+	// 1.5 fixes
+	public async Task<bool> TrySaveConfiguration(ServerConfiguration configuration)
 	{
 		try
 		{
 			await _jellyfinApiClient.System.Configuration.PostAsync(configuration);
+			return true;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
-			return;
+			return false;
 		}
 	}
+	// END 1.5 fixes
 
 	public async Task<EndPointInfo?> EndpointInfo()
 	{

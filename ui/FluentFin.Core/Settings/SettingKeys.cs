@@ -50,6 +50,14 @@ public static class SettingKeys
 	/// <summary>Seaglass: what the update check remembers (when it last asked, the release it found, the one dismissed), as JSON: <see cref="Updates.UpdateState"/>.</summary>
 	public static Key<string> UpdateState { get; } = new Key<string>("UpdateState", "");
 
+	// 1.5 updater
+	/// <summary>
+	/// Nixie 1.5: Settings > Install when I close Nixie. Off by default (the owner's 1.5 choice): an update that is downloaded and
+	/// checked installs only on "Restart to update"; with this on, also quietly as Nixie closes. Kept on this PC.
+	/// </summary>
+	public static Key<bool> InstallUpdatesOnClose { get; } = new Key<bool>("InstallUpdatesOnClose", false);
+	// end 1.5 updater
+
 	/// <summary>Seaglass: how much glass the app shows (Settings > Appearance), kept on this PC. Automatic by default.</summary>
 	public static Key<GlassChoice> Glass { get; } = new Key<GlassChoice>("Glass", GlassChoice.Automatic);
 
@@ -59,6 +67,23 @@ public static class SettingKeys
 	/// player falls back to mpv's controls and says so (MpvVideoSurfaceChoice).
 	/// </summary>
 	public static Key<MpvPlayerControls> MpvPlayerControls { get; } = new Key<MpvPlayerControls>("MpvPlayerControls", global::FluentFin.Core.Settings.MpvPlayerControls.FluentFin);
+
+	// 1.5 fixes
+	/// <summary>
+	/// 1.5 (the owner's choice): Settings' "Include shows I'm rewatching" turned off. Up next and Continue Watching include
+	/// shows being watched again (on since 1.4.1, sg-cw) unless this is true: then Next Up is asked without rewatching, and
+	/// Continue Watching leaves out an episode that is watched and being watched again (Jellyfin 12 keeps it marked watched
+	/// meanwhile). Kept on this PC: Jellyfin web keeps its own in the browser. Stored the other way round from the switch, so
+	/// that a settings store that says nothing (a new install, a test's) keeps rewatching in.
+	/// </summary>
+	public static Key<bool> LeaveOutRewatching { get; } = new Key<bool>("UpNextLeaveOutRewatching", false);
+
+	/// <summary>
+	/// 1.5 (the button review's L1, L2; WCAG 2.1.4): Settings' "Letter keys on Home" turned off: N and C no longer take the
+	/// keyboard to Up next and Continue watching. Stored the other way round from the switch (on by default).
+	/// </summary>
+	public static Key<bool> HomeLetterKeysOff { get; } = new Key<bool>("HomeLetterKeysOff", false);
+	// END 1.5 fixes
 }
 
 /// <summary>fluentfin-mpv: who draws the controls over the mpv player's video.</summary>

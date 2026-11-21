@@ -1255,6 +1255,12 @@ public sealed partial class MpvPlayerControls : UserControl
 			return;
 		}
 
+		if (item is null)
+		{
+			// 1.5 (BH-140-m7): the request failed: asked again when the controls next show (PlayingItem waits ItemOnce.RetryAfter)
+			_chaptersFor = null;
+		}
+
 		_chapters = item?.Chapters?.Where(c => c.StartPositionTicks is >= 0).ToList() ?? [];
 		ChaptersButton.IsEnabled = _chapters.Count > 0;
 		Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(ChaptersButton, PlayerChapters.ButtonName(_chapters.Count));

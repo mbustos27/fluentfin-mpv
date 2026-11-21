@@ -79,7 +79,7 @@ public sealed partial class ItemBoard : UserControl
 		KickerText.Text = DriveInItems.Kicker(dto);
 		var title = ItemMeta.HeroTitle(dto);
 		var logo = dto?.Type == BaseItemDto_Type.Episode ? null : ItemArtworkConverters.Logo(dto, 520);
-		LogoImage.Source = logo;
+		LogoImage.Source = ItemArtworkConverters.Keep(LogoImage.Source, logo);
 		LogoImage.Visibility = ItemHero.HeadingVisibility(hasLogo: logo is not null, title, forLogo: true);
 		AutomationProperties.SetName(LogoImage, title);
 		TitleText.Text = MarqueeSign.Upper(title);

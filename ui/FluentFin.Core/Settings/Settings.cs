@@ -42,6 +42,14 @@ public interface ISettings
 	/// <summary>Seaglass: see <see cref="SettingKeys.UpdateState"/>.</summary>
 	string UpdateState { get; set; }
 
+	// 1.5 fixes
+	/// <summary>1.5: see <see cref="SettingKeys.LeaveOutRewatching"/>.</summary>
+	bool LeaveOutRewatching { get; set; }
+
+	/// <summary>1.5: see <see cref="SettingKeys.HomeLetterKeysOff"/>.</summary>
+	bool HomeLetterKeysOff { get; set; }
+	// END 1.5 fixes
+
 	void ListenToChanges();
 
 	void SaveServerDetails();
@@ -95,6 +103,20 @@ public partial class Settings(ILocalSettingsService localSettingsService, MediaP
 		get => localSettingsService.ReadSetting(SettingKeys.UpdateState) ?? "";
 		set => localSettingsService.SaveSetting(SettingKeys.UpdateState, value ?? "");
 	}
+
+	// 1.5 fixes
+	public bool LeaveOutRewatching
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.LeaveOutRewatching);
+		set => localSettingsService.SaveSetting(SettingKeys.LeaveOutRewatching, value);
+	}
+
+	public bool HomeLetterKeysOff
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.HomeLetterKeysOff);
+		set => localSettingsService.SaveSetting(SettingKeys.HomeLetterKeysOff, value);
+	}
+	// END 1.5 fixes
 
 	public bool ShowSkipPrompt
 	{

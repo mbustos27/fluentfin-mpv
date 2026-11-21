@@ -1,6 +1,7 @@
 using FluentFin.Core;
 using Jellyfin.Sdk.Generated.Models;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace FluentFin.Converters;
@@ -11,11 +12,21 @@ namespace FluentFin.Converters;
 /// </summary>
 public static class ItemArtworkConverters
 {
-	private static Uri? ToUri(string? path) =>
-		path is null || string.IsNullOrEmpty(SessionInfo.BaseUrl) ? null : new Uri(SessionInfo.BaseUrl.TrimEnd('/') + path);
+	// 1.5 qacheck: one join for every address (a sub-path, a "/" at its end)
+	private static Uri? ToUri(string? path) => ServerAddress.Join(SessionInfo.BaseUrl, path);
 
 	private static BitmapImage? Load(string? path, int decodeWidth) =>
 		ToUri(path) is { } uri ? new BitmapImage { DecodePixelWidth = decodeWidth, UriSource = uri } : null;
+
+	/// <summary>
+	/// Nixie 1.5 (season stream, review M1): <paramref name="next"/>, unless <paramref name="shown"/> is already that picture
+	/// (the same address, decoded at the same width): a page that shows an item, then the server's copy of it (a season page
+	/// opened from a pill), or the item again after a toggle, keeps its pictures instead of loading them again.
+	/// </summary>
+	public static ImageSource? Keep(ImageSource? shown, BitmapImage? next) =>
+		shown is BitmapImage current && next is not null && current.UriSource == next.UriSource && current.DecodePixelWidth == next.DecodePixelWidth
+			? current
+			: next;
 
 	public static BitmapImage? Backdrop(BaseItemDto? dto, int width) => Load(ItemArtwork.BackdropPath(dto, width), width);
 

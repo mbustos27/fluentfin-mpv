@@ -594,6 +594,18 @@ if ($script:page -ne 'player') {
             Start-Sleep -Seconds 2
             $kbCard = KB-FirstCard
             KM-Row 'browsing' 'Search results' 'Enter (the results page)' ([bool]$kbCard) "$(KB-Desc (KB-Focus))"
+            # 1.5 search: the top result is a row of one card (Right has nothing to go to, as at any row's end): Down goes on
+            # into the groups; the arrows along a row are checked on the first group's cards
+            $kmTopRow = Find-Ui -Name 'Top result' -Type 'List'
+            if ($kbCard -and $kmTopRow) {
+                $kbS = KB-Start 'Search results' $kbCard
+                if ($kbS) { [void](KB-Moves 'Search results' 'Down' $null) }
+                $kmGroupCard = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::List))) |
+                    Where-Object { $_.Current.Name -ne 'Top result' -and -not $_.Current.IsOffscreen } | ForEach-Object {
+                        @([OffscreenUi]::Under($_, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))))
+                    } | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.IsKeyboardFocusable }) | Select-Object -First 1
+                if ($kmGroupCard) { $kbCard = $kmGroupCard }
+            }
             if ($kbCard) {
                 $kbS = KB-Start 'Search results' $kbCard
                 if ($kbS) { KB-ArrowsAndEnds 'Search results' $kbS @('Right/Left') }
