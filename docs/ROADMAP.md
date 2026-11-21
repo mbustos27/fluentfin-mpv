@@ -18,7 +18,7 @@ and the owner's own steps are the real limits.
 | 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
-| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Phases 0 to 2 **done 2026-11-21** (every screen in all three themes, the theme picker, trailers, the play features); hardening and the home features running; 1.0 in **1 to 3 days**, plus the owner's 20-minute TV check and 10-minute key at the end |
+| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Phases 0 to 2 and the hardening **done 2026-11-21**; review fixes and a bug hunt running; then the owner's 20-minute TV session and 10-minute key. 1.0 in **1 to 2 days** |
 
 **Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
 
@@ -555,9 +555,18 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
     switches themes live and keeps focus; **trailers play through Nixie's own origin**
     (`https://io.github.mbustos27.nixie.tv/trailer`, as on the desktop) with no Error 153 on the emulator; the play
     features merged (skips from four sources, credits as watched, the server's autoplay, Play labels, search ranking).
-  - **Next:** the home features after their review fixes, a search fix for the test server, then hardening (a second
-    font scale, glass tiers and a 2 GB low-memory check, a baseline profile, the updater's asset names), a review and
-    a bug hunt of the whole app, and **the owner's 20-minute TV session**.
+  - **Hardening done the same day** (main green, 714 unit tests): the home features and the search fix merged; text up
+    to 1.3x in every theme; glass tiers (boxes of 2 GB or less, like the owner's onn, get pre-blurred images and no soft
+    shadows); a 2 GB emulator held Home, a library, a movie and a series at about 185 MB; a start-up profile ships in
+    the release build; the updater's files are `Nixie-TV-<version>.apk` with no check at start. No sign-in shortcut in
+    the app: a test script signs in to the test server by Quick Connect instead.
+  - **A review of the whole app** found the network side clean (no telemetry, tokens only in headers, lookups off by
+    default, trailers on Nixie's origin), and two Blockers about Glacier's name and credit, being fixed: the share-log
+    screen pointed at Glacier's issue tracker, and the licence file dropped Glacier's copyright from files taken from
+    it. Also two Majors in the home code (holding OK on a card removed it; focus jumped when a row changed).
+  - **Next:** those fixes, a bug hunt on the emulator, then **the owner's 20-minute TV session** (frame timing and the
+    player on the real box, the three themes, a trailer, one sign-in to their own server by Quick Connect, done by the
+    owner), then the release key and where TV releases live (a GitHub repo of the owner's choosing).
   - **Running (2026-11-21):** phase 1 (Drive-in, screenshot tests, the exit check), Cinematic, Editorial, and two
     feature streams: **home** (a device id per Quick Connect attempt, Continue Watching with Undo, two rows, the hero
     rule, live rows from the server's websocket, Undo after marking watched) and **play** (skips from four sources,
