@@ -447,6 +447,10 @@ its test fake, and Nixie's own message when it refuses.
 
 ## Nixie for Google TV (a separate app: phase 0 alongside 1.6, started 2026-11-21)
 Phase 0 needs about 30 minutes of the owner's time (the release key, a test on their TV); the stream asks before then.
+**Downloads approved** (the owner, 2026-11-21: "it can download whatever is needed"): Android SDK components, system
+images, the NDK if needed, and Gradle/Maven dependencies, from official sources only (sdkmanager, Google's Maven, Maven
+Central, the Gradle plugin portal, the projects' own GitHub releases), each one logged with its size. Not covered: the
+release key (the owner makes it), anything on the owner's TV, and any account sign-in.
 Plan: `docs\reports\Nixie Google TV architecture.md`, which replaces the earlier draft (`Nixie Google TV plan.md`).
 All three themes are in 1.0, because adding layouts to finished screens is the main risk. It builds from 1.4.0's
 behaviour.
