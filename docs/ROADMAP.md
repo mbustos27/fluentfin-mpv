@@ -10,7 +10,7 @@ are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL month
 | 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
 | 1.5.0 | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Released** 2026-11-21 |
 | 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Now**, alongside 1.6 (one stream) |
-| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), and skipping repeated extras (its own stream) | **Now** (L, started 2026-11-21) |
+| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Now** (L, started 2026-11-21) |
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | After 1.6 |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | Planned (M–L) |
 | 1.8 | Player | Pop-out player, chapter extras | From the backburner (M–L) |
@@ -299,7 +299,31 @@ check of the "Updated" notice.
 - **theme polish goes to colpage,** which already owns the Collection page, the library pages and their headers;
 - the skip stream: step 0 and the skip rules first. Until the owner answers its open questions (below), it builds the
   plan's defaults: a Skip button, not skipping by itself, and rules per show;
-- Google TV phase 0 beside them (below).
+- Google TV phase 0 beside them (below);
+- **the player stream** (added the same day; below).
+
+**Player: quality and playback stats (added 2026-11-21, about M, a stream of its own).** The owner: "we need to be able
+to adjust the quality of the stream adjust bitrate that kind of things and also have a little activatable for nerds
+window like in youtube that is toggleable in the settings it will be a button thats toggleable".
+- **Quality, in every theme's player:** Auto (today's behaviour and the default), Original (direct play, no transcode),
+  and caps like Jellyfin's own list (about 120, 80 and 60 Mbps for 4K; 40, 20, 10 and 8 for 1080p; 6 and 4 for 720p;
+  3 and 1.5 for 480p). The menu says what's playing now ("Direct play · 1080p · 12 Mbps", "Transcoding · 8 Mbps") with
+  the server's reason. A change picks up at the same position as the same viewing, through a new `set_quality` bridge
+  command (the backend can already renegotiate: the shim's `trs_ovr`). Settings: a default for home and one for away,
+  using 1.5's local or remote rule.
+- **The owner's server isn't theirs:** a lower quality makes it transcode, and their account may not be allowed to. A
+  refusal is said in plain words and playback goes on. Nixie never moves the default away from Auto by itself.
+- **Playback stats** (Nixie's own name, not YouTube's): a Settings switch, off by default, puts a button in the player
+  that opens and closes a small glass panel over the video, in each theme's style. It shows the play method and the
+  server's transcode reasons; the container; video codec and profile, resolution (source to output), frame rate, HDR
+  and hardware decoding; dropped and delayed frames; audio codec, channels, sample rate and track; the subtitle
+  format; the server's and the measured bitrate; buffer ahead (seconds and MB) and network speed; local or remote and
+  the mpv version. It updates about once a second while open and reads nothing while closed. A Copy button for bug
+  reports never includes the token. A toggle key that clashes with no other.
+- **Gates:** the keyboard matrix in four themes, contrast, shots, the QA servers (one transcode, one direct play), and a
+  review (the bridge and player files are sensitive).
+- **Shares the player controls, Settings and the bridge with the skip stream:** each keeps its own marked blocks, and
+  the integrator merges them one after the other.
 
 The top bar, tidy names, collections and the Collection page touch the same pages (the Collection page, its cards and
 chips, the top bar's Collections destination, the fake server), so they're built together. Theme polish joins them
