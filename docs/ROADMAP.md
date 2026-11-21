@@ -1,6 +1,6 @@
 # Nixie roadmap
 
-Updated 2026-11-21 (1.5.0 released; the 1.6 streams start from it). These are the planned releases in order, with
+Updated 2026-11-21 (1.5.0 released; 1.6 and the 1.5.1 fix release under way). These are the planned releases in order, with
 the backburner ideas placed where they fit. Nothing past 1.4.1 has a date. Version numbers past 1.6 are a guide. Sizes
 are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL months.
 
@@ -9,8 +9,9 @@ are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL month
 | 1.4.0 | Consistency | The library layer for all four themes, plus the contrast floor and big libraries | **Released** 2026-11-20 |
 | 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
 | 1.5.0 | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Released** 2026-11-21 |
-| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), and skipping repeated extras (its own stream) | Next (L) |
-| 1.6.1 | Fixes | The first fix release: clears the fix queue in KNOWN-ISSUES | After 1.6 |
+| 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Now**, alongside 1.6 (one stream) |
+| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), and skipping repeated extras (its own stream) | **Now** (L, started 2026-11-21) |
+| 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | After 1.6 |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | Planned (M–L) |
 | 1.8 | Player | Pop-out player, chapter extras | From the backburner (M–L) |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research first (L) |
@@ -28,7 +29,10 @@ The owner noticed that fixes kept pushing features down the road, and that relea
 fix streams finish as planned. From 1.6:
 1. **Two kinds of release:**
    - **feature releases** (1.6, 1.7, …) carry their planned features only;
-   - **fix releases** (1.6.1, 1.6.2, …) clear the fix queue between feature releases.
+   - **fix releases** follow each feature release and clear its fix queue: 1.5.1, then 1.6.1, 1.7.1, and so on (the
+     owner, 2026-11-21: "shouldnt there 1.5.x fix builds?"). A fix release runs as one stream beside the next feature
+     release's streams; when usage is short the feature gets it first, and what a fix release doesn't finish moves to
+     the next one.
 2. **Every finding is triaged** (reviews, bug hunts, the owner's reports):
    - a **Blocker** ships right away as a hotfix;
    - a **Major in the feature's own new code** is fixed before that feature merges;
@@ -275,7 +279,28 @@ The plan:
 - accessibility by hand;
 - the performance baseline.
 
-## 1.6: Collections
+## 1.5.1: Fixes (now, alongside 1.6)
+The first fix release (the owner, 2026-11-21). One stream from v1.5.0 (`wip/151-fixes`), with 1.5.0's gates: the full
+suites, a review, the bug hunt, the release build, and the Sandbox upgrade test from 1.5.0 to 1.5.1, the first real
+check of the "Updated" notice.
+- **The bug hunt's fixes already written** on `wip/150-huntfix` (M1, M3, m1 to m6, m8): finish their full suites and
+  harness runs, review them, one revert check per fix.
+- **The two the fix round didn't reach:**
+  - M2: a refused sign-in reads as a dead server (and the per-PC device id behind it);
+  - m7: search doesn't find home videos, music videos or audio.
+- **Sunny's learned "Skip intro" at 0:00:** skips 10 s or more apart mark the show as "moves", and its fixed spot is no
+  longer offered.
+- **If small:** Display's date-added choice, show-level anime ids for seasons 2 and on, sentence case for row names.
+- **Usage:** 1.6 gets it first. Anything not ready by 1.5.1's build waits for 1.6.1.
+
+## 1.6: Collections (now)
+**Started 2026-11-21** (the owner: "Start 1.6"), every branch from v1.5.0:
+- the top bar, collections and colpage streams;
+- **theme polish goes to colpage,** which already owns the Collection page, the library pages and their headers;
+- the skip stream: step 0 and the skip rules first. Until the owner answers its open questions (below), it builds the
+  plan's defaults: a Skip button, not skipping by itself, and rules per show;
+- Google TV phase 0 beside them (below).
+
 The top bar, tidy names, collections and the Collection page touch the same pages (the Collection page, its cards and
 chips, the top bar's Collections destination, the fake server), so they're built together. Theme polish joins them
 (release rules, 2026-11-20), since it's on the same pages.
@@ -340,14 +365,14 @@ chips, the top bar's Collections destination, the fake server), so they're built
 - **Intros that move (the owner, 2026-11-20):** "certain shows such as its always sunny in philadelphia has the title
   theme at random points in the first 6-7 minutes". The intro follows a cold open whose length changes every episode.
   - **Position rules can't catch it,** and today's learned skip misleads: it offers the last episode's spot during the
-    cold open, and a skip elsewhere never corrects it that season. The fix (S; the 1.6.1 fix queue, or closed by the
+    cold open, and a skip elsewhere never corrects it that season. The fix (S; in 1.5.1 since 2026-11-21, and kept by the
     skip stream's rewrite): skips 10 s or more apart mark the show "moves", and its fixed spot is no longer offered.
   - **Evidence (the owner, 2026-11-20):** "Skip intro" shows on Sunny today, "but its sometimes right at the
     beginning", where pressing it skips the cold open. Most likely the learned skip (a forward jump near 0:00 in an
     earlier episode of that season); chapters, TheIntroDB or the server can also put an intro at 0:00. The pill's
     tooltip tells them apart, as does whether it shows before any skip in a season, and Settings > "Forget learned
-    intros" removes a learned one. Workaround until 1.6.1: forget learned intros, and turn learning off. It heads the
-    1.6.1 queue, not a hotfix: it's a button that never skips by itself, and seeking back undoes it.
+    intros" removes a learned one. Workaround until 1.5.1: forget learned intros, and turn learning off. It's in
+    1.5.1, not a hotfix: it's a button that never skips by itself, and seeking back undoes it.
   - **Try first, no build:** turn on "Look up intros online". TheIntroDB has Sunny with a time per episode (checked:
     S1E1 1:44–2:12, S5E3 1:37–2:08, S12E1 2:07–2:31), but its times are for its own copy, so a bumper before the
     episode in the owner's files would make them early. A constant shift can be taught by one correction (S).
@@ -380,15 +405,10 @@ chips, the top bar's Collections destination, the fake server), so they're built
   - with "Look up intros online" on, whether it lands on Sunny's title card;
   - a fingerprint tool in the installer, and temporary files while watching: OK?
 
-## 1.6.1: Fixes (the first fix release)
+## 1.6.1: Fixes
 - Clears the fix queue in KNOWN-ISSUES: the Minors and old bugs that 1.6's reviews and hunt put there, and the owner's
   reports. No features.
-- **Already queued from 1.5.0:**
-  - the 1.5 bug hunt's 11 findings. Fixes for 8 of them wait, untested, on `wip/150-huntfix`: finish their tests and
-    merge;
-  - the reviews' leftovers (Display's date-added choice, show-level anime ids for later seasons, sentence case for row
-    names);
-  - Sunny's "Skip intro" at 0:00.
+- Also anything 1.5.1 didn't finish. (1.5.0's own queue moved to 1.5.1 on 2026-11-21.)
 
 ## 1.7: Discover
 Plan phases 2 and 3. Each source is off until the user turns it on. Nixie fetches public lists and matches them on the
@@ -425,7 +445,8 @@ its test fake, and Nixie's own message when it refuses.
   - start-up time and memory are no worse than today.
 - **Otherwise no rewrite.**
 
-## Nixie for Google TV (a separate app: phase 0 alongside 1.5, the rest alongside 1.6)
+## Nixie for Google TV (a separate app: phase 0 alongside 1.6, started 2026-11-21)
+Phase 0 needs about 30 minutes of the owner's time (the release key, a test on their TV); the stream asks before then.
 Plan: `docs\reports\Nixie Google TV architecture.md`, which replaces the earlier draft (`Nixie Google TV plan.md`).
 All three themes are in 1.0, because adding layouts to finished screens is the main risk. It builds from 1.4.0's
 behaviour.
