@@ -9,7 +9,7 @@ are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL month
 | 1.4.0 | Consistency | The library layer for all four themes, plus the contrast floor and big libraries | **Released** 2026-11-20 |
 | 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
 | **1.5** | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Now** (M–L, in progress) |
-| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view) | Next (L) |
+| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), and skipping repeated extras (its own stream) | Next (L) |
 | 1.6.1 | Fixes | The first fix release: clears the fix queue in KNOWN-ISSUES | After 1.6 |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | Planned (M–L) |
 | 1.8 | Player | Pop-out player, chapter extras | From the backburner (M–L) |
@@ -285,14 +285,29 @@ chips, the top bar's Collections destination, the fake server), so they're built
     - Settings' "Learn intros from my skips" becomes "Learn skips from my seeks", with a list of rules to forget.
   - **The bridge** (`docs\BRIDGE.md`): commands to list, add and forget rules, a `skip_suggestion` event, and a
     `"rule"` segment source.
-- **Release fit:** step 0 in 1.6; skip rules beside 1.6 as their own stream, or in 1.8 Player if 1.6 is full.
-- **Matching by audio (1.8, only if needed):** for extras at a different time in each episode. Scanning whole episodes
-  would download gigabytes from a server that isn't the owner's, so it's out. Learning while watching, from what mpv
-  has already downloaded, is a two-day spike first (S), then L.
+- **Release fit (release rules: a planned feature, so a feature release):** all of it is 1.6's skip stream, a stream of
+  its own (about L): step 0 (S), the skip rules (M) with their margin (S), then audio-matched intros (M). What doesn't
+  fit becomes the first item of 1.7, not a 1.6.x.
+- **Intros that move (the owner, 2026-11-20):** "certain shows such as its always sunny in philadelphia has the title
+  theme at random points in the first 6-7 minutes". The intro follows a cold open whose length changes every episode.
+  - **Position rules can't catch it,** and today's learned skip misleads: it offers the last episode's spot during the
+    cold open, and a skip elsewhere never corrects it that season. The fix (S; the 1.6.1 fix queue, or closed by the
+    skip stream's rewrite): skips 10 s or more apart mark the show "moves", and its fixed spot is no longer offered.
+  - **Try first, no build:** turn on "Look up intros online". TheIntroDB has Sunny with a time per episode (checked:
+    S1E1 1:44–2:12, S5E3 1:37–2:08, S12E1 2:07–2:31), but its times are for its own copy, so a bumper before the
+    episode in the owner's files would make them early. A constant shift can be taught by one correction (S).
+  - **Audio matching becomes a real need** (M, 1.6's skip stream, after the rules): learn the theme's sound once, from
+    a skip or a mark, out of what mpv has already read ahead; recognise it in later episodes in the first 10 minutes,
+    so the Skip pill shows at the title card. No extra download beyond normal playback. Costs a fingerprint tool
+    (`fpcalc`, a few MB) in the installer and temporary files during those 10 minutes.
+  - **The two-day spike moves ahead** (S): a test tool and generated media on the local test servers, no shipped
+    files. It checks whether mpv can save the read-ahead audio only, how far ahead it reaches, the tool's speed and
+    licence, and hits and false hits. It runs once usage allows (1.5 has the usage until it ships).
+  - Scanning whole episodes stays out: gigabytes from a server that isn't the owner's.
 - **Plan:** `docs\reports\Nixie repeated extras skip plan.md`.
 - **The owner answered (2026-11-20): the extras sit before and after the episode**, not mid-episode.
   - So the skip rules cover them: two rules per show, one measured from the start and one from before the end.
-  - The audio-matching spike isn't needed for this case.
+  - The audio-matching spike isn't needed for this case (Sunny's moving intro needs it; above).
   - Today's learned skip can't catch either part: it only looks in the first 10 minutes, for jumps of 30 to 150 s, and
     stops once an intro is known.
 - **The owner's second answer (2026-11-20):** the extras' length **varies a bit** from episode to episode. A rule with a
@@ -303,10 +318,12 @@ chips, the top bar's Collections destination, the fake server), so they're built
     stretch of the file (a few MB), never the whole episode;
   - **each correction teaches the rule:** a seek back or forward right after a skip moves the rule's end.
 - **Still to ask the owner:**
-  - whether the player's Chapters list shows a chapter at each break;
+  - whether the player's Chapters list shows a chapter at the extras or at Sunny's theme;
   - a Skip button, or skip by itself;
   - one rule for the whole show, or per season;
-  - 1.6 or 1.8.
+  - whether "Skip intro" shows on Sunny today, and what its tooltip says;
+  - with "Look up intros online" on, whether it lands on Sunny's title card;
+  - a fingerprint tool in the installer, and temporary files while watching: OK?
 
 ## 1.6.1: Fixes (the first fix release)
 - Clears the fix queue in KNOWN-ISSUES: the Minors and old bugs that 1.6's reviews and hunt put there, and the owner's
@@ -398,10 +415,9 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   playlist (an ordinary user can). Nothing is written to the server otherwise.
 
 ## Still open (later releases)
-- Skip repeated extras: skip rules beside 1.6 or in 1.8. The extras sit before and after the episode (the owner,
-  2026-11-20), so no audio spike is needed. Their length varies a bit, so the rules get a margin: a Skip button, an end
-  that snaps to a black frame or silence, and corrections that teach the rule. Still to ask: whether Chapters shows
-  them, a button or skip by itself, one rule per show or per season.
+- Skip repeated extras: one skip stream in 1.6 (the rules with their margin, then audio-matched intros once the spike
+  passes); audio intros become 1.7's first item if 1.6 is full. Waits on the owner: chapters, a button or skip by
+  itself, per show or per season, how Sunny behaves today and with online lookup on, and the fingerprint tool.
 - The pop-out player's meaning (1.8).
 - Friends through the server only, or a Trakt exception (1.9).
 - Rust: go or no-go after the spike (2.0).
