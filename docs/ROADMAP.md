@@ -293,6 +293,17 @@ check of the "Updated" notice.
 - **If small:** Display's date-added choice, show-level anime ids for seasons 2 and on, sentence case for row names.
 - **Usage:** 1.6 gets it first. Anything not ready by 1.5.1's build waits for 1.6.1.
 
+**Progress (2026-11-21):**
+- **The fixes are in** (09:15, 14 commits): the hunt's fixes, M2 (sign in again; a device id per copy, and a 1.5.0
+  sign-in still works), m7 (search finds home videos, music videos, albums and songs), Sunny's "moves", Display's
+  date-added choice and show-level anime ids. Version 1.5.1 is set. The suites pass, and the sign-in check passes in
+  all four themes on both test servers.
+- **The Sandbox test gains a leg** where 1.5.0's own Restart to update installs the real 1.5.1 and must report
+  "Updated".
+- **Left for 1.6.1:** sentence case for row names (61 names across 16 test scripts, over the hour's limit) and the
+  episode search for "With <name>".
+- **Next:** a review and the bug hunt (running), then the final pass, the build, the Sandbox test and publish.
+
 ## 1.6: Collections (now)
 **Started 2026-11-21** (the owner: "Start 1.6"), every branch from v1.5.0:
 - the top bar, collections and colpage streams;
