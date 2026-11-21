@@ -536,6 +536,18 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
 - **Re-estimate (provisional, until GLACIER-BASE.md):** most of the playback and browse work is done, so TV 1.0 is
   mostly Nixie's three themes and Nixie's own features: roughly phase 1 about 2–3 agent-days, the three themes across
   the rest about 5–8, hardening and release about 2–3, so about 9–14 agent-days instead of 19–25.
+- **The fork's survey** (`Dev\nixie-tv\docs\GLACIER-BASE.md`, 2026-11-21): Glacier covers most of the plan's phases 1,
+  2 and 4; in the plan's agent-days, 19–25 becomes 14–21 (phase 1 2–3, phase 2 4–6, the themes 3–5, hardening 2–3,
+  Nixie's own features 3–4). At the measured pace with parallel streams that's the **2 to 4 days** below.
+  - **Jellyfin 12.0 or newer for TV 1.0:** Glacier's SDK (1.9.4) needs it. The owner's server is 12.4.0; the 10.11
+    test server becomes a "too old" check. The desktop app keeps supporting 10.11.
+  - **The FFmpeg decoder's native part** (DTS and TrueHD on the onn box) needs Glacier's 18 MB CI build plus the NDK and
+    CMake (about 2 GB); it's built in phase 2, and the release checker refuses a release without it.
+  - **Running (2026-11-21):** phase 1 (Drive-in, screenshot tests, the exit check), Cinematic, Editorial, and two
+    feature streams: **home** (a device id per Quick Connect attempt, Continue Watching with Undo, two rows, the hero
+    rule, live rows from the server's websocket, Undo after marking watched) and **play** (skips from four sources,
+    credits count as watched, the server's autoplay, Play labels, search ranking). After 1.0: Made by Nixie rows, the
+    quality choice and stats, skip rules for extras.
 - **Sped up (the owner, 2026-11-21: "Yes, speed it up"):** in calendar time at the measured pace, phase 1 lands today
   and **TV 1.0 in about 2 to 4 days**. As soon as phase 1 commits Drive-in's theme contract, **Cinematic, Editorial and
   "Nixie features on TV"** (what GLACIER-BASE.md shows Glacier lacking against desktop Nixie, split further if long)
