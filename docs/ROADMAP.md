@@ -18,7 +18,7 @@ and the owner's own steps are the real limits.
 | 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
-| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Phase 0 done; **phase 1 started 2026-11-21** (Nixie on Glacier); 1.0 in **2 to 4 days** with the themes and Nixie's features in parallel, plus the owner's 20-minute TV check and 10-minute key at the end |
+| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Phases 0 and 1 **done 2026-11-21** (sign-in, top bar and Home in all three themes); Nixie's features running; 1.0 in **2 to 4 days**, plus the owner's 20-minute TV check and 10-minute key at the end |
 
 **Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
 
@@ -543,6 +543,11 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
     test server becomes a "too old" check. The desktop app keeps supporting 10.11.
   - **The FFmpeg decoder's native part** (DTS and TrueHD on the onn box) needs Glacier's 18 MB CI build plus the NDK and
     CMake (about 2 GB); it's built in phase 2, and the release checker refuses a release without it.
+  - **Phase 1's exit check passed** (2026-11-21, 11:59, on the emulator): Quick Connect first, its code on nixie tubes,
+    signed in by D-pad only, Home in Drive-in with Resume focused, Back from a row returns to the top and the bar, and
+    Back on the bar asks "Quit Nixie?". On the same day: the rebrand, the theme contract, Drive-in's sign-in, top bar
+    and Home, Cinematic and Editorial built in parallel and merged, screenshot tests that need no emulator, and a
+    contrast test every theme must pass (it caught Drive-in's buttons at 3.0:1; now 5.1:1). 521 unit tests pass.
   - **Running (2026-11-21):** phase 1 (Drive-in, screenshot tests, the exit check), Cinematic, Editorial, and two
     feature streams: **home** (a device id per Quick Connect attempt, Continue Watching with Undo, two rows, the hero
     rule, live rows from the server's websocket, Undo after marking watched) and **play** (skips from four sources,
