@@ -117,6 +117,18 @@ Three parallel streams (search, the updater, fixes), each owning its files, as i
 - **The integration has started** (17:20): it merges fixes, season and qacheck, sets version 1.5.0, and runs the final
   checks. A performance baseline is new this release: start-up, first Home paint and memory, for 1.4.1 against 1.5.0.
   Then the release build, the bug hunt, the Sandbox upgrade test, and publish.
+- **All five streams merged**, and version 1.5.0 is set (18:00).
+- **The bug hunt found no Blocker** (`docs\reports\Bug hunt 2026-11-20 (1.5.0).md`). It found 3 Majors, all older than
+  1.5:
+  - Classic Home's error notice drawn under the top bar;
+  - a refused sign-in reading as a dead server;
+  - Enter, Enter on a show going back.
+- **Its 8 Minors:** 5 are new in 1.5, among them:
+  - "With <name>" opening on Back;
+  - a home server reached by name counting as remote;
+  - a test-only install switch working in release builds.
+- **A two-hour fix round** takes the new Minors, Classic's notice and, if it fits, Enter, Enter. The refused sign-in and
+  search missing home videos go to the 1.6.1 fix queue. The release build waits for the fix round.
 - The fixes stream finished the backend and privacy items in its first half hour:
   - private certificates;
   - split-season anime;
