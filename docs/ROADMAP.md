@@ -1,6 +1,6 @@
 # Nixie roadmap
 
-Updated 2026-11-20 (1.4.1 released; 1.5 split after the second review). These are the planned releases in order, with
+Updated 2026-11-21 (1.5.0 released; the 1.6 streams start from it). These are the planned releases in order, with
 the backburner ideas placed where they fit. Nothing past 1.4.1 has a date. Version numbers past 1.6 are a guide. Sizes
 are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL months.
 
@@ -8,7 +8,7 @@ are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL month
 |---|---|---|---|
 | 1.4.0 | Consistency | The library layer for all four themes, plus the contrast floor and big libraries | **Released** 2026-11-20 |
 | 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
-| **1.5** | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Now** (M–L, in progress) |
+| 1.5.0 | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Released** 2026-11-21 |
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), and skipping repeated extras (its own stream) | Next (L) |
 | 1.6.1 | Fixes | The first fix release: clears the fix queue in KNOWN-ISSUES | After 1.6 |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | Planned (M–L) |
@@ -77,7 +77,7 @@ The full list is CHANGELOG `## 1.4.0`:
 - Esc inside YouTube's player;
 - a real trailer plays.
 
-## 1.5: Search and updates (now)
+## 1.5: Search and updates (released 2026-11-21)
 Three parallel streams (search, the updater, fixes), each owning its files, as in 1.4.0. The musts go first.
 
 **Progress (2026-11-20, 13:30):**
@@ -133,7 +133,20 @@ Three parallel streams (search, the updater, fixes), each owning its files, as i
   - the fix round had already committed fixes for 8 of them (m1–m6, m8, M1 and M3) before it stopped, but not finished
     their tests. They're kept on `wip/150-huntfix` as the start of 1.6.1;
   - M2 (a refused sign-in) and m7 (search and home videos) have no fix yet.
-- **Next:** the final pass, the baseline, the release build, the Sandbox upgrade test, then publish.
+- **The final pass passed** (overnight): the keyboard check in all four themes, the contrast floor, 40 of 41 theme
+  scripts (Cinematic's placeholder check at 1920 wide fails the same way in 1.4.1), search, playlists, a transcode and
+  the smoke check on both test servers, both UI suites, Core, and the end-to-end and bridge checks. The release package
+  passed its 121 checks, and Defender found nothing.
+- **The first baseline** (median of 5 runs, 1.4.1 against 1.5.0): the window shows in 962 against 1,016 ms, Home first
+  paints in 1,132 against 1,138 ms, and memory after the browse script is 575 against 584 MB (`docs\RELEASE.md`,
+  "Baseline").
+- **The Sandbox upgrade test didn't finish.** It installed 1.4.1 as a standard user, then stopped on a bug in the test
+  script, not in Nixie: Windows PowerShell won't start a program with an empty argument list (fixed on main). The second
+  try found Windows Sandbox itself stuck, which only a PC restart clears.
+- **The owner: "Publish now"** (2026-11-21). **1.5.0 is released**
+  (github.com/mbustos27/fluentfin-mpv/releases/tag/v1.5.0). Its notes say the upgrade test is still to run.
+- **Still to do for 1.5.0:** the Sandbox upgrade test after the owner's next PC restart (1.4.1 to 1.5.0, then 1.5.0's
+  Restart to update). A problem it finds ships as 1.5.1.
 - The fixes stream finished the backend and privacy items in its first half hour:
   - private certificates;
   - split-season anime;

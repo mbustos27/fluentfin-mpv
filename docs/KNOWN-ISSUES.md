@@ -59,6 +59,10 @@ runs post keys and cannot move the real cursor or hear sound).
   - One real trailer plays in the theatre, with sound: not run, for the owner.
   - Restart to update on a real install (the Sandbox upgrade test, `upgrade-test-sandbox.ps1`, covers it off the owner's
     account): not run, for the owner.
+  - The Sandbox upgrade test itself (1.4.1 to 1.5.0 by the old flow, then 1.5.0's Restart to update, as a standard
+    user): not finished. It installed 1.4.1, then stopped on a bug in its own script (fixed after the release); the
+    second try found Windows Sandbox stuck until a restart. 1.5.0 shipped without it (owner: "Publish now"); it runs
+    again after the next restart, and a problem it finds ships as 1.5.1.
 
 ## Never verified
 - **Parts of a real Jellyfin server.** The automated tests use fake servers and fake tokens.
@@ -156,8 +160,8 @@ runs post keys and cannot move the real cursor or hear sound).
   has too (`test_audio_settings` 6, `test_mpvtk_pilfont` 2) once the 8 modules the suite's 300 s limit cut under that
   load were run again alone: 7 passed (`test_shell_library` 314, `test_live_tv` 258, `test_shell_settings` 170,
   `test_shell_books` 147, `test_list_page` 126, `test_dpi_matrix` 25, `test_playlist_edit` 8), and `test_shell_playback`
-  passed 119 of its 165 tests before a 20-minute limit, none failing (its layout sweeps rebuild the player bar hundreds
-  of times; it and the shell it tests are unchanged since v1.4.1).
+  passed all 165 once it ran alone with no time limit (the first run, cut at 20 minutes, had reached 119 with none
+  failing; its layout sweeps rebuild the player bar hundreds of times).
   The bug hunt ran beside it; its findings are in the Fix queue above, none fixed in 1.5.0.
 - **Cinematic's library placeholders can stand off the grid.** then-140-checks' skeleton check (Cinematic, 1920 wide)
   failed in the final pass and again alone: on the first visit to Movies the placeholders stood 21 px below the cards
