@@ -302,7 +302,17 @@ check of the "Updated" notice.
   "Updated".
 - **Left for 1.6.1:** sentence case for row names (61 names across 16 test scripts, over the hour's limit) and the
   episode search for "With <name>".
-- **Next:** a review and the bug hunt (running), then the final pass, the build, the Sandbox test and publish.
+- **The review and the bug hunt found no Blocker** (`docs\reports\Bug hunt 2026-11-21 (1.5.1).md`). Three Majors in
+  this release's own code, being fixed:
+  - "moves" was judged across seasons, so a show whose intro sits elsewhere in season 2 would lose its learned Skip in
+    every season. It's judged within a season now;
+  - search offered songs and albums, but an album can't play yet. Music leaves search for 1.5.1 and comes back with
+    playback in 1.6.1;
+  - the Sandbox test's new leg looked for `Updated` without the quotes Nixie's log puts around it.
+- **The rest go to 1.6.1's queue,** among them: the saved-password sign-in has no test; the live-updates connection
+  keeps redialing with a refused sign-in; a portable copy counts as a new device; time watched is lost when the sign-in
+  ends mid-playback.
+- **Next:** the final pass, the build, the Sandbox test and publish.
 
 ## 1.6: Collections (now)
 **Started 2026-11-21** (the owner: "Start 1.6"), every branch from v1.5.0:
