@@ -18,7 +18,7 @@ and the owner's own steps are the real limits.
 | 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
-| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Phases 0 to 2 and the hardening **done 2026-11-21**; review fixes and a bug hunt running; then the owner's 20-minute TV session and 10-minute key. 1.0 in **1 to 2 days** |
+| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Built, reviewed and bug-hunted **2026-11-21**; **ready for the owner's 20-minute TV session** (`Dev\nixie-tv\docs\TV-SESSION.md`), then the key and where releases live |
 
 **Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
 
@@ -574,7 +574,12 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
     default, trailers on Nixie's origin), and two Blockers about Glacier's name and credit, being fixed: the share-log
     screen pointed at Glacier's issue tracker, and the licence file dropped Glacier's copyright from files taken from
     it. Also two Majors in the home code (holding OK on a card removed it; focus jumped when a row changed).
-  - **Next:** those fixes, a bug hunt on the emulator, then **the owner's 20-minute TV session** (frame timing and the
+  - **The review's fixes and a bug hunt done the same evening** (main green): Glacier's tracker and copyright fixed; the
+    hunt (no Blocker) found five Majors, all fixed: focus on Home after Undo, Back and a live change; search showing
+    bare episodes; and the TV test server breaking whenever the desktop fake changed (it now keeps its own pinned copy).
+    On the 2 GB emulator the player used about 211 MB (peak 272), with no crash. The debug build for the session is
+    built.
+  - **Next (was):** those fixes, a bug hunt on the emulator, then **the owner's 20-minute TV session** (frame timing and the
     player on the real box, the three themes, a trailer, one sign-in to their own server by Quick Connect, done by the
     owner), then the release key and where TV releases live (a GitHub repo of the owner's choosing).
   - **Running (2026-11-21):** phase 1 (Drive-in, screenshot tests, the exit check), Cinematic, Editorial, and two
