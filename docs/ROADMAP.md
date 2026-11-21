@@ -111,7 +111,12 @@ Three parallel streams (search, the updater, fixes), each owning its files, as i
   Found, not fixed (the track code): a track change during a transcode reports a second start.
 - **Season is done** (in review): season switching is about twice as fast, with pictures arriving with the rows. For
   example, Drive-in's next season went from 448 ms rows and 1.24 s pictures to 290 ms for both.
-- Weekly usage is 98%.
+- **The owner reset the weekly limit at 100%** (17:00). Fixes and season finished their review fixes: no Blockers, all
+  Majors fixed. Qacheck is fixing the transcode's double start, which was already in 1.4.1 and inflates play counts on
+  the server.
+- **The integration has started** (17:20): it merges fixes, season and qacheck, sets version 1.5.0, and runs the final
+  checks. A performance baseline is new this release: start-up, first Home paint and memory, for 1.4.1 against 1.5.0.
+  Then the release build, the bug hunt, the Sandbox upgrade test, and publish.
 - The fixes stream finished the backend and privacy items in its first half hour:
   - private certificates;
   - split-season anime;
