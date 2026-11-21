@@ -16,7 +16,7 @@ are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL month
 | 1.8 | Player | Pop-out player, chapter extras | From the backburner (M–L) |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research first (L) |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | Research first (XL if go) |
-| TV 1.0 | Google TV | A separate app with all three themes; no home-screen Continue watching (the TV filters it) | Phase 0 done 2026-11-21 (but the release key); phase 1 after the usage reset |
+| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Phase 0 done; **phase 1 started 2026-11-21** (Nixie on Glacier) |
 
 **Split (owner, 2026-11-20: "Yes, split it"):** the second review found 1.5 too big at about 40 items, with four streams
 editing the same files. 1.5 now ships search, the updater and the fixes; the top bar, tidy names, collections and the
@@ -490,17 +490,41 @@ its test fake, and Nixie's own message when it refuses.
   - start-up time and memory are no worse than today.
 - **Otherwise no rewrite.**
 
-## Nixie for Google TV (a separate app: phase 0 done 2026-11-21 but the release key)
+## Nixie for Google TV (a separate app, based on Glacier: phase 1 started 2026-11-21)
+**The base is now Glacier** (the owner, 2026-11-21: "https://github.com/Glacier-Jellyfin/glacier-androidtv use this as a
+base"), asked right after "why are we waiting for google tv we're on low usage". Glacier is a GPL-3.0 Jellyfin client
+for Android TV in Kotlin and Compose for TV, with Media3 and the Jellyfin SDK, released weekly (v0.10.1 on 2026-11-18).
+It already has what the plan's phases 2 and 4 would have built: adaptive playback, skip intro and credits, the
+next-episode countdown, careful audio and subtitle tracks, trickplay, versions, profiles, music, photos, live TV, an
+updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which the owner's box can't pass through).
+- **Nixie for TV is a local fork of it:** Glacier's history kept with a fetch-only `upstream` remote, based on v0.10.1;
+  rebranded (Nixie's name, application id, banner and icon; no Glacier name or art in the UI); the GPL-3.0 licence and
+  every notice kept, and the README and About screen say it's based on Glacier. The updater points at Nixie's own
+  releases or is off, Glacier's store CI and any telemetry are off, and nothing is pushed anywhere. The phase 0
+  skeleton stays on the branch `nixie-skeleton`.
+- **Nixie's look is a theme layer** on Glacier's design system: Drive-in first (sign-in with Quick Connect on nixie
+  tubes, the top bar, Home), then Cinematic and Editorial. Glacier's screens change through that layer and small marked
+  hooks, and `DIVERGENCE.md` lists every change and why.
+- **The upstream-merge rule:** merge Glacier's `main` at each of its releases that builds; Nixie's changes stay in the
+  theme layer and marked hooks, so the merge stays small; DIVERGENCE.md is updated at each merge.
+- **Phase 1 (started 2026-11-21): Nixie on Glacier:** the fork, the rebrand, the licence credit, everything outbound off,
+  Drive-in's sign-in, top bar and Home, an emulator check (Quick Connect by D-pad against the test server, then Home),
+  and `docs\GLACIER-BASE.md`: what Glacier covers, feature by feature, against the plan, and the phases re-estimated.
+- **Re-estimate (provisional, until GLACIER-BASE.md):** most of the playback and browse work is done, so TV 1.0 is
+  mostly Nixie's three themes and Nixie's own features: roughly phase 1 about 2–3 agent-days, the three themes across
+  the rest about 5–8, hardening and release about 2–3, so about 9–14 agent-days instead of 19–25.
+
 Phase 0 needed about 30 minutes of the owner's time: the TV test is done; the release key waits until a release.
 **Downloads approved** (the owner, 2026-11-21: "it can download whatever is needed"): Android SDK components, system
 images, the NDK if needed, and Gradle/Maven dependencies, from official sources only (sdkmanager, Google's Maven, Maven
 Central, the Gradle plugin portal, the projects' own GitHub releases), each one logged with its size. Not covered: the
 release key (the owner makes it), anything on the owner's TV, and any account sign-in.
-Plan: `docs\reports\Nixie Google TV architecture.md`, which replaces the earlier draft (`Nixie Google TV plan.md`).
+Plan: `docs\reports\Nixie Google TV architecture.md`, which replaces the earlier draft (`Nixie Google TV plan.md`); its
+own-build phases below are kept for the record, and the Glacier base above replaces phases 1, 2 and 4's building work.
 All three themes are in 1.0, because adding layouts to finished screens is the main risk. It builds from 1.4.0's
 behaviour.
 
-| Phase | What | Effort |
+| Phase (the plan before the Glacier base) | What | Effort |
 |---|---|---|
 | **0. Groundwork** (first) | The repo, version catalog, banner and icon, the release key and its backups, fake-server profiles, a home-screen row test on the owner's TV | About 1 agent-day, 30 min of the owner's time |
 | **1. Foundation** | Network, tokens, focus, the theme contract, Drive-in's sign-in, top bar and Home | 4–5 agent-days |
@@ -530,9 +554,9 @@ owner ran the TV steps the same day:
   installing the first signed build.
 
 **Fitting it on this PC:**
-- The emulator and Gradle need about 6–8 GB of the roughly 10 GB free, so the emulator takes one of the 3 off-screen
-  test slots.
-- Heavy phases start after the weekly usage reset (24 November).
+- The emulator and Gradle need about 6–8 GB (about 21 GB free on C: on 2026-11-21), and the emulator takes one of the 3
+  off-screen test slots while it runs.
+- Phase 1 started 2026-11-21: weekly usage was at 15%, so the earlier wait for the reset no longer applies.
 
 ## Decided for 1.5 and 1.6 (2026-11-20, the owner: "Make 1.5 choices")
 Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. Rewatching has been on since 1.4.1, and its Settings switch rides 1.5 with the rest.
