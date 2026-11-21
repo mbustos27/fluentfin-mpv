@@ -1,7 +1,6 @@
 ﻿using System.Net.Security;
 using System.Reflection;
 using System.Security.Authentication;
-using DeviceId;
 using FluentFin.Contracts.Services;
 using FluentFin.Core;
 using FluentFin.Core.Contracts.Services;
@@ -326,7 +325,7 @@ public class JellyfinAuthenticationService(IJellyfinClient jellyfinClient,
 
 	private static JellyfinApiClient GetClient(string url)
 	{
-		var id = new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
+		var id = Core.InstallDeviceId.Current; // 1.5.1 fixes (BH-150-M2): this copy's id, not the PC's (sign-in and the server page alike)
 		var settings = new JellyfinSdkSettings();
 		settings.SetServerUrl(url);
 		settings.Initialize(Core.AppIdentity.ClientName, Core.AppVersion.Current, Environment.MachineName, id);

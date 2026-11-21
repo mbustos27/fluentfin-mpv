@@ -34,6 +34,9 @@ public sealed class UpdateChecker(HttpClient http, string currentVersion, Uri? a
 
 	public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
 
+	/// <summary>BH-150-m8: the API version the last answer says it used (GitHub's <see cref="UpdateSource.ApiVersionSelectedHeader"/>), or null.</summary>
+	public string? ApiVersionSelected { get; private set; }
+
 	public async Task<UpdateCheckResult> CheckAsync(DateTimeOffset now, CancellationToken cancellation = default)
 	{
 		try
@@ -41,9 +44,11 @@ public sealed class UpdateChecker(HttpClient http, string currentVersion, Uri? a
 			using var request = new HttpRequestMessage(HttpMethod.Get, Api);
 			request.Headers.UserAgent.Add(new ProductInfoHeaderValue(AppIdentity.Name, currentVersion));
 			request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+			request.Headers.Add(UpdateSource.ApiVersionHeader, UpdateSource.ApiVersion);   // BH-150-m8: the answer's shape, pinned
 			using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
 			timeout.CancelAfter(Timeout);
 			using var response = await http.SendAsync(request, HttpCompletionOption.ResponseContentRead, timeout.Token).ConfigureAwait(false);
+			ApiVersionSelected = response.Headers.TryGetValues(UpdateSource.ApiVersionSelectedHeader, out var selected) ? selected.FirstOrDefault()?.Trim() : null;
 
 			if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
 			{

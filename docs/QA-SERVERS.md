@@ -209,6 +209,12 @@ Never take a pre-release (`preview`, `unstable`) without the owner's yes.
   device's older session when the same user signs in from it again: a second run's sign-in as qa-user turned the first
   run's token into 401s (its library "Couldn't load"). The tap now signs in with a device id of its own per process;
   Nixie's own cannot differ, so a run that meets a 401 mid-way while another stream used the same server is run again.
+  **Fixed in 1.5.1 (BH-150-M2):** Nixie's device id is per install (the PC's id hashed with its data and program
+  folders and the Windows user), so runs with their own `--data-dir` no longer end each other's sessions; a build from
+  before 1.5.1 still sends the PC's id. `then-signin.ps1` checks both on a server: another copy's sign-in leaves Nixie
+  signed in, one with Nixie's own id (and the administrator removing the device) ends it, and Nixie asks to sign in
+  again. The tap's `/__harness/devices`, `/__harness/signin {"device"}` and `/__harness/revoke {"device"}` act only on
+  the device the run names.
 - **"Part of" is 12 only.** 10.11.11 answers 404 to `GET /Items/{id}/Collections`, the movie page's "Part of" (the
   code's comment says 10.11): Nixie leaves the line out quietly there.
 - **Legacy authorization.** 12.4.0 answers 401 to the token in `X-Emby-Authorization`, `X-Emby-Token`,

@@ -1,6 +1,10 @@
+using System.ComponentModel;
 using FluentFin.Controls;
 using FluentFin.Core.ViewModels;
+using FluentFin.Services;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Navigation;
 
 namespace FluentFin.Views;
 
@@ -10,6 +14,7 @@ public sealed partial class PersonItemsPage : Page
 	public PersonItemsViewModel ViewModel { get; } = App.GetService<PersonItemsViewModel>();
 
 	private readonly CardGrid _grid;
+	private bool _focusedOnArrival;
 
 	public PersonItemsPage()
 	{
@@ -19,4 +24,58 @@ public sealed partial class PersonItemsPage : Page
 		_grid = new CardGrid(PersonScroller, PersonList, PersonRepeater);
 		_grid.ForwardWheel(PersonRoot);
 	}
+
+	// 1.5 huntfix (BH-150-m2): the page opened on the top bar's Back (Enter went back); it opens on its first poster, as a
+	// library does, by the app's one arrival rule (ArrivalFocus: never after the user moved, nor after R or a theme switch)
+	protected override void OnNavigatedTo(NavigationEventArgs e)
+	{
+		_focusedOnArrival = false;
+		ViewModel.Results.PropertyChanged -= OnResultsChanged;
+		ViewModel.Results.PropertyChanged += OnResultsChanged;
+		base.OnNavigatedTo(e);
+		if (ViewModel.Results.IsLoaded)
+		{
+			OnResultsChanged(ViewModel.Results, new PropertyChangedEventArgs(nameof(LoadState.Status)));
+		}
+	}
+
+	protected override void OnNavigatedFrom(NavigationEventArgs e)
+	{
+		ViewModel.Results.PropertyChanged -= OnResultsChanged;
+		base.OnNavigatedFrom(e);
+	}
+
+	private void OnResultsChanged(object? sender, PropertyChangedEventArgs e)
+	{
+		if (e.PropertyName == nameof(LoadState.Status) && ViewModel.Results.IsLoaded && ViewModel.Items.Count > 0 && !_focusedOnArrival)
+		{
+			_focusedOnArrival = true;
+			UiDispatch.Enqueue(DispatcherQueue, "the person page's arrival focus", FocusOnArrival, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+		}
+	}
+
+	private void FocusOnArrival()
+	{
+		if (!IsLoaded)
+		{
+			// loaded before it was drawn (a quick server): once it is
+			void OnLoaded(object sender, RoutedEventArgs e)
+			{
+				Loaded -= OnLoaded;
+				UiDispatch.Enqueue(DispatcherQueue, "the person page's arrival focus", FocusOnArrival, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+			}
+
+			Loaded += OnLoaded;
+			return;
+		}
+
+		ArrivalFocus.TryTake(this, "the first poster", () =>
+		{
+			// the grid lays its cards out first and the card is taken from those (BH-140-M3: a card asked for before the grid
+			// had laid any out never let the layout settle)
+			UpdateLayout();
+			return _grid.FocusIndex(0, FocusState.Keyboard);
+		});
+	}
+	// END 1.5 huntfix
 }

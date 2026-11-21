@@ -89,11 +89,8 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 	}
 	// end 1.5 qacheck
 
-	[RelayCommand]
-	public async Task ResetWatchProgress(Guid id)
-	{
-		await jellyfinClient.ResetProgress(id);
-	}
+	// 1.5 huntfix (BH-150-m1): upstream's ResetWatchProgress(Guid) removed: nothing ran it since ResetWatchProgressOf, and it
+	// changed nothing on screen
 
 	// 1.5 fixes
 	/// <summary>1.5 (the button review's L38): the item menu's Reset watch progress, with an Undo (<see cref="ItemUserData.ResetProgressAsync"/>).</summary>

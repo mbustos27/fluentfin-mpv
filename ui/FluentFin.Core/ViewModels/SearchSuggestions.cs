@@ -171,6 +171,9 @@ public static class SearchLabels
 		BaseItemDto_Type.Episode => "episode",
 		BaseItemDto_Type.Person => "person",
 		BaseItemDto_Type.BoxSet => "collection",
+		// 1.5.1 fixes (BH-150-m7)
+		BaseItemDto_Type.Video => "video",
+		BaseItemDto_Type.MusicVideo => "music video",
 		_ => null,
 	};
 

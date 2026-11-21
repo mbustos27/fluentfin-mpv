@@ -72,6 +72,13 @@ public partial class VideoPlayerViewModel
 	public partial bool MpvMessageIsError { get; set; }
 
 	/// <summary>
+	/// 1.5.1 fixes (BH-150-M2): the message says the server no longer takes this sign-in (the backend's connect or play was
+	/// refused, and the app's own check agreed): its bar has Sign in again.
+	/// </summary>
+	[ObservableProperty]
+	public partial bool MpvSignInNeeded { get; set; }
+
+	/// <summary>
 	/// A brief message while the video plays on (a non-fatal error once playback runs, such as a track or quality change the
 	/// backend could not apply, docs/BRIDGE.md §5): shown above the video area, gone after <see cref="MpvNoticeDuration"/>
 	/// or when dismissed (<see cref="DismissMpvNotice"/>). Playback is not touched.
@@ -262,7 +269,11 @@ public partial class VideoPlayerViewModel
 		{
 			// as text, redacted: a failure's message may quote a request (docs/BRIDGE.md §1: no token in any log)
 			logger.LogError("MPV playback could not start (step: {Step}, generation {Generation}): {Error}", step?.ToString() ?? "play", generation, BridgeRedaction.Redact(ex.ToString()));
-			ShowMpvMessage(StartFailureMessage(step, ex, _mpvControlsFellBack), isError: true);
+			// 1.5.1 fixes (BH-150-M2): a refused token (the queue's request, or the backend's connect) asks for a new sign-in
+			if (!await ShowMpvSignInIfEnded(ex is BridgeCommandException { Code: "auth_failed" }))
+			{
+				ShowMpvMessage(StartFailureMessage(step, ex, _mpvControlsFellBack), isError: true);
+			}
 		}
 
 		return true;
@@ -429,6 +440,12 @@ public partial class VideoPlayerViewModel
 
 				case Bridge.Events.Error when e.DataAs<BridgeError>() is { } error:
 					_mpvLastError = BridgeRedaction.Redact(error.Message);
+					if (error.Code == "auth_failed")
+					{
+						// 1.5.1 fixes (BH-150-M2): the server refused the backend's request: if it no longer takes the token, say so
+						_ = ShowMpvSignInIfEnded(refusedByBackend: true);
+					}
+
 					if (error.Fatal || !_mpvSawPlayback)
 					{
 						ShowMpvMessage($"MPV: {_mpvLastError}", isError: true);
@@ -746,8 +763,48 @@ public partial class VideoPlayerViewModel
 
 	private static string NormalizeId(string id) => id.Replace("-", "", StringComparison.Ordinal).ToLowerInvariant();
 
+	/// <summary>
+	/// 1.5.1 fixes (BH-150-M2): when the server no longer takes this sign-in, the message bar says so, with Sign in again, and
+	/// true. <paramref name="refusedByBackend"/>: the backend was refused (<c>auth_failed</c>: a 401 or a 403 to its request), so
+	/// the app asks the server once itself (<see cref="Core.Services.SignInWatch"/> decides); a 403 alone ends nothing.
+	/// </summary>
+	private async Task<bool> ShowMpvSignInIfEnded(bool refusedByBackend)
+	{
+		if (refusedByBackend && !Core.SignInState.Ended)
+		{
+			await JellyfinClient.GetCurrentUser();
+		}
+
+		if (!Core.SignInState.Ended || _mpvLeaving)
+		{
+			return false;
+		}
+
+		ShowMpvMessage($"{Core.SignInState.Title()}. {Core.SignInState.Message()}", isError: true);
+		MpvSignInNeeded = true;
+		return true;
+	}
+
+	/// <summary>1.5.1 fixes (BH-150-M2): the message bar's Sign in again: the app's sign-in (the pages' button does the same).</summary>
+	[CommunityToolkit.Mvvm.Input.RelayCommand]
+	private async Task SignInAgainFromMpv()
+	{
+		if (Core.SignInState.SignInAgain is { } signIn)
+		{
+			await signIn();
+		}
+
+		if (!Core.SignInState.Ended)
+		{
+			// signed in again in place (the saved sign-in): back to the page play was pressed on, to play it again
+			DismissMpvMessage();
+			_ = GoBack?.Invoke() ?? navigationService.GoBack();
+		}
+	}
+
 	private void ShowMpvMessage(string message, bool isError)
 	{
+		MpvSignInNeeded = false;
 		IsMpvStarting = false;
 		MpvStatusText = "";
 		MpvMessageIsError = isError;
@@ -776,7 +833,11 @@ public partial class VideoPlayerViewModel
 	}
 
 	/// <summary>The message bar's close button: gone now, and the next message opens the bar again, even with the same text.</summary>
-	public void DismissMpvMessage() => MpvMessage = null;
+	public void DismissMpvMessage()
+	{
+		MpvSignInNeeded = false;
+		MpvMessage = null;
+	}
 
 	/// <summary>The notice's close button (or a message that replaces it): gone now, and the next notice shows even with the same text.</summary>
 	public void DismissMpvNotice()

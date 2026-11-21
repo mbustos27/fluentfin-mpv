@@ -68,8 +68,10 @@
             <!--
                 fluentfin-mpv: Home failed, is empty, or only partly loaded (docs/research/ux-review.md H6); no ring of its own,
                 the placeholders are the loading state. No height when it has nothing to say: the hero is the first thing then.
+                1.5 huntfix (BH-150-M1): the page runs under the transparent top bar (the hero's art), so a notice or message
+                starts below the bar, or its text ran through the tabs and its Try again sat under the search box.
             -->
-            <lc:LoadStateView Margin="36,0" State="{x:Bind ViewModel.State}" />
+            <lc:LoadStateView Margin="{x:Bind local:HomePage.StateMargin(ViewModel.State.HasProblem, ViewModel.State.HasMessage), Mode=OneWay}" State="{x:Bind ViewModel.State}" />
             <!--  Seaglass: the hero; absent until the rows have something with a backdrop to show, so the first paint is the rows' placeholders  -->
             <lc:HomeHero Margin="0" Slides="{x:Bind ViewModel.Hero, Mode=OneWay}" />
             <StackPanel

@@ -126,6 +126,8 @@ public partial class App : Application
 		var migrationNote = legacyCopy.Note;
 		_legacyCopyFailed = legacyCopy.Failed ? legacyCopy.LegacyApp ?? "the old version" : null;
 		var knownFolders = StartupFolders(legacyCopy.Failed ? legacyCopy.LegacyRoot : null);
+		// 1.5.1 fixes (BH-150-M2): the device id Jellyfin sees is this copy's (its data folder's), not the PC's
+		Core.InstallDeviceId.UseDataFolder(knownFolders.ApplicationData);
 
 		Host = Microsoft.Extensions.Hosting.Host
 		.CreateDefaultBuilder()
@@ -354,6 +356,8 @@ public partial class App : Application
 			Services.ImageDownloads.AllowMoreAtOnce(GetService<ILogger<App>>());
 			// Nixie 1.4.0 (bug hunt m4): every theme's library page gives its load's focus by the app's one arrival rule
 			Core.ViewModels.LibraryViewModel.LoadFocusYields = Services.ArrivalFocus.LibraryYields;
+			// 1.5.1 fixes (BH-150-M2): every page's Sign in again, once the server no longer takes this sign-in
+			Core.SignInState.SignInAgain = () => ((ViewModels.TitleBarViewModel)GetService<ITitleBarViewModel>()).SignInAgain(GetService<IJellyfinAuthenticationService>());
 			await Host.StartAsync();
 
 			Locator.SetServiceProvider(Host.Services);

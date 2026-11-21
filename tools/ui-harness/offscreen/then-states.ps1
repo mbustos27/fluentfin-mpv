@@ -44,6 +44,28 @@ if ($skip -notcontains 'home') {
     [void](Wait-Text 'Some of Home' 20)
     Start-Sleep -Seconds 2
     Capture-State 'home-partly'
+    # 1.5 huntfix (BH-150-M1): what the user sees, not only the words: the notice below the top bar's tabs (Classic drew it
+    # under them, its text through the tab labels), its Try again clear of the search box (a click on it landed in Search),
+    # and Try again, invoked, loads Home
+    $hpRect = { param($e) if ($e) { $r = $e.Current.BoundingRectangle; '{0},{1} {2}x{3}' -f [int]$r.X, [int]$r.Y, [int]$r.Width, [int]$r.Height } else { 'none' } }
+    $hpNotice = Find-Ui -Name 'Some of Home' -Contains -Type 'Text'
+    $hpBar = Find-Ui -Id 'TopTabs'
+    if (-not $hpBar) { $hpBar = Find-Ui -Id 'TopTabsMenu' }
+    $hpBox = Find-Ui -Name 'Search' -Type 'Edit' -Contains
+    $hpRetry = [OffscreenUi]::FindButton($script:hwnd, $script:ui.Id, 'Try again')
+    Check 'states (BH-150-M1): Home''s notice is below the top bar''s tabs' ($hpNotice -and $hpBar -and $hpNotice.Current.BoundingRectangle.Top -ge $hpBar.Current.BoundingRectangle.Bottom) "notice $(& $hpRect $hpNotice); tabs $(& $hpRect $hpBar)"
+    Check 'states (BH-150-M1): its Try again is clear of the search box' ($hpRetry -and (-not $hpBox -or -not $hpRetry.Current.BoundingRectangle.IntersectsWith($hpBox.Current.BoundingRectangle))) "Try again $(& $hpRect $hpRetry); search $(& $hpRect $hpBox)"
+    if ($hpRetry) {
+        Set-Rules @()
+        Say "pressed 'Try again' ($(Invoke-Element $hpRetry))"
+        $hpLoaded = Wait-Until { if (-not (Find-Ui -Name 'Some of Home' -Contains -Type 'Text') -and (Find-Ui -Name 'Continue Watching' -Type 'Text')) { $true } } -Seconds 20 -PollMs 200
+        Check 'states (BH-150-M1): Try again, invoked, loads Home (the notice goes, Continue Watching is back)' ([bool]$hpLoaded)
+        # back to the partly loaded Home for the next state (it starts from its Try again)
+        Set-Rules @(, @($resume, 'status:500'))
+        Key 0x52
+        [void](Wait-Text 'Some of Home' 20)
+        Start-Sleep -Seconds 1
+    }
     # 4. nothing to continue: the Continue Watching row is empty
     Set-Rules @(, @($resume, 'empty'))
     Press-First @('Try again', 'Refresh')

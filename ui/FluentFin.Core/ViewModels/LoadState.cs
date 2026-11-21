@@ -32,6 +32,19 @@ public readonly record struct LoadOutcome(LoadStatus Status, string Title = "", 
 	public static LoadOutcome Empty(string title, string message) => new(LoadStatus.Empty, title, message);
 
 	public static LoadOutcome Failed(string title, string message) => new(LoadStatus.Failed, title, message);
+
+	/// <summary>
+	/// 1.5.1 fixes (BH-150-M2): the server no longer takes this sign-in (<see cref="SignInState.Ended"/>): the page asks for a new
+	/// sign-in, in place of what it had (a failure, an empty page) or above what it shows (Home from its cache).
+	/// </summary>
+	public bool SignInNeeded { get; init; }
+
+	/// <summary>1.5.1 fixes (BH-150-M2): <paramref name="outcome"/> once the sign-in has ended: the same place on the page, the sign-in's words.</summary>
+	public static LoadOutcome SignedOut(LoadOutcome outcome) => outcome.Status switch
+	{
+		LoadStatus.Loaded => new(LoadStatus.Loaded, SignInState.Title(), SignInState.Message()) { SignInNeeded = true },
+		_ => new(LoadStatus.Failed, SignInState.Title(), SignInState.Message()) { SignInNeeded = true },
+	};
 }
 
 /// <summary>
@@ -56,6 +69,11 @@ public sealed partial class LoadState : ObservableObject
 	[NotifyPropertyChangedFor(nameof(IsLoading), nameof(IsLoaded), nameof(IsEmpty), nameof(IsFailed), nameof(HasMessage), nameof(HasProblem), nameof(RetryText))]
 	public partial LoadStatus Status { get; private set; }
 
+	/// <summary>1.5.1 fixes (BH-150-M2): the page asks for a new sign-in; its button is Sign in again (<see cref="LoadOutcome.SignedOut"/>).</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(RetryText))]
+	public partial bool SignInNeeded { get; private set; }
+
 	/// <summary>What happened (empty while loading or loaded without a problem).</summary>
 	[ObservableProperty]
 	public partial string Title { get; private set; } = "";
@@ -78,8 +96,8 @@ public sealed partial class LoadState : ObservableObject
 	/// <summary>Loaded, but not all of it: the page shows its content with a warning above it.</summary>
 	public bool HasProblem => Status == LoadStatus.Loaded && !string.IsNullOrEmpty(Title);
 
-	/// <summary>The Retry button's text: an empty page is refreshed, a failed one tried again.</summary>
-	public string RetryText => Status == LoadStatus.Empty ? "Refresh" : "Try again";
+	/// <summary>The Retry button's text: an empty page is refreshed, a failed one tried again, an ended sign-in signed in again.</summary>
+	public string RetryText => SignInNeeded ? SignInState.ButtonText : Status == LoadStatus.Empty ? "Refresh" : "Try again";
 
 	public IAsyncRelayCommand RetryCommand { get; }
 
@@ -116,7 +134,10 @@ public sealed partial class LoadState : ObservableObject
 
 		if (run == _run)
 		{
-			Set(outcome);
+			// 1.5.1 fixes (BH-150-M2): the server refused the token (checked: SignInWatch) while this loaded, so what failed or came
+			// back empty (or the cache Home showed) is not the server's answer: the page asks for a new sign-in
+			var problem = outcome.Status is LoadStatus.Failed or LoadStatus.Empty || !string.IsNullOrEmpty(outcome.Title);
+			Set(problem && SignInState.Ended ? LoadOutcome.SignedOut(outcome) : outcome);
 		}
 	}
 
@@ -127,12 +148,30 @@ public sealed partial class LoadState : ObservableObject
 		Set(new LoadOutcome(LoadStatus.Idle));
 	}
 
-	private Task RetryAsync() => _load is { } load ? RunAsync(load) : Task.CompletedTask;
+	private async Task RetryAsync()
+	{
+		// 1.5.1 fixes (BH-150-M2): Sign in again is the app's sign-in (SignInState.SignInAgain). Signed in again in place (a saved
+		// sign-in), or by another page's button meanwhile, the page loads again; on the sign-in page, this page is gone.
+		if (SignInNeeded && SignInState.Ended && SignInState.SignInAgain is { } signIn)
+		{
+			await signIn();
+			if (SignInState.Ended)
+			{
+				return;
+			}
+		}
+
+		if (_load is { } load)
+		{
+			await RunAsync(load);
+		}
+	}
 
 	private void Set(LoadOutcome outcome)
 	{
 		Title = outcome.Title;
 		Message = outcome.Message;
+		SignInNeeded = outcome.SignInNeeded;
 		Status = outcome.Status;
 	}
 }

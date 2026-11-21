@@ -102,7 +102,7 @@ class Search:
 def hint(lib, item):
     """A SearchHint as /Search/Hints answers it (no user data, no card fields)."""
     kinds = {"movie": "Movie", "series": "Series", "season": "Season", "episode": "Episode", "person": "Person",
-             "boxset": "BoxSet"}
+             "boxset": "BoxSet", "video": "Video", "musicvideo": "MusicVideo", "musicalbum": "MusicAlbum", "audio": "Audio"}
     out = {"ItemId": item["Id"], "Id": item["Id"], "Name": item["Name"], "Type": kinds.get(item["kind"], "Folder"),
            "IsFolder": item["kind"] in ("series", "season", "boxset"), "MatchedTerm": None,
            "ProductionYear": item.get("year"), "PrimaryImageTag": "p" + item["Id"][:8],

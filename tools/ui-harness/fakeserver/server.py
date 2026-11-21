@@ -41,6 +41,11 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   POST /__harness/played {"series": id, "played": true} (sg-cw: the test user marks a series watched; answers its
   episodes), POST /__harness/lag {"stopped_ms": N} (sg-cw: Stopped reports applied N ms after they are answered).
 - Next Up honours EnableRewatching (sg-cw), as Jellyfin's TVSeriesManager does.
+- Devices (1.5.1 fixes, BH-150-M2): as Jellyfin, a sign-in ends the same user's older sessions on the same device id (the
+  DeviceId of its Authorization header), so two copies that send one id sign each other out. POST /__harness/revoke
+  {"device": id?} ends the test user's sessions (all of them, as "sign out of all devices", a removed device or a new
+  password; or one device's); POST /__harness/signin {"device": id} signs the test user in from another copy with that id
+  (no token answered); GET /__harness/devices lists the signed-in device ids with their client and user (never a token).
 """
 
 import argparse
@@ -251,6 +256,7 @@ class Server:
         runtime = int(media_meta["duration_ms"]) * 10_000
         self.lib = library.Library(self.server_id, self.user_id, runtime, seed=seed)
         self.tokens = {}            # token -> user id (never logged)
+        self.token_device = {}      # 1.5.1 fixes (BH-150-M2): token -> (device id, client) it was given to (never logged)
         self.quick = {}             # Quick Connect secret -> {code, user (once approved), client...} (never logged)
         self.lock = threading.Lock()
         self.latency = latency
@@ -318,6 +324,30 @@ class Server:
             json.dump(self.summary(), f, indent=2)
 
     # ------------------------------------------------------------------ model helpers
+    # 1.5.1 fixes (BH-150-M2): sign-ins and devices, as Jellyfin keeps them
+    def uid_of(self, name):
+        """The id of the user called name (None: the test user)."""
+        name = (name or self.creds["username"]).lower()
+        return next((u for u, v in self.users.items() if v["name"].lower() == name), self.user_id)
+
+    def sessions_on(self, uid, device):
+        """The user's sessions on the device id (what a sign-in from it ends)."""
+        with self.lock:
+            return sum(1 for t, u in self.tokens.items() if u == uid and self.token_device.get(t, ("", ""))[0] == device)
+
+    def sign_in(self, uid, device, client):
+        """A new token for uid, given to device: as Jellyfin's AuthenticateNewSession, the user's older sessions on the same
+        device id end first (no device id, nothing ends). The token is never logged."""
+        token = secrets.token_hex(16)
+        with self.lock:
+            if device:
+                for old in [t for t, u in self.tokens.items() if u == uid and self.token_device.get(t, ("", ""))[0] == device]:
+                    self.tokens.pop(old, None)
+                    self.token_device.pop(old, None)
+            self.tokens[token] = uid
+            self.token_device[token] = (device, client or "")
+        return token
+
     def user_dto(self, uid):
         u = self.users[uid]
         now = library.iso(datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None))
@@ -998,6 +1028,7 @@ class Server:
                     token = self._token_value()
                     with outer.lock:
                         outer.tokens.pop(token, None)
+                        outer.token_device.pop(token, None)
                     return self._send(204)
                 if low == "/sessions":
                     self.route = "sessions"
@@ -1033,6 +1064,11 @@ class Server:
 
             def _token_value(self):
                 return auth_token(self.headers, self.q, outer.auth)[0]
+
+            def _device_id(self):
+                """1.5.1 fixes (BH-150-M2): the DeviceId of the request's Authorization header ("" without one)."""
+                m = re.search(r'DeviceId="([^"]*)"', self.headers.get("Authorization") or "")
+                return urllib.parse.unquote(m.group(1)) if m else ""
 
             # ---------------- handlers
             def _harness(self, method, low):
@@ -1119,6 +1155,30 @@ class Server:
                     # sg-cw: {"stopped_ms": N}: Stopped reports are answered at once and applied N ms later (0: at once)
                     outer.stopped_lag = max(0.0, float(self._body().get("stopped_ms") or 0) / 1000.0)
                     return self._json(200, {"stopped_ms": int(outer.stopped_lag * 1000)})
+                # 1.5.1 fixes (BH-150-M2): the test user's sessions end on the server, or another copy signs in
+                if low == "/__harness/revoke" and method == "POST":
+                    body = self._body()
+                    uid = outer.uid_of(body.get("user"))
+                    device = body.get("device")
+                    with outer.lock:
+                        ended = [t for t, u in outer.tokens.items()
+                                 if u == uid and (device is None or outer.token_device.get(t, ("", ""))[0] == device)]
+                        for t in ended:
+                            outer.tokens.pop(t, None)
+                            outer.token_device.pop(t, None)
+                    return self._json(200, {"ended": len(ended)})
+                if low == "/__harness/signin" and method == "POST":
+                    device = str(self._body().get("device") or "")
+                    if not device:
+                        return self._json(400, {"error": "a device id is needed"})
+                    ended = outer.sessions_on(outer.user_id, device)
+                    outer.sign_in(outer.uid_of(None), device, "Nixie harness (another copy)")
+                    return self._json(200, {"device": device, "ended": ended})
+                if low == "/__harness/devices":
+                    with outer.lock:
+                        seen = sorted({(d, c, outer.users[u]["name"]) for t, u in outer.tokens.items()
+                                       for d, c in [outer.token_device.get(t, ("", ""))]})
+                    return self._json(200, [{"device": d, "client": c, "user": n} for d, c, n in seen])
                 if low == "/__harness/shutdown" and method == "POST":
                     self._json(200, {"ok": True})
                     outer.stop()
@@ -1200,11 +1260,11 @@ class Server:
                 return self._signed_in(uid)
 
             def _signed_in(self, uid):
-                token = secrets.token_hex(16)
-                with outer.lock:
-                    outer.tokens[token] = uid
+                device = self._device_id()
+                token = outer.sign_in(uid, device, self.client)
+                self.extra = {"device": device}   # 1.5.1 fixes: which device signed in (logged; never the token)
                 session = {"Id": uuid.uuid4().hex, "UserId": uid, "UserName": outer.users[uid]["name"],
-                           "Client": self.client, "DeviceName": "", "DeviceId": "", "ApplicationVersion": "",
+                           "Client": self.client, "DeviceName": "", "DeviceId": device, "ApplicationVersion": "",
                            "IsActive": True, "SupportsMediaControl": False, "SupportsRemoteControl": False,
                            "PlayableMediaTypes": [], "ServerId": outer.server_id,
                            "LastActivityDate": library.iso(datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None))}

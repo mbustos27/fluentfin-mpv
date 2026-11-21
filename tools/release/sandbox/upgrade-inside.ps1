@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Inside Windows Sandbox only: the upgrade test's two legs (tools\release\upgrade-test-sandbox.ps1 generates the .wsb whose
+  Inside Windows Sandbox only: the upgrade test's three legs (tools\release\upgrade-test-sandbox.ps1 generates the .wsb whose
   logon command runs this). Refuses to run anywhere else: it installs Nixie, so it must never run in a real account.
 
 .DESCRIPTION
@@ -13,6 +13,10 @@
       this release started once and closed;
     leg 2, the new flow: Nixie.exe --install-update <the test build> (Nixie's own switch for this test: "Restart to update"
       with no clicks): Nixie closes, the launcher's helper installs the test build quietly and opens Nixie again;
+    leg 3 (1.5.1), the previous release's own Restart to update to this release: the test build uninstalled, the data
+      folders cleared, the previous MSI installed, then its Nixie.exe --install-update <this release's MSI> (the previous
+      release takes the switch without the marker: the gate came with 1.5.1); this release opens again and logs
+      "[update] the install of <this> from <previous>: Updated", the "Updated" notice's own line;
     the elevation: whoami /groups (no administrator, medium integrity), msiexec's exit codes and its logs' privilege lines.
   Results: results.json (every check, versions, log excerpts) and done.json in the mapped results folder; then the Sandbox
   shuts down. -DryRun checks the inputs and writes plan.json only: nothing installed, no user made, nothing started.
@@ -63,6 +67,8 @@ New-Item -ItemType Directory -Force $Results | Out-Null
 
 $work = 'C:\Users\Public\nixie-upgrade'
 $installFolder = '%LOCALAPPDATA%\Programs\Nixie'
+# BH-150-m6: the host script's marker beside the test build; Nixie's --install-update needs NIXIE_UPGRADE_TEST to name it
+$testMarkerName = '.nixie-upgrade-test'
 $plan = [ordered]@{
     leg1 = @("seed %LOCALAPPDATA%\Seaglass\LocalSettings.json with a marker",
              "msiexec /i `"$($previous.Path)`" /qn /norestart /l*v leg1-previous.log  (exit 0; version $($previous.Version))",
@@ -70,11 +76,18 @@ $plan = [ordered]@{
              "msiexec /i `"$($new.Path)`" /passive /norestart /l*v leg1-upgrade.log with Nixie closed, as 1.4.1's updater does (exit 0; version $($new.Version); nothing reopened)",
              'the Nixie data folder keeps the marker; the Seaglass folder is untouched',
              "start $($new.Version) once (it runs); close it")
-    leg2 = @("copy the test build and its .sha256 to $work",
-             "start $installFolder\app\Nixie.exe --install-update $work\$(Split-Path -Leaf $test.Path)",
+    leg2 = @("copy the test build, its .sha256 and the host script's marker ($testMarkerName) to $work",
+             "start $installFolder\app\Nixie.exe --install-update $work\$(Split-Path -Leaf $test.Path) with NIXIE_UPGRADE_TEST=$work\$testMarkerName (BH-150-m6: a release package refuses the switch without the test's marker)",
              'it closes; the helper (Updates\Nixie-updater.exe) installs with msiexec /passive /norestart /l*v Updates\install.log',
              "the installed version becomes $($test.Version); Nixie is opened again (a new process, without --install-update)",
              "Nixie's log: the install of $($test.Version) from $($new.Version), installer exit 0")
+    # 1.5.1: the previous release's own Restart to update installs this release (the "Updated" notice, seen for real)
+    leg3 = @("msiexec /x <the installed product> /qn /norestart /l*v leg3-uninstall.log (exit 0); the Nixie and Seaglass data folders removed",
+             "msiexec /i `"$($previous.Path)`" /qn /norestart /l*v leg3-previous.log  (exit 0; version $($previous.Version))",
+             "copy this release's MSI and its .sha256 to $work",
+             "start $installFolder\app\Nixie.exe --install-update $work\$(Split-Path -Leaf $new.Path) ($($previous.Version) takes it without the marker)",
+             "it closes; its helper installs $($new.Version) quietly; Nixie is opened again (a new process, without --install-update)",
+             "Nixie's log: [update] the install of $($new.Version) from $($previous.Version): `"Updated`" (installer exit 0; Serilog quotes the word)")
     elevation = @('whoami /groups: not an administrator, Mandatory Label\Medium Mandatory Level',
                   'every msiexec exit 0; the logs'' Privileged / MsiRunningElevated / AdminUser / ALLUSERS lines kept')
 }
@@ -99,6 +112,11 @@ function Get-Installed {
     foreach ($code in @($installer.RelatedProducts('{612ED1CB-52F7-49B1-9129-A1B04ADB015A}'))) { return $installer.ProductInfo($code, 'VersionString') }
     $null
 }
+function Get-InstalledCode {
+    # 1.5.1 (leg 3): the installed Nixie's product code, for its uninstall
+    $installer = New-Object -ComObject WindowsInstaller.Installer
+    @($installer.RelatedProducts('{612ED1CB-52F7-49B1-9129-A1B04ADB015A}')) | Select-Object -First 1
+}
 function Get-LogLines([string]$Log) {
     if (-not (Test-Path $Log)) { return @("(no log at $Log)") }
     @(Select-String -LiteralPath $Log -Pattern 'Privileged|MsiRunningElevated|AdminUser|ALLUSERS|user privileges|Installation success or error status|completed successfully|Windows Installer installed' |
@@ -121,6 +139,11 @@ function Get-NixieProcesses([datetime]$After) {
     $app = Join-Path $env:LOCALAPPDATA 'Programs\Nixie\app\Nixie.exe'
     @(Get-CimInstance Win32_Process -Filter "Name = 'Nixie.exe'" | Where-Object { $_.ExecutablePath -eq $app -and $_.CreationDate -gt $After })
 }
+# 1.5.1 review: the update's result line as Nixie's log writes it. Serilog quotes the enum (the 1.5.0 run logged
+# 'the install of 1.5.90 from 1.5.0: "None" (installer exit 0)'), so the Kind is matched with or without its quotes.
+function Test-UpdateLine([string]$Line, [string]$Version, [string]$From, [string]$Kind) {
+    [bool]($Line -match ('\[update\] the install of ' + [regex]::Escape($Version) + ' from ' + [regex]::Escape($From) + ': "?' + [regex]::Escape($Kind) + '"?(\s|$)'))
+}
 function Snapshot([string]$Folder) { if (Test-Path $Folder) { @(Get-ChildItem -LiteralPath $Folder -Recurse -File | ForEach-Object { '{0}|{1}' -f $_.FullName.Substring($Folder.Length), (Get-FileHash $_.FullName).Hash }) -join "`n" } else { '' } }
 
 if (-not $AsTester) {
@@ -136,7 +159,9 @@ if (-not $AsTester) {
         $isAdmin = $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
         $notes.sandbox_account = "$env:USERNAME (administrator: $isAdmin)"
         New-Item -ItemType Directory -Force $work | Out-Null
-        Copy-Item -LiteralPath $test.Path, "$($test.Path).sha256" -Destination $work
+        Copy-Item -LiteralPath $test.Path, "$($test.Path).sha256", (Join-Path (Split-Path $test.Path) $testMarkerName) -Destination $work
+        # 1.5.1 (leg 3): this release's installer where the previous release's switch can take it (a folder it may write in)
+        Copy-Item -LiteralPath $new.Path, "$($new.Path).sha256" -Destination $work
         New-Item -ItemType Directory -Force $testerResults | Out-Null
         $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Root 'scripts\upgrade-inside.ps1'), '-AsTester', '-Root', $Root,
             '-NewMsi', $NewMsi, '-PreviousMsi', $PreviousMsi, '-TestMsi', $TestMsi, '-Results', $testerResults)
@@ -160,7 +185,7 @@ if (-not $AsTester) {
         $null = $p.Handle   # held open now, or ExitCode reads empty once it has exited (the 1.5.0 run's "exit ")
         $notes.tester = "$who, pid $($p.Id)"
         Write-Host "tester started: $($notes.tester)"
-        $deadline = (Get-Date).AddMinutes(35)
+        $deadline = (Get-Date).AddMinutes(50)   # 1.5.1: three legs
         while (-not $p.HasExited -and (Get-Date) -lt $deadline) {
             Copy-Item -Path (Join-Path $testerResults '*') -Destination $Results -Recurse -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 10
@@ -169,7 +194,7 @@ if (-not $AsTester) {
             $code = try { $p.ExitCode } catch { 'unknown' }
             $notes.tester = "$who, exit $code"
         }
-        else { $notes.tester = "$who, still running after 35 minutes"; Check 'the legs finished within 35 minutes' $false }
+        else { $notes.tester = "$who, still running after 50 minutes"; Check 'the legs finished within 50 minutes' $false }
     }
     catch { Check 'the outer script ran to the end' $false "$($_.Exception.Message) (line $($_.InvocationInfo.ScriptLineNumber))" }
     finally {
@@ -244,7 +269,10 @@ try {
     Step "leg 2: Restart to update to $($test.Version)"
     $testCopy = Join-Path $work (Split-Path -Leaf $test.Path)
     $leg2At = Get-Date
-    $first = Start-Nixie @('--install-update', "`"$testCopy`"")
+    # BH-150-m6: the release package takes --install-update only with the test's marker; only this start gets it
+    $env:NIXIE_UPGRADE_TEST = Join-Path $work $testMarkerName
+    try { $first = Start-Nixie @('--install-update', "`"$testCopy`"") }
+    finally { Remove-Item Env:NIXIE_UPGRADE_TEST -ErrorAction SilentlyContinue }
     $closed = Wait-For { $first.HasExited } 90
     Check 'leg 2: Restart to update closes Nixie' ([bool]$closed)
     $installed = Wait-For { (Get-Installed) -eq $test.Version } 300
@@ -258,6 +286,35 @@ try {
     Start-Sleep -Seconds 10
     $line = Get-ChildItem $logs -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1 | ForEach-Object { Select-String -LiteralPath $_.FullName -Pattern '\[update\] the install of' | Select-Object -Last 1 }
     Check "leg 2: the reopened Nixie read the helper's result (installer exit 0)" ($line -and $line.Line -match 'installer exit 0') $(if ($line) { $line.Line.Trim() })
+    if ($reopened) { Stop-Nixie (Get-Process -Id $reopened.ProcessId -ErrorAction SilentlyContinue) }
+
+    # ---- leg 3 (1.5.1): the previous release's own Restart to update installs this release, and this release says so
+    Step "leg 3: $($previous.Version) again, then its own Restart to update to $($new.Version)"
+    Start-Sleep -Seconds 5
+    $product = Get-InstalledCode
+    $log = Join-Path $Results 'leg3-uninstall.log'
+    $exit = (Start-Process msiexec.exe -ArgumentList @('/x', $product, '/qn', '/norestart', '/l*v', "`"$log`"") -Wait -PassThru).ExitCode
+    Check "leg 3: the test build uninstalls as a standard user (exit 0)" ($exit -eq 0 -and -not (Get-Installed)) "exit $exit; $(Get-Installed)"
+    # a user of the previous release: its own data, not what the test build wrote
+    Remove-Item -LiteralPath $nixieData, $seaglass -Recurse -Force -ErrorAction SilentlyContinue
+    $log = Join-Path $Results 'leg3-previous.log'
+    $exit = (Start-Process msiexec.exe -ArgumentList @('/i', "`"$($previous.Path)`"", '/qn', '/norestart', '/l*v', "`"$log`"") -Wait -PassThru).ExitCode
+    Check "leg 3: the previous MSI ($($previous.Version)) installs again (exit 0)" ($exit -eq 0 -and (Get-Installed) -eq $previous.Version) "exit $exit; $(Get-Installed)"
+    $newCopy = Join-Path $work (Split-Path -Leaf $new.Path)
+    $leg3At = Get-Date
+    # no NIXIE_UPGRADE_TEST: the previous release has no marker gate (BH-150-m6 came with 1.5.1)
+    $first = Start-Nixie @('--install-update', "`"$newCopy`"")
+    $closed = Wait-For { $first.HasExited } 90
+    Check "leg 3: $($previous.Version)'s Restart to update closes it" ([bool]$closed)
+    $installed = Wait-For { (Get-Installed) -eq $new.Version } 300
+    Check "leg 3: its helper installs $($new.Version) quietly" ([bool]$installed) "$(Get-Installed)"
+    $reopened = Wait-For { Get-NixieProcesses $leg3At | Where-Object { $_.ProcessId -ne $first.Id } | Select-Object -First 1 } 120
+    Check "leg 3: and opens $($new.Version) again, without the install switch" ($reopened -and $reopened.CommandLine -notmatch '--install-update') $(if ($reopened) { $reopened.CommandLine })
+    $notes.leg3_install_log = Get-LogLines (Join-Path (Join-Path $nixieData 'Updates') 'install.log')
+    Start-Sleep -Seconds 10
+    $updated = "the install of $($new.Version) from $($previous.Version): Updated"   # the words; the check takes Serilog's quotes
+    $line = Get-ChildItem (Join-Path $nixieData 'Logs') -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1 | ForEach-Object { Select-String -LiteralPath $_.FullName -Pattern '\[update\] the install of' | Select-Object -Last 1 }
+    Check "leg 3: the reopened $($new.Version) logs [update] $updated (the Updated notice's line)" ($line -and (Test-UpdateLine $line.Line $new.Version $previous.Version 'Updated')) $(if ($line) { $line.Line.Trim() })
     if ($reopened) { Stop-Nixie (Get-Process -Id $reopened.ProcessId -ErrorAction SilentlyContinue) }
 }
 catch {

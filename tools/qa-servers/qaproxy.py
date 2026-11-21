@@ -12,6 +12,11 @@ and nothing else:
 - GET /__harness/fixture: the showcase items the driver navigates to, read from the server as the ordinary test user.
 - POST /__harness/quickconnect/approve {"code"}: the ordinary test user approves the code (POST /QuickConnect/Authorize),
   as a user would on another device. GET /__harness/summary, POST /__harness/shutdown.
+- 1.5.1 fixes (BH-150-M2): GET /__harness/devices (the test user's devices, as the administrator reads them: id, client;
+  never a token); POST /__harness/signin {"device"}: the test user signs in from another copy with that device id (which
+  ends that device's session, as Jellyfin does), then signs that session out; POST /__harness/revoke {"device"}: the
+  administrator removes the device (its session ends). Only a named device: other runs share these servers. A sign-in's
+  DeviceId is logged with it (report.device; a device id is no secret).
 Listens on 127.0.0.1 only (an ephemeral port unless --port). Stdlib only.
 """
 
@@ -105,6 +110,7 @@ class Tap:
         self.unhandled = Counter()
         self.log_file = open(os.path.join(out, "requests.jsonl"), "a", encoding="utf-8")
         self._user = None
+        self._admin = None      # 1.5.1 fixes: the administrator's token (in memory only), for the devices
         self._fixture = None
         self.url = None
         self.server = None
@@ -127,12 +133,12 @@ class Tap:
             json.dump(self.summary(), f, indent=1)
 
     # --- the harness's own calls to the server, as the ordinary test user (the token stays in this process) ---
-    def _call(self, method, path, body=None, token=None):
+    def _call(self, method, path, body=None, token=None, device=None):
         conn = http.client.HTTPConnection(self.up_host, self.up_port, timeout=30)
         # 1.5 qacheck: a device id of this tap's own: Jellyfin ends a device's older session when it signs in again, and
-        # two runs at once with one id signed each other's tap out
-        auth = 'MediaBrowser Client="Nixie QA harness", Device="qa-harness-tap", DeviceId="nixie-qa-harness-tap-%d", ' \
-               'Version="1.0"' % os.getpid() + (', Token="%s"' % token if token else "")
+        # two runs at once with one id signed each other's tap out (1.5.1 fixes: or the one the harness names)
+        auth = 'MediaBrowser Client="Nixie QA harness", Device="qa-harness-tap", DeviceId="%s", ' \
+               'Version="1.0"' % (device or "nixie-qa-harness-tap-%d" % os.getpid()) + (', Token="%s"' % token if token else "")
         data = json.dumps(body).encode("utf-8") if body is not None else None
         headers = {"Authorization": auth, "Accept": "application/json"}
         if data is not None:
@@ -227,7 +233,50 @@ class Tap:
             urllib.parse.quote(code), uid), token=token)
         return status
 
+    # 1.5.1 fixes (BH-150-M2): devices, for then-signin.ps1
+    def admin(self):
+        if self._admin is None:
+            with open(self.credentials, encoding="utf-8-sig") as f:
+                c = json.load(f)["admin"]
+            status, res = self._call("POST", "/Users/AuthenticateByName", {"Username": c["username"], "Pw": c["password"]},
+                                     device="nixie-qa-harness-tap-admin-%d" % os.getpid())
+            if status != 200 or not res or not res.get("AccessToken"):
+                raise RuntimeError("the QA administrator could not sign in (HTTP %s)" % status)
+            self._admin = res["AccessToken"]
+        return self._admin
+
+    def devices(self):
+        """The test user's devices: [{"device", "client", "user"}] (no tokens)."""
+        _, uid, name = self.user()
+        _, res = self._call("GET", "/Devices?userId=%s" % uid, token=self.admin())
+        return [{"device": d.get("Id") or "", "client": d.get("AppName") or "", "user": d.get("LastUserName") or name}
+                for d in (res or {}).get("Items") or []]
+
+    def sign_in_from(self, device):
+        """The test user signs in with this device id (another copy), then signs that session out again. How many of the
+        user's devices had that id before (the sessions the sign-in ended)."""
+        before = sum(1 for d in self.devices() if d["device"] == device)
+        with open(self.credentials, encoding="utf-8-sig") as f:
+            c = json.load(f)["user"]
+        status, res = self._call("POST", "/Users/AuthenticateByName", {"Username": c["username"], "Pw": c["password"]},
+                                 device=device)
+        if status != 200 or not res or not res.get("AccessToken"):
+            raise RuntimeError("the test user could not sign in from %s (HTTP %s)" % (device, status))
+        self._call("POST", "/Sessions/Logout", token=res["AccessToken"], device=device)
+        return before
+
+    def remove_device(self, device):
+        """The administrator removes the device (Dashboard > Devices > Delete): its session ends. Whether it was there."""
+        there = any(d["device"] == device for d in self.devices())
+        status, _ = self._call("DELETE", "/Devices?id=%s" % urllib.parse.quote(device), token=self.admin())
+        return there and status in (200, 204)
+
     def sign_out(self):
+        if self._admin:
+            try:
+                self._call("POST", "/Sessions/Logout", token=self._admin, device="nixie-qa-harness-tap-admin-%d" % os.getpid())
+            except OSError:
+                pass
         if self._user:
             try:
                 self._call("POST", "/Sessions/Logout", token=self._user[0])
@@ -358,6 +407,19 @@ def make_handler(tap):
                 return self._json(200 if status == 200 else 404, {"approved": status == 200, "status": status})
             if low == "/__harness/quickconnect":
                 return self._json(200, [])
+            # 1.5.1 fixes (BH-150-M2): devices; only a named one is ever signed in from or removed (shared servers)
+            if low == "/__harness/devices":
+                return self._json(200, tap.devices())
+            if low in ("/__harness/signin", "/__harness/revoke") and self.command == "POST":
+                try:
+                    device = str(json.loads(body or b"{}").get("device") or "")
+                except ValueError:
+                    device = ""
+                if not device:
+                    return self._json(400, {"error": "name the device: other runs share this server"})
+                if low == "/__harness/signin":
+                    return self._json(200, {"device": device, "ended": tap.sign_in_from(device)})
+                return self._json(200, {"device": device, "ended": 1 if tap.remove_device(device) else 0})
             if low == "/__harness/shutdown" and self.command == "POST":
                 self._json(200, {"ok": True})
                 tap.write_summary()
@@ -369,6 +431,10 @@ def make_handler(tap):
         # ---------------- forwarding
         def _forward(self, route):
             body = self._read_body()
+            if route == "authenticate":
+                # 1.5.1 fixes (BH-150-M2): which device signed in (the device id; no token, no password)
+                m = re.search(r'DeviceId="([^"]*)"', self.headers.get("Authorization") or "")
+                self.extra = {"device": urllib.parse.unquote(m.group(1)) if m else ""}
             if route.startswith("report-") and body:
                 try:
                     b = json.loads(body)

@@ -66,7 +66,7 @@ $arFilm = { Open-Library $fixture.movie.library; Start-Sleep -Seconds 3; Open-Ca
 $arFilmIn = { Wait-ItemPage $fixture.movie.name 0.2 }
 $arLibrary = { Open-Library $fixture.movie.library }
 $arLibraryIn = { Find-MediaCard $fixture.movie.name }
-$arOnly = if ($env:AR_ONLY) { $env:AR_ONLY -split ',' } else { @('untouched', 'collection', 'film', 'library', 'filmback', 'suggest', 'colstate', 'rlock') }
+$arOnly = if ($env:AR_ONLY) { $env:AR_ONLY -split ',' } else { @('untouched', 'collection', 'film', 'library', 'filmback', 'suggest', 'colstate', 'show', 'rlock') }
 
 [OffscreenUi]::Resize($script:hwnd, $script:ui.Id, 1600, 1000); Start-Sleep -Milliseconds 1500
 
@@ -165,6 +165,31 @@ if ($arOnly -contains 'colstate') {
     $focus = CK-Focus
     Check "collection: Back from a film keeps Order and Hide watched, and the keyboard on its card" ($back -eq $before -and $focus -like "*'$film'*") "before: $before || after Back from '$film': $back; focus $focus"
     Shot 'collection-after-back'
+}
+if ($arOnly -contains 'show') {
+    # 1.5 huntfix (BH-150-M3): Enter on a show's card opens it with the keyboard on its Play, not the top bar's Back (a second
+    # Enter went back to the library); the same for its season's page, opened from the series page's "<season> details"
+    Open-Nav 'Home'; Start-Sleep -Seconds 2
+    Open-Library $fixture.series.library
+    $card = Wait-Until { Find-MediaCard $fixture.series.name } -Seconds 20 -PollMs 200
+    if ($card) { [void][OffscreenUi]::SetFocus($card); Start-Sleep -Milliseconds 600 }
+    $at = Get-Epoch
+    CK-Key 'Enter'
+    $in = Wait-ItemPage $fixture.series.name
+    $seen = Wait-Until { $f = CK-Focus; if ($f -match "^Button '(Play|Resume)") { $f } } -Seconds 6 -PollMs 200
+    Check "show (BH-150-M3): Enter on a show's card opens it with the keyboard on its Play" ([bool]$card -and [bool]$in -and [bool]$seen) "card $([bool]$card); page $([bool]$in); focus $(CK-Focus); $((CK-Log $at '\[focus\]') -join ' | ')"
+    Shot 'arrival-show-enter'
+    $link = Wait-Until { Find-Ui -Name "$($fixture.season.name) details" -Type 'Hyperlink' -OffscreenToo } -Seconds 10 -PollMs 200
+    if ($link) {
+        [void][OffscreenUi]::SetFocus($link); Start-Sleep -Milliseconds 400
+        $at = Get-Epoch
+        CK-Key 'Enter'
+        $season = Wait-Until { [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, "Mark $($fixture.season.name) of ", '') } -Seconds 20 -PollMs 150
+        $seen = Wait-Until { $f = CK-Focus; if ($f -match "^Button '(Play|Resume)") { $f } } -Seconds 6 -PollMs 200
+        Check "show (BH-150-M3): Enter on '$($fixture.season.name) details' opens the season with the keyboard on its Play" ([bool]$season -and [bool]$seen) "page $([bool]$season); focus $(CK-Focus); $((CK-Log $at '\[focus\]') -join ' | ')"
+        Shot 'arrival-season-enter'
+    }
+    else { Say "show: no '$($fixture.season.name) details' link in this theme; the season row is skipped" }
 }
 if ($arOnly -contains 'rlock') {
     # the bug hunt's m1: R with no place to put back (the keyboard on the top bar's tab, where invoking it leaves it) kept the

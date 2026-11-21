@@ -132,8 +132,55 @@ public static class UpdateHandoff
 	/// <c>Nixie.exe --install-update &lt;msi&gt;</c>: the upgrade test in Windows Sandbox (tools\release\upgrade-test-sandbox.ps1)
 	/// drives "Restart to update" with it, never with clicks: an installed copy takes the installer named, with its .sha256 beside
 	/// it, as a downloaded update and restarts to install it. It grants nothing a user could not do with msiexec.
+	/// BH-150-m6: a release package takes it only with the test's own marker (<see cref="TestMarkerVariable"/>), so a shortcut or
+	/// any other launch with arguments can't install an installer with no question asked.
 	/// </summary>
 	public const string InstallSwitch = "--install-update";
+
+	/// <summary>
+	/// BH-150-m6: the environment variable the Sandbox test sets for its <see cref="InstallSwitch"/> start: the full path of the
+	/// marker file tools\release\upgrade-test-sandbox.ps1 writes beside the test build (<see cref="TestMarkerName"/>, starting
+	/// with <see cref="TestMarkerText"/>). A release package refuses the switch without it; a dev build doesn't ask.
+	/// </summary>
+	public const string TestMarkerVariable = "NIXIE_UPGRADE_TEST";
+
+	/// <summary>The marker file's name (the host script's own folder marker).</summary>
+	public const string TestMarkerName = ".nixie-upgrade-test";
+
+	/// <summary>What the marker file starts with.</summary>
+	public const string TestMarkerText = @"made by tools\release\upgrade-test-sandbox.ps1";
+
+	/// <summary>
+	/// BH-150-m6: whether <see cref="InstallSwitch"/> may be honoured: always in a dev build; in a release package only when
+	/// <paramref name="testMarker"/> (<see cref="TestMarkerVariable"/>'s value) names an existing <see cref="TestMarkerName"/>
+	/// that starts with <see cref="TestMarkerText"/>. <paramref name="error"/> says why not.
+	/// </summary>
+	public static bool InstallSwitchAllowed(bool releasePackage, string? testMarker, out string? error)
+	{
+		error = null;
+		if (!releasePackage)
+		{
+			return true;
+		}
+
+		try
+		{
+			var marker = testMarker?.Trim();
+			if (!string.IsNullOrEmpty(marker)
+				&& string.Equals(Path.GetFileName(marker), TestMarkerName, StringComparison.OrdinalIgnoreCase)
+				&& File.Exists(marker)
+				&& File.ReadAllText(marker).TrimStart().StartsWith(TestMarkerText, StringComparison.Ordinal))
+			{
+				return true;
+			}
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+		{
+		}
+
+		error = $"a release package takes {InstallSwitch} only in the upgrade test (no {TestMarkerVariable} marker)";
+		return false;
+	}
 
 	/// <summary>The arguments without <see cref="InstallSwitch"/> and its installer (the reopened Nixie must not install again).</summary>
 	public static string[] WithoutInstallSwitch(IReadOnlyList<string> arguments)
@@ -168,9 +215,11 @@ public static class UpdateHandoff
 	/// <summary>
 	/// The installer <see cref="InstallSwitch"/> names, as a release ready to install: its name must be
 	/// <c>Nixie-&lt;version&gt;-win-x64.msi</c> of a version newer than <paramref name="currentVersion"/>, and the
-	/// <c>.sha256</c> beside it must name it and match it. Null with no switch; <paramref name="error"/> says why one is refused.
+	/// <c>.sha256</c> beside it must name it and match it, and a release package needs the test's marker
+	/// (<see cref="InstallSwitchAllowed"/>). Null with no switch; <paramref name="error"/> says why one is refused.
 	/// </summary>
-	public static ReleaseInfo? LocalInstaller(IReadOnlyList<string> arguments, string currentVersion, out string? msiPath, out string? error)
+	public static ReleaseInfo? LocalInstaller(IReadOnlyList<string> arguments, string currentVersion, bool releasePackage, string? testMarker,
+		out string? msiPath, out string? error)
 	{
 		msiPath = null;
 		error = null;
@@ -184,6 +233,11 @@ public static class UpdateHandoff
 		}
 
 		if (at < 0)
+		{
+			return null;
+		}
+
+		if (!InstallSwitchAllowed(releasePackage, testMarker, out error))
 		{
 			return null;
 		}

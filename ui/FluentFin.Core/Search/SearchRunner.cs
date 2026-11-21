@@ -96,7 +96,7 @@ public static class SearchRunner
 		var hintsTask = Try(() => client.SearchHints(term, HintLimit));
 		var kindTasks = SearchKinds.All.Select(kind => Try(() => kind.Kind == SearchKind.People
 			? client.SearchPeople(term, Limit)
-			: client.Search(term, [kind.ServerKind], Limit))).ToArray();
+			: client.Search(term, kind.ServerKinds, Limit))).ToArray();
 		var answers = await Task.WhenAll(kindTasks);
 		var hints = await hintsTask;
 		if (answers.All(a => a is null) && hints is null)

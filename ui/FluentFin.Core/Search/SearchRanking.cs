@@ -12,10 +12,29 @@ public enum SearchKind
 
 	/// <summary>Nixie 1.5 (the second review: people search for actors): a person opens "With <name>".</summary>
 	People,
+
+	/// <summary>
+	/// 1.5.1 fixes (BH-150-m7): home videos and music videos (each opens its page and plays, since 1.5). Not songs or albums
+	/// (BH-151-M2): Nixie plays no music, so an album found would open with Play off (1.6.1 takes music search with playback).
+	/// </summary>
+	Videos,
 }
 
-/// <summary>A kind's server type, its group title and its word ("show").</summary>
-public sealed record SearchKindInfo(SearchKind Kind, BaseItemKind ServerKind, BaseItemDto_Type Type, string Title, string Noun, string Nouns);
+/// <summary>
+/// A kind's server types, its group title and its word ("show"). 1.5.1 fixes (BH-150-m7): a kind may gather more than one
+/// server type (Videos: home videos and music videos); the first is its own.
+/// </summary>
+public sealed record SearchKindInfo(SearchKind Kind, IReadOnlyList<BaseItemKind> ServerKinds, IReadOnlyList<BaseItemDto_Type> Types, string Title, string Noun, string Nouns)
+{
+	public SearchKindInfo(SearchKind kind, BaseItemKind serverKind, BaseItemDto_Type type, string title, string noun, string nouns)
+		: this(kind, [serverKind], [type], title, noun, nouns)
+	{
+	}
+
+	public BaseItemKind ServerKind => ServerKinds[0];
+
+	public BaseItemDto_Type Type => Types[0];
+}
 
 public static class SearchKinds
 {
@@ -27,9 +46,11 @@ public static class SearchKinds
 		new(SearchKind.Episodes, BaseItemKind.Episode, BaseItemDto_Type.Episode, "Episodes", "episode", "episodes"),
 		new(SearchKind.Collections, BaseItemKind.BoxSet, BaseItemDto_Type.BoxSet, "Collections", "collection", "collections"),
 		new(SearchKind.People, BaseItemKind.Person, BaseItemDto_Type.Person, "People", "person", "people"),
+		// 1.5.1 fixes (BH-150-m7): search found none of these (the bug hunt: the kinds it asked for left them out)
+		new(SearchKind.Videos, [BaseItemKind.Video, BaseItemKind.MusicVideo], [BaseItemDto_Type.Video, BaseItemDto_Type.MusicVideo], "Videos", "video", "videos"),
 	];
 
-	public static SearchKind? KindOf(BaseItemKind? kind) => All.FirstOrDefault(k => k.ServerKind == kind)?.Kind;
+	public static SearchKind? KindOf(BaseItemKind? kind) => All.FirstOrDefault(k => kind is { } t && k.ServerKinds.Contains(t))?.Kind;
 
 	/// <summary>A hint's kind (/Search/Hints names its type with an enum of its own, by the same names).</summary>
 	public static SearchKind? KindOf(SearchHint_Type? type) =>
@@ -37,7 +58,7 @@ public static class SearchKinds
 
 	public static SearchKindInfo Of(SearchKind kind) => All[(int)kind];
 
-	public static SearchKind? KindOf(BaseItemDto_Type? type) => All.FirstOrDefault(k => k.Type == type)?.Kind;
+	public static SearchKind? KindOf(BaseItemDto_Type? type) => All.FirstOrDefault(k => type is { } t && k.Types.Contains(t))?.Kind;
 }
 
 /// <summary>An item with its match, and its place in the server's answer (the last tie-break).</summary>
@@ -107,7 +128,7 @@ public static class SearchRanking
 		{
 			var seen = new HashSet<Guid>();
 			ranked[kind.Kind] = [.. (answers.TryGetValue(kind.Kind, out var items) ? items : [])
-				.Where(i => i is not null && i.Type == kind.Type && (i.Id is not { } id || seen.Add(id)))
+				.Where(i => i is not null && i.Type is { } type && kind.Types.Contains(type) && (i.Id is not { } id || seen.Add(id)))
 				.Select((item, i) => new RankedItem(item, q.Match(item), i))];
 		}
 

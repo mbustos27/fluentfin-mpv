@@ -60,7 +60,8 @@ class ServerTests(unittest.TestCase):
         cls.srv = server.Server(os.path.join(cls.tmp, "out"), cls.meta, CREDS,
                                 rules=[(r"/Items/Filters", 300.0)])
         threading.Thread(target=cls.srv.serve, daemon=True).start()
-        cls.token = cls.login(CREDS["username"], CREDS["password"])["AccessToken"]
+        # 1.5.1 fixes (BH-150-M2): a device of its own, so the tests' sign-ins (AUTH's DeviceId) don't end it, as on Jellyfin
+        cls.token = cls.login(CREDS["username"], CREDS["password"], device="class-session")["AccessToken"]
 
     @classmethod
     def tearDownClass(cls):
@@ -87,10 +88,46 @@ class ServerTests(unittest.TestCase):
             return e.code, e.read(), e.headers
 
     @classmethod
-    def login(cls, user, password):
-        status, data, _ = cls.request("/Users/AuthenticateByName", "POST", {"Username": user, "Pw": password})
+    def login(cls, user, password, device=None):
+        headers = {"Authorization": AUTH.replace('DeviceId="t1"', 'DeviceId="%s"' % device)} if device else None
+        status, data, _ = cls.request("/Users/AuthenticateByName", "POST", {"Username": user, "Pw": password}, headers=headers)
         assert status == 200, status
         return data
+
+    # 1.5.1 fixes (BH-150-M2): devices, as Jellyfin keeps them
+    def test_a_sign_in_ends_the_same_users_older_session_on_the_same_device_only(self):
+        first = self.login(CREDS["username"], CREDS["password"], device="copy-a")["AccessToken"]
+        other = self.login(CREDS["username"], CREDS["password"], device="copy-b")["AccessToken"]
+        self.assertEqual(200, self.request("/Users/Me", token=first)[0], "another device id leaves it alone")
+        again = self.login(CREDS["username"], CREDS["password"], device="copy-a")
+        self.assertEqual("copy-a", again["SessionInfo"]["DeviceId"])
+        self.assertEqual(401, self.request("/Users/Me", token=first)[0], "the same device id ends it")
+        self.assertEqual(200, self.request("/Users/Me", token=other)[0])
+        self.assertEqual(200, self.request("/Users/Me", token=again["AccessToken"])[0])
+        self.assertEqual(200, self.request("/Users/Me", token=self.token)[0])
+
+    def test_the_harness_lists_devices_signs_in_another_copy_and_revokes(self):
+        token = self.login(CREDS["username"], CREDS["password"], device="nixie-copy")["AccessToken"]
+        devices = self.get("/__harness/devices")
+        self.assertIn({"device": "nixie-copy", "client": "FluentFin", "user": CREDS["username"]}, devices)
+        self.assertNotIn(token, json.dumps(devices))
+        # another copy with its own id: nothing ends; with this one's id (what every copy sent up to Nixie 1.5.0): it ends
+        self.assertEqual({"device": "a-second-copy", "ended": 0}, self.request("/__harness/signin", "POST", {"device": "a-second-copy"})[1])
+        self.assertEqual(200, self.request("/Users/Me", token=token)[0])
+        self.assertEqual({"device": "nixie-copy", "ended": 1}, self.request("/__harness/signin", "POST", {"device": "nixie-copy"})[1])
+        self.assertEqual(401, self.request("/Users/Me", token=token)[0])
+        self.assertEqual(400, self.request("/__harness/signin", "POST", {})[0])
+        # one device's sessions, then all of the user's ("sign out of all devices")
+        mine = self.login(CREDS["username"], CREDS["password"], device="revoked-one")["AccessToken"]
+        self.assertEqual(1, self.request("/__harness/revoke", "POST", {"device": "revoked-one"})[1]["ended"])
+        self.assertEqual(401, self.request("/Users/Me", token=mine)[0])
+        self.assertEqual(200, self.request("/Users/Me", token=self.token)[0])
+        status, answer, _ = self.request("/__harness/revoke", "POST", {})
+        self.assertEqual(200, status)
+        self.assertGreaterEqual(answer["ended"], 1)
+        self.assertEqual(401, self.request("/Users/Me", token=self.token)[0])
+        type(self).token = self.login(CREDS["username"], CREDS["password"], device="class-session")["AccessToken"]
+        self.assertEqual(200, self.request("/Users/Me", token=self.token)[0])
 
     def get(self, path, **kw):
         status, data, _ = self.request(path, token=self.token, **kw)
@@ -223,6 +260,21 @@ class ServerTests(unittest.TestCase):
         self.assertEqual("60", r.getheader("x-ratelimit-limit"))
         self.assertEqual("core", r.getheader("x-ratelimit-resource"))
         self.assertTrue(int(r.getheader("x-ratelimit-reset")) > time.time())
+
+    def test_the_release_api_refuses_an_api_version_github_does_not_support(self):
+        """BH-150-m8: GitHub answers an unknown X-GitHub-Api-Version with a 400 naming it (live, 2026-11-20); a known one,
+        or none (its default), with a 200 that says which version it used."""
+        self._release(reset_limit=True)
+        agent = {"User-Agent": "Nixie/1.5.0"}
+        status, body, _ = self._bare("/__harness/release/latest", dict(agent, **{"X-GitHub-Api-Version": "1999-01-01"}))
+        self.assertEqual(400, status)
+        self.assertIn(b'\\"1999-01-01\\", is not a supported version', body)
+        for asked, used in (("2022-11-28", "2022-11-28"), ("2026-03-10", "2026-03-10"), (None, "2022-11-28")):
+            headers = dict(agent, **({"X-GitHub-Api-Version": asked} if asked else {}))
+            status, _, r = self._bare("/__harness/release/latest", headers)
+            self.assertEqual(200, status, asked)
+            self.assertEqual(used, r.getheader("x-github-api-version-selected"))
+            self.assertEqual(asked, self.get("/__harness/release/state")["api_version_asked"])
 
     def test_the_release_api_counts_down_its_hourly_limit_then_answers_403_with_none_left(self):
         try:
@@ -906,6 +958,22 @@ class SearchTests(unittest.TestCase):
         amelie = [i for i in asked if i["Name"] == "Amélie"][0]
         self.assertEqual("Le Fabuleux Destin d'Amélie Poulain", amelie["OriginalTitle"])
         self.assertIn("SortName", amelie)
+
+    def test_home_videos_music_videos_albums_and_songs_are_found_as_jellyfin_finds_them(self):
+        # 1.5.1 fixes (BH-150-m7): the kinds Nixie asks for now, in no library view (no tab, page or Home row changes)
+        self.assertEqual(["Sunny Afternoon", "Sunny Beach Day"], sorted(self.names("sunny", "Video,MusicVideo")))
+        found = self.lib.query({"searchterm": ["sunny"], "recursive": ["true"], "includeitemtypes": ["MusicAlbum,Audio"]})["Items"]
+        self.assertEqual({"Sunny Side Songs": "MusicAlbum", "Sunny Morning": "Audio"}, {i["Name"]: i["Type"] for i in found})
+        song = [i for i in found if i["Type"] == "Audio"][0]
+        album = [i for i in found if i["Type"] == "MusicAlbum"][0]
+        self.assertEqual((album["Id"], "Sunny Side Songs"), (song["AlbumId"], song["Album"]))
+        self.assertEqual(["Sunny Morning"], [i["Name"] for i in self.lib.query({"parentid": [album["Id"]]})["Items"]])
+        types = {h["Type"] for h in self.lib.hints({"searchterm": ["sunny"], "limit": ["200"]})["SearchHints"]}
+        self.assertTrue({"Video", "MusicVideo", "MusicAlbum", "Audio"} <= types, types)
+        self.assertFalse([v for v in self.lib.views
+                          if any(d["kind"] in ("video", "musicvideo", "musicalbum", "audio") for d in self.lib.descendants(v))])
+        # not in the default fixture
+        self.assertFalse([i for i in self.plain.items.values() if i["kind"] in ("video", "musicvideo", "musicalbum", "audio")])
 
     def test_loose_mode_answers_any_word_as_a_search_plugin(self):
         os.environ["FAKESERVER_SEARCH"] = "sunny"

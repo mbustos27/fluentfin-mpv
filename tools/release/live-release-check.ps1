@@ -2,9 +2,10 @@
 .SYNOPSIS
   Opt-in, by hand: the updater against the REAL GitHub release (read-only). One request to
   api.github.com/repos/mbustos27/fluentfin-mpv/releases/latest with Nixie's User-Agent, through the updater's own code
-  (UpdaterTests.Live_TheRealLatestRelease_PassesTheUpdatersRules), and one without a User-Agent to see GitHub still refuse
-  it (403), as the fake release does. Nothing is downloaded. Run it before a release, and after any change to the
-  release's assets or the repository's name (docs\RELEASE.md, step 5).
+  (UpdaterTests.Live_TheRealLatestRelease_PassesTheUpdatersRules, which also asserts GitHub used the API version Nixie
+  pins, BH-150-m8), one without a User-Agent to see GitHub still refuse it (403), and one with an API version GitHub
+  doesn't know to see it refuse that (400), as the fake release does. Nothing is downloaded. Run it before a release,
+  and after any change to the release's assets or the repository's name (docs\RELEASE.md, step 5).
 #>
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -17,11 +18,21 @@ finally { Remove-Item Env:NIXIE_LIVE_GITHUB -ErrorAction SilentlyContinue }
 $record = Join-Path ([IO.Path]::GetTempPath()) 'nixie-live-release-check.txt'
 if (Test-Path $record) { Get-Content $record | ForEach-Object { "  $_" } }
 
-# GitHub refuses an API request without a User-Agent: the fake release must keep doing the same
-$request = [Net.HttpWebRequest]::Create('https://api.github.com/repos/mbustos27/fluentfin-mpv/releases/latest')
-$request.Accept = 'application/vnd.github+json'
-try { $response = $request.GetResponse(); $status = [int]$response.StatusCode; $response.Close() }
-catch [Net.WebException] { $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { -1 } }
-"  without a User-Agent: $status (403 expected)"
-if (-not $passed -or $status -ne 403) { 'FAILED'; exit 1 }
+function Get-Status([string]$UserAgent, [string]$ApiVersion) {
+    $request = [Net.HttpWebRequest]::Create('https://api.github.com/repos/mbustos27/fluentfin-mpv/releases/latest')
+    $request.Accept = 'application/vnd.github+json'
+    if ($UserAgent) { $request.UserAgent = $UserAgent }
+    if ($ApiVersion) { $request.Headers.Add('X-GitHub-Api-Version', $ApiVersion) }
+    try { $response = $request.GetResponse(); $status = [int]$response.StatusCode; $response.Close() }
+    catch [Net.WebException] { $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { -1 } }
+    $status
+}
+
+# GitHub refuses an API request without a User-Agent, and one with an API version it doesn't know (BH-150-m8, the
+# contrast to the pinned one): the fake release must keep doing the same
+$noAgent = Get-Status '' ''
+"  without a User-Agent: $noAgent (403 expected)"
+$unknown = Get-Status 'Nixie/0.0.1' '1999-01-01'
+"  with API version 1999-01-01: $unknown (400 expected)"
+if (-not $passed -or $noAgent -ne 403 -or $unknown -ne 400) { 'FAILED'; exit 1 }
 'PASSED'

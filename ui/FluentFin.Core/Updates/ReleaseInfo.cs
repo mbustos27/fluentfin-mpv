@@ -18,6 +18,18 @@ public static class UpdateSource
 	public const string ReleasesPage = RepositoryUrl + "/releases";
 
 	/// <summary>
+	/// Nixie 1.5 (BH-150-m8): the REST API version the check pins (<see cref="ApiVersionHeader"/>), so the answer's shape is the
+	/// one <see cref="ReleaseInfo.Parse(string?, bool)"/> reads, not whatever GitHub's default becomes. GitHub supports
+	/// 2022-11-28 and 2026-03-10 (2026-11-20, its own 400 for an unknown version says so) and refuses any other with a 400.
+	/// </summary>
+	public const string ApiVersion = "2022-11-28";
+
+	/// <summary>The request header that names <see cref="ApiVersion"/>; GitHub echoes the version it used in <see cref="ApiVersionSelectedHeader"/>.</summary>
+	public const string ApiVersionHeader = "X-GitHub-Api-Version";
+
+	public const string ApiVersionSelectedHeader = "x-github-api-version-selected";
+
+	/// <summary>
 	/// Nixie 1.3.1: the harness's override of <see cref="LatestReleaseApi"/> (<c>NIXIE_UPDATE_API</c>, through
 	/// <see cref="AppIdentity.ReadEnvironment"/>): its fake server's release answer, so no automated run asks GitHub.
 	/// </summary>

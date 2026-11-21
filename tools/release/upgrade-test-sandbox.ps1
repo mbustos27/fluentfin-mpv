@@ -9,13 +9,16 @@
   READ-ONLY; the scripts (tools\release\sandbox), read-only; and one results folder, read-write. Networking is off (no
   step needs GitHub: the updater's download is replaced by a local installer). No GPU, microphone, camera, clipboard or
   printer. Its logon command runs tools\release\sandbox\upgrade-inside.ps1, which (as a standard user it makes inside the
-  Sandbox) runs two legs and writes results.json, then shuts the Sandbox down:
-    leg 1, the old flow: the previous MSI (1.4.1), then this release over it the way 1.4.1's updater does it (msiexec /i,
+  Sandbox) runs three legs and writes results.json, then shuts the Sandbox down:
+    leg 1, the old flow: the previous MSI (-PreviousVersion), then this release over it the way 1.4.1's updater did it (msiexec /i,
       Nixie closed, nothing reopened); the installed version, and the data folders (a Seaglass folder copied to Nixie by
       the older version, kept by this one, the Seaglass folder untouched);
     leg 2, the new flow: this release's "Restart to update" (driven by Nixie.exe --install-update <msi>, no clicks) to a
       test build numbered higher (this release's files in an MSI of version -TestVersion, built here, never published):
       Nixie closes, the launcher's helper installs quietly (msiexec /passive, logged) and opens Nixie again;
+    leg 3 (1.5.1), the previous release's own Restart to update to this release (the real MSI from dist): the test build
+      uninstalled and the previous release installed again, its --install-update (no marker gate before 1.5.1) installs
+      this release, which opens and logs "[update] the install of <this> from <previous>: Updated" (the Updated notice);
     and the proof that the per-user MSI needs no administrator: the tester is not an administrator and runs at medium
       integrity (whoami /groups), every install exits 0, and the msiexec logs' privilege lines are kept.
   Nothing is installed by this script on this PC, and the inside script refuses to run anywhere but in the Sandbox.
@@ -34,11 +37,11 @@ param(
     [string]$Dist,
     [string]$Version,
     [string]$PreviousMsi,
-    [string]$PreviousVersion = '1.4.1',
+    [string]$PreviousVersion = '1.5.0',      # the previous release (1.5.1: 1.5.0, whose updater is the new flow)
     [string]$TestVersion,
     [string]$TestMsi,
     [switch]$DryRun,
-    [int]$TimeoutMinutes = 45
+    [int]$TimeoutMinutes = 60
 )
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -71,7 +74,9 @@ foreach ($folder in $Dist, (Split-Path $PreviousMsi)) {
 
 $testBuild = Join-Path $Out 'test-build'
 $results = Join-Path $Out 'results'
-# review m9: only a folder this script made (it holds its marker) is emptied again; anything else of that name is refused
+# review m9: only a folder this script made (it holds its marker) is emptied again; anything else of that name is refused.
+# BH-150-m6: the test-build folder's marker is also the Sandbox test's own for Nixie: a release package takes --install-update
+# only when NIXIE_UPGRADE_TEST names it (UpdateHandoff.TestMarker*; keep the name and the words in step with it)
 $marker = '.nixie-upgrade-test'
 foreach ($d in $testBuild, $results) {
     if (Test-Path -LiteralPath $d) {
@@ -143,7 +148,8 @@ $wsb = Join-Path $Out 'nixie-upgrade-test.wsb'
 $plan = [ordered]@{ version = $Version; previous = $PreviousVersion; test = $TestVersion; wsb = $wsb; networking = 'off'
     mapped = @($mappings | ForEach-Object { [ordered]@{ host = $_.Host; sandbox = $_.Sandbox; readOnly = $_.ReadOnly } }); logon = $logon
     legs = @('1: previous MSI, then this release over it by the old flow (closes, nothing reopens); version and data folders',
-             '2: this release, Restart to update (--install-update) to the test build: quiet install, Nixie reopens',
+             '2: this release, Restart to update (--install-update, with the test''s marker in NIXIE_UPGRADE_TEST) to the test build: quiet install, Nixie reopens',
+             '3: the previous release again, its own Restart to update (--install-update, no marker before 1.5.1) to this release: quiet install, this release reopens and logs Updated',
              'no administrator: a standard user at medium integrity; msiexec exit codes and log lines kept') }
 $plan | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $Out 'plan.json')
 Write-Host "wrote $wsb"

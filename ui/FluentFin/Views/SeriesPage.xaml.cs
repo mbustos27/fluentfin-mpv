@@ -24,7 +24,7 @@ public sealed partial class SeriesPage : Page
 	{
 		base.OnNavigatedTo(e);
 		// the place waits for the shown season's episodes too, so the scroll lands in the right list
-		_place ??= new ItemPagePlace(this, PageContent, () => ViewModel.State.Status is not (LoadStatus.Idle or LoadStatus.Loading) && !ViewModel.IsLoadingEpisodes);
+		_place ??= new ItemPagePlace(this, PageContent, () => ViewModel.State.Status is not (LoadStatus.Idle or LoadStatus.Loading) && !ViewModel.IsLoadingEpisodes, primary: () => PlayButton); // 1.5 huntfix (BH-150-M3): Play takes the keyboard on arrival, as on a film's page
 		// 1.2.0 (items review, item 1): Back shows the season the page showed when it was left, not Next Up's
 		ViewModel.ReturnTo(_place.Arrived(e)?.SelectedSeasonId);
 	}

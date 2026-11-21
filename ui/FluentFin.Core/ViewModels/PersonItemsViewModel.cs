@@ -46,11 +46,17 @@ public partial class PersonItemsViewModel(IJellyfinClient jellyfinClient) : Obse
 			}
 
 			Items = [.. (result.Items ?? []).Where(i => i is not null).Select(BaseItemViewModel.FromDto)];
+			// 1.5 huntfix (BH-150-m3): the page asks for films and shows, and Jellyfin credits a guest star on the episodes only,
+			// so "has no films or shows with them" was false for one; it says what Nixie looked at
 			return Items.Count == 0
-				? LoadOutcome.Empty($"Nothing with {(Name.Length > 0 ? Name : "this person")}", $"{LoadMessages.ServerName()} has no films or shows with them.")
+				? LoadOutcome.Empty($"Nothing with {(Name.Length > 0 ? Name : "this person")}", EmptyDetail(LoadMessages.ServerName()))
 				: LoadOutcome.Loaded;
 		});
 	}
+
+	/// <summary>1.5 huntfix (BH-150-m3): "No films or shows on Home Server list them. Guest roles on single episodes aren't shown here."</summary>
+	public static string EmptyDetail(string server) =>
+		$"No films or shows on {server} list them. Guest roles on single episodes aren't shown here.";
 
 	public Task OnNavigatedFrom() => Task.CompletedTask;
 }

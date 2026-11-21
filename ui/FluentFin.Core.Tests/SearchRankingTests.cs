@@ -336,8 +336,9 @@ public sealed class SearchRankingTests
 
 		Assert.Equal("Night of the Living Dead", results?.Top is null ? results?.Groups[0].Strong[0].Item.Name : null);
 		Assert.Equal(["Night Moves"], results!.GroupOf(SearchKind.Movies)!.Weak.Select(r => r.Item.Name));
-		client.Verify(x => x.Search("night dead", It.IsAny<IReadOnlyList<BaseItemKind>>(), 100), Times.Exactly(4));
-		client.Verify(x => x.Search("night", It.IsAny<IReadOnlyList<BaseItemKind>>(), 100), Times.Exactly(4));
+		// 1.5.1 fixes (BH-150-m7): five kinds through /Items (Videos too), people through /Persons
+		client.Verify(x => x.Search("night dead", It.IsAny<IReadOnlyList<BaseItemKind>>(), 100), Times.Exactly(5));
+		client.Verify(x => x.Search("night", It.IsAny<IReadOnlyList<BaseItemKind>>(), 100), Times.Exactly(5));
 		client.Verify(x => x.Search(It.IsAny<string>(), It.Is<IReadOnlyList<BaseItemKind>>(k => k.Contains(BaseItemKind.Person)), It.IsAny<int>()), Times.Never);
 	}
 
@@ -459,6 +460,10 @@ public sealed class SearchRankingTests
 		await vm.OnNavigatedTo(nobody);
 		Assert.True(vm.Results.IsEmpty);
 		Assert.Equal("Nothing with Nobody Here", vm.Results.Title);
+		// BH-150-m3: a guest star is credited on episodes only, which the page doesn't ask: it says what it looked at
+		Assert.StartsWith("No films or shows on ", vm.Results.Message, StringComparison.Ordinal);
+		Assert.EndsWith(" list them. Guest roles on single episodes aren't shown here.", vm.Results.Message, StringComparison.Ordinal);
+		Assert.DoesNotContain("has no films or shows", vm.Results.Message, StringComparison.Ordinal);
 		Assert.Empty(vm.Items);
 
 		var down = Item("Down Town", BaseItemDto_Type.Person);
@@ -478,8 +483,55 @@ public sealed class SearchRankingTests
 	{
 		var client = new Mock<IJellyfinClient>();
 		client.Setup(x => x.Search(It.IsAny<string>(), It.IsAny<IReadOnlyList<BaseItemKind>>(), It.IsAny<int>()))
-			.ReturnsAsync((string _, IReadOnlyList<BaseItemKind> kinds, int _) => Found([.. items.Where(i => SearchKinds.All.Any(k => k.ServerKind == kinds.Single() && k.Type == i.Type))]));
+			.ReturnsAsync((string _, IReadOnlyList<BaseItemKind> kinds, int _) => Found([.. items.Where(i => SearchKinds.All.Any(k => k.ServerKinds.SequenceEqual(kinds) && i.Type is { } type && k.Types.Contains(type)))]));
 		return client;
+	}
+
+	/// <summary>
+	/// 1.5.1 fixes (BH-150-m7): search finds home videos and music videos (it asked for shows, films, episodes, collections
+	/// and people only): a Videos group with its chip, asked for in one request, named for Narrator; each opens its page. Not
+	/// songs or albums (BH-151-M2: nothing plays them): none asked for, none shown.
+	/// </summary>
+	[Fact]
+	public async Task HomeVideosAndMusicVideos_AreFound_InTheirOwnGroup_SongsAndAlbumsAreNot()
+	{
+		var home = Item("Sunny Beach Day", BaseItemDto_Type.Video);
+		var clip = Item("Sunny Afternoon", BaseItemDto_Type.MusicVideo);
+		var client = Client(Item("Sunny", BaseItemDto_Type.Movie), home, clip, Item("Sunny Side", BaseItemDto_Type.MusicAlbum), Item("Sunny Morning", BaseItemDto_Type.Audio));
+		var vm = new SearchResultsViewModel(client.Object);
+		SearchPageMemory.Forget("sunny");
+
+		await vm.OnNavigatedTo("sunny");
+
+		client.Verify(x => x.Search("sunny", It.Is<IReadOnlyList<BaseItemKind>>(k => k.SequenceEqual(new[] { BaseItemKind.Video, BaseItemKind.MusicVideo })), 100), Times.Once);
+		client.Verify(x => x.Search(It.IsAny<string>(), It.Is<IReadOnlyList<BaseItemKind>>(k => k.Contains(BaseItemKind.Audio) || k.Contains(BaseItemKind.MusicAlbum)), It.IsAny<int>()), Times.Never);
+		Assert.Equal(["All", "Movies", "Videos"], vm.Chips.Select(c => c.Label));
+		vm.ShowKindCommand.Execute(SearchKind.Videos);
+		Assert.Equal("Videos (2)", Assert.Single(vm.CardGroups).Heading);
+		Assert.Equal("Sunny Beach Day, video", SearchLabels.For(home));
+		Assert.Equal("Sunny Afternoon, music video", SearchLabels.For(clip));
+		Assert.Equal(typeof(MovieViewModel), GlobalCommands.PageFor(BaseItemDto_Type.Video));
+		Assert.Equal(typeof(MovieViewModel), GlobalCommands.PageFor(BaseItemDto_Type.MusicVideo));
+		// a hint of these kinds counts too (/Search/Hints names them by the same names); a song's does not
+		Assert.Equal(SearchKind.Videos, SearchKinds.KindOf(SearchHint_Type.MusicVideo));
+		Assert.Null(SearchKinds.KindOf(SearchHint_Type.Audio));
+		Assert.Null(SearchKinds.KindOf(SearchHint_Type.MusicAlbum));
+	}
+
+	/// <summary>
+	/// 1.5.1 (the bug hunt's BH-151-M2): everything search finds can be played from where it opens: an item Play starts
+	/// (CollectionBrowse.IsPlayable), a collection whose page plays what it holds, or a person whose page lists films and
+	/// shows. An album found by search opened with Play off.
+	/// </summary>
+	[Fact]
+	public void EveryKindSearchFinds_OpensSomethingThatPlays()
+	{
+		foreach (var type in SearchKinds.All.SelectMany(k => k.Types))
+		{
+			Assert.True(CollectionBrowse.IsPlayable(new BaseItemDto { Type = type }) || type is BaseItemDto_Type.BoxSet or BaseItemDto_Type.Person,
+				$"{type}: search finds it, but nothing plays it");
+			Assert.NotNull(GlobalCommands.PageFor(type));
+		}
 	}
 
 	[Fact]

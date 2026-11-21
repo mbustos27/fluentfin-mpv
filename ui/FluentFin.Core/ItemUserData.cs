@@ -165,10 +165,19 @@ public static class ItemUserData
 			took = false;
 		}
 
-		if (took && ticks > 0)
+		if (!took)
 		{
-			// the baseline for "played since": the item as the reset left it (in case the server dates the reset as a play)
-			lastPlayed = (await TryGetUserData(client, id))?.LastPlayedDate ?? lastPlayed;
+			return false;
+		}
+
+		// BH-150-m1: the item as the reset left it replaces its copy and every surface hears it (as the toggles do), so its
+		// cards and rows lose their progress bar and its menu stops offering Reset. It is also the baseline for "played since"
+		// (in case the server dates the reset as a play).
+		var after = await TryGetUserData(client, id);
+		Show(dto, id, after, 0);
+		if (ticks > 0)
+		{
+			lastPlayed = after?.LastPlayedDate ?? lastPlayed;
 			UndoOffered?.Invoke(null, new UndoOffer(UndoOffer.ResetSaid(dto), async () =>
 			{
 				var now = await TryGetUserData(client, id);
@@ -177,18 +186,46 @@ public static class ItemUserData
 					return false;
 				}
 
+				bool undone;
 				try
 				{
-					return await client.SetResumePosition(id, ticks);
+					undone = await client.SetResumePosition(id, ticks);
 				}
 				catch (Exception)
 				{
-					return false;
+					undone = false;
 				}
+
+				if (undone)
+				{
+					Show(dto, id, await TryGetUserData(client, id), ticks);   // BH-150-m1: the resume point is back on screen too
+				}
+
+				return undone;
 			}));
 		}
 
-		return took;
+		return true;
+	}
+
+	/// <summary>
+	/// BH-150-m1: <paramref name="dto"/>'s copy becomes <paramref name="server"/> (the server's answer), or, when the server
+	/// could not say, its own copy at <paramref name="ticks"/>; then <see cref="Changed"/> tells every surface showing it.
+	/// </summary>
+	private static void Show(BaseItemDto dto, Guid id, UserItemDataDto? server, long ticks)
+	{
+		if (server is null)
+		{
+			server = dto.UserData ?? new UserItemDataDto();
+			server.PlaybackPositionTicks = ticks;
+			if (ticks == 0)
+			{
+				server.PlayedPercentage = null;
+			}
+		}
+
+		dto.UserData = server;
+		Changed?.Invoke(null, new ItemUserDataChangedEventArgs(id, server, failed: false));
 	}
 
 	/// <summary>The review of 1.5 (m6): the item was played after the reset: it has a resume point again, or a newer last play.</summary>

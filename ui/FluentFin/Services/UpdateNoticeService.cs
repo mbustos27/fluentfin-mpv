@@ -306,11 +306,13 @@ public sealed class UpdateNoticeService : IHostedService, IDisposable
 	/// <summary>
 	/// Nixie 1.5: <c>--install-update &lt;msi&gt;</c> (the upgrade test in Windows Sandbox drives "Restart to update" with it): an
 	/// installed copy takes that installer, checked against the .sha256 beside it, as a ready update and restarts to install
-	/// it, once the window is up. Refused (and logged) on a portable copy or for anything else.
+	/// it, once the window is up. Refused (and logged) on a portable copy, in a release package without the test's marker
+	/// (BH-150-m6), or for anything else.
 	/// </summary>
 	private void InstallFromCommandLine(CancellationToken token)
 	{
-		if (UpdateHandoff.LocalInstaller([.. Environment.GetCommandLineArgs().Skip(1)], AppVersion.Current, out var msi, out var error) is not { } release)
+		if (UpdateHandoff.LocalInstaller([.. Environment.GetCommandLineArgs().Skip(1)], AppVersion.Current, AppVersion.IsReleasePackage,
+			Environment.GetEnvironmentVariable(UpdateHandoff.TestMarkerVariable), out var msi, out var error) is not { } release)
 		{
 			if (error is not null)
 			{

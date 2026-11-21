@@ -1,5 +1,4 @@
 ﻿using System.Reflection;
-using DeviceId;
 using FluentFin.Core.Contracts.Services;
 using Jellyfin.Sdk.WebSockets;
 using Flurl;
@@ -43,7 +42,7 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		homeCache.SignedIn(baseUrl, UserId, authResult.ServerId, authResult.User.Name);
 
 		_token = authResult.AccessToken;
-		_deviceId = new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
+		_deviceId = InstallDeviceId.Current; // 1.5.1 fixes (BH-150-M2): this copy's id, not the PC's
 		_settings = new Jellyfin.Sdk.JellyfinSdkSettings();
 		SessionInfo.ClientName = AppIdentity.ClientName; // Nixie (was "Seaglass", and "FluentFin MPV" before that)
 		SessionInfo.ClientVersion = AppVersion.Current; // fluentfin-mpv: the release version ("1.0.0")
@@ -53,7 +52,10 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 		_settings.SetAccessToken(_token);
 		_settings.SetServerUrl(baseUrl);
 		ForgetUserViews(); // fluentfin-mpv: another server or user (GetUserViews)
-		_jellyfinApiClient = new Jellyfin.Sdk.JellyfinApiClient(new Jellyfin.Sdk.JellyfinRequestAdapter(new Jellyfin.Sdk.JellyfinAuthenticationProvider(_settings), _settings));
+		// 1.5.1 fixes (BH-150-M2): a token the server stops taking makes the pages ask for a new sign-in (SignInWatch)
+		SignInState.SignedIn();
+		_jellyfinApiClient = new Jellyfin.Sdk.JellyfinApiClient(new Jellyfin.Sdk.JellyfinRequestAdapter(new Jellyfin.Sdk.JellyfinAuthenticationProvider(_settings), _settings,
+			WatchedHttpClient(baseUrl, authResult.AccessToken)));
 
 		// fluentfin-mpv: capabilities, plugins and views do not depend on each other: asked together they cost one round
 		// trip instead of three before the window and Home show. The views stay in GetUserViews, so Home does not ask again.
@@ -69,6 +71,16 @@ public partial class JellyfinClient(ILogger<JellyfinClient> logger,
 
 		await jumpListService.Initialize(await views);
 	}
+
+	/// <summary>
+	/// 1.5.1 fixes (BH-150-M2): Kiota's own client (its retry, redirect and other handlers, as the SDK made it before) over
+	/// <see cref="SignInWatch"/>, which watches this sign-in's token.
+	/// </summary>
+	private HttpClient WatchedHttpClient(string baseUrl, string token) =>
+		Microsoft.Kiota.Http.HttpClientLibrary.KiotaClientFactory.Create(new SignInWatch(() => baseUrl, () => _token == token ? token : "", logger)
+		{
+			InnerHandler = Microsoft.Kiota.Http.HttpClientLibrary.KiotaClientFactory.GetDefaultHttpMessageHandler(),
+		});
 
 	/// <summary>
 	/// fluentfin-mpv (startup-perf, O13): the device profile ready for the selected player. A probe that fails (the Windows

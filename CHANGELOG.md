@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.5.1
+
+A fix release: signing in again when the server ends your sign-in, "Skip intro" on shows whose intro moves, search for
+videos and music, and the rest of what 1.5.0's bug hunt found.
+
+**Fixes**
+
+- **A sign-in the server no longer accepts asks you to sign in again.** When the server ended Nixie's sign-in (signed out
+  from its dashboard, "sign out of all devices", a new password), every page said "Check that the server is running" and
+  Try again never worked. The page now says your sign-in ended, with Sign in again: a saved sign-in signs in again where
+  you are, otherwise the server's sign-in page opens. The player says the same.
+- **Two copies of Nixie on one PC no longer sign each other out.** An installed and a portable copy, or two Windows
+  accounts signed in as the same Jellyfin user, are now devices of their own. After the update the server lists Nixie
+  once more as a new device (the old entry can be removed from its Devices page); your saved sign-in carries over.
+- **"Skip intro" stops guessing where a show's intro moves.** A show whose intro follows a cold open of a different length
+  each episode (It's Always Sunny in Philadelphia) was offered the spot you skipped last time, sometimes at 0:00, where
+  Skip skipped the cold open. Once your own skips in a season land 10 s or more apart, Nixie offers that season no
+  learned spot (a show whose intro sits elsewhere in another season keeps its spot there). Settings > "Forget learned
+  intros" starts over.
+- **Search finds home videos and music videos,** with a Videos chip.
+- **Enter on a show opens it on its Play,** so Enter, Enter plays, as on a film's page. The keyboard was on the top bar's
+  Back, and the second Enter went back to the library.
+- **Home's "Some of Home couldn't be loaded" notice can be read in Classic.** It sat under the top bar, its words through
+  the tabs and its Try again under the search box.
+- **Reset watch progress shows at once:** the progress bar goes and the menu stops offering Reset, and Undo brings them
+  back.
+- **"With <name>" opens on its first poster,** its posters keep their shape in very wide windows, and a person with no
+  films or shows says so plainly (guest roles on single episodes aren't listed there yet).
+- **A home server reached by a local name is at home again** (split DNS, a router's name such as `nas.home`, a hosts-file
+  entry): 1.5.0 counted it as remote, so its plays kept the remote quality limit. A public address stays remote.
+- **Libraries > Display's "Date added behavior for new content" is saved.** The page said "Saved" but never sent it.
+- **Anime seasons 2 and on get their own online skip times** ("Look intros up online"): a show whose server lists a
+  MyAnimeList, AniList or AniDB id looked every season up as its first.
+- **Only the updater installs updates.** The installed copy also took an installer named on its command line (a switch
+  kept for the release's own upgrade test), with no question; it now refuses that outside the test.
+
 ## 1.5.0
 
 Search that puts what you typed first, updates you can watch happen, seasons that switch with their pictures, and fixes.

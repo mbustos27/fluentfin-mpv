@@ -86,4 +86,35 @@ public sealed class ServerConfigurationSaveTests
 		Assert.StartsWith("Couldn't save", page.SaveStatus, StringComparison.Ordinal);
 		Assert.True(page.SaveCommand.CanExecute(null));
 	}
+
+	/// <summary>
+	/// 1.5.1 fixes: Libraries > Display's "Date added behavior for new content" is the server's metadata configuration
+	/// (/System/Configuration/metadata): Save sends it as chosen, and a server that does not take it is "Couldn't save".
+	/// </summary>
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task Display_SavesTheDateAddedChoice(bool takes)
+	{
+		var metadata = new Metadata { UseFileCreationTimeForDateAdded = true };
+		_client.Setup(x => x.GetConfiguration()).ReturnsAsync(_config);
+		_client.Setup(x => x.TrySaveConfiguration(It.IsAny<ServerConfiguration>())).ReturnsAsync(true);
+		_client.Setup(x => x.GetMetadata()).ReturnsAsync(metadata);
+		var saved = new List<bool>();
+		_client.Setup(x => x.SaveMetadata(It.IsAny<Metadata>())).Returns((Metadata m) =>
+		{
+			saved.Add(m.UseFileCreationTimeForDateAdded);
+			return takes ? Task.CompletedTask : Task.FromException(new HttpRequestException("400"));
+		});
+		var page = new LibrariesDisplayViewModel(_client.Object);
+		await ((FluentFin.Contracts.ViewModels.INavigationAware)page).OnNavigatedTo(null!);
+		var dateAdded = Assert.IsType<JellyfinSelectableConfigItemViewModel>(page.Items[0]);
+
+		dateAdded.SelectedValue = page.DateAddedBehaviors[1]; // "Use date scanned into the library"
+		Assert.True(page.SaveCommand.CanExecute(null));
+		await page.SaveCommand.ExecuteAsync(null);
+
+		Assert.Equal([false], saved);
+		Assert.Equal(takes ? "Saved" : ServerConfigurationViewModel.NotSavedText, page.SaveStatus);
+	}
 }

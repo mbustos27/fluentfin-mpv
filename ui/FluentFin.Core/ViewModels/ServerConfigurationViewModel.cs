@@ -80,6 +80,12 @@ namespace FluentFin.Core.ViewModels
 
 		protected abstract List<JellyfinConfigItemViewModel> CreateItems(ServerConfiguration config);
 
+		/// <summary>
+		/// 1.5.1 fixes: what a page saves besides the server configuration, after it (Libraries > Display's date-added choice is
+		/// the metadata configuration's, which Save never sent while the page said "Saved"). True when the server took it.
+		/// </summary>
+		protected virtual Task<bool> SaveMoreAsync() => Task.FromResult(true);
+
 		[RelayCommand(CanExecute = nameof(CanSave))]
 		private async Task Save()
 		{
@@ -99,6 +105,7 @@ namespace FluentFin.Core.ViewModels
 
 				// 1.5 fixes: whether the server took it (SaveConfiguration logs a failure and says nothing)
 				var took = await _jellyfinClient.TrySaveConfiguration(_configuration);
+				took = await SaveMoreAsync() && took; // 1.5.1 fixes
 				_unsaved = !took;
 				SaveStatus = took ? SavedText : NotSavedText;
 			}

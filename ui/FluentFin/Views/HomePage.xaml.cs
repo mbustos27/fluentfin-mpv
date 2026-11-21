@@ -163,6 +163,19 @@ public sealed partial class HomePage : Page
 	/// <summary>1.1.4: the rows' inset under an edge-to-edge hero: 24 a side, and 36 on top while there is no hero (as before).</summary>
 	public static Microsoft.UI.Xaml.Thickness RowsMargin(IReadOnlyList<HeroSlide>? hero) => new(24, hero is { Count: > 0 } ? 20 : 36, 24, 0);
 
+	// 1.5 huntfix (BH-150-M1)
+	/// <summary>
+	/// Home's load state (a "Some of Home couldn't be loaded" notice, or a message in place of the page): below the top bar the
+	/// page runs under (<see cref="Controls.TopBar.Height"/>), with room before the hero; no room at all when there is nothing
+	/// to say, so the hero stays the first thing, right under the title bar.
+	/// </summary>
+	public static Microsoft.UI.Xaml.Thickness StateMargin(bool hasProblem, bool hasMessage) =>
+		hasProblem || hasMessage ? new(36, Controls.TopBar.Height + StateGap, 36, hasProblem ? StateGap : 0) : new(36, 0, 36, 0);
+
+	/// <summary>The space between the top bar and the notice, and between the notice and the hero.</summary>
+	public const double StateGap = 12;
+	// END 1.5 huntfix
+
 	public static Microsoft.UI.Xaml.Visibility NoticeVisibility(HomeNotice? notice) =>
 		notice is null ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
 

@@ -117,22 +117,40 @@ def synchronous(tlockname: str):
 
 def is_local_domain(client: "JellyfinClient_type"):
     # FluentFin MPV (1.5, privacy and the review of 1.5): decided from the
-    # server's address alone. Upstream resolved the name, then settled IPv4
-    # hairpin NAT by asking checkip.amazonaws.com for this machine's public
-    # address on every play, and asked the server's /System/Endpoint for
-    # IPv6. The outside lookup is gone for privacy, and the endpoint call
-    # with it: behind a reverse proxy the server sees only the proxy's LAN
-    # address and calls every play local, which lifted the remote bitrate
-    # cap (`remote_kbps`) from plays that were remote. A home server reached
-    # by its public name now counts as remote, as any public address does.
+    # server's address and its name lookup, asking nobody. Upstream resolved
+    # the name, then settled IPv4 hairpin NAT by asking checkip.amazonaws.com
+    # for this machine's public address on every play, and asked the
+    # server's /System/Endpoint for IPv6. The outside lookup is gone for
+    # privacy, and the endpoint call with it: behind a reverse proxy the
+    # server sees only the proxy's LAN address and calls every play local,
+    # which lifted the remote bitrate cap (`remote_kbps`) from plays that
+    # were remote. A public address stays remote. A public-looking name is
+    # resolved (as 1.4.1 did, no request): a private answer is local (split
+    # DNS, router names, hosts-file entries; BH-150-m5), anything else -- a
+    # public answer or none -- is remote.
     # END FluentFin MPV
     url = client.config.data.get("auth.server", "")
-    return address_is_local(urllib.parse.urlparse(url).hostname)
+    host = urllib.parse.urlparse(url).hostname
+    if address_is_local(host):
+        return True
+    if not host or _ip_literal(host) is not None:
+        return False
+    return resolved_host_is_private(url) is True
 
 
 #: FluentFin MPV: name endings that are never public (mDNS, RFC 8375's
 #: home.arpa, and the private-use names routers hand out).
 LOCAL_NAME_ENDINGS = (".local", ".lan", ".home.arpa", ".internal", ".localhost")
+
+
+def _ip_literal(host):
+    """FluentFin MPV: ``host`` as an IP address (zone id dropped), or None
+    when it is a name."""
+    try:
+        return ipaddress.ip_address(
+            host.strip("[]").rstrip(".").split("%", 1)[0])
+    except ValueError:
+        return None
 
 
 def address_is_local(host):
@@ -141,14 +159,12 @@ def address_is_local(host):
     IPv6, an IPv4-mapped IPv6 address as its IPv4), a single-label name
     (``localhost``, a machine name) or a name ending in one of
     `LOCAL_NAME_ENDINGS`. Anything else -- a public address or a public host
-    name -- is remote. Nothing is resolved and nothing is asked."""
+    name -- is not local *as written*. Nothing is resolved and nothing is
+    asked: `is_local_domain` resolves a public-looking name afterwards."""
     if not host:
         return False
     host = host.strip("[]").rstrip(".").lower()
-    try:
-        ip = ipaddress.ip_address(host.split("%", 1)[0])
-    except ValueError:
-        ip = None
+    ip = _ip_literal(host)
     if ip is not None:
         if ip.version == 6 and ip.ipv4_mapped is not None:
             ip = ip.ipv4_mapped
@@ -169,9 +185,10 @@ def resolved_host_is_private(address):
     and it is the half that matters for split-horizon DNS: a self-hoster's
     own domain resolves to a LAN address at home and a public one away, so
     nothing about the spelling of the URL can answer it. (FluentFin MPV:
-    `is_local_domain` now goes the other way and reads only the address as
-    written -- no lookup, no outbound request -- so that a server behind a
-    reverse proxy keeps its remote bitrate cap.)
+    `is_local_domain` reads the address as written first and asks this only
+    for a public-looking name -- never an outbound request -- so a public
+    address behind a reverse proxy keeps its remote bitrate cap and a
+    split-DNS name at home is local.)
 
     **Blocking, and there is no bounding it** -- ``getaddrinfo`` takes no
     timeout, and ``socket.setdefaulttimeout`` does not reach it on glibc. It

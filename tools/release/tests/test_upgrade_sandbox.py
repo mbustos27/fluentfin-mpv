@@ -47,16 +47,16 @@ class HostScriptTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="nixie-sandbox-test-")
         self.dist = os.path.join(self.tmp, "dist")
+        placeholder(self.dist, "Nixie-1.5.1-win-x64.msi")
         placeholder(self.dist, "Nixie-1.5.0-win-x64.msi")
-        placeholder(self.dist, "Nixie-1.4.1-win-x64.msi")
-        self.test_msi = placeholder(os.path.join(self.tmp, "made"), "Nixie-1.5.90-win-x64.msi")
+        self.test_msi = placeholder(os.path.join(self.tmp, "made"), "Nixie-1.5.91-win-x64.msi")
         self.out = os.path.join(self.tmp, "out")
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def dry(self, *extra):
-        return run(HOST, "-Out", self.out, "-Dist", self.dist, "-Version", "1.5.0", "-TestMsi", self.test_msi, "-DryRun", *extra)
+        return run(HOST, "-Out", self.out, "-Dist", self.dist, "-Version", "1.5.1", "-TestMsi", self.test_msi, "-DryRun", *extra)
 
     def test_the_dry_run_writes_the_wsb_maps_inputs_read_only_and_starts_nothing(self):
         code, said = self.dry()
@@ -74,23 +74,31 @@ class HostScriptTests(unittest.TestCase):
         self.assertEqual((os.path.join(self.out, "results"), "false"), mapped[r"C:\nixie\results"])   # the one folder it writes
         logon = config.find("LogonCommand").findtext("Command")
         self.assertIn(r"-File C:\nixie\scripts\upgrade-inside.ps1 -Root C:\nixie", logon)
-        self.assertIn(r"-NewMsi dist\Nixie-1.5.0-win-x64.msi -PreviousMsi dist\Nixie-1.4.1-win-x64.msi -TestMsi test-build\Nixie-1.5.90-win-x64.msi", logon)
+        self.assertIn(r"-NewMsi dist\Nixie-1.5.1-win-x64.msi -PreviousMsi dist\Nixie-1.5.0-win-x64.msi -TestMsi test-build\Nixie-1.5.91-win-x64.msi", logon)
         self.assertNotIn(os.path.expanduser("~"), logon)            # nothing of this PC's folders inside
-        self.assertTrue(os.path.exists(os.path.join(self.out, "test-build", "Nixie-1.5.90-win-x64.msi.sha256")))
+        self.assertTrue(os.path.exists(os.path.join(self.out, "test-build", "Nixie-1.5.91-win-x64.msi.sha256")))
         plan = read_json(os.path.join(self.out, "plan.json"))
         self.assertEqual("off", plan["networking"])
-        self.assertEqual(3, len(plan["legs"]))
+        self.assertEqual(4, len(plan["legs"]))
         self.assertIn("old flow", plan["legs"][0])
         self.assertIn("Restart to update", plan["legs"][1])
+        # 1.5.1: the previous release's own Restart to update installs this release, which logs Updated
+        self.assertIn("previous release again, its own Restart to update", plan["legs"][2])
+        self.assertIn("logs Updated", plan["legs"][2])
+        self.assertEqual("1.5.0", plan["previous"])                  # the previous release by default
+        # BH-150-m6: the test build's folder carries the marker a release package needs for --install-update
+        self.assertIn("NIXIE_UPGRADE_TEST", plan["legs"][1])
+        with open(os.path.join(self.out, "test-build", ".nixie-upgrade-test"), encoding="utf-8") as f:
+            self.assertTrue(f.read().startswith("made by tools\\release\\upgrade-test-sandbox.ps1"))
 
     def test_a_previous_installer_elsewhere_gets_its_own_read_only_folder(self):
-        elsewhere = placeholder(os.path.join(self.tmp, "downloads"), "Nixie-1.4.1-win-x64.msi")
+        elsewhere = placeholder(os.path.join(self.tmp, "downloads"), "Nixie-1.5.0-win-x64.msi")
         code, said = self.dry("-PreviousMsi", elsewhere)
         self.assertEqual(0, code, said)
         config = ET.parse(os.path.join(self.out, "nixie-upgrade-test.wsb")).getroot()
         mapped = {m.findtext("SandboxFolder"): (m.findtext("HostFolder"), m.findtext("ReadOnly")) for m in config.iter("MappedFolder")}
         self.assertEqual((os.path.dirname(elsewhere), "true"), mapped[r"C:\nixie\previous"])
-        self.assertIn(r"-PreviousMsi previous\Nixie-1.4.1-win-x64.msi", config.find("LogonCommand").findtext("Command"))
+        self.assertIn(r"-PreviousMsi previous\Nixie-1.5.0-win-x64.msi", config.find("LogonCommand").findtext("Command"))
 
     def test_it_empties_only_folders_it_made_itself(self):
         # review m9: an existing <Out>\results or <Out>\test-build without the script's marker is refused, not deleted
@@ -111,12 +119,12 @@ class HostScriptTests(unittest.TestCase):
         self.assertEqual(0, code, said)
 
     def test_it_refuses_inputs_that_do_not_make_an_upgrade(self):
-        code, said = run(HOST, "-Out", self.out, "-Dist", self.dist, "-Version", "1.5.0", "-TestVersion", "1.5.0", "-DryRun")
+        code, said = run(HOST, "-Out", self.out, "-Dist", self.dist, "-Version", "1.5.1", "-TestVersion", "1.5.1", "-DryRun")
         self.assertEqual(2, code, said)
         self.assertIn("numbered higher", said)
         code, said = run(HOST, "-Out", self.out, "-Dist", self.dist, "-Version", "1.4.0", "-DryRun")
         self.assertEqual(2, code, said)                              # no Nixie-1.4.0 installer
-        code, said = run(HOST, "-Out", os.path.join(RELEASE, "out"), "-Dist", self.dist, "-Version", "1.5.0", "-DryRun")
+        code, said = run(HOST, "-Out", os.path.join(RELEASE, "out"), "-Dist", self.dist, "-Version", "1.5.1", "-DryRun")
         self.assertEqual(2, code, said)
         self.assertIn("outside the repository", said)
 
@@ -124,17 +132,17 @@ class HostScriptTests(unittest.TestCase):
 class InsideScriptTests(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp(prefix="nixie-sandbox-root-")
+        placeholder(os.path.join(self.root, "dist"), "Nixie-1.5.1-win-x64.msi")
         placeholder(os.path.join(self.root, "dist"), "Nixie-1.5.0-win-x64.msi")
-        placeholder(os.path.join(self.root, "dist"), "Nixie-1.4.1-win-x64.msi")
-        placeholder(os.path.join(self.root, "test-build"), "Nixie-1.5.90-win-x64.msi")
+        placeholder(os.path.join(self.root, "test-build"), "Nixie-1.5.91-win-x64.msi")
         self.results = os.path.join(self.root, "results")
 
     def tearDown(self):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def args(self):
-        return ["-Root", self.root, "-NewMsi", r"dist\Nixie-1.5.0-win-x64.msi", "-PreviousMsi", r"dist\Nixie-1.4.1-win-x64.msi",
-                "-TestMsi", r"test-build\Nixie-1.5.90-win-x64.msi", "-Results", self.results, "-NoShutdown"]
+        return ["-Root", self.root, "-NewMsi", r"dist\Nixie-1.5.1-win-x64.msi", "-PreviousMsi", r"dist\Nixie-1.5.0-win-x64.msi",
+                "-TestMsi", r"test-build\Nixie-1.5.91-win-x64.msi", "-Results", self.results, "-NoShutdown"]
 
     def test_outside_windows_sandbox_it_refuses_before_anything(self):
         code, said = run(INSIDE, *self.args())
@@ -153,8 +161,16 @@ class InsideScriptTests(unittest.TestCase):
         self.assertIn("nothing reopened", leg1)
         leg2 = " ".join(plan["leg2"])
         self.assertIn("--install-update", leg2)
+        self.assertIn(r"with NIXIE_UPGRADE_TEST=C:\Users\Public\nixie-upgrade\.nixie-upgrade-test", leg2)   # BH-150-m6
+        self.assertIn("the host script's marker (.nixie-upgrade-test)", leg2)
         self.assertIn("msiexec /passive /norestart /l*v Updates\\install.log", leg2)
         self.assertIn("opened again", leg2)
+        # 1.5.1: leg 3, the previous release's own Restart to update to this release, and the Updated line
+        leg3 = " ".join(plan["leg3"])
+        self.assertIn("msiexec /x <the installed product> /qn", leg3)
+        self.assertIn(r"--install-update C:\Users\Public\nixie-upgrade\Nixie-1.5.1-win-x64.msi (1.5.0 takes it without the marker)", leg3)
+        self.assertNotIn("NIXIE_UPGRADE_TEST", leg3)
+        self.assertIn('[update] the install of 1.5.1 from 1.5.0: "Updated"', leg3)
         self.assertIn("Medium Mandatory Level", " ".join(plan["elevation"]))
 
     def test_its_results_code_runs_in_windows_powershell_5_1(self):
@@ -185,8 +201,38 @@ class InsideScriptTests(unittest.TestCase):
         self.assertIn("outer 4 True", said)   # the tester's two read back, plus the outer's own two, and its notes
         self.assertIn("$null = $p.Handle", "\n".join(lines))   # the tester's exit code stays readable
 
+    def test_leg_3_reads_the_update_line_as_nixies_log_writes_it(self):
+        # 1.5.1 review: Serilog writes the enum in quotes (the 1.5.0 Sandbox run's real line, below with "None"): a check
+        # that looked for ': Updated' would fail a good update. The script's own Test-UpdateLine, on real lines, in 5.1.
+        with open(INSIDE, encoding="utf-8-sig") as f:
+            lines = f.read().splitlines()
+        start = next(i for i, line in enumerate(lines) if line.startswith("function Test-UpdateLine("))
+        end = next(i for i in range(start, len(lines)) if lines[i] == "}")
+        self.assertIn("(Test-UpdateLine $line.Line $new.Version $previous.Version 'Updated')", "\n".join(lines))
+        cases = [
+            # the real 1.5.0 run's line, and the same line for this release's update
+            ('2026-11-21 07:52:37.894 -08:00 [INF] [update] the install of 1.5.90 from 1.5.0: "None" (installer exit 0)', "1.5.90", "1.5.0", "None", True),
+            ('2026-11-21 07:52:37.894 -08:00 [INF] [update] the install of 1.5.1 from 1.5.0: "Updated" (installer exit 0)', "1.5.1", "1.5.0", "Updated", True),
+            ('[update] the install of 1.5.1 from 1.5.0: Updated (installer exit 0)', "1.5.1", "1.5.0", "Updated", True),
+            ('2026-11-21 07:52:37.894 -08:00 [INF] [update] the install of 1.5.1 from 1.5.0: "None" (installer exit 0)', "1.5.1", "1.5.0", "Updated", False),
+            ('2026-11-21 07:52:37.894 -08:00 [INF] [update] the install of 1.5.1 from 1.5.0: "Failed" (it failed) (installer exit 1603)', "1.5.1", "1.5.0", "Updated", False),
+            ('2026-11-21 07:52:37.894 -08:00 [INF] [update] the install of 1.5.11 from 1.5.0: "Updated" (installer exit 0)', "1.5.1", "1.5.0", "Updated", False),
+        ]
+        data = os.path.join(self.root, "update-lines.json")
+        with open(data, "w", encoding="utf-8") as f:
+            json.dump([{"line": c[0], "version": c[1], "from": c[2], "kind": c[3]} for c in cases], f)
+        probe = os.path.join(self.root, "update-line-probe.ps1")
+        with open(probe, "w", encoding="utf-8-sig") as f:
+            f.write("\n".join(["$ErrorActionPreference = 'Stop'", *lines[start:end + 1],
+                               f"foreach ($c in (Get-Content -Raw -Encoding UTF8 '{data}' | ConvertFrom-Json)) {{",
+                               "  Write-Host \"result $(Test-UpdateLine $c.line $c.version $c.from $c.kind)\" }"]))
+        code, said = run(probe)
+        self.assertEqual(0, code, said)
+        got = [line.split()[1] == "True" for line in said.splitlines() if line.startswith("result ")]
+        self.assertEqual([c[4] for c in cases], got, said)
+
     def test_versions_must_rise_through_the_legs(self):
-        os.remove(os.path.join(self.root, "test-build", "Nixie-1.5.90-win-x64.msi"))
+        os.remove(os.path.join(self.root, "test-build", "Nixie-1.5.91-win-x64.msi"))
         placeholder(os.path.join(self.root, "test-build"), "Nixie-1.4.9-win-x64.msi")
         args = self.args()
         args[args.index("-TestMsi") + 1] = r"test-build\Nixie-1.4.9-win-x64.msi"

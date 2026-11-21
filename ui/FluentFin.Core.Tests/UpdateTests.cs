@@ -192,6 +192,32 @@ public sealed class UpdateTests : IDisposable
 		Assert.Equal("Nixie/1.1.1", request.Headers.UserAgent.ToString());
 		Assert.Empty(request.Headers.Authorization is null ? [] : new[] { "auth" });
 		Assert.False(request.Headers.Contains("Cookie"));
+		// BH-150-m8: the API version is pinned, so GitHub moving its default can't change the answer's shape
+		Assert.Equal(["2022-11-28"], request.Headers.GetValues("X-GitHub-Api-Version"));
+		Assert.Equal("application/vnd.github+json", request.Headers.Accept.ToString());
+	}
+
+	/// <summary>BH-150-m8: GitHub refuses an API version it doesn't know with a 400 (live, 2026-11-20): a failed check that says so.</summary>
+	[Fact]
+	public async Task Check_AnswerForAnUnknownApiVersion_IsAFailedCheck_AndTheSelectedVersionIsRead()
+	{
+		var refused = new UpdateChecker(new HttpClient(new Fake(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+		{
+			Content = new StringContent("{\"message\":\"Bad Request\",\"errors\":\"The version you specified in the \\\"X-GitHub-API-Version\\\" request header ... is not a supported version.\",\"status\":\"400\"}"),
+		})), "1.1.1");
+		var result = await refused.CheckAsync(DateTimeOffset.UtcNow);
+		Assert.Equal(UpdateCheckStatus.Failed, result.Status);
+		Assert.Equal("GitHub answered 400", result.Reason);
+		Assert.Null(refused.ApiVersionSelected);
+
+		var answered = new UpdateChecker(new HttpClient(new Fake(_ =>
+		{
+			var ok = Ok(Release());
+			ok.Headers.Add("X-GitHub-Api-Version-Selected", "2022-11-28");
+			return ok;
+		})), "1.1.1");
+		Assert.Equal(UpdateCheckStatus.Available, (await answered.CheckAsync(DateTimeOffset.UtcNow)).Status);
+		Assert.Equal(UpdateSource.ApiVersion, answered.ApiVersionSelected);
 	}
 
 	[Fact]

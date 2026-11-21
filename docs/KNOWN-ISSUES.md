@@ -6,16 +6,11 @@ below is low severity, an accepted cost of the contract, or not verified yet. Ea
 says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
 ## Fix queue (next fix release)
-Found by the 1.5 reviews (2026-11-20); not fixed in 1.5.
-- **Libraries > Display's "Date added behavior for new content" is never sent.** The choice is written into the
-  library metadata options (`LibrariesDisplayViewModel.cs:37`, `UseFileCreationTimeForDateAdded`), but Save sends only the
-  server configuration, and the page says "Saved".
-- **Online intro lookups use a show-level id for seasons 2 and up.** When the server has a MyAnimeList, AniList or AniDB
-  id on the series, `intro_online.py` `mal_id_for` (lines 235-243) uses it for every season, so Season 2's episodes are
-  looked up as Season 1's (the wrong times, or none). Only the TVDB/TMDb mapping is per season.
+Found by the 1.5 reviews (2026-11-20); not fixed in 1.5 or 1.5.1 (1.6.1 takes them).
 - **Home's row names are not in sentence case** (button review L6): "Continue Watching" and "Next Up" style names where the
   rest of the app says "Continue watching". Held back in 1.5 because the harness finds rows by name (`then-search.ps1`,
-  `drive.ps1`'s Home step, the keys matrix): rename the rows and the scripts' names together.
+  `drive.ps1`'s Home step, the keys matrix): rename the rows and the scripts' names together. Left out of 1.5.1 too: 61
+  names in 16 harness scripts and the keys matrix in four themes, more than a fix release's hour.
 - **"/" can, rarely, type itself into the search box it opens** (found at the 1.5 integration). Once in about 60 presses
   (1 of 29 keys-matrix runs across the 1.5 streams; 0 of 30 in a targeted off-screen repro) the search sent "/Signal":
   the "/" that focused the box was also typed into it. `WindowShortcuts` handles "/" in
@@ -24,31 +19,45 @@ Found by the 1.5 reviews (2026-11-20); not fixed in 1.5.
   and Ctrl+E make no character. Fix: when "/" opens the box, swallow that key press's character (or focus the box once
   the character has been dispatched); the keys matrix should check the box is empty after "/".
 
-From the 1.5.0 bug hunt (`docs\reports\Bug hunt 2026-11-20 (1.5.0).md`; the owner shipped 1.5.0 with them queued; the
-fixes already started for them wait for the next release):
-- **BH-150-M1:** in Classic, Home's "Some of Home couldn't be loaded" notice is drawn under the top bar: its text runs
-  through the tabs and its Try again sits under the search box (`HomePage.xaml`; the other themes are fine).
-- **BH-150-M2:** a sign-in the server stops accepting looks like a dead server: every page says "Check that the server is
-  running" and Try again never works; nothing offers "sign in again". Two copies on one PC (two Windows accounts as the
-  same user, an installed and a portable copy) sign each other out, because the device id is the PC's.
-- **BH-150-M3:** Enter on a show's card opens it with the keyboard on the top bar's Back, so a second Enter goes back to
-  the library (the series and season pages have no first focus; Classic with real keys, seen in Drive-in and Cinematic).
-- **BH-150-m1:** Reset watch progress changes nothing on screen: the card keeps its progress bar and "Resume at", the menu
-  still offers Reset, and Undo changes nothing either, until the page reloads (`ItemUserData.ResetProgressAsync`).
-- **BH-150-m2:** "With <name>" opens with the keyboard on Back, its tooltip over the title, not on the first poster.
-- **BH-150-m3:** "With <name>" asks only for films and shows: a guest star credited on episodes only gets "has no films or
-  shows with them".
-- **BH-150-m4:** "With <name>" posters are stretched to fill the row and cropped, the year line cut (Editorial, a very wide
-  window).
-- **BH-150-m5:** a home server reached by a local name (split DNS, a router name such as `nas.home`, a hosts-file entry)
-  now counts as remote and gets the 10 Mbps remote cap: 1.5's "from the address alone" also dropped the name lookup
-  (`utils.address_is_local`).
-- **BH-150-m6:** `Nixie.exe --install-update <msi>` (the Sandbox test's hook) works in release builds: any local launch
-  installs an MSI with a matching `.sha256` beside it, with no question.
-- **BH-150-m7:** search never finds home videos, music videos or audio (`SearchKinds.All` asks shows, films, episodes,
-  collections and people).
-- **BH-150-m8:** the update check does not pin GitHub's API version (`X-GitHub-Api-Version`), so its answer is shaped by
-  GitHub's default of the day.
+From the 1.5.0 bug hunt (`docs\reports\Bug hunt 2026-11-20 (1.5.0).md`): 1.5.1 fixed every finding but this part of one:
+- **BH-150-m3 (the rest):** "With <name>" asks only for films and shows, so a guest star credited on episodes only finds
+  nothing there (1.5.1 says so in the empty state: "Guest roles on single episodes aren't shown here"). Ask `Episode` too,
+  grouped per show ("in 3 episodes").
+
+Found while making 1.5.1:
+- **then-140-arrival.ps1 assigns drive.ps1's `$before`** (lines 127 and 148; `test_then_names.ps1` fails on it, on 1.5.0
+  too): harmless today (drive.ps1 reads its `-Before` before the -Then script runs); rename the variable.
+
+From the 1.5.1 review (2026-11-21):
+- `ui\FluentFin\ViewModels\TitleBarViewModel.cs:220` `SignInAgain`: the in-place sign-in with a saved password has no test
+  (the bug hunt's probe passed it in Classic).
+- `ui\FluentFin.Core\Services\JellyfinClient.cs:70`: the websocket keeps redialling with the dead token until the next sign-in.
+- `ui\FluentFin.Core\InstallDeviceId.cs:29`: the program folder is part of the device id, so each portable version folder
+  (and each drive letter of a USB copy) is a new device; a user the administrator limits to chosen devices is refused
+  after the update (the bug hunt's BH-151-m5 too). Store the id in the data folder the first time.
+- `ui\FluentFin.Core\Services\SignInWatch.cs:48`: a check that started before a new sign-in can end the new session (a
+  tiny window: its 401 is for the old token, the mark is global).
+
+From the 1.5.1 bug hunt (`docs\reports\Bug hunt 2026-11-21 (1.5.1).md`):
+- **BH-151-m1** `ui\FluentFin.Core\ViewModels\SeriesViewModel.cs:299`: a series page's season list keeps "Couldn't load the
+  episodes" with Try again after the sign-in ended (all four themes' hard-coded Try again).
+- **BH-151-m2** `ui\FluentFin.Core\ViewModels\HomeViewModel.cs:752`, `ServerConfigurationViewModel.cs:28`: action
+  messages (remove, Save, the toggles) still say "didn't answer" or "check that it is running" after the sign-in ended.
+- **BH-151-m3** `ui\FluentFin.Core\InstallDeviceId.cs`: two windows of one copy share a device id (no single-instance
+  guard), and each one's in-place Sign in again ends the other's session, back and forth.
+- **BH-151-m4** `backend\jellyfin_mpv_shim\intro_sources.py:258` (`_save`): a 1.5.0 backend saving learned-intros.json
+  drops 1.5.1's "moves" marks (a 1.5.0 portable copy beside 1.5.1, or a downgrade).
+- **BH-151-m5** `ui\FluentFin.Core\InstallDeviceId.cs:29`: each portable version folder and USB drive letter is a new
+  device; per-device allow lists refuse it (the review's line above).
+- **BH-151-m6** `ui\FluentFin\Services\UpdateNoticeService.cs:314`: the release package's refusal of `--install-update`
+  without the marker is only unit-tested; the Sandbox's leg 2 (`upgrade-inside.ps1:269`) proves only the allowed side.
+- **BH-151-m7** `ui\FluentFin.Core\ViewModels\LibrariesDisplayViewModel.cs:51`: Display's Save posts a one-field
+  `Metadata` over the server's whole metadata configuration, on every Save (a key a later Jellyfin adds would be reset).
+- **BH-151-m8** `backend\jellyfin_mpv_shim\player_reporting.py:432` (`send_timeline`): the sign-in ending mid-playback
+  refuses the progress and Stopped reports, the player says nothing, and the place and watched state are lost.
+
+Left out of 1.5.1:
+- **Music in search, with playback** (BH-151-M2): songs and albums were taken out of search because nothing plays them.
 
 ## Hand checks, recorded
 From 1.5, one line per check and release: pass, fail, or not run. They need a real desktop and real hands (off-screen
@@ -72,6 +81,48 @@ runs post keys and cannot move the real cursor or hear sound).
     and the Sandbox didn't shut down, and the tester's exit code read empty. The test build is 1.5.0's files in an
     installer numbered 1.5.90, so the reopened app logs "None", not "Updated": the "Updated" notice is first seen for
     real on 1.5.0 to 1.5.1.
+- **1.5.1**
+  - The Sandbox upgrade test with its new leg 3 (1.5.0's own Restart to update to 1.5.1, the "Updated" line): not run
+    yet, for the coordinator at release.
+  - Sign in again on a real server after signing Nixie out there (Dashboard > Devices): not run, for the owner (the QA
+    servers passed it off-screen: `then-signin.ps1` on 10.11.11 and 12.4.0).
+
+## Nixie 1.5.1: the fix release
+- **The release's final pass** (2026-11-21, off-screen, a Debug x64 build of the branch after its review fixes, the fake
+  server's strict auth on in every run): the keys matrix 538/538 in Classic, Drive-in and Editorial and 576/576 in
+  Cinematic; 44 theme runs (then-140-checks, arrival, then-search in four themes and Cinematic Light, then-update in four
+  themes with the full flow and Restart to update, the season switch with its latency rules, rewatch, paging, T5, the Alt
+  keys, Classic's states, then-signin in four themes) all green but the skeleton check (Cinematic at 1920, the 1.5.0
+  issue below) and one Editorial season run that stopped on a screenshot's GDI+ error and passed 83/83 run again; on the
+  QA servers (10.11.11 and 12.4.0) then-search-live 14/14, the playlist and transcode run 44/44, then-signin 16/16 and
+  the smoke 20/20 on each; FluentFin.Core.Tests 4,598 and FluentFin.Tests 1,559, all passed; the end-to-end harness 26/26,
+  the transitions check 4/4 and the bridge smoke 75/75; the backend suite (5,885 tests in 300 modules) with only the 8
+  environment failures (`test_audio_settings` 6, `test_mpvtk_pilfont` 2) once the 20 modules its 300 s limit cut under
+  the harness load were run again alone, all passed (`test_shell_playback` 165 in 1,509 s); the release build's own run of
+  the suites (and the bridge tests, 472) green, after a first try beside those reruns lost one UI test to the load.
+- **What it fixed:** the 1.5.0 bug hunt's three Majors (BH-150-M1 Classic Home's notice under the top bar, M2 a refused
+  sign-in read as a dead server and the per-PC device id, M3 Enter, Enter on a show) and its Minors m1, m2, m4 to m8 (m3
+  in part), "Skip intro" at 0:00 on shows whose intro moves, Display's date-added choice, and show-level anime ids for
+  later seasons. CHANGELOG.md has them in words.
+- **Signing in again** (BH-150-M2): the app takes a sign-in as ended only when the server answers 401 to the request and
+  again to `GET /Users/Me` (Jellyfin also answers 401 with a good token, for Quick Connect turned off). A proxy in front
+  of the server that answers 401 on every path for its own sign-in reads as an ended sign-in too; a 403 never does.
+  Pages that loaded before the sign-in ended keep their content until they load again (R); the player and every load
+  after it say it.
+- **The device id after the update:** each copy is a new device on the server (the PC's id hashed with the copy's data
+  and program folders and the Windows user). The 1.5.0 entry stays in the server's Devices list until removed there,
+  its token unused (Nixie never stored it). A portable copy unzipped to a new folder for each version is a new device
+  each time, and so is a copy run with another `--data-dir`.
+- **Intros that move:** the mark is per season, from the viewer's own skips, the first in each episode, in the intro's
+  window (the first 10 minutes, a 30 to 150 s jump), compared only with skips of a similar length (within 15 s: a recap
+  skipped in one episode is not the intro of the next). A viewer who jumps into a scene in the first 10 minutes, as far
+  as they usually skip the intro, marks the season too, and loses its learned spot (the button that never skips by
+  itself). A hand skip that overshoots the intro by much more than usual is taken for another part and missed. The 1.6
+  skip stream rewrites the learner and keeps the rule.
+- **Search's new kind** (Videos: home videos and music videos) is one request more per search. Songs and albums are left
+  out (BH-151-M2): an album found would open with Play off, as Nixie plays no music; music search comes with playback.
+- **Not checked live:** Display's date-added choice against a real server (`POST /System/Configuration/metadata` changes
+  the shared QA servers' settings); the code path is the client's own, unit-tested.
 
 ## Never verified
 - **Parts of a real Jellyfin server.** The automated tests use fake servers and fake tokens.
@@ -510,11 +561,12 @@ runs post keys and cannot move the real cursor or hear sound).
 
 ## Privacy note (upstream behaviour, unchanged)
 - Fixed in 1.5: the shim asked `checkip.amazonaws.com` for the public IPv4 address on each play when the
-  server address was a public IPv4 (its `is_local` check). It now decides from the server's address alone: loopback,
-  private and link-local addresses, a single-label name and `.local`, `.lan`, `.home.arpa`, `.internal` names are local;
-  anything else is remote, with no lookup and no request.
-- **A home server reached by its public name (or public address) counts as remote** since 1.5, so its plays keep the
-  remote bitrate cap: the backend's `remote_kbps` (10,000 kbps by default) in `conf.json` in the data folder's
+  server address was a public IPv4 (its `is_local` check). It now decides from the server's address and this PC's name
+  lookup, with no request: loopback, private and link-local addresses, a single-label name, `.local`, `.lan`,
+  `.home.arpa`, `.internal` names, and any name that resolves to a private address (split DNS at home) are local;
+  anything else is remote.
+- **A home server reached by a public address, or by a name that resolves to one (hairpin NAT, no split DNS), counts as
+  remote** since 1.5, so its plays keep the remote bitrate cap: the backend's `remote_kbps` (10,000 kbps by default) in `conf.json` in the data folder's
   `mpv-backend` folder. Raise it there if that is wrong for you (Nixie has no setting for it in its own Settings).
 
 ## Release package (`tools\release`, docs\RELEASE.md)

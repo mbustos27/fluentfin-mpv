@@ -63,10 +63,11 @@
                             </ItemContainer>
                         </DataTemplate>
                     </ItemsRepeater.ItemTemplate>
+                    <!--  1.5 huntfix (BH-150-m4): the library grid's cell rule (LibraryPage's GridLayout): Uniform keeps a poster's 2:3, Fill stretched the cells and cropped the year line  -->
                     <ItemsRepeater.Layout>
                         <UniformGridLayout
                             ItemsJustification="Start"
-                            ItemsStretch="Fill"
+                            ItemsStretch="Uniform"
                             MinColumnSpacing="8"
                             MinItemHeight="390"
                             MinItemWidth="220"

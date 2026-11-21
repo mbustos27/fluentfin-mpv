@@ -212,6 +212,45 @@ public partial class TitleBarViewModel : ObservableObject, ITitleBarViewModel
 	public Task SwitchUser() => SignOut(() => _setupNavigationService.NavigateTo<LoginViewModel>(CurrentServer));
 
 	/// <summary>
+	/// 1.5.1 fixes (BH-150-M2): every page's (and the player's) Sign in again, once the server no longer takes this sign-in
+	/// (<see cref="SignInState"/>). A saved sign-in (a user name and a protected password) signs in again in place, as at a
+	/// start, and the page loads again; one the server refuses, or none (Quick Connect), goes to the server's sign-in page the
+	/// way Switch user does (what plays is stopped, this session's saved Home forgotten). True when signed in again in place.
+	/// </summary>
+	public async Task<bool> SignInAgain(IJellyfinAuthenticationService authentication)
+	{
+		if (IsSigningOut)
+		{
+			return false;
+		}
+
+		if (CurrentServer is { } server && SessionInfo.CurrentUserCrendentials is { Password.Length: > 0 } saved)
+		{
+			IsSigningOut = true;
+			SignOutStatus = $"Signing in to {ServerName} again…";
+			try
+			{
+				if (await authentication.Authenticate(server, saved))
+				{
+					return true;
+				}
+			}
+			catch (Exception)
+			{
+				// the sign-in page says why, next
+			}
+			finally
+			{
+				SignOutStatus = "";
+				IsSigningOut = false;
+			}
+		}
+
+		await SwitchUser();
+		return false;
+	}
+
+	/// <summary>
 	/// fluentfin-mpv: Sign out and Switch user. The mpv playback stops and is reported before the page goes and the token is
 	/// revoked (bounded, <see cref="MpvPlaybackService.StopForSignOutAsync"/>), which is shown meanwhile. One at a time: both
 	/// commands are disabled until it is done, and one invoked anyway (back to back, before the first got that far) does nothing.

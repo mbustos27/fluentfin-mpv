@@ -206,6 +206,19 @@ public sealed class HomeAndLibraryXamlTests
 		Assert.Equal("{x:Bind ViewModel.IsLoading, Mode=OneWay}", (string?)FindByName(library, "SkeletonRepeater").Attribute("Visibility"));
 		Assert.Equal("Uniform", (string?)FindByName(library, "GridLayout").Attribute("ItemsStretch")); // a poster keeps its 2:3 at 1100
 		Assert.Contains("LibrarySkeleton.Mirror(GridLayout, SkeletonLayout);", File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Views/LibraryPage.xaml.cs")));
+
+		// 1.5 huntfix (BH-150-m4): "With <name>" is a library-style poster grid: it shares the library's cell rule (Fill
+		// stretched its cells off 2:3 and cropped the year line, Editorial at 2576)
+		var person = Load("FluentFin/Views/PersonItemsPage.xaml").Descendants().Single(e => e.Name.LocalName == "UniformGridLayout");
+		foreach (var rule in new[] { "ItemsStretch", "MinItemWidth", "MinItemHeight", "MinColumnSpacing", "MinRowSpacing", "ItemsJustification" })
+		{
+			Assert.Equal((string?)FindByName(library, "GridLayout").Attribute(rule), (string?)person.Attribute(rule));
+		}
+
+		// 1.5 huntfix (BH-150-m2): and it opens on its first poster by the app's one arrival rule, not on the top bar's Back
+		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Views/PersonItemsPage.xaml.cs"));
+		Assert.Contains("ArrivalFocus.TryTake(this, \"the first poster\"", code);
+		Assert.Contains("_grid.FocusIndex(0, FocusState.Keyboard)", code);
 		Assert.Contains(library.Descendants(), e => e.Name.LocalName == "LibraryNoMatchesView");
 		Assert.Contains(library.Descendants(), e => e.Name.LocalName == "AppliedFilterRow");
 		Assert.Null(typeof(LibraryViewModel).GetProperty("SelectedPage"));
@@ -226,10 +239,12 @@ public sealed class HomeAndLibraryXamlTests
 		Assert.Contains(rows.Descendants(), e => e.Name.LocalName == "ItemsControl"); // the library rows are inside it
 		Assert.Contains("public static Microsoft.UI.Xaml.Thickness RowsMargin(IReadOnlyList<HeroSlide>? hero) => new(24, hero is { Count: > 0 } ? 20 : 36, 24, 0);",
 			File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Views/HomePage.xaml.cs")));
-		// nothing above the hero takes room: the page's own spacing is 0 and the state view has no top margin
+		// nothing above the hero takes room: the page's own spacing is 0 and the state view has no top margin, unless it has
+		// something to say: then it starts below the top bar the page runs under (1.5 huntfix, BH-150-M1)
 		var content = FindByName(home, "PageScroller").Elements().Single();
 		Assert.Null(content.Attribute("Spacing"));
-		Assert.Equal("36,0", (string?)content.Elements().First().Attribute("Margin"));
+		Assert.Equal("LoadStateView", content.Elements().First().Name.LocalName);
+		Assert.Equal("{x:Bind local:HomePage.StateMargin(ViewModel.State.HasProblem, ViewModel.State.HasMessage), Mode=OneWay}", (string?)content.Elements().First().Attribute("Margin"));
 	}
 
 	// ---- interaction audit, item 4: a single letter must never start playback

@@ -1177,7 +1177,7 @@ public sealed class UpdaterTests : IDisposable
 		File.WriteAllBytes(msi, bytes);
 		File.WriteAllText(msi + ".sha256", $"{Sha(bytes)} *Nixie-1.5.99-win-x64.msi\n");
 
-		var release = UpdateHandoff.LocalInstaller(["--data-dir", "D:\\d", UpdateHandoff.InstallSwitch, msi], "1.5.0", out var path, out var error);
+		var release = UpdateHandoff.LocalInstaller(["--data-dir", "D:\\d", UpdateHandoff.InstallSwitch, msi], "1.5.0", false, null, out var path, out var error);
 
 		Assert.Null(error);
 		Assert.Equal(msi, path);
@@ -1186,19 +1186,73 @@ public sealed class UpdaterTests : IDisposable
 		Assert.Equal(Sha(bytes), release.MsiDigest);
 		Assert.Equal(["--data-dir", "D:\\d"], UpdateHandoff.WithoutInstallSwitch(["--data-dir", "D:\\d", "--install-update", msi]));
 
-		Assert.Null(UpdateHandoff.LocalInstaller(["--data-dir", "x"], "1.5.0", out _, out error));
+		Assert.Null(UpdateHandoff.LocalInstaller(["--data-dir", "x"], "1.5.0", false, null, out _, out error));
 		Assert.Null(error);                                                    // no switch: nothing to say
-		Assert.Null(UpdateHandoff.LocalInstaller(["--install-update", msi], "1.5.99", out _, out error));
+		Assert.Null(UpdateHandoff.LocalInstaller(["--install-update", msi], "1.5.99", false, null, out _, out error));
 		Assert.Contains("not newer", error);
 		File.WriteAllText(msi + ".sha256", $"{new string('0', 64)} *Nixie-1.5.99-win-x64.msi\n");
-		Assert.Null(UpdateHandoff.LocalInstaller(["--install-update", msi], "1.5.0", out _, out error));
+		Assert.Null(UpdateHandoff.LocalInstaller(["--install-update", msi], "1.5.0", false, null, out _, out error));
 		Assert.Contains("no .sha256", error);
 		var other = Path.Combine(_folder, "evil.msi");
 		File.WriteAllBytes(other, bytes);
-		Assert.Null(UpdateHandoff.LocalInstaller(["--install-update", other], "1.5.0", out _, out error));
+		Assert.Null(UpdateHandoff.LocalInstaller(["--install-update", other], "1.5.0", false, null, out _, out error));
 		Assert.Contains("is not a Nixie installer", error);
-		Assert.Null(UpdateHandoff.LocalInstaller(["--install-update"], "1.5.0", out _, out error));
+		Assert.Null(UpdateHandoff.LocalInstaller(["--install-update"], "1.5.0", false, null, out _, out error));
 		Assert.NotNull(error);
+	}
+
+	/// <summary>
+	/// BH-150-m6: a release package takes the switch only with the Sandbox test's marker (the variable naming the host script's
+	/// marker file), so a shortcut with arguments can't install an installer with no question asked. A dev build doesn't ask.
+	/// </summary>
+	[Fact]
+	public void TheInstallSwitch_InAReleasePackage_NeedsTheUpgradeTestsMarker()
+	{
+		Directory.CreateDirectory(_folder);
+		var msi = Path.Combine(_folder, "Nixie-1.5.99-win-x64.msi");
+		var bytes = Bytes(5000);
+		File.WriteAllBytes(msi, bytes);
+		File.WriteAllText(msi + ".sha256", $"{Sha(bytes)} *Nixie-1.5.99-win-x64.msi\n");
+		string[] arguments = [UpdateHandoff.InstallSwitch, msi];
+
+		Assert.Null(UpdateHandoff.LocalInstaller(arguments, "1.5.0", releasePackage: true, testMarker: null, out var path, out var error));
+		Assert.Null(path);
+		Assert.Contains("only in the upgrade test", error);
+		Assert.Contains(UpdateHandoff.TestMarkerVariable, error);
+
+		var marker = Path.Combine(_folder, UpdateHandoff.TestMarkerName);
+		Assert.Null(UpdateHandoff.LocalInstaller(arguments, "1.5.0", true, marker, out _, out error));        // named, not there
+		Assert.Contains("only in the upgrade test", error);
+		File.WriteAllText(marker, "anything else\n");
+		Assert.Null(UpdateHandoff.LocalInstaller(arguments, "1.5.0", true, marker, out _, out error));        // not the script's
+		Assert.Contains("only in the upgrade test", error);
+		var elsewhere = Path.Combine(_folder, "marker.txt");
+		File.WriteAllText(elsewhere, UpdateHandoff.TestMarkerText + "\n");
+		Assert.Null(UpdateHandoff.LocalInstaller(arguments, "1.5.0", true, elsewhere, out _, out error));     // not its name
+		Assert.Contains("only in the upgrade test", error);
+
+		// what tools\release\upgrade-test-sandbox.ps1 writes (its folder marker, UTF-8 without a BOM)
+		File.WriteAllText(marker, UpdateHandoff.TestMarkerText + "\n", new System.Text.UTF8Encoding(false));
+		Assert.Equal("1.5.99", UpdateHandoff.LocalInstaller(arguments, "1.5.0", true, marker, out path, out error)!.Version);
+		Assert.Null(error);
+		Assert.Equal(msi, path);
+
+		Assert.Equal("1.5.99", UpdateHandoff.LocalInstaller(arguments, "1.5.0", false, null, out _, out error)!.Version);   // a dev build
+		Assert.Null(UpdateHandoff.LocalInstaller(["--data-dir", "x"], "1.5.0", true, null, out _, out error));
+		Assert.Null(error);                                                    // no switch: nothing to say, marker or not
+	}
+
+	/// <summary>BH-150-m6: the marker's words are the host script's own, so the Sandbox test's start passes the gate.</summary>
+	[Fact]
+	public void TheUpgradeTestMarker_IsWhatTheSandboxScriptsWrite()
+	{
+		var release = Path.Combine(HomeAndLibraryXamlTests.RepoRoot, "..", "tools", "release");
+		var host = File.ReadAllText(Path.Combine(release, "upgrade-test-sandbox.ps1"));
+		Assert.Contains($"$marker = '{UpdateHandoff.TestMarkerName}'", host);
+		Assert.Contains($"\"{UpdateHandoff.TestMarkerText}`n\"", host);
+		var inside = File.ReadAllText(Path.Combine(release, "sandbox", "upgrade-inside.ps1"));
+		Assert.Contains($"$env:{UpdateHandoff.TestMarkerVariable} = ", inside);
+		Assert.Contains(UpdateHandoff.TestMarkerName, inside);
 	}
 
 	/// <summary>
@@ -1225,7 +1279,7 @@ public sealed class UpdaterTests : IDisposable
 		var bytes = Bytes(5000);
 		File.WriteAllBytes(msi, bytes);
 		File.WriteAllText(msi + ".sha256", $"{Sha(bytes)} *Nixie-1.5.99-win-x64.msi\n");
-		var release = UpdateHandoff.LocalInstaller(["--install-update", msi], "1.5.0", out var path, out _)!;
+		var release = UpdateHandoff.LocalInstaller(["--install-update", msi], "1.5.0", false, null, out var path, out _)!;
 		var updates = Path.Combine(_folder, "Updates");
 
 		var portable = new UpdateCenter(new UpdateCoordinator(FakeSettings().settings.Object, new UpdateChecker(new HttpClient(), "1.5.0"), () => DateTimeOffset.UtcNow, "1.5.0"),
@@ -1349,14 +1403,16 @@ public sealed class UpdaterTests : IDisposable
 			return;
 		}
 
-		var result = await new UpdateChecker(new HttpClient(), "0.0.1").CheckAsync(DateTimeOffset.UtcNow);
+		var checker = new UpdateChecker(new HttpClient(), "0.0.1");
+		var result = await checker.CheckAsync(DateTimeOffset.UtcNow);
 		Assert.True(result.Status == UpdateCheckStatus.Available, $"{result.Status} {result.Reason} {result.RetryAfter}");
 		var release = result.Release!;
 		Assert.True(release.HasInstaller, $"{release.Version}: no installer that passes the rules");
 		Assert.True(UpdateSource.IsReleasePage(release.PageUrl, release.Source), release.PageUrl);
 		Assert.Null(release.Repository);   // no rename: the repository is the one the app names
+		Assert.Equal(UpdateSource.ApiVersion, checker.ApiVersionSelected);   // BH-150-m8: GitHub used the version pinned
 		File.WriteAllText(Path.Combine(Path.GetTempPath(), "nixie-live-release-check.txt"),
-			$"{release.Version} {release.MsiName} size {release.MsiSize} digest {release.MsiDigest ?? "none"}\n{release.MsiUrl}\n{release.Sha256Url}\n{release.PageUrl}\n");
+			$"{release.Version} {release.MsiName} size {release.MsiSize} digest {release.MsiDigest ?? "none"} api {checker.ApiVersionSelected}\n{release.MsiUrl}\n{release.Sha256Url}\n{release.PageUrl}\n");
 	}
 
 	// ---------- 7. the release notes

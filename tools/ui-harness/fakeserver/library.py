@@ -90,6 +90,7 @@ class Library:
         self.children = {}       # id -> [child ids] in order
         self.views = []          # view ids
         self.people = {}         # id -> person item
+        self.loose = []          # 1.5.1 fixes (BH-150-m7): searchable items in no library view (FAKESERVER_SEARCH=sunny)
         self.user = {}           # item id -> user data dict (played, position, favorite, play_count, last_played)
         self.rng = random.Random(seed)
         self._names = set()
@@ -272,6 +273,22 @@ class Library:
                      episodes=3, episode_name=lambda e: ["Always Sunny", "It's a Sunny Day", "Rain"][e - 1])
         for vid in (movies, shows):
             self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
+        # 1.5.1 fixes (BH-150-m7): a home video, a music video, an album and its song, which search found none of; in no
+        # view, so no library page, tab or Home row changes (only search, the hints and /Items by id or type see them)
+        album = _id("musicalbum", "Sunny Side Songs")
+        for kind, name in (("video", "Sunny Beach Day"), ("musicvideo", "Sunny Afternoon"), ("musicalbum", "Sunny Side Songs"),
+                           ("audio", "Sunny Morning")):
+            iid = album if kind == "musicalbum" else _id(kind, name)
+            # (no self.rng: the search runs' other titles stay as they were)
+            item = {"Id": iid, "kind": kind, "Name": name, "parent": None, "view": None, "showcase": None,
+                    "created": self.now - datetime.timedelta(days=20), "year": 2019, "premiere": datetime.datetime(2019, 6, 1),
+                    "genres": ["Music"], "tags": [], "rating": "", "community": 7.0, "critic": 70, "people": [], "studios": [],
+                    "overview": "%s, for search." % name, "tagline": ""}
+            if kind == "audio":
+                item.update(album=album, album_name="Sunny Side Songs", parent=album)
+            self.items[iid] = item
+            self.loose.append(iid)
+        self.children[album] = [_id("audio", "Sunny Morning")]
 
     # UXCAP (the library and collections review's captures): a "Collections" view (boxsets) of BoxSets made of the Movies library's titles
     COLLECTION_NAMES = ["The Harbor Collection", "Kestrel Bay Trilogy", "Midnight Stories", "The Northgate Saga",
@@ -694,7 +711,9 @@ class Library:
         from imagegen import blurhash_cached as blurhash
         iid, kind = item["Id"], item["kind"]
         types = {"view": "CollectionFolder", "movie": "Movie", "series": "Series", "season": "Season",
-                 "episode": "Episode", "person": "Person", "boxset": "BoxSet"}
+                 "episode": "Episode", "person": "Person", "boxset": "BoxSet",
+                 # 1.5.1 fixes (BH-150-m7)
+                 "video": "Video", "musicvideo": "MusicVideo", "musicalbum": "MusicAlbum", "audio": "Audio"}
         d = {"Name": item["Name"], "ServerId": self.server_id, "Id": iid, "Etag": _tag(iid, "etag")[:16],
              "DateCreated": iso(item["created"]), "CanDelete": False, "CanDownload": kind in ("movie", "episode"),
              "SortName": self.sort_name(item), "Type": "Playlist" if item.get("playlist") else types[kind], "LocationType": "FileSystem",
@@ -735,6 +754,12 @@ class Library:
             d["BackdropImageTags"] = [_tag(iid, "Backdrop")] if kind != "episode" else []
             if d["BackdropImageTags"]:
                 d["ImageBlurHashes"]["Backdrop"] = {d["BackdropImageTags"][0]: blurhash(iid + "Backdrop")}
+        if kind in ("video", "musicvideo", "audio", "musicalbum"):   # 1.5.1 fixes (BH-150-m7)
+            d.update(MediaType={"audio": "Audio", "musicalbum": "Unknown"}.get(kind, "Video"), RunTimeTicks=self.runtime,
+                     PrimaryImageAspectRatio=1.0 if kind in ("audio", "musicalbum") else 16 / 9,
+                     IsFolder=kind == "musicalbum")
+            if kind == "audio":
+                d.update(AlbumId=item["album"], Album=item["album_name"])
         if kind == "movie":
             d.update(CriticRating=item["critic"], PrimaryImageAspectRatio=2 / 3, MediaType="Video",
                      VideoType="VideoFile", RunTimeTicks=self.runtime, Container="mkv", HasSubtitles=True,
@@ -864,13 +889,14 @@ class Library:
                 return {"Items": [], "TotalRecordCount": 0, "StartIndex": 0}
             pool = self.descendants(parent) if recursive else [self.items[c] for c in self.children.get(parent, [])]
         elif recursive or term:
-            pool = [d for v in self.views for d in self.descendants(v)] + list(self.people.values())
+            pool = [d for v in self.views for d in self.descendants(v)] + list(self.people.values()) +                 [self.items[i] for i in self.loose]   # 1.5.1 fixes (BH-150-m7)
         else:
             pool = [self.items[v] for v in self.views]
 
         kind_of = {"movie": "movie", "series": "series", "season": "season", "episode": "episode",
                    "person": "person", "collectionfolder": "view", "boxset": "boxset",
-                   "playlist": "boxset"}   # 1.4.0: the fake's playlist is a boxset-like item (Type Playlist)
+                   "playlist": "boxset",   # 1.4.0: the fake's playlist is a boxset-like item (Type Playlist)
+                   "video": "video", "musicvideo": "musicvideo", "musicalbum": "musicalbum", "audio": "audio"}   # 1.5.1 fixes
         # UXCAP: a film in a collection is under two views; a recursive pool lists it once
         seen = set()
         pool = [i for i in pool if not (i["Id"] in seen or seen.add(i["Id"]))]
@@ -945,7 +971,7 @@ class Library:
         if not term.strip():
             return None
         include_people = (q.get("includepeople") or ["true"])[0].lower() != "false"
-        kinds = {"movie", "series", "season", "episode", "boxset"} | ({"person"} if include_people else set())
+        kinds = {"movie", "series", "season", "episode", "boxset", "video", "musicvideo", "musicalbum", "audio"} |             ({"person"} if include_people else set())   # 1.5.1 fixes (BH-150-m7): videos and music too, as Jellyfin
         pool = [i for i in self.items.values() if i["kind"] in kinds]
         limit = self.int_of((q.get("limit") or [None])[0], None)
         ranked = self.search.rank(pool, term, self.sort_name, None)

@@ -255,7 +255,57 @@ public sealed partial class VideoPlayerViewModelMpvTests
 
 		Assert.Equal("Connecting failed: The backend refused 'connect': auth_failed (the server refused the login)", vm.MpvMessage);
 		Assert.True(vm.MpvMessageIsError);
+		Assert.False(vm.MpvSignInNeeded); // 1.5.1 fixes: the app's own check found the sign-in good (a 403, say)
 		Assert.DoesNotContain("play", _backend.Commands);
+	}
+
+	/// <summary>
+	/// 1.5.1 fixes (BH-150-M2): the backend's connect is refused (<c>auth_failed</c>) and the app's own check finds the server no
+	/// longer takes the token: the player says so, with Sign in again, which runs the app's sign-in; another message after it
+	/// has no such button.
+	/// </summary>
+	[Fact]
+	public async Task AConnectRefused_ByAServerThatNoLongerTakesTheSignIn_AsksToSignInAgain()
+	{
+		var movie = new FakeLibrary(_client).AddMovie();
+		_backend.ConnectFailure = new BridgeCommandException("connect", "auth_failed", "the server refused the login");
+		var checks = 0;
+		_client.Setup(x => x.GetCurrentUser()).Returns(() =>
+		{
+			checks++;
+			FluentFin.Core.SignInState.MarkEnded(); // as SignInWatch does when /Users/Me is refused too
+			return Task.FromResult<UserDto?>(null);
+		});
+		var signIns = 0;
+		FluentFin.Core.SignInState.SignInAgain = () =>
+		{
+			signIns++;
+			return Task.CompletedTask;
+		};
+		try
+		{
+			var vm = CreateViewModel();
+
+			await vm.OnNavigatedTo(movie);
+
+			Assert.Equal(1, checks);
+			Assert.StartsWith("Your sign-in to ", vm.MpvMessage);
+			Assert.Contains("no longer accepts this sign-in", vm.MpvMessage);
+			Assert.DoesNotContain("auth_failed", vm.MpvMessage);
+			Assert.True(vm.MpvMessageIsError);
+			Assert.True(vm.MpvSignInNeeded);
+			Assert.DoesNotContain("play", _backend.Commands);
+
+			await vm.SignInAgainFromMpvCommand.ExecuteAsync(null);
+			Assert.Equal(1, signIns);
+			vm.DismissMpvMessage();
+			Assert.False(vm.MpvSignInNeeded);
+		}
+		finally
+		{
+			FluentFin.Core.SignInState.SignedIn();
+			FluentFin.Core.SignInState.SignInAgain = null;
+		}
 	}
 
 	[Fact]

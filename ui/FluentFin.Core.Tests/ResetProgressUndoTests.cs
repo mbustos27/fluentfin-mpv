@@ -66,6 +66,68 @@ public sealed class ResetProgressUndoTests
 		Assert.Equal([0L, 12_345_000L], _positions); // the server's point, not the card's 9,000,000
 	}
 
+	/// <summary>
+	/// BH-150-m1: the reset and its Undo change what is on screen: the item's copy takes the server's answer (so its menu
+	/// stops offering Reset, then offers it again), and every card and row hears it, with the position at 0 then back.
+	/// </summary>
+	[Fact]
+	public async Task TheResetAndItsUndo_UpdateTheItemsCopy_AndTellEverySurface()
+	{
+		var item = Episode();
+		var heard = new List<(Guid Id, long? Ticks, bool Failed)>();
+		void OnChanged(object? s, ItemUserDataChangedEventArgs e) => heard.Add((e.ItemId, e.UserData.PlaybackPositionTicks, e.Failed));
+		ItemUserData.Changed += OnChanged;
+		try
+		{
+			var (_, offers) = await Reset(item);
+
+			Assert.Equal([(item.Id!.Value, (long?)0L, false)], heard);
+			Assert.Equal(0L, item.UserData!.PlaybackPositionTicks);
+			Assert.DoesNotContain(ItemMenuCommand.ResetWatchProgress, Menu(item));
+
+			Assert.True(await Assert.Single(offers).Undo());
+
+			Assert.Equal((item.Id!.Value, (long?)12_345_000L, false), heard[^1]);
+			Assert.Equal(2, heard.Count);
+			Assert.Equal(12_345_000L, item.UserData!.PlaybackPositionTicks);
+			Assert.Contains(ItemMenuCommand.ResetWatchProgress, Menu(item));
+		}
+		finally
+		{
+			ItemUserData.Changed -= OnChanged;
+		}
+	}
+
+	[Fact]
+	public async Task AServerThatCannotSayAfterTheReset_StillClearsTheCopysPosition()
+	{
+		var item = Episode();
+		var asked = 0;
+		_client.Setup(x => x.GetItem(It.IsAny<Guid>())).ReturnsAsync(() => ++asked == 1 ? new BaseItemDto { UserData = _server } : null);
+
+		var (took, _) = await Reset(item);
+
+		Assert.True(took);
+		Assert.Equal(0L, item.UserData!.PlaybackPositionTicks);
+		Assert.DoesNotContain(ItemMenuCommand.ResetWatchProgress, Menu(item));
+	}
+
+	[Fact]
+	public async Task ARefusedReset_LeavesTheCopyAlone()
+	{
+		_client.Setup(x => x.SetResumePosition(It.IsAny<Guid>(), It.IsAny<long>())).ReturnsAsync(false);
+		var item = Episode();
+
+		await Reset(item);
+
+		Assert.Equal(9_000_000L, item.UserData!.PlaybackPositionTicks);
+		Assert.Contains(ItemMenuCommand.ResetWatchProgress, Menu(item));
+	}
+
+	private static List<ItemMenuCommand> Menu(BaseItemDto item) =>
+		[.. ItemMenu.For(item, new UserDto { Policy = new UserPolicy { IsAdministrator = false } }, includePlay: false, canEditSegments: false)
+			.SelectMany(x => x).Select(x => x.Command)];
+
 	[Fact]
 	public async Task TheUndo_DoesNothing_WhenTheItemWasPlayedSince()
 	{

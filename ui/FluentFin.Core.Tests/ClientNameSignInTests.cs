@@ -96,12 +96,14 @@ public sealed class ClientNameSignInTests : IAsyncLifetime
 			Assert.DoesNotContain("Seaglass", call.Authorization);
 		}
 
-		// the backend's connect: Nixie, on this PC's Windows device id (Seaglass sent the same one)
+		// the backend's connect: Nixie, on this copy's device id (1.5.1 fixes, BH-150-M2: no longer the PC's, which Seaglass and
+		// Nixie up to 1.5.0 sent from every copy on the PC), the one FluentFin's own sign-in sent (its calls carry only the token)
 		var identity = MpvIdentity.FromSession(settings.Object);
 		Assert.NotNull(identity);
 		Assert.Equal("Nixie", identity.ClientName);
 		Assert.Equal(AppVersion.Current, identity.ClientVersion);
-		Assert.Equal(new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString(), identity.DeviceId);
+		Assert.Equal(InstallDeviceId.Current, identity.DeviceId);
+		Assert.NotEqual(new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString(), identity.DeviceId);
 		Assert.Equal(Environment.MachineName, identity.DeviceName);
 		Assert.Equal(newToken, identity.AccessToken);
 	}

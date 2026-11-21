@@ -274,6 +274,29 @@ class Forwarding(unittest.TestCase):
         self.assertEqual(r.status, 404)
         c.close()
 
+    # 1.5.1 fixes (BH-150-M2)
+    def test_a_sign_in_logs_its_device_id_and_never_the_password(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        c.request("POST", "/Users/AuthenticateByName", body=json.dumps({"Username": "qa-user", "Pw": "PASSWORD-X"}),
+                  headers={"Content-Type": "application/json",
+                           "Authorization": 'MediaBrowser Client="Nixie", Device="PC", DeviceId="0123abcd", Version="1.5.1"'})
+        c.getresponse().read()
+        c.close()
+        time.sleep(0.2)
+        entry = [e for e in self.log() if e["route"] == "authenticate"][-1]
+        self.assertEqual({"device": "0123abcd"}, entry["report"])
+        self.assertNotIn("PASSWORD-X", json.dumps(self.log()))
+
+    def test_signin_and_revoke_need_a_named_device(self):
+        # other runs share the QA servers: the tap never signs anything out but the device the harness names
+        for path in ("/__harness/signin", "/__harness/revoke"):
+            c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+            c.request("POST", path, body=b"{}", headers={"Content-Type": "application/json"})
+            r = c.getresponse()
+            r.read()
+            c.close()
+            self.assertEqual(400, r.status, path)
+
 
 class SubPath(unittest.TestCase):
     """1.5 qacheck: --base-path /jellyfin stands in for a reverse proxy on a sub-path (subpath-probe.ps1)."""

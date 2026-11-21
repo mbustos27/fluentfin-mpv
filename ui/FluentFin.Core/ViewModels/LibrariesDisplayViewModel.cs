@@ -47,6 +47,25 @@ public partial class LibrariesDisplayViewModel(IJellyfinClient jellyfinClient) :
 		return items;
 	}
 
+	/// <summary>1.5.1 fixes: the date-added choice is the metadata configuration's: saved with the page (it never was).</summary>
+	protected override async Task<bool> SaveMoreAsync()
+	{
+		if (_metadata is null)
+		{
+			return true;
+		}
+
+		try
+		{
+			await _jellyfinClient.SaveMetadata(_metadata);
+			return true;
+		}
+		catch (Exception)
+		{
+			return false;
+		}
+	}
+
 	async Task INavigationAware.OnNavigatedTo(object parameter)
 	{
 		_metadata = await _jellyfinClient.GetMetadata();

@@ -11,7 +11,9 @@ never gets two pills for the same part.
 * **learned** -- a range the viewer skipped by hand in an earlier episode of
   the same season (`LearnedStore`, `SkipLearner`), kept on this PC in
   ``learned-intros.json`` in the backend's config directory. The UI's
-  "Forget learned intros" deletes that file.
+  "Forget learned intros" deletes that file. 1.5.1: a season whose intro
+  moves (skips by hand of one part 10 s or more apart,
+  `LearnedStore.note_skip`) is offered no learned spot (`LearnedStore.moves`).
 
 Nothing here raises into playback: every entry point catches and logs.
 """
@@ -135,6 +137,59 @@ BACK_MIN_JUMP = 5.0
 #: How long after a skip a seek back is "undoing" it.
 UNDO_WINDOW = 20.0
 
+# 1.5.1 fixes (intros that move, It's Always Sunny): the intro follows a cold
+# open of a different length in each episode, so one learned spot is wrong in
+# the next episode (offered at 0:00, a Skip there skipped the cold open). Two
+# skips by hand of the same part in one season this far apart (seconds
+# between the two ranges) mark the season "moves", and no learned spot is
+# offered for it again until the viewer forgets the learned intros. Judged per
+# season, as the spot itself is learned (the review, BH-151-M1): a show whose
+# intro sits elsewhere in season 2 keeps its learned spot in both seasons. The
+# 1.6 skip stream rewrites the learner and keeps the rule.
+MOVES_GAP = 10.0
+#: Two skips whose lengths differ by more than this (seconds) are different
+#: parts (a recap skipped in one episode, the intro in the next): not compared.
+MOVES_SAME_PART = 15.0
+#: The skips kept per season to compare a new one with (the latest).
+MOVES_KEEP = 8
+
+
+def moves_key(video):
+    """``"<server id>:<user id>:<series id>:<season>"`` for an episode, else
+    None: where a season's "moves" mark is kept (per server, user, show and
+    season)."""
+    try:
+        item = getattr(video, "item", None) or {}
+        series = item.get("SeriesId")
+        season = item.get("ParentIndexNumber")
+        if not series or not isinstance(season, int):
+            return None
+        user = ""
+        try:
+            user = video.client.config.data.get("auth.user_id") or ""
+        except Exception:
+            pass
+
+        def norm(value):
+            return str(value or "").replace("-", "").lower()
+
+        return "%s:%s:%s:%d" % (norm(item.get("ServerId")), norm(user),
+                                norm(series), season)
+    except Exception:
+        return None
+
+
+def same_part(a, b):
+    """Whether two skips ``(start, end)`` can be of one part: their lengths
+    are `MOVES_SAME_PART` or less apart."""
+    return abs((a[1] - a[0]) - (b[1] - b[0])) <= MOVES_SAME_PART
+
+
+def skips_apart(a, b):
+    """Whether two skips' ranges ``(start, end)`` are `MOVES_GAP` or more
+    apart (overlapping ranges are not apart at all)."""
+    return max(a[0], b[0]) - min(a[1], b[1]) >= MOVES_GAP
+
 
 def series_key(item):
     """``"<series id>:<season number>"`` for an episode, else None."""
@@ -157,6 +212,7 @@ class LearnedStore:
         self.path = path
         self._lock = threading.RLock()
         self._entries = {}
+        self._seasons = {}      # 1.5.1: moves_key -> {"skips", "moves"}
         self._stamp = None
 
     def _load(self):
@@ -165,7 +221,7 @@ class LearnedStore:
         try:
             stamp = os.stat(self.path).st_mtime_ns
         except OSError:
-            self._entries, self._stamp = {}, None
+            self._entries, self._seasons, self._stamp = {}, {}, None
             return
         if stamp == self._stamp:
             return
@@ -179,10 +235,24 @@ class LearnedStore:
                 and isinstance(v.get("start"), (int, float))
                 and isinstance(v.get("end"), (int, float))
                 and v["end"] > v["start"]}
+            # 1.5.1: a file from before has none (and a 1.5.0 backend reads
+            # only "entries")
+            seasons = data.get("seasons", {})
+            self._seasons = {
+                k: {"skips": [[float(a), float(b)] for a, b in v["skips"]],
+                    "moves": v["moves"]}
+                for k, v in (seasons.items() if isinstance(seasons, dict)
+                             else ())
+                if isinstance(k, str) and isinstance(v, dict)
+                and isinstance(v.get("moves"), bool)
+                and isinstance(v.get("skips"), list)
+                and all(isinstance(x, list) and len(x) == 2
+                        and all(isinstance(n, (int, float)) for n in x)
+                        for x in v["skips"])}
         except Exception:
             log.warning("learned intros unreadable; starting over",
                         exc_info=True)
-            self._entries = {}
+            self._entries, self._seasons = {}, {}
         self._stamp = stamp
 
     def _save(self):
@@ -191,7 +261,8 @@ class LearnedStore:
         try:
             tmp = self.path + ".tmp"
             with open(tmp, "w", encoding="utf-8") as handle:
-                json.dump({"version": 1, "entries": self._entries}, handle,
+                json.dump({"version": 1, "entries": self._entries,
+                           "seasons": self._seasons}, handle,
                           indent=1, sort_keys=True)
             os.replace(tmp, self.path)
             self._stamp = os.stat(self.path).st_mtime_ns
@@ -233,9 +304,36 @@ class LearnedStore:
                 del self._entries[key]
             self._save()
 
+    def note_skip(self, season, start, end):
+        """1.5.1: a skip by hand from ``start`` to ``end`` seconds, the first
+        of an episode of ``season`` (`moves_key`). One of the same part
+        (`same_part`) `MOVES_GAP` or more away from an earlier one marks the
+        season "moves" for good (`moves`). True when this skip marked it."""
+        with self._lock:
+            self._load()
+            entry = self._seasons.get(season) or {"skips": [], "moves": False}
+            if entry["moves"]:
+                return False
+            skip = [round(float(start), 1), round(float(end), 1)]
+            moved = any(same_part(skip, earlier) and skips_apart(skip, earlier)
+                        for earlier in entry["skips"])
+            self._seasons[season] = {
+                "skips": [] if moved
+                else (entry["skips"] + [skip])[-MOVES_KEEP:],
+                "moves": moved}
+            self._save()
+            return moved
+
+    def moves(self, season):
+        """1.5.1: whether the season's intro moves (no learned spot for it)."""
+        with self._lock:
+            self._load()
+            return bool((self._seasons.get(season) or {}).get("moves"))
+
     def clear(self):
         with self._lock:
             self._entries = {}
+            self._seasons = {}
             if self.path:
                 try:
                     os.remove(self.path)
@@ -295,7 +393,11 @@ def augment(video, make_segment, store_=None):
 
         key = series_key(item)
         if OPTIONS.learn and key and "Intro" in wanted and "Intro" not in have:
-            learned = (store_ or store()).get(key)
+            learned_in = store_ or store()
+            season = moves_key(video)
+            # 1.5.1: a season whose intro moves gets no fixed spot
+            learned = None if season and learned_in.moves(season) \
+                else learned_in.get(key)
             if learned is not None:
                 start, end = learned
                 add("Intro", max(0.0, start - START_TOLERANCE), end,
@@ -363,6 +465,7 @@ class SkipLearner:
         self._last = None
         self._skipped = None     # (learned segment, when) after its skip
         self._by_skip = 0.0      # until when a forward jump is a Skip press
+        self._noted = None       # 1.5.1: the video whose first hand skip was noted
 
     def note_skip(self, now=None):
         """The app itself is about to seek (`skip_segment`): that jump is
@@ -382,6 +485,7 @@ class SkipLearner:
     def _sample(self, video, position, now):
         if video is not self._video:
             self._video, self._last, self._skipped = video, None, None
+            self._noted = None
         if not isinstance(position, (int, float)):
             return
         previous, self._last = self._last, float(position)
@@ -396,6 +500,19 @@ class SkipLearner:
         if key is None:
             return
         if LEARN_MIN_JUMP <= delta <= LEARN_MAX_JUMP:
+            # 1.5.1: the episode's first skip by hand in the intro's window,
+            # wherever it is (also away from a learned spot offered), for the
+            # season's "moves" mark
+            if (OPTIONS.learn and self._noted is not video
+                    and 0 <= previous <= LEARN_MAX_START
+                    and now > self._by_skip):
+                self._noted = video
+                season = moves_key(video)
+                if season and self._store_().note_skip(season, previous,
+                                                       position):
+                    log.info("the intro of this season moves (skips by hand "
+                             "%.0f s or more apart): no learned spot is "
+                             "offered for it", MOVES_GAP)
             if learned is not None:
                 if learned.start <= previous < learned.end:
                     self._skipped = (learned, now)

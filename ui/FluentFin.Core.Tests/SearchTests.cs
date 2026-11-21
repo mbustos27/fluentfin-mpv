@@ -262,7 +262,9 @@ public sealed class SearchTests
 		// the box suggests movies and shows; the results page asks for each kind on its own (people too, since the second
 		// review: a person opens "With <name>"), with the titles the PC ranks on
 		Assert.Equal([BaseItemKind.Movie, BaseItemKind.Series], JellyfinClient.SuggestionKinds);
-		Assert.Equal([BaseItemKind.Series, BaseItemKind.Movie, BaseItemKind.Episode, BaseItemKind.BoxSet, BaseItemKind.Person], Search.SearchKinds.All.Select(k => k.ServerKind));
+		// 1.5.1 fixes (BH-150-m7): home videos and music videos (Videos) too; not songs or albums (BH-151-M2: nothing plays them)
+		Assert.Equal([BaseItemKind.Series, BaseItemKind.Movie, BaseItemKind.Episode, BaseItemKind.BoxSet, BaseItemKind.Person,
+			BaseItemKind.Video, BaseItemKind.MusicVideo], Search.SearchKinds.All.SelectMany(k => k.ServerKinds));
 		Assert.Equal(typeof(PersonItemsViewModel), GlobalCommands.PageFor(BaseItemDto_Type.Person));
 		Assert.Equal([ItemFields.OriginalTitle, ItemFields.SortName], JellyfinClient.SearchFields);
 	}

@@ -87,6 +87,9 @@ public sealed class SignInClientTests : IDisposable
 
 	private static string WindowsDeviceId => new DeviceIdBuilder().OnWindows(windows => windows.AddWindowsDeviceId()).ToString();
 
+	/// <summary>1.5.1 fixes (BH-150-M2): the device id every sign-in sends: this copy's, not the PC's (<see cref="WindowsDeviceId"/>).</summary>
+	private static string ThisCopysDeviceId => InstallDeviceId.Current;
+
 	[Fact]
 	public async Task TheSignInClient_SaysNixie_OnTheSameDevice()
 	{
@@ -103,7 +106,8 @@ public sealed class SignInClientTests : IDisposable
 		Assert.NotNull(header);
 		var fields = Fields(header);
 		Assert.Equal("Nixie", fields["Client"]);
-		Assert.Equal(WindowsDeviceId, fields["DeviceId"]);
+		Assert.Equal(ThisCopysDeviceId, fields["DeviceId"]);
+		Assert.NotEqual(WindowsDeviceId, fields["DeviceId"]);
 		Assert.Equal(Environment.MachineName, fields["Device"]);
 		Assert.Equal(AppVersion.Current, fields["Version"]);
 		Assert.DoesNotContain("Seaglass", header);
@@ -149,10 +153,95 @@ public sealed class SignInClientTests : IDisposable
 		Assert.NotNull(request.Authorization);
 		var fields = Fields(request.Authorization);
 		Assert.Equal("Nixie", fields["Client"]);
-		Assert.Equal(WindowsDeviceId, fields["DeviceId"]);
+		Assert.Equal(ThisCopysDeviceId, fields["DeviceId"]);
 		Assert.Equal(Environment.MachineName, fields["Device"]);
 		Assert.False(fields.ContainsKey("Token")); // nothing saved is sent but the user name and password
 		// the session the server made for Nixie is the one the app goes on with
 		client.Verify(x => x.Initialize(_baseUrl, It.Is<Jellyfin.Sdk.Generated.Models.AuthenticationResult>(a => a.AccessToken == "a-new-token-for-nixie")), Times.Once);
+	}
+
+	/// <summary>
+	/// 1.5.1 fixes (BH-150-M2): the device id changed from the PC's to this copy's, and the update asks nothing: the settings
+	/// file Nixie 1.5.0 wrote (a saved server and user, a protected password, the entropy; no device id anywhere) is read as it
+	/// is, its saved sign-in (the start signs in by itself with one server and one user: DefaultActivationHandler) signs in with
+	/// no question, now from this copy's device, and the file keeps the server and the user as they were.
+	/// </summary>
+	[Fact]
+	public async Task ASettingsFileFrom150_SignsInWithoutAsking_AsThisCopysDevice_AndKeepsItsSignIn()
+	{
+		var folder = Path.Combine(Path.GetTempPath(), "nixie-151-tests", Guid.NewGuid().ToString("N"));
+		Directory.CreateDirectory(folder);
+		try
+		{
+			var entropy = System.Security.Cryptography.RandomNumberGenerator.GetBytes(20);
+			var password = "s3cret".Protect(entropy);
+			// LocalSettings.json as 1.5.0 writes it (indented, the saved sign-ins under "Servers", byte arrays in base64)
+			var file = Path.Combine(folder, KnownFolders.SettingsFileName);
+			File.WriteAllText(file, $$"""
+				{
+				  "Entropy": "{{Convert.ToBase64String(entropy)}}",
+				  "Servers": [
+				    {
+				      "DisplayName": "home",
+				      "PublicUrl": "{{_baseUrl}}",
+				      "LocalUrl": "{{_baseUrl}}",
+				      "LocalNetworkNames": [],
+				      "Id": "fake-server",
+				      "Users": [ { "Username": "alice", "Password": "{{Convert.ToBase64String(password)}}" } ]
+				    }
+				  ],
+				  "MediaPlayerType": "Mpv",
+				  "CheckForUpdates": true
+				}
+				""");
+			var before = File.ReadAllText(file);
+			var localSettings = new FluentFin.Core.Services.LocalSettingsService(new KnownFolders(folder));
+			var server = Assert.Single(new FluentFin.Core.Settings.Settings(localSettings).Servers);
+			var user = Assert.Single(server.Users);
+
+			var client = new Mock<IJellyfinClient>();
+			client.Setup(x => x.Initialize(It.IsAny<string>(), It.IsAny<Jellyfin.Sdk.Generated.Models.AuthenticationResult>())).Returns(Task.CompletedTask);
+			var titleBar = new Mock<ITitleBarViewModel>();
+			titleBar.SetupAllProperties();
+			var service = new JellyfinAuthenticationService(client.Object, titleBar.Object, localSettings, Mock.Of<INavigationService>(),
+				NullLogger<JellyfinAuthenticationService>.Instance);
+			try
+			{
+				Assert.True(await service.Authenticate(server, user));
+			}
+			finally
+			{
+				SessionInfo.CurrentUserCrendentials = null!; // static: no other test sees this user
+			}
+
+			(string Path, string? Authorization, string Body) request;
+			lock (_requests)
+			{
+				request = Assert.Single(_requests, r => r.Path.Equals("/Users/AuthenticateByName", StringComparison.OrdinalIgnoreCase));
+			}
+
+			using (var body = JsonDocument.Parse(request.Body))
+			{
+				Assert.Equal("alice", body.RootElement.GetProperty("Username").GetString());
+				Assert.Equal("s3cret", body.RootElement.GetProperty("Pw").GetString());
+			}
+
+			var fields = Fields(request.Authorization!);
+			Assert.Equal(ThisCopysDeviceId, fields["DeviceId"]);
+			Assert.NotEqual(WindowsDeviceId, fields["DeviceId"]);
+			client.Verify(x => x.Initialize(_baseUrl, It.Is<Jellyfin.Sdk.Generated.Models.AuthenticationResult>(a => a.AccessToken == "a-new-token-for-nixie")), Times.Once);
+
+			// nothing reset: the saved server and user are still there, as they were
+			var after = new FluentFin.Core.Settings.Settings(new FluentFin.Core.Services.LocalSettingsService(new KnownFolders(folder)));
+			Assert.Equal("alice", Assert.Single(Assert.Single(after.Servers).Users).Username);
+			using var was = JsonDocument.Parse(before);
+			using var now = JsonDocument.Parse(File.ReadAllText(file));
+			Assert.Equal(was.RootElement.GetProperty("Servers").GetRawText(), now.RootElement.GetProperty("Servers").GetRawText());
+			Assert.Equal(was.RootElement.GetProperty("Entropy").GetString(), now.RootElement.GetProperty("Entropy").GetString());
+		}
+		finally
+		{
+			Directory.Delete(folder, true);
+		}
 	}
 }

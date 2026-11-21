@@ -132,7 +132,7 @@ rename's paths are exercised) so the script itself can be checked on a PC that h
 
 ## 4c. The upgrade test in Windows Sandbox (from 1.5)
 
-    .\tools\release\upgrade-test-sandbox.ps1 -Out <scratch folder outside the repo> [-PreviousMsi <Nixie-1.4.1-win-x64.msi>] [-DryRun]
+    .\tools\release\upgrade-test-sandbox.ps1 -Out <scratch folder outside the repo> [-PreviousVersion 1.5.0] [-PreviousMsi <Nixie-1.5.0-win-x64.msi>] [-DryRun]
 
 The release's upgrade test, run by the coordinating session at release (Windows Sandbox is on on the build PC). **Its
 window shows on the desktop, so tell the owner first.** Nothing is installed in this account: everything happens in a
@@ -140,7 +140,7 @@ throwaway Sandbox, and the inside script (`tools\release\sandbox\upgrade-inside.
 Agents run it only with `-DryRun` (writes the `.wsb` and `plan.json`, starts nothing); `tools\release\tests\test_upgrade_sandbox.py`
 checks the dry runs and the refusals.
 
-- **In:** `dist\` (this release's MSI), the previous release's MSI (`dist\Nixie-1.4.1-win-x64.msi`, or `-PreviousMsi
+- **In:** `dist\` (this release's MSI), the previous release's MSI (`-PreviousVersion`, 1.5.0 by default since 1.5.1: `dist\Nixie-1.5.0-win-x64.msi`, or `-PreviousMsi
   <path>`: download it from its GitHub release first, with its `.sha256`, and check it), and a test build numbered higher (`-TestVersion`, default
   the patch number + 90: this release's own files in an MSI WiX builds here, never published), all mapped
   **read-only**; one results folder (`<Out>\results`) read-write. Networking, the GPU, audio and video input, the
@@ -151,7 +151,15 @@ checks the dry runs and the refusals.
   starting.
 - **Leg 2, the new flow:** this release's Restart to update, driven by `Nixie.exe --install-update <msi>` (no clicks),
   to the test build: Nixie closes, the launcher's helper installs quietly (`msiexec /passive`, logged to
-  `Updates\install.log`) and opens Nixie again, without the switch.
+  `Updates\install.log`) and opens Nixie again, without the switch. A release package takes the switch only with the
+  test's marker: `NIXIE_UPGRADE_TEST` naming the `.nixie-upgrade-test` file the host script writes beside the test build
+  (BH-150-m6); without it the switch is refused and logged.
+- **Leg 3, the previous release's own Restart to update (from 1.5.1):** the test build uninstalled (`msiexec /x`), the
+  data folders cleared, the previous MSI installed again, and its `Nixie.exe --install-update <this release's MSI>` (the
+  real one from `dist\`; the previous release has no marker gate). Its helper installs this release quietly and opens it,
+  and this release's log says `[update] the install of <this> from <previous>: "Updated"` (Serilog quotes the word; the check takes it with or without): the line the "Updated to Nixie
+  <this> · What's new" notice comes from, which legs 1 and 2 can't show (leg 2's test build carries this release's own
+  files, so it logs "None"). The legs take up to 50 minutes in all; the host waits 60.
 - **No administrator:** the legs run as a standard user the script makes inside the Sandbox; `results.json` records
   its integrity level (whoami: medium), every msiexec exit code and the logs' privilege lines.
 - Results in `<Out>\results\results.json` (and the logs); the Sandbox shuts itself down. Exit 0 passed, 1 failed or no
@@ -187,6 +195,18 @@ in any of them shows up at the release that made it:
 1.5.0 opens its window about 50 ms later (its fastest run is slower than 1.4.1's median; not traced to one change),
 paints Home as fast (the ranges overlap), and holds about 9 MB more after the browse. None of it is a release gate; the
 next release measures itself beside this one.
+
+**1.5.1 beside 1.5.0** (2026-11-21 on the build PC; Debug x64 builds of the 1.5.1 branch after its review fixes and of
+v1.5.0; all 10 runs passed every check, strict auth included). The other streams' harness runs shared the PC, so the
+ranges are wide (one 1.5.0 start took 11 s); the medians, with the 5 runs' range:
+
+| Build | Start-up: window shown (ms) | The app's own "window shown" (ms) | First Home paint (ms) | Private bytes (MB) |
+|---|---|---|---|---|
+| 1.5.0 | 1,351 (1,061 to 11,001) | 1,340 | 1,655 (1,091 to 4,864) | 579 (575 to 596) |
+| 1.5.1 | 1,306 (1,017 to 3,956) | 1,306 | 1,530 (1,059 to 3,809) | 578 (565 to 592) |
+
+1.5.1 opens its window and paints Home as fast as 1.5.0 (the medians 45 and 125 ms apart, inside each other's ranges),
+and holds the same memory after the browse. The sign-in watch (a handler under every request) costs nothing measurable.
 
 ## 5. Publish (the coordinating session, after review)
 

@@ -1,4 +1,4 @@
-﻿# Seaglass 1.1.4 (interaction audit, item 2): the title bar's search, live. Run with -Script wait:1 -Then offscreen\then-search.ps1
+# Seaglass 1.1.4 (interaction audit, item 2): the title bar's search, live. Run with -Script wait:1 -Then offscreen\then-search.ps1
 # (signed in, on Home). The arrows move through the rows without opening anything and the box shows the row's name; Narrator's
 # names are "name, year, type"; Enter on a row opens it and clears the box; Enter on the text opens the results page, grouped
 # by type, the query kept there; the box clears when a result is opened from it. Nixie 1.5 (with FAKESERVER_SEARCH=sunny):
@@ -155,16 +155,30 @@ if ($srLoose -eq 'loose') {
     SrSearch 'sunny'
     $srPeople = SrChip 'People'
     Check 'search 1.5: people come back, with a People chip' ([bool]$srPeople) "chips: $((SrChips | ForEach-Object { $_.Current.Name }) -join ' | ')"
+    # 1.5.1 fixes (BH-150-m7): a home video and a music video are found, with their chip; the fixture's album and song are
+    # not (BH-151-M2: nothing plays them, so search leaves music out until 1.6.1)
+    $srVideos = SrChip 'Videos'
+    $srMusicChip = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::RadioButton))) | Where-Object { $_.Current.Name -like 'Music,*' })
+    Check 'search 1.5.1 (BH-150-m7, BH-151-M2): home videos and music videos come back (Videos, 2), songs and albums do not (no Music chip)' ($srVideos -and $srVideos.Current.Name -eq 'Videos, 2 results' -and $srMusicChip.Count -eq 0 -and -not (Find-Ui -Name 'Sunny Morning' -Contains)) "chips: $((SrChips | ForEach-Object { $_.Current.Name }) -join ' | ')"
     if ($srPeople) {
         [void](Invoke-Element $srPeople); SrSettle 1500
         $srPerson = Wait-Until { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) | Where-Object { $_.Current.Name -like 'Sunny Holm*' }) | Select-Object -First 1 } -Seconds 8 -PollMs 200
         if (-not $srPerson) { Dump-Tree "$srTag-search150-people" }
         if ($srPerson) {
-            [void](Invoke-Element $srPerson)
+            # 1.5 huntfix (BH-150-m2): opened with Enter (the keyboard's way), the page takes the keyboard on its first poster,
+            # not the top bar's Back (a second Enter went back)
+            [void][OffscreenUi]::SetFocus($srPerson); SrSettle 400
+            Key 0x0D
             $srWith = Wait-Ui -Name 'With Sunny Holm' -Type 'Text' -Seconds 15
             SrSettle 2000
             $srWithCards = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.ClassName -match 'BaseItemDtoCard' })
             Check 'search 1.5: a person opens "With <name>", their films and shows' ([bool]$srWith -and $srWithCards.Count -gt 0) "cards: $($srWithCards.Count)"
+            $srWithFocus = SrFocused
+            $srFirst = $srWithCards | Sort-Object { [OffscreenUi]::RectOf($_).Top }, { [OffscreenUi]::RectOf($_).Left } | Select-Object -First 1
+            $srFirstRect = if ($srFirst) { $srR = [OffscreenUi]::RectOf($srFirst); '"rect":[{0},{1},{2},{3}]' -f [int]$srR.X, [int]$srR.Y, [int]$srR.Width, [int]$srR.Height } else { 'none' }
+            Check 'search 1.5 (BH-150-m2): Enter on a person opens "With <name>" with the keyboard on its first poster' ($srFirst -and $srWithFocus -match 'BaseItemDtoCard' -and $srWithFocus.Contains($srFirstRect)) "focus: $srWithFocus; first: $(if ($srFirst) { $srFirst.Current.Name }) $srFirstRect"
+            # BH-150-m4: the posters keep the library's cells (Fill stretched them wide and cropped the year line)
+            if ($srFirst) { Say "search 1.5 (BH-150-m4): first poster cell $([int]$srR.Width)x$([int]$srR.Height)" }
             SrShot "$srTag-search150-person-1920"
             Key 0xA6
             [void](Wait-Ui -Name 'Results for' -Type 'Text' -Contains -Seconds 15); SrSettle 1500

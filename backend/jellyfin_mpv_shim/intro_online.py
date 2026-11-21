@@ -229,15 +229,22 @@ def mal_id_for(ids, season, version, fetch, now):
     one entry (BH-140X-m1): Attack on Titan's TVDB Season 3 is MAL 35760
     (Season 3) and 38524 (Season 3 Part 2), and ARM gives no episode
     offsets, so the episode cannot pick its part. The first entry's times
-    were another episode's, or none at all; no Skip button is better."""
+    were another episode's, or none at all; no Skip button is better.
+
+    1.5.1 fixes: ``ids`` are the series' (`series_info`), and a MyAnimeList,
+    AniList or AniDB id there is one entry, the first season's: Season 2's
+    episodes were looked up as Season 1's (the wrong times, or none). Those
+    ids count for season 1 only; a later season takes ARM's per-season
+    mapping of the TVDB or TMDb id, or nothing."""
     if season == 0:
         return None
+    first = season == 1
     direct = ids.get("MyAnimeList") or ids.get("Mal")
-    if direct and str(direct).isdigit():
+    if first and direct and str(direct).isdigit():
         return int(direct)
     for key, path in (("AniList", "ids?source=anilist&include=myanimelist&id="),
                       ("AniDB", "ids?source=anidb&include=myanimelist&id=")):
-        if ids.get(key):
+        if first and ids.get(key):
             data = _cached_json("arm", ARM + path + urllib.parse.quote(
                 str(ids[key])), version, fetch, now)
             if isinstance(data, dict) and data.get("myanimelist"):

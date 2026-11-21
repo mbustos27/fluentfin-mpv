@@ -125,9 +125,14 @@ if ($env:UP_FLOW -ne 'full') {
 }
 
 # ---- full: every step
+# 1.5.1: the three releases the full flow publishes are this build's next three (they were 1.5.1 to 1.5.3, which a 1.5.1
+# build would not take for updates)
+$upBase = [version](Get-Item -LiteralPath $Exe).VersionInfo.FileVersion
+$upV1, $upV2, $upV3 = @(1, 2, 3 | ForEach-Object { '{0}.{1}.{2}' -f $upBase.Major, $upBase.Minor, ($upBase.Build + $_) })
+Say "update (full): this build is $upBase; the releases published are $upV1, $upV2 and $upV3"
 $upInstalled = $env:NIXIE_UPDATE_INSTALLED -eq '1'
 Check 'update (full): the run acts as an installed copy (NIXIE_UPDATE_INSTALLED=1)' $upInstalled
-$upNotes = "## Nixie 1.5.1`n`nThe **updater** shows every step.`n`n- Downloads in the background, with its progress`n- Restart to update reopens Nixie where you were ([details](https://github.com/mbustos27/fluentfin-mpv/releases))`n  - checked against its ``.sha256`` and GitHub's digest`n- Release notes in the app`n"
+$upNotes = "## Nixie $upV1`n`nThe **updater** shows every step.`n`n- Downloads in the background, with its progress`n- Restart to update reopens Nixie where you were ([details](https://github.com/mbustos27/fluentfin-mpv/releases))`n  - checked against its ``.sha256`` and GitHub's digest`n- Release notes in the app`n"
 [void](UP-Release @{ version = '0.0.1'; mode = 'ok'; notes = $upNotes; kbps = 600; mismatch = $false; digest = 'ok' })
 
 # 1. the start check: up to date
@@ -152,11 +157,11 @@ $upFailed = Wait-Until { Find-Ui -Name "Couldn't check: " -Contains -Type 'Text'
 Check 'update: a check GitHub never answers says why, with Retry' ($upFailed -and (Find-Ui -Name 'Retry' -Type 'Button')) $(if ($upFailed) { $upFailed.Current.Name })
 UP-Shot 'settings-check-failed'
 
-# 3. 1.5.1 published: found, and the installed copy downloads it at once
-[void](UP-Release @{ mode = 'ok'; version = '1.5.1'; kbps = 600 })
+# 3. the next version published: found, and the installed copy downloads it at once
+[void](UP-Release @{ mode = 'ok'; version = $upV1; kbps = 600 })
 Start-Sleep -Seconds 1
 [void](UP-Click 'Retry')
-$upDownloading = Wait-Until { Find-Ui -Name 'Downloading Nixie 1.5.1' -Type 'Text' } -Seconds 20 -PollMs 200
+$upDownloading = Wait-Until { Find-Ui -Name "Downloading Nixie $upV1" -Type 'Text' } -Seconds 20 -PollMs 200
 Check 'update: a found update downloads by itself (installed copy)' ([bool]$upDownloading)
 Start-Sleep -Seconds 3
 $upLine = Find-Ui -Name ' MB of 24 MB' -Contains -Type 'Text'
@@ -164,35 +169,35 @@ Check 'update: Settings shows the progress: MB of total, speed, time left' ($upL
 Check 'update: and a progress bar' ([bool](Find-Ui -Name 'Download progress'))
 UP-Shot 'settings-downloading'
 UP-Home
-$upNotice = Wait-Until { Find-Ui -Name 'Downloading Nixie 1.5.1' -Type 'Text' } -Seconds 10
+$upNotice = Wait-Until { Find-Ui -Name "Downloading Nixie $upV1" -Type 'Text' } -Seconds 10
 Check 'update: the notice shows the same download' ($upNotice -and (Find-Ui -Name 'Cancel' -Type 'Button'))
 UP-Shot 'notice-downloading'
 
 # 4. Cancel, then Download carries on where it stopped
 [void](UP-Click 'Cancel')
-$upAvail = Wait-Until { Find-Ui -Name "Nixie 1.5.1 is available$($upDot)24 MB" -Type 'Text' } -Seconds 10
+$upAvail = Wait-Until { Find-Ui -Name "Nixie $upV1 is available$($upDot)24 MB" -Type 'Text' } -Seconds 10
 Check 'update: Cancel stops it: available, with its size and Download' ($upAvail -and (Find-Ui -Name 'Download' -Type 'Button'))
 UP-Shot 'notice-available'
 [void](UP-Settings)
-Check 'update: Settings says available too, with its size and Download' ([bool](Wait-Until { Find-Ui -Name "Nixie 1.5.1 is available$($upDot)24 MB" -Type 'Text' } -Seconds 5))
+Check 'update: Settings says available too, with its size and Download' ([bool](Wait-Until { Find-Ui -Name "Nixie $upV1 is available$($upDot)24 MB" -Type 'Text' } -Seconds 5))
 UP-Shot 'settings-available'
 UP-Home
 [void](UP-Release @{ kbps = 40000 })
 $upAt = Get-Epoch
 [void](UP-Click 'Download')
-$upReady = Wait-Until { Find-Ui -Name 'Nixie 1.5.1 is ready to install' -Type 'Text' } -Seconds 60 -PollMs 300
+$upReady = Wait-Until { Find-Ui -Name "Nixie $upV1 is ready to install" -Type 'Text' } -Seconds 60 -PollMs 300
 $upResumed = @(Get-Requests $upAt | Where-Object { $_.route -like 'release:installer*' })
 Check 'update: Download resumed the cancelled download (an HTTP Range)' (@($upResumed | Where-Object { $_.report.range_from -gt 0 }).Count -ge 1) (($upResumed | ForEach-Object { "$($_.route) $($_.status)" }) -join '; ')
 Check 'update: then checked and ready, with Restart to update' ($upReady -and (Find-Ui -Name 'Restart to update' -Type 'Button'))
 UP-Shot 'notice-ready'
 [void](UP-Settings)
-Check 'update: Settings says it is ready too' ([bool](Wait-Until { Find-Ui -Name 'Nixie 1.5.1 is ready to install' -Type 'Text' } -Seconds 5))
+Check 'update: Settings says it is ready too' ([bool](Wait-Until { Find-Ui -Name "Nixie $upV1 is ready to install" -Type 'Text' } -Seconds 5))
 Check 'update: on Settings the notice steps aside (one Restart to update, one Primary)' (@([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.AndCondition((New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Restart to update')), (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)))))).Count -eq 1)
 UP-Shot 'settings-ready'
 
 # 5. the release notes in the app
 if (UP-Click 'Release notes') {
-    $upDialog = Wait-Until { Find-Ui -Name 'What''s new in Nixie 1.5.1' } -Seconds 10
+    $upDialog = Wait-Until { Find-Ui -Name "What's new in Nixie $upV1" } -Seconds 10
     Check 'update: Release notes opens the notes in the app' ([bool]$upDialog)
     Check 'update: the notes read as Markdown (their heading, no ## left)' (-not (Find-Ui -Name '## ' -Contains -Type 'Text'))
     $script:upOnSettings = $false
@@ -202,35 +207,35 @@ if (UP-Click 'Release notes') {
 }
 
 # 6. a download that doesn't match its checksum
-[void](UP-Release @{ version = '1.5.2'; mismatch = $true; digest = 'none'; kbps = 40000 })   # no digest: the .sha256 alone, started over once
+[void](UP-Release @{ version = $upV2; mismatch = $true; digest = 'none'; kbps = 40000 })   # no digest: the .sha256 alone, started over once
 Start-Sleep -Seconds 16      # Check now says a 15-s-old answer again: ask after it
 [void](UP-Click 'Check now')
-$upBad = Wait-Until { Find-Ui -Name "Couldn't download Nixie 1.5.2" -Type 'Text' } -Seconds 60 -PollMs 300
+$upBad = Wait-Until { Find-Ui -Name "Couldn't download Nixie $upV2" -Type 'Text' } -Seconds 60 -PollMs 300
 Check "update: a checksum mismatch (twice) says it couldn't download, with Retry" ($upBad -and (Find-Ui -Name 'Retry' -Type 'Button'))
 UP-Shot 'settings-download-failed'
 UP-Home
-Check 'update: the notice says so too' ([bool](Wait-Until { Find-Ui -Name "Couldn't download Nixie 1.5.2" -Type 'Text' } -Seconds 5))
+Check 'update: the notice says so too' ([bool](Wait-Until { Find-Ui -Name "Couldn't download Nixie $upV2" -Type 'Text' } -Seconds 5))
 UP-Shot 'notice-download-failed'
 
 $upUpdates = Join-Path $DataDir 'Updates'
 if ($env:UP_RESTART -eq '1') {
     # 7a. Restart to update: the handoff written down (never installed in a harness run), and Nixie closes
-    [void](UP-Release @{ version = '1.5.3'; mismatch = $false; digest = 'ok' })
+    [void](UP-Release @{ version = $upV3; mismatch = $false; digest = 'ok' })
     Start-Sleep -Seconds 16
     [void](UP-Settings)
     [void](UP-Click 'Check now')
-    $upReady = Wait-Until { Find-Ui -Name 'Nixie 1.5.3 is ready to install' -Type 'Text' } -Seconds 60 -PollMs 300
-    Check 'update: 1.5.3 ready' ([bool]$upReady)
+    $upReady = Wait-Until { Find-Ui -Name "Nixie $upV3 is ready to install" -Type 'Text' } -Seconds 60 -PollMs 300
+    Check "update: $upV3 ready" ([bool]$upReady)
     [void](UP-Click 'Restart to update')
     $upGone = Wait-Until { $script:ui.Refresh(); $script:ui.HasExited } -Seconds 40 -PollMs 250
     Check 'update: Restart to update closes Nixie' ([bool]$upGone)
     $upPlan = Join-Path $upUpdates 'harness-handoff.txt'
     $upArgs = if (Test-Path $upPlan) { @(Get-Content -LiteralPath $upPlan) } else { @() }
-    Check 'update: the handoff installs 1.5.3 with a log, waits for this Nixie, and reopens it' (
-        $upArgs -contains '--nixie-install-update' -and ($upArgs -match 'Nixie-1\.5\.3-win-x64\.msi$').Count -eq 1 -and $upArgs -contains '--reopen' -and $upArgs -contains '--wait-pid' -and $upArgs -notcontains '--quiet') ($upArgs -join ' ')
+    Check "update: the handoff installs $upV3 with a log, waits for this Nixie, and reopens it" (
+        $upArgs -contains '--nixie-install-update' -and ($upArgs -match ('Nixie-' + [regex]::Escape($upV3) + '-win-x64\.msi$')).Count -eq 1 -and $upArgs -contains '--reopen' -and $upArgs -contains '--wait-pid' -and $upArgs -notcontains '--quiet') ($upArgs -join ' ')
     $upPending = Join-Path $upUpdates 'pending.json'
     $upP = if (Test-Path $upPending) { Get-Content -Raw -LiteralPath $upPending | ConvertFrom-Json }
-    Check 'update: what the next start reads: the version and the page to come back to' ($upP -and $upP.Version -eq '1.5.3' -and $upP.Resume.PageKey -like '*ViewModel') "$($upP.Version) $($upP.Resume.PageKey)"
+    Check 'update: what the next start reads: the version and the page to come back to' ($upP -and $upP.Version -eq $upV3 -and $upP.Resume.PageKey -like '*ViewModel') "$($upP.Version) $($upP.Resume.PageKey)"
     return
 }
 

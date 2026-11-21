@@ -81,7 +81,7 @@ public sealed partial class EditorialSeriesPage : Page
 	{
 		base.OnNavigatedTo(e);
 		// Back gives the scroll position, the focus and the season shown back (the shared page's ItemPagePlace)
-		_place ??= new ItemPagePlace(this, PageContent, () => ViewModel.State.Status is not (LoadStatus.Idle or LoadStatus.Loading) && !ViewModel.IsLoadingEpisodes);
+		_place ??= new ItemPagePlace(this, PageContent, () => ViewModel.State.Status is not (LoadStatus.Idle or LoadStatus.Loading) && !ViewModel.IsLoadingEpisodes, primary: () => PlayButton); // 1.5 huntfix (BH-150-M3): Play takes the keyboard on arrival, as on a film's page
 		ViewModel.ReturnTo(_place.Arrived(e)?.SelectedSeasonId);
 	}
 

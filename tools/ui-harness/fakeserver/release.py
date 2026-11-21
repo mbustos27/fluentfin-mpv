@@ -4,6 +4,8 @@ as strict as GitHub where the app depends on it (the 1.4.0 bug hunt: "each fake 
 - GET /__harness/release/latest: GitHub's latest-release answer for the version set (FAKESERVER_RELEASE at start, or
   POST /__harness/release {"version"}; 0.0.1, up to date, by default).
   * No User-Agent: 403 with GitHub's own words (GitHub refuses API requests without one).
+  * BH-150-m8: an X-GitHub-Api-Version GitHub doesn't support: 400 with GitHub's own words (live, 2026-11-20); none: its
+    default, 2022-11-28. A 200 says which it used in x-github-api-version-selected, as GitHub does.
   * Every answer carries GitHub's rate-limit headers (x-ratelimit-limit 60, -remaining, -used, -reset as epoch seconds,
     -resource core); the 61st request within the hour gets 403 with remaining 0, as GitHub's primary limit does.
   * {"mode"}: "ok"; "ratelimited" (403, remaining 0, reset in 15 minutes); "retry-after" (429 with Retry-After: 90);
@@ -34,6 +36,18 @@ NO_AGENT = {"message": "Request forbidden by administrative rules. Please make s
                        "(https://docs.github.com/en/rest/overview/resources-in-the-rest-api#user-agent-required). "
                        "Check https://developer.github.com for other possible causes."}
 MODES = ("ok", "ratelimited", "retry-after", "refuse", "error", "hang")
+#: BH-150-m8: the REST API versions GitHub supports (its own 400 listed them, 2026-11-20), and the one it uses without the header
+API_VERSIONS = ("2026-03-10", "2022-11-28")
+DEFAULT_API_VERSION = "2022-11-28"
+
+
+def unsupported_version(version):
+    """GitHub's 400 body for an X-GitHub-Api-Version it doesn't support (its words, 2026-11-20)."""
+    return {"message": "Bad Request",
+            "errors": "The version you specified in the \"X-GitHub-API-Version\" request header, \"%s\", is not a supported "
+                      "version. The following versions are currently supported: \"2026-03-10\" (most recent) and "
+                      "\"2022-11-28\"." % version,
+            "documentation_url": "https://docs.github.com/rest", "status": "400"}
 
 
 def release_answer(version, repository=DEFAULT_REPOSITORY, size=None, digest=None, notes=None):
@@ -77,6 +91,7 @@ class FakeRelease:
         self.notes = None
         self.asked = []              # times of API requests (the hour's window)
         self.api_requests = 0
+        self.api_version_asked = None   # BH-150-m8: the X-GitHub-Api-Version of the last API request it took
         self.downloads = 0
         self._bytes = {}
 
@@ -108,7 +123,7 @@ class FakeRelease:
     def state(self):
         return {"version": self.version, "mode": self.mode, "repository": self.repository, "size": self.size, "kbps": self.kbps,
                 "cut_at": self.cut_at, "mismatch": self.mismatch, "digest": self.digest, "limit": self.limit,
-                "api_requests": self.api_requests, "downloads": self.downloads}
+                "api_requests": self.api_requests, "api_version_asked": self.api_version_asked, "downloads": self.downloads}
 
     def installer(self):
         """The installer's bytes for this version and size: the same every time (a seeded generator)."""
@@ -136,6 +151,11 @@ class FakeRelease:
         if not (handler.headers.get("User-Agent") or "").strip():
             handler.route = "release:no-agent"
             return handler._json(403, NO_AGENT)
+        asked_version = handler.headers.get("X-GitHub-Api-Version")
+        if asked_version is not None and asked_version.strip() not in API_VERSIONS:
+            handler.route = "release:api-version"
+            return handler._json(400, unsupported_version(asked_version.strip()))
+        self.api_version_asked = asked_version
         renamed = self.repository != DEFAULT_REPOSITORY
         if path == "/__harness/release/latest" and renamed:
             # GitHub's answer for a renamed repository's old address: a permanent redirect to its id
@@ -167,6 +187,7 @@ class FakeRelease:
             return handler._send(502, json.dumps({"message": "Server Error"}).encode(), "application/json; charset=utf-8", headers)
         digest = {"ok": "sha256:" + self.sha256(), "wrong": "sha256:" + "0" * 64, "none": None}[self.digest]
         answer = release_answer(self.version, self.repository, self.size, digest, self.notes)
+        headers["x-github-api-version-selected"] = (asked_version or DEFAULT_API_VERSION).strip()
         handler.route = "release:latest"
         return handler._send(200, json.dumps(answer).encode("utf-8"), "application/json; charset=utf-8", headers)
 

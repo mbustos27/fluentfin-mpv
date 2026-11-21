@@ -41,8 +41,10 @@
                             fluentfin-mpv: a named Play (ux-review I2, I3). 1.2.0: it says what it starts, "Resume S1E4" with
                             the episode's progress under the words, "Play S2E1", "Play from the start" (ItemPlay; Seaglass UX review,
                             fix 12); Narrator and the tooltip get the episode's title too. The padding makes room for the bar in 44 px.
+                            1.5 huntfix (BH-150-M3): named, the page's Primary: it takes the keyboard on arrival (ItemPagePlace)
                         -->
                         <Button
+                            x:Name="PlayButton"
                             AutomationProperties.Name="{x:Bind ViewModel.PlayTarget.Name, Mode=OneWay}"
                             Command="{x:Bind root:App.Commands.PlayDtoCommand}"
                             CommandParameter="{x:Bind ViewModel.Dto, Mode=OneWay}"

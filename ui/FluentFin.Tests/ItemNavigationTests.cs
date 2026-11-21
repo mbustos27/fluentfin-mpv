@@ -142,6 +142,21 @@ public sealed class ItemNavigationTests
 		Assert.Contains("NixiePrimaryButtonStyle", xaml);
 	}
 
+	/// <summary>
+	/// 1.5 huntfix (BH-150-M3): every theme's Series and Season page gives its Play ("Play S1 E4") as the Primary too: Enter on a
+	/// show's card opened it with the keyboard on the top bar's Back, and a second Enter went back to the library.
+	/// </summary>
+	[Theory]
+	[InlineData(@"Views\SeriesPage.xaml.cs")]
+	[InlineData(@"Views\SeasonPage.xaml.cs")]
+	[InlineData(@"Themes\Cinematic\Views\CinematicSeriesPage.xaml.cs")]
+	[InlineData(@"Themes\Cinematic\Views\CinematicSeasonPage.xaml.cs")]
+	[InlineData(@"Themes\DriveIn\Views\DriveInSeriesPage.xaml.cs")]
+	[InlineData(@"Themes\DriveIn\Views\DriveInSeasonPage.xaml.cs")]
+	[InlineData(@"Themes\Editorial\Views\EditorialSeriesPage.xaml.cs")]
+	[InlineData(@"Themes\Editorial\Views\EditorialSeasonPage.xaml.cs")]
+	public void EverySeriesAndSeasonPage_FocusesItsPlayOnArrival(string page) => EveryMovieAndEpisodePage_FocusesItsPlayOnArrival(page);
+
 	/// <summary>Nixie 1.4.0: every theme's movie page says which collections the film is in ("Part of"), above its facts.</summary>
 	[Theory]
 	[InlineData(@"Views\MoviePage.xaml")]

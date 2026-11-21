@@ -193,6 +193,21 @@ public sealed class HomeInsetTests
 		Assert.Equal(new Microsoft.UI.Xaml.Thickness(24, 36, 24, 0), FluentFin.Views.HomePage.RowsMargin(null));
 		Assert.Equal(new Microsoft.UI.Xaml.Thickness(24, 20, 24, 0), FluentFin.Views.HomePage.RowsMargin([slide]));
 	}
+
+	/// <summary>
+	/// 1.5 huntfix (BH-150-M1): the page runs under the transparent top bar, so Home's notice ("Some of Home couldn't be
+	/// loaded") or its message starts below the bar (its text ran through the tabs and Try again sat under the search box in
+	/// Classic); with nothing to say it takes no room, and the hero stays right under the title bar.
+	/// </summary>
+	[Fact]
+	public void HomesNotice_StartsBelowTheTopBar_AndTakesNoRoomWhenItHasNothingToSay()
+	{
+		var notice = FluentFin.Views.HomePage.StateMargin(hasProblem: true, hasMessage: false);
+		Assert.True(notice.Top >= TopBar.Height + 8, $"top {notice.Top}");
+		Assert.True(notice.Bottom > 0);                                         // room before the hero
+		Assert.True(FluentFin.Views.HomePage.StateMargin(false, true).Top >= TopBar.Height + 8);
+		Assert.Equal(new Microsoft.UI.Xaml.Thickness(36, 0, 36, 0), FluentFin.Views.HomePage.StateMargin(false, false));
+	}
 }
 
 /// <summary>The review, item 7: the focus hold after Back or a jump gives way to anything the user does.</summary>

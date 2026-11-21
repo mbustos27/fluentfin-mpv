@@ -255,6 +255,22 @@ class SplitSeasons(unittest.TestCase):
         self.assertEqual([], net.lookup(episode, anime, "1", fake))
         self.assertFalse([c for c in fake.calls if "aniskip" in c[0]])
 
+    def test_a_show_level_anime_id_is_season_ones_only(self):
+        """1.5.1 fixes: the series' MyAnimeList (or AniList, AniDB) id is the
+        first season's entry; Season 2 takes ARM's per-season mapping, or
+        nothing, never Season 1's id."""
+        with_tvdb = {"MyAnimeList": "16498", "AniList": "16498", "Tvdb": "267440"}
+        self.assertEqual(16498, self.mal(1, with_tvdb)[0])
+        found, fake = self.mal(2, with_tvdb)
+        self.assertEqual(25777, found)                   # Season 2's own entry
+        self.assertTrue(all("thetvdb" in c[0] for c in fake.calls))
+        found, fake = self.mal(2, {"MyAnimeList": "16498"})
+        self.assertIsNone(found)                          # nothing per season: no lookup
+        self.assertEqual([], fake.calls)
+        found, fake = self.mal(2, {"AniDB": "9541"})
+        self.assertIsNone(found)
+        self.assertEqual([], fake.calls)
+
     def test_a_whole_season_episode_still_asks_aniskip(self):
         fake = Fake([("theintrodb", (404, {}, b"{}")),
                      ("aniskip", ANISKIP_200),

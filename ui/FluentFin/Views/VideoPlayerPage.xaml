@@ -58,7 +58,17 @@
                     IsClosable="True"
                     IsOpen="{x:Bind ViewModel.HasMpvMessage, Mode=OneWay}"
                     Message="{x:Bind ViewModel.MpvMessage, Mode=OneWay}"
-                    Severity="{x:Bind SeverityOf(ViewModel.MpvMessageIsError), Mode=OneWay}" />
+                    Severity="{x:Bind SeverityOf(ViewModel.MpvMessageIsError), Mode=OneWay}">
+                    <!--  1.5.1 fixes (BH-150-M2): the server no longer takes this sign-in  -->
+                    <InfoBar.ActionButton>
+                        <Button
+                            x:Name="MpvSignInAgainButton"
+                            Command="{x:Bind ViewModel.SignInAgainFromMpvCommand}"
+                            Content="Sign in again"
+                            Style="{StaticResource NixieCompactButtonStyle}"
+                            Visibility="{x:Bind VisibleIf(ViewModel.MpvSignInNeeded), Mode=OneWay}" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
 
                 <!--  fluentfin-mpv: brief, the video plays on (e.g. a track or quality change that could not be applied); hides itself  -->
                 <InfoBar
