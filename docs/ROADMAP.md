@@ -145,8 +145,11 @@ Three parallel streams (search, the updater, fixes), each owning its files, as i
   try found Windows Sandbox itself stuck, which only a PC restart clears.
 - **The owner: "Publish now"** (2026-11-21). **1.5.0 is released**
   (github.com/mbustos27/fluentfin-mpv/releases/tag/v1.5.0). Its notes say the upgrade test is still to run.
-- **Still to do for 1.5.0:** the Sandbox upgrade test after the owner's next PC restart (1.4.1 to 1.5.0, then 1.5.0's
-  Restart to update). A problem it finds ships as 1.5.1.
+- **The Sandbox upgrade test passed** (2026-11-21, 07:45 to 07:53, after the owner's restart). As a standard user:
+  1.4.1 installs and copies the Seaglass folder; 1.5.0 installs over it by the old flow and keeps the data; 1.5.0's
+  Restart to update installs the test build and opens Nixie again, once. No 1.5.1 needed. The test's own three faults
+  (a log check that a quiet start can't meet, results lost to a Windows PowerShell 5.1 quirk, the tester's exit code)
+  are fixed on main with a permanent check. Still to watch: the "Updated" notice, first seen for real on 1.5.0 to 1.5.1.
 - The fixes stream finished the backend and privacy items in its first half hour:
   - private certificates;
   - split-season anime;

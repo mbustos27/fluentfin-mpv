@@ -157,6 +157,34 @@ class InsideScriptTests(unittest.TestCase):
         self.assertIn("opened again", leg2)
         self.assertIn("Medium Mandatory Level", " ".join(plan["elevation"]))
 
+    def test_its_results_code_runs_in_windows_powershell_5_1(self):
+        # the 1.5.0 Sandbox run lost results.json, done.json and the shutdown to @($checks) ("Argument types do not match"
+        # in 5.1): run the script's own checks list, Check, the tester's results writer, then the outer's merge and writer
+        with open(INSIDE, encoding="utf-8-sig") as f:
+            lines = f.read().splitlines()
+        take = lambda start: next(i for i, line in enumerate(lines) if line.lstrip().startswith(start))
+        setup = lines[take("$checks = New-Object"):take("function Check(") + 1]
+        tester = lines[take("$result = [ordered]@{"):take("catch { Step \"results.json not written") + 1]
+        outer = lines[take("$r = $null"):take("catch { Write-Host \"results.json not written") + 1]
+        os.makedirs(self.results)
+        script = "\n".join(["$ErrorActionPreference = 'Stop'", f"$Results = '{self.results}'",
+                            "$previous = $new = $test = [pscustomobject]@{ Version = '1.5.0' }; $started = Get-Date",
+                            *setup, "Check 'one' $true 'a'; Check 'two' $false 'b'", *tester,
+                            "$t = Get-Content -Raw (Join-Path $Results 'results.json') | ConvertFrom-Json",
+                            "Write-Host \"tester $(@($t.checks).Count)\"", *outer,
+                            "$o = Get-Content -Raw (Join-Path $Results 'results.json') | ConvertFrom-Json",
+                            "Write-Host \"outer $(@($o.checks).Count) $($o.outer -ne $null)\""])
+        probe = os.path.join(self.root, "results-probe.ps1")
+        with open(probe, "w", encoding="utf-8-sig") as f:
+            f.write(script)
+        code, said = run(probe)
+        self.assertEqual(0, code, said)
+        self.assertNotIn("Argument types do not match", said)
+        self.assertNotIn("not written", said)
+        self.assertIn("tester 2", said)
+        self.assertIn("outer 4 True", said)   # the tester's two read back, plus the outer's own two, and its notes
+        self.assertIn("$null = $p.Handle", "\n".join(lines))   # the tester's exit code stays readable
+
     def test_versions_must_rise_through_the_legs(self):
         os.remove(os.path.join(self.root, "test-build", "Nixie-1.5.90-win-x64.msi"))
         placeholder(os.path.join(self.root, "test-build"), "Nixie-1.4.9-win-x64.msi")

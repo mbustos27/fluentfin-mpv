@@ -57,12 +57,21 @@ runs post keys and cannot move the real cursor or hear sound).
   - Space before any click in the player, then move the mouse (the controls must come back): not run, for the owner.
   - Esc inside YouTube's player in the trailer theatre (the theatre must close): not run, for the owner.
   - One real trailer plays in the theatre, with sound: not run, for the owner.
-  - Restart to update on a real install (the Sandbox upgrade test, `upgrade-test-sandbox.ps1`, covers it off the owner's
-    account): not run, for the owner.
-  - The Sandbox upgrade test itself (1.4.1 to 1.5.0 by the old flow, then 1.5.0's Restart to update, as a standard
-    user): not finished. It installed 1.4.1, then stopped on a bug in its own script (fixed after the release); the
-    second try found Windows Sandbox stuck until a restart. 1.5.0 shipped without it (owner: "Publish now"); it runs
-    again after the next restart, and a problem it finds ships as 1.5.1.
+  - Restart to update on a real install: not run on the owner's own install; the Sandbox upgrade test below covers it
+    off the owner's account.
+  - The Sandbox upgrade test (`upgrade-test-sandbox.ps1`): **passed on 2026-11-21, after the release** (1.5.0 shipped
+    first, owner: "Publish now"; the first two tries failed on the test script and a stuck Sandbox). As a standard user
+    at medium integrity:
+    - leg 1: 1.4.1 installs, copies the Seaglass folder at its first start; 1.5.0 installs over it by the old flow,
+      reopens nothing, keeps the data, leaves the Seaglass folder alone, and starts;
+    - leg 2: Restart to update closes Nixie, the helper installs 1.5.90 quietly and opens Nixie once, without the
+      switch, and the reopened Nixie logs the result (installer exit 0).
+
+    Its three failures were the test's own, fixed on main: a start with no server logs nothing (the leg 1 log check
+    is gone; leg 2's line proves the log), Windows PowerShell 5.1 threw on `@($checks)` so no results.json was written
+    and the Sandbox didn't shut down, and the tester's exit code read empty. The test build is 1.5.0's files in an
+    installer numbered 1.5.90, so the reopened app logs "None", not "Updated": the "Updated" notice is first seen for
+    real on 1.5.0 to 1.5.1.
 
 ## Never verified
 - **Parts of a real Jellyfin server.** The automated tests use fake servers and fake tokens.

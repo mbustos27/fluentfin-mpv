@@ -69,7 +69,7 @@ $plan = [ordered]@{
              "start $installFolder\app\Nixie.exe once: the Seaglass folder copied to %LOCALAPPDATA%\Nixie; close it",
              "msiexec /i `"$($new.Path)`" /passive /norestart /l*v leg1-upgrade.log with Nixie closed, as 1.4.1's updater does (exit 0; version $($new.Version); nothing reopened)",
              'the Nixie data folder keeps the marker; the Seaglass folder is untouched',
-             "start $($new.Version) once (it runs, its log has this start); close it")
+             "start $($new.Version) once (it runs); close it")
     leg2 = @("copy the test build and its .sha256 to $work",
              "start $installFolder\app\Nixie.exe --install-update $work\$(Split-Path -Leaf $test.Path)",
              'it closes; the helper (Updates\Nixie-updater.exe) installs with msiexec /passive /norestart /l*v Updates\install.log',
@@ -85,6 +85,8 @@ if ($DryRun) {
 }
 
 # --- the checks ----------------------------------------------------------------------------------------------------------
+# Windows PowerShell 5.1 throws "Argument types do not match" on @($checks) (the 1.5.0 Sandbox run lost its results.json
+# to it): take the checks out with $checks.ToArray()
 $checks = New-Object System.Collections.Generic.List[object]
 $notes = [ordered]@{}
 # progress.log: one line per step and check as it happens (opened and closed each time, so it can be copied mid-run)
@@ -155,6 +157,7 @@ if (-not $AsTester) {
             $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $arguments -WorkingDirectory $work -PassThru
             $who = "$env:USERNAME (already a standard user)"
         }
+        $null = $p.Handle   # held open now, or ExitCode reads empty once it has exited (the 1.5.0 run's "exit ")
         $notes.tester = "$who, pid $($p.Id)"
         Write-Host "tester started: $($notes.tester)"
         $deadline = (Get-Date).AddMinutes(35)
@@ -175,7 +178,7 @@ if (-not $AsTester) {
         try { if (Test-Path (Join-Path $Results 'results.json')) { $r = Get-Content -Raw (Join-Path $Results 'results.json') | ConvertFrom-Json } }
         catch { Check "the tester's results.json reads" $false $_.Exception.Message }
         if (-not $r) { Check 'the legs ran and wrote their results' $false "$($notes.tester)"; $r = [pscustomobject]@{ checks = @() } }
-        $r | Add-Member -NotePropertyName checks -NotePropertyValue (@($r.checks) + @($checks)) -Force
+        $r | Add-Member -NotePropertyName checks -NotePropertyValue (@($r.checks) + $checks.ToArray()) -Force
         $r | Add-Member -NotePropertyName outer -NotePropertyValue $notes -Force
         try { $r | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 (Join-Path $Results 'results.json') }
         catch { Write-Host "results.json not written: $($_.Exception.Message)" }
@@ -230,11 +233,11 @@ try {
     $notes.leg1_upgrade_log = Get-LogLines $log
 
     $logs = Join-Path $nixieData 'Logs'
-    $runAt = Get-Date
     $one = Start-Nixie @()
     Start-Sleep -Seconds 20
     Check "leg 1: $($new.Version) starts and keeps running" (-not $one.HasExited)
-    Check "leg 1: $($new.Version) writes its log" ([bool](Get-ChildItem $logs -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $runAt }))
+    # no log check here: a start with no server and nothing to copy logs nothing (the 1.5.0 run's one false failure);
+    # leg 2's "[update] the install of" line proves the log in the Nixie folder
     Stop-Nixie $one
 
     # ---- leg 2: Restart to update, driven by Nixie's own switch
@@ -262,6 +265,7 @@ catch {
 }
 
 $result = [ordered]@{ versions = [ordered]@{ previous = $previous.Version; new = $new.Version; test = $test.Version }; started = $started.ToUniversalTime().ToString('o')
-    checks = @($checks); notes = $notes }
-$result | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 (Join-Path $Results 'results.json')
+    checks = $checks.ToArray(); notes = $notes }
+try { $result | ConvertTo-Json -Depth 6 | Set-Content -Encoding utf8 (Join-Path $Results 'results.json') }
+catch { Step "results.json not written: $($_.Exception.Message)"; exit 1 }
 exit 0
