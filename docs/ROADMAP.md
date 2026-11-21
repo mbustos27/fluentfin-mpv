@@ -11,7 +11,7 @@ and the owner's own steps are the real limits.
 | 1.4.0 | Consistency | The library layer for all four themes, plus the contrast floor and big libraries | **Released** 2026-11-20 |
 | 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
 | 1.5.0 | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Released** 2026-11-21 |
-| 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Now**: final pass and build; release expected **2026-11-21** |
+| 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Released** 2026-11-21 |
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Now** (started 2026-11-21, 6 streams): release expected **2026-11-22** |
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | About half a day after 1.6: **2026-11-22 to 23** |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | About 1 day of work; **2026-11-23 to 25**, after the weekly usage reset on 24 November if usage runs short. Needs the owner's Trakt registration (a few minutes) |
@@ -302,7 +302,7 @@ The plan:
 - accessibility by hand;
 - the performance baseline.
 
-## 1.5.1: Fixes (now, alongside 1.6)
+## 1.5.1: Fixes (released 2026-11-21)
 The first fix release (the owner, 2026-11-21). One stream from v1.5.0 (`wip/151-fixes`), with 1.5.0's gates: the full
 suites, a review, the bug hunt, the release build, and the Sandbox upgrade test from 1.5.0 to 1.5.1, the first real
 check of the "Updated" notice.
@@ -335,7 +335,17 @@ check of the "Updated" notice.
 - **The rest go to 1.6.1's queue,** among them: the saved-password sign-in has no test; the live-updates connection
   keeps redialing with a refused sign-in; a portable copy counts as a new device; time watched is lost when the sign-in
   ends mid-playback.
-- **Next:** the final pass, the build, the Sandbox test and publish.
+- **The final pass passed** (14:00): the keyboard check in all four themes, 43 of 44 theme runs (Cinematic's placeholder
+  check, the 1.5.0 issue), every run on both test servers, both UI suites, the backend and the bridge. The release
+  package passed its 121 checks, Defender found nothing, and 1.5.1 measures the same as 1.5.0 in the baseline.
+- **The Sandbox upgrade test passed every check** (13:58 to 14:12, as a standard user): 1.5.0 to 1.5.1 by the old flow,
+  1.5.1's own Restart to update, and, the first real check of it, **1.5.0's Restart to update installing 1.5.1, which
+  opens again and logs "Updated"**.
+- **1.5.1 is released** (2026-11-21, 22:19 UTC; github.com/mbustos27/fluentfin-mpv/releases/tag/v1.5.1), squashed onto
+  main as `fa95aa0`.
+- **From launch to release:** about 6 hours (08:12 to 14:19): fixes 1 hour, review and hunt 1 hour, their fixes and the
+  final pass with the build about 3.5 hours (the test slots were shared with six streams), the Sandbox test and
+  publishing 30 minutes.
 
 ## 1.6: Collections (now)
 **Started 2026-11-21** (the owner: "Start 1.6"), every branch from v1.5.0:
