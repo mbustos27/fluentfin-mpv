@@ -1,22 +1,45 @@
 # Nixie roadmap
 
-Updated 2026-11-21 (1.5.0 released; 1.6 and the 1.5.1 fix release under way). These are the planned releases in order, with
-the backburner ideas placed where they fit. Nothing past 1.4.1 has a date. Version numbers past 1.6 are a guide. Sizes
-are for one dev stream: S up to 2 days, M about a week, L 2 to 3 weeks, XL months.
+Updated 2026-11-21 (1.5.0 released; 1.6, the 1.5.1 fix release and Google TV under way; sizes re-measured). These are
+the planned releases in order, with the backburner ideas placed where they fit. Version numbers past 1.6 are a guide.
+**Sizes are calendar time at the measured pace** (below): several streams in parallel, each building in hours, plus a
+fixed tail of about half a day per release. A date past today is an estimate, not a promise; usage, the 3 test slots
+and the owner's own steps are the real limits.
 
-| Release | Name | What | Status |
+| Release | Name | What | Status (estimate at the measured pace) |
 |---|---|---|---|
 | 1.4.0 | Consistency | The library layer for all four themes, plus the contrast floor and big libraries | **Released** 2026-11-20 |
 | 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
 | 1.5.0 | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Released** 2026-11-21 |
-| 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Now**, alongside 1.6 (one stream) |
-| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Now** (L, started 2026-11-21) |
-| 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | After 1.6 |
-| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | Planned (M–L) |
-| 1.8 | Player | Pop-out player, chapter extras | From the backburner (M–L) |
-| 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research first (L) |
-| 2.0 | Rust | A time-boxed spike, then go or no-go | Research first (XL if go) |
-| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Phase 0 done; **phase 1 started 2026-11-21** (Nixie on Glacier) |
+| 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Now**: final pass and build; release expected **2026-11-21** |
+| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Now** (started 2026-11-21, 6 streams): release expected **2026-11-22** |
+| 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | About half a day after 1.6: **2026-11-22 to 23** |
+| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | About 1 day of work; **2026-11-23 to 25**, after the weekly usage reset on 24 November if usage runs short. Needs the owner's Trakt registration (a few minutes) |
+| 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
+| 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
+| 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
+| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Phase 0 done; **phase 1 started 2026-11-21** (Nixie on Glacier); 1.0 in **2 to 4 days** with the themes and Nixie's features in parallel, plus the owner's 20-minute TV check and 10-minute key at the end |
+
+**Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
+
+| Step | Measured | Notes |
+|---|---|---|
+| A stream builds its items | **1 to 3.5 hours** (median about 2.5) | 1.5: search 1 h 55, updater 2 h 27, fixes 3 h 17, season 3 h 22, qacheck 3 h 21. 1.6: colpage 2 h 32, player 2 h 34. 1.5.1's fixes 1 h 07. Items once sized M to L each took one stream an afternoon |
+| A review | **10 to 35 minutes** | One reviewer per stream, read-only |
+| Fixing a review's Blockers and Majors | **1 to 2.5 hours** | Usually 1 to 4 Majors per stream |
+| Integration, final pass, baseline and the release build | **about 2.5 hours** | 1.5: 17:54 to 20:30, every gate in four themes on both test servers |
+| The bug hunt | **25 to 70 minutes** | Beside the final pass |
+| The Sandbox upgrade test and publishing | **about 30 minutes** | When Sandbox works; on 2026-11-20 it stuck until a PC restart, which moved 1.5.0 to the next morning |
+| **A feature release, end to end** | **about 9 to 10 hours of work**, so about a day | 1.5: launched 11:39, release build at 20:30, published the next morning (the Sandbox restart) |
+| **A fix release** | **about half a day** | 1.5.1: launched 08:12, fixes in at 09:19, review and hunt by 10:26 |
+
+**What actually limits the pace:**
+- **Usage:** on 2026-11-20, 1.5 took the weekly allowance to 100% and the owner reset it by hand; on 2026-11-21, after
+  the reset, eight agents ran at once from about 15%. More parallel streams spend it faster, not slower.
+- **The 3 off-screen test slots:** every stream's harness runs, the final passes, and now the TV emulator share them.
+  Waits of up to 30 minutes were seen, and one hunt probe gave up waiting.
+- **The owner's own steps:** hand checks, a restart when Sandbox sticks, the TV session, the release key, registrations
+  (Trakt), and decisions (the skip questions, the pop-out player, social).
 
 **Split (owner, 2026-11-20: "Yes, split it"):** the second review found 1.5 too big at about 40 items, with four streams
 editing the same files. 1.5 now ships search, the updater and the fixes; the top bar, tidy names, collections and the
@@ -513,6 +536,13 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
 - **Re-estimate (provisional, until GLACIER-BASE.md):** most of the playback and browse work is done, so TV 1.0 is
   mostly Nixie's three themes and Nixie's own features: roughly phase 1 about 2–3 agent-days, the three themes across
   the rest about 5–8, hardening and release about 2–3, so about 9–14 agent-days instead of 19–25.
+- **Sped up (the owner, 2026-11-21: "Yes, speed it up"):** in calendar time at the measured pace, phase 1 lands today
+  and **TV 1.0 in about 2 to 4 days**. As soon as phase 1 commits Drive-in's theme contract, **Cinematic, Editorial and
+  "Nixie features on TV"** (what GLACIER-BASE.md shows Glacier lacking against desktop Nixie, split further if long)
+  start as parallel streams under the same fork rules. Most checks run as JVM screenshot and UI tests, so the one
+  emulator slot isn't the bottleneck; desktop final passes still go first. **The owner's real-TV check** is one batched
+  session of about 20 minutes near the end (wireless debugging has to be turned back on after a TV restart), and the
+  release key is their 10 minutes at the very end.
 
 Phase 0 needed about 30 minutes of the owner's time: the TV test is done; the release key waits until a release.
 **Downloads approved** (the owner, 2026-11-21: "it can download whatever is needed"): Android SDK components, system
