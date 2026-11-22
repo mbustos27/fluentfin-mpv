@@ -95,6 +95,8 @@ the same tidy name stay apart everywhere, and Nixie stays one device on the serv
   rule learned from two episodes, snapping to the cut.
 - The download itself, unzipped with no mpv anywhere: a skip rule snaps to the cut with the player it ships, and it
   refuses to install an update it was handed outside the upgrade test.
+- The upgrade, in Windows Sandbox as a standard user: 1.6.0 to 1.6.1 by the installer, 1.6.1's own Restart to update,
+  and 1.6.0's Restart to update installing 1.6.1, which opens again and says "Updated".
 - Not checked by hand for this release (they need a real desktop or your own server): a skip rule snapping on a real
   show, the device id kept across a real upgrade, and Sign in again mid-playback on your server.
 
