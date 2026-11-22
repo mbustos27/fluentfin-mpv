@@ -19,7 +19,8 @@ and the owner's own steps are the real limits.
 | 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
-| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Built, reviewed and bug-hunted **2026-11-21**; **ready for the owner's 20-minute TV session** (`Dev\nixie-tv\docs\TV-SESSION.md`), then the key and where releases live |
+| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). **The fix round is running** (2 streams), then the key and the `mbustos27/nixie-tv` repository |
+| Fire TV | Fire TV | The same TV app on Amazon's Fire OS devices | **Planning** (started 2026-11-21): a research pass, then `Dev\nixie-tv\docs\FIRE-TV-PLAN.md` |
 
 **Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
 
@@ -661,6 +662,30 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
     bare episodes; and the TV test server breaking whenever the desktop fake changed (it now keeps its own pinned copy).
     On the 2 GB emulator the player used about 211 MB (peak 272), with no crash. The debug build for the session is
     built.
+  - **The owner's TV session done (2026-11-21, evening, on the onn. 4K Plus;** `Dev\nixie-tv\docs\TV-SESSION-RESULTS.md`):
+    - **Good:** episodes, playing a movie, subtitles, typing in search, Editorial.
+    - **Four findings:** a big library's first load is slow (TV-S1); scrolling it is slow, with 11% janky frames from
+      layout and draw work, not images (TV-S2); the trailer controls feel odd (TV-S3); search results take far too
+      long (TV-S4).
+    - **Memory was fine:** about 230 to 320 MB.
+    - **Not seen:** DTS and TrueHD, Skip intro, Up next.
+    - **The owner delegated the open decisions** ("make all these decisions"):
+      - the TV themes follow the desktop's design ("keep the design philosophy of desktop");
+      - Nixie debug stays installed;
+      - the release key is made at TV 1.0's release by the owner (keytool asks the passphrase itself);
+      - **releases live in a public `mbustos27/nixie-tv`**, a GPL-3.0 fork of Glacier with credit, created when 1.0 is
+        ready.
+  - **The fix round started 2026-11-21 evening** (brief `briefs\tv-fix-session.md`), in two streams measured against a
+    big fake library:
+    - library paging and the scroll (TV-S1, S2);
+    - search and the trailer player (TV-S4, S3).
+
+    Then a review, a short emulator hunt, the owner's quick re-check on the box, the key and the repository, and **TV
+    1.0**.
+  - **Fire TV (planning started 2026-11-21, the owner: "also plan amazon fire tv release"):** a research pass on Fire
+    OS 7 and 8 and Vega OS, the Amazon Appstore's rules (self-updating, GPL), sideloading, Fire TV's home-screen row and
+    its audio formats. Then a plan in `Dev\nixie-tv\docs\FIRE-TV-PLAN.md`. The working assumption is one codebase and one
+    repository with a Fire TV build variant, since Fire OS runs Android apps (Vega OS devices don't).
   - **Next (was):** those fixes, a bug hunt on the emulator, then **the owner's 20-minute TV session** (frame timing and the
     player on the real box, the three themes, a trailer, one sign-in to their own server by Quick Connect, done by the
     owner), then the release key and where TV releases live (a GitHub repo of the owner's choosing).
