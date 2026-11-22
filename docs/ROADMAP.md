@@ -20,7 +20,7 @@ and the owner's own steps are the real limits.
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
 | TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes, and Continue watching published for third-party home screens (Google TV's own filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). **The fix round is running** (3 streams, with Watch Next), then the key and the `mbustos27/nixie-tv` repository |
-| Fire TV | Fire TV | The same TV app on Amazon's Fire OS devices | **Planning** (started 2026-11-21): a research pass, then `Dev\nixie-tv\docs\FIRE-TV-PLAN.md` |
+| Fire TV | Fire TV | The same TV app on Amazon's Fire OS devices (not Vega OS, which runs no Android apps) | **Planned** 2026-11-21 (`Dev\nixie-tv\docs\FIRE-TV-PLAN.md`), after TV 1.0: compatibility about half a day, then the sideloaded GitHub APK, then an Appstore build without the updater (about a day, plus Amazon's review). Needs the owner's Fire OS stick (avoid Vega models), a free developer account, and Submit |
 
 **Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
 
@@ -686,10 +686,18 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
 
     Then a review, a short emulator hunt, the owner's quick re-check on the box, the key and the repository, and **TV
     1.0**.
-  - **Fire TV (planning started 2026-11-21, the owner: "also plan amazon fire tv release"):** a research pass on Fire
-    OS 7 and 8 and Vega OS, the Amazon Appstore's rules (self-updating, GPL), sideloading, Fire TV's home-screen row and
-    its audio formats. Then a plan in `Dev\nixie-tv\docs\FIRE-TV-PLAN.md`. The working assumption is one codebase and one
-    repository with a Fire TV build variant, since Fire OS runs Android apps (Vega OS devices don't).
+  - **Fire TV, planned 2026-11-21** (the owner: "also plan amazon fire tv release"; `Dev\nixie-tv\docs\FIRE-TV-PLAN.md`):
+    - **One codebase and one repository.** Fire OS 7, 8, 14 and 16 only; Amazon's Vega OS sticks run no APKs and allow
+      no sideloading, and Amazon says future sticks will be Vega.
+    - **Nixie already fits:** minSdk 28 (Fire OS 7), 32-bit ARM libraries, no Google services, and the FFmpeg decoder
+      (Fire TV passes through only Dolby).
+    - **F0 compatibility** (about half a day): hide Watch Next on Fire OS (Fire's own row needs an Amazon partnership),
+      the manifest, 16 KB-aligned libraries, refresh rate matching, and Amazon's test criteria as tests.
+    - **F1 sideload:** the GitHub APK with its updater, plus the owner's check on a Fire OS 8 stick.
+    - **F2 Appstore:** an `amazon` build with its own application id and no updater, a drafted listing, and a review
+      login on a demo server we control. Submitting is the owner's step.
+    - **The owner buys a Fire OS stick soon** (4K Max 2nd gen or 4K Plus; not the 4K Select, the Stick HD 2026 or the
+      Stick 4K 3rd gen).
   - **Next (was):** those fixes, a bug hunt on the emulator, then **the owner's 20-minute TV session** (frame timing and the
     player on the real box, the three themes, a trailer, one sign-in to their own server by Quick Connect, done by the
     owner), then the release key and where TV releases live (a GitHub repo of the owner's choosing).
