@@ -54,8 +54,11 @@ show and its season.
   and Wikidata's queries answered, and Trakt's lists answered and refused requests without Nixie's name or with a wrong
   app ID. A privacy test runs the whole app path with two libraries and an empty one: the very same requests every
   time, none carrying anything from a library. Turning a source off mid-refresh sends nothing more.
-- Not checked live: TMDb trending against TMDb itself, and Wikidata through QLever. Not checked by hand (they need your
-  own server): the lists on your libraries, the way up on a show with Specials and a long name, and a gamepad on it.
+- TMDb trending checked live with the release's own key on 2026-11-22: trending films and shows answered, and a
+  request without a key was refused.
+- The upgrade, in Windows Sandbox as a standard user, right after publishing: 1.6.1 to 1.7.0 by the installer, 1.7.0's
+  own Restart to update, and 1.6.1's Restart to update installing 1.7.0, which opens again and says "Updated".
+- Not checked live: Wikidata through QLever. Not checked by hand (they need your own server): the lists on your libraries, the way up on a show with Specials and a long name, and a gamepad on it.
 
 **Known issues in 1.7.0** (queued for 1.7.1)
 
