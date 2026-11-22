@@ -189,6 +189,10 @@ runs post keys and cannot move the real cursor or hear sound).
     what was added since the saved newest (`MinDateCreated`) instead.
   - q1: the reading line has no total until every library's first page is in (84 s at 3-10 s a request, 23 libraries).
   - M1's other half: a first read whose played-episodes request fails keeps no plays until the next read.
+  - The Collections page's arrival focus can stay on Back (1 of 7 Drive-in runs under load, from the server's
+    collections tile; eed7bc12's code): `TakeArrivalFocus` tried 1 ms after the rows, before Loaded, and returned
+    through its `!IsLoaded` branch with neither the Loaded retry nor the timer running after it. The log says "the
+    section's first tile could not take the keyboard on arrival (it was on Button PART_BackButton)" with no retry.
 - **Fixed before the build (1.7.1 blocker, review and bug hunt, 2026-11-22):** the Collections page's first read was over
   before its Made by Nixie rows were in (a race a cold start lost; the rows came a moment later); rows that stayed kept
   their first page's collections through the whole read (M1); a read again was saved only after its people, so closing
