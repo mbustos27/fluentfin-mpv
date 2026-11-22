@@ -168,10 +168,24 @@ class InsideScriptTests(unittest.TestCase):
         # 1.5.1: leg 3, the previous release's own Restart to update to this release, and the Updated line
         leg3 = " ".join(plan["leg3"])
         self.assertIn("msiexec /x <the installed product> /qn", leg3)
-        self.assertIn(r"--install-update C:\Users\Public\nixie-upgrade\Nixie-1.5.1-win-x64.msi (1.5.0 takes it without the marker)", leg3)
-        self.assertNotIn("NIXIE_UPGRADE_TEST", leg3)
+        self.assertIn(r"--install-update C:\Users\Public\nixie-upgrade\Nixie-1.5.1-win-x64.msi with NIXIE_UPGRADE_TEST=C:\Users\Public\nixie-upgrade\.nixie-upgrade-test", leg3)
+        self.assertIn("1.5.1 and later refuse the switch without it", leg3)
         self.assertIn('[update] the install of 1.5.1 from 1.5.0: "Updated"', leg3)
         self.assertIn("Medium Mandatory Level", " ".join(plan["elevation"]))
+
+    def test_every_install_update_start_names_the_marker(self):
+        # the 1.6.0 Sandbox run: leg 3 started 1.5.1 with --install-update but no NIXIE_UPGRADE_TEST, and 1.5.1 (whose
+        # release the gate came with) refused the switch, so leg 3 failed with nothing wrong in Nixie. Every start with the
+        # switch sets the marker just before it and removes it right after (1.5.0 ignores it).
+        with open(INSIDE, encoding="utf-8-sig") as f:
+            lines = f.read().splitlines()
+        starts = [i for i, line in enumerate(lines) if "Start-Nixie @('--install-update'" in line]
+        self.assertEqual(2, len(starts), "leg 2 and leg 3 each start Nixie with --install-update")
+        for i in starts:
+            before = "\n".join(lines[max(0, i - 3):i])
+            after = "\n".join(lines[i:i + 2])
+            self.assertIn("$env:NIXIE_UPGRADE_TEST = Join-Path $work $testMarkerName", before, f"line {i + 1}")
+            self.assertIn("Remove-Item Env:NIXIE_UPGRADE_TEST", after, f"line {i + 1}")
 
     def test_its_results_code_runs_in_windows_powershell_5_1(self):
         # the 1.5.0 Sandbox run lost results.json, done.json and the shutdown to @($checks) ("Argument types do not match"

@@ -14,8 +14,9 @@
     leg 2, the new flow: Nixie.exe --install-update <the test build> (Nixie's own switch for this test: "Restart to update"
       with no clicks): Nixie closes, the launcher's helper installs the test build quietly and opens Nixie again;
     leg 3 (1.5.1), the previous release's own Restart to update to this release: the test build uninstalled, the data
-      folders cleared, the previous MSI installed, then its Nixie.exe --install-update <this release's MSI> (the previous
-      release takes the switch without the marker: the gate came with 1.5.1); this release opens again and logs
+      folders cleared, the previous MSI installed, then its Nixie.exe --install-update <this release's MSI>, with the
+      marker (the gate came with 1.5.1, so 1.5.1 and later refuse the switch without it; 1.5.0 ignores it; the 1.6.0 run's
+      leg 3 failed on exactly that); this release opens again and logs
       "[update] the install of <this> from <previous>: Updated", the "Updated" notice's own line;
     the elevation: whoami /groups (no administrator, medium integrity), msiexec's exit codes and its logs' privilege lines.
   Results: results.json (every check, versions, log excerpts) and done.json in the mapped results folder; then the Sandbox
@@ -85,7 +86,7 @@ $plan = [ordered]@{
     leg3 = @("msiexec /x <the installed product> /qn /norestart /l*v leg3-uninstall.log (exit 0); the Nixie and Seaglass data folders removed",
              "msiexec /i `"$($previous.Path)`" /qn /norestart /l*v leg3-previous.log  (exit 0; version $($previous.Version))",
              "copy this release's MSI and its .sha256 to $work",
-             "start $installFolder\app\Nixie.exe --install-update $work\$(Split-Path -Leaf $new.Path) ($($previous.Version) takes it without the marker)",
+             "start $installFolder\app\Nixie.exe --install-update $work\$(Split-Path -Leaf $new.Path) with NIXIE_UPGRADE_TEST=$work\$testMarkerName (1.5.1 and later refuse the switch without it; 1.5.0 ignores it)",
              "it closes; its helper installs $($new.Version) quietly; Nixie is opened again (a new process, without --install-update)",
              "Nixie's log: [update] the install of $($new.Version) from $($previous.Version): `"Updated`" (installer exit 0; Serilog quotes the word)")
     elevation = @('whoami /groups: not an administrator, Mandatory Label\Medium Mandatory Level',
@@ -302,8 +303,11 @@ try {
     Check "leg 3: the previous MSI ($($previous.Version)) installs again (exit 0)" ($exit -eq 0 -and (Get-Installed) -eq $previous.Version) "exit $exit; $(Get-Installed)"
     $newCopy = Join-Path $work (Split-Path -Leaf $new.Path)
     $leg3At = Get-Date
-    # no NIXIE_UPGRADE_TEST: the previous release has no marker gate (BH-150-m6 came with 1.5.1)
-    $first = Start-Nixie @('--install-update', "`"$newCopy`"")
+    # the marker too: the gate (BH-150-m6) came with 1.5.1, so a previous release of 1.5.1 or later refuses the switch
+    # without it (the 1.6.0 run's leg 3 failed so); 1.5.0 ignores it
+    $env:NIXIE_UPGRADE_TEST = Join-Path $work $testMarkerName
+    try { $first = Start-Nixie @('--install-update', "`"$newCopy`"") }
+    finally { Remove-Item Env:NIXIE_UPGRADE_TEST -ErrorAction SilentlyContinue }
     $closed = Wait-For { $first.HasExited } 90
     Check "leg 3: $($previous.Version)'s Restart to update closes it" ([bool]$closed)
     $installed = Wait-For { (Get-Installed) -eq $new.Version } 300

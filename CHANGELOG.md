@@ -98,6 +98,10 @@ page to match the set, skipping the parts a show repeats, and a quality choice w
 
 **Known issues in 1.6.0** (queued for 1.6.1)
 
+- **A skip rule lands on its own time, not on the nearest cut,** unless a separate mpv is installed (WinGet's, or one
+  on PATH): the package doesn't include the mpv that finds the black frame or silence.
+- Two collections whose tidy names match ("Winter Films" and "Winter Films (4K)") keep their server names only on the
+  Collections page; search, the Collection page and cards show both as "Winter Films".
 - Libraries pinned to the top bar in 1.3 become the first favourites of every user who signs in on this PC.
 - If the server's list of libraries can't be read, the top bar shows no favourites and a star says nothing.
 - On a server with more than 2,000 collections or playlists, Nixie reads the first 2,000 by name.
