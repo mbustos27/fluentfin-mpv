@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: A problem with the Jellyfin server itself
+    url: https://jellyfin.org/docs/general/getting-help/
+    about: Libraries, transcoding settings, users and plugins belong to the server. Jellyfin's own community helps with those.

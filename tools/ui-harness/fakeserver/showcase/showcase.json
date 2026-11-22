@@ -1,0 +1,1020 @@
+{
+  "_comment": "The README screenshots' showcase library (tools/ui-harness/fakeserver/showcase.py, FAKESERVER_SHOWCASE). Overviews are our own words. Pictures: art/, made by make_art.py from the files in sources.tsv; every one is credited below and in the README.",
+  "art_dir": "art",
+  "views": [
+    {
+      "name": "Movies",
+      "type": "movies"
+    },
+    {
+      "name": "Shows",
+      "type": "tvshows"
+    }
+  ],
+  "films": [
+    {
+      "key": "night-of-the-living-dead",
+      "name": "Night of the Living Dead",
+      "year": 1968,
+      "view": "Movies",
+      "genres": [
+        "Horror"
+      ],
+      "rating": "NR",
+      "runtime": 96,
+      "overview": "Strangers barricade themselves in a Pennsylvania farmhouse as the dead rise and close in. The low-budget film that set the rules for the modern zombie story.",
+      "studios": [
+        "Image Ten"
+      ],
+      "people": [
+        {
+          "name": "George A. Romero",
+          "type": "Director"
+        },
+        {
+          "name": "Duane Jones",
+          "type": "Actor"
+        },
+        {
+          "name": "Judith O'Dea",
+          "type": "Actor"
+        }
+      ],
+      "countries": [
+        "United States of America"
+      ],
+      "art": {
+        "Primary": "night-of-the-living-dead-poster.jpg",
+        "Backdrop": "night-of-the-living-dead-backdrop.jpg"
+      },
+      "month": 10,
+      "day": 1
+    },
+    {
+      "key": "a-trip-to-the-moon",
+      "name": "A Trip to the Moon",
+      "year": 1902,
+      "view": "Movies",
+      "genres": [
+        "Adventure",
+        "Fantasy",
+        "Science Fiction"
+      ],
+      "rating": "NR",
+      "runtime": 13,
+      "overview": "Six astronomers fire themselves at the Moon from a giant cannon, meet the people who live there and tumble back to Earth. One of the first science-fiction films.",
+      "studios": [
+        "Star Film"
+      ],
+      "people": [
+        {
+          "name": "Georges Méliès",
+          "type": "Director"
+        },
+        {
+          "name": "Georges Méliès",
+          "type": "Actor"
+        }
+      ],
+      "countries": [
+        "France"
+      ],
+      "art": {
+        "Primary": "a-trip-to-the-moon-poster.jpg",
+        "Backdrop": "a-trip-to-the-moon-backdrop.jpg"
+      },
+      "month": 9,
+      "day": 1
+    },
+    {
+      "key": "the-general",
+      "name": "The General",
+      "year": 1926,
+      "view": "Movies",
+      "genres": [
+        "Comedy",
+        "Action",
+        "War"
+      ],
+      "rating": "NR",
+      "runtime": 78,
+      "overview": "A railway engineer chases the locomotive Union spies stole from him, with the woman he loves aboard it. Buster Keaton did his own stunts on a real moving train.",
+      "studios": [
+        "Buster Keaton Productions"
+      ],
+      "people": [
+        {
+          "name": "Clyde Bruckman",
+          "type": "Director"
+        },
+        {
+          "name": "Buster Keaton",
+          "type": "Director"
+        },
+        {
+          "name": "Buster Keaton",
+          "type": "Actor"
+        },
+        {
+          "name": "Marion Mack",
+          "type": "Actor"
+        }
+      ],
+      "countries": [
+        "United States of America"
+      ],
+      "art": {
+        "Primary": "the-general-poster.jpg",
+        "Backdrop": "the-general-backdrop.jpg"
+      },
+      "month": 12,
+      "day": 31,
+      "user": {
+        "progress": 0.65,
+        "days_ago": 3
+      }
+    },
+    {
+      "key": "charade",
+      "name": "Charade",
+      "year": 1963,
+      "view": "Movies",
+      "genres": [
+        "Comedy",
+        "Mystery",
+        "Romance",
+        "Thriller"
+      ],
+      "rating": "NR",
+      "runtime": 113,
+      "overview": "A widow in Paris learns her late husband stole a fortune, and three of his old partners want it back. A charming stranger offers to help, under more than one name.",
+      "studios": [
+        "Universal Pictures"
+      ],
+      "people": [
+        {
+          "name": "Stanley Donen",
+          "type": "Director"
+        },
+        {
+          "name": "Cary Grant",
+          "type": "Actor"
+        },
+        {
+          "name": "Audrey Hepburn",
+          "type": "Actor"
+        },
+        {
+          "name": "Walter Matthau",
+          "type": "Actor"
+        }
+      ],
+      "countries": [
+        "United States of America"
+      ],
+      "art": {
+        "Primary": "charade-poster.jpg",
+        "Backdrop": "charade-backdrop.jpg"
+      },
+      "role": "movie",
+      "month": 12,
+      "day": 5,
+      "user": {
+        "progress": 0.42,
+        "days_ago": 1
+      }
+    },
+    {
+      "key": "metropolis",
+      "name": "Metropolis",
+      "year": 1927,
+      "view": "Movies",
+      "genres": [
+        "Science Fiction",
+        "Drama"
+      ],
+      "rating": "NR",
+      "runtime": 148,
+      "overview": "In a towering city run like a machine, the ruler's son goes below ground and meets the workers who keep it running. A robot made in a woman's likeness is sent to turn them.",
+      "studios": [
+        "UFA"
+      ],
+      "people": [
+        {
+          "name": "Fritz Lang",
+          "type": "Director"
+        },
+        {
+          "name": "Brigitte Helm",
+          "type": "Actor"
+        },
+        {
+          "name": "Gustav Fröhlich",
+          "type": "Actor"
+        }
+      ],
+      "countries": [
+        "Germany"
+      ],
+      "art": {
+        "Primary": "metropolis-poster.jpg",
+        "Backdrop": "metropolis-backdrop.jpg"
+      },
+      "month": 1,
+      "day": 10,
+      "user": {
+        "favorite": true
+      }
+    },
+    {
+      "key": "sintel",
+      "name": "Sintel",
+      "year": 2010,
+      "view": "Movies",
+      "genres": [
+        "Animation",
+        "Fantasy"
+      ],
+      "rating": "NR",
+      "runtime": 15,
+      "overview": "A young woman crosses a harsh world to find the baby dragon she rescued and then lost. The Blender Foundation's third open movie.",
+      "studios": [
+        "Blender Foundation"
+      ],
+      "people": [
+        {
+          "name": "Colin Levy",
+          "type": "Director"
+        }
+      ],
+      "countries": [
+        "Netherlands"
+      ],
+      "art": {
+        "Primary": "sintel-poster.jpg",
+        "Backdrop": "sintel-backdrop.jpg"
+      },
+      "month": 9,
+      "day": 27,
+      "user": {
+        "favorite": true
+      }
+    },
+    {
+      "key": "big-buck-bunny",
+      "name": "Big Buck Bunny",
+      "year": 2008,
+      "view": "Movies",
+      "genres": [
+        "Animation",
+        "Comedy"
+      ],
+      "rating": "NR",
+      "runtime": 10,
+      "overview": "A big, gentle rabbit is pushed too far by three bullying rodents and plans a comeback of his own. The Blender Foundation's second open movie.",
+      "studios": [
+        "Blender Foundation"
+      ],
+      "people": [
+        {
+          "name": "Sacha Goedegebure",
+          "type": "Director"
+        }
+      ],
+      "countries": [
+        "Netherlands"
+      ],
+      "art": {
+        "Primary": "big-buck-bunny-poster.jpg",
+        "Backdrop": "big-buck-bunny-backdrop.jpg"
+      },
+      "month": 4,
+      "day": 10
+    },
+    {
+      "key": "his-girl-friday",
+      "name": "His Girl Friday",
+      "year": 1940,
+      "view": "Movies",
+      "genres": [
+        "Comedy",
+        "Romance"
+      ],
+      "rating": "NR",
+      "runtime": 92,
+      "overview": "A newspaper editor has one day to win back his best reporter, who is also his ex-wife, before she remarries. The talk rarely stops for breath.",
+      "studios": [
+        "Columbia Pictures"
+      ],
+      "people": [
+        {
+          "name": "Howard Hawks",
+          "type": "Director"
+        },
+        {
+          "name": "Cary Grant",
+          "type": "Actor"
+        },
+        {
+          "name": "Rosalind Russell",
+          "type": "Actor"
+        }
+      ],
+      "countries": [
+        "United States of America"
+      ],
+      "art": {
+        "Primary": "his-girl-friday-poster.jpg",
+        "Backdrop": "his-girl-friday-backdrop.jpg"
+      },
+      "month": 1,
+      "day": 18
+    },
+    {
+      "key": "caligari",
+      "name": "The Cabinet of Dr. Caligari",
+      "year": 1920,
+      "view": "Movies",
+      "genres": [
+        "Horror",
+        "Mystery"
+      ],
+      "rating": "NR",
+      "runtime": 76,
+      "overview": "A fairground showman presents a sleepwalker who can tell the future, and murders follow them from town to town. Its crooked painted sets defined German Expressionism.",
+      "studios": [
+        "Decla-Bioscop"
+      ],
+      "people": [
+        {
+          "name": "Robert Wiene",
+          "type": "Director"
+        },
+        {
+          "name": "Werner Krauss",
+          "type": "Actor"
+        },
+        {
+          "name": "Conrad Veidt",
+          "type": "Actor"
+        }
+      ],
+      "countries": [
+        "Germany"
+      ],
+      "art": {
+        "Primary": "caligari-poster.jpg",
+        "Backdrop": "caligari-backdrop.jpg"
+      },
+      "month": 2,
+      "day": 26
+    },
+    {
+      "key": "tears-of-steel",
+      "name": "Tears of Steel",
+      "year": 2012,
+      "view": "Movies",
+      "genres": [
+        "Science Fiction"
+      ],
+      "rating": "NR",
+      "runtime": 12,
+      "overview": "In a future Amsterdam, scientists try to stop an army of robots by replaying a breakup. A live-action open movie made to test visual effects in Blender.",
+      "studios": [
+        "Blender Foundation"
+      ],
+      "people": [
+        {
+          "name": "Ian Hubert",
+          "type": "Director"
+        }
+      ],
+      "countries": [
+        "Netherlands"
+      ],
+      "art": {
+        "Primary": "tears-of-steel-poster.jpg",
+        "Backdrop": "tears-of-steel-backdrop.jpg"
+      },
+      "month": 9,
+      "day": 26
+    },
+    {
+      "key": "spring",
+      "name": "Spring",
+      "year": 2019,
+      "view": "Movies",
+      "genres": [
+        "Animation",
+        "Fantasy"
+      ],
+      "rating": "NR",
+      "runtime": 8,
+      "overview": "A shepherd girl and her dog face the ancient spirits of the mountain to bring the spring back. A short film made with Blender 2.80.",
+      "studios": [
+        "Blender Foundation"
+      ],
+      "people": [
+        {
+          "name": "Andy Goralczyk",
+          "type": "Director"
+        }
+      ],
+      "countries": [
+        "Netherlands"
+      ],
+      "art": {
+        "Primary": "spring-poster.jpg",
+        "Backdrop": "spring-backdrop.jpg"
+      },
+      "month": 4,
+      "day": 4
+    },
+    {
+      "key": "plan-9",
+      "name": "Plan 9 from Outer Space",
+      "year": 1957,
+      "view": "Movies",
+      "genres": [
+        "Science Fiction",
+        "Horror"
+      ],
+      "rating": "NR",
+      "runtime": 79,
+      "overview": "Visitors from space raise the dead to stop humanity from building a doomsday weapon. Long called the worst film ever made, and loved for it.",
+      "studios": [
+        "Reynolds Pictures"
+      ],
+      "people": [
+        {
+          "name": "Ed Wood",
+          "type": "Director"
+        },
+        {
+          "name": "Bela Lugosi",
+          "type": "Actor"
+        },
+        {
+          "name": "Vampira",
+          "type": "Actor"
+        }
+      ],
+      "countries": [
+        "United States of America"
+      ],
+      "art": {
+        "Primary": "plan-9-poster.jpg",
+        "Backdrop": "plan-9-backdrop.jpg"
+      },
+      "month": 7,
+      "day": 22
+    },
+    {
+      "key": "sprite-fright",
+      "name": "Sprite Fright",
+      "year": 2021,
+      "view": "Movies",
+      "genres": [
+        "Animation",
+        "Comedy",
+        "Horror"
+      ],
+      "rating": "NR",
+      "runtime": 10,
+      "overview": "A group of teenagers on a weekend in the woods upset the tiny mushroom folk who live there. A comedy horror short from the Blender Studio.",
+      "studios": [
+        "Blender Foundation"
+      ],
+      "people": [
+        {
+          "name": "Matthew Luhn",
+          "type": "Director"
+        }
+      ],
+      "countries": [
+        "Netherlands"
+      ],
+      "art": {
+        "Primary": "sprite-fright-poster.jpg",
+        "Backdrop": "sprite-fright-backdrop.jpg"
+      },
+      "month": 10,
+      "day": 29
+    },
+    {
+      "key": "sherlock-jr",
+      "name": "Sherlock Jr.",
+      "year": 1924,
+      "view": "Movies",
+      "genres": [
+        "Comedy"
+      ],
+      "rating": "NR",
+      "runtime": 45,
+      "overview": "A cinema projectionist who wants to be a detective dozes off at work and walks into the film on the screen. Its camera tricks still look like magic.",
+      "studios": [
+        "Buster Keaton Productions"
+      ],
+      "people": [
+        {
+          "name": "Buster Keaton",
+          "type": "Director"
+        },
+        {
+          "name": "Buster Keaton",
+          "type": "Actor"
+        },
+        {
+          "name": "Kathryn McGuire",
+          "type": "Actor"
+        }
+      ],
+      "countries": [
+        "United States of America"
+      ],
+      "art": {
+        "Primary": "sherlock-jr-poster.jpg",
+        "Backdrop": "sherlock-jr-backdrop.jpg"
+      },
+      "month": 4,
+      "day": 21,
+      "user": {
+        "played": true,
+        "days_ago": 20
+      }
+    },
+    {
+      "key": "the-kid",
+      "name": "The Kid",
+      "year": 1921,
+      "view": "Movies",
+      "genres": [
+        "Comedy",
+        "Drama"
+      ],
+      "rating": "NR",
+      "runtime": 68,
+      "overview": "A tramp finds an abandoned baby and raises him as his own, until the authorities come to take the boy. Chaplin's first feature mixes slapstick and heartbreak.",
+      "studios": [
+        "Charles Chaplin Productions"
+      ],
+      "people": [
+        {
+          "name": "Charlie Chaplin",
+          "type": "Director"
+        },
+        {
+          "name": "Charlie Chaplin",
+          "type": "Actor"
+        },
+        {
+          "name": "Jackie Coogan",
+          "type": "Actor"
+        }
+      ],
+      "countries": [
+        "United States of America"
+      ],
+      "art": {
+        "Primary": "the-kid-poster.jpg",
+        "Backdrop": "the-kid-backdrop.jpg"
+      },
+      "month": 2,
+      "day": 6,
+      "user": {
+        "played": true,
+        "days_ago": 40
+      }
+    }
+  ],
+  "series": [
+    {
+      "key": "beverly-hillbillies",
+      "name": "The Beverly Hillbillies",
+      "year": 1962,
+      "view": "Shows",
+      "role": "series",
+      "genres": [
+        "Comedy"
+      ],
+      "rating": "TV-G",
+      "runtime": 26,
+      "status": "Ended",
+      "studios": [
+        "CBS"
+      ],
+      "people": [
+        {
+          "name": "Buddy Ebsen",
+          "type": "Actor"
+        },
+        {
+          "name": "Irene Ryan",
+          "type": "Actor"
+        },
+        {
+          "name": "Donna Douglas",
+          "type": "Actor"
+        },
+        {
+          "name": "Max Baer Jr.",
+          "type": "Actor"
+        }
+      ],
+      "overview": "A mountain man strikes oil on his land and moves his family into a Beverly Hills mansion, where they never quite fit in. A CBS sitcom that ran for nine seasons.",
+      "month": 9,
+      "day": 26,
+      "art": {
+        "Primary": "beverly-hillbillies-poster.jpg",
+        "Backdrop": "beverly-hillbillies-backdrop.jpg"
+      },
+      "seasons": [
+        {
+          "index": 1,
+          "year": 1962,
+          "episodes": [
+            {
+              "index": 1,
+              "name": "The Clampetts Strike Oil",
+              "overview": "Jed Clampett's shot at a rabbit strikes oil, and an oil company pays a fortune for his land. The family loads up the truck for California.",
+              "art": {
+                "Primary": "beverly-hillbillies-s01e01.jpg"
+              }
+            },
+            {
+              "index": 2,
+              "name": "Getting Settled",
+              "overview": "The Clampetts take in their new home in Beverly Hills."
+            },
+            {
+              "index": 3,
+              "name": "Meanwhile, Back at the Cabin",
+              "overview": "The family settles into city life."
+            }
+          ]
+        }
+      ],
+      "user": {
+        "watched": 1,
+        "days_ago": 2
+      }
+    }
+  ],
+  "collections": [
+    {
+      "name": "Silent era",
+      "members": [
+        "a-trip-to-the-moon",
+        "caligari",
+        "the-kid",
+        "sherlock-jr",
+        "the-general",
+        "metropolis"
+      ],
+      "overview": "Six silent films, 1902 to 1927."
+    },
+    {
+      "name": "Blender open movies",
+      "members": [
+        "big-buck-bunny",
+        "sintel",
+        "tears-of-steel",
+        "spring",
+        "sprite-fright"
+      ],
+      "overview": "Short films from the Blender Foundation and the Blender Studio, free to share under Creative Commons."
+    }
+  ],
+  "credits": [
+    {
+      "file": "a-trip-to-the-moon-backdrop.jpg",
+      "from": "backdrop-a-trip-to-the-moon.jpg",
+      "work": "A Trip to the Moon (1902), still",
+      "author": "Georges Méliès",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Melies_color_Voyage_dans_la_lune.jpg",
+      "changes": "cut to 16:9, reduced to 1920 x 1080",
+      "licence_tag": "PD-old-80-expired"
+    },
+    {
+      "file": "a-trip-to-the-moon-poster.jpg",
+      "from": "poster-a-trip-to-the-moon.jpg",
+      "work": "A Trip to the Moon (1902), poster",
+      "author": "Georges Méliès (sketch for the poster)",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Voyage_dans_la_Lune_affiche.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-old-70-expired"
+    },
+    {
+      "file": "beverly-hillbillies-backdrop.jpg",
+      "from": "series-beverly-hillbillies.jpg",
+      "work": "The Beverly Hillbillies (1962), press photo",
+      "author": "CBS Television",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Donna_Douglas_in_%22Beverly_Hillbillies%22_%281963_Press_photo%29.jpg",
+      "changes": "reduced to 1080 px high, in the middle of a dark 1920 x 1080 frame",
+      "licence_tag": "PD-US-no notice"
+    },
+    {
+      "file": "beverly-hillbillies-poster.jpg",
+      "from": "series-beverly-hillbillies.jpg",
+      "work": "The Beverly Hillbillies (1962), press photo",
+      "author": "CBS Television",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Donna_Douglas_in_%22Beverly_Hillbillies%22_%281963_Press_photo%29.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-US-no notice"
+    },
+    {
+      "file": "beverly-hillbillies-s01e01.jpg",
+      "from": "episode-beverly-hillbillies-s01e01.ogv",
+      "work": "The Beverly Hillbillies (1962), episode 1 (frame at 200 s)",
+      "author": "CBS",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Beverly_Hillbillies_Episode_01_The_Clampetts_Strike_Oil.ogv",
+      "changes": "a frame, cut to 16:9, at its own size (320 x 180)",
+      "licence_tag": "PD-US-not renewed"
+    },
+    {
+      "file": "big-buck-bunny-backdrop.jpg",
+      "from": "poster-big-buck-bunny.jpg",
+      "work": "Big Buck Bunny (2008), poster",
+      "author": "(c) copyright 2008, Blender Foundation / www.bigbuckbunny.org",
+      "licence": "CC BY 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Big_buck_bunny_poster_big.jpg",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_url": "https://creativecommons.org/licenses/by/3.0/"
+    },
+    {
+      "file": "big-buck-bunny-poster.jpg",
+      "from": "poster-big-buck-bunny.jpg",
+      "work": "Big Buck Bunny (2008), poster",
+      "author": "(c) copyright 2008, Blender Foundation / www.bigbuckbunny.org",
+      "licence": "CC BY 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Big_buck_bunny_poster_big.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_url": "https://creativecommons.org/licenses/by/3.0/"
+    },
+    {
+      "file": "caligari-backdrop.jpg",
+      "from": "poster-caligari.jpg",
+      "work": "The Cabinet of Dr. Caligari (1920), poster",
+      "author": "Atelier Ledl Bernhard",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Das_Cabinet_des_Dr._Caligari.JPG",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_tag": "PD-old-80-expired"
+    },
+    {
+      "file": "caligari-poster.jpg",
+      "from": "poster-caligari.jpg",
+      "work": "The Cabinet of Dr. Caligari (1920), poster",
+      "author": "Atelier Ledl Bernhard",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Das_Cabinet_des_Dr._Caligari.JPG",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-old-80-expired"
+    },
+    {
+      "file": "charade-backdrop.jpg",
+      "from": "backdrop-charade.jpg",
+      "work": "Charade (1963), still",
+      "author": "Stanley Donen",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Charade_1963_Audrey_Hepburn_and_Cary_Grant.jpg",
+      "changes": "cut to 16:9, enlarged to 1920 x 1080",
+      "licence_tag": "PD-US-not renewed"
+    },
+    {
+      "file": "charade-poster.jpg",
+      "from": "poster-charade.jpg",
+      "work": "Charade (1963), poster",
+      "author": "Universal Pictures",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Charade_%281963_poster%29.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-US-not renewed"
+    },
+    {
+      "file": "his-girl-friday-backdrop.jpg",
+      "from": "poster-his-girl-friday.jpg",
+      "work": "His Girl Friday (1940), poster",
+      "author": "Columbia Pictures",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:His_Girl_Friday_%281940_poster%29_crop.jpg",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_tag": "PD-US-not renewed"
+    },
+    {
+      "file": "his-girl-friday-poster.jpg",
+      "from": "poster-his-girl-friday.jpg",
+      "work": "His Girl Friday (1940), poster",
+      "author": "Columbia Pictures",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:His_Girl_Friday_%281940_poster%29_crop.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-US-not renewed"
+    },
+    {
+      "file": "metropolis-backdrop.jpg",
+      "from": "poster-metropolis.jpg",
+      "work": "Metropolis (1927), poster",
+      "author": "Boris Bilinsky",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Boris_Bilinski_-_Filmplakat_f%C3%BCr_Metropolis_restored.jpg",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_tag": "PD-Art / PD-old-70"
+    },
+    {
+      "file": "metropolis-poster.jpg",
+      "from": "poster-metropolis.jpg",
+      "work": "Metropolis (1927), poster",
+      "author": "Boris Bilinsky",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Boris_Bilinski_-_Filmplakat_f%C3%BCr_Metropolis_restored.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-Art / PD-old-70"
+    },
+    {
+      "file": "night-of-the-living-dead-backdrop.jpg",
+      "from": "backdrop-night-of-the-living-dead.png",
+      "work": "Night of the Living Dead (1968), still",
+      "author": "George A. Romero",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Night_of_the_Living_Dead_%281968%29_Title_Screen.png",
+      "changes": "cut to 16:9, enlarged to 1920 x 1080",
+      "licence_tag": "PD-US-no notice"
+    },
+    {
+      "file": "night-of-the-living-dead-poster.jpg",
+      "from": "poster-night-of-the-living-dead.jpg",
+      "work": "Night of the Living Dead (1968), poster",
+      "author": "Unknown",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Night_Of_The_Living_Dead_%281968%29_-_Poster.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-US-no notice"
+    },
+    {
+      "file": "plan-9-backdrop.jpg",
+      "from": "poster-plan-9.jpg",
+      "work": "Plan 9 from Outer Space (1957), poster",
+      "author": "Distributors Corp. of America",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Plan_9_Alternative_poster.jpg",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_tag": "PD-US-not renewed"
+    },
+    {
+      "file": "plan-9-poster.jpg",
+      "from": "poster-plan-9.jpg",
+      "work": "Plan 9 from Outer Space (1957), poster",
+      "author": "Distributors Corp. of America",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Plan_9_Alternative_poster.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-US-not renewed"
+    },
+    {
+      "file": "sherlock-jr-backdrop.jpg",
+      "from": "poster-sherlock-jr.jpg",
+      "work": "Sherlock Jr. (1924), poster",
+      "author": "Unknown",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Sherlock_jr_poster.jpg",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_tag": "PD-1923"
+    },
+    {
+      "file": "sherlock-jr-poster.jpg",
+      "from": "poster-sherlock-jr.jpg",
+      "work": "Sherlock Jr. (1924), poster",
+      "author": "Unknown",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Sherlock_jr_poster.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-1923"
+    },
+    {
+      "file": "sintel-backdrop.jpg",
+      "from": "poster-sintel.jpg",
+      "work": "Sintel (2010), poster",
+      "author": "© copyright Blender Foundation | durian.blender.org",
+      "licence": "CC BY 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Sintel_poster.jpg",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_url": "https://creativecommons.org/licenses/by/3.0/"
+    },
+    {
+      "file": "sintel-poster.jpg",
+      "from": "poster-sintel.jpg",
+      "work": "Sintel (2010), poster",
+      "author": "© copyright Blender Foundation | durian.blender.org",
+      "licence": "CC BY 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Sintel_poster.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_url": "https://creativecommons.org/licenses/by/3.0/"
+    },
+    {
+      "file": "spring-backdrop.jpg",
+      "from": "poster-spring.jpg",
+      "work": "Spring (2019), poster",
+      "author": "© Blender Foundation | cloud.blender.org/spring",
+      "licence": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Spring2019PillarPosterBlender.jpg",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/"
+    },
+    {
+      "file": "spring-poster.jpg",
+      "from": "poster-spring.jpg",
+      "work": "Spring (2019), poster",
+      "author": "© Blender Foundation | cloud.blender.org/spring",
+      "licence": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Spring2019PillarPosterBlender.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/"
+    },
+    {
+      "file": "sprite-fright-backdrop.jpg",
+      "from": "poster-sprite-fright.jpg",
+      "work": "Sprite Fright (2021), poster",
+      "author": "(CC) Blender Foundation | studio.blender.org",
+      "licence": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Sprite_Fright-movie_poster.jpg",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/"
+    },
+    {
+      "file": "sprite-fright-poster.jpg",
+      "from": "poster-sprite-fright.jpg",
+      "work": "Sprite Fright (2021), poster",
+      "author": "(CC) Blender Foundation | studio.blender.org",
+      "licence": "CC BY 4.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Sprite_Fright-movie_poster.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/"
+    },
+    {
+      "file": "tears-of-steel-backdrop.jpg",
+      "from": "poster-tears-of-steel.png",
+      "work": "Tears of Steel (2012), poster",
+      "author": "(CC) Blender Foundation | mango.blender.org",
+      "licence": "CC BY 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Tos-poster.png",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_url": "https://creativecommons.org/licenses/by/3.0/"
+    },
+    {
+      "file": "tears-of-steel-poster.jpg",
+      "from": "poster-tears-of-steel.png",
+      "work": "Tears of Steel (2012), poster",
+      "author": "(CC) Blender Foundation | mango.blender.org",
+      "licence": "CC BY 3.0",
+      "source": "https://commons.wikimedia.org/wiki/File:Tos-poster.png",
+      "changes": "reduced to 600 px wide",
+      "licence_url": "https://creativecommons.org/licenses/by/3.0/"
+    },
+    {
+      "file": "the-general-backdrop.jpg",
+      "from": "backdrop-the-general.jpg",
+      "work": "The General (1926), still",
+      "author": "Buster Keaton Productions",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:Buster_Keaton_drives_a_two-man,_railroad_handcar_in_The_General.jpg",
+      "changes": "cut to 16:9, reduced to 1920 x 1080",
+      "licence_tag": "PD-1923"
+    },
+    {
+      "file": "the-general-poster.jpg",
+      "from": "poster-the-general.png",
+      "work": "The General (1926), poster",
+      "author": "United Artists",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:The_General_%281926%29_-_Movie_Poster_2.png",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-1923"
+    },
+    {
+      "file": "the-kid-backdrop.jpg",
+      "from": "poster-the-kid.jpg",
+      "work": "The Kid (1921), poster",
+      "author": "First National",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:The_Kid_%281921%29_poster.jpg",
+      "changes": "reduced to cover 640 x 360 (16:9) and blurred, as a backdrop",
+      "licence_tag": "PD-1923, PD-scan"
+    },
+    {
+      "file": "the-kid-poster.jpg",
+      "from": "poster-the-kid.jpg",
+      "work": "The Kid (1921), poster",
+      "author": "First National",
+      "licence": "Public domain",
+      "source": "https://commons.wikimedia.org/wiki/File:The_Kid_%281921%29_poster.jpg",
+      "changes": "reduced to 600 px wide",
+      "licence_tag": "PD-1923, PD-scan"
+    }
+  ]
+}

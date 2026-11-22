@@ -19,6 +19,9 @@ subtitle tracks, media segments, trickplay, progress reports). Standard library 
   'hang' = never answer, 'status:NNN' = answer that status (400-599) at once, 'empty' = 200 with no items); also
   POST /__harness/latency {"default": ms, "rules": [["regex", ms], ...]} while running. A REGEX with "\\?" in it is
   matched against the path and its query string, unquoted ('^/Items\\?.*ParentId=' = the item lists of one parent).
+- FAKESERVER_SHOWCASE=<manifest.json or its folder> (repo polish): the README screenshots' curated library (showcase.py)
+  instead of the generated one: its films, series and collections with their own files for pictures, nothing generated;
+  GET /__harness/showcase lists its credits and problems. Off by default.
 - FAKESERVER_BIG_SERIES=<seasons>x<episodes> (e.g. 10x20): a second showcase series in Shows, "A Tide of Seasons", every
   episode named uniquely in it; the fixture's "big_series" lists its seasons and episodes (null when off).
 - Segments: POST /__harness/segments {"outro_seconds": N}: the end credits (Outro) run the last N seconds (40).
@@ -77,6 +80,7 @@ import media as media_mod  # noqa: E402
 import admin  # noqa: E402  (Nixie 1.2.0: the administration endpoints)
 import release as release_mod  # noqa: E402  # 1.5 updater: the fake GitHub release (release.py)
 import outside as outside_mod  # noqa: E402  # 1.7 keyless: the outside sources' fakes (outside.py)
+import showcase as showcase_mod  # noqa: E402  # repo polish: the screenshots' curated library (FAKESERVER_SHOWCASE)
 from release import release_answer  # noqa: E402,F401  # 1.5 updater: kept importable from here
 
 # Nixie 1.3.1: the trailer embed's stand-in (GET /__harness/trailer/<id>): a still frame of a "film" with a play bar, made of
@@ -769,6 +773,15 @@ class Server:
                     if not item:
                         return self._json(404, None)
                     kind = mm.group(2).capitalize()
+                    # repo polish (showcase): a showcase item's own file, or 404: never a generated picture
+                    if "art" in item:
+                        path = showcase_mod.art_file(item, kind)
+                        if not path:
+                            return self._json(404, None)
+                        with open(path, "rb") as f:
+                            data = f.read()
+                        return self._send(200, data, showcase_mod.content_type(path),
+                                          {"Cache-Control": "public, max-age=31536000", "ETag": '"%s"' % library._tag(item["Id"], kind)})
                     photo = outer.photo(item, kind)
                     data = photo or outer.image(item, kind, int(mm.group(3)) if mm.group(3) else None, self.q)
                     return self._send(200, data, "image/jpeg" if photo else "image/png", {"Cache-Control": "public, max-age=31536000",
@@ -1108,6 +1121,9 @@ class Server:
                 if low == "/__harness/fixture":
                     return self._json(200, dict(outer.lib.showcase(), server=outer.url, username=outer.creds["username"],
                                                 counts=outer.lib.counts()))
+                # repo polish: the showcase library's credits and problems ({"on": false} when FAKESERVER_SHOWCASE is unset)
+                if low == "/__harness/showcase":
+                    return self._json(200, showcase_mod.report(outer.lib))
                 # 1.5 search: {"mode": "stock" | "loose"}: how search matches from now on (search.py)
                 if low == "/__harness/search" and method == "POST":
                     body = self._body()

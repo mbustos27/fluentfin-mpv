@@ -1,0 +1,69 @@
+name: Suggest an idea
+description: Something Nixie could do, or do better.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        What's planned is in the roadmap (`docs/ROADMAP.md` in this repository) and in the open issues. If your idea is there already, a comment or a thumbs-up on that issue counts for more than a new one.
+
+        **Never paste a server address, username or token.** None of it is needed, and this page is public.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What would you like Nixie to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: What it's for
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: theme
+    attributes:
+      label: Theme
+      description: The themes in Settings → Appearance → Theme it's for.
+      multiple: true
+      options:
+        - All of them
+        - Drive-in
+        - Cinematic
+        - Editorial
+        - Classic
+        - It isn't about the look
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where in Nixie
+      multiple: true
+      options:
+        - Signing in
+        - Home
+        - A library, collection or playlist
+        - A film, series, season or episode page
+        - Playing video
+        - Search
+        - Settings
+        - Diary
+        - Something new
+    validations:
+      required: false
+
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: |
+        An app that does it well, a sketch or a screenshot. Crop out server names and addresses, and never paste a server address, username or token.
+    validations:
+      required: false

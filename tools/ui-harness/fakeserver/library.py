@@ -13,6 +13,7 @@ import threading
 import uuid
 
 import search as search_mod   # 1.5 search
+import showcase as showcase_mod   # repo polish: the screenshots' curated library (FAKESERVER_SHOWCASE)
 import smartdata   # 1.6 collections
 
 TICKS = 10_000_000
@@ -180,6 +181,13 @@ class Library:
         return added
 
     def _build(self):
+        # repo polish: FAKESERVER_SHOWCASE=<manifest> builds the curated screenshot library (showcase.py) instead of the
+        # generated one; off by default, so every other run's fixture is unchanged
+        import os
+        manifest = showcase_mod.path_from(os.environ.get("FAKESERVER_SHOWCASE"))
+        if manifest:
+            showcase_mod.build(self, showcase_mod.load(manifest), _id, _tag)
+            return
         rng = self.rng
         start = self.now - datetime.timedelta(days=3 * 365)
         span = (self.now - start).total_seconds()
@@ -700,13 +708,16 @@ class Library:
                         if self.items[i]["kind"] == "movie")
         r_word = next((n[:3] for n in movies if len(n) > 3 and n[:3].isalpha() and n[2] in "rR" and n[0] not in "rR"
                        and not n.startswith("The ")), None)
-        return {"movie": {"id": found["movie"]["Id"], "name": found["movie"]["Name"], "library": "Movies", "r_word": r_word},
-                "series": {"id": series["Id"], "name": series["Name"], "library": "Shows"},
+        return {"movie": {"id": found["movie"]["Id"], "name": found["movie"]["Name"],
+                          "library": self.items[found["movie"]["view"]]["Name"], "r_word": r_word},
+                "series": {"id": series["Id"], "name": series["Name"], "library": self.items[series["view"]]["Name"]},
                 "season": {"id": season["Id"], "name": season["Name"]},
                 "episode": {"id": episode["Id"], "name": episode["Name"], "index": 1},
-                "anime": {"id": found["anime"]["Id"], "name": found["anime"]["Name"], "library": "Anime"},
+                # repo polish: optional, as a showcase manifest (FAKESERVER_SHOWCASE) may have neither
+                "anime": {"id": found["anime"]["Id"], "name": found["anime"]["Name"],
+                          "library": self.items[found["anime"]["view"]]["Name"]} if "anime" in found else None,
                 "documentary": {"id": found["documentary"]["Id"], "name": found["documentary"]["Name"],
-                                "library": "Documentaries"},
+                                "library": self.items[found["documentary"]["view"]]["Name"]} if "documentary" in found else None,
                 "views": [self.items[v]["Name"] for v in self.views],
                 # UXCAP: the collections (FAKESERVER_COLLECTIONS) and the big library (FAKESERVER_BIG_LIBRARY), when on
                 "collections": [{"id": b, "name": self.items[b]["Name"], "count": len(self.children[b]),
@@ -748,6 +759,14 @@ class Library:
                 return name[len(article):].lower() if article != "A " else " " + name.lower()
         return name.lower()
 
+    def runtime_of(self, item):
+        """repo polish: an item's runtime as its page shows it: the showcase manifest's "runtime" (a film's, or a series'
+        for its episodes) when it gives one, else the test video's. Playback still streams the test video."""
+        minutes = item.get("runtime_minutes")
+        if minutes is None and item.get("series"):
+            minutes = self.items[item["series"]].get("runtime_minutes")
+        return int(minutes * 60 * TICKS) if minutes else self.runtime
+
     # ---------------------------------------------------------------- user data
     def user_data(self, item):
         iid = item["Id"]
@@ -759,7 +778,7 @@ class Library:
         if ud["last_played"]:
             out["LastPlayedDate"] = iso(ud["last_played"])
         if ud["position"] and self.runtime:
-            out["PlayedPercentage"] = round(100.0 * ud["position"] / self.runtime, 2)
+            out["PlayedPercentage"] = round(100.0 * ud["position"] / self.runtime_of(item), 2)   # repo polish: runtime_of
         if item["kind"] in ("series", "season", "boxset"):
             eps = ([self.items[c] for c in self.children.get(iid, [])] if item["kind"] == "boxset"   # UXCAP
                    else self.episodes_of(item["series"] if item["kind"] == "season" else iid,
@@ -814,6 +833,8 @@ class Library:
     # ---------------------------------------------------------------- DTOs
     def image_tags(self, item):
         iid, kind = item["Id"], item["kind"]
+        if "art" in item:   # repo polish (showcase): only the pictures it has files for (a backdrop is BackdropImageTags)
+            return {k: _tag(iid, k) for k in item["art"] if k != "Backdrop"}
         tags = {"Primary": _tag(iid, "Primary")}
         if kind in ("movie", "series"):
             tags.update(Logo=_tag(iid, "Logo"), Thumb=_tag(iid, "Thumb"), Banner=_tag(iid, "Banner"))
@@ -838,13 +859,13 @@ class Library:
         if kind == "person":
             d.update(ImageTags={"Primary": _tag(iid, "Primary")}, PrimaryImageAspectRatio=2 / 3,
                      ImageBlurHashes={"Primary": {_tag(iid, "Primary"): blurhash(iid + "Primary")}})
-            return d
+            return self._showcase_images(item, d)
         if kind == "view":
             d.update(CollectionType=item["collection"], ImageTags={"Primary": _tag(iid, "Primary")},
                      PrimaryImageAspectRatio=16 / 9, ChildCount=len(self.children.get(iid, [])),
                      ImageBlurHashes={"Primary": {_tag(iid, "Primary"): blurhash(iid + "Primary")}},
                      Path="/media/%s" % item["Name"].lower(), ParentId=None)
-            return d
+            return self._showcase_images(item, d)
         tags = self.image_tags(item)
         d["ImageTags"] = tags
         d["ImageBlurHashes"] = {k: {v: blurhash(iid + k)} for k, v in tags.items()}
@@ -869,18 +890,18 @@ class Library:
             if d["BackdropImageTags"]:
                 d["ImageBlurHashes"]["Backdrop"] = {d["BackdropImageTags"][0]: blurhash(iid + "Backdrop")}
         if kind in ("video", "musicvideo", "audio", "musicalbum"):   # 1.5.1 fixes (BH-150-m7)
-            d.update(MediaType={"audio": "Audio", "musicalbum": "Unknown"}.get(kind, "Video"), RunTimeTicks=self.runtime,
+            d.update(MediaType={"audio": "Audio", "musicalbum": "Unknown"}.get(kind, "Video"), RunTimeTicks=self.runtime_of(item),
                      PrimaryImageAspectRatio=1.0 if kind in ("audio", "musicalbum") else 16 / 9,
                      IsFolder=kind == "musicalbum")
             if kind == "audio":
                 d.update(AlbumId=item["album"], Album=item["album_name"])
         if kind == "movie":
             d.update(CriticRating=item["critic"], PrimaryImageAspectRatio=2 / 3, MediaType="Video",
-                     VideoType="VideoFile", RunTimeTicks=self.runtime, Container="mkv", HasSubtitles=True,
+                     VideoType="VideoFile", RunTimeTicks=self.runtime_of(item), Container="mkv", HasSubtitles=True,
                      Width=1280, Height=720, IsHD=True)
         elif kind == "series":
             d.update(PrimaryImageAspectRatio=2 / 3, Status=item["status"], AirDays=["Sunday"],
-                     RunTimeTicks=self.runtime, ChildCount=len(self.children.get(iid, [])),
+                     RunTimeTicks=self.runtime_of(item), ChildCount=len(self.children.get(iid, [])),
                      RecursiveItemCount=len(self.episodes_of(iid)), MediaType="Unknown")
             if item["status"] == "Ended":
                 d["EndDate"] = iso(datetime.datetime(min(2026, item["year"] + 4), 6, 1))
@@ -897,7 +918,7 @@ class Library:
                 season = self.items[item["season"]]
                 d.update(SeasonId=season["Id"], SeasonName=season["Name"], ParentIndexNumber=item["parent_index"],
                          PrimaryImageAspectRatio=16 / 9, MediaType="Video", VideoType="VideoFile",
-                         RunTimeTicks=self.runtime, Container="mkv", HasSubtitles=True, Width=1280, Height=720)
+                         RunTimeTicks=self.runtime_of(item), Container="mkv", HasSubtitles=True, Width=1280, Height=720)
         if detail:
             d["People"] = item["people"]
             d["Studios"] = [{"Name": s, "Id": _id("studio", s)} for s in item["studios"]]
@@ -914,6 +935,31 @@ class Library:
             d["Path"] = self.path(item)
             if kind in ("movie", "episode"):
                 d["Chapters"] = self.chapters(item)
+        return self._showcase_images(item, d)
+
+    def _showcase_images(self, item, d):
+        """repo polish (showcase): an item of the showcase manifest advertises only the pictures it has files for (its own,
+        and its series' for a season or an episode), so the app never asks for a generated one. Others are unchanged."""
+        if "art" not in item:
+            return d
+        art = item["art"]
+        if not art.get("Primary"):
+            d["ImageTags"].pop("Primary", None)
+        if "BackdropImageTags" in d and not art.get("Backdrop"):
+            d["BackdropImageTags"] = []
+        series = self.items.get(item.get("series") or "")
+        if series:
+            sart = series.get("art") or {}
+            for kind, keys in (("Primary", ("SeriesPrimaryImageTag",)), ("Logo", ("ParentLogoItemId", "ParentLogoImageTag")),
+                               ("Thumb", ("ParentThumbItemId", "ParentThumbImageTag")),
+                               ("Backdrop", ("ParentBackdropItemId", "ParentBackdropImageTags"))):
+                if not sart.get(kind):
+                    for key in keys:
+                        d.pop(key, None)
+        d["ImageBlurHashes"] = {k: v for k, v in d.get("ImageBlurHashes", {}).items()
+                                if (k == "Backdrop" and d.get("BackdropImageTags")) or k in d.get("ImageTags", {})}
+        for chapter in d.get("Chapters") or []:
+            chapter.pop("ImageTag", None)
         return d
 
     # 1.5 season: Jellyfin sends only the image types a request asks for (EnableImageTypes; EnableImages=false: none): an

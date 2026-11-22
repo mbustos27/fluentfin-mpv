@@ -6,7 +6,11 @@ here combines them with two subtitle tracks (S_TEXT/UTF8) into one .mkv: video, 
 "Japanese" (AC-3), subtitles "English" and "Spanish". A third subtitle track, French, is the server's external .srt.
 Trickplay: mpv tiles one frame every 10 s into 10x10 sheets of 320x180 JPEGs, Jellyfin's layout.
 
-    python media.py --mpv <mpv.exe> --out <dir> [--seconds 600]
+    python media.py --mpv <mpv.exe> --out <dir> [--seconds 600] [--source <video> [--start S]]
+
+repo polish: --source makes the video track from that file instead of the test pattern (from --start, scaled into the same
+1280x720 frame), for the README's player screenshot (tools/ui-harness/gallery.ps1: a public-domain episode kept outside
+the repository). The audio stays digital silence, and the subtitle tracks carry no cues, so no harness text shows.
 
 Standard library only. mpv runs in encode mode (no window) with --no-config. Writes only under --out.
 """
@@ -251,15 +255,18 @@ def _run(cmd, log):
     return rc
 
 
-def build(mpv, out, seconds=600):
+def build(mpv, out, seconds=600, source=None, start=0):
     """Makes <out>/test.mkv, <out>/test.fr.srt, <out>/trickplay/<n>.jpg and <out>/media.json (what the server
-    reports about them). Returns media.json's content. Reuses a complete earlier build with the same length."""
+    reports about them). Returns media.json's content. Reuses a complete earlier build with the same length (and the
+    same source: repo polish)."""
     os.makedirs(out, exist_ok=True)
     meta_path = os.path.join(out, "media.json")
+    made_from = {"file": os.path.basename(source), "start": start} if source else None   # repo polish
     if os.path.exists(meta_path):
         with open(meta_path, encoding="utf-8") as f:
             meta = json.load(f)
-        if meta.get("seconds") == seconds and meta.get("silent") and os.path.exists(meta["path"]):
+        if meta.get("seconds") == seconds and meta.get("silent") and os.path.exists(meta["path"]) \
+                and meta.get("source") == made_from:
             return meta
     log = os.path.join(out, "media-build.log")
     work = os.path.join(out, "parts")
@@ -271,8 +278,13 @@ def build(mpv, out, seconds=600):
     for ovc, opts, name in (("h264_mf", "b=1500000", "h264"), ("mpeg4", "b=1500000", "mpeg4")):
         if os.path.exists(video):
             os.remove(video)
-        rc = _run(base + ["av://lavfi:testsrc=size=%dx%d:rate=%d:duration=%d" % (VIDEO_W, VIDEO_H, FPS, seconds),
-                          "--o=" + video, "--of=matroska", "--ovc=" + ovc, "--ovcopts=" + opts, "--oac=aac"], log)
+        if source:   # repo polish: the given file's picture, in the same frame, rate and length; no sound, no subtitles
+            frames = [source, "--start=%d" % start, "--length=%d" % seconds, "--no-audio", "--sid=no",
+                      "--vf=lavfi=[scale=w=%d:h=%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,"
+                      "fps=%d,format=yuv420p]" % (VIDEO_W, VIDEO_H, VIDEO_W, VIDEO_H, FPS)]
+        else:
+            frames = ["av://lavfi:testsrc=size=%dx%d:rate=%d:duration=%d" % (VIDEO_W, VIDEO_H, FPS, seconds)]
+        rc = _run(base + frames + ["--o=" + video, "--of=matroska", "--ovc=" + ovc, "--ovcopts=" + opts, "--oac=aac"], log)
         if rc == 0 and os.path.exists(video) and os.path.getsize(video) > 10000:
             codec = name
             break
@@ -289,14 +301,17 @@ def build(mpv, out, seconds=600):
         audio.append(path)
 
     final = os.path.join(out, "test.mkv")
-    duration_ms = mux(final, [(video, 1, {"language": "und", "name": "Test pattern", "default": True}),
+    # repo polish: a --source build's subtitle tracks are there (the menus list them) but carry no harness cues
+    def cues(prefix, every=4.0):
+        return [] if source else subtitle_cues(prefix, seconds, every=every)
+    duration_ms = mux(final, [(video, 1, {"language": "und", "name": "Video" if source else "Test pattern", "default": True}),
                               (audio[0], 1, {"language": "eng", "name": "English", "default": True}),
                               (audio[1], 1, {"language": "jpn", "name": "Japanese"})],
-                      [({"language": "eng", "name": "English"}, subtitle_cues("[English]", seconds)),
-                       ({"language": "spa", "name": "Spanish"}, subtitle_cues("[Espanol]", seconds, every=5.0))],
-                      "Nixie harness test video")
+                      [({"language": "eng", "name": "English"}, cues("[English]")),
+                       ({"language": "spa", "name": "Spanish"}, cues("[Espanol]", every=5.0))],
+                      "Nixie showcase video" if source else "Nixie harness test video")
     with open(os.path.join(out, "test.fr.srt"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(srt(subtitle_cues("[Francais]", seconds, every=6.0)))
+        f.write(srt(cues("[Francais]", every=6.0)))
 
     trick = os.path.join(out, "trickplay")
     os.makedirs(trick, exist_ok=True)
@@ -310,7 +325,7 @@ def build(mpv, out, seconds=600):
     sheets = sorted(glob.glob(os.path.join(trick, "sheet-*.jpg")), key=lambda p: int(p.rsplit("-", 1)[1][:-4]))
     for i, path in enumerate(sheets):
         os.replace(path, os.path.join(trick, "%d.jpg" % i))
-    meta = {"seconds": seconds, "silent": True, "path": final, "size": os.path.getsize(final), "duration_ms": duration_ms,
+    meta = {"seconds": seconds, "silent": True, "source": made_from, "path": final, "size": os.path.getsize(final), "duration_ms": duration_ms,
             "video": {"codec": codec, "width": VIDEO_W, "height": VIDEO_H, "fps": FPS, "bitrate": 1500000},
             "audio": [{"codec": "aac", "language": "eng", "title": "English", "channels": 2, "bitrate": 128000},
                       {"codec": "ac3", "language": "jpn", "title": "Japanese", "channels": 2, "bitrate": 192000}],
@@ -331,8 +346,11 @@ def main():
     ap.add_argument("--mpv", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--seconds", type=int, default=600)
+    ap.add_argument("--source", help="repo polish: the video track from this file instead of the test pattern")
+    ap.add_argument("--start", type=int, default=0, help="where in --source to start, in seconds")
     a = ap.parse_args()
-    print(json.dumps(build(a.mpv, os.path.abspath(a.out), a.seconds), indent=2))
+    source = os.path.abspath(a.source) if a.source else None
+    print(json.dumps(build(a.mpv, os.path.abspath(a.out), a.seconds, source, a.start), indent=2))
     return 0
 
 

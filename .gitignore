@@ -18,6 +18,12 @@ tools/**/out/
 
 # screenshots the dev streams save for review (tools\ui-harness), never committed
 /shots/
+# video files: the harness builds its test video in a cache and the screenshots' episode stays outside the repository
+# (tools\ui-harness\gallery.ps1 -Video); none is committed
+*.ogv
+*.mkv
+*.webm
+*.mp4
 # agent working notes in each worktree, never committed
 /HANDOFF.md
 /BRIEF.md
