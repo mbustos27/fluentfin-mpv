@@ -20,7 +20,7 @@ and the owner's own steps are the real limits.
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
 | TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes, and Continue watching published for third-party home screens (Google TV's own filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). **The fix round is running** (3 streams, with Watch Next), then the key and the `mbustos27/nixie-tv` repository |
-| Fire TV | Fire TV | The same TV app on Amazon's Fire OS devices (not Vega OS, which runs no Android apps) | **Planned** 2026-11-21 (`Dev\nixie-tv\docs\FIRE-TV-PLAN.md`), after TV 1.0: compatibility about half a day, then the sideloaded GitHub APK, then an Appstore build without the updater (about a day, plus Amazon's review). Needs the owner's Fire OS stick (avoid Vega models), a free developer account, and Submit |
+| Fire TV | Fire TV | The same TV app on Amazon's Fire OS devices (not Vega OS, which runs no Android apps), **sideloaded only** | **Planned** 2026-11-21 (`Dev\nixie-tv\docs\FIRE-TV-PLAN.md`), after TV 1.0: compatibility about half a day, tested on Android TV emulators (no device, no Appstore, at the owner's call), then the same GitHub APK with its updater. What an emulator can't prove is listed as known gaps |
 
 **Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
 
@@ -691,13 +691,20 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
       no sideloading, and Amazon says future sticks will be Vega.
     - **Nixie already fits:** minSdk 28 (Fire OS 7), 32-bit ARM libraries, no Google services, and the FFmpeg decoder
       (Fire TV passes through only Dolby).
-    - **F0 compatibility** (about half a day): hide Watch Next on Fire OS (Fire's own row needs an Amazon partnership),
-      the manifest, 16 KB-aligned libraries, refresh rate matching, and Amazon's test criteria as tests.
-    - **F1 sideload:** the GitHub APK with its updater, plus the owner's check on a Fire OS 8 stick.
-    - **F2 Appstore:** an `amazon` build with its own application id and no updater, a drafted listing, and a review
-      login on a demo server we control. Submitting is the owner's step.
-    - **The owner buys a Fire OS stick soon** (4K Max 2nd gen or 4K Plus; not the 4K Select, the Stick HD 2026 or the
-      Stick 4K 3rd gen).
+    - **Reworked the same evening at the owner's calls:** no device ("lets just emulate it i dont want to buy one") and
+      no Appstore ("we'll do this sideload only on firetvb").
+    - **F0 compatibility** (about half a day): Fire OS detection with a debug switch "Behave as Fire OS", Watch Next
+      hidden on Fire OS (Fire's own row needs an Amazon partnership), the manifest, 16 KB-aligned libraries, refresh rate
+      matching behind a setting, and Amazon's test criteria as tests. It's tested on two Android TV emulators without
+      Google APIs, at API 28 (Fire OS 7) and API 30 (Fire OS 8, Amazon's own advice). No Fire OS emulator exists, and
+      Amazon's free cloud Fire TVs need a developer account the owner chose not to make.
+    - **F1 sideload:** the same GitHub APK with its updater, and a README section for Fire TV (the devices, Downloader,
+      the known gaps).
+    - **Known gaps, said plainly** ("built for, not yet tried on a device"): HDMI passthrough, HDR and Dolby Vision
+      output, refresh-rate switching, real-box speed and memory, Fire's launcher, the sideload and updater flow on Fire
+      OS, remote buttons and the screensaver. Each is handled by shared code checked on the onn box and the emulators,
+      and by user reports.
+    - **Nothing for the owner to buy or sign up for.**
   - **Next (was):** those fixes, a bug hunt on the emulator, then **the owner's 20-minute TV session** (frame timing and the
     player on the real box, the three themes, a trailer, one sign-in to their own server by Quick Connect, done by the
     owner), then the release key and where TV releases live (a GitHub repo of the owner's choosing).
@@ -792,6 +799,10 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   with the final pass and the build, instead of before them (that wait was up to an hour). A Blocker it finds still
   stops the release. A Major in 1.6.1's own new code that's quick to fix is fixed before the build finishes; everything
   else goes to the next fix queue in KNOWN-ISSUES.
+- **Fire TV is sideloaded only and tested by emulation** (the owner, 2026-11-21: "lets just emulate it i dont want to
+  buy one", then "we'll do this sideload only on firetvb", meaning Fire TV). There's no Amazon Appstore build, listing,
+  account or review, and no Fire TV device. Fire TV gets the same GitHub APK with its updater, tested on Android TV
+  emulators at Fire OS 7's and 8's levels, with what an emulator can't prove listed as known gaps.
 - **TV 1.0 publishes Continue watching for third-party home screens** (the owner, 2026-11-21, asked whether 1.0 should
   or leave it for later: "yes also lets start another session to install a new launcher on my android tv"). Google
   TV's own home filters uncertified apps' Watch Next (phase 0), so this serves launchers like Projectivy. It's a small
