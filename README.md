@@ -10,7 +10,7 @@ Nixie uses Trakt but is not endorsed or certified by Trakt. Nixie uses TMDB and 
 
 ## Download
 
-**Windows 10 or 11 (x64).** From the [Releases](https://github.com/mbustos27/fluentfin-mpv/releases) page:
+**Windows 10 or 11 (x64).** From the [Releases](https://github.com/mbustos27/nixie/releases) page:
 
 - **Installer** (`.msi`): installs for your Windows user, with no administrator rights, and adds Nixie to the Start menu. Uninstall it in Settings → Apps.
 - **Portable** (`.zip`): unzip it anywhere and run `Nixie.exe` at the top of the folder (the app's own files are in `app\`).
@@ -95,6 +95,8 @@ Settings, logs and the journal go to `%LOCALAPPDATA%\Nixie`. For a separate data
 - [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md): what is open, accepted or not yet verified.
 - [docs/JOURNAL.md](docs/JOURNAL.md): the TV journal's design.
 - [docs/design/DESIGN.md](docs/design/DESIGN.md): the glass design rules (tokens, glass modes, motion).
+- [docs/DESIGN-RULES.md](docs/DESIGN-RULES.md): what every change and bug hunt looks for (speed on big servers,
+  standby, device facts, the way up from any page).
 - [docs/SHORTCUTS.md](docs/SHORTCUTS.md): every keyboard and mouse shortcut.
 - [docs/RELEASE.md](docs/RELEASE.md): how a release is built, verified and published.
 - [tools/README.md](tools/README.md): the test harnesses:

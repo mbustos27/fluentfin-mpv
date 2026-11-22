@@ -81,4 +81,4 @@ use its page.
 ## Questions
 
 Nixie is a personal project. Ask, or report a privacy problem, in the repository's issues:
-<https://github.com/mbustos27/fluentfin-mpv/issues>.
+<https://github.com/mbustos27/nixie/issues>.

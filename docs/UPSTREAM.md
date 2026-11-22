@@ -10,7 +10,7 @@ shows every local change.
 | `backend/` | https://github.com/jellyfin/jellyfin-mpv-shim | `a3a9a31460cb3f15483a7052cbac18b9b065ec92` (2026-11-13, Weblate) | GPL-3.0-or-later |
 
 Both are GPLv3, so the combined work is GPLv3. It is published on GitHub
-(mbustos27/fluentfin-mpv) under GPLv3, with both upstream notices intact.
+(mbustos27/nixie, named mbustos27/fluentfin-mpv until 2026-11-22) under GPLv3, with both upstream notices intact.
 
 To pull upstream changes later: clone the upstream at a newer commit, diff it against the
 commit above, and apply that diff to the matching folder.

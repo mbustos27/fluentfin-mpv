@@ -16,7 +16,7 @@ and the owner's own steps are the real limits.
 | 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Released** 2026-11-21 |
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test passed right after) |
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Released** 2026-11-22 00:16 (started 2026-11-21 18:10, 3 streams; its Sandbox upgrade test passed before publishing) |
-| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Released** 2026-11-22 08:37 (https://github.com/mbustos27/fluentfin-mpv/releases/tag/v1.7.0; started 2026-11-21 19:40, 3 streams). The release carries Nixie's own TMDb key and the Trakt Production Client ID, never the repository; TMDb trending was checked live with it. Its Sandbox upgrade test runs right after publishing, at the owner's call |
+| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Released** 2026-11-22 08:37 (https://github.com/mbustos27/nixie/releases/tag/v1.7.0; started 2026-11-21 19:40, 3 streams). The release carries Nixie's own TMDb key and the Trakt Production Client ID, never the repository; TMDb trending was checked live with it. Its Sandbox upgrade test runs right after publishing, at the owner's call |
 | 1.8 | Player | A floating picture-in-picture player (decided 2026-11-22), chapter extras, a filled-in Report a problem (decided 2026-11-22) | **Planned** (`briefs\180-plan.md`): a 30-minute spike first, then a setup commit and two streams, PiP (about 12 hours) and chapter extras (about 7), about 20 hours of work, so about a day and a half at the measured pace. Starts after 1.7 and TV 1.0, which keep priority |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
@@ -174,7 +174,7 @@ Three parallel streams (search, the updater, fixes), each owning its files, as i
   script, not in Nixie: Windows PowerShell won't start a program with an empty argument list (fixed on main). The second
   try found Windows Sandbox itself stuck, which only a PC restart clears.
 - **The owner: "Publish now"** (2026-11-21). **1.5.0 is released**
-  (github.com/mbustos27/fluentfin-mpv/releases/tag/v1.5.0). Its notes say the upgrade test is still to run.
+  (github.com/mbustos27/nixie/releases/tag/v1.5.0). Its notes say the upgrade test is still to run.
 - **The Sandbox upgrade test passed** (2026-11-21, 07:45 to 07:53, after the owner's restart). As a standard user:
   1.4.1 installs and copies the Seaglass folder; 1.5.0 installs over it by the old flow and keeps the data; 1.5.0's
   Restart to update installs the test build and opens Nixie again, once. No 1.5.1 needed. The test's own three faults
@@ -344,7 +344,7 @@ check of the "Updated" notice.
 - **The Sandbox upgrade test passed every check** (13:58 to 14:12, as a standard user): 1.5.0 to 1.5.1 by the old flow,
   1.5.1's own Restart to update, and, the first real check of it, **1.5.0's Restart to update installing 1.5.1, which
   opens again and logs "Updated"**.
-- **1.5.1 is released** (2026-11-21, 22:19 UTC; github.com/mbustos27/fluentfin-mpv/releases/tag/v1.5.1), squashed onto
+- **1.5.1 is released** (2026-11-21, 22:19 UTC; github.com/mbustos27/nixie/releases/tag/v1.5.1), squashed onto
   main as `fa95aa0`.
 - **From launch to release:** about 6 hours (08:12 to 14:19): fixes 1 hour, review and hunt 1 hour, their fixes and the
   final pass with the build about 3.5 hours (the test slots were shared with six streams), the Sandbox test and
@@ -499,7 +499,7 @@ chips, the top bar's Collections destination, the fake server), so they're built
 - **The package:** verify-package passed 121/121, and Defender found nothing (22 minutes). The baseline matches 1.5.1,
   except that Home's first cards come about 115 ms later.
 - **1.6.0 is released** (2026-11-22, 01:50 UTC, which is 17:50 on 2026-11-21 in California;
-  github.com/mbustos27/fluentfin-mpv/releases/tag/v1.6.0). It was squashed onto main as `ab57230` and tagged `v1.6.0`.
+  github.com/mbustos27/nixie/releases/tag/v1.6.0). It was squashed onto main as `ab57230` and tagged `v1.6.0`.
   Its 8 assets match their digests. It was published before its Sandbox upgrade test, at the owner's call (Decided,
   below); the test from 1.5.1 runs right after.
 - **After publishing:** the bug hunt and a review of the three integration commits found no Blocker. Their findings
@@ -518,7 +518,7 @@ chips, the top bar's Collections destination, the fake server), so they're built
   with the TV work. Defender took 22 minutes.
 
 ## 1.6.1: Fixes (released 2026-11-22)
-- **Released 2026-11-22 00:16:** https://github.com/mbustos27/fluentfin-mpv/releases/tag/v1.6.1 (squash c7182f6, tag
+- **Released 2026-11-22 00:16:** https://github.com/mbustos27/nixie/releases/tag/v1.6.1 (squash c7182f6, tag
   v1.6.1, 8 assets matching their digests).
   - **Each stream's review:** no Blocker or Major. Their Minors were fixed before the merge: a crumb test on the real
     navigation service, tidy names before the list is read, a separate device id per install kind, the locked id file,
@@ -888,6 +888,13 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
      URL would 404.
   6. A new repository named `fluentfin-mpv` is never created, because it would break every redirect. The local folder
      `Dev\fluentfin-mpv` keeps its name, and only the git remote changes.
+  - **Done 2026-11-22, right after 1.7.0:**
+    - renamed to `mbustos27/nixie`, with the same repository id;
+    - the old API address answers 301 to it, and followed it gives v1.7.0;
+    - the old page and download links answer 301;
+    - the docs' links switched on main.
+
+    The owner's installed copy finding 1.7.0 is the real-world check. 1.7.1 switches the code's constants.
 - **1.7.0's Sandbox test runs after publishing** (the owner, 2026-11-22: "sandbox test after publishing and opening
   test build"). The order: build, verify-package, Defender, publish, open the release build on the owner's desktop
   as their test copy, then the Sandbox. As with 1.5.0 and 1.6.0, a failure there makes a hotfix.

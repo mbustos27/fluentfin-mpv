@@ -287,8 +287,8 @@ in four themes, 1.7's own scripts, the shared pages' scripts, and the QA servers
    For the 1.2.x releases also `dist\Seaglass-<version>-win-x64.msi` and its `.sha256` (the same MSI, a hard link the
    build makes): Seaglass 1.1.x's "Download and install" only takes an asset of that name, so with it Seaglass users
    update to Nixie from the app. Without it they are told about the release and download it from its page.
-3. The package's README.txt links the source at `https://github.com/mbustos27/fluentfin-mpv/tree/v<version>`: the tag
-   must exist under that name.
+3. The package's README.txt links the source at `https://github.com/mbustos27/nixie/tree/v<version>` (1.7.0 and
+   earlier: the old name, which redirects): the tag must exist under that name.
 4. **The updater reads the release** (1.5): the installer and its `.sha256` must be assets of the release itself, named
    `Nixie-<version>-win-x64.msi`; GitHub's API reports each asset's SHA-256 (`digest`), and Nixie 1.5 refuses an installer
    whose `.sha256` disagrees with it. The release body is what "What's new" shows (simple Markdown: headings, bullets,
@@ -299,6 +299,10 @@ in four themes, 1.7's own scripts, the shared pages' scripts, and the QA servers
    together), but 1.1 to 1.4 only accept `/mbustos27/fluentfin-mpv/`: renamed, they fall back to opening the release
    page with no word why. If a rename is ever wanted, wait until most people run 1.5 or later, then change the constant,
    `build-release.ps1`'s source link and the installer's links together.
+   **Renamed 2026-11-22, after 1.7.0, to `mbustos27/nixie`** (the owner's call). GitHub redirects the old name, and
+   1.7.1 moves the constant, the source link and the installer's links to the new one.
+   **Never create a repository named `fluentfin-mpv` under this account.** It would take over the redirect, and every
+   installed copy before 1.7.1 would stop finding updates.
 
 ## Moving a pinned dependency
 
