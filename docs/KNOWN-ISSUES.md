@@ -6,7 +6,9 @@ below is low severity, an accepted cost of the contract, or not verified yet. Ea
 says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
 ## Fix queue (next fix release)
-For 1.7.1 now: 1.6.1 took what it could of the queue it was given, and what is left of it stays below, after 1.7.0's own.
+For 1.7.2 now: 1.7.1 was the library index alone (the owner, 2026-11-22: "release 1.7.1 quick fix bc thats the whole
+thing"), so 1.7.0's queue below waits for 1.7.2, with 1.7.1's own (in its section) and the rename's code constants.
+1.6.1 took what it could of the queue it was given, and what is left of it stays below, after 1.7.0's own.
 
 From the 1.7.0 bug hunt (`docs\reports\Bug hunt 2026-11-22 (1.7.0).md`; no Blocker; its Major BH-170-M1 and q1, q4 were
 fixed before the build):

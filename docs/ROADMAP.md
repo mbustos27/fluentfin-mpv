@@ -1,8 +1,8 @@
 # Nixie roadmap
 
-Updated 2026-11-22 (1.6.1 released; 1.7 in its final pass, its build waiting on Trakt's Production Client ID; the TV
-session done and the TV fix round running; Fire TV planned as sideload only; 1.6.0 released, before its Sandbox upgrade
-test at the owner's call). These are
+Updated 2026-11-22 (1.7.1 released, the library index on a big server, its Sandbox upgrade test right after
+publishing; 1.7.2 queued with the rename's code constants and 1.7.1's bug hunt; TV's second fix round done, its APK
+waiting to go onto the owner's box; 1.7.0 released and the repository renamed to `mbustos27/nixie`). These are
 the planned releases in order, with the backburner ideas placed where they fit. Version numbers past 1.6 are a guide.
 **Sizes are calendar time at the measured pace** (below): several streams in parallel, each building in hours, plus a
 fixed tail of about half a day per release. A date past today is an estimate, not a promise; usage, the 3 test slots
@@ -17,10 +17,12 @@ and the owner's own steps are the real limits.
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test passed right after) |
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Released** 2026-11-22 00:16 (started 2026-11-21 18:10, 3 streams; its Sandbox upgrade test passed before publishing) |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Released** 2026-11-22 08:37 (https://github.com/mbustos27/nixie/releases/tag/v1.7.0; started 2026-11-21 19:40, 3 streams). The release carries Nixie's own TMDb key and the Trakt Production Client ID, never the repository; TMDb trending was checked live with it. Its Sandbox upgrade test ran right after publishing, at the owner's call, and passed (08:41-08:54) |
+| 1.7.1 | Fixes | The library index on a big server: "Nixie is reading your libraries" took minutes on the owner's server (the owner, 2026-11-22: "figure out why and release 1.7.1 quick fix bc thats the whole thing"). The saved index shows at once and is read again behind it only when stale; a first read comes two pages of 1,000 at a time and shows its rows as it goes | **Released** 2026-11-22 15:27 (https://github.com/mbustos27/nixie/releases/tag/v1.7.1; 1 stream, a review, a bug hunt through a proxy slowing every request by 3-10 s, two re-reviews and three fix rounds). Measured on a test Jellyfin with 25,736 films, not yet on the owner's server. Its Sandbox upgrade test runs right after publishing, as 1.7.0's did |
+| 1.7.2 | Fixes | The rename's code constants (the updater's repository, the installer's links, the sources link), Drive-in's Up next count, 1.7.0's queue, and 1.7.1's bug hunt queue (the people pass when its collections are off, the rows' 40 px jump, reading only what was added since, the reading line's total) | **Queued**: the next fix release, one stream beside 1.8 |
 | 1.8 | Player | A floating picture-in-picture player (decided 2026-11-22), chapter extras, a filled-in Report a problem (decided 2026-11-22) | **Planned** (`briefs\180-plan.md`): a 30-minute spike first, then a setup commit and two streams, PiP (about 12 hours) and chapter extras (about 7), about 20 hours of work, so about a day and a half at the measured pace. Starts after 1.7 and TV 1.0, which keep priority |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
-| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes, and Continue watching published for third-party home screens (Google TV's own filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). The fix round merged and went onto the owner's box 2026-11-22: Home about a minute and Movies about 10 s on their real server, a slow trailer, Quit blocked while Home loads, a 1080p limit on their 4K TV. **A second fix round is running** (3 streams, timed on a real Jellyfin at scale), then a re-check on the box, the key and the `mbustos27/nixie-tv` repository. TV 1.0 also gets a Report a problem QR (decided 2026-11-22) |
+| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes, and Continue watching published for third-party home screens (Google TV's own filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). The fix round merged and went onto the owner's box 2026-11-22: Home about a minute and Movies about 10 s on their real server, a slow trailer, Quit blocked while Home loads, a 1080p limit on their 4K TV. **The second fix round is done** (2026-11-22, 3 streams and a bug hunt, timed on a real Jellyfin 12.4 with 25,736 films): Home's first row 2.0-2.2 s from a cold start, Movies about 1 s, the A-Z jump 1.3 s, search 0.6 s, a trailer 2.7-2.9 s, Quit at once while Home loads, and a 4K display's mode used for transcodes. Its APK (0.1.1-beta.1) waits to go onto the owner's box; then their re-check, the key and the `mbustos27/nixie-tv` repository. TV 1.0 also gets a Report a problem QR (decided 2026-11-22) |
 | Fire TV | Fire TV | The same TV app on Amazon's Fire OS devices (not Vega OS, which runs no Android apps), **sideloaded only** | **Planned** 2026-11-21 (`Dev\nixie-tv\docs\FIRE-TV-PLAN.md`), after TV 1.0: compatibility about half a day, tested on Android TV emulators (no device, no Appstore, at the owner's call), then the same GitHub APK with its updater. What an emulator can't prove is listed as known gaps |
 
 **Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
@@ -884,8 +886,8 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   3. 1.5.0 and later already follow GitHub's redirect for a renamed repository (BH-140X-m3), so installed copies keep
      updating. The owner's own copy checking for 1.7 after the rename is the first real-world check of that.
   4. 1.4.1 and earlier would need one manual download.
-  5. The next release (1.7.1) switches every old-name place to the new name: never before the rename, since the API
-     URL would 404.
+  5. The next fix release switches every old-name place to the new name: never before the rename, since the API
+     URL would 404. That is 1.7.2: 1.7.1 became the library-index fix alone, at the owner's call.
   6. A new repository named `fluentfin-mpv` is never created, because it would break every redirect. The local folder
      `Dev\fluentfin-mpv` keeps its name, and only the git remote changes.
   - **Done 2026-11-22, right after 1.7.0:**
@@ -894,7 +896,8 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
     - the old page and download links answer 301;
     - the docs' links switched on main.
 
-    The owner's installed copy finding 1.7.0 is the real-world check. 1.7.1 switches the code's constants.
+    The owner's installed copy finding 1.7.0 is the real-world check. 1.7.2 switches the code's constants (the
+    updater's repository, the installer's links, the sources link); until then they follow the redirect.
 - **1.7.0's Sandbox test runs after publishing** (the owner, 2026-11-22: "sandbox test after publishing and opening
   test build"). The order: build, verify-package, Defender, publish, open the release build on the owner's desktop
   as their test copy, then the Sandbox. As with 1.5.0 and 1.6.0, a failure there makes a hotfix.
