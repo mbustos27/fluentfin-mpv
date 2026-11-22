@@ -1,7 +1,7 @@
 # Nixie roadmap
 
-Updated 2026-11-21 (1.6.0 released, before its Sandbox upgrade test at the owner's call; 1.5.1 released; Google TV
-ready for the owner's TV session; sizes re-measured). These are
+Updated 2026-11-21 (1.7 started beside 1.6.1 at the owner's call; 1.6.0 released, before its Sandbox upgrade test at
+the owner's call; 1.5.1 released; Google TV ready for the owner's TV session; sizes re-measured). These are
 the planned releases in order, with the backburner ideas placed where they fit. Version numbers past 1.6 are a guide.
 **Sizes are calendar time at the measured pace** (below): several streams in parallel, each building in hours, plus a
 fixed tail of about half a day per release. A date past today is an estimate, not a promise; usage, the 3 test slots
@@ -15,7 +15,7 @@ and the owner's own steps are the real limits.
 | 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Released** 2026-11-21 |
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test passed right after) |
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Now** (started 2026-11-21 18:10, 3 streams): release expected **2026-11-22** |
-| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | About 1 day of work; **2026-11-23 to 25**, after the weekly usage reset on 24 November if usage runs short. Needs the owner's Trakt registration (a few minutes) |
+| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Now** (started 2026-11-21 19:40, 2 streams beside 1.6.1, which goes first): release expected **2026-11-23**. Trakt may not need a new registration (see the 1.7 section) |
 | 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
@@ -542,17 +542,32 @@ chips, the top bar's Collections destination, the fake server), so they're built
 - **Not in 1.6.1:** sentence case for Home's row names (61 names in the test scripts), and music in search with playback
   (a feature, for 1.7).
 
-## 1.7: Discover
-Plan phases 2 and 3. Each source is off until the user turns it on. Nixie fetches public lists and matches them on the
+## 1.7: Discover (now)
+Plan phases 2 and 3 (`docs\reports\Nixie smart collections plan.md`). Each source is off until the user turns it on. Nixie fetches public lists and matches them on the
 PC. It never sends the library or the watch history. Each source gets its current terms checked, a live check beside
 its test fake, and Nixie's own message when it refuses.
 
 - **TMDb's daily export files:** franchise and keyword names. No key.
 - **Wikidata:** awards and finer genres. No key. Its query endpoint moves by June 2027, so the endpoint is a setting.
-- **Trakt:** trending, popular, anticipated and box office, with the Client ID only and no sign-in. The registration
-  made 2026-11-19 will lapse unused; a live check doesn't count as use. Register again when 1.7 starts (a few
-  minutes).
+- **Trakt:** trending, popular, anticipated and box office, with the Client ID only and no sign-in. A live check doesn't
+  count as use, so the 2026-11-19 registration lapses on 2026-12-19 unless a build in regular use calls it first (see
+  "Trakt's registration" below).
 - **TMDb trending,** with each user's own token at first.
+- **Started 2026-11-21 19:40, in two streams beside 1.6.1** (brief `briefs\170-discover.md`). 1.6.1 keeps priority on the
+  test slots and usage.
+  - **the keyless sources:** the shared outside layer (Nixie's User-Agent, one request at a time, pauses on 429, a
+    cache with each source's maximum age, a "Look up lists online" section in Settings with a "What is sent" card per
+    source), TMDb's daily export files (franchise and keyword names), and Wikidata (awards and finer genres, the
+    endpoint as a setting);
+  - **trending:** Trakt (trending, popular, anticipated, box office; the Client ID built into the release, no sign-in)
+    and TMDb trending (each user's own token, kept with DPAPI), shown as "Trending this week in your library" on Home and
+    as rows on the Collections page; plus `PRIVACY.md`, which Trakt's Production request needs.
+  - Every request is chosen from the settings alone, never from the library; a permanent test proves no request carries
+    anything from it.
+  - A terms re-check of all four sources runs first; what it finds overrides the plan's table.
+- **Trakt's registration:** 1.7 now ships before 2026-12-19, so a 1.7 build in regular use may keep the 2026-11-19
+  registration alive. The trending stream's live check tells whether it still answers; the owner registers again (a few
+  minutes) only if it doesn't. Requesting Production access, after `PRIVACY.md` exists, is the owner's step.
 
 ## 1.8: Player (from the backburner)
 - **A pop-out picture-in-picture player** (WinUI compact overlay with the libmpv swap chain). Confirm the idea first.
@@ -727,6 +742,11 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   with the final pass and the build, instead of before them (that wait was up to an hour). A Blocker it finds still
   stops the release. A Major in 1.6.1's own new code that's quick to fix is fixed before the build finishes; everything
   else goes to the next fix queue in KNOWN-ISSUES.
+- **1.7 starts beside 1.6.1** (the owner, 2026-11-21: "We can start 1.7"). The release rules run each fix release beside
+  the next feature release, and weekly usage was at 38%, so there was no reason to wait. 1.6.1 is close to its release,
+  so it keeps priority on the test slots and usage. The keyless sources (TMDb's export files, Wikidata) and TMDb trending
+  with each user's own token start at once; Trakt needs only its Client ID, never a sign-in, and any registration is the
+  owner's own step.
 - **TMDb (1.7):** each user brings their own token at first. An app-wide key is reconsidered once people use it.
 - **Save as playlist (1.6):** yes, as an explicit button that copies a Nixie collection to the server as the user's own
   playlist (an ordinary user can). Nothing is written to the server otherwise.
