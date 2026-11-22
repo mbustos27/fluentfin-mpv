@@ -1,6 +1,7 @@
 # Nixie roadmap
 
-Updated 2026-11-21 (1.5.0 released; 1.6, the 1.5.1 fix release and Google TV under way; sizes re-measured). These are
+Updated 2026-11-21 (1.6.0 released, before its Sandbox upgrade test at the owner's call; 1.5.1 released; Google TV
+ready for the owner's TV session; sizes re-measured). These are
 the planned releases in order, with the backburner ideas placed where they fit. Version numbers past 1.6 are a guide.
 **Sizes are calendar time at the measured pace** (below): several streams in parallel, each building in hours, plus a
 fixed tail of about half a day per release. A date past today is an estimate, not a promise; usage, the 3 test slots
@@ -12,8 +13,8 @@ and the owner's own steps are the real limits.
 | 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
 | 1.5.0 | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Released** 2026-11-21 |
 | 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Released** 2026-11-21 |
-| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Now** (started 2026-11-21, 6 streams): release expected **2026-11-22** |
-| 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | About half a day after 1.6: **2026-11-22 to 23** |
+| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test runs right after) |
+| 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | The bug hunt and a review of the merges run now; about half a day: **2026-11-22** |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | About 1 day of work; **2026-11-23 to 25**, after the weekly usage reset on 24 November if usage runs short. Needs the owner's Trakt registration (a few minutes) |
 | 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
@@ -30,7 +31,7 @@ and the owner's own steps are the real limits.
 | Integration, final pass, baseline and the release build | **about 2.5 hours** | 1.5: 17:54 to 20:30, every gate in four themes on both test servers |
 | The bug hunt | **25 to 70 minutes** | Beside the final pass |
 | The Sandbox upgrade test and publishing | **about 30 minutes** | When Sandbox works; on 2026-11-20 it stuck until a PC restart, which moved 1.5.0 to the next morning |
-| **A feature release, end to end** | **about 9 to 10 hours of work**, so about a day | 1.5: launched 11:39, release build at 20:30, published the next morning (the Sandbox restart) |
+| **A feature release, end to end** | **about 9 to 10 hours of work**, so about a day | 1.5: launched 11:39, release build at 20:30, published the next morning (the Sandbox restart). 1.6: launched 08:12, published 17:50 the same day |
 | **A fix release** | **about half a day** | 1.5.1: launched 08:12, fixes in at 09:19, review and hunt by 10:26 |
 
 **What actually limits the pace:**
@@ -347,7 +348,7 @@ check of the "Updated" notice.
   final pass with the build about 3.5 hours (the test slots were shared with six streams), the Sandbox test and
   publishing 30 minutes.
 
-## 1.6: Collections (now)
+## 1.6: Collections (released 2026-11-21)
 **Started 2026-11-21** (the owner: "Start 1.6"), every branch from v1.5.0:
 - the top bar, collections and colpage streams;
 - **theme polish goes to colpage,** which already owns the Collection page, the library pages and their headers;
@@ -482,6 +483,27 @@ chips, the top bar's Collections destination, the fake server), so they're built
   - Sunny's 0:00 "Skip intro": what its tooltip says, and whether it's gone after "Forget learned intros";
   - with "Look up intros online" on, whether it lands on Sunny's title card;
   - a fingerprint tool in the installer, and temporary files while watching: OK?
+
+**Released (2026-11-21):**
+- **Five streams** were reviewed with no Blocker, and every Major was fixed: the top bar, collections, the Collection
+  page with theme polish, skipping repeated parts, and quality with Playback stats. They were then integrated with 1.5.1:
+  1.5.1's per-season rule for intros that move now runs inside the skip learner.
+- **The final pass:**
+  - the keyboard matrix (2,314 rows) and the contrast floor (4,408 labels), in all four themes;
+  - both QA servers, e2e and the bridge smoke test;
+  - 54 of 58 theme runs; the 4 that failed are queued for 1.6.1;
+  - the integration found one gap and fixed it: a Nixie collection's page showed neither "Made by Nixie" nor where it
+    came from.
+- **The package:** verify-package passed 121/121, and Defender found nothing (22 minutes). The baseline matches 1.5.1,
+  except that Home's first cards come about 115 ms later.
+- **1.6.0 is released** (2026-11-22, 01:50 UTC, which is 17:50 on 2026-11-21 in California;
+  github.com/mbustos27/fluentfin-mpv/releases/tag/v1.6.0). It was squashed onto main as `ab57230` and tagged `v1.6.0`.
+  Its 8 assets match their digests. It was published before its Sandbox upgrade test, at the owner's call (Decided,
+  below); the test from 1.5.1 runs right after.
+- **After publishing:** the bug hunt and a review of the three integration commits run now; their findings go to 1.6.1.
+- **From launch to release:** about 9.5 hours (08:12 to 17:50). The streams took about 4 hours; reviews and their
+  fixes about 2.5 hours. Integration, the final pass and the build ran alongside, about 5 hours, sharing the test slots
+  with the TV work. Defender took 22 minutes.
 
 ## 1.6.1: Fixes
 - Clears the fix queue in KNOWN-ISSUES: the Minors and old bugs that 1.6's reviews and hunt put there, and the owner's
@@ -665,6 +687,9 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   in season. Each can be turned off in Settings, and the other kinds rotate one a day.
 
 ## Decided for 1.6 and 1.7
+- **1.6.0 ships before its upgrade test** (the owner, 2026-11-21: "Do asap and notify me when we have the GitHub
+  link"). 1.6 changed neither the updater nor the installer (new settings, and one line of build-release.ps1), so the
+  Sandbox test runs right after publishing, as it did for 1.5.0. A failure there makes a hotfix.
 - **TMDb (1.7):** each user brings their own token at first. An app-wide key is reconsidered once people use it.
 - **Save as playlist (1.6):** yes, as an explicit button that copies a Nixie collection to the server as the user's own
   playlist (an ordinary user can). Nothing is written to the server otherwise.

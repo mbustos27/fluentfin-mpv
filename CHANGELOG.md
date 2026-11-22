@@ -109,7 +109,7 @@ page to match the set, skipping the parts a show repeats, and a quality choice w
 ## 1.5.1
 
 A fix release: signing in again when the server ends your sign-in, "Skip intro" on shows whose intro moves, search for
-videos and music, and the rest of what 1.5.0's bug hunt found.
+home videos and music videos, and the rest of what 1.5.0's bug hunt found.
 
 **Fixes**
 
