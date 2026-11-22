@@ -19,7 +19,7 @@ and the owner's own steps are the real limits.
 | 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
-| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes; no home-screen Continue watching (the TV filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). **The fix round is running** (2 streams), then the key and the `mbustos27/nixie-tv` repository |
+| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes, and Continue watching published for third-party home screens (Google TV's own filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). **The fix round is running** (3 streams, with Watch Next), then the key and the `mbustos27/nixie-tv` repository |
 | Fire TV | Fire TV | The same TV app on Amazon's Fire OS devices | **Planning** (started 2026-11-21): a research pass, then `Dev\nixie-tv\docs\FIRE-TV-PLAN.md` |
 
 **Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
@@ -678,7 +678,11 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
   - **The fix round started 2026-11-21 evening** (brief `briefs\tv-fix-session.md`), in two streams measured against a
     big fake library:
     - library paging and the scroll (TV-S1, S2);
-    - search and the trailer player (TV-S4, S3).
+    - search and the trailer player (TV-S4, S3);
+    - **Continue watching for other home screens** (Watch Next; the owner, 2026-11-21: "yes"). Google TV's own home
+      filters it, but Projectivy, Plume and LtvLauncher show it, searchable. The rows are kept in step with resume
+      points, removed when finished, on removal (and put back on Undo) and on sign-out, with a setting to turn them off
+      and no telemetry. A separate session is installing such a launcher on the owner's box for the re-check.
 
     Then a review, a short emulator hunt, the owner's quick re-check on the box, the key and the repository, and **TV
     1.0**.
@@ -780,6 +784,10 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   with the final pass and the build, instead of before them (that wait was up to an hour). A Blocker it finds still
   stops the release. A Major in 1.6.1's own new code that's quick to fix is fixed before the build finishes; everything
   else goes to the next fix queue in KNOWN-ISSUES.
+- **TV 1.0 publishes Continue watching for third-party home screens** (the owner, 2026-11-21, asked whether 1.0 should
+  or leave it for later: "yes also lets start another session to install a new launcher on my android tv"). Google
+  TV's own home filters uncertified apps' Watch Next (phase 0), so this serves launchers like Projectivy. It's a small
+  stream in the TV fix round, so 1.0 isn't held for it.
 - **1.7 starts beside 1.6.1** (the owner, 2026-11-21: "We can start 1.7"). The release rules run each fix release beside
   the next feature release, and weekly usage was at 38%, so there was no reason to wait. 1.6.1 is close to its release,
   so it keeps priority on the test slots and usage. The keyless sources (TMDb's export files, Wikidata) and TMDb trending
