@@ -14,7 +14,7 @@ and the owner's own steps are the real limits.
 | 1.5.0 | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Released** 2026-11-21 |
 | 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Released** 2026-11-21 |
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test runs right after) |
-| 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | The bug hunt and a review of the merges run now; about half a day: **2026-11-22** |
+| 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Now** (started 2026-11-21 18:10, 3 streams): release expected **2026-11-22** |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | About 1 day of work; **2026-11-23 to 25**, after the weekly usage reset on 24 November if usage runs short. Needs the owner's Trakt registration (a few minutes) |
 | 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
@@ -500,15 +500,40 @@ chips, the top bar's Collections destination, the fake server), so they're built
   github.com/mbustos27/fluentfin-mpv/releases/tag/v1.6.0). It was squashed onto main as `ab57230` and tagged `v1.6.0`.
   Its 8 assets match their digests. It was published before its Sandbox upgrade test, at the owner's call (Decided,
   below); the test from 1.5.1 runs right after.
-- **After publishing:** the bug hunt and a review of the three integration commits run now; their findings go to 1.6.1.
+- **After publishing:** the bug hunt and a review of the three integration commits found no Blocker. Their findings
+  are in 1.6.1 (below).
+- **The Sandbox test's first run:** legs 1 and 2 passed every check (1.5.1 to 1.6.0 by the old flow, and 1.6.0's own
+  Restart to update). Leg 3 failed on a fault in the test: it started 1.5.1's install switch without the test's marker,
+  which 1.5.1 itself requires. The fix is `f71865a`, with a test, and the test runs again.
 - **From launch to release:** about 9.5 hours (08:12 to 17:50). The streams took about 4 hours; reviews and their
   fixes about 2.5 hours. Integration, the final pass and the build ran alongside, about 5 hours, sharing the test slots
   with the TV work. Defender took 22 minutes.
 
-## 1.6.1: Fixes
+## 1.6.1: Fixes (now)
 - Clears the fix queue in KNOWN-ISSUES: the Minors and old bugs that 1.6's reviews and hunt put there, and the owner's
   reports. No features.
 - Also anything 1.5.1 didn't finish. (1.5.0's own queue moved to 1.5.1 on 2026-11-21.)
+- **What 1.6.0's checks found** (2026-11-21, after publishing; no Blocker):
+  - **the bug hunt:**
+    - skip rules never snap to the cut on most PCs, because snapping needs a separate mpv that the package doesn't
+      include;
+    - collections whose tidy names match read the same outside the Collections page;
+    - three smaller items;
+  - **the review of the merges:** "See all", then Back, then the same "See all" does nothing (an older cause, which
+    also affects the library tabs), plus four smaller items.
+
+  The two hunt Majors are in the release's Known issues.
+- **Started 2026-11-21 18:10, in three streams** (brief `briefs\161-fixes.md`):
+  - **navigation and collections:** Back, tidy names everywhere, seasonal rows by the local date, Save as playlist,
+    release-notes focus, the top bar's and collections' queue;
+  - **skipping and the player:** snapping with the shipped libmpv, 1.5.1's "moves" marks kept through forget and undo,
+    migrating once, the skip and stats queue, the sign-in ending mid-playback;
+  - **the older queue:** the device id kept in the data folder, the sign-in-ended leftovers, Display's Save, "/" in
+    search, guest roles in "With <name>", the Collection page's queue.
+
+  Then one review and a short bug hunt, the integration, the build, the Sandbox test and publishing.
+- **Not in 1.6.1:** sentence case for Home's row names (61 names in the test scripts), and music in search with playback
+  (a feature, for 1.7).
 
 ## 1.7: Discover
 Plan phases 2 and 3. Each source is off until the user turns it on. Nixie fetches public lists and matches them on the
