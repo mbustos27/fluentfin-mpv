@@ -27,6 +27,26 @@ A fix release: Nixie's collections on a big server.
 - **The log says how long each part took:** each page, each pass, the saved index read from this PC, and the
   Collections page's rows (durations and counts only).
 
+**Verified**
+
+- Off-screen in all four themes: the Collections page as a read comes in (33 checks), Home's arrival with no keys, and
+  the keyboard matrix with both keys (2,322 checks). The release build ran every test (5,517 core, 1,630 UI, 569
+  bridge) and the package's 134 checks; Microsoft Defender found nothing.
+- A bug hunt through a proxy that slowed every request by 3-10 s and dropped connections, before a test Jellyfin with
+  25,736 films in 23 libraries: never more than two requests in flight, a failed or stalled check left the saved index
+  as it was, and killed mid-save eight times the index stayed whole. At about 3 s a request, the titles were in after
+  105 s and the actors and directors after 213 s; a restart asked no library pages.
+- The upgrade, in Windows Sandbox as a standard user, right after publishing: 1.7.0 to 1.7.1 by the installer, 1.7.1's
+  own Restart to update, and 1.7.0's Restart to update installing 1.7.1, which opens again and says "Updated".
+- Not checked on your own server: a first read with full metadata over the internet.
+
+**Known issues in 1.7.1** (queued for 1.7.2, with 1.7.0's)
+
+- A first read still takes minutes on a big remote server. It now shows rows as it goes and happens once.
+- The actors-and-directors pass still runs when those collections are off.
+- When the reading line goes, the rows move up under the keyboard focus.
+- Drive-in: Home's "All of Up next" link can count more than the cards it shows.
+
 ## 1.7.0
 
 Discover: award winners and finer genres from Wikidata, franchise names from TMDb, and what's trending on Trakt and TMDb,
