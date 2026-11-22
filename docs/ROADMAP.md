@@ -567,7 +567,14 @@ its test fake, and Nixie's own message when it refuses.
   - A terms re-check of all four sources runs first; what it finds overrides the plan's table.
 - **Trakt's registration:** 1.7 now ships before 2026-12-19, so a 1.7 build in regular use may keep the 2026-11-19
   registration alive. The trending stream's live check tells whether it still answers; the owner registers again (a few
-  minutes) only if it doesn't. Requesting Production access, after `PRIVACY.md` exists, is the owner's step.
+  minutes) only if it doesn't.
+- **Before 1.7 ships, the owner requests Trakt Production access** (a few minutes, the drafted fields in the plan's
+  Appendix A). Trakt's staff said on 2026-11-17 that an app should do this before launch, and that an app nobody signs
+  in to gets read-only Production access. The Production Client ID is the one the release carries. The request needs
+  `PRIVACY.md`'s URL, so `PRIVACY.md` goes on main ahead of the release.
+- **The terms re-check (2026-11-21):** no term changed. The plan had Trakt's paging (read its headers instead of
+  assuming 250) and box office (an unpaged top 10, updated Mondays) wrong, and left out Wikidata's limit of 30 failed
+  queries a minute. Wikidata's old service runs through June 2027, with no shutdown date.
 
 ## 1.8: Player (from the backburner)
 - **A pop-out picture-in-picture player** (WinUI compact overlay with the libmpv swap chain). Confirm the idea first.
