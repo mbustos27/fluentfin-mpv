@@ -138,10 +138,64 @@ public static class CollectionBrowse
 		return string.Join(" · ", parts);
 	}
 
-	/// <summary>Over the cards: "6 films", or "5 of 6 films" when some are hidden; "" when there is nothing.</summary>
+	/// <summary>
+	/// Over the cards: "5 of 6 films" when Hide watched hides some; else "" (1.6 colpage, C2: the summary already says "6 films",
+	/// so the grid's heading shows only when it says something new).
+	/// </summary>
 	public static string ShownText(int shown, IReadOnlyList<BaseItemDto> items) =>
-		items.Count == 0 ? "" : shown == items.Count ? Count(items.Count, Noun(items))
+		items.Count == 0 || shown == items.Count ? ""
 		: $"{shown.ToString("N0", CultureInfo.CurrentCulture)} of {Count(items.Count, Noun(items))}";
+
+	// ---- 1.6 colpage (LB1, C3): a card's place in the set, only where the order means something ----------------------------
+
+	/// <summary>
+	/// Whether the set's own order means something, so its cards carry their place ("1 · Wild Canyons"): a playlist (the user's
+	/// order), an album (its tracks), a box set in release order (a franchise); not a box set its admin sorted by name (A to Z
+	/// says nothing a title doesn't), and never in another order picked here.
+	/// </summary>
+	public static bool PositionsMeanSomething(CollectionOrder order, bool playlist, string? displayOrder) =>
+		order == CollectionOrder.Collection && (playlist || displayOrder == TrackOrder || OwnOrder(displayOrder) == CollectionOrder.ReleaseDate);
+
+	/// <summary>The card's caption prefix: "1" before "· Wild Canyons" (the separator is the card's).</summary>
+	public static string CaptionPrefix(int position) => position.ToString(CultureInfo.CurrentCulture);
+
+	// ---- 1.6 colpage (C1, C5): what a theme's header stage shows ------------------------------------------------------------
+
+	/// <summary>How many of the set's films a header lists ("01 … 06": Editorial's contents); more are "and N more".</summary>
+	public const int ContentsShown = 8;
+
+	/// <summary>
+	/// The header's facts, in a shape a Nixie collection can fill too: the eyebrow ("Collection", "Made by Nixie · Franchise"),
+	/// the title, the count ("6 films"), a why line (a Nixie collection's source; "" for a server's set), the art (the set's
+	/// Backdrop, else its first member's in the set's order, else up to four posters for a 2×2 mosaic), the films as a numbered
+	/// contents list ("01", "Wild Canyons", "1979"), and the marquee's words ("NOW SHOWING: COPPER AND GLASS · 6 FEATURES").
+	/// </summary>
+	public static CollectionHeaderFacts Header(BaseItemDto? set, IReadOnlyList<BaseItemDto> inOwnOrder, string kind, bool numbered, string eyebrow = "", string why = "")
+	{
+		var title = set?.Name ?? "";
+		var noun = Noun(inOwnOrder);
+		var count = inOwnOrder.Count == 0 ? "" : Count(inOwnOrder.Count, noun);
+		var backdrop = HasBackdrop(set) ? set : inOwnOrder.FirstOrDefault(HasBackdrop);
+		var mosaic = backdrop is null ? inOwnOrder.Where(HasPrimary).Take(4).ToList() : [];
+		var width = Math.Max(2, inOwnOrder.Count.ToString(CultureInfo.InvariantCulture).Length);
+		var contents = inOwnOrder.Take(ContentsShown).Select((x, i) => new CollectionContentsLine(
+			numbered ? (i + 1).ToString(CultureInfo.InvariantCulture).PadLeft(width, '0') : "",
+			x.Name ?? "",
+			(x.ProductionYear ?? x.PremiereDate?.Year) is int y and > 0 ? y.ToString(CultureInfo.InvariantCulture) : "")).ToList();
+		var more = Math.Max(0, inOwnOrder.Count - ContentsShown);
+		var features = inOwnOrder.Count == 0 ? "" : noun.One == "film"
+			? $"{inOwnOrder.Count.ToString("N0", CultureInfo.CurrentCulture)} {(inOwnOrder.Count == 1 ? "FEATURE" : "FEATURES")}"
+			: count.ToUpper(CultureInfo.CurrentCulture);
+		var marquee = string.IsNullOrEmpty(features) ? $"NOW SHOWING: {title.ToUpper(CultureInfo.CurrentCulture)}" : $"NOW SHOWING: {title.ToUpper(CultureInfo.CurrentCulture)} · {features}";
+		return new CollectionHeaderFacts(string.IsNullOrEmpty(eyebrow) ? kind : eyebrow, title, count, why, backdrop, mosaic, contents,
+			more > 0 ? $"and {more.ToString("N0", CultureInfo.CurrentCulture)} more" : "", features, marquee);
+	}
+
+	/// <summary>The item has a backdrop of its own (a box set's, a film's).</summary>
+	public static bool HasBackdrop(BaseItemDto? item) => item?.BackdropImageTags is { Count: > 0 } tags && !string.IsNullOrEmpty(tags[0]);
+
+	/// <summary>The item has a poster.</summary>
+	public static bool HasPrimary(BaseItemDto? item) => item?.ImageTags?.AdditionalData?.ContainsKey(nameof(ImageType.Primary)) == true;
 
 	/// <summary>How much of the collection is watched, 0 to 1 (the progress bar).</summary>
 	public static double Progress(IReadOnlyList<BaseItemDto> items) => items.Count == 0 ? 0 : (double)items.Count(IsWatched) / items.Count;
@@ -216,4 +270,32 @@ public static class CollectionBrowse
 	/// <summary>"All 6 films are watched", for Hide watched with nothing left to show.</summary>
 	public static string AllWatchedText(IReadOnlyList<BaseItemDto> items) =>
 		items.Count == 1 ? $"The one {Noun(items).One} is watched" : $"All {Count(items.Count, Noun(items))} are watched";
+}
+
+/// <summary>1.6 colpage (C5): one line of a header's contents list: "01", "Wild Canyons", "1979" (no number when the order means nothing).</summary>
+public sealed record CollectionContentsLine(string Number, string Title, string Year)
+{
+	/// <summary>The line as one string, for a theme's single text run: "01  Wild Canyons  1979".</summary>
+	public string Text => string.Join("  ", new[] { Number, Title, Year }.Where(x => !string.IsNullOrEmpty(x)));
+}
+
+/// <summary>
+/// 1.6 colpage (C1, C5): what a Collection page's header stage shows, the same for a server's box set or playlist and a Nixie
+/// collection (the collections stream fills <see cref="Eyebrow"/> and <see cref="Why"/>). <see cref="BackdropFrom"/> is the
+/// item whose Backdrop is drawn (the set's own, else its first member's); with none, <see cref="Mosaic"/> holds up to four
+/// members whose posters make a 2×2 mosaic.
+/// </summary>
+public sealed record CollectionHeaderFacts(
+	string Eyebrow,
+	string Title,
+	string CountWords,
+	string Why,
+	BaseItemDto? BackdropFrom,
+	IReadOnlyList<BaseItemDto> Mosaic,
+	IReadOnlyList<CollectionContentsLine> Contents,
+	string ContentsMore,
+	string Features,
+	string Marquee)
+{
+	public static CollectionHeaderFacts Empty { get; } = new("", "", "", "", null, [], [], "", "", "");
 }

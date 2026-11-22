@@ -16,7 +16,7 @@ public partial class JellyfinTitleConverter : IValueConverter
 			return bid.SeriesName ?? "";
 		}
 
-		return bid.Name ?? "";
+		return FluentFin.Core.ViewModels.CollectionNames.Display(bid); // 1.6 collections: a box set's tidy name (the server's for anything else)
 	}
 
 	public object ConvertBack(object value, Type targetType, object parameter, string language)

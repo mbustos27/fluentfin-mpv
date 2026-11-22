@@ -37,7 +37,7 @@ public sealed partial class LibraryTile(BaseItemDto library) : ObservableObject
 {
 	public BaseItemDto Library { get; } = library;
 
-	public string Name => Library.Name ?? "";
+	public string Name => CollectionNames.DisplayLibrary(Library.Name); // 1.6 integration: the tidy library name (collections)
 
 	/// <summary>After the name: " · 320 · 97 unwatched" ("" until the counts are in, or when the server did not give them).</summary>
 	[ObservableProperty]
@@ -48,7 +48,38 @@ public sealed partial class LibraryTile(BaseItemDto library) : ObservableObject
 	[NotifyPropertyChangedFor(nameof(AutomationName))]
 	public partial LibraryCounts? Counts { get; private set; }
 
-	public string AutomationName => SpokenName(Name, Library.CollectionType, Counts);
+	public string AutomationName => (IsMadeByNixie ? MadeByNixieName(Counts) : SpokenName(Name, Library.CollectionType, Counts))
+		+ (IsFavourite ? ", in the top bar" : ""); // 1.6 collections (Made by Nixie's tile) and 1.6 topbar (its star)
+
+	// 1.6 topbar
+	/// <summary>Nixie 1.6: the library is one of the top bar's favourites: its star is lit (the Libraries page sets it).</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(IsNotFavourite), nameof(StarName), nameof(AutomationName))]
+	public partial bool IsFavourite { get; set; }
+
+	public bool IsNotFavourite => !IsFavourite;
+
+	/// <summary>The star's name and tooltip: "Add Movies to the top bar", "Remove Movies from the top bar".</summary>
+	public string StarName => TopFavourites.StarName(Name, IsFavourite);
+	// end 1.6 topbar
+
+	// 1.6 collections: the "Collections & playlists" group's "Made by Nixie · 48" tile (not a server view)
+	/// <summary>Nixie 1.6: the tile of Nixie's own collections (it opens the Collections page at Made by Nixie).</summary>
+	public bool IsMadeByNixie { get; init; }
+
+	/// <summary>Nixie 1.6: the Made by Nixie tile's art: a 2×2 mosaic of its first collections' posters (none on a server view).</summary>
+	public IReadOnlyList<BaseItemDto> Mosaic { get; init; } = [];
+
+	public static LibraryTile MadeByNixie(int count, IReadOnlyList<BaseItemDto>? mosaic = null)
+	{
+		var tile = new LibraryTile(new BaseItemDto { Name = "Made by Nixie", Type = BaseItemDto_Type.UserView }) { IsMadeByNixie = true, Mosaic = mosaic ?? [] };
+		tile.SetCounts(new LibraryCounts(count, null));
+		return tile;
+	}
+
+	private static string MadeByNixieName(LibraryCounts? counts) =>
+		counts is null ? "Made by Nixie" : $"Made by Nixie, {N(counts.Total)} {(counts.Total == 1 ? "collection" : "collections")}";
+	// end 1.6 collections
 
 	public void SetCounts(LibraryCounts? counts)
 	{
@@ -137,6 +168,7 @@ public partial class LibrariesLandingPageViewModel(IJellyfinClient jellyfinClien
 		}
 
 		HasCollections = Collections.Count > 0;
+		_ = AddMadeByNixie(); // 1.6 collections
 		if (tiles.Count == 0)
 		{
 			return LoadOutcome.Empty("No libraries yet", $"Libraries added on {LoadMessages.ServerName()} appear here.");
@@ -151,4 +183,43 @@ public partial class LibrariesLandingPageViewModel(IJellyfinClient jellyfinClien
 	{
 		navigationService.NavigateTo<LibraryViewModel>(library);
 	}
+
+	// 1.6 collections: the "Collections & playlists" group opens the Collections page at its section
+	/// <summary>Nixie 1.6: a tile of the group: the Collections page at the server's box sets, Playlists, or Made by Nixie.</summary>
+	public void OpenTile(LibraryTile tile)
+	{
+		if (tile.IsMadeByNixie || IsCollectionsView(tile.Library))
+		{
+			var section = tile.IsMadeByNixie ? CollectionsSection.MadeByNixie
+				: tile.Library.CollectionType == BaseItemDto_CollectionType.Playlists ? CollectionsSection.Playlists : CollectionsSection.Server;
+			navigationService.NavigateTo(typeof(CollectionsViewModel).FullName!, new CollectionsPlace(section));
+			return;
+		}
+
+		NavigateToLibrary(tile.Library);
+	}
+
+	/// <summary>"Made by Nixie · 48" at the group's end, once the library index is in (none when Nixie made none).</summary>
+	private async Task AddMadeByNixie()
+	{
+		if (SmartCollectionServices.Index is not { } index || await index.GetAsync() is not { } snapshot)
+		{
+			return;
+		}
+
+		var boxed = (await jellyfinClient.GetBoxSets())?.Items?.Select(x => SmartCollections.IndexEntry.ProviderId(x, "Tmdb")).OfType<string>().ToHashSet() ?? [];
+		var made = await SmartCollections.SmartCollectionCatalog.BuildAllAsync(snapshot, DateTimeOffset.Now, boxed, SmartCollections.CollectionSettings.KindsOff(SmartCollectionServices.Settings));
+		if (made.Count == 0 || Collections.Any(x => x.IsMadeByNixie))
+		{
+			return;
+		}
+
+		// the art: a poster from each of four collections (the franchises first, as the page lists them)
+		var mosaic = made.OrderBy(x => x.Kind == SmartCollections.SmartCollectionKind.Franchise ? 0 : 1)
+			.Select(x => x.Cover.FirstOrDefault(c => c.PrimaryTag is not null)).OfType<SmartCollections.IndexEntry>()
+			.DistinctBy(x => x.Id).Take(4).Select(x => x.ToDto()).ToList();
+		Collections.Add(LibraryTile.MadeByNixie(made.Count, mosaic));
+		HasCollections = true;
+	}
+	// end 1.6 collections
 }

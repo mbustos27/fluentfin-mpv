@@ -56,14 +56,15 @@ public sealed partial class PartOfLink : UserControl
 		for (var i = 0; i < collections.Count; i++)
 		{
 			var collection = collections[i];
+			var shown = Core.ViewModels.CollectionNames.Display(collection).Trim(); // 1.6 collections: "[HUB] Marvel" reads "Marvel"
 			var link = new HyperlinkButton
 			{
-				Content = collection.Name!.Trim(),
+				Content = shown,
 				VerticalAlignment = VerticalAlignment.Center,
 				Style = Application.Current.Resources["NixieLinkButtonStyle"] as Style,
 			};
 			AutomationProperties.SetName(link, ItemMeta.PartOfName(collection));
-			ToolTipService.SetToolTip(link, $"Open the collection {collection.Name!.Trim()}");
+			ToolTipService.SetToolTip(link, $"Open the collection {shown}");
 			link.Click += (_, _) => App.Commands.DisplayDto(collection);
 			_row.Children.Add(link);
 			if (i < collections.Count - 1)

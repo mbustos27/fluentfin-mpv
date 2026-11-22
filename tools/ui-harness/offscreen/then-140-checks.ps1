@@ -145,10 +145,13 @@ function IcFacts([string]$Where, $Elements) {
     }
     Check "names ($icTag): $Where, every number shown is in the name" ($bad.Count -eq 0) "$seen read; $($bad -join '; ')"
 }
-function IcCards([double]$MinY = 140) {
+# 1.6 integration: -Kind 'collection' or 'playlist' gives the Collections page's tiles instead (buttons named "<name>,
+# collection, ..." or "<name>, playlist, ...", CollectionTile): the server's Collections and Playlists views open that page
+function IcCards([double]$MinY = 140, [string]$Kind) {
     $win = IcWin
-    @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition($icUia::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) |
-        Where-Object { try { -not $_.Current.IsOffscreen -and ($_.Current.BoundingRectangle.Top - $win.Top) -gt $MinY -and $_.Current.Name } catch { $false } } |
+    $icCardType = if ($Kind) { [System.Windows.Automation.ControlType]::Button } else { [System.Windows.Automation.ControlType]::ListItem }
+    @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition($icUia::ControlTypeProperty, $icCardType))) |
+        Where-Object { try { -not $_.Current.IsOffscreen -and ($_.Current.BoundingRectangle.Top - $win.Top) -gt $MinY -and $_.Current.Name -and (-not $Kind -or $_.Current.Name -like "*, $Kind*") } catch { $false } } |
         Sort-Object { $_.Current.BoundingRectangle.Top }, { $_.Current.BoundingRectangle.Left })
 }
 
@@ -206,14 +209,22 @@ $icViews = @($fixture.views | Where-Object { $_ })
 foreach ($icView in $icViews) {
     try { Open-Nav 'Home'; IcSettle 800; Open-Library $icView } catch { Check "views ($icTag): $icView opens" $false $_.Exception.Message; continue }
     $icAt = Get-Epoch
-    $icFirst = Wait-Until { IcCards | Select-Object -First 1 } -Seconds 30 -PollMs 250
+    # 1.6 integration: Collections (the top bar's) and Playlists (the Libraries page's tile) open the Collections page, its
+    # tiles of that kind; any other view is its library page's cards
+    $icKind = ''
+    if ($icView -in @('Collections', 'Playlists')) {
+        $icTry = if ($icView -eq 'Playlists') { 'playlist' } else { 'collection' }
+        if (Wait-Until { IcCards -Kind $icTry | Select-Object -First 1 } -Seconds 15 -PollMs 250) { $icKind = $icTry }
+    }
+    $icType = if ($icKind) { 'Button' } else { 'ListItem' }
+    $icFirst = Wait-Until { IcCards -Kind $icKind | Select-Object -First 1 } -Seconds 30 -PollMs 250
     if (-not $icFirst) {
         IcShot "view-$(Safe-Name $icView)-empty"
         Check "views ($icTag): $icView shows its items" $false 'no card'
         continue
     }
     IcFocusNamed "opening the $icView library"
-    IcFacts "the $icView cards" (IcCards)
+    IcFacts "the $icView cards" (IcCards -Kind $icKind)
     if ($icView -eq 'Archive') {
         $icPerf = Wait-Until { IcLog $icAt '\[perf\] library: first card' | Select-Object -Last 1 } -Seconds 10 -PollMs 250
         Check "archive ($icTag): the first card's time is logged ([perf])" ([bool]$icPerf) "$icPerf"
@@ -222,7 +233,7 @@ foreach ($icView in $icViews) {
         IcShot 'archive-end-1920'
         IcKey 0x24; IcSettle 1500
     }
-    $icFirst = IcCards | Select-Object -First 1
+    $icFirst = IcCards -Kind $icKind | Select-Object -First 1
     $icName = $icFirst.Current.Name
     $icTitle = ($icName -split ', ')[0]
     [void][OffscreenUi]::SetFocus($icFirst); IcSettle 400
@@ -230,13 +241,13 @@ foreach ($icView in $icViews) {
     # (Editorial: the details in place first; their Full details opens the page)
     $icFull = Wait-Until { Find-Ui -Name 'Full details' -Type 'Button' -Contains } -Seconds 2 -PollMs 150
     if ($icFull) { [void][OffscreenUi]::SetFocus($icFull); IcSettle 300; IcKey 0x0D }
-    $icOpened = Wait-Until { if (-not (Find-Ui -Name $icName -Type 'ListItem') -and (Find-Ui -Name $icTitle -Contains)) { $true } } -Seconds 15 -PollMs 250
+    $icOpened = Wait-Until { if (-not (Find-Ui -Name $icName -Type $icType) -and (Find-Ui -Name $icTitle -Contains)) { $true } } -Seconds 15 -PollMs 250
     Check "views ($icTag): $icView's first item ('$icTitle') opens its page" ([bool]$icOpened) "$(IcDesc (IcFocus))"
     if ($icOpened) {
         IcFocusNamed "opening '$icTitle' from $icView"
         IcShot "view-$(Safe-Name $icView)-item"
         IcBack
-        $icBack = Wait-Until { Find-Ui -Name $icName -Type 'ListItem' -OffscreenToo } -Seconds 12 -PollMs 250
+        $icBack = Wait-Until { Find-Ui -Name $icName -Type $icType -OffscreenToo } -Seconds 12 -PollMs 250
         Check "views ($icTag): Back from '$icTitle' comes back to $icView" ([bool]$icBack) ''
         if ($icBack) { IcFocusNamed "Back to $icView" }
     }

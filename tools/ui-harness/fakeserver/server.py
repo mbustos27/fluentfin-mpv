@@ -276,6 +276,7 @@ class Server:
         self.reports = []           # playback reports: kind, item, position, play session, client
         self.sockets = []
         self.stopped_lag = 0.0      # sg-cw: POST /__harness/lag: a Stopped report is applied this many seconds after it is answered
+        self.refuse_playlists = 0   # 1.6 collections: POST /__harness/playlists {"refuse": 403}: POST /Playlists answers that
         self.image_cache = collections.OrderedDict()
         self.started = time.time()
         self.log_file = open(os.path.join(out, "requests.jsonl"), "a", encoding="utf-8")
@@ -1014,6 +1015,28 @@ class Server:
                             item = lib.set_position(item["Id"], body["PlaybackPositionTicks"]) or item
                         outer.push_user_data(self.uid, [item])
                     return self._json(200, lib.user_data(item))
+                # 1.6 collections: "Save as playlist": POST /Playlists (any signed-in user may), the ids in the body (or the
+                # query, as older clients send them); the playlist is the user's own, in the order sent
+                if low == "/playlists" and method == "POST":
+                    self.route = "playlist-create"
+                    if outer.refuse_playlists:
+                        return self._json(outer.refuse_playlists, None)
+                    body = self._body()
+                    ids = body.get("Ids") or [x for v in self.q.get("ids", []) for x in v.split(",") if x]
+                    # an empty name is made too, as 10.11.11 and 12.4.0 make it (live-save-playlist.ps1)
+                    name = str(body.get("Name") or self._one("name", "") or "").strip()
+                    # as 10.11.11 and 12.4.0: a playlist whose IsPublic is left out is public (every account sees it)
+                    public = body.get("IsPublic", True) is not False
+                    return self._json(200, {"Id": lib.create_playlist(name, [library.norm_id(i) for i in ids], public)})
+                # 1.6 collections: GET /Playlists/{id}: who sees a playlist (Jellyfin 10.9+'s PlaylistDto)
+                mm = match(r"/playlists/" + ID)
+                if mm and method == "GET":
+                    self.route = "playlist"
+                    item = lib.items.get(library.norm_id(mm.group(1)))
+                    if not item or not item.get("playlist"):
+                        return self._json(404, None)
+                    return self._json(200, {"OpenAccess": bool(item.get("public", False)), "Shares": [],
+                                            "ItemIds": list(lib.children.get(item["Id"], []))})
                 if low.startswith("/user_usage_stats/"):
                     # the Playback Reporting plugin's API: a server without the plugin answers 404, as this one does
                     self.route = "plugin-absent"
@@ -1151,6 +1174,10 @@ class Server:
                     return self._json(200, {"episodes": [{"id": e["Id"], "name": e["Name"], "season": e["parent_index"],
                                                           "index": e["index"], "runtime": outer.lib.runtime / 1e7}
                                                          for e in eps]})
+                # 1.6 collections: {"refuse": 403|401|500|0}: "Save as playlist" is refused with that status from now on (0: made)
+                if low == "/__harness/playlists" and method == "POST":
+                    outer.refuse_playlists = int(self._body().get("refuse") or 0)
+                    return self._json(200, {"refuse": outer.refuse_playlists})
                 if low == "/__harness/lag" and method == "POST":
                     # sg-cw: {"stopped_ms": N}: Stopped reports are answered at once and applied N ms later (0: at once)
                     outer.stopped_lag = max(0.0, float(self._body().get("stopped_ms") or 0) / 1000.0)

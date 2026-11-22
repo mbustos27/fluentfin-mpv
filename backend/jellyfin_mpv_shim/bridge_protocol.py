@@ -42,10 +42,14 @@ MPV_NOT_FOUND = "mpv_not_found"
 NO_PLAYBACK = "no_playback"
 WINDOW_LOCKED = "window_locked"
 INTERNAL = "internal"
+# 1.6 player: the server will not convert the video for this account
+# (set_quality; BRIDGE.md section 2)
+NOT_ALLOWED = "not_allowed"
 
 ERROR_CODES = frozenset({
     NOT_CONNECTED, BAD_ARGS, UNKNOWN_CMD, AUTH_FAILED, SERVER_UNREACHABLE,
     MPV_FAILED, MPV_NOT_FOUND, NO_PLAYBACK, WINDOW_LOCKED, INTERNAL,
+    NOT_ALLOWED,  # 1.6 player
 })
 
 
@@ -423,13 +427,29 @@ def validate_subtitle_delay(args):
 def validate_skip_options(args):
     """``set_skip_options`` args -> ``{"onlineLookup": bool|None,
     "learnIntros": bool|None}``: each optional (None = leave as is), a bool
-    when given."""
+    when given. 1.6 skip: and ``"learnSkips"`` (the same switch, renamed;
+    it wins over ``learnIntros``), ``"segmentActions"`` (``{type: action}``
+    or None) and ``"ruleAction"`` (``"ask"``/``"always"`` or None)."""
     out = {}
     for key in ("onlineLookup", "learnIntros"):
         value = args.get(key)
         if value is not None and not isinstance(value, bool):
             raise _bad("%s must be true or false" % key)
         out[key] = value
+    # -- 1.6 skip ----------------------------------------------------------
+    learn = args.get("learnSkips")
+    if learn is not None and not isinstance(learn, bool):
+        raise _bad("learnSkips must be true or false")
+    if learn is not None:
+        out["learnIntros"] = learn
+    out["segmentActions"] = validate_segment_actions(args.get(
+        "segmentActions"))
+    rule_action = args.get("ruleAction")
+    if rule_action is not None and rule_action not in SKIP_RULE_ACTIONS:
+        raise _bad("ruleAction must be one of %s"
+                   % ", ".join(SKIP_RULE_ACTIONS))
+    out["ruleAction"] = rule_action
+    # -- end 1.6 skip ------------------------------------------------------
     return out
 
 
@@ -861,8 +881,9 @@ def _clamp_ticks(ticks):
     return min(MAX_TICKS, max(0, ticks))
 
 
-#: Where a segment came from (BRIDGE.md ``segments.source``).
-SEGMENT_SOURCES = ("server", "chapters", "online", "learned")
+#: Where a segment came from (BRIDGE.md ``segments.source``; 1.6 skip:
+#: ``rule``).
+SEGMENT_SOURCES = ("server", "chapters", "online", "learned", "rule")
 
 
 def segment_list(segments):
@@ -876,6 +897,8 @@ def segment_list(segments):
     for entry in segments or ():
         kind, start, end, action = entry[:4]
         source = entry[4] if len(entry) > 4 else "server"
+        # 1.6 skip: a rule's segment names its rule and where it came from
+        extra = entry[5] if len(entry) > 5 and source == "rule" else None
         if source not in SEGMENT_SOURCES:
             source = "server"
         start_ticks = seconds_to_ticks(start)
@@ -888,23 +911,37 @@ def segment_list(segments):
                 or start_ticks is None or end_ticks is None
                 or end_ticks <= start_ticks):
             continue
-        out.append({"type": kind, "startTicks": start_ticks,
-                    "endTicks": end_ticks, "action": action,
-                    "source": source})
+        segment = {"type": kind, "startTicks": start_ticks,
+                   "endTicks": end_ticks, "action": action,
+                   "source": source}
+        if extra:   # 1.6 skip
+            segment.update(_rule_fields(extra))
+        out.append(segment)
     return out
+
+
+#: 1.6 skip: the last stretch of a segment that is no longer offered. mpv's
+#: exact seek lands on the frame at or before its target (97.875 for a seek
+#: to a snapped 97.88, at 24 fps), so the seek to a segment's end that skips
+#: it could leave the position inside it, and the offer came back with the
+#: next sample (seen in the harness). A tenth of a second covers 10 fps.
+OFFER_END_SLACK_TICKS = 1_000_000
 
 
 def offered_segment(segments, position):
     """The index in ``segments`` (a `segment_list`) of the one on offer at
     ``position`` (seconds): the first ``ask`` segment the position is in,
     start inclusive and end exclusive -- so the seek to its end that skips
-    it also ends the offer. None when there is none, or no position."""
+    it also ends the offer (1.6 skip: its last tenth of a second is not
+    offered, `OFFER_END_SLACK_TICKS`). None when there is none, or no
+    position."""
     ticks = seconds_to_ticks(position)
     if ticks is None:
         return None
     for index, segment in enumerate(segments):
         if (segment["action"] == "ask"
-                and segment["startTicks"] <= ticks < segment["endTicks"]):
+                and segment["startTicks"] <= ticks
+                < segment["endTicks"] - OFFER_END_SLACK_TICKS):
             return index
     return None
 
@@ -928,4 +965,159 @@ def next_payload(item_id, queue, auto_play):
         if index > 0 and ids[index - 1]:
             out["previousItemId"] = ids[index - 1]
     out["autoPlay"] = bool(auto_play) and "nextItemId" in out
+    return out
+
+
+# -- 1.6 skip: skip rules (BRIDGE.md section 4 ``skip_rules``,
+# ``add_skip_rule``, ``forget_skip_rules``, ``answer_skip_suggestion``;
+# section 5 ``skip_suggestion`` and ``segments`` with ``source: "rule"``) ---
+
+#: What a skip rule does: offer a Skip button, or skip by itself.
+SKIP_RULE_ACTIONS = ("ask", "always")
+#: The segment types ``set_skip_options.segmentActions`` can set.
+SEGMENT_TYPES = ("Intro", "Outro", "Commercial", "Preview", "Recap")
+#: The actions it can set them to ("off": neither fetched nor listed).
+SEGMENT_TYPE_ACTIONS = ("off", "ask", "always")
+SKIP_ANCHORS = ("start", "end")
+#: The longest part a rule may cover, in seconds (an ad block, never an act).
+MAX_SKIP_RULE_SECONDS = 600.0
+#: The latest a rule may sit from its anchor, in seconds.
+MAX_SKIP_RULE_OFFSET = 4 * 3600.0
+SUGGESTION_ANSWERS = ("yes", "not_now", "never")
+_RULE_ID = re.compile(r"^(r[0-9a-f]{12}|intro-[0-9a-f]{32}-\d{1,4})$")
+_CANDIDATE_ID = re.compile(r"^c[0-9a-f]{12}$")
+
+
+def validate_segment_actions(value):
+    """``segmentActions``: ``{type: "off"|"ask"|"always"}`` for some of
+    `SEGMENT_TYPES` (others are left as they are), or None."""
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise _bad("segmentActions must be an object")
+    out = {}
+    for kind, action in value.items():
+        if kind not in SEGMENT_TYPES:
+            raise _bad("segmentActions: unknown segment type %r" % (kind,))
+        if action not in SEGMENT_TYPE_ACTIONS:
+            raise _bad("segmentActions.%s must be one of %s"
+                       % (kind, ", ".join(SEGMENT_TYPE_ACTIONS)))
+        out[kind] = action
+    return out
+
+
+def _rule_fields(extra):
+    out = {}
+    if isinstance(extra.get("ruleId"), str):
+        out["ruleId"] = extra["ruleId"]
+    if extra.get("origin") in ("marked", "learned"):
+        out["origin"] = extra["origin"]
+    if extra.get("anchor") in SKIP_ANCHORS:
+        out["anchor"] = extra["anchor"]
+    return out
+
+
+def _series_arg(args, required):
+    value = args.get("seriesId")
+    if value is None:
+        if required:
+            raise _bad("seriesId is required")
+        return None
+    normalized = normalize_item_id(value)
+    if normalized is None:
+        raise _bad("seriesId must be a Jellyfin item id")
+    return normalized
+
+
+def _seconds_arg(args, key):
+    value = float(get_number(args, key))
+    if not 0.0 <= value <= MAX_SKIP_RULE_OFFSET:
+        raise _bad("%s must be between 0 and %g" % (key,
+                                                     MAX_SKIP_RULE_OFFSET))
+    return value
+
+
+def validate_add_skip_rule(args):
+    """``add_skip_rule`` args: ``seriesId`` (optional: the show playing),
+    ``seriesName`` (optional), ``anchor``, ``startS``, ``endS``, ``action``
+    (optional: the Settings choice). For ``start`` the times are seconds
+    from the episode's start (``startS < endS``); for ``end`` seconds
+    *before* its end (``startS > endS >= 0``). At most
+    `MAX_SKIP_RULE_SECONDS` long."""
+    anchor = get_str(args, "anchor")
+    if anchor not in SKIP_ANCHORS:
+        raise _bad("anchor must be one of %s" % ", ".join(SKIP_ANCHORS))
+    start = _seconds_arg(args, "startS")
+    end = _seconds_arg(args, "endS")
+    span = end - start if anchor == "start" else start - end
+    if span <= 0:
+        raise _bad("startS must be %s endS for a rule anchored to the %s"
+                   % ("before" if anchor == "start" else "farther from the "
+                      "end than", anchor))
+    if span > MAX_SKIP_RULE_SECONDS:
+        raise _bad("a skip rule covers at most %d seconds"
+                   % MAX_SKIP_RULE_SECONDS)
+    action = args.get("action")
+    if action is not None and action not in SKIP_RULE_ACTIONS:
+        raise _bad("action must be one of %s" % ", ".join(SKIP_RULE_ACTIONS))
+    name = get_str(args, "seriesName", required=False, nullable=True,
+                   allow_empty=True)
+    return {"seriesId": _series_arg(args, required=False),
+            "seriesName": name.strip()[:200] if name else None,
+            "anchor": anchor, "startS": start, "endS": end,
+            "action": action}
+
+
+def validate_forget_skip_rules(args):
+    """``forget_skip_rules`` args: ``seriesId`` and ``ruleId``, each
+    optional (both left out: everything)."""
+    rule_id = get_str(args, "ruleId", required=False, nullable=True)
+    if rule_id is not None and not _RULE_ID.match(rule_id):
+        raise _bad("ruleId is not a skip rule's id")
+    return {"seriesId": _series_arg(args, required=False),
+            "ruleId": rule_id}
+
+
+def validate_skip_suggestion_answer(args):
+    """``answer_skip_suggestion`` args: ``id`` (the ``skip_suggestion``'s),
+    ``answer`` and an optional ``action`` for a ``yes``."""
+    suggestion = get_str(args, "id")
+    if not _CANDIDATE_ID.match(suggestion):
+        raise _bad("id is not a skip suggestion's id")
+    answer = get_str(args, "answer")
+    if answer not in SUGGESTION_ANSWERS:
+        raise _bad("answer must be one of %s" % ", ".join(SUGGESTION_ANSWERS))
+    action = args.get("action")
+    if action is not None and action not in SKIP_RULE_ACTIONS:
+        raise _bad("action must be one of %s" % ", ".join(SKIP_RULE_ACTIONS))
+    return {"id": suggestion, "answer": answer, "action": action}
+
+
+def validate_skip_rules_account(args):
+    """``skip_rules`` and ``forget_skip_rules`` before ``connect``: whose
+    rules, as ``serverId`` and ``userId`` (no secret: the ids Jellyfin
+    shows any client). None when neither is given."""
+    server = args.get("serverId")
+    user = args.get("userId")
+    if server is None and user is None:
+        return None
+    server = get_str(args, "serverId")
+    user = normalize_item_id(get_str(args, "userId"))
+    if user is None:
+        raise _bad("userId must be a Jellyfin user id")
+    return {"serverId": server.strip(), "userId": user}
+
+
+def skip_suggestion_payload(suggestion):
+    """The ``skip_suggestion`` event from `skip_rules.SkipWatcher`'s."""
+    out = {"id": suggestion["id"],
+           "itemId": item_id_out(suggestion.get("itemId")),
+           "seriesId": item_id_out(suggestion.get("seriesId")),
+           "anchor": suggestion["anchor"],
+           "startTicks": _clamp_ticks(seconds_to_ticks(
+               suggestion["startS"]) or 0),
+           "endTicks": _clamp_ticks(seconds_to_ticks(
+               suggestion["endS"]) or 0)}
+    if suggestion.get("seriesName"):
+        out["seriesName"] = suggestion["seriesName"]
     return out

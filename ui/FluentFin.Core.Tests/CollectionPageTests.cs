@@ -62,7 +62,7 @@ public sealed class CollectionPageTests
 		Assert.Equal("1979", CollectionBrowse.YearSpan([.. films.Where(x => x.ProductionYear == 1979)]));
 		Assert.Equal(1.0 / 6, CollectionBrowse.Progress(films), 3);
 		Assert.Equal("5 of 6 films", CollectionBrowse.ShownText(5, films));
-		Assert.Equal("6 films", CollectionBrowse.ShownText(6, films));
+		Assert.Equal("", CollectionBrowse.ShownText(6, films)); // 1.6 colpage (C2): the summary says it once
 		Assert.Equal("All 6 films are watched", CollectionBrowse.AllWatchedText(films));
 		var mixed = new List<BaseItemDto> { new() { Type = BaseItemDto_Type.Movie }, new() { Type = BaseItemDto_Type.Series } };
 		Assert.Equal("2 items · 0 of 2 watched", CollectionBrowse.Summary(mixed, playlist: true));
@@ -436,7 +436,7 @@ public sealed class CollectionPageTests
 		var (vm, _, _) = Page(set, CopperAndGlass().Take(1).ToList());
 		await vm.OnNavigatedTo(set);
 		Assert.Equal("1 film · 2000 · 0 of 1 watched", vm.Summary);
-		Assert.Equal("1 film", vm.ShownText);
+		Assert.Equal("", vm.ShownText); // 1.6 colpage (C2)
 		Assert.Equal("Play Forest of Brightwater, film 1 of 1", vm.PlayName);
 	}
 
@@ -494,7 +494,7 @@ public sealed class CollectionPageTests
 		vm.HideWatched = true;
 		vm.HideWatched = false;
 		Assert.Equal(6, vm.Entries.Count);
-		Assert.Equal("6 films", vm.ShownText);
+		Assert.Equal("", vm.ShownText); // 1.6 colpage (C2): no heading once nothing is hidden
 	}
 
 	[Fact]

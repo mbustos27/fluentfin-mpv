@@ -212,6 +212,47 @@
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
+
+            <!--  1.6 collections: the Made by Nixie rows, after "New in ...", each under a small "Made by Nixie" kicker  -->
+            <ItemsControl x:Name="NixieRows" Margin="0,20,0,0" IsTabStop="False" ItemsSource="{x:Bind ViewModel.NixieRows}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:NixieHomeRowViewModel">
+                        <StackPanel Spacing="0">
+                            <TextBlock
+                                Margin="{StaticResource SmallLeftRightMargin}"
+                                CharacterSpacing="80"
+                                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="MADE BY NIXIE" />
+                            <lc:ShelfRow
+                                Margin="{StaticResource SmallLeftRightMargin}"
+                                HasSeeAll="True"
+                                Header="{x:Bind Title}"
+                                ItemsSource="{x:Bind Items, Mode=OneWay}"
+                                SeeAll="NixieSeeAll"
+                                Tag="{x:Bind}">
+                                <lc:ShelfRow.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BaseItemViewModel">
+                                        <lc:BaseItemDtoCard
+                                            Width="225"
+                                            Height="385"
+                                            BlurHashImageSource="{x:Bind c:BaseItemDtoConverters.GetBlurHash(Dto, jm:ImageType.Primary, 302)}"
+                                            ImageSource="{x:Bind c:BaseItemDtoConverters.GetImage(Dto, jm:ImageType.Primary, 302)}"
+                                            JellyfinClient="{Binding ElementName=Page, Path=ViewModel.JellyfinClient}"
+                                            Model="{x:Bind}" />
+                                    </DataTemplate>
+                                </lc:ShelfRow.ItemTemplate>
+                            </lc:ShelfRow>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="20" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+            <!--  end 1.6 collections  -->
             </StackPanel>
 
         </StackPanel>

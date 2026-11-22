@@ -2265,9 +2265,10 @@ class TrackerTest(unittest.TestCase):
         events = self.step(video=a, position=0.0, duration=60.0,
                            paused=False)
         self.assertEqual(self.names(events),
-                         ["item", "tracks", "segments", "next", "state",
-                          "position"])
-        snap = events[4][1]
+                         ["item", "tracks", "segments", "next",
+                          "stream",     # 1.6 player
+                          "state", "position"])
+        snap = events[5][1]     # 1.6 player: after "stream"
         self.assertEqual((snap["state"], snap["itemId"], snap["mediaSourceId"],
                           snap["playSessionId"], snap["playMethod"],
                           snap["queue"]),
@@ -2290,6 +2291,7 @@ class TrackerTest(unittest.TestCase):
         events = self.step(video=b, position=0.0, duration=30.0)
         self.assertEqual(self.names(events),
                          ["ended", "item", "tracks", "segments", "next",
+                          "stream",     # 1.6 player
                           "state", "position"])
         self.assertEqual(events[0][1], {"itemId": A, "reason": "eof"})
         events = self.step(video=None)
@@ -2413,7 +2415,9 @@ class TrackerTest(unittest.TestCase):
                           "no offer from a position read while opening")
         self.assertIsNone(self.tracker.offer())
         currents = []
-        for position in (0.0, 5.0, 10.0, 30.0, 60.0, 69.9, 70.0, 80.0,
+        # (1.6 skip: 69.85, not 69.9: the last tenth of a second is not
+        # offered, bridge_protocol.OFFER_END_SLACK_TICKS)
+        for position in (0.0, 5.0, 10.0, 30.0, 60.0, 69.85, 70.0, 80.0,
                          101.0, 110.0, 130.0):
             events = self.step(video=a, position=position,
                                segments=self.SEGMENTS)

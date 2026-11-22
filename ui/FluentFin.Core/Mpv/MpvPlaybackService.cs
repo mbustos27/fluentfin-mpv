@@ -184,6 +184,7 @@ public sealed class MpvPlaybackService
 		await SendControlsAsync(generation, controls, cancellationToken);
 		await SendSkipOptionsAsync(generation, skipOptions, cancellationToken);
 		await SendAutoPlayAsync(generation, autoPlay, cancellationToken);
+		await SendQualityDefaultsAsync(generation, cancellationToken); // 1.6 player
 		_logger.LogInformation("Playing {Count} item(s) with mpv from index {Index} ({ItemId}) at {Position}, mediaSource={MediaSource}, audio={Audio}, subtitle={Subtitle}",
 			request.ItemIds.Count, request.StartIndex, request.StartItemId, TimeSpan.FromTicks(request.StartPositionTicks), request.MediaSourceId, request.AudioStreamIndex, request.SubtitleStreamIndex);
 		var timeline = TimelineOf(generation);
@@ -323,6 +324,47 @@ public sealed class MpvPlaybackService
 			_logger.LogWarning("Could not tell the mpv backend whether to play the next item by itself: {Message}", ex.Message);
 		}
 	}
+
+	// 1.6 player
+	/// <summary>
+	/// 1.6: the default quality at home and away (<c>set_quality_defaults</c>, docs/BRIDGE.md §4), sent before every play:
+	/// the page sets it from Settings just before <see cref="PlayAsync"/>. Null sends nothing (the backend keeps Auto).
+	/// </summary>
+	public JsonObject? QualityDefaults { get; set; }
+
+	private async Task SendQualityDefaultsAsync(long generation, CancellationToken cancellationToken)
+	{
+		if (QualityDefaults?.DeepClone() is not JsonObject defaults)
+		{
+			return;
+		}
+
+		try
+		{
+			await SendIfCurrentAsync(generation, Bridge.Commands.SetQualityDefaults, defaults, cancellationToken: cancellationToken);
+		}
+		catch (BridgeException ex)
+		{
+			// an older backend (unknown_cmd) plays with its own settings, as before 1.6
+			_logger.LogWarning("Could not tell the mpv backend the default quality: {Message}", ex.Message);
+		}
+	}
+
+	/// <summary>
+	/// 1.6: a read-only question for the page with this generation (<c>get_stats</c>), its answer back; null when the page is
+	/// gone. Not behind the commands' gate (it changes nothing, and a slow answer must not hold a seek back), and bounded by
+	/// <paramref name="timeout"/>. Throws what <see cref="IMpvBackend.SendAsync"/> throws (the caller shows "not available").
+	/// </summary>
+	public async Task<JsonNode?> QueryIfCurrentAsync(long generation, string command, JsonObject? args = null, TimeSpan? timeout = null)
+	{
+		if (!IsCurrent(generation) || !_backend.Status.IsRunning)
+		{
+			return null;
+		}
+
+		return await _backend.SendAsync(command, args, timeout ?? TimeSpan.FromSeconds(2));
+	}
+	// end 1.6 player
 
 	/// <summary>fluentfin-mpv player controls: who draws them, before the play (a backend that refuses it plays on with its own).</summary>
 	private async Task SendControlsAsync(long generation, JsonObject? controls, CancellationToken cancellationToken)

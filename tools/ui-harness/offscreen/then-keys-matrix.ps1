@@ -1,4 +1,4 @@
-# Nixie 1.3.1, the keyboard matrix: every documented player key, in every context, checked through the player's own state.
+﻿# Nixie 1.3.1, the keyboard matrix: every documented player key, in every context, checked through the player's own state.
 # Run once per layout theme (tools\ui-harness\keys-matrix.ps1 runs all four and writes shots\keys-matrix.md):
 #   NIXIE_LAYOUT=<Classic|DriveIn|Cinematic|Editorial> run-offscreen.ps1 ... -Script season,play -Then offscreen\then-keys-matrix.ps1
 # Dot-sourced by drive.ps1 after the play step (FluentFin's controls; paused, the bars up). Every name here starts with KM.
@@ -193,6 +193,8 @@ function KM-State([switch]$NoUi) {
         Full = (Get-WindowState $script:hwnd).FullScreen
     }
     if (-not $NoUi) { $s.Bars = KM-Bars }
+    # 1.6 player: the Playback stats panel shown (UI Automation), read only for the I rows
+    if ($script:kmStats) { $s.Stats = [bool](Find-Ui -Id 'StatsPanel') }
     [pscustomobject]$s
 }
 function KM-Focus { $f = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id); if ($f) { ($f | ConvertFrom-Json) } else { $null } }
@@ -291,6 +293,7 @@ function KM-Did([string]$Chord, $B, $A) {
         'X' { return $A.Delay -gt $B.Delay + 0.05 }
         'S' { return $null -ne $A.Pos -and $A.Pos -ge 39 }
         { $_ -in 'Shift+N', 'Shift+P' } { return $A.Title -and $A.Title -ne $B.Title }
+        'I' { return $null -ne $A.Stats -and $A.Stats -ne $B.Stats }    # 1.6 player: Playback stats shown or hidden
         default { return $false }
     }
 }
@@ -298,6 +301,7 @@ function KM-Did([string]$Chord, $B, $A) {
 # presses a key and checks it did its job (polled up to $Seconds); the row says where the key went and what it changed. A
 # chord's modifiers stay held until the key has done its job or the time is up.
 function KM-Key([string]$Section, [string]$Case, [string]$Chord, [double]$Seconds = 2.5) {
+    $script:kmStats = $Chord -eq 'I'    # 1.6 player
     $b = KM-State -NoUi
     $parts = $Chord -split '\+'
     $mods = ($parts -contains 'Ctrl') -or ($parts -contains 'Shift') -or ($parts -contains 'Alt')
@@ -533,6 +537,64 @@ if ($script:page -ne 'player') {
             $kbB = KB-Focus; [void](KM-Press 'Tab'); Start-Sleep -Milliseconds 500
             KM-Row 'browsing' 'Movie' 'Tab (moves the focus)' (-not (KB-Same (KB-Focus) $kbB)) "$(KB-Desc $kbB) -> $(KB-Desc (KB-Focus))"
             KB-Back 'Movie' { Find-MediaCard $fixture.movie.name }
+        }
+    }
+    # -- 1.6 colpage: the presets strip (every theme): the keyboard on the lit preset (All: Cinematic's tabs let only the lit
+    # one take the focus), Right to Unwatched, Space turns it on and Space again off, Left back to All, Enter on All takes
+    # every filter off. A key is pressed only once the focus is where the row says (else the row fails, nothing pressed).
+    Open-Library $fixture.movie.library
+    [void](Wait-Until { Find-MediaCard $fixture.movie.name } -Seconds 30 -PollMs 150)
+    Start-Sleep -Milliseconds 1500
+    $kmAll = Find-Ui -Name 'All titles' -Contains
+    if ($kmAll) { [void][OffscreenUi]::SetFocus($kmAll); Start-Sleep -Milliseconds 400 }
+    $kmF = KB-Focus
+    if ($kmF -and $kmF.name -like 'All titles*') {
+        $kmUnw = KB-Moves 'Library presets' 'Right' $null
+        if ($kmUnw -and $kmUnw.name -like 'Unwatched*') {
+            [void](KM-Press 'Space')
+            $kmOn = Wait-Until { Find-Ui -Name 'Showing ' -Type 'Text' -Contains } -Seconds 4 -PollMs 150
+            KM-Row 'browsing' 'Library presets' 'Space on Unwatched (turns it on)' ([bool]$kmOn) "$(KB-Desc (KB-Focus))"
+            [void](KM-Press 'Space')
+            $kmOff = Wait-Until { if (-not (Find-Ui -Name 'Showing ' -Type 'Text' -Contains)) { $true } } -Seconds 4 -PollMs 150
+            KM-Row 'browsing' 'Library presets' 'Space again (turns it off: the way out)' ([bool]$kmOff) "$(KB-Desc (KB-Focus))"
+            [void](KM-Press 'Space')
+            [void](Wait-Until { Find-Ui -Name 'Showing ' -Type 'Text' -Contains } -Seconds 4 -PollMs 150)
+            $kmBack = KB-Moves 'Library presets' 'Left' $null
+            if ($kmBack -and $kmBack.name -like 'All titles*') {
+                [void](KM-Press 'Enter')
+                $kmCleared = Wait-Until { if (-not (Find-Ui -Name 'Showing ' -Type 'Text' -Contains)) { $true } } -Seconds 4 -PollMs 150
+                KM-Row 'browsing' 'Library presets' 'Enter on All (every filter off)' ([bool]$kmCleared) "$(KB-Desc (KB-Focus))"
+            }
+            else { KM-Row 'browsing' 'Library presets' 'Enter on All (every filter off)' $false "Left did not land on All: $(KB-Desc $kmBack)" }
+        }
+        else { KM-Row 'browsing' 'Library presets' 'Space on Unwatched (turns it on)' $false "Right did not land on Unwatched: $(KB-Desc $kmUnw)" }
+    }
+    else { KM-Row 'browsing' 'Library presets' 'the keyboard on All (the lit preset)' $false "focus: $(KB-Desc $kmF)" }
+    if ($kmTheme -eq 'Editorial') {
+        $kmView = Find-Ui -Id 'ViewButton'
+        if ($kmView) { [void](Invoke-Element $kmView); Start-Sleep -Milliseconds 700 }
+        $kmListItem = Find-Ui -Name 'List' -Type 'MenuItem'
+        if ($kmListItem) { [void](Invoke-Element $kmListItem); Start-Sleep -Milliseconds 2000 }
+        $kmIsList = [bool](Find-Ui -Name 'View: list' -Type 'Button' -Contains)
+        KM-Row 'browsing' 'Editorial list' 'View > List' $kmIsList ''
+        if ($kmIsList) {
+            $kbStart = KB-Start 'Editorial list' (Find-MediaCard $fixture.movie.name)
+            if ($kbStart) {
+                $kmDown = KB-Moves 'Editorial list' 'Down' $null
+                if ($kmDown) { [void](KB-Moves 'Editorial list' 'Up' $kbStart) }
+                [void](KM-Press 'Enter')
+                $kmDetails = Wait-Until { Find-Ui -Name 'Full details' -Type 'Button' -Contains } -Seconds 4 -PollMs 150
+                KM-Row 'browsing' 'Editorial list' 'Enter (its details in place)' ([bool]$kmDetails) "$(KB-Desc (KB-Focus))"
+                [void](KM-Press 'Esc')
+                $kmShut = Wait-Until { if (-not (Find-Ui -Name 'Full details' -Type 'Button' -Contains)) { $true } } -Seconds 4 -PollMs 150
+                KM-Row 'browsing' 'Editorial list' 'Esc (closes the details)' ([bool]$kmShut) "$(KB-Desc (KB-Focus))"
+            }
+            # back to the grid (the rest of the matrix expects posters)
+            $kmView = Find-Ui -Id 'ViewButton'
+            if ($kmView) { [void](Invoke-Element $kmView); Start-Sleep -Milliseconds 700 }
+            $kmGridItem = Find-Ui -Name 'Medium posters' -Type 'MenuItem'
+            if ($kmGridItem) { [void](Invoke-Element $kmGridItem); Start-Sleep -Milliseconds 1500 }
+            KM-Row 'browsing' 'Editorial list' 'View > Medium posters (the grid again)' ([bool](Find-Ui -Name 'View: medium posters' -Type 'Button' -Contains)) ''
         }
     }
     # -- Series and Season: Tab, the episode rows, the menu key, the episode's page, Back
@@ -833,6 +895,40 @@ function KM-SheetSection {
     }
 }
 
+# ==== 10. 1.6 skip: Shift+S opens "Skip a part every episode" (the mark sheet) with the keyboard in its first field, whether
+# the bars show or not; its fields take the keys (M is a letter there, not mute); Esc closes it and the player's keys work again
+function KM-ShiftS {
+    $target = [KeysMatrix]::FocusWindow($script:hwnd)
+    if ($target -eq [IntPtr]::Zero -or [KeysMatrix]::ProcessOf($target) -ne [uint32]$script:ui.Id) { return $false }
+    $script:kmLastTarget = [KeysMatrix]::ClassOf($target)
+    try {
+        if (-not [KeysMatrix]::Hold($target, $false, $true, $false)) { return $false }
+        [KeysMatrix]::Post($target, 0x53, $false, $false)
+        Start-Sleep -Milliseconds 500
+    }
+    finally { [KeysMatrix]::Release() }
+    $true
+}
+function KM-SkipSheetSection {
+    foreach ($kmCase in @('paused, bars shown', 'playing, bars hidden')) {
+        if ($kmCase -eq 'paused, bars shown') { KM-Ready $true } else { KM-Ready $false; [void](KM-WaitBarsHidden) }
+        $kmB = KM-State -NoUi
+        $sent = KM-ShiftS
+        $open = [bool](Wait-Until { Find-Ui -Name 'Skip a part every episode' -Type 'Text' } -Seconds 4 -PollMs 150)
+        $kmF = KM-Focus
+        KM-Row 'skip rules (1.6)' $kmCase 'Shift+S opens the sheet, the keyboard in it' ($sent -and $open -and $kmF.name -eq 'Starts at') "sent $sent to $script:kmLastTarget; focus $(KM-FocusName)"
+        if (-not $open) { continue }
+        if ($kmCase -eq 'paused, bars shown') { Shot "keys-matrix-skip-sheet-$kmTheme" }
+        KM-KeyIsNotThePlayers 'skip rules (1.6)' "$kmCase, the sheet open" 'M' { [bool](Find-Ui -Name 'Skip a part every episode' -Type 'Text') }
+        [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 700
+        $kmA = KM-State -NoUi
+        KM-Row 'skip rules (1.6)' $kmCase 'Esc closes the sheet only' ((-not (Find-Ui -Name 'Skip a part every episode' -Type 'Text')) -and $kmA.Full -eq $kmB.Full) "full $($kmB.Full)->$($kmA.Full), focus $(KM-FocusName)"
+        [void](KM-Key 'skip rules (1.6)' "$kmCase, the sheet closed" 'M')
+        [void](KM-Key 'skip rules (1.6)' "$kmCase, the sheet closed" 'M')
+    }
+    KM-SetPaused $true
+}
+
 function KM-OverlaySection {
     # first: the user's repro (the player opened again for each); NIXIE_OVERLAY_PART=space runs it alone
     KM-OvSpaceFirst
@@ -905,6 +1001,100 @@ function KM-OverlaySection {
     else { KM-Row 'overlay' 'the player again' 'opened' $false 'no episode row' }
 }
 
+# ==== 11. 1.6: Esc closes the innermost thing first, one thing per press (docs/SHORTCUTS.md, Esc) ==========================
+# In full screen with "Skip this every episode?" up (the same two skips in two episodes, as then-160-skip.ps1 makes it), the
+# Playback stats panel open (I), in Cinematic its Audio and subtitles panel open (a click on the tab: the keyboard stays on
+# the video) and the volume flyout over them (a click): each Esc closes one thing, the innermost first (the flyout, the stats,
+# Cinematic's panel), then answers the question Not now, and only then does full screen end. Each press is checked against
+# all five. In Cinematic it first does it keyboard first, the keyboard in its panel (KM-EscCinematicKeyboard).
+# NIXIE_MATRIX_ONLY=esc runs this section alone.
+function KM-EscState {
+    [pscustomobject]@{
+        Flyout   = [bool](Find-Ui -Id 'MuteButton')
+        Stats    = [bool](Find-Ui -Id 'StatsPanel')
+        Panel    = [bool](Find-Ui -Id 'TracksSubtitlesHeading')
+        Question = [bool](Find-Ui -Id 'SkipSuggestionDetail')
+        Full     = [bool](Get-WindowState $script:hwnd).FullScreen
+    }
+}
+function KM-EscDesc($S) { "flyout $($S.Flyout), stats $($S.Stats), panel $($S.Panel), question $($S.Question), full $($S.Full)" }
+# the two skips of an episode: 1:00 (the 1 key), then 1:30 (Shift+Right), five seconds apart (then-160-skip.ps1's)
+function KM-EscTwoSkips { [void](KM-Press '1'); Start-Sleep -Seconds 5; [void](KM-Press 'Shift+Right'); Start-Sleep -Seconds 1 }
+# Cinematic, keyboard first: the keyboard on its Audio and subtitles tab, Enter opens the panel, I the stats; Esc closes the
+# stats first there too (the panel's own Escape goes through the same order), then the panel
+function KM-EscCinematicKeyboard([string]$Sec) {
+    KM-Ready $true
+    $kmT = Find-Ui -Name 'Audio and subtitles' -Type 'Button'
+    if (-not $kmT) { $kmT = Find-Ui -Name 'Audio and subtitles' }
+    if (-not $kmT) { KM-Row $Sec 'the keyboard in Cinematic''s panel' 'set up' $false 'no Audio and subtitles tab'; return }
+    [void][OffscreenUi]::SetFocus($kmT); Start-Sleep -Milliseconds 300
+    [void](KM-Press 'Enter'); [void](Wait-Ui -Id 'TracksSubtitlesHeading' -Seconds 3)
+    [void](KM-Press 'I'); [void](Wait-Ui -Id 'StatsPanel' -Seconds 3)
+    $kmS = KM-EscState
+    if (-not ($kmS.Panel -and $kmS.Stats)) { KM-Row $Sec 'the keyboard in Cinematic''s panel' 'set up' $false "$(KM-EscDesc $kmS), focus $(KM-FocusName)"; return }
+    [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 700
+    $kmS = KM-EscState
+    KM-Row $Sec 'the keyboard in Cinematic''s panel' 'Esc closes the Playback stats first' (-not $kmS.Stats -and $kmS.Panel) "$(KM-EscDesc $kmS), focus $(KM-FocusName)"
+    [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 700
+    $kmS = KM-EscState
+    KM-Row $Sec 'the keyboard in Cinematic''s panel' 'then Esc closes the panel' (-not $kmS.Stats -and -not $kmS.Panel -and -not $kmS.Full) "$(KM-EscDesc $kmS), focus $(KM-FocusName)"
+}
+function KM-EscOrderSection {
+    $kmSec = 'Esc order (1.6)'
+    if ($kmTheme -eq 'Cinematic') { KM-EscCinematicKeyboard $kmSec }
+    KM-Ready $false
+    KM-EscTwoSkips
+    if (-not (KM-Key $kmSec 'the question: the next episode' 'Shift+N' 12)) { [void](KM-Key $kmSec 'the question: the episode before' 'Shift+P' 12) }
+    Start-Sleep -Seconds 4
+    KM-EscTwoSkips
+    $kmQ = [bool](Wait-Until { Find-Ui -Id 'SkipSuggestionDetail' } -Seconds 14 -PollMs 250)
+    KM-Row $kmSec 'set up' 'the same skip in two episodes asks "Skip this every episode?"' $kmQ ''
+    if (-not $kmQ) { return }
+    KM-SetPaused $true
+    [void](KM-Press 'F'); [void](Wait-WindowState $script:hwnd $true 6); Start-Sleep -Milliseconds 700
+    # opened from the outside in (in full screen the stats panel lies over Cinematic's tabs: a click on a tab after it hit the
+    # stats panel); the state after each step goes into the row's detail
+    $kmPanels = $kmTheme -eq 'Cinematic'
+    $kmSaw = @()
+    if ($kmPanels) {
+        KM-ShowBars
+        if (KM-Click -Name 'Audio and subtitles') { [void](Wait-Ui -Id 'TracksSubtitlesHeading' -Seconds 3) }
+        $kmSaw += "after the tab: $(KM-EscDesc (KM-EscState))"
+    }
+    [void](KM-Press 'I'); [void](Wait-Ui -Id 'StatsPanel' -Seconds 3)
+    $kmSaw += "after I: $(KM-EscDesc (KM-EscState))"
+    KM-ShowBars
+    if (KM-Click 'VolumeButton') { [void](Wait-Ui -Id 'MuteButton' -Seconds 3) }
+    $kmS = KM-EscState
+    $kmUp = $kmS.Flyout -and $kmS.Stats -and $kmS.Question -and $kmS.Full -and ($kmS.Panel -or -not $kmPanels)
+    Shot "keys-matrix-esc-order-$kmTheme"
+    KM-Row $kmSec 'set up' 'full screen, the question, the stats, the flyout (and Cinematic''s panel) all open' $kmUp "$(KM-EscDesc $kmS); $($kmSaw -join '; ')"
+    if (-not $kmUp) { KM-SetWindowed; return }
+    # what each press leaves open: the flyout, the stats, the panel, the question, full screen, in that order
+    $kmSteps = @(
+        @{ Name = 'Esc 1 closes the volume flyout only'; Want = @{ Flyout = $false; Stats = $true; Panel = $kmPanels; Question = $true; Full = $true } },
+        @{ Name = 'Esc 2 closes the Playback stats only'; Want = @{ Flyout = $false; Stats = $false; Panel = $kmPanels; Question = $true; Full = $true } })
+    if ($kmPanels) { $kmSteps += @{ Name = 'Esc 3 closes Cinematic''s panel only'; Want = @{ Flyout = $false; Stats = $false; Panel = $false; Question = $true; Full = $true } } }
+    $kmSteps += @{ Name = 'then Esc answers the question Not now (full screen stays)'; Want = @{ Flyout = $false; Stats = $false; Panel = $false; Question = $false; Full = $true } }
+    $kmSteps += @{ Name = 'and only then Esc leaves full screen'; Want = @{ Flyout = $false; Stats = $false; Panel = $false; Question = $false; Full = $false } }
+    foreach ($kmStep in $kmSteps) {
+        [void](KM-Press 'Esc'); Start-Sleep -Milliseconds 800
+        if (-not $kmStep.Want.Full) { [void](Wait-WindowState $script:hwnd $false 6) }
+        $kmS = KM-EscState
+        $kmOk = $true
+        foreach ($k in $kmStep.Want.Keys) { if ($kmS.$k -ne $kmStep.Want[$k]) { $kmOk = $false } }
+        KM-Row $kmSec 'full screen, paused' $kmStep.Name $kmOk (KM-EscDesc $kmS)
+    }
+    KM-SetWindowed
+}
+
+if ($env:NIXIE_MATRIX_ONLY -eq 'esc') {   # 1.6: section 11 alone
+    KM-EscOrderSection
+    [KeysMatrix]::Close()
+    [IO.File]::WriteAllText((Join-Path $kmDir 'keys-matrix.json'), (ConvertTo-Json -InputObject @($kmRows) -Depth 4), [Text.UTF8Encoding]::new($false))
+    return
+}
+
 if ($env:NIXIE_MATRIX_ONLY -eq 'overlay') {
     if ($env:NIXIE_OVERLAY_PART -ne 'space') { KM-SheetSection }
     KM-OverlaySection
@@ -924,7 +1114,8 @@ Start-Sleep -Seconds 4
 
 # ==== 1. every documented key, playing with the bars shown, and paused ===========================================================
 $kmAll = @('Space', 'Space', 'K', 'K', 'Left', 'Right', 'Ctrl+Left', 'Ctrl+Right', 'J', 'L', 'Shift+Right', 'Shift+Left', 'Up', 'Down', 'M', 'M',
-    '[', 'Backspace', ']', 'Backspace', 'C', 'C', 'V', 'B', 'Z', 'X', 'F', 'F', 'F11', 'F11', 'Alt+Enter', 'Alt+Enter', '5', 'Numpad3', 'Home', '0')
+    '[', 'Backspace', ']', 'Backspace', 'C', 'C', 'V', 'B', 'Z', 'X', 'F', 'F', 'F11', 'F11', 'Alt+Enter', 'Alt+Enter', '5', 'Numpad3', 'Home', '0',
+    'I', 'I')    # 1.6 player: Playback stats open, then closed
 foreach ($kmPaused in @($false, $true)) {
     $kmCase = if ($kmPaused) { 'paused, bars shown' } else { 'playing, bars shown' }
     KM-Ready $kmPaused
@@ -945,7 +1136,7 @@ foreach ($kmPaused in @($false, $true)) {
 
 # ==== 2. playing, the bars hidden (each key shows them; wait for them to go again) ===============================================
 KM-Ready $false
-foreach ($kmChord in @('Space', 'Space', 'Left', 'Right', 'Up', 'Down', 'M', 'M', 'F', 'F')) {
+foreach ($kmChord in @('Space', 'Space', 'Left', 'Right', 'Up', 'Down', 'M', 'M', 'F', 'F', 'I', 'I')) {   # 1.6 player: I
     if ((KM-Bool 'pause')) { KM-SetPaused $false }
     $kmHidden = KM-WaitBarsHidden
     if (-not $kmHidden) { KM-Row 'all keys' 'playing, bars hidden' $kmChord $false 'the bars did not hide'; continue }
@@ -1135,6 +1326,8 @@ KM-SetPaused $true
 # ==== 9 (defined above): F1's sheet over the player is modal; the overlay after each transition, before the theme switch ======
 KM-SheetSection
 KM-OverlaySection
+KM-SkipSheetSection   # 1.6 skip (defined above)
+KM-EscOrderSection   # 1.6: Esc closes the innermost thing first (11, defined above)
 
 # ==== 8. the Back key leaves; a theme switch mid-session, then the player again =========================================================
 KM-SetWindowed

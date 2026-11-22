@@ -319,10 +319,12 @@ public class AccessibilityXamlTests
 	[Fact]
 	public void LibraryTiles_AreNamed()
 	{
-		var container = Assert.Single(Load("FluentFin/Views/LibrariesLandingPage.xaml").Descendants(Presentation + "ItemContainer"));
+		// 1.6 topbar: two tiles, the media library's (with its star) and the collections group's
+		var containers = Load("FluentFin/Views/LibrariesLandingPage.xaml").Descendants(Presentation + "ItemContainer").ToList();
+		Assert.Equal(2, containers.Count);
 
 		// Nixie 1.4.0: with what the tile shows beside the name: "Movies, 320 movies, 97 unwatched" (LibraryTile.AutomationName)
-		Assert.Equal("{x:Bind AutomationName, Mode=OneWay}", (string?)container.Attribute("AutomationProperties.Name"));
+		Assert.All(containers, container => Assert.Equal("{x:Bind AutomationName, Mode=OneWay}", (string?)container.Attribute("AutomationProperties.Name")));
 	}
 
 	[Fact]
@@ -372,7 +374,7 @@ public class AccessibilityXamlTests
 		var home = Load("FluentFin/Views/HomePage.xaml");
 		var rows = home.Descendants().Where(e => e.Name.LocalName == "ShelfRow").ToList();
 
-		Assert.Equal(3, rows.Count); // Continue Watching, Next Up, Recently Added (one template)
+		Assert.Equal(4, rows.Count); // Continue Watching, Next Up, Recently Added (one template), 1.6: Made by Nixie (one template)
 		Assert.All(rows, row => Assert.Equal("True", (string?)row.Attribute("HasSeeAll")));
 		// the page's own scroll viewer is the only one left (no hand-made horizontal ScrollViewer rows)
 		Assert.Single(home.Descendants(Presentation + "ScrollViewer"));

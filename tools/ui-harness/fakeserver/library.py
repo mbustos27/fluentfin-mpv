@@ -13,6 +13,7 @@ import threading
 import uuid
 
 import search as search_mod   # 1.5 search
+import smartdata   # 1.6 collections
 
 TICKS = 10_000_000
 
@@ -215,6 +216,15 @@ class Library:
         # UXCAP (the library and collections review's captures): env switches for the library/collections UX capture; off by default, and generated
         # after everything else with their own random sources, so the default fixture is unchanged
         import os
+        # 1.6 topbar: FAKESERVER_VIEWS=<n> lists only the first n of the four default libraries (1 to 4; their items stay, so
+        # the showcase fixture holds), and FAKESERVER_HUB_VIEWS=1 puts three "[HUB] …" hub libraries first in the server's
+        # order, as the owner's server does (the top bar's default favourites must not be them)
+        shown = self.int_of(os.environ.get("FAKESERVER_VIEWS"), 0)
+        if 0 < shown < len(self.views):
+            del self.views[shown:]
+        if os.environ.get("FAKESERVER_HUB_VIEWS"):
+            self._hub_views()
+        # end 1.6 topbar
         if os.environ.get("FAKESERVER_COLLECTIONS"):
             self._collections()
         big = self.int_of(os.environ.get("FAKESERVER_BIG_LIBRARY"), 0)
@@ -233,6 +243,50 @@ class Library:
         # 1.5 search: FAKESERVER_SEARCH=sunny adds the search titles (a show and its near-misses, a person)
         if os.environ.get("FAKESERVER_SEARCH") == "sunny":
             self._search_fixture()
+        # 1.6 collections: TmdbCollection ids, countries, recurring directors, a show left a while ago, and (with
+        # FAKESERVER_COLLECTIONS) the admin's box set with its franchise's Tmdb id (smartdata.py)
+        smartdata.apply(self, _id("view", "Movies"))
+
+    # 1.6 collections: smartdata's helpers
+    def _person_named(self, name):
+        pid = _id("person", name)
+        if pid not in self.people:
+            self.people[pid] = {"Id": pid, "Name": name, "Type": "Person", "kind": "person", "created": self.now,
+                                "parent": None, "view": None}
+            self.items[pid] = self.people[pid]
+        return dict(self.people[pid], PrimaryImageTag=_tag(pid, "Primary"))
+
+    @staticmethod
+    def studio_id(name):
+        return _id("studio", name)
+
+    def create_playlist(self, name, ids, public=True):
+        """POST /Playlists: a playlist of these items (the ones that exist), in the Playlists view when there is one; public
+        unless asked otherwise, as Jellyfin makes one whose IsPublic is left out."""
+        with self.lock:
+            pvid = _id("view", "Playlists")
+            view = pvid if pvid in self.items else None
+            plid = new_guid()
+            # as Jellyfin: a show sent to a playlist is every one of its episodes, in order
+            members = []
+            for i in ids:
+                item = self.items.get(i)
+                if not item:
+                    continue
+                if item["kind"] == "series":
+                    members.extend(e["Id"] for e in self.episodes_of(i))
+                elif item["kind"] in ("movie", "episode"):
+                    members.append(i)
+            years = [self.items[m]["year"] for m in members if self.items[m].get("year")] or [self.now.year]
+            self.items[plid] = {"Id": plid, "kind": "boxset", "playlist": True, "Name": name, "parent": view, "view": view,
+                                "created": _utcnow(), "year": min(years), "premiere": self.now, "genres": [], "tags": [],
+                                "rating": None, "people": [], "studios": [], "overview": "", "tagline": "",
+                                "community": None, "critic": None, "public": bool(public)}
+            self.children[plid] = members
+            if view:
+                self.children[view].append(plid)
+            return plid
+    # end 1.6 collections
 
     # 1.5 search: "it's always sunny" as the owner typed it, among films that share its words
     SEARCH_FILMS = ["It's Always Fair Weather", "Always", "Sunny", "It", "It's a Wonderful Life", "Little Miss Sunshine",
@@ -321,6 +375,33 @@ class Library:
                                "tagline": "", "community": None, "critic": None}
             self.children[vid].append(bid)
             self.children[bid] = members
+        # 1.6 colpage: FAKESERVER_LONG_TITLE=1 adds a box set whose name runs two lines (the Collection page's header: the
+        # title's wrap, the marquee board, the stage beside it); off by default, so the default fixture is unchanged
+        import os
+        if os.environ.get("FAKESERVER_LONG_TITLE"):
+            name = "The Extraordinarily Long Franchise of Copper, Glass and Every Sequel After"
+            bid = _id("boxset", name)
+            members = sorted(rng.sample(pool, 4), key=lambda i: (self.items[i]["premiere"], self.sort_name(self.items[i])))
+            years = [self.items[m]["year"] for m in members]
+            self.items[bid] = {"Id": bid, "kind": "boxset", "Name": name, "parent": vid, "view": vid, "created": self.now,
+                               "year": min(years), "premiere": min(self.items[m]["premiere"] for m in members),
+                               "genres": [], "tags": [], "rating": self.items[members[0]]["rating"], "people": [],
+                               "studios": [], "overview": "Four films and a title too long for one line.", "tagline": "",
+                               "community": None, "critic": None}
+            self.children[vid].append(bid)
+            self.children[bid] = members
+            # and a long set (24 films): Back to a deep card, Up through the grid (the review's focus under Cinematic's bar)
+            name = "Anthology of Twenty-Four"
+            bid = _id("boxset", name)
+            members = sorted(rng.sample(pool, min(24, len(pool))), key=lambda i: (self.items[i]["premiere"], self.sort_name(self.items[i])))
+            years = [self.items[m]["year"] for m in members]
+            self.items[bid] = {"Id": bid, "kind": "boxset", "Name": name, "parent": vid, "view": vid, "created": self.now,
+                               "year": min(years), "premiere": min(self.items[m]["premiere"] for m in members),
+                               "genres": [], "tags": [], "rating": self.items[members[0]]["rating"], "people": [],
+                               "studios": [], "overview": "Twenty-four films.", "tagline": "", "community": None, "critic": None}
+            self.children[vid].append(bid)
+            self.children[bid] = members
+        # end 1.6 colpage
         self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
         # Nixie 1.4.0 (shared stream): a "Playlists" view with one playlist, its items in the user's own order (neither by name
         # nor by date: the page must keep it); a boxset-like item whose Type is Playlist
@@ -368,6 +449,18 @@ class Library:
 
     # 1.4.0 topbar: the extra views' names (FAKESERVER_EXTRA_VIEWS), long and short, as real servers name them
     EXTRA_VIEW_NAMES = ["Concerts", "Kids and Family", "Stand-up Specials", "Classics", "Home Videos", "4K Remasters"]
+
+    # 1.6 topbar: the hubs (FAKESERVER_HUB_VIEWS), first in the server's order: two of movies and one of shows
+    HUB_VIEWS = [("[HUB] Trending Movies", "movies"), ("[HUB] Kids Movies", "movies"), ("[HUB] Trending Shows", "tvshows")]
+
+    def _hub_views(self):
+        before = list(self.views)
+        for name, ctype in self.HUB_VIEWS:
+            self._small_library(name, 6)
+            self.items[_id("view", name)]["collection"] = ctype
+        hubs = [v for v in self.views if v not in before]
+        self.views[:] = hubs + before
+    # end 1.6 topbar
 
     def _small_library(self, view_name, n):
         saved = self.rng
@@ -788,6 +881,7 @@ class Library:
             d["People"] = item["people"]
             d["Studios"] = [{"Name": s, "Id": _id("studio", s)} for s in item["studios"]]
             d["ProviderIds"] = {"Tmdb": str(int(iid[:6], 16)), "Imdb": "tt%07d" % (int(iid[6:12], 16) % 10000000)}
+            smartdata.detail(self, d, item)   # 1.6 collections: TmdbCollection, a box set's Tmdb, ProductionLocations
             d["ExternalUrls"] = []
             d["Taglines"] = [item["tagline"]] if item.get("tagline") else []
             # Nixie 1.3.1: the showcase movie has a YouTube trailer (the app plays it in its theatre window from the fake
@@ -903,6 +997,9 @@ class Library:
         if types:
             wanted = {kind_of.get(t) for t in types}
             pool = [i for i in pool if i["kind"] in wanted]
+            # 1.6 collections: as Jellyfin, BoxSet lists box sets and Playlist playlists (the fake keeps both as "boxset")
+            if "boxset" in wanted and not ({"boxset", "playlist"} <= types):
+                pool = [i for i in pool if i["kind"] != "boxset" or bool(i.get("playlist")) == ("playlist" in types)]
         elif term:
             pool = [i for i in pool if i["kind"] in ("movie", "series", "episode", "person", "boxset")]
         else:
@@ -953,7 +1050,9 @@ class Library:
         # 1.5 search (review m5): SortName and OriginalTitle only when asked for (fields=), as Jellyfin answers: a client
         # that stops asking for them sees them go
         fields = {f.lower() for f in many("fields")}
-        return {"Items": [self.with_fields(self.dto(i), fields) for i in page], "TotalRecordCount": total, "StartIndex": start}
+        # 1.6 collections: ProviderIds, Studios, People and ProductionLocations only when asked for (smartdata.with_fields)
+        return {"Items": [smartdata.with_fields(self, self.with_fields(self.dto(i), fields), i, fields) for i in page],
+                "TotalRecordCount": total, "StartIndex": start}
 
     @staticmethod
     def with_fields(d, fields):

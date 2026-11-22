@@ -170,7 +170,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 
 				var continueLoaded = UpdateContinueItems();
 				var nextUpLoaded = UpdateNextUpItems();
-				await Task.WhenAll(continueLoaded, nextUpLoaded, UpdateRecentItems());
+				await Task.WhenAll(continueLoaded, nextUpLoaded, UpdateRecentItems(), UpdateNixieRows()); // 1.6 collections: Nixie's rows
 				failed = !continueLoaded.Result || !nextUpLoaded.Result;
 
 				if (Snapshot() is { } shown && JellyfinClient.BaseUrl == serverUrl && JellyfinClient.UserId == userId)
@@ -206,6 +206,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			RecentItems.Add(new NamedQueryResult(row.Library) { Items = [.. row.Items.Select(BaseItemViewModel.FromDto)], IsLoading = false });
 		}
 		_emptyLibraries.UnionWith(snapshot.EmptyLibraries);
+		ShowNixieRows(snapshot.NixieRows); // 1.6 collections
 		RefreshHero();
 	}
 
@@ -215,7 +216,7 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		var rows = RecentItems.Where(x => !x.IsLoading && x.Items.Count > 0).Select(x => new HomeSnapshotRow(x.Library, [.. x.Items.Select(i => i.Dto)])).ToList();
 		return _continueAnswer.Count + _nextUpAnswer.Count + rows.Count == 0
 			? null
-			: new HomeSnapshot([.. _continueAnswer], [.. _nextUpAnswer], rows, [.. _emptyLibraries]);
+			: new HomeSnapshot([.. _continueAnswer], [.. _nextUpAnswer], rows, [.. _emptyLibraries]) { NixieRows = NixieSnapshot() }; // 1.6 collections
 	}
 
 	// fluentfin-mpv: an answer that matches what the page shows (a cached page that has not changed) keeps its cards,
@@ -853,7 +854,7 @@ public partial class NamedQueryResult(BaseItemDto library) : ObservableObject
 	public BaseItemDto Library { get; } = library;
 
 	/// <summary>Seaglass 1.1.4 (UX review, fix 9): the row's title, "New in Movies" (it was "Recently Added In Movies").</summary>
-	public string Title => HomeRowTitles.NewIn(Library.Name);
+	public string Title => HomeRowTitles.NewIn(CollectionNames.DisplayLibrary(Library.Name)); // 1.6 collections: a tidy library name
 
 	[ObservableProperty]
 	public partial ObservableCollection<BaseItemViewModel> Items { get; set; } = [];

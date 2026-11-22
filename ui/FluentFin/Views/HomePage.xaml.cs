@@ -334,4 +334,13 @@ public sealed partial class HomePage : Page
 			App.GetService<FluentFin.Contracts.Services.INavigationService>().NavigateTo<LibraryViewModel>(library);
 		}
 	}
+
+	// 1.6 collections: a Made by Nixie row's "See all" opens its collection
+	private void NixieSeeAll(object sender, EventArgs e)
+	{
+		if (sender is Microsoft.UI.Xaml.FrameworkElement { Tag: Core.ViewModels.NixieHomeRowViewModel row })
+		{
+			ViewModel.OpenNixieRow(row);
+		}
+	}
 }

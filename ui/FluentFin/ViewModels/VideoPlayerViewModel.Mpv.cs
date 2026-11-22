@@ -259,7 +259,10 @@ public partial class VideoPlayerViewModel
 			}
 
 			_mpvItems = new HashSet<string>(request.ItemIds.Select(NormalizeId), StringComparer.Ordinal);
-			if (await mpvPlayback.PlayAsync(generation, identity, request, IsFullScreen?.Invoke() ?? false, onStep: OnStep, controls: ControlsCommand(), skipOptions: BridgeCommands.SkipOptions(settings.LookUpIntrosOnline, settings.LearnIntros), autoPlay: PlaysNextItem()))
+			// 1.6 player: Settings' default quality at home and away goes before the play (set_quality_defaults)
+			mpvPlayback.QualityDefaults = Core.Settings.PlayerQualitySettings.DefaultsCommand(settings);
+			// 1.6 skip: SkipOptions() (the skip rules' settings with the intro ones)
+			if (await mpvPlayback.PlayAsync(generation, identity, request, IsFullScreen?.Invoke() ?? false, onStep: OnStep, controls: ControlsCommand(), skipOptions: SkipOptions(), autoPlay: PlaysNextItem()))
 			{
 				logger.LogInformation("Sent play to the mpv backend {Ms} ms after the player page opened (generation {Generation})", opened.ElapsedMilliseconds, generation);
 				OnMpvPlayAccepted();
@@ -421,12 +424,28 @@ public partial class VideoPlayerViewModel
 		try
 		{
 			// fluentfin-mpv player controls: what they show (the state is passed on by OnMpvState, for this page's playback only);
-			// segments and next: the Skip button and the Next button's state (docs/BRIDGE.md §5)
+			// segments and next: the Skip button and the Next button's state (docs/BRIDGE.md §5); 1.6 skip: skip_suggestion, the
+			// "Skip this every episode?" toast
 			if (MpvControls is { } controls && _mpvPlayAccepted
-				&& e.Name is Bridge.Events.Position or Bridge.Events.Item or Bridge.Events.Tracks or Bridge.Events.Segments or Bridge.Events.Next)
+				&& e.Name is Bridge.Events.Position or Bridge.Events.Item or Bridge.Events.Tracks or Bridge.Events.Segments or Bridge.Events.Next
+					or Bridge.Events.SkipSuggestion)
 			{
 				controls.OnEvent(e);
 			}
+
+			// 1.6 player: how the item is served (the Quality menu); a quality the server won't convert for this account is said in
+			// its own words (not "MPV: ..."), and the item plays on
+			if (MpvControls is { } served && _mpvPlayAccepted && e.Name == Bridge.Events.Stream)
+			{
+				served.OnEvent(e);
+			}
+
+			if (e.Name == Bridge.Events.Error && e.DataAs<BridgeError>() is { Code: QualityChoices.NotAllowed, Fatal: false } refused && _mpvSawPlayback)
+			{
+				ShowMpvNotice(string.IsNullOrWhiteSpace(refused.Message) ? QualityChoices.RefusedText : BridgeRedaction.Redact(refused.Message));
+				return;
+			}
+			// end 1.6 player
 
 			switch (e.Name)
 			{
@@ -599,6 +618,34 @@ public partial class VideoPlayerViewModel
 		await SendMpv(generation, command.Name, command.Args);
 	}
 
+	// 1.6 skip
+	/// <summary>
+	/// 1.6 skip: Settings > Playback's skip settings, sent before every play (docs/BRIDGE.md §4 set_skip_options): the two
+	/// switches, what the server's ads and previews do, and what a skip rule with no choice of its own does.
+	/// </summary>
+	private System.Text.Json.Nodes.JsonObject SkipOptions() =>
+		BridgeSkipCommands.SkipOptions(settings.LookUpIntrosOnline, settings.LearnIntros, settings.AdsAndPreviewsAction, settings.SkipRuleAction);
+
+	/// <summary>1.6 skip: <see cref="SendMpv"/> that says whether the backend took the command. Never throws.</summary>
+	private async Task<bool> SendMpvChecked(long generation, string command, System.Text.Json.Nodes.JsonObject? args)
+	{
+		try
+		{
+			return await mpvPlayback.SendIfCurrentAsync(generation, command, args);
+		}
+		catch (BridgeException ex)
+		{
+			logger.LogWarning("'{Command}' was not taken by the mpv backend: {Message}", command, ex.Message);
+			return false;
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "'{Command}' could not be sent to the mpv backend", command);
+			return false;
+		}
+	}
+	// end 1.6 skip
+
 	/// <summary>Never throws: its callers are event handlers and async void subscribers.</summary>
 	private async Task SendMpv(long generation, string command, System.Text.Json.Nodes.JsonObject? args)
 	{
@@ -679,8 +726,16 @@ public partial class VideoPlayerViewModel
 		AutoPlay = PlaysNextItem(),
 		NameItem = NameMpvItem,
 		TrickplayOf = TrickplayOfMpvItem,
+		// 1.6 skip: the mark sheet's default, and answers that know whether the backend took them
+		SkipRuleAction = settings.SkipRuleAction,
+		Request = (command, args) => SendMpvChecked(generation, command, args),
 		TrickplaySheetAt = (itemId, width, sheet) => Guid.TryParse(itemId, out var id) ? JellyfinClient.GetTrickplayImage(new BaseItemDto { Id = id }, sheet, width) : null,
 		IsFullScreen = IsFullScreen?.Invoke() ?? false,
+		// 1.6 player: the Playback stats (Settings' button; get_stats answered through this page's generation)
+		ShowStatsButton = settings.ShowPlaybackStatsButton,
+		Query = (command, args) => mpvPlayback.QueryIfCurrentAsync(generation, command, args),
+		AppVersionText = Core.AppVersion.Current,
+		// end 1.6 player
 		SetFullScreen = fullScreen =>
 		{
 			SetFullScreen?.Invoke(fullScreen);

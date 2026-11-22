@@ -171,6 +171,29 @@
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
+
+                    <!--  1.6 collections: the Made by Nixie rows, after "New in ...", on the bulb sign with "Made by Nixie" under it  -->
+                    <ItemsControl x:Name="NixieRows" Margin="0,24,0,0" IsTabStop="False" ItemsSource="{x:Bind ViewModel.NixieRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NixieHomeRowViewModel">
+                                <lc:ShelfRow
+                                    dc:DriveInRows.Marquee="True"
+                                    dc:DriveInRows.Subtitle="{x:Bind Kicker}"
+                                    HasSeeAll="True"
+                                    Header="{x:Bind Title}"
+                                    ItemTemplate="{StaticResource DriveInPoster}"
+                                    ItemsSource="{x:Bind Items, Mode=OneWay}"
+                                    SeeAll="NixieSeeAll"
+                                    Tag="{x:Bind}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="24" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <!--  end 1.6 collections  -->
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

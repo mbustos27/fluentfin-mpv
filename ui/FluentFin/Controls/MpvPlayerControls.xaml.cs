@@ -91,6 +91,8 @@ public sealed partial class MpvPlayerControls : UserControl
 			self.PlaceSkipButton();
 			self.RefreshChapters();
 		}
+
+		self.HookSkipRules(e.OldValue as MpvControlsViewModel, e.NewValue as MpvControlsViewModel); // 1.6 skip
 	}
 
 	private void OnControlsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -571,6 +573,12 @@ public sealed partial class MpvPlayerControls : UserControl
 	private bool IsOnControls(DependencyObject? source, Func<UIElement, Windows.Foundation.Point> position)
 	{
 		if (source is not null && IsWithin(source, PillRow))
+		{
+			return true;
+		}
+
+		// 1.6 player: the Playback stats panel is a control: a click on it neither pauses nor goes full screen
+		if (source is not null && IsWithin(source, StatsPanel))
 		{
 			return true;
 		}
@@ -1121,9 +1129,51 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	private void OnTracksClick(object sender, RoutedEventArgs e) => _themeTracks?.Invoke();
 
-	private void OnMenuOpened(object? sender, object e) => Controls?.MenuOpened(true);
+	// 1.6 integration: FlyoutOpened (Escape's first rung; it holds the bars as MenuOpened did)
+	private void OnMenuOpened(object? sender, object e) => Controls?.FlyoutOpened(true);
 
-	private void OnMenuClosed(object? sender, object e) => Controls?.MenuOpened(false);
+	private void OnMenuClosed(object? sender, object e) => Controls?.FlyoutOpened(false);
+
+	// -- 1.6 player: the Quality menu and the Playback stats button ------------------------------------------------------
+
+	/// <summary>The Quality menu as it opens: this item's choices, the one in effect marked (its header follows by binding).</summary>
+	private void OnQualityMenuOpening(object? sender, object e) => QualityList.ItemsSource = Controls?.QualityMenu ?? [];
+
+	/// <summary>The keyboard on the choice in effect, so Enter on an unchanged menu changes nothing and Up/Down start there.</summary>
+	private void OnQualityMenuOpened(object? sender, object e)
+	{
+		OnMenuOpened(sender, e);
+		if (QualityList.ItemsSource is IReadOnlyList<QualityMenuItem> items)
+		{
+			var at = Math.Max(0, items.ToList().FindIndex(i => i.IsCurrent));
+			DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+			{
+				if (QualityList.ContainerFromIndex(at) is ListViewItem item)
+				{
+					item.Focus(FocusState.Programmatic);
+				}
+			});
+		}
+	}
+
+	/// <summary>A click, or Enter or Space on a choice: asked for (the item restarts where it is), and the menu closes.</summary>
+	private void OnQualityItemClick(object sender, ItemClickEventArgs e)
+	{
+		if (e.ClickedItem is QualityMenuItem item)
+		{
+			QualityMenu.Hide();
+			_ = Controls?.SetQuality(item.Choice);
+		}
+	}
+
+	private void OnStatsClick(object sender, RoutedEventArgs e) => Controls?.ToggleStats();
+
+	/// <summary>The Quality menu's choices as shown (the tests and the harness read them).</summary>
+	internal ListView QualityChoicesView => QualityList;
+
+	/// <summary>The Playback stats panel (the tests and the harness read it).</summary>
+	internal PlaybackStatsPanel StatsView => StatsPanel;
+	// -- end 1.6 player
 
 	private IReadOnlyList<MpvTrackChoice> _audioChoices = [];
 	private IReadOnlyList<MpvTrackChoice> _subtitleChoices = [];

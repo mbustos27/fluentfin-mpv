@@ -59,6 +59,46 @@ From the 1.5.1 bug hunt (`docs\reports\Bug hunt 2026-11-21 (1.5.1).md`):
 Left out of 1.5.1:
 - **Music in search, with playback** (BH-151-M2): songs and albums were taken out of search because nothing plays them.
 
+From the 1.6 reviews (2026-11-21; each stream fixed its Blockers and Majors before the merge):
+- Collection page and library pages (colpage): `ui\FluentFin\Themes\DriveIn\DriveIn.xaml:673` the marquee's tube count is
+  not spoken; `ui\FluentFin.Core\ViewModels\LibraryViewModel.Presets.cs:66` and `:87` a preset on a playlist loses the
+  playlist's order; `ui\FluentFin\Controls\AppliedFilterRow.xaml.cs:72` Save as collection can save twice;
+  `ui\FluentFin\Themes\DriveIn\Views\DriveInLibraryPage.xaml:139` pink in high contrast (older).
+- Top bar: an empty bar after `GetUserViews` fails, and the stars then say nothing; 1.3's pins are every user's first
+  favourites on this PC (`ui\FluentFin.Core\ViewModels\TopFavourites.cs:198`); tests: the tab's Tag is not asserted,
+  FoldFromTheRight tests Fit only, no mouse click on a star. (The review's "slow server, late Collections" was topbar's
+  interim route, retired at the merge: the Collections page loads on its own.)
+- Skip the parts a show repeats: the "asked" flag is kept after a restart; an "always" rule re-arms on Yes or Add
+  mid-episode, and the fake's no-loop test (`backend	ests	est_skip_rules.py`, AlwaysDoesNotLoop) does not cover it;
+  `ui\FluentFin.Core\Mpv\SkipRuleSheet.cs:127` always sends an action; the golden test covers `segment_list` only.
+- Quality and Playback stats: `backend\jellyfin_mpv_shim\bridge.py:2982` a quality (or `set_audio`) change racing the
+  next item's auto-advance; the stats panel polls while the window is minimized; an INFO log line every second
+  (`bridge.py:1291`); `backend\jellyfin_mpv_shim\quality.py:213` the defaults skip their checks; a NaN fails `get_stats`;
+  `PlaybackStatsTests` changes `SessionInfo`'s token; BRIDGE.md's `connect` wording.
+- Collections: `ui\FluentFin.Core\Services\JellyfinClient_Index.cs:167` reads at most 2,000 box sets (or playlists), the
+  first by name; `ui\FluentFin.Core\ViewModels\CollectionNames.cs:136` cleaning is not idempotent for every name; the
+  snapshot paints disabled rows; a write-back can race sign-out; tests: the Fields test is weak (`:499`), the 25,800-film
+  test has no thread check (`:432`), and the fake server accepts another user's UserId.
+
+Found at the 1.6 integration:
+- `backend\jellyfin_mpv_shim\skip_rules.py` (`SkipWatcher._app_jump`): the first forward step after `note_skip` is taken
+  for the press's jump; should a 0.5 s playback reading come between the app's `note_skip` and its seek landing, the
+  seek counts as the viewer's (a candidate, or a hand skip for "moves"). Read in the code, not reproduced; the window is
+  milliseconds.
+- `ui\FluentFin\Themes\DriveIn\Views\DriveInLibraryPage.xaml.cs:111`: Drive-in's presets strip stays collapsed until the
+  library has loaded, so the loaded page is 46 px taller than its loading placeholders: the posters land 46 px below
+  them (then-140-checks' skeleton check, at 1920 and 1100). Keep the strip's room while loading.
+- `ui\FluentFin\Views\CollectionsPage.xaml.cs:64` (`FocusSection`), Editorial only: the Libraries page's "Made by Nixie"
+  tile opens the Collections page with the keyboard on the Playlists row's first tile ("Nothing Yet"), not on the first
+  Made by Nixie tile (then-160-collections, twice; the page logs that the section's first tile took the keyboard, and
+  something moves it within about a second). The other three themes land on the Made by Nixie tile.
+- `ui\FluentFin\Services\UpdateActions.cs:186-199`, Classic, the release notes opened from Settings (an update ready):
+  the keyboard starts on the notes' first link ("details"), not on Close (then-update's full flow, three runs, at light
+  load too; Drive-in and 1.5.1's Classic start on Close, and so does "What's new" from Home in 1.6.0). The redirect to Close
+  is timing-based (the dialog's first 800 ms, then one low-priority try after Opened). After it, the run's Check now
+  started no check (no "[update] checked" line), so its checksum-mismatch step could not run: whether the dialog stayed
+  open after Esc on "Open the release page" is not known yet. For the bug hunt.
+
 ## Hand checks, recorded
 From 1.5, one line per check and release: pass, fail, or not run. They need a real desktop and real hands (off-screen
 runs post keys and cannot move the real cursor or hear sound).
@@ -86,6 +126,54 @@ runs post keys and cannot move the real cursor or hear sound).
     yet, for the coordinator at release.
   - Sign in again on a real server after signing Nixie out there (Dashboard > Devices): not run, for the owner (the QA
     servers passed it off-screen: `then-signin.ps1` on 10.11.11 and 12.4.0).
+
+- **1.6.0**
+  - A skip rule on a real show with extras (Shift+S over a bumper, then the next episode offers it): not run, for the
+    owner.
+  - The Playback stats panel over real video (the numbers move, Copy has no token): not run, for the owner.
+  - A quality change on the owner's server: never tested by us (the server isn't ours); not run, for the owner. The QA
+    servers' quality run covers the code path.
+  - The Sandbox upgrade test (1.5.1 to 1.6.0, its three legs): not run yet, for the coordinator at release.
+
+## Nixie 1.6.0: collections
+- **Merged** (2026-11-21, `wip/rel-1.6.0`): colpage, topbar, skip, player, collections, then main with 1.5.1.
+- **Esc in the player** closes the innermost thing first: an open menu or flyout (the skip mark sheet is one), the
+  Playback stats, Cinematic's panel, then the "Skip this every episode?" question as Not now, then the page's own Esc
+  (leaving full screen). Not "hide the controls" before that: in a window Esc shows them, and F shows the bars, so it
+  would never leave full screen. Cinematic's panel holds the bars as a menu does but is no flyout
+  (`MpvControlsViewModel.FlyoutOpened`): the keys matrix's new Esc rows caught Esc dead under it at the merge.
+- **Collections** opens the collections stream's page from the top bar (`GlobalCommands.OpenCollections`); topbar's
+  interim route (the server's box-set view, else the Libraries page lit as Collections) and its in-place re-light are
+  retired. Collections chosen on a "See all" or the server's box-set view opens the page. The top bar's tabs and the
+  Libraries page's tiles use the tidy library names.
+- **Intros that move:** 1.5.1's rule (per season, the first hand skip of each episode, the same part 10 s or more apart)
+  in the skip stream's learner (`SkipStore.note_hand_skip`), replacing that stream's first form of the rule; 1.5.1's
+  marks in `learned-intros.json` ("seasons") migrate with the ranges into `skip-rules.json`.
+- **The release's final pass** (2026-11-21, off-screen, Debug x64 builds of the branch, the fake server's strict auth on
+  in every run): the keys matrix 566/566 in Classic and Drive-in, 610/610 in Cinematic and 572/572 in Editorial (the new
+  Esc rows among them); the contrast floor in four themes, Dark and Light, 4,408 labels and none under its
+  floor; 58 theme runs (then-140-checks, arrival, then-search, then-update, the season switch, rewatch, paging and T5 in
+  four themes, search in Cinematic Light, the full update flow and Restart to update, and the 1.6 streams' own:
+  then-topbar160 in four themes and its hub fixture, then-160-colpage in four themes with the long title and the list
+  view, then-160-skip, then-160-player and then-160-collections in four themes): 54 green once the harness knew the
+  Collections page and the reruns were in, the other four queued above (Drive-in's skeleton, Editorial's Made by Nixie
+  focus, the release notes' focus in Classic) or the 1.5.0 issue (Cinematic's skeleton, 21 px at 1920). On the QA
+  servers (10.11.11 and 12.4.0): then-search-live 14/14, the playlist and transcode run 44/44 (run alone: beside the skip
+  live check, which plays the same seeded episodes as the same user, the server's activity log counted both), the
+  quality run 16/16, the skip live check 14/14, the smoke 20/20, live-save-playlist 10/10 and live-server-index 12/12 on
+  each. FluentFin.Core.Tests 5,055 and FluentFin.Tests 1,592, all passed (two process timing tests alone); the
+  end-to-end harness 26/26, the transitions check 4/4 and the bridge smoke 75/75; the backend suite (6,733 tests in 304
+  modules) with only the 8 environment failures once the 8 modules its 300 s limit cut under the harness load were run
+  alone, all passed (`test_shell_playback` 165 in 1,078 s); the fake server's tests 74, the QA tools' 23 and the release
+  tools' 20 (`test_libmpv_stub` needs `pefile`, which only the build's venv has); the package from a dry run of
+  `build-release` 121/121 in `verify-package`.
+- **Found and fixed in the pass:** a Nixie collection's page drew neither its eyebrow ("Made by Nixie · Franchise") nor
+  its why line, in every theme: each stream had left drawing them to the other (fixed at the integration, with a test).
+  And the harness itself: the server's Collections and Playlists views now open the Collections page (`drive.ps1`'s
+  `Find-MediaCard`, then-140-checks, then-topbar160 and then-160-collections, whose page markers were a Text any top bar
+  tab also has), the tidy library names in the top bar's menu (then-topbar160's hub fixture), and the contrast run's
+  crops (a Made by Nixie row's name made a path over Windows' 260 characters; a preset clipped to 5 px at the edge of
+  Cinematic's scrolling strip was measured as a label).
 
 ## Nixie 1.5.1: the fix release
 - **The release's final pass** (2026-11-21, off-screen, a Debug x64 build of the branch after its review fixes, the fake

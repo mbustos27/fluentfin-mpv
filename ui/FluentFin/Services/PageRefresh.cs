@@ -31,6 +31,7 @@ public static class PageRefresh
 		typeof(HomeViewModel),
 		typeof(LibraryViewModel),
 		typeof(CollectionViewModel), // Nixie 1.4.0: a collection or a playlist, and the Libraries page (its counts)
+		typeof(CollectionsViewModel), // 1.6 collections: the Collections page (and its library index, read again)
 		typeof(LibrariesLandingPageViewModel),
 		typeof(ItemGridViewModel),
 		typeof(MovieViewModel),
@@ -117,6 +118,11 @@ public static class PageRefresh
 
 			// Home's page and a series' episodes are kept between visits: this visit asks the server
 			cache.MarkStale();
+			// 1.6 collections: R on Home or a collections page reads the library index again (the old one shows meanwhile)
+			if (viewModel == typeof(HomeViewModel) || viewModel == typeof(CollectionsViewModel) || viewModel == typeof(CollectionViewModel))
+			{
+				App.GetService<Core.SmartCollections.LibraryIndex>().MarkStale();
+			}
 			return true;
 		});
 		if (page is not { } fresh)

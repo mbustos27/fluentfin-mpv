@@ -1,4 +1,4 @@
-using FluentFin.Core.Contracts.Services;
+﻿using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.ViewModels;
 using Jellyfin.Sdk.Generated.Models;
 using Moq;
@@ -286,7 +286,11 @@ public sealed class EditorialXamlTests
 		Assert.All(keys.Where(k => k is not ("TopBarStyle" or "RowHeaderTemplate" or "PosterTemplate" or "StillTemplate" or "PageHeaderStyle" or "SignInBackdropTemplate"
 			or "ThemeOptionsTemplate" or "PlayerTopBarStyle" or "PlayerBottomBarStyle" or "TrailerFrameTemplate"
 			// Nixie 1.4.0: the page grid's contract keys (PageGridXamlTests)
-			or "PageGutterNarrow" or "PageGutterWide" or "PageTitleY" or "PageTitleUppercase")),
+			or "PageGutterNarrow" or "PageGutterWide" or "PageTitleY" or "PageTitleUppercase"
+			// 1.6 player: the Playback stats panel's look (ThemeContract.OptionalKeys)
+			or "PlayerStatsPanelStyle")
+			// 1.6 colpage: the shared pages' optional dress (Theming.SharedPageKeys)
+			&& !Theming.SharedPageKeys.All.Contains(k)),
 			k => Assert.StartsWith("Editorial", k));
 	}
 

@@ -1014,6 +1014,37 @@ class SearchRouteTests(unittest.TestCase):
         self.assertEqual("stock", body["mode"])
 
 
+# 1.6 topbar
+class TopBarFixtureTests(unittest.TestCase):
+    """FAKESERVER_VIEWS lists the first n default libraries; FAKESERVER_HUB_VIEWS puts three "[HUB]" hubs first."""
+
+    def _lib(self, **env):
+        keys = ("FAKESERVER_VIEWS", "FAKESERVER_HUB_VIEWS")
+        old = {k: os.environ.pop(k, None) for k in keys}
+        try:
+            os.environ.update(env)
+            return library.Library("server", "user", 600)
+        finally:
+            for k in keys:
+                os.environ.pop(k, None)
+                if old[k] is not None:
+                    os.environ[k] = old[k]
+
+    def test_the_first_views_only_and_the_showcase_still_answers(self):
+        lib = self._lib(FAKESERVER_VIEWS="1")
+        self.assertEqual(["Movies"], [lib.items[v]["Name"] for v in lib.views])
+        self.assertEqual(["Movies"], lib.showcase()["views"])
+        self.assertEqual("Shows", lib.showcase()["series"]["library"])
+
+    def test_the_hubs_come_first_by_kind(self):
+        lib = self._lib(FAKESERVER_HUB_VIEWS="1")
+        names = [lib.items[v]["Name"] for v in lib.views]
+        self.assertEqual(["[HUB] Trending Movies", "[HUB] Kids Movies", "[HUB] Trending Shows", "Movies", "Shows"], names[:5])
+        self.assertEqual(["movies", "movies", "tvshows"], [lib.items[v]["collection"] for v in lib.views[:3]])
+        self.assertTrue(all(lib.children[v] for v in lib.views[:3]))
+# end 1.6 topbar
+
+
 class LibraryViewsTests(unittest.TestCase):
     def test_a_library_added_is_a_fifth_view_once(self):
         lib = library.Library("server", "user", 600, seed=3)

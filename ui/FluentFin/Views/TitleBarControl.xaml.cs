@@ -42,8 +42,16 @@ public sealed partial class TitleBarControl : UserControl
 		Loaded += (_, _) => RegisterAsWindowTitleBar();
 
 		// 1.2.0 (the top bar): narrow windows fold the tabs and search; a hero under the bar gets the scrim
-		SizeChanged += (_, _) =>
+		SizeChanged += (_, e) =>
 		{
+			// 1.6 topbar (seen with the favourites' short row, 1920 to 1440): the search box's centring offset kept from the wider
+			// window made the right header wider than its room, the account slid under Minimize, and the offset measured from there
+			// kept it there. A new width starts pinned (no offset: it always fits) and CheckGap centres it again from there
+			if (e.NewSize.Width != e.PreviousSize.Width && SearchHost.Margin.Right != 0)
+			{
+				SearchHost.Margin = new Thickness(0);
+			}
+
 			Relayout();
 			QueuePassthrough();
 		};
@@ -71,6 +79,7 @@ public sealed partial class TitleBarControl : UserControl
 			else if (e.PropertyName is nameof(TitleBarViewModel.IsBackButtonShown) or nameof(TitleBarViewModel.IsVisible))
 			{
 				// Back coming or going moves the headers without changing their size
+				_measurePasses = 0; // 1.6 topbar: a bar shown again (after the player) may measure its new favourites
 				QueueRelayout();
 			}
 		};
@@ -85,6 +94,7 @@ public sealed partial class TitleBarControl : UserControl
 			_top.PropertyChanged -= OnTopChanged;
 			_top.PropertyChanged += OnTopChanged;
 			ShowLit();
+			ShowSections(); // 1.6 topbar
 		};
 
 		// Nixie 1.3.0: the active layout theme's TopBarStyle on the chrome, now and on every switch (the bar itself is kept)
@@ -117,7 +127,42 @@ public sealed partial class TitleBarControl : UserControl
 		{
 			DispatcherQueue.TryEnqueue(ShowLit);
 		}
+		else if (e.PropertyName is nameof(TopNavigation.Sections))
+		{
+			DispatcherQueue.TryEnqueue(ShowSections); // 1.6 topbar
+		}
 	}
+
+	// 1.6 topbar
+	/// <summary>
+	/// Nixie 1.6 (the review's T4): the plugins' sections (Diary, Playback reports) in the account menu, after who is signed in,
+	/// each with its glyph; one opens its page (the account wears the ring while it shows).
+	/// </summary>
+	private void ShowSections()
+	{
+		AccountSections.Children.Clear();
+		foreach (var section in _top.Sections)
+		{
+			var item = new MenuFlyoutButton
+			{
+				Content = section.Title,
+				HorizontalAlignment = HorizontalAlignment.Stretch,
+				Icon = new FontIcon { Glyph = section.Glyph ?? "" },
+			};
+			Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(item, section.Title);
+			item.Click += (_, _) =>
+			{
+				AccountFlyout.Hide();
+				_top.Open(section);
+			};
+			AccountSections.Children.Add(item);
+		}
+
+		var shown = AccountSections.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+		AccountSections.Visibility = shown;
+		AccountSectionsSeparator.Visibility = shown;
+	}
+	// end 1.6 topbar
 
 	/// <summary>
 	/// Nixie 1.4.0 (the review's X7, CL-m9): the search box wears the tabs' underline while its results (or an item opened from
@@ -126,7 +171,7 @@ public sealed partial class TitleBarControl : UserControl
 	private void ShowLit()
 	{
 		SearchLit.Visibility = _top.IsSearchLit ? Visibility.Visible : Visibility.Collapsed;
-		AccountLit.Visibility = _top.IsSettingsLit ? Visibility.Visible : Visibility.Collapsed;
+		AccountLit.Visibility = _top.IsAccountLit ? Visibility.Visible : Visibility.Collapsed; // 1.6 topbar: Settings, or the Diary
 		// Narrator hears it as it hears the marked tab's "selected"
 		Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(SearchBox, _top.IsSearchLit ? "Current" : "");
 		// the box's text field is what takes the keyboard (and what Narrator reads)
@@ -136,7 +181,7 @@ public sealed partial class TitleBarControl : UserControl
 		}
 
 		Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(SearchIconButton, _top.IsSearchLit ? "Current" : "");
-		Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(AccountButton, _top.IsSettingsLit ? "Settings is open" : "");
+		Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(AccountButton, _top.AccountLitName is { } open ? $"{open} is open" : "");
 	}
 
 	private void RegisterAsWindowTitleBar()
@@ -367,12 +412,13 @@ public sealed partial class TitleBarControl : UserControl
 		}
 
 		var navigation = ViewModel.IsNavigationShown;
+		var row = navigation ? Tabs.RowWidths() : new TopRowWidths(0, [], 0, 0);
 		var fit = TopBar.Fit(
 			width,
 			inset + _slack,
 			back: Math.Max(leftStart, ViewModel.IsBackButtonShown ? Math.Max(BackButton()?.ActualWidth ?? 0, 48) : 0),
 			wordmark: _wordmarkWidth > 0 ? _wordmarkWidth : 120,
-			row: navigation ? Tabs.RowWidths() : new TopRowWidths(0, [], 0, 0),
+			row: row,
 			menuButton: navigation ? Tabs.MenuButtonWidth() : 0,
 			account: ViewModel.IsAccountShown ? AccountButton.Width : 0,
 			search: ViewModel.IsSearchShown,
@@ -383,7 +429,20 @@ public sealed partial class TitleBarControl : UserControl
 		// Nixie 1.4.0: the library tabs the bar has no room for fold into "Libraries ▾" (the row changes: TabsChanged, measured again)
 		if (navigation)
 		{
-			_top.Fold(fit.ShownLibraries);
+			// 1.6 topbar (seen in Drive-in: two favourites starred at 1920 stayed off the bar, which had room, until a resize): a
+			// favourite never laid out has an estimated width; when the fit would leave one out, every tab shows for a pass, is
+			// measured (TopTabStrip.RowWidths keeps what each took) and the bar fits again
+			if (row.Unmeasured && !fit.Compact && !Tabs.IsMenuOpen && fit.ShownLibraries < row.Libraries.Count && _measurePasses < 3)
+			{
+				_measurePasses++;
+				_top.Fold(int.MaxValue);
+				QueueRelayout();
+			}
+			else
+			{
+				_measurePasses = row.Unmeasured ? _measurePasses : 0;
+				_top.Fold(fit.ShownLibraries);
+			}
 		}
 
 		Tabs.IsCompact = fit.Compact;
@@ -397,6 +456,9 @@ public sealed partial class TitleBarControl : UserControl
 		// then the gap really left, once laid out: short of the minimum, keep more room and lay out again (TopBar.Slack)
 		DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, CheckGap);
 	}
+
+	/// <summary>1.6 topbar: passes that showed every tab to measure a new favourite (at most 3 in a row).</summary>
+	private int _measurePasses;
 
 	/// <summary>Room kept beyond the measured parts (TopBar.Slack).</summary>
 	private double _slack;

@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Nixie 1.6 (smart collections, plan 4.1): the Collections page: every collection in one place, skinned by the theme like
+    the 1.4.0 Libraries page (its PageHeaderStyle title, gutter and ground). Rows: the server's box sets (tidied names,
+    "6 films · 3 left"), Playlists, Made by Nixie by kind (each row ending in "See all"), Saved. A Nixie collection's tile is
+    a 2×2 mosaic of its titles with a small Nixie mark; Narrator hears "made by Nixie". "See all" shows one row as a grid.
+-->
+<Page
+    x:Class="FluentFin.Views.CollectionsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:FluentFin.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
+    xmlns:lc="using:FluentFin.Controls"
+    xmlns:local="using:FluentFin.Views"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="using:FluentFin.Core.ViewModels"
+    x:Name="Page"
+    Background="{ThemeResource PageGroundBrush}"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <!--  one tile: the art (the set's poster, or a Nixie collection's mosaic and mark), then its name and what it holds  -->
+        <DataTemplate x:Key="CollectionTileTemplate" x:DataType="vm:CollectionTile">
+            <Button
+                Width="168"
+                Margin="0,0,16,0"
+                Padding="0"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.Name="{x:Bind AutomationName}"
+                Background="Transparent"
+                BorderThickness="0"
+                Click="Tile_Click"
+                CornerRadius="{StaticResource GlassCardCornerRadius}"
+                FocusVisualMargin="-4"
+                Style="{StaticResource BareButtonStyle}"
+                Tag="{x:Bind}"
+                ToolTipService.ToolTip="{x:Bind Title}">
+                <Grid RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="252" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid
+                        AutomationProperties.AccessibilityView="Raw"
+                        Background="{ThemeResource GlassInsetFillBrush}"
+                        CornerRadius="{StaticResource GlassCardCornerRadius}">
+                        <lc:LoadingImage
+                            Glyph="&#xE8F1;"
+                            Source="{x:Bind local:CollectionsPage.SetArt(Set)}"
+                            Stretch="UniformToFill"
+                            Visibility="{x:Bind local:CollectionsPage.ShownUnless(IsNixie)}" />
+                        <lc:CollectionMosaic ImageHeight="252" Items="{x:Bind Mosaic}" Visibility="{x:Bind IsNixie}" />
+                        <!--  the Nixie mark: a small lit "N" over a dark plate, legible on any poster (Narrator: the tile's "made by Nixie")  -->
+                        <Border
+                            Width="26"
+                            Height="26"
+                            Margin="8"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Background="#D9141018"
+                            BorderBrush="#66FFC4A6"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            ToolTipService.ToolTip="Made by Nixie"
+                            Visibility="{x:Bind IsNixie}">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="#FFFFC4A6"
+                                Text="N" />
+                        </Border>
+                    </Grid>
+                    <StackPanel Grid.Row="1" Padding="4,0,4,0" Spacing="2">
+                        <TextBlock
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                            MaxLines="2"
+                            Text="{x:Bind Title}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="WrapWholeWords" />
+                        <TextBlock
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind Detail}"
+                            TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </DataTemplate>
+    </Page.Resources>
+
+    <ScrollView x:Name="PageScroller" HorizontalScrollMode="Disabled">
+        <StackPanel
+            x:Name="PageContent"
+            Padding="36,72,36,48"
+            lc:PageGrid.Apply="True"
+            Spacing="20">
+            <TextBlock
+                x:Name="TitleText"
+                AutomationProperties.HeadingLevel="Level1"
+                AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+                Style="{StaticResource PageHeaderStyle}"
+                Text="{x:Bind lc:PageGrid.Title(ViewModel.Title), Mode=OneWay}" />
+
+            <!--  the first read of the libraries: Made by Nixie is on its way  -->
+            <StackPanel
+                x:Name="ReadingPanel"
+                Orientation="Horizontal"
+                Spacing="12"
+                Visibility="{x:Bind ViewModel.IsReadingIndex, Mode=OneWay}">
+                <ProgressRing
+                    Width="20"
+                    Height="20"
+                    IsActive="{x:Bind ViewModel.IsReadingIndex, Mode=OneWay}" />
+                <TextBlock
+                    AutomationProperties.LiveSetting="Polite"
+                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                    Text="{x:Bind ViewModel.ReadingText}" />
+            </StackPanel>
+
+            <!--  the rows; an ItemsControl, not a virtualizing repeater, so Tab reaches every row  -->
+            <ItemsControl
+                x:Name="RowsView"
+                IsTabStop="False"
+                ItemsSource="{x:Bind ViewModel.Rows}"
+                Visibility="{x:Bind local:CollectionsPage.ShownUnless(ViewModel.IsSeeAll), Mode=OneWay}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CollectionsRow">
+                        <StackPanel Spacing="8">
+                            <!--  the Made by Nixie section's heading: a small lit kicker over its rows, as Home's rows wear it  -->
+                            <StackPanel Margin="0,28,0,4" Orientation="Horizontal" Spacing="10" Visibility="{x:Bind HasHeading}">
+                                <Border
+                                    Width="26"
+                                    Height="26"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Background="#D9141018"
+                                    BorderBrush="#66FFC4A6"
+                                    BorderThickness="1"
+                                    CornerRadius="8">
+                                    <TextBlock
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Foreground="#FFFFC4A6"
+                                        Text="N" />
+                                </Border>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.HeadingLevel="Level2"
+                                    CharacterSpacing="80"
+                                    FontSize="15"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                    Text="{x:Bind local:CollectionsPage.Kicker(Heading)}" />
+                            </StackPanel>
+                            <lc:ShelfRow
+                                HasSeeAll="{x:Bind HasSeeAll}"
+                                Header="{x:Bind Title}"
+                                ItemTemplate="{StaticResource CollectionTileTemplate}"
+                                ItemsSource="{x:Bind Tiles}"
+                                SeeAll="Row_SeeAll"
+                                Tag="{x:Bind}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="20" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+
+            <!--  See all: one row's tiles as a grid  -->
+            <lc:RowList
+                x:Name="GridList"
+                AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+                TabFocusNavigation="Once"
+                Visibility="{x:Bind ViewModel.IsSeeAll, Mode=OneWay}"
+                XYFocusKeyboardNavigation="Enabled">
+                <ItemsRepeater
+                    x:Name="GridRepeater"
+                    ItemTemplate="{StaticResource CollectionTileTemplate}"
+                    ItemsSource="{x:Bind ViewModel.GridTiles, Mode=OneWay}">
+                    <ItemsRepeater.Layout>
+                        <UniformGridLayout
+                            ItemsJustification="Start"
+                            MinColumnSpacing="16"
+                            MinRowSpacing="24"
+                            Orientation="Horizontal" />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
+            </lc:RowList>
+
+            <!--  loading, nothing yet, or the server could not be read: said, with Retry  -->
+            <lc:LoadStateView ShowsLoading="True" State="{x:Bind ViewModel.State}" />
+        </StackPanel>
+    </ScrollView>
+</Page>

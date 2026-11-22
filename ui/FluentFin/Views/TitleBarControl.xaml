@@ -406,6 +406,17 @@
 
                                 <MenuFlyoutSeparator Margin="{StaticResource XSmallTopBottomMargin}" />
 
+                                <!--  1.6 topbar: the plugins' sections (Diary, Playback reports), moved here from the bar (the review's T4): TitleBarControl.ShowSections  -->
+                                <StackPanel
+                                    x:Name="AccountSections"
+                                    Spacing="2"
+                                    Visibility="Collapsed" />
+                                <MenuFlyoutSeparator
+                                    x:Name="AccountSectionsSeparator"
+                                    Margin="{StaticResource XSmallTopBottomMargin}"
+                                    Visibility="Collapsed" />
+                                <!--  end 1.6 topbar  -->
+
                                 <lc:MenuFlyoutButton
                                     x:Name="SwitchUserItem"
                                     HorizontalAlignment="Stretch"

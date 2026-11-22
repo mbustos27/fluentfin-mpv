@@ -499,6 +499,15 @@ public sealed partial class EditorialHomePage : Page
 		}
 	}
 
+	// 1.6 collections: a Made by Nixie row's "See all" opens its collection
+	private void NixieSeeAll(object sender, EventArgs e)
+	{
+		if (sender is Microsoft.UI.Xaml.FrameworkElement { Tag: Core.ViewModels.NixieHomeRowViewModel row })
+		{
+			ViewModel.OpenNixieRow(row);
+		}
+	}
+
 	// ---- Back to Home: where the user was ------------------------------------------------------------------------------
 
 	private HomePlace? _restore;

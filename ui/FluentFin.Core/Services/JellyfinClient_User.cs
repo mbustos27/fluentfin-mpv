@@ -157,6 +157,11 @@ public partial class JellyfinClient
 		try
 		{
 			var views = await _jellyfinApiClient.UserViews.GetAsync(x => x.QueryParameters.UserId = UserId);
+			if (views?.Items is { } read)
+			{
+				ViewModels.CollectionNames.RememberLibraries(read.Select(x => x.Name)); // 1.6 collections: tidy library names stay unique
+			}
+
 			return views?.Items is { } items ? [.. items.OfType<BaseItemDto>()] : null;
 		}
 		catch (Exception ex)

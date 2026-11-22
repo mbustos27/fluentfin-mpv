@@ -28,11 +28,16 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	/// <summary>Nixie 1.4.1: where a big library's pages are logged (each page's time, a try again, the end).</summary>
 	private readonly ILogger<LibraryViewModel>? _logger;
 
-	public LibraryViewModel(IJellyfinClient jellyfinClient, ILocalSettingsService? localSettings = null, ILogger<LibraryViewModel>? logger = null)
+	public LibraryViewModel(IJellyfinClient jellyfinClient, ILocalSettingsService? localSettings = null, ILogger<LibraryViewModel>? logger = null,
+		ILibraryPresetSource? presetSource = null, ISavedFilters? savedFilters = null)
 	{
 		JellyfinClient = jellyfinClient;
 		_localSettings = localSettings;
 		_logger = logger;
+		// 1.6 colpage: the presets strip's Nixie collections and Save as collection (the collections stream registers both)
+		PresetSource = presetSource;
+		SavedFilters = savedFilters;
+		Presets = [.. LibraryPreset.Builtin.Select(p => new LibraryPresetState(p, p.Kind == LibraryPresetKind.All, p.Name))];
 		_items = new(_shown);
 
 		// tie-break so equal keys (e.g. unrated, never played) keep a stable order
@@ -45,6 +50,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 				UserMoved();
 				Show();
 				UpdateBrowse();
+				UpdatePresets(); // 1.6 colpage: Recently added lights with its sort
 			});
 
 		Filter.WhenAnyPropertyChanged()
@@ -205,14 +211,21 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	/// <summary>The Sort button for Narrator, its words first: "Title, A to Z, Sort".</summary>
 	public string SortButtonName => InPlaylistOrder ? $"{PlaylistOrderName}, Sort" : LibraryBrowse.SortButtonName(SortBy, Order);
 
-	/// <summary>The genres, tags, years and ratings picked in Filter.</summary>
+	/// <summary>Every filter on: Unwatched, Favorites, a preset's titles, and the genres, tags, years and ratings picked in Filter.</summary>
 	[ObservableProperty]
-	[NotifyPropertyChangedFor(nameof(FilterText), nameof(FilterButtonName))]
 	public partial int ActiveFilters { get; set; }
 
-	public string FilterText => LibraryBrowse.FilterText(ActiveFilters);
+	/// <summary>
+	/// 1.6 colpage (LB3): what Filter's count counts: the genres, tags, years and ratings picked in it; not what has its own
+	/// switch in the presets strip (Unwatched, Favorites, a Nixie collection), which was a third signal for one filter.
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(FilterText), nameof(FilterButtonName))]
+	public partial int FilterCount { get; set; }
 
-	public string FilterButtonName => LibraryBrowse.FilterButtonName(ActiveFilters);
+	public string FilterText => LibraryBrowse.FilterText(FilterCount);
+
+	public string FilterButtonName => LibraryBrowse.FilterButtonName(FilterCount);
 
 	/// <summary>"368 movies", or "12 of 368 movies" with filters on.</summary>
 	[ObservableProperty]
@@ -404,11 +417,13 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		// the filters did not change (FiltersChanged would say they did, and the grid would go to its top)
 		Recount();
 		UpdateBrowse();
+		LoadNixiePresets(); // 1.6 colpage
 	}
 
 	private void FiltersChanged()
 	{
 		ActiveFilters = LibraryBrowse.ActiveFilters(Filter);
+		FilterCount = LibraryBrowse.FilterCount(Filter);
 		// Nixie 1.4.1: a new list only when the filters did change: the pages take a changed list for a new set of titles
 		// and start the grid at its top
 		var applied = Filter.Applied();
@@ -419,6 +434,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 
 		Recount();
 		UpdateBrowse();
+		UpdatePresets(); // 1.6 colpage
 	}
 
 	/// <summary>The Filter menu's counts and the Unwatched switch's, against the other filters on.</summary>
@@ -832,6 +848,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	{
 		Filter.Unwatched = false;
 		Filter.Favorites = false;
+		Filter.Preset = null;
 		Filter.Genres.Clear();
 		Filter.Tags.Clear();
 		Filter.Years.Clear();
@@ -898,6 +915,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 	{
 		// Nixie 1.4.1: the rest of a big library is not asked for once the page is left
 		_loading?.Cancel();
+		StopPresets(); // 1.6 colpage (review Major 4): the presets source's Changed let go
 		return Task.CompletedTask;
 	}
 
@@ -962,7 +980,7 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 		_serverTotal = null;
 		_pendingPlace = null;
 		RestLoaded = Task.CompletedTask;
-		Title = dto.Name ?? "";
+		Title = CollectionNames.DisplayView(dto); // 1.6 collections: a tidy library (or box set) name
 		_library = dto;
 		ReadView();
 		_firstShown = 0;
@@ -1049,6 +1067,11 @@ public partial class LibraryViewModel : ObservableObject, INavigationAware
 			else if (reader is not null && IsLoadingMore)
 			{
 				RestRead(reader); // every page came while the place was awaited (or one failed)
+			}
+
+			if (!IsLoadingMore)
+			{
+				LoadNixiePresets(); // 1.6 colpage: every title is in (one page, or a playlist)
 			}
 
 			if (_all.Count == 0 && playlist)
@@ -1217,6 +1240,10 @@ public partial class LibraryFilter : ObservableObject
 	[ObservableProperty]
 	public partial bool Favorites { get; set; }
 
+	/// <summary>1.6 colpage: only a Nixie collection's titles (a preset of the strip), null for none.</summary>
+	[ObservableProperty]
+	public partial LibraryPresetItems? Preset { get; set; }
+
 	[ObservableProperty]
 	public partial ObservableCollection<string> Genres { get; set; } = new();
 
@@ -1242,6 +1269,11 @@ public partial class LibraryFilter : ObservableObject
 		}
 
 		if (except != FilterGroup.Favorites && Favorites && dto.UserData?.IsFavorite != true)
+		{
+			return false;
+		}
+
+		if (except != FilterGroup.Preset && Preset is { } preset && !(dto.Id is { } id && preset.Items.Contains(id)))
 		{
 			return false;
 		}
@@ -1286,6 +1318,11 @@ public partial class LibraryFilter : ObservableObject
 			applied.Add(new AppliedFilter(FilterGroup.Favorites, "", "Favorites"));
 		}
 
+		if (Preset is { } preset)
+		{
+			applied.Add(new AppliedFilter(FilterGroup.Preset, preset.Id, preset.Label));
+		}
+
 		applied.AddRange(Genres.Select(g => new AppliedFilter(FilterGroup.Genres, g, g)));
 		applied.AddRange(Years.Select(y => new AppliedFilter(FilterGroup.Years, y, y)));
 		applied.AddRange(OfficialRatings.Select(r => new AppliedFilter(FilterGroup.Ratings, r, $"Rated {r}")));
@@ -1303,6 +1340,9 @@ public partial class LibraryFilter : ObservableObject
 				break;
 			case FilterGroup.Favorites:
 				Favorites = false;
+				break;
+			case FilterGroup.Preset:
+				Preset = null;
 				break;
 			case FilterGroup.Genres:
 				Genres.Remove(filter.Value);

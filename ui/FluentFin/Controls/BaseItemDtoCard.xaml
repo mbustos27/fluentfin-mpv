@@ -241,14 +241,15 @@
             Background="Transparent"
             Spacing="2">
 
+            <!--  1.6 colpage (LB1): a place in a set, where its order means something, leads the caption ("1 · Wild Canyons"), not a chip on the art  -->
             <TextBlock
+                x:Name="CaptionText"
                 FontFamily="{StaticResource GlassTextFontFamily}"
                 FontSize="14"
                 FontWeight="SemiBold"
                 Foreground="{ThemeResource GlassTextPrimaryBrush}"
-                Text="{x:Bind Model.Dto, Converter={StaticResource NameConverter}, Mode=OneWay}"
                 TextTrimming="CharacterEllipsis"
-                TextWrapping="NoWrap" />
+                TextWrapping="NoWrap"><Run x:Name="CaptionPrefixRun" Foreground="{ThemeResource GlassTextSecondaryBrush}" Text="{x:Bind local:BaseItemDtoCard.PrefixWords(CaptionPrefix), Mode=OneWay}" /><Run Text="{x:Bind Model.Dto, Converter={StaticResource NameConverter}, Mode=OneWay}" /></TextBlock>
 
             <TextBlock
                 Style="{StaticResource GlassMetaTextBlockStyle}"

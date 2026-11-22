@@ -96,6 +96,30 @@ namespace FluentFin.Core.Contracts.Services
 		Task<BaseItemDtoQueryResult?> GetPersonItems(Guid personId);
 		// end 1.5 search
 
+		// 1.6 collections (JellyfinClient_Index.cs; docs/research/smart-collections-data.md): the library index's pages, the
+		// played episodes, items by id, the box sets and playlists, and "Save as playlist". Each is null on a failure.
+		/// <summary>Nixie 1.6: a page of a library's index (films or shows with ProviderIds, Tags, Genres, Studios, ProductionLocations).</summary>
+		Task<BaseItemDtoQueryResult?> GetLibraryIndexPage(BaseItemDto library, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken);
+
+		/// <summary>Nixie 1.6: the same page with People only (its own pass: People cost about 3.5 times the index).</summary>
+		Task<BaseItemDtoQueryResult?> GetLibraryPeoplePage(BaseItemDto library, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken);
+
+		/// <summary>Nixie 1.6: the user's played episodes, latest first (each with its show and when it was played).</summary>
+		Task<BaseItemDtoQueryResult?> GetPlayedEpisodesPage(int startIndex, int limit, bool withTotal, CancellationToken cancellationToken);
+
+		/// <summary>Nixie 1.6: these items in this order (a Nixie collection's cards).</summary>
+		Task<IReadOnlyList<BaseItemDto>?> GetItemsByIds(IReadOnlyList<Guid> ids, CancellationToken cancellationToken = default);
+
+		/// <summary>Nixie 1.6: the user's box sets, with their TMDb id and size.</summary>
+		Task<BaseItemDtoQueryResult?> GetBoxSets(CancellationToken cancellationToken = default);
+
+		/// <summary>Nixie 1.6: the playlists the user can see.</summary>
+		Task<BaseItemDtoQueryResult?> GetPlaylists(CancellationToken cancellationToken = default);
+
+		/// <summary>Nixie 1.6: "Save as playlist": a playlist of the user's own with these items; the server's no as a status.</summary>
+		Task<PlaylistCreation> CreatePlaylist(string name, IReadOnlyList<Guid> ids);
+		// end 1.6 collections
+
 		Task<BaseItemDto?> GetItem(Guid id);
 
 		/// <summary>Nixie 1.4.0: the folders an item is in, nearest first (its library among them); empty on failure. Never throws.</summary>

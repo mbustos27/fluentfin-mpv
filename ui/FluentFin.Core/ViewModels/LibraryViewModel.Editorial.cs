@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Jellyfin.Sdk.Generated.Models;
 
 namespace FluentFin.Core.ViewModels;
@@ -83,6 +83,7 @@ public sealed record EditorialRowLine(IReadOnlyList<BaseItemViewModel> Items, in
 	{
 		Tag = Tags is { } tags && i < tags.Count ? tags[i] : null,
 		PosterWidth = Metrics?.PosterWidth ?? EditorialLibrary.PosterWidth,
+		ListForm = Metrics?.ListForm ?? false,
 	})];
 }
 
@@ -96,6 +97,9 @@ public sealed record EditorialCell(BaseItemViewModel Item, int Position, int Siz
 
 	/// <summary>Nixie 1.4.0: the poster's width when its row was drawn (EditorialGridMetrics).</summary>
 	public double PosterWidth { get; init; } = EditorialLibrary.PosterWidth;
+
+	/// <summary>1.6 colpage: drawn as a line of the list view.</summary>
+	public bool ListForm { get; init; }
 }
 
 /// <summary>
@@ -107,6 +111,9 @@ public sealed record EditorialCell(BaseItemViewModel Item, int Position, int Siz
 public sealed class EditorialGridMetrics
 {
 	public double PosterWidth { get; set; } = EditorialLibrary.PosterWidth;
+
+	/// <summary>1.6 colpage: the list view (one title a line) rather than the grid.</summary>
+	public bool ListForm { get; set; }
 }
 
 /// <summary>The opened poster's details, under its row.</summary>
@@ -359,4 +366,64 @@ public static class EditorialLibrary
 
 	/// <summary>Nixie 1.4.0 (item 8): the direction in words on the button in every theme: "Title · A to Z", "Date added · newest first".</summary>
 	public static string SortWords(ItemSortBy sortBy, SortOrder order) => LibraryBrowse.SortText(sortBy, order);
+}
+
+/// <summary>
+/// 1.6 colpage (theme polish): Editorial's list view, a magazine's index: each title a line with its small poster, the title,
+/// "1979 · 1h 52m · PG", a short line from its overview, and where the user is with it ("Watched", "45% watched", "5 left").
+/// View > List in the toolbar, kept per library; the grid's keyboard and Narrator model (one poster a stop, "n of m").
+/// </summary>
+public static class EditorialListForm
+{
+	/// <summary>A list line's poster: 64 wide (96 high), and the line's height.</summary>
+	public const double ArtWidth = 64, LineHeight = 112;
+
+	/// <summary>The facts: the poster's own line ("1979 · 1h 52m", "3 seasons") and the rating.</summary>
+	public static string Facts(BaseItemDto? dto)
+	{
+		var meta = EditorialCards.PosterMeta(dto);
+		var rating = dto?.OfficialRating?.Trim();
+		return string.Join(" · ", new[] { meta, rating ?? "" }.Where(x => !string.IsNullOrEmpty(x)));
+	}
+
+	/// <summary>The overview's first sentence, at most <paramref name="most"/> characters (cut at a word, with an ellipsis); "" when none.</summary>
+	public static string ShortLine(BaseItemDto? dto, int most = 140)
+	{
+		var text = (dto?.Overview ?? "").Replace('\n', ' ').Replace('\r', ' ').Trim();
+		while (text.Contains("  ", StringComparison.Ordinal))
+		{
+			text = text.Replace("  ", " ", StringComparison.Ordinal);
+		}
+
+		if (text.Length == 0)
+		{
+			return "";
+		}
+
+		var end = text.IndexOfAny(['.', '!', '?']);
+		var sentence = end is > 0 and var e && e < most ? text[..(e + 1)] : text;
+		if (sentence.Length <= most)
+		{
+			return sentence;
+		}
+
+		var cut = sentence.LastIndexOf(' ', most - 1);
+		return $"{sentence[..(cut > most / 2 ? cut : most - 1)].TrimEnd(',', ';', ':', ' ')}…";
+	}
+
+	/// <summary>Where the user is with it: "Watched", "45% watched", "5 left" (a show or a set), or "" (not started).</summary>
+	public static string State(BaseItemDto? dto)
+	{
+		if (ItemBadges.ToWatch(dto) > 0)
+		{
+			return $"{ItemBadges.ToWatchText(dto)} left";
+		}
+
+		if (ItemBadges.Watched(dto))
+		{
+			return "Watched";
+		}
+
+		return EditorialCards.Progress(dto) is > 0 and var percent ? $"{Math.Round(percent).ToString(CultureInfo.CurrentCulture)}% watched" : "";
+	}
 }

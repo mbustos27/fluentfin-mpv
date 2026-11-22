@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 
 namespace FluentFin.Tests;
 
@@ -41,7 +41,8 @@ public sealed class EditorialLibraryLayoutTests
 		var code = File.ReadAllText(App("Themes", "Editorial", "Controls", "EditorialPoster.xaml.cs"));
 		var resize = code[code.IndexOf("private void Resize()", StringComparison.Ordinal)..];
 		resize = resize[..resize.IndexOf("ApplyImage();", StringComparison.Ordinal)];
-		Assert.Contains("Picture.Width = PosterWidth;", resize);
+		// (1.6 colpage: the poster's art width, or the list form's small art: ArtWidthNow)
+		Assert.Contains("Picture.Width = ArtWidthNow;", resize);
 		Assert.Contains("Picture.Height = ArtHeight;", resize);
 	}
 

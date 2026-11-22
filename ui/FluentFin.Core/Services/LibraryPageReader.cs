@@ -22,6 +22,14 @@ namespace FluentFin.Core.Services;
 /// </summary>
 public sealed class LibraryPageReader(IJellyfinClient client, BaseItemDto library)
 {
+	// 1.6 collections: the same paging over another request (the library index's pages, its people, the played episodes)
+	private readonly Func<int, int, bool, CancellationToken, Task<BaseItemDtoQueryResult?>>? _ask;
+
+	/// <summary>Nixie 1.6: pages of <paramref name="ask"/> (start, limit, with the total, cancellation) instead of the library's cards.</summary>
+	public LibraryPageReader(BaseItemDto library, Func<int, int, bool, CancellationToken, Task<BaseItemDtoQueryResult?>> ask)
+		: this(null!, library) => _ask = ask;
+	// end 1.6 collections
+
 	/// <summary>The first page: a screen of cards at the smallest size, at once.</summary>
 	public const int FirstPageSize = 100;
 
@@ -234,7 +242,7 @@ public sealed class LibraryPageReader(IJellyfinClient client, BaseItemDto librar
 		timeout.CancelAfter(PageTimeout);
 		Requests++;
 		var started = Stopwatch.GetTimestamp();
-		var answer = await client.GetLibraryItems(library, start, limit, withTotal, timeout.Token).ConfigureAwait(false);
+		var answer = await (_ask is { } ask ? ask(start, limit, withTotal, timeout.Token) : client.GetLibraryItems(library, start, limit, withTotal, timeout.Token)).ConfigureAwait(false); // 1.6 collections: _ask
 		return (answer, Stopwatch.GetElapsedTime(started));
 	}
 }

@@ -31,6 +31,16 @@ public static class SettingKeys
 	/// <summary>Remember where the user skips the start of an episode and offer it on the season's later episodes.</summary>
 	public static Key<bool> LearnIntros { get; } = new Key<bool>("LearnIntros", true);
 
+	// 1.6 skip: Settings > Playback's skip rules (docs/BRIDGE.md §4 set_skip_options). "Learn skips from my seeks" is
+	// LearnIntros above, renamed on screen only, so a 1.5 choice carries over.
+
+	/// <summary>1.6 skip: the server's ad and preview segments: "off", "ask" (a Skip button, the default) or "always".</summary>
+	public static Key<string> AdsAndPreviewsAction { get; } = new Key<string>("AdsAndPreviewsAction", "ask");
+
+	/// <summary>1.6 skip: "When a show has a skip rule": "ask" (a Skip button, the default) or "always" (skip it by itself).</summary>
+	public static Key<string> SkipRuleAction { get; } = new Key<string>("SkipRuleAction", "ask");
+	// end 1.6 skip
+
 	/// <summary>The mouse wheel over the video changes the volume.</summary>
 	public static Key<bool> MouseWheelVolume { get; } = new Key<bool>("MouseWheelVolume", true);
 
@@ -84,6 +94,21 @@ public static class SettingKeys
 	/// </summary>
 	public static Key<bool> HomeLetterKeysOff { get; } = new Key<bool>("HomeLetterKeysOff", false);
 	// END 1.5 fixes
+
+	// 1.6 player
+	/// <summary>
+	/// 1.6: Settings &gt; Playback, the default quality when the server is at home (1.5's local-or-remote rule, the backend's):
+	/// <see cref="Mpv.QualityChoice.ToSetting"/>'s "auto", "original" or a cap in bits per second. Auto by default, and Nixie
+	/// never moves it by itself. Sent before every play (<c>set_quality_defaults</c>, docs/BRIDGE.md §4). Kept on this PC.
+	/// </summary>
+	public static Key<string> QualityAtHome { get; } = new Key<string>("QualityAtHome", "auto");
+
+	/// <summary>1.6: the default quality when the server is away (remote), as <see cref="QualityAtHome"/>.</summary>
+	public static Key<string> QualityAway { get; } = new Key<string>("QualityAway", "auto");
+
+	/// <summary>1.6: Settings &gt; Playback, "Show the Playback stats button" in the player. Off by default; the I key works either way.</summary>
+	public static Key<bool> ShowPlaybackStatsButton { get; } = new Key<bool>("ShowPlaybackStatsButton", false);
+	// end 1.6 player
 }
 
 /// <summary>fluentfin-mpv: who draws the controls over the mpv player's video.</summary>

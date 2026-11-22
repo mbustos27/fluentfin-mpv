@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using FluentFin.Core.Contracts.Services;
 using Jellyfin.Sdk.Generated.Models;
@@ -14,6 +14,9 @@ public enum FilterGroup
 	Years,
 	Ratings,
 	Tags,
+
+	/// <summary>1.6 colpage: a Nixie collection's titles, picked in the presets strip.</summary>
+	Preset,
 }
 
 /// <summary>
@@ -75,6 +78,10 @@ public static class LibraryNoMatches
 		else if (filter.Tags.Count > 0)
 		{
 			words.Add($"tagged {Or(filter.Tags)}");
+		}
+		else if (filter.Preset is { } preset)
+		{
+			words.Add($"in {preset.Label}"); // 1.6 colpage: a Nixie collection's titles
 		}
 
 		return string.Join(' ', words);

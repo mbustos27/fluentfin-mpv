@@ -40,9 +40,27 @@ public static class Bridge
 		public const string SetAutoPlay = "set_auto_play";
 		/// <summary>fluentfin-mpv: skips the segment on offer (<see cref="BridgeSegments.Offered"/>); result <see cref="BridgeSkipResult"/> (docs/BRIDGE.md §4).</summary>
 		public const string SkipSegment = "skip_segment";
+		// 1.6 skip: skip rules (docs/BRIDGE.md §4)
+		/// <summary>1.6 skip: the account's skip rules, <see cref="BridgeSkipRulesList"/>.</summary>
+		public const string SkipRules = "skip_rules";
+		/// <summary>1.6 skip: a part to skip in every episode of the show playing; result <c>{"ruleId"}</c>.</summary>
+		public const string AddSkipRule = "add_skip_rule";
+		/// <summary>1.6 skip: forgets one rule, one show's, or all.</summary>
+		public const string ForgetSkipRules = "forget_skip_rules";
+		/// <summary>1.6 skip: the answer to a <see cref="Events.SkipSuggestion"/>.</summary>
+		public const string AnswerSkipSuggestion = "answer_skip_suggestion";
+		// end 1.6 skip
 		public const string GetState = "get_state";
 		public const string Shutdown = "shutdown";
 		public const string PlayFile = "play_file";
+		// 1.6 player
+		/// <summary>1.6: the quality of the item playing (<see cref="QualityChoice"/>; docs/BRIDGE.md §4).</summary>
+		public const string SetQuality = "set_quality";
+		/// <summary>1.6: the default quality at home and away, before every play (docs/BRIDGE.md §4).</summary>
+		public const string SetQualityDefaults = "set_quality_defaults";
+		/// <summary>1.6: the Playback stats, read only while the panel is open (<see cref="BridgeStats"/>; docs/BRIDGE.md §4).</summary>
+		public const string GetStats = "get_stats";
+		// end 1.6 player
 	}
 
 	public static class Events
@@ -61,6 +79,12 @@ public static class Bridge
 		public const string Segments = "segments";
 		/// <summary>fluentfin-mpv: the items <c>next</c> and <c>previous</c> would play, <see cref="BridgeNext"/> (docs/BRIDGE.md §5).</summary>
 		public const string Next = "next";
+		/// <summary>1.6 skip: the same skip in two episodes of a show, <see cref="BridgeSkipSuggestion"/> (docs/BRIDGE.md §5).</summary>
+		public const string SkipSuggestion = "skip_suggestion";
+		// 1.6 player
+		/// <summary>1.6: how the item is served and the quality chosen for it, <see cref="BridgeStream"/> (docs/BRIDGE.md §5).</summary>
+		public const string Stream = "stream";
+		// end 1.6 player
 	}
 
 	/// <summary>fluentfin-mpv: what the backend's settings do with a segment type (<see cref="BridgeSegment.Action"/>).</summary>
@@ -141,7 +165,8 @@ public sealed record BridgeTrack(int Index, string? Language = null, string? Tit
 /// fluentfin-mpv: one media segment of the <c>segments</c> event: Jellyfin's <c>MediaSegmentType</c> (<c>Intro</c>,
 /// <c>Outro</c>, <c>Commercial</c>, <c>Preview</c>, <c>Recap</c>), its span in ticks, and <see cref="Bridge.SegmentActions"/>.
 /// </summary>
-public sealed record BridgeSegment(string Type, long StartTicks, long EndTicks, string Action, string Source = "server")
+public sealed record BridgeSegment(string Type, long StartTicks, long EndTicks, string Action, string Source = "server",
+	string? RuleId = null, string? Origin = null, string? Anchor = null) // 1.6 skip: a rule's (source "rule")
 {
 	/// <summary>The quiet tooltip line for where the skip came from; null for the server's own segments and unknown sources.</summary>
 	[JsonIgnore]
@@ -150,12 +175,18 @@ public sealed record BridgeSegment(string Type, long StartTicks, long EndTicks, 
 		"chapters" => "from chapters",
 		"online" => "from an online source",
 		"learned" => "from your earlier skips",
+		// 1.6 skip: a show's skip rule, the viewer's own or a yes to a suggestion
+		"rule" => Origin == "learned" ? "Learned from your skips" : "Your rule for this show",
 		_ => null,
 	};
 
+	/// <summary>1.6 skip: a skip rule's part that is not an intro or the credits: "Skip extra".</summary>
+	[JsonIgnore]
+	public bool IsExtra => Source == "rule" && Type is not ("Intro" or "Outro");
+
 	/// <summary>The skip button's text, the backend's own words for the type ("Skip Credits" for an outro).</summary>
 	[JsonIgnore]
-	public string SkipLabel => Type switch
+	public string SkipLabel => IsExtra ? "Skip Extra" : Type switch // 1.6 skip: IsExtra
 	{
 		"Outro" => "Skip Credits",
 		"Commercial" => "Skip Commercial",

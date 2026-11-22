@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 using FluentFin.Core.ViewModels;
 using FluentFin.Themes;
 using FluentFin.Themes.DriveIn;
@@ -69,8 +69,11 @@ public sealed class DriveInThemeTests
 		var shared = new[] { "TopBarStyle", "RowHeaderTemplate", "PosterTemplate", "StillTemplate", "PageHeaderStyle", "SignInBackdropTemplate",
 			"ThemeOptionsTemplate", "PlayerTopBarStyle", "PlayerBottomBarStyle", "TrailerFrameTemplate", "Default", "Light", "HighContrast",
 			// Nixie 1.4.0: the shared pages' ground and the page grid (ThemeContract, Styles/PageGrid.xaml)
-			"PageGroundBrush", "PageGutterNarrow", "PageGutterWide", "PageTitleY", "PageTitleUppercase" };
-		Assert.All(keys.Except(shared), key => Assert.StartsWith("DriveIn", key));
+			"PageGroundBrush", "PageGutterNarrow", "PageGutterWide", "PageTitleY", "PageTitleUppercase",
+			// 1.6 player: the Playback stats panel's look (ThemeContract.OptionalKeys)
+			"PlayerStatsPanelStyle" };
+		// 1.6 colpage: the shared pages' optional dress (Core.Theming.SharedPageKeys)
+		Assert.All(keys.Except(shared).Except(FluentFin.Core.Theming.SharedPageKeys.All), key => Assert.StartsWith("DriveIn", key));
 	}
 
 	[Fact]

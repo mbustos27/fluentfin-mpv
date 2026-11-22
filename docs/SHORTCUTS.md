@@ -8,7 +8,7 @@ The map below is what the app does (`ui/FluentFin.Core/Shortcuts/AppShortcuts.cs
 
 | Where | Keys |
 |---|---|
-| Player (FluentFin controls) | Space, K; Left/Right 5 s, Ctrl+Left/Right 10 s, J/L 10 s; Up/Down volume; M; F; S; Shift+N/Shift+P; media keys; Esc (leave full screen, then leave); mouse wheel volume; click pauses, double click is full screen |
+| Player (FluentFin controls) | Space, K; Left/Right 5 s, Ctrl+Left/Right 10 s, J/L 10 s; Up/Down volume; M; F; S; Shift+S (1.6); Shift+N/Shift+P; media keys; Esc (leave full screen, then leave); mouse wheel volume; click pauses, double click is full screen |
 | Shell | Alt+Left and the Back key: back (ShellPage accelerators; no forward at all) |
 | Title bar | Ctrl+F: search |
 | Home page | N next up, C continue (hidden accelerators) |
@@ -61,6 +61,22 @@ notice shows) is on the "?" sheet.
 | Space, Enter on a chip | Shows that kind only (All shows every group again). The chip stays lit after Back and R; a new search starts on All |
 | Space, Enter on "Show N more" | Opens the group's weaker matches; on "Show fewer" folds them again |
 
+## Top bar (1.6)
+
+| Key | Does |
+|---|---|
+| Tab | Lands on the lit tab (the first when none is), then search and the account |
+| Left, Right, Home, End on a tab | Move between the tabs (round) |
+| Enter, Space on Libraries ▾ | Opens its menu, the keyboard on All libraries |
+| Up, Down in the Libraries menu | Move between All libraries and the libraries (round); Home and End go to the first and last |
+| Right, Left in the Libraries menu | Between a library and its star |
+| Enter, Space on a star | Adds the library to the top bar or takes it off; the menu stays open. A fourth is refused, and the line under the list says so |
+| Enter on a library | Opens it; the keyboard goes to the page |
+| Esc | Closes the menu; the keyboard goes back to Libraries ▾ |
+| Shift+F10, the Menu key on a tile of the Libraries page | The tile's menu: "Add Movies to the top bar" or "Remove Movies from the top bar" |
+
+The Diary and other plugin sections are in the account menu (Enter or Space on the account button, then Tab to them).
+
 ## Player keys (only while the video is shown)
 
 | Key | Does |
@@ -73,7 +89,8 @@ notice shows) is on the "?" sheet.
 | Shift+Left | 30 s back |
 | 0 to 9 (also the number pad) | Jump to that tenth of the video; 0 is the start |
 | Home | Start |
-| S | Skip intro or credits, while offered |
+| S | Skip intro or credits (or an extra a skip rule marks), while offered |
+| Shift+S | Skip a part every episode (1.6): opens the sheet that marks a part of this episode (pre-filled from your last forward seek) to skip in every episode of the show, from the start or before the end; Esc closes it. Episodes only |
 | Shift+N, Shift+P, media keys | Next / previous item (also the bar's Previous and Next buttons) |
 | [, ] | Speed a step down / up: 0.5×, 0.75×, normal, 1.25×, 1.5×, 1.75×, 2× (the bar's speed button shows any speed but normal) |
 | Backspace | Normal speed |
@@ -83,8 +100,9 @@ notice shows) is on the "?" sheet.
 | V | Next subtitle track (off, each track, off ...) |
 | B | Next audio track |
 | Z, X | Subtitles 0.1 s earlier / later (the subtitles menu has the same, with a reset) |
+| I | Playback stats (1.6): the panel over the video opens or closes (mpv's own stats key). It works with or without Settings' "Show the Playback stats button"; Esc, the panel's Close and the button close it too |
 | F, F11, Alt+Enter | Full screen (Alt+Enter since 1.2.0, the classic Windows players' key) |
-| Esc | Close an open panel of the theme (Cinematic's tabs panel), else leave full screen. In a window it only shows the controls: it never stops the video or leaves the player (1.2.0; Back, Alt+Left, the Back key and Mouse 4 leave). On the loading screen it cancels the start, as its Cancel does. |
+| Esc | One thing per press, the innermost first (1.6): an open menu or flyout closes (Audio and subtitles, Quality, volume, speed, chapters, the "Skip a part every episode" sheet); if none is open, the Playback stats panel closes; if that isn't open either, a panel of the theme closes (Cinematic's tabs panel); only when none of these is open does Esc answer "Skip this every episode?" with Not now; after that, it leaves full screen. In a window it only shows the controls: it never stops the video or leaves the player (1.2.0; Back, Alt+Left, the Back key and Mouse 4 leave). On the loading screen it cancels the start, as its Cancel does. |
 
 The mouse: a click on the video pauses or plays at once (1.2.0; 1.1.3 waited the double-click time), a double click is full
 screen and puts the play state back to what it was before its first click, the wheel is volume, Mouse 4 / 5 are back /
@@ -111,8 +129,10 @@ restyle and re-lay out the controls and never change a key (`PlayerKeysContractT
   player the keyboard is the player's again if it was elsewhere (the title bar, nothing, a theme panel's button). Every key
   works at once after a click, while the controls are still showing.
 - **A held key** repeats only the seeks, the volume, the speed steps and the subtitle delay; a held Space, K, M, F, F11,
-  Alt+Enter, Shift+N, Shift+P, S, C, V, B, Home, a digit or Backspace does its job once.
-- **Escape** stays the page's: an open theme panel closes first, then full screen ends; in a window it shows the controls.
+  Alt+Enter, Shift+N, Shift+P, S, C, V, B, I, Home, a digit or Backspace does its job once.
+- **Escape** stays the page's, one thing per press (1.6): an open menu or flyout (its own Esc), then the Playback stats
+  panel, then a theme's panel, then "Skip this every episode?" as Not now, then full screen ends; in a window it shows the
+  controls. With the keyboard in Cinematic's panel the order is the same (`MpvControlsViewModel.ClosePanels`).
 - **A dialog over the player** (F1's sheet, a confirmation) has every key (1.4.0: the router sees the open dialog itself,
   `PlayerFocus.Modal`; in 1.3.1 F, M, the digits, K and Shift+N still acted under the sheet). Esc and F1 close the sheet.
 - **Not in the key matrix, by design** (`tools\ui-harness\keys-matrix.ps1` checks every other context in all four themes):

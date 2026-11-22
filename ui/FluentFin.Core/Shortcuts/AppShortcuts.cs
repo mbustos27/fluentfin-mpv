@@ -184,6 +184,9 @@ public static class ShortcutCatalog
 				C(MpvControlsViewModel.Keys.D0), C(MpvControlsViewModel.Keys.D9), C(MpvControlsViewModel.Keys.Numpad0)),
 			new("Home", "Back to the start", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Home)),
 			new("S", "Skip intro or credits, when offered", ShortcutScope.Player, C(MpvControlsViewModel.Keys.S)),
+			// 1.6 skip
+			new("Shift+S", "Skip a part in every episode of the show (marks a skip rule)", ShortcutScope.Player,
+				C(MpvControlsViewModel.Keys.S, Shift: true)),
 			new("Shift+N, Shift+P", "Next or previous episode", ShortcutScope.Player,
 				C(MpvControlsViewModel.Keys.N, Shift: true), C(MpvControlsViewModel.Keys.P, Shift: true)),
 			new("[, ]", "Slower or faster (0.5× to 2×)", ShortcutScope.Player,
@@ -198,6 +201,7 @@ public static class ShortcutCatalog
 			new("V", "Next subtitle track", ShortcutScope.Player, C(MpvControlsViewModel.Keys.V)),
 			new("B", "Next audio track", ShortcutScope.Player, C(MpvControlsViewModel.Keys.B)),
 			new("Z, X", "Subtitles 0.1 s earlier or later", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Z), C(MpvControlsViewModel.Keys.X)),
+			new("I", "Playback stats: show or hide (Esc hides them too)", ShortcutScope.Player, C(MpvControlsViewModel.Keys.I)), // 1.6 player
 			new("F, F11, Alt+Enter", "Full screen", ShortcutScope.Player, C(MpvControlsViewModel.Keys.F), C(MpvControlsViewModel.Keys.F11), C(MpvControlsViewModel.Keys.Enter, Alt: true)),
 			new("Esc", "Leave full screen, or cancel a start still loading (never stops the video)", ShortcutScope.Player, C(MpvControlsViewModel.Keys.Escape)),
 		]),

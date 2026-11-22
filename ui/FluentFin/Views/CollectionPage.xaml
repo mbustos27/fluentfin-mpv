@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <!--
     Nixie 1.4.0 (the UX review's plan item 1; X1, X2, CL-M4, CL-B1): the shared Collection page, one structure in every theme,
     skinned by the theme's keys (PageHeaderStyle for the title, PosterTemplate for the cards, PageGroundBrush behind it, the
@@ -24,25 +24,24 @@
     Background="{ThemeResource PageGroundBrush}"
     mc:Ignorable="d">
 
-    <Page.Resources>
-        <!--  the films' place in the collection's own order: a neutral square tab on the poster's corner (not the accent: X9)  -->
-        <Style x:Key="CollectionPositionStyle" TargetType="Border">
-            <Setter Property="MinWidth" Value="28" />
-            <Setter Property="Height" Value="28" />
-            <Setter Property="Margin" Value="8" />
-            <Setter Property="Padding" Value="6,0" />
-            <Setter Property="HorizontalAlignment" Value="Left" />
-            <Setter Property="VerticalAlignment" Value="Top" />
-            <Setter Property="CornerRadius" Value="{StaticResource GlassChipCornerRadius}" />
-            <Setter Property="Background" Value="#E6141016" />
-            <Setter Property="BorderBrush" Value="#59FFFFFF" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="IsHitTestVisible" Value="False" />
-        </Style>
-    </Page.Resources>
-
     <Grid x:Name="CollectionRoot" Background="Transparent">
         <ScrollView x:Name="PageScroller" HorizontalScrollMode="Disabled">
+            <Grid x:Name="ScrollContent">
+            <!--
+                1.6 colpage (C1, C5): the theme's header stage, across the window behind the header (CollectionStageTemplate, bound
+                to a CollectionStage: the set's backdrop, else its first member's, else a 2×2 mosaic, in the region right of the
+                header's words; Drive-in's lot and screen, Cinematic's stage, Editorial's spread). Classic draws the backdrop soft
+                behind the window instead (CollectionAmbientBackdrop). Pictures only: Narrator reads the header, not this.
+            -->
+            <ContentPresenter
+                x:Name="Stage"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                AutomationProperties.AccessibilityView="Raw"
+                HorizontalContentAlignment="Stretch"
+                IsHitTestVisible="False"
+                VerticalContentAlignment="Stretch"
+                Visibility="Collapsed" />
             <StackPanel
                 x:Name="PageContent"
                 Padding="36,72,36,48"
@@ -69,16 +68,44 @@
                             Stretch="UniformToFill" />
                     </Grid>
 
-                    <StackPanel Grid.Column="1" MaxWidth="900" HorizontalAlignment="Left" Spacing="12">
+                    <StackPanel
+                        x:Name="Words"
+                        Grid.Column="1"
+                        MaxWidth="900"
+                        HorizontalAlignment="Left"
+                        Spacing="12">
+                        <!--
+                            1.6 integration: a Nixie collection's eyebrow over its title ("Made by Nixie · Franchise"; the collections
+                            stream's Eyebrow, hidden for a server's set, whose kind the summary line says). Neither stream drew it (each
+                            left it to the other's header): the merged page said nothing of where the collection came from.
+                        -->
                         <TextBlock
-                            x:Name="TitleText"
-                            AutomationProperties.HeadingLevel="Level1"
-                            MaxLines="2"
-                            Style="{StaticResource PageHeaderStyle}"
-                            AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
-                            Text="{x:Bind lc:PageGrid.Title(ViewModel.Title), Mode=OneWay}"
-                            TextTrimming="CharacterEllipsis"
-                            TextWrapping="WrapWholeWords" />
+                            x:Name="EyebrowText"
+                            Margin="0,0,0,-8"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.Eyebrow, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.IsNixie, Mode=OneWay}" />
+                        <!--
+                            1.6 colpage (C5): the title in the theme's frame (PageTitleFrameStyle: Drive-in's marquee board, "NOW
+                            SHOWING" over the title and the count in tubes); without one, the title alone. The frame's DataContext is the
+                            page's CollectionStage.
+                        -->
+                        <ContentControl
+                            x:Name="TitleFrame"
+                            HorizontalAlignment="Left"
+                            HorizontalContentAlignment="Left"
+                            IsTabStop="False">
+                            <TextBlock
+                                x:Name="TitleText"
+                                AutomationProperties.HeadingLevel="Level1"
+                                MaxLines="2"
+                                Style="{StaticResource PageHeaderStyle}"
+                                AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}"
+                                Text="{x:Bind lc:PageGrid.Title(ViewModel.Title), Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="WrapWholeWords" />
+                        </ContentControl>
                         <StackPanel x:Name="SummaryBlock" Spacing="8" Visibility="{x:Bind local:CollectionPage.Shown(ViewModel.Summary), Mode=OneWay}">
                             <TextBlock
                                 x:Name="SummaryText"
@@ -98,6 +125,16 @@
                                 Maximum="100"
                                 Value="{x:Bind ViewModel.Progress, Mode=OneWay}" />
                         </StackPanel>
+                        <!--  1.6 integration: a Nixie collection's why line ("Your films that TMDb lists in one collection, ..."; its Why)  -->
+                        <TextBlock
+                            x:Name="WhyText"
+                            MaxWidth="720"
+                            HorizontalAlignment="Left"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Text="{x:Bind ViewModel.Why, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind local:CollectionPage.Shown(ViewModel.Why), Mode=OneWay}" />
                         <StackPanel Spacing="2" Visibility="{x:Bind local:CollectionPage.Shown(ViewModel.Overview), Mode=OneWay}">
                             <TextBlock
                                 x:Name="OverviewText"
@@ -134,9 +171,15 @@
                                 IsEnabled="{x:Bind ViewModel.CanPlay, Mode=OneWay}"
                                 Style="{StaticResource NixiePrimaryButtonStyle}"
                                 ToolTipService.ToolTip="{x:Bind ViewModel.PlayName, Mode=OneWay}">
+                                <!--  1.6 colpage (C6): a long title is cut with an ellipsis, so Shuffle stays on the line at 1100; the name and tooltip keep it whole  -->
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon FontSize="16" Glyph="&#xE768;" />
-                                    <TextBlock Text="{x:Bind ViewModel.PlayLabel, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        x:Name="PlayLabelText"
+                                        MaxWidth="320"
+                                        Text="{x:Bind ViewModel.PlayLabel, Mode=OneWay}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap" />
                                 </StackPanel>
                             </Button>
                             <Button
@@ -151,10 +194,12 @@
                                     <TextBlock Text="Shuffle" />
                                 </StackPanel>
                             </Button>
+                            <!--  1.6 collections (review Major 4): hidden on a Nixie collection, whose only write to the server is Save as playlist  -->
                             <ToggleButton
                                 x:Name="WatchedToggle"
                                 AutomationProperties.Name="{x:Bind local:CollectionPage.WatchedName(ViewModel.Kind), Mode=OneWay}"
                                 Click="WatchedToggle_Click"
+                                Visibility="{x:Bind ViewModel.CanMarkWatched, Mode=OneWay}"
                                 IsChecked="{x:Bind ViewModel.IsWatched, Mode=OneWay}"
                                 Style="{StaticResource NixieIconToggleButtonStyle}"
                                 ToolTipService.ToolTip="{x:Bind local:CollectionPage.WatchedName(ViewModel.Kind), Mode=OneWay}">
@@ -169,6 +214,53 @@
                                 ToolTipService.ToolTip="Favourite">
                                 <FontIcon Glyph="&#xEB51;" />
                             </ToggleButton>
+                            <!--  1.6 collections: "Save as playlist", a Nixie collection only (the user's own playlist on the server)  -->
+                            <Button
+                                x:Name="SaveAsPlaylistButton"
+                                AutomationProperties.Name="Save as playlist"
+                                Command="{x:Bind ViewModel.SaveAsPlaylistCommand}"
+                                Style="{StaticResource NixieButtonStyle}"
+                                ToolTipService.ToolTip="Save as a playlist of your own on the server"
+                                Visibility="{x:Bind ViewModel.IsNixie, Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon FontSize="16" Glyph="&#xE710;" />
+                                    <TextBlock Text="Save as playlist" />
+                                </StackPanel>
+                            </Button>
+                            <!--  1.6 collections: a saved filter's way out (it lives on this PC, in Saved)  -->
+                            <Button
+                                x:Name="RemoveSavedButton"
+                                AutomationProperties.Name="Remove from Saved"
+                                Command="{x:Bind ViewModel.RemoveSavedCommand}"
+                                Style="{StaticResource NixieButtonStyle}"
+                                ToolTipService.ToolTip="Remove this saved filter from Saved"
+                                Visibility="{x:Bind ViewModel.IsSavedFilter, Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon FontSize="16" Glyph="&#xE74D;" />
+                                    <TextBlock Text="Remove from Saved" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <!--  1.6 collections: what Save as playlist did, or why the server said no; Open once it is made  -->
+                        <StackPanel
+                            x:Name="PlaylistNote"
+                            Orientation="Horizontal"
+                            Spacing="12"
+                            Visibility="{x:Bind local:CollectionPage.Shown(ViewModel.PlaylistMessage), Mode=OneWay}">
+                            <TextBlock
+                                x:Name="PlaylistMessageText"
+                                VerticalAlignment="Center"
+                                AutomationProperties.LiveSetting="Polite"
+                                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                Text="{x:Bind ViewModel.PlaylistMessage, Mode=OneWay}"
+                                TextWrapping="Wrap" />
+                            <HyperlinkButton
+                                x:Name="OpenPlaylistLink"
+                                AutomationProperties.Name="Open the playlist"
+                                Command="{x:Bind ViewModel.OpenSavedPlaylistCommand}"
+                                Content="Open"
+                                Style="{StaticResource NixieLinkButtonStyle}"
+                                Visibility="{x:Bind local:CollectionPage.Shown(ViewModel.SavedPlaylist.Name), Mode=OneWay, FallbackValue=Collapsed}" />
                         </StackPanel>
 
                         <!--  loading: the summary, the overview and the actions as placeholders in their places  -->
@@ -193,13 +285,15 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <!--  1.6 colpage (C2): only when Hide watched hides some ("5 of 6 films"); the summary says "6 films" once  -->
                     <TextBlock
                         x:Name="ShownText"
                         VerticalAlignment="Center"
                         AutomationProperties.HeadingLevel="Level2"
                         Style="{StaticResource GlassSectionTitleTextBlockStyle}"
                         Text="{x:Bind ViewModel.ShownText, Mode=OneWay}"
-                        TextTrimming="CharacterEllipsis" />
+                        TextTrimming="CharacterEllipsis"
+                        Visibility="{x:Bind local:CollectionPage.Shown(ViewModel.ShownText), Mode=OneWay}" />
                     <CheckBox
                         x:Name="HideWatchedBox"
                         Grid.Column="1"
@@ -300,18 +394,10 @@
                                     Orientation="Horizontal" />
                             </ItemsRepeater.Layout>
                             <ItemsRepeater.ItemTemplate>
+                                <!--  1.6 colpage (LB1, C3): the place leads the card's caption ("1 · Wild Canyons", CardCaption), not a chip on the art  -->
                                 <DataTemplate x:DataType="vm:CollectionEntry">
-                                    <Grid>
+                                    <Grid lc:CardCaption.Prefix="{x:Bind CaptionPrefix}">
                                         <ContentPresenter Content="{x:Bind Item}" ContentTemplate="{StaticResource PosterTemplate}" />
-                                        <Border AutomationProperties.AccessibilityView="Raw" Style="{StaticResource CollectionPositionStyle}" Visibility="{x:Bind ShowsPosition}">
-                                            <TextBlock
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                FontSize="13"
-                                                FontWeight="SemiBold"
-                                                Foreground="White"
-                                                Text="{x:Bind PositionText}" />
-                                        </Border>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
@@ -352,7 +438,34 @@
                     <!--  failed or empty: worded, with Retry  -->
                     <lc:LoadStateView State="{x:Bind ViewModel.State}" VerticalContentAlignment="Top" />
                 </Grid>
+
+                <!--  1.6 collections: on an admin's box set, the owned films of its TMDb collection it leaves out  -->
+                <StackPanel
+                    x:Name="AlsoInLibraryPanel"
+                    Spacing="12"
+                    Visibility="{x:Bind local:CollectionPage.Shown(ViewModel.AlsoInLibraryTitle), Mode=OneWay}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource GlassSectionTitleTextBlockStyle}"
+                        Text="{x:Bind ViewModel.AlsoInLibraryTitle, Mode=OneWay}" />
+                    <lc:RowList
+                        AutomationProperties.Name="{x:Bind ViewModel.AlsoInLibraryTitle, Mode=OneWay}"
+                        TabFocusNavigation="Once"
+                        XYFocusKeyboardNavigation="Enabled">
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.AlsoInLibrary, Mode=OneWay}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout Orientation="Horizontal" Spacing="16" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BaseItemViewModel">
+                                    <ContentPresenter Content="{x:Bind}" ContentTemplate="{StaticResource PosterTemplate}" />
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </lc:RowList>
+                </StackPanel>
             </StackPanel>
+            </Grid>
         </ScrollView>
     </Grid>
 </Page>

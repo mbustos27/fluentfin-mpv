@@ -222,6 +222,14 @@ Never take a pre-release (`preview`, `unstable`) without the owner's yes.
   Token="..."` and to `ApiKey` (any case: `apikey` too). 10.11.11 takes them all (`live-auth.ps1`). Nixie, its backend and
   mpv used only the two forms 12 reads in every run.
 
+## Smart collections (1.6)
+
+- `tools\ui-harness\live-server-index.ps1` (opt-in, read-only): the library index's request as qa-user, per title, and the
+  contrast with a bogus `Fields` name; results in `docs\research\smart-collections-data.md`.
+- `tools\qa-servers\live-save-playlist.ps1` (opt-in): Nixie's "Save as playlist" request as qa-user, read back in its
+  order, the refusals, and the playlist deleted again (only "QA Playlist" is left). Both versions make a playlist with an
+  empty name too (the fake does likewise); `GET /Items/{id}` of a deleted playlist answers 400, not 404.
+
 ## Not covered yet
 
 The outside-services hunt's untested cases still need setting up (the sub-path and the "/" at the end: 1.5's

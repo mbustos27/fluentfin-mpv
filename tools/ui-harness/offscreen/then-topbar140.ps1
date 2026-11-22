@@ -1,3 +1,5 @@
+# Nixie 1.6: superseded by then-topbar160.ps1 (the favourites bar: Home · favourites · Collections · Libraries ▾); the fold
+# and menu checks below assume 1.4.0's bar, where every view was a tab.
 # Nixie 1.4.0 (the top bar: fold by width, one lit destination, its geometry), live: -Script wait:1 -Then
 # offscreen\then-topbar140.ps1, with FAKESERVER_COLLECTIONS=1, FAKESERVER_BIG_LIBRARY=<n> and FAKESERVER_EXTRA_VIEWS=<n> for
 # 5, 6 or 9 views (NIXIE_LAYOUT the theme, SG_SHOT_TAG names the shots). Checks, at 2560, 1920, 1440 and 1100 px: the bar's

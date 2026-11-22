@@ -28,7 +28,7 @@ public static class ItemLabels
 			}
 		}
 
-		var title = dto.Type == BaseItemDto_Type.Episode ? dto.SeriesName : dto.Name;
+		var title = dto.Type == BaseItemDto_Type.Episode ? dto.SeriesName : ViewModels.CollectionNames.Display(dto); // 1.6 collections: a box set's tidy name
 		Add(title);
 
 		switch (dto.Type)

@@ -1,6 +1,7 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using FluentFin.Converters;
+using FluentFin.Core;
 using FluentFin.Core.ViewModels;
 using FluentFin.Services;
 using Jellyfin.Sdk.Generated.Models;
@@ -26,9 +27,36 @@ public sealed partial class CollectionPage : Page
 
 	public CollectionPage()
 	{
+		// 1.6 colpage (C5): a theme whose stage runs under the top bar (Cinematic's) says so before the shell reads it
+		Controls.TopBar.SetExtendsUnder(this, ThemeResources.Find(StageUnderBarKey) is true);
 		InitializeComponent();
+		ApplyThemeParts();
+		Header.SizeChanged += (_, _) => QueueStage();
+		Words.SizeChanged += (_, _) => QueueStage();
+		ScrollContent.SizeChanged += (_, _) => QueueStage();
+		Loaded += (_, _) =>
+		{
+			QueueStage();
+			ShowAmbient();
+		};
+		Unloaded += (_, _) =>
+		{
+			// a page that opens before this one is closed has already set its own; only take down what is ours
+			if (_ambient is not null && AmbientBackdrop.Current == _ambient)
+			{
+				AmbientBackdrop.Set(null);
+			}
+		};
 
 		GridList.GotFocus += (_, e) => Remember(e.OriginalSource as DependencyObject);
+		// review Major 2: a card scrolled into view (the keyboard, Back) keeps room above it: the bar's height and 16 where the
+		// page runs under the top bar (Cinematic), 16 otherwise, as CardGrid keeps its reveal margin
+		GridList.BringIntoViewRequested += (_, args) =>
+		{
+			var top = RevealTop(Controls.TopBar.GetExtendsUnder(this));
+			var rect = args.TargetRect;
+			args.TargetRect = new Windows.Foundation.Rect(rect.X, rect.Y - top, rect.Width, rect.Height + top + RevealMargin);
+		};
 		GridList.AddHandler(PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, e) => Remember(e.OriginalSource as DependencyObject)), true);
 
 		// each card's place for Narrator ("3 of 6"): the card (the theme's poster) is the element it reads
@@ -130,6 +158,115 @@ public sealed partial class CollectionPage : Page
 		{
 			UiDispatch.Enqueue(DispatcherQueue, "the Collection cards' places", UpdatePlaces);
 		}
+		else if (e.PropertyName == nameof(CollectionViewModel.Header))
+		{
+			QueueStage();
+			ShowAmbient();
+		}
+	}
+
+	// ---- 1.6 colpage (C1, C5): the theme's header stage, title frame and backdrop ----------------------------------------
+
+	/// <summary>The theme keys the page asks for (each optional: without them, today's header).</summary>
+	public const string StageTemplateKey = "CollectionStageTemplate", StageHeightKey = "CollectionStageHeight",
+		StageUnderBarKey = "CollectionStageUnderBar", TitleFrameKey = "PageTitleFrameStyle", TitleFrameForegroundKey = "PageTitleFrameForeground", AmbientKey = "CollectionAmbientBackdrop",
+		StandfirstKey = "CollectionStandfirstStyle";
+
+	private bool _stageQueued;
+	private Uri? _ambient;
+
+	private void ApplyThemeParts()
+	{
+		var template = ThemeResources.Find(StageTemplateKey) as DataTemplate;
+		Stage.ContentTemplate = template;
+		Stage.Visibility = template is null ? Visibility.Collapsed : Visibility.Visible;
+		if (ThemeResources.Find(TitleFrameKey) is Style { TargetType: var type } frame && (type is null || type.IsAssignableFrom(typeof(ContentControl))))
+		{
+			TitleFrame.Style = frame;
+			// the frame's own title colour (Drive-in's lit board is dark in Light too: the theme's page title colour read 1:1
+			// on it); high contrast keeps the system's colours
+			if (ThemeResources.Find(TitleFrameForegroundKey) is Microsoft.UI.Xaml.Media.Brush ink && !new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
+			{
+				TitleText.Foreground = ink;
+			}
+		}
+
+		// Editorial: the overview as a standfirst
+		if (ThemeResources.Find(StandfirstKey) is Style { TargetType: var textType } standfirst && (textType is null || textType.IsAssignableFrom(typeof(TextBlock))))
+		{
+			OverviewText.Style = standfirst;
+			OverviewText.ClearValue(TextBlock.LineHeightProperty); // the standfirst's own leading
+		}
+	}
+
+	private void QueueStage()
+	{
+		if (_stageQueued)
+		{
+			return;
+		}
+
+		_stageQueued = true;
+		// after the layout pass that moved the words: the stage is sized from them, never inside their own pass
+		UiDispatch.Enqueue(DispatcherQueue, "the Collection page's header stage", () =>
+		{
+			_stageQueued = false;
+			UpdateStage();
+		}, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+	}
+
+	private void UpdateStage()
+	{
+		if (!IsLoaded || ScrollContent.ActualWidth <= 0)
+		{
+			return;
+		}
+
+		var facts = ViewModel.Header;
+		var wordsRight = 0.0;
+		foreach (var element in new FrameworkElement[] { TitleFrame, SummaryBlock, OverviewText, Actions })
+		{
+			if (element.Visibility == Visibility.Visible && element.ActualWidth > 0 && element.IsLoaded)
+			{
+				var at = element.TransformToVisual(ScrollContent).TransformPoint(new Windows.Foundation.Point(element.ActualWidth, 0));
+				wordsRight = Math.Max(wordsRight, at.X);
+			}
+		}
+
+		var headerBottom = Header.TransformToVisual(ScrollContent).TransformPoint(new Windows.Foundation.Point(0, Header.ActualHeight)).Y;
+		var themeHeight = ThemeResources.Find(StageHeightKey) is double h ? h : 0;
+		var (artLeft, height) = CollectionStage.Measure(ScrollContent.ActualWidth, wordsRight, headerBottom, themeHeight);
+		var stage = new CollectionStage
+		{
+			Facts = facts,
+			Backdrop = CollectionStage.Picture(facts.BackdropFrom, ImageType.Backdrop, 720),
+			Mosaic = [.. facts.Mosaic.Select(x => CollectionStage.Picture(x, ImageType.Primary, 360))],
+			ArtLeft = artLeft,
+			Height = height,
+			Width = ScrollContent.ActualWidth,
+			HeaderTop = PageContent.Padding.Top,
+			HeaderHeight = Header.ActualHeight,
+			Gutter = PageContent.Padding.Right,
+		};
+		TitleFrame.DataContext = stage;
+		if (Stage.Visibility == Visibility.Visible)
+		{
+			Stage.Height = height;
+			Stage.Content = stage;
+		}
+	}
+
+	/// <summary>Classic: the set's backdrop soft behind the window (as its item pages do), else its first member's.</summary>
+	private void ShowAmbient()
+	{
+		if (ThemeResources.Find(AmbientKey) is not true || !IsLoaded)
+		{
+			return;
+		}
+
+		var from = ViewModel.Header.BackdropFrom;
+		_ambient = from is null ? null : ItemArtworkConverters.AmbientBackdrop(from);
+		AmbientBackdrop.Set(_ambient, from is null ? null : ItemArtwork.BackdropBlurHash(from));
 	}
 
 	/// <summary>
@@ -320,6 +457,12 @@ public sealed partial class CollectionPage : Page
 
 		return false;
 	}
+
+	/// <summary>Room kept below a card scrolled into view, and above it on a page below the bar.</summary>
+	public const double RevealMargin = 16;
+
+	/// <summary>Room kept above a card scrolled into view: the top bar's height and <see cref="RevealMargin"/> when the page runs under the bar.</summary>
+	public static double RevealTop(bool underBar) => underBar ? Controls.TopBar.Height + RevealMargin : RevealMargin;
 
 	/// <summary>Whether a card can be asked of the grid: a place among the entries, the grid holding them, both drawn.</summary>
 	internal static bool CanFocusCard(int index, int entries, int inGrid, bool drawn) =>

@@ -82,7 +82,8 @@ public sealed class MergeWiringTests
 		// the 1.1.3 layout audit's item 23 (an unowned page, applied at the merge): no solid name strip, art not stretched
 		var page = Load("FluentFin/Views/LibrariesLandingPage.xaml");
 		Assert.DoesNotContain(page.Descendants().Attributes("Background"), a => a.Value.Contains("CardBackgroundFillColorDefaultBrush"));
-		Assert.Equal("UniformToFill", (string?)page.Descendants().Single(e => e.Name.LocalName == "LoadingImage").Attribute("Stretch"));
+		// 1.6 topbar: two tile templates (the media library's with its star, the collections group's)
+		Assert.All(page.Descendants().Where(e => e.Name.LocalName == "LoadingImage"), image => Assert.Equal("UniformToFill", (string?)image.Attribute("Stretch")));
 		// Nixie 1.4.0: two groups; each tile sized by the page to share the rows evenly, its art kept 16:9 (PageGridMetrics.Tiles, TileHeight)
 		Assert.All(page.Descendants().Where(e => e.Name.LocalName == "UniformGridLayout"), l => Assert.Equal("None", (string?)l.Attribute("ItemsStretch")));
 		Assert.Contains("PageGridMetrics.TileHeight(tile)", Code("FluentFin/Views/LibrariesLandingPage.xaml.cs"), StringComparison.Ordinal);

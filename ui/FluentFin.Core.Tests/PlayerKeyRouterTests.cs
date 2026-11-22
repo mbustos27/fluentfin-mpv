@@ -53,6 +53,8 @@ public sealed class PlayerKeyRouterTests
 		R("Home", Home, MpvControlsAction.SeekStart),
 		// S: skip
 		R("S", MpvControlsViewModel.Keys.S, MpvControlsAction.SkipSegment),
+		// 1.6 skip: Shift+S, skip a part in every episode (the mark sheet)
+		R("Shift+S", MpvControlsViewModel.Keys.S, MpvControlsAction.MarkSkipPart, shift: true),
 		// Shift+N, Shift+P, media keys
 		R("N", MpvControlsViewModel.Keys.N, MpvControlsAction.Next, shift: true),
 		R("P", MpvControlsViewModel.Keys.P, MpvControlsAction.Previous, shift: true),
@@ -73,6 +75,8 @@ public sealed class PlayerKeyRouterTests
 		R("B", MpvControlsViewModel.Keys.B, MpvControlsAction.CycleAudio),
 		R("Z", MpvControlsViewModel.Keys.Z, MpvControlsAction.SubtitleEarlier),
 		R("X", MpvControlsViewModel.Keys.X, MpvControlsAction.SubtitleLater),
+		// 1.6 player: I, the Playback stats
+		R("I", MpvControlsViewModel.Keys.I, MpvControlsAction.TogglePlaybackStats),
 		// F, F11, Alt+Enter: full screen
 		R("F", MpvControlsViewModel.Keys.F, MpvControlsAction.ToggleFullScreen),
 		R("F11", MpvControlsViewModel.Keys.F11, MpvControlsAction.ToggleFullScreen),

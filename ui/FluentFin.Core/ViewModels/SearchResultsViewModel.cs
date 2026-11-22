@@ -198,7 +198,7 @@ public static class SearchResultsText
 			: !string.IsNullOrWhiteSpace(item.OriginalTitle) && !string.Equals(item.OriginalTitle.Trim(), item.Name?.Trim(), StringComparison.Ordinal)
 				? $"Original title: {item.OriginalTitle.Trim()}"
 				: "";
-		return (item.Name?.Trim() ?? "", meta, note);
+		return (CollectionNames.Display(item).Trim(), meta, note); // 1.6 collections: a box set's tidy name
 	}
 }
 

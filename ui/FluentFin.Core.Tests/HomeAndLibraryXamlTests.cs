@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 using FluentFin.Core.ViewModels;
 using Jellyfin.Sdk.Generated.Models;
 
@@ -94,10 +94,11 @@ public sealed class HomeAndLibraryXamlTests
 		Assert.Equal("{x:Bind ViewModel.LibraryCountText, Mode=OneWay}", (string?)FindByName(library, "CountText").Attribute("Text")); // 1.4.0: the row says what is shown
 		// the stable toolbar (item 8): Filter keeps its width when it says "Filter (2)"
 		Assert.True(double.Parse((string)FindByName(bar, "FilterButton").Attribute("MinWidth")!) >= 100);
-		// the one-click Unwatched (item 2), before Sort
+		// the one-click Unwatched (item 2), before Sort; 1.6 colpage (LB2): hidden unless a page has no presets strip
 		var unwatched = FindByName(bar, "UnwatchedToggle");
 		Assert.Equal("{x:Bind ViewModel.Filter.Unwatched, Mode=TwoWay}", (string?)unwatched.Attribute("IsChecked"));
 		Assert.Contains(FindByName(bar, "SortButton"), unwatched.ElementsAfterSelf());
+		Assert.Equal("Collapsed", (string?)unwatched.Attribute("Visibility"));
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin/Controls/LibraryToolbar.xaml.cs"));
 		Assert.Contains("foreach (var key in LibraryBrowse.SortKeys)", code);
 		Assert.Contains("LibraryBrowse.DirectionWords(vm.SortBy, order)", code);

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <!--
     Editorial: a dense poster (144 px wide at 1920, 122 at 1100): opaque 2:3 artwork with 8 px corners and a faint lit edge,
     the title and one line of facts under it. 1.4.0 (the library UX review, X9, X10, E-M8): watched a dim neutral check, top
@@ -23,6 +23,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+        <!--  1.6 colpage: the list form adds three columns (art, words, state; EditorialPoster.ApplyForm); the poster has none  -->
 
 
         <Grid x:Name="Art" CornerRadius="8">
@@ -118,6 +119,16 @@
             IsHitTestVisible="False"
             Visibility="Collapsed" />
 
+        <!--  1.6 colpage: the list form's row behind it (its hover and its ring take the whole line)  -->
+        <Border
+            x:Name="ListBack"
+            Grid.ColumnSpan="3"
+            Margin="-12,-8"
+            Background="Transparent"
+            CornerRadius="8"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
+
         <StackPanel
             x:Name="TitleArea"
             Grid.Row="1"
@@ -138,6 +149,25 @@
                 Foreground="{ThemeResource GlassTextSecondaryBrush}"
                 TextTrimming="CharacterEllipsis"
                 TextWrapping="NoWrap" />
+            <!--  1.6 colpage: the list form's short line (the overview's first sentence)  -->
+            <TextBlock
+                x:Name="ShortText"
+                Margin="0,4,0,0"
+                FontFamily="{StaticResource GlassTextFontFamily}"
+                FontSize="14"
+                Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap"
+                Visibility="Collapsed" />
         </StackPanel>
+
+        <!--  1.6 colpage: the list form's state at the line's end ("Watched", "45% watched", "5 left"), in the kicker's peach  -->
+        <TextBlock
+            x:Name="StateText"
+            Grid.Column="2"
+            Margin="16,0,0,0"
+            VerticalAlignment="Center"
+            Style="{StaticResource EditorialKickerTextBlockStyle}"
+            Visibility="Collapsed" />
     </Grid>
 </UserControl>

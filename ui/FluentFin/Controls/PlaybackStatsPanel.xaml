@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    1.6 player: "Playback stats" (Nixie's own name; the owner, 2026-11-21: "a little activatable for nerds window like in
+    youtube"). A small panel over the video, top left under the title, opened and closed by the stats button (Settings, "Show
+    the Playback stats button"), the I key, Esc and its own Close. It reads the backend only while open (MpvControlsViewModel's
+    PlaybackStatsPoller, about once a second). Chrome over video: no blur (the swap chain cannot be blurred), a dense fill with
+    the glass edge and grain, radius 8; each theme sets its own look through PlayerStatsPanelStyle (themes:ThemeStyle). Always
+    dark, as the player's controls are (RequestedTheme Dark); its text keeps 4.5:1 or more over a white frame
+    (PlaybackStatsContrastTests). Copy puts the rows on the clipboard as plain text with no token or server credentials.
+-->
+<UserControl
+    x:Class="FluentFin.Controls.PlaybackStatsPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls"
+    xmlns:core="using:FluentFin.Core.Mpv"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:themes="using:FluentFin.Themes"
+    RequestedTheme="Dark"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <!--  the panel's own fill: the palette's deep wine, opaque, so the rows read the same over any picture  -->
+                    <SolidColorBrush x:Key="PlaybackStatsFill" Color="#F2170508" />
+                    <SolidColorBrush x:Key="PlaybackStatsLabel" Color="#D3BFC1" />
+                    <SolidColorBrush x:Key="PlaybackStatsValue" Color="#F8EFF0" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="PlaybackStatsFill" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="PlaybackStatsLabel" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="PlaybackStatsValue" Color="{ThemeResource SystemColorWindowTextColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+            <!--  the panel's own look; a theme's PlayerStatsPanelStyle goes over it in place (fill, edge, margin)  -->
+            <Style x:Key="PlaybackStatsPlateBaseStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource PlaybackStatsFill}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource GlassStrokeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="16,12,12,14" />
+                <Setter Property="Margin" Value="24,96,24,160" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border
+        x:Name="Plate"
+        Width="392"
+        HorizontalAlignment="Left"
+        VerticalAlignment="Top"
+        themes:ThemeStyle.Key="PlayerStatsPanelStyle"
+        AutomationProperties.LandmarkType="Custom"
+        AutomationProperties.LocalizedLandmarkType="Panel"
+        AutomationProperties.Name="Playback stats"
+        Style="{StaticResource PlaybackStatsPlateBaseStyle}">
+        <Grid>
+            <controls:GrainOverlay />
+            <Grid RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <!--  the title and the panel's two buttons, at the top: the bottom bar never covers them  -->
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        x:Name="Title"
+                        VerticalAlignment="Center"
+                        AutomationProperties.HeadingLevel="Level2"
+                        FontSize="15"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource PlaybackStatsValue}"
+                        Text="Playback stats" />
+                    <Button
+                        x:Name="CopyButton"
+                        Grid.Column="1"
+                        AllowFocusOnInteraction="False"
+                        AutomationProperties.HelpText="Puts these stats on the clipboard as text, for a bug report"
+                        AutomationProperties.Name="Copy the playback stats"
+                        Click="OnCopyClick"
+                        Style="{StaticResource NixieCompactButtonStyle}"
+                        ToolTipService.ToolTip="Copy the stats as text">
+                        <TextBlock x:Name="CopyLabel" Text="Copy" />
+                    </Button>
+                    <Button
+                        x:Name="CloseButton"
+                        Grid.Column="2"
+                        AllowFocusOnInteraction="False"
+                        AutomationProperties.AcceleratorKey="I"
+                        AutomationProperties.Name="Close playback stats"
+                        Click="OnCloseClick"
+                        Style="{StaticResource NixieCompactIconButtonStyle}"
+                        ToolTipService.ToolTip="Close (I or Esc)">
+                        <FontIcon FontSize="14" Glyph="&#xE711;" />
+                    </Button>
+                </Grid>
+                <ScrollViewer
+                    x:Name="RowsScroller"
+                    Grid.Row="1"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="RowsList" ItemsSource="{x:Bind Controls.StatsRowViews, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="core:PlaybackStatsRowView">
+                                <Grid Padding="0,2" ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="132" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <!--  read once, with its value ("Container: MKV"), by the value's name  -->
+                                    <TextBlock
+                                        AutomationProperties.AccessibilityView="Raw"
+                                        FontSize="13"
+                                        Foreground="{ThemeResource PlaybackStatsLabel}"
+                                        Text="{x:Bind Label}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
+                                        FontSize="13"
+                                        Foreground="{ThemeResource PlaybackStatsValue}"
+                                        IsTextSelectionEnabled="False"
+                                        Text="{x:Bind Value, Mode=OneWay}"
+                                        TextWrapping="WrapWholeWords"
+                                        Typography.NumeralAlignment="Tabular" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

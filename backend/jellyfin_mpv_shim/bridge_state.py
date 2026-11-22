@@ -226,6 +226,8 @@ class Tracker:
         self._last_segments = None
         self._last_next = None
         self._offer = None
+        #: 1.6 player: the last ``stream`` event sent for the announced item.
+        self._last_stream = None
         self._last_position = None
         self._last_position_at = float("-inf")
         self._volume = 100
@@ -450,6 +452,23 @@ class Tracker:
             self._last_next = following
         return events
 
+    # 1.6 player
+    def _stream(self, video):
+        """The ``stream`` event for the announced ``video`` when it differs
+        from the last one sent (always, after a new item): how it is served
+        and the quality in effect (BRIDGE.md section 5). Never raises."""
+        from . import quality
+
+        try:
+            payload = quality.stream_payload(video)
+        except Exception:
+            return []
+        if payload == self._last_stream:
+            return []
+        self._last_stream = payload
+        return [("stream", payload)]
+    # end 1.6 player
+
     def update(self, obs):
         """Events since the last update, in the order the UI must see
         them. Returns ``[(event, data), ...]``."""
@@ -467,6 +486,7 @@ class Tracker:
                 self.announced = None
                 self._last_tracks = None
                 self._last_segments = self._last_next = self._offer = None
+                self._last_stream = None    # 1.6 player
             for error in self._errors:
                 events.append(("error", error))
             self._errors = []
@@ -482,6 +502,7 @@ class Tracker:
                     events.append(("tracks", tracks))
                     self._last_tracks = tracks
                     events.extend(self._segments_and_next(obs, current))
+                    events.extend(self._stream(current))    # 1.6 player
                 else:
                     self.error = None
             elif (current is not None and not isinstance(current, DevItem)
@@ -494,6 +515,7 @@ class Tracker:
                     events.append(("tracks", tracks))
                     self._last_tracks = tracks
                 events.extend(self._segments_and_next(obs, current))
+                events.extend(self._stream(current))        # 1.6 player
 
             if (self.error is not None and current is not None
                     and obs.pending is None and obs.opening is None

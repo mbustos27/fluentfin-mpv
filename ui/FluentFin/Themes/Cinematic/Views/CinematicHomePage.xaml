@@ -167,6 +167,41 @@
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
+
+                <!--  1.6 collections: the Made by Nixie rows, after "New in ...", each under a small "Made by Nixie" kicker  -->
+                <ItemsControl
+                    x:Name="NixieRows"
+                    Margin="0,0,0,48"
+                    IsTabStop="False"
+                    ItemsSource="{x:Bind ViewModel.NixieRows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NixieHomeRowViewModel">
+                            <StackPanel>
+                                <TextBlock
+                                    Margin="{Binding ElementName=Page, Path=PlaceholderMargin}"
+                                    CharacterSpacing="80"
+                                    Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="MADE BY NIXIE" />
+                                <lc:ShelfRow
+                                    Margin="{Binding ElementName=Page, Path=RowMargin}"
+                                    HasSeeAll="True"
+                                    Header="{x:Bind Title}"
+                                    ItemsSource="{x:Bind Items, Mode=OneWay}"
+                                    ItemTemplate="{StaticResource StillSmall}"
+                                    Loaded="RecentRow_Loaded"
+                                    SeeAll="NixieSeeAll"
+                                    Tag="{x:Bind}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Spacing="28" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <!--  end 1.6 collections  -->
             </StackPanel>
         </ScrollViewer>
 

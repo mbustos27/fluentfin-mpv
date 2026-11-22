@@ -213,6 +213,26 @@ msgstr ""
 msgid "Seek to Skip Commercial"
 msgstr ""
 
+#. Button drawn over the video during a part the viewer set to skip in
+#. every episode of a show (a network bumper or promo baked into the file).
+#. Pressing it jumps past it. An imperative verb phrase.
+#: jellyfin_mpv_shim/media.py
+msgid "Skip Extra"
+msgstr ""
+
+#. Confirmation drawn over the video after such a part (a bumper or promo
+#. the viewer set to skip in every episode) was jumped past. Past tense.
+#: jellyfin_mpv_shim/media.py
+msgid "Skipped Extra"
+msgstr ""
+
+#. Prompt drawn over the video offering to jump past such a part (a bumper
+#. or promo the viewer set to skip in every episode), shown when the viewer
+#. seeks into it.
+#: jellyfin_mpv_shim/media.py
+msgid "Seek to Skip Extra"
+msgstr ""
+
 #. Button drawn over the video during a preview of a coming episode.
 #. Pressing it jumps past it. An imperative verb phrase.
 #: jellyfin_mpv_shim/media.py

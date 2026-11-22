@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <!--
     The Libraries page ("All libraries"). Nixie 1.4.0 (the UX review's plan item 10; X11, CL-M13, CL-p5, DI-M6, C-M13, E-M9):
     one shared page skinned by the theme (its PageHeaderStyle title where its library puts its title, its gutter, its ground),
@@ -49,6 +49,28 @@
                             Glyph="&#xEA8C;"
                             Source="{x:Bind c:BaseItemDtoConverters.GetImage(Library, jm:ImageType.Primary, 270)}"
                             Stretch="UniformToFill" />
+                        <!--  1.6 collections: the Made by Nixie tile's art, a mosaic of its collections' posters, with Nixie's mark  -->
+                        <controls:CollectionMosaic ImageHeight="270" Items="{x:Bind Mosaic}" Visibility="{x:Bind IsMadeByNixie}" />
+                        <Border
+                            Width="26"
+                            Height="26"
+                            Margin="10"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            AutomationProperties.AccessibilityView="Raw"
+                            Background="#D9141018"
+                            BorderBrush="#66FFC4A6"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Visibility="{x:Bind IsMadeByNixie}">
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="#FFFFC4A6"
+                                Text="N" />
+                        </Border>
                     </Grid>
                     <TextBlock
                         Grid.Row="1"
@@ -63,27 +85,140 @@
                 </Grid>
             </ItemContainer>
         </DataTemplate>
+
+        <!--  1.6 topbar  -->
+        <!--
+            Nixie 1.6 (the favourites): a media library's tile is the tile above with its star, top right on the art: lit (the
+            theme's accent) when the library is in the top bar, an outline when not, on the badges' dark plate so it reads on any
+            picture; a 32 square, radius 8. The plate is dark in both themes, so the star wears the dark theme's accent (Light's
+            darker red was about 3:1 on it). A click adds or removes it; the keyboard and Narrator reach it as the tile's menu
+            (Shift+F10, the Menu key: "Add Movies to the top bar") and as a button of its own. Narrator's name for the tile says
+            "in the top bar" when it is.
+        -->
+        <Style
+            x:Key="TileStarButtonStyle"
+            BasedOn="{StaticResource NixieCompactIconButtonStyle}"
+            TargetType="Button">
+            <Setter Property="Background" Value="{ThemeResource NixieBadgeFillBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource NixieBadgeStrokeBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource NixieBadgeForegroundBrush}" />
+            <Setter Property="Margin" Value="8" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+        </Style>
+        <DataTemplate x:Key="MediaTileTemplate" x:DataType="vm:LibraryTile">
+            <ItemContainer
+                AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
+                CornerRadius="{StaticResource GlassCardCornerRadius}"
+                FocusVisualMargin="-4">
+                <ItemContainer.ContextFlyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem
+                            Click="OnStarMenuClick"
+                            Tag="{x:Bind}"
+                            Text="{x:Bind StarName, Mode=OneWay}">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE734;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </ItemContainer.ContextFlyout>
+                <Grid Padding="0,0,0,8" RowSpacing="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid Background="{ThemeResource GlassInsetFillBrush}" CornerRadius="{StaticResource GlassCardCornerRadius}">
+                        <controls:LoadingImage
+                            Glyph="&#xEA8C;"
+                            Source="{x:Bind c:BaseItemDtoConverters.GetImage(Library, jm:ImageType.Primary, 270)}"
+                            Stretch="UniformToFill" />
+                        <Button
+                            AutomationProperties.Name="{x:Bind StarName, Mode=OneWay}"
+                            Click="OnStarClick"
+                            Loaded="OnStarLoaded"
+                            RequestedTheme="Dark"
+                            Style="{StaticResource TileStarButtonStyle}"
+                            Tag="{x:Bind}"
+                            ToolTipService.ToolTip="{x:Bind StarName, Mode=OneWay}">
+                            <Grid>
+                                <FontIcon
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    FontSize="16"
+                                    Glyph="&#xE734;"
+                                    Visibility="{x:Bind IsNotFavourite, Mode=OneWay}" />
+                                <FontIcon
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    FontSize="16"
+                                    Foreground="{ThemeResource GlassTabUnderlineBrush}"
+                                    Glyph="&#xE735;"
+                                    Visibility="{x:Bind IsFavourite, Mode=OneWay}" />
+                            </Grid>
+                        </Button>
+                    </Grid>
+                    <TextBlock
+                        Grid.Row="1"
+                        Margin="8,0,8,0"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap">
+                        <Run
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource GlassTextPrimaryBrush}"
+                            Text="{x:Bind Name}" /><Run Foreground="{ThemeResource GlassTextSecondaryBrush}" Text="{x:Bind Detail, Mode=OneWay}" />
+                    </TextBlock>
+                </Grid>
+            </ItemContainer>
+        </DataTemplate>
+        <!--  end 1.6 topbar  -->
     </Page.Resources>
 
     <ScrollView x:Name="PageScroller" HorizontalScrollMode="Disabled">
+        <!--  1.6 colpage (theme polish): the theme's header stage behind the title (LibrariesStageTemplate: Drive-in's strip of sky)  -->
+        <Grid x:Name="ScrollContent">
+        <ContentPresenter
+            x:Name="Stage"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            AutomationProperties.AccessibilityView="Raw"
+            HorizontalContentAlignment="Stretch"
+            IsHitTestVisible="False"
+            VerticalContentAlignment="Stretch"
+            Visibility="Collapsed" />
         <StackPanel
             x:Name="PageContent"
             Padding="36,72,36,48"
             lc:PageGrid.Apply="True"
             Spacing="20">
+            <!--  1.6 colpage (theme polish): the title in the theme's frame (PageTitleFrameStyle: Drive-in's marquee, the libraries in tubes)  -->
+            <ContentControl
+                x:Name="TitleFrame"
+                HorizontalAlignment="Left"
+                HorizontalContentAlignment="Left"
+                IsTabStop="False">
+                <TextBlock
+                    x:Name="TitleText"
+                    AutomationProperties.HeadingLevel="Level1"
+                    AutomationProperties.Name="Libraries"
+                    Style="{StaticResource PageHeaderStyle}"
+                    Text="{x:Bind lc:PageGrid.Title('Libraries')}" />
+            </ContentControl>
+
+            <!--  1.6 topbar: a fourth star is refused here, and read out at once  -->
             <TextBlock
-                x:Name="TitleText"
-                AutomationProperties.HeadingLevel="Level1"
-                AutomationProperties.Name="Libraries"
-                Style="{StaticResource PageHeaderStyle}"
-                Text="{x:Bind lc:PageGrid.Title('Libraries')}" />
+                x:Name="FavouritesNote"
+                AutomationProperties.LiveSetting="Assertive"
+                Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                Style="{ThemeResource BodyTextBlockStyle}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+            <!-- /1.6 topbar -->
 
             <ItemsView
                 x:Name="MediaView"
                 AutomationProperties.Name="Libraries"
                 IsItemInvokedEnabled="True"
                 ItemInvoked="ItemsView_ItemInvoked"
-                ItemTemplate="{StaticResource LibraryTileTemplate}"
+                ItemTemplate="{StaticResource MediaTileTemplate}"
                 ItemsSource="{x:Bind ViewModel.Media}"
                 SelectionMode="None">
                 <ItemsView.Layout>
@@ -128,5 +263,6 @@
             <!--  loading, no libraries, or the views could not be read: said, with Retry  -->
             <lc:LoadStateView ShowsLoading="True" State="{x:Bind ViewModel.State}" />
         </StackPanel>
+        </Grid>
     </ScrollView>
 </Page>

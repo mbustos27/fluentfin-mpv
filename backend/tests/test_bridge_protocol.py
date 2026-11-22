@@ -747,10 +747,12 @@ class SegmentsAndNextTest(unittest.TestCase):
                                        ("Intro", 10, 70, "ask"),
                                        ("Outro", 100, 130, "ask")])
         # Overlapping an always segment: the ask one is the offer.
+        # 1.6 skip: up to a tenth of a second before the end (an exact seek
+        # to the end can land a frame short: OFFER_END_SLACK_TICKS)
         for position, offered in ((0, None), (9.99, None), (10, 1),
-                                  (69.99, 1), (70, None), (99, None),
-                                  (100, 2), (129.5, 2), (130, None),
-                                  (None, None)):
+                                  (69.85, 1), (69.95, None), (70, None),
+                                  (99, None), (100, 2), (129.5, 2),
+                                  (130, None), (None, None)):
             with self.subTest(position=position):
                 self.assertEqual(proto.offered_segment(segments, position),
                                  offered)

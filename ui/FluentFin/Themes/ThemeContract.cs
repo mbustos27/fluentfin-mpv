@@ -42,6 +42,8 @@ public static class ThemeContract
 		(OptionsTemplateKey, "DataTemplate"),
 		("PlayerTopBarStyle", "Style"),
 		("PlayerBottomBarStyle", "Style"),
+		// 1.6 player: the Playback stats panel's look (TargetType Border; Controls\PlaybackStatsPanel, themes:ThemeStyle)
+		("PlayerStatsPanelStyle", "Style"),
 		// Nixie 1.3.1: the theatre window's frame (a ControlTemplate for Controls.TrailerFrame); without it, the shared glass frame
 		(TrailerFrameKey, "ControlTemplate"),
 	];

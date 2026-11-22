@@ -81,9 +81,12 @@ public static class LibraryBrowse
 	/// <summary>The arrow beside the sort's name: up for ascending, down for descending (Segoe Fluent Icons).</summary>
 	public static string SortGlyph(SortOrder order) => order == SortOrder.Descending ? "" : "";
 
-	/// <summary>The filters on: Unwatched, Favorites, and every genre, tag, year and rating picked counts one.</summary>
+	/// <summary>The filters on: Unwatched, Favorites, a preset's titles, and every genre, tag, year and rating picked counts one.</summary>
 	public static int ActiveFilters(LibraryFilter filter) =>
-		(filter.Unwatched ? 1 : 0) + (filter.Favorites ? 1 : 0) + filter.Genres.Count + filter.Tags.Count + filter.Years.Count + filter.OfficialRatings.Count;
+		(filter.Unwatched ? 1 : 0) + (filter.Favorites ? 1 : 0) + (filter.Preset is null ? 0 : 1) + FilterCount(filter);
+
+	/// <summary>1.6 colpage (LB3): Filter's own count: the genres, tags, years and ratings picked in it (the switches have their own place).</summary>
+	public static int FilterCount(LibraryFilter filter) => filter.Genres.Count + filter.Tags.Count + filter.Years.Count + filter.OfficialRatings.Count;
 
 	/// <summary>The Filter button's words: "Filter", or "Filter (2)" with two on.</summary>
 	public static string FilterText(int active) => active > 0 ? $"Filter ({active})" : "Filter";

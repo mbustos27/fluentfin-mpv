@@ -19,7 +19,7 @@ using Windows.System;
 
 namespace FluentFin.Controls;
 
-public sealed partial class BaseItemDtoCard : UserControl
+public sealed partial class BaseItemDtoCard : UserControl, ICaptionPrefixed
 {
 	[GeneratedDependencyProperty]
 	public partial ImageSource? ImageSource { get; set; }
@@ -36,6 +36,19 @@ public sealed partial class BaseItemDtoCard : UserControl
 	[GeneratedDependencyProperty]
 	public partial IJellyfinClient? JellyfinClient { get; set; }
 
+	/// <summary>
+	/// 1.6 colpage (LB1): the card's place in a set whose order means something ("1"), shown before its caption ("1 · Wild
+	/// Canyons") and said first by Narrator ("1, Wild Canyons, 1979"); empty: none. The art's top-left square is for counts only.
+	/// </summary>
+	[GeneratedDependencyProperty(DefaultValue = "")]
+	public partial string CaptionPrefix { get; set; }
+
+	/// <summary>The caption's lead: "1 · " for "1", nothing for none.</summary>
+	public static string PrefixWords(string? prefix) => string.IsNullOrEmpty(prefix) ? "" : $"{prefix} · ";
+
+	/// <summary>Narrator's name for a card with a place: "1, Wild Canyons, 1979" (the caption's words, in its order).</summary>
+	public static string NameWithPrefix(string? prefix, string name) => string.IsNullOrEmpty(prefix) ? name : $"{prefix}, {name}";
+
 	// fluentfin-mpv: the buttons show while the pointer is over the image or the keyboard focus is in the card (ux-review A1)
 	private readonly CardActions _actions = new();
 
@@ -46,6 +59,7 @@ public sealed partial class BaseItemDtoCard : UserControl
 		// 1.2.0: the card shows its item's watched and favourite state as the server has it, whichever surface changed it
 		Loaded += (_, _) =>
 		{
+			CardCaption.Pull(this); // 1.6 colpage (LB1): a place its entry gives
 			ItemUserData.Changed += OnUserDataChanged;
 			CardFocus.Changed += OnCardFocusChanged;
 			ShowActions(_actions.KeyboardElsewhere(CardFocus.IsElsewhere(this)));
@@ -490,7 +504,7 @@ internal sealed partial class BaseItemDtoCardAutomationPeer(BaseItemDtoCard owne
 	protected override string GetNameCore()
 	{
 		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? ItemLabels.CardName(owner.Model) : name;
+		return string.IsNullOrEmpty(name) ? BaseItemDtoCard.NameWithPrefix(owner.CaptionPrefix, ItemLabels.CardName(owner.Model)) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;

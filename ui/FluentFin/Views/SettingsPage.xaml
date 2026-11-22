@@ -10,8 +10,10 @@
     xmlns:jm="using:Jellyfin.Sdk.Generated.Models"
     xmlns:local="using:FluentFin.Views.JellyfinSettings"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:mpv="using:FluentFin.Core.Mpv"
     xmlns:root="using:FluentFin"
     xmlns:s="using:FluentFin.Core.Contracts.Services"
+    xmlns:sc="using:FluentFin.Core.SmartCollections"
     xmlns:settings="using:FluentFin.Core.Settings"
     xmlns:ui="using:CommunityToolkit.WinUI"
     xmlns:vm="using:FluentFin.Core.ViewModels"
@@ -129,6 +131,49 @@
                     <!--  END 1.5 fixes  -->
 
                 </StackPanel>
+                <!--  1.6 collections: Settings > Collections, on this PC: tidy names, Home's Made by Nixie rows, each kind  -->
+                <StackPanel x:Name="CollectionsSection" Spacing="4">
+                    <TextBlock
+                        Margin="1,28,0,6"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="Collections" />
+                    <ctk:SettingsCard
+                        Description="{x:Bind CollectionsSettings.TidyNames.Description}"
+                        Header="{x:Bind CollectionsSettings.TidyNames.Name}"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE8F1;}">
+                        <ToggleSwitch AutomationProperties.Name="{x:Bind CollectionsSettings.TidyNames.Name}" IsOn="{x:Bind CollectionsSettings.TidyNames.IsOn, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                    <ctk:SettingsExpander
+                        x:Name="NixieHomeRowsExpander"
+                        Description="Rows of collections Nixie makes from your libraries, after New in. Only on this PC."
+                        Header="Made by Nixie on Home"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE80F;}"
+                        ItemsSource="{x:Bind CollectionsSettings.HomeRows}">
+                        <ctk:SettingsExpander.ItemTemplate>
+                            <DataTemplate x:DataType="sc:CollectionSwitch">
+                                <ctk:SettingsCard Description="{x:Bind Description}" Header="{x:Bind Name}">
+                                    <ToggleSwitch AutomationProperties.Name="{x:Bind Name}" IsOn="{x:Bind IsOn, Mode=TwoWay}" />
+                                </ctk:SettingsCard>
+                            </DataTemplate>
+                        </ctk:SettingsExpander.ItemTemplate>
+                    </ctk:SettingsExpander>
+                    <ctk:SettingsExpander
+                        x:Name="NixieKindsExpander"
+                        Description="The kinds of collection Nixie makes from your server's own data, on the Collections page and Home. Nothing is sent anywhere."
+                        Header="Made by Nixie collections"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE8FD;}"
+                        ItemsSource="{x:Bind CollectionsSettings.Kinds}">
+                        <ctk:SettingsExpander.ItemTemplate>
+                            <DataTemplate x:DataType="sc:CollectionSwitch">
+                                <ctk:SettingsCard Header="{x:Bind Name}">
+                                    <ToggleSwitch AutomationProperties.Name="{x:Bind Name}" IsOn="{x:Bind IsOn, Mode=TwoWay}" />
+                                </ctk:SettingsCard>
+                            </DataTemplate>
+                        </ctk:SettingsExpander.ItemTemplate>
+                    </ctk:SettingsExpander>
+                </StackPanel>
+                <!--  end 1.6 collections  -->
                 <!--  fluentfin-mpv: Settings > Playback (docs/research/ux-review.md T1)  -->
                 <!--  kept on this PC; the bridge has no field for the skip and wheel settings yet (docs/BRIDGE.md v1), so mpv's own controls ignore them;
                       Nixie's player controls over the MPV player use the Skip button, the wheel and the step (MpvControlsViewModel)  -->
@@ -188,16 +233,85 @@
                             </ctk:SettingsCard>
                         </ctk:SettingsExpander.Items>
                     </ctk:SettingsExpander>
+                    <!--
+                        1.6 skip: skipping repeated extras (docs/BRIDGE.md set_skip_options, skip_rules). The server's ad and
+                        preview segments; learning from the viewer's seeks (1.5's "Learn intros from my skips", the same switch);
+                        what a show's skip rule does; and the rules themselves, read from the backend when the list opens, with a
+                        Forget for each and for each show, and Forget all (it replaces "Forget learned intros"). With the mpv
+                        player only, as the skips are its backend's.
+                    -->
                     <ctk:SettingsCard
-                        Description="Skipped ahead near an episode's start? Offer the same skip on the season's later episodes."
-                        Header="Learn intros from my skips"
-                        HeaderIcon="{ui:FontIcon Glyph=&#xE7BE;}">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.ForgetLearnedStatus, Mode=OneWay}" />
-                            <Button Command="{x:Bind ViewModel.ForgetLearnedIntrosCommand}" Content="Forget learned intros" />
-                            <ToggleSwitch AutomationProperties.Name="Learn intros from my skips" IsOn="{x:Bind ViewModel.LearnIntros, Mode=TwoWay}" />
-                        </StackPanel>
+                        x:Name="AdsAndPreviewsCard"
+                        Description="Ad breaks and previews your server marks, if it marks any."
+                        Header="Ads and previews the server marks"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE789;}"
+                        Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                        <ComboBox
+                            x:Name="AdsAndPreviewsBox"
+                            AutomationProperties.Name="Ads and previews the server marks"
+                            DisplayMemberPath="Name"
+                            ItemsSource="{x:Bind vm:SettingsViewModel.AdsAndPreviewsChoices}"
+                            SelectedItem="{x:Bind ViewModel.SelectedAdsAndPreviews, Mode=TwoWay}" />
                     </ctk:SettingsCard>
+                    <ctk:SettingsCard
+                        x:Name="LearnSkipsCard"
+                        Description="Skipped the same part in two episodes of a show? Nixie offers to skip it every time."
+                        Header="Learn skips from my seeks"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE7BE;}"
+                        Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                        <ToggleSwitch AutomationProperties.Name="Learn skips from my seeks" IsOn="{x:Bind ViewModel.LearnIntros, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                    <ctk:SettingsCard
+                        x:Name="SkipRuleActionCard"
+                        Description="A rule you mark in the player can choose for itself."
+                        Header="When a show has a skip rule"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE893;}"
+                        Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                        <ComboBox
+                            x:Name="SkipRuleActionBox"
+                            AutomationProperties.Name="When a show has a skip rule"
+                            DisplayMemberPath="Name"
+                            ItemsSource="{x:Bind vm:SettingsViewModel.SkipRuleChoices}"
+                            SelectedItem="{x:Bind ViewModel.SelectedSkipRuleAction, Mode=TwoWay}" />
+                    </ctk:SettingsCard>
+                    <ctk:SettingsExpander
+                        x:Name="SkipRulesExpander"
+                        Description="Parts skipped in every episode of a show, and intros learned from your skips. Kept on this PC."
+                        Expanded="OnSkipRulesExpanded"
+                        Header="Skip rules"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE8C6;}"
+                        ItemsSource="{x:Bind ViewModel.SkipRules.Rows}"
+                        Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.IsMpvSelected), Mode=OneWay}">
+                        <Button
+                            x:Name="ForgetAllSkipRulesButton"
+                            Command="{x:Bind ViewModel.ForgetAllSkipRulesCommand}"
+                            Content="Forget all"
+                            IsEnabled="{x:Bind ViewModel.SkipRules.CanForgetAll, Mode=OneWay}" />
+                        <ctk:SettingsExpander.ItemsHeader>
+                            <TextBlock
+                                x:Name="SkipRulesStatus"
+                                Margin="16,8"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind ViewModel.SkipRules.Status, Mode=OneWay}"
+                                TextWrapping="WrapWholeWords"
+                                Visibility="{x:Bind c:Converters.BooleanToVisibility(ViewModel.SkipRules.HasStatus), Mode=OneWay}" />
+                        </ctk:SettingsExpander.ItemsHeader>
+                        <ctk:SettingsExpander.ItemTemplate>
+                            <DataTemplate x:DataType="mpv:SkipRuleRow">
+                                <ctk:SettingsCard
+                                    Description="{x:Bind Detail}"
+                                    Header="{x:Bind Title}"
+                                    HeaderIcon="{x:Bind root:SkipRuleLook.Icon(IsShow)}">
+                                    <Button
+                                        AutomationProperties.Name="{x:Bind ForgetName}"
+                                        Click="OnForgetSkipRuleClick"
+                                        Content="Forget"
+                                        Tag="{x:Bind}" />
+                                </ctk:SettingsCard>
+                            </DataTemplate>
+                        </ctk:SettingsExpander.ItemTemplate>
+                    </ctk:SettingsExpander>
+                    <!--  end 1.6 skip  -->
                     <ctk:SettingsCard
                         Description="With Nixie's player controls and Windows Media Player. mpv's own controls always change the volume with the wheel."
                         Header="Change the volume with the mouse wheel"
@@ -225,6 +339,9 @@
                             SpinButtonPlacementMode="Inline"
                             Value="{x:Bind ViewModel.VolumeStep, Mode=TwoWay}" />
                     </ctk:SettingsCard>
+                    <!--  1.6 player: the default quality at home and away, and the Playback stats button (Controls\PlayerQualitySettingsPanel)  -->
+                    <controls:PlayerQualitySettingsPanel x:Name="PlayerQualityGroup" />
+                    <!--  end 1.6 player  -->
 
                 </StackPanel>
                 <!--  kept by the server for this user, as jellyfin-web's Playback settings: they reach every player  -->

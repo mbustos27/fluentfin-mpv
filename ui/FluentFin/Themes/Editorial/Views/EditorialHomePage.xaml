@@ -482,6 +482,30 @@
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
+
+                <!--  1.6 collections: the Made by Nixie rows, after "New in ...", "Made by Nixie" as their caption  -->
+                <ItemsControl x:Name="NixieShelves" IsTabStop="False" ItemsSource="{x:Bind ViewModel.NixieRows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NixieHomeRowViewModel">
+                            <Grid Margin="0,22,0,0">
+                                <ec:EditorialShelf
+                                    Caption="{x:Bind Kicker}"
+                                    HasSeeAll="True"
+                                    IsNarrow="{Binding ElementName=Page, Path=IsNarrow}"
+                                    ItemsSource="{x:Bind Items, Mode=OneWay}"
+                                    SeeAll="NixieSeeAll"
+                                    Tag="{x:Bind}"
+                                    Title="{x:Bind Title}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <!--  end 1.6 collections  -->
             </StackPanel>
         </ScrollViewer>
 

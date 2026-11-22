@@ -2727,6 +2727,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
             self._player.command("seek", intro.end, "absolute")
 
         intro.has_triggered = True
+        # 1.6 skip: when the app made this jump, so the skip learner never
+        # takes it for the viewer's (skip_rules.SkipWatcher._app_jump)
+        intro.skipped_at = time.monotonic()
         self.timeline_handle()
         self.is_in_intro = False
         self._last_intro_msg_time = time.time()
@@ -2796,7 +2799,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
         prev_hud_skip = self._hud_skip
         try:
             if (
-                conf.any_segment_wanted()
+                # 1.6 skip: a show's skip rules apply with every type off
+                (conf.any_segment_wanted()
+                 or getattr(self._video, "intros", None))
                 and self._video is not None
                 and self._player.playback_time is not None
             ):
@@ -2820,7 +2825,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
                     getattr(self, "_osc_style_resolved", None) == "mpvtk")
 
                 if intro is not None:
-                    action = conf.segment_action(intro.type)
+                    # 1.6 skip: a skip rule's segment carries its own action
+                    action = (getattr(intro, "action", None)
+                              or conf.segment_action(intro.type))
                     # In a SyncPlay group "always" degrades to "ask" rather
                     # than switching the feature off. Skipping is a seek, and
                     # a seek is the *group's*: done automatically it yanks
@@ -2840,7 +2847,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
                         intro.has_triggered = True
                         self.skip_intro()
                         self._player.show_text(
-                            segment_labels(intro.type)[1], 3000, 1)
+                            segment_labels(  # 1.6 skip: by source
+                                intro.type,
+                                getattr(intro, "source", None))[1], 3000, 1)
                         self._last_intro_msg_time = time.time()
 
                     if have_hud:
@@ -2860,7 +2869,9 @@ class PlayerManager(AudioMixin, ReportingMixin, WindowMixin):
                         and time.time() - self._last_intro_msg_time > 3
                     ):
                         self._player.show_text(
-                            segment_labels(intro.type)[2], 3000, 1)
+                            segment_labels(  # 1.6 skip: by source
+                                intro.type,
+                                getattr(intro, "source", None))[2], 3000, 1)
                         self._last_intro_msg_time = time.time()
                     self.is_in_intro = True
                 else:

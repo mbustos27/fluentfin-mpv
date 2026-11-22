@@ -90,10 +90,11 @@ public sealed partial class TopTabStrip : UserControl
 		var all = _navigation?.AllTabs ?? [];
 		var fixedWidth = Margin.Left + Margin.Right + all.Where(t => t.Kind is not (TopTabKind.Library or TopTabKind.Libraries)).Sum(t => TabWidth(t.Title, false));
 		var libraries = all.Where(t => t.Kind == TopTabKind.Library).Select(t => TabWidth(t.Title, false)).ToList();
-		var plain = TabWidth(TopTabs.LibrariesTitle, false);
-		var lit = all.FirstOrDefault(t => t.Kind == TopTabKind.Library && _navigation?.Lit is { } m && t.Mark == m)?.Title;
+		// 1.6 topbar: "Libraries ▾" is a menu at every width (its chevron always), named after a lit library without a tab
+		var lit = TopTabs.AllLibraryTabs(all).FirstOrDefault(t => _navigation?.Lit is { } m && t.Mark == m)?.Title;
 		var folded = Math.Max(TabWidth(TopTabs.LibrariesTitle, true), lit is null ? 0 : TabWidth(lit, true));
-		return new TopRowWidths(fixedWidth, libraries, plain, folded);
+		var unmeasured = all.Any(t => t.Kind == TopTabKind.Library && !_measured.ContainsKey((t.Title, false)));
+		return new TopRowWidths(fixedWidth, libraries, folded, folded, unmeasured);
 	}
 
 	private readonly Dictionary<(string Title, bool Menu), double> _measured = [];
@@ -115,8 +116,8 @@ public sealed partial class TopTabStrip : UserControl
 	private string CompactTitle() => _navigation switch
 	{
 		{ IsSearchLit: true } => "Search",
-		{ IsSettingsLit: true } => "Settings",
-		{ Lit: { } lit } n when n.AllTabs.FirstOrDefault(t => t.Mark == lit) is { } tab => tab.Title,
+		{ IsAccountLit: true } n => n.AccountLitName ?? "Settings", // 1.6 topbar: Settings, or a section of the account menu
+		{ Lit: { } lit } n when n.AllTabs.Concat(TopTabs.AllLibraryTabs(n.AllTabs)).FirstOrDefault(t => t.Mark == lit) is { } tab => tab.Title,
 		_ => "Menu",
 	};
 
@@ -180,12 +181,25 @@ public sealed partial class TopTabStrip : UserControl
 		{
 			Mark();
 		}
+		else if (e.PropertyName == nameof(TopNavigation.AllTabs))
+		{
+			// 1.6 topbar: a favourite added or removed (a star): the bar measures again. The fold's count was the old row's, and
+			// a row it leaves unchanged (a new favourite folded at once) said nothing, so a star at 1920 showed only after a resize
+			TabsChanged?.Invoke(this, EventArgs.Empty);
+		}
 	}
 
 	private void Build()
 	{
 		if (_navigation is null)
 		{
+			return;
+		}
+
+		// 1.6 topbar: a star pressed in the open Libraries menu changes the row: once the menu closes (its way back is the tab)
+		if (_libraryMenu is not null)
+		{
+			_buildPending = true;
 			return;
 		}
 
@@ -204,7 +218,8 @@ public sealed partial class TopTabStrip : UserControl
 			return;
 		}
 
-		var hadFocus = _buttons.FirstOrDefault(b => b.FocusState != FocusState.Unfocused)?.FocusState;
+		var focusedTab = _buttons.FirstOrDefault(b => b.FocusState != FocusState.Unfocused);
+		var hadFocus = focusedTab?.FocusState;
 		TabsPanel.Children.Clear();
 		_buttons.Clear();
 		for (var i = 0; i < tabs.Count; i++)
@@ -223,7 +238,8 @@ public sealed partial class TopTabStrip : UserControl
 			// 1.5 (T5): keyboard focus stays keyboard focus; any other comes back without the box (RefocusState). At launch the
 			// window's first focus is Home's tab, and the libraries arriving rebuild the tabs: given back as keyboard focus, Home
 			// wore the focus box over its lit underline though no key had been pressed.
-			(Marked() ?? _buttons.FirstOrDefault())?.Focus(RefocusState(state, Services.ArrivalFocus.UserActedAt));
+			// 1.6 topbar: the same tab when it is still there (a star changed the row: the keyboard stays on "Libraries ▾")
+			(_buttons.FirstOrDefault(b => focusedTab is not null && SameTab(b.Tab, focusedTab.Tab)) ?? Marked() ?? _buttons.FirstOrDefault())?.Focus(RefocusState(state, Services.ArrivalFocus.UserActedAt));
 		}
 
 		TabsChanged?.Invoke(this, EventArgs.Empty);
@@ -297,11 +313,17 @@ public sealed partial class TopTabStrip : UserControl
 		AutomationProperties.SetPositionInSet(button, index + 1);
 		AutomationProperties.SetSizeOfSet(button, count);
 		// Nixie 1.4.0: the folded tab names the lit library ("Movies ▾"); Narrator hears that it is the libraries' menu
-		AutomationProperties.SetHelpText(button, tab.HasMenu ? "Libraries menu: All libraries and the libraries the bar has no room for" : "");
+		AutomationProperties.SetHelpText(button, tab.HasMenu ? "Libraries menu: All libraries and every library, each with a star for the top bar" : ""); // 1.6 topbar
 	}
 
 	private void Mark()
 	{
+		// 1.6 topbar: the row a star changed waits for the Libraries menu to close; its index is not these buttons'
+		if (_buildPending)
+		{
+			return;
+		}
+
 		var selected = _navigation?.SelectedIndex ?? -1;
 		for (var i = 0; i < _buttons.Count; i++)
 		{
@@ -340,7 +362,7 @@ public sealed partial class TopTabStrip : UserControl
 
 		if (tab.HasMenu)
 		{
-			ShowMenu(TopMenus.Libraries(tab), placement);
+			ShowLibrariesMenu(tab, placement); // 1.6 topbar: with the stars
 			return;
 		}
 
@@ -388,6 +410,62 @@ public sealed partial class TopTabStrip : UserControl
 		};
 		menu.ShowAt(placement);
 	}
+
+	// 1.6 topbar
+	/// <summary>The open "Libraries ▾" menu (the row waits for it to close: <see cref="Build"/>).</summary>
+	private Flyout? _libraryMenu;
+
+	private bool _buildPending;
+
+	/// <summary>"Libraries ▾"'s menu is open: the row waits for it (the bar measures nothing new meanwhile).</summary>
+	public bool IsMenuOpen => _libraryMenu is not null;
+
+	/// <summary>The same destination's tab (a rebuilt row's).</summary>
+	private static bool SameTab(TopTab a, TopTab b) => a.Kind == b.Kind && a.Key == b.Key && a.LibraryId == b.LibraryId;
+
+	/// <summary>
+	/// Nixie 1.6 (the review's T3, the favourites): "Libraries ▾"'s menu: All libraries, then every media library, the current
+	/// one checked, each with its star (TopLibrariesMenu). Opened with the keyboard, All libraries takes it (its box shows);
+	/// with the mouse, without the box. A choice opens its page and hands it the keyboard (as the other menus); a star keeps
+	/// the menu open, and the bar's row follows once it closes, the keyboard back on "Libraries ▾".
+	/// </summary>
+	private void ShowLibrariesMenu(TopTab tab, FrameworkElement placement)
+	{
+		if (_navigation is null || _libraryMenu is not null)
+		{
+			return;
+		}
+
+		var keyboard = placement is Control { FocusState: FocusState.Keyboard or FocusState.Programmatic };
+		var content = new TopLibrariesMenu(_navigation, tab);
+		var flyout = TopLibrariesMenu.Wrap(content);
+		var chosen = false;
+		content.Chosen += (_, entry) =>
+		{
+			chosen = true;
+			flyout.Hide();
+			_navigation?.Open(entry);
+		};
+		flyout.Opened += (_, _) => content.FocusFirst(keyboard ? FocusState.Keyboard : FocusState.Pointer);
+		flyout.Closed += (_, _) =>
+		{
+			_libraryMenu = null;
+			if (chosen)
+			{
+				HandFocusToPage();
+			}
+
+			if (_buildPending)
+			{
+				_buildPending = false;
+				// after the flyout's own way back to the tab, so the rebuilt row gives the keyboard back to "Libraries ▾"
+				DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Build);
+			}
+		};
+		_libraryMenu = flyout;
+		flyout.ShowAt(placement);
+	}
+	// end 1.6 topbar
 
 	/// <summary>
 	/// Nixie 1.4.0 (item 4): after a menu opened a page, the keyboard goes to the page's first stop rather than back to the

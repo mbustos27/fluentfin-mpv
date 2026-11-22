@@ -1,4 +1,4 @@
-using FluentFin.Controls;
+﻿using FluentFin.Controls;
 using FluentFin.Core;
 using FluentFin.Core.ViewModels;
 using FluentFin.Themes.Cinematic.Controls;
@@ -46,6 +46,9 @@ public sealed partial class CinematicLibraryPage : Page
 				case nameof(LibraryViewModel.SortBy) or nameof(LibraryViewModel.Order) or nameof(LibraryViewModel.AppliedFilters):
 					ShowTabs();
 					QueueStage();
+					break;
+				case nameof(LibraryViewModel.Presets): // 1.6 colpage
+					ShowTabs();
 					break;
 				case nameof(LibraryViewModel.Density) or nameof(LibraryViewModel.Layout) or nameof(LibraryViewModel.Art):
 					_narrow = null;
@@ -346,86 +349,24 @@ public sealed partial class CinematicLibraryPage : Page
 
 		return false;
 	}
-	// ---- the sections: tabs over the shared filter and sort --------------------------------------------------------
-
-	private enum Section
-	{
-		All,
-		Unwatched,
-		Favorites,
-		Recent,
-	}
-
+	// ---- the sections: tabs over the shared presets (1.6 colpage, LB2, LB5) -------------------------------------------
 
 	/// <summary>
-	/// Nixie 1.4.0 (the UX review's C-M3, item 2): a section is lit only when it is exactly what is shown: All, no filter (in any
-	/// sort but Recently added's); Unwatched or Favorites, that switch alone; Recently added, no filter, newest added first.
-	/// A genre ticked, or two switches, light none (they lit All).
+	/// 1.6 colpage (LB2, LB5): Cinematic's tabs are the library's presets strip (LibraryViewModel.Presets, the same model in
+	/// every theme): All · Unwatched · Favorites · Recently added, then the library's Nixie collections. Unwatched lights
+	/// whenever its filter is on, whatever else is on (it lit only alone, so the toolbar's switch could be on while the tab was
+	/// dark); a lit tab clicked again is off; All takes every filter off and Recently added's sort back.
 	/// </summary>
-	private Section? Current
-	{
-		get
-		{
-			var f = ViewModel.Filter;
-			var recent = ViewModel.SortBy == ItemSortBy.DateCreated && ViewModel.Order == SortOrder.Descending && !ViewModel.InPlaylistOrder;
-			return ViewModel.ActiveFilters switch
-			{
-				0 => recent ? Section.Recent : Section.All,
-				1 when f.Unwatched => Section.Unwatched,
-				1 when f.Favorites => Section.Favorites,
-				_ => null,
-			};
-		}
-	}
-
-	private void ShowTabs()
-	{
-		var current = Current;
-		SectionTabs.SetTabs(
-		[
-			new CinematicTab("All", "All titles", current == Section.All, Section.All),
-			new CinematicTab("Unwatched", "Unwatched", current == Section.Unwatched, Section.Unwatched),
-			new CinematicTab("Favorites", "Favorites", current == Section.Favorites, Section.Favorites),
-			new CinematicTab("Recently added", "Recently added", current == Section.Recent, Section.Recent),
-		]);
-	}
-
-	// the sort in use before Recently added put its own: All puts it back (a preset never resets the user's sort to Name)
-	private (ItemSortBy SortBy, SortOrder Order)? _sortBeforeRecent;
+	private void ShowTabs() =>
+		SectionTabs.SetTabs([.. ViewModel.Presets.Select(p => new CinematicTab(p.Label, p.Name, p.IsOn, p.Preset))]);
 
 	private void SectionTabs_TabInvoked(object? sender, CinematicTab tab)
 	{
-		if (tab.Payload is not Section section || section == Current)
+		if (tab.Payload is LibraryPreset preset)
 		{
-			return;
+			ViewModel.TogglePreset(preset);
+			ShowTabs();
 		}
-
-		var wasRecent = Current == Section.Recent;
-		ViewModel.ClearFilters();
-		switch (section)
-		{
-			case Section.Unwatched:
-				ViewModel.Filter.Unwatched = true;
-				break;
-			case Section.Favorites:
-				ViewModel.Filter.Favorites = true;
-				break;
-			case Section.Recent:
-				_sortBeforeRecent ??= (ViewModel.SortBy, ViewModel.Order);
-				ViewModel.SetSort(ItemSortBy.DateCreated, SortOrder.Descending);
-				break;
-			case Section.All when wasRecent:
-				var (sortBy, order) = _sortBeforeRecent ?? (ItemSortBy.Name, SortOrder.Ascending);
-				ViewModel.SetSort(sortBy, order == SortOrder.Descending && sortBy == ItemSortBy.DateCreated ? SortOrder.Ascending : order);
-				break;
-		}
-
-		if (section != Section.Recent)
-		{
-			_sortBeforeRecent = null;
-		}
-
-		ShowTabs();
 	}
 
 	// ---- the shared library's place, jump and focus (LibraryGridHost) ------------------------------------------------

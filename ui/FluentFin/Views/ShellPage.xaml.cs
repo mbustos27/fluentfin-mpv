@@ -36,6 +36,8 @@ public sealed partial class ShellPage : Page
 		// Nixie 1.4.0 (the trail rule): an item page reached from another section names its library (TrailEyebrow), from the
 		// item's folders on the server (asked once per item)
 		_top.LibraryOf = LibraryOfAsync;
+		// 1.6 topbar: the Collections destination opens through GlobalCommands.OpenCollections (1.6 integration: the Collections page)
+		_top.OpenCollections = App.Commands.OpenCollections;
 		// Nixie 1.4.0 (the trail rule): the lit destination chosen again on its own page goes back to its top
 		_top.ReturnToTopRequested += OnReturnToTop;
 		Unloaded += (_, _) => _top.ReturnToTopRequested -= OnReturnToTop;
@@ -100,7 +102,8 @@ public sealed partial class ShellPage : Page
 	private bool IsTabPage(Type pageType)
 	{
 		var key = KeyOf(pageType);
-		return key.Length > 0 && _top.AllTabs.SelectMany(t => t.Menu.Prepend(t)).Any(t => t.Key == key);
+		// 1.6 topbar: the account menu's sections (Diary) are sections too
+		return key.Length > 0 && (_top.AllTabs.SelectMany(t => t.Menu.Prepend(t)).Any(t => t.Key == key) || _top.Sections.Any(t => t.Key == key));
 	}
 
 	private readonly Dictionary<Guid, Guid?> _libraryOf = [];
@@ -118,7 +121,7 @@ public sealed partial class ShellPage : Page
 			return known;
 		}
 
-		var libraries = _top.AllTabs.Where(t => t.Kind == TopTabKind.Library).Select(t => t.LibraryId).ToHashSet();
+		var libraries = TopTabs.AllLibraryTabs(_top.AllTabs).Select(t => t.LibraryId).ToHashSet(); // 1.6 topbar: every library, not only the bar's
 		var library = (await _client.GetAncestors(id)).FirstOrDefault(a => libraries.Contains(a.Id))?.Id;
 		if (library is not null)
 		{

@@ -208,6 +208,19 @@ ranges are wide (one 1.5.0 start took 11 s); the medians, with the 5 runs' range
 1.5.1 opens its window and paints Home as fast as 1.5.0 (the medians 45 and 125 ms apart, inside each other's ranges),
 and holds the same memory after the browse. The sign-in watch (a handler under every request) costs nothing measurable.
 
+**1.6.0 beside 1.5.1** (2026-11-21 on the build PC, after the final pass with nothing else running; Debug x64 builds of
+the 1.6 branch at 1744631 and of v1.5.1; all 10 runs passed every check, strict auth included). Each build's first run
+was a cold start (about 2.5 s to the window, the files just copied); the medians, with the 5 runs' range:
+
+| Build | Start-up: window shown (ms) | The app's own "window shown" (ms) | First Home paint (ms) | Private bytes (MB) |
+|---|---|---|---|---|
+| 1.5.1 | 970 (959 to 2,382) | 943 | 984 (944 to 1,165) | 592 (589 to 598) |
+| 1.6.0 | 955 (952 to 2,728) | 936 | 1,100 (1,029 to 1,183) | 587 (576 to 596) |
+
+1.6.0 opens its window as fast as 1.5.1 and holds the same memory after the browse; Home's first cards come about 115 ms
+later (the ranges overlap; 1.6 adds Home's Made by Nixie rows, built from the library index when it is in). Not a gate;
+1.6.1 measures itself beside this.
+
 ## 5. Publish (the coordinating session, after review)
 
 1. Tag the commit the zip was built from: `git tag -a v<version> -m "Nixie <version>"`, push the tag.

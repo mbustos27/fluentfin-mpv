@@ -185,6 +185,14 @@ def build_video(item_id, parent, aid=None, sid=None, srcid=None,
 
 
 class Intro(object):
+    # 1.6 skip: a skip rule's segment (source "rule", intro_sources and
+    # skip_rules) carries its own action, whatever its type is set to, and
+    # names its rule; None on every other segment.
+    action = None
+    rule_id = None
+    origin = None
+    anchor = None
+
     def __init__(self, type, start, end, source="server"):
         # A Jellyfin MediaSegmentType: Intro, Outro, Commercial, Preview or
         # Recap. Named Intro for its first two.
@@ -193,12 +201,13 @@ class Intro(object):
         self.end: float = end
         self.has_triggered: bool = False
         # fluentfin-mpv: where it came from (intro_sources): server,
-        # chapters, online or learned.
+        # chapters, online, learned or (1.6 skip) rule.
         self.source: str = source
 
 
-def segment_labels(segment_type):
-    """``(button, done, prompt)`` for a segment type.
+def segment_labels(segment_type, source=None):
+    """``(button, done, prompt)`` for a segment type (1.6 skip: a skip rule's
+    part that is not an intro or the credits is an "extra").
 
     Whole phrases per type rather than "Skip {0}" with a noun: gettext keys
     on the English, and a language that inflects the verb with the object
@@ -208,6 +217,10 @@ def segment_labels(segment_type):
     Built per call, not at import: ``_()`` resolves against whatever locale
     is loaded, and at module scope that is whatever was loaded first.
     """
+    if source == "rule" and segment_type not in ("Intro", "Outro"):
+        # 1.6 skip
+        return (_("Skip Extra"), _("Skipped Extra"),
+                _("Seek to Skip Extra"))
     table = {
         "Outro": (_("Skip Credits"), _("Skipped Credits"),
                   _("Seek to Skip Credits")),
@@ -1024,8 +1037,9 @@ class Video(object):
             return None
         if conf.any_segment_wanted():
             self.get_intro(self.media_source["Id"])
-            # fluentfin-mpv: chapters, online lookups, learned intros.
-            intro_sources.augment(self, Intro)
+        # fluentfin-mpv: chapters, online lookups, learned intros; 1.6 skip:
+        # and the show's skip rules, which apply with every type set to off.
+        intro_sources.augment(self, Intro)
 
         self.map_streams()
         url = self._get_url_from_source()

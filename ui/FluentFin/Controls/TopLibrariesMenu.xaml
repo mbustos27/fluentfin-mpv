@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    Nixie 1.6 (the review's T3, the favourites): "Libraries ▾"'s menu, at every width: All libraries, a separator, then every
+    media library, the current one checked, each with its star (in the top bar or not). A row reads as a menu item to Narrator
+    ("Movies, menu item, selected" for the current one); its star is a button named for what it does ("Add Movies to the top
+    bar", "Remove Movies from the top bar"). Up and Down move between the rows, Left and Right between a row and its star,
+    Enter opens, Esc closes. A fourth star is refused with a line under the list ("Up to 3 favourites in the top bar. Remove a
+    star to add Anime."), read out at once.
+-->
+<UserControl
+    x:Class="FluentFin.Controls.TopLibrariesMenu"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:FluentFin.Controls"
+    IsTabStop="False">
+
+    <UserControl.Resources>
+        <!--  the star: the bar's other icon buttons' subtle 32 square, radius 8; lit in the theme's accent  -->
+        <Style
+            x:Key="TopStarButtonStyle"
+            BasedOn="{StaticResource NixieCompactIconButtonStyle}"
+            TargetType="Button" />
+
+        <DataTemplate x:Key="RowTemplate" x:DataType="local:TopLibraryRow">
+            <Grid ColumnSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <local:TopMenuEntry
+                    HorizontalAlignment="Stretch"
+                    AutomationProperties.Name="{x:Bind Title}"
+                    Click="{x:Bind Open}"
+                    Content="{x:Bind Title}"
+                    IsCurrent="{x:Bind IsCurrent}">
+                    <local:TopMenuEntry.Icon>
+                        <FontIcon
+                            AutomationProperties.AccessibilityView="Raw"
+                            Glyph="&#xE73E;"
+                            Visibility="{x:Bind IsCurrent}" />
+                    </local:TopMenuEntry.Icon>
+                </local:TopMenuEntry>
+                <Button
+                    Grid.Column="1"
+                    AutomationProperties.Name="{x:Bind StarName, Mode=OneWay}"
+                    Click="{x:Bind ToggleStar}"
+                    Style="{StaticResource TopStarButtonStyle}"
+                    ToolTipService.ToolTip="{x:Bind StarName, Mode=OneWay}">
+                    <Grid>
+                        <FontIcon
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="16"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="&#xE734;"
+                            Visibility="{x:Bind IsNotFavourite, Mode=OneWay}" />
+                        <FontIcon
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="16"
+                            Foreground="{ThemeResource GlassTabUnderlineBrush}"
+                            Glyph="&#xE735;"
+                            Visibility="{x:Bind IsFavourite, Mode=OneWay}" />
+                    </Grid>
+                </Button>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <StackPanel
+        x:Name="MenuPanel"
+        MinWidth="260"
+        MaxWidth="360"
+        Spacing="2"
+        TabFocusNavigation="Cycle"
+        XYFocusKeyboardNavigation="Enabled">
+        <local:TopMenuEntry
+            x:Name="AllEntry"
+            HorizontalAlignment="Stretch"
+            AutomationProperties.Name="All libraries"
+            Click="OnAllClick"
+            Content="All libraries">
+            <local:TopMenuEntry.Icon>
+                <FontIcon
+                    x:Name="AllCheck"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Glyph="&#xE73E;" />
+            </local:TopMenuEntry.Icon>
+        </local:TopMenuEntry>
+        <MenuFlyoutSeparator x:Name="Separator" Margin="0,2,0,2" />
+        <ItemsRepeater
+            x:Name="Rows"
+            AutomationProperties.Name="Libraries"
+            ItemTemplate="{StaticResource RowTemplate}"
+            TabFocusNavigation="Local"
+            XYFocusKeyboardNavigation="Enabled">
+            <ItemsRepeater.Layout>
+                <StackLayout Spacing="2" />
+            </ItemsRepeater.Layout>
+        </ItemsRepeater>
+        <!--  a fourth star: said here, and read out at once  -->
+        <TextBlock
+            x:Name="FullNote"
+            MaxWidth="320"
+            Margin="12,6,12,6"
+            AutomationProperties.LiveSetting="Assertive"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{ThemeResource CaptionTextBlockStyle}"
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+    </StackPanel>
+</UserControl>

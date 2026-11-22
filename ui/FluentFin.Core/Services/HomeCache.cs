@@ -13,7 +13,16 @@ namespace FluentFin.Core.Services;
 /// What the home page showed: Continue Watching, Next Up and the "Recently added" rows, in order, and the libraries that
 /// had nothing recent (no placeholder row for them next time, so the rows below do not jump when it goes).
 /// </summary>
-public sealed record HomeSnapshot(IReadOnlyList<BaseItemDto> ContinueItems, IReadOnlyList<BaseItemDto> NextUpItems, IReadOnlyList<HomeSnapshotRow> Rows, IReadOnlyList<Guid> EmptyLibraries);
+public sealed record HomeSnapshot(IReadOnlyList<BaseItemDto> ContinueItems, IReadOnlyList<BaseItemDto> NextUpItems, IReadOnlyList<HomeSnapshotRow> Rows, IReadOnlyList<Guid> EmptyLibraries)
+{
+	// 1.6 collections
+	/// <summary>Nixie 1.6: Home's Made by Nixie rows (a saved page from before 1.6 has none).</summary>
+	public IReadOnlyList<HomeSnapshotNixieRow> NixieRows { get; init; } = [];
+}
+
+/// <summary>Nixie 1.6: a Made by Nixie row on Home: its collection and the cards it showed.</summary>
+public sealed record HomeSnapshotNixieRow(SmartCollections.SmartCollection Collection, IReadOnlyList<BaseItemDto> Items);
+// end 1.6 collections
 
 public sealed record HomeSnapshotRow(BaseItemDto Library, IReadOnlyList<BaseItemDto> Items);
 
@@ -138,6 +147,7 @@ public sealed class HomeCache : IDisposable
 	/// </summary>
 	public async Task Forget(string serverUrl, Guid userId)
 	{
+		Forgetting?.Invoke(serverUrl, userId); // 1.6 collections
 		var key = Key(serverUrl, userId);
 		lock (_lock)
 		{
@@ -166,6 +176,7 @@ public sealed class HomeCache : IDisposable
 			return;
 		}
 
+		ForgettingLogin?.Invoke(login); // 1.6 collections
 		lock (_lock)
 		{
 			Changed();
@@ -294,6 +305,26 @@ public sealed class HomeCache : IDisposable
 		}
 	}
 
+	// 1.6 collections: what else is kept per server and user (the library index, the saved collections) goes with the home page
+	/// <summary>Nixie 1.6: a user signs out (<see cref="Forget"/>): their server address and id.</summary>
+	public event Action<string, Guid>? Forgetting;
+
+	/// <summary>Nixie 1.6: a saved login is removed (<see cref="ForgetLogin"/>): the login as <see cref="LoginKey"/> writes it.</summary>
+	public event Action<string>? ForgettingLogin;
+
+	/// <summary>Nixie 1.6: the file name this cache uses for a server and user (hashed: nothing readable about either).</summary>
+	public static string FileKey(string serverUrl, Guid userId) => Key(serverUrl, userId);
+
+	/// <summary>Nixie 1.6: the saved login a server and user signed in with this run (hashed), for files that go with it.</summary>
+	public string? LoginKey(string serverUrl, Guid userId)
+	{
+		lock (_lock)
+		{
+			return _logins.TryGetValue(Key(serverUrl, userId), out var login) ? login : null;
+		}
+	}
+	// end 1.6 collections
+
 	// under _lock
 	private bool ForgottenSince(string key, int changesSeen) => _forgotten.TryGetValue(key, out var at) && changesSeen < at;
 
@@ -321,6 +352,12 @@ public sealed class HomeCache : IDisposable
 			["NextUp"] = Kiota(snapshot.NextUpItems),
 			["Rows"] = new JsonArray([.. snapshot.Rows.Select(row => new JsonObject { ["Library"] = Kiota(row.Library), ["Items"] = Kiota(row.Items) })]),
 			["EmptyLibraries"] = new JsonArray([.. snapshot.EmptyLibraries.Select(id => JsonValue.Create(id.ToString("N")))]),
+			// 1.6 collections: the Made by Nixie rows (their collections without the covers: the cards are the items)
+			["Nixie"] = new JsonArray([.. snapshot.NixieRows.Select(row => new JsonObject
+			{
+				["Collection"] = JsonSerializer.SerializeToNode(row.Collection with { Cover = [] }),
+				["Items"] = Kiota(row.Items),
+			})]),
 		};
 
 		var temporary = path + ".tmp";
@@ -345,7 +382,13 @@ public sealed class HomeCache : IDisposable
 				[.. root.GetProperty("Rows").EnumerateArray().Select(row => new HomeSnapshotRow(
 					new JsonParseNode(row.GetProperty("Library")).GetObjectValue(BaseItemDto.CreateFromDiscriminatorValue),
 					Items(row.GetProperty("Items"))))],
-				[.. root.GetProperty("EmptyLibraries").EnumerateArray().Select(x => Guid.Parse(x.GetString()!))]);
+				[.. root.GetProperty("EmptyLibraries").EnumerateArray().Select(x => Guid.Parse(x.GetString()!))])
+			{
+				// 1.6 collections: none in a page saved before 1.6
+				NixieRows = root.TryGetProperty("Nixie", out var nixie)
+					? [.. nixie.EnumerateArray().Select(row => new HomeSnapshotNixieRow(row.GetProperty("Collection").Deserialize<SmartCollections.SmartCollection>()!, Items(row.GetProperty("Items"))))]
+					: [],
+			};
 		}
 		catch (Exception ex)
 		{

@@ -128,4 +128,5 @@ public readonly record struct TopBarFit(bool Compact, bool ShowWordmark, bool Sh
 /// Nixie 1.4.0: the tabs' widths for <see cref="TopBar.Fit"/>: <see cref="Fixed"/> (Home, the plugins' sections, the strip's
 /// margin), each library's tab in order, "Libraries" as a plain tab, and folded ("Libraries ▾", or a lit library's name ▾).
 /// </summary>
-public readonly record struct TopRowWidths(double Fixed, IReadOnlyList<double> Libraries, double Plain, double Folded);
+/// <remarks>1.6 topbar: <see cref="Unmeasured"/>, a library tab never laid out yet (a favourite starred while the bar folded it): its width is an estimate.</remarks>
+public readonly record struct TopRowWidths(double Fixed, IReadOnlyList<double> Libraries, double Plain, double Folded, bool Unmeasured = false);

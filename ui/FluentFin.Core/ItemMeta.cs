@@ -77,7 +77,7 @@ public static class ItemMeta
 	}
 
 	/// <summary>A "Part of" link for Narrator: "Part of the collection Copper and Glass".</summary>
-	public static string PartOfName(BaseItemDto? collection) => $"Part of the collection {collection?.Name?.Trim()}";
+	public static string PartOfName(BaseItemDto? collection) => $"Part of the collection {ViewModels.CollectionNames.Display(collection).Trim()}"; // 1.6 collections: tidied
 
 	/// <summary>The first trailer link that is a web address, or null (anything else would be handed to the shell).</summary>
 	public static Uri? TrailerUrl(BaseItemDto? dto) =>

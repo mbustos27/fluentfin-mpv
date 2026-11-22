@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <!--
     Nixie 1.4.0 (the UX review's X4, item 2): what is filtered, under the toolbar in every theme: "Showing 223 of 320 movies",
     a chip per filter on ("Unwatched ✕", "Comedy ✕"), and Clear all. The count line is a polite live region (Narrator hears
@@ -63,5 +63,62 @@
             Command="{x:Bind ViewModel.ClearFiltersCommand}"
             Content="Clear all"
             Style="{StaticResource NixieChipButtonStyle}" />
+        <!--
+            1.6 colpage: Save as collection (the smart collections plan's 4.4; Plex's smart collections are saved filters): names
+            the filters on and keeps them as a Nixie collection (the collections stream's SmartCollectionStore). Shown only
+            where there is somewhere to save (LibraryViewModel.CanSaveFilter). Enter saves, Esc or Cancel leaves it.
+        -->
+        <Button
+            x:Name="SaveButton"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="Save as collection"
+            Style="{StaticResource NixieChipButtonStyle}"
+            ToolTipService.ToolTip="Keep these filters as a collection of your own"
+            Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    FontSize="12"
+                    Glyph="&#xE74E;" />
+                <TextBlock VerticalAlignment="Center" Text="Save as collection" />
+            </StackPanel>
+            <Button.Flyout>
+                <Flyout x:Name="SaveFlyout" Opening="SaveFlyout_Opening" Placement="BottomEdgeAlignedLeft">
+                    <StackPanel Width="320" Spacing="12">
+                        <TextBlock
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource BodyStrongTextBlockStyle}"
+                            Text="Save as collection" />
+                        <TextBox
+                            x:Name="SaveName"
+                            AutomationProperties.Name="Collection name"
+                            Header="Name"
+                            KeyDown="SaveName_KeyDown"
+                            MaxLength="80"
+                            TextChanged="SaveName_TextChanged" />
+                        <TextBlock
+                            x:Name="SaveMessage"
+                            AutomationProperties.LiveSetting="Polite"
+                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="These filters, kept on this PC as a collection."
+                            TextWrapping="Wrap" />
+                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
+                            <Button
+                                x:Name="SaveConfirm"
+                                Click="SaveConfirm_Click"
+                                Content="Save"
+                                Style="{StaticResource NixiePrimaryButtonStyle}" />
+                            <Button
+                                x:Name="SaveCancel"
+                                Click="SaveCancel_Click"
+                                Content="Cancel"
+                                Style="{StaticResource NixieButtonStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Flyout>
+            </Button.Flyout>
+        </Button>
     </ctk:WrapPanel>
 </UserControl>

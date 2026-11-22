@@ -24,6 +24,14 @@ public interface ISettings
 	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.LearnIntros"/>.</summary>
 	bool LearnIntros { get; set; }
 
+	// 1.6 skip
+	/// <summary>1.6 skip: see <see cref="SettingKeys.AdsAndPreviewsAction"/>.</summary>
+	string AdsAndPreviewsAction { get; set; }
+
+	/// <summary>1.6 skip: see <see cref="SettingKeys.SkipRuleAction"/>.</summary>
+	string SkipRuleAction { get; set; }
+	// end 1.6 skip
+
 	/// <summary>fluentfin-mpv: see <see cref="SettingKeys.MouseWheelVolume"/>.</summary>
 	bool MouseWheelVolume { get; set; }
 
@@ -49,6 +57,17 @@ public interface ISettings
 	/// <summary>1.5: see <see cref="SettingKeys.HomeLetterKeysOff"/>.</summary>
 	bool HomeLetterKeysOff { get; set; }
 	// END 1.5 fixes
+
+	// 1.6 player
+	/// <summary>1.6: see <see cref="SettingKeys.QualityAtHome"/>.</summary>
+	Mpv.QualityChoice QualityAtHome { get; set; }
+
+	/// <summary>1.6: see <see cref="SettingKeys.QualityAway"/>.</summary>
+	Mpv.QualityChoice QualityAway { get; set; }
+
+	/// <summary>1.6: see <see cref="SettingKeys.ShowPlaybackStatsButton"/>.</summary>
+	bool ShowPlaybackStatsButton { get; set; }
+	// end 1.6 player
 
 	void ListenToChanges();
 
@@ -118,6 +137,26 @@ public partial class Settings(ILocalSettingsService localSettingsService, MediaP
 	}
 	// END 1.5 fixes
 
+	// 1.6 player
+	public Mpv.QualityChoice QualityAtHome
+	{
+		get => Mpv.QualityChoice.FromSetting(localSettingsService.ReadSetting(SettingKeys.QualityAtHome));
+		set => localSettingsService.SaveSetting(SettingKeys.QualityAtHome, (value ?? Mpv.QualityChoice.Auto).ToSetting());
+	}
+
+	public Mpv.QualityChoice QualityAway
+	{
+		get => Mpv.QualityChoice.FromSetting(localSettingsService.ReadSetting(SettingKeys.QualityAway));
+		set => localSettingsService.SaveSetting(SettingKeys.QualityAway, (value ?? Mpv.QualityChoice.Auto).ToSetting());
+	}
+
+	public bool ShowPlaybackStatsButton
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.ShowPlaybackStatsButton);
+		set => localSettingsService.SaveSetting(SettingKeys.ShowPlaybackStatsButton, value);
+	}
+	// end 1.6 player
+
 	public bool ShowSkipPrompt
 	{
 		get => localSettingsService.ReadSetting(SettingKeys.ShowSkipPrompt);
@@ -135,6 +174,20 @@ public partial class Settings(ILocalSettingsService localSettingsService, MediaP
 		get => localSettingsService.ReadSetting(SettingKeys.LearnIntros);
 		set => localSettingsService.SaveSetting(SettingKeys.LearnIntros, value);
 	}
+
+	// 1.6 skip
+	public string AdsAndPreviewsAction
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.AdsAndPreviewsAction);
+		set => localSettingsService.SaveSetting(SettingKeys.AdsAndPreviewsAction, value);
+	}
+
+	public string SkipRuleAction
+	{
+		get => localSettingsService.ReadSetting(SettingKeys.SkipRuleAction);
+		set => localSettingsService.SaveSetting(SettingKeys.SkipRuleAction, value);
+	}
+	// end 1.6 skip
 
 	public bool MouseWheelVolume
 	{

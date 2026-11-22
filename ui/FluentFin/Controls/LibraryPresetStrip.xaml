@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    1.6 colpage (LB2, LB3, LB5): a library's presets strip, the same model in every theme (LibraryViewModel.Presets): All ·
+    Unwatched · Favorites · Recently added, then the library's Nixie collections. Each is a switch (lit whenever it is on: a
+    second click turns it off; All takes every filter off). One Tab stop, Left and Right along it. The theme gives the look
+    (LibraryPresetChipStyle: Classic's chips, Drive-in's letter-board tiles, Editorial's chips; Cinematic draws its tabs).
+-->
+<UserControl
+    x:Class="FluentFin.Controls.LibraryPresetStrip"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False">
+    <!--
+        review Major 4: up to 12 Nixie collections after the four: the strip scrolls sideways (a thin bar under it for the
+        pointer), and the keyboard's preset is always brought into view
+    -->
+    <ScrollViewer
+        x:Name="Scroller"
+        HorizontalScrollBarVisibility="Auto"
+        HorizontalScrollMode="Enabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Disabled"
+        VerticalScrollMode="Disabled">
+        <StackPanel
+            x:Name="Strip"
+            Padding="0,0,0,4"
+            Orientation="Horizontal"
+            Spacing="8"
+            TabFocusNavigation="Once"
+            XYFocusKeyboardNavigation="Enabled" />
+    </ScrollViewer>
+</UserControl>

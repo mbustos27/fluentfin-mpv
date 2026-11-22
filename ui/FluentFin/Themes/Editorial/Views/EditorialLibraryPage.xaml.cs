@@ -1,4 +1,4 @@
-using FluentFin.Controls;
+﻿using FluentFin.Controls;
 using FluentFin.Core.ViewModels;
 using FluentFin.Services;
 using FluentFin.Themes.Editorial.Controls;
@@ -98,7 +98,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 					}
 
 					break;
-				case nameof(LibraryViewModel.Density):
+				case nameof(LibraryViewModel.Density) or nameof(LibraryViewModel.Layout): // 1.6 colpage: the list view
+					_toTop = !ViewModel.IsLoading;
 					Fit(_gridWidth);
 					break;
 				case nameof(LibraryViewModel.IsLoadingMore) when !ViewModel.IsLoadingMore:
@@ -194,6 +195,8 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		var narrow = width < 1400;
 		// Nixie 1.4.0 (plan item 13): the theme's page grid: its gutter (40 at 1100 to 56 at 1920) and the title at its y (56)
 		var margin = PageGrid.GutterAt(width);
+		// 1.6 colpage (review Major 4): the presets take at most half the chips' row (up to 12 Nixie collections scroll in it), the genres the rest
+		PresetStrip.MaxWidth = Math.Max(320, Math.Floor((width - (2 * margin)) * 0.5));
 		var pageTop = XamlRoot?.Content is UIElement root ? TransformToVisual(root).TransformPoint(default).Y : FluentFin.Controls.TopBar.Height;
 		Head.Padding = new Thickness(margin, _compact ? 6 : Core.Theming.PageGridMetrics.TitleTop(PageGrid.Tokens().TitleY, pageTop), margin, 0);
 		GridScroller.Padding = new Thickness(margin, 0, margin, 0);
@@ -216,12 +219,15 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 	private readonly List<EditorialTabButton> _chips = [];
 
-	/// <summary>The chips: All, then each genre with its count against the other filters; the one genre picked lit (several: none).</summary>
+	/// <summary>
+	/// The chips: each genre with its count against the other filters; the one genre picked lit (several: none). 1.6 colpage:
+	/// the presets before them hold the row's All; the lit genre clicked again is off.
+	/// </summary>
 	private void UpdateChips()
 	{
 		SummaryText.Text = ViewModel.EditorialSummary();
 		var genres = ViewModel.EditorialGenreChips();
-		var names = genres.Select(g => g.Value).Prepend("").ToList();
+		var names = genres.Select(g => g.Value).ToList();
 		if (_chips.Count != names.Count || _chips.Zip(names).Any(x => (string)x.First.Tag != x.Second))
 		{
 			ChipStack.Children.Clear();
@@ -229,7 +235,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 			foreach (var name in names)
 			{
 				var chip = new EditorialTabButton { Tag = name, Style = (Style)Application.Current.Resources["EditorialChipStyle"] };
-				chip.Click += (sender, _) => ViewModel.EditorialPickGenre((string)((FrameworkElement)sender).Tag is { Length: > 0 } genre ? genre : null);
+				chip.Click += (sender, _) => ViewModel.EditorialPickGenre((string)((FrameworkElement)sender).Tag is { Length: > 0 } genre && genre != ViewModel.EditorialGenre ? genre : null);
 				_chips.Add(chip);
 				ChipStack.Children.Add(chip);
 			}
@@ -237,12 +243,12 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 
 		for (var i = 0; i < _chips.Count; i++)
 		{
-			var (label, count) = i == 0 ? ("All", ViewModel.EditorialTotal) : (genres[i - 1].Value, genres[i - 1].Count);
+			var (label, count) = (genres[i].Value, genres[i].Count);
 			_chips[i].Content = ChipContent(label, count);
-			_chips[i].IsSelected = i == 0 ? ViewModel.Filter.Genres.Count == 0 : ViewModel.EditorialGenre == genres[i - 1].Value;
+			_chips[i].IsSelected = ViewModel.EditorialGenre == genres[i].Value;
 			// Nixie 1.4.0: a genre that would leave nothing is greyed, not hidden (its count follows the other filters)
-			_chips[i].IsEnabled = i == 0 || genres[i - 1].IsAvailable;
-			AutomationProperties.SetName(_chips[i], i == 0 ? $"All, {count} titles" : genres[i - 1].Name);
+			_chips[i].IsEnabled = genres[i].IsAvailable || _chips[i].IsSelected;
+			AutomationProperties.SetName(_chips[i], genres[i].Name);
 			AutomationProperties.SetPositionInSet(_chips[i], i + 1);
 			AutomationProperties.SetSizeOfSet(_chips[i], _chips.Count);
 		}
@@ -305,8 +311,16 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		// a narrow window's posters are smaller (the concept's 122 px at 1100), so the row still holds seven; small and large a step either way
 		var medium = width < 1300 ? 122 : EditorialLibrary.PosterWidth;
 		var poster = LibraryDensities.Width(ViewModel.Density, medium);
-		var columns = EditorialLibrary.Columns(width, poster);
-		PosterWidth = Math.Floor((width - (columns - 1) * EditorialLibrary.Gap) / columns);
+		// 1.6 colpage (theme polish): the list view is one title a line
+		var list = ViewModel.IsList;
+		var columns = list ? 1 : EditorialLibrary.Columns(width, poster);
+		if (_metrics.ListForm != list)
+		{
+			_metrics.ListForm = list;
+			_columns = 0; // the lines again, in the other form
+		}
+
+		PosterWidth = list ? poster : Math.Floor((width - (columns - 1) * EditorialLibrary.Gap) / columns);
 		PosterHeight = Math.Round(PosterWidth * 1.5);
 		SkeletonLayout.MinItemWidth = PosterWidth;
 		if (_metrics.PosterWidth != PosterWidth)
@@ -897,7 +911,7 @@ public sealed partial class EditorialLibraryPage : Page, IEditorialDetailsHost
 		if (key == "Up" && EditorialLibrary.Move(_lines, index, ViewModel.Items.Count, "Up") is null)
 		{
 			_ = (Letters.Visibility == Visibility.Visible && Letters.FocusCurrent(FocusState.Keyboard))
-				|| (ChipRow.Visibility == Visibility.Visible && (_chips.FirstOrDefault(c => c.IsSelected) ?? _chips.FirstOrDefault())?.Focus(FocusState.Keyboard) == true)
+				|| (ChipRow.Visibility == Visibility.Visible && (_chips.FirstOrDefault(c => c.IsSelected) ?? (Control?)PresetStrip.Buttons.FirstOrDefault(b => b.IsChecked == true) ?? _chips.FirstOrDefault())?.Focus(FocusState.Keyboard) == true)
 				|| SortFilterBar.Focus(FocusState.Keyboard);
 			return;
 		}

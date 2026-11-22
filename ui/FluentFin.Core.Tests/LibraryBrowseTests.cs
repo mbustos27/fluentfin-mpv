@@ -1,4 +1,4 @@
-using FluentFin.Core.Contracts.Services;
+﻿using FluentFin.Core.Contracts.Services;
 using FluentFin.Core.ViewModels;
 using Jellyfin.Sdk.Generated.Models;
 using Moq;
@@ -193,10 +193,11 @@ public sealed class LibraryBrowseTests
 		Assert.Equal(["A", "B"], vm.Items.Select(x => x.Name));
 		Assert.Equal("Filter (1)", vm.FilterText);
 
-		// Unwatched and Favorites (layout audit, item 15): what jellyfin-web and Plex offer first; each counts as one filter
+		// Unwatched and Favorites (layout audit, item 15): what jellyfin-web and Plex offer first; each is a filter on, but
+		// 1.6 colpage (LB3): Filter's count leaves them out (they have their own switch in the presets strip)
 		vm.Filter.Unwatched = true;
 		Assert.Equal(["A"], vm.Items.Select(x => x.Name));
-		Assert.Equal("Filter (2)", vm.FilterText);
+		Assert.Equal(("Filter (1)", 2), (vm.FilterText, vm.ActiveFilters));
 		vm.Filter.Unwatched = false;
 		vm.Filter.Favorites = true;
 		Assert.Equal(["B"], vm.Items.Select(x => x.Name));

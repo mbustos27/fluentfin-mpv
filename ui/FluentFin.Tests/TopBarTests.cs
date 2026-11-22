@@ -375,6 +375,130 @@ public sealed class TopBarTests
 		Assert.Contains("App.GetService<Core.ViewModels.TopNavigation>().ChooseSearch();", search);
 	}
 
+	// 1.6 topbar
+
+	/// <summary>
+	/// Nixie 1.6: Home and Collections with the strip's margin; three favourites with long names ("Kids and Family", "Stand-up
+	/// Specials"); "Libraries ▾" with its chevron (always a menu: plain and folded the same).
+	/// </summary>
+	private static TopRowWidths FavouritesRow(int favourites) => new(12 + 66 + 106, new[] { 90.0, 148, 166 }.Take(favourites).ToList(), 112, 112);
+
+	[Theory]
+	[InlineData(2560, 3, 3)]
+	[InlineData(1920, 3, 3)]
+	[InlineData(1440, 3, 3)]
+	[InlineData(1100, 3, 1)]
+	[InlineData(1100, 1, 1)]
+	[InlineData(1100, 0, 0)]
+	public void TheFavourites_FoldFromTheRight_ByWidth_TheSearchBoxKeepsItsRoom(double width, int favourites, int shown)
+	{
+		var row = FavouritesRow(favourites);
+
+		var fit = TopBar.Fit(width, Caption, Back, Wordmark, row, LongMenu, Account, search: true, searchOpen: false);
+
+		Assert.False(fit.Compact);
+		Assert.Equal(shown, Math.Min(fit.ShownLibraries, favourites));
+		var taken = Back + Wordmark + row.Fixed + row.Libraries.Take(shown).Sum() + row.Folded + fit.SearchWidth + TopBar.Spacing + Account + TopBar.Spacing + TopBar.MinDragGap + Caption;
+		Assert.True(taken <= width, $"{taken} px taken at {width}");
+	}
+
+	[Fact]
+	public void TheLibrariesMenu_HasItsStars_AndTheRowWaitsForItToClose()
+	{
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var strip = File.ReadAllText(Path.Combine(root, "Controls", "TopTabStrip.xaml.cs"));
+		// the review's T3: "Libraries ▾" opens its menu at every width
+		Assert.Contains("ShowLibrariesMenu(tab, placement); // 1.6 topbar: with the stars", strip);
+		Assert.Contains("if (_libraryMenu is not null)\r\n\t\t{\r\n\t\t\t_buildPending = true;".ReplaceLineEndings(), strip.ReplaceLineEndings());
+		Assert.Contains("DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, Build);", strip);
+		Assert.Contains("_buttons.FirstOrDefault(b => focusedTab is not null && SameTab(b.Tab, focusedTab.Tab))", strip);
+		// a star changes the row's libraries: the bar measures again (the fold's count was the old row's)
+		Assert.Contains("else if (e.PropertyName == nameof(TopNavigation.AllTabs))\r\n\t\t{\r\n".ReplaceLineEndings() + "\t\t\t// 1.6 topbar", strip.ReplaceLineEndings());
+		// the narrow window's menu stays the radio list (TopMenus.Sections)
+		Assert.Contains("ShowMenu(TopMenus.Sections(_navigation.AllTabs), CompactButton);", strip);
+
+		var menu = File.ReadAllText(Path.Combine(root, "Controls", "TopLibrariesMenu.xaml"));
+		Assert.Contains("AutomationProperties.Name=\"{x:Bind StarName, Mode=OneWay}\"", menu);
+		Assert.Contains("Click=\"{x:Bind ToggleStar}\"", menu);
+		Assert.Contains("AutomationProperties.LiveSetting=\"Assertive\"", menu);
+		var code = File.ReadAllText(Path.Combine(root, "Controls", "TopLibrariesMenu.xaml.cs"));
+		// the menu moves the keyboard itself (TopMenuKeys): Windows' arrow navigation skipped a row in the running app
+		Assert.Contains("MenuPanel.KeyDown += OnPanelKeyDown;", code);
+		Assert.Contains("protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.MenuItem;", code);
+		Assert.Contains("FavouriteChange.Full => TopFavourites.FullMessage(row.Title),", code);
+	}
+
+	[Theory]
+	// 1 + 6 rows: All libraries, then six libraries with their stars
+	[InlineData(VirtualKey.Down, 0, 0, 1, 0)]
+	[InlineData(VirtualKey.Down, 3, 1, 4, 1)]
+	[InlineData(VirtualKey.Down, 6, 0, 0, 0)]
+	[InlineData(VirtualKey.Down, 6, 1, 0, 0)]
+	[InlineData(VirtualKey.Up, 0, 0, 6, 0)]
+	[InlineData(VirtualKey.Up, 1, 1, 0, 0)]
+	[InlineData(VirtualKey.Up, 4, 1, 3, 1)]
+	[InlineData(VirtualKey.Right, 4, 0, 4, 1)]
+	[InlineData(VirtualKey.Right, 4, 1, 4, 1)]
+	[InlineData(VirtualKey.Right, 0, 0, 0, 0)]
+	[InlineData(VirtualKey.Left, 4, 1, 4, 0)]
+	[InlineData(VirtualKey.Left, 4, 0, 4, 0)]
+	[InlineData(VirtualKey.Home, 5, 1, 0, 0)]
+	[InlineData(VirtualKey.End, 2, 1, 6, 1)]
+	public void TheLibrariesMenusKeys_MoveByRowAndBetweenALibraryAndItsStar(VirtualKey key, int row, int column, int toRow, int toColumn) =>
+		Assert.Equal((toRow, toColumn), TopMenuKeys.Next(key, row, column, 7));
+
+	[Fact]
+	public void TheLibrariesMenusKeys_LeaveOtherKeys_AndAnEmptyMenu()
+	{
+		Assert.Null(TopMenuKeys.Next(VirtualKey.Enter, 1, 0, 7));
+		Assert.Null(TopMenuKeys.Next(VirtualKey.Space, 1, 1, 7));
+		Assert.Null(TopMenuKeys.Next(VirtualKey.Down, 0, 0, 0));
+		// one row (no libraries): Down and Up stay on All libraries
+		Assert.Equal((0, 0), TopMenuKeys.Next(VirtualKey.Down, 0, 0, 1));
+	}
+
+	[Fact]
+	public void TheAccountMenu_HoldsThePluginsSections_AndLightsForThem()
+	{
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var xaml = File.ReadAllText(Path.Combine(root, "Views", "TitleBarControl.xaml"));
+		// the review's T4: after who is signed in, before Switch user
+		Assert.True(xaml.IndexOf("x:Name=\"AccountIdentity\"", StringComparison.Ordinal) < xaml.IndexOf("x:Name=\"AccountSections\"", StringComparison.Ordinal));
+		Assert.True(xaml.IndexOf("x:Name=\"AccountSections\"", StringComparison.Ordinal) < xaml.IndexOf("x:Name=\"SwitchUserItem\"", StringComparison.Ordinal));
+		var bar = File.ReadAllText(Path.Combine(root, "Views", "TitleBarControl.xaml.cs"));
+		Assert.Contains("_top.Open(section);", bar);
+		// a favourite never laid out is shown for a pass and measured before the bar folds it (Drive-in: starred at 1920, left out)
+		Assert.Contains("if (row.Unmeasured && !fit.Compact && !Tabs.IsMenuOpen && fit.ShownLibraries < row.Libraries.Count && _measurePasses < 3)", bar);
+		// a new width starts with the search box pinned (its centring offset from the old width pushed the account under Minimize)
+		Assert.Contains("if (e.NewSize.Width != e.PreviousSize.Width && SearchHost.Margin.Right != 0)", bar);
+		Assert.Contains("AccountLit.Visibility = _top.IsAccountLit ? Visibility.Visible : Visibility.Collapsed;", bar);
+		Assert.Contains("SetItemStatus(AccountButton, _top.AccountLitName is { } open ? $\"{open} is open\" : \"\");", bar);
+	}
+
+	[Fact]
+	public void TheLibrariesPage_StarsItsMediaTiles_AndTheShellRoutesCollections()
+	{
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var page = File.ReadAllText(Path.Combine(root, "Views", "LibrariesLandingPage.xaml"));
+		Assert.Contains("ItemTemplate=\"{StaticResource MediaTileTemplate}\"", page);
+		// the collections group keeps its own tile (the collections stream's)
+		Assert.Contains("ItemTemplate=\"{StaticResource LibraryTileTemplate}\"", page);
+		var tile = page[page.IndexOf("x:Key=\"MediaTileTemplate\"", StringComparison.Ordinal)..];
+		Assert.Contains("<ItemContainer.ContextFlyout>", tile);
+		Assert.Contains("Click=\"OnStarClick\"", tile);
+		Assert.Contains("AutomationProperties.Name=\"{x:Bind StarName, Mode=OneWay}\"", tile);
+		// the plate is dark in both themes: the star wears the dark theme's accent (Light's red was about 3:1 on it)
+		Assert.Contains("RequestedTheme=\"Dark\"", tile[..tile.IndexOf("</DataTemplate>", StringComparison.Ordinal)]);
+		var code = File.ReadAllText(Path.Combine(root, "Views", "LibrariesLandingPage.xaml.cs"));
+		// the star's press does not open the tile under it
+		Assert.Contains("star.AddHandler(PointerPressedEvent,", code);
+		Assert.Contains("if (Environment.TickCount64 - _starPressedAt < 500)", code);
+		var shell = File.ReadAllText(Path.Combine(root, "Views", "ShellPage.xaml.cs"));
+		Assert.Contains("_top.OpenCollections = App.Commands.OpenCollections;", shell);
+		Assert.Contains("TopTabs.AllLibraryTabs(_top.AllTabs)", shell);
+	}
+	// end 1.6 topbar
+
 	[Fact]
 	public void ThePluginsSectionsAndThePins_GoToTheTabs()
 	{

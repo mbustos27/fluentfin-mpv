@@ -28,7 +28,8 @@ internal sealed class RecordingBackend : IMpvBackend
 	public string[] Commands => [.. AllCommands.Where(x => !IsPlaySetting(x))];
 
 	/// <summary>The settings every play sends before it (1.2.0: set_auto_play too).</summary>
-	public static bool IsPlaySetting(string command) => command is "set_skip_options" or "set_auto_play";
+	public static bool IsPlaySetting(string command) => command is "set_skip_options" or "set_auto_play"
+		or "set_quality_defaults"; // 1.6 player: the default quality at home and away goes before every play too
 
 	public string[] AllCommands => [.. _sent.Select(x => x.Command)];
 

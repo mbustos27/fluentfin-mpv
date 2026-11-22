@@ -44,6 +44,8 @@ from . import bridge_http
 from . import bridge_protocol as proto
 from . import bridge_state
 from . import intro_sources
+from . import bridge_skip, skip_rules, skip_snap  # 1.6 skip
+from . import quality  # 1.6 player
 from .bridge_protocol import (BAD_ARGS, INTERNAL, MPV_FAILED, NOT_CONNECTED,
                               NO_PLAYBACK, UNKNOWN_CMD, WINDOW_LOCKED,
                               AUTH_FAILED, SERVER_UNREACHABLE, BridgeError,
@@ -628,9 +630,13 @@ class ShimRuntime:
         out = []
         for segment in list(getattr(video, "intros", None) or ()):
             try:
+                # 1.6 skip: a rule's segment carries its own action and
+                # names its rule
                 out.append((segment.type, segment.start, segment.end,
-                            conf.segment_action(segment.type),
-                            getattr(segment, "source", "server")))
+                            getattr(segment, "action", None)
+                            or conf.segment_action(segment.type),
+                            getattr(segment, "source", "server"),
+                            bridge_skip.segment_extra(segment)))
             except Exception:
                 log.debug("unreadable segment", exc_info=True)
         return out
@@ -666,12 +672,12 @@ class ShimRuntime:
         conf.settings.auto_play = bool(value)
 
     @staticmethod
-    def segment_label(segment_type):
+    def segment_label(segment_type, source=None):
         """The Skip button's text for a segment type, in the shim's
-        language ("Skip Intro")."""
+        language ("Skip Intro"; 1.6 skip: "Skip Extra" for a rule's)."""
         from .media import segment_labels
 
-        return segment_labels(segment_type)[0]
+        return segment_labels(segment_type, source)[0]
 
     # -- the server --------------------------------------------------------
 
@@ -752,6 +758,9 @@ class ShimRuntime:
         if _guid(me["Id"]) != _guid(server["userId"]):
             raise BridgeError(AUTH_FAILED, "the access token belongs to "
                               "another user")
+        # 1.6 player: the account's policy, for set_quality (may it have
+        # video converted?), from this answer: no request of its own.
+        quality.remember_policy(client, me)
 
     @staticmethod
     def stop_client(client):
@@ -1009,8 +1018,12 @@ class Bridge:
         self.runtime = runtime
         self.dev = dev
         self.tracker = bridge_state.Tracker()
-        #: fluentfin-mpv: learns intros from the viewer's seeks.
-        self.learner = intro_sources.SkipLearner()
+        #: fluentfin-mpv: learns intros from the viewer's seeks; 1.6 skip:
+        #: and skip rules' candidates and corrections (`skip_rules`).
+        self.learner = skip_rules.SkipWatcher()
+        #: 1.6 skip: snaps a skip rule's edge to black or silence (the
+        #: margin), from what mpv has already cached.
+        self.snapper = skip_snap.Snapper()
         #: fluentfin-mpv: who draws the player controls (``set_controls``).
         self.controls = bridge_controls.UiControls()
         #: fluentfin-mpv: ``(mpv handle, skip text, next flag)`` last
@@ -1206,6 +1219,7 @@ class Bridge:
             verifying = self._verifying
         self.shutdown_deadline = deadline
         log.info("Shutting down (%s).", self.shutdown_reason)
+        self.snapper.close()    # 1.6 skip: its analysers end, folders go
         self._monitor_stop.set()
         self._wake.set()
         self._supersede()           # queued starts dropped, one in flight cut
@@ -1235,6 +1249,7 @@ class Bridge:
         if self.client is not None:
             self.runtime.stop_client(self.client)
         self._flush_reported(final=True)
+        self._end_stats(INTERNAL, "the backend is shutting down")  # 1.6 player
         if self.shutdown_request_id is not None:
             self.writer.respond(self.shutdown_request_id, {})
         while True:
@@ -1293,6 +1308,9 @@ class Bridge:
             self.shutdown_request_id = req.id
             self.request_shutdown("shutdown command", 0)
             return "stop"
+        elif req.cmd == "get_stats":
+            # 1.6 player: beside the command queue, never ahead of a stop
+            self._ask_stats(req)
         elif req.cmd not in self.HANDLERS or (req.cmd == "play_file"
                                               and not self.dev):
             self.writer.fail(req.id, UNKNOWN_CMD,
@@ -1414,6 +1432,8 @@ class Bridge:
             committed = self._committed
             dev = self.dev_item
             self.dev_item = None
+        # 1.6 player: a stats read in progress is for what played
+        self._end_stats(NO_PLAYBACK, "playback changed")
         pm = self.runtime.pm
         if pm is None:
             return dev
@@ -1511,6 +1531,10 @@ class Bridge:
             if restart is not None:
                 with self._state_lock:
                     self._restart_shown = (video, before)
+            else:
+                # 1.6 player: an item's first start gets the default
+                # quality for home or away (set_quality_defaults).
+                quality.apply_default(video)
             try:
                 return original_play(video, *args, **kwargs)
             except BaseException as error:
@@ -2416,6 +2440,7 @@ class Bridge:
             old, self.client = self.client, None
             self.server = None
             self.connected = False
+        bridge_skip.account_cleared()   # 1.6 skip
         if old is not None:
             threading.Thread(target=self.runtime.stop_client, args=(old,),
                              daemon=True).start()
@@ -2438,6 +2463,7 @@ class Bridge:
             self.client = client
             self.server = server
             self.connected = True
+        bridge_skip.account_connected(server)   # 1.6 skip
         self.tracker.clear_error()
         log.info("Connected to %s as user %s (device %s, client %s); the "
                  "server check took %d ms", server["url"], server["userId"],
@@ -2934,6 +2960,7 @@ class Bridge:
             intro_sources.OPTIONS.lookup_online = options["onlineLookup"]
         if options["learnIntros"] is not None:
             intro_sources.OPTIONS.learn = options["learnIntros"]
+        bridge_skip.apply_skip_options(options)     # 1.6 skip
         return {}
 
     def cmd_set_auto_play(self, args):
@@ -2946,6 +2973,131 @@ class Bridge:
         self.runtime.set_auto_play(value)
         self.poke()
         return {}
+
+    # -- 1.6 player: the quality choice and the Playback stats -------------
+
+    def cmd_set_quality(self, args):
+        """1.6 player: the quality of the item playing (BRIDGE.md section 4,
+        `quality`): Auto, Original or a cap. The item restarts at its
+        position as the same viewing, on the play worker, like a track
+        change that needs a new stream. Held for the rest of that item."""
+        pm = self._require_player()
+        choice = quality.validate(args)
+        video = self._playing(pm)
+        if video is None:
+            raise BridgeError(NO_PLAYBACK, "nothing is playing")
+        self._queue_play("set_quality",
+                         lambda: self._change_quality(pm, video, choice))
+        return {}
+
+    def _change_quality(self, pm, video, choice):
+        """The play worker's half of ``set_quality``: refused up front when
+        the account may not have the video converted and the cap is under
+        the file's bitrate; otherwise the override written and the item
+        restarted (`restart_playback`; one that finds no stream is put back
+        by `_restart_not_taken`, which says so). A cap the server then
+        ignores -- the file sent as it is although it is over the cap --
+        is told the same way, and the choice reads Original."""
+        if pm._video is not video:
+            log.info("Not changing the quality: the item it was for is not "
+                     "playing")
+            return
+        item = getattr(video, "item_id", None)
+        if quality.refused_up_front(video, choice):
+            log.info("Quality cap refused for %s: the account may not have "
+                     "video converted", item)
+            self.tracker.report_error(quality.NOT_ALLOWED, quality.REFUSED,
+                                      item_id=item, sticky=False)
+            return
+        override = quality.override_for(choice)
+        if getattr(video, "trs_ovr", None) == override:
+            log.info("Quality of %s unchanged", item)
+            return
+        log.info("Quality of %s: %s", item, choice.payload())
+        # The stream event keeps showing the choice playing until the change
+        # is over (taken, put back, or a cap the server ignored).
+        with quality.changing(video):
+            previous = getattr(video, "trs_ovr", None)
+            epoch = pm._play_epoch
+            video.trs_ovr = override
+            pm.restart_playback()
+            if pm._play_epoch == epoch:
+                # No start took: the restart was dropped (a play, stop or
+                # connect came while it waited for the player's lock: the
+                # hook's "superseded"), or found no stream and was put back.
+                # The stream playing is the one asked with the previous
+                # choice, and what it says about a cap is nothing.
+                if pm._video is video and getattr(video, "trs_ovr",
+                                                  None) == override:
+                    video.trs_ovr = previous
+                log.info("The quality change of %s did not take", item)
+            elif (pm._video is video
+                    and getattr(video, "trs_ovr", None) == override
+                    and quality.cap_ignored(video, choice)):
+                log.info("The server sent %s as it is, over the cap", item)
+                video.trs_ovr = quality.override_for(quality.ORIGINAL)
+                try:
+                    self._quality[video] = video.trs_ovr
+                except TypeError:
+                    pass
+                self.tracker.report_error(quality.NOT_ALLOWED,
+                                          quality.REFUSED, item_id=item,
+                                          sticky=False)
+        self.poke()
+
+    def cmd_set_quality_defaults(self, args):
+        """1.6 player: the default quality at home and away (BRIDGE.md
+        section 4), held for every later item; each item's first start
+        takes the one for where its server is (`quality.apply_default`)."""
+        if not (self.connected or self.dev):
+            raise BridgeError(NOT_CONNECTED, "send connect first")
+        defaults = quality.validate_defaults(args)
+        quality.DEFAULTS.update(defaults["home"], defaults["away"])
+        return {}
+
+    def cmd_get_stats(self, args):
+        """1.6 player: the Playback stats (BRIDGE.md section 4): read from
+        mpv now, and only when asked. Takes no lock: a quality restart may
+        hold the player's for its round trips. The reader hands it to
+        `_ask_stats`, never to the control worker; this is the read
+        itself."""
+        pm, video = self._stats_subject()
+        return quality.stats(pm, video)
+
+    def _stats_subject(self):
+        pm = self._require_player()
+        video = self._playing(pm)
+        if video is None or not pm._mpv_alive:
+            raise BridgeError(NO_PLAYBACK, "nothing is playing")
+        return pm, video
+
+    def _stats_reads(self):
+        with self._state_lock:
+            reads = getattr(self, "_stats_reads_obj", None)
+            if reads is None:
+                reads = self._stats_reads_obj = quality.StatsReads(
+                    self.writer)
+            return reads
+
+    def _ask_stats(self, req):
+        """``get_stats`` from the reader: refused at once when there is
+        nothing to read, else read beside the command queue
+        (`quality.StatsReads`), answered within its budget."""
+        try:
+            pm, video = self._stats_subject()
+        except BridgeError as error:
+            self.writer.fail(req.id, error.code, error.message)
+            return
+        self._stats_reads().ask(req.id, lambda deadline, cancelled:
+                                quality.stats(pm, video, deadline=deadline,
+                                              cancelled=cancelled))
+
+    def _end_stats(self, code, message):
+        reads = getattr(self, "_stats_reads_obj", None)
+        if reads is not None:
+            reads.end(code, message)
+
+    # -- end 1.6 player ----------------------------------------------------
 
     def cmd_skip_segment(self, args):
         """fluentfin-mpv: skip the segment on offer (BRIDGE.md section 4,
@@ -2985,7 +3137,14 @@ class Bridge:
             if position is None or not start <= position < end:
                 log.info("Not skipping: the position has left the segment")
                 return
-            self.learner.note_skip()    # not a seek to learn from
+            # 1.6 skip: the segment skipped (a rule's may be corrected by
+            # the next seek), found before the seek
+            skipped = next(
+                (s for s in getattr(video, "intros", None) or ()
+                 if getattr(s, "type", None) == offer["type"]
+                 and proto.seconds_to_ticks(s.start) == offer["startTicks"]),
+                None)
+            self.learner.note_skip(skipped)    # not a seek to learn from
             pm._player.command("seek", end, "absolute")
             # What `skip_intro` records for the segment it skips.
             for segment in getattr(video, "intros", None) or ():
@@ -3051,6 +3210,21 @@ class Bridge:
         "skip_segment": cmd_skip_segment,
         "set_skip_options": cmd_set_skip_options,
         "set_auto_play": cmd_set_auto_play,
+        # -- 1.6 skip (bridge_skip) --
+        "skip_rules": lambda self, args: bridge_skip.cmd_skip_rules(
+            self, args),
+        "add_skip_rule": lambda self, args: bridge_skip.cmd_add_skip_rule(
+            self, args),
+        "forget_skip_rules": lambda self, args:
+            bridge_skip.cmd_forget_skip_rules(self, args),
+        "answer_skip_suggestion": lambda self, args:
+            bridge_skip.cmd_answer_skip_suggestion(self, args),
+        # -- end 1.6 skip --
+        # 1.6 player
+        "set_quality": cmd_set_quality,
+        "set_quality_defaults": cmd_set_quality_defaults,
+        "get_stats": cmd_get_stats,
+        # end 1.6 player
     }
 
     # -- the monitor -------------------------------------------------------
@@ -3106,8 +3280,17 @@ class Bridge:
                 if (obs is not None and obs.video is not None
                         and obs.pending is None and obs.opening is None
                         and not obs.start_in_progress):
-                    # fluentfin-mpv: learned intros (intro_sources).
-                    self.learner.sample(obs.video, obs.position)
+                    # fluentfin-mpv: learned intros; 1.6 skip: and skip
+                    # rules' candidates and corrections (skip_rules)
+                    self.learner.sample(obs.video, obs.position,
+                                        duration=obs.duration)
+                    events.extend(bridge_skip.suggestion_events(
+                        self.learner))
+                    self.snapper.tick(self.runtime.pm, obs.video,
+                                      obs.position)
+                elif obs is not None and obs.video is None:
+                    # 1.6 skip: stopped: the skip snap's analysis ends
+                    self.snapper.tick(self.runtime.pm, None, None)
             except Exception:
                 log.exception("monitor tick failed")
                 events = []
@@ -3150,7 +3333,8 @@ class Bridge:
             offer = self.tracker.offer()
             text = ""
             if offer is not None and not self.controls.ui:
-                text = self.runtime.segment_label(offer["type"])
+                text = self.runtime.segment_label(  # 1.6 skip: by source
+                    offer["type"], offer.get("source"))
             following = self.tracker.following()
             has_next = ("1" if following and following.get("nextItemId")
                         else "")

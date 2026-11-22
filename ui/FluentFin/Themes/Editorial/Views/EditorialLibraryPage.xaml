@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <!--
     Nixie 1.3.0, the Editorial theme's Library: the library's name in big type over the Googie arc, what it holds ("312
     films · 41 unwatched · 18 added this month"), the toolbar, and its genres as chips with their counts (one click narrows
@@ -58,42 +58,113 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:EditorialCell">
-                        <Grid>
+                        <!--
+                            1.6 colpage (LB1): the first title of a letter carries it on a hairline over its poster, Editorial's own index
+                            idiom (Home's "01 … 05"), not a chip on the art: the art's top-left square is for counts only. Every cell keeps
+                            the line's room (22), so a row's height never depends on its letters.
+                        -->
+                        <Grid RowSpacing="0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="22" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid
+                                x:Name="LetterTag"
+                                Margin="0,0,0,4"
+                                AutomationProperties.AccessibilityView="Raw"
+                                ColumnSpacing="8"
+                                IsHitTestVisible="False"
+                                Visibility="{x:Bind HasTag}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    VerticalAlignment="Bottom"
+                                    FontSize="18"
+                                    LineHeight="18"
+                                    LineStackingStrategy="BlockLineHeight"
+                                    Style="{StaticResource EditorialBigTypeTextBlockStyle}"
+                                    Text="{x:Bind Tag}" />
+                                <Rectangle
+                                    Grid.Column="1"
+                                    Height="1"
+                                    Margin="0,0,0,3"
+                                    VerticalAlignment="Bottom"
+                                    Fill="{ThemeResource EditorialKickerBrush}"
+                                    Opacity="0.55" />
+                            </Grid>
                             <ec:EditorialPoster
-                                Margin="0,0,0,30"
+                                Grid.Row="1"
+                                Margin="0,0,0,18"
                                 AutomationProperties.PositionInSet="{x:Bind Position}"
                                 AutomationProperties.SizeOfSet="{x:Bind Size}"
                                 Item="{x:Bind Item}"
                                 PosterWidth="{x:Bind PosterWidth}" />
-                            <!--  Nixie 1.4.0: the first title of a letter carries it (the rows flow on across letters)  -->
-                            <Border
-                                Margin="6,6,0,0"
-                                Padding="8,1,8,2"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Top"
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </DataTemplate>
+        <!--
+            1.6 colpage (theme polish): the list view's line, a magazine's index: the letter's hairline over its first title, then
+            the poster in its list form (small art, the title, the facts, a short line, the state) across the width
+        -->
+        <DataTemplate x:Key="ListRowTemplate" x:DataType="vm:EditorialRowLine">
+            <ItemsControl IsTabStop="False" ItemsSource="{x:Bind Cells}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:EditorialCell">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid
+                                Margin="0,14,0,10"
                                 AutomationProperties.AccessibilityView="Raw"
-                                Background="{ThemeResource EditorialGroundBrush}"
-                                CornerRadius="6"
+                                ColumnSpacing="10"
                                 IsHitTestVisible="False"
                                 Visibility="{x:Bind HasTag}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
                                 <TextBlock
-                                    FontSize="18"
-                                    LineHeight="22"
+                                    VerticalAlignment="Bottom"
+                                    FontSize="26"
+                                    LineHeight="26"
                                     LineStackingStrategy="BlockLineHeight"
                                     Style="{StaticResource EditorialBigTypeTextBlockStyle}"
                                     Text="{x:Bind Tag}" />
-                            </Border>
+                                <Rectangle
+                                    Grid.Column="1"
+                                    Height="1"
+                                    Margin="0,0,0,5"
+                                    VerticalAlignment="Bottom"
+                                    Fill="{ThemeResource EditorialKickerBrush}"
+                                    Opacity="0.55" />
+                            </Grid>
+                            <ec:EditorialPoster
+                                Grid.Row="1"
+                                Margin="12,8,12,8"
+                                AutomationProperties.PositionInSet="{x:Bind Position}"
+                                AutomationProperties.SizeOfSet="{x:Bind Size}"
+                                Item="{x:Bind Item}"
+                                ListForm="{x:Bind ListForm}"
+                                PosterWidth="{x:Bind PosterWidth}" />
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </DataTemplate>
         <DataTemplate x:Key="DetailsTemplate" x:DataType="vm:EditorialDetailsLine">
-            <ec:InlineDetailsRow Margin="0,-4,0,30" Item="{x:Bind Item}" />
+            <!--  1.6 colpage: 18 under the poster and 8 here keep the notch's 26 to the panel; the next row's letter line adds its 22  -->
+            <ec:InlineDetailsRow Margin="0,8,0,12" Item="{x:Bind Item}" />
         </DataTemplate>
         <ec:EditorialLineTemplateSelector
             x:Key="LineTemplates"
             Details="{StaticResource DetailsTemplate}"
+            ListRow="{StaticResource ListRowTemplate}"
             Row="{StaticResource RowTemplate}"
             Section="{StaticResource SectionTemplate}" />
 
@@ -145,8 +216,7 @@
                     Grid.Column="2"
                     Margin="0,0,0,22"
                     VerticalAlignment="Bottom"
-                    ShowFavorites="True"
-                    ShowListChoice="False"
+                    ShowListChoice="True"
                     ViewModel="{x:Bind ViewModel}"
                     Visibility="{x:Bind shared:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}" />
             </Grid>
@@ -158,11 +228,29 @@
             -->
             <Grid x:Name="ChipRow" ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <!--
+                    1.6 colpage (LB2, LB3, LB5): the presets first, Editorial's chips (All · Unwatched · Favorites · Recently added ·
+                    Nixie's), a hairline, then the genres (one at a time; the lit one clicked again is off: the presets' All is the
+                    row's one All)
+                -->
+                <lc:LibraryPresetStrip x:Name="PresetStrip" VerticalAlignment="Center" ViewModel="{x:Bind ViewModel}" />
+                <Rectangle
+                    x:Name="PresetRule"
+                    Grid.Column="1"
+                    Width="1"
+                    Height="24"
+                    Margin="8,0"
+                    VerticalAlignment="Center"
+                    Fill="{ThemeResource EditorialKickerBrush}"
+                    Opacity="0.5" />
                 <ScrollViewer
                     x:Name="ChipScroller"
+                    Grid.Column="2"
                     HorizontalScrollBarVisibility="Hidden"
                     HorizontalScrollMode="Enabled"
                     VerticalScrollBarVisibility="Disabled"
@@ -177,6 +265,7 @@
                 <!--  the overflow cue: the row's last chips fade into the ground, and a chevron moves it on (and back)  -->
                 <Border
                     x:Name="ChipFade"
+                    Grid.Column="2"
                     Width="56"
                     HorizontalAlignment="Right"
                     AutomationProperties.AccessibilityView="Raw"
@@ -191,6 +280,7 @@
                 </Border>
                 <Button
                     x:Name="ChipMore"
+                    Grid.Column="2"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Center"
                     AutomationProperties.Name="More genres"
@@ -203,7 +293,7 @@
                 </Button>
                 <HyperlinkButton
                     x:Name="MoreFilters"
-                    Grid.Column="1"
+                    Grid.Column="3"
                     VerticalAlignment="Center"
                     Click="MoreFilters_Click"
                     Content="More filters"
@@ -274,7 +364,8 @@
                 Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}">
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="x:Int32">
-                        <StackPanel Spacing="8">
+                        <!--  1.6 colpage: the cells' letter line (22) over each placeholder, as over each poster  -->
+                        <StackPanel Padding="0,22,0,0" Spacing="8">
                             <ctkl:Shimmer Height="{Binding ElementName=Page, Path=PosterHeight}" CornerRadius="8" />
                             <ctkl:Shimmer
                                 Width="96"
@@ -291,7 +382,7 @@
                         ItemsStretch="None"
                         MinColumnSpacing="16"
                         MinItemWidth="136"
-                        MinRowSpacing="30"
+                        MinRowSpacing="18"
                         Orientation="Horizontal" />
                 </ItemsRepeater.Layout>
             </ItemsRepeater>

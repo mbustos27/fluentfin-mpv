@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <!--
     Drive-in: the Library. A letter-board header on a strip of the dusk sky (never behind the posters): the library's name on
     a large marquee, its count in nixie tubes ("312 FEATURES ON THE LOT"), the shared toolbar; then the A to Z as letter tiles
@@ -169,8 +169,9 @@
         <!--  the header on its strip of sky (Nixie 1.4.0: it folds to a band once the grid scrolls)  -->
         <Grid x:Name="Header">
             <dc:DriveInScene x:Name="Sky" Layer="Back" />
-            <Grid x:Name="HeaderContent" Padding="96,56,96,18" RowSpacing="22">
+            <Grid x:Name="HeaderContent" Padding="96,88,96,18" RowSpacing="22">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -223,7 +224,17 @@
                     the letter in view marked, on one row at any width (the tiles narrow below 1300 px); under another sort, the
                     two directions; "M · 324 of 1,000" at its end. Its height is kept while loading.
                 -->
-                <Grid x:Name="LetterRow" Grid.Row="1" MinHeight="42">
+                <!--
+                    1.6 colpage (LB2, LB3, LB5): the presets strip as the board's tiles (All · Unwatched · Favorites · Recently
+                    added · Nixie's), lit as the letter in view is; on the sky at rest, folded away with it into the band
+                -->
+                <lc:LibraryPresetStrip
+                    x:Name="PresetStrip"
+                    Grid.Row="1"
+                    ViewModel="{x:Bind ViewModel}"
+                    Visibility="Collapsed" />
+
+                <Grid x:Name="LetterRow" Grid.Row="2" MinHeight="42">
                     <lc:LetterBar
                         x:Name="Letters"
                         LetterStyle="{StaticResource DriveInLetterTileStyle}"

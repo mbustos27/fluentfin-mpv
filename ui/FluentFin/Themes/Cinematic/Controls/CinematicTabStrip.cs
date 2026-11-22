@@ -1,4 +1,4 @@
-using FluentFin.Controls;
+﻿using FluentFin.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
@@ -26,7 +26,17 @@ public sealed partial class CinematicTabStrip : UserControl
 	{
 		IsTabStop = false;
 		_panel.TabFocusNavigation = KeyboardNavigationMode.Once;
-		Content = _panel;
+		// 1.6 colpage (review Major 4): many tabs (a library's presets and up to 12 Nixie collections) scroll sideways, the
+		// keyboard's tab brought into view; tabs that fit show as before
+		Content = new ScrollViewer
+		{
+			Content = _panel,
+			IsTabStop = false,
+			HorizontalScrollMode = ScrollMode.Enabled,
+			HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+			VerticalScrollMode = ScrollMode.Disabled,
+			VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+		};
 		_panel.AddHandler(KeyDownEvent, new KeyEventHandler(Panel_KeyDown), true);
 	}
 
@@ -68,6 +78,22 @@ public sealed partial class CinematicTabStrip : UserControl
 	/// <summary>Shows <paramref name="tabs"/>; the keyboard's stop is the tab shown (else the first).</summary>
 	public void SetTabs(IReadOnlyList<CinematicTab> tabs)
 	{
+		// 1.6 colpage: the same tabs with another one lit (the library's presets after Space or a click) change in place: made
+		// anew, the focused tab left the tree and the keyboard fell to the next control (Sort) before the new tab could take it
+		if (_buttons.Count == tabs.Count && _buttons.Count > 0 && _buttons.Zip(tabs).All(x => x.First.Tab.Label == x.Second.Label))
+		{
+			var focused = _buttons.FindIndex(b => b.FocusState != FocusState.Unfocused);
+			var stop = focused >= 0 ? focused : Math.Max(0, tabs.ToList().FindIndex(t => t.IsSelected));
+			for (var i = 0; i < tabs.Count; i++)
+			{
+				_buttons[i].Show(tabs[i]);
+				AutomationProperties.SetName(_buttons[i], tabs[i].Name);
+				_buttons[i].IsTabStop = i == stop;
+			}
+
+			return;
+		}
+
 		var focusedAt = _buttons.FindIndex(b => b.FocusState != FocusState.Unfocused);
 		_panel.Children.Clear();
 		_buttons.Clear();
@@ -89,7 +115,7 @@ public sealed partial class CinematicTabStrip : UserControl
 			AutomationProperties.SetPositionInSet(button, i + 1);
 			AutomationProperties.SetSizeOfSet(button, tabs.Count);
 			button.AllowFocusOnInteraction = TabsTakeFocusOnClick;
-			button.Click += (_, _) => Invoke(tab);
+			button.Click += (_, _) => Invoke(button.Tab); // the tab as shown now (1.6 colpage: tabs change in place)
 			_buttons.Add(button);
 			_panel.Children.Add(button);
 		}
@@ -145,9 +171,17 @@ public sealed partial class CinematicTabButton : Button
 		Loaded += (_, _) => ShowSelection();
 	}
 
-	public CinematicTab Tab { get; }
+	public CinematicTab Tab { get; private set; }
 
 	internal CinematicTabStrip? Strip => _strip;
+
+	/// <summary>1.6 colpage: the same tab, lit or not now (the strip changes its tabs in place).</summary>
+	internal void Show(CinematicTab tab)
+	{
+		Tab = tab;
+		Content = tab.Label;
+		ShowSelection();
+	}
 
 	protected override void OnApplyTemplate()
 	{

@@ -1,5 +1,111 @@
 # Changelog
 
+## 1.6.0
+
+Collections: your server's, your playlists and Nixie's own in one place, favourite libraries in the top bar, a Collection
+page to match the set, skipping the parts a show repeats, and a quality choice with Playback stats in the player.
+
+**Collections**
+
+- **One Collections page** for every collection: your server's (with "6 films · 3 left"), your playlists, Made by Nixie
+  by kind (each row ends in "See all"), and Saved. It's the top bar's Collections; on the Libraries page, "Collections &
+  playlists" opens it at the right row, and "Made by Nixie · 48" at Nixie's.
+- **Collections Nixie makes from your libraries.** Franchises (two or more films TMDb puts in one collection), decades,
+  directors, actors, studios and networks, genre mixes ("Comedy · Horror"), keywords ("Heists", "Time travel"),
+  countries, highly rated films you haven't watched, short films, shows you left over a month ago, and Halloween or
+  Christmas in season. A franchise your server's admin already made a collection of shows once, as theirs. Nixie reads
+  your libraries in the background, a page at a time (25,000 films never freeze the window), again when the server says
+  they changed, when you press R, and once a day. Nothing is sent anywhere, and they stay on this PC.
+- **A Nixie collection opens like any other,** with "Made by Nixie · Franchise" over its title, a line saying where it
+  came from, a mosaic of its films' posters, Play, Shuffle and Favourite. Narrator says "made by Nixie".
+- **Save as playlist** copies a Nixie collection to your server as a private playlist of your own, in its order (its
+  films and episodes, up to 200), when you press it; nothing else is written to the server. If the server says no, Nixie
+  says why in plain words.
+- **"Also in your library"** under an admin's collection lists the films of that franchise you own that it leaves out.
+- **Home shows Made by Nixie rows** after "New in …": "Highly rated, not watched", "Unfinished series", a seasonal row in
+  season, and one more collection a day. Settings > Collections turns off each row and each kind.
+- **Tidy names.** "[HUB] Marvel" reads "Marvel", "!010_Bond" reads "Bond" and "🎅 Christmas" reads "Christmas", for
+  collections and libraries alike, in the top bar too. Titles that only look decorated stay ("[REC]", "#Alive", "+1"), and
+  films, shows, episodes and playlists are never touched. Two that would read the same keep their server names. Settings
+  > Collections > "Tidy collection names" turns it off.
+
+**The top bar**
+
+- **Your favourite libraries in the top bar:** Home, up to three favourites, Collections, then Libraries ▾, at every
+  width. Libraries you pinned in 1.3 come first; otherwise your Movies and Shows libraries, found by what they hold (a
+  "[HUB] Trending Movies" hub doesn't count), then the ones you open most. Kept for each server and user.
+- **A star adds a library to the bar or takes it off,** in the Libraries ▾ menu and on the Libraries page's tiles. A
+  fourth says "Up to 3 favourites in the top bar. Remove a star to add Anime." The keyboard reaches every star (Right
+  from a library in the menu; Shift+F10 on a tile), and Narrator reads "Add Movies to the top bar".
+- **Libraries ▾ is always a menu:** All libraries, then every library, the one you're in checked, and it takes that
+  library's name while you're there ("Anime ▾"). The server's Collections and Playlists are no longer tabs.
+- **The Diary is in the account menu,** with any other plugin's section; the account button wears its ring while it's
+  open.
+
+**The Collection page and the library pages**
+
+- **A header to match the set:** the box set's backdrop (its first film's, or four posters) beside the title, faded so no
+  words sit on a picture. Drive-in puts the title on a lit marquee and the backdrop on a little drive-in screen;
+  Cinematic runs it under the top bar; Editorial sets the overview as a standfirst beside the films listed "01 … 06";
+  Classic shows it soft behind the window.
+- **A place in the set is part of the title** ("1 · Wild Canyons"), only where the order means something. The corner
+  square only counts what's left to watch, "6 films" is said once, and a long film name no longer pushes Shuffle off the
+  line.
+- **One presets strip in every look:** All · Unwatched · Favorites · Recently added, then a library's Made by Nixie
+  collections. Unwatched and Favorites light while on, a second click turns them off, All takes every filter off, and the
+  toolbar's separate Unwatched switch is gone. **Save as collection** keeps the filters in use under Saved.
+- **Editorial has a list view** (View > List: a magazine index of poster, year, length, rating, a line of story and how
+  much is watched), kept per library. Drive-in's Libraries page opens on the lot at dusk, and titles have room under the
+  top bar in Drive-in and Editorial.
+
+**Skip the parts a show repeats**
+
+- **Skip a part in every episode.** A network bumper before the episode, promos after the credits: in the player, Shift+S
+  (or the bar's skip-parts button) marks the part you just jumped over, and Nixie offers "Skip extra" there in every
+  episode of the show, the same time from the start or before the end. By default it's a Skip button, and rules are kept
+  per show (on this PC, per server and user); Settings can have them skipped by themselves.
+- **Nixie notices what you skip.** Skip the same part in two episodes and Nixie asks "Skip this every episode?" (Yes, Not
+  now, Never for this show). Seeks one after another count as one skip; the Skip button, parts skipped by themselves and
+  the chapters menu never count.
+- **The skip lands on the cut:** its end moves to the nearest black frame or silence within a few seconds, read only from
+  what the player already has. Seek back or forward right after a skip and the rule learns where the episode starts.
+- **Settings > Playback:** "Ads and previews the server marks" (Off, Show a Skip button, Skip them by itself; chapters
+  named Commercial, Ad break, Advertisement, Promo or Sponsor count too), "Learn skips from my seeks", "When a show has a
+  skip rule", and a "Skip rules" list with Forget for each rule, each show, and all. 1.5.1's rule for intros that move
+  (judged within a season) comes along.
+
+**Quality and Playback stats in the player**
+
+- **Pick the quality of what you're watching.** The new Quality button (the gear) lists Auto, Original and the bitrates
+  Jellyfin offers that suit the video's size, and says what plays now ("Direct play · 1080p · 12 Mbps"). A pick picks up
+  where you are and holds for that video. A server that won't convert the video for your account says so, and it plays
+  on at the original quality.
+- **Settings > Playback has a default quality at home and one away,** both Auto until you change them.
+- **Playback stats:** I in the player (or "Show the Playback stats button" in Settings) shows how it's played and why, the
+  format, resolution, frame rate, HDR, hardware decoding, dropped frames, bitrates, the buffer and the network speed,
+  every second while open. Copy puts it on the clipboard for a bug report, never with your sign-in.
+- **Esc closes the innermost thing first:** an open menu, then Playback stats, then Cinematic's panel, then the "Skip this
+  every episode?" question (as Not now), and only then leaves full screen.
+
+**Verified**
+
+- Off-screen in all four themes: the keyboard matrix (2,314 checks), the contrast floor (4,408 labels), and the
+  scripts for collections, the top bar, the Collection page, skipping and quality. On real Jellyfin 10.11 and 12.4 test
+  servers: search, a private playlist saved from a Nixie collection, a playlist and a transcoded video's audio change, a
+  quality change, and a skip rule learned from two episodes.
+- Not checked by hand for this release (they need a real desktop or your own server): a skip rule on a real show with
+  extras, the Playback stats over real video, a quality change on your server, and Restart to update on a real install.
+
+**Known issues in 1.6.0** (queued for 1.6.1)
+
+- Libraries pinned to the top bar in 1.3 become the first favourites of every user who signs in on this PC.
+- If the server's list of libraries can't be read, the top bar shows no favourites and a star says nothing.
+- On a server with more than 2,000 collections or playlists, Nixie reads the first 2,000 by name.
+- In Classic, the release notes opened from Settings start with the keyboard on a link in the notes rather than on Close.
+- In Editorial, "Made by Nixie" on the Libraries page opens the Collections page with the keyboard on a playlist rather
+  than on Nixie's first collection.
+- On Drive-in's library pages the posters land a little below the placeholders that stood for them while loading.
+
 ## 1.5.1
 
 A fix release: signing in again when the server ends your sign-in, "Skip intro" on shows whose intro moves, search for

@@ -121,6 +121,8 @@ public sealed class PlayerKeysContractTests
 		var code = File.ReadAllText(Path.Combine(RepoRoot, "FluentFin", "Themes", "Cinematic", "Controls", "CinematicPlayerPanel.xaml.cs"));
 		Assert.Contains("MpvPlayerKeys.SetOwnsArrows(this, true)", code);
 		Assert.Contains("ClosePanelsRequested += OnClosePanelsRequested", code);
+		// 1.6 integration: Escape with the keyboard in the panel takes the player's order too (the Playback stats first)
+		Assert.Contains("_controls?.ClosePanels() != true", code);
 	}
 
 	private static string RepoRoot { get; } = FindRepoRoot();

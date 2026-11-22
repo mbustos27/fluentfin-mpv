@@ -19,6 +19,10 @@ public sealed partial class SettingsPage : Page
 	/// <summary>1.2.0 merge (the library stream's setting, kept on this PC): Home leaves out Continue Watching items not played for a while.</summary>
 	public ContinueWatchingSettingViewModel ContinueWatching { get; } = new(App.GetService<Core.Contracts.Services.ILocalSettingsService>());
 
+	/// <summary>1.6 collections: Settings &gt; Collections (tidy names, Home's Made by Nixie rows, each kind), on this PC.</summary>
+	public Core.SmartCollections.CollectionsSettingsViewModel CollectionsSettings { get; } =
+		new(App.GetService<Core.Contracts.Services.ILocalSettingsService>(), App.GetService<Core.Services.HomeCache>());
+
 	/// <summary>Nixie 1.3.0: Settings &gt; Appearance &gt; Theme: a choice applies at once (ThemeSwitcher) and is saved on this PC.</summary>
 	public FluentFin.ViewModels.ThemePickerViewModel ThemePicker { get; } =
 		new(App.GetService<FluentFin.Services.ThemeService>(), id => App.GetService<FluentFin.Services.ThemeSwitcher>().SwitchAsync(id));
@@ -96,6 +100,19 @@ public sealed partial class SettingsPage : Page
 	private async void OnReportProblemClick(object sender, RoutedEventArgs e) => await Launcher.LaunchUriAsync(new Uri(SettingsViewModel.ReportProblemUrl));
 
 	private async void OnContributeClick(object sender, RoutedEventArgs e) => await Launcher.LaunchUriAsync(new Uri(SettingsViewModel.ContributeUrl));
+
+	// ---- 1.6 skip: Settings > Playback > Skip rules, read from the backend when the list opens
+
+	private void OnSkipRulesExpanded(object sender, EventArgs e) => _ = ViewModel.LoadSkipRulesCommand.ExecuteAsync(null);
+
+	private async void OnForgetSkipRuleClick(object sender, RoutedEventArgs e)
+	{
+		if (sender is FrameworkElement { Tag: FluentFin.Core.Mpv.SkipRuleRow row })
+		{
+			await ViewModel.ForgetSkipRuleCommand.ExecuteAsync(row);
+		}
+	}
+	// ---- end 1.6 skip
 
 	private async void RemoveUser(object sender, RoutedEventArgs e)
 	{

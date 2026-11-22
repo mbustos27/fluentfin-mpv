@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using CommunityToolkit.WinUI;
 using FluentFin.Core.ViewModels;
 using Microsoft.UI.Xaml;
@@ -42,7 +42,7 @@ public sealed partial class AppliedFilterRow : UserControl
 	{
 		switch (e.PropertyName)
 		{
-			case nameof(LibraryViewModel.HasAppliedFilters) or nameof(LibraryViewModel.AppliedFilters):
+			case nameof(LibraryViewModel.HasAppliedFilters) or nameof(LibraryViewModel.AppliedFilters) or nameof(LibraryViewModel.CanSaveFilter):
 				Show();
 				break;
 			case nameof(LibraryViewModel.ShowingText):
@@ -57,7 +57,62 @@ public sealed partial class AppliedFilterRow : UserControl
 		}
 	}
 
-	private void Show() => Visibility = ViewModel?.HasAppliedFilters == true ? Visibility.Visible : Visibility.Collapsed;
+	private void Show()
+	{
+		Visibility = ViewModel?.HasAppliedFilters == true ? Visibility.Visible : Visibility.Collapsed;
+		SaveButton.Visibility = ViewModel?.CanSaveFilter == true ? Visibility.Visible : Visibility.Collapsed;
+	}
+
+	// ---- 1.6 colpage: Save as collection ---------------------------------------------------------------------------------
+
+	private bool _saving;
+
+	private void SaveFlyout_Opening(object? sender, object e)
+	{
+		_saving = false;
+		SaveName.Text = ViewModel is { } vm ? LibraryPresets.SuggestedName(vm.Filter) : "";
+		SaveName.SelectAll();
+		SaveMessage.Text = "These filters, kept on this PC as a collection.";
+		SaveConfirm.IsEnabled = LibraryPresets.IsValidName(SaveName.Text);
+		DispatcherQueue.TryEnqueue(() => SaveName.Focus(FocusState.Programmatic));
+	}
+
+	private void SaveName_TextChanged(object sender, TextChangedEventArgs e) => SaveConfirm.IsEnabled = !_saving && LibraryPresets.IsValidName(SaveName.Text);
+
+	private void SaveName_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+	{
+		if (e.Key == Windows.System.VirtualKey.Enter && SaveConfirm.IsEnabled)
+		{
+			e.Handled = true;
+			SaveConfirm_Click(SaveConfirm, new RoutedEventArgs());
+		}
+	}
+
+	private async void SaveConfirm_Click(object sender, RoutedEventArgs e)
+	{
+		if (ViewModel is not { } vm || _saving)
+		{
+			return;
+		}
+
+		_saving = true;
+		SaveConfirm.IsEnabled = false;
+		var name = SaveName.Text.Trim();
+		var saved = await vm.SaveFilterAs(name);
+		_saving = false;
+		if (saved)
+		{
+			SaveFlyout.Hide();
+			SaveButton.Focus(FocusState.Programmatic);
+			return;
+		}
+
+		// said in the flyout, which stays open with the name kept (a Nixie message, never nothing)
+		SaveMessage.Text = $"Couldn't save \"{name}\". Try again, or another name.";
+		SaveConfirm.IsEnabled = LibraryPresets.IsValidName(SaveName.Text);
+	}
+
+	private void SaveCancel_Click(object sender, RoutedEventArgs e) => SaveFlyout.Hide();
 
 	private void Chip_Click(object sender, RoutedEventArgs e)
 	{

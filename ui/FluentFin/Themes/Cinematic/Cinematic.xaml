@@ -1,4 +1,4 @@
-<ResourceDictionary
+﻿<ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:c="using:FluentFin.Converters"
@@ -113,6 +113,14 @@
         <Setter Property="CornerRadius" Value="8" />
     </Style>
     <!--  end 1.4.0 topbar  -->
+    <!--  1.6 topbar: "Libraries ▾" with its stars is a flyout (TopLibrariesMenu.Wrap takes this optional key): the same island glass  -->
+    <Style x:Key="TopBarFlyoutPresenterStyle" TargetType="FlyoutPresenter">
+        <Setter Property="Background" Value="{ThemeResource GlassTitleBarBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CinematicIslandRimBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <!--  end 1.6 topbar  -->
 
     <!--  a shelf's title: 24 px SemiBold, Segoe UI Variable Display (a heading for Narrator: ShelfRow makes it level 2)  -->
     <DataTemplate x:Key="RowHeaderTemplate">
@@ -161,6 +169,12 @@
     <Style x:Key="PlayerBottomBarStyle" TargetType="Grid">
         <Setter Property="Padding" Value="96,72,96,24" />
     </Style>
+    <!--  1.6 player: the Playback stats panel on the tabs panel's dense fill, under the tabs, at the overlay's 40 px  -->
+    <Style x:Key="PlayerStatsPanelStyle" TargetType="Border">
+        <Setter Property="Margin" Value="40,112,40,168" />
+        <Setter Property="Background" Value="{ThemeResource CinematicPlayerPanelBrush}" />
+    </Style>
+    <!--  end 1.6 player  -->
     <!--
         Nixie 1.3.1: the theatre window's frame (TrailerFrame): the top bar's dark glass island, larger: the island's glass, sheen
         and lit rim (8 px corners, the soft shadow), the coral TRAILER kicker and the title in the display face over the video,
@@ -239,5 +253,67 @@
     <x:Double x:Key="PageGutterWide">96</x:Double>
     <x:Double x:Key="PageTitleY">72</x:Double>
     <!--  /1.4.0 shared  -->
+
+    <!--
+        1.6 colpage (C1, C5): the Collection page's header stage, Cinematic's backdrop stage. The page runs under the top bar (as
+        the library does), and the set's backdrop (its first member's, else a 2×2 mosaic of posters) fills the region right of
+        the header's words, faded into the night at its left and its foot: no word sits on the picture. High contrast: the
+        night is the window's colour, so the picture fades to nothing.
+    -->
+    <x:Boolean x:Key="CollectionStageUnderBar">True</x:Boolean>
+    <DataTemplate x:Key="CollectionStageTemplate">
+        <Grid
+            Margin="{Binding ArtMargin}"
+            AutomationProperties.AccessibilityView="Raw"
+            IsHitTestVisible="False"
+            Visibility="{Binding ArtVisibility}">
+            <Image AutomationProperties.AccessibilityView="Raw"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Source="{Binding Backdrop}"
+                Stretch="UniformToFill"
+                Visibility="{Binding BackdropVisibility}" />
+            <Grid ColumnSpacing="2" RowSpacing="2" Visibility="{Binding MosaicVisibility}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Image AutomationProperties.AccessibilityView="Raw" Source="{Binding Mosaic0}" Stretch="UniformToFill" />
+                <Image AutomationProperties.AccessibilityView="Raw" Grid.Column="1" Source="{Binding Mosaic1}" Stretch="UniformToFill" />
+                <Image AutomationProperties.AccessibilityView="Raw" Grid.Row="1" Source="{Binding Mosaic2}" Stretch="UniformToFill" />
+                <Image AutomationProperties.AccessibilityView="Raw" Grid.Row="1" Grid.Column="1" Source="{Binding Mosaic3}" Stretch="UniformToFill" />
+            </Grid>
+            <!--
+                a shade under the top bar's right end (the window's caption buttons are drawn on the art there, white: 1:1 over a
+                white picture), as the library's stage has; drawn before the night from the left, so that edge has no seam
+            -->
+            <Rectangle
+                Height="200"
+                VerticalAlignment="Top"
+                Fill="{ThemeResource CinematicHeroTopScrimBrush}" />
+            <!--  the night from the left (the words' side; 2 over its edge, so no hairline of the picture shows at it) and from the foot  -->
+            <Rectangle Margin="-2,0,0,0">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Offset="0" Color="{ThemeResource CinematicNightColor}" />
+                        <GradientStop Offset="0.42" Color="{ThemeResource CinematicNightClearColor}" />
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+            <Rectangle>
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Offset="0.5" Color="{ThemeResource CinematicNightClearColor}" />
+                        <GradientStop Offset="1" Color="{ThemeResource CinematicNightColor}" />
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+        </Grid>
+    </DataTemplate>
+    <!--  /1.6 colpage  -->
 
 </ResourceDictionary>

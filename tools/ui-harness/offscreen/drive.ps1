@@ -262,7 +262,15 @@ function Find-MediaCard([string]$Title) {
     if ($card) { return $card }
     $card = Find-Ui -Name "$Title, " -Type 'ListItem' -Contains -OffscreenToo
     if ($card -and $card.Current.Name.StartsWith("$Title, ")) { return $card }
-    Find-Ui -Name $Title -Type 'ListItem' -OffscreenToo
+    $card = Find-Ui -Name $Title -Type 'ListItem' -OffscreenToo
+    if ($card) { return $card }
+    # 1.6 integration: the Collections page (where the server's Collections and Playlists views now open) shows a box set or
+    # a playlist as a tile: a button "<title>, collection, ..." or "<title>, playlist, ..." (CollectionTile)
+    foreach ($kind in @(', collection', ', playlist')) {
+        $tile = [OffscreenUi]::FindButtonLike($script:hwnd, $script:ui.Id, "$Title$kind", $null)
+        if ($tile) { return $tile }
+    }
+    $null
 }
 # opens a media card: the card is one UIA button named after its item (a11y-items) that opens the item on Invoke; an
 # older build's card (an image that opens on a pointer tap) gets a posted click on its image, above its title. Editorial's
@@ -295,13 +303,14 @@ function Open-NavMenuItem([string]$Name) {
     $mi
 }
 function Open-Nav([string]$Name) {
-    if ($Name -eq 'Settings') {
+    # 1.6 topbar: the plugins' sections (Diary, Playback reports) are in the Account menu with Settings (the review's T4)
+    if ($Name -in @('Settings', 'Diary', 'Playback reports')) {
         $acct = Wait-Until { Find-Ui -Name 'Account, ' -Type 'Button' -Contains } -Seconds 15 -PollMs 150
-        if (-not $acct) { throw "no Account button (Settings is in the Account menu)" }
+        if (-not $acct) { throw "no Account button ($Name is in the Account menu)" }
         [void](Invoke-Element $acct)
-        $set = Wait-Ui -Name 'Settings' -Type 'Button' -Seconds 8
-        if (-not $set) { throw "no Settings in the Account menu" }
-        Say "nav 'Settings' (Account menu: $(Invoke-Element $set))"
+        $set = Wait-Ui -Name $Name -Type 'Button' -Seconds 8
+        if (-not $set) { throw "no $Name in the Account menu" }
+        Say "nav '$Name' (Account menu: $(Invoke-Element $set))"
         return
     }
     $tab = Wait-Until {

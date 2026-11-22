@@ -10,6 +10,12 @@ namespace FluentFin.Core.ViewModels;
 public sealed record CollectionEntry(BaseItemViewModel Item, int Position, bool ShowsPosition)
 {
 	public string PositionText => ShowsPosition ? Position.ToString(System.Globalization.CultureInfo.CurrentCulture) : "";
+
+	/// <summary>
+	/// 1.6 colpage (LB1): the place as the card's caption shows it ("1" in "1 · Wild Canyons"), not a chip on the art: the
+	/// art's top-left square is for counts only ("3" left to watch); "" where the order means nothing.
+	/// </summary>
+	public string CaptionPrefix => ShowsPosition ? CollectionBrowse.CaptionPrefix(Position) : "";
 }
 
 /// <summary>
@@ -74,7 +80,7 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 	[NotifyPropertyChangedFor(nameof(OrderLabel), nameof(OrderButtonName), nameof(Kind))]
 	public partial bool IsPlaylist { get; private set; }
 
-	public string Title => Collection?.Name ?? "";
+	public string Title => CollectionNames.Display(Collection); // 1.6 collections: a box set's tidy name (a playlist's as it is)
 
 	public string Overview => Collection?.Overview ?? "";
 
@@ -88,9 +94,22 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 	[ObservableProperty]
 	public partial IReadOnlyList<CollectionEntry> Entries { get; private set; } = [];
 
-	/// <summary>Over the films: "6 films", or "5 of 6 films" under Hide watched.</summary>
+	/// <summary>Over the films: "5 of 6 films" when Hide watched hides some; else "" (1.6 colpage, C2: the summary says "6 films").</summary>
 	[ObservableProperty]
 	public partial string ShownText { get; private set; } = "";
+
+	/// <summary>1.6 colpage (C1, C5): what the theme's header stage shows (the art, the marquee, the contents list).</summary>
+	[ObservableProperty]
+	public partial CollectionHeaderFacts Header { get; private set; } = CollectionHeaderFacts.Empty;
+
+	// 1.6 collections: a Nixie collection's eyebrow ("Made by Nixie · Franchise"), why line, and whether its order means
+	// something (a franchise, trending; not a decade): the collections stream's ICollectionSource sets them in its Load hook
+	public string HeaderEyebrow { get; set; } = "";
+
+	public string HeaderWhy { get; set; } = "";
+
+	public bool? PositionsOverride { get; set; }
+	// end 1.6 collections
 
 	/// <summary>"6 films · 1979–2016 · 1 of 6 watched".</summary>
 	[ObservableProperty]
@@ -157,6 +176,13 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 
 	public async Task OnNavigatedTo(object parameter)
 	{
+		// 1.6 collections: a Nixie collection loads through its source (CollectionViewModel.Nixie.cs)
+		if (parameter is NixieCollection nixie)
+		{
+			await OpenNixie(nixie);
+			return;
+		}
+
 		var given = parameter as BaseItemDto;
 		var id = given?.Id ?? (parameter as Guid?);
 		if (id is null)
@@ -167,6 +193,7 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 		Collection = given;
 		IsPlaylist = given?.Type == BaseItemDto_Type.Playlist;
 		await State.RunAsync(() => Load(id.Value, given));
+		await AfterServerLoad(); // 1.6 collections: "Also in your library" on an admin's box set
 	}
 
 	private async Task<LoadOutcome> Load(Guid id, BaseItemDto? given)
@@ -244,7 +271,10 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 		var shown = CollectionBrowse.Ordered(_serverOrder, Order, IsPlaylist, OwnDisplayOrder)
 			.Where(x => !HideWatched || !CollectionBrowse.IsWatched(x)).ToList();
 
-		Entries = [.. shown.Select(x => new CollectionEntry(BaseItemViewModel.FromDto(x), places[x], Order == CollectionOrder.Collection))];
+		// 1.6 colpage (LB1): places only where the order means something (a franchise's release order, a playlist, an album)
+		var numbered = Order == CollectionOrder.Collection && (PositionsOverride ?? CollectionBrowse.PositionsMeanSomething(Order, IsPlaylist, OwnDisplayOrder));
+		Entries = [.. shown.Select(x => new CollectionEntry(BaseItemViewModel.FromDto(x), places[x], numbered))];
+		Header = CollectionBrowse.Header(Collection, own, Kind, PositionsOverride ?? CollectionBrowse.PositionsMeanSomething(CollectionOrder.Collection, IsPlaylist, OwnDisplayOrder), HeaderEyebrow, HeaderWhy);
 		Summary = CollectionBrowse.Summary(_serverOrder, IsPlaylist);
 		ShownText = CollectionBrowse.ShownText(shown.Count, _serverOrder);
 		Progress = Math.Round(CollectionBrowse.Progress(_serverOrder) * 100, 1);
@@ -314,6 +344,11 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 	/// <summary>The whole set watched or not: the server marks every item, and the cards are read again.</summary>
 	public async Task SetWatched(bool played)
 	{
+		if (await SetNixieWatched(played)) // 1.6 collections: a Nixie collection marks its titles
+		{
+			return;
+		}
+
 		if (Collection is not { Id: not null } collection)
 		{
 			return;
@@ -331,6 +366,11 @@ public partial class CollectionViewModel(IJellyfinClient jellyfinClient, GlobalC
 
 	public async Task SetFavorite(bool favorite)
 	{
+		if (await SetNixieFavorite(favorite)) // 1.6 collections: a Nixie collection's Favourite is kept on this PC
+		{
+			return;
+		}
+
 		if (Collection is { } collection)
 		{
 			await commands.SetFavorite(collection, favorite);

@@ -213,6 +213,16 @@ public partial class App : Application
 			services.AddSingleton<HomeCache>(); // fluentfin-mpv: the last home page, shown at once (HomeViewModel)
 			services.AddSingleton<SeriesEpisodes>(); // 1.2.0: a series' episodes for Play's label, kept (series and season pages)
 			services.AddSingleton<RecentPlays>(); // sg-cw: what the mpv player just played, on Home and the item pages at once
+			// 1.6 collections: the library index Nixie's collections are built from, and what the user keeps of them (on this PC)
+			services.AddSingleton<Core.SmartCollections.LibraryIndex>();
+			services.AddSingleton<Core.SmartCollections.SmartCollectionStore>();
+			services.AddSingleton<Core.SmartCollections.NixieLibraryPresets>();
+			// the colpage stream's seams (its LibraryPresets.cs): the presets strip's Nixie entries, and Save as collection
+			services.AddSingleton<Core.SmartCollections.NixieLibraryPresetSource>();
+			services.AddSingleton<ILibraryPresetSource>(sp => sp.GetRequiredService<Core.SmartCollections.NixieLibraryPresetSource>());
+			services.AddSingleton<ISavedFilters>(sp => sp.GetRequiredService<Core.SmartCollections.NixieLibraryPresetSource>());
+			services.AddTransient<CollectionsViewModel>();
+			// end 1.6 collections
 
 			// Views and ViewModels
 			services.AddTransient<ShellViewModel>();
@@ -220,6 +230,12 @@ public partial class App : Application
 			services.AddSingleton<ITitleBarViewModel, TitleBarViewModel>();
 			services.AddTransient<HomeViewModel>();
 			services.AddTransient<LibraryViewModel>();
+			// 1.6 colpage: the harness's stand-in presets (NIXIE_PRESETS, dev builds under the harness only; HarnessPresetSource)
+			if (HarnessPresetSource.FromEnvironment() is { } harnessPresets)
+			{
+				services.AddSingleton<ILibraryPresetSource>(harnessPresets);
+			}
+			// end 1.6 colpage
 			services.AddTransient<ItemGridViewModel>();
 			services.AddTransient<VideoPlayerViewModel>();
 			services.AddTransient<MovieViewModel>();
@@ -361,6 +377,11 @@ public partial class App : Application
 			await Host.StartAsync();
 
 			Locator.SetServiceProvider(Host.Services);
+			// 1.6 collections: the Collection page (colpage's view model) reads the index and the saved collections through these
+			Core.ViewModels.SmartCollectionServices.Index = GetService<Core.SmartCollections.LibraryIndex>();
+			Core.ViewModels.SmartCollectionServices.Store = GetService<Core.SmartCollections.SmartCollectionStore>();
+			Core.ViewModels.SmartCollectionServices.Settings = GetService<ILocalSettingsService>();
+			GetService<Core.SmartCollections.NixieLibraryPresets>(); // listening to the index from the start: the presets are ready when a library opens
 
 			// Nixie 1.4.0 (the bug hunt's m5): an item Nixie has no page for says so, instead of nothing happening
 			Commands.CannotOpen += (_, e) => _ = GetService<IContentDialogService>().ShowMessage(e.Title, e.Message);
@@ -377,6 +398,8 @@ public partial class App : Application
 
 			// Seaglass: the saved Glass choice, and the glass brushes following GlassMode
 			GlassSetting.Apply(GetService<ISettings>());
+			// 1.6 collections: Settings > Collections > "Tidy collection names" (on by default)
+			Core.SmartCollections.CollectionSettings.Apply(GetService<ILocalSettingsService>());
 			// Nixie 1.3.0: the layout theme's dictionary in App.xaml's slot, before the first page (the sign-in's backdrop is the theme's)
 			ThemeResources.Attach(GetService<ThemeService>(), GetService<ILogger<App>>());
 			// the harness's light-theme screenshots (NIXIE_THEME=Light|Dark, or SEAGLASS_THEME); unset, the app follows Windows

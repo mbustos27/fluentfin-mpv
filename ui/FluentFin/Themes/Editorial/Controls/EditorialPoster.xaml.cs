@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using FluentFin.Controls;
 using FluentFin.Converters;
 using FluentFin.Core;
@@ -31,7 +31,7 @@ public interface IEditorialDetailsHost
 }
 
 /// <summary>Editorial's poster card (see EditorialPoster.xaml).</summary>
-public sealed partial class EditorialPoster : UserControl
+public sealed partial class EditorialPoster : UserControl, FluentFin.Controls.ICaptionPrefixed
 {
 	/// <summary>Nixie 1.4.0 (item 15, LibraryProbe): the 2:3 artwork, measured against the loading placeholders.</summary>
 	internal FrameworkElement ArtElement => Art;
@@ -45,6 +45,76 @@ public sealed partial class EditorialPoster : UserControl
 	public static readonly DependencyProperty IsOpenProperty =
 		DependencyProperty.Register(nameof(IsOpen), typeof(bool), typeof(EditorialPoster), new PropertyMetadata(false, (d, e) => ((EditorialPoster)d).OnIsOpenChanged((bool)e.OldValue, (bool)e.NewValue)));
 
+	/// <summary>
+	/// 1.6 colpage (LB1): the poster's place in a set whose order means something ("1"), set in its caption in Editorial's
+	/// numbering ("01 · Wild Canyons", as Home's "01 … 05") and said first by Narrator ("1, Wild Canyons, 1979"); empty: none.
+	/// </summary>
+	public static readonly DependencyProperty CaptionPrefixProperty =
+		DependencyProperty.Register(nameof(CaptionPrefix), typeof(string), typeof(EditorialPoster), new PropertyMetadata("", (d, _) => ((EditorialPoster)d).ApplyTitle()));
+
+	public string CaptionPrefix
+	{
+		get => (string)GetValue(CaptionPrefixProperty);
+		set => SetValue(CaptionPrefixProperty, value);
+	}
+
+	/// <summary>
+	/// 1.6 colpage (theme polish): the list view's line: a small poster (64 wide), then the title, "1979 · 1h 52m · PG", a short
+	/// line from the overview, and the state at the end ("Watched", "45% watched", "5 left"); the same stop, ring, details in
+	/// place and Narrator name as the grid's poster.
+	/// </summary>
+	public static readonly DependencyProperty ListFormProperty =
+		DependencyProperty.Register(nameof(ListForm), typeof(bool), typeof(EditorialPoster), new PropertyMetadata(false, (d, _) => ((EditorialPoster)d).ApplyForm()));
+
+	public bool ListForm
+	{
+		get => (bool)GetValue(ListFormProperty);
+		set => SetValue(ListFormProperty, value);
+	}
+
+	private void ApplyForm()
+	{
+		var list = ListForm;
+		// the columns only in the list form: an Auto column in the poster took a long title's width and shifted the art
+		RootGrid.ColumnDefinitions.Clear();
+		if (list)
+		{
+			RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+			RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			RootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+		}
+
+		Grid.SetRow(TitleArea, list ? 0 : 1);
+		Grid.SetColumn(TitleArea, list ? 1 : 0);
+		TitleArea.Padding = list ? new Thickness(20, 0, 0, 0) : new Thickness(1, 8, 1, 0);
+		TitleArea.VerticalAlignment = list ? VerticalAlignment.Center : VerticalAlignment.Stretch;
+		TitleText.FontSize = list ? 18 : 15;
+		ShortText.Visibility = list && ShortText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+		StateText.Visibility = list && StateText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+		ListBack.Visibility = list ? Visibility.Visible : Visibility.Collapsed;
+		ApplyUserData(); // the marks on the art, or the words at the line's end
+		Grid.SetColumnSpan(FocusRing, list ? 3 : 1);
+		Grid.SetColumnSpan(OpenRim, list ? 3 : 1);
+		HorizontalAlignment = list ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
+		Resize();
+	}
+
+	/// <summary>Editorial's numbering: "01" for "1", "12" for "12" (a number), the prefix as it is otherwise.</summary>
+	public static string Numbered(string? prefix) =>
+		int.TryParse(prefix, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n.ToString("00", System.Globalization.CultureInfo.InvariantCulture) : prefix ?? "";
+
+	private void ApplyTitle()
+	{
+		var title = EditorialCards.Title(Item?.Dto);
+		TitleText.Inlines.Clear();
+		if (!string.IsNullOrEmpty(CaptionPrefix))
+		{
+			TitleText.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = $"{Numbered(CaptionPrefix)} · ", Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["GlassTextSecondaryBrush"] });
+		}
+
+		TitleText.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = title });
+	}
+
 	private bool _pointerOver;
 	private bool _keyboardFocus;
 	private bool _keyboardElsewhere;
@@ -55,6 +125,7 @@ public sealed partial class EditorialPoster : UserControl
 		InitializeComponent();
 		Loaded += (_, _) =>
 		{
+			FluentFin.Controls.CardCaption.Pull(this); // 1.6 colpage (LB1): a place its entry gives
 			ItemUserData.Changed += OnUserDataChanged;
 			CardFocus.Changed += OnCardFocusChanged;
 			_keyboardElsewhere = CardFocus.IsElsewhere(this);
@@ -107,28 +178,41 @@ public sealed partial class EditorialPoster : UserControl
 		set => SetValue(IsOpenProperty, value);
 	}
 
-	private double ArtHeight => Math.Round(PosterWidth * 1.5);
+	private double ArtWidthNow => ListForm ? FluentFin.Core.ViewModels.EditorialListForm.ArtWidth : PosterWidth;
+
+	private double ArtHeight => Math.Round(ArtWidthNow * 1.5);
 
 	private void Resize()
 	{
-		Width = PosterWidth;
+		// 1.6 colpage: the list form is as wide as its line, its art the list's small poster
+		Width = ListForm ? double.NaN : PosterWidth;
+		Art.Width = ListForm ? FluentFin.Core.ViewModels.EditorialListForm.ArtWidth : double.NaN;
 		Art.Height = ArtHeight;
 		// Nixie 1.4.0 (the release's layout cycle): the picture has its size before its image arrives (it grew from nothing as
 		// the image opened, which laid the Library's grid out again: after a far scroll, every image re-made its rows for 30 s)
-		Picture.Width = PosterWidth;
+		Picture.Width = ArtWidthNow;
 		Picture.Height = ArtHeight;
-		FocusRing.Height = ArtHeight + 8;
-		FocusRing.VerticalAlignment = VerticalAlignment.Top;
-		OpenRim.Height = ArtHeight + 6;
+		// the list form's ring and rim go round the whole line (the art and its words)
+		FocusRing.Height = ListForm ? double.NaN : ArtHeight + 8;
+		FocusRing.Margin = ListForm ? new Thickness(-12, -8, -12, -8) : new Thickness(-4);
+		FocusRing.VerticalAlignment = ListForm ? VerticalAlignment.Stretch : VerticalAlignment.Top;
+		OpenRim.Height = ListForm ? double.NaN : ArtHeight + 6;
+		OpenRim.Margin = ListForm ? new Thickness(-11, -7, -11, -7) : new Thickness(-3);
+		OpenRim.VerticalAlignment = ListForm ? VerticalAlignment.Stretch : VerticalAlignment.Top;
 		ApplyImage();
 	}
 
 	private void Apply()
 	{
 		var dto = Item?.Dto;
-		TitleText.Text = EditorialCards.Title(dto);
-		MetaText.Text = EditorialCards.PosterMeta(dto);
+		ApplyTitle();
+		MetaText.Text = ListForm ? FluentFin.Core.ViewModels.EditorialListForm.Facts(dto) : EditorialCards.PosterMeta(dto);
 		MetaText.Visibility = MetaText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+		// 1.6 colpage: the list form's short line and state
+		ShortText.Text = FluentFin.Core.ViewModels.EditorialListForm.ShortLine(dto);
+		StateText.Text = FluentFin.Core.ViewModels.EditorialListForm.State(dto);
+		ShortText.Visibility = ListForm && ShortText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+		StateText.Visibility = ListForm && StateText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		ApplyUserData();
 		_decodedHeight = 0;
 		ApplyImage();
@@ -153,16 +237,19 @@ public sealed partial class EditorialPoster : UserControl
 	private void ApplyUserData()
 	{
 		var dto = Item?.Dto;
-		WatchedMark.Visibility = ItemBadges.Watched(dto) ? Visibility.Visible : Visibility.Collapsed;
+		// 1.6 colpage: the list form says it in words at the line's end ("Watched", "5 left"): no second mark on its small art
+		WatchedMark.Visibility = ItemBadges.Watched(dto) && !ListForm ? Visibility.Visible : Visibility.Collapsed;
 		// 1.4.0 (X10, E-m4): the count Narrator hears ("5 unwatched items") is on screen too
 		CountText.Text = ItemBadges.ToWatchText(dto);
-		CountChip.Visibility = CountText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+		CountChip.Visibility = CountText.Text.Length > 0 && !ListForm ? Visibility.Visible : Visibility.Collapsed;
 		var progress = EditorialCards.Progress(dto);
 		ProgressTrack.Visibility = progress > 0 ? Visibility.Visible : Visibility.Collapsed;
-		ProgressFill.Width = Math.Max(4, (PosterWidth - 20) * progress / 100);
+		ProgressFill.Width = Math.Max(4, (ArtWidthNow - 20) * progress / 100);
+		StateText.Text = FluentFin.Core.ViewModels.EditorialListForm.State(dto);
+		StateText.Visibility = ListForm && StateText.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 		if (FrameworkElementAutomationPeer.FromElement(this) is { } peer)
 		{
-			peer.RaisePropertyChangedEvent(AutomationElementIdentifiers.NameProperty, "", ItemLabels.CardName(Item));
+			peer.RaisePropertyChangedEvent(AutomationElementIdentifiers.NameProperty, "", FluentFin.Controls.BaseItemDtoCard.NameWithPrefix(CaptionPrefix, ItemLabels.CardName(Item)));
 		}
 	}
 
@@ -296,8 +383,10 @@ public sealed partial class EditorialPoster : UserControl
 	{
 		var look = Look(_pointerOver, _keyboardFocus, _keyboardElsewhere, IsOpen);
 		FocusRing.Visibility = look.Ring ? Visibility.Visible : Visibility.Collapsed;
-		OpenRim.Visibility = Notch.Visibility = look.Open ? Visibility.Visible : Visibility.Collapsed;
+		OpenRim.Visibility = look.Open ? Visibility.Visible : Visibility.Collapsed;
+		Notch.Visibility = look.Open && !ListForm ? Visibility.Visible : Visibility.Collapsed; // the list form's rim says it alone
 		HoverBrighten.Visibility = look.Brighten ? Visibility.Visible : Visibility.Collapsed;
+		ListBack.Background = ListForm && (_pointerOver || look.Ring) ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["EditorialRowHoverBrush"] : null;
 		Lift(look.Lift);
 	}
 
@@ -317,8 +406,8 @@ public sealed partial class EditorialPoster : UserControl
 	private void Lift(bool lifted)
 	{
 		var visual = ElementCompositionPreview.GetElementVisual(Art);
-		visual.CenterPoint = new Vector3((float)(PosterWidth / 2), (float)(ArtHeight / 2), 0);
-		var scale = lifted && SafeMotion.Allowed ? 1.04f : 1f;
+		visual.CenterPoint = new Vector3((float)(ArtWidthNow / 2), (float)(ArtHeight / 2), 0);
+		var scale = lifted && SafeMotion.Allowed && !ListForm ? 1.04f : 1f; // a list line does not lift (its ring and hover say it)
 		if (SafeMotion.Allowed)
 		{
 			var spring = visual.Compositor.CreateSpringVector3Animation();
@@ -358,7 +447,7 @@ internal sealed partial class EditorialPosterAutomationPeer(EditorialPoster owne
 	protected override string GetNameCore()
 	{
 		var name = AutomationProperties.GetName(owner);
-		return string.IsNullOrEmpty(name) ? ItemLabels.CardName(owner.Item) : name;
+		return string.IsNullOrEmpty(name) ? FluentFin.Controls.BaseItemDtoCard.NameWithPrefix(owner.CaptionPrefix, ItemLabels.CardName(owner.Item)) : name;
 	}
 
 	protected override bool IsControlElementCore() => true;

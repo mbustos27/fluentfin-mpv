@@ -60,6 +60,7 @@ public class PageService : IPageService, IPageRegistration
 		Configure<MediaSegmentsEditorViewModel, MediaSegmentsEditorPage>();
 		Configure<LibrariesLandingPageViewModel, LibrariesLandingPage>();
 		Configure<CollectionViewModel, CollectionPage>(); // Nixie 1.4.0: box sets and playlists (GlobalCommands.DisplayDto)
+		Configure<CollectionsViewModel, CollectionsPage>(); // 1.6 collections: every collection in one place (GlobalCommands.OpenCollections)
 		Configure<EpisodeViewModel, EpisodePage>();
 		// Seaglass 1.1.4: Enter in the title bar's search
 		Configure<SearchResultsViewModel, SearchResultsPage>();

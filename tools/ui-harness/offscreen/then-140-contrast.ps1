@@ -110,7 +110,14 @@ function CtPage([string]$Page, $Boxes) {
         $win = CtWin
         $dx = $win.Left - $left; $dy = $win.Top - $top
         foreach ($b in $Boxes) {
-            $file = Join-Path $ctDir ("{0}-{1}-{2}.png" -f $ctTag, $Page, (Safe-Name $b.Label))
+            # 1.6 integration: a label clipped to a sliver at a scroller's edge (Cinematic's presets strip scrolls; its last
+            # preset showed 5 px) holds no text to read: not measured
+            if ([int]$b.W -lt 12) { Say "contrast ($ctTag, $Page): $($b.Label) clipped to $([int]$b.W) px, not measured"; continue }
+            # (1.6 integration: the label part capped at 60 characters: a Made by Nixie row's long name made the crop's path
+            # longer than Windows' 260, and GDI+ refused to save it, "a generic error")
+            $ctName = Safe-Name $b.Label
+            if ($ctName.Length -gt 60) { $ctName = $ctName.Substring(0, 60).TrimEnd('-') }
+            $file = Join-Path $ctDir ("{0}-{1}-{2}.png" -f $ctTag, $Page, $ctName)
             $m = [CtW]::Measure($bmp, [int]($b.X + $dx), [int]($b.Y + $dy), [int]$b.W, [int]$b.H, $file)
             $min = if ($b.Min) { [double]$b.Min } else { 4.5 }
             $row = [ordered]@{ tag = $ctTag; layout = $ctLayout; mode = $ctMode; art = $ctArt; page = $Page; label = $b.Label; held = [bool]$b.Held; min = $min
@@ -273,7 +280,13 @@ if ($fixture.views -contains 'Collections' -and @($fixture.collections).Count) {
         Open-Nav 'Home'; CtSettle 800
         Open-Library 'Collections'
         CtWaitCards
-        CtLibrary 'Collections' 'collections'
+        # 1.6 integration: Collections is the Collections page (no library toolbar to measure): its bar and header words, as
+        # a collection's below
+        $ctEls = CtElements
+        $ctBoxes = New-Object System.Collections.ArrayList
+        foreach ($b in @(CtBarBoxes $ctEls) + @(CtHeaderBoxes $ctEls (CtGridTop $ctEls))) { if ($b -and $b.Label) { [void]$ctBoxes.Add($b) } }
+        if ($env:CT_DUMP) { Dump-Tree "$ctTag-collections" }
+        CtPage 'collections' $ctBoxes
         $ctFirst = @($fixture.collections)[0].name
         Open-Card $ctFirst
         [void](Wait-Until { Find-Ui -Name $ctFirst -Type 'Text' } -Seconds 15 -PollMs 250)

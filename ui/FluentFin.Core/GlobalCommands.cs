@@ -158,6 +158,26 @@ public partial class GlobalCommands(INavigationServiceCore navigationService,
 		CannotOpen?.Invoke(this, CannotOpenText(dto));
 	}
 
+	// 1.6 integration: topbar's interim OpenCollections (the server's box-set view, else the Libraries page lit as
+	// Collections, CollectionsRoute) gave way to the Collections page below; the top bar opens it (TopNavigation.Open)
+	// 1.6 collections
+	/// <summary>
+	/// Nixie 1.6: the one Collections destination (the top bar's, the Libraries page's "Collections &amp; playlists" tiles): the
+	/// Collections page at <paramref name="section"/> (the server's box sets, Playlists, Made by Nixie or Saved).
+	/// </summary>
+	public void OpenCollections(CollectionsSection section = CollectionsSection.All) => OpenCollectionsAt(new CollectionsPlace(section));
+
+	/// <summary>Nixie 1.6: the Collections page at a place (a row's "See all": every collection of one kind).</summary>
+	public void OpenCollectionsAt(CollectionsPlace place) => navigationService.NavigateTo(typeof(CollectionsViewModel).FullName!, place);
+
+	/// <summary>Nixie 1.6: back to where a page was opened from (a saved filter removed from its own page).</summary>
+	public void GoBack() => navigationService.GoBack();
+
+	/// <summary>Nixie 1.6: a collection Nixie made, on the shared Collection page.</summary>
+	public void OpenSmartCollection(SmartCollections.SmartCollection collection) =>
+		navigationService.NavigateTo(typeof(CollectionViewModel).FullName!, new NixieCollection(collection));
+	// end 1.6 collections
+
 	[RelayCommand]
 	public void NavigateToSegmentsEditor(BaseItemDto dto)
 	{

@@ -393,26 +393,75 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		}
 	}
 
-	/// <summary>What "Forget learned intros" said last ("" before it was pressed).</summary>
-	[ObservableProperty]
-	public partial string ForgetLearnedStatus { get; set; } = "";
+	// 1.6 skip: skip rules (docs/BRIDGE.md §4). "Forget learned intros" became the list's Forget all: the backend keeps
+	// the learned intros with the rules now, and is the one that forgets them.
 
-	/// <summary>
-	/// Deletes the intros learned from the user's skips (<see cref="LearnedIntros"/>). Seaglass 1.1.4 (button review A39): after
-	/// a yes to <see cref="ForgetLearnedPrompt"/> (it went at once, with no way back).
-	/// </summary>
-	[RelayCommand]
-	private async Task ForgetLearnedIntros()
+	/// <summary>"Ads and previews the server marks": Off, Show a Skip button, Skip them by itself.</summary>
+	public static IReadOnlyList<SkipChoice> AdsAndPreviewsChoices { get; } =
+	[
+		new("off", "Off"),
+		new("ask", "Show a Skip button"),
+		new("always", "Skip them by itself"),
+	];
+
+	/// <summary>"When a show has a skip rule": Show a Skip button, Skip it by itself.</summary>
+	public static IReadOnlyList<SkipChoice> SkipRuleChoices { get; } =
+	[
+		new("ask", "Show a Skip button"),
+		new("always", "Skip it by itself"),
+	];
+
+	/// <summary>Kept on this PC: see <see cref="SettingKeys.AdsAndPreviewsAction"/>. Reaches the backend with the next play.</summary>
+	public SkipChoice? SelectedAdsAndPreviews
 	{
-		if (knownFolders is null || !await Asked(ForgetLearnedPrompt))
+		get => AdsAndPreviewsChoices.FirstOrDefault(x => x.Value == BridgeSkipCommands.SegmentAction(settings.AdsAndPreviewsAction)) ?? AdsAndPreviewsChoices[1];
+		set
+		{
+			if (value is not null && settings.AdsAndPreviewsAction != value.Value)
+			{
+				settings.AdsAndPreviewsAction = value.Value;
+				OnPropertyChanged();
+			}
+		}
+	}
+
+	/// <summary>Kept on this PC: see <see cref="SettingKeys.SkipRuleAction"/>. A rule's own choice wins.</summary>
+	public SkipChoice? SelectedSkipRuleAction
+	{
+		get => SkipRuleChoices.FirstOrDefault(x => x.Value == BridgeSkipCommands.RuleAction(settings.SkipRuleAction)) ?? SkipRuleChoices[0];
+		set
+		{
+			if (value is not null && settings.SkipRuleAction != value.Value)
+			{
+				settings.SkipRuleAction = value.Value;
+				OnPropertyChanged();
+			}
+		}
+	}
+
+	/// <summary>The "Skip rules" list, read from the backend when its expander opens (<see cref="LoadSkipRulesCommand"/>).</summary>
+	public SkipRulesList SkipRules => field ??= new SkipRulesList(mpvBackend, () =>
+		MpvIdentity.FromSession(settings) is { } identity ? (identity.ServerId, identity.UserId) : (null, null));
+
+	[RelayCommand]
+	private Task LoadSkipRules() => SkipRules.LoadAsync();
+
+	/// <summary>A row's Forget: one rule or learned intro, or a show with everything of it.</summary>
+	[RelayCommand]
+	private Task ForgetSkipRule(SkipRuleRow? row) => row is null ? Task.CompletedTask : SkipRules.ForgetAsync(row);
+
+	/// <summary>Forget all, after a yes to <see cref="ForgetAllSkipRulesPrompt"/> (button review A39's rule: nothing goes unasked).</summary>
+	[RelayCommand]
+	private async Task ForgetAllSkipRules()
+	{
+		if (!await Asked(ForgetAllSkipRulesPrompt))
 		{
 			return;
 		}
 
-		ForgetLearnedStatus = LearnedIntros.Forget(LearnedIntros.ConfigDirectory(knownFolders))
-			? "Learned intros forgotten."
-			: "Could not forget them. Close the player and try again.";
+		await SkipRules.ForgetAllAsync();
 	}
+	// end 1.6 skip
 
 	/// <summary>Kept on this PC: see <see cref="SettingKeys.MouseWheelVolume"/>.</summary>
 	public bool MouseWheelVolume
@@ -680,11 +729,11 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		$"{AppIdentity.Name} forgets the sign-in saved for {user.Username} on this PC, with its saved home page. The account on the server is not changed.",
 		"Remove");
 
-	/// <summary>What "Forget learned intros" asks.</summary>
-	public static ConfirmPrompt ForgetLearnedPrompt { get; } = new(
-		"Forget learned intros?",
-		"Skips you made before stop being used. The player learns again from your next skips.",
-		"Forget");
+	/// <summary>1.6 skip: what the skip rules' "Forget all" asks.</summary>
+	public static ConfirmPrompt ForgetAllSkipRulesPrompt { get; } = new(
+		"Forget all skip rules?",
+		"Every part you set to skip, and every intro learned from your skips, stops being skipped on this PC. The player learns again from your next skips.",
+		"Forget all");
 
 	/// <summary>
 	/// Seaglass 1.1.3: the accessible name of a saved sign-in's button; 1.1.4 (button review A48): "Remove sign-in", as it

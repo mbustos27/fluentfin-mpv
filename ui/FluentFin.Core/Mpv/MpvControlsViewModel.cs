@@ -39,6 +39,12 @@ public enum MpvControlsAction
 	SubtitleLater,
 	/// <summary>The digits: a tenth of the length each. Keep the ten in order (<see cref="MpvControlsViewModel.PercentOf"/>).</summary>
 	Percent0, Percent1, Percent2, Percent3, Percent4, Percent5, Percent6, Percent7, Percent8, Percent9,
+	/// <summary>1.6 skip: Shift+S, "Skip a part every episode" (the mark sheet).</summary>
+	MarkSkipPart,
+	// 1.6 player
+	/// <summary>1.6: I, the Playback stats panel open or closed (mpv's own stats key).</summary>
+	TogglePlaybackStats,
+	// end 1.6 player
 }
 
 /// <summary>
@@ -198,7 +204,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	public string? ItemId { get; private set; }
 
 	/// <summary>Anything of the controls' is on screen (the window they draw in is shown only then).</summary>
-	public bool AnythingVisible => ControlsVisible || VolumeIndicatorVisible || IsSkipVisible || IsNextPromptVisible || ToastVisible;
+	public bool AnythingVisible => ControlsVisible || VolumeIndicatorVisible || IsSkipVisible || IsNextPromptVisible || ToastVisible
+		|| IsSuggestionVisible; // 1.6 skip
 
 	partial void OnControlsVisibleChanged(bool value)
 	{
@@ -219,6 +226,20 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		_menusOpen = Math.Max(0, _menusOpen + (open ? 1 : -1));
 		NotifyActivity();
+	}
+
+	// 1.6 integration: the flyouts open (not Cinematic's panel, which holds the bars through MenuOpened too): Escape's first rung
+	private int _flyoutsOpen;
+
+	/// <summary>
+	/// 1.6 integration: one of the controls' flyouts or menus (Audio and subtitles, Quality, volume, speed, chapters, the skip
+	/// mark sheet) opened or closed. It holds the bars as <see cref="MenuOpened"/> does, and while one is open Escape is its
+	/// own (<see cref="ClosePanels"/> answers nothing under it). A theme's panel calls <see cref="MenuOpened"/> only.
+	/// </summary>
+	public void FlyoutOpened(bool open)
+	{
+		_flyoutsOpen = Math.Max(0, _flyoutsOpen + (open ? 1 : -1));
+		MenuOpened(open);
 	}
 
 	/// <summary>Why the controls stay up now, whatever the time since the last input; null when nothing holds them.</summary>
@@ -245,10 +266,14 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			ToastVisible = false;
 		}
 
+		TickSuggestion(now); // 1.6 skip
+
 		if (!_scrubbing)
 		{
 			ShowPosition(CurrentPosition(now));
 		}
+
+		TickStats(); // 1.6 player: the open Playback stats panel asks about once a second
 	}
 
 	/// <summary>Where playback is now: the last report, moved on by the time since while playing, or a seek not yet reported.</summary>
@@ -307,6 +332,15 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			case Bridge.Events.Next when e.DataAs<BridgeNext>() is { } next:
 				OnNext(next);
 				break;
+			// 1.6 skip
+			case Bridge.Events.SkipSuggestion when e.DataAs<BridgeSkipSuggestion>() is { } suggestion:
+				OnSkipSuggestion(suggestion);
+				break;
+			// 1.6 player: how the item is served, for the Quality menu
+			case Bridge.Events.Stream when e.DataAs<BridgeStream>() is { } stream:
+				OnStream(stream);
+				break;
+			// end 1.6 player
 		}
 	}
 
@@ -366,6 +400,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			_seekTarget = null;
 		}
 
+		NoteJump(position.PositionTicks); // 1.6 skip
 		_reportedPosition = position.PositionTicks;
 		_backendPosition = position.PositionTicks;
 		_reportedAt = now;
@@ -380,6 +415,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		// a new item: a click on the last one's video does not pause this one
 		_clicks.Cancel();
 		var another = !string.Equals(NormalizeId(item.ItemId), NormalizeId(ItemId), StringComparison.Ordinal);
+		var previousItemId = ItemId; // 1.6 skip
 		ItemId = item.ItemId;
 		(Title, Subtitle) = FormatTitle(item);
 		if (item.RunTimeTicks is long runtime && runtime > 0)
@@ -392,6 +428,13 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		_skipped = null;
 		UpdateSkip();
 		_isEpisode = item.Type == "Episode";
+		// 1.6 skip: the sheet is for episodes; another item's toast and last seek go
+		OnPropertyChanged(nameof(CanMarkSkipPart));
+		if (another)
+		{
+			ResetSkipRulesForItem(previousItemId);
+		}
+
 		OnPropertyChanged(nameof(PreviousName));
 		OnPropertyChanged(nameof(NextButtonName));
 		_nextKnown = false;
@@ -878,12 +921,15 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	{
 		if (_offered is { } offered)
 		{
-			SkipText = SkipTextFor(offered.Type);
+			SkipText = offered.IsExtra ? SkipExtraText : SkipTextFor(offered.Type); // 1.6 skip: IsExtra
 			SkipSourceNote = offered.SourceNote;
 		}
 
 		IsSkipVisible = ShowSkipPrompt && _offered is { } shown && shown != _skipped && !(shown.Type == "Outro" && IsNextPromptVisible);
 	}
+
+	/// <summary>1.6 skip: a show's skip rule over a part that is not the intro or the credits.</summary>
+	public const string SkipExtraText = "Skip extra";
 
 	/// <summary>The Skip button's words for a Jellyfin segment type, in FluentFin's sentence case ("Skip credits" for an outro).</summary>
 	public static string SkipTextFor(string? type) => type switch
@@ -1713,12 +1759,40 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 	/// </summary>
 	public event EventHandler<System.ComponentModel.HandledEventArgs>? ClosePanelsRequested;
 
-	/// <summary>Escape: a theme's open panel closes first (true); false when none was open (the page's own Escape goes on).</summary>
+	/// <summary>
+	/// Escape, before the page's own rule (leave full screen; in a window, show the controls). Nixie 1.6: one thing per press,
+	/// the innermost first (docs/SHORTCUTS.md, Esc): an open menu or flyout, then the Playback stats panel, then a theme's open
+	/// panel (Cinematic's tabs panel), and only when none of those is open is "Skip this every episode?" answered Not now, so
+	/// Escape never answers the question while a panel the viewer is looking at is open. True when this press was taken here;
+	/// false when nothing was open (the page's own Escape goes on).
+	/// </summary>
 	public bool ClosePanels()
 	{
+		// 1.6 integration: an open menu or flyout (Audio and subtitles, Quality, volume, speed, chapters, the skip mark sheet)
+		// closes itself on Escape; should the press reach here as well, nothing under the menu answers it. Not _menusOpen:
+		// Cinematic's panel holds the bars through it, and is the third rung (the keys matrix caught Esc dead under it)
+		if (_flyoutsOpen > 0)
+		{
+			return true;
+		}
+
+		// 1.6 player: the Playback stats panel
+		if (IsStatsOpen)
+		{
+			SetStatsOpen(false);
+			return true;
+		}
+		// end 1.6 player
+
 		var request = new System.ComponentModel.HandledEventArgs();
 		ClosePanelsRequested?.Invoke(this, request);
-		return request.Handled;
+		if (request.Handled)
+		{
+			return true;
+		}
+
+		// 1.6 skip: "Skip this every episode?" is answered Not now, last of all (1.6 integration: after the panels)
+		return DismissSuggestion();
 	}
 
 	public Task Run(MpvControlsAction action)
@@ -1750,6 +1824,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			case MpvControlsAction.SubtitleEarlier: return StepSubtitleDelay(-1, announce: true);
 			case MpvControlsAction.SubtitleLater: return StepSubtitleDelay(1, announce: true);
 			case >= MpvControlsAction.Percent0 and <= MpvControlsAction.Percent9: return SeekToPercent(PercentOf(action));
+			case MpvControlsAction.MarkSkipPart: OpenSkipSheet(); return Task.CompletedTask; // 1.6 skip
+			case MpvControlsAction.TogglePlaybackStats: ToggleStats(); return Task.CompletedTask; // 1.6 player
 			default: return Task.CompletedTask;
 		}
 	}
@@ -1764,6 +1840,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 		public const int MediaNext = 0xB0, MediaPrevious = 0xB1, MediaPlayPause = 0xB3;
 		/// <summary>1.2.0: Backspace, Z, X, and the "[" and "]" keys (VK_OEM_4, VK_OEM_6 on a US layout): mpv's own keys for them.</summary>
 		public const int Back = 0x08, X = 0x58, Z = 0x5A, OpenBracket = 0xDB, CloseBracket = 0xDD;
+		/// <summary>1.6 player: I, the Playback stats (mpv's own stats key).</summary>
+		public const int I = 0x49;
 	}
 
 	/// <summary>The key map (pure): which action a key and its modifiers mean, null for none of the player's.</summary>
@@ -1798,6 +1876,8 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			Keys.F11 when !control && !shift => MpvControlsAction.ToggleFullScreen,
 			// the backend's own key for its Skip (docs/BRIDGE.md §4 skip_segment); nothing on offer, nothing is sent
 			Keys.S when !control && !shift => MpvControlsAction.SkipSegment,
+			// 1.6 skip: Shift+S, skip a part in every episode of the show (the mark sheet)
+			Keys.S when shift && !control => MpvControlsAction.MarkSkipPart,
 			Keys.N when shift && !control => MpvControlsAction.Next,
 			Keys.P when shift && !control => MpvControlsAction.Previous,
 			Keys.MediaNext => MpvControlsAction.Next,
@@ -1809,6 +1889,7 @@ public sealed partial class MpvControlsViewModel : ObservableObject
 			Keys.Back when !control && !shift => MpvControlsAction.SpeedNormal,
 			Keys.Z when !control && !shift => MpvControlsAction.SubtitleEarlier,
 			Keys.X when !control && !shift => MpvControlsAction.SubtitleLater,
+			Keys.I when !control && !shift => MpvControlsAction.TogglePlaybackStats, // 1.6 player
 			_ => null,
 		};
 	}

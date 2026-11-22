@@ -271,7 +271,13 @@ public sealed partial class CinematicPlayerPanel : UserControl
 	{
 		if (e.Key == VirtualKey.Escape && _open is not null)
 		{
-			Close(returnFocus: true);
+			// 1.6 integration: the player's Escape order whoever hears the key first (docs/SHORTCUTS.md, Esc): the Playback stats
+			// panel closes before this one; this panel then closes through OnClosePanelsRequested (the keyboard back to the tabs)
+			if (_controls?.ClosePanels() != true)
+			{
+				Close(returnFocus: true);
+			}
+
 			e.Handled = true;
 		}
 	}

@@ -360,6 +360,15 @@ public sealed partial class DriveInHomePage : Page
 		}
 	}
 
+	// 1.6 collections: a Made by Nixie row's "See all" opens its collection
+	private void NixieSeeAll(object sender, EventArgs e)
+	{
+		if (sender is Microsoft.UI.Xaml.FrameworkElement { Tag: Core.ViewModels.NixieHomeRowViewModel row })
+		{
+			ViewModel.OpenNixieRow(row);
+		}
+	}
+
 	// ---- the removal notice: the shared Home's behaviour --------------------------------------------------------------
 
 	private void OnNoticeChanged()

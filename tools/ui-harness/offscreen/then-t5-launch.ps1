@@ -60,7 +60,8 @@ function T5-Measure([string]$When) {
 }
 $timings.t5_launch = @()
 # 1. as soon as the libraries' tabs are in (the strip rebuilt for them): with -Script wait:1 this is the launch itself
-[void](Wait-Until { if ((Find-Ui -Name 'Libraries' -Type 'TabItem') -and (Find-Ui -Name 'Diary' -Type 'TabItem')) { $true } } -Seconds 15 -PollMs 100)
+# 1.6 topbar: the Diary is in the account menu now; the favourites' tabs (Movies) come with the libraries
+[void](Wait-Until { if ((Find-Ui -Name 'Libraries' -Type 'TabItem') -and (Find-Ui -Name 'Movies' -Type 'TabItem')) { $true } } -Seconds 15 -PollMs 100)
 Start-Sleep -Milliseconds 1500
 T5-Measure 'launch'
 # 2. the window made narrow and wide again: the tabs fold and unfold (a rebuild each time)

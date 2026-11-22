@@ -128,9 +128,9 @@ public sealed class SettingsRemoveAsksTests : IDisposable
 	}
 
 	[Fact]
-	public async Task ForgetLearnedIntros_AsksFirst()
+	public async Task ForgetAllSkipRules_AsksFirst()
 	{
-		// button review A39: it deleted the learned intros at once
+		// button review A39: "Forget learned intros" deleted them at once; 1.6 skip: its successor, Forget all, asks too
 		var settings = new Mock<ISettings>();
 		var backend = new Mock<IMpvBackend>();
 		backend.SetupGet(x => x.StatusChanged).Returns(Observable.Never<MpvBackendStatus>());
@@ -138,16 +138,12 @@ public sealed class SettingsRemoveAsksTests : IDisposable
 		ConfirmPrompt? asked = null;
 		vm.Confirm = prompt => { asked = prompt; return Task.FromResult(false); };
 
-		await vm.ForgetLearnedIntrosCommand.ExecuteAsync(null);
+		await vm.ForgetAllSkipRulesCommand.ExecuteAsync(null);
 
-		Assert.Equal(SettingsViewModel.ForgetLearnedPrompt, asked);
-		Assert.Equal("Forget learned intros?", asked!.Title);
-		// a no forgets nothing (the status says nothing happened)
-		Assert.Equal("", vm.ForgetLearnedStatus);
-
-		vm.Confirm = _ => Task.FromResult(true);
-		await vm.ForgetLearnedIntrosCommand.ExecuteAsync(null);
-		Assert.NotEqual("", vm.ForgetLearnedStatus);
+		Assert.Equal(SettingsViewModel.ForgetAllSkipRulesPrompt, asked);
+		Assert.Equal("Forget all skip rules?", asked!.Title);
+		// a no forgets nothing: the backend is not even asked
+		backend.Verify(x => x.SendAsync(It.IsAny<string>(), It.IsAny<System.Text.Json.Nodes.JsonObject?>(), It.IsAny<TimeSpan?>(), It.IsAny<CancellationToken>()), Times.Never);
 	}
 
 	[Fact]

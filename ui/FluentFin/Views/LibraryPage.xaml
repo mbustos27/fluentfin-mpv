@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <!--
     Classic: the Library. Nixie 1.4.0 (the UX review's items 2, 8, 12, 13 and 4): the library's name and count, the shared
     toolbar (Unwatched, Sort with its direction in words, the direction, Filter, View); the filters on as chips with what is
@@ -84,6 +84,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -126,16 +127,24 @@
         </Grid>
 
         <!--  Nixie 1.4.0 (item 2): what is filtered, "Showing 223 of 320 movies · Unwatched ✕ · Clear all"  -->
+        <!--  1.6 colpage (LB2, LB3, LB5): the presets strip, Classic's chips (All · Unwatched · Favorites · Recently added · Nixie's)  -->
+        <lc:LibraryPresetStrip
+            x:Name="PresetStrip"
+            Grid.Row="1"
+            Margin="0,0,0,12"
+            ViewModel="{x:Bind ViewModel}"
+            Visibility="{x:Bind local:LibraryPage.BarVisibility(ViewModel.State.Status), Mode=OneWay}" />
+
         <lc:AppliedFilterRow
             x:Name="AppliedFilters"
-            Grid.Row="1"
+            Grid.Row="2"
             Margin="0,0,0,12"
             ViewModel="{x:Bind ViewModel}" />
 
         <!--  Nixie 1.4.0 (item 13): the A to Z, or the sort's directions; while loading its placeholder keeps its height  -->
         <Grid
             x:Name="LetterRow"
-            Grid.Row="2"
+            Grid.Row="3"
             Margin="0,0,0,12">
             <lc:LetterBar x:Name="Letters" ViewModel="{x:Bind ViewModel}" />
             <ctkl:Shimmer
@@ -153,7 +162,7 @@
             back in lands on the last-focused card; a focused card is scrolled clear of the edges; the wheel anywhere on the
             page scrolls the grid. Nixie 1.4.0: letters typed on a card go to the first title they start.
         -->
-        <ScrollView x:Name="GridScroller" Grid.Row="3">
+        <ScrollView x:Name="GridScroller" Grid.Row="4">
             <lc:RowList
                 x:Name="GridList"
                 HorizontalContentAlignment="Stretch"
@@ -185,7 +194,7 @@
         <!--  Nixie 1.4.0 (item 13): while loading, placeholders laid out by a copy of the grid's own layout (LibrarySkeleton.Mirror)  -->
         <ItemsRepeater
             x:Name="SkeletonRepeater"
-            Grid.Row="3"
+            Grid.Row="4"
             AutomationProperties.AccessibilityView="Raw"
             IsHitTestVisible="False"
             ItemTemplate="{StaticResource SkeletonCardTemplate}"
@@ -198,11 +207,11 @@
 
         <!--  fluentfin-mpv: the library failed to load or is empty (docs/research/ux-review.md §3.11)  -->
         <lc:LoadStateView
-            Grid.Row="3"
+            Grid.Row="4"
             VerticalContentAlignment="Center"
             State="{x:Bind ViewModel.State}" />
 
         <!--  Nixie 1.4.0 (item 2): a filter that leaves nothing says so  -->
-        <lc:LibraryNoMatchesView Grid.Row="3" ViewModel="{x:Bind ViewModel}" />
+        <lc:LibraryNoMatchesView Grid.Row="4" ViewModel="{x:Bind ViewModel}" />
     </Grid>
 </Page>

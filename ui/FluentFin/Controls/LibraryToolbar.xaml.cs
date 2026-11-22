@@ -1,4 +1,4 @@
-using CommunityToolkit.WinUI;
+﻿using CommunityToolkit.WinUI;
 using FluentFin.Core.ViewModels;
 using Jellyfin.Sdk.Generated.Models;
 using Microsoft.UI.Xaml;
@@ -7,8 +7,8 @@ using Microsoft.UI.Xaml.Controls;
 namespace FluentFin.Controls;
 
 /// <summary>
-/// Nixie 1.4.0: the library's toolbar, the same parts in every theme (see LibraryToolbar.xaml): Unwatched in one click, Sort
-/// with its direction in words, the direction in one click, Filter, and View.
+/// Nixie 1.4.0: the library's toolbar, the same parts in every theme (see LibraryToolbar.xaml): Unwatched in one click (1.6:
+/// only without the presets strip), Sort with its direction in words, the direction in one click, Filter, and View.
 /// </summary>
 public sealed partial class LibraryToolbar : UserControl
 {
@@ -27,9 +27,16 @@ public sealed partial class LibraryToolbar : UserControl
 	[GeneratedDependencyProperty]
 	public partial Style? IconButtonStyle { get; set; }
 
-	/// <summary>Editorial: Favorites is a switch beside Unwatched too.</summary>
+	/// <summary>Favorites is a switch beside Unwatched too (with <see cref="ShowSwitches"/>).</summary>
 	[GeneratedDependencyProperty]
 	public partial bool ShowFavorites { get; set; }
+
+	/// <summary>
+	/// 1.6 colpage (LB2): the Unwatched (and Favorites) switches show only on a page without the presets strip, whose
+	/// Unwatched and Favorites are the same filters (two controls for one filter on one screen was LB2).
+	/// </summary>
+	[GeneratedDependencyProperty]
+	public partial bool ShowSwitches { get; set; }
 
 	/// <summary>Cinematic: View also offers stills or posters.</summary>
 	[GeneratedDependencyProperty]
@@ -53,7 +60,15 @@ public sealed partial class LibraryToolbar : UserControl
 
 	partial void OnIconButtonStyleChanged(Style? newValue) => ApplyStyles();
 
-	partial void OnShowFavoritesChanged(bool newValue) => FavoritesToggle.Visibility = newValue ? Visibility.Visible : Visibility.Collapsed;
+	partial void OnShowFavoritesChanged(bool newValue) => ShowSwitchesNow();
+
+	partial void OnShowSwitchesChanged(bool newValue) => ShowSwitchesNow();
+
+	private void ShowSwitchesNow()
+	{
+		UnwatchedToggle.Visibility = ShowSwitches ? Visibility.Visible : Visibility.Collapsed;
+		FavoritesToggle.Visibility = ShowSwitches && ShowFavorites ? Visibility.Visible : Visibility.Collapsed;
+	}
 
 	private void ApplyStyles()
 	{

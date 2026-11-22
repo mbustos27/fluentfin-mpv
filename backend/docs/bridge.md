@@ -842,6 +842,52 @@ times are held to 0 .. 2^63-1 ticks (`bridge_protocol.MAX_TICKS`), a C#
 none or with `set_controls` `"ui"`), for the Skip button and prompt of the
 bar mpv draws (section 4a); written on change and again for a new mpv.
 
+**Skip rules** (1.6 skip, BRIDGE.md sections 4 and 5). `skip_rules.py` keeps
+`skip-rules.json` (rules, the one-seek learned intros with 1.5.1's "moves",
+candidates, refusals; keyed `<server>:<user>:<series>`, the account set at
+`connect` by `bridge_skip.account_connected`, which also migrates
+`learned-intros.json` once). `intro_sources.augment` adds a show's rules as
+segments with source `rule` and their own `action` (`player.update` reads the
+segment's action before the type's). `skip_rules.SkipWatcher` replaces 1.4's
+`SkipLearner` on the monitor tick: seeks one after another are one skip
+(`BURST_GAP`), two matching skips in two episodes queue a `skip_suggestion`,
+and a seek within 15 s after the app skipped a start rule corrects it.
+`skip_snap.Snapper` starts a worker per rule segment near its edge: it waits
+for mpv's demuxer cache to hold the edge's few seconds, `dump-cache`s them to
+a temporary file, runs a windowless, silent mpv (`--vo=null --ao=null`, its
+own process, ended by its own handle on a timeout) with `blackdetect` and
+`silencedetect` over it, and moves the edge; the file is deleted at once.
+The dumps live under `<temp>/nixie-snap/<config tag>/nixie-snap-*`;
+the Snapper sweeps that folder as the bridge starts, ends its analysers
+(own Popen handles) when playback stops, and `Bridge.stop` and `atexit`
+close it. Nothing is read from the server for it. The four commands are in
+`bridge_skip.py`.
+
+<!-- 1.6 player -->
+**Quality and Playback stats** (1.6, BRIDGE.md sections 4 and 5;
+`quality.py`). A choice is the shim's own quality override,
+`media.Video.trs_ovr`, the one its gear menu writes, so `set_quality` is
+that menu's restart (`restart_playback`, on the play worker): the same
+viewing at mpv's position, put back by `_restart_not_taken` when it finds
+no stream. Unlike the menu it never forces a transcode: a cap is
+`(kbps, False)`, the profile's MaxStreamingBitrate, which the server
+compares with the file (jellyfin-web's rule), and Original is
+`(ORIGINAL_KBPS, False)`, the shim's own no-cap value. Auto is no override,
+the shim's settings as before. The account's policy comes from `connect`'s
+`Users/Me` answer, cached where `user_policy.policy_for` looks
+(`quality.remember_policy`): a cap under the file's bitrate for an account
+without `EnableVideoPlaybackTranscoding` is refused without a request, and a
+cap the server then sends the file over anyway reads Original; both are a
+non-fatal `error` `not_allowed` in plain words. `set_quality_defaults` is
+held in `quality.DEFAULTS` and applied by the `play()` hook at a video's
+first start only (`quality.apply_default`, which marks the video), by
+`Media.is_local`. The `stream` event (`Tracker._stream`) follows `next`
+for a new item and is sent again on change once nothing negotiates, as
+`tracks` is. `get_stats` reads mpv's properties on the control worker,
+without the player's lock, and only when asked; the monitor never reads
+them (`GetStatsTest.test_mpv_is_read_only_when_asked`).
+<!-- end 1.6 player -->
+
 ## 6. Testing
 
 Unit tests, no mpv (stdlib unittest, select with `-k`):

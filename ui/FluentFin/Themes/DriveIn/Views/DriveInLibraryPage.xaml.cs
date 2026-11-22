@@ -1,4 +1,4 @@
-using FluentFin.Controls;
+﻿using FluentFin.Controls;
 using FluentFin.Core.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -65,6 +65,14 @@ public sealed partial class DriveInLibraryPage : Page
 		};
 		ShowView();
 
+		ViewModel.State.PropertyChanged += (_, e) =>
+		{
+			if (e.PropertyName == nameof(LoadState.Status))
+			{
+				ShowPresets();
+			}
+		};
+
 		// the header's strip of sky follows its size; the page's margins follow the window's width
 		Header.SizeChanged += (_, e) => Sky.Layout = Controls.DriveInLayout.Strip(e.NewSize.Width, e.NewSize.Height);
 		SizeChanged += (_, e) =>
@@ -98,13 +106,21 @@ public sealed partial class DriveInLibraryPage : Page
 		};
 	}
 
+	/// <summary>1.6 colpage: the presets fold away with the sky (the band is the marquee, the tubes and the A to Z), and wait for the titles.</summary>
+	private void ShowPresets() =>
+		PresetStrip.Visibility = _band || ViewModel.State.Status != LoadStatus.Loaded ? Visibility.Collapsed : Visibility.Visible;
+
+	/// <summary>The band's top: 8 under the 48 px bar (the band is a compact strip, not a title).</summary>
+	public const double BandTop = 56;
+
 	/// <summary>The header at rest (the large marquee) or as a band (the compact one, smaller tubes, tighter rows).</summary>
 	private void Fold(bool band)
 	{
 		_band = band;
-		// the marquee at the theme's title y (56: it clears the top bar the strip runs under)
-		HeaderContent.Padding = new Thickness(_margin, PageGrid.Tokens().TitleY, _margin, band ? 10 : 18);
+		// the marquee at the theme's title y at rest (1.6 colpage, L2: 88, 40 under the bar it runs under); the band keeps 56
+		HeaderContent.Padding = new Thickness(_margin, band ? BandTop : PageGrid.Tokens().TitleY, _margin, band ? 10 : 18);
 		HeaderContent.RowSpacing = band ? 10 : 22;
+		ShowPresets();
 		TitleSign.Style = (Style)Application.Current.Resources[band ? "DriveInCompactMarqueeStyle" : "DriveInLargeMarqueeStyle"];
 		CountTubes.DigitHeight = band ? 28 : 40;
 	}

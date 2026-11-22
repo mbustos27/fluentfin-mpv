@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <!--
     Nixie 1.4.0 (the UX review's X4, X5, X13; items 2, 8 and 13): the library's toolbar in every theme, in one order: the
     one-click Unwatched switch, Sort (the key and its direction in words, "Date added · newest first"), the direction in one
@@ -43,8 +43,10 @@
         x:Name="Bar"
         Orientation="Horizontal"
         Spacing="8">
+        <!--  1.6 colpage (LB2): the switches only where a page has no presets strip (ShowSwitches); every theme has the strip now  -->
         <ToggleButton
             x:Name="UnwatchedToggle"
+            Visibility="Collapsed"
             AutomationProperties.Name="{x:Bind local:LibraryToolbar.UnwatchedName(ViewModel.UnwatchedCount), Mode=OneWay}"
             IsChecked="{x:Bind ViewModel.Filter.Unwatched, Mode=TwoWay}"
             Style="{StaticResource NixieChipToggleButtonStyle}"

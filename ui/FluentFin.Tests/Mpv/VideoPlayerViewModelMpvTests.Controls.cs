@@ -54,8 +54,12 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		var args = _backend.Args("set_skip_options");
 		Assert.Equal(online, (bool)args["onlineLookup"]!);
 		Assert.Equal(learn, (bool)args["learnIntros"]!);
+		// 1.6 skip: learnSkips (the same switch), the server's ads and previews, the rules' default; Settings' defaults
+		Assert.Equal(learn, (bool)args["learnSkips"]!);
+		Assert.Equal("ask", (string)args["segmentActions"]!["Commercial"]!);
+		Assert.Equal("ask", (string)args["ruleAction"]!);
 		// nothing else: no server, user, token or path rides along
-		Assert.Equal(2, args.Count);
+		Assert.Equal(["learnIntros", "learnSkips", "onlineLookup", "ruleAction", "segmentActions"], args.Select(x => x.Key).Order());
 	}
 
 	/// <summary>
@@ -225,6 +229,37 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		await controls.SkipSegment();
 		Assert.Equal("skip_segment", _backend.Commands[^1]);
 		Assert.False(controls.IsSkipVisible);
+	}
+
+	/// <summary>
+	/// 1.6 skip: the backend's skip_suggestion reaches the controls ("Skip this every episode?"), and its Yes goes back to the
+	/// backend through the page (answer_skip_suggestion). In the first harness run it was filtered out on the way.
+	/// </summary>
+	[Fact]
+	public async Task FluentFinControls_AskSkipThisEveryEpisode_AndAnswerTheBackend()
+	{
+		var episode = Movie();
+		_client.Setup(x => x.GetItem(episode.Id!.Value)).ReturnsAsync(episode);
+		var vm = CreateViewModelWithControls(use: true);
+		await vm.OnNavigatedTo(episode);
+		var controls = vm.MpvControls!;
+		var id = episode.Id!.Value.ToString("N");
+
+		vm.OnMpvEvent(vm.MpvGeneration, new BridgeEvent("item", new JsonObject { ["itemId"] = id, ["name"] = "Pilot", ["type"] = "Episode", ["seriesName"] = "Spike Show" }));
+		await PushState(vm, "playing", episode.Id.Value);
+		vm.OnMpvEvent(vm.MpvGeneration, new BridgeEvent("skip_suggestion", JsonNode.Parse($$"""
+			{"id": "c0123456789ab", "itemId": "{{id}}", "seriesId": "abababababababababababababababab", "seriesName": "Spike Show",
+			 "anchor": "start", "startTicks": 30000000, "endTicks": 420000000}
+			""")));
+		await Task.Yield();
+
+		Assert.True(controls.IsSuggestionVisible);
+		Assert.Equal("0:03–0:42 in every episode of Spike Show", controls.SuggestionDetail);
+
+		await controls.AnswerSuggestion("yes");
+		Assert.Equal("answer_skip_suggestion", _backend.Commands[^1]);
+		Assert.Equal("yes", (string)_backend.Args("answer_skip_suggestion")["answer"]!);
+		Assert.False(controls.IsSuggestionVisible);
 	}
 
 	[Fact]
