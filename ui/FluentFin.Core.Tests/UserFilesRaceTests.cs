@@ -53,10 +53,12 @@ public sealed class UserFilesRaceTests : IDisposable
 	{
 		var root = HomeAndLibraryXamlTests.RepoRoot;
 		var index = File.ReadAllText(Path.Combine(root, "FluentFin.Core", "SmartCollections", "LibraryIndex.cs"));
-		var read = index[index.IndexOf("private Task<IndexSnapshot?> Read(string key)", StringComparison.Ordinal)..];
-		read = read[..read.IndexOf("private async Task<IndexSnapshot?> ReadFromServer(", StringComparison.Ordinal)];
-		Assert.Contains("var since = _files.Generation;", read);
-		Assert.True(read.IndexOf("var since = _files.Generation;", StringComparison.Ordinal) < read.IndexOf("Task.Run(() => ReadFromServer(key, url, user, since, cancellation)", StringComparison.Ordinal));
-		Assert.Contains("await _files.Write(key, ToJson(snapshot), _homeCache.LoginKey(url, user), since).ConfigureAwait(false);", index);
+		var read = index[index.IndexOf("private Task<IndexSnapshot?> Read(string key, ReadKind kind = ReadKind.Whole)", StringComparison.Ordinal)..];
+		read = read[..read.IndexOf("private async Task ReadFromServer(", StringComparison.Ordinal)]; // 1.7.1: the read's first index is a task of its own
+		Assert.Contains("since = _files.Generation;", read);
+		Assert.True(read.IndexOf("since = _files.Generation;", StringComparison.Ordinal) < read.IndexOf("Task.Run(() => ReadFromServer(key, kind, url, user, since, previous, begun, firstIn, cancellation)", StringComparison.Ordinal));
+		Assert.Contains("var login = _homeCache.LoginKey(url, user);", index); // 1.7.1: saved behind the index it says is in
+		Assert.Contains("_files.Write(key, ToJson(snapshot), login, since)", index);
+		Assert.Contains("}, _homeCache.LoginKey(url, user), since);", read); // 1.7.1 review M2: the note of its last read, too
 	}
 }

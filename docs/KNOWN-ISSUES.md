@@ -146,6 +146,59 @@ runs post keys and cannot move the real cursor or hear sound).
   - Sign in again mid-playback on the owner's server: never tested by us (the server isn't ours, and ending a sign-in
     there is the owner's to do); not run, for the owner.
 
+## Nixie 1.7.1: the library index on a big server
+- **Fixed** (stream I, `wip/171-index`): "Nixie is reading your libraries" took minutes. On the owner's server (this
+  PC's 1.6.1 log: 34,001 titles in 23 libraries) the index took 1,198 s, one page after another (pages sized for 2 s
+  each, so ~275 titles a request there), and it was read again at every start and after any library change; 1.7.0's
+  new index format threw the 1.6 index away. Now the saved index (1.6's too) shows at once and is read again behind it
+  only when stale; pages of 1,000 come two at a time; a first read shows rows as its pages come.
+- **Not measured on a big remote server.** The numbers are the throwaway 25,736-film instance on this PC (loopback,
+  synthetic films with no people, tags or studios): titles 3.0 s and people 5.2 s for a first read. A real server with
+  full metadata answers each page much more slowly (the owner's took ~3 s for ~275 titles); there the first read is
+  still minutes, but it shows its first rows after the first page, says how far it has got, and happens once.
+- **The daily refresh is still the whole library**, titles and people, in the background (two pages at a time). A
+  change between two refreshes is read only when the server's check (how many films and shows, and the newest one
+  added) differs: an edited tag, a new poster or a title watched on another device waits for the daily refresh or R.
+  A change the check confirms reads the titles only (review M2): a film added then has no actors or directors until the
+  daily refresh or R.
+- **A people pass closed midway starts again from its first page** (review M2 saved the titles before it, not its own
+  pages): on the owner's server (682 s of people in 1.6.1's log) a Nixie never left open that long never finishes it.
+  It is tried at most once an hour, counted across restarts; the people the index had are kept meanwhile.
+- **A page Nixie gave up on may still run on the server** (review M3): after 45 s the request is cancelled on this PC,
+  but Jellyfin may finish it anyway. A page that ran out of time halves the pages after it (never below 250, kept on this
+  PC for the next read), and three quick full pages in a row double them again, up to 1,000.
+- **The Collections page's first row waits for the server's box sets** (`GetBoxSets`, which asks each box set's
+  ChildCount): ~700 ms for 492 box sets on the throwaway instance, likely seconds on a big server. The saved index's
+  collections are made meanwhile; keeping the box sets with the saved index would take the wait away.
+- **Pages at fixed offsets:** a film added or removed on the server during a read can move one title across two pages:
+  a repeat is dropped (by id); a title skipped that way comes at the next read.
+- **The people pass still asks each title's whole cast** (Jellyfin's `People` field has no limit); Nixie keeps the
+  directors and the first five actors. It now runs after the titles are in and saved, with no images or user data.
+- **A first read that stops part way starts again from its first page** at the next ask, at once (BH-171-m1): the
+  page now says "Nixie couldn't finish reading your libraries. It will try again next time." under the rows it made,
+  but the pages read so far are not kept and there is no back-off between tries.
+- **The server's check counts every film and show of the user**, in libraries the index skips too (BH-171-m5): Jellyfin's
+  `/Items` takes one `ParentId`, so asking per indexed library would be one request per library (23 on the owner's
+  server) instead of one. A change in a skipped library reads the titles of the indexed ones.
+- **For 1.7.2** (the 1.7.1 bug hunt, `BH-171-*`):
+  - m3: the people pass runs with the Actors and Directors kinds off, and nothing turns the index off.
+  - m4: when the reading line goes, every row moves up 40 px under the keyboard focus and the pointer (four themes).
+  - m5: a library that changes every day (most big servers) still means a titles read about once a start; read only
+    what was added since the saved newest (`MinDateCreated`) instead.
+  - q1: the reading line has no total until every library's first page is in (84 s at 3-10 s a request, 23 libraries).
+  - M1's other half: a first read whose played-episodes request fails keeps no plays until the next read.
+- **Fixed before the build (1.7.1 blocker, review and bug hunt, 2026-11-22):** the Collections page's first read was over
+  before its Made by Nixie rows were in (a race a cold start lost; the rows came a moment later); rows that stayed kept
+  their first page's collections through the whole read (M1); a read again was saved only after its people, so closing
+  Nixie mid-read read every title again at the next start, and the once-an-hour limit was forgotten at each start (M2);
+  people pages stayed at 1,000 after timing out (M3; with the app's client the timeout was never even seen); a library
+  change's read dated the index anew, so the day's read of the people never came; R during a read read everything again
+  after it; new outside lists brought back a stopped first read's reading line. From the bug hunt: a refresh whose
+  played episodes failed saved no plays (BH-171-M1); a read whose check failed was read again at every start, and the
+  check had no time limit (m5); a switch of user during the saved index's disk read gave it to the new user (m6); a late
+  ask after a sign-out read with the ended sign-in (m7); a refused page was tried three times (q3); the first Made by
+  Nixie rows' time is logged (q2).
+
 ## Nixie 1.7.0: Discover
 - **Merged** (2026-11-22, `wip/rel-1.7.0` from 1.6.1's build commit `9a50a01`): keyless (`0d0c8eb`), upnav (`7a83843`),
   trending (`4bbf744`), then `main` twice (1.6.1 as released, its Sandbox line and the roadmap). main's 1.6.1 is a

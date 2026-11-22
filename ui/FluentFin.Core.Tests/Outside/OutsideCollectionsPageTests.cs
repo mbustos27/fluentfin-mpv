@@ -58,10 +58,7 @@ public sealed class OutsideCollectionsPageTests : IDisposable
 	{
 		OutsideListsSnapshot.Shared = OutsideListsSnapshot.Empty;
 		_homeCache.Dispose();
-		if (Directory.Exists(_folder))
-		{
-			Directory.Delete(_folder, recursive: true);
-		}
+		TestFolder.Delete(_folder); // 1.7.1: the index's people pass may still be saving behind a test that ended
 	}
 
 	private static BaseItemDto Film(string name, int year, string tmdb) => new()

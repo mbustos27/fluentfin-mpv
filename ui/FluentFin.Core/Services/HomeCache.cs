@@ -126,6 +126,7 @@ public sealed class HomeCache : IDisposable
 	/// </summary>
 	public void SignedIn(string serverUrl, Guid userId, string? serverId, string? userName)
 	{
+		SigningIn?.Invoke(serverUrl, userId); // 1.7.1 (BH-171-m7): the library index asks again
 		var key = Key(serverUrl, userId);
 		lock (_lock)
 		{
@@ -308,6 +309,9 @@ public sealed class HomeCache : IDisposable
 	// 1.6 collections: what else is kept per server and user (the library index, the saved collections) goes with the home page
 	/// <summary>Nixie 1.6: a user signs out (<see cref="Forget"/>): their server address and id.</summary>
 	public event Action<string, Guid>? Forgetting;
+
+	/// <summary>Nixie 1.7.1 (BH-171-m7): a user signs in (the server and the user): what a sign-out stopped may ask again.</summary>
+	public event Action<string, Guid>? SigningIn;
 
 	/// <summary>Nixie 1.6: a saved login is removed (<see cref="ForgetLogin"/>): the login as <see cref="LoginKey"/> writes it.</summary>
 	public event Action<string>? ForgettingLogin;

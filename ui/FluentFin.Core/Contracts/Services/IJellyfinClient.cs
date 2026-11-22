@@ -107,6 +107,9 @@ namespace FluentFin.Core.Contracts.Services
 		/// <summary>Nixie 1.6: the same page with People only (its own pass: People cost about 3.5 times the index).</summary>
 		Task<BaseItemDtoQueryResult?> GetLibraryPeoplePage(BaseItemDto library, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken);
 
+		/// <summary>Nixie 1.7.1: how many films and shows the user has and the newest one added ("25736:&lt;id&gt;"), to tell whether the saved index is current; null when not known.</summary>
+		Task<string?> GetIndexCheck(CancellationToken cancellationToken);
+
 		/// <summary>Nixie 1.6: the user's played episodes, latest first (each with its show and when it was played).</summary>
 		Task<BaseItemDtoQueryResult?> GetPlayedEpisodesPage(int startIndex, int limit, bool withTotal, CancellationToken cancellationToken);
 

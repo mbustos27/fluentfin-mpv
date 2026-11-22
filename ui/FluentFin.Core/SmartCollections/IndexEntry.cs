@@ -185,4 +185,39 @@ public sealed record IndexSnapshot(
 	DateTimeOffset ReadAt)
 {
 	public static IndexSnapshot Empty { get; } = new([], [], new Dictionary<Guid, SeriesPlays>(), false, DateTimeOffset.MinValue);
+
+	// 1.7.1 (the index on a big server)
+	/// <summary>What the server's check said when this index was read (<see cref="Contracts.Services.IJellyfinClient.GetIndexCheck"/>); null when not known.</summary>
+	public string? Check { get; init; }
+
+	/// <summary>A first read on its way: the titles read so far, and how far it has got; null for a whole index.</summary>
+	public IndexProgress? Reading { get; init; }
+
+	/// <summary>
+	/// Review M2: this index's own people pass is still to come (the people it has are lent from the index before it, for the
+	/// titles that one had). Saved, so that a read closed before its people pass reads only the people at a later start.
+	/// </summary>
+	public bool PeopleDue { get; init; }
+
+	/// <summary>
+	/// BH-171-m6: whose index this is (the server and user, <see cref="Services.HomeCache.FileKey"/>): what is made of it is
+	/// made for them, whoever is signed in by then.
+	/// </summary>
+	public string? Key { get; init; }
+	// end 1.7.1
+}
+
+/// <summary>Nixie 1.7.1: how far a first read of the index has got: titles read, of how many (null until every library's count is in).</summary>
+public sealed record IndexProgress(int Read, int? Total, IndexKind? Only)
+{
+	/// <summary>"12,000 of 25,736 films", "300 of 1,200 titles", "12,000 films": what the reading line says.</summary>
+	public string Text
+	{
+		get
+		{
+			var noun = Only switch { IndexKind.Movie => "films", IndexKind.Series => "shows", _ => "titles" };
+			var read = Read.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
+			return Total is { } total ? $"{read} of {total.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)} {noun}" : $"{read} {noun}";
+		}
+	}
 }

@@ -16,12 +16,40 @@ namespace FluentFin.Core.SmartCollections;
 /// their own (they cost about 3.5 times the index), then the played episodes (no show carries a last-played date). Kept per
 /// server and user like <see cref="HomeCache"/>, in memory and in the data folder; read again when the server reports a
 /// library change, on R, and once a day; forgotten when the user signs out or the saved login is removed.
+/// <para>
+/// Nixie 1.7.1 (the index on a big server: 1,198 s on the owner's 34,001 titles, at every start): the saved index shows at
+/// once and is read again in the background only when it is stale: a day old, R, an index without its people or of an older
+/// format, or a library change the server's check (<see cref="IJellyfinClient.GetIndexCheck"/>: one request of one title)
+/// confirms, at most once an hour. Pages come two at a time (<see cref="IndexPages"/>); a first read shows its rows as its
+/// pages come (<see cref="IndexSnapshot.Reading"/>, <see cref="Progress"/>) and is in, and saved, before its people pass.
+/// </para>
+/// <para>
+/// 1.7.1 review (M2): a read again is saved before its people pass too, the people it had lent to its titles
+/// (<see cref="IndexSnapshot.PeopleDue"/>); an index whose people are lent or missing reads only its people again; a library
+/// change the check confirms reads only the titles (the people lent); and when a read last began is kept on this PC, so the
+/// once-an-hour limit holds across restarts. M3: the page sizes a slow server's timeouts left are kept with it.
+/// </para>
 /// </summary>
 public sealed class LibraryIndex : IDisposable
 {
 	public static readonly TimeSpan FreshFor = TimeSpan.FromDays(1);
 
+	// 1.7.1 (the index on a big server)
+	/// <summary>A library change, an index without its people or of an older format: read again at most this often (R at once).</summary>
+	public static readonly TimeSpan ChangesReadAfter = TimeSpan.FromHours(1);
+
+	/// <summary>The server's check, at most this often.</summary>
+	public static readonly TimeSpan CheckEvery = TimeSpan.FromMinutes(5);
+
+	/// <summary>BH-171-m5: how long the server's check may take (it waited the client's 100 s, and outlived a sign-out).</summary>
+	public static readonly TimeSpan DefaultCheckTimeout = TimeSpan.FromSeconds(15);
+
+	/// <summary>A first read's rows, made again from its pages at most this often.</summary>
+	public static readonly TimeSpan PartialEvery = TimeSpan.FromSeconds(4);
+	// end 1.7.1
+
 	private const int FormatVersion = 2; // 1.7 keyless: 2 adds the Tmdb, Imdb and Tvdb ids (an older saved index is read again)
+	private const int OldestFormat = 1; // 1.7.1: a 1.6 index shows at once (without the outside ids) and is read again behind it
 
 	private readonly IJellyfinClient _client;
 	private readonly HomeCache _homeCache;
@@ -34,8 +62,39 @@ public sealed class LibraryIndex : IDisposable
 	private IndexSnapshot? _memory;
 	private bool _stale;
 	private string? _readingKey;
-	private Task<IndexSnapshot?>? _reading;
+	private Task? _reading; // 1.7.1: the whole read (its people too)
+	private Task<IndexSnapshot?>? _firstIn; // 1.7.1: the read's first whole index (before its people on a first read)
 	private CancellationTokenSource? _readingCancel;
+	// 1.7.1: why the saved index is read again, and how often
+	private bool _checkDue = true; // the server's check, once at the start and after each library change
+	private bool _oldFormat;
+	private DateTimeOffset _lastCheck = DateTimeOffset.MinValue;
+	private IndexSnapshot? _soFar; // a first read's titles so far
+	private ReadKind _readingKind;
+
+	// review M2, M3: per user, when a read last began and the page sizes it left; kept on this PC beside the index
+	private readonly UserFiles _readsFiles;
+	private readonly Dictionary<string, Reads> _reads = [];
+	private readonly Dictionary<string, Task> _readsLoading = []; // re-review (Minor): a second load waits for the first
+
+	// BH-171-m5: the check asked with an index read when the check didn't answer (its Check is null): what later checks are
+	// compared with, rather than a change every time
+	private (string Key, string Check)? _adoptedCheck;
+	private CancellationTokenSource _checkCancel = new();
+	private Task _checking = Task.CompletedTask;
+
+	// BH-171-m7: the user signed out (their key): nothing is read for them until the next sign-in
+	private string? _signedOut;
+
+	private sealed record Reads(DateTimeOffset LastRead, int TitlesPage, int PeoplePage);
+
+	/// <summary>What a read reads: every title and their people; the titles only (their people lent); the people only.</summary>
+	private enum ReadKind
+	{
+		Whole,
+		Titles,
+		People,
+	}
 
 	public LibraryIndex(IJellyfinClient client, HomeCache homeCache, KnownFolders folders, IObservable<IOutboundWebSocketMessage> serverMessages, ILogger<LibraryIndex> logger)
 		: this(client, homeCache, Path.Combine(folders.ApplicationData, "LibraryIndex"), serverMessages, logger, TimeProvider.System)
@@ -50,17 +109,94 @@ public sealed class LibraryIndex : IDisposable
 		_time = time;
 		_files = new UserFiles(folder, homeCache, logger);
 		_files.Deleted += Drop;
+		_readsFiles = new UserFiles(Path.Combine(folder, "Reads"), homeCache, logger); // review M2: forgotten with the index
+		// BH-171-m7: a sign-out ends the index's asking for that user (a late ask started a read with the ended sign-in), and
+		// the next sign-in starts it again
+		homeCache.Forgetting += (url, user) =>
+		{
+			lock (_lock)
+			{
+				_signedOut = HomeCache.FileKey(url, user);
+			}
+		};
+		homeCache.SigningIn += (_, _) =>
+		{
+			lock (_lock)
+			{
+				_signedOut = null;
+			}
+		};
 		_subscription = serverMessages.Subscribe(message =>
 		{
 			if (message is LibraryChangedMessage)
 			{
-				MarkStale();
+				MarkChanged(); // 1.7.1: checked, not read at once
 			}
 		});
 	}
 
-	/// <summary>A new index came in (from the server, or the saved one); raised off the UI thread.</summary>
+	/// <summary>
+	/// A new index came in (from the server, or the saved one); raised off the UI thread. 1.7.1: on a first read, also the
+	/// titles read so far as its pages come (<see cref="IndexSnapshot.Reading"/> says how far).
+	/// </summary>
 	public event EventHandler<IndexSnapshot>? Changed;
+
+	/// <summary>Nixie 1.7.1: a first read's progress, at each page (off the UI thread).</summary>
+	public event EventHandler<IndexProgress>? Progress;
+
+	/// <summary>Tests: awaited before the note of the last read is read from this PC (a test holds it there).</summary>
+	internal Func<Task>? ReadingNote { get; init; }
+
+	/// <summary>BH-171-m5: how long the server's check may take (tests shorten it).</summary>
+	internal TimeSpan CheckTimeout { get; init; } = DefaultCheckTimeout;
+
+	/// <summary>BH-171-m5: the server's check running now (tests wait for it); done when there is none.</summary>
+	internal Task Checking
+	{
+		get
+		{
+			lock (_lock)
+			{
+				return _checking;
+			}
+		}
+	}
+
+	// BH-171-m7: the signed-in user signed out, and nobody has signed in since
+	private bool SignedOut
+	{
+		get
+		{
+			lock (_lock)
+			{
+				return _signedOut is { } key && key == CurrentKey;
+			}
+		}
+	}
+
+	/// <summary>Nixie 1.7.1: the read running now, its people pass too (tests wait for it); done when there is none.</summary>
+	internal Task Settled
+	{
+		get
+		{
+			lock (_lock)
+			{
+				return _reading ?? Task.CompletedTask;
+			}
+		}
+	}
+
+	/// <summary>Nixie 1.7.1: during a first read, its titles so far (a page opened meanwhile shows them); null otherwise.</summary>
+	public IndexSnapshot? ReadingSoFar
+	{
+		get
+		{
+			lock (_lock)
+			{
+				return _soFar is not null && (_memoryKey != CurrentKey || _memory is null) && _readingKey == CurrentKey && _reading is { IsCompleted: false } ? _soFar : null;
+			}
+		}
+	}
 
 	/// <summary>How long the last read took, for the log and the time-budget test.</summary>
 	public TimeSpan LastReadTook { get; private set; }
@@ -79,177 +215,511 @@ public sealed class LibraryIndex : IDisposable
 		}
 	}
 
-	/// <summary>The server reported a library change: the next <see cref="GetAsync"/> reads it again (the old one shows meanwhile).</summary>
+	/// <summary>R: the next <see cref="GetAsync"/> reads the index again (the old one shows meanwhile).</summary>
 	public void MarkStale()
 	{
 		lock (_lock)
 		{
+			// review (Minor): R during a whole read of this user is answered by that read; it was kept and read it all again
+			// at the next visit
+			if (_reading is { IsCompleted: false } && _readingKey == CurrentKey && _readingKind == ReadKind.Whole)
+			{
+				return;
+			}
+
 			_stale = true;
 		}
 	}
 
 	/// <summary>
+	/// Nixie 1.7.1: the server reported a library change: the next <see cref="GetAsync"/> asks the server's check, and reads
+	/// the index again only when it changed (1.7.0 read the whole library at once, on a server whose library changes often).
+	/// </summary>
+	public void MarkChanged()
+	{
+		lock (_lock)
+		{
+			_checkDue = true;
+		}
+	}
+
+	/// <summary>
 	/// The index for the signed-in user: in memory, else the saved one, else read from the server now (null when that
-	/// failed). One that is stale (a day old, a library change, a saved one) is read again in the background, and
+	/// failed). 1.7.1: a saved one is read again in the background only when it is stale (<see cref="ReadAgainIfDue"/>), and
 	/// <see cref="Changed"/> says when it is in.
 	/// </summary>
 	public async Task<IndexSnapshot?> GetAsync(CancellationToken cancellationToken = default)
 	{
 		var key = CurrentKey;
+		if (SignedOut)
+		{
+			return null; // BH-171-m7
+		}
+
+		if (await SavedAsync().ConfigureAwait(false) is { } known)
+		{
+			return known;
+		}
+
+		return await Read(key).WaitAsync(cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// Nixie 1.7.1: the index in memory, else the saved one (read from this PC, never from the server), else null; a stale
+	/// one is read again in the background. What a page shows at once.
+	/// </summary>
+	public async Task<IndexSnapshot?> SavedAsync()
+	{
+		var key = CurrentKey;
 		IndexSnapshot? known;
-		bool stale;
 		lock (_lock)
 		{
 			known = _memoryKey == key ? _memory : null;
-			stale = _stale;
 		}
 
-		if (known is null && await Load(key).ConfigureAwait(false) is { } saved)
+		if (SignedOut)
 		{
+			return null; // BH-171-m7
+		}
+
+		if (known is null)
+		{
+			var watch = Stopwatch.StartNew();
+			var since = _files.Generation;
+			await LoadReads(key).ConfigureAwait(false); // review M2: when a read last began, before deciding on another
+			if (await Load(key).ConfigureAwait(false) is not { } saved)
+			{
+				return null;
+			}
+
+			var loaded = false;
 			lock (_lock)
 			{
+				// BH-171-m6: another user signed in, or this one out, while the file was read: it is not theirs to have
+				if (key != CurrentKey || _files.Generation != since)
+				{
+					return null;
+				}
+
 				if (_memoryKey != key || _memory is null)
 				{
 					(_memoryKey, _memory) = (key, saved);
+					loaded = true;
 				}
 
 				known = _memory;
 			}
 
-			Changed?.Invoke(this, saved);
-			stale = true; // a saved index is read again, whatever its age
+			if (loaded)
+			{
+				_logger.LogInformation("Library index: the saved one ({Titles} titles, read {Hours:0.0} h ago) in {Ms} ms from this PC",
+					saved.Entries.Count, (_time.GetUtcNow() - saved.ReadAt).TotalHours, watch.ElapsedMilliseconds);
+				Changed?.Invoke(this, saved);
+			}
 		}
 
-		if (known is null)
-		{
-			return await Read(key).WaitAsync(cancellationToken).ConfigureAwait(false);
-		}
-
-		if (stale || _time.GetUtcNow() - known.ReadAt > FreshFor)
-		{
-			_ = Read(key);
-		}
-
+		ReadAgainIfDue(key, known);
 		return known;
 	}
 
 	/// <summary>R: the index read again now; the one in memory stays until the new one is in.</summary>
-	public Task<IndexSnapshot?> RefreshAsync() => Read(CurrentKey);
+	public Task<IndexSnapshot?> RefreshAsync()
+	{
+		MarkStale();
+		return Read(CurrentKey, ReadKind.Whole);
+	}
 
-	// one read at a time per user; a read for another user cancels the one running
-	private Task<IndexSnapshot?> Read(string key)
+	/// <summary>
+	/// Nixie 1.7.1: the index read again in the background when it is stale: R; a day old; without its people or of an
+	/// older format (at most once an hour); or a library change the server's check confirms (the check at most every five
+	/// minutes, the read at most once an hour). Nothing when a read is running.
+	/// </summary>
+	private void ReadAgainIfDue(string key, IndexSnapshot known)
+	{
+		var now = _time.GetUtcNow();
+		ReadKind? due;
+		var check = false;
+		lock (_lock)
+		{
+			if (_reading is { IsCompleted: false } && _readingKey == key)
+			{
+				return;
+			}
+
+			// review M2: the people alone when only they are missing (a read closed, or failed, before its people pass)
+			due = _stale ? ReadKind.Whole
+				: ReadLately(key, now) ? null
+				: now - known.ReadAt > FreshFor || _oldFormat ? ReadKind.Whole
+				: !known.HasPeople || known.PeopleDue ? ReadKind.People
+				: null;
+			if (due is null && _checkDue && now - _lastCheck >= CheckEvery)
+			{
+				(check, _checkDue, _lastCheck) = (true, false, now);
+			}
+		}
+
+		if (due is { } kind)
+		{
+			_ = Read(key, kind);
+		}
+		else if (check)
+		{
+			_ = CheckAsync(key, known);
+		}
+	}
+
+	// whether a read of this user began within the hour (review M2: also before a restart). Re-review (Minor): a note dated
+	// after now (the clock moved back) is not "lately": it held every automatic read until the clock passed it
+	private bool ReadLately(string key, DateTimeOffset now) =>
+		_reads.TryGetValue(key, out var reads) && now - reads.LastRead is var age && age >= TimeSpan.Zero && age < ChangesReadAfter;
+
+	// the server's check against the one the index was read with: a change reads it again, at most once an hour
+	private Task CheckAsync(string key, IndexSnapshot known)
 	{
 		lock (_lock)
 		{
-			if (_reading is { IsCompleted: false } running && _readingKey == key)
+			return _checking = Check(_checkCancel.Token); // BH-171-m5: a sign-out ends it
+		}
+
+		async Task Check(CancellationToken signedIn)
+		{
+			try
+			{
+				await CheckOnce(key, known, signedIn).ConfigureAwait(false);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogInformation("Library index: the check failed: {Error}", ex.GetType().Name);
+			}
+		}
+	}
+
+	private async Task CheckOnce(string key, IndexSnapshot known, CancellationToken signedIn)
+	{
+		var watch = Stopwatch.StartNew();
+		string? now;
+		using (var limit = CancellationTokenSource.CreateLinkedTokenSource(signedIn))
+		{
+			limit.CancelAfter(CheckTimeout); // BH-171-m5: 15 s, not the client's 100
+			now = await _client.GetIndexCheck(limit.Token).ConfigureAwait(false);
+		}
+
+		if (now is null || key != CurrentKey || signedIn.IsCancellationRequested)
+		{
+			_logger.LogInformation("Library index: the server's check in {Ms} ms: no answer, nothing decided on it", watch.ElapsedMilliseconds);
+			return;
+		}
+
+		string? against;
+		lock (_lock)
+		{
+			against = known.Check ?? (_adoptedCheck is { } adopted && adopted.Key == key ? adopted.Check : null);
+			if (against is null)
+			{
+				// BH-171-m5: the index was read when the check didn't answer: nothing to compare with, so not a change (it read
+				// every title at the next start); this answer is what later checks are compared with
+				_adoptedCheck = (key, now);
+			}
+		}
+
+		var changed = against is not null && now != against;
+		_logger.LogInformation("Library index: the server's check in {Ms} ms: {Outcome}", watch.ElapsedMilliseconds,
+			against is null ? "not known before, kept to compare with" : changed ? "the libraries changed" : "unchanged");
+		if (!changed)
+		{
+			return;
+		}
+
+		lock (_lock)
+		{
+			if (_time.GetUtcNow() - known.ReadAt < ChangesReadAfter || ReadLately(key, _time.GetUtcNow()))
+			{
+				_checkDue = true; // read lately: checked again later
+				return;
+			}
+
+			// check of 69002e14: what the next check is compared with if this read's own check doesn't answer (the older answer
+			// made a change of one already read)
+			_adoptedCheck = (key, now);
+		}
+
+		_ = Read(key, ReadKind.Titles); // review (Minor): the titles; their people lent, read with the day's whole read
+	}
+
+	// one read at a time per user; a read for another user cancels the one running
+	private Task<IndexSnapshot?> Read(string key, ReadKind kind = ReadKind.Whole)
+	{
+		Reads reads;
+		string url;
+		Guid user;
+		long since;
+		Task<IndexSnapshot?> first;
+		lock (_lock)
+		{
+			if (_signedOut is { } gone && gone == key)
+			{
+				return Task.FromResult<IndexSnapshot?>(null); // BH-171-m7: signed out: nothing asked with the ended sign-in
+			}
+
+			if (key != CurrentKey)
+			{
+				// check of 69002e14: another user signed in since this was asked (m6's switch): it cancelled their read and read
+				// a whole index with their sign-in, to throw it away
+				return Task.FromResult<IndexSnapshot?>(null);
+			}
+
+			if (_reading is { IsCompleted: false } && _readingKey == key && _firstIn is { } running)
 			{
 				return running;
+			}
+
+			var previous = _memoryKey == key ? _memory : null;
+			if (previous is null)
+			{
+				kind = ReadKind.Whole; // nothing to lend people to, or to read the people of
 			}
 
 			_readingCancel?.Cancel();
 			_readingCancel = new CancellationTokenSource();
 			_readingKey = key;
+			_readingKind = kind;
 			_stale = false;
+			if (kind == ReadKind.Whole)
+			{
+				_oldFormat = false;
+			}
+
+			if (kind != ReadKind.People)
+			{
+				_checkDue = false; // its titles answer the check (the people alone don't)
+			}
+
 			var cancellation = _readingCancel.Token;
-			var url = _client.BaseUrl;
-			var user = _client.UserId;
-			var since = _files.Generation; // 1.6.1: a sign-out after this refuses the read's write-back
-			return _reading = Task.Run(() => ReadFromServer(key, url, user, since, cancellation), CancellationToken.None);
+			url = _client.BaseUrl;
+			user = _client.UserId;
+			since = _files.Generation; // 1.6.1: a sign-out after this refuses the read's write-back
+			reads = (_reads.GetValueOrDefault(key) ?? new Reads(DateTimeOffset.MinValue, IndexPages.PageSize, IndexPages.PageSize)) with { LastRead = _time.GetUtcNow() };
+			_reads[key] = reads;
+			var firstIn = new TaskCompletionSource<IndexSnapshot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+			_firstIn = first = firstIn.Task;
+			var begun = reads;
+			_reading = Task.Run(() => ReadFromServer(key, kind, url, user, since, previous, begun, firstIn, cancellation), CancellationToken.None);
+		}
+
+		return first;
+	}
+
+	// review M2, M3: when a read last began and the page sizes it left, on this PC (forgotten with the index on sign-out)
+	private Task KeepReads(string key, Reads reads, string url, Guid user, long since) =>
+		_readsFiles.Write(key, new JsonObject
+		{
+			["LastRead"] = reads.LastRead.ToString("O"),
+			["TitlesPage"] = reads.TitlesPage,
+			["PeoplePage"] = reads.PeoplePage,
+		}, _homeCache.LoginKey(url, user), since);
+
+	// re-review (Minor): one load per user; a second start-up ask waits for it (it went on without the note, and read)
+	private Task LoadReads(string key)
+	{
+		lock (_lock)
+		{
+			if (!_readsLoading.TryGetValue(key, out var loading))
+			{
+				_readsLoading[key] = loading = LoadReadsOnce(key);
+			}
+
+			return loading;
 		}
 	}
 
-	private async Task<IndexSnapshot?> ReadFromServer(string key, string url, Guid user, long since, CancellationToken cancellationToken)
+	private async Task LoadReadsOnce(string key)
 	{
-		var watch = Stopwatch.StartNew();
+		await Task.Yield(); // not under the caller's lock
+		if (ReadingNote is { } hold)
+		{
+			await hold();
+		}
+		if (await _readsFiles.Read(key).ConfigureAwait(false) is not { } saved)
+		{
+			return;
+		}
+
 		try
 		{
-			var snapshot = await ReadIndex(_client, _time, cancellationToken, _logger).ConfigureAwait(false);
-			if (snapshot is null || cancellationToken.IsCancellationRequested || key != CurrentKey)
-			{
-				return null;
-			}
-
-			LastReadTook = watch.Elapsed;
-			_logger.LogInformation("Library index: {Titles} titles in {Libraries} libraries, people {People}, {Seconds:0.0} s",
-				snapshot.Entries.Count, snapshot.Libraries.Count, snapshot.HasPeople, watch.Elapsed.TotalSeconds);
+			var kept = new Reads(DateTimeOffset.Parse((string)saved["LastRead"]!, System.Globalization.CultureInfo.InvariantCulture),
+				(int?)saved["TitlesPage"] ?? IndexPages.PageSize, (int?)saved["PeoplePage"] ?? IndexPages.PageSize);
 			lock (_lock)
 			{
-				(_memoryKey, _memory) = (key, snapshot);
+				if (!_reads.TryGetValue(key, out var now) || now.LastRead < kept.LastRead)
+				{
+					_reads[key] = kept;
+				}
+			}
+		}
+		catch (Exception ex) when (ex is FormatException or InvalidOperationException or ArgumentException)
+		{
+			_logger.LogInformation("Library index: ignoring a damaged note of its last read");
+		}
+	}
+
+	private async Task ReadFromServer(string key, ReadKind kind, string url, Guid user, long since, IndexSnapshot? previous, Reads reads,
+		TaskCompletionSource<IndexSnapshot?> firstIn, CancellationToken cancellationToken)
+	{
+		var watch = Stopwatch.StartNew();
+		bool Current() => !cancellationToken.IsCancellationRequested && key == CurrentKey;
+		var read = new IndexRead(_client, _time, _logger) { TitlesPageSize = reads.TitlesPage, PeoplePageSize = reads.PeoplePage, CheckTimeout = CheckTimeout };
+		try
+		{
+			await KeepReads(key, reads, url, user, since).ConfigureAwait(false); // review M2: a restart within the hour begins no other
+
+			if (kind == ReadKind.People && previous is not null)
+			{
+				// review M2: only the people are missing (a read closed, or failed, before its people pass): the titles stay
+				if (!await read.LibrariesOfAsync(previous).ConfigureAwait(false) || !Current())
+				{
+					firstIn.TrySetResult(null);
+					return;
+				}
+
+				await People(previous).ConfigureAwait(false);
+				return;
 			}
 
-			Changed?.Invoke(this, snapshot);
-			await _files.Write(key, ToJson(snapshot), _homeCache.LoginKey(url, user), since).ConfigureAwait(false);
-			return snapshot;
+			if (previous is null)
+			{
+				// a first read: its rows as its pages come, and how far it has got
+				read.Progress += progress => Progress?.Invoke(this, progress);
+				read.Partial += partial =>
+				{
+					if (Current())
+					{
+						partial = partial with { Key = key }; // BH-171-m6: whose it is
+						lock (_lock)
+						{
+							_soFar = partial;
+						}
+
+						Changed?.Invoke(this, partial);
+					}
+				};
+			}
+
+			var titles = await read.TitlesAsync(cancellationToken).ConfigureAwait(false);
+			if (titles is null || !Current())
+			{
+				firstIn.TrySetResult(null);
+				return;
+			}
+
+			titles = titles with { Key = key }; // BH-171-m6: whose it is
+			if (previous is not null)
+			{
+				// review M2: a read again lends the people it had to its titles: saved so, a closed app keeps the titles, and
+				// reads only the people at a later start. A library change's read (Titles) reads no people: the day's does
+				titles = IndexRead.Lend(titles, previous) with { PeopleDue = kind == ReadKind.Whole || previous.PeopleDue };
+				if (read.PlaysFailed)
+				{
+					// BH-171-M1: the played episodes didn't come: the plays it had stay (Unfinished series went until the next read)
+					titles = titles with { SeriesPlays = previous.SeriesPlays };
+				}
+
+				if (kind == ReadKind.Titles)
+				{
+					// re-review (Major B): a library change's read is not the day's: the index keeps the day's date, so the day's
+					// whole read (its people too) still comes on a server whose library changes every day
+					titles = titles with { ReadAt = previous.ReadAt };
+				}
+			}
+
+			// in, and saved, before the people pass (which costs about twice the titles): a closed app keeps it
+			_logger.LogInformation("Library index: the titles' read is in: {Titles} titles in {Libraries} libraries, people {People}, {Seconds:0.0} s",
+				titles.Entries.Count, titles.Libraries.Count, titles.HasPeople ? titles.PeopleDue ? "lent" : "kept" : "to come", watch.Elapsed.TotalSeconds);
+			await Publish(key, titles, url, user, since).ConfigureAwait(false); // shown at once (Changed), then saved
+			firstIn.TrySetResult(titles);
+			if (kind == ReadKind.Titles)
+			{
+				LastReadTook = watch.Elapsed;
+				return;
+			}
+
+			await People(titles).ConfigureAwait(false);
 		}
 		catch (OperationCanceledException)
 		{
-			return null;
+			firstIn.TrySetResult(null);
 		}
 		catch (Exception ex)
 		{
 			_logger.LogWarning(ex, "Library index: the read failed");
-			return null;
+			firstIn.TrySetResult(null);
+		}
+		finally
+		{
+			// review M3: the page sizes this read left (smaller after a page ran out of time), for the next one
+			if (read.TitlesPageSize != reads.TitlesPage || read.PeoplePageSize != reads.PeoplePage)
+			{
+				Reads kept;
+				lock (_lock)
+				{
+					kept = (_reads.GetValueOrDefault(key) ?? reads) with { TitlesPage = read.TitlesPageSize, PeoplePage = read.PeoplePageSize };
+					_reads[key] = kept;
+				}
+
+				await KeepReads(key, kept, url, user, since).ConfigureAwait(false);
+			}
+		}
+
+		// the people pass over these titles: the whole index; when it fails, the titles keep the people they have (none on a
+		// first read) and read them again later (review M2: an hour on, not at once)
+		async Task People(IndexSnapshot titles)
+		{
+			var whole = await read.PeopleAsync(titles, cancellationToken).ConfigureAwait(false);
+			if (!Current())
+			{
+				firstIn.TrySetResult(null);
+				return;
+			}
+
+			if (whole is null)
+			{
+				_logger.LogInformation("Library index: the people pass stopped after {Seconds:0.0} s: the people the index has are kept, and read again later", watch.Elapsed.TotalSeconds);
+				firstIn.TrySetResult(titles);
+				return;
+			}
+
+			LastReadTook = watch.Elapsed;
+			_logger.LogInformation("Library index: {Titles} titles in {Libraries} libraries, people {People}, {Seconds:0.0} s",
+				whole.Entries.Count, whole.Libraries.Count, whole.HasPeople, watch.Elapsed.TotalSeconds);
+			await Publish(key, whole, url, user, since).ConfigureAwait(false);
+			firstIn.TrySetResult(whole);
 		}
 	}
 
+	// in memory and said (at once), then saved (in the background: a 25,000-title index takes a moment to write)
+	private Task Publish(string key, IndexSnapshot snapshot, string url, Guid user, long since)
+	{
+		lock (_lock)
+		{
+			(_memoryKey, _memory) = (key, snapshot);
+			_soFar = null;
+		}
+
+		Changed?.Invoke(this, snapshot);
+		var login = _homeCache.LoginKey(url, user);
+		return Task.Run(() => _files.Write(key, ToJson(snapshot), login, since));
+	}
+
 	/// <summary>
-	/// The whole read: the media libraries, their index pages, the people pass and the played episodes. Null when the
+	/// The whole read: the media libraries, their index pages, the played episodes and the people pass. Null when the
 	/// libraries or an index page could not be read (the index in memory stays); a failed people or played pass leaves those
 	/// kinds out.
 	/// </summary>
 	internal static async Task<IndexSnapshot?> ReadIndex(IJellyfinClient client, TimeProvider time, CancellationToken cancellationToken, ILogger? log = null)
 	{
-		var views = await client.GetUserViewsOrNull().ConfigureAwait(false);
-		if (views is null)
-		{
-			return null;
-		}
-
-		var libraries = views.Where(v => v.Id is not null && JellyfinClient.IndexKinds(v) is not null).ToList();
-		var entries = new List<IndexEntry>();
-		var hasPeople = true;
-		foreach (var library in libraries)
-		{
-			cancellationToken.ThrowIfCancellationRequested();
-			var reader = new LibraryPageReader(library, (start, limit, total, ct) => client.GetLibraryIndexPage(library, start, limit, total, ct)) { Log = log };
-			if (await reader.ReadAllAsync(cancellationToken).ConfigureAwait(false) is not { } items)
-			{
-				return null;
-			}
-
-			var read = items.Select(x => IndexEntry.From(x, library.Id!.Value)).OfType<IndexEntry>().ToList();
-			// the people pass: directors and the first actors, by id
-			var peopleReader = new LibraryPageReader(library, (start, limit, total, ct) => client.GetLibraryPeoplePage(library, start, limit, total, ct)) { Log = log };
-			if (await peopleReader.ReadAllAsync(cancellationToken).ConfigureAwait(false) is { } withPeople)
-			{
-				var people = withPeople.Where(x => x.Id is not null).GroupBy(x => x.Id!.Value).ToDictionary(g => g.Key, g => IndexEntry.PeopleOf(g.First()));
-				read = [.. read.Select(x => people.TryGetValue(x.Id, out var p) ? x with { People = p } : x)];
-			}
-			else
-			{
-				hasPeople = false;
-			}
-
-			entries.AddRange(read);
-		}
-
-		var plays = new Dictionary<Guid, SeriesPlays>();
-		if (libraries.Any(l => l.CollectionType == BaseItemDto_CollectionType.Tvshows))
-		{
-			var played = new BaseItemDto { Name = "played episodes" };
-			var reader = new LibraryPageReader(played, (start, limit, total, ct) => client.GetPlayedEpisodesPage(start, limit, total, ct)) { Log = log };
-			if (await reader.ReadAllAsync(cancellationToken).ConfigureAwait(false) is { } episodes)
-			{
-				foreach (var show in episodes.Where(x => x.SeriesId is not null).GroupBy(x => x.SeriesId!.Value))
-				{
-					var last = show.Select(x => x.UserData?.LastPlayedDate).Where(x => x is not null).DefaultIfEmpty(null).Max();
-					plays[show.Key] = new SeriesPlays(show.Count(), last ?? DateTimeOffset.MinValue);
-				}
-			}
-		}
-
-		return new IndexSnapshot([.. libraries.Select(l => new IndexLibrary(l.Id!.Value, l.Name ?? "", l.CollectionType == BaseItemDto_CollectionType.Movies ? IndexKind.Movie : IndexKind.Series))],
-			entries, plays, hasPeople, time.GetUtcNow());
+		var read = new IndexRead(client, time, log);
+		return await read.TitlesAsync(cancellationToken).ConfigureAwait(false) is { } titles
+			? await read.PeopleAsync(titles, cancellationToken).ConfigureAwait(false) ?? titles
+			: null;
 	}
 
 	private void Drop()
@@ -258,8 +728,14 @@ public sealed class LibraryIndex : IDisposable
 		{
 			// a sign-out or a removed login: nothing kept in memory for anyone until the next read
 			_readingCancel?.Cancel();
+			_checkCancel.Cancel(); // BH-171-m5: the check too
+			_checkCancel = new CancellationTokenSource();
 			_memoryKey = null;
 			_memory = null;
+			_soFar = null;
+			_reads.Clear(); // review M2: their files go with the index's
+			_readsLoading.Clear();
+			_adoptedCheck = null;
 		}
 
 		Forgotten?.Invoke(this, EventArgs.Empty);
@@ -278,28 +754,40 @@ public sealed class LibraryIndex : IDisposable
 		["Libraries"] = JsonSerializer.SerializeToNode(snapshot.Libraries, Json),
 		["Entries"] = JsonSerializer.SerializeToNode(snapshot.Entries, Json),
 		["SeriesPlays"] = JsonSerializer.SerializeToNode(snapshot.SeriesPlays, Json),
+		["Check"] = snapshot.Check, // 1.7.1
+		["PeopleDue"] = snapshot.PeopleDue, // 1.7.1 review M2
 	};
+
+	// 1.7.1: the saved index read straight into its records (a 1.6.1 index of 34,001 titles is a 40 MB file)
+	private sealed record Saved(int Version, string ReadAt, bool HasPeople, List<IndexLibrary>? Libraries, List<IndexEntry>? Entries, Dictionary<Guid, SeriesPlays>? SeriesPlays, string? Check,
+		bool PeopleDue = false);
 
 	private async Task<IndexSnapshot?> Load(string key)
 	{
-		if (await _files.Read(key).ConfigureAwait(false) is not { } root)
+		if (await _files.ReadBytes(key).ConfigureAwait(false) is not { } bytes)
 		{
 			return null;
 		}
 
 		try
 		{
-			if (root["Version"]?.GetValue<int>() != FormatVersion)
+			var saved = await Task.Run(() => JsonSerializer.Deserialize<Saved>(bytes, Json)).ConfigureAwait(false);
+			if (saved is null || saved.Version is < OldestFormat or > FormatVersion)
 			{
 				return null;
 			}
 
-			return new IndexSnapshot(
-				root["Libraries"].Deserialize<List<IndexLibrary>>(Json) ?? [],
-				root["Entries"].Deserialize<List<IndexEntry>>(Json) ?? [],
-				root["SeriesPlays"].Deserialize<Dictionary<Guid, SeriesPlays>>(Json) ?? [],
-				root["HasPeople"]?.GetValue<bool>() == true,
-				DateTimeOffset.Parse(root["ReadAt"]!.GetValue<string>(), System.Globalization.CultureInfo.InvariantCulture));
+			if (saved.Version < FormatVersion)
+			{
+				lock (_lock)
+				{
+					_oldFormat = true; // 1.7.1: shown, and read again behind it
+				}
+			}
+
+			return new IndexSnapshot(saved.Libraries ?? [], saved.Entries ?? [], saved.SeriesPlays ?? [], saved.HasPeople,
+				DateTimeOffset.Parse(saved.ReadAt, System.Globalization.CultureInfo.InvariantCulture))
+			{ Check = saved.Check, PeopleDue = saved.PeopleDue, Key = key };
 		}
 		catch (Exception ex)
 		{
@@ -312,5 +800,6 @@ public sealed class LibraryIndex : IDisposable
 	{
 		_subscription.Dispose();
 		_readingCancel?.Cancel();
+		_checkCancel.Cancel();
 	}
 }

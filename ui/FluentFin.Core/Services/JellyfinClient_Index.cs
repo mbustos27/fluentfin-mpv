@@ -3,6 +3,15 @@ using Microsoft.Extensions.Logging;
 
 namespace FluentFin.Core.Services;
 
+/// <summary>
+/// Nixie 1.7.1 (BH-171-q3): the server refused an index page (401, 403): the read ends, with no other try (the sign-in
+/// watch already knows). Its message names the status only.
+/// </summary>
+public sealed class IndexRefusedException(int status) : Exception($"the server refused the library index's request (HTTP {status})")
+{
+	public int Status { get; } = status;
+}
+
 /// <summary>What the server answered a "Save as playlist": the new playlist's id, or why it said no.</summary>
 public sealed record PlaylistCreation(Guid? Id, int Status, string? Error)
 {
@@ -12,7 +21,7 @@ public sealed record PlaylistCreation(Guid? Id, int Status, string? Error)
 /// <summary>
 /// Nixie 1.6 (smart collections phase 1, docs\research\smart-collections-data.md): the requests behind the library index and
 /// the Collections page. An ordinary user's requests only; each is null (or empty) on a failure and never throws, except
-/// for cancellation where it takes a token.
+/// for cancellation where it takes a token, and (1.7.1) an index page the server refuses (<see cref="IndexRefusedException"/>).
 /// </summary>
 public partial class JellyfinClient
 {
@@ -31,9 +40,11 @@ public partial class JellyfinClient
 		IndexPage(library, IndexFields, startIndex, limit, withTotal, cancellationToken);
 
 	public Task<BaseItemDtoQueryResult?> GetLibraryPeoplePage(BaseItemDto library, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken) =>
-		IndexPage(library, PeopleFields, startIndex, limit, withTotal, cancellationToken);
+		IndexPage(library, PeopleFields, startIndex, limit, withTotal, cancellationToken, lean: true); // 1.7.1: lean
 
-	private async Task<BaseItemDtoQueryResult?> IndexPage(BaseItemDto library, ItemFields[] fields, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken)
+	// 1.7.1 (the index on a big server): the people pass asks for the people and the id only: no images (the index pass has
+	// the poster's tag) and no user data, which cut its answer by about a quarter on the throwaway 25,736-film server
+	private async Task<BaseItemDtoQueryResult?> IndexPage(BaseItemDto library, ItemFields[] fields, int startIndex, int limit, bool withTotal, CancellationToken cancellationToken, bool lean = false)
 	{
 		try
 		{
@@ -43,8 +54,17 @@ public partial class JellyfinClient
 				query.SortBy = [ItemSortBy.SortName, ItemSortBy.ProductionYear];
 				query.SortOrder = [SortOrder.Ascending, SortOrder.Ascending];
 				query.Fields = fields;
-				query.ImageTypeLimit = 1;
-				query.EnableImageTypes = [ImageType.Primary];
+				if (lean)
+				{
+					query.EnableImages = false;
+					query.EnableUserData = false;
+				}
+				else
+				{
+					query.ImageTypeLimit = 1;
+					query.EnableImageTypes = [ImageType.Primary];
+				}
+
 				query.ParentId = library.Id;
 				query.IncludeItemTypes = IndexKinds(library);
 				query.Recursive = true;
@@ -57,9 +77,49 @@ public partial class JellyfinClient
 		{
 			return null;
 		}
+		catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode is 401 or 403)
+		{
+			// 1.7.1 (BH-171-q3): refused: the pass ends here (asked again three times, as halves, it was only refused again)
+			logger.LogWarning("Index page {Start}+{Limit}: refused (HTTP {Status})", startIndex, limit, ex.ResponseStatusCode); // no id (rule 10)
+			throw new IndexRefusedException(ex.ResponseStatusCode);
+		}
 		catch (Exception ex)
 		{
 			logger.LogWarning("Index page {Start}+{Limit} of {Library}: {Error}", startIndex, limit, library.Id, ex.Message);
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.7.1 (the index on a big server): a cheap look at whether the user's films and shows changed since the index
+	/// was read: how many there are, and the newest one added, in one request of one title with no fields, images or user
+	/// data ("25736:&lt;id&gt;"). Null when the server didn't answer: then nothing is decided on it.
+	/// </summary>
+	public async Task<string?> GetIndexCheck(CancellationToken cancellationToken)
+	{
+		try
+		{
+			var answer = await _jellyfinApiClient.Items.GetAsync(x =>
+			{
+				var query = x.QueryParameters;
+				query.IncludeItemTypes = [BaseItemKind.Movie, BaseItemKind.Series];
+				query.Recursive = true;
+				query.SortBy = [ItemSortBy.DateCreated, ItemSortBy.SortName];
+				query.SortOrder = [SortOrder.Descending, SortOrder.Ascending];
+				query.EnableImages = false;
+				query.EnableUserData = false;
+				query.Limit = 1;
+				query.EnableTotalRecordCount = true;
+			}, cancellationToken);
+			return answer?.TotalRecordCount is { } total ? $"{total}:{answer.Items?.FirstOrDefault()?.Id?.ToString("N") ?? "-"}" : null;
+		}
+		catch (Exception) when (cancellationToken.IsCancellationRequested)
+		{
+			return null;
+		}
+		catch (Exception ex)
+		{
+			logger.LogInformation("Library index check: {Error}", ex.Message);
 			return null;
 		}
 	}

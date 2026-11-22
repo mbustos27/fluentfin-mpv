@@ -116,6 +116,26 @@ internal sealed class UserFiles
 		}
 	}
 
+	/// <summary>Nixie 1.7.1: the file's bytes, for a typed read (a 40 MB index parsed into a JSON tree first took seconds); null when there is none.</summary>
+	public async Task<byte[]?> ReadBytes(string key)
+	{
+		var path = PathOf(key);
+		if (!File.Exists(path))
+		{
+			return null;
+		}
+
+		try
+		{
+			return await File.ReadAllBytesAsync(path).ConfigureAwait(false);
+		}
+		catch (Exception ex)
+		{
+			_logger.LogInformation(ex, "Ignoring an unreadable {File} file", Path.GetFileName(_folder));
+			return null;
+		}
+	}
+
 	private async Task Delete(Func<string, bool> which)
 	{
 		await _writing.WaitAsync().ConfigureAwait(false);

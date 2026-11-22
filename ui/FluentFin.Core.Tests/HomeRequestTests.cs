@@ -377,7 +377,18 @@ internal sealed class UiThread : SynchronizationContext, IDisposable
 		}
 	}) { IsBackground = true, Name = "test-ui" }.Start();
 
-	public override void Post(SendOrPostCallback d, object? state) => _queue.Add((d, state));
+	// 1.7.1: work posted after the thread ended (a page still making its collections when its test ended) is dropped, as a
+	// closed window's dispatcher takes none; it used to end the whole test run
+	public override void Post(SendOrPostCallback d, object? state)
+	{
+		try
+		{
+			_queue.Add((d, state));
+		}
+		catch (InvalidOperationException) when (_queue.IsAddingCompleted)
+		{
+		}
+	}
 
 	public override SynchronizationContext CreateCopy() => this;
 

@@ -358,7 +358,7 @@ public sealed class SmartCollectionsTests
 
 		var home = File.ReadAllText(Path.Combine(core, "ViewModels", "HomeViewModel.Nixie.cs"));
 		Assert.Contains("var now = SmartCollectionCatalog.Now(_time);", home);
-		Assert.Contains("SmartCollectionCatalog.Now(_time), boxed", File.ReadAllText(Path.Combine(core, "ViewModels", "CollectionsViewModel.cs")));
+		Assert.Contains("SmartCollectionCatalog.Now(_time), null", File.ReadAllText(Path.Combine(core, "ViewModels", "CollectionsViewModel.cs"))); // 1.7.1: boxed ones left out after
 		Assert.Contains("SmartCollectionCatalog.Now(), boxed", File.ReadAllText(Path.Combine(core, "ViewModels", "LibrariesLandingPageViewModel.cs")));
 		Assert.Contains("BuildAllAsync(own, SmartCollectionCatalog.Now())", File.ReadAllText(Path.Combine(core, "ViewModels", "CollectionSources.cs")));
 		var presets = File.ReadAllText(Path.Combine(core, "SmartCollections", "NixiePresets.cs"));

@@ -60,10 +60,7 @@ public sealed class CollectionsPageTests : IDisposable
 		SmartCollectionServices.Store = null;
 		CollectionNames.ForgetBoxSets();
 		_homeCache.Dispose();
-		if (Directory.Exists(_folder))
-		{
-			Directory.Delete(_folder, recursive: true);
-		}
+		TestFolder.Delete(_folder); // 1.7.1: the index's people pass may still be saving behind a test that ended
 	}
 
 	private static BaseItemDto Film(string name, int year, string? collection, double rating) => new()
@@ -123,6 +120,54 @@ public sealed class CollectionsPageTests : IDisposable
 		Assert.Equal("The Matrix, made by Nixie, franchise, 3 films", matrix.AutomationName);
 		Assert.Equal(3, matrix.Mosaic.Count);
 		Assert.Same(vm.Rows[2], vm.FocusRow); // opened at Made by Nixie
+	}
+
+	// The 1.7.1 blocker: the first read's own news (Changed) shows its index first, on the UI thread, before the read's own
+	// continuation (as in the app). The read saw that show begun and was over before its rows were made, so Reading (what the
+	// tests above wait for) was done with no Made by Nixie on the page: a race that a cold start (the test above alone, or early
+	// in a run) lost every time. Here that show is held: the read is over only when it is done.
+	[Fact]
+	public async Task AFirstRead_IsOverOnlyWhenItsRowsAreIn_WhenTheIndexsNewsIsShowingThemAlready()
+	{
+		var people = new TaskCompletionSource();
+		_client.Setup(x => x.GetLibraryPeoplePage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+			.Returns(async (BaseItemDto _, int _, int _, bool _, CancellationToken _) =>
+			{
+				await people.Task;
+				return new BaseItemDtoQueryResult { Items = [], TotalRecordCount = 0 };
+			});
+		_client.Setup(x => x.GetBoxSets(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [BoxSet("[HUB] Marvel", null, 6, 3)] });
+		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+		var (index, store) = Services();
+		var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		using var ui = new UiThread();
+		var vm = new CollectionsViewModel(_client.Object, Commands(), index, store)
+		{
+			// the read's titles, whole (not a page so far): the first show of them is held
+			Making = snapshot => snapshot.Reading is null && held.TrySetResult() ? release.Task : Task.CompletedTask,
+		};
+		try
+		{
+			await ui.Run(() => vm.OnNavigatedTo(new CollectionsPlace(CollectionsSection.All))).WaitAsync(TimeSpan.FromSeconds(20));
+			await held.Task.WaitAsync(TimeSpan.FromSeconds(20));
+			var reading = vm.Reading;
+
+			Assert.NotSame(reading, await Task.WhenAny(reading, Task.Delay(300))); // not over while its rows are being made
+			release.SetResult();
+			await reading.WaitAsync(TimeSpan.FromSeconds(20));
+			Assert.Equal(["Your server's collections", "Picks", "Franchises"], await ui.Invoke(() => vm.Rows.Select(r => r.Title).ToList()));
+			Assert.False(await ui.Invoke(() => vm.IsReadingIndex));
+		}
+		finally
+		{
+			release.TrySetResult();
+			people.TrySetResult();
+			await index.Settled.WaitAsync(TimeSpan.FromSeconds(20));
+			await ui.Run(vm.OnNavigatedFrom).WaitAsync(TimeSpan.FromSeconds(5));
+			await ui.Invoke(() => 0).WaitAsync(TimeSpan.FromSeconds(5));
+			index.Dispose();
+		}
 	}
 
 	[Fact]
@@ -603,6 +648,7 @@ public sealed class CollectionsPageTests : IDisposable
 		// the index not read yet: none now, and it is read for the next call
 		Assert.Empty(presets.PresetsFor(movies, _films));
 		await index.GetAsync();
+		await index.Settled; // 1.7.1: the titles, then with their people (each makes the presets again)
 		await presets.Making;
 
 		var made = presets.PresetsFor(movies, _films);
@@ -629,7 +675,9 @@ public sealed class CollectionsPageTests : IDisposable
 		var made = await presets.PresetsForAsync(movies, _films, CancellationToken.None);
 
 		Assert.Contains(made, p => p.Id == "nixie:franchise:2344");
-		Assert.Equal(1, changed);
+		await index.Settled;
+		await presets.Making;
+		Assert.InRange(changed, 1, 2); // 1.7.1: the titles, then (maybe made again by then) with their people
 		using var cancel = new CancellationTokenSource();
 		cancel.Cancel();
 		Assert.NotEmpty(await presets.PresetsForAsync(movies, _films, cancel.Token)); // made already: a lookup

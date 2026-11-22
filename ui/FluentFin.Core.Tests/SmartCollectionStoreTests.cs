@@ -28,10 +28,7 @@ public sealed class SmartCollectionStoreTests : IDisposable
 	public void Dispose()
 	{
 		_homeCache.Dispose();
-		if (Directory.Exists(_folder))
-		{
-			Directory.Delete(_folder, recursive: true);
-		}
+		TestFolder.Delete(_folder); // 1.7.1: the index's people pass may still be saving behind a test that ended
 	}
 
 	private SmartCollectionStore NewStore() => new(_client.Object, _homeCache, Path.Combine(_folder, "SmartCollections"), new CoreListLogger<SmartCollectionStore>());
@@ -107,10 +104,7 @@ public sealed class SmartCollectionStoreTests : IDisposable
 		{
 			var read = await index.GetAsync();
 			Assert.Equal("The Matrix", Assert.Single(read!.Entries).Name);
-			for (var i = 0; i < 50 && Directory.GetFiles(folder).Length == 0; i++)
-			{
-				await Task.Delay(20);
-			}
+			await index.Settled; // 1.7.1: saved behind the index it says is in (and again with its people)
 		}
 
 		// the next start: the saved index at once, with the server not answering
@@ -124,6 +118,7 @@ public sealed class SmartCollectionStoreTests : IDisposable
 			await Task.Delay(200);
 			Assert.Null(index.Current);
 			Assert.Empty(Directory.GetFiles(folder));
+			Assert.Empty(Directory.GetFiles(folder, "*", SearchOption.AllDirectories)); // 1.7.1 review M2: the note of its last read too
 		}
 	}
 }

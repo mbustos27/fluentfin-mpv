@@ -19,9 +19,13 @@ public sealed partial class CollectionsPage : Page
 
 	private bool _focused;
 
+	// 1.7.1: the page has been in the window (before that, an arrival focus waits for it rather than giving up)
+	private bool _wasLoaded;
+
 	public CollectionsPage()
 	{
 		InitializeComponent();
+		Loaded += (_, _) => _wasLoaded = true;
 		ViewModel.State.PropertyChanged += (_, e) =>
 		{
 			if (e.PropertyName == nameof(Core.ViewModels.LoadState.Status) && ViewModel.State.IsLoaded && !_focused)
@@ -40,9 +44,27 @@ public sealed partial class CollectionsPage : Page
 	private void TakeArrivalFocus(int tries) =>
 		UiDispatch.Enqueue(DispatcherQueue, "the Collections page's arrival focus", () =>
 		{
-			if (ArrivalFocus.TryTake(this, "the section's first tile", FocusSection) || tries <= 1 || !IsLoaded
+			if (ArrivalFocus.TryTake(this, "the section's first tile", FocusSection) || tries <= 1
 				|| ArrivalFocus.UserActedAt > ArrivalFocus.ArrivedAt + ArrivalFocus.GraceMs)
 			{
+				return;
+			}
+
+			if (!IsLoaded)
+			{
+				// 1.7.1: loaded before the page is in the window (with the saved index the load takes milliseconds): tried again
+				// once it is; a page that has left gives up
+				if (!_wasLoaded)
+				{
+					void Once(object sender, RoutedEventArgs e)
+					{
+						Loaded -= Once;
+						TakeArrivalFocus(tries - 1);
+					}
+
+					Loaded += Once;
+				}
+
 				return;
 			}
 

@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.7.1
+
+A fix release: Nixie's collections on a big server.
+
+- **"Nixie is reading your libraries" no longer takes minutes.** Nixie keeps the index of your libraries it made last
+  time and shows its collections from it at once, on the Collections page, on Home and in a library's presets. It reads
+  your libraries again only behind them, and only when they're stale: once a day, when you press R, or when the server
+  says something changed and a quick check (one title, one count) agrees, at most once an hour. Since 1.6, Nixie read
+  every title and every person of every library again at each start, one page at a time: 20 minutes on a server with
+  34,000 titles. The index 1.6 saved is shown too, and brought up to date behind it.
+- **A first read is much quicker and shows as it goes.** Nixie asks two pages at a time, of 1,000 titles each, and only
+  the first page asks the server to count. The collections appear with the first page and fill in as the rest come,
+  and the reading line says how far it has got ("12,000 of 25,736 films"); a collection already on the page grows in
+  place, its count too, and the keyboard stays on it. The people pass (actors and directors) comes after, asks for no
+  pictures or watch data, and a refresh whose people pass fails keeps the people it had. On a test server with 25,736
+  films: the first rows' titles in 0.25 s, the whole read in 3 s and the people in 5 s, where 1.7.0 took 11 s before
+  showing anything.
+- **Closing Nixie mid-read no longer starts it again from zero.** Every read is saved as soon as its titles are in (a
+  read again keeps the people it had meanwhile); if Nixie closes before the people pass, a later start reads only the
+  people. When a read last began is kept on this PC, so the once-an-hour limit holds across restarts too. A library
+  change the check confirms reads the titles only. A page the server takes too long to answer makes the pages after it
+  smaller, for that read and the next, instead of each one running out of time in turn.
+- **Outside lists never make Nixie read your libraries:** award, franchise and trending lists are matched to the index
+  Nixie has, during a first read too.
+- **The log says how long each part took:** each page, each pass, the saved index read from this PC, and the
+  Collections page's rows (durations and counts only).
+
 ## 1.7.0
 
 Discover: award winners and finer genres from Wikidata, franchise names from TMDb, and what's trending on Trakt and TMDb,

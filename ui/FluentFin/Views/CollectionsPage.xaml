@@ -21,14 +21,15 @@
     mc:Ignorable="d">
 
     <Page.Resources>
-        <!--  one tile: the art (the set's poster, or a Nixie collection's mosaic and mark), then its name and what it holds  -->
+        <!--  one tile: the art (the set's poster, or a Nixie collection's mosaic and mark), then its name and what it holds.
+              1.7.1 (review M1): what it holds, its spoken name and its art change in place as a first read's pages come  -->
         <DataTemplate x:Key="CollectionTileTemplate" x:DataType="vm:CollectionTile">
             <Button
                 Width="168"
                 Margin="0,0,16,0"
                 Padding="0"
                 HorizontalContentAlignment="Stretch"
-                AutomationProperties.Name="{x:Bind AutomationName}"
+                AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
                 Background="Transparent"
                 BorderThickness="0"
                 Click="Tile_Click"
@@ -48,10 +49,10 @@
                         CornerRadius="{StaticResource GlassCardCornerRadius}">
                         <lc:LoadingImage
                             Glyph="&#xE8F1;"
-                            Source="{x:Bind local:CollectionsPage.SetArt(Set)}"
+                            Source="{x:Bind local:CollectionsPage.SetArt(Set), Mode=OneWay}"
                             Stretch="UniformToFill"
                             Visibility="{x:Bind local:CollectionsPage.ShownUnless(IsNixie)}" />
-                        <lc:CollectionMosaic ImageHeight="252" Items="{x:Bind Mosaic}" Visibility="{x:Bind IsNixie}" />
+                        <lc:CollectionMosaic ImageHeight="252" Items="{x:Bind Mosaic, Mode=OneWay}" Visibility="{x:Bind IsNixie}" />
                         <!--  the Nixie mark: a small lit "N" over a dark plate, legible on any poster (Narrator: the tile's "made by Nixie")  -->
                         <Border
                             Width="26"
@@ -85,7 +86,7 @@
                         <TextBlock
                             Foreground="{ThemeResource GlassTextSecondaryBrush}"
                             Style="{StaticResource CaptionTextBlockStyle}"
-                            Text="{x:Bind Detail}"
+                            Text="{x:Bind Detail, Mode=OneWay}"
                             TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                 </Grid>
@@ -106,20 +107,21 @@
                 Style="{StaticResource PageHeaderStyle}"
                 Text="{x:Bind lc:PageGrid.Title(ViewModel.Title), Mode=OneWay}" />
 
-            <!--  the first read of the libraries: Made by Nixie is on its way  -->
+            <!--  the first read of the libraries: Made by Nixie is on its way (1.7.1, BH-171-m1: or it stopped part way, said so)  -->
             <StackPanel
                 x:Name="ReadingPanel"
                 Orientation="Horizontal"
                 Spacing="12"
-                Visibility="{x:Bind ViewModel.IsReadingIndex, Mode=OneWay}">
+                Visibility="{x:Bind ViewModel.ShowsReadingLine, Mode=OneWay}">
                 <ProgressRing
                     Width="20"
                     Height="20"
-                    IsActive="{x:Bind ViewModel.IsReadingIndex, Mode=OneWay}" />
+                    IsActive="{x:Bind ViewModel.IsReadingIndex, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.IsReadingIndex, Mode=OneWay}" />
                 <TextBlock
                     AutomationProperties.LiveSetting="Polite"
                     Foreground="{ThemeResource GlassTextSecondaryBrush}"
-                    Text="{x:Bind ViewModel.ReadingText}" />
+                    Text="{x:Bind ViewModel.ReadingText, Mode=OneWay}" />
             </StackPanel>
 
             <!--  the rows; an ItemsControl, not a virtualizing repeater, so Tab reaches every row  -->

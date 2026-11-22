@@ -138,7 +138,13 @@ public sealed class NixieLibraryPresets
 		_store = store;
 		_settings = settings;
 		_logger = logger;
-		index.Changed += (_, snapshot) => Make(snapshot);
+		index.Changed += (_, snapshot) =>
+		{
+			if (snapshot.Reading is null) // 1.7.1: a first read's pages so far make no presets (a library's strip waits for the whole)
+			{
+				Make(snapshot);
+			}
+		};
 		index.Forgotten += (_, _) => Clear();
 	}
 
@@ -226,7 +232,7 @@ public sealed class NixieLibraryPresets
 				return [];
 			}
 
-			Make(snapshot);
+			Make(_index.Current ?? snapshot); // 1.7.1: the newest (a first read's people may be in by now: never made again from the older)
 			await Making.WaitAsync(cancellationToken);
 			return PresetsFor(library, titles);
 		}
@@ -241,7 +247,7 @@ public sealed class NixieLibraryPresets
 	{
 		lock (_lock)
 		{
-			var key = CurrentKey;
+			var key = snapshot.Key ?? CurrentKey; // 1.7.1 (BH-171-m6): the index's own user, not whoever is signed in by now
 			if (ReferenceEquals(_madeFor, snapshot) && _madeForKey == key)
 			{
 				return;
