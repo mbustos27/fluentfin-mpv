@@ -23,6 +23,11 @@ fixed before the build):
   of TMDb's keyword names, so a refresh with as many titles but other ones isn't published until a restart. Compare the
   items (or a hash of each cached list).
 
+From the repository polish (2026-11-22, seen while taking 1.7.0's screenshots):
+- Drive-in: Home's Up next board counts what it doesn't show. With Next Up empty or short but Continue Watching
+  not, the board's link reads "All of Up next (3)" over fewer cards (`docs\screenshots\home-drive-in.webp` shows one).
+  The count and the cards must come from the same list. Add a test with Next Up empty and Continue Watching full.
+
 From the 1.7 streams and their reviews (2026-11-21; each fixed what its review sent back before the merge):
 - Drive-in: `ui\FluentFin\Themes\DriveIn\Controls\ItemStage.cs:104`: under 1400 px wide the item board's 20 px top margin
   puts its top row of lights under the 48 px top bar (seen at 1100x900). Found by stream U.
