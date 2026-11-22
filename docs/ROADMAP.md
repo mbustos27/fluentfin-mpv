@@ -871,7 +871,14 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   so it keeps priority on the test slots and usage. The keyless sources (TMDb's export files, Wikidata) and TMDb trending
   with each user's own token start at once; Trakt needs only its Client ID, never a sign-in, and any registration is the
   owner's own step.
-- **TMDb (1.7):** each user brings their own token at first. An app-wide key is reconsidered once people use it.
+- **TMDb (1.7):** ~~each user brings their own token at first~~. **Changed 2026-11-22:** the owner read PRIVACY.md's
+  table ("this seems not great") and agreed to three fixes ("ya lets do that"):
+  1. **Nixie's own TMDb token** (the v4 Read Access Token, sent as `Authorization: Bearer`) is baked into the release
+     build like the Trakt Client ID: never in the repository, and the release refuses to build without it. A user's
+     own token stays as an optional override. The owner registers the TMDb app and sets it themselves.
+  2. **"Kept at most" reads as Nixie's own copy of public lists,** not stored data, in PRIVACY.md and the Settings
+     cards alike.
+  3. **A gentler refresh:** TMDb export files weekly instead of daily, trending daily, Wikidata weekly.
 - **Save as playlist (1.6):** yes, as an explicit button that copies a Nixie collection to the server as the user's own
   playlist (an ordinary user can). Nothing is written to the server otherwise.
 
