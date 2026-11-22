@@ -690,7 +690,11 @@
                             Orientation="Horizontal"
                             Spacing="10"
                             Visibility="{Binding FeaturesVisibility}">
-                            <dc:NixieReadout DigitHeight="40" Text="{Binding FeatureCount}" />
+                            <!--  1.6.1 (colpage queue): Narrator says the count with its word ("6 features"), as the library's tubes do  -->
+                            <dc:NixieReadout
+                                DigitHeight="40"
+                                Spoken="{Binding FeatureSpoken}"
+                                Text="{Binding FeatureCount}" />
                             <TextBlock
                                 VerticalAlignment="Center"
                                 AutomationProperties.AccessibilityView="Raw"

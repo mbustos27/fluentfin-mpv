@@ -169,6 +169,12 @@ namespace FluentFin.Views
 		/// <summary>When a star was last pressed: the tile under it is not opened by the same click (ItemInvoked).</summary>
 		private long _starPressedAt;
 
+		/// <summary>1.6.1 (the review's "a mouse click on a star"): a tile's invoke this soon after a press on its star is the star's click.</summary>
+		internal const long StarClickMs = 500;
+
+		/// <summary>1.6.1: whether the tile's invoke at <paramref name="now"/> came from the star pressed at <paramref name="starPressedAt"/>.</summary>
+		internal static bool StarTookTheClick(long starPressedAt, long now) => now - starPressedAt < StarClickMs;
+
 		private void OnStarClick(object sender, RoutedEventArgs e)
 		{
 			_starPressedAt = Environment.TickCount64;
@@ -216,13 +222,15 @@ namespace FluentFin.Views
 				FavouriteChange.Added => $"{tile.Name} added to the top bar",
 				FavouriteChange.Removed => $"{tile.Name} removed from the top bar",
 				FavouriteChange.Full => TopFavourites.FullMessage(tile.Name),
+				FavouriteChange.NotRead => TopFavourites.NotReadMessage, // 1.6.1: it said nothing
 				_ => null,
 			};
-			FavouritesNote.Text = change == FavouriteChange.Full ? said : "";
-			FavouritesNote.Visibility = change == FavouriteChange.Full ? Visibility.Visible : Visibility.Collapsed;
+			var noted = change is FavouriteChange.Full or FavouriteChange.NotRead;
+			FavouritesNote.Text = noted ? said : "";
+			FavouritesNote.Visibility = noted ? Visibility.Visible : Visibility.Collapsed;
 			if (said is not null)
 			{
-				Controls.TopStarAnnouncer.Say(near, said, change == FavouriteChange.Full);
+				Controls.TopStarAnnouncer.Say(near, said, noted);
 			}
 		}
 		// end 1.6 topbar
@@ -230,7 +238,7 @@ namespace FluentFin.Views
 		private void ItemsView_ItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
 		{
 			// 1.6 topbar: the click was the tile's star
-			if (Environment.TickCount64 - _starPressedAt < 500)
+			if (StarTookTheClick(_starPressedAt, Environment.TickCount64))
 			{
 				return;
 			}

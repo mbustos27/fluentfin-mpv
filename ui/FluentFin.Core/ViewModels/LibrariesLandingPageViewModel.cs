@@ -208,7 +208,7 @@ public partial class LibrariesLandingPageViewModel(IJellyfinClient jellyfinClien
 		}
 
 		var boxed = (await jellyfinClient.GetBoxSets())?.Items?.Select(x => SmartCollections.IndexEntry.ProviderId(x, "Tmdb")).OfType<string>().ToHashSet() ?? [];
-		var made = await SmartCollections.SmartCollectionCatalog.BuildAllAsync(snapshot, DateTimeOffset.Now, boxed, SmartCollections.CollectionSettings.KindsOff(SmartCollectionServices.Settings));
+		var made = await SmartCollections.SmartCollectionCatalog.BuildAllAsync(snapshot, SmartCollections.SmartCollectionCatalog.Now(), boxed, SmartCollections.CollectionSettings.KindsOff(SmartCollectionServices.Settings));
 		if (made.Count == 0 || Collections.Any(x => x.IsMadeByNixie))
 		{
 			return;

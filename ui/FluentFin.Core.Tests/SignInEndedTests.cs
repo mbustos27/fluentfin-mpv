@@ -144,6 +144,48 @@ public sealed class SignInEndedTests : IDisposable
 		Assert.False(SignInState.Ended);
 	}
 
+	/// <summary>A server whose <c>/Users/Me</c> answers 401 only when the test lets it (<see cref="Answer"/>).</summary>
+	private sealed class HeldUsersMe : HttpMessageHandler
+	{
+		public TaskCompletionSource Asked { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+		public TaskCompletionSource Answer { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+		protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			if (request.RequestUri!.AbsolutePath.EndsWith("/Users/Me", StringComparison.Ordinal))
+			{
+				Asked.TrySetResult();
+				await Answer.Task.WaitAsync(cancellationToken);
+			}
+
+			return new HttpResponseMessage(HttpStatusCode.Unauthorized);
+		}
+	}
+
+	/// <summary>
+	/// 1.6.1 (the 1.5.1 review, SignInWatch.cs:48): a check that began under the old sign-in, answered after a new sign-in, is for
+	/// the old token: it ends nothing (the mark is global, and it ended the new session).
+	/// </summary>
+	[Fact]
+	public async Task ACheckThatBeganBeforeANewSignIn_DoesNotEndTheNewOne()
+	{
+		var server = new HeldUsersMe();
+		using var client = Client(server);
+
+		var old = client.SendAsync(Get("/Items/abc"));
+		await server.Asked.Task.WaitAsync(TimeSpan.FromSeconds(5));
+		SignInState.SignedIn();       // the user signs in again while the old token's check is on its way
+		server.Answer.SetResult();
+		using var answer = await old.WaitAsync(TimeSpan.FromSeconds(5));
+
+		Assert.Equal(HttpStatusCode.Unauthorized, answer.StatusCode);
+		Assert.False(SignInState.Ended);
+		Assert.False(SignInState.MarkEnded(SignInState.Generation - 1)); // an older sign-in's mark ends nothing
+		Assert.False(SignInState.Ended);
+		Assert.True(SignInState.MarkEnded(SignInState.Generation));
+		Assert.True(SignInState.Ended);
+	}
+
 	private sealed class ThrowsOnUsersMe : HttpMessageHandler
 	{
 		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>

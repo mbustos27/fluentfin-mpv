@@ -10,10 +10,15 @@
      removes the device (Dashboard > Devices), the other real trigger.
   3. "again": Sign in again reaches the server's sign-in page; Quick Connect, approved as on another device, opens Home
      again, loaded.
-  NIXIE_SIGNIN_PARTS (other,ended,again; all by default) leaves parts out. Dot-sourced by drive.ps1 after the sign-in.
+  4. "season" (1.6.1, BH-151-m1; the fake server with FAKESERVER_BIG_SERIES=13x20 only, and by default when it is on): a
+     series page is open, the server ends the sign-in, and Season 13 (not asked ahead) is picked: its list says the sign-in
+     ended and offers Sign in again, not "Couldn't load the episodes" with Try again; Sign in again then signs in again in
+     place (a saved password: the season's episodes come) or opens the server's sign-in page (Quick Connect).
+  NIXIE_SIGNIN_PARTS (other,ended,again, and season with a big series; all by default) leaves parts out. Dot-sourced by
+  drive.ps1 after the sign-in.
 #>
 . (Join-Path $PSScriptRoot 'search-common.ps1')
-$siParts = @(([string]$(if ($env:NIXIE_SIGNIN_PARTS) { $env:NIXIE_SIGNIN_PARTS } else { 'other,ended,again' })) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$siParts = @(([string]$(if ($env:NIXIE_SIGNIN_PARTS) { $env:NIXIE_SIGNIN_PARTS } elseif ($fixture.big_series -and -not $QaUpstream) { 'other,ended,again,season' } else { 'other,ended,again' })) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $siTag = if ($env:SG_SHOT_TAG) { $env:SG_SHOT_TAG } else { 'run' }
 $siRect = { param($e) if ($e) { $r = $e.Current.BoundingRectangle; '{0},{1} {2}x{3}' -f [int]$r.X, [int]$r.Y, [int]$r.Width, [int]$r.Height } else { 'none' } }
 function SiText([string]$Part) { Find-Ui -Name $Part -Contains -Type 'Text' }
@@ -114,6 +119,60 @@ if ($siParts -contains 'ended') {
             Capture-Page "signin-again-home-$siTag"
             Check 'signin (BH-150-M2): signed in again, Home loads (nothing of the ended sign-in left)' ([bool]$siHome) "device $(if ($signedIn -and $signedIn.report) { $signedIn.report.device } else { '?' })"
             Check 'signin: the new sign-in is from the same copy''s device id' ($signedIn -and $signedIn.report -and $signedIn.report.device -eq $siDevice) ''
+        }
+    }
+}
+
+if ($siParts -contains 'season') {
+    # 4. 1.6.1 (BH-151-m1): a series page's season list after the sign-in ended. The fake server only: on a QA server the revoke
+    # would end the shared test user's other sessions
+    $sisBs = $fixture.big_series
+    if ($QaUpstream -or -not $sisBs) {
+        Check 'signin season (BH-151-m1): the fake server has a big series (FAKESERVER_BIG_SERIES=13x20)' $false "$(if ($QaUpstream) { 'not on a QA server' } else { 'no big_series in the fixture' })"
+    }
+    else {
+        Open-Library $sisBs.library
+        Start-Sleep -Milliseconds 1200
+        $sisCard = Wait-Until { Find-MediaCard $sisBs.name } -Seconds 30 -PollMs 200
+        if ($sisCard) { [void](Invoke-Element $sisCard) }
+        if ($env:NIXIE_LAYOUT -eq 'Editorial') {
+            # Editorial's poster opens its details in place: their "Full details" opens the page
+            $sisFull = Wait-Until { Find-Ui -Name 'Full details' -Type 'Button' -Contains } -Seconds 5 -PollMs 100
+            if ($sisFull) { [void](Invoke-Element $sisFull) }
+        }
+        $sisPage = Wait-ItemPage $sisBs.name -Seconds 20
+        Start-Sleep -Seconds 4   # Season 1 shown, the seasons either side asked ahead (not Season 13)
+        $sisRevoked = Invoke-Server '/__harness/revoke' 'POST' @{}
+        Say "signin season: the server ended the sign-in ($($sisRevoked.ended) session(s)) on '$($sisBs.name)'"
+        $sisPill = Wait-Until {
+            @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, [System.Windows.Automation.Condition]::TrueCondition) | Where-Object {
+                $_.Current.Name -match '^Season 13(,|$)' -and $_.Current.ControlType -ne [System.Windows.Automation.ControlType]::Hyperlink -and
+                $_.Current.ControlType -ne [System.Windows.Automation.ControlType]::Text }) | Select-Object -First 1 } -Seconds 10 -PollMs 200
+        $sisAt = Get-Epoch
+        $sisPillName = if ($sisPill) { $sisPill.Current.Name } else { '' }
+        if ($sisPill) { Say "signin season: picked '$sisPillName' ($(Invoke-Element $sisPill))" }
+        $sisSaid = Wait-Until { $t = SiText 'Your sign-in to'; if (-not $t) { $t = SiText "Couldn't load the episodes" }; $t } -Seconds 15 -PollMs 200
+        Start-Sleep -Milliseconds 800
+        $sisSaid = SiText 'Your sign-in to'
+        $sisAgain = SiButton 'Sign in again'
+        $sisTry = SiButton 'Try again'
+        # the season's list asked (refused: the fake logs a refused request as "unauthorized")
+        $sisAsked = @(Get-Requests $sisAt | Where-Object { $_.route -in @('items', 'unauthorized') -and $_.path -eq '/Items' })
+        Capture-Page "signin-season-$siTag"
+        Check 'signin season (BH-151-m1): Season 13 was picked and asked of the server' ([bool]$sisPill -and $sisAsked.Count -gt 0) "$(if ($sisPill) { $sisPillName } else { 'no Season 13 pill' }); $($sisAsked.Count) /Items request(s), $(@($sisAsked | Where-Object { $_.status -eq 401 }).Count) refused"
+        Check 'signin season (BH-151-m1): the season list says the sign-in ended (not "Couldn''t load the episodes")' ([bool]$sisSaid -and -not (SiText "Couldn't load the episodes")) "$(if ($sisSaid) { $sisSaid.Current.Name } else { 'none' })"
+        Check 'signin season (BH-151-m1): its button is Sign in again, shown, and no Try again' ($sisAgain -and -not $sisAgain.Current.IsOffscreen -and -not $sisTry) "Sign in again $(& $siRect $sisAgain); Try again $([bool]$sisTry)"
+        if ($sisAgain) {
+            # the way out: a saved password signs in again in place and the season's episodes come; Quick Connect opens the sign-in page
+            $sisAt = Get-Epoch
+            Say "signin season: pressed 'Sign in again' ($(Invoke-Element $sisAgain))"
+            $sisFirst = $sisBs.seasons | Where-Object { $_.index -eq 13 } | Select-Object -First 1
+            $sisEpisode = if ($sisFirst -and $sisFirst.episodes) { [string]$sisFirst.episodes[0].name } else { '' }
+            $sisOut = Wait-Until {
+                if ($sisEpisode -and (Find-Ui -Name $sisEpisode -Contains)) { return 'episodes' }
+                if ((SiButton 'Use Quick Connect') -or (SiButton 'Quick Connect')) { return 'sign-in page' } } -Seconds 25 -PollMs 200
+            Capture-Page "signin-season-again-$siTag"
+            Check 'signin season (BH-151-m1): Sign in again signs in in place (the episodes come) or opens the sign-in page' ([bool]$sisOut) "$(if ($sisOut) { $sisOut } else { 'neither' })"
         }
     }
 }

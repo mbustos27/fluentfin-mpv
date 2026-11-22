@@ -423,6 +423,14 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 	{
 		if (!_libraries.Any(l => l.Id == library && TopFavourites.IsMedia(l)))
 		{
+			// 1.6.1 (the 1.6 review): no libraries at all is a list that could not be read (the star said nothing): read again
+			if (!_libraries.Any(TopFavourites.IsMedia))
+			{
+				logger.LogInformation("Top bar: a star with no libraries read: asking for them again");
+				LibrariesWanted?.Invoke(this, EventArgs.Empty);
+				return FavouriteChange.NotRead;
+			}
+
 			return FavouriteChange.NotALibrary;
 		}
 
@@ -439,6 +447,9 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 		return change;
 	}
 
+	/// <summary>Nixie 1.6.1: the bar has no libraries and wants them (a star pressed meanwhile): the shell reads them again.</summary>
+	public event EventHandler? LibrariesWanted;
+
 	/// <summary>The opener of the Collections destination (the shell sets it: GlobalCommands.OpenCollections); null: the Collections page directly.</summary>
 	public Action<CollectionsSection>? OpenCollections { get; set; }
 
@@ -446,7 +457,47 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 	{
 		_profile = Profile();
 		_record = _store.Read(_profile);
-		_pins = _store.Pins();
+		_pins = _store.PinsFor(_profile); // 1.6.1: only while nobody else has them
+	}
+
+	/// <summary>
+	/// Nixie 1.6.1 (the 1.6 review): the 1.3 pins were every user's first favourites on this PC. The first profile whose server
+	/// has a pinned library keeps them: they become that user's stars on that server (so they stay theirs), and the pins are
+	/// marked as theirs (nobody else gets them). A profile whose server has none of them leaves them for another.
+	/// </summary>
+	/// <remarks>
+	/// Review of 1.6.1 (F4): claimed whether or not the user has stars already (a 1.6.0 user who starred from the pins has):
+	/// claiming only for a user with no stars left the pins for the next user to sign in. A user with stars keeps them as they
+	/// are; one without gets the pins as their stars.
+	/// </remarks>
+	private void ClaimPins(IReadOnlyList<Guid> favourites)
+	{
+		if (_pins.Count == 0 || _profile is not { } profile || !_libraries.Any(l => l.Id is { } id && _pins.Contains(id) && TopFavourites.IsMedia(l)))
+		{
+			return;
+		}
+
+		if (_record.Chosen is null)
+		{
+			_record.Chosen = [.. favourites];
+			Save();
+		}
+
+		if (_store.PinsClaimedBy() == profile)
+		{
+			return;
+		}
+
+		try
+		{
+			_store.ClaimPins(profile);
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+		{
+			logger.LogWarning("Top bar: the 1.3 pins could not be marked as this user's: {Error}", ex.Message);
+		}
+
+		logger.LogInformation("Top bar: the libraries pinned in 1.3 are this user's on this server now ({Count} favourites)", favourites.Count);
 	}
 
 	private void Save()
@@ -489,6 +540,7 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 	/// <summary>A new shell (signed in): the sections are added again by the plugins after this, the libraries asked for by <see cref="SetLibraries"/>.</summary>
 	public void Reset()
 	{
+		FollowNames(); // 1.6.1
 		_sections.Clear();
 		_libraries = [];
 		_shown = null;
@@ -502,6 +554,7 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 
 	public void SetLibraries(IReadOnlyList<BaseItemDto> libraries)
 	{
+		FollowNames(); // 1.6.1
 		_libraries = libraries;
 		if (_profile != Profile())
 		{
@@ -718,10 +771,32 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 	{
 	}
 
+	private bool _followsNames;
+
+	/// <summary>
+	/// Nixie 1.6.1 (the merge review's R4): the tabs carry the libraries' names as they were when built (the tidy names,
+	/// <see cref="CollectionNames.DisplayLibrary"/>): "Tidy collection names" turned off or on builds them again, at once.
+	/// </summary>
+	private void FollowNames()
+	{
+		if (_followsNames)
+		{
+			return;
+		}
+
+		_followsNames = true;
+		CollectionNames.TidyChanged += (_, _) =>
+		{
+			logger.LogDebug("Top bar: the library names changed (Tidy collection names)");
+			Rebuild();
+		};
+	}
+
 	private void Rebuild()
 	{
 		// 1.6 topbar: the favourites for the libraries the server lists now
 		var favourites = TopFavourites.Pick(_libraries, _record.Chosen, _pins, _record.Opens);
+		ClaimPins(favourites); // 1.6.1
 		if (!favourites.SequenceEqual(Favourites))
 		{
 			Favourites = favourites;

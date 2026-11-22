@@ -643,6 +643,10 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 		}
 	}
 
+	/// <summary>1.6.1 (BH-151-m2): Playback preferences' failed Save, in words that name an ended sign-in.</summary>
+	internal static string ChangeDidNotReach() => LoadMessages.ActionFailed($"Your change didn't reach {LoadMessages.ServerName()}",
+		$"Your change didn't reach {LoadMessages.ServerName()}. Check that the server is running and that this PC can reach it, then try again.");
+
 	/// <summary>
 	/// fluentfin-mpv: saves this page's four fields into the user's configuration as the server has it now, read just
 	/// before (as jellyfin-web does): a change made elsewhere while the page was open is kept, not undone by an old copy.
@@ -664,7 +668,7 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 			var fresh = await jellyfinClient.GetCurrentUser();
 			if (fresh?.Configuration is not { } configuration || fresh.Id is not { } userId)
 			{
-				SaveError = $"Your change didn't reach {LoadMessages.ServerName()}. Check that the server is running and that this PC can reach it, then try again.";
+				SaveError = ChangeDidNotReach();
 				return;
 			}
 
@@ -690,7 +694,7 @@ public partial class SettingsViewModel(ISettings settings, IMpvBackend mpvBacken
 			}
 			else
 			{
-				SaveError = $"Your change didn't reach {LoadMessages.ServerName()}. Check that the server is running and that this PC can reach it, then try again.";
+				SaveError = ChangeDidNotReach();
 			}
 		}
 		finally

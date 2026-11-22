@@ -7480,6 +7480,78 @@ class StopOutcomeTest(_RealClientCase):
         self.assertEqual(post.call_count, 1)
 
 
+class ReportRefusedTest(_RealClientCase):
+    """1.6.1 (BH-151-m8): `bridge_http.watch_refusals` on a real apiclient
+    client (`ShimRuntime.make_client` installs it): a progress or Stopped
+    report the server refuses (401, 403) is handed on, and the call raises
+    as before; any other answer is not. The sign-in ending mid-playback was
+    only logged: the viewer never heard the place was not being saved."""
+
+    def setUp(self):
+        super().setUp()
+        self.refused = []
+        self.outcomes = []
+        self.runtime.on_report_refused = lambda *a: self.refused.append(a)
+        self.runtime.on_stop_outcome = lambda *a: self.outcomes.append(a)
+        self.body = {"ItemId": A, "PlaySessionId": "ps-1",
+                     "PositionTicks": 10}
+
+    def report(self, name, status):
+        from jellyfin_apiclient_python.exceptions import HTTPException
+
+        raised = None
+        with mock.patch.object(self.session, "post",
+                               return_value=self.answer(status)), \
+                mock.patch("time.sleep"):
+            try:
+                getattr(self.client.jellyfin, name)(dict(self.body))
+            except HTTPException as error:
+                raised = error
+        return raised
+
+    def test_a_refused_report_is_handed_on(self):
+        for status, refused in ((401, True), (403, True), (204, False),
+                                (500, False), (404, False)):
+            for name in ("session_progress", "session_stop"):
+                with self.subTest(name=name, status=status):
+                    del self.refused[:]
+                    raised = self.report(name, status)
+                    self.assertEqual(self.refused,
+                                     [(A, "ps-1")] if refused else [])
+                    if status in (401, 403):
+                        self.assertIsNotNone(raised, "raises as before")
+
+    def test_the_stopped_outcome_stands(self):
+        self.report("session_stop", 401)
+        self.assertEqual(self.outcomes, [(A, "ps-1", "failed")])
+        self.assertEqual(self.refused, [(A, "ps-1")])
+
+
+class ReportRefusedSaidTest(BridgeCase):
+    """1.6.1 (BH-151-m8): the Bridge says a refused report as a non-fatal
+    ``auth_failed`` once per play session (progress is refused every few
+    seconds), and playback goes on (BRIDGE.md section 5)."""
+
+    def errors(self):
+        return [d for n, d in self.bridge.tracker.update(
+            self.bridge._observe()) if n == "error"]
+
+    def test_once_per_play_session_and_never_fatal(self):
+        self.connect_server()
+        refused = self.runtime.on_report_refused
+        for _ in range(3):
+            refused(A, "ps-1")
+        self.assertEqual(self.errors(), [{
+            "code": "auth_failed", "fatal": False,
+            "message": bridge_mod.Bridge.REPORT_REFUSED}])
+        refused(A, "ps-1")                  # its Stopped report too
+        refused(B, "ps-2")                  # the next item's session
+        self.assertEqual([e["code"] for e in self.errors()], ["auth_failed"])
+        state = self.bridge.tracker.snapshot(self.bridge._observe())
+        self.assertNotEqual(state["state"], "error", "not an error state")
+        self.assertNotIn(SERVER["accessToken"], json.dumps(self.messages()))
+
+
 class PlaybackInfoAnswerTest(_RealClientCase):
     """rr6 item 7, `bridge_http.check_play_info` on a real apiclient
     client: **the apiclient answers None for a 500** (and for an empty or

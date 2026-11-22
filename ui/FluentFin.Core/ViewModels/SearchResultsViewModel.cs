@@ -129,6 +129,9 @@ public partial class SearchResultsViewModel(IJellyfinClient jellyfinClient) : Ob
 		}
 
 		_ranked = ranked;
+		// 1.6.1 (BH-160-M2): two box sets found that would read the same keep their server names, on the cards and the top result
+		var found = ranked.Groups.SelectMany(g => g.Strong.Concat(g.Weak)).Select(x => x.Item);
+		CollectionNames.NoteBoxSets(ranked.Top is { } best ? found.Prepend(best.Item) : found);
 		if (ranked.Count == 0)
 		{
 			return LoadOutcome.Empty($"No results for “{Query}”", "Check the spelling, or try fewer words.");

@@ -46,6 +46,10 @@ public sealed partial class BaseItemDtoCard : UserControl, ICaptionPrefixed
 	/// <summary>The caption's lead: "1 · " for "1", nothing for none.</summary>
 	public static string PrefixWords(string? prefix) => string.IsNullOrEmpty(prefix) ? "" : $"{prefix} · ";
 
+	/// <summary>1.6.1 (BH-150-m3): the card's second line: the model's own (a guest's show: "in 3 episodes"), else the item's.</summary>
+	public static string SubtitleOf(BaseItemViewModel? model) =>
+		model?.CardSubtitle is { Length: > 0 } line ? line : Converters.BaseItemDtoConverters.GetCardSubtitle(model?.Dto);
+
 	/// <summary>Narrator's name for a card with a place: "1, Wild Canyons, 1979" (the caption's words, in its order).</summary>
 	public static string NameWithPrefix(string? prefix, string name) => string.IsNullOrEmpty(prefix) ? name : $"{prefix}, {name}";
 

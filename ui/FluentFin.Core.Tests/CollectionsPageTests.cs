@@ -31,6 +31,7 @@ public sealed class CollectionsPageTests : IDisposable
 	public CollectionsPageTests()
 	{
 		_homeCache = new HomeCache(Path.Combine(_folder, "HomeCache"), _messages, new CoreListLogger<HomeCache>(), TimeProvider.System);
+		CollectionNames.RememberBoxSets([]); // review of 1.6.1 (F2): a list read, as the page reads it
 		_client.SetupGet(x => x.BaseUrl).Returns("http://server");
 		_client.SetupGet(x => x.UserId).Returns(Guid.Parse("aaaaaaaa-0000-0000-0000-000000000160"));
 		_films =
@@ -57,6 +58,7 @@ public sealed class CollectionsPageTests : IDisposable
 	{
 		SmartCollectionServices.Index = null;
 		SmartCollectionServices.Store = null;
+		CollectionNames.ForgetBoxSets();
 		_homeCache.Dispose();
 		if (Directory.Exists(_folder))
 		{
@@ -412,16 +414,78 @@ public sealed class CollectionsPageTests : IDisposable
 	}
 
 	[Fact]
-	public async Task SaveAsPlaylist_OfShowsOnly_WritesNothing_AndSaysWhy()
+	public async Task SaveAsPlaylist_IsNotOffered_OnACollectionOfShowsOnly_AndWritesNothing()
 	{
+		// 1.6.1 (bug hunt BH-160-m2): "Unfinished series" offered Save, enabled, and pressed it could only say it can't
 		var shows = Enumerable.Range(0, 3).Select(i => new BaseItemDto { Id = Guid.NewGuid(), Name = $"Show {i}", Type = BaseItemDto_Type.Series, UserData = new UserItemDataDto() }).ToList();
 		var vm = await PageOf(shows);
+
+		Assert.True(vm.IsNixie);
+		Assert.False(vm.OffersSaveAsPlaylist);
+		Assert.False(vm.CanSaveAsPlaylist);
+		Assert.False(vm.SaveAsPlaylistCommand.CanExecute(null));
 
 		await vm.SaveAsPlaylistCommand.ExecuteAsync(null);
 
 		_client.Verify(x => x.CreatePlaylist(It.IsAny<string>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Never);
-		Assert.StartsWith("This collection holds shows only.", vm.PlaylistMessage);
-		Assert.False(vm.CanSaveAsPlaylist);
+		Assert.Equal("", vm.PlaylistMessage);
+		// its words, should it ever be pressed, name what a playlist from Nixie holds
+		Assert.Contains("holds films and episodes", CollectionViewModel.ShowsOnlyText);
+
+		// a film among the shows: offered (the shows are left out, and it says so)
+		var mixed = await PageOf([shows[0], _films[0]]);
+		Assert.True(mixed.OffersSaveAsPlaylist);
+		Assert.True(mixed.CanSaveAsPlaylist);
+	}
+
+	[Fact]
+	public async Task SaveAsPlaylist_AfterLeavingAndComingBack_MakesNoSecondCopy()
+	{
+		// 1.6.1 (BH-160-m2): the saved playlist lived in the page's view model: a second press after coming back made a second
+		// playlist of the same name on the server
+		var made = Guid.NewGuid();
+		_client.Setup(x => x.CreatePlaylist("The Matrix", It.IsAny<IReadOnlyList<Guid>>())).ReturnsAsync(new PlaylistCreation(made, 200, null));
+		var (first, _) = await NixiePage();
+		await first.SaveAsPlaylistCommand.ExecuteAsync(null);
+		_client.Verify(x => x.CreatePlaylist(It.IsAny<string>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Once);
+		// the server lists it now
+		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult
+		{
+			Items = [new BaseItemDto { Id = Guid.NewGuid(), Name = "Rainy Sunday", Type = BaseItemDto_Type.Playlist }, new BaseItemDto { Id = made, Name = "the matrix ", Type = BaseItemDto_Type.Playlist }],
+		});
+
+		var (again, _) = await NixiePage();
+		Assert.True(again.CanSaveAsPlaylist);
+		await again.SaveAsPlaylistCommand.ExecuteAsync(null);
+
+		_client.Verify(x => x.CreatePlaylist(It.IsAny<string>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Once);
+		Assert.Equal(made, again.SavedPlaylist?.Id);
+		Assert.Equal("Already in your playlists as “the matrix ”.", again.PlaylistMessage);
+		Assert.False(again.CanSaveAsPlaylist);
+		again.OpenSavedPlaylist();
+		_navigation.Verify(x => x.NavigateTo(typeof(CollectionViewModel).FullName!, It.Is<BaseItemDto>(d => d.Id == made), It.IsAny<bool>()));
+	}
+
+	[Fact]
+	public async Task SaveAsPlaylist_AnAnswerThatNamesNoPlaylist_IsSaidPlainly_AndSavingAgainFindsIt()
+	{
+		// 1.6.1 (BH-160-m2): a 200 with no playlist id read "didn't make the playlist (error 200)"
+		var (vm, _) = await NixiePage();
+		_client.Setup(x => x.CreatePlaylist(It.IsAny<string>(), It.IsAny<IReadOnlyList<Guid>>())).ReturnsAsync(new PlaylistCreation(null, 200, "no playlist id in the answer"));
+
+		await vm.SaveAsPlaylistCommand.ExecuteAsync(null);
+
+		Assert.Contains("answered without saying which playlist it made", vm.PlaylistMessage);
+		Assert.DoesNotContain("error 200", vm.PlaylistMessage);
+		Assert.DoesNotContain("no playlist id", vm.PlaylistMessage);
+		Assert.True(vm.CanSaveAsPlaylist);
+
+		// it had made it: Save again finds it rather than making a second
+		var made = Guid.NewGuid();
+		_client.Setup(x => x.GetPlaylists(It.IsAny<CancellationToken>())).ReturnsAsync(new BaseItemDtoQueryResult { Items = [new BaseItemDto { Id = made, Name = "The Matrix", Type = BaseItemDto_Type.Playlist }] });
+		await vm.SaveAsPlaylistCommand.ExecuteAsync(null);
+		Assert.Equal(made, vm.SavedPlaylist?.Id);
+		_client.Verify(x => x.CreatePlaylist(It.IsAny<string>(), It.IsAny<IReadOnlyList<Guid>>()), Times.Once);
 	}
 
 	[Theory]
@@ -626,6 +690,37 @@ public sealed class CollectionsPageTests : IDisposable
 	}
 
 	[Fact]
+	public async Task HomesSavedPage_PaintsOnlyTheNixieRowsTurnedOnNow()
+	{
+		// 1.6.1 (the 1.6 review): a row turned off in Settings after Home was saved was painted again at the next visit
+		var rated = new SmartCollection("pick:highly-rated", SmartCollectionKind.HighlyRated, "Highly rated, not watched", "", false, [_films[0].Id!.Value]);
+		var matrix = new SmartCollection("franchise:2344", SmartCollectionKind.Franchise, "The Matrix", "", true, [_films[0].Id!.Value]);
+		var unfinished = new SmartCollection("pick:unfinished", SmartCollectionKind.UnfinishedSeries, "Unfinished series", "", false, [_films[1].Id!.Value]);
+		var snapshot = new HomeSnapshot([], [], [new HomeSnapshotRow(new BaseItemDto { Id = MoviesId, Name = "Movies" }, [_films[3]])], [])
+		{
+			NixieRows = [new HomeSnapshotNixieRow(rated, [_films[0]]), new HomeSnapshotNixieRow(matrix, [_films[0]]), new HomeSnapshotNixieRow(unfinished, [_films[1]])],
+		};
+		var user = _client.Object.UserId;
+		await _homeCache.Save("http://server", user, snapshot, (await _homeCache.Get("http://server", user)).ChangesSeen);
+		var settings = new SwitchSettings();
+		settings.SaveSetting(CollectionSettingKeys.HomeRowsOff, "HighlyRated");
+		settings.SaveSetting(CollectionSettingKeys.KindsOff, "Franchise");
+		var painted = new List<string>();
+		var home = new HomeViewModel(_client.Object, _messages, Commands(), _homeCache, settings);
+		home.NixieRows.CollectionChanged += (_, e) => painted.AddRange(e.NewItems?.OfType<NixieHomeRowViewModel>().Select(r => r.Title) ?? []);
+		_client.Setup(x => x.GetContinueWatching()).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+		_client.Setup(x => x.GetNextUp()).ReturnsAsync(new BaseItemDtoQueryResult { Items = [] });
+		_client.Setup(x => x.GetLatestItems(It.IsAny<BaseItemDto>())).ReturnsAsync([_films[3]]);
+
+		await home.OnNavigatedTo(new object());
+
+		// never painted: Highly rated (its row off) nor The Matrix (franchises off)
+		Assert.Equal(["Unfinished series"], painted.Distinct());
+		Assert.True(HomeViewModel.NixieRowShown(unfinished, new HashSet<NixieHomeRow> { NixieHomeRow.Rotating }, new HashSet<SmartCollectionKind>()));
+		Assert.False(HomeViewModel.NixieRowShown(matrix, new HashSet<NixieHomeRow> { NixieHomeRow.Rotating }, new HashSet<SmartCollectionKind>()));
+	}
+
+	[Fact]
 	public void TheLibrariesPagesMadeByNixieTile_SaysWhatItHolds()
 	{
 		var tile = LibraryTile.MadeByNixie(48);
@@ -655,5 +750,21 @@ public sealed class CollectionsPageTests : IDisposable
 		Assert.Equal("Shown on the server as “[HUB] Marvel”", CollectionNames.ServerNameNote(set));
 		Assert.Equal("", CollectionNames.ServerNameNote(BoxSet("Marvel", null, 6, 3)));
 		Assert.Equal("[REC]", ItemLabels.CardName(BaseItemViewModel.FromDto(new BaseItemDto { Name = "[REC]", Type = BaseItemDto_Type.Movie })));
+	}
+
+	/// <summary>Settings in memory: what was saved, else the default asked for (as LocalSettingsService answers).</summary>
+	private sealed class SwitchSettings : ILocalSettingsService
+	{
+		private readonly Dictionary<string, object?> _values = [];
+
+		public System.Text.Json.Nodes.JsonNode? ReadSettingRaw(string key) => null;
+
+		public T ReadSetting<T>(string key, T defaultValue) => _values.TryGetValue(key, out var v) && v is T t ? t : defaultValue;
+
+		public void SaveSetting<T>(string key, T value) => _values[key] = value;
+
+		public void RemoveSetting(string key) => _values.Remove(key);
+
+		public byte[] GetEntropyBytes() => [];
 	}
 }

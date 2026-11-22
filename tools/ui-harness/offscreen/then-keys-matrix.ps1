@@ -206,6 +206,11 @@ $kmKeys = @{
     'End' = 0x23; 'PageUp' = 0x21; 'PageDown' = 0x22; 'Backspace' = 0x08; 'F11' = 0x7A; '[' = 0xDB; ']' = 0xDD; 'BackKey' = 0xA6
     '0' = 0x30; '5' = 0x35; '9' = 0x39; 'Numpad3' = 0x63; 'Apps' = 0x5D; '/' = 0xBF; 'F1' = 0x70
 }
+# 1.6.1: what the search box holds ($null when there is none on screen)
+function KM-SearchText {
+    $b = Find-Ui -Name 'Search' -Type 'Edit' -Contains
+    if ($b) { try { "$(([System.Windows.Automation.ValuePattern]$b.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)).Current.Value)" } catch { $null } } else { $null }
+}
 function KM-Vk([string]$Name) { if ($kmKeys.ContainsKey($Name)) { $kmKeys[$Name] } else { [int][char]$Name.ToUpperInvariant() } }
 
 # a chord such as 'Shift+Right', 'Ctrl+Left', 'Alt+Enter', 'Space', 'M'; posted to FluentFin's focus window
@@ -636,10 +641,25 @@ if ($script:page -ne 'player') {
     }
     # -- Search: / and Ctrl+F put the keyboard in the box; typing and Enter show the results; Down goes into them
     foreach ($kbChord in @('/', 'Ctrl+F')) {
+        $kmBefore = KM-SearchText
         [void](KM-Press $kbChord)
         $kbBox = Wait-Until { $f = KB-Focus; if ($f -and $f.type -eq 'Edit') { $f } } -Seconds 4 -PollMs 150
         KM-Row 'browsing' 'Search' "$kbChord (the search box)" ([bool]$kbBox) "$(KB-Desc (KB-Focus))"
         if ($kbBox -and $kbChord -eq '/') {
+            # 1.6.1 (fix queue): the "/" press's own character is not typed into the box it opens. It came after the focus
+            # once in about 60 presses ("/Signal"); here it is made to: a "/" character posted once the box has the keyboard
+            $kmTarget = [KeysMatrix]::FocusWindow($script:hwnd)
+            [void][OffscreenUi]::PostMessage($kmTarget, 0x0102, [IntPtr]0x2F, [IntPtr]1)
+            Start-Sleep -Milliseconds 700
+            $kmAfter = KM-SearchText
+            KM-Row 'browsing' 'Search' '/ types nothing into the box (its own "/" coming late)' ("$kmAfter" -eq "$kmBefore") "before '$kmBefore', after '$kmAfter'"
+            # the way out: a "/" the user types after another key is typed (R is a letter in the box, below)
+            [void](KM-Press 'R'); Start-Sleep -Milliseconds 300
+            [void][OffscreenUi]::PostMessage([KeysMatrix]::FocusWindow($script:hwnd), 0x0102, [IntPtr]0x2F, [IntPtr]1)
+            Start-Sleep -Milliseconds 600
+            $kmTyped = KM-SearchText
+            KM-Row 'browsing' 'Search' 'a "/" typed after another key is typed' ("$kmTyped" -like '*r/') "after R and /: '$kmTyped'"
+            [void](KM-Press 'Backspace'); Start-Sleep -Milliseconds 200; [void](KM-Press 'Backspace'); Start-Sleep -Milliseconds 400
             # Nixie 1.4.0: R in the search box is a letter (typed; nothing refreshed), and Backspace takes it out again
             $kmAt = Get-Epoch
             [void](KM-Press 'R'); Start-Sleep -Milliseconds 1200

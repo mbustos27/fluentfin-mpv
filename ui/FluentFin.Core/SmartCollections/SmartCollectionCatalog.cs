@@ -43,6 +43,14 @@ public static class SmartCollectionCatalog
 	public static Task<IReadOnlyList<SmartCollection>> BuildAllAsync(IndexSnapshot index, DateTimeOffset now, IReadOnlySet<string>? boxedFranchises = null, IReadOnlySet<SmartCollectionKind>? kindsOff = null) =>
 		Task.Run(() => BuildAll(index, now, boxedFranchises, kindsOff));
 
+	/// <summary>
+	/// Nixie 1.6.1 (bug hunt BH-160-m1): the clock every page builds Nixie's collections by, the PC's local time: the seasonal
+	/// row's month and the day's row (<see cref="OfTheDay"/>) follow the date on the user's clock. Home and the Collections
+	/// page went by UTC, so in California the Halloween row left them at 5 PM on October 31, while the Libraries page (local)
+	/// still counted it, and the day's row changed in the afternoon.
+	/// </summary>
+	public static DateTimeOffset Now(TimeProvider? time = null) => (time ?? TimeProvider.System).GetLocalNow();
+
 	/// <summary>The collection of a kind a day for Home's rotating row: the same all day, the next one tomorrow; none when there are none.</summary>
 	public static SmartCollection? OfTheDay(IReadOnlyList<SmartCollection> all, DateTimeOffset now)
 	{

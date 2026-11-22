@@ -179,14 +179,26 @@ public static class UpdateActions
 		Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(dialog, title);
 		// the keyboard starts on Close, not on the first link in the notes (Enter there would open the browser)
 		// the dialog's own first focus goes to the first focusable element, a link of the notes: it is turned to Close as it
-		// happens (GettingFocus), whatever the timing; the focus is drawn
-		// (turned: a move no key or pointer made, and, as the dialog opens, its own first move whatever it says it came from;
-		// Tab and clicks after that go where the user sends them)
-		var shown = System.Diagnostics.Stopwatch.StartNew();
+		// happens (GettingFocus); the focus is drawn. Nixie 1.6.1 (bug hunt BH-160-m3): by what the user did, not by the
+		// time: every move no pointer made is turned to Close until the user presses a key in the dialog (none of those moves
+		// can be theirs). The 800 ms window lost its race on a session's first dialog, whose first focus came late (Classic
+		// and Drive-in started on the notes' first link). Tab and clicks after that go where the user sends them.
+		// and the links are no tab stops until then, so the dialog's own first focus has nothing in the notes to land on: on a
+		// second opening the turn to Close did not take (Classic and Drive-in), and the keyboard started on "details" again
+		var links = NotesLinks(text).ToList();
+		HoldLinks(links, page, held: true);
+		var keyed = false;
+		dialog.PreviewKeyDown += (_, args) =>
+		{
+			if (!keyed && !args.KeyStatus.WasKeyDown)
+			{
+				keyed = true;
+				HoldLinks(links, page, held: false); // before the key's own move: Tab goes on to the first link
+			}
+		};
 		dialog.GettingFocus += (_, args) =>
 		{
-			var opening = shown.ElapsedMilliseconds < 800 && args.InputDevice is not (FocusInputDeviceKind.Mouse or FocusInputDeviceKind.Touch or FocusInputDeviceKind.Pen);
-			if ((args.InputDevice == FocusInputDeviceKind.None || opening) && FindNamed<Button>(dialog, "CloseButton") is { } close
+			if (TurnsToClose(keyed, args.InputDevice) && FindNamed<Button>(dialog, "CloseButton") is { } close
 				&& !ReferenceEquals(args.NewFocusedElement, close))
 			{
 				args.TrySetNewFocusedElement(close);
@@ -194,14 +206,13 @@ public static class UpdateActions
 		};
 		dialog.Opened += (_, _) => dialog.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
 		{
-			if (FindNamed<Button>(dialog, "CloseButton") is { } close && close.FocusState == FocusState.Unfocused)
+			if (!keyed && FindNamed<Button>(dialog, "CloseButton") is { } close && close.FocusState == FocusState.Unfocused)
 			{
 				close.Focus(FocusState.Keyboard);
 			}
 		});
 		try
 		{
-			shown.Restart();
 			await dialog.ShowAsync();
 		}
 		catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
@@ -209,6 +220,52 @@ public static class UpdateActions
 			// another dialog is open: the notes wait for the next click
 		}
 	}
+
+	/// <summary>Nixie 1.6.1 (BH-160-m3): the notes' links (each Hyperlink in their paragraphs, in a span too).</summary>
+	internal static IEnumerable<Hyperlink> NotesLinks(RichTextBlock text)
+	{
+		static IEnumerable<Hyperlink> In(IEnumerable<Inline> inlines)
+		{
+			foreach (var inline in inlines)
+			{
+				if (inline is Hyperlink link)
+				{
+					yield return link;
+				}
+
+				if (inline is Span span)
+				{
+					foreach (var inner in In(span.Inlines))
+					{
+						yield return inner;
+					}
+				}
+			}
+		}
+
+		return text.Blocks.OfType<Paragraph>().SelectMany(p => In(p.Inlines));
+	}
+
+	/// <summary>
+	/// Nixie 1.6.1 (BH-160-m3): the notes' links and the release page's are tab stops only once the user pressed a key in the
+	/// dialog. A click and Narrator reach them all the time.
+	/// </summary>
+	private static void HoldLinks(IEnumerable<Hyperlink> links, Control page, bool held)
+	{
+		foreach (var link in links)
+		{
+			link.IsTabStop = !held;
+		}
+
+		page.IsTabStop = !held;
+	}
+
+	/// <summary>
+	/// Nixie 1.6.1 (BH-160-m3): a focus move in the notes that goes to Close instead: one no pointer made, before the user
+	/// pressed any key in the dialog (so it is the dialog's own, however late it comes).
+	/// </summary>
+	internal static bool TurnsToClose(bool userPressedAKey, FocusInputDeviceKind device) =>
+		!userPressedAKey && device is not (FocusInputDeviceKind.Mouse or FocusInputDeviceKind.Touch or FocusInputDeviceKind.Pen);
 
 	/// <summary>A named element of <paramref name="root"/>'s visual tree (the dialog's own Close button).</summary>
 	private static T? FindNamed<T>(DependencyObject root, string name)

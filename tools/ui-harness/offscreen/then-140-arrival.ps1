@@ -124,10 +124,10 @@ if ($arOnly -contains 'suggest') {
     CK-Key 'Enter'
     $opened = Wait-ItemPage $fixture.movie.name 15
     $onPlay = Wait-Until { $f = CK-Focus; if ($f -match "^Button '(Play|Resume)") { $f } } -Seconds 6 -PollMs 200
-    $before = AR-Text
+    $arBefore = AR-Text
     CK-Key 'Q'; Start-Sleep -Milliseconds 700
     $after = AR-Text
-    Check "search: a suggestion chosen with Down and Enter opens the film with the keyboard on Play; a letter then does not type into the box" ([bool]$listed -and [bool]$opened -and [bool]$onPlay -and $before -eq '' -and $after -eq '') "typed '$query'; listed $([bool]$listed); Down put '$picked' in the box; opened $([bool]$opened); focus $(CK-Focus); box '$before' then '$after'; $((CK-Log $at '\[focus\]') -join ' | ')"
+    Check "search: a suggestion chosen with Down and Enter opens the film with the keyboard on Play; a letter then does not type into the box" ([bool]$listed -and [bool]$opened -and [bool]$onPlay -and $arBefore -eq '' -and $after -eq '') "typed '$query'; listed $([bool]$listed); Down put '$picked' in the box; opened $([bool]$opened); focus $(CK-Focus); box '$arBefore' then '$after'; $((CK-Log $at '\[focus\]') -join ' | ')"
     AR-Reset
 }
 if ($arOnly -contains 'colstate') {
@@ -145,14 +145,14 @@ if ($arOnly -contains 'colstate') {
     AR-Order 'Name'
     $h = Find-Ui -Id 'HideWatchedBox'; if ($h) { try { $h.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle() } catch { } }
     Start-Sleep -Milliseconds 800
-    $before = AR-View
+    $arBefore = AR-View
     $card = Find-Ui -Name 'Painted Forests' -Type 'ListItem' -Contains
     if ($card) { [void][OffscreenUi]::SetFocus($card); Start-Sleep -Milliseconds 400 }
     $at = Get-Epoch
     CK-Key 'R'
     [void](Wait-Until { if (@(CK-Log $at '^Refresh: the place').Count) { $true } } -Seconds 10 -PollMs 200); Start-Sleep -Seconds 1
     $after = AR-View
-    Check 'collection: R keeps Order and Hide watched' ($before -match "Order: Name" -and $after -eq $before) "before: $before || after R: $after; focus $(CK-Focus)"
+    Check 'collection: R keeps Order and Hide watched' ($arBefore -match "Order: Name" -and $after -eq $arBefore) "before: $arBefore || after R: $after; focus $(CK-Focus)"
     # a film, then Back
     $card = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) |
         Where-Object { try { $_.Cached.Name -match ', \d{4}' -and -not $_.Cached.IsOffscreen } catch { $false } }) | Select-Object -Last 1
@@ -163,7 +163,7 @@ if ($arOnly -contains 'colstate') {
     [void](Wait-Until { Find-Ui -Id 'OrderButton' } -Seconds 15 -PollMs 200); Start-Sleep -Seconds 2
     $back = AR-View
     $focus = CK-Focus
-    Check "collection: Back from a film keeps Order and Hide watched, and the keyboard on its card" ($back -eq $before -and $focus -like "*'$film'*") "before: $before || after Back from '$film': $back; focus $focus"
+    Check "collection: Back from a film keeps Order and Hide watched, and the keyboard on its card" ($back -eq $arBefore -and $focus -like "*'$film'*") "before: $arBefore || after Back from '$film': $back; focus $focus"
     Shot 'collection-after-back'
 }
 if ($arOnly -contains 'show') {

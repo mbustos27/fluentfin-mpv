@@ -72,6 +72,15 @@ public sealed partial class DriveInLibraryPage : Page
 				ShowPresets();
 			}
 		};
+		// 1.6.1: the room kept for the strip while the titles load is its height as it showed
+		PresetStrip.SizeChanged += (_, e) =>
+		{
+			if (e.NewSize.Height > 0)
+			{
+				_presetRoom = e.NewSize.Height;
+			}
+		};
+		ShowPresets();
 
 		// the header's strip of sky follows its size; the page's margins follow the window's width
 		Header.SizeChanged += (_, e) => Sky.Layout = Controls.DriveInLayout.Strip(e.NewSize.Width, e.NewSize.Height);
@@ -106,9 +115,20 @@ public sealed partial class DriveInLibraryPage : Page
 		};
 	}
 
-	/// <summary>1.6 colpage: the presets fold away with the sky (the band is the marquee, the tubes and the A to Z), and wait for the titles.</summary>
-	private void ShowPresets() =>
-		PresetStrip.Visibility = _band || ViewModel.State.Status != LoadStatus.Loaded ? Visibility.Collapsed : Visibility.Visible;
+	/// <summary>
+	/// 1.6 colpage: the presets fold away with the sky (the band is the marquee, the tubes and the A to Z), and wait for the
+	/// titles. 1.6.1 (colpage queue): while they load, the strip's row keeps its room (<see cref="_presetRoom"/>): the loaded
+	/// page was 46 px taller than its placeholders, and the posters landed 46 px under them.
+	/// </summary>
+	private void ShowPresets()
+	{
+		var status = ViewModel.State.Status;
+		PresetStrip.Visibility = _band || status != LoadStatus.Loaded ? Visibility.Collapsed : Visibility.Visible;
+		HeaderContent.RowDefinitions[1].MinHeight = !_band && status is LoadStatus.Idle or LoadStatus.Loading ? _presetRoom : 0;
+	}
+
+	/// <summary>1.6.1: the strip's height (the board's 42 px tiles and the strip's 4 under them), as it last showed.</summary>
+	private double _presetRoom = 46;
 
 	/// <summary>The band's top: 8 under the 48 px bar (the band is a compact strip, not a title).</summary>
 	public const double BandTop = 56;

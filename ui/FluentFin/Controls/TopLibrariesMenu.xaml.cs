@@ -124,13 +124,15 @@ public sealed partial class TopLibrariesMenu : UserControl
 			FavouriteChange.Added => $"{row.Title} added to the top bar",
 			FavouriteChange.Removed => $"{row.Title} removed from the top bar",
 			FavouriteChange.Full => TopFavourites.FullMessage(row.Title),
+			FavouriteChange.NotRead => TopFavourites.NotReadMessage, // 1.6.1
 			_ => null,
 		};
-		FullNote.Text = change == FavouriteChange.Full ? said : "";
-		FullNote.Visibility = change == FavouriteChange.Full ? Visibility.Visible : Visibility.Collapsed;
+		var noted = change is FavouriteChange.Full or FavouriteChange.NotRead;
+		FullNote.Text = noted ? said : "";
+		FullNote.Visibility = noted ? Visibility.Visible : Visibility.Collapsed;
 		if (said is not null)
 		{
-			TopStarAnnouncer.Say(FullNote, said, change == FavouriteChange.Full);
+			TopStarAnnouncer.Say(FullNote, said, noted);
 		}
 	}
 

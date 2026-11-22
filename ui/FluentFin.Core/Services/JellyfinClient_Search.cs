@@ -145,4 +145,35 @@ public partial class JellyfinClient
 			return null;
 		}
 	}
+
+	/// <summary>
+	/// 1.6.1 (BH-150-m3; the review): the episodes a person is credited on (Jellyfin credits a guest star there only), newest
+	/// first, at most <paramref name="limit"/> of them with their total: the page shows one card per show, so a show's regular
+	/// cast on a big server isn't hundreds of episodes thrown away. No extra fields: an episode's show (its id, name and poster
+	/// tag) comes with it.
+	/// </summary>
+	public async Task<BaseItemDtoQueryResult?> GetPersonEpisodes(Guid personId, int limit)
+	{
+		try
+		{
+			return await _jellyfinApiClient.Items.GetAsync(x =>
+			{
+				var query = x.QueryParameters;
+				query.PersonIds = [personId];
+				query.Recursive = true;
+				query.IncludeItemTypes = [BaseItemKind.Episode];
+				query.SortBy = [ItemSortBy.ProductionYear, ItemSortBy.SortName];
+				query.SortOrder = [SortOrder.Descending, SortOrder.Ascending];
+				query.Limit = limit;
+				query.EnableTotalRecordCount = true;
+				query.ImageTypeLimit = 1;
+				query.EnableImageTypes = [ImageType.Primary];
+			});
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, @"Unhandled exception");
+			return null;
+		}
+	}
 }

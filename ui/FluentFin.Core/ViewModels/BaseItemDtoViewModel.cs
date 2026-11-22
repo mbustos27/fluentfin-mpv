@@ -6,6 +6,12 @@ namespace FluentFin.Core.ViewModels;
 public partial class BaseItemViewModel : ObservableObject
 {
 	public BaseItemDto Dto { get; set; } = null!;
+
+	/// <summary>
+	/// 1.6.1 (BH-150-m3): the card's second line in place of the item's own (its year), and in its spoken name: a show a person
+	/// is a guest in, "in 3 episodes" (<see cref="PersonItemsViewModel.Cards"/>). Null: the item's own line.
+	/// </summary>
+	public string? CardSubtitle { get; set; }
 	public List<DayOfWeekObject?> AirDays { get; set; } = [];
 	public int? AirsAfterSeasonNumber { get; set; }
 	public int? AirsBeforeEpisodeNumber { get; set; }

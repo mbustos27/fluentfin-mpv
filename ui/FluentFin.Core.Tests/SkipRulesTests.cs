@@ -345,9 +345,27 @@ public sealed class SkipRulesTests
 		Assert.Equal("end", (string)args["anchor"]!);
 		Assert.Equal(62.0, (double)args["startS"]!);   // 23:20 is the end: 1400 - 1338
 		Assert.Equal(0.0, (double)args["endS"]!);
-		Assert.Equal("always", (string)args["action"]!);
+		// 1.6.1: left as Settings has it, the rule has no action of its own and follows Settings ("As in Settings")
+		Assert.False(args.ContainsKey("action"), "Settings' choice, not the rule's own");
 		Assert.False(args.ContainsKey("seriesId"), "the show playing: the backend knows it");
 		Assert.Equal("Skipping it in every episode", _vm.ToastText);
+	}
+
+	[Theory]
+	[InlineData("ask", true, "always")]
+	[InlineData("always", false, "ask")]
+	[InlineData("ask", false, null)]
+	[InlineData("always", true, null)]
+	public void TheSheet_SendsAnAction_OnlyWhenTheViewerChangedSettingsChoice(string settings, bool skipsByItself, string? sent)
+	{
+		// 1.6.1 (the 1.6 review's skip queue: SkipRuleSheet always sent one, so a marked rule never followed Settings again)
+		var sheet = new SkipRuleSheet();
+		sheet.Prefill((5, 41), 41, 1400, settings);
+		Assert.Equal(settings == "always", sheet.SkipsByItself);
+		sheet.SkipsByItself = !sheet.SkipsByItself;     // changed, then
+		sheet.SkipsByItself = skipsByItself;            // back or not
+		var args = sheet.Build()!;
+		Assert.Equal(sent, args.ContainsKey("action") ? (string)args["action"]! : null);
 	}
 
 	[Fact]
@@ -384,7 +402,8 @@ public sealed class SkipRulesTests
 		sheet.MarkEnd(53.6);
 		Assert.Equal(("0:12", "0:54"), (sheet.StartText, sheet.EndText));
 		var args = sheet.Build()!;
-		Assert.Equal(("start", 12.0, 54.0, "ask"), ((string)args["anchor"]!, (double)args["startS"]!, (double)args["endS"]!, (string)args["action"]!));
+		Assert.Equal(("start", 12.0, 54.0), ((string)args["anchor"]!, (double)args["startS"]!, (double)args["endS"]!));
+		Assert.False(args.ContainsKey("action"), "a Skip button, as Settings has it: Settings' choice");
 	}
 
 	[Theory]
@@ -433,6 +452,24 @@ public sealed class SkipRulesTests
 			"A show | No suggestions (you said never) | Forget everything for A show",
 		], rows.Select(x => $"{x.Title} | {x.Detail} | {x.ForgetName}"));
 		Assert.Equal([true, false, false, false, false, true], rows.Select(x => x.IsShow));
+	}
+
+	[Fact]
+	public void TheList_ASeasonThatMoves_WithItsSpotTakenBack_ReadsMoves_NotATime()
+	{
+		// 1.6.1 (R2, BRIDGE.md skip_rules): a season keeps its "moves" mark when its spot was taken back, and is listed
+		// with startS and endS of 0 when it kept no skip; the row says it moves, never "0:00 to 0:00"
+		var rows = SkipRulesList.RowsOf(new BridgeSkipRulesList([
+			new BridgeSkipShow("abababababababababababababababab", "Shadows", [],
+				[new BridgeLearnedIntro("intro-abababababababababababababababab-1", 1, 0, 0, true)], false),
+		]));
+
+		Assert.Equal(
+		[
+			"Shadows | 1 learned intro | Forget everything for Shadows",
+			"Season 1 intro | Moves between episodes, so it's not offered | Forget the season 1 intro of Shadows",
+		], rows.Select(x => $"{x.Title} | {x.Detail} | {x.ForgetName}"));
+		Assert.Equal("intro-abababababababababababababababab-1", rows[1].RuleId);
 	}
 
 	[Fact]

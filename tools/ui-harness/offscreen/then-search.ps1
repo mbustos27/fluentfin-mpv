@@ -173,6 +173,11 @@ if ($srLoose -eq 'loose') {
             SrSettle 2000
             $srWithCards = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) | Where-Object { -not $_.Current.IsOffscreen -and $_.Current.ClassName -match 'BaseItemDtoCard' })
             Check 'search 1.5: a person opens "With <name>", their films and shows' ([bool]$srWith -and $srWithCards.Count -gt 0) "cards: $($srWithCards.Count)"
+            # 1.6.1 (BH-150-m3): the shows they are a guest in, one card per show, its line "in 2 episodes" (shown and spoken)
+            $srGuest = Wait-Until { @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) |
+                Where-Object { $_.Current.ClassName -match 'BaseItemDtoCard' -and $_.Current.Name -like "It's Always Sunny in Philadelphia*" }) } -Seconds 5 -PollMs 200
+            # (a card's lines are drawn, not separate elements: its name carries them; the shot shows the line)
+            Check 'search 1.6.1 (BH-150-m3): "With <name>" shows a show they are a guest in once, its card named "in 2 episodes"' (@($srGuest).Count -eq 1 -and $srGuest[0].Current.Name -like '*in 2 episodes*') "cards: $((@($srGuest) | ForEach-Object { $_.Current.Name }) -join ' | ')"
             $srWithFocus = SrFocused
             $srFirst = $srWithCards | Sort-Object { [OffscreenUi]::RectOf($_).Top }, { [OffscreenUi]::RectOf($_).Left } | Select-Object -First 1
             $srFirstRect = if ($srFirst) { $srR = [OffscreenUi]::RectOf($srFirst); '"rect":[{0},{1},{2},{3}]' -f [int]$srR.X, [int]$srR.Y, [int]$srR.Width, [int]$srR.Height } else { 'none' }

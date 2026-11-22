@@ -15,5 +15,12 @@ public sealed record PageTitleFacts(string Kicker, int Count, string CountLabel)
 
 	public string FeatureLabel => CountLabel;
 
+	/// <summary>1.6.1 (colpage queue): what Narrator says for the count: "4 screens on the lot" (the tubes alone said "4").</summary>
+	public string FeatureSpoken => SpokenCount(FeatureCount, FeatureLabel);
+
+	/// <summary>1.6.1: a count and its word as Narrator says them: "6 features" (the board writes "6" "FEATURES").</summary>
+	public static string SpokenCount(string count, string label) =>
+		string.IsNullOrWhiteSpace(label) ? count : $"{count} {label.Trim().ToLowerInvariant()}";
+
 	public Visibility FeaturesVisibility => Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 }

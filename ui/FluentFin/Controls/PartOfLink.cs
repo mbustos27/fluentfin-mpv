@@ -56,7 +56,7 @@ public sealed partial class PartOfLink : UserControl
 		for (var i = 0; i < collections.Count; i++)
 		{
 			var collection = collections[i];
-			var shown = Core.ViewModels.CollectionNames.Display(collection).Trim(); // 1.6 collections: "[HUB] Marvel" reads "Marvel"
+			var shown = ItemMeta.PartOfShown(collection); // 1.6 collections: "[HUB] Marvel" reads "Marvel" (1.6.1: one rule, ItemMeta)
 			var link = new HyperlinkButton
 			{
 				Content = shown,

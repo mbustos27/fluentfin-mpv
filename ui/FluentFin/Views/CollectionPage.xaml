@@ -214,14 +214,14 @@
                                 ToolTipService.ToolTip="Favourite">
                                 <FontIcon Glyph="&#xEB51;" />
                             </ToggleButton>
-                            <!--  1.6 collections: "Save as playlist", a Nixie collection only (the user's own playlist on the server)  -->
+                            <!--  1.6 collections: "Save as playlist", a Nixie collection only (the user's own playlist on the server); 1.6.1: never one of shows only  -->
                             <Button
                                 x:Name="SaveAsPlaylistButton"
                                 AutomationProperties.Name="Save as playlist"
                                 Command="{x:Bind ViewModel.SaveAsPlaylistCommand}"
                                 Style="{StaticResource NixieButtonStyle}"
                                 ToolTipService.ToolTip="Save as a playlist of your own on the server"
-                                Visibility="{x:Bind ViewModel.IsNixie, Mode=OneWay}">
+                                Visibility="{x:Bind ViewModel.OffersSaveAsPlaylist, Mode=OneWay}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <FontIcon FontSize="16" Glyph="&#xE710;" />
                                     <TextBlock Text="Save as playlist" />

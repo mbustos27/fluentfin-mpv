@@ -200,4 +200,12 @@ public static class LoadMessages
 		$"{AppIdentity.Name} couldn't get it from {ServerName()}. Check that the server is running and that this PC can reach it, then select Try again.";
 
 	public static LoadOutcome CouldNotLoad(string what) => LoadOutcome.Failed($"Couldn't load {what}", CheckServer());
+
+	/// <summary>
+	/// 1.6.1 (BH-151-m2): what an action's failure says (a removal, a Save): <paramref name="otherwise"/>, unless the server no
+	/// longer takes this sign-in (<see cref="SignInState.Ended"/>): then <paramref name="what"/> and the ended sign-in, not "check
+	/// the server", which can't help.
+	/// </summary>
+	public static string ActionFailed(string what, string otherwise) =>
+		SignInState.Ended ? $"{what}: your sign-in to {ServerName()} ended. Sign in again, then try again." : otherwise;
 }

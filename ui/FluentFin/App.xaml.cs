@@ -126,8 +126,9 @@ public partial class App : Application
 		var migrationNote = legacyCopy.Note;
 		_legacyCopyFailed = legacyCopy.Failed ? legacyCopy.LegacyApp ?? "the old version" : null;
 		var knownFolders = StartupFolders(legacyCopy.Failed ? legacyCopy.LegacyRoot : null);
-		// 1.5.1 fixes (BH-150-M2): the device id Jellyfin sees is this copy's (its data folder's), not the PC's
-		Core.InstallDeviceId.UseDataFolder(knownFolders.ApplicationData);
+		// 1.5.1 fixes (BH-150-M2): the device id Jellyfin sees is this copy's (its data folder's), not the PC's; 1.6.1: kept in
+		// that folder (a new version folder or drive letter is the same device), one per running window of the copy
+		Core.InstallDeviceId.UseDataFolder(knownFolders.ApplicationData, UpdateNoticeService.IsMsiInstall());
 
 		Host = Microsoft.Extensions.Hosting.Host
 		.CreateDefaultBuilder()

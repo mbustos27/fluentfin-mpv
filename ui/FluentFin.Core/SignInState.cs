@@ -10,10 +10,18 @@ namespace FluentFin.Core;
 /// </summary>
 public static class SignInState
 {
+	private static readonly Lock Gate = new();
 	private static int _ended;
+	private static int _generation;
 
 	/// <summary>The server refused this sign-in's token: nothing more will load until the user signs in again.</summary>
 	public static bool Ended => Volatile.Read(ref _ended) == 1;
+
+	/// <summary>
+	/// 1.6.1: which sign-in this is (one more at every <see cref="SignedIn"/>). A check that began under one sign-in may end only
+	/// that one (<see cref="MarkEnded(int)"/>): its 401 was for the old token.
+	/// </summary>
+	public static int Generation => Volatile.Read(ref _generation);
 
 	/// <summary>Raised (on any thread) when <see cref="Ended"/> changes.</summary>
 	public static event Action? Changed;
@@ -25,11 +33,22 @@ public static class SignInState
 	public static Func<Task>? SignInAgain { get; set; }
 
 	/// <summary>The server refused the token. True the first time only (the caller logs it).</summary>
-	public static bool MarkEnded()
+	public static bool MarkEnded() => MarkEnded(Generation);
+
+	/// <summary>
+	/// 1.6.1: the server refused the token of sign-in <paramref name="generation"/> (<see cref="Generation"/> when the refused
+	/// request was seen). False, and nothing ends, when a newer sign-in came meanwhile, or when it had already ended.
+	/// </summary>
+	public static bool MarkEnded(int generation)
 	{
-		if (Interlocked.Exchange(ref _ended, 1) == 1)
+		lock (Gate)
 		{
-			return false;
+			if (generation != _generation || _ended == 1)
+			{
+				return false;
+			}
+
+			Volatile.Write(ref _ended, 1);
 		}
 
 		Changed?.Invoke();
@@ -39,7 +58,15 @@ public static class SignInState
 	/// <summary>A sign-in (or a sign-out): whatever ended before is over.</summary>
 	public static void SignedIn()
 	{
-		if (Interlocked.Exchange(ref _ended, 0) == 1)
+		bool was;
+		lock (Gate)
+		{
+			Interlocked.Increment(ref _generation);
+			was = _ended == 1;
+			Volatile.Write(ref _ended, 0);
+		}
+
+		if (was)
 		{
 			Changed?.Invoke();
 		}

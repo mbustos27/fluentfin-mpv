@@ -1,6 +1,8 @@
 # Nixie 1.6 (the player stream): the Quality menu and Playback stats, by keyboard, in the layout theme NIXIE_LAYOUT names.
 #   $env:NIXIE_LAYOUT='<Classic|DriveIn|Cinematic|Editorial>'
-#   run-offscreen.ps1 ... -Script season,play -Setting ShowPlaybackStatsButton=true -Then offscreen\then-160-player.ps1
+#   run-offscreen.ps1 ... -Script season,play -Setting ShowPlaybackStatsButton=true -Then offscreen\then-160-player.ps1 `
+#       -Before offscreen\before-backend-debug.ps1
+#   (1.6.1: the backend logs a polled get_stats at DEBUG, so the stats checks count its questions in a DEBUG log)
 # Dot-sourced by drive.ps1 after the play step (FluentFin's controls; paused, the bars up, the keyboard on Play/Pause). Every
 # name here starts with QP. P160_NARROW=0 skips the 1100 px shots; P160_SETTINGS=0 skips Settings.
 #
@@ -21,7 +23,8 @@ function QP-Names($Element) {
 }
 function QP-Focus { $f = [OffscreenUi]::Focused($script:hwnd, $script:ui.Id); if ($f) { $f | ConvertFrom-Json } else { $null } }
 function QP-FocusText { $f = QP-Focus; if ($f) { "$($f.type) '$($f.name)' $($f.automationId)" } else { 'nothing' } }
-# get_stats questions the backend has had so far (its log: "<- get_stats (id N)")
+# get_stats questions the backend has had so far (its log: "<- get_stats (id N)", at DEBUG since 1.6.1: -Before
+# offscreen\before-backend-debug.ps1, or every count here is 0)
 function QP-StatsAsked {
     $log = Join-Path $DataDir 'Logs\mpv-backend.log'
     if (-not (Test-Path $log)) { return 0 }
@@ -98,6 +101,10 @@ if ($qpMenu) {
 }
 
 # ---- Playback stats: I opens, reads about once a second, Esc closes, nothing read while closed ------------------------------
+# the counts below mean something only with the backend's DEBUG lines in its log (before-backend-debug.ps1)
+$qpBackendLog = Join-Path $DataDir 'Logs\mpv-backend.log'
+$qpDebug = (Test-Path -LiteralPath $qpBackendLog) -and [bool](Select-String -LiteralPath $qpBackendLog -Pattern '\[\s*DEBUG\]' -Quiet)
+Check "160 $qpTheme | the backend logs at DEBUG, so its get_stats questions can be counted" $qpDebug 'run with -Before offscreen\before-backend-debug.ps1'
 $qpAsked0 = QP-StatsAsked
 Start-Sleep -Seconds 3
 Check "160 $qpTheme | closed, the stats are never asked for" ((QP-StatsAsked) -eq $qpAsked0) "$qpAsked0 -> $(QP-StatsAsked)"

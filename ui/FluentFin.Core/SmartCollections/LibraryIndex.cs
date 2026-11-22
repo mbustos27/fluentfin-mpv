@@ -153,11 +153,12 @@ public sealed class LibraryIndex : IDisposable
 			var cancellation = _readingCancel.Token;
 			var url = _client.BaseUrl;
 			var user = _client.UserId;
-			return _reading = Task.Run(() => ReadFromServer(key, url, user, cancellation), CancellationToken.None);
+			var since = _files.Generation; // 1.6.1: a sign-out after this refuses the read's write-back
+			return _reading = Task.Run(() => ReadFromServer(key, url, user, since, cancellation), CancellationToken.None);
 		}
 	}
 
-	private async Task<IndexSnapshot?> ReadFromServer(string key, string url, Guid user, CancellationToken cancellationToken)
+	private async Task<IndexSnapshot?> ReadFromServer(string key, string url, Guid user, long since, CancellationToken cancellationToken)
 	{
 		var watch = Stopwatch.StartNew();
 		try
@@ -177,7 +178,7 @@ public sealed class LibraryIndex : IDisposable
 			}
 
 			Changed?.Invoke(this, snapshot);
-			await _files.Write(key, ToJson(snapshot), _homeCache.LoginKey(url, user)).ConfigureAwait(false);
+			await _files.Write(key, ToJson(snapshot), _homeCache.LoginKey(url, user), since).ConfigureAwait(false);
 			return snapshot;
 		}
 		catch (OperationCanceledException)

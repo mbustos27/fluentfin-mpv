@@ -48,6 +48,14 @@ public sealed partial class ShellPage : Page
 		// or renamed, here or on the server: LibraryChanged); a fifth library moves them into the Libraries menu
 		_client.UserViewsChanged += OnUserViewsChanged;
 		Unloaded += (_, _) => _client.UserViewsChanged -= OnUserViewsChanged;
+		// 1.6.1 (the 1.6 review): a star pressed while the bar has no libraries (their read failed) asks for them again
+		_top.LibrariesWanted += OnLibrariesWanted;
+		Unloaded += (_, _) =>
+		{
+			_top.LibrariesWanted -= OnLibrariesWanted;
+			_gone = true;
+			_librariesRetry?.Stop();
+		};
 
 		// Seaglass 1.1.4 (UX review, prioritised fix 5): the title bar's Back and Account follow the page this frame shows, by
 		// its type, as soon as the frame shows it (the navigation service's own Navigated waits for the page's view model:
@@ -67,16 +75,94 @@ public sealed partial class ShellPage : Page
 
 	private void OnUserViewsChanged(object? sender, EventArgs e) => DispatcherQueue.TryEnqueue(() => _ = LoadLibrariesAsync());
 
+	private void OnLibrariesWanted(object? sender, EventArgs e) => DispatcherQueue.TryEnqueue(() => _ = LoadLibrariesAsync());
+
+	/// <summary>1.6.1: when the bar reads the libraries again after a failed read (seconds), then no more.</summary>
+	internal static readonly int[] LibrariesRetrySeconds = [3, 10, 30, 90];
+
+	private Microsoft.UI.Dispatching.DispatcherQueueTimer? _librariesRetry;
+	private int _librariesTries;
+
+	/// <summary>Review of 1.6.1 (F3): the shell went (signed out, switched): no more reads of the libraries.</summary>
+	private bool _gone;
+
+	/// <summary>
+	/// Review of 1.6.1 (F3): when the bar reads the libraries again after a failed read (null: no more). Not tied to the page
+	/// being loaded: the first read starts in the constructor, and one that failed before Loaded scheduled none.
+	/// </summary>
+	internal static TimeSpan? NextLibrariesRetry(int tries, bool gone) =>
+		gone || tries < 0 || tries >= LibrariesRetrySeconds.Length ? null : TimeSpan.FromSeconds(LibrariesRetrySeconds[tries]);
+
 	private async Task LoadLibrariesAsync()
 	{
 		try
 		{
-			var libraries = await _client.GetUserViews();
-			_top.SetLibraries(libraries);
+			// 1.6.1 (the 1.6 review): a failed read (null) left the bar empty for the session, and the stars said nothing: it is
+			// read again a few times, and a good read anywhere else fills the bar too (UserViewsChanged)
+			var libraries = await _client.GetUserViewsOrNull();
+			_top.SetLibraries(libraries ?? []);
+			if (libraries is not null)
+			{
+				_librariesTries = 0;
+				_librariesRetry?.Stop();
+				_ = ReadBoxSetsSoonAsync();
+				return;
+			}
+
+			if (NextLibrariesRetry(_librariesTries, _gone) is { } wait)
+			{
+				_librariesTries++;
+				_librariesRetry ??= DispatcherQueue.CreateTimer();
+				_librariesRetry.IsRepeating = false;
+				_librariesRetry.Interval = wait;
+				_librariesRetry.Tick -= OnLibrariesRetry;
+				_librariesRetry.Tick += OnLibrariesRetry;
+				_librariesRetry.Start();
+			}
 		}
 		catch (Exception)
 		{
 			// no list: one "Libraries" tab, whose page says why (its own load state)
+		}
+	}
+
+	private void OnLibrariesRetry(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+	{
+		if (!_gone)
+		{
+			_ = LoadLibrariesAsync();
+		}
+	}
+
+	/// <summary>Review of 1.6.1 (F2): how long after the libraries the shell reads the box sets, when nothing else has.</summary>
+	internal static readonly TimeSpan BoxSetsAfter = TimeSpan.FromSeconds(8);
+
+	private bool _boxSetsAsked;
+
+	/// <summary>
+	/// Review of 1.6.1 (F2): until this user's box sets are read, a collection name that would be tidied keeps the server's
+	/// (CollectionNames.Display). Home's Made by Nixie rows and the Collections page read them; with neither (the rows turned
+	/// off, a film opened at once), the shell reads them once, a few seconds after sign-in.
+	/// </summary>
+	private async Task ReadBoxSetsSoonAsync()
+	{
+		if (_boxSetsAsked)
+		{
+			return;
+		}
+
+		_boxSetsAsked = true;
+		try
+		{
+			await Task.Delay(BoxSetsAfter);
+			if (CollectionNames.Tidy && !CollectionNames.BoxSetsKnown)
+			{
+				await _client.GetBoxSets();
+			}
+		}
+		catch (Exception)
+		{
+			// the names stay the server's until a page reads the list
 		}
 	}
 

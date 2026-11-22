@@ -48,6 +48,10 @@ public sealed partial class CollectionPage : Page
 			}
 		};
 
+		// 1.6.1: Save as playlist turns itself off while it saves and once saved; the keyboard left on it would sit on a disabled
+		// button, where no key reaches a handler (Back did nothing after a save)
+		SaveAsPlaylistButton.IsEnabledChanged += (_, e) => OnSaveEnabledChanged((bool)e.NewValue);
+
 		GridList.GotFocus += (_, e) => Remember(e.OriginalSource as DependencyObject);
 		// review Major 2: a card scrolled into view (the keyboard, Back) keeps room above it: the bar's height and 16 where the
 		// page runs under the top bar (Cinematic), 16 otherwise, as CardGrid keeps its reveal margin
@@ -162,6 +166,43 @@ public sealed partial class CollectionPage : Page
 		{
 			QueueStage();
 			ShowAmbient();
+		}
+		else if (e.PropertyName == nameof(CollectionViewModel.SavedPlaylist) && ViewModel.SavedPlaylist is not null && _saveHadKeyboard is { } how)
+		{
+			// saved: the keyboard goes on to its Open link, once the link is drawn
+			_saveHadKeyboard = null;
+			UiDispatch.Enqueue(DispatcherQueue, "the saved playlist's Open link", () =>
+			{
+				if (KeyboardWaitsOnFavourite)
+				{
+					OpenPlaylistLink.Focus(how);
+				}
+			}, Microsoft.UI.Dispatching.DispatcherQueuePriority.Low);
+		}
+	}
+
+	/// <summary>1.6.1: the keyboard is still where Save left it while it saved (the user has not gone elsewhere since).</summary>
+	private bool KeyboardWaitsOnFavourite => XamlRoot is { } root && Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) == FavoriteToggle;
+
+	/// <summary>1.6.1: how the keyboard was on Save as playlist when it turned itself off (null: it wasn't there).</summary>
+	private FocusState? _saveHadKeyboard;
+
+	/// <summary>
+	/// 1.6.1: Save as playlist turned off with the keyboard on it (it saves, or it saved): the keyboard waits on Favourite beside
+	/// it, then goes to the Open link once the playlist is made (<see cref="OnViewModelChanged"/>), or back to Save when the
+	/// server said no and Save is on again.
+	/// </summary>
+	private void OnSaveEnabledChanged(bool enabled)
+	{
+		if (!enabled && SaveAsPlaylistButton.FocusState != FocusState.Unfocused)
+		{
+			_saveHadKeyboard = SaveAsPlaylistButton.FocusState;
+			FavoriteToggle.Focus(_saveHadKeyboard.Value);
+		}
+		else if (enabled && _saveHadKeyboard is { } how && KeyboardWaitsOnFavourite)
+		{
+			_saveHadKeyboard = null;
+			SaveAsPlaylistButton.Focus(how);
 		}
 	}
 

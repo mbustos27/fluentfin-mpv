@@ -45,6 +45,12 @@ public static class WindowShortcuts
 
 	private static void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
 	{
+		// 1.6.1: any key after the "/" that opened the search box: a "/" typed from now on is the user's (SlashSwallow)
+		if (!AppShortcuts.IsModifierKey((int)e.Key))
+		{
+			TitleBarControl.KeyPressed();
+		}
+
 		if (e.Handled || sender is not UIElement root)
 		{
 			return;
@@ -93,7 +99,7 @@ public static class WindowShortcuts
 		}
 
 		// Nixie 1.4.0 (bug hunt M4): a held key's repeats are handled and do nothing (Run); they never reach the page either
-		if (shortcut is { } found && Run(root, found, e.KeyStatus.WasKeyDown))
+		if (shortcut is { } found && Run(root, found, e.KeyStatus.WasKeyDown, (int)e.Key))
 		{
 			e.Handled = true;
 		}
@@ -121,7 +127,7 @@ public static class WindowShortcuts
 	// -- doing it --------------------------------------------------------------------------------------------------------
 
 	/// <summary>Carries the shortcut out where it applies; true when it did something (the key is then handled).</summary>
-	private static bool Run(UIElement root, AppShortcut shortcut, bool repeat = false)
+	private static bool Run(UIElement root, AppShortcut shortcut, bool repeat = false, int key = 0)
 	{
 		try
 		{
@@ -150,7 +156,8 @@ public static class WindowShortcuts
 				case AppShortcut.Forward:
 					return BackForwardService().GoForward();
 				case AppShortcut.FocusSearch:
-					return TitleBarControl.FocusSearch();
+					// 1.6.1: "/" makes a character too, which must not land in the box it opens (Ctrl+F and Ctrl+E make none)
+					return TitleBarControl.FocusSearch(bySlash: key == AppShortcuts.Keys.Slash);
 				case AppShortcut.OpenSettings:
 					return App.GetService<INavigationService>().NavigateTo<SettingsViewModel>();
 				case AppShortcut.GoHome:

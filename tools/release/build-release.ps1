@@ -41,7 +41,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '1.6.0',
+    [string]$Version = '1.6.1',
     [string]$SourceUrl,
     [switch]$Reuse,
     [switch]$SkipTests,  # only to try the packaging itself; a release runs them
@@ -292,10 +292,13 @@ else {
     if (Test-Path $testLog) { Remove-Item $testLog }
     Push-Location (Join-Path $repo 'backend')
     try {
+        # Nixie 1.6.1 (BH-160-M1): test_skip_snap too, with the release's libmpv folder (NIXIE_LIBMPV_DIR) and
+        # FLUENTFIN_MPV_REQUIRE_LIBMPV=1, so its no-mpv.exe snap test fails instead of skipping
         & $venvPython -B -I (Join-Path $repo 'tools\backend-bench\hidden_run.py') --log $testLog --timeout 1800 --desktop "ffr-release-tests-$PID" `
             --env "APPDATA=$testEnv\appdata" --env "LOCALAPPDATA=$testEnv\localappdata" `
             --env "PATH=$(Split-Path $mpvExe);$env:SystemRoot\System32;$env:SystemRoot" `
-            -- $venvPython -B -m unittest discover -s tests -k test_bridge -k test_window_embed -k test_window_geometry | Out-Null
+            --env "NIXIE_LIBMPV_DIR=$LibmpvDir" --env 'FLUENTFIN_MPV_REQUIRE_LIBMPV=1' `
+            -- $venvPython -B -m unittest discover -s tests -k test_bridge -k test_window_embed -k test_window_geometry -k test_skip_snap | Out-Null
         $code = $LASTEXITCODE
     }
     finally { Pop-Location }

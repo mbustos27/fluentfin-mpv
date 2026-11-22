@@ -577,6 +577,70 @@ class AlwaysDoesNotLoop(Base):
         ready, found = video.get_current_intro(10)
         self.assertTrue(found.has_triggered)
 
+    def rebuilt(self, before, position):
+        """The show's rule segments built again (what
+        `bridge_skip.refresh_rules` does after a Yes, an Add or a forget),
+        carrying what the episode did with each."""
+        olds = {s.rule_id: s for s in before}
+        video = self.augment(episode())
+        for seg in video.intros:
+            sr.carry_rule_state(olds.get(seg.rule_id), seg, position)
+        return {s.rule_id: s for s in video.intros}
+
+    def test_an_always_part_skipped_stays_skipped_when_the_rules_rebuild(self):
+        """1.6.1 (the 1.6 review's skip queue): a Yes or an Add mid-episode
+        rebuilt every rule's segment, so an "always" part the player had
+        skipped re-armed: a seek back into it skipped it again."""
+        first = self.store.add_rule(self.key, "start", 5, 41, "always")
+        seg, = self.augment(episode()).intros
+        seg.has_triggered, seg.skipped_at = True, 12.5
+        # the viewer seeks back into it, then marks another part
+        added = self.store.add_rule(self.key, "end", 62, 0, "always")
+        segs = self.rebuilt([seg], position=20.0)
+        self.assertTrue(segs[first].has_triggered, "not skipped again")
+        self.assertEqual(segs[first].skipped_at, 12.5)
+        self.assertFalse(segs[added].has_triggered,
+                         "the new part, still ahead, is skipped when reached")
+
+    def test_a_rule_made_from_the_skip_just_taken_does_not_skip_it_again(self):
+        # a Yes (or Shift+S) right after skipping 5-41 by hand: at 43 s
+        segs = self.rebuilt([], position=43.0)
+        self.assertEqual(segs, {})
+        made = self.store.add_rule(self.key, "start", 5, 41, "always",
+                                   "learned")
+        segs = self.rebuilt([], position=43.0)
+        self.assertTrue(segs[made].has_triggered)
+
+    def test_a_rule_added_inside_its_part_still_skips_it_now(self):
+        """1.6.1 review (a regression from 1.6.0): the sheet's default part is
+        now to 30 s from now; added "skipped by itself" with the playhead
+        inside it, it counted as skipped and this episode played it."""
+        from jellyfin_mpv_shim.media import Video
+
+        made = self.store.add_rule(self.key, "start", 20, 50, "always")
+        for position in (20.0, 21.0, 49.5):
+            segs = self.rebuilt([], position=position)
+            self.assertFalse(segs[made].has_triggered, position)
+        video = Video.__new__(Video)
+        video.intros = list(self.rebuilt([], position=21.0).values())
+        ready, found = video.get_current_intro(21.5)
+        self.assertEqual((found.rule_id, found.has_triggered), (made, False),
+                         "the player skips it")
+        self.assertTrue(self.rebuilt([], position=50.0)[made].has_triggered,
+                        "past its end: as taken")
+
+    def test_a_snapped_edge_stays_unless_the_rule_moved(self):
+        made = self.store.add_rule(self.key, "start", 5, 41, "always")
+        seg, = self.augment(episode()).intros
+        seg.end, seg.snap_pending = 42.35, False        # snapped
+        segs = self.rebuilt([seg], position=1.0)
+        self.assertEqual((segs[made].end, segs[made].snap_pending),
+                         (42.35, False))
+        self.store.correct_rule(self.key, made, 44.0)   # corrected: snaps anew
+        segs = self.rebuilt([seg], position=1.0)
+        self.assertEqual((segs[made].end, segs[made].snap_pending),
+                         (44.0, True))
+
 
 class StoreFile(Base):
     def test_roundtrip_forget_and_list(self):
@@ -624,6 +688,121 @@ class StoreFile(Base):
                 store.add_rule(self.key, "start", 0, 40)
                 self.assertEqual(len(sr.SkipStore(path).show(
                     self.key)["rules"]), 1)
+
+    LEGACY = {"version": 1,
+              "entries": {SERIES + ":1": {"start": 150.5, "end": 190,
+                                          "undone": 0}},
+              "seasons": {ACCOUNT + ":" + SERIES + ":1": {
+                  "skips": [[150.5, 190.0]], "moves": False}}}
+
+    def write_legacy(self, folder, data=None):
+        path = os.path.join(folder, sr.LEGACY_FILE)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self.LEGACY if data is None else data, f)
+        return path
+
+    def test_a_second_migration_never_brings_a_forgotten_intro_back(self):
+        """1.6.1, the merge review's R3 (its twice_probe.py): migrate,
+        Forget all, the legacy file back (1.5.1 ran again after a downgrade,
+        or the rename failed), the next start: the intro stays forgotten."""
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, sr.RULES_FILE)
+            legacy = self.write_legacy(d)
+            first = sr.SkipStore(path)
+            first.migrate(ACCOUNT)
+            self.assertEqual(first.intro(self.key, 1), (150.5, 190.0))
+            self.assertTrue(os.path.exists(legacy + sr.LEGACY_DONE_SUFFIX))
+            self.assertEqual(first.forget(ACCOUNT), 1)
+            self.assertIsNone(first.intro(self.key, 1))
+            self.write_legacy(d)
+            again = sr.SkipStore(path)
+            again.migrate(ACCOUNT)
+            self.assertIsNone(again.intro(self.key, 1))
+            self.assertTrue(os.path.exists(legacy), "left alone")
+            with open(path, encoding="utf-8") as f:
+                self.assertTrue(json.load(f)["legacyMigrated"])
+
+    def test_migrated_once_even_when_the_rename_fails_or_it_held_nothing(
+            self):
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, sr.RULES_FILE)
+            self.write_legacy(d, {"version": 1, "entries": {}})
+            sr.SkipStore(path).migrate(ACCOUNT)
+            with open(path, encoding="utf-8") as f:
+                self.assertTrue(json.load(f)["legacyMigrated"],
+                                "recorded though nothing moved")
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, sr.RULES_FILE)
+            self.write_legacy(d)
+            real = os.replace
+
+            def no_rename(src, dst):
+                if src.endswith(sr.LEGACY_FILE):
+                    raise OSError("in use")
+                return real(src, dst)
+
+            with mock.patch.object(sr.os, "replace", no_rename):
+                sr.SkipStore(path).migrate(ACCOUNT)
+            store = sr.SkipStore(path)
+            store.forget(ACCOUNT, rule_id="intro-%s-1" % SERIES)
+            sr.SkipStore(path).migrate(ACCOUNT)    # the file is still there
+            self.assertIsNone(sr.SkipStore(path).intro(self.key, 1))
+
+    def test_a_file_160_wrote_counts_as_migrated(self):
+        """1.6.1 review (a gap in R3): 1.6.0 wrote no ``legacyMigrated``; with
+        its rename failed, 1.6.1 migrated the legacy file again and brought
+        back intros forgotten under 1.6.0, also when every show was
+        forgotten (an empty ``shows``)."""
+        for shows in ({}, {self.key: {"name": "Shadows", "rules": [{
+                "id": "r1", "anchor": "start", "start": 0, "end": 40,
+                "action": None, "origin": "marked"}]}}):
+            with self.subTest(shows=len(shows)), \
+                    tempfile.TemporaryDirectory() as d:
+                path = os.path.join(d, sr.RULES_FILE)
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump({"version": 2, "shows": shows}, f)  # 1.6.0's
+                legacy = self.write_legacy(d)          # its rename failed
+                store = sr.SkipStore(path)
+                store.migrate(ACCOUNT)
+                self.assertIsNone(store.intro(self.key, 1))
+                self.assertTrue(os.path.exists(legacy), "left alone")
+                with open(path, encoding="utf-8") as f:
+                    saved = json.load(f)
+                self.assertTrue(saved["legacyMigrated"], "recorded")
+                self.assertEqual(len(saved["shows"]), len(shows))
+        # an unreadable file is set aside and starts over: it migrates
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, sr.RULES_FILE)
+            open(path, "wb").close()
+            self.write_legacy(d)
+            store = sr.SkipStore(path)
+            store.migrate(ACCOUNT)
+            self.assertEqual(store.intro(self.key, 1), (150.5, 190.0))
+
+    def test_a_question_left_open_by_a_restart_asks_again(self):
+        """1.6.1 (the 1.6 review's skip queue): "asked" was kept in the file,
+        so a question open when the backend ended (nobody answered, nothing
+        released it) never came back."""
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, sr.RULES_FILE)
+            before = sr.SkipStore(path)
+            self.assertIsNone(before.note_candidate(self.key, "e1", "start",
+                                                    2.0, 41.0))
+            asked = before.note_candidate(self.key, "e2", "start", 3.0, 43.0)
+            self.assertIsNotNone(asked, "asked once")
+            self.assertIsNone(before.note_candidate(self.key, "e3", "start",
+                                                    2.5, 42.0),
+                              "not again while it is open")
+            # the backend ends with the question open; the next start
+            after = sr.SkipStore(path)
+            again = after.note_candidate(self.key, "e4", "start", 2.0, 41.0)
+            self.assertIsNotNone(again)
+            self.assertEqual(again["id"], asked["id"])
+            # while this run's own question is open, it waits as before
+            self.assertIsNone(after.note_candidate(self.key, "e5", "start",
+                                                   2.0, 41.0))
 
     def test_a_rule_too_long_or_empty_is_refused(self):
         for anchor, start, end in (("start", 40, 10), ("start", 0, 700),
@@ -768,6 +947,21 @@ class Moves(Base):
         self.play(video, 40)
         self.assertFalse(self.moves(video))
 
+    def test_a_reading_between_the_press_and_its_seek_is_not_by_hand(self):
+        """1.6.1 (found at the 1.6 integration, `_app_jump`): a 0.5 s
+        playback reading that came between the app's `note_skip` and its
+        seek landing was taken for the press's jump, and the seek then
+        counted as the viewer's (a hand skip 40 s from the spot: "moves")."""
+        self.play(self.ep(1), 150, 150.5, 190)
+        video = self.ep(2)
+        self.play(video, 0, 0.5)
+        self.watcher.note_skip(now=self.t)
+        self.play(video, 1.0)                 # playback, before the seek lands
+        self.play(video, 40)                  # the app's seek
+        self.assertFalse(self.moves(video))
+        self.assertEqual(self.store.intro_entry(self.key, 1)["skips"],
+                         [[150.5, 190.0]], "nothing kept from the app's jump")
+
     def test_learning_off_notes_nothing(self):
         sr.OPTIONS.learn = False
         self.play(self.ep(1), 150, 150.5, 190)
@@ -825,6 +1019,148 @@ class Moves(Base):
             # season 2's kept skip is compared with the next one
             self.play(self.ep(12, season=2), 40, 40.5, 80)
             self.assertTrue(self.moves(self.ep(13, season=2)))
+
+
+class MovesOutliveTheSpot(Base):
+    """1.6.1, the 1.6 merge review's R2: 1.5.1 kept a season's skips and its
+    "moves" mark apart from the learned range, and 1.6.0 put them inside the
+    intro entry, so two undos or a seek back into the spot (which drop the
+    entry) took the season's evidence with them, and the next spot learned
+    started a new history; a 1.5.1 mark whose range was already gone was
+    dropped at the migration. Now the season keeps its own record."""
+
+    # Moves' helpers
+    def setUp(self):
+        super().setUp()
+        self.watcher = sr.SkipWatcher(self.store)
+        self.t = 0.0
+
+    def play(self, video, *positions):
+        for p in positions:
+            self.t += 0.5
+            self.watcher.sample(video, p, now=self.t)
+
+    def ep(self, n, season=1, series=SERIES):
+        return Vid(dict(episode(season=season), Id="%032d" % n,
+                        SeriesId=series))
+
+    def moves(self, video):
+        entry = self.store.intro_entry(sr.show_key(video.item),
+                                       video.item["ParentIndexNumber"])
+        return bool(entry and entry.get("moves"))
+
+    def offered(self, video):
+        video.intros = []
+        intro_sources.augment(video, make, self.store)
+        return [(s.type, s.start, s.end, s.source) for s in video.intros]
+
+    def undo_twice(self, video):
+        """The Skip pill pressed on the learned spot, then a seek back into
+        it, twice (the player's undo)."""
+        self.play(video, 146, 146.5)
+        for back in (160, 170):
+            self.watcher.note_skip(now=self.t)
+            self.play(video, 190, back)
+
+    def test_two_undos_then_a_hand_skip_40_s_away_moves(self):
+        self.play(self.ep(1), 150, 150.5, 190)       # learned 150.5-190
+        second = self.ep(2)
+        second.intros = []
+        intro_sources.augment(second, make, self.store)
+        self.undo_twice(second)
+        self.assertIsNone(self.store.intro(self.key, 1), "the spot is gone")
+        self.play(self.ep(4), 70, 70.5, 110)          # same part, 40 s earlier
+        self.assertTrue(self.moves(self.ep(5)))
+        self.assertEqual([], self.offered(self.ep(5)), "not learned again")
+
+    def test_the_reviewers_probe_undo_twice_through_the_store(self):
+        # moves_probe.py case B, as the reviewer ran it
+        self.play(self.ep(1), 150, 150.5, 190)
+        self.store.undo_intro(self.key, 1)
+        self.store.undo_intro(self.key, 1)
+        self.play(self.ep(4), 70, 70.5, 110)
+        self.assertTrue(bool((self.store.intro_entry(self.key, 1) or {})
+                             .get("moves")))
+        self.assertIsNone(self.store.intro(self.key, 1))
+
+    def test_a_seek_back_into_the_spot_keeps_the_seasons_skips(self):
+        self.play(self.ep(1), 150, 150.5, 190)
+        second = self.ep(2)
+        second.intros = []
+        intro_sources.augment(second, make, self.store)
+        self.play(second, 185, 160)       # a seek back into it: forgotten
+        self.assertIsNone(self.store.intro(self.key, 1))
+        self.play(self.ep(3), 70, 70.5, 110)
+        self.assertTrue(self.moves(self.ep(4)))
+
+    def test_learned_again_at_the_same_spot_keeps_one_history(self):
+        self.play(self.ep(1), 150, 150.5, 190)
+        self.store.undo_intro(self.key, 1)
+        self.store.undo_intro(self.key, 1)
+        self.play(self.ep(2), 151, 151.5, 190)        # learned again, near
+        self.assertEqual(self.store.intro(self.key, 1), (151.5, 190.0))
+        self.assertEqual([[150.5, 190.0], [151.5, 190.0]],
+                         self.store.intro_entry(self.key, 1)["skips"])
+        self.assertFalse(self.moves(self.ep(3)))
+
+    def test_a_151_mark_whose_range_was_gone_migrates(self):
+        # moves_probe.py case A: 1.5.1 marked season 1 "moves", and a seek
+        # back had already forgotten its range
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, sr.LEGACY_FILE), "w",
+                      encoding="utf-8") as f:
+                json.dump({"version": 1, "entries": {}, "seasons": {
+                    ACCOUNT + ":" + SERIES + ":1": {"skips": [],
+                                                    "moves": True},
+                    ACCOUNT + ":" + SERIES + ":2": {
+                        "skips": [[100.5, 140.0]], "moves": False}}}, f)
+            self.store = sr.SkipStore(os.path.join(d, sr.RULES_FILE))
+            self.watcher = sr.SkipWatcher(self.store)
+            self.store.migrate(ACCOUNT)
+            self.play(self.ep(1), 150, 150.5, 190)
+            self.assertIsNone(self.store.intro(self.key, 1),
+                              "a season that moves is not learned")
+            self.assertTrue(self.moves(self.ep(2)))
+            # season 2's kept skip (no range) is compared with the next
+            self.play(self.ep(12, season=2), 40, 40.5, 80)
+            self.assertTrue(self.moves(self.ep(13, season=2)))
+            # Settings lists the season that moves, and Forget clears it
+            listed = sr.listing(self.store, ACCOUNT)["shows"][0]
+            self.assertEqual([(i["season"], i["moves"])
+                              for i in listed["learnedIntros"]],
+                             [(1, True), (2, True)])
+            self.store.forget(ACCOUNT, rule_id="intro-%s-1" % SERIES)
+            self.assertFalse(self.moves(self.ep(3)))
+            self.play(self.ep(4), 150, 150.5, 190)
+            self.assertEqual(self.store.intro(self.key, 1), (150.5, 190.0))
+
+    def test_kept_on_disk_and_mirrored_for_a_160_backend(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, sr.RULES_FILE)
+            self.store = sr.SkipStore(path)
+            self.watcher = sr.SkipWatcher(self.store)
+            self.play(self.ep(1), 150, 150.5, 190)
+            self.play(self.ep(2), 70, 70.5, 110)
+            with open(path, encoding="utf-8") as f:
+                show = json.load(f)["shows"][self.key]
+            self.assertTrue(show["seasons"]["1"]["moves"])
+            self.assertTrue(show["intros"]["1"]["moves"],
+                            "1.6.0 reads the mark in the entry")
+            # a file 1.6.0 wrote (no "seasons"): its marks are read from the
+            # entries
+            del show["seasons"]
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"version": 2, "shows": {self.key: show}}, f)
+            reread = sr.SkipStore(path)
+            self.assertIsNone(reread.intro(self.key, 1))
+            self.assertTrue(reread.intro_entry(self.key, 1)["moves"])
+
+    def test_a_season_never_learned_keeps_nothing(self):
+        # a server's intro: nothing learned, so hand skips are not kept
+        video = Vid(dict(episode(), Id="%032d" % 1),
+                    [Seg("Intro", 10, 40, "server")])
+        self.play(video, 150, 150.5, 190)
+        self.assertIsNone(self.store.show(self.key))
 
 
 if __name__ == "__main__":

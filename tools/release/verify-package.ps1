@@ -6,6 +6,8 @@
 
 .DESCRIPTION
   - Checks the zip against its .sha256 and unzips it into -Out\pkg (a fresh folder; -Out must be outside the repo).
+  - Checks that a skip rule snaps to the cut with only what the package ships (1.6.1): the bundled backend's
+    --nixie-skip-check, off-screen, with no mpv.exe on PATH.
   - Runs, each with its own scratch data folder (--data-dir), APPDATA/LOCALAPPDATA pointed into -Out, and a PATH of
     Windows' own folders only (no Python, no mpv), through tools\ui-harness\offscreen\drive.ps1 on a private desktop
     inside a kill-on-close job (tools\backend-bench\hidden_run.py), with no backend command set (FluentFin finds its
@@ -24,6 +26,10 @@
                  started" and report nothing to the server (the release notes' "needs mpv on PATH"), then close.
       SelfTest   Nixie.exe --mpv-selftest with FluentFin's controls (no server), tools\release\selftest-offscreen.ps1.
       Kill       the self-test, then FluentFin ended abruptly (a crash): its kill-on-close job must end the backend.
+      InstallSwitch  1.6.1 (BH-151-m6): Nixie.exe --install-update <a decoy installer> refused for want of the upgrade
+                 test's marker (NIXIE_UPGRADE_TEST unset), and let through the gate with it, tools\release\
+                 installswitch-offscreen.ps1. Nothing is installed: the decoy is no installer, and the unzipped copy is
+                 portable.
   - Alongside each run, tools\release\proc_audit.py records every process FluentFin starts (image, command line, every
     DLL loaded). A run fails if any of them comes from the repository, a dev checkout, a Python install, the build's
     work folder or (except mpv.exe and its DLLs in the Mpv run) a WinGet mpv; or if a command line names a token.
@@ -39,7 +45,7 @@ param(
     [Parameter(Mandatory)][string]$Out,
     [string]$HarnessPython,
     [string]$Cache = (Join-Path $env:TEMP 'fluentfin-mpv-harness'),
-    [ValidateSet('Launcher', 'Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill')][string[]]$Runs = @('Launcher', 'Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill'),
+    [ValidateSet('Launcher', 'Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill', 'InstallSwitch')][string[]]$Runs = @('Launcher', 'Default', 'SavedVlc', 'Mpv', 'NoMpv', 'SelfTest', 'Kill', 'InstallSwitch'),
     [int]$TimeoutSeconds = 600
 )
 
@@ -120,6 +126,29 @@ Check 'libmpv\: no libdvdcss (DVD decryption), at most its stub' ((-not $css) -o
 function Get-Listing { Get-ChildItem $pkg -Recurse -File -Force | ForEach-Object { "{0}|{1}|{2}" -f $_.FullName.Substring($pkg.Length), $_.Length, $_.LastWriteTimeUtc.Ticks } }
 $before = @(Get-Listing)
 
+# --- Nixie 1.6.1 (BH-160-M1): a skip rule snaps to the cut with only what the package ships ----------------------------
+# 1.6.0 analysed with a separate mpv.exe, which the package doesn't have. The bundled backend's --nixie-skip-check
+# (skip_snap.self_check): the package's libmpv encodes a check clip (a test pattern and a tone, black and silent at 9.0 to
+# 9.6 s), the backend analyses it in a process of its own (the same exe with --nixie-skip-analyse, as a skip does) and
+# snaps a rule's edge to the clip's cut. Off-screen and silent (libmpv with vo=null and ao=null, on a private desktop in a
+# kill-on-close job), with a PATH of Windows' own folders only (no mpv.exe, no Python), and TEMP and the data folders in -Out.
+$skipDir = Join-Path $Out 'skip-check'
+if (Test-Path $skipDir) { Remove-Item -Recurse -Force $skipDir }
+New-Item -ItemType Directory -Force (Join-Path $skipDir 'temp'), (Join-Path $skipDir 'local'), (Join-Path $skipDir 'roaming') | Out-Null
+$skipLog = Join-Path $skipDir 'run.log'
+& $HarnessPython -I $hidden --log $skipLog --timeout 180 --desktop "ffr-skipcheck-$PID" --env "PATH=$windowsPath" `
+    --env "TEMP=$skipDir\temp" --env "TMP=$skipDir\temp" --env "LOCALAPPDATA=$skipDir\local" --env "APPDATA=$skipDir\roaming" `
+    -- (Join-Path $app 'backend\fluentfin-mpv-backend.exe') --nixie-skip-check | Out-Null
+$skipCode = $LASTEXITCODE
+$skipLine = @(Get-Content $skipLog -ErrorAction SilentlyContinue | Where-Object { $_ -match '^\{.*"analyser"' }) | Select-Object -Last 1
+$skip = $null
+if ($skipLine) { try { $skip = $skipLine | ConvertFrom-Json } catch { $skip = $null } }
+$skipLibmpv = [IO.Path]::GetFullPath((Join-Path $app 'libmpv\libmpv-2.dll'))
+$skipOk = ($skipCode -eq 0) -and $skip -and $skip.ok -and $skip.analyser -eq 'libmpv' -and $skip.path -and
+    ([IO.Path]::GetFullPath($skip.path) -eq $skipLibmpv)
+Check 'skip rules snap with only the package: the bundled backend analyses with app\libmpv in a process of its own and lands on the cut' $skipOk `
+    $(if ($skip) { "exit $skipCode; analyser $($skip.analyser) $($skip.path); snapped $($skip.snapped) s; $($skip.error)" } else { "exit $skipCode, no result line (log $skipLog)" })
+
 # --- what the runs need: mpv for the Mpv run and for the test video, the test video ------------------------------------
 $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
 $mpvDir = $null
@@ -187,7 +216,8 @@ function Complete-Audit($Audit, [string]$Name, [bool]$MpvAllowed) {
     $summary = ($procs | ForEach-Object { "$([IO.Path]::GetFileName($_.image))#$($_.pid) ($(@($_.modules).Count) DLLs) = $($_.image)" }) -join '; '
     Check "$($Name): every process FluentFin started, and every DLL they loaded, is the package's or Windows'" ($bad.Count -eq 0 -and $procs.Count -gt 0) $(if ($bad.Count) { ($bad | Select-Object -Unique) -join '; ' } else { $summary })
     $backend = @($procs | Where-Object { $_.image -like '*\backend\fluentfin-mpv-backend.exe' })
-    Check "$($Name): the backend is the bundled one" ($backend.Count -ge 1) $(if ($backend) { $backend[0].commandLine } else { 'no fluentfin-mpv-backend.exe started' })
+    # InstallSwitch never signs in, so nothing starts the backend there (it starts with the shell)
+    if ($Name -ne 'InstallSwitch') { Check "$($Name): the backend is the bundled one" ($backend.Count -ge 1) $(if ($backend) { $backend[0].commandLine } else { 'no fluentfin-mpv-backend.exe started' }) }
     if ($Name -eq 'Mpv') { Check "$($Name): mpv.exe from PATH was used (mpv's controls)" $mpvSeen $mpvDir }
     if ($Name -in 'Default', 'Launcher', 'SelfTest', 'Kill') {
         $own = Join-Path $app 'libmpv\libmpv-2.dll'
@@ -299,6 +329,29 @@ foreach ($run in $Runs) {
             # 1.2.0: the app's own name (Nixie's controls), never upstream's
             $shown = if (Test-Path $dump) { Select-String -Path $dump -Pattern "mpv isn't installed on this PC.*Switch to Nixie's controls.*winget install mpv-player\.mpv-CI\.MSVC" | Select-Object -First 1 }
             Check "NoMpv: the player page says to switch to Nixie's controls or install mpv (winget)" ([bool]$shown) $(if ($shown) { $shown.Line.Trim() } else { "no such text in $dump" })
+        }
+        'InstallSwitch' {
+            # 1.6.1 (BH-151-m6): the release package's gate on --install-update, for real (the Sandbox proves only the allowed side)
+            $runOut = Join-Path $Out $run
+            $data = Join-Path $Out "data-$run"
+            foreach ($d in $runOut, $data) { if (Test-Path $d) { Remove-Item -Recurse -Force $d } }
+            foreach ($leg in 'no-marker', 'marker') {
+                New-Item -ItemType Directory -Force (Join-Path $data $leg) | Out-Null
+                [void](Initialize-HarnessSettings (Join-Path $data $leg) '' @('MpvPlayerControls=FluentFin'))
+                [void](Initialize-HarnessMpvConf (Join-Path $data $leg))
+            }
+            New-Item -ItemType Directory -Force $runOut | Out-Null
+            $envA = Join-Path $runOut 'env\appdata'; $envL = Join-Path $runOut 'env\localappdata'
+            New-Item -ItemType Directory -Force $envA, $envL | Out-Null
+            $audit = Start-Audit $run
+            Write-Host "`n== $run (Nixie.exe --install-update <a decoy>, without and with the upgrade test's marker; $runOut)"
+            $switchArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'installswitch-offscreen.ps1'), '-Exe', $exe, '-DataDir', $data, '-Out', $runOut)
+            & $HarnessPython -B -I $hidden --log (Join-Path $runOut 'hidden_run.log') --timeout 240 --desktop "ffv-$run-$PID" `
+                --env "APPDATA=$envA" --env "LOCALAPPDATA=$envL" --env "PATH=$windowsPath" -- $ps @switchArgs | Out-Host
+            Complete-Audit $audit $run $false
+            $json = Join-Path $runOut 'installswitch.json'
+            if (Test-Path $json) { (Get-Content $json -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { Check "$($run): $($_.Name)" ([bool]$_.Value.ok) "$($_.Value.detail)" } }
+            else { Check "$($run): result" $false "no installswitch.json (see $runOut\hidden_run.log)" }
         }
         { $_ -in 'Launcher', 'SelfTest', 'Kill' } {
             # Kill: the self-test again, but FluentFin is ended abruptly (a crash): its job must end the bundled backend

@@ -402,6 +402,91 @@ public sealed class TopBarTests
 		Assert.True(taken <= width, $"{taken} px taken at {width}");
 	}
 
+	/// <summary>
+	/// Nixie 1.6.1 (the 1.6 review: "FoldFromTheRight tests Fit only"): the row the bar then shows. At 1100 px with three
+	/// favourites the first stays and the other two leave from the right, in their order, into "Libraries ▾"; a lit favourite
+	/// that left names "Libraries ▾" after it; at 1920 all three are back.
+	/// </summary>
+	[Fact]
+	public void TheFavourites_FoldFromTheRight_InTheRowTheBarShows()
+	{
+		static BaseItemDto Library(string name, BaseItemDto_CollectionType? type = null) =>
+			new() { Id = Guid.NewGuid(), Name = name, Type = BaseItemDto_Type.CollectionFolder, CollectionType = type };
+		var kids = Library("Kids and Family", BaseItemDto_CollectionType.Movies);
+		var standUp = Library("Stand-up Specials", BaseItemDto_CollectionType.Movies);
+		var anime = Library("Anime", BaseItemDto_CollectionType.Tvshows);
+		var tabs = TopTabs.Build([kids, standUp, anime], [kids.Id!.Value, standUp.Id!.Value, anime.Id!.Value]);
+
+		var narrow = TopBar.Fit(1100, Caption, Back, Wordmark, FavouritesRow(3), LongMenu, Account, search: true, searchOpen: false);
+		var row = TopTabs.Fold(tabs, narrow.ShownLibraries, lit: null);
+
+		Assert.Equal(["Home", "Kids and Family", "Collections", "Libraries"], row.Select(t => t.Title));
+		// the ones folded are still in the menu, in their order
+		Assert.Equal(["Kids and Family", "Stand-up Specials", "Anime"], row[^1].Menu.Skip(1).Select(t => t.Title));
+		// Anime lit (its page shown): "Libraries ▾" says so
+		var lit = TopTabs.Fold(tabs, narrow.ShownLibraries, tabs.Single(t => t.Title == "Anime").Mark);
+		Assert.Equal("Anime", lit[^1].Title);
+		Assert.Equal(TopTabs.LibrariesKey, lit[^1].Menu[0].Key);
+
+		var wide = TopBar.Fit(1920, Caption, Back, Wordmark, FavouritesRow(3), LongMenu, Account, search: true, searchOpen: false);
+		Assert.Equal(["Home", "Kids and Family", "Stand-up Specials", "Anime", "Collections", "Libraries"], TopTabs.Fold(tabs, wide.ShownLibraries, null).Select(t => t.Title));
+	}
+
+	/// <summary>
+	/// Nixie 1.6.1 (the 1.6 review: "no mouse click on a star"): a click on a tile's star stars it and never opens the tile
+	/// (the tile's invoke on the same press is the star's), and a click on the tile later opens it. The press is seen even
+	/// though the star's button handles it (handledEventsToo).
+	/// </summary>
+	[Fact]
+	public void AClickOnAStar_StarsTheLibrary_AndNeverOpensTheTile()
+	{
+		Assert.True(LibrariesLandingPage.StarTookTheClick(starPressedAt: 10_000, now: 10_000));
+		Assert.True(LibrariesLandingPage.StarTookTheClick(10_000, 10_000 + LibrariesLandingPage.StarClickMs - 1));
+		Assert.False(LibrariesLandingPage.StarTookTheClick(10_000, 10_000 + LibrariesLandingPage.StarClickMs));
+		Assert.False(LibrariesLandingPage.StarTookTheClick(starPressedAt: 0, now: Environment.TickCount64));
+
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var page = File.ReadAllText(Path.Combine(root, "Views", "LibrariesLandingPage.xaml.cs"));
+		Assert.Contains("star.AddHandler(PointerPressedEvent, new Microsoft.UI.Xaml.Input.PointerEventHandler((_, _) => _starPressedAt = Environment.TickCount64), true);", page);
+		Assert.Contains("if (StarTookTheClick(_starPressedAt, Environment.TickCount64))", page);
+		var click = page[page.IndexOf("private void OnStarClick(", StringComparison.Ordinal)..];
+		click = click[..click.IndexOf("private void OnStarLoaded(", StringComparison.Ordinal)];
+		Assert.Contains("_starPressedAt = Environment.TickCount64;", click);
+		Assert.Contains("ToggleStar(tile, (UIElement)sender);", click);
+	}
+
+	/// <summary>
+	/// Nixie 1.6.1 (the 1.6 review: "an empty bar after GetUserViews fails, after which the stars say nothing"): the shell reads
+	/// the libraries again after a failed read and when a star asks, and both stars say why nothing happened.
+	/// </summary>
+	[Fact]
+	public void AFailedReadOfTheLibraries_IsTriedAgain_AndTheStarsSaySo()
+	{
+		var root = Path.GetDirectoryName(AppVersionTests.FindUp(Path.Combine("ui", "FluentFin", "FluentFin.csproj")))!;
+		var shell = File.ReadAllText(Path.Combine(root, "Views", "ShellPage.xaml.cs"));
+		Assert.Contains("var libraries = await _client.GetUserViewsOrNull();", shell);
+		Assert.Contains("_top.SetLibraries(libraries ?? []);", shell);
+		// review of 1.6.1 (F3): the retry is not tied to Loaded (the first read starts in the constructor), only to the shell going
+		Assert.Contains("if (NextLibrariesRetry(_librariesTries, _gone) is { } wait)", shell);
+		var load = shell[shell.IndexOf("private async Task LoadLibrariesAsync()", StringComparison.Ordinal)..];
+		load = load[..load.IndexOf("private void OnLibrariesRetry(", StringComparison.Ordinal)];
+		Assert.DoesNotContain("IsLoaded", load);
+		Assert.Equal(TimeSpan.FromSeconds(3), ShellPage.NextLibrariesRetry(0, gone: false));
+		Assert.Equal(TimeSpan.FromSeconds(90), ShellPage.NextLibrariesRetry(3, gone: false));
+		Assert.Null(ShellPage.NextLibrariesRetry(4, gone: false));
+		Assert.Null(ShellPage.NextLibrariesRetry(0, gone: true));
+		Assert.Contains("_top.LibrariesWanted += OnLibrariesWanted;", shell);
+		Assert.Contains("_client.UserViewsChanged += OnUserViewsChanged;", shell);
+		Assert.Equal([3, 10, 30, 90], ShellPage.LibrariesRetrySeconds);
+
+		foreach (var file in new[] { Path.Combine("Views", "LibrariesLandingPage.xaml.cs"), Path.Combine("Controls", "TopLibrariesMenu.xaml.cs") })
+		{
+			var code = File.ReadAllText(Path.Combine(root, file));
+			Assert.Contains("FavouriteChange.NotRead => TopFavourites.NotReadMessage,", code);
+			Assert.Contains("var noted = change is FavouriteChange.Full or FavouriteChange.NotRead;", code);
+		}
+	}
+
 	[Fact]
 	public void TheLibrariesMenu_HasItsStars_AndTheRowWaitsForItToClose()
 	{
@@ -492,7 +577,7 @@ public sealed class TopBarTests
 		var code = File.ReadAllText(Path.Combine(root, "Views", "LibrariesLandingPage.xaml.cs"));
 		// the star's press does not open the tile under it
 		Assert.Contains("star.AddHandler(PointerPressedEvent,", code);
-		Assert.Contains("if (Environment.TickCount64 - _starPressedAt < 500)", code);
+		Assert.Contains("if (StarTookTheClick(_starPressedAt, Environment.TickCount64))", code); // 1.6.1: the rule named (StarClickMs, 500)
 		var shell = File.ReadAllText(Path.Combine(root, "Views", "ShellPage.xaml.cs"));
 		Assert.Contains("_top.OpenCollections = App.Commands.OpenCollections;", shell);
 		Assert.Contains("TopTabs.AllLibraryTabs(_top.AllTabs)", shell);

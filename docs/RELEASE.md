@@ -102,7 +102,11 @@ command set and a PATH of Windows' own folders only:
   backend);
 - the launcher: the folder's top holds only `Nixie.exe` (the launcher, `tools\release\launcher\Launcher.cs`),
   `README.txt`, `LICENSE`, `THIRD-PARTY-NOTICES.txt` and `app\`; the self-test started through that `Nixie.exe`,
-  with a data folder whose name has a space, must start `app\Nixie.exe` with the arguments unchanged and pass.
+  with a data folder whose name has a space, must start `app\Nixie.exe` with the arguments unchanged and pass;
+- `--install-update` (1.6.1, `tools\release\installswitch-offscreen.ps1`): `Nixie.exe --install-update` with a decoy
+  installer (a text file with a matching `.sha256`) must be refused for want of the upgrade test's marker, Nixie must
+  keep running past the moment it would restart to install, and with the marker the switch must get past that gate (the
+  unzipped copy is portable, so it is refused later and nothing is ever installed).
 
 Each run records every process FluentFin starts and every DLL they load (`tools\release\proc_audit.py`) and fails on
 anything from a dev checkout, a Python install or the build folder, on a token in a command line, or on a file written
@@ -220,6 +224,21 @@ was a cold start (about 2.5 s to the window, the files just copied); the medians
 1.6.0 opens its window as fast as 1.5.1 and holds the same memory after the browse; Home's first cards come about 115 ms
 later (the ranges overlap; 1.6 adds Home's Made by Nixie rows, built from the library index when it is in). Not a gate;
 1.6.1 measures itself beside this.
+
+**1.6.1 beside 1.6.0** (2026-11-21 on the build PC, after the final pass; Debug x64 builds of the 1.6.1 branch at dcf706b
+and of v1.6.0). The 1.7 streams' builds and harness runs kept the PC at full load (the CPU at 74 to 100 %), so every
+figure is about three times 1.6.0's own row above, and the ranges are wide; one 1.6.0 run failed on the harness's
+screenshot (GDI+ "generic error"), so its row has 4 runs, all others passed every check, strict auth included. The
+medians, with the runs' range:
+
+| Build | Start-up: window shown (ms) | The app's own "window shown" (ms) | First Home paint (ms) | Private bytes (MB) |
+|---|---|---|---|---|
+| 1.6.0 | 4,941 (3,958 to 20,295) | 5,178 | 4,748 (3,949 to 7,952) | 586 (577 to 587) |
+| 1.6.1 | 3,410 (2,959 to 3,953) | 3,606 | 3,115 (1,692 to 4,792) | 574 (558 to 584) |
+
+Under that load 1.6.1 is no slower than 1.6.0 (its medians lower, the ranges overlapping) and holds a little less
+memory after the browse. A fix release with no new start-up work; not a gate. 1.7 measures itself beside this, on a
+quieter PC if it can.
 
 ## 5. Publish (the coordinating session, after review)
 

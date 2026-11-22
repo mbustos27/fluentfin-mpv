@@ -679,7 +679,90 @@ public sealed partial class TitleBarControl : UserControl
 	private static TitleBarControl? _current;
 
 	/// <summary>Seaglass: the search keys (Ctrl+E, /, WindowShortcuts): the search box takes the focus when it shows.</summary>
-	public static bool FocusSearch() => _current is { } bar && bar.OpenSearch(FocusState.Keyboard);
+	public static bool FocusSearch() => FocusSearch(bySlash: false);
+
+	// 1.6.1 (fix queue): the "/" press's own character, when it comes after the focus, is not typed into the box (SlashSwallow)
+	private static readonly Core.Shortcuts.SlashSwallow Slash = new();
+	private TextBox? _searchText;
+
+	/// <summary>
+	/// 1.6.1: <see cref="FocusSearch()"/>; <paramref name="bySlash"/>: the "/" key opened it, so that press's character, if it
+	/// reaches the box after the focus, is not typed into it.
+	/// </summary>
+	public static bool FocusSearch(bool bySlash)
+	{
+		if (_current is not { } bar)
+		{
+			return false;
+		}
+
+		if (bySlash)
+		{
+			Slash.Arm();
+		}
+
+		var opened = bar.OpenSearch(FocusState.Keyboard);
+		if (opened)
+		{
+			bar.HookSearchText();
+		}
+		else
+		{
+			Slash.Disarm();
+		}
+
+		return opened;
+	}
+
+	/// <summary>1.6.1: a key other than the "/" that opened the box: the next "/" is the user's (WindowShortcuts).</summary>
+	public static void KeyPressed() => Slash.Disarm();
+
+	/// <summary>1.6.1: the box's own text box (its template's), whose next change may be the "/" press's character.</summary>
+	private void HookSearchText()
+	{
+		var box = FindTextBox(SearchBox);
+		if (box is null || ReferenceEquals(box, _searchText))
+		{
+			return;
+		}
+
+		if (_searchText is not null)
+		{
+			_searchText.BeforeTextChanging -= OnSearchBeforeTextChanging;
+		}
+
+		_searchText = box;
+		box.BeforeTextChanging += OnSearchBeforeTextChanging;
+	}
+
+	private static TextBox? FindTextBox(DependencyObject parent)
+	{
+		for (var i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+		{
+			var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
+			if (child is TextBox box)
+			{
+				return box;
+			}
+
+			if (FindTextBox(child) is { } inner)
+			{
+				return inner;
+			}
+		}
+
+		return null;
+	}
+
+	private void OnSearchGotFocus(object sender, RoutedEventArgs e) => HookSearchText();
+
+	private static void OnSearchBeforeTextChanging(TextBox sender, TextBoxBeforeTextChangingEventArgs e)
+	{
+		if (Slash.IsArmed && Slash.Swallows(sender.Text, sender.SelectionStart, sender.SelectionLength, e.NewText))
+		{
+			e.Cancel = true;
+		}
+	}
 
 	private void TitleBar_BackRequested(Microsoft.UI.Xaml.Controls.TitleBar sender, object args)
 	{

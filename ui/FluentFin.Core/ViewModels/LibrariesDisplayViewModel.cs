@@ -8,6 +8,9 @@ public partial class LibrariesDisplayViewModel(IJellyfinClient jellyfinClient) :
 {
 	private Metadata? _metadata;
 
+	/// <summary>1.6.1 (BH-151-m7): the date-added choice as the server had it when the page was read or last saved.</summary>
+	private bool _dateAddedAsRead;
+
 	public List<string> DateAddedBehaviors { get; set; } = ["User file creation date", "Use date scanned into the library"];
 
 	protected override List<JellyfinConfigItemViewModel> CreateItems(ServerConfiguration config)
@@ -47,17 +50,25 @@ public partial class LibrariesDisplayViewModel(IJellyfinClient jellyfinClient) :
 		return items;
 	}
 
-	/// <summary>1.5.1 fixes: the date-added choice is the metadata configuration's: saved with the page (it never was).</summary>
+	/// <summary>
+	/// 1.5.1 fixes: the date-added choice is the metadata configuration's: saved with the page (it never was). 1.6.1 (BH-151-m7):
+	/// only when the choice changed, and into the configuration as the server has it now (read again just before, every key
+	/// kept): Jellyfin replaces the whole configuration with what it is sent, and a Save of another setting on this page posted
+	/// a one-key copy over it every time.
+	/// </summary>
 	protected override async Task<bool> SaveMoreAsync()
 	{
-		if (_metadata is null)
+		if (_metadata is null || _metadata.UseFileCreationTimeForDateAdded == _dateAddedAsRead)
 		{
 			return true;
 		}
 
 		try
 		{
-			await _jellyfinClient.SaveMetadata(_metadata);
+			var now = await _jellyfinClient.GetMetadata();
+			now.UseFileCreationTimeForDateAdded = _metadata.UseFileCreationTimeForDateAdded;
+			await _jellyfinClient.SaveMetadata(now);
+			_dateAddedAsRead = now.UseFileCreationTimeForDateAdded;
 			return true;
 		}
 		catch (Exception)
@@ -69,6 +80,7 @@ public partial class LibrariesDisplayViewModel(IJellyfinClient jellyfinClient) :
 	async Task INavigationAware.OnNavigatedTo(object parameter)
 	{
 		_metadata = await _jellyfinClient.GetMetadata();
+		_dateAddedAsRead = _metadata?.UseFileCreationTimeForDateAdded ?? false;
 
 		await OnNavigatedTo(parameter);
 	}

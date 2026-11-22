@@ -8,6 +8,9 @@ namespace FluentFin.Core.Tests;
 /// second while open and never while closed, the I key and Esc, and the Copy text, which never carries the token, the server
 /// address's credentials or an <c>ApiKey=</c>.
 /// </summary>
+// 1.6.1 (the 1.6 review's queue): one test sets SessionInfo's token and address (static) for the Copy check, so this
+// class runs with the other tests that set SessionInfo, one at a time, never beside a test that reads them.
+[Collection(SessionInfoCollection.Name)]
 public sealed class PlaybackStatsTests
 {
 	private const string Item = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee1";
@@ -151,6 +154,28 @@ public sealed class PlaybackStatsTests
 		}
 
 		Assert.Equal(6, _queries.Count);
+	}
+
+	[Fact]
+	public void Open_but_minimized_it_asks_nothing_until_the_window_is_back()
+	{
+		// 1.6.1 (the 1.6 review's queue): the open panel asked mpv once a second with the window minimized
+		var minimized = false;
+		_vm.WindowMinimized = () => minimized;
+		_vm.ToggleStats();
+		Assert.Single(_queries);
+		minimized = true;
+		for (var i = 0; i < 40; i++)
+		{
+			Wait(0.25);
+		}
+
+		Assert.Single(_queries);
+		Assert.True(_vm.IsStatsOpen, "still open for when the window is back");
+		minimized = false;
+		Wait(0.25);
+		Assert.Equal(2, _queries.Count);
+		Assert.Equal("Playing: Transcoding", _vm.StatsRows[0].Name);
 	}
 
 	[Fact]

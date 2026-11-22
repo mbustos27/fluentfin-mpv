@@ -126,7 +126,7 @@ public sealed class PageRefreshTests
 	public void AHeldR_RefreshesOnce_AndASecondRJoinsTheRefreshUnderWay()
 	{
 		var keys = Source("Services", "WindowShortcuts.cs").Replace("\r\n", "\n");
-		Assert.Contains("Run(root, found, e.KeyStatus.WasKeyDown)", keys);
+		Assert.Contains("Run(root, found, e.KeyStatus.WasKeyDown, (int)e.Key)", keys); // 1.6.1: and the key ("/" arms SlashSwallow)
 		Assert.Contains("if (repeat && !AppShortcuts.Repeats(shortcut))\n\t\t\t{\n\t\t\t\treturn true;", keys);
 		Assert.Contains("ownsLetters: TextInput.OwnsLetters(e.OriginalSource)", keys);
 

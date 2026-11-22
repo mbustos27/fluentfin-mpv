@@ -168,6 +168,17 @@ class ServerTests(unittest.TestCase):
         self.assertTrue(found["Items"])
         self.assertTrue(all("harbor" in i["Name"].lower() for i in found["Items"]))
 
+    def test_another_users_id_is_refused(self):
+        # 1.6.1 (the 1.6 review): the fake accepted any userId; Jellyfin refuses another user's to a user who is not an
+        # administrator, and Nixie never sends one: a request that does is a bug to see
+        other = "0123456789abcdef0123456789abcdef"
+        dashed = "%s-%s-%s-%s-%s" % (self.srv.user_id[:8], self.srv.user_id[8:12], self.srv.user_id[12:16], self.srv.user_id[16:20], self.srv.user_id[20:])
+        self.assertEqual(403, self.request("/Items?userId=%s&recursive=true&limit=1" % other, token=self.token)[0])
+        self.assertEqual(403, self.request("/UserViews?userId=" + other, token=self.token)[0])
+        self.assertEqual(200, self.request("/Items?userId=%s&recursive=true&limit=1" % dashed, token=self.token)[0])
+        self.assertEqual(200, self.request("/UserViews?userId=" + self.srv.user_id, token=self.token)[0])
+        self.assertEqual(200, self.request("/Items?recursive=true&limit=1", token=self.token)[0])
+
     def test_home_rows(self):
         resume = self.get("/UserItems/Resume?limit=12&mediaTypes=Video")
         self.assertGreater(len(resume["Items"]), 4)
@@ -948,6 +959,13 @@ class SearchTests(unittest.TestCase):
         films = self.lib.query({"personids": [pid], "recursive": ["true"], "includeitemtypes": ["Movie,Series"]})
         self.assertTrue(films["Items"])
         self.assertTrue(all(any(p["Id"] == pid for p in self.lib.items[i["Id"]]["people"]) for i in films["Items"]))
+        # 1.6.1 (BH-150-m3): a guest star in two episodes, credited on them only, with their show for Nixie's one card per show
+        self.assertNotIn("Episode", {i["Type"] for i in films["Items"]})
+        guest = self.lib.query({"personids": [pid], "recursive": ["true"], "includeitemtypes": ["Movie,Series,Episode"]})
+        episodes = [i for i in guest["Items"] if i["Type"] == "Episode"]
+        self.assertEqual(2, len(episodes))
+        self.assertEqual({"It's Always Sunny in Philadelphia"}, {e["SeriesName"] for e in episodes})
+        self.assertTrue(all(e.get("SeriesId") and e.get("SeriesPrimaryImageTag") for e in episodes))
 
     def test_sort_and_original_titles_only_when_asked_for(self):
         q = {"searchterm": ["amelie"], "recursive": ["true"], "includeitemtypes": ["Movie"]}

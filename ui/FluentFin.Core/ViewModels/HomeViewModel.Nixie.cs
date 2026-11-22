@@ -43,6 +43,19 @@ public partial class HomeViewModel
 
 	public ObservableCollection<NixieHomeRowViewModel> NixieRows { get; } = [];
 
+	/// <summary>
+	/// Nixie 1.6.1: whether a saved row of Nixie's is shown under the Settings switches now: its kind on, and its Home row on
+	/// (Highly rated, Unfinished series and the seasonal row are rows of their own; any other kind is the collection a day).
+	/// </summary>
+	internal static bool NixieRowShown(SmartCollection collection, IReadOnlySet<NixieHomeRow> rowsOff, IReadOnlySet<SmartCollectionKind> kindsOff) =>
+		!kindsOff.Contains(collection.Kind) && !rowsOff.Contains(collection.Kind switch
+		{
+			SmartCollectionKind.HighlyRated => NixieHomeRow.HighlyRated,
+			SmartCollectionKind.UnfinishedSeries => NixieHomeRow.UnfinishedSeries,
+			SmartCollectionKind.Seasonal => NixieHomeRow.Seasonal,
+			_ => NixieHomeRow.Rotating,
+		});
+
 	/// <summary>The rows Home shows of these collections, in order, under the Settings switches.</summary>
 	public static IReadOnlyList<SmartCollection> PickNixieRows(IReadOnlyList<SmartCollection> all, IReadOnlySet<NixieHomeRow> off, DateTimeOffset now)
 	{
@@ -65,7 +78,11 @@ public partial class HomeViewModel
 	private void ShowNixieRows(IReadOnlyList<HomeSnapshotNixieRow> rows)
 	{
 		NixieRows.Clear();
-		foreach (var row in rows)
+		// 1.6.1 (the 1.6 review): the saved page painted the rows Settings had turned off since it was saved, until the index's
+		// rows replaced them; it shows today's switches at once
+		var rowsOff = CollectionSettings.HomeRowsOff(localSettings);
+		var kindsOff = CollectionSettings.KindsOff(localSettings);
+		foreach (var row in rows.Where(r => NixieRowShown(r.Collection, rowsOff, kindsOff)))
 		{
 			NixieRows.Add(new NixieHomeRowViewModel(row.Collection) { Items = [.. row.Items.Select(BaseItemViewModel.FromDto)] });
 		}
@@ -119,7 +136,7 @@ public partial class HomeViewModel
 	private async Task FillNixieRows(IndexSnapshot snapshot)
 	{
 		var boxed = (await JellyfinClient.GetBoxSets())?.Items?.Select(x => IndexEntry.ProviderId(x, "Tmdb")).OfType<string>().ToHashSet() ?? [];
-		var now = _time.GetUtcNow();
+		var now = SmartCollectionCatalog.Now(_time); // 1.6.1 (BH-160-m1): the local date
 		var all = await SmartCollectionCatalog.BuildAllAsync(snapshot, now, boxed, CollectionSettings.KindsOff(localSettings));
 		var picked = PickNixieRows(all, CollectionSettings.HomeRowsOff(localSettings), now);
 		var rows = new List<NixieHomeRowViewModel>();

@@ -6,98 +6,68 @@ below is low severity, an accepted cost of the contract, or not verified yet. Ea
 says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
 ## Fix queue (next fix release)
-Found by the 1.5 reviews (2026-11-20); not fixed in 1.5 or 1.5.1 (1.6.1 takes them).
+For 1.7.1 now: 1.6.1 took what it could of the queue it was given, and what is left of it stays below.
+
+From the 1.6.1 bug hunt (`docs\reports\Bug hunt 2026-11-21 (1.6.1).md`; no Blocker, no Major):
+- **BH-161-q1** `ui\FluentFin.Core\Services\JellyfinClient_Search.cs:165-167`, `ui\FluentFin.Core\ViewModels\PersonItemsViewModel.cs:105`:
+  "With <name>" asks for at most 200 episodes, so a person's own long-running show can fill the cap and their older
+  guest roles disappear, with no hint that some were left out.
+- **BH-161-q2** `ui\FluentFin.Core\InstallDeviceId.cs:156`: a `device-id.json` with a duplicate key throws; `Current`'s
+  fallback then skips `ClaimWindow`, so two windows share one id again, and the file is never repaired (only a
+  hand-edited or oddly broken file; every other bad file is handled).
+- **BH-161-q3** `ui\FluentFin.Core\ViewModels\PersonItemsViewModel.cs:131`: once the cap is hit, every guest show reads
+  "in N+ episodes", even shows whose episodes all arrived, not only the oldest.
+- **BH-161-q4 (nit)** `backend\jellyfin_mpv_shim\skip_analyse.py:77`: the DLL search flags go in as `mode`, which
+  Windows ignores; it works only because Python's default flags match.
+
+Found by the 1.6.1 review (stream C, 2026-11-21):
+- `ui\FluentFin.Core\InstallDeviceId.cs` (`ClaimWindow`): a window opened while the copy's last one is still closing (Restart
+  to update reopening Nixie before the old process has ended, or a close and a quick start) finds the first slot still held
+  and signs in as the copy's second window: a device of its own on the server, which a per-device allow list refuses. The
+  next start is the first window again.
+
+Found by the 1.5 reviews (2026-11-20); not fixed in 1.5, 1.5.1 or 1.6.1.
 - **Home's row names are not in sentence case** (button review L6): "Continue Watching" and "Next Up" style names where the
   rest of the app says "Continue watching". Held back in 1.5 because the harness finds rows by name (`then-search.ps1`,
-  `drive.ps1`'s Home step, the keys matrix): rename the rows and the scripts' names together. Left out of 1.5.1 too: 61
-  names in 16 harness scripts and the keys matrix in four themes, more than a fix release's hour.
-- **"/" can, rarely, type itself into the search box it opens** (found at the 1.5 integration). Once in about 60 presses
-  (1 of 29 keys-matrix runs across the 1.5 streams; 0 of 30 in a targeted off-screen repro) the search sent "/Signal":
-  the "/" that focused the box was also typed into it. `WindowShortcuts` handles "/" in
-  PreviewKeyDown and focuses the box at once (`TitleBarControl.FocusSearch`); the key's character (WM_CHAR, made by
-  TranslateMessage after the key-down, as for a real keyboard) usually does not reach the box, but sometimes does. Ctrl+F
-  and Ctrl+E make no character. Fix: when "/" opens the box, swallow that key press's character (or focus the box once
-  the character has been dispatched); the keys matrix should check the box is empty after "/".
-
-From the 1.5.0 bug hunt (`docs\reports\Bug hunt 2026-11-20 (1.5.0).md`): 1.5.1 fixed every finding but this part of one:
-- **BH-150-m3 (the rest):** "With <name>" asks only for films and shows, so a guest star credited on episodes only finds
-  nothing there (1.5.1 says so in the empty state: "Guest roles on single episodes aren't shown here"). Ask `Episode` too,
-  grouped per show ("in 3 episodes").
-
-Found while making 1.5.1:
-- **then-140-arrival.ps1 assigns drive.ps1's `$before`** (lines 127 and 148; `test_then_names.ps1` fails on it, on 1.5.0
-  too): harmless today (drive.ps1 reads its `-Before` before the -Then script runs); rename the variable.
-
-From the 1.5.1 review (2026-11-21):
-- `ui\FluentFin\ViewModels\TitleBarViewModel.cs:220` `SignInAgain`: the in-place sign-in with a saved password has no test
-  (the bug hunt's probe passed it in Classic).
-- `ui\FluentFin.Core\Services\JellyfinClient.cs:70`: the websocket keeps redialling with the dead token until the next sign-in.
-- `ui\FluentFin.Core\InstallDeviceId.cs:29`: the program folder is part of the device id, so each portable version folder
-  (and each drive letter of a USB copy) is a new device; a user the administrator limits to chosen devices is refused
-  after the update (the bug hunt's BH-151-m5 too). Store the id in the data folder the first time.
-- `ui\FluentFin.Core\Services\SignInWatch.cs:48`: a check that started before a new sign-in can end the new session (a
-  tiny window: its 401 is for the old token, the mark is global).
+  `drive.ps1`'s Home step, the keys matrix): rename the rows and the scripts' names together. Left out of 1.5.1 and 1.6.1
+  too: 61 names in 16 harness scripts and the keys matrix in four themes, more than a fix release's hour.
 
 From the 1.5.1 bug hunt (`docs\reports\Bug hunt 2026-11-21 (1.5.1).md`):
-- **BH-151-m1** `ui\FluentFin.Core\ViewModels\SeriesViewModel.cs:299`: a series page's season list keeps "Couldn't load the
-  episodes" with Try again after the sign-in ended (all four themes' hard-coded Try again).
-- **BH-151-m2** `ui\FluentFin.Core\ViewModels\HomeViewModel.cs:752`, `ServerConfigurationViewModel.cs:28`: action
-  messages (remove, Save, the toggles) still say "didn't answer" or "check that it is running" after the sign-in ended.
-- **BH-151-m3** `ui\FluentFin.Core\InstallDeviceId.cs`: two windows of one copy share a device id (no single-instance
-  guard), and each one's in-place Sign in again ends the other's session, back and forth.
 - **BH-151-m4** `backend\jellyfin_mpv_shim\intro_sources.py:258` (`_save`): a 1.5.0 backend saving learned-intros.json
   drops 1.5.1's "moves" marks (a 1.5.0 portable copy beside 1.5.1, or a downgrade).
-- **BH-151-m5** `ui\FluentFin.Core\InstallDeviceId.cs:29`: each portable version folder and USB drive letter is a new
-  device; per-device allow lists refuse it (the review's line above).
-- **BH-151-m6** `ui\FluentFin\Services\UpdateNoticeService.cs:314`: the release package's refusal of `--install-update`
-  without the marker is only unit-tested; the Sandbox's leg 2 (`upgrade-inside.ps1:269`) proves only the allowed side.
-- **BH-151-m7** `ui\FluentFin.Core\ViewModels\LibrariesDisplayViewModel.cs:51`: Display's Save posts a one-field
-  `Metadata` over the server's whole metadata configuration, on every Save (a key a later Jellyfin adds would be reset).
-- **BH-151-m8** `backend\jellyfin_mpv_shim\player_reporting.py:432` (`send_timeline`): the sign-in ending mid-playback
-  refuses the progress and Stopped reports, the player says nothing, and the place and watched state are lost.
+- **BH-151-m8 (the rest)** `backend\jellyfin_mpv_shim\player_reporting.py:432` (`send_timeline`): the sign-in ending
+  mid-playback refuses the progress and Stopped reports. 1.6.1 says so in the player (Sign in again), but that
+  playback's place and watched state are still lost: after Sign in again, the app could send the last position it saw
+  (`RecentPlays` has it); a new server call, with its own live check.
 
-Left out of 1.5.1:
+Left out of 1.5.1 and 1.6.1 (a feature, for 1.7):
 - **Music in search, with playback** (BH-151-M2): songs and albums were taken out of search because nothing plays them.
 
-From the 1.6 reviews (2026-11-21; each stream fixed its Blockers and Majors before the merge):
-- Collection page and library pages (colpage): `ui\FluentFin\Themes\DriveIn\DriveIn.xaml:673` the marquee's tube count is
-  not spoken; `ui\FluentFin.Core\ViewModels\LibraryViewModel.Presets.cs:66` and `:87` a preset on a playlist loses the
-  playlist's order; `ui\FluentFin\Controls\AppliedFilterRow.xaml.cs:72` Save as collection can save twice;
-  `ui\FluentFin\Themes\DriveIn\Views\DriveInLibraryPage.xaml:139` pink in high contrast (older).
-- Top bar: an empty bar after `GetUserViews` fails, and the stars then say nothing; 1.3's pins are every user's first
-  favourites on this PC (`ui\FluentFin.Core\ViewModels\TopFavourites.cs:198`); tests: the tab's Tag is not asserted,
-  FoldFromTheRight tests Fit only, no mouse click on a star. (The review's "slow server, late Collections" was topbar's
-  interim route, retired at the merge: the Collections page loads on its own.)
-- Skip the parts a show repeats: the "asked" flag is kept after a restart; an "always" rule re-arms on Yes or Add
-  mid-episode, and the fake's no-loop test (`backend	ests	est_skip_rules.py`, AlwaysDoesNotLoop) does not cover it;
-  `ui\FluentFin.Core\Mpv\SkipRuleSheet.cs:127` always sends an action; the golden test covers `segment_list` only.
-- Quality and Playback stats: `backend\jellyfin_mpv_shim\bridge.py:2982` a quality (or `set_audio`) change racing the
-  next item's auto-advance; the stats panel polls while the window is minimized; an INFO log line every second
-  (`bridge.py:1291`); `backend\jellyfin_mpv_shim\quality.py:213` the defaults skip their checks; a NaN fails `get_stats`;
-  `PlaybackStatsTests` changes `SessionInfo`'s token; BRIDGE.md's `connect` wording.
-- Collections: `ui\FluentFin.Core\Services\JellyfinClient_Index.cs:167` reads at most 2,000 box sets (or playlists), the
-  first by name; `ui\FluentFin.Core\ViewModels\CollectionNames.cs:136` cleaning is not idempotent for every name; the
-  snapshot paints disabled rows; a write-back can race sign-out; tests: the Fields test is weak (`:499`), the 25,800-film
-  test has no thread check (`:432`), and the fake server accepts another user's UserId.
-
 Found at the 1.6 integration:
-- `backend\jellyfin_mpv_shim\skip_rules.py` (`SkipWatcher._app_jump`): the first forward step after `note_skip` is taken
-  for the press's jump; should a 0.5 s playback reading come between the app's `note_skip` and its seek landing, the
-  seek counts as the viewer's (a candidate, or a hand skip for "moves"). Read in the code, not reproduced; the window is
-  milliseconds.
-- `ui\FluentFin\Themes\DriveIn\Views\DriveInLibraryPage.xaml.cs:111`: Drive-in's presets strip stays collapsed until the
-  library has loaded, so the loaded page is 46 px taller than its loading placeholders: the posters land 46 px below
-  them (then-140-checks' skeleton check, at 1920 and 1100). Keep the strip's room while loading.
-- `ui\FluentFin\Views\CollectionsPage.xaml.cs:64` (`FocusSection`), Editorial only: the Libraries page's "Made by Nixie"
-  tile opens the Collections page with the keyboard on the Playlists row's first tile ("Nothing Yet"), not on the first
-  Made by Nixie tile (then-160-collections, twice; the page logs that the section's first tile took the keyboard, and
-  something moves it within about a second). The other three themes land on the Made by Nixie tile.
-- `ui\FluentFin\Services\UpdateActions.cs:186-199`, Classic, the release notes opened from Settings (an update ready):
-  the keyboard starts on the notes' first link ("details"), not on Close (then-update's full flow, three runs, at light
-  load too; Drive-in and 1.5.1's Classic start on Close, and so does "What's new" from Home in 1.6.0). The redirect to Close
-  is timing-based (the dialog's first 800 ms, then one low-priority try after Opened). After it, the run's Check now
-  started no check (no "[update] checked" line), so its checksum-mismatch step could not run: whether the dialog stayed
-  open after Esc on "Open the release page" is not known yet. For the bug hunt.
+- `ui\FluentFin\Controls\UpdateSettingsPanel.xaml.cs` (Settings' Check now), then-update's full flow in Classic: after the
+  release notes closed (Esc on "Open the release page"), the run's Check now started no check (no "[update] checked"
+  line), so its checksum-mismatch step could not run. Not re-checked: 1.6.1 makes the notes start on Close (the part of
+  this line it fixed), and the 1.6.0 bug hunt found Esc closes them from every stop. At 1.6.1's final pass the full
+  flow passed in Classic (40/40) and in Drive-in (40/40); the Restart to update flow in Drive-in failed this step once
+  under load (the notes closed, then Check now made no check for about two minutes; the next step's Check now worked)
+  and passed it on its rerun (31/31). So it is intermittent, not gone: watch it in the next full-flow runs.
+
+From the 1.6.1 streams (2026-11-21; each fixed what its review sent back before the merge):
+- Skipping: `backend\jellyfin_mpv_shim\bridge_skip.py` (`refresh_rules`): a rule that took over the server's Intro or
+  Outro becomes "Commercial" ("Skip extra") after any Add, Yes or Forget mid-episode (the server's segment it replaced
+  is gone from the list), and forgetting such a rule mid-episode doesn't bring the server's intro back until the next
+  item.
+- Sign-in ended: `ui\FluentFin.Core\Admin\ServerPower.cs:54` and the library scan and delete notices have no words for
+  an ended sign-in yet, and the played and favourite toggles spring back with nothing said.
+- Two windows of one copy (each its own device id): unit tests only (the window slots); no harness run starts a second
+  window.
+- `ui\FluentFin\Views\CollectionsPage.xaml.cs:41-56`: the Libraries page's Collections tile sometimes opens the
+  Collections page with the keyboard left on Back (one "could not take", no retry; Cinematic, and Drive-in at 1920 and
+  1100).
+- ShelfRow (`ItemsRepeater`): the keyboard on a tile jumps to the page's first focusable control when its row scrolls
+  out of view (seen on the Collections page in Classic and Editorial).
+- Save as playlist (also review A): another user's public playlist with the same name reads "Already in your
+  playlists": the check for an earlier save goes by name.
 
 ## Hand checks, recorded
 From 1.5, one line per check and release: pass, fail, or not run. They need a real desktop and real hands (off-screen
@@ -122,8 +92,8 @@ runs post keys and cannot move the real cursor or hear sound).
     installer numbered 1.5.90, so the reopened app logs "None", not "Updated": the "Updated" notice is first seen for
     real on 1.5.0 to 1.5.1.
 - **1.5.1**
-  - The Sandbox upgrade test with its new leg 3 (1.5.0's own Restart to update to 1.5.1, the "Updated" line): not run
-    yet, for the coordinator at release.
+  - The Sandbox upgrade test with its new leg 3 (1.5.0's own Restart to update to 1.5.1, the "Updated" line): **passed
+    on 2026-11-21** (every check, as a standard user; `docs\ROADMAP.md`).
   - Sign in again on a real server after signing Nixie out there (Dashboard > Devices): not run, for the owner (the QA
     servers passed it off-screen: `then-signin.ps1` on 10.11.11 and 12.4.0).
 
@@ -133,7 +103,56 @@ runs post keys and cannot move the real cursor or hear sound).
   - The Playback stats panel over real video (the numbers move, Copy has no token): not run, for the owner.
   - A quality change on the owner's server: never tested by us (the server isn't ours); not run, for the owner. The QA
     servers' quality run covers the code path.
-  - The Sandbox upgrade test (1.5.1 to 1.6.0, its three legs): not run yet, for the coordinator at release.
+  - The Sandbox upgrade test (1.5.1 to 1.6.0, its three legs): **passed on 2026-11-21, after the release**, on its
+    second run (the first run's leg 3 failed on the test's own fault, fixed in `f71865a`; `docs\ROADMAP.md`).
+
+- **1.6.1**
+  - A skip rule snapping on a real show (Shift+S over a bumper, then the next episode's skip lands on the cut, with
+    the package's own player and no separate mpv): not run, for the owner.
+  - The device id kept across the owner's real upgrade (1.6.0 to 1.6.1: the saved sign-in still works, and the
+    server's Devices page lists Nixie once, not twice): not run, for the owner.
+  - Sign in again mid-playback on the owner's server: never tested by us (the server isn't ours, and ending a sign-in
+    there is the owner's to do); not run, for the owner.
+
+## Nixie 1.6.1: the fix release
+- **Merged** (2026-11-21, `wip/rel-1.6.1`): skip, older, nav (with its review follow-ups). `verify-package.ps1` keeps
+  both streams' checks, each with its own pass lines: skip's (the bundled backend's `--nixie-skip-check` snaps a rule to
+  the cut with only the package's libmpv, no mpv.exe on PATH) and older's InstallSwitch run (the packaged Nixie.exe
+  refuses `--install-update` without the upgrade test's marker and lets it through with it; nothing is installed). The
+  fake server's `library.py` and its tests keep both older's and nav's changes.
+- **Known issue (the owner's finding, 2026-11-21; ships in 1.6.1, not fixed):** an episode opened from Continue
+  watching, search, Up next or a collection shows only the library above its title (for example "Shows ›"), with no
+  link to its series or season, in every theme. Use Back, or search for the show. Planned for 1.7.
+- **Left for 1.7.1:** the place and watched state of a playback whose sign-in ended (BH-151-m8, the rest: 1.6.1 says
+  so in the player and offers Sign in again, but sending the last position after it is a new server call), and the
+  items above from the 1.6.1 streams, its reviews and its bug hunt.
+- **The release's final pass** (2026-11-21, off-screen, a Debug x64 build of the branch at `dcf706b`, the fake server's
+  strict auth on in every run; the bug hunt beside it on the same commit): the keys matrix 568/568 in Classic and
+  Drive-in, 612/612 in Cinematic and 574/574 in Editorial (2,322 rows, "/" leaving the search box empty among them); the
+  contrast floor in four themes, Dark and Light, 4,408 labels and none under its floor; 63 theme runs (1.6.0's 58 with
+  the 1.6 streams' scripts, then-signin in four themes, and then-160-collections with the colliding tidy names and
+  Settings > Collections) and a full update flow in Drive-in: all green but Cinematic's 1.5.0 skeleton (21 px at 1920),
+  once the reruns below were in. The full update flow passes in Classic now (40/40), as do the release notes' first
+  focus on Close and Editorial's Made by Nixie arrival in every theme. Rerun alone after a load failure: arrival in
+  Drive-in (a search suggestion not listed in time, then three R presses 2.5 s apart where one load outlasted the
+  gap: 20/20 on the third run), Restart to update in Drive-in (Check now after the notes, above: 31/31 on the rerun) and
+  then-160-collections in Drive-in (the Collections tile's focus on Back, queued above: 33/33 on the rerun). On the QA
+  servers (10.11.11 and 12.4.0): then-search-live 14/14 on each (its first live run with "With <name>"'s episodes),
+  the playlist and transcode run 44/44 (alone), the quality run 16/16, the skip live check 14/14 (snapping with
+  libmpv), the smoke 10/10, live-save-playlist and live-server-index all passed. FluentFin.Core.Tests 5,141 and
+  FluentFin.Tests 1,621, all passed (the process and pipe timing tests that failed under load passed alone); the
+  end-to-end harness 26/26, the transitions check 4/4
+  and the bridge smoke 75/75; the backend suite (7,042 tests in 304 modules) with only the 8 environment failures once
+  the 6 modules its 300 s limit cut under load were run alone (`test_shell_playback` 165 in 949 s) and the one real
+  failure was fixed (below); the fake server's tests 75, the QA tools' 23 and the release tools' 21 (7 more need
+  `pefile`, which only the build's venv has); `verify-package` on a dry run's package 134/134, the skip snap check
+  and the `--install-update` refusal among them.
+- **Found and fixed in the pass:** `backend\tests\test_skip_rules.py:778` (a review follow-up) wrote its empty rules
+  file in text mode, which the repository's own `test_no_platform_text_reads` refuses: "wb" now. And the harness:
+  then-160-player counted the Playback stats' `get_stats` lines in the backend log, which 1.6.1 logs at DEBUG, so it
+  read 0 in every theme and its "never asked while closed" checks passed on nothing; a new -Before script,
+  `before-backend-debug.ps1`, has the run's backend log at DEBUG, and the script checks that it does (46/46 in four
+  themes: 3 questions in 3 s open, none closed).
 
 ## Nixie 1.6.0: collections
 - **Merged** (2026-11-21, `wip/rel-1.6.0`): colpage, topbar, skip, player, collections, then main with 1.5.1.

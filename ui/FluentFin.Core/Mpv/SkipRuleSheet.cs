@@ -36,6 +36,12 @@ public sealed partial class SkipRuleSheet : ObservableObject
 	public double DurationSeconds { get; private set; }
 
 	/// <summary>
+	/// 1.6.1: Settings' "When a show has a skip rule" as the sheet opened (true: skipped by itself). Left as it is, the rule
+	/// is saved with no action of its own, so it follows Settings ("As in Settings"); only a change here is the rule's own.
+	/// </summary>
+	private bool _settingsSkipsByItself;
+
+	/// <summary>
 	/// Fills the sheet as it opens: the last forward seek in this episode if there is one (the usual moment: the viewer just
 	/// jumped over the part), else 30 s from now. A part in the episode's second half is measured from its end.
 	/// </summary>
@@ -62,7 +68,8 @@ public sealed partial class SkipRuleSheet : ObservableObject
 		StartText = SkipRuleText.Time(start);
 		EndText = SkipRuleText.Time(end);
 		FromEnd = DurationSeconds > 0 && start >= DurationSeconds / 2;
-		SkipsByItself = ruleAction == SkipRuleWords.Always;
+		_settingsSkipsByItself = ruleAction == SkipRuleWords.Always;
+		SkipsByItself = _settingsSkipsByItself;
 		Error = "";
 	}
 
@@ -123,7 +130,10 @@ public sealed partial class SkipRuleSheet : ObservableObject
 		}
 
 		var (anchor, startS, endS) = Anchored(s, e);
-		return BridgeSkipCommands.AddRule(anchor, startS, endS, SkipsByItself ? SkipRuleWords.Always : SkipRuleWords.Ask);
+		// 1.6.1: an action only when the viewer changed Settings' choice here; otherwise none, and the rule follows Settings
+		// (it always sent one, so every marked rule kept the choice of the day it was marked)
+		var action = SkipsByItself == _settingsSkipsByItself ? null : SkipsByItself ? SkipRuleWords.Always : SkipRuleWords.Ask;
+		return BridgeSkipCommands.AddRule(anchor, startS, endS, action);
 	}
 
 	private (double Start, double End)? Times() =>

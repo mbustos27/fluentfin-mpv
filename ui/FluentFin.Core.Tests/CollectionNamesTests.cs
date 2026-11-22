@@ -12,8 +12,13 @@ public sealed class CollectionNamesSerial
 
 /// <summary>Nixie 1.6 (smart collections phase 0, plan section 5): tidy collection and library names, and nothing else.</summary>
 [Collection(CollectionNamesSerial.Name)]
-public sealed class CollectionNamesTests
+public sealed class CollectionNamesTests : IDisposable
 {
+	// review of 1.6.1 (F2): a list of box sets read (empty: no collisions), so the cleaning rules show as they are
+	public CollectionNamesTests() => CollectionNames.RememberBoxSets([]);
+
+	public void Dispose() => CollectionNames.ForgetBoxSets();
+
 	private static BaseItemDto BoxSet(string name, string? tmdb = null)
 	{
 		var dto = new BaseItemDto { Name = name, Type = BaseItemDto_Type.BoxSet };
@@ -132,6 +137,11 @@ public sealed class CollectionNamesTests
 	[InlineData("+++++++_X")]
 	[InlineData("zz_!!Misc")]
 	[InlineData("The Mummy Collection (4K)")]
+	// 1.6.1 (the 1.6 review): rule 8 or 9 uncovering another rule's decoration after the passes
+	[InlineData("Marvel (4K) Collection")]
+	[InlineData("[HUB] Marvel Collection -")]
+	[InlineData("!!Bond Collection (SD) Collection")]
+	[InlineData("zz_ [4K] Alien Collection ·")]
 	public void CleaningTwice_ChangesNothing(string server)
 	{
 		foreach (var tmdb in new[] { false, true })
@@ -140,6 +150,12 @@ public sealed class CollectionNamesTests
 			Assert.Equal(once, CollectionNames.Clean(once, tmdb));
 		}
 	}
+
+	[Theory]
+	[InlineData("Marvel (4K) Collection", "Marvel")]
+	[InlineData("[HUB] Marvel Collection -", "Marvel")]
+	public void TheLastRules_UncoverTheFirstOnes_InOneCleaning(string server, string shown) =>
+		Assert.Equal(shown, CollectionNames.Clean(server, fromTmdb: true));
 
 	[Fact]
 	public void TwoNamesThatWouldReadTheSame_KeepTheServersNames()

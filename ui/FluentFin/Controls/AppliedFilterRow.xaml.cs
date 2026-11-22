@@ -69,11 +69,12 @@ public sealed partial class AppliedFilterRow : UserControl
 
 	private void SaveFlyout_Opening(object? sender, object e)
 	{
-		_saving = false;
+		// 1.6.1 (colpage queue): a save still on its way (the flyout closed meanwhile) keeps Save off: it never saves twice
+		_saving = ViewModel?.IsSavingFilter == true;
 		SaveName.Text = ViewModel is { } vm ? LibraryPresets.SuggestedName(vm.Filter) : "";
 		SaveName.SelectAll();
-		SaveMessage.Text = "These filters, kept on this PC as a collection.";
-		SaveConfirm.IsEnabled = LibraryPresets.IsValidName(SaveName.Text);
+		SaveMessage.Text = _saving ? "Saving the last one…" : "These filters, kept on this PC as a collection.";
+		SaveConfirm.IsEnabled = !_saving && LibraryPresets.IsValidName(SaveName.Text);
 		DispatcherQueue.TryEnqueue(() => SaveName.Focus(FocusState.Programmatic));
 	}
 
@@ -102,8 +103,13 @@ public sealed partial class AppliedFilterRow : UserControl
 		_saving = false;
 		if (saved)
 		{
-			SaveFlyout.Hide();
-			SaveButton.Focus(FocusState.Programmatic);
+			// closed meanwhile (Esc, a click away): the keyboard stays where the user took it
+			if (SaveFlyout.IsOpen)
+			{
+				SaveFlyout.Hide();
+				SaveButton.Focus(FocusState.Programmatic);
+			}
+
 			return;
 		}
 

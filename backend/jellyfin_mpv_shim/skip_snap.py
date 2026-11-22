@@ -6,22 +6,31 @@ black frame or silence within a few seconds of where the rule puts it.
 Only that stretch is read, and only from what mpv has already read ahead:
 mpv's ``dump-cache`` writes the few seconds around the edge (a few MB) from
 its demuxer cache to a temporary file, never asking the server for anything,
-and an ``mpv`` with no window and no sound (``--vo=null --ao=null``) runs
+and an mpv with no window and no sound (``vo=null``, ``ao=null``) runs
 FFmpeg's ``blackdetect`` and ``silencedetect`` over that file. The file is
 deleted at once. Nothing happens when mpv has not cached the stretch (a
-local file, a cache too short), when no mpv binary is found, or when nothing
-black or silent is near: the rule's own edge stands.
+local file, a cache too short), when there is nothing to analyse with, or
+when nothing black or silent is near: the rule's own edge stands.
+
+1.6.1 (BH-160-M1): the analysing mpv is the libmpv Nixie ships
+(`libmpv_path`), in a process of the backend's own (`skip_analyse`); an
+``mpv`` binary (`mpv_binary`) only where there is no libmpv, as a source
+checkout without one. 1.6.0 needed the binary, which the release package
+does not have, so on most PCs no rule ever snapped.
 
 Nothing here raises into playback; every worker catches and logs.
 """
 
 import atexit
+import collections
+import glob
 import hashlib
 import logging
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -39,6 +48,19 @@ POLL = 1.0
 #: The longest a worker waits for the cache, and the analysis may take.
 MAX_WAIT = 600.0
 ANALYSE_TIMEOUT = 15.0
+#: 1.6.1 (review): the analysis must never compete with playback (it reads
+#: untimed, as fast as the CPU goes, and end rules from up to
+#: `END_LOOKAHEAD` ahead): its process runs below normal priority, with at
+#: most this many decoder threads.
+DECODER_THREADS = 2
+BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+
+
+def _creation_flags():
+    """No window, and (Windows) below normal priority."""
+    return (getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS",
+                      BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 0))
 #: Black (pixels under 10 % of white, for at least 80 ms) and silence (under
 #: -50 dB, for at least 150 ms).
 BLACK_FILTER = "blackdetect=d=0.08:pix_th=0.10"
@@ -59,6 +81,16 @@ _DURATION_SCRIPT = (
     'mp.msg.info("nixie-duration=" .. tostring('
     'mp.get_property_native("duration"))) end)\n')
 
+#: What analyses: ``kind`` "libmpv" (``path`` a libmpv-2.dll, run in a
+#: process of the backend's own, `skip_analyse`) or "mpv" (an mpv binary).
+Analyser = collections.namedtuple("Analyser", "kind path")
+LIBMPV = "libmpv-2.dll"
+#: A source run's libmpv folder when it is not the checkout's
+#: ``vendor/libmpv/<build>`` (as FluentFin.csproj's ``-p:LibmpvDir``).
+LIBMPV_ENV = "NIXIE_LIBMPV_DIR"
+#: The frozen backend's switch for `skip_analyse` (backend_entry.py).
+ANALYSE_SWITCH = "--nixie-skip-analyse"
+
 _BLACK = re.compile(r"black_start:\s*([\d.]+)\s+black_end:\s*([\d.]+)")
 _SILENCE_START = re.compile(r"silence_start:\s*(-?[\d.]+)")
 _SILENCE_END = re.compile(r"silence_end:\s*(-?[\d.]+)")
@@ -74,6 +106,16 @@ def edge_of(segment):
     edge = getattr(segment, "rule_end", segment.end) if anchor == "start" \
         else getattr(segment, "rule_start", segment.start)
     return float(edge), window, anchor
+
+
+def snap_key(segment):
+    """What one analysis is for: the rule and its edge. 1.6.1 (review): a
+    rules rebuild mid-episode (`bridge_skip.refresh_rules`) makes new
+    segment objects for the same rules, and an analysis keyed by the object
+    started a second one of the same edge while the first still ran."""
+    edge, _window, anchor = edge_of(segment)
+    return (getattr(segment, "rule_id", None) or id(segment), anchor,
+            round(edge, 2))
 
 
 def parse_detections(text):
@@ -154,28 +196,49 @@ def covered(cache_state, start, end):
     return False
 
 
-def analyse(mpv_binary, path, timeout=ANALYSE_TIMEOUT, started=None):
+def child_command():
+    """How the backend starts `skip_analyse` in a process of its own: the
+    frozen backend's exe with `ANALYSE_SWITCH`, else this Python with the
+    module's file (``-I``: nothing from the environment or the folder). A
+    venv's python.exe on Windows is a launcher with the interpreter as its
+    child; ending the launcher by its handle ends that child too
+    (`test_a_cancel_ends_the_analysing_interpreter_itself`)."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, ANALYSE_SWITCH]
+    return [sys.executable, "-I",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "skip_analyse.py")]
+
+
+def analyse(tool, path, timeout=ANALYSE_TIMEOUT, started=None):
     """Runs a windowless, silent mpv over ``path``; returns its log text, or
-    None. The process is this function's own: it is ended on its timeout,
-    and ``started(process)`` (if given) gets its handle, so a stop or the
+    None. ``tool`` is an `Analyser` (a plain string: an mpv binary). The
+    process is this function's own: it is ended on its timeout, and
+    ``started(process)`` (if given) gets its handle, so a stop or the
     backend's exit can end it sooner (`Snapper.close`)."""
+    if not isinstance(tool, Analyser):
+        tool = Analyser("mpv", tool)
     folder = os.path.dirname(path)
-    script = os.path.join(folder, "duration.lua")
     log_path = os.path.join(folder, "analyse.log")
-    with open(script, "w", encoding="utf-8") as handle:
-        handle.write(_DURATION_SCRIPT)
-    command = [mpv_binary, "--no-config", "--load-scripts=no", "--osc=no",
-               "--ytdl=no", "--idle=no", "--force-window=no", "--vo=null",
-               "--ao=null", "--ao-null-untimed", "--untimed", "--sid=no",
-               "--no-terminal", "--log-file=" + log_path,
-               "--script=" + script,
-               "--vf=lavfi=[%s]" % BLACK_FILTER,
-               "--af=lavfi=[%s]" % SILENCE_FILTER, "--", path]
+    if tool.kind == "libmpv":
+        command = child_command() + [tool.path, path, log_path,
+                                     BLACK_FILTER, SILENCE_FILTER]
+    else:
+        script = os.path.join(folder, "duration.lua")
+        with open(script, "w", encoding="utf-8") as handle:
+            handle.write(_DURATION_SCRIPT)
+        command = [tool.path, "--no-config", "--load-scripts=no", "--osc=no",
+                   "--ytdl=no", "--idle=no", "--force-window=no", "--vo=null",
+                   "--ao=null", "--ao-null-untimed", "--untimed", "--sid=no",
+                   "--vd-lavc-threads=%d" % DECODER_THREADS,
+                   "--no-terminal", "--log-file=" + log_path,
+                   "--script=" + script,
+                   "--vf=lavfi=[%s]" % BLACK_FILTER,
+                   "--af=lavfi=[%s]" % SILENCE_FILTER, "--", path]
     try:
         process = subprocess.Popen(
             command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            stderr=subprocess.DEVNULL, creationflags=_creation_flags())
     except OSError:
         log.info("Could not run mpv to find the skip rule's edge",
                  exc_info=True)
@@ -192,13 +255,19 @@ def analyse(mpv_binary, path, timeout=ANALYSE_TIMEOUT, started=None):
     finally:
         if started is not None:
             started(process, done=True)
-    if process.returncode not in (0, None) and not os.path.isfile(log_path):
-        return None
     try:
         with open(log_path, "r", encoding="utf-8", errors="replace") as fh:
-            return fh.read()
+            text = fh.read()
     except OSError:
-        return None
+        text = None
+    if process.returncode not in (0, None):
+        # skip_analyse's status (a stop's kill is 1 on Windows) and its
+        # last word; the edge stands
+        error = re.findall(r"^nixie-error=(.*)$", text or "", re.M)
+        log.info("The skip rule's analysis (%s) ended with status %s%s",
+                 tool.kind, process.returncode,
+                 ": " + error[-1] if error else "")
+    return text
 
 
 def snap_root(config_path=None):
@@ -236,9 +305,122 @@ def sweep(root):
     return gone
 
 
+def libmpv_path():
+    """The libmpv to analyse with, the one the UI plays with, or None.
+
+    Frozen (the release package): ``app\\libmpv\\libmpv-2.dll``, beside the
+    backend's ``app\\backend`` folder (build-release.ps1 puts it there), and
+    nothing else. From source: `LIBMPV_ENV`'s folder, else the checkout's
+    ``vendor/libmpv/<build>`` (FluentFin.csproj's default; the last build
+    by name)."""
+    if getattr(sys, "frozen", False):
+        candidates = [os.path.join(os.path.dirname(os.path.abspath(
+            sys.executable)), os.pardir, "libmpv", LIBMPV)]
+    else:
+        candidates = []
+        folder = os.environ.get(LIBMPV_ENV)
+        if folder:
+            candidates.append(os.path.join(folder, LIBMPV))
+        repo = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))))
+        candidates += sorted(glob.glob(os.path.join(
+            repo, "vendor", "libmpv", "*", LIBMPV)), reverse=True)
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return os.path.normpath(candidate)
+    return None
+
+
+def find_analyser():
+    """An `Analyser`: the shipped libmpv (`libmpv_path`), else an mpv
+    binary (`mpv_binary`); None when there is neither."""
+    path = libmpv_path()
+    if path:
+        return Analyser("libmpv", path)
+    path = mpv_binary()
+    if path:
+        return Analyser("mpv", path)
+    return None
+
+
+def make_test_clip(dll, out, timeout=120.0):
+    """Has `skip_analyse` encode its check clip into ``out`` with ``dll``,
+    in a process of its own (as an analysis runs); True when written."""
+    try:
+        process = subprocess.run(
+            child_command() + ["--make-clip", dll, out],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, timeout=timeout,
+            creationflags=_creation_flags())
+    except (OSError, subprocess.TimeoutExpired):
+        log.info("Could not make the skip check's clip", exc_info=True)
+        return False
+    return (process.returncode == 0 and os.path.isfile(out)
+            and os.path.getsize(out) > 0)
+
+
+#: The check clip's cut (skip_analyse.CLIP_GAP) and where a start rule that
+#: ends 1 s before it lands: ``LEAD`` before the gap's end.
+CHECK_EDGE = 8.0
+CHECK_SNAP = 9.6 - LEAD
+
+
+def self_check(out=None):
+    """Whether a skip rule can snap here, with what a skip would use.
+
+    Finds libmpv as a skip does (`libmpv_path`, which `find_analyser`
+    tries first; never the mpv binary, so the shim's settings are not read
+    either); has it encode the check clip, analyses the clip in a process
+    of the backend's own (`analyse`) and snaps a start rule ending at
+    `CHECK_EDGE` to the clip's cut. Prints one JSON line to ``out``
+    (stdout) and returns 0 when the edge landed on `CHECK_SNAP`, else 1.
+    The release package's check (verify-package.ps1, the frozen backend's
+    ``--nixie-skip-check``) and the tests run it."""
+    import json
+
+    out = out or sys.stdout
+    result = {"analyser": None, "path": None, "duration": None,
+              "blacks": [], "silences": [], "snapped": None, "error": None}
+    path = libmpv_path()
+    tool = Analyser("libmpv", path) if path else None
+    if tool is not None:
+        result["analyser"], result["path"] = tool.kind, tool.path
+    folder = tempfile.mkdtemp(prefix="nixie-snap-check-")
+    try:
+        clip = os.path.join(folder, "part.mkv")
+        if tool is None:
+            result["error"] = "no libmpv to analyse with"
+        elif not make_test_clip(tool.path, clip):
+            result["error"] = "libmpv made no check clip"
+        else:
+            text = analyse(tool, clip)
+            blacks, silences, duration = parse_detections(text or "")
+            result.update(blacks=blacks, silences=silences,
+                          duration=duration)
+            if not duration:
+                result["error"] = "the analysis read no duration"
+            else:
+                result["snapped"] = choose_edge(
+                    blacks, silences, CHECK_EDGE, WINDOW, "start",
+                    read=(0.0, duration))
+                if result["snapped"] is None:
+                    result["error"] = "no cut found"
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    ok = result["snapped"] is not None \
+        and abs(result["snapped"] - CHECK_SNAP) <= 0.15
+    if result["snapped"] is not None and not ok:
+        result["error"] = "the edge landed off the cut"
+    result["ok"] = ok
+    out.write(json.dumps(result) + "\n")
+    out.flush()
+    return 0 if ok else 1
+
+
 def mpv_binary():
-    """The mpv to analyse with: the shim's ``mpv_ext_path``, else one on
-    PATH or from WinGet. None when there is none."""
+    """The mpv binary to analyse with when there is no libmpv: the shim's
+    ``mpv_ext_path``, else one on PATH or from WinGet. None when there is
+    none."""
     try:
         from .conf import settings
 
@@ -262,8 +444,12 @@ class Snapper:
     it, analyses it and moves the segment's edge; the next ``segments``
     event carries it."""
 
-    def __init__(self, binary=None, root=None):
-        self._binary = binary
+    def __init__(self, binary=None, root=None, analyser=None):
+        #: what analyses: given (an `Analyser`; ``binary``, an mpv binary),
+        #: else `find_analyser` at each snap
+        self._analyser = analyser or (Analyser("mpv", binary) if binary
+                                      else None)
+        self._told = False  # nothing said yet (None: said "nothing")
         self._lock = threading.Lock()
         self._video = None
         self._started = set()
@@ -332,7 +518,8 @@ class Snapper:
             for segment in list(getattr(video, "intros", None) or ()):
                 if not getattr(segment, "snap_pending", False):
                     continue
-                if id(segment) in self._started:
+                key = snap_key(segment)
+                if key in self._started:
                     continue
                 edge, window, anchor = edge_of(segment)
                 if position >= edge:
@@ -340,12 +527,24 @@ class Snapper:
                     continue
                 if anchor == "end" and position < edge - END_LOOKAHEAD:
                     continue
-                self._started.add(id(segment))
+                self._started.add(key)
                 thread = threading.Thread(
                     target=self._work, args=(pm, video, segment),
                     name="skip-snap", daemon=True)
                 self.threads.append(thread)
                 thread.start()
+
+    @staticmethod
+    def _standing_for(video, segment):
+        """``segment`` and the segments of ``video`` now standing for the same
+        rule and edge (`snap_key`: a rebuild made new ones meanwhile)."""
+        key = snap_key(segment)
+        out = [segment]
+        for other in list(getattr(video, "intros", None) or ()):
+            if other is not segment and getattr(other, "rule_id", None) \
+                    and snap_key(other) == key:
+                out.append(other)
+        return out
 
     def _work(self, pm, video, segment):
         try:
@@ -353,15 +552,23 @@ class Snapper:
         except Exception:
             log.debug("skip snap failed", exc_info=True)
         finally:
-            segment.snap_pending = False
+            for standing in self._standing_for(video, segment):
+                standing.snap_pending = False
 
     def _snap(self, pm, video, segment):
         edge, window, anchor = edge_of(segment)
         start, end = max(0.0, edge - window), edge + window
-        binary = self._binary or mpv_binary()
-        if not binary:
-            log.info("No mpv binary to analyse with; skip rules keep their "
-                     "own edges")
+        tool = self._analyser or find_analyser()
+        if tool != self._told:
+            # once per change, not per rule
+            self._told = tool
+            if tool is None:
+                log.info("No libmpv or mpv to analyse with; skip rules keep "
+                         "their own edges")
+            else:
+                log.info("Skip rules' edges are analysed with %s (%s)",
+                         tool.kind, tool.path)
+        if tool is None:
             return
         deadline = time.monotonic() + MAX_WAIT
         while True:
@@ -389,7 +596,7 @@ class Snapper:
                 if os.path.isfile(path) and os.path.getsize(path) > 0:
                     break
                 time.sleep(0.1)
-            text = analyse(binary, path, started=self._process)
+            text = analyse(tool, path, started=self._process)
             if not text:
                 return
             blacks, silences, duration = parse_detections(text)
@@ -404,11 +611,14 @@ class Snapper:
                                   read=(offset, end))
             if snapped is None or pm._video is not video:
                 return
-            if anchor == "start":
-                if snapped > segment.start + 1.0:
-                    segment.end = snapped
-            elif snapped < segment.end - 1.0:
-                segment.start = snapped
+            # the rule's segment as it stands now (a rebuild made a new one
+            # while this ran), and the one it was started for
+            for standing in self._standing_for(video, segment):
+                if anchor == "start":
+                    if snapped > standing.start + 1.0:
+                        standing.end = snapped
+                elif snapped < standing.end - 1.0:
+                    standing.start = snapped
             log.info("Skip rule %s: its edge snapped from %.2f to %.2f s",
                      getattr(segment, "rule_id", "?"), edge, snapped)
         finally:

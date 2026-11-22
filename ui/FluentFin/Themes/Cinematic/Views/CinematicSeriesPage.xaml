@@ -159,7 +159,7 @@
                                     TextWrapping="Wrap" />
                                 <Button
                                     Command="{x:Bind ViewModel.RetrySeasonCommand}"
-                                    Content="Try again"
+                                    Content="{x:Bind ViewModel.EpisodesRetryText, Mode=OneWay}"
                                     Style="{StaticResource NixieButtonStyle}"
                                     Visibility="{x:Bind c:ItemRowConverters.Show(ViewModel.EpisodesFailed), Mode=OneWay}" />
                             </StackPanel>

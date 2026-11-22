@@ -121,6 +121,6 @@ public sealed record NixieCollection(SmartCollection Collection) : ICollectionSo
 
 		var id = presetId.StartsWith(NixiePreset.IdPrefix, StringComparison.Ordinal) ? presetId[NixiePreset.IdPrefix.Length..] : presetId;
 		var own = index with { Entries = [.. index.Entries.Where(x => x.LibraryId == libraryId)] };
-		return (await SmartCollectionCatalog.BuildAllAsync(own, DateTimeOffset.Now)).FirstOrDefault(x => x.Id == id)?.ItemIds.ToHashSet() ?? [];
+		return (await SmartCollectionCatalog.BuildAllAsync(own, SmartCollectionCatalog.Now())).FirstOrDefault(x => x.Id == id)?.ItemIds.ToHashSet() ?? [];
 	}
 }

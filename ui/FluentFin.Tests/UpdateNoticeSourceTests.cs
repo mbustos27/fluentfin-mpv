@@ -115,4 +115,46 @@ public sealed class UpdateNoticeSourceTests
 		Assert.Contains("if (ReleaseNotes.SafeLink(url) is { } safe)", actions);
 		Assert.DoesNotContain("NavigateUri", actions);
 	}
+
+	/// <summary>
+	/// Nixie 1.6.1 (bug hunt BH-160-m3): the release notes start with the keyboard on Close in every theme, the session's first
+	/// dialog too. The turn to Close was timed (the dialog's first 800 ms), and a session's first dialog focused its first link
+	/// later than that in Classic and Drive-in. Now every move no pointer made goes to Close until the user presses a key.
+	/// </summary>
+	[Fact]
+	public void TheNotes_StartOnClose_ByWhatTheUserDid_NotByTheTime()
+	{
+		var none = Microsoft.UI.Xaml.Input.FocusInputDeviceKind.None;
+		var keyboard = Microsoft.UI.Xaml.Input.FocusInputDeviceKind.Keyboard;
+		// the dialog's own first focus, however late (it says None, or Keyboard after Enter opened it)
+		Assert.True(FluentFin.Services.UpdateActions.TurnsToClose(userPressedAKey: false, none));
+		Assert.True(FluentFin.Services.UpdateActions.TurnsToClose(userPressedAKey: false, keyboard));
+		// a click goes where it was made, and after a key (Tab) the keyboard goes where it is sent
+		foreach (var pointer in new[] { Microsoft.UI.Xaml.Input.FocusInputDeviceKind.Mouse, Microsoft.UI.Xaml.Input.FocusInputDeviceKind.Touch, Microsoft.UI.Xaml.Input.FocusInputDeviceKind.Pen })
+		{
+			Assert.False(FluentFin.Services.UpdateActions.TurnsToClose(userPressedAKey: false, pointer));
+		}
+
+		Assert.False(FluentFin.Services.UpdateActions.TurnsToClose(userPressedAKey: true, keyboard));
+		Assert.False(FluentFin.Services.UpdateActions.TurnsToClose(userPressedAKey: true, none));
+
+		var actions = Source("FluentFin", "Services", "UpdateActions.cs").Replace("\r\n", "\n");
+		var notes = actions[actions.IndexOf("public static async Task ShowNotesAsync(", StringComparison.Ordinal)..];
+		notes = notes[..notes.IndexOf("await dialog.ShowAsync();", StringComparison.Ordinal)];
+		Assert.DoesNotContain("Stopwatch", notes);
+		Assert.DoesNotContain("ElapsedMilliseconds", notes);
+		// the links are no tab stops until a key is pressed (the dialog's own first focus has nothing in the notes to land on), and
+		// the first key frees them before its own move
+		Assert.Contains("HoldLinks(links, page, held: true);", notes);
+		var key = notes[notes.IndexOf("dialog.PreviewKeyDown += (_, args) =>", StringComparison.Ordinal)..];
+		key = key[..key.IndexOf("dialog.GettingFocus", StringComparison.Ordinal)];
+		Assert.Contains("if (!keyed && !args.KeyStatus.WasKeyDown)", key);
+		Assert.Contains("HoldLinks(links, page, held: false);", key);
+		Assert.True(notes.IndexOf("HoldLinks(links, page, held: true);", StringComparison.Ordinal) < notes.IndexOf("dialog.PreviewKeyDown", StringComparison.Ordinal));
+		var hold = actions[actions.IndexOf("private static void HoldLinks(", StringComparison.Ordinal)..];
+		Assert.Contains("link.IsTabStop = !held;", hold);
+		Assert.Contains("page.IsTabStop = !held;", hold);
+		Assert.Contains("if (TurnsToClose(keyed, args.InputDevice) && FindNamed<Button>(dialog, \"CloseButton\") is { } close", notes);
+		Assert.Contains("if (!keyed && FindNamed<Button>(dialog, \"CloseButton\") is { } close && close.FocusState == FocusState.Unfocused)", notes);
+	}
 }

@@ -2,7 +2,9 @@
 silence (`skip_snap`). The choice is pure; the analysis and the dump run a
 real mpv with no window and no sound (``--vo=null --ao=null``) on a clip
 generated here (a test pattern and a tone with one black, silent stretch;
-never real footage), and are skipped when no mpv is found."""
+never real footage). 1.6.1 (BH-160-M1): with the libmpv Nixie ships and no
+mpv binary (`NoMpvExeTest`, which a release run requires); the mpv binary's
+own test is skipped when there is none."""
 
 # Run as a script, this is what puts the repo root on sys.path -- without
 # it `jellyfin_mpv_shim` resolves to whatever is pip-installed. A no-op
@@ -19,9 +21,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import uuid
+from unittest import mock
 
 from jellyfin_mpv_shim import skip_snap as snap
 
@@ -127,6 +131,68 @@ class TickTest(unittest.TestCase):
         for thread in snapper.threads:
             thread.join(5)
         self.assertEqual(started, [start_rule, end_rule])
+
+    def test_a_rules_rebuild_while_a_snap_runs_starts_no_second_one(self):
+        """1.6.1 review: a rules rebuild mid-episode (a Yes, an Add) makes a
+        new segment for each rule, still pending while its edge is being
+        read (`carry_rule_state`); keyed by the object, a second analysis of
+        the same edge started, and the first ran on for nothing. The one
+        analysis now lands on the rule's segment as it stands."""
+        root = tempfile.mkdtemp(prefix="snap-rebuild-")
+        self.addCleanup(shutil.rmtree, root, True)
+        snapper = snap.Snapper(analyser=snap.Analyser("libmpv", "unused"),
+                               root=root)
+        self.addCleanup(snapper.close)
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        analysed = []
+
+        def analyse(tool, path, started=None):
+            analysed.append(path)
+            gate.wait(10)
+            return LOG
+
+        class Player:
+            playback_time = 10.0
+            demuxer_cache_state = {"seekable-ranges": [{"start": 0,
+                                                        "end": 100}]}
+
+            def command(self, name, start, end, path):
+                with open(path, "wb") as handle:
+                    handle.write(b"dump")
+
+        class V:
+            pass
+
+        video = V()
+        first = Seg("Commercial", 0, 41)
+        video.intros = [first]
+
+        class PM:
+            _mpv_alive = True
+            _player = Player()
+            _video = video
+
+        with mock.patch.object(snap, "analyse", analyse):
+            snapper.tick(PM, video, 10.0)
+            deadline = time.monotonic() + 5
+            while not analysed and time.monotonic() < deadline:
+                time.sleep(0.02)
+            rebuilt = Seg("Commercial", 0, 41)      # the same rule, rebuilt
+            video.intros = [rebuilt]
+            snapper.tick(PM, video, 10.5)
+            snapper.tick(PM, video, 11.0)
+            gate.set()
+            for thread in snapper.threads:
+                thread.join(10)
+        self.assertEqual(len(analysed), 1, "one analysis of the edge")
+        self.assertAlmostEqual(rebuilt.end, 42.77, delta=0.05)
+        self.assertFalse(rebuilt.snap_pending)
+        # a corrected rule (another edge) is read again
+        corrected = Seg("Commercial", 0, 44)
+        corrected.corrected = True
+        video.intros = [corrected]
+        self.assertNotEqual(snap.snap_key(corrected), snap.snap_key(rebuilt))
 
 
 class TempFolders(unittest.TestCase):
@@ -275,6 +341,346 @@ class RealMpvTest(unittest.TestCase):
         self.assertEqual(seg.start, 0.0)
         self.assertEqual(os.listdir(root), [], "the dump is deleted")
         snapper.close()
+
+
+class Analysers(unittest.TestCase):
+    """1.6.1 (BH-160-M1): what analyses, and how it is started."""
+
+    def setUp(self):
+        self.base = tempfile.mkdtemp(prefix="skip-snap-libmpv-")
+        self.addCleanup(shutil.rmtree, self.base, True)
+
+    def dll(self, *parts):
+        path = os.path.join(self.base, *parts, snap.LIBMPV)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        open(path, "wb").close()
+        return path
+
+    def test_frozen_the_packages_libmpv_beside_the_backend_and_only_it(self):
+        exe = os.path.join(self.base, "app", "backend",
+                           "fluentfin-mpv-backend.exe")
+        shipped = self.dll("app", "libmpv")
+        elsewhere = self.dll("elsewhere")
+        with mock.patch.object(sys, "frozen", True, create=True), \
+                mock.patch.object(sys, "executable", exe), \
+                mock.patch.dict(os.environ, {
+                    snap.LIBMPV_ENV: os.path.dirname(elsewhere)}):
+            self.assertEqual(os.path.normcase(snap.libmpv_path()),
+                             os.path.normcase(shipped))
+            self.assertEqual(snap.child_command(),
+                             [exe, snap.ANALYSE_SWITCH])
+            os.remove(shipped)
+            self.assertIsNone(snap.libmpv_path(), "never another folder's")
+
+    def test_from_source_the_folder_named_by_the_environment(self):
+        named = self.dll("named")
+        with mock.patch.dict(os.environ,
+                             {snap.LIBMPV_ENV: os.path.dirname(named)}):
+            self.assertEqual(os.path.normcase(snap.libmpv_path()),
+                             os.path.normcase(named))
+        command = snap.child_command()
+        self.assertEqual(command[:2], [sys.executable, "-I"])
+        self.assertTrue(command[2].endswith("skip_analyse.py"))
+        self.assertTrue(os.path.isfile(command[2]))
+
+    def test_a_cancel_ends_the_analysing_interpreter_itself(self):
+        """Ending the analyser's process by its handle (`Snapper.cancel`)
+        leaves nothing of it running, also when this Python is a venv's
+        launcher with the interpreter as its child (Windows)."""
+        work = tempfile.mkdtemp(dir=self.base)
+        flag = os.path.join(work, "alive")
+        script = os.path.join(work, "linger.py")
+        with open(script, "w", encoding="utf-8") as handle:
+            handle.write("import sys, time\n"
+                         "deadline = time.monotonic() + 30\n"
+                         "while time.monotonic() < deadline:\n"
+                         "    open(sys.argv[1], 'w').close()\n"
+                         "    time.sleep(0.1)\n")
+        python = snap.child_command()[0]
+        process = subprocess.Popen(
+            [python, "-I", script, flag], stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        deadline = time.monotonic() + 10
+        while not os.path.exists(flag) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertTrue(os.path.exists(flag), "it started")
+        snapper = snap.Snapper(binary="unused", root=os.path.join(work, "r"))
+        self.addCleanup(snapper.close)
+        snapper._process(process)
+        snapper.cancel()
+        process.wait(10)
+        time.sleep(0.5)
+        os.remove(flag)
+        time.sleep(0.5)
+        self.assertFalse(os.path.exists(flag), "nothing of it still runs")
+
+    def test_libmpv_comes_before_an_mpv_binary(self):
+        named = self.dll("named")
+        with mock.patch.dict(os.environ,
+                             {snap.LIBMPV_ENV: os.path.dirname(named)}), \
+                mock.patch.object(snap, "mpv_binary",
+                                  return_value=r"C:\mpv\mpv.exe"):
+            self.assertEqual(snap.find_analyser().kind, "libmpv")
+        with mock.patch.object(snap, "libmpv_path", return_value=None), \
+                mock.patch.object(snap, "mpv_binary",
+                                  return_value=r"C:\mpv\mpv.exe"):
+            self.assertEqual(snap.find_analyser(),
+                             snap.Analyser("mpv", r"C:\mpv\mpv.exe"))
+        with mock.patch.object(snap, "libmpv_path", return_value=None), \
+                mock.patch.object(snap, "mpv_binary", return_value=None):
+            self.assertIsNone(snap.find_analyser())
+
+    def test_the_self_check_fails_without_libmpv_and_never_asks_for_mpv(self):
+        import io
+        import json
+
+        out = io.StringIO()
+        with mock.patch.object(snap, "libmpv_path", return_value=None), \
+                mock.patch.object(snap, "mpv_binary",
+                                  side_effect=AssertionError("asked")):
+            self.assertEqual(snap.self_check(out), 1)
+        result = json.loads(out.getvalue())
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error"], "no libmpv to analyse with")
+
+    def test_a_libmpv_analysis_starts_the_child_with_the_filters(self):
+        part = os.path.join(self.base, "part.mkv")
+        open(part, "wb").close()
+        seen = []
+
+        class Done:
+            returncode = 0
+
+            def __init__(self, command, **kwargs):
+                seen.append((command, kwargs))
+                with open(command[-3], "w", encoding="utf-8") as handle:
+                    handle.write("nixie-duration=6.0\n")
+
+            def wait(self, timeout=None):
+                return 0
+
+        with mock.patch.object(snap.subprocess, "Popen", Done):
+            text = snap.analyse(snap.Analyser("libmpv", r"C:\x\libmpv-2.dll"),
+                                part)
+        self.assertEqual(text, "nixie-duration=6.0\n")
+        command, kwargs = seen[0]
+        self.assertEqual(command[:len(snap.child_command())],
+                         snap.child_command())
+        self.assertEqual(command[-5:], [
+            r"C:\x\libmpv-2.dll", part,
+            os.path.join(self.base, "analyse.log"), snap.BLACK_FILTER,
+            snap.SILENCE_FILTER])
+        self.assertIs(kwargs["stdout"], subprocess.DEVNULL,
+                      "nothing of it reaches the bridge's stdout")
+
+    def test_the_analysis_runs_below_normal_priority_with_few_threads(self):
+        """1.6.1 review: the analysis reads untimed, as fast as the CPU goes,
+        and now on every PC: it must never compete with playback."""
+        from jellyfin_mpv_shim import skip_analyse
+
+        part = os.path.join(self.base, "part.mkv")
+        open(part, "wb").close()
+        seen = []
+
+        class Done:
+            returncode = 0
+
+            def __init__(self, command, **kwargs):
+                seen.append((command, kwargs))
+
+            def wait(self, timeout=None):
+                return 0
+
+        with mock.patch.object(snap.subprocess, "Popen", Done):
+            snap.analyse(snap.Analyser("libmpv", r"C:\x\libmpv-2.dll"), part)
+            snap.analyse(snap.Analyser("mpv", r"C:\mpv\mpv.exe"), part)
+        below = 0x00004000 if os.name == "nt" else 0
+        for command, kwargs in seen:
+            self.assertEqual(kwargs["creationflags"] & below, below, command)
+        self.assertIn("--vd-lavc-threads=2", seen[1][0])
+        self.assertIn(("vd-lavc-threads", "2"),
+                      skip_analyse.analyse_options("a", "b"))
+        if os.name != "nt":
+            return
+        # and Windows takes it: a process of this test's own, by its handle
+        import ctypes
+
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, creationflags=snap._creation_flags())
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetPriorityClass.argtypes = [ctypes.c_void_p]
+        kernel32.GetPriorityClass.restype = ctypes.c_uint32
+        self.assertEqual(kernel32.GetPriorityClass(int(process._handle)),
+                         below)
+
+
+def _hide_mpv(test):
+    """PATH and LOCALAPPDATA (WinGet's folders) pointed at an empty folder,
+    and no ``mpv_ext_path``: no mpv binary is reachable, as on most PCs
+    with the release package. Asserted, so the test cannot pass on a PC
+    whose mpv it failed to hide."""
+    from jellyfin_mpv_shim.conf import settings
+
+    empty = tempfile.mkdtemp(prefix="skip-snap-no-mpv-")
+    test.addCleanup(shutil.rmtree, empty, True)
+    for patcher in (mock.patch.dict(os.environ, {"PATH": empty,
+                                                 "LOCALAPPDATA": empty}),
+                    mock.patch.object(settings, "mpv_ext_path", None)):
+        patcher.start()
+        test.addCleanup(patcher.stop)
+    test.assertIsNone(shutil.which("mpv.exe"))
+    test.assertIsNone(shutil.which("mpv"))
+    test.assertIsNone(snap.mpv_binary(), "an mpv binary is still reachable")
+
+
+def _require_libmpv(test):
+    """The libmpv Nixie ships (``NIXIE_LIBMPV_DIR``, or the checkout's
+    vendor/libmpv); a release's test run sets FLUENTFIN_MPV_REQUIRE_LIBMPV
+    so this fails there instead of skipping."""
+    path = snap.libmpv_path()
+    if path:
+        return path
+    if os.environ.get("FLUENTFIN_MPV_REQUIRE_LIBMPV") == "1":
+        test.fail("no libmpv-2.dll (set %s) and FLUENTFIN_MPV_REQUIRE_LIBMPV"
+                  " is 1" % snap.LIBMPV_ENV)
+    test.skipTest("no libmpv-2.dll to analyse with (set %s)"
+                  % snap.LIBMPV_ENV)
+
+
+class LibmpvPlayer:
+    """The playing mpv for `Snapper._snap`'s dump: a libmpv handle in this
+    process, no window and no sound, with what ``_snap`` reads of
+    ``pm._player``."""
+
+    def __init__(self, dll, clip):
+        import json
+
+        from jellyfin_mpv_shim import skip_analyse
+
+        self._json = json
+        self.mpv = skip_analyse.Libmpv(dll)
+        for name, value in (("config", "no"), ("load-scripts", "no"),
+                            ("osc", "no"), ("vo", "null"), ("ao", "null"),
+                            ("force-window", "no"), ("idle", "yes"),
+                            ("cache", "yes"), ("pause", "yes")):
+            self.mpv.set_option(name, value)
+        self.mpv.initialize("no")
+        self.mpv.command("loadfile", clip)
+
+    def _drain(self):
+        while self.mpv.wait(0)[0] != 0:
+            pass
+
+    @property
+    def playback_time(self):
+        self._drain()
+        value = self.mpv.get("playback-time")
+        return float(value) if value else None
+
+    @property
+    def demuxer_cache_state(self):
+        self._drain()
+        value = self.mpv.get("demuxer-cache-state")
+        return self._json.loads(value) if value else None
+
+    def command(self, *args):
+        self.mpv.command(*args)
+
+    def terminate(self):
+        self.mpv.close()
+
+
+class NoMpvExeTest(unittest.TestCase):
+    """BH-160-M1: the release package ships libmpv-2.dll and no mpv.exe,
+    and 1.6.0 analysed only with an mpv binary, so with no mpv installed no
+    skip rule ever snapped. Here no mpv binary is reachable (asserted), and
+    a rule's edge still snaps: the playing mpv dumps its cache (libmpv, in
+    this process) and the analysis runs with the same libmpv in a process
+    of the backend's own. The live test above is skipped without an mpv
+    binary; this one fails without libmpv when a release runs it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.mkdtemp(prefix="nixie-snap-libmpv-test-")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.folder, ignore_errors=True)
+
+    def setUp(self):
+        self.dll = _require_libmpv(self)
+        _hide_mpv(self)
+        self.clip = os.path.join(self.folder, "clip.mkv")
+        if not os.path.isfile(self.clip):
+            self.assertTrue(snap.make_test_clip(self.dll, self.clip),
+                            "libmpv encodes the check clip")
+
+    def test_the_skip_snaps_to_the_cut_with_no_mpv_binary(self):
+        player = LibmpvPlayer(self.dll, self.clip)
+        self.addCleanup(player.terminate)
+
+        class PM:
+            _mpv_alive = True
+
+        pm = PM()
+        pm._player = player
+        pm._video = video = object()
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if snap.covered(player.demuxer_cache_state, 5, 11):
+                break
+            time.sleep(0.2)
+        seg = Seg("Commercial", 0.0, 8.0)
+        root = os.path.join(self.folder, "snap-root")
+        snapper = snap.Snapper(root=root)       # finds its own analyser
+        self.addCleanup(snapper.close)
+        with self.assertLogs("skip_snap", "INFO") as logs:
+            snapper._snap(pm, video, seg)
+        self.assertAlmostEqual(seg.end, 9.35, delta=0.2, msg=logs.output)
+        self.assertEqual(seg.start, 0.0)
+        self.assertTrue(any("analysed with libmpv" in line
+                            for line in logs.output), logs.output)
+        self.assertEqual(os.listdir(root), [], "the dump is deleted")
+
+    def test_the_self_check_passes_with_no_mpv_binary(self):
+        import io
+        import json
+
+        out = io.StringIO()
+        self.assertEqual(snap.self_check(out), 0, out.getvalue())
+        result = json.loads(out.getvalue())
+        self.assertEqual(result["analyser"], "libmpv")
+        self.assertAlmostEqual(result["snapped"], snap.CHECK_SNAP,
+                               delta=0.15)
+        self.assertAlmostEqual(result["duration"], 20.0, delta=0.2)
+
+    def test_the_analysis_itself_finds_the_black_and_the_silence(self):
+        work = tempfile.mkdtemp(dir=self.folder)
+        part = os.path.join(work, "part.mkv")
+        shutil.copy(self.clip, part)
+        blacks, silences, duration = snap.parse_detections(
+            snap.analyse(snap.find_analyser(), part))
+        self.assertAlmostEqual(duration, 20.0, delta=0.2)
+        self.assertTrue(any(abs(a - 9.0) < 0.1 and abs(b - 9.6) < 0.1
+                            for a, b in blacks), blacks)
+        self.assertTrue(any(abs(a - 9.0) < 0.1 for a, b in silences),
+                        silences)
+
+    def test_a_file_libmpv_cannot_play_leaves_the_edge(self):
+        work = tempfile.mkdtemp(dir=self.folder)
+        part = os.path.join(work, "part.mkv")
+        with open(part, "wb") as handle:
+            handle.write(b"not a video" * 100)
+        with self.assertLogs("skip_snap", "INFO") as logs:
+            text = snap.analyse(snap.find_analyser(), part)
+        self.assertEqual(snap.parse_detections(text or "")[2], None)
+        self.assertTrue(any("ended with status 5" in line
+                            for line in logs.output), logs.output)
 
 
 if __name__ == "__main__":

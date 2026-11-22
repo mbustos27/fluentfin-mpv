@@ -459,20 +459,23 @@ public partial class VideoPlayerViewModel
 
 				case Bridge.Events.Error when e.DataAs<BridgeError>() is { } error:
 					_mpvLastError = BridgeRedaction.Redact(error.Message);
-					if (error.Code == "auth_failed")
-					{
-						// 1.5.1 fixes (BH-150-M2): the server refused the backend's request: if it no longer takes the token, say so
-						_ = ShowMpvSignInIfEnded(refusedByBackend: true);
-					}
-
 					if (error.Fatal || !_mpvSawPlayback)
 					{
 						ShowMpvMessage($"MPV: {_mpvLastError}", isError: true);
 					}
 					else
 					{
-						// the item plays on (a track or quality change that could not be applied): said briefly, nothing stops
+						// the item plays on (a track or quality change that could not be applied, or 1.6.1: a progress report the
+						// server refused): said briefly, nothing stops
 						ShowMpvNotice(string.IsNullOrEmpty(_mpvLastError) ? "MPV: something could not be done; playback goes on." : $"MPV: {_mpvLastError}");
+					}
+
+					if (error.Code == "auth_failed")
+					{
+						// 1.5.1 fixes (BH-150-M2): the server refused the backend's request: if it no longer takes the token, say so.
+						// 1.6.1 (BH-151-m8): after the backend's own words, so the sign-in message takes their place whenever the
+						// check ends (one answered at once was overwritten by them, its Sign in again gone)
+						_ = ShowMpvSignInIfEnded(refusedByBackend: true);
 					}
 					break;
 

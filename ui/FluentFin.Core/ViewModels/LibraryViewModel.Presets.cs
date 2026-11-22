@@ -22,6 +22,9 @@ public partial class LibraryViewModel
 	// the sort before Recently added put its own: a click again (or All) puts it back
 	private (ItemSortBy SortBy, SortOrder Order)? _sortBeforeRecent;
 
+	// 1.6.1 (colpage queue): a playlist was in its own order before Recently added: that order comes back, not titles A to Z
+	private bool _playlistOrderBeforeRecent;
+
 	/// <summary>The strip: each preset, lit or not, with its Narrator name.</summary>
 	[CommunityToolkit.Mvvm.ComponentModel.ObservableProperty]
 	public partial IReadOnlyList<LibraryPresetState> Presets { get; private set; } = [];
@@ -63,6 +66,7 @@ public partial class LibraryViewModel
 				}
 				else
 				{
+					_playlistOrderBeforeRecent = InPlaylistOrder;
 					_sortBeforeRecent = InPlaylistOrder ? null : (SortBy, Order);
 					SetSort(ItemSortBy.DateCreated, SortOrder.Descending);
 				}
@@ -84,6 +88,15 @@ public partial class LibraryViewModel
 
 	private void RestoreSortBeforeRecent()
 	{
+		if (_playlistOrderBeforeRecent && _playlistPlaces.Count > 0)
+		{
+			_playlistOrderBeforeRecent = false;
+			_sortBeforeRecent = null;
+			InPlaylistOrder = true; // the playlist's own order again (its comparer follows InPlaylistOrder)
+			return;
+		}
+
+		_playlistOrderBeforeRecent = false;
 		var (sortBy, order) = _sortBeforeRecent ?? (ItemSortBy.Name, SortOrder.Ascending);
 		_sortBeforeRecent = null;
 		// never back to Recently added itself (it was picked from the Sort menu first): titles A to Z
@@ -212,16 +225,30 @@ public partial class LibraryViewModel
 	/// <summary>Save as collection: the filters on, under <paramref name="name"/>; false when it could not be saved.</summary>
 	public async Task<bool> SaveFilterAs(string? name)
 	{
-		if (SavedFilters is not { } saved || !LibraryPresets.IsValidName(name) || _library is not { Id: { } id } library)
+		// 1.6.1 (colpage queue): one save at a time. The flyout's own guard was reset each time it opened, so closing it mid-save
+		// and saving again made two collections
+		if (IsSavingFilter || SavedFilters is not { } saved || !LibraryPresets.IsValidName(name) || _library is not { Id: { } id } library)
 		{
 			return false;
 		}
 
 		var filter = new LibrarySavedFilter(id, library.Name ?? "", Filter.Unwatched, Filter.Favorites, [.. Filter.Genres], [.. Filter.Years],
 			[.. Filter.OfficialRatings], [.. Filter.Tags], Filter.Preset?.Id, SortBy, Order);
+		var saving = SaveFilterAsync(saved, name!.Trim(), filter);
+		_savingFilter = saving;
+		return await saving;
+	}
+
+	private Task<bool>? _savingFilter;
+
+	/// <summary>1.6.1: a Save as collection is on its way (a second one saves nothing until it is done).</summary>
+	public bool IsSavingFilter => _savingFilter is { IsCompleted: false };
+
+	private async Task<bool> SaveFilterAsync(ISavedFilters saved, string name, LibrarySavedFilter filter)
+	{
 		try
 		{
-			return await saved.SaveFilter(name!.Trim(), filter);
+			return await saved.SaveFilter(name, filter);
 		}
 		catch (Exception ex)
 		{

@@ -194,6 +194,20 @@ stores it. ``MediaSources: []`` is an answer (nothing to play) and passes.
 HTTPExceptions carry the requests error, which names the url, and stay
 "status (type)". `PlaybackInfoAnswerTest`.
 
+**A report refused mid-playback** (1.6.1, BH-151-m8): when the server stops
+taking the sign-in while an item plays, it answers every progress report
+and the Stopped report 401 (the apiclient raises ``Unauthorized`` and
+revokes the token in-process), and the backend only logged it.
+`make_client` puts `bridge_http.watch_refusals` round each client's
+``session_progress`` and ``session_stop`` (after `watch_stops`, whose
+outcome stands): a 401 or 403 hands ``(item_id, play_session_id)`` to
+`Bridge._report_refused`, which queues a non-fatal ``auth_failed`` with
+`Bridge.REPORT_REFUSED`, once per play session (progress is refused every
+few seconds). Playback goes on; the UI asks ``Users/Me`` itself and, if the
+sign-in has ended, offers Sign in again. That playback's place is not
+kept for after the sign-in (KNOWN-ISSUES). `ReportRefusedTest`,
+`ReportRefusedSaidTest`.
+
 A new `connect` with a server **retires** the old client, stops playback,
 drops the old client, and is "not connected" until the new one verifies.
 
@@ -854,9 +868,25 @@ segment's action before the type's). `skip_rules.SkipWatcher` replaces 1.4's
 and a seek within 15 s after the app skipped a start rule corrects it.
 `skip_snap.Snapper` starts a worker per rule segment near its edge: it waits
 for mpv's demuxer cache to hold the edge's few seconds, `dump-cache`s them to
-a temporary file, runs a windowless, silent mpv (`--vo=null --ao=null`, its
+a temporary file, runs a windowless, silent mpv (`vo=null`, `ao=null`, its
 own process, ended by its own handle on a timeout) with `blackdetect` and
 `silencedetect` over it, and moves the edge; the file is deleted at once.
+**That mpv is the libmpv Nixie ships** (1.6.1, BH-160-M1: 1.6.0 needed an
+`mpv.exe`, which the release package does not have, so on most PCs no rule
+snapped). `skip_snap.libmpv_path` finds it: frozen, `app\libmpv\libmpv-2.dll`
+beside the backend's folder and nothing else; from source,
+`NIXIE_LIBMPV_DIR`, else the checkout's `vendor\libmpv\<build>`.
+`skip_analyse.py` (stdlib only, run by path) loads it through ctypes in a
+process of the backend's own: the frozen exe with `--nixie-skip-analyse`
+(`tools\release\backend_entry.py`), or `python -I skip_analyse.py`. The
+process's stdout is discarded (never the protocol's), it is in the UI's
+kill-on-close job like the backend, and a decoder that hangs or crashes
+takes only it. An mpv binary (`mpv_binary`) analyses only where there is
+no libmpv. The package proves it: `verify-package.ps1` runs the bundled
+backend's `--nixie-skip-check` (`skip_snap.self_check`: the package's
+libmpv encodes a clip with a cut, and a rule's edge must land on it) with
+no mpv.exe on PATH, and the release's backend tests include
+`test_skip_snap` with `FLUENTFIN_MPV_REQUIRE_LIBMPV=1`.
 The dumps live under `<temp>/nixie-snap/<config tag>/nixie-snap-*`;
 the Snapper sweeps that folder as the bridge starts, ends its analysers
 (own Popen handles) when playback stops, and `Bridge.stop` and `atexit`

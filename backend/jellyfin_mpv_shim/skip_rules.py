@@ -20,10 +20,23 @@ users or two servers on one PC never share anything. Per show it holds:
   within the season: the first skip by hand of each episode is kept, and one
   of the same part 10 s or more from an earlier one marks the season
   "moves"; its fixed spot is never offered again.
+* **seasons** (1.6.1, the merge review's R2): those kept skips and the
+  "moves" mark, per season, apart from the intro itself, so a learned spot
+  taken back (two undos, a seek back into it) or relearned keeps the
+  season's evidence. Created with the season's first learned intro (a
+  season never learned keeps nothing); only Settings' Forget (the intro, the
+  show, everything) clears it. Mirrored into the intro entry while there is
+  one, as 1.6.0 kept them, so a 1.6.0 backend reading this file still sees
+  its marks.
 * **candidates**: a viewer's forward seek near the start or the end of an
   episode; the same seek in a second episode asks once "Skip this every
   episode?" (``skip_suggestion``).
 * **refused**: "Never for this show".
+
+Beside the shows, ``legacyMigrated`` (1.6.1, the merge review's R3):
+``learned-intros.json`` was migrated once, so a copy of it that comes back
+(its rename failed, or 1.5.1 ran again after a downgrade) is never migrated
+again; a second migration brought forgotten intros back.
 
 Nothing here raises into playback: every entry point catches and logs.
 """
@@ -286,6 +299,22 @@ def _valid_candidate(entry):
             and isinstance(entry.get("items"), list))
 
 
+def _kept(skips):
+    """The usable ``[start, end]`` pairs of a list read from disk."""
+    return [[float(s[0]), float(s[1])] for s in skips or ()
+            if isinstance(s, list) and len(s) == 2 and _num(s[0])
+            and _num(s[1])][-MOVES_KEEP:]
+
+
+def _marks_of_entry(entry):
+    """A season's record (`_clean_show`'s "seasons") as 1.6.0 kept it, in
+    the intro entry: its kept skips (the intro's own range when it has
+    none) and its "moves" mark."""
+    moves = bool(entry.get("moves"))
+    return {"skips": _kept(entry.get("skips")) if moves
+            else _skips(entry)[-MOVES_KEEP:], "moves": moves}
+
+
 def _clean_show(show):
     """A show entry read from disk, with anything unusable left out."""
     if not isinstance(show, dict):
@@ -305,17 +334,41 @@ def _clean_show(show):
         "last_item": show.get("last_item") if isinstance(
             show.get("last_item"), str) else None,
     }
+    # 1.6.1 (R2): the seasons' kept skips and "moves" marks; a season with
+    # an intro and no record (a 1.6.0 file, or one a 1.6.0 backend wrote)
+    # takes them from the intro entry, where 1.6.0 kept them
+    seasons = show.get("seasons") if isinstance(show.get("seasons"),
+                                                dict) else {}
+    out["seasons"] = {
+        k: {"skips": _kept(v.get("skips")), "moves": v.get("moves") is True}
+        for k, v in seasons.items()
+        if isinstance(k, str) and isinstance(v, dict)}
+    for season, entry in out["intros"].items():
+        if season not in out["seasons"]:
+            out["seasons"][season] = _marks_of_entry(entry)
+        _mirror(out, season)
     return out
 
 
+def _mirror(show, season):
+    """The season's record into its intro entry, if it has one (1.6.0
+    reads them there)."""
+    entry = show["intros"].get(season)
+    marks = show["seasons"].get(season)
+    if entry is not None and marks is not None:
+        entry["moves"] = marks["moves"]
+        entry["skips"] = [list(s) for s in marks["skips"]]
+
+
 def _empty_show(name=None):
-    return {"name": name, "rules": [], "intros": {}, "candidates": [],
-            "refused": False, "episodes": 0, "last_item": None}
+    return {"name": name, "rules": [], "intros": {}, "seasons": {},
+            "candidates": [], "refused": False, "episodes": 0,
+            "last_item": None}
 
 
 def _has_content(show):
-    return bool(show["rules"] or show["intros"] or show["candidates"]
-                or show["refused"])
+    return bool(show["rules"] or show["intros"] or show["seasons"]
+                or show["candidates"] or show["refused"])
 
 
 class SkipStore:
@@ -329,6 +382,10 @@ class SkipStore:
         self._shows = {}
         self._stamp = None
         self._migrated = False
+        #: 1.6.1 (R3): ``legacyMigrated`` in the file
+        self._legacy_done = False
+        #: 1.6.1: the file was read once in this process (`_load`)
+        self._read_once = False
 
     # -- disk --------------------------------------------------------------
 
@@ -341,6 +398,7 @@ class SkipStore:
             if self._stamp is not None:
                 # deleted underneath us: nothing is kept
                 self._shows = {}
+                self._legacy_done = False
             self._stamp = None
             return
         if stamp == self._stamp:
@@ -356,16 +414,33 @@ class SkipStore:
                 show = _clean_show(value) if isinstance(key, str) else None
                 if show is not None:
                     self._shows[key] = show
+            self._legacy_done = data.get("legacyMigrated") is True
+            if not self._read_once:
+                self._read_once = True
+                self._release_asked()
         except Exception:
             log.warning("%s is unreadable; skip rules start over (a copy is "
                         "kept beside it)", RULES_FILE, exc_info=True)
             self._shows = {}
+            self._legacy_done = False
             try:
                 os.replace(self.path, self.path + ".corrupt")
             except OSError:
                 pass
             stamp = None
         self._stamp = stamp
+
+    def _release_asked(self):
+        """1.6.1 (the 1.6 review's skip queue): a candidate still "asked" as
+        the file is first read was asked in an earlier run (the backend
+        ended, or was restarted, with the question open): nobody can answer
+        that one now, and `release` never ran, so it would never ask again.
+        Released as `release` does (written with the next change)."""
+        for show in self._shows.values():
+            for candidate in show["candidates"]:
+                if candidate.get("asked"):
+                    candidate["asked"] = False
+                    candidate["items"] = candidate["items"][-1:]
 
     def _save(self):
         if not self.path:
@@ -374,9 +449,11 @@ class SkipStore:
             from . import durable
 
             shows = {k: v for k, v in self._shows.items() if _has_content(v)}
+            data = {"version": 2, "shows": shows}
+            if self._legacy_done:
+                data["legacyMigrated"] = True
             durable.replace_file(
-                self.path, json.dumps({"version": 2, "shows": shows},
-                                      indent=1, sort_keys=True))
+                self.path, json.dumps(data, indent=1, sort_keys=True))
             self._stamp = os.stat(self.path).st_mtime_ns
         except Exception:
             log.warning("could not save the skip rules", exc_info=True)
@@ -385,11 +462,29 @@ class SkipStore:
         """1.4's ``learned-intros.json`` (keys ``"<series>:<season>"``, no
         server or user) into this file once, under ``account`` -- the first
         account that plays after the upgrade. The old file is renamed, not
-        deleted. Never raises."""
+        deleted. 1.6.1 (R3): once for good, recorded in this file
+        (``legacyMigrated``); a legacy file found after that is left alone.
+        1.6.1 review: 1.6.0 wrote no such mark, so a readable file of 1.6.0's
+        counts as migrated too (1.6.0 migrated at the first ``connect``,
+        before anything else could write it), also one whose shows are all
+        forgotten: a legacy file still there (1.6.0's rename failed) would
+        bring back intros forgotten under 1.6.0. Never raises."""
         if self._migrated or not self.path or not account:
             return
         self._migrated = True
         legacy = os.path.join(os.path.dirname(self.path), LEGACY_FILE)
+        with self._lock:
+            self._load()
+            if not self._legacy_done and self._stamp is not None:
+                # read, with no mark: 1.6.0's (an unreadable one was set
+                # aside by `_load` and starts over)
+                self._legacy_done = True
+                self._save()
+            if self._legacy_done:
+                if os.path.isfile(legacy):
+                    log.info("%s is there again; it was migrated once, so it "
+                             "is left alone", LEGACY_FILE)
+                return
         try:
             if not os.path.isfile(legacy):
                 return
@@ -416,16 +511,21 @@ class SkipStore:
                 show = self._shows.setdefault("%s:%s" % (account, series),
                                               _empty_show())
                 if season not in show["intros"]:
-                    show["intros"][season] = {
+                    show["intros"][season] = entry = {
                         "start": float(value["start"]),
                         "end": float(value["end"]),
                         "undone": int(value.get("undone", 0) or 0),
                         "learned": int(value.get("learned", 0) or 0),
                         "moves": bool(value.get("moves", False))}
+                    if season not in show["seasons"]:
+                        show["seasons"][season] = _marks_of_entry(entry)
+                    _mirror(show, season)
                     moved += 1
             marks = self._migrate_seasons(seasons)
-            if moved or marks:
-                self._save()
+            # saved even when it held nothing: the next start must not take
+            # it again (R3)
+            self._legacy_done = True
+            self._save()
         try:
             os.replace(legacy, legacy + LEGACY_DONE_SUFFIX)
         except OSError:
@@ -434,10 +534,12 @@ class SkipStore:
         log.info("Migrated %d learned intro(s) into %s", moved, RULES_FILE)
 
     def _migrate_seasons(self, seasons):
-        """1.5.1's per-season "moves" (1.6 integration): each onto the learned
-        intro of its own server, user, show and season, where one was
-        migrated (1.5.1 keyed them as `account_key` and `show_key` do). The
-        count carried over."""
+        """1.5.1's per-season "moves" (1.6 integration) into the season's
+        record of its own server, user and show (1.5.1 keyed them as
+        `account_key` and `show_key` do). 1.6.1 (R2): also a mark whose
+        learned intro was gone (1.5.1 kept its marks apart from the ranges,
+        so a seek back into the spot left the season's "moves"). The count
+        carried over."""
         marks = 0
         for key, value in (seasons.items() if isinstance(seasons, dict)
                            else ()):
@@ -445,15 +547,23 @@ class SkipStore:
             if (len(parts) != 4 or not parts[3].lstrip("-").isdigit()
                     or not isinstance(value, dict)):
                 continue
-            entry = ((self._shows.get(":".join(parts[:3])) or {})
-                     .get("intros") or {}).get(str(int(parts[3])))
-            if entry is None:
-                continue
+            season = str(int(parts[3]))
+            show = self._shows.get(":".join(parts[:3]))
+            entry = ((show or {}).get("intros") or {}).get(season)
+            kept = _kept(value.get("skips"))
             if value.get("moves") is True:
-                entry["moves"], entry["skips"] = True, []
+                record = {"skips": [], "moves": True}
+            elif entry is not None:
+                record = {"skips": _skips(dict(entry, skips=kept))[
+                    -MOVES_KEEP:], "moves": False}
+            elif kept:
+                record = {"skips": kept, "moves": False}
             else:
-                entry["skips"] = _skips(dict(entry, skips=value.get("skips")))[
-                    -MOVES_KEEP:]
+                continue        # nothing kept and no spot: nothing to judge
+            if show is None:
+                show = self._shows[":".join(parts[:3])] = _empty_show()
+            show["seasons"][season] = record
+            _mirror(show, season)
             marks += 1
         return marks
 
@@ -475,6 +585,11 @@ class SkipStore:
                     for k, v in self._shows.items()
                     if k.startswith(prefix) and _has_content(v)}
 
+    def _marks(self, key, season):
+        """The season's record (kept skips, "moves"), or None."""
+        return ((self._shows.get(key) or {}).get("seasons") or {}).get(
+            str(season))
+
     def intro(self, key, season):
         """The learned intro ``(start, end)`` for a season, or None (also
         when it "moves")."""
@@ -482,16 +597,28 @@ class SkipStore:
             self._load()
             entry = ((self._shows.get(key) or {}).get("intros") or {}).get(
                 str(season))
-            if not entry or entry.get("moves"):
+            marks = self._marks(key, season) or {}
+            if not entry or marks.get("moves") or entry.get("moves"):
                 return None
             return float(entry["start"]), float(entry["end"])
 
     def intro_entry(self, key, season):
+        """A copy of the season's learned intro with its record's ``moves``
+        and ``skips``; for a season that moves and has no intro (taken back,
+        then marked), ``{"moves": True, "skips": [...]}``. None for a season
+        with neither (it may be learned)."""
         with self._lock:
             self._load()
             entry = ((self._shows.get(key) or {}).get("intros") or {}).get(
                 str(season))
-            return dict(entry) if entry else None
+            marks = self._marks(key, season)
+            if entry is None and not (marks and marks["moves"]):
+                return None
+            out = dict(entry or {})
+            if marks is not None:
+                out["moves"] = marks["moves"]
+                out["skips"] = [list(s) for s in marks["skips"]]
+            return out
 
     # -- writes ------------------------------------------------------------
 
@@ -507,15 +634,24 @@ class SkipStore:
         with self._lock:
             self._load()
             show = self._show_for(key, name)
-            entry = show["intros"].get(str(season))
-            if entry and entry.get("moves"):
-                return          # a show that moves is never relearned
-            show["intros"][str(season)] = {
-                "start": round(start, 1), "end": round(end, 1), "undone": 0,
-                "learned": int(time.time()), "moves": False,
-                # 1.6 integration (1.5.1's "moves"): the skip it was learned
-                # from is the season's first kept skip
-                "skips": [[round(start, 1), round(end, 1)]]}
+            season = str(season)
+            marks = show["seasons"].get(season)
+            if marks and marks["moves"]:
+                return          # a season that moves is never relearned
+            skip = [round(start, 1), round(end, 1)]
+            show["intros"][season] = {
+                "start": skip[0], "end": skip[1], "undone": 0,
+                "learned": int(time.time()), "moves": False}
+            # 1.6 integration (1.5.1's "moves"): the skip it was learned from
+            # is one of the season's kept skips; 1.6.1 (R2): added to those
+            # the season kept before (a spot taken back and learned again),
+            # never a new history
+            if marks is None:
+                marks = show["seasons"][season] = {"skips": [],
+                                                   "moves": False}
+            if skip not in marks["skips"]:
+                marks["skips"] = (marks["skips"] + [skip])[-MOVES_KEEP:]
+            _mirror(show, season)
             self._save()
 
     def note_hand_skip(self, key, season, start, end):
@@ -525,20 +661,23 @@ class SkipStore:
         `MOVES_GAP` or more from it (`skips_apart`) marks the season "moves"
         for good (its spot is no longer offered, nor relearned, until it is
         forgotten); else it is kept (the latest `MOVES_KEEP`). True when this
-        skip marked it. A season with no learned intro keeps nothing: there
-        is no spot to stop offering."""
+        skip marked it. A season never learned keeps nothing: there is no
+        spot to stop offering. 1.6.1 (R2): kept in the season's record, which
+        outlives the intro (two undos, a seek back into it), so the skips of
+        a season whose spot was taken back still count."""
         with self._lock:
             self._load()
-            entry = ((self._shows.get(key) or {}).get("intros") or {}).get(
-                str(season))
-            if not entry or entry.get("moves"):
+            show = self._shows.get(key)
+            marks = self._marks(key, season)
+            if show is None or marks is None or marks["moves"]:
                 return False
             skip = [round(float(start), 1), round(float(end), 1)]
-            kept = _skips(entry)
+            kept = marks["skips"]
             moved = any(same_part(skip, earlier) and skips_apart(skip, earlier)
                         for earlier in kept)
-            entry["moves"] = moved
-            entry["skips"] = [] if moved else (kept + [skip])[-MOVES_KEEP:]
+            marks["moves"] = moved
+            marks["skips"] = [] if moved else (kept + [skip])[-MOVES_KEEP:]
+            _mirror(show, str(season))
             self._save()
             return moved
 
@@ -739,7 +878,13 @@ class SkipStore:
                     changed += 1
                     continue
                 if intro is not None:
-                    if show["intros"].pop(intro, None) is not None:
+                    # Settings' Forget: the season's kept skips and "moves"
+                    # go with its intro (1.6.1: they outlive the intro only
+                    # for the player's undo and seek back)
+                    gone = show["intros"].pop(intro, None) is not None
+                    gone = show["seasons"].pop(intro, None) is not None \
+                        or gone
+                    if gone:
                         changed += 1
                     continue
                 before = len(show["rules"])
@@ -790,13 +935,22 @@ def listing(store_, account):
                   "action": r.get("action"), "origin": r["origin"],
                   "created": r.get("created", 0)}
                  for r in show["rules"]]
+        # 1.6.1 (R2): a season that moves is listed (and can be forgotten)
+        # whether or not its intro is still there
+        seasons = show.get("seasons") or {}
+        listed = dict(show["intros"])
+        for season, marks in seasons.items():
+            if marks.get("moves") and season not in listed:
+                last = (marks.get("skips") or [[0.0, 0.0]])[-1]
+                listed[season] = {"start": last[0], "end": last[1]}
         intros = [{"id": "intro-%s-%s" % (series, season),
                    "season": int(season) if season.lstrip("-").isdigit()
                    else None,
                    "startS": entry["start"], "endS": entry["end"],
-                   "moves": bool(entry.get("moves"))}
+                   "moves": bool((seasons.get(season) or entry)
+                                 .get("moves"))}
                   for season, entry in sorted(
-                      show["intros"].items(),
+                      listed.items(),
                       key=lambda kv: (len(kv[0]), kv[0]))]
         if not rules and not intros and not show["refused"]:
             continue
@@ -867,6 +1021,38 @@ def add_rules(video, make_segment, key, store_):
         segment.corrected = bool(rule.get("corrected"))
         segment.snap_pending = True
         video.intros.append(segment)
+
+
+def carry_rule_state(before, segment, position):
+    """1.6.1 (the 1.6 review's skip queue): a rule's segment rebuilt while
+    its episode plays (`bridge_skip.refresh_rules`: a rule added, a Yes to a
+    suggestion, a rule forgotten) keeps what this episode already did with
+    it. ``before`` is the same rule's segment before (None for a rule new to
+    the episode):
+
+    * skipped stays skipped (``has_triggered``, ``skipped_at``): the player
+      skips an "always" part once, and a seek back into it is the viewer's
+      to watch (`AlwaysDoesNotLoop`); a fresh segment re-armed it;
+    * its snapped edge stays, when the rule's own span is the same (a
+      corrected rule snaps again);
+    * a rule new to the episode whose end ``position`` has passed counts as
+      skipped here: an "always" rule made from the skip just taken (Yes,
+      Shift+S, the playhead past the part) must not skip again when the
+      viewer seeks back into it. One added with the playhead inside its part
+      (the sheet's "now to 30 s from now", skipped by itself) still skips it
+      now, as 1.6.0 did (the 1.6.1 review: it tested the start)."""
+    if before is not None:
+        segment.has_triggered = bool(getattr(before, "has_triggered", False))
+        skipped_at = getattr(before, "skipped_at", None)
+        if skipped_at is not None:
+            segment.skipped_at = skipped_at
+        same = (getattr(before, "rule_start", None) == segment.rule_start
+                and getattr(before, "rule_end", None) == segment.rule_end)
+        if same and not getattr(before, "snap_pending", True):
+            segment.start, segment.end = before.start, before.end
+            segment.snap_pending = False
+    elif _num(position) and position >= segment.rule_end:
+        segment.has_triggered = True
 
 
 def learned_intro(video, key, store_):
@@ -1063,6 +1249,12 @@ class SkipWatcher:
         if position <= previous:
             return None
         if now <= self._by_skip:
+            if position - previous < SEEK_MIN:
+                # 1.6.1 (found at the 1.6 integration): a playback reading
+                # between the app's `note_skip` and its seek landing; the
+                # press waits for its jump, which was then taken for the
+                # viewer's (a candidate, or a hand skip for "moves")
+                return None
             pressed = self._skip_segment
             self._by_skip = 0.0
             if pressed is not None:
@@ -1167,9 +1359,10 @@ class SkipWatcher:
             noted = qualifying and self._noted is not self._video
             if noted:
                 self._noted = self._video
-            if (noted and entry is not None
-                    and store_.note_hand_skip(key, season, previous,
-                                              position)):
+            # 1.6.1 (R2): with or without the intro (the season's record
+            # outlives it; the store keeps nothing for a season never learned)
+            if noted and store_.note_hand_skip(key, season, previous,
+                                               position):
                 log.info("The learned intro of this season moves (skips by "
                          "hand %.0f s or more apart); its fixed spot is no "
                          "longer offered", MOVES_GAP)

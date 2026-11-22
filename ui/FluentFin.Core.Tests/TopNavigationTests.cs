@@ -425,6 +425,142 @@ public sealed class TopNavigationTests
 		Assert.Equal(["Home", "Collections", "Libraries"], broken.Tabs.Select(t => t.Title));
 	}
 
+	// ---- Nixie 1.6.1 (the 1.6 review's top bar queue)
+
+	[Fact]
+	public void AStar_WhileTheLibrariesCouldNotBeRead_SaysSo_AndAsksForThemAgain()
+	{
+		// the read failed: an empty bar, and a star on the Libraries page said nothing
+		var top = Create();
+		var wanted = 0;
+		top.LibrariesWanted += (_, _) => wanted++;
+		top.SetLibraries([]);
+
+		Assert.Equal(FavouriteChange.NotRead, top.ToggleFavourite(Guid.NewGuid()));
+		Assert.Equal(1, wanted);
+		Assert.Contains("couldn't read your libraries", TopFavourites.NotReadMessage);
+		Assert.Equal(0, _settings.Saves);
+
+		// read again: the star works, and a star on something else is still nothing
+		var server = Server();
+		top.SetLibraries(server.All);
+		Assert.Equal(FavouriteChange.Added, top.ToggleFavourite(server.Music.Id!.Value));
+		Assert.Equal(FavouriteChange.NotALibrary, top.ToggleFavourite(Guid.NewGuid()));
+		Assert.Equal(1, wanted);
+	}
+
+	[Fact]
+	public void The13Pins_GoToTheFirstUserWhoseServerHasThem_NotToEveryUserOnThisPC()
+	{
+		var libraries = Libraries(6);
+		_settings.Values[TopNavigation.PinsSetting] = JsonSerializer.SerializeToNode(new List<CustomNavigationViewItem>
+		{
+			new() { Key = TopTabs.LibraryKey, Name = "Library 5", Parameter = libraries[4].Id, Persistent = true },
+			new() { Key = TopTabs.LibraryKey, Name = "Library 2", Parameter = libraries[1].Id, Persistent = true },
+		});
+		var pins = _settings.Values[TopNavigation.PinsSetting]!.ToJsonString();
+
+		// another server, none of the pinned libraries: they are left for someone else
+		_profile = "server-b|user-1";
+		var elsewhere = Create();
+		elsewhere.SetLibraries(Libraries(3));
+		Assert.Empty(elsewhere.Favourites);
+		Assert.False(_settings.Values.ContainsKey(FavouritesStore.PinsClaimKey));
+
+		// the first user whose server has them keeps them, as their stars
+		_profile = "server-a|user-1";
+		var first = Create();
+		first.SetLibraries(libraries);
+		Assert.Equal(Ids([libraries[4], libraries[1]]), first.Favourites);
+		Assert.Equal("server-a|user-1", _settings.Values[FavouritesStore.PinsClaimKey]!.GetValue<string>());
+		Assert.Equal(pins, _settings.Values[TopNavigation.PinsSetting]!.ToJsonString()); // the 1.3 setting itself is never written
+
+		// another user of the same server on this PC: not theirs
+		_profile = "server-a|user-2";
+		var second = Create();
+		second.SetLibraries(libraries);
+		Assert.Empty(second.Favourites);
+		Assert.Equal(["Home", "Collections", "Libraries"], second.Tabs.Select(t => t.Title));
+
+		// the first user again: still theirs (their stars now)
+		_profile = "server-a|user-1";
+		var again = Create();
+		again.SetLibraries(libraries);
+		Assert.Equal(Ids([libraries[4], libraries[1]]), again.Favourites);
+	}
+
+	[Fact]
+	public void The13Pins_StayWithThe160UserWhoStarredFromThem_EvenIfAnotherSignsInFirst()
+	{
+		// review of 1.6.1 (F4): in 1.6.0 user-1 had the pins and starred (their stars hold the pins); in 1.6.1 user-2, with no
+		// stars, signed in first and took the pins
+		var libraries = Libraries(6);
+		_settings.Values[TopNavigation.PinsSetting] = JsonSerializer.SerializeToNode(new List<CustomNavigationViewItem>
+		{
+			new() { Key = TopTabs.LibraryKey, Name = "Library 5", Parameter = libraries[4].Id, Persistent = true },
+		});
+		_profile = "server-a|user-1";
+		var in160 = Create();
+		in160.SetLibraries(libraries);
+		in160.ToggleFavourite(libraries[0].Id!.Value);
+		_settings.Values.Remove(FavouritesStore.PinsClaimKey); // as 1.6.0 left it: stars, and no claim
+
+		_profile = "server-a|user-2";
+		var second = Create();
+		second.SetLibraries(libraries);
+		Assert.Empty(second.Favourites);
+
+		_profile = "server-a|user-1";
+		var first = Create();
+		first.SetLibraries(libraries);
+		Assert.Equal(Ids([libraries[4], libraries[0]]), first.Favourites);
+		Assert.Equal("server-a|user-1", _settings.Values[FavouritesStore.PinsClaimKey]!.GetValue<string>());
+
+		// a user with stars of their own (none of them a pin), first on that server: the pins are theirs, their stars stay
+		_settings.Values.Remove(FavouritesStore.PinsClaimKey);
+		_settings.Values.Remove(FavouritesStore.SettingKey);
+		_profile = "server-a|user-3";
+		var starred = Create();
+		starred.SetLibraries(libraries);
+		starred.ToggleFavourite(libraries[4].Id!.Value); // the pinned one, off
+		starred.ToggleFavourite(libraries[2].Id!.Value);
+		_settings.Values.Remove(FavouritesStore.PinsClaimKey);
+		var again = Create();
+		again.SetLibraries(libraries);
+		Assert.Equal(Ids([libraries[2]]), again.Favourites);
+		Assert.Equal("server-a|user-3", _settings.Values[FavouritesStore.PinsClaimKey]!.GetValue<string>());
+		_profile = "server-a|user-4";
+		var fourth = Create();
+		fourth.SetLibraries(libraries);
+		Assert.Empty(fourth.Favourites);
+	}
+
+	[Fact]
+	public void EachTab_CarriesWhatItOpens()
+	{
+		// the review: the tabs' titles and kinds were asserted, never what each one opens
+		var server = Server();
+		var tabs = TopTabs.Build(server.All, Ids([server.Shows, server.Music]));
+
+		var home = tabs.Single(t => t.Kind == TopTabKind.Home);
+		Assert.Equal(TopTabs.HomeKey, home.Key);
+		Assert.Null(home.Parameter);
+		var favourites = tabs.Where(t => t.Kind == TopTabKind.Library).ToList();
+		Assert.Equal([server.Shows, server.Music], favourites.Select(t => t.Parameter));
+		Assert.All(favourites, t => Assert.Equal(TopTabs.LibraryKey, t.Key));
+		Assert.Equal(Ids([server.Shows, server.Music]), favourites.Select(t => t.LibraryId!.Value));
+		Assert.Equal(TopTabs.CollectionsKey, tabs.Single(t => t.Kind == TopTabKind.Collections).Key);
+		var libraries = tabs.Single(t => t.Kind == TopTabKind.Libraries);
+		Assert.Equal(TopTabs.LibrariesKey, libraries.Menu[0].Key);
+		Assert.Null(libraries.Menu[0].Parameter);
+		// each library in the menu opens that library
+		foreach (var entry in libraries.Menu.Skip(1))
+		{
+			Assert.Equal(TopTabs.LibraryKey, entry.Key);
+			Assert.Equal(entry.Title, ((BaseItemDto)entry.Parameter!).Name);
+		}
+	}
+
 	[Fact]
 	public void OpeningALibrary_CountsForTheDefaults_NotBackNorTheSamePageAgain()
 	{

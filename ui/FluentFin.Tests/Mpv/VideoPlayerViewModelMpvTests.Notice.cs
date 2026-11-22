@@ -178,4 +178,54 @@ public sealed partial class VideoPlayerViewModelMpvTests
 		Assert.Equal("MPV: A movie could not be opened", vm.MpvMessage);
 		Assert.Null(vm.MpvNotice);
 	}
+
+	/// <summary>The backend's words for a progress or Stopped report the server refused (bridge.py Bridge.REPORT_REFUSED).</summary>
+	private const string ReportRefused = "The server refused this playback's report, so your place in it isn't being saved";
+
+	/// <summary>
+	/// 1.6.1 (BH-151-m8): the sign-in ends mid-playback; the backend's progress reports are refused, and it says so once
+	/// (a non-fatal <c>auth_failed</c>, docs/BRIDGE.md §5). The app asks the server itself: an ended sign-in takes the
+	/// notice's place with Sign in again, and playback is not touched. The player said nothing before.
+	/// </summary>
+	[Fact]
+	public async Task ARefusedProgressReport_WhenTheSignInEnded_AsksToSignInAgain_AndPlaysOn()
+	{
+		var vm = await PagePlayingWithNoticeTimers();
+		var checks = 0;
+		_client.Setup(x => x.GetCurrentUser()).Returns(() =>
+		{
+			checks++;
+			FluentFin.Core.SignInState.MarkEnded(); // as SignInWatch does when /Users/Me is refused too
+			return Task.FromResult<Jellyfin.Sdk.Generated.Models.UserDto?>(null);
+		});
+		try
+		{
+			Error(vm, ReportRefused, code: "auth_failed");
+
+			Assert.Equal(1, checks);
+			Assert.StartsWith("Your sign-in to ", vm.MpvMessage);
+			Assert.True(vm.MpvSignInNeeded, "with Sign in again");
+			Assert.Null(vm.MpvNotice);
+			Assert.True(vm.IsMpvVideoVisible, "it plays on");
+			Assert.Equal(["set_fullscreen", "play"], _backend.Commands);
+		}
+		finally
+		{
+			FluentFin.Core.SignInState.SignedIn();
+		}
+	}
+
+	[Fact]
+	public async Task ARefusedProgressReport_WhenTheSignInIsGood_IsANotice()
+	{
+		var vm = await PagePlayingWithNoticeTimers();
+		_client.Setup(x => x.GetCurrentUser()).ReturnsAsync(new Jellyfin.Sdk.Generated.Models.UserDto());
+
+		Error(vm, ReportRefused, code: "auth_failed");
+
+		Assert.Equal($"MPV: {ReportRefused}", vm.MpvNotice);
+		Assert.Null(vm.MpvMessage);
+		Assert.False(vm.MpvSignInNeeded);
+		Assert.True(vm.IsMpvVideoVisible);
+	}
 }

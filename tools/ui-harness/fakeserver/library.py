@@ -325,6 +325,12 @@ class Library:
                      None, seasons=2, episodes=6, episode_name=lambda e: gang[(e - 1) % len(gang)])
         self._series(shows, "Shows", "Sunny Days", self.now - datetime.timedelta(days=60), 2017, None, seasons=1,
                      episodes=3, episode_name=lambda e: ["Always Sunny", "It's a Sunny Day", "Rain"][e - 1])
+        # 1.6.1 (BH-150-m3): the person is a guest star in two episodes of It's Always Sunny (credited on them only, as
+        # Jellyfin credits a guest): "With Sunny Holm" shows the show once, "in 2 episodes"
+        sunny = _id("series", "Shows", "It's Always Sunny in Philadelphia")
+        for eid in self.children[self.children[sunny][0]][:2]:
+            self.items[eid]["people"].insert(0, {"Name": person["Name"], "Id": person["Id"], "Role": "Guest", "Type": "GuestStar",
+                                                 "PrimaryImageTag": _tag(person["Id"], "Primary")})
         for vid in (movies, shows):
             self.children[vid].sort(key=lambda i: self.sort_name(self.items[i]))
         # 1.5.1 fixes (BH-150-m7): a home video, a music video, an album and its song, which search found none of; in no
@@ -373,6 +379,21 @@ class Library:
                                "genres": genres, "tags": [], "rating": self.items[members[0]]["rating"], "people": [],
                                "studios": [], "overview": "%d films, %d-%d." % (len(members), min(years), max(years)),
                                "tagline": "", "community": None, "critic": None}
+            self.children[vid].append(bid)
+            self.children[bid] = members
+        # 1.6.1 (bug hunt BH-160-M2): FAKESERVER_COLLIDE=1 adds "Winter Films (4K)" beside "Winter Films": two names that
+        # would read the same tidied ("(4K)" is an end tag), each kept as the server has it; off by default
+        import os
+        if os.environ.get("FAKESERVER_COLLIDE"):
+            name = "Winter Films (4K)"
+            bid = _id("boxset", name)
+            members = sorted(rng.sample(pool, 3), key=lambda i: (self.items[i]["premiere"], self.sort_name(self.items[i])))
+            years = [self.items[m]["year"] for m in members]
+            self.items[bid] = {"Id": bid, "kind": "boxset", "Name": name, "parent": vid, "view": vid, "created": self.now,
+                               "year": min(years), "premiere": min(self.items[m]["premiere"] for m in members),
+                               "genres": [], "tags": [], "rating": self.items[members[0]]["rating"], "people": [],
+                               "studios": [], "overview": "Three films, in 4K.", "tagline": "",
+                               "community": None, "critic": None}
             self.children[vid].append(bid)
             self.children[bid] = members
         # 1.6 colpage: FAKESERVER_LONG_TITLE=1 adds a box set whose name runs two lines (the Collection page's header: the

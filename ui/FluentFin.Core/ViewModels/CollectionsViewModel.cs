@@ -276,7 +276,7 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	public Task<IReadOnlyList<SmartCollection>> MadeByNixie(IndexSnapshot snapshot)
 	{
 		var boxed = _boxSets.Select(x => IndexEntry.ProviderId(x, "Tmdb")).OfType<string>().ToHashSet();
-		return SmartCollectionCatalog.BuildAllAsync(snapshot, _time.GetUtcNow(), boxed, CollectionSettings.KindsOff(settings));
+		return SmartCollectionCatalog.BuildAllAsync(snapshot, SmartCollectionCatalog.Now(_time), boxed, CollectionSettings.KindsOff(settings)); // 1.6.1 (BH-160-m1): the local date
 	}
 
 	// a new index can come in on another thread while a load shows the first one (the app posts it to the UI thread; a test

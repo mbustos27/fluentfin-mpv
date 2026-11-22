@@ -176,6 +176,7 @@
                 Width="320"
                 Height="32"
                 VerticalAlignment="Center"
+                GotFocus="OnSearchGotFocus"
                 LostFocus="OnSearchLostFocus"
                 CornerRadius="8"
                 AutomationProperties.Name="Search"

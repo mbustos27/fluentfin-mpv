@@ -84,6 +84,8 @@ public sealed partial class MpvPlayerControls : UserControl
 		if (e.NewValue is MpvControlsViewModel controls)
 		{
 			controls.DoubleClickTime = TimeSpan.FromMilliseconds(GetDoubleClickTime());
+			// 1.6.1: the open Playback stats ask nothing while the window is minimized
+			controls.WindowMinimized = static () => MainWindowHandle() is var hwnd && hwnd != 0 && IsIconic(hwnd);
 			controls.PropertyChanged += self.OnControlsPropertyChanged;
 			controls.PropertyChanging += self.OnControlsPropertyChanging;
 			self.UpdateCursor();
@@ -474,6 +476,10 @@ public sealed partial class MpvPlayerControls : UserControl
 
 	[System.Runtime.InteropServices.DllImport("user32.dll")]
 	private static extern uint GetDoubleClickTime();
+
+	[System.Runtime.InteropServices.DllImport("user32.dll")]
+	[return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+	private static extern bool IsIconic(nint hwnd);
 
 	private void OnVideoTapped(object sender, TappedRoutedEventArgs e)
 	{

@@ -72,6 +72,9 @@ public sealed class CollectionStage
 
 	public string FeatureLabel => Facts.Features.Split(' ', 2) is { Length: 2 } parts ? parts[1] : "";
 
+	/// <summary>1.6.1 (colpage queue): what Narrator says for the count: "6 features" (the tubes alone said "6").</summary>
+	public string FeatureSpoken => PageTitleFacts.SpokenCount(FeatureCount, FeatureLabel);
+
 	public Thickness ArtMargin => new(ArtLeft, 0, 0, 0);
 
 	public Visibility ArtVisibility => ArtWidth >= MinArtWidth && (Backdrop is not null || Mosaic.Count > 0) ? Visibility.Visible : Visibility.Collapsed;

@@ -107,7 +107,7 @@ namespace FluentFin.Core.ViewModels
 				var took = await _jellyfinClient.TrySaveConfiguration(_configuration);
 				took = await SaveMoreAsync() && took; // 1.5.1 fixes
 				_unsaved = !took;
-				SaveStatus = took ? SavedText : NotSavedText;
+				SaveStatus = took ? SavedText : LoadMessages.ActionFailed("Couldn't save", NotSavedText); // 1.6.1 (BH-151-m2)
 			}
 			finally
 			{

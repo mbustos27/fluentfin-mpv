@@ -253,7 +253,7 @@
 
             <TextBlock
                 Style="{StaticResource GlassMetaTextBlockStyle}"
-                Text="{x:Bind Model.Dto, Converter={StaticResource SubtitleConverter}, Mode=OneWay}"
+                Text="{x:Bind local:BaseItemDtoCard.SubtitleOf(Model), Mode=OneWay}"
                 TextWrapping="NoWrap"
                 Visibility="{Binding RelativeSource={RelativeSource Mode=Self}, Path=Text, Converter={StaticResource EmptyStringVisibilityConverter}}" />
         </StackPanel>

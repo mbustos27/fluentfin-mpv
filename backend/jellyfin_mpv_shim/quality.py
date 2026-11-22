@@ -23,6 +23,7 @@ while its panel is open, never while it is closed).
 """
 
 import logging
+import math
 import threading
 import time
 import urllib.parse
@@ -209,13 +210,20 @@ DEFAULTS = Defaults()
 #: retry of the same video (or anything else that plays it again) keeps the
 #: choice it had.
 _SEEN = "_fluentfin_quality_default"
+#: 1.6.1: the default choice `apply_default` wrote, for `settle_default`.
+_DEFAULT_CHOICE = "_fluentfin_quality_default_choice"
 
 
 def apply_default(video, defaults=None):
     """At the first start of ``video``: the default for where the server is
     (1.5's local-or-remote rule, `utils.is_local_domain`, on the video's
     queue). Leaves an override something else already wrote (the shim's
-    forced transcode) alone. Never raises."""
+    forced transcode) alone. 1.6.1 (the 1.6 review's queue: the defaults
+    skipped the checks a choice by hand has): a cap is not asked for an
+    account that may not have video converted (`may_convert_video`; the
+    file's bitrate, which `refused_up_front` weighs, is not known before the
+    first start, and such an account gets the file as it is either way).
+    Never raises."""
     try:
         if getattr(video, _SEEN, False):
             return
@@ -223,13 +231,44 @@ def apply_default(video, defaults=None):
         if getattr(video, "trs_ovr", None) is not None:
             return
         choice = (defaults or DEFAULTS).for_video(video)
-        if not choice.is_auto:
-            video.trs_ovr = override_for(choice)
-            log.info("Quality for %s: the %s default", getattr(
-                video, "item_id", "an item"),
-                "home" if is_local(video) else "away")
+        if choice.is_auto:
+            return
+        where = "home" if is_local(video) else "away"
+        item = getattr(video, "item_id", "an item")
+        if choice.is_cap and not may_convert_video(getattr(video, "client",
+                                                           None)):
+            log.info("Quality for %s: the %s default's cap is not asked for "
+                     "(the account may not have video converted)", item,
+                     where)
+            return
+        video.trs_ovr = override_for(choice)
+        setattr(video, _DEFAULT_CHOICE, choice)
+        log.info("Quality for %s: the %s default", item, where)
     except Exception:
         log.debug("could not apply the default quality", exc_info=True)
+
+
+def settle_default(video):
+    """1.6.1: after the first start of ``video`` with a default cap: a cap the
+    server ignored (`cap_ignored`: the file sent as it is although it is over
+    the cap) reads Original, as a change by hand does
+    (`Bridge._change_quality`), but quietly: the viewer chose nothing. True
+    when it changed the choice. Never raises."""
+    try:
+        choice = getattr(video, _DEFAULT_CHOICE, None)
+        if not isinstance(choice, Choice) or getattr(
+                video, "trs_ovr", None) != override_for(choice):
+            return False
+        if not cap_ignored(video, choice):
+            return False
+        video.trs_ovr = override_for(ORIGINAL)
+        log.info("Quality for %s: the server sent it as it is, over the "
+                 "default's cap; it reads Original", getattr(
+                     video, "item_id", "an item"))
+        return True
+    except Exception:
+        log.debug("could not settle the default quality", exc_info=True)
+        return False
 
 
 def is_local(video):
@@ -389,7 +428,13 @@ def read_property(player, name):
 
 
 def _number(value):
+    """A number mpv reported, None for anything else. 1.6.1: also for NaN
+    and the infinities (a frame rate mpv has not worked out yet): the
+    protocol's JSON has no word for them, and the answer could not be sent
+    at all."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if isinstance(value, float) and not math.isfinite(value):
         return None
     return value
 
@@ -556,9 +601,15 @@ class StatsReads:
                 return
             entry["done"] = True
         if ok:
-            self._writer.respond(entry["id"], payload)
-        else:
-            self._writer.fail(entry["id"], *payload)
+            try:
+                self._writer.respond(entry["id"], payload)
+                return
+            except ValueError:
+                # 1.6.1: a result the protocol's JSON cannot carry (a NaN
+                # `_number` did not catch) went unanswered: still one answer
+                log.debug("the stats could not be sent", exc_info=True)
+                payload = (proto.INTERNAL, "the stats could not be read")
+        self._writer.fail(entry["id"], *payload)
 
     def end(self, code, message):
         """A stop, play or connect, or the shutdown: the read in progress

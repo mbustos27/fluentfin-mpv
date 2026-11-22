@@ -802,6 +802,13 @@ class Server:
                     return
                 if admin.route(self, outer, method, p, low):   # Nixie 1.2.0: admin.py (logged to <out>/admin.jsonl)
                     return
+                # 1.6.1 (the 1.6 review): another user's userId is refused (403), as Jellyfin refuses it to a user who is
+                # not an administrator. Nixie asks only for its own user's items: a request naming another user (a stale
+                # user after a switch) is a bug the fake must not hide. The admin pages (admin.py, above) keep theirs.
+                asked = self._one("userId")
+                if asked and library.norm_id(asked) != library.norm_id(self.uid):
+                    self.route = "another-user"
+                    return self._send(403, b"Forbidden", "text/plain")
                 lib = outer.lib
                 if low == "/system/info":
                     self.route = "system-info"

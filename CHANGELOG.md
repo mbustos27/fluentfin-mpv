@@ -1,5 +1,119 @@
 # Changelog
 
+## 1.6.1
+
+A fix release: skip rules land on the cut on every PC, Back then the same "See all" opens it again, collections with
+the same tidy name stay apart everywhere, and Nixie stays one device on the server wherever it runs from.
+
+**Skipping and the player**
+
+- **A skip rule lands on the cut on every PC.** 1.6.0 needed a separate mpv to find the black frame or silence, which
+  the download doesn't include, so most skips landed on the rule's own time. Nixie now uses the player it ships.
+- **An intro that moves stays known after you take a skip back.** Undoing "Skip intro" twice, or seeking back into it,
+  no longer wipes what Nixie had seen of that season, so a moving intro isn't offered at a fixed time again. A 1.5.1 mark
+  whose learned time was already gone now comes along too. Settings lists such a season, and Forget clears it.
+- **Forgotten intros stay forgotten.** If 1.5's learned-intros file turned up again (after going back to 1.5.1, say),
+  the next start brought back intros you had forgotten in Settings. It's read once now, and never again.
+- **"Skip this every episode?" comes back after a restart.** A question still open when Nixie closed was never
+  asked again for that part; the next matching skip asks it now.
+- **A part skipped by itself stays skipped when you add a rule mid-episode.** Saying Yes to a question, or marking a
+  part with Shift+S, no longer re-arms the show's other rules: seeking back into a part Nixie skipped lets you watch it.
+- **A part you mark follows Settings.** Left as Settings has it, a part marked with Shift+S follows "When a show has a
+  skip rule" from then on (Settings lists it "As in Settings"); only a choice changed in the sheet is the part's own.
+- **Pressing Skip never counts as a skip of your own.** A playback moment between the press and its jump could make
+  Nixie take the jump for yours (a question, or an intro marked as moving).
+- **A change near an episode's end stays with that episode.** A quality, audio or subtitle change made just as the
+  next episode started by itself could land on the next one (another episode's track, or a restart of it); it now
+  applies only to the item it was made for.
+- **A default quality follows the same rules as a pick.** Settings' default quality at home or away is no longer asked
+  for on an account the server won't convert video for, and when the server sends the file as it is anyway, the
+  Quality menu says Original, as it does after a pick.
+- **Playback stats never stall on an odd number.** A frame rate the player hadn't worked out yet left the panel saying
+  "Reading the stats…"; it now shows Unknown for it and the rest as usual. The open panel also rests while Nixie is
+  minimized, and its read once a second no longer puts a line a second in the playback log.
+
+**Navigation, collections and the top bar**
+
+- **Back, then the same place again, opens it.** "See all", Back, then the same "See all" did nothing; so did Movies,
+  Shows, Back, Shows in the top bar, and the Collections tab after Back from a "See all".
+- **Two collections that would read the same keep their server names everywhere,** not only on the Collections page:
+  "Winter Films" and "Winter Films (4K)" read as themselves in search, on cards, on the Collection page's title and in
+  "Part of the collection". Until Nixie has read your collections, a few seconds after you sign in, their
+  names show as the server has them.
+- **Settings > Collections > "Tidy collection names" renames the top bar's libraries at once,** not at the next start.
+- **Home's and the Collections page's seasonal row and "A collection a day" follow your PC's date.** They went by UTC:
+  in California the Halloween row left Home at 5 PM on October 31, and the day's collection changed in the afternoon.
+- **"Save as playlist" is offered only where it can save:** not on a collection of shows only ("Unfinished series").
+  Saving again after leaving the page and coming back finds the playlist you made instead of making a second one, an
+  answer from the server that names no playlist is said in plain words, and the keyboard goes on to "Open" once it's saved
+  (it stayed on the turned-off button, where Back did nothing).
+- **The release notes start with the keyboard on Close in every theme,** the first time you open them too. In Classic
+  and Drive-in the first opening started on a link in the notes.
+- **The top bar gets its libraries back after the server didn't answer.** One failed read left it without favourites for
+  the session, and a star on the Libraries page did nothing: the bar now tries again, fills in as soon as any page reads
+  the libraries, and a star pressed meanwhile says so.
+- **Libraries pinned in Nixie 1.3 are one user's favourites, not everyone's on this PC.** The first user whose server has
+  them keeps them as their stars; other users and servers start from their own.
+- **Every collection and playlist on a big server:** Nixie read the first 2,000 by name; it reads them all now.
+- **Home no longer shows, for a moment, a Made by Nixie row you turned off** in Settings since your last visit.
+- **Signing out right as Nixie finishes reading your libraries no longer leaves that read on this PC.**
+- **Drive-in's library and Collection pages.** Narrator says the marquee's count with its word ("6 features"), the
+  posters no longer land lower than their loading placeholders, and the letter in view takes your high contrast colours,
+  not pink.
+- **Presets and Save as collection.** Recently added on a playlist puts the playlist's own order back when you turn it
+  off (it went to A to Z), and Save as collection never saves twice when its flyout is closed and opened mid-save.
+- A few tidy names ("Marvel (4K) Collection") now read the same however often they're tidied.
+
+**Sign-in, search and the rest**
+
+- **One device on the server, wherever Nixie runs from.** Nixie keeps its device id in its data folder now, so a portable
+  copy unzipped to a new version folder, or a USB copy that gets another drive letter, stays the same device, and a server
+  that allows you only chosen devices keeps letting you in. The installed copy keeps the id 1.6.0 used, even if you tried
+  the 1.6.1 zip first, so your saved sign-in carries over with nothing to do. (A portable copy started from a new folder
+  shows up once more as a new device, the first time only.)
+- **Two Nixie windows no longer sign each other out.** A second window on the same data folder is a device of its own on
+  the server, the same one each time.
+- **The player says when your sign-in ends mid-playback.** If the server stops taking your sign-in while something
+  plays, it refuses Nixie's progress reports; the player now says your place isn't being saved and, when the sign-in
+  has really ended, offers Sign in again. Playback goes on.
+- **An ended sign-in says so in more places.** A series page's season list says your sign-in ended and offers Sign in
+  again (its Try again couldn't work then), and Continue Watching's Remove, the administration pages' Save and Playback
+  preferences say your sign-in ended instead of asking you to check the server. Nixie also stops reconnecting to the
+  server's live updates with the ended sign-in, and a sign-in check still on its way can no longer end the new sign-in.
+- **"With <name>" shows the shows they guest in.** A person found by search opens with the episodes they're credited
+  on too, one card per show ("in 3 episodes"), so a guest star no longer finds nothing.
+- **"/" no longer types itself into the search box it opens** (it did now and then, so a search read "/Signal"). A "/"
+  you type into the box yourself is typed as before.
+- **Display's Save changes only what you changed.** Libraries > Display sends the server's metadata settings only when
+  you change "Date added behavior", and then with every other setting there kept as the server has it.
+
+**Verified**
+
+- Off-screen in all four themes: the keyboard matrix (2,322 checks), the contrast floor (4,408 labels), and the scripts
+  for skipping, the player, collections, the top bar, sign-in and updates. On real Jellyfin 10.11 and 12.4 test servers:
+  search (a guest star's episodes too), a playlist and a transcoded video's audio change, a quality change, and a skip
+  rule learned from two episodes, snapping to the cut.
+- The download itself, unzipped with no mpv anywhere: a skip rule snaps to the cut with the player it ships, and it
+  refuses to install an update it was handed outside the upgrade test.
+- Not checked by hand for this release (they need a real desktop or your own server): a skip rule snapping on a real
+  show, the device id kept across a real upgrade, and Sign in again mid-playback on your server.
+
+**Known issues in 1.6.1** (the first planned for 1.7, the rest queued for 1.7.1)
+
+- An episode opened from Continue watching, search, Up next or a collection shows only the library above its title
+  (for example "Shows ›"), with no link to its series or season, in every theme. Use Back, or search for the show.
+  Planned for 1.7.
+- When your sign-in ends mid-playback, the place and watched state of what was playing aren't saved, even after Sign in
+  again.
+- A skip rule that took the place of the server's "Skip intro" or "Skip credits" reads "Skip extra" for the rest of the
+  episode once you add, accept or forget a rule mid-episode, and forgetting it brings the server's button back only from
+  the next episode.
+- A Nixie opened while its last window is still closing (Restart to update reopening it quickly, say) counts as a
+  second window, a device of its own on the server, until the next start; a server that allows only chosen devices may
+  refuse it that once.
+- "With <name>" reads up to 200 of a person's episodes: for someone with a long-running show of their own, older guest
+  roles can be left out with nothing saying so, and every guest show then reads "in N+ episodes".
+
 ## 1.6.0
 
 Collections: your server's, your playlists and Nixie's own in one place, favourite libraries in the top bar, a Collection

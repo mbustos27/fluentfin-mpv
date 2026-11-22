@@ -175,11 +175,25 @@ def refresh_rules(bridge, series):
             from .media import Intro
 
             key = skip_rules.show_key(item)
+            before = {getattr(s, "rule_id", None): s for s in video.intros
+                      if getattr(s, "source", None) == skip_rules.SOURCE_RULE}
             kept = [s for s in video.intros
                     if getattr(s, "source", None) != skip_rules.SOURCE_RULE]
             video.intros[:] = kept
             if key is not None:
                 skip_rules.add_rules(video, Intro, key, skip_rules.store())
+                # 1.6.1: what this episode already did with each rule (an
+                # "always" part skipped stays skipped: no re-arm on a Yes
+                # or an Add mid-episode)
+                try:
+                    position = pm._player.playback_time
+                except Exception:
+                    position = None
+                for segment in video.intros:
+                    if getattr(segment, "source", None) == \
+                            skip_rules.SOURCE_RULE:
+                        skip_rules.carry_rule_state(
+                            before.get(segment.rule_id), segment, position)
         except Exception:
             log.debug("could not refresh the skip rules", exc_info=True)
 

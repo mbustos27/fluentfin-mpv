@@ -146,10 +146,16 @@ public sealed partial class MpvControlsViewModel
 	/// <summary>The panel's Copy text: the rows as plain text, with no token, server credentials or api key in it.</summary>
 	public string StatsCopyText() => PlaybackStats.CopyText(StatsRows, AppVersionText, SessionInfo.AccessToken, SessionInfo.BaseUrl);
 
-	/// <summary>The heartbeat's part: the open panel asks again once a second has passed.</summary>
+	/// <summary>
+	/// 1.6.1 (the 1.6 review's queue): whether the window is minimized (the player controls set it; null: never). The open
+	/// panel asks nothing then: nobody sees its numbers, and it asked mpv once a second for them.
+	/// </summary>
+	public Func<bool>? WindowMinimized { get; set; }
+
+	/// <summary>The heartbeat's part: the open panel asks again once a second has passed, unless the window is minimized.</summary>
 	private void TickStats()
 	{
-		if (_stats is { IsOpen: true } stats)
+		if (_stats is { IsOpen: true } stats && WindowMinimized?.Invoke() != true)
 		{
 			_ = stats.Poll();
 		}

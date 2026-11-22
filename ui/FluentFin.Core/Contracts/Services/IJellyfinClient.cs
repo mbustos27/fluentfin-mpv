@@ -94,6 +94,9 @@ namespace FluentFin.Core.Contracts.Services
 
 		/// <summary>Nixie 1.5: the films and shows a person is in, newest first ("With Ava Abara").</summary>
 		Task<BaseItemDtoQueryResult?> GetPersonItems(Guid personId);
+
+		/// <summary>1.6.1 (BH-150-m3): the episodes a person is credited on, newest first, at most <paramref name="limit"/>, with the total.</summary>
+		Task<BaseItemDtoQueryResult?> GetPersonEpisodes(Guid personId, int limit);
 		// end 1.5 search
 
 		// 1.6 collections (JellyfinClient_Index.cs; docs/research/smart-collections-data.md): the library index's pages, the
@@ -394,9 +397,18 @@ namespace FluentFin.Core.Contracts.Services
 		public Guid? UserId { get; set; }
 	}
 
+	/// <summary>
+	/// The server's metadata configuration (<c>/System/Configuration/metadata</c>). 1.6.1 (BH-151-m7): Jellyfin replaces the
+	/// whole named configuration with what it is sent, so every key this class doesn't name is kept as read (<see cref="Other"/>)
+	/// and sent back as it was: a key a later Jellyfin adds is no longer reset by a Save of the date-added choice.
+	/// </summary>
 	public class Metadata
 	{
 		public bool UseFileCreationTimeForDateAdded { get; set; }
+
+		/// <summary>1.6.1: the configuration's other keys, as the server sent them.</summary>
+		[System.Text.Json.Serialization.JsonExtensionData]
+		public Dictionary<string, System.Text.Json.JsonElement>? Other { get; set; }
 	}
 
 	/// <summary>Seaglass 1.1.4: how approving a Quick Connect code went (IJellyfinClient.ApproveQuickConnect).</summary>

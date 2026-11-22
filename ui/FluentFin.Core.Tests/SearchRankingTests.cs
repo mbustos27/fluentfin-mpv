@@ -448,6 +448,7 @@ public sealed class SearchRankingTests
 		var person = Item("Sunny Holm", BaseItemDto_Type.Person);
 		var client = new Mock<IJellyfinClient>();
 		client.Setup(x => x.GetPersonItems(person.Id!.Value)).ReturnsAsync(Found(Item("Sunny", BaseItemDto_Type.Movie), Item("Sunny Days", BaseItemDto_Type.Series)));
+		client.Setup(x => x.GetPersonEpisodes(It.IsAny<Guid>(), It.IsAny<int>())).ReturnsAsync(Found());
 		var vm = new PersonItemsViewModel(client.Object);
 
 		await vm.OnNavigatedTo(person);
@@ -460,9 +461,9 @@ public sealed class SearchRankingTests
 		await vm.OnNavigatedTo(nobody);
 		Assert.True(vm.Results.IsEmpty);
 		Assert.Equal("Nothing with Nobody Here", vm.Results.Title);
-		// BH-150-m3: a guest star is credited on episodes only, which the page doesn't ask: it says what it looked at
-		Assert.StartsWith("No films or shows on ", vm.Results.Message, StringComparison.Ordinal);
-		Assert.EndsWith(" list them. Guest roles on single episodes aren't shown here.", vm.Results.Message, StringComparison.Ordinal);
+		// BH-150-m3: it says what it looked at (1.6.1: episodes too, where a guest star is credited)
+		Assert.StartsWith("No films, shows or episodes on ", vm.Results.Message, StringComparison.Ordinal);
+		Assert.EndsWith(" list them.", vm.Results.Message, StringComparison.Ordinal);
 		Assert.DoesNotContain("has no films or shows", vm.Results.Message, StringComparison.Ordinal);
 		Assert.Empty(vm.Items);
 
@@ -475,6 +476,131 @@ public sealed class SearchRankingTests
 		await vm.OnNavigatedTo("not a person");
 		Assert.True(vm.Results.IsEmpty);
 		Assert.Equal("With this person", vm.Title);
+	}
+
+	private static BaseItemDto Episode(string name, Guid series, string show, int year, string? tag = "tag-of-the-show") =>
+		new() { Id = Guid.NewGuid(), Name = name, Type = BaseItemDto_Type.Episode, SeriesId = series, SeriesName = show, ProductionYear = year, SeriesPrimaryImageTag = tag };
+
+	/// <summary>
+	/// 1.6.1 (BH-150-m3, the rest): "With <name>" asks for episodes too (a guest star is credited there only) and shows one card
+	/// per show, at its newest episode's place, opening the show, "in 3 episodes"; a show credited as a whole keeps its card.
+	/// </summary>
+	[Fact]
+	public async Task WithName_ShowsAGuestStarsShows_OneCardPerShow_InNEpisodes()
+	{
+		var lost = Guid.NewGuid();
+		var sunny = Guid.NewGuid();
+		var days = Item("Sunny Days", BaseItemDto_Type.Series);
+		var person = Item("Sunny Holm", BaseItemDto_Type.Person);
+		var client = new Mock<IJellyfinClient>();
+		// each list as the server sorts it: newest first
+		var film = Item("Sunny", BaseItemDto_Type.Movie);
+		film.ProductionYear = 2023;
+		days.ProductionYear = 2017;
+		client.Setup(x => x.GetPersonItems(person.Id!.Value)).ReturnsAsync(Found(film, days));
+		client.Setup(x => x.GetPersonEpisodes(person.Id!.Value, PersonItemsViewModel.EpisodeLimit)).ReturnsAsync(Found(
+			Episode("Pilot", lost, "Lost", 2024),
+			Episode("The Gang Gets Started", sunny, "It's Always Sunny", 2023),
+			Episode("Exodus", lost, "Lost", 2022),
+			Episode("Walkabout", lost, "Lost", 2021),
+			new BaseItemDto { Id = Guid.NewGuid(), Name = "No show", Type = BaseItemDto_Type.Episode, ProductionYear = 2020 },
+			Episode("Always Sunny", days.Id!.Value, "Sunny Days", 2017)));   // credited on the show itself: no second card
+		var vm = new PersonItemsViewModel(client.Object);
+
+		await vm.OnNavigatedTo(person);
+
+		Assert.True(vm.Results.IsLoaded);
+		Assert.Equal(["Lost", "Sunny", "It's Always Sunny", "Sunny Days"], vm.Items.Select(i => i.Dto.Name));
+		var lostCard = vm.Items[0];
+		Assert.Equal(BaseItemDto_Type.Series, lostCard.Dto.Type);
+		Assert.Equal(lost, lostCard.Dto.Id);                    // it opens the show
+		Assert.Equal("in 3 episodes", lostCard.CardSubtitle);
+		Assert.Equal("tag-of-the-show", lostCard.Dto.ImageTags!.AdditionalData["Primary"]);
+		Assert.Equal("in 1 episode", vm.Items[2].CardSubtitle);
+		Assert.Null(vm.Items[1].CardSubtitle);                  // a film keeps its own line
+		Assert.Null(vm.Items[3].CardSubtitle);
+		Assert.Same(days, vm.Items[3].Dto);
+		// Narrator says the card's line as shown
+		Assert.Equal("Lost, in 3 episodes", ItemLabels.CardName(lostCard));
+		Assert.Equal(GlobalCommands.PageFor(BaseItemDto_Type.Series), GlobalCommands.PageFor(lostCard.Dto.Type!.Value));
+	}
+
+	/// <summary>
+	/// 1.6.1 (the review): the episodes are asked with a limit (a show's regular cast on a big server is hundreds of episodes the
+	/// page throws away); when the server has more than were asked, the counts say "or more". Without the episodes the films and
+	/// shows still show; with neither, the page says it couldn't load them (not "nothing").
+	/// </summary>
+	[Fact]
+	public async Task WithName_AsksForAtMostALimitOfEpisodes_AndSaysWhenThereAreMore()
+	{
+		var person = Item("Sunny Holm", BaseItemDto_Type.Person);
+		var show = Guid.NewGuid();
+		var client = new Mock<IJellyfinClient>();
+		client.Setup(x => x.GetPersonItems(person.Id!.Value)).ReturnsAsync(Found());
+		client.Setup(x => x.GetPersonEpisodes(person.Id!.Value, It.IsAny<int>()))
+			.ReturnsAsync(new BaseItemDtoQueryResult { Items = [Episode("Pilot", show, "Lost", 2024), Episode("Exodus", show, "Lost", 2023)], TotalRecordCount = 340 });
+		var vm = new PersonItemsViewModel(client.Object);
+
+		await vm.OnNavigatedTo(person);
+
+		client.Verify(x => x.GetPersonEpisodes(person.Id!.Value, PersonItemsViewModel.EpisodeLimit), Times.Once);
+		Assert.InRange(PersonItemsViewModel.EpisodeLimit, 50, 500);
+		Assert.Equal("in 2+ episodes", Assert.Single(vm.Items).CardSubtitle);
+
+		// the episodes fail: the films and shows still show; and with none of those, it couldn't load (not "nothing")
+		client.Setup(x => x.GetPersonEpisodes(person.Id!.Value, It.IsAny<int>())).ReturnsAsync((BaseItemDtoQueryResult?)null);
+		client.Setup(x => x.GetPersonItems(person.Id!.Value)).ReturnsAsync(Found(Item("Sunny", BaseItemDto_Type.Movie)));
+		await vm.OnNavigatedTo(person);
+		Assert.True(vm.Results.IsLoaded);
+		Assert.Equal(["Sunny"], vm.Items.Select(i => i.Dto.Name));
+		client.Setup(x => x.GetPersonItems(person.Id!.Value)).ReturnsAsync(Found());
+		await vm.OnNavigatedTo(person);
+		Assert.True(vm.Results.IsFailed);
+	}
+
+	/// <summary>1.6.1 (the review): the real client's two requests: films and shows unlimited, the episodes with the limit.</summary>
+	[Fact]
+	public async Task TheClient_AsksForTheEpisodesApart_WithALimit()
+	{
+		using var server = new FakeJellyfin();
+		server.Start();
+		server.Respond("/Items", 200, """{"Items":[],"TotalRecordCount":0}""");
+		var client = new FluentFin.Core.Services.JellyfinClient(new CoreListLogger<FluentFin.Core.Services.JellyfinClient>(), Mock.Of<IObserver<Jellyfin.Sdk.WebSockets.IOutboundWebSocketMessage>>(),
+			Mock.Of<IJumpListService>(), Mock.Of<IDeviceProfileFactory>(), Mock.Of<FluentFin.Core.Settings.ISettings>(), TestHomeCache.Unused());
+		await client.Initialize(server.BaseUrl, new AuthenticationResult { AccessToken = "token-161-person", ServerId = "fake-server", User = new UserDto { Id = Guid.NewGuid(), Name = "alice" } });
+		try
+		{
+			var person = Guid.NewGuid();
+			Assert.NotNull(await client.GetPersonItems(person));
+			Assert.NotNull(await client.GetPersonEpisodes(person, 200));
+
+			var asked = server.ApiRequests.Where(r => r.Path.Equals("/Items", StringComparison.OrdinalIgnoreCase)).ToList();
+			Assert.Equal(2, asked.Count);
+			string? Value(FakeRequest r, string key) => r.Query.AllKeys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)) is { } k ? r.Query[k] : null;
+			var films = asked[0];
+			Assert.Equal("Movie,Series", Value(films, "includeItemTypes"));
+			Assert.Null(Value(films, "limit"));
+			var episodes = asked[1];
+			Assert.Equal("Episode", Value(episodes, "includeItemTypes"));
+			Assert.Equal("200", Value(episodes, "limit"));
+			Assert.Equal("true", Value(episodes, "enableTotalRecordCount")?.ToLowerInvariant());
+			Assert.Contains(person.ToString("N"), (Value(episodes, "personIds") ?? "").Replace("-", ""), StringComparison.OrdinalIgnoreCase);
+		}
+		finally
+		{
+			client.StopWebSocket();
+		}
+	}
+
+	[Fact]
+	public void TheCards_OfAGuestStarWithNoPictureOfTheShow_HaveNoImageTags_AndEmptyListsAreEmpty()
+	{
+		var cards = PersonItemsViewModel.Cards([Episode("Pilot", Guid.NewGuid(), "", 2024, tag: null), null]);
+
+		var card = Assert.Single(cards);
+		Assert.Equal("A show", card.Dto.Name);
+		Assert.Null(card.Dto.ImageTags);
+		Assert.Empty(PersonItemsViewModel.Cards([]));
 	}
 
 	// ---- the view model: chips, the fold, and their ways out

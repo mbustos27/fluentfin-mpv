@@ -33,6 +33,9 @@ public static class ItemLabels
 
 		switch (dto.Type)
 		{
+			case var _ when !string.IsNullOrWhiteSpace(item.CardSubtitle):
+				Add(item.CardSubtitle); // 1.6.1 (BH-150-m3): the card's own line ("in 3 episodes"), spoken as shown
+				break;
 			case BaseItemDto_Type.Episode:
 				Add(EpisodeNumber(dto));
 				if (!string.Equals(dto.Name?.Trim(), title?.Trim(), StringComparison.OrdinalIgnoreCase))

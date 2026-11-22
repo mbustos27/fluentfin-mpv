@@ -300,6 +300,71 @@ public sealed class SmartCollectionsTests
 		Assert.Null(SmartCollectionCatalog.OfTheDay([], November));
 	}
 
+	// --- Nixie 1.6.1 (bug hunt BH-160-m1): the local date, on every page -------------------------------------------------
+
+	/// <summary>A PC in California (UTC-7 in October), at a moment the test names.</summary>
+	private sealed class PacificClock(DateTimeOffset utc) : TimeProvider
+	{
+		private static readonly TimeZoneInfo Pacific = TimeZoneInfo.CreateCustomTimeZone("nixie-test-pdt", TimeSpan.FromHours(-7), "UTC-7", "UTC-7");
+
+		public override DateTimeOffset GetUtcNow() => utc;
+
+		public override TimeZoneInfo LocalTimeZone => Pacific;
+	}
+
+	[Fact]
+	public void HalloweenEvening_InCalifornia_StillHasTheHalloweenRow_AndTheDaysRowOfThatDay()
+	{
+		// 17:00 PDT on 31 October is 1 November in UTC: the row left Home and the Collections page then
+		var evening = new PacificClock(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
+		var morning = new PacificClock(new DateTimeOffset(2026, 10, 31, 16, 0, 0, TimeSpan.Zero)); // 09:00 PDT
+		var films = new List<IndexEntry>
+		{
+			Film("Night of the Living Dead", 1968, tags: ["halloween"], genres: ["Horror"], rating: 7.6),
+			Film("Scream", 1996, genres: ["Horror"], rating: 7.4),
+			Film("Halloween", 1978, tags: ["halloween"], genres: ["Horror"], rating: 7.5),
+		};
+		films.AddRange(Enumerable.Range(0, 30).Select(i => Film($"F{i}", 1980 + i, tmdbCollection: $"{i / 2}")));
+
+		var now = SmartCollectionCatalog.Now(evening);
+		Assert.Equal((10, 31, 17), (now.Month, now.Day, now.Hour));
+		var all = SmartCollectionCatalog.BuildAll(Index(films), now);
+		var rows = FluentFin.Core.ViewModels.HomeViewModel.PickNixieRows(all, new HashSet<NixieHomeRow>(), now);
+
+		Assert.Contains(rows, x => x.Kind == SmartCollectionKind.Seasonal && x.Title == "Halloween");
+		var morningsRow = SmartCollectionCatalog.OfTheDay(all, SmartCollectionCatalog.Now(morning));
+		Assert.Equal(morningsRow, SmartCollectionCatalog.OfTheDay(all, now));
+		Assert.Equal(morningsRow, rows[^1]);
+	}
+
+	/// <summary>Home, the Collections page, the Libraries page, the presets and a Nixie collection found by id: one clock.</summary>
+	[Fact]
+	public void EveryPageBuildsNixiesCollections_ByTheOneLocalClock()
+	{
+		var core = Path.Combine(HomeAndLibraryXamlTests.RepoRoot, "FluentFin.Core");
+		var callers = Directory.EnumerateFiles(core, "*.cs", SearchOption.AllDirectories)
+			.Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal) && !f.EndsWith("SmartCollectionCatalog.cs", StringComparison.Ordinal))
+			.SelectMany(f => File.ReadAllLines(f).Select(line => (File: Path.GetFileName(f), Line: line)))
+			.Where(x => x.Line.Contains("BuildAllAsync(", StringComparison.Ordinal) || x.Line.Contains("NixiePresets.For(", StringComparison.Ordinal) || x.Line.Contains("PickNixieRows(all", StringComparison.Ordinal))
+			.ToList();
+
+		Assert.True(callers.Count >= 6, string.Join(Environment.NewLine, callers));
+		foreach (var (file, line) in callers)
+		{
+			Assert.DoesNotContain("GetUtcNow()", line);
+			Assert.DoesNotContain("DateTimeOffset.Now", line);
+			Assert.DoesNotContain("DateTimeOffset.UtcNow", line);
+		}
+
+		var home = File.ReadAllText(Path.Combine(core, "ViewModels", "HomeViewModel.Nixie.cs"));
+		Assert.Contains("var now = SmartCollectionCatalog.Now(_time);", home);
+		Assert.Contains("SmartCollectionCatalog.Now(_time), boxed", File.ReadAllText(Path.Combine(core, "ViewModels", "CollectionsViewModel.cs")));
+		Assert.Contains("SmartCollectionCatalog.Now(), boxed", File.ReadAllText(Path.Combine(core, "ViewModels", "LibrariesLandingPageViewModel.cs")));
+		Assert.Contains("BuildAllAsync(own, SmartCollectionCatalog.Now())", File.ReadAllText(Path.Combine(core, "ViewModels", "CollectionSources.cs")));
+		var presets = File.ReadAllText(Path.Combine(core, "SmartCollections", "NixiePresets.cs"));
+		Assert.Equal(2, presets.Split("SmartCollectionCatalog.Now()").Length - 1);
+	}
+
 	// --- the index read ---------------------------------------------------------------------------------------------
 
 	private static BaseItemDto ServerFilm(int i, Guid library) => new()
@@ -438,12 +503,24 @@ public sealed class SmartCollectionsTests
 		var watch = Stopwatch.StartNew();
 
 		var all = SmartCollectionCatalog.BuildAll(index!, November);
-		var viaAsync = await SmartCollectionCatalog.BuildAllAsync(index!, November);
+		var built = watch.Elapsed;
+		// 1.6.1 (the 1.6 review: the test had no thread check): from a UI thread, BuildAllAsync hands the work to another thread at
+		// once: the UI thread is free again long before the collections are made, and they are made on another thread
+		using var ui = new UiThread();
+		var uiThread = await ui.Invoke(() => Environment.CurrentManagedThreadId);
+		var handed = Stopwatch.StartNew();
+		var building = await ui.Invoke(() => SmartCollectionCatalog.BuildAllAsync(index!, November));
+		var freeAfter = handed.Elapsed;
+		var answered = await ui.Invoke(() => Environment.CurrentManagedThreadId);
+		var viaAsync = await building;
+		var asyncTook = handed.Elapsed;
 
 		watch.Stop();
 		Assert.Equal(25_800, index!.Entries.Count);
 		Assert.Equal(all.Count, viaAsync.Count);
 		Assert.True(watch.Elapsed < TimeSpan.FromSeconds(6), $"built twice in {watch.Elapsed.TotalMilliseconds:0} ms");
+		Assert.Equal(uiThread, answered);
+		Assert.True(freeAfter < asyncTook / 2 && freeAfter < built / 2, $"the UI thread was free after {freeAfter.TotalMilliseconds:0} ms of a {asyncTook.TotalMilliseconds:0} ms build ({built.TotalMilliseconds:0} ms on the test's thread)");
 		client.Verify(x => x.GetLibraryIndexPage(It.IsAny<BaseItemDto>(), It.IsAny<int>(), It.Is<int>(l => l > Services.LibraryPageReader.MaxPageSize), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
 	}
 

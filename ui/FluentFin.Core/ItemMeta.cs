@@ -67,7 +67,7 @@ public static class ItemMeta
 	/// </summary>
 	public static string PartOfText(IReadOnlyList<BaseItemDto>? collections)
 	{
-		var names = Names(collections?.Select(c => c.Name));
+		var names = Names(collections?.Select(PartOfShown)); // 1.6.1: the names the links show
 		return names.Count switch
 		{
 			0 => "",
@@ -77,7 +77,13 @@ public static class ItemMeta
 	}
 
 	/// <summary>A "Part of" link for Narrator: "Part of the collection Copper and Glass".</summary>
-	public static string PartOfName(BaseItemDto? collection) => $"Part of the collection {ViewModels.CollectionNames.Display(collection).Trim()}"; // 1.6 collections: tidied
+	public static string PartOfName(BaseItemDto? collection) => $"Part of the collection {PartOfShown(collection)}"; // 1.6 collections: tidied
+
+	/// <summary>
+	/// A "Part of" link's text: the collection's name as shown everywhere (1.6.1, BH-160-M2: <see cref="ViewModels.CollectionNames.Display"/>,
+	/// unique as the server's box sets are).
+	/// </summary>
+	public static string PartOfShown(BaseItemDto? collection) => ViewModels.CollectionNames.Display(collection).Trim();
 
 	/// <summary>The first trailer link that is a web address, or null (anything else would be handed to the shell).</summary>
 	public static Uri? TrailerUrl(BaseItemDto? dto) =>

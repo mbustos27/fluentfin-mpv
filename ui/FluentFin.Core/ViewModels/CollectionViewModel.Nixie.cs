@@ -52,6 +52,14 @@ public partial class CollectionViewModel
 	[NotifyCanExecuteChangedFor(nameof(SaveAsPlaylistCommand))]
 	public partial bool CanSaveAsPlaylist { get; private set; }
 
+	/// <summary>
+	/// Nixie 1.6.1 (bug hunt BH-160-m2): "Save as playlist" is offered: a Nixie collection holding something a playlist from
+	/// Nixie holds (films, episodes, videos). A collection of shows only ("Unfinished series") never offers it: pressed, it
+	/// could only say it can't.
+	/// </summary>
+	[ObservableProperty]
+	public partial bool OffersSaveAsPlaylist { get; private set; }
+
 	/// <summary>What "Save as playlist" did, or why the server said no ("" before it is pressed).</summary>
 	[ObservableProperty]
 	public partial string PlaylistMessage { get; private set; } = "";
@@ -88,6 +96,7 @@ public partial class CollectionViewModel
 		if (items is null)
 		{
 			CanSaveAsPlaylist = false;
+			OffersSaveAsPlaylist = false;
 			return LoadMessages.CouldNotLoad("this collection");
 		}
 
@@ -95,7 +104,8 @@ public partial class CollectionViewModel
 		_placeKnown = true;
 		Update();
 
-		CanSaveAsPlaylist = _serverOrder.Count > 0 && SavedPlaylist is null;
+		OffersSaveAsPlaylist = _serverOrder.Any(IsPlaylistItem); // 1.6.1 (BH-160-m2): never on shows only
+		CanSaveAsPlaylist = OffersSaveAsPlaylist && SavedPlaylist is null;
 		return _serverOrder.Count == 0
 			? LoadOutcome.Empty("Nothing here now", $"None of the titles in this collection are on {LoadMessages.ServerName()} any more.")
 			: LoadOutcome.Loaded;
@@ -140,12 +150,22 @@ public partial class CollectionViewModel
 		if (playable.Count == 0)
 		{
 			CanSaveAsPlaylist = false;
-			PlaylistMessage = "This collection holds shows only. A playlist from Nixie holds films: a show would add every one of its episodes.";
+			OffersSaveAsPlaylist = false;
+			PlaylistMessage = ShowsOnlyText;
 			return;
 		}
 
 		CanSaveAsPlaylist = false;
 		PlaylistMessage = "Saving to your playlists…";
+		// 1.6.1 (BH-160-m2): saved before (this page left and opened again, another start, a 200 that named no playlist): the
+		// user's playlist of that name is the one, not a second copy
+		if (await SavedBefore(Title) is { } before)
+		{
+			SavedPlaylist = before;
+			PlaylistMessage = $"Already in your playlists as “{before.Name}”.";
+			return;
+		}
+
 		var ids = playable.Take(PlaylistMost).Select(x => x.Id).OfType<Guid>().ToList();
 		var made = await JellyfinClient.CreatePlaylist(Title, ids);
 		if (made.Created)
@@ -157,6 +177,20 @@ public partial class CollectionViewModel
 
 		PlaylistMessage = PlaylistRefusal(made.Status);
 		CanSaveAsPlaylist = true;
+	}
+
+	/// <summary>What a collection of shows only says if Save is pressed anyway (it isn't offered: <see cref="OffersSaveAsPlaylist"/>).</summary>
+	public const string ShowsOnlyText = "This collection holds shows only. A playlist from Nixie holds films and episodes: a show would add every one of its episodes.";
+
+	/// <summary>
+	/// The user's playlist named <paramref name="title"/> (as the server's list of playlists has it, ignoring case and the
+	/// edges' spaces), or null: none, or the list could not be read (then Save makes it, as asked).
+	/// </summary>
+	private async Task<BaseItemDto?> SavedBefore(string title)
+	{
+		var name = title.Trim();
+		var playlists = await JellyfinClient.GetPlaylists();
+		return playlists?.Items?.FirstOrDefault(x => x is { Id: not null, Type: BaseItemDto_Type.Playlist } && string.Equals(x.Name?.Trim(), name, StringComparison.CurrentCultureIgnoreCase));
 	}
 
 	/// <summary>The most titles "Save as playlist" sends: the first ones in the collection's order (a "Highly rated" of thousands is not one request).</summary>
@@ -184,6 +218,8 @@ public partial class CollectionViewModel
 	{
 		401 => "Your sign-in has ended. Sign in again, then save the playlist.",
 		403 => $"{LoadMessages.ServerName()} doesn't let your account make playlists. Ask its administrator.",
+		// 1.6.1 (BH-160-m2): an answer that names no playlist: it may have been made (Save again finds it by its name)
+		200 => $"{LoadMessages.ServerName()} answered without saying which playlist it made. Look in your playlists before saving again.",
 		0 => $"Couldn't reach {LoadMessages.ServerName()}. Check the connection, then try again.",
 		_ => $"{LoadMessages.ServerName()} didn't make the playlist (error {status}). Try again later.",
 	};

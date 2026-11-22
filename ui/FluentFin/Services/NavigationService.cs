@@ -14,7 +14,6 @@ namespace FluentFin.Services;
 public class NavigationService : INavigationService
 {
 	private readonly IPageService _pageService;
-	private object? _lastParameterUsed;
 	private Frame? _frame;
 
 	public event NavigatedEventHandler? Navigated;
@@ -107,25 +106,24 @@ public class NavigationService : INavigationService
 		try
 		{
 			var pageType = _pageService.GetPageType(pageKey);
-
-			if (_frame != null && (_frame.Content?.GetType() != pageType || (parameter != null && !parameter.Equals(_lastParameterUsed))))
+			if (_frame is not { } frame)
 			{
-				_frame.Tag = clearNavigation;
-				var vmBeforeNavigation = _frame.GetPageViewModel();
-				var navigated = _frame.Navigate(pageType, parameter);
-				if (navigated)
+				return false;
+			}
+
+			return Open(frame.Content?.GetType(), pageType, parameter, () =>
+			{
+				frame.Tag = clearNavigation;
+				var vmBeforeNavigation = frame.GetPageViewModel();
+				// the frame raises Navigated (OnNavigated: Arrived) before Navigate returns
+				var navigated = frame.Navigate(pageType, parameter);
+				if (navigated && vmBeforeNavigation is INavigationAware navigationAware)
 				{
-					_lastParameterUsed = parameter;
-					if (vmBeforeNavigation is INavigationAware navigationAware)
-					{
-						navigationAware.OnNavigatedFrom();
-					}
+					navigationAware.OnNavigatedFrom();
 				}
 
 				return navigated;
-			}
-
-			return false;
+			});
 		}
 		catch
 		{
@@ -134,7 +132,31 @@ public class NavigationService : INavigationService
 
 	}
 
-	/// <summary>Nixie 1.3.0: the parameter of the page the frame shows (the theme switch shows it again with it).</summary>
+	/// <summary>
+	/// Whether the frame already shows the place asked for: the same page with the same parameter (or no parameter asked for).
+	/// <see cref="NavigateTo"/> refuses it. Nixie 1.6.1 (the merge review's R1): <paramref name="shownParameter"/> is the
+	/// parameter the frame shows now, which every arrival sets (<see cref="OnNavigated"/>: Back and Forward too). It was the
+	/// last one <see cref="NavigateTo"/> passed, which Back left behind: See all, Back, the same See all did nothing, and so
+	/// did Movies, Shows, Back, Shows.
+	/// </summary>
+	internal static bool ShowsAlready(Type? shownPage, object? shownParameter, Type pageType, object? parameter) =>
+		shownPage == pageType && (parameter is null || parameter.Equals(shownParameter));
+
+	/// <summary>
+	/// Nixie 1.6.1: <see cref="NavigateTo"/>'s decision and move. <paramref name="navigate"/> moves the frame (which raises
+	/// Navigated, so <see cref="Arrived"/>, before it returns) unless the frame already shows that place, by the parameter
+	/// the frame shows now. The tests drive it with a frame of their own (NavigationServiceTests).
+	/// </summary>
+	internal bool Open(Type? shownPage, Type pageType, object? parameter, Func<bool> navigate) =>
+		!ShowsAlready(shownPage, _currentParameter, pageType, parameter) && navigate();
+
+	/// <summary>Nixie 1.6.1: a page arrived (new, Back, Forward, a refresh, a theme switch): the parameter the frame shows now.</summary>
+	internal void Arrived(object? parameter) => _currentParameter = parameter;
+
+	/// <summary>
+	/// Nixie 1.3.0: the parameter of the page the frame shows (the theme switch shows it again with it). Nixie 1.6.1: set by
+	/// every arrival, so <see cref="ShowsAlready"/> asks about the page the frame shows, not the last one opened.
+	/// </summary>
 	private object? _currentParameter;
 
 	/// <summary>Nixie 1.3.0: the page type a theme switch is navigating to, until its Navigated (<see cref="ReloadForTheme"/>).</summary>
@@ -279,7 +301,6 @@ public class NavigationService : INavigationService
 			navigationAware.OnNavigatedFrom();
 		}
 
-		_lastParameterUsed = _currentParameter;
 		return frame.Content as Page;
 	}
 
@@ -332,7 +353,7 @@ public class NavigationService : INavigationService
 	{
 		if (sender is Frame frame)
 		{
-			_currentParameter = e.Parameter;
+			Arrived(e.Parameter);
 
 			// Nixie 1.3.0: a theme switch's navigation: the same page in the new view, its view model kept as it was (no
 			// OnNavigatedTo: nothing is fetched again), the old view's history entry gone, no page transition

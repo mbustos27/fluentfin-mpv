@@ -145,37 +145,78 @@ public partial class JellyfinClient
 	}
 
 	/// <summary>The user's box sets (every library's), with their TMDb id and how many items each holds.</summary>
-	public Task<BaseItemDtoQueryResult?> GetBoxSets(CancellationToken cancellationToken = default) => Sets(BaseItemKind.BoxSet, cancellationToken);
+	/// <remarks>Nixie 1.6.1 (BH-160-M2): the list read is the one tidy names stay unique against (<see cref="ViewModels.CollectionNames.RememberBoxSets"/>).</remarks>
+	public async Task<BaseItemDtoQueryResult?> GetBoxSets(CancellationToken cancellationToken = default)
+	{
+		var read = await Sets(BaseItemKind.BoxSet, cancellationToken);
+		if (read?.Items is { } items)
+		{
+			ViewModels.CollectionNames.RememberBoxSets(items);
+		}
+
+		return read;
+	}
 
 	/// <summary>The playlists the user can see.</summary>
 	public Task<BaseItemDtoQueryResult?> GetPlaylists(CancellationToken cancellationToken = default) => Sets(BaseItemKind.Playlist, cancellationToken);
 
+	/// <summary>Nixie 1.6.1 (the 1.6 review): a page of box sets or playlists; a server with more is read page after page.</summary>
+	internal const int SetsPageSize = 2000;
+
+	/// <summary>Nixie 1.6.1: the most box sets or playlists read (a server's answer that never ends stops here).</summary>
+	internal const int SetsMost = 100_000;
+
 	private async Task<BaseItemDtoQueryResult?> Sets(BaseItemKind kind, CancellationToken cancellationToken)
 	{
-		try
+		// 1.6.1 (the 1.6 review): one request of 2,000 read only the first 2,000 by name: every page now, in order
+		List<BaseItemDto> all = [];
+		int? total = null;
+		while (all.Count < SetsMost)
 		{
-			return await _jellyfinApiClient.Items.GetAsync(x =>
+			BaseItemDtoQueryResult? page;
+			try
 			{
-				var query = x.QueryParameters;
-				query.IncludeItemTypes = [kind];
-				query.Recursive = true;
-				query.SortBy = [ItemSortBy.SortName];
-				query.SortOrder = [SortOrder.Ascending];
-				query.Fields = [ItemFields.ProviderIds, ItemFields.ChildCount, ItemFields.SortName, ItemFields.Overview];
-				query.ImageTypeLimit = 1;
-				query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb];
-				query.Limit = 2000;
-			}, cancellationToken);
+				var start = all.Count;
+				page = await _jellyfinApiClient.Items.GetAsync(x =>
+				{
+					var query = x.QueryParameters;
+					query.IncludeItemTypes = [kind];
+					query.Recursive = true;
+					query.SortBy = [ItemSortBy.SortName];
+					query.SortOrder = [SortOrder.Ascending];
+					query.Fields = [ItemFields.ProviderIds, ItemFields.ChildCount, ItemFields.SortName, ItemFields.Overview];
+					query.ImageTypeLimit = 1;
+					query.EnableImageTypes = [ImageType.Primary, ImageType.Backdrop, ImageType.Thumb];
+					query.StartIndex = start;
+					query.Limit = SetsPageSize;
+				}, cancellationToken);
+			}
+			catch (Exception) when (cancellationToken.IsCancellationRequested)
+			{
+				return null;
+			}
+			catch (Exception ex)
+			{
+				// the first page: the list could not be read; a later one: what was read stands
+				logger.LogWarning("The {Kind} list (from {Start}): {Error}", kind, all.Count, ex.Message);
+				return all.Count == 0 ? null : new BaseItemDtoQueryResult { Items = all, TotalRecordCount = total ?? all.Count, StartIndex = 0 };
+			}
+
+			if (page is null)
+			{
+				return all.Count == 0 ? null : new BaseItemDtoQueryResult { Items = all, TotalRecordCount = total ?? all.Count, StartIndex = 0 };
+			}
+
+			var items = page.Items ?? [];
+			all.AddRange(items.OfType<BaseItemDto>());
+			total = page.TotalRecordCount;
+			if (items.Count < SetsPageSize || (total is { } known && all.Count >= known))
+			{
+				break;
+			}
 		}
-		catch (Exception) when (cancellationToken.IsCancellationRequested)
-		{
-			return null;
-		}
-		catch (Exception ex)
-		{
-			logger.LogWarning("The {Kind} list: {Error}", kind, ex.Message);
-			return null;
-		}
+
+		return new BaseItemDtoQueryResult { Items = all, TotalRecordCount = total ?? all.Count, StartIndex = 0 };
 	}
 
 	/// <summary>

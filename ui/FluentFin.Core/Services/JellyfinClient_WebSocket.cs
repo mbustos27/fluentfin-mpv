@@ -17,18 +17,34 @@ public partial class JellyfinClient
 	private void StartWebSocketConnection()
 	{
 		// settings are recreated on every login, so the socket client is too
-		_webSocket?.Dispose();
-		_webSocket = new JellyfinWebSocketClient(_settings, new JellyfinWebSocketOptions
+		StopWebSocket();
+		var socket = new JellyfinWebSocketClient(_settings, new JellyfinWebSocketOptions
 		{
 			PeriodicMessageInterval = TimeSpan.FromSeconds(1.5),
 			IdleTimeout = Timeout.InfiniteTimeSpan
 		});
-		_webSocket.ErrorOccurred += (_, e) => logger.LogError(e.Content, "WebSocket error");
-		_webSocket.StateChanged += (_, e) => logger.LogInformation(e.Error, "WebSocket {State}", e.State);
-		_webSocket.SubscribeAll(socketMessageSender.OnNext);
-		_webSocket.Subscribe<Jellyfin.Sdk.Generated.Models.UserUpdatedMessage>(OnUserUpdated);
-		_webSocket.Subscribe<Jellyfin.Sdk.Generated.Models.LibraryChangedMessage>(OnLibraryChanged);
+		_webSocket = socket;
+		socket.ErrorOccurred += (_, e) => logger.LogError(e.Content, "WebSocket error");
+		socket.StateChanged += (_, e) => logger.LogInformation(e.Error, "WebSocket {State}", e.State);
+		socket.SubscribeAll(socketMessageSender.OnNext);
+		socket.Subscribe<Jellyfin.Sdk.Generated.Models.UserUpdatedMessage>(OnUserUpdated);
+		socket.Subscribe<Jellyfin.Sdk.Generated.Models.LibraryChangedMessage>(OnLibraryChanged);
+		// 1.6.1 (the 1.5.1 review): the socket dials again with the token it has, and the server refuses it every time once the
+		// sign-in ended: it stops then, and the next sign-in starts a new one (Initialize)
+		_stopWhenSignInEnds = () =>
+		{
+			if (SignInState.Ended && StopWebSocket(socket))
+			{
+				logger.LogInformation("[sign-in] the sign-in ended: the websocket stops until the next sign-in");
+			}
+		};
+		SignInState.Changed += _stopWhenSignInEnds;
 	}
+
+	private Action? _stopWhenSignInEnds;
+
+	/// <summary>1.6.1 tests: whether a websocket is open or dialling.</summary>
+	internal bool WebSocketRunning => _webSocket is not null;
 
 	// fluentfin-mpv: this user's library access or view order may have changed: read the views again (GetUserViews)
 	internal void OnUserUpdated(Jellyfin.Sdk.Generated.Models.UserUpdatedMessage message)
@@ -46,7 +62,26 @@ public partial class JellyfinClient
 	/// <summary>Tests: the websocket closes (a client left behind kept reconnecting to the next test's fake server).</summary>
 	internal void StopWebSocket()
 	{
-		_webSocket?.Dispose();
-		_webSocket = null;
+		if (_webSocket is { } socket)
+		{
+			StopWebSocket(socket);
+		}
+	}
+
+	/// <summary>1.6.1: closes <paramref name="socket"/> if it is still this client's; false when another took its place.</summary>
+	private bool StopWebSocket(JellyfinWebSocketClient socket)
+	{
+		if (!ReferenceEquals(Interlocked.CompareExchange(ref _webSocket, null, socket), socket))
+		{
+			return false;
+		}
+
+		if (Interlocked.Exchange(ref _stopWhenSignInEnds, null) is { } watch)
+		{
+			SignInState.Changed -= watch;
+		}
+
+		socket.Dispose();
+		return true;
 	}
 }

@@ -5,7 +5,8 @@
 # Covers: Home's Made by Nixie rows (after New in ..., filled once the library index is in); the Libraries page's "Collections &
 # playlists" group with "Made by Nixie - N"; its tile opening the Collections page at Made by Nixie (the keyboard on its first
 # tile); a Nixie franchise's Collection page (the eyebrow, the why line, the mosaic, Save as playlist and its answer, and the
-# server's no); the admin's box set with "Also in your library"; Settings > Collections. Shots <tag>-<name>-<width>.png at
+# server's no); the admin's box set with "Also in your library"; Back then the same place again (1.6.1, R1: the library
+# tabs, a See all, the Collections tab); Settings > Collections. Shots <tag>-<name>-<width>.png at
 # 1920 and 1100 (NIXIE_THEME / SG_SHOT_TAG name them). Dot-sourced by drive.ps1: every name here starts with co.
 
 $coTag = if ($env:SG_SHOT_TAG) { $env:SG_SHOT_TAG } elseif ($env:NIXIE_LAYOUT) { $env:NIXIE_LAYOUT.ToLowerInvariant() } else { 'classic' }
@@ -39,10 +40,15 @@ Check "collections ($coTag): the Libraries page has Made by Nixie, N" ([bool]$co
 Co-Shots 'libraries' { [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 100); Co-Settle 600 }
 
 # --- its tile: the Collections page at Made by Nixie, the keyboard on its first tile ---------------------------------
+# 1.6.1 (the integration's "Editorial lands on the Playlists row"): found again after the shots. The shots resize the window
+# (1920, 1100, 1920) and the group's ItemsView hands its containers to other tiles: the tile found before them could be
+# Playlists' by then, and Invoke opened the Collections page at Playlists, whose first tile ("Nothing Yet") took the keyboard
+if ($coMade) { $coMade = Wait-Until { Find-Ui -Name 'Made by Nixie, ' -Contains -Type 'ListItem' } -Seconds 10 -PollMs 300 }
 if ($coMade) {
-    Say "Made by Nixie tile ($(Invoke-Element $coMade))"
-    # (1.6 integration: the page's title element, not any Text named Collections: the top bar's tab is one too)
-    $coTitle = Wait-Ui -Id 'TitleText' -Name 'Collections' -Seconds 20
+    Say "Made by Nixie tile '$($coMade.Current.Name)' ($(Invoke-Element $coMade))"
+    # (1.6 integration: the page's title element, not any Text named Collections: the top bar's tab is one too; 1.6.1:
+    # -OffscreenToo, the page scrolls down to Made by Nixie's rows and its title leaves the view)
+    $coTitle = Wait-Ui -Id 'TitleText' -Name 'Collections' -OffscreenToo -Seconds 20
     Check "collections ($coTag): the tile opens the Collections page" ([bool]$coTitle) ''
     $coPicks = Wait-Until { Find-Ui -Name 'Picks' -Contains } -Seconds 20 -PollMs 200
     Check "collections ($coTag): its Made by Nixie rows are there" ([bool]$coPicks) ''
@@ -83,8 +89,26 @@ if ($coFranchise) {
     $coMade = @(Get-Requests | Where-Object { $_.path -match '^/Playlists$' -and $_.method -eq 'POST' -and $_.status -eq 200 })
     Check "collections ($coTag): one playlist made (a second click makes no copy)" ($coMade.Count -eq 1) "$($coMade.Count) made"
     if ($coWidths -contains 1920) { Shot "$coTag-playlist-saved-1920" }
-    Key 0x08   # Back
-    Co-Settle 1500
+    # 1.6.1 (the merge review's R5): the harness's real Back is BrowserBack (0xA6), as drive.ps1's leave; 0x08 is Backspace
+    Key 0xA6
+    # (-OffscreenToo: Back puts the page where it was, scrolled down to the franchise's row, its title above the view)
+    $coBack = Wait-Ui -Id 'TitleText' -Name 'Collections' -OffscreenToo -Seconds 15
+    Check "collections ($coTag): Back from the franchise shows the Collections page" ([bool]$coBack) ''
+    Co-Settle 1000
+    # 1.6.1 (bug hunt BH-160-m2): a Nixie collection of shows only ("Unfinished series") doesn't offer Save as playlist
+    $coShows = Wait-Until { Find-Ui -Name 'Unfinished series, made by Nixie' -Contains -OffscreenToo } -Seconds 15 -PollMs 300
+    if ($coShows) {
+        try { $coSp = $null; if ($coShows.TryGetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern, [ref]$coSp)) { $coSp.ScrollIntoView() } } catch { }
+        Say "Unfinished series ($(Invoke-Element $coShows))"
+        $coShowsPage = Wait-Ui -Id 'TitleText' -Name 'Unfinished series' -Seconds 15
+        Co-Settle 1500
+        $coShowsSave = Find-Ui -Name 'Save as playlist' -Type 'Button' -OffscreenToo
+        Check "collections ($coTag): a collection of shows only doesn't offer Save as playlist" ([bool]$coShowsPage -and -not $coShowsSave) "page: $([bool]$coShowsPage); Save shown: $([bool]$coShowsSave)"
+        Key 0xA6
+        [void](Wait-Ui -Id 'TitleText' -Name 'Collections' -OffscreenToo -Seconds 15)
+        Co-Settle 800
+    }
+    else { Check "collections ($coTag): an Unfinished series tile" $false 'none on the Collections page' }
 }
 else { Check "collections ($coTag): a franchise tile" $false 'none on the Collections page' }
 
@@ -105,6 +129,62 @@ if ($coBox) {
     Co-Shots 'boxset-also' { [void][OffscreenUi]::ScrollPage($script:hwnd, $script:ui.Id, 100); Co-Settle 700 }
 }
 else { Check "collections ($coTag): the admin's box set tile" $false 'none' }
+
+# --- Nixie 1.6.1 (the merge review's R1): Back, then the same place again, opens it (the frame's refusal asked about the
+# last page opened, not the one Back showed). The library tabs, a See all, and the Collections tab from a See all. The
+# Back key is the harness's real one, 0xA6 (BrowserBack). (The merge review's then-rp.ps1, kept here.)
+function Co-Title { $t = Find-Ui -Id 'TitleText' -OffscreenToo; if ($t) { $t.Current.Name } else { '<none>' } }
+function Co-Grid { Wait-Until { $n = Co-Title; if ($n -ne 'Collections' -and $n -ne '<none>') { $n } } -Seconds 15 -PollMs 200 }
+$coM = $fixture.movie.library; $coS = $fixture.series.library
+Open-Nav $coM
+Check "collections ($coTag): R1 the $coM tab opens $coM" ([bool](Wait-Until { Find-MediaCard $fixture.movie.name } -Seconds 30 -PollMs 200)) ''
+Open-Nav $coS
+Check "collections ($coTag): R1 the $coS tab opens $coS" ([bool](Wait-Until { Find-MediaCard $fixture.series.name } -Seconds 30 -PollMs 200)) ''
+Key 0xA6
+Check "collections ($coTag): R1 Back shows $coM again" ([bool](Wait-Until { Find-MediaCard $fixture.movie.name } -Seconds 20 -PollMs 200)) ''
+Co-Settle 1200
+Open-Nav $coS
+Check "collections ($coTag): R1 the $coS tab after Back opens $coS" ([bool](Wait-Until { Find-MediaCard $fixture.series.name } -Seconds 15 -PollMs 200)) ''
+Open-Nav 'Collections'
+Check "collections ($coTag): R1 the Collections tab opens the Collections page" ([bool](Wait-Ui -Id 'TitleText' -Name 'Collections' -Seconds 20)) (Co-Title)
+$coSee = Wait-Until { Find-Ui -Name 'See all' -Contains -Type 'Hyperlink' -OffscreenToo } -Seconds 60 -PollMs 400
+if (-not $coSee) { $coSee = Find-Ui -Name 'See all' -Contains -Type 'Button' -OffscreenToo }
+Check "collections ($coTag): R1 the Collections page has a See all" ([bool]$coSee) ''
+if ($coSee) {
+    $coSeeName = $coSee.Current.Name
+    Say "R1: '$coSeeName' ($(Invoke-Element $coSee))"
+    $coGrid = Co-Grid
+    Check "collections ($coTag): R1 See all opens its grid" ([bool]$coGrid) "title '$(Co-Title)'"
+    Key 0xA6
+    Check "collections ($coTag): R1 Back shows the Collections page" ([bool](Wait-Ui -Id 'TitleText' -Name 'Collections' -Seconds 15)) "title '$(Co-Title)'"
+    Co-Settle 1200
+    $coSee = Wait-Until { Find-Ui -Name $coSeeName -OffscreenToo } -Seconds 15 -PollMs 300
+    if ($coSee) { Say "R1: '$coSeeName' again ($(Invoke-Element $coSee))" }
+    $coGrid = Co-Grid
+    Check "collections ($coTag): R1 the same See all after Back opens its grid" ([bool]$coGrid) "title '$(Co-Title)'"
+    if ($coGrid) {
+        Open-Nav 'Collections'
+        Check "collections ($coTag): R1 the Collections tab from a See all opens the Collections page" ([bool](Wait-Ui -Id 'TitleText' -Name 'Collections' -Seconds 15)) "title '$(Co-Title)'"
+        Key 0xA6
+        Check "collections ($coTag): R1 Back shows the See all" ([bool](Co-Grid)) "title '$(Co-Title)'"
+        Co-Settle 1200
+        Open-Nav 'Collections'
+        Check "collections ($coTag): R1 the Collections tab again opens the Collections page" ([bool](Wait-Ui -Id 'TitleText' -Name 'Collections' -Seconds 15)) "title '$(Co-Title)'"
+    }
+}
+
+# --- Nixie 1.6.1 (bug hunt BH-160-M2), with FAKESERVER_COLLIDE=1 ("Winter Films (4K)" beside "Winter Films"): two names
+# that would read the same keep their server names in search (its cards and its top result), not on the Collections page only
+if ($env:FAKESERVER_COLLIDE) {
+    . (Join-Path $PSScriptRoot 'search-common.ps1')
+    SrSearch 'Winter Films'
+    $coCards = @([OffscreenUi]::Where($script:hwnd, $script:ui.Id, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem))) |
+        ForEach-Object { $_.Current.Name } | Where-Object { $_ -like 'Winter Films*' })
+    $coTop = @(SrTexts | ForEach-Object { $_.Current.Name } | Where-Object { $_ -like 'Winter Films*' })
+    $coSaid = @($coCards + $coTop | ForEach-Object { ($_ -split ', ')[0] } | Sort-Object -Unique)
+    Check "collections ($coTag): search says both Winter Films and Winter Films (4K)" (($coSaid -contains 'Winter Films') -and ($coSaid -contains 'Winter Films (4K)')) "cards: $($coCards -join ' | '); texts: $($coTop -join ' | ')"
+    Shot "$coTag-collide-search-1920"
+}
 
 # --- Settings > Collections (a shared page: one theme is enough, CO_SETTINGS=1) ----------------------------------------
 if ($env:CO_SETTINGS) {

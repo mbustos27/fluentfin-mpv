@@ -219,6 +219,49 @@ def watch_stops(client, on_outcome):
     return session_stop
 
 
+#: 1.6.1 (BH-151-m8): the answers that say the server refused this sign-in
+#: (or this account) a report: the apiclient's own words and the statuses.
+REFUSED = ("Unauthorized", "AccessRestricted", 401, 403)
+
+
+def watch_refusals(client, on_refused):
+    """1.6.1 (BH-151-m8): wrap ``session_progress`` and ``session_stop`` so a
+    report the server refuses (401 or 403: the sign-in ended there, or the
+    account lost access) calls ``on_refused(item_id, play_session_id)``
+    before the call raises (or returns) as it did. A refused progress report
+    was only logged, so the viewer never heard that the place was not being
+    saved. Install after `watch_stops`, whose outcome stands. ``on_refused``
+    runs on the reporting thread and must only hand it on."""
+    api = client.jellyfin
+    guard_ = getattr(client, "bridge_guard", None)
+
+    def wrap(original):
+        def report(data):
+            refused = False
+            try:
+                result = original(data)
+                status = guard_.last_status() if guard_ is not None else None
+                refused = status in REFUSED
+                return result
+            except Exception as error:
+                refused = getattr(error, "status", None) in REFUSED or (
+                    guard_ is not None and guard_.last_status() in REFUSED)
+                raise
+            finally:
+                if refused:
+                    body = data if isinstance(data, dict) else {}
+                    try:
+                        on_refused(body.get("ItemId"),
+                                   body.get("PlaySessionId"))
+                    except Exception:
+                        log.debug("could not hand on a refused report",
+                                  exc_info=True)
+        return report
+
+    api.session_progress = wrap(api.session_progress)
+    api.session_stop = wrap(api.session_stop)
+
+
 def check_play_info(client):
     """Wrap ``client.jellyfin.get_play_info`` so that an answer that is not
     a usable PlaybackInfo -- a 500 or an empty or non-JSON body, which the

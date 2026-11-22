@@ -24,6 +24,9 @@ public sealed class SignInWatch(Func<string> baseUrl, Func<string> token, ILogge
 	protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
 	{
 		var response = await base.SendAsync(request, cancellationToken);
+		// 1.6.1: the sign-in this 401 belongs to, read before the token: a new sign-in sets its token first, then a new generation,
+		// so a 401 seen under the old token keeps the old generation, and its check can't end the new sign-in (MarkEnded below)
+		var generation = SignInState.Generation;
 		if (response.StatusCode != HttpStatusCode.Unauthorized || SignInState.Ended || Authorization(request) is not { } authorization ||
 			!Carries(authorization, token()))
 		{
@@ -45,7 +48,7 @@ public sealed class SignInWatch(Func<string> baseUrl, Func<string> token, ILogge
 			}
 		}
 
-		if (refused && SignInState.MarkEnded())
+		if (refused && SignInState.MarkEnded(generation))
 		{
 			logger.LogWarning("[sign-in] {Server} no longer accepts this sign-in (401 to {Path}, and to /Users/Me): the pages ask to sign in again",
 				BridgeRedaction.ServerForLog(baseUrl()), request.RequestUri?.AbsolutePath);

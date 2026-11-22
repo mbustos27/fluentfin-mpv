@@ -450,6 +450,10 @@ class ShimRuntime:
         #: a client of ours made, once it returned or raised (`make_client`,
         #: `bridge_http.watch_stops`). Set by the `Bridge`.
         self.on_stop_outcome = None
+        #: 1.6.1 (BH-151-m8): ``(item_id, play_session_id)`` for a progress
+        #: or Stopped report the server refused (401/403,
+        #: `bridge_http.watch_refusals`). Set by the `Bridge`.
+        self.on_report_refused = None
         #: ``(pm)``, run by the shutdown's orderly stop under both locks
         #: right after its ``stop()`` (the name is older than that order):
         #: the end of an item the bridge held for a ``play``
@@ -711,6 +715,9 @@ class ShimRuntime:
         bridge_http.guard(client)
         # How each Stopped report ended, for BRIDGE.md's `reported`.
         bridge_http.watch_stops(client, self._stop_outcome)
+        # 1.6.1 (BH-151-m8): a progress or Stopped report the server refused
+        # (the sign-in ended mid-playback) is said, once per play session.
+        bridge_http.watch_refusals(client, self._report_refused)
         # A PlaybackInfo the apiclient answered None for (a 500, a body that
         # is not JSON) raises where it comes back: `server_unreachable`.
         bridge_http.check_play_info(client)
@@ -720,6 +727,11 @@ class ShimRuntime:
         callback = self.on_stop_outcome
         if callback is not None:
             callback(item_id, session, outcome)
+
+    def _report_refused(self, item_id, session):
+        callback = self.on_report_refused
+        if callback is not None:
+            callback(item_id, session)
 
     @staticmethod
     def retire_client(client, grace=None):
@@ -1013,6 +1025,10 @@ class Bridge:
     """One backend process's protocol state. See the module docstring for
     the threads."""
 
+    #: 1.6.1: commands the UI asks again and again (the open Playback stats,
+    #: once a second): their "<-" line is DEBUG, not INFO.
+    POLLED = frozenset({"get_stats"})
+
     def __init__(self, writer, runtime, dev=False):
         self.writer = writer
         self.runtime = runtime
@@ -1112,6 +1128,10 @@ class Bridge:
         #: ``reported`` events: nothing writes one after that.
         self._reported_closed = False
         runtime.on_stop_outcome = self._stop_outcome
+        #: 1.6.1 (BH-151-m8): the play sessions whose refused report has
+        #: been said (`_report_refused`)
+        self._refused_said = set()
+        runtime.on_report_refused = self._report_refused
         runtime.before_final_stop = (
             lambda pm: self._end_held(pm, unload=False))
 
@@ -1299,7 +1319,12 @@ class Bridge:
         if req.cmd == "connect":
             # Before anything can log it -- including the line below.
             proto.add_secret(req.args.get("accessToken"))
-        log.info("<- %s (id %d)", req.cmd, req.id)
+        # 1.6.1: the commands the UI polls (the open Playback stats ask once
+        # a second) at DEBUG, or the log took a line a second for them
+        if req.cmd in self.POLLED:
+            log.debug("<- %s (id %d)", req.cmd, req.id)
+        else:
+            log.info("<- %s (id %d)", req.cmd, req.id)
         if req.cmd == "ping":
             self.writer.respond(req.id, {})
         elif req.cmd == "get_state":
@@ -1568,6 +1593,10 @@ class Bridge:
                         # wrote (`update_subtitle_visuals`): here instead.
                         self._apply_controls(pm, at_load=True,
                                              item_started=True)
+                    if restart is None:
+                        # 1.6.1: a default cap the server ignored reads
+                        # Original, as a change by hand does
+                        quality.settle_default(video)
                     # The quality this stream was negotiated with, for a
                     # later change that cannot be applied (`_put_back`).
                     try:
@@ -1992,6 +2021,31 @@ class Bridge:
                 and phases.phase(now) in (None, phases.SEEN)):
             self._session_done(item, now, bridge_state.NONE,
                                "it never opened")
+
+    #: 1.6.1 (BH-151-m8): what the viewer is told when the server refuses a
+    #: report (the UI checks whether the sign-in ended, and offers Sign in
+    #: again if it did).
+    REPORT_REFUSED = ("The server refused this playback's report, so your "
+                      "place in it isn't being saved")
+
+    def _report_refused(self, item_id, session):
+        """1.6.1 (BH-151-m8): the server refused a progress or Stopped report
+        (401/403: the sign-in ended mid-playback): a non-fatal ``auth_failed``
+        ``error`` event, once per play session (the progress is refused every
+        few seconds); playback goes on. The UI asks the server itself whether
+        the sign-in ended, and says so with Sign in again (BRIDGE.md section
+        5). Runs on the reporting thread: only queues the event."""
+        key = session or item_id
+        with self._state_lock:
+            if key in self._refused_said:
+                return
+            self._refused_said.add(key)
+        log.warning("The server refused a playback report for %s (play "
+                    "session %s): the sign-in may have ended",
+                    item_id or "an item", session or "unknown")
+        self.tracker.report_error(AUTH_FAILED, self.REPORT_REFUSED,
+                                  item_id=item_id, sticky=False)
+        self.poke()
 
     def _stop_outcome(self, item_id, session, outcome):
         """A client's Stopped report returned or raised
@@ -2869,19 +2923,42 @@ class Bridge:
     def cmd_set_audio(self, args):
         pm = self._require_player()
         index = proto.get_int(args, "index", minimum=0)
-        if self._playing(pm) is None:
+        video = self._playing(pm)
+        if video is None:
             raise BridgeError(NO_PLAYBACK, "nothing is playing")
         # set_streams may restart a transcode, which blocks for the load.
-        self._queue_play("set_audio", lambda: pm.set_streams(index, None))
+        self._queue_play("set_audio", lambda: self._for_item(
+            pm, video, "the audio track",
+            lambda: pm.set_streams(index, None)))
         return {}
 
     def cmd_set_subtitle(self, args):
         pm = self._require_player()
         index = proto.get_int(args, "index", minimum=-1)
-        if self._playing(pm) is None:
+        video = self._playing(pm)
+        if video is None:
             raise BridgeError(NO_PLAYBACK, "nothing is playing")
-        self._queue_play("set_subtitle", lambda: pm.set_streams(None, index))
+        self._queue_play("set_subtitle", lambda: self._for_item(
+            pm, video, "the subtitles",
+            lambda: pm.set_streams(None, index)))
         return {}
+
+    @staticmethod
+    def _for_item(pm, video, what, action):
+        """1.6.1 (the 1.6 review's queue, bridge.py:2982): ``action`` on the
+        play worker only while ``video`` is still the item playing, with the
+        player's lock held from that check through the action. A track or
+        quality change was queued for the item playing, but an auto-advance
+        (the next item at this one's end) is no command, so nothing dropped
+        the job: the change landed on the next item, an index of one item's
+        tracks on another's, or restarted it. Every start takes the same
+        lock (`_play_media`), so none can come between."""
+        with pm._lock:
+            if pm._video is not video:
+                log.info("Not changing %s: the item it was for is not "
+                         "playing", what)
+                return
+            action()
 
     def cmd_set_volume(self, args):
         pm = self._require_player()
@@ -2991,6 +3068,14 @@ class Bridge:
         return {}
 
     def _change_quality(self, pm, video, choice):
+        """`_change_quality_now` with the player's lock held from its check
+        that ``video`` is playing through the restart (1.6.1, as
+        `_for_item`): an auto-advance cannot come between them, so the
+        restart is never the next item's."""
+        with pm._lock:
+            self._change_quality_now(pm, video, choice)
+
+    def _change_quality_now(self, pm, video, choice):
         """The play worker's half of ``set_quality``: refused up front when
         the account may not have the video converted and the cap is under
         the file's bitrate; otherwise the override written and the item

@@ -750,7 +750,8 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 		{
 			removal.Settled = true;
 			PutBack(removal);
-			Notice = new HomeNotice($"Couldn't remove {ContinueWatchingRules.NameOf(item.Dto)}: {LoadMessages.ServerName()} didn't answer", null);
+			var what = $"Couldn't remove {ContinueWatchingRules.NameOf(item.Dto)}";
+			Notice = new HomeNotice(LoadMessages.ActionFailed(what, $"{what}: {LoadMessages.ServerName()} didn't answer"), null); // 1.6.1 (BH-151-m2)
 		}
 	}
 
@@ -791,7 +792,8 @@ public partial class HomeViewModel(IJellyfinClient jellyfinClient,
 			ContinueItems.Remove(removal.Item);
 			_continueAnswer = [.. _continueAnswer.Where(x => x.Id != id)];
 			ShowNextUp();
-			Notice = new HomeNotice($"Couldn't put {ContinueWatchingRules.NameOf(removal.Dto)} back: {LoadMessages.ServerName()} didn't answer", null);
+			var what = $"Couldn't put {ContinueWatchingRules.NameOf(removal.Dto)} back";
+			Notice = new HomeNotice(LoadMessages.ActionFailed(what, $"{what}: {LoadMessages.ServerName()} didn't answer"), null); // 1.6.1 (BH-151-m2)
 		}
 
 		await SaveShown();

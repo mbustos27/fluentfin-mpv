@@ -239,6 +239,15 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 
 	public bool HasEpisodesMessage => EpisodesMessage.Length > 0;
 
+	/// <summary>
+	/// 1.6.1 (BH-151-m1): the list's button under a failed season: "Try again", or "Sign in again" once the server no longer
+	/// takes this sign-in (Try again could never work then).
+	/// </summary>
+	[ObservableProperty]
+	public partial string EpisodesRetryText { get; set; } = "Try again";
+
+	private bool _episodesSignInNeeded;
+
 	/// <summary>The shown season's episodes could not be loaded: the list area offers Try again.</summary>
 	[ObservableProperty]
 	public partial bool EpisodesFailed { get; set; }
@@ -266,7 +275,21 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 	private Task SelectSeason(BaseItemDto? season) => season is null ? Task.CompletedTask : ShowSeason(season);
 
 	[RelayCommand]
-	private Task RetrySeason() => ShowSeason(SelectedSeason);
+	private async Task RetrySeason()
+	{
+		// 1.6.1 (BH-151-m1): Sign in again is the app's sign-in, as every page's (LoadState): signed in again in place (a saved
+		// sign-in), or by another page meanwhile, the season loads again; on the sign-in page, this page is gone
+		if (_episodesSignInNeeded && SignInState.Ended && SignInState.SignInAgain is { } signIn)
+		{
+			await signIn();
+			if (SignInState.Ended)
+			{
+				return;
+			}
+		}
+
+		await ShowSeason(SelectedSeason);
+	}
 
 	private async Task ShowSeason(BaseItemDto? season, bool fresh = false)
 	{
@@ -278,6 +301,7 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 			Episodes = [];
 			EpisodesMessage = "";
 			EpisodesFailed = false;
+			SetEpisodesSignInNeeded(false);
 			IsLoadingEpisodes = false;
 			return;
 		}
@@ -296,7 +320,10 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		var name = season.Name?.Trim() is { Length: > 0 } n ? n : "This season";
 		Episodes = response?.Items ?? [];
 		EpisodesFailed = response?.Items is null;
-		EpisodesMessage = EpisodesFailed ? $"Couldn't load the episodes of {name}." : Episodes.Count == 0 ? $"{name} has no episodes yet." : "";
+		// 1.6.1 (BH-151-m1): the server refused this sign-in (SignInWatch marks it before the list's answer comes back)
+		SetEpisodesSignInNeeded(EpisodesFailed && SignInState.Ended);
+		EpisodesMessage = _episodesSignInNeeded ? $"{SignInState.Title()}. Select Sign in again."
+			: EpisodesFailed ? $"Couldn't load the episodes of {name}." : Episodes.Count == 0 ? $"{name} has no episodes yet." : "";
 		IsLoadingEpisodes = false;
 		// shown first, then the seasons either side asked ahead (Nixie 1.5: then a small show's others, in turn), unless the page
 		// was left meanwhile
@@ -304,6 +331,12 @@ public partial class SeriesViewModel(IJellyfinClient jellyfinClient, SeriesEpiso
 		{
 			_seriesEpisodes.PrefetchSeasons(Seasons?.Select(x => x.Dto), id);
 		}
+	}
+
+	private void SetEpisodesSignInNeeded(bool needed)
+	{
+		_episodesSignInNeeded = needed;
+		EpisodesRetryText = needed ? SignInState.ButtonText : "Try again";
 	}
 
 	private async Task UpdateNextUp(BaseItemDto dto)

@@ -16,13 +16,35 @@ namespace FluentFin.Core.ViewModels;
 /// "short capitals in brackets" rule, so "[REC]" stays); known tags at the end; emoji at the edges; leaked sort keys
 /// ("!020_", "01. "); sort-forcing punctuation ("!!Marvel", "~Misc", "! Favorites"); "zz" prefixes; " Collection" after a
 /// TMDb-named box set; a separator left dangling at an edge. The server's name comes back when nothing readable is left,
-/// or when two names in one view would read the same (<see cref="DisplayAll"/>).
+/// or when two names would read the same: two of the server's box sets or libraries (1.6.1: <see cref="Display"/> and
+/// <see cref="DisplayLibrary"/>, one rule), or two in one view (<see cref="DisplayAll"/>).
 /// </para>
 /// </summary>
 public static partial class CollectionNames
 {
 	/// <summary>Settings → Collections → "Tidy collection names" (on by default). The app sets it from the setting.</summary>
-	public static bool Tidy { get; set; } = true;
+	public static bool Tidy
+	{
+		get => s_tidy;
+		set
+		{
+			if (s_tidy == value)
+			{
+				return;
+			}
+
+			s_tidy = value;
+			TidyChanged?.Invoke(null, EventArgs.Empty);
+		}
+	}
+
+	private static volatile bool s_tidy = true;
+
+	/// <summary>
+	/// Nixie 1.6.1 (the merge review's R4): <see cref="Tidy"/> changed. Names a view keeps (the top bar's tabs, built once)
+	/// are made again: Settings → Collections → "Tidy collection names" renames them at once.
+	/// </summary>
+	public static event EventHandler? TidyChanged;
 
 	/// <summary>Tests: how many times the cleaner ran (it never runs for a film, a show, a season, an episode or a playlist).</summary>
 	internal static int CleanerCalls;
@@ -31,6 +53,13 @@ public static partial class CollectionNames
 	/// The name to show for <paramref name="item"/>: a box set's tidied (<see cref="Tidy"/> on), any other item's as the
 	/// server sent it. Never null.
 	/// </summary>
+	/// <remarks>
+	/// Nixie 1.6.1 (bug hunt BH-160-M2): unique, as the server's box sets are. A tidied name that another of the user's box sets
+	/// has, or tidies to, keeps the server's name ("Winter Films" and "Winter Films (4K)" both stay as they are) wherever it
+	/// shows: search, the Collection page's title, cards, "Part of the collection", the Collections page. The box sets are those
+	/// the client read last (<see cref="RememberBoxSets"/>), and any search showed (<see cref="NoteBoxSets"/>). One rule for
+	/// box sets and libraries (<see cref="Unique"/>).
+	/// </remarks>
 	public static string Display(BaseItemDto? item)
 	{
 		var name = item?.Name ?? "";
@@ -39,7 +68,12 @@ public static partial class CollectionNames
 			return name;
 		}
 
-		return Clean(name, HasTmdbId(item));
+		// review of 1.6.1 (F2): until this user's box sets are known, a name that would be tidied keeps the server's (another
+		// set could read the same: "Winter Films" and "Winter Films (4K)" on a first start, before the list is in)
+		var tidied = Clean(name, HasTmdbId(item));
+		return string.Equals(tidied, name, StringComparison.Ordinal) ? name
+			: BoxSetsFor(Owner()) is { } known ? Unique(name, tidied, known)
+			: name;
 	}
 
 	/// <summary>
@@ -75,32 +109,126 @@ public static partial class CollectionNames
 			return name ?? "";
 		}
 
-		var tidied = Clean(name, fromTmdb: false, library: true);
-		if (tidied == name)
+		return Unique(name, Clean(name, fromTmdb: false, library: true), s_libraries is { } list && list.Owner == Owner() ? list.Names : []);
+	}
+
+	/// <summary>A name the server has, and how it reads tidied.</summary>
+	private readonly record struct Known(string Server, string Tidied);
+
+	/// <summary>Review of 1.6.1 (F2): a list of the server's names and whose it is ("server|user"; null before a sign-in).</summary>
+	private sealed record KnownList(string? Owner, Known[] Names);
+
+	/// <summary>
+	/// Review of 1.6.1 (F2): whose lists count (the signed-in server and user, as the favourites are kept). A list read for
+	/// another user (before a sign-out or a switch) is not this one's: the names it holds neither keep nor tidy theirs.
+	/// </summary>
+	internal static Func<string?> Owner { get; set; } = FavouritesStore.ProfileKey;
+
+	private static volatile KnownList? s_libraries;
+
+	/// <summary>The user's box sets, null until a list was read (<see cref="RememberBoxSets"/>).</summary>
+	private static volatile KnownList? s_boxSets;
+
+	private static readonly object s_boxSetsLock = new();
+
+	private static Known[]? BoxSetsFor(string? owner) => s_boxSets is { } list && list.Owner == owner ? list.Names : null;
+
+	/// <summary>Review of 1.6.1 (F2): this user's box sets were read (until then, names that would be tidied stay the server's).</summary>
+	public static bool BoxSetsKnown => BoxSetsFor(Owner()) is not null;
+
+	/// <summary>Tests: back to a first start, no box set list read.</summary>
+	internal static void ForgetBoxSets()
+	{
+		lock (s_boxSetsLock)
+		{
+			s_boxSets = null;
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.6.1: the one rule for a tidied name (a box set's and a library's): <paramref name="tidied"/>, unless another of
+	/// the server's names (<paramref name="known"/>, any but <paramref name="name"/> itself) is it or reads as it, where the
+	/// server's <paramref name="name"/> stays.
+	/// </summary>
+	private static string Unique(string name, string tidied, Known[] known)
+	{
+		if (string.Equals(tidied, name, StringComparison.Ordinal))
 		{
 			return name;
 		}
 
-		var others = s_libraries.Where(x => !string.Equals(x, name, StringComparison.Ordinal)).ToList();
-		return others.Any(x => string.Equals(x, tidied, StringComparison.CurrentCultureIgnoreCase)
-			|| string.Equals(Clean(x, fromTmdb: false, library: true), tidied, StringComparison.CurrentCultureIgnoreCase))
-			? name
-			: tidied;
-	}
+		foreach (var other in known)
+		{
+			if (!string.Equals(other.Server, name, StringComparison.Ordinal)
+				&& (string.Equals(other.Server, tidied, StringComparison.CurrentCultureIgnoreCase) || string.Equals(other.Tidied, tidied, StringComparison.CurrentCultureIgnoreCase)))
+			{
+				return name;
+			}
+		}
 
-	private static volatile string[] s_libraries = [];
+		return tidied;
+	}
 
 	/// <summary>The server's libraries, as the client read them (its views): a tidied name that two would share stays as it is.</summary>
 	public static void RememberLibraries(IEnumerable<string?> names) =>
-		s_libraries = [.. names.Where(x => !string.IsNullOrEmpty(x)).Select(x => x!).Distinct(StringComparer.Ordinal)];
+		s_libraries = new(Owner(), [.. names.Where(x => !string.IsNullOrEmpty(x)).Select(x => x!).Distinct(StringComparer.Ordinal)
+			.Select(x => new Known(x, Clean(x, fromTmdb: false, library: true)))]);
+
+	/// <summary>
+	/// Nixie 1.6.1 (BH-160-M2): the user's box sets, as the client read them (<c>GetBoxSets</c>), in place of those known: a
+	/// tidied name that two would share stays as the server has it, wherever one shows.
+	/// </summary>
+	public static void RememberBoxSets(IEnumerable<BaseItemDto?> boxSets)
+	{
+		lock (s_boxSetsLock)
+		{
+			s_boxSets = new(Owner(), KnownBoxSets(boxSets, []));
+		}
+	}
+
+	/// <summary>
+	/// Nixie 1.6.1 (BH-160-M2): box sets a page was given (search's answer) added to the user's list, once it is known (before,
+	/// every name that would be tidied keeps the server's anyway).
+	/// </summary>
+	public static void NoteBoxSets(IEnumerable<BaseItemDto?> items)
+	{
+		lock (s_boxSetsLock)
+		{
+			var owner = Owner();
+			if (BoxSetsFor(owner) is not { } known)
+			{
+				return;
+			}
+
+			var added = KnownBoxSets(items, known);
+			if (added.Length > 0)
+			{
+				s_boxSets = new(owner, [.. known, .. added]);
+			}
+		}
+	}
+
+	private static Known[] KnownBoxSets(IEnumerable<BaseItemDto?> items, Known[] already) =>
+		[.. items.Where(x => x is { Type: BaseItemDto_Type.BoxSet, Name.Length: > 0 }).Select(x => new Known(x!.Name!, Clean(x.Name!, HasTmdbId(x))))
+			.Where(k => !already.Contains(k)).Distinct()];
 
 	/// <summary>
 	/// The names to show for the items of one view (a page of box sets, the top bar's libraries), in their order: each
 	/// <see cref="Display"/>ed, except where two would read the same ("Spider-Man Collection (4K HDR)" and "… (SD)"): those
 	/// keep the server's names.
 	/// </summary>
-	public static IReadOnlyList<string> DisplayAll(IReadOnlyList<BaseItemDto> items) =>
-		WithoutCollisions([.. items.Select(x => x.Name ?? "")], [.. items.Select(Display)]);
+	/// <remarks>Review of 1.6.1 (F2): before the user's list is known, the view's own box sets are the list (the Collections page has them all).</remarks>
+	public static IReadOnlyList<string> DisplayAll(IReadOnlyList<BaseItemDto> items)
+	{
+		var known = BoxSetsFor(Owner()) ?? KnownBoxSets(items, []);
+		string Shown(BaseItemDto item)
+		{
+			var name = item.Name ?? "";
+			return !Tidy || item.Type != BaseItemDto_Type.BoxSet ? name : Unique(name, Clean(name, HasTmdbId(item)), known);
+		}
+
+		return WithoutCollisions([.. items.Select(x => x.Name ?? "")], [.. items.Select(Shown)]);
+	}
 
 	/// <summary><see cref="DisplayAll"/> for library names (<see cref="DisplayLibrary"/>).</summary>
 	public static IReadOnlyList<string> DisplayAllLibraries(IReadOnlyList<string?> names) =>
@@ -143,8 +271,10 @@ public static partial class CollectionNames
 		var s = Collapse(WithoutInvisible(name));
 		var server = s;
 
-		// rules 2 to 7, again while one uncovers another's decoration ("zz_!!Misc"), so cleaning twice changes nothing
-		for (var pass = 0; pass < 4; pass++)
+		// rules 2 to 9, again while one uncovers another's decoration ("zz_!!Misc"), so cleaning twice changes nothing.
+		// Nixie 1.6.1 (the 1.6 review): 8 and 9 are in the passes too: "Marvel (4K) Collection" (TMDb) lost " Collection"
+		// after the passes, which uncovered "(4K)" for a second cleaning, and "[HUB] Marvel Collection -" its separator
+		for (var pass = 0; pass < 6; pass++)
 		{
 			var before = s;
 			// 2. known tags at the start, repeated, with a separator after them
@@ -160,21 +290,22 @@ public static partial class CollectionNames
 			// 7. "zz" prefixes
 			s = ZzPrefix().Replace(s, "", 1);
 			s = Collapse(s);
+			// 8. " Collection" after a TMDb-named box set, when more than an article is left
+			if (fromTmdb && CollectionSuffix().Match(s) is { Success: true } suffix && !IsNothing(suffix.Groups["name"].Value))
+			{
+				s = suffix.Groups["name"].Value;
+			}
+
+			// 9. a separator left dangling at an edge by the rules above (never one the name had: "Alien / Predator" stays)
+			if (s != server)
+			{
+				s = Collapse(DanglingSeparator().Replace(s, ""));
+			}
+
 			if (s == before)
 			{
 				break;
 			}
-		}
-		// 8. " Collection" after a TMDb-named box set, when more than an article is left
-		if (fromTmdb && CollectionSuffix().Match(s) is { Success: true } suffix && !IsNothing(suffix.Groups["name"].Value))
-		{
-			s = suffix.Groups["name"].Value;
-		}
-
-		// 9. a separator left dangling at an edge by the rules above (never one the name had: "Alien / Predator" stays)
-		if (s != server)
-		{
-			s = Collapse(DanglingSeparator().Replace(s, ""));
 		}
 
 		// 10. nothing readable left: the server's name

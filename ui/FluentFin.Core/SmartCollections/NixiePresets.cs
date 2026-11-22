@@ -95,7 +95,7 @@ public static class NixiePresets
 
 			var boxed = (await client.GetBoxSets(cancellationToken))?.Items?.Select(x => IndexEntry.ProviderId(x, "Tmdb")).OfType<string>().ToHashSet() ?? [];
 			var off = CollectionSettings.KindsOff(SmartCollectionServices.Settings);
-			return await Task.Run(() => For(snapshot, libraryId, DateTimeOffset.Now, boxed, off), cancellationToken);
+			return await Task.Run(() => For(snapshot, libraryId, SmartCollectionCatalog.Now(), boxed, off), cancellationToken);
 		}
 		catch (OperationCanceledException)
 		{
@@ -255,7 +255,7 @@ public sealed class NixieLibraryPresets
 				{
 					var boxed = (await _client.GetBoxSets())?.Items?.Select(x => IndexEntry.ProviderId(x, "Tmdb")).OfType<string>().ToHashSet() ?? [];
 					var off = CollectionSettings.KindsOff(_settings);
-					var now = DateTimeOffset.Now;
+					var now = SmartCollectionCatalog.Now();
 					var presets = snapshot.Libraries.ToDictionary(l => l.Id, l => NixiePresets.For(snapshot, l.Id, now, boxed, off));
 					bool current;
 					lock (_lock)

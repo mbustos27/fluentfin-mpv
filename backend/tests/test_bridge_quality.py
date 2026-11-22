@@ -18,9 +18,11 @@ if __name__ == "__main__":
 
 import ast
 import json
+import logging
 import os
 import threading
 import time
+import types
 import unittest
 from unittest import mock
 
@@ -122,6 +124,29 @@ class NotConnectedTest(BridgeCase):
         self.assertEqual(self.code("set_quality_defaults", {"home": 5}),
                          "not_connected")
         self.assertEqual(self.code("get_stats"), "not_connected")
+
+
+class DevBackendTest(BridgeCase):
+    """1.6.1 (the 1.6 review's queue: BRIDGE.md's ``connect`` wording): what
+    the doc now says a ``--dev`` backend does before a server ``connect``."""
+    dev = True
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(quality.DEFAULTS.reset)
+
+    def test_defaults_before_any_connect_and_the_rest_after_a_window(self):
+        self.assertIsNone(self.code("set_quality_defaults",
+                                    {"home": {"bitrate": 6_000_000}}))
+        self.assertIsNone(self.code("set_auto_play", {"autoPlay": False}))
+        self.assertEqual(self.code("get_stats"), "not_connected")
+        self.assertEqual(self.code("set_quality", {"bitrate": None}),
+                         "not_connected")
+        self.assertTrue(self.connect()["ok"])       # its window only
+        self.assertFalse(self.bridge.connected)
+        self.assertEqual(self.code("get_stats"), "no_playback")
+        self.assertEqual(self.code("set_quality", {"bitrate": None}),
+                         "no_playback")
 
 
 class SetQualityArgsTest(QualityCase):
@@ -239,6 +264,63 @@ class SetQualityTest(QualityCase):
         b = FakeVideo(B)
         quality.apply_default(b)
         self.assertIsNone(b.trs_ovr, "the next item starts with its default")
+
+
+class AutoAdvanceRaceTest(QualityCase):
+    """1.6.1 (the 1.6 review's queue, bridge.py:2982): a quality, audio or
+    subtitle change is queued for the item playing; the next item's
+    auto-advance is no command, so nothing dropped the job, and the change
+    landed on the next item."""
+
+    def plays(self):
+        return [e[1] for e in self.journal("play")]
+
+    def test_an_auto_advance_cannot_come_between_the_check_and_the_restart(
+            self):
+        self.server_converts()
+        b = FakeVideo(B)
+        switched = threading.Event()
+
+        def advance():
+            # the next item's start: `_play_media` takes the player's lock
+            with self.pm._lock:
+                self.pm._video = b
+            switched.set()
+
+        real = quality.refused_up_front
+
+        def check(video, choice):
+            # the item ends just as the change has checked it is playing
+            threading.Thread(target=advance, daemon=True).start()
+            switched.wait(0.5)
+            return real(video, choice)
+
+        before = len(self.plays())
+        with mock.patch.object(quality, "refused_up_front", check):
+            self.set_quality(8_000_000)
+        self.assertTrue(switched.wait(5), "the next item came after")
+        self.assertEqual(self.plays()[before:], [A],
+                         "the restart was the item's it was for")
+        self.assertIs(self.pm._video, b)
+        self.assertIsNone(getattr(b, "trs_ovr", None))
+
+    def test_a_track_change_for_an_item_that_ended_is_not_the_next_ones(self):
+        b = FakeVideo(B)
+        b.aid = 1
+        for cmd, args in (("set_audio", {"index": 3}),
+                          ("set_subtitle", {"index": 2})):
+            self.pm._video = self.a
+            self.assertTrue(self.send(cmd, args)["ok"])
+            self.pm._video = b              # the auto-advance, before it ran
+            self.run_plays()
+        self.assertEqual(self.journal("set_streams"), [])
+        self.assertEqual((b.aid, b.sid), (1, None))
+
+    def test_a_track_change_for_the_item_playing_still_applies(self):
+        self.assertTrue(self.send("set_audio", {"index": 3})["ok"])
+        self.run_plays()
+        self.assertEqual(self.journal("set_streams"),
+                         [("set_streams", 3, None)])
 
 
 class RefusedTest(QualityCase):
@@ -392,6 +474,65 @@ class DefaultsTest(BridgeCase):
         forced.trs_ovr = (None, True)            # retry_failed_playback
         quality.apply_default(forced)
         self.assertEqual(forced.trs_ovr, (None, True))
+
+    def no_conversion(self, video):
+        quality.remember_policy(video.client, {
+            "Id": SERVER["user"]["id"],
+            "Policy": {"EnableVideoPlaybackTranscoding": False}})
+
+    def test_a_default_cap_is_not_asked_for_an_account_that_may_not_convert(
+            self):
+        """1.6.1 (the 1.6 review's queue: the defaults skipped the checks a
+        choice by hand has)."""
+        quality.DEFAULTS.update(quality.Choice(4_000_000), quality.ORIGINAL)
+        video = FakeVideo(A, client=types.SimpleNamespace())
+        self.no_conversion(video)
+        quality.apply_default(video)
+        self.assertIsNone(video.trs_ovr, "Auto: the file as it is")
+        original = FakeVideo(B, parent=FakeQueue([B]),
+                             client=types.SimpleNamespace())
+        original.parent.is_local = False
+        self.no_conversion(original)
+        quality.apply_default(original)
+        self.assertEqual(original.trs_ovr, (quality.ORIGINAL_KBPS, False),
+                         "Original is never refused")
+
+    def test_a_default_cap_the_server_ignored_reads_original(self):
+        quality.DEFAULTS.update(quality.Choice(4_000_000), quality.AUTO)
+        video = FakeVideo(A)
+        quality.apply_default(video)
+        self.assertEqual(video.trs_ovr, (4000, False))
+        video.media_source = source()            # 20 Mbps, sent as it is
+        video.play_method = "DirectPlay"
+        video.playback_info = {"PlaySessionId": "ps"}
+        self.assertTrue(quality.settle_default(video))
+        self.assertEqual(video.trs_ovr, (quality.ORIGINAL_KBPS, False))
+        self.assertEqual(quality.choice_of(video), quality.ORIGINAL)
+        self.assertFalse(quality.settle_default(video), "once")
+        # a cap the server honoured, and a choice by hand, stay
+        honoured = FakeVideo(B)
+        quality.apply_default(honoured)
+        honoured.media_source = source(transcode=True)
+        honoured.play_method, honoured.is_transcode = "Transcode", True
+        self.assertFalse(quality.settle_default(honoured))
+        self.assertEqual(honoured.trs_ovr, (4000, False))
+        by_hand = FakeVideo(A)
+        by_hand.trs_ovr = (4000, False)
+        by_hand.media_source = source()
+        self.assertFalse(quality.settle_default(by_hand))
+
+    def test_the_play_hook_settles_the_first_start_only(self):
+        self.connect_server()
+        self.runtime.start_plays = True
+        with mock.patch.object(quality, "settle_default",
+                               return_value=False) as settle:
+            self.send("play", {"itemIds": [A]})
+            self.run_plays()
+            video = self.runtime.pm._video
+            self.assertEqual([c.args for c in settle.call_args_list],
+                             [(video,)])
+            self.runtime.pm.restart_playback()
+            self.assertEqual(len(settle.call_args_list), 1, "not a restart")
 
     def test_the_play_hook_applies_it(self):
         self.connect_server()
@@ -565,6 +706,46 @@ class GetStatsTest(QualityCase):
         self.assertIsNone(stats["width"])
         self.assertIsNone(stats["networkSpeed"])
         self.assertEqual(stats["audioTrack"], "English - Dolby Digital+ - 5.1")
+
+    def test_a_nan_from_mpv_reads_null_and_the_stats_are_answered(self):
+        """1.6.1 (the 1.6 review's queue): a NaN (a frame rate mpv has not
+        worked out yet) went into the answer, which the protocol's JSON
+        cannot carry: the request was never answered."""
+        nan = float("nan")
+        self.handle.VALUES = dict(FakeStatsHandle.VALUES, **{
+            "container-fps": nan, "estimated-vf-fps": float("inf"),
+            "demuxer-cache-duration": nan, "video-bitrate": nan})
+        answer = self.send("get_stats")
+        self.assertTrue(answer["ok"], answer)
+        stats = answer["result"]
+        self.assertIsNone(stats["frameRate"])
+        self.assertIsNone(stats["bufferSeconds"])
+        self.assertEqual(stats["measuredBitrate"], 380_000, "the audio's")
+
+    def test_an_answer_that_cannot_be_sent_is_still_answered(self):
+        reads = quality.StatsReads(self.bridge.writer)
+        reads.ask(990, lambda deadline, cancelled: {"frameRate": float("nan")})
+        answer = self.answer_to(990)
+        self.assertIsNotNone(answer, "answered")
+        self.assertEqual((answer["ok"], answer["error"]["code"]),
+                         (False, "internal"))
+        self.assertEqual(len(self.answers(990)), 1)
+
+    def test_the_polled_stats_are_not_logged_at_info(self):
+        """1.6.1 (the 1.6 review's queue): the open panel's read once a
+        second put an INFO line a second in the backend's log."""
+        with self.assertLogs("bridge", "DEBUG") as logs:
+            for _ in range(3):
+                self.assertTrue(self.send("get_stats")["ok"])
+            self.send("ping")
+        lines = [(r.levelno, r.getMessage()) for r in logs.records]
+        self.assertEqual(
+            [m for level, m in lines if level >= logging.INFO
+             and m.startswith("<- get_stats")], [])
+        self.assertEqual(len([m for level, m in lines
+                              if m.startswith("<- get_stats")]), 3)
+        self.assertIn((logging.INFO, "<- ping (id %d)" % self.next_id),
+                      lines, "other commands as before")
 
     def stuck(self, on="video-params"):
         """mpv not answering one property: the read waits until released."""

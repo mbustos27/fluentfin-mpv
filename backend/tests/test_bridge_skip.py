@@ -206,6 +206,54 @@ class Rules(SkipBridgeCase):
         self.assertNotIn("ruleId", proto.segment_list(
             [("Intro", 1, 2, "ask", "server", {"ruleId": "r1"})])[0])
 
+    def test_an_always_part_skipped_stays_skipped_after_an_add(self):
+        """1.6.1 (the 1.6 review's skip queue): an Add (or a Yes) mid-episode
+        rebuilt every rule's segment, so an "always" part the player had
+        already skipped re-armed and was skipped again on a seek back."""
+        self.connect_server()
+        first = self.store.add_rule(ACCOUNT + ":" + SERIES, "start", 5, 41,
+                                    "always")
+        pm, video = self.play_episode("e" * 32, 10.0)
+        seg, = [s for s in video.intros if s.rule_id == first]
+        seg.has_triggered = True            # the player skipped it
+        pm._player.playback_time = 20.0     # the viewer seeks back into it
+        self.tick()
+        answer = self.send("add_skip_rule", {"anchor": "end", "startS": 62,
+                                             "endS": 0, "action": "always"})
+        self.assertTrue(answer["ok"], answer)
+        pm.run_deferred()
+        rules = {s.rule_id: s for s in video.intros
+                 if s.source == skip_rules.SOURCE_RULE}
+        self.assertIsNot(rules[first], seg, "rebuilt")
+        self.assertTrue(rules[first].has_triggered, "not armed again")
+        self.assertFalse(rules[answer["result"]["ruleId"]].has_triggered,
+                         "the new part ahead is skipped when reached")
+
+    def test_the_segments_event_of_an_item_with_no_rule_is_15s(self):
+        """Golden (the 1.6 review's skip queue: it covered `segment_list`
+        only): the whole ``segments`` event of an episode with no rule, as
+        the bridge sends it, is 1.5's: the same keys and nothing more."""
+        from jellyfin_mpv_shim.media import Intro
+
+        self.connect_server()
+        pm = self.runtime.pm
+        video = episode_video("e" * 32)
+        video.intros = [Intro("Intro", 10.0, 40.0, "server"),
+                        Intro("Outro", 1300.0, 1400.0, "chapters")]
+        pm.play(video)
+        pm._player.playback_time = 12.0
+        data, = [d for n, d in self.tick() if n == "segments"]
+        self.assertEqual(data, {
+            "itemId": "e" * 32,
+            "segments": [
+                {"type": "Intro", "startTicks": 100_000_000,
+                 "endTicks": 400_000_000, "action": "ask",
+                 "source": "server"},
+                {"type": "Outro", "startTicks": 13_000_000_000,
+                 "endTicks": 14_000_000_000, "action": "ask",
+                 "source": "chapters"}],
+            "current": 0})
+
     def test_skip_options_segment_actions_and_rule_action(self):
         self.connect_server()
         conf.settings.segment_commercial = "off"

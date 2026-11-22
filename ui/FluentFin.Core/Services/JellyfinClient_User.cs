@@ -105,6 +105,9 @@ public partial class JellyfinClient
 	private Task<IReadOnlyList<BaseItemDto>?>? _userViews;
 	private long _userViewsReadAt;
 
+	/// <summary>Nixie 1.6.1: the last read of the views failed (the next good one says so: <see cref="UserViewsChanged"/>).</summary>
+	private volatile bool _userViewsFailed;
+
 	public async Task<IReadOnlyList<BaseItemDto>> GetUserViews()
 	{
 		Task<IReadOnlyList<BaseItemDto>?> views;
@@ -162,11 +165,22 @@ public partial class JellyfinClient
 				ViewModels.CollectionNames.RememberLibraries(read.Select(x => x.Name)); // 1.6 collections: tidy library names stay unique
 			}
 
-			return views?.Items is { } items ? [.. items.OfType<BaseItemDto>()] : null;
+			IReadOnlyList<BaseItemDto>? got = views?.Items is { } items ? [.. items.OfType<BaseItemDto>()] : null;
+			// Nixie 1.6.1 (the 1.6 review): a good read after a failed one says so, so the top bar, left without its
+			// libraries by the failure, reads them again whoever asked (the Libraries page, Home, the bar's own retry)
+			if (got is not null && _userViewsFailed)
+			{
+				_userViewsFailed = false;
+				UserViewsChanged?.Invoke(this, EventArgs.Empty);
+			}
+
+			_userViewsFailed = got is null;
+			return got;
 		}
 		catch (Exception ex)
 		{
 			logger.LogError(ex, @"Unhandled exception");
+			_userViewsFailed = true;
 			return null;
 		}
 	}

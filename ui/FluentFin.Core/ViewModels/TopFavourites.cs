@@ -15,6 +15,9 @@ public enum FavouriteChange
 	Removed,
 	Full,
 	NotALibrary,
+
+	/// <summary>Nixie 1.6.1: the bar has no libraries yet (the server's list could not be read): it reads them again; say so.</summary>
+	NotRead,
 }
 
 /// <summary>
@@ -118,6 +121,12 @@ public static class TopFavourites
 		return favourite ? $"Remove {name} from the top bar" : $"Add {name} to the top bar";
 	}
 
+	/// <summary>
+	/// Nixie 1.6.1: a star pressed while the bar could not read the server's libraries (it reads them again): said instead of
+	/// nothing.
+	/// </summary>
+	public const string NotReadMessage = "The top bar couldn't read your libraries yet. It's trying again: press the star once more in a moment.";
+
 	/// <summary>The message when the bar is full: "Up to 3 favourites in the top bar. Remove a star to add Anime."</summary>
 	public static string FullMessage(string? library) =>
 		$"Up to {Max} favourites in the top bar. Remove a star to add {(string.IsNullOrWhiteSpace(library) ? "this library" : library.Trim())}.";
@@ -193,6 +202,76 @@ public sealed class FavouritesStore(ILocalSettingsService settings)
 		all[profile] = JsonSerializer.SerializeToNode(record, Options);
 		settings.SaveSetting(SettingKey, all);
 	}
+
+	/// <summary>
+	/// Nixie 1.6.1 (the 1.6 review): who the 1.3 pins went to ("server|user"). The pins were one list on this PC, and every user
+	/// who signed in here got them as their first favourites; now the first who has those libraries keeps them as their stars
+	/// (<see cref="TopNavigation"/>), and nobody else gets them.
+	/// </summary>
+	public const string PinsClaimKey = "TopBarPinsClaimedBy";
+
+	/// <summary>The 1.3 pins for <paramref name="profile"/>: all of them while nobody has them, none once another profile has.</summary>
+	public IReadOnlyList<Guid> PinsFor(string? profile)
+	{
+		if (profile is null)
+		{
+			return [];
+		}
+
+		var pins = Pins();
+		var owner = PinsClaimedBy() ?? StarredFrom(pins);
+		return owner is null || owner == profile ? pins : [];
+	}
+
+	/// <summary>Who the 1.3 pins went to (<see cref="PinsClaimKey"/>), or null.</summary>
+	public string? PinsClaimedBy()
+	{
+		try
+		{
+			return settings.ReadSettingRaw(PinsClaimKey)?.GetValue<string>();
+		}
+		catch (Exception ex) when (ex is InvalidOperationException or FormatException)
+		{
+			return null;
+		}
+	}
+
+	/// <summary>
+	/// Review of 1.6.1 (F4): the profile whose stars started from the 1.3 pins in 1.6.0 (1.6.0 gave every user the pins, and a
+	/// user's first star kept them in their stars): theirs, whoever signs in first now. Null when no record holds a pin.
+	/// </summary>
+	private string? StarredFrom(IReadOnlyList<Guid> pins)
+	{
+		if (pins.Count == 0)
+		{
+			return null;
+		}
+
+		try
+		{
+			if (settings.ReadSettingRaw(SettingKey) is not JsonObject all)
+			{
+				return null;
+			}
+
+			foreach (var (profile, node) in all)
+			{
+				if (node?.Deserialize<FavouritesRecord>(Options)?.Chosen is { } chosen && chosen.Any(pins.Contains))
+				{
+					return profile;
+				}
+			}
+		}
+		catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+		{
+			return null;
+		}
+
+		return null;
+	}
+
+	/// <summary>Nixie 1.6.1: the 1.3 pins are <paramref name="profile"/>'s (written once, the first time that user's server has one).</summary>
+	public void ClaimPins(string profile) => settings.SaveSetting(PinsClaimKey, profile);
 
 	/// <summary>The libraries pinned in 1.3 ("Add to the top bar"), in their order: read, never written.</summary>
 	public IReadOnlyList<Guid> Pins()
