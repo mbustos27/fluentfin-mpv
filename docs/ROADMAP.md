@@ -610,8 +610,8 @@ its test fake, and Nixie's own message when it refuses.
       window, so there's no reload, no position jump and no audio change. It's not CompactOverlay, because Windows
       picks its sizes; and not the backend's child window, which is tied to the main window and can't carry
       controls. PiP is offered only on that default path.
-    - **Enter:** "Mini player (P)" beside Full screen (the owner to confirm P). The main window goes back to the item
-      page, and playback isn't stopped.
+    - **Enter:** "Mini player (P)" beside Full screen (P confirmed by the owner, 2026-11-22). The main window goes back
+      to the item page, and playback isn't stopped.
     - **Restore:** the same player at the same place, with tracks, quality, skip rules and stats as they were, and no
       new play sent.
     - **Close:** one stop, reported to the server once.
@@ -840,6 +840,9 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   with the final pass and the build, instead of before them (that wait was up to an hour). A Blocker it finds still
   stops the release. A Major in 1.6.1's own new code that's quick to fix is fixed before the build finishes; everything
   else goes to the next fix queue in KNOWN-ISSUES.
+- **P opens 1.8's mini player** (the owner, 2026-11-22, asked "Should P open 1.8's mini player?": "Yes, P"). Plain P is
+  free: the app's shortcut maps use P only as Shift+P (Previous, `MpvControlsViewModel.cs:1882`,
+  `AppShortcuts.cs:191`), and the keys matrix has no P case.
 - **1.8's pop-out player is a floating picture-in-picture window** (the owner, 2026-11-22, asked whether it meant that:
   "Yes, floating PiP"). It's a small always-on-top window you can move and resize, beside chapter extras. 1.8 starts
   after 1.7 and TV 1.0.
