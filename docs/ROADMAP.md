@@ -840,6 +840,18 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   with the final pass and the build, instead of before them (that wait was up to an hour). A Blocker it finds still
   stops the release. A Major in 1.6.1's own new code that's quick to fix is fixed before the build finishes; everything
   else goes to the next fix queue in KNOWN-ISSUES.
+- **The repository becomes `mbustos27/nixie`** (the owner, 2026-11-22, on whether to stage it: "its early on we can just
+  update it"). The order:
+  1. 1.7 is published under the current name, so its Sandbox leg (1.6.1's Restart to update installing 1.7) stays as
+     tested.
+  2. The repository is renamed right after.
+  3. 1.5.0 and later already follow GitHub's redirect for a renamed repository (BH-140X-m3), so installed copies keep
+     updating. The owner's own copy checking for 1.7 after the rename is the first real-world check of that.
+  4. 1.4.1 and earlier would need one manual download.
+  5. The next release (1.7.1) switches every old-name place to the new name: never before the rename, since the API
+     URL would 404.
+  6. A new repository named `fluentfin-mpv` is never created, because it would break every redirect. The local folder
+     `Devluentfin-mpv` keeps its name, and only the git remote changes.
 - **P opens 1.8's mini player** (the owner, 2026-11-22, asked "Should P open 1.8's mini player?": "Yes, P"). Plain P is
   free: the app's shortcut maps use P only as Shift+P (Previous, `MpvControlsViewModel.cs:1882`,
   `AppShortcuts.cs:191`), and the keys matrix has no P case.
