@@ -93,8 +93,11 @@ page to match the set, skipping the parts a show repeats, and a quality choice w
   scripts for collections, the top bar, the Collection page, skipping and quality. On real Jellyfin 10.11 and 12.4 test
   servers: search, a private playlist saved from a Nixie collection, a playlist and a transcoded video's audio change, a
   quality change, and a skip rule learned from two episodes.
+- **The upgrade test in Windows Sandbox passed every check** right after publishing, as a standard user: 1.5.1 to 1.6.0
+  by the old flow, 1.6.0's own Restart to update, and 1.5.1's Restart to update installing 1.6.0, which opens again and
+  says it updated.
 - Not checked by hand for this release (they need a real desktop or your own server): a skip rule on a real show with
-  extras, the Playback stats over real video, a quality change on your server, and Restart to update on a real install.
+  extras, the Playback stats over real video, and a quality change on your server.
 
 **Known issues in 1.6.0** (queued for 1.6.1)
 

@@ -13,7 +13,7 @@ and the owner's own steps are the real limits.
 | 1.4.1 | Continue Watching | Rewatched shows come back, Home updates as the player closes, faster season switching | **Released** 2026-11-20 |
 | 1.5.0 | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Released** 2026-11-21 |
 | 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Released** 2026-11-21 |
-| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test runs right after) |
+| 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test passed right after) |
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Now** (started 2026-11-21 18:10, 3 streams): release expected **2026-11-22** |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | About 1 day of work; **2026-11-23 to 25**, after the weekly usage reset on 24 November if usage runs short. Needs the owner's Trakt registration (a few minutes) |
 | 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
@@ -504,7 +504,13 @@ chips, the top bar's Collections destination, the fake server), so they're built
   are in 1.6.1 (below).
 - **The Sandbox test's first run:** legs 1 and 2 passed every check (1.5.1 to 1.6.0 by the old flow, and 1.6.0's own
   Restart to update). Leg 3 failed on a fault in the test: it started 1.5.1's install switch without the test's marker,
-  which 1.5.1 itself requires. The fix is `f71865a`, with a test, and the test runs again.
+  which 1.5.1 itself requires. The fix is `f71865a`, with a test.
+- **The Sandbox upgrade test passed every check** on its second run (18:08 to 18:20, as a standard user):
+  - 1.5.1 to 1.6.0 by the old flow;
+  - 1.6.0's own Restart to update;
+  - **1.5.1's Restart to update installing 1.6.0, which opens again and logs "Updated"**.
+
+  The release notes say so.
 - **From launch to release:** about 9.5 hours (08:12 to 17:50). The streams took about 4 hours; reviews and their
   fixes about 2.5 hours. Integration, the final pass and the build ran alongside, about 5 hours, sharing the test slots
   with the TV work. Defender took 22 minutes.
