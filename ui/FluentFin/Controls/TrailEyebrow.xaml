@@ -5,61 +5,137 @@
     where you came from rather than where the item lives (TopNavigation.Eyebrow). A click (or Enter) opens the library, which
     is then lit. Nothing shows otherwise. Neutral ink (the accent is the bar's light's), the bar's subtle 8-radius fill on
     hover; Narrator: a button "Movies" whose help text says it is the library this is in.
+    Nixie 1.7 (upnav, the owner: an episode had no way back to its show): then the way up, however the page was reached
+    (TopNavigation.Trail): an episode's series and season ("Shows › What We Do in the Shadows › Season 3 ›"), a season's series.
+    Each crumb is a button that opens that page in the theme shown, before the title's actions in the keyboard's order, named
+    for Narrator "Go to series What We Do in the Shadows", "Go to Season 3". One line (TrailPanel): a long name trims with an
+    ellipsis, its tooltip says it whole.
 -->
 <UserControl
     x:Class="FluentFin.Controls.TrailEyebrow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:FluentFin.Controls"
     IsTabStop="False"
     Visibility="Collapsed">
-    <Button
-        x:Name="LibraryButton"
-        MinHeight="32"
-        Margin="-8,0,0,0"
-        Padding="8,6,8,6"
-        HorizontalAlignment="Left"
-        AutomationProperties.AutomationId="TrailEyebrow"
-        AutomationProperties.HelpText="The library this is in. Opens it"
-        Background="Transparent"
-        BorderThickness="0"
-        Click="OnClick"
-        CornerRadius="8"
-        Foreground="{ThemeResource TextFillColorSecondaryBrush}">
-        <Button.Resources>
-            <ResourceDictionary>
-                <ResourceDictionary.ThemeDictionaries>
-                    <ResourceDictionary x:Key="Default">
-                        <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
-                        <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
-                        <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
-                        <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="TextFillColorSecondaryBrush" />
-                        <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
-                        <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
-                    </ResourceDictionary>
-                    <ResourceDictionary x:Key="Light">
-                        <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
-                        <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
-                        <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
-                        <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="TextFillColorSecondaryBrush" />
-                        <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
-                        <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
-                    </ResourceDictionary>
-                </ResourceDictionary.ThemeDictionaries>
-            </ResourceDictionary>
-        </Button.Resources>
-        <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock
-                x:Name="Label"
-                VerticalAlignment="Center"
-                FontSize="13"
-                FontWeight="SemiBold"
-                TextLineBounds="Tight" />
-            <FontIcon
-                Margin="0,1,0,0"
-                VerticalAlignment="Center"
-                AutomationProperties.AccessibilityView="Raw"
-                FontSize="10"
-                Glyph="&#xE76C;" />
-        </StackPanel>
-    </Button>
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="TextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="TextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="TextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+            <!--  each crumb: neutral ink, no fill at rest, the subtle fill above on hover, radius 8  -->
+            <Style
+                x:Key="TrailCrumbStyle"
+                BasedOn="{StaticResource DefaultButtonStyle}"
+                TargetType="Button">
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="Padding" Value="8,6,8,6" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="TrailCrumbLabelStyle" TargetType="TextBlock">
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="TextLineBounds" Value="Tight" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                <Setter Property="TextWrapping" Value="NoWrap" />
+                <Setter Property="MaxLines" Value="1" />
+            </Style>
+            <Style x:Key="TrailCrumbChevronStyle" TargetType="FontIcon">
+                <Setter Property="Margin" Value="0,1,0,0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="FontSize" Value="10" />
+                <Setter Property="Glyph" Value="&#xE76C;" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!--  the crumbs' text lines up with the title's (each crumb's 8 px of padding sits outside it)  -->
+    <controls:TrailPanel Margin="-8,0,0,0" HorizontalAlignment="Left">
+        <Button
+            x:Name="LibraryButton"
+            AutomationProperties.AutomationId="TrailEyebrow"
+            AutomationProperties.HelpText="The library this is in. Opens it"
+            Click="OnLibraryClick"
+            Style="{StaticResource TrailCrumbStyle}"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="LibraryLabel"
+                    IsTextTrimmedChanged="OnLabelTrimmed"
+                    Style="{StaticResource TrailCrumbLabelStyle}" />
+                <FontIcon
+                    Grid.Column="1"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Style="{StaticResource TrailCrumbChevronStyle}" />
+            </Grid>
+        </Button>
+        <!--  1.7 upnav: the series, then the season  -->
+        <Button
+            x:Name="SeriesButton"
+            AutomationProperties.AutomationId="TrailSeries"
+            Click="OnSeriesClick"
+            Style="{StaticResource TrailCrumbStyle}"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="SeriesLabel"
+                    IsTextTrimmedChanged="OnLabelTrimmed"
+                    Style="{StaticResource TrailCrumbLabelStyle}" />
+                <FontIcon
+                    Grid.Column="1"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Style="{StaticResource TrailCrumbChevronStyle}" />
+            </Grid>
+        </Button>
+        <Button
+            x:Name="SeasonButton"
+            AutomationProperties.AutomationId="TrailSeason"
+            Click="OnSeasonClick"
+            Style="{StaticResource TrailCrumbStyle}"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="SeasonLabel"
+                    IsTextTrimmedChanged="OnLabelTrimmed"
+                    Style="{StaticResource TrailCrumbLabelStyle}" />
+                <FontIcon
+                    Grid.Column="1"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Style="{StaticResource TrailCrumbChevronStyle}" />
+            </Grid>
+        </Button>
+    </controls:TrailPanel>
 </UserControl>

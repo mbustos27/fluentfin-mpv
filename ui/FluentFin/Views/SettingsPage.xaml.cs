@@ -23,6 +23,20 @@ public sealed partial class SettingsPage : Page
 	public Core.SmartCollections.CollectionsSettingsViewModel CollectionsSettings { get; } =
 		new(App.GetService<Core.Contracts.Services.ILocalSettingsService>(), App.GetService<Core.Services.HomeCache>());
 
+	// 1.7 keyless
+	/// <summary>1.7: Settings &gt; Look up lists online: TMDb's export files and Wikidata, each off until turned on.</summary>
+	public Core.Outside.OutsideSourcesSettingsViewModel OutsideSources { get; } =
+		new(App.GetService<Core.Outside.OutsideHub>(), Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread() is { } queue ? a => queue.TryEnqueue(() => a()) : null,
+			App.GetService<Core.Contracts.Services.ILocalSettingsService>());
+	// end 1.7 keyless
+
+	// 1.7 trending
+	/// <summary>1.7: Settings &gt; Look up lists online, stream T's part: Trakt and TMDb trending, and the TMDb token field.</summary>
+	public Core.Outside.TrendingSourcesSettingsViewModel TrendingSources { get; } =
+		new(App.GetService<Core.Outside.TrendingSources>(), App.GetService<Core.Outside.TmdbToken>(),
+			Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread() is { } queue ? a => queue.TryEnqueue(() => a()) : null);
+	// end 1.7 trending
+
 	/// <summary>Nixie 1.3.0: Settings &gt; Appearance &gt; Theme: a choice applies at once (ThemeSwitcher) and is saved on this PC.</summary>
 	public FluentFin.ViewModels.ThemePickerViewModel ThemePicker { get; } =
 		new(App.GetService<FluentFin.Services.ThemeService>(), id => App.GetService<FluentFin.Services.ThemeSwitcher>().SwitchAsync(id));
@@ -43,6 +57,14 @@ public sealed partial class SettingsPage : Page
 		// Seaglass: a Glass pick takes effect at once (it is saved by the view model)
 		ViewModel.PropertyChanged += OnViewModelPropertyChanged;
 		Unloaded += (_, _) => ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+		// 1.7 keyless: the status lines follow the sources only while the page is shown
+		Loaded += (_, _) => OutsideSources.Attach();
+		Unloaded += (_, _) => OutsideSources.Detach();
+		// end 1.7 keyless
+		// 1.7 trending: the same for Trakt and TMDb trending
+		Loaded += (_, _) => TrendingSources.Attach();
+		Unloaded += (_, _) => TrendingSources.Detach();
+		// end 1.7 trending
 
 		// Seaglass 1.1.3: removing a saved server or sign-in asks first, naming it; Cancel is the default button
 		ViewModel.Confirm = prompt => ConfirmDialog.AskAsync(XamlRoot, prompt);

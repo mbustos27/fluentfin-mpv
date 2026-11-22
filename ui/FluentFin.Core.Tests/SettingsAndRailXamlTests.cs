@@ -74,7 +74,8 @@ public sealed class SettingsAndRailXamlTests
 
 		// Seaglass 1.1.4: Other devices (Quick Connect, SyncPlay, from the old profile flyout)
 		// 1.6 collections: Collections (tidy names, Home's Made by Nixie rows, each kind) after Appearance
-		Assert.Equal(["Appearance", "Collections", "Playback", "Audio and subtitles", "Servers and accounts", "Other devices", "Integrations", "Advanced", "About"], titles);
+		// 1.7 keyless: Look up lists online (the outside sources the collections draw on) after Collections
+		Assert.Equal(["Appearance", "Collections", "Look up lists online", "Playback", "Audio and subtitles", "Servers and accounts", "Other devices", "Integrations", "Advanced", "About"], titles);
 
 		// nothing after About
 		var stack = groups[^1].Parent!;

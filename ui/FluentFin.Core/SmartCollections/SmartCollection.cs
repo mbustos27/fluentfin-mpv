@@ -19,6 +19,19 @@ public enum SmartCollectionKind
 	Country,
 	Seasonal,
 	Saved,
+
+	// 1.7 keyless
+	/// <summary>1.7: an award's winners or nominees, from Wikidata (Settings &gt; Look up lists online).</summary>
+	Award,
+	// end 1.7 keyless
+
+	// 1.7 trending: the public lists' kinds (Core\Outside\TrendingBuilder), numbered apart so that a Home page saved with one
+	// keeps its kind whatever other kinds join the list
+	Trending = 100,
+	Popular = 101,
+	Anticipated = 102,
+	BoxOffice = 103,
+	// end 1.7 trending
 }
 
 /// <summary>
@@ -44,6 +57,14 @@ public sealed record SmartCollection(string Id, SmartCollectionKind Kind, string
 	/// <summary>Films only, shows only, or null: both.</summary>
 	public IndexKind? Only { get; init; }
 
+	// 1.7 trending
+	/// <summary>
+	/// The page keeps <see cref="ItemIds"/>' order as the collection's own (a list's rank: trending, the box office), where
+	/// <see cref="HasOwnOrder"/> alone means release order (a franchise).
+	/// </summary>
+	public bool InListOrder { get; init; }
+	// end 1.7 trending
+
 	/// <summary>"12 films", "3 shows", "8 titles".</summary>
 	public string CountText => SmartCollectionKinds.CountText(ItemIds.Count, Only);
 
@@ -60,6 +81,7 @@ public static class SmartCollectionKinds
 		SmartCollectionKind.Franchise, SmartCollectionKind.Decade, SmartCollectionKind.Director, SmartCollectionKind.Actor,
 		SmartCollectionKind.Studio, SmartCollectionKind.Network, SmartCollectionKind.GenreMix, SmartCollectionKind.Keyword,
 		SmartCollectionKind.Country,
+		SmartCollectionKind.Award, // 1.7 keyless: after Countries, as the plan's 4.1 orders them
 	];
 
 	/// <summary>The kinds that make one collection each, together in the page's "Picks" row.</summary>
@@ -85,6 +107,13 @@ public static class SmartCollectionKinds
 		SmartCollectionKind.Country => "Country",
 		SmartCollectionKind.Seasonal => "In season",
 		SmartCollectionKind.Saved => "Saved filter",
+		SmartCollectionKind.Award => "Award", // 1.7 keyless
+		// 1.7 trending
+		SmartCollectionKind.Trending => "Trending",
+		SmartCollectionKind.Popular => "Popular",
+		SmartCollectionKind.Anticipated => "Anticipated",
+		SmartCollectionKind.BoxOffice => "Box office",
+		// end 1.7 trending
 		_ => "Collection",
 	};
 
@@ -105,6 +134,13 @@ public static class SmartCollectionKinds
 		SmartCollectionKind.Country => "Countries",
 		SmartCollectionKind.Seasonal => "In season",
 		SmartCollectionKind.Saved => "Saved",
+		SmartCollectionKind.Award => "Awards", // 1.7 keyless
+		// 1.7 trending
+		SmartCollectionKind.Trending => "Trending", // not "this week": Trakt's is right now, TMDb's the week (TrendingBuilder.Windows)
+		SmartCollectionKind.Popular => "Popular",
+		SmartCollectionKind.Anticipated => "Most anticipated",
+		SmartCollectionKind.BoxOffice => "Box office this week",
+		// end 1.7 trending
 		_ => "Collections",
 	};
 

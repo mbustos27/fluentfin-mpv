@@ -59,6 +59,26 @@ public static class FranchiseNames
 		return run.Count == 0 || run.All(w => Articles.Contains(w) || Joining.Contains(w)) || name.Length < 2 ? $"{oldest} films" : name;
 	}
 
+	// 1.7 keyless
+	/// <summary>
+	/// 1.7: a franchise's name from TMDb's collection export ("The Mummy Collection"): without its closing "Collection" word,
+	/// as the eyebrow already says "Franchise" ("The Mummy"); TMDb's name as it is when that leaves nothing.
+	/// </summary>
+	public static string FromTmdb(string? tmdbName)
+	{
+		var name = (tmdbName ?? "").Trim();
+		foreach (var suffix in new[] { " - Collection", " Collection", " collection" })
+		{
+			if (name.Length > suffix.Length && name.EndsWith(suffix, StringComparison.Ordinal))
+			{
+				return name[..^suffix.Length].TrimEnd(' ', '-', '–', ':');
+			}
+		}
+
+		return name;
+	}
+	// end 1.7 keyless
+
 	private static List<string> Words(string name) => [.. name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
 
 	private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);

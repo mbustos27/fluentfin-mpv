@@ -21,7 +21,7 @@ public sealed class LibraryIndex : IDisposable
 {
 	public static readonly TimeSpan FreshFor = TimeSpan.FromDays(1);
 
-	private const int FormatVersion = 1;
+	private const int FormatVersion = 2; // 1.7 keyless: 2 adds the Tmdb, Imdb and Tvdb ids (an older saved index is read again)
 
 	private readonly IJellyfinClient _client;
 	private readonly HomeCache _homeCache;

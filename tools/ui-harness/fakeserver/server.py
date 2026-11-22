@@ -76,6 +76,7 @@ import library  # noqa: E402
 import media as media_mod  # noqa: E402
 import admin  # noqa: E402  (Nixie 1.2.0: the administration endpoints)
 import release as release_mod  # noqa: E402  # 1.5 updater: the fake GitHub release (release.py)
+import outside as outside_mod  # noqa: E402  # 1.7 keyless: the outside sources' fakes (outside.py)
 from release import release_answer  # noqa: E402,F401  # 1.5 updater: kept importable from here
 
 # Nixie 1.3.1: the trailer embed's stand-in (GET /__harness/trailer/<id>): a still frame of a "film" with a play bar, made of
@@ -266,6 +267,8 @@ class Server:
         # Nixie 1.3.1: the version GET /__harness/release/latest answers (the app's update check in a harness run)
         # 1.5 updater: the whole fake release (release.py): the installer, a rename, rate limits, failures
         self.release = release_mod.FakeRelease(os.environ.get("FAKESERVER_RELEASE") or "0.0.1")
+        # 1.7 keyless: the outside sources (TMDb export files, Wikidata; stream T adds its own), as strict as the real ones
+        self.outside = outside_mod.FakeOutside(self.lib)
         # Nixie 1.4.0: how the trailer stand-in answers (POST /__harness/trailer {"mode"}: TRAILER_MODES)
         self.trailer_mode = "play"
         self.trailer_slow = 0
@@ -1137,6 +1140,10 @@ class Server:
                     if "outro_seconds" in body:
                         outer.lib.outro_seconds = float(body["outro_seconds"])
                     return self._json(200, {"outro_seconds": outer.lib.outro_seconds})
+                # 1.7 keyless: the outside sources a harness run's app asks (NIXIE_OUTSIDE_BASE): /__harness/outside/<host>/... (outside.py)
+                if low.startswith(outside_mod.PREFIX) and outer.outside.handle(
+                        self, method, urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)):
+                    return
                 # 1.5 updater: GitHub's latest-release API, the installer and its .sha256, and their settings (release.py)
                 if low.startswith("/__harness/release") and outer.release.handle(
                         self, method, urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)):

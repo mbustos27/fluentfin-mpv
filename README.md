@@ -6,7 +6,7 @@ A Windows Jellyfin client with a glassy, Apple TV-inspired look. It combines [Fl
 
 This is a personal project. It is not affiliated with FluentFin, Jellyfin or mpv. It is tested by automated suites against a fake server and in daily use against a real Jellyfin server; [docs/KNOWN-ISSUES.md](docs/KNOWN-ISSUES.md) says what is still unverified.
 
-Nixie uses Trakt but is not endorsed or certified by Trakt. What Nixie sends to Trakt and the other outside sources, each off until you turn it on, is in [PRIVACY.md](PRIVACY.md).
+Nixie uses Trakt but is not endorsed or certified by Trakt. Nixie uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB. What Nixie sends to Trakt, TMDB and the other outside sources, each off until you turn it on, is in [PRIVACY.md](PRIVACY.md).
 
 ## Download
 

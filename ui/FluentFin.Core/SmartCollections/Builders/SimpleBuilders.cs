@@ -125,14 +125,47 @@ public sealed class KeywordBuilder : ISmartCollectionBuilder
 
 	public SmartCollectionKind Kind => SmartCollectionKind.Keyword;
 
-	public IEnumerable<SmartCollection> Build(BuildContext context) =>
-		context.Index.Entries
-			.SelectMany(x => x.Tags.Where(t => Keywords.NameOf(t) is not null).Select(t => (Tag: t, Entry: x)))
+	public IEnumerable<SmartCollection> Build(BuildContext context)
+	{
+		var tmdb = context.Outside.KeywordNames;
+		var groups = context.Index.Entries
+			.SelectMany(x => x.Tags.Where(t => Keywords.NameOf(t, tmdb) is not null).Select(t => (Tag: t, Entry: x)))
 			.GroupBy(x => x.Tag, StringComparer.OrdinalIgnoreCase)
 			.Select(g => (Tag: g.Key, Titles: g.Select(x => x.Entry).DistinctBy(x => x.Id).ToList()))
-			.Where(g => g.Titles.Count >= Least)
+			.ToList();
+		// 1.7 keyless: Wikidata's finer genres join the keyword of the same name ("heist"): its titles the library has, matched
+		// on this PC, added to the tagged ones (or alone, when nothing carries the tag)
+		var genres = new Dictionary<string, List<IndexEntry>>(StringComparer.OrdinalIgnoreCase);
+		var genreWhy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		var lists = context.Outside.Lists.Where(x => x.Kind == Outside.OutsideListKind.Genre && x.KeywordTag is not null).ToList();
+		if (lists.Count > 0)
+		{
+			var matcher = new Outside.OutsideMatcher(context.Index);
+			foreach (var list in lists)
+			{
+				genres[list.KeywordTag!] = [.. matcher.MatchAll(list.Items.Select(x => x.Ref))];
+				genreWhy[list.KeywordTag!] = list.Why;
+			}
+		}
+
+		var merged = groups.Select(g => genres.TryGetValue(g.Tag, out var more) ? (g.Tag, Titles: g.Titles.Concat(more).DistinctBy(x => x.Id).ToList(), FromWikidata: more.Count > 0, Tagged: true) : (g.Tag, g.Titles, FromWikidata: false, Tagged: true))
+			.Concat(genres.Where(x => !groups.Any(g => string.Equals(g.Tag, x.Key, StringComparison.OrdinalIgnoreCase))).Select(x => (Tag: x.Key, Titles: x.Value, FromWikidata: x.Value.Count > 0, Tagged: false)))
+			.ToList();
+		// end 1.7 keyless
+		// only the allowlist's keywords, each confirmed by TMDb's names when its export is on (Keywords.NameOf)
+		return merged.Where(g => Keywords.NameOf(g.Tag, tmdb) is not null && g.Titles.Count >= Least)
 			.OrderByDescending(g => g.Titles.Count).ThenBy(g => g.Tag)
-			.Select(g => Make.Of($"keyword:{Make.Key(g.Tag)}", Kind, Keywords.NameOf(g.Tag)!, $"Your titles with TMDb's keyword “{g.Tag}”", hasOwnOrder: false, Make.ByName(g.Titles)));
+			.Select(g => Make.Of($"keyword:{Make.Key(g.Tag)}", Kind, Keywords.NameOf(g.Tag, tmdb)!, Why(g.Tag, g.Tagged, g.FromWikidata ? genreWhy[g.Tag] : null), hasOwnOrder: false, Make.ByName(g.Titles)));
+	}
+
+	// 1.7 keyless: the why line names where the titles came from: TMDb's keyword, Wikidata's genre, or both
+	private static string Why(string tag, bool tagged, string? wikidata) => (tagged, wikidata) switch
+	{
+		(true, null) => $"Your titles with TMDb's keyword “{tag}”",
+		(true, { } w) => $"Your titles with TMDb's keyword “{tag}”, and {w}",
+		(false, { } w) => $"Your {w}",
+		_ => $"Your titles with TMDb's keyword “{tag}”",
+	};
 }
 
 /// <summary>Highly rated, not watched: community rating 7.5 or more, not played; best first.</summary>

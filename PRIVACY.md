@@ -40,25 +40,26 @@ its GitHub page, the key the source needs (below), and your IP address.
 server's address, or your account. Which lists Nixie asks for, and when, depends only on the switches you turned on,
 never on what is in your library.
 
-| Source | What Nixie reads | Key sent | Kept on your PC |
+| Source | What Nixie reads | Key sent | Nixie's own copy (public lists, not your data) |
 |---|---|---|---|
-| **Trakt** (`api.trakt.tv`) | Trending, popular and most anticipated films and shows, and the US box office | Nixie's own Trakt Client ID, which identifies the app, not you | Asked again every 6 hours (the box office at its Monday update, or after a day); kept at most 24 hours |
-| **TMDb trending** (`api.themoviedb.org`) | Trending films and shows this week | **Your own** TMDb API Read Access Token, if you enter one | Asked again daily; kept at most 7 days |
-| **TMDb export files** (`files.tmdb.org`) | Franchise (collection) names and keyword names | None | Asked again daily; kept at most 182 days (about 6 months) |
-| **Wikidata** (`query.wikidata.org`, or the endpoint you choose) | Award winners and nominees, and finer genres | None | Asked again weekly; kept at most 60 days |
+| **Trakt** (`api.trakt.tv`) | Trending, popular and most anticipated films and shows, and the US box office | Nixie's own Trakt Client ID, which identifies the app, not you | Nixie keeps its own copy of these public lists. Refreshed every 6 hours (the box office daily, and after its Monday update); the last copy is used for up to 24 hours if Trakt can't be reached. |
+| **TMDb trending** (`api.themoviedb.org`) | Trending films and shows this week | Nixie's own TMDb key (or yours, if you enter one) | Nixie keeps its own copy of these public lists. Refreshed daily; the last copy is used for up to 7 days if TMDb can't be reached. |
+| **TMDb export files** (`files.tmdb.org`) | Franchise (collection) names and keyword names | None | Nixie keeps its own copy of these public lists. Refreshed weekly; the last copy is used for up to 6 months if TMDb can't be reached. |
+| **Wikidata** (`query.wikidata.org`, or the endpoint you choose) | Award winners and nominees, and finer genres | None | Nixie keeps its own copy of these public lists. Refreshed weekly; the last copy is used for up to 60 days if Wikidata can't be reached. |
 
-A list kept past its maximum age is never shown, and Nixie deletes it (when it next reads it, and at every start). When a
-source refuses or can't be reached, Nixie keeps showing the list it has until that maximum age, then stops.
+Settings' "What is sent" card for each source says the same. Nixie never shows a copy past its limit, and deletes it then
+(when it next reads it, and at every start).
 
 - **No sign-in, ever.** Nixie never signs you in to Trakt, never asks for a Trakt account, and never sends Trakt what you
   watch. Nixie uses Trakt but is not endorsed or certified by Trakt.
 - **No pictures from TMDb or Trakt.** Nixie matches the lists only; every poster you see comes from your own server.
-- **Your TMDb token** is stored encrypted with Windows (DPAPI), so only your Windows account on this PC can read it. It is
-  sent only to `api.themoviedb.org`, in the request's `Authorization` header: never in an address, and never written to
-  a log.
+- **TMDb's key.** Nixie's own TMDb key is built into the release, so TMDb trending works without one of yours. If you
+  enter your own token in Settings, Nixie uses it instead; it is stored encrypted with Windows (DPAPI), so only your
+  Windows account on this PC can read it. Either is sent only to `api.themoviedb.org`, in the request's `Authorization`
+  header: never in an address, and never written to a log.
 - **What matched** (which of your titles are on a list) is worked out on your PC, kept for that server and user only, and
   forgotten when you sign out.
-- Nixie's logs stay on your PC. They never contain your TMDb token or Nixie's Trakt Client ID.
+- Nixie's logs stay on your PC. They never contain a TMDb key or token, or Nixie's Trakt Client ID.
 
 ## How to stop
 
@@ -69,8 +70,8 @@ use its page.
 
 ## How to delete what is kept
 
-- The saved public lists hold nothing about you, and they age out on their own: at most 24 hours for Trakt, 7 days for
-  TMDb trending, 60 days for Wikidata and 182 days for TMDb's export files.
+- Nixie's copies of the public lists hold nothing about you, and they age out on their own: at most 24 hours for Trakt,
+  7 days for TMDb trending, 60 days for Wikidata and 6 months for TMDb's export files.
 - To remove everything Nixie keeps on your PC at once (saved lists, settings, saved sign-ins, the TV journal), close
   Nixie and delete the folder `%LOCALAPPDATA%\Nixie`. Uninstalling Nixie (Settings → Apps in Windows) removes the
   program but leaves that folder, so delete it as well.

@@ -41,14 +41,16 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = '1.6.1',
+    [string]$Version = '1.7.0',
     [string]$SourceUrl,
     [switch]$Reuse,
     [switch]$SkipTests,  # only to try the packaging itself; a release runs them
     [string]$LibmpvDir,  # the libmpv folder (libmpv-2.dll, its DLLs, BUILD-MANIFEST.txt); default: FluentFin.csproj's
     [string]$LibmpvSources,  # its sources (msys2\*.src.tar.zst, mpv\mpv-<commit>.tar.gz); default: 'sources' beside it
     [int]$MaxZipMB = 300,  # the zip may not be bigger
-    [string[]]$LibmpvExclude = @('libdvdcss-2.dll')  # left out of libmpv\ and of the sources; only a stub of one may ship
+    [string[]]$LibmpvExclude = @('libdvdcss-2.dll'),  # left out of libmpv\ and of the sources; only a stub of one may ship
+    [switch]$RequireProductionTraktId,  # 1.7 trending: stop unless NIXIE_TRAKT_CLIENT_ID (the Production app's ID) is set
+    [switch]$RequireAppTmdbToken  # 1.7 trending: stop unless NIXIE_TMDB_TOKEN (Nixie's own TMDb token) is set
 )
 
 $ErrorActionPreference = 'Stop'
@@ -128,6 +130,18 @@ $dirty = @(& git -C $repo status --porcelain)
 if ($LASTEXITCODE -ne 0) { throw "git status failed in $repo" }
 if ($dirty) { throw "the working tree is not clean; commit or remove these first:`n$($dirty -join "`n")" }
 New-Item -ItemType Directory -Force $work | Out-Null
+# 1.7 trending: the Trakt Client ID (NIXIE_TRAKT_CLIENT_ID, else NIXIE_LIVE_TRAKT_CLIENT_ID), for Nixie.dll only; only whether
+# it was found is printed, never the value (tools\release\trakt-client-id.ps1)
+. (Join-Path $PSScriptRoot 'trakt-client-id.ps1')
+$trakt = Get-NixieTraktClientId
+if ($trakt.Value -and -not $trakt.Production) { Write-Warning (Format-NixieTraktClientIdNote $trakt) } else { Write-Host (Format-NixieTraktClientIdNote $trakt) }
+Assert-NixieTraktClientId $trakt $RequireProductionTraktId
+# 1.7 trending: Nixie's own TMDb token (NIXIE_TMDB_TOKEN), for Nixie.dll only; "TMDb: app token" or "TMDb: no app token" is
+# all that is printed (tools\release\tmdb-token.ps1)
+. (Join-Path $PSScriptRoot 'tmdb-token.ps1')
+$tmdb = Get-NixieTmdbToken
+if ($tmdb.Value) { Write-Host (Format-NixieTmdbTokenNote $tmdb) } else { Write-Warning (Format-NixieTmdbTokenNote $tmdb) }
+Assert-NixieTmdbToken $tmdb $RequireAppTmdbToken
 
 # --- 1. Python runtime ----------------------------------------------------------------------------------------------
 Step "Python $PythonVersion (python.org)"
@@ -239,14 +253,18 @@ function Get-NotExecuted([string]$trx) {
     if ($names.Count -eq 0 -and $counted -gt 0) { $names = @("$counted test(s) the counters name NotExecuted") }
     $names
 }
-function Invoke-UiTests([string]$project, [string[]]$extra) {
+# Nixie 1.7.0: -Exclude, a test filter of what a release leaves out by design (Core's opt-in live check, which asks the
+# real TMDb and Wikidata and is skipped unless tools\live asks for it): left out it is not "not run", and every other test
+# still has to run; a failed test's rerun keeps the same filter.
+function Invoke-UiTests([string]$project, [string[]]$extra, [string]$Exclude) {
     # dotnet test writes failures to stderr; under 'Stop', PowerShell 5.1 would end the script at the first one
     $ErrorActionPreference = 'Continue'
+    $excludeArgs = if ($Exclude) { @('--filter', $Exclude) } else { @() }
     # the failed tests' names come from the TRX results file: the console's lines can arrive split in two (stderr records)
     $results = Join-Path $work 'test-results'
     $trx = Join-Path $results "$(Split-Path $project -Leaf).trx"
     if (Test-Path $trx) { Remove-Item $trx }
-    $out = @(& $dotnet test $project @extra -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers -v:q -nologo `
+    $out = @(& $dotnet test $project @extra @excludeArgs -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers -v:q -nologo `
             --results-directory $results --logger "trx;LogFileName=$(Split-Path $trx -Leaf)" 2>&1 | ForEach-Object { "$_" })
     $code = $LASTEXITCODE
     $summary = $out | Where-Object { $_ -match '^(Passed|Failed)!' }
@@ -266,6 +284,7 @@ function Invoke-UiTests([string]$project, [string[]]$extra) {
     }
     if (-not $failed) { throw "$project failed, and no failed test was named:`n$(($out | Select-Object -Last 30) -join "`n")" }
     $filter = ($failed | ForEach-Object { "FullyQualifiedName~$_" }) -join '|'
+    if ($Exclude) { $filter = "($filter)&($Exclude)" }
     $again = @(& $dotnet test $project @extra -p:UseSharedCompilation=false -nodeReuse:false --disable-build-servers -v:q -nologo --filter $filter 2>&1 | ForEach-Object { "$_" })
     if ($LASTEXITCODE -ne 0) { throw "$project : these tests fail again on their own: $($failed -join ', ')`n$(($again | Select-Object -Last 30) -join "`n")" }
     Write-Warning "$(Split-Path $project -Leaf): failed in the full run and passed on their own (timing): $($failed -join ', ')"
@@ -275,7 +294,8 @@ if ($SkipTests) {
 }
 else {
     Step 'tests (UI suites, backend bridge tests)'
-    Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Core.Tests') @()
+    # 1.7.0: the opt-in live check of TMDb's export files and Wikidata stays out of a release's run (it asks the real hosts)
+    Invoke-UiTests (Join-Path $repo 'ui\FluentFin.Core.Tests') @() -Exclude 'Category!=LiveOutside'
     # the libmpv probe tests run against the release's libmpv folder (bug hunt m2: without it they were skipped)
     $savedRequire = $env:FLUENTFIN_MPV_REQUIRE_LIBMPV
     $env:FLUENTFIN_MPV_REQUIRE_LIBMPV = '1'
@@ -361,13 +381,15 @@ Step 'FluentFin (dotnet publish, self-contained, unpackaged)'
 $publish = Join-Path $work 'publish'
 if (Test-Path $publish) { Remove-Item -Recurse -Force $publish }
 $artifacts = Join-Path $work 'dotnet'
-Invoke-Checked 'dotnet publish' {
+# 1.7 trending: the Trakt Client ID and Nixie's TMDb token reach MSBuild in the environment (FluentFinTraktClientId,
+# FluentFinTmdbToken), for this publish alone
+Invoke-WithNixieTraktClientId $trakt { Invoke-WithNixieTmdbToken $tmdb { Invoke-Checked 'dotnet publish' {
     & $dotnet publish (Join-Path $repo 'ui\FluentFin\FluentFin.csproj') -c Release -r win-x64 -p:Platform=x64 `
         --self-contained true -p:WindowsPackageType=None -p:VlcWindowsX64Enabled=false -p:FluentFinMpvRelease=true `
         -p:DebugType=none -p:DebugSymbols=false -p:SatelliteResourceLanguages=en `
         "-p:LibmpvDir=$LibmpvDir" --artifacts-path $artifacts -o $publish `
         -nodeReuse:false -p:UseSharedCompilation=false --disable-build-servers -nologo -v:minimal
-}
+} } }
 $exe = Join-Path $publish 'Nixie.exe'
 if (-not (Test-Path $exe)) { throw "dotnet publish made no Nixie.exe in $publish" }
 # the Windows App SDK self-contained (FluentFin.csproj sets WindowsAppSDKSelfContained; as a global property it would reach
@@ -388,6 +410,17 @@ if (Test-Path (Join-Path $publish 'libmpv-2.dll')) { throw 'a libmpv-2.dll besid
 $pdbs = @(Get-ChildItem $publish -Recurse -Filter '*.pdb')
 if ($pdbs) { throw "the publish has debug symbols: $($pdbs.Name -join ', ')" }
 if (-not (Select-String -Path (Join-Path $publish 'Nixie.dll') -SimpleMatch -Pattern 'FluentFinMpvRelease' -Quiet)) { throw 'Nixie.dll has no FluentFinMpvRelease marker' }
+# 1.7 trending: Nixie.dll names the Trakt Client ID's metadata when one was found, and not otherwise (the value is checked
+# by the Trakt gate below); the publish's generated sources that held it are deleted
+$hasTraktKey = Select-String -Path (Join-Path $publish 'Nixie.dll') -SimpleMatch -Pattern 'NixieTraktClientId' -Quiet
+if ($trakt.Value -and -not $hasTraktKey) { throw 'a Trakt Client ID was found but Nixie.dll does not carry it' }
+if (-not $trakt.Value -and $hasTraktKey) { throw 'Nixie.dll carries a Trakt Client ID although none was found' }
+Write-Host "Trakt Client ID: $(if ($trakt.Value) { 'in Nixie.dll' } else { 'none in this build' }); generated copies removed: $(Remove-NixieTraktClientIdCopies $artifacts $trakt)"
+# 1.7 trending: the same for Nixie's TMDb token
+$hasTmdbKey = Select-String -Path (Join-Path $publish 'Nixie.dll') -SimpleMatch -Pattern 'NixieTmdbToken' -Quiet
+if ($tmdb.Value -and -not $hasTmdbKey) { throw "Nixie's TMDb token was found but Nixie.dll does not carry it" }
+if (-not $tmdb.Value -and $hasTmdbKey) { throw "Nixie.dll carries a TMDb token although none was found" }
+Write-Host "TMDb: $(if ($tmdb.Value) { 'app token in Nixie.dll' } else { 'no app token in this build' }); generated copies removed: $(Remove-NixieTmdbTokenCopies $artifacts $tmdb)"
 # upstream's VLC and Flyleaf players are not in the release: no libvlc (VlcWindowsX64Enabled=false above) and no FFMpeg
 # folder (FluentFin.csproj copies it for the dev build). FluentFin offers only the players whose libraries are there
 # (Core\Settings\MediaPlayerAvailability), so the release offers MPV and Windows Media Player.
@@ -458,7 +491,9 @@ $assets = Join-Path $artifacts 'obj\FluentFin\project.assets.json'
 if (-not (Test-Path $assets)) { throw "no $assets (the restore of FluentFin)" }
 $components = @(
     "Microsoft Visual C++ runtime (app\backend\_internal\VCRUNTIME140.dll, VCRUNTIME140_1.dll)|as shipped with python.org's CPython $PythonVersion|Microsoft Distributable Code, under the conditions in Python's LICENSE.txt (in the licence texts: 'Additional Conditions for this Windows binary build')|https://www.python.org/downloads/release/python-$($PythonVersion.Replace('.', ''))/",
-    "Microsoft Visual C++ runtime for .NET (vcruntime140_cor3.dll)|as shipped in the .NET runtime pack Microsoft.NETCore.App.Runtime.win-x64|the .NET runtime pack's licence (section 4; its LICENSE.TXT in the licence texts)|https://github.com/dotnet/runtime"
+    "Microsoft Visual C++ runtime for .NET (vcruntime140_cor3.dll)|as shipped in the .NET runtime pack Microsoft.NETCore.App.Runtime.win-x64|the .NET runtime pack's licence (section 4; its LICENSE.TXT in the licence texts)|https://github.com/dotnet/runtime",
+    # 1.7 trending: TMDb's logo beside its notice in Settings > About
+    "TMDB logo (app\Assets\Credits\tmdb-logo.svg)|TMDB's 'Alt short (blue)' logo, as drawn by TMDB|used under TMDB's API terms of use and its logo and attribution guidelines. Nixie uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.|https://www.themoviedb.org/about/logos-attribution"
 )
 # libmpv: its own section, each DLL with its package, licence and source (notices.py --libmpv-status)
 $fluentfinAssets = Join-Path $repo 'backend\fluentfin'
@@ -506,6 +541,31 @@ $gateArgs = @('-I', (Join-Path $PSScriptRoot 'path_gate.py'), '--dir', $package,
 foreach ($t in Get-ChildItem $sources -Recurse -File -Include '*.txt', '*.md') { $gateArgs += @('--file', $t.FullName) }
 foreach ($n in $needles) { $gateArgs += @('--needle', $n) }
 Invoke-Checked 'path gate' { & $venvPython @gateArgs }
+# 1.7 trending: the Trakt Client ID is in app\Nixie.dll and nowhere else: not in another file of the package, the source
+# archive or the sources' texts. path_gate.py reads it from the environment and never prints it.
+if ($trakt.Value) {
+    Step 'Trakt Client ID gate'
+    $traktGate = @('-I', (Join-Path $PSScriptRoot 'path_gate.py'), '--secret-env', $NixieTraktGateVariable, '--dir', $package,
+        '--allow-secret-in', 'app\Nixie.dll', '--expect-secret-in', 'app\Nixie.dll', '--archive', (Join-Path $sources "fluentfin-mpv-$Version-source.zip"))
+    foreach ($t in Get-ChildItem $sources -Recurse -File -Include '*.txt', '*.md') { $traktGate += @('--file', $t.FullName) }
+    try {
+        [Environment]::SetEnvironmentVariable($NixieTraktGateVariable, $trakt.Value, 'Process')
+        Invoke-Checked 'Trakt Client ID gate' { & $venvPython @traktGate }
+    }
+    finally { [Environment]::SetEnvironmentVariable($NixieTraktGateVariable, $null, 'Process') }
+}
+# 1.7 trending: Nixie's TMDb token likewise: in app\Nixie.dll and nowhere else, never printed
+if ($tmdb.Value) {
+    Step 'TMDb token gate'
+    $tmdbGate = @('-I', (Join-Path $PSScriptRoot 'path_gate.py'), '--secret-env', $NixieTmdbGateVariable, '--dir', $package,
+        '--allow-secret-in', 'app\Nixie.dll', '--expect-secret-in', 'app\Nixie.dll', '--archive', (Join-Path $sources "fluentfin-mpv-$Version-source.zip"))
+    foreach ($t in Get-ChildItem $sources -Recurse -File -Include '*.txt', '*.md') { $tmdbGate += @('--file', $t.FullName) }
+    try {
+        [Environment]::SetEnvironmentVariable($NixieTmdbGateVariable, $tmdb.Value, 'Process')
+        Invoke-Checked 'TMDb token gate' { & $venvPython @tmdbGate }
+    }
+    finally { [Environment]::SetEnvironmentVariable($NixieTmdbGateVariable, $null, 'Process') }
+}
 
 Step "zip $zip"
 foreach ($f in $zip, "$zip.sha256") { if (Test-Path $f) { Remove-Item -Force $f } }

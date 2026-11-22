@@ -92,6 +92,18 @@ public static class Keywords
 	public static string[] Kept(IEnumerable<string?>? tags) =>
 		tags is null ? [] : [.. tags.Select(t => t?.Trim().ToLowerInvariant()).Where(t => !string.IsNullOrEmpty(t) && (Allowed.ContainsKey(t) || Seasonal.Contains(t))).Distinct()!];
 
+	// 1.7 keyless (review #1): TMDb's keyword names only confirm the allowlist, never add to it: a server's tags can be any of
+	// TMDb's ~100,000 keywords, junk and harmful ones too ("duringcreditsstinger", "suicide"), and only hand-picked keywords
+	// may name a collection (the plan's 1.3).
+	/// <summary>
+	/// 1.7: a keyword's collection name ("Heists"), when it is on the allowlist and, with TMDb's keyword export on
+	/// (<paramref name="tmdbKeywords"/>, lower case), TMDb lists it too; null for anything else. With the export off (empty),
+	/// the allowlist alone, as before.
+	/// </summary>
+	public static string? NameOf(string tag, IReadOnlyDictionary<string, string> tmdbKeywords) =>
+		NameOf(tag) is { } name && (tmdbKeywords.Count == 0 || tmdbKeywords.ContainsKey(tag.Trim().ToLowerInvariant())) ? name : null;
+	// end 1.7 keyless
+
 	/// <summary>A keyword's collection name ("Heists"), or null when it is not on the list.</summary>
 	public static string? NameOf(string tag) => Allowed.TryGetValue(tag.Trim(), out var name) ? name : null;
 }

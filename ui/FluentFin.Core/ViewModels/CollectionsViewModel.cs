@@ -161,6 +161,8 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	public Task OnNavigatedFrom()
 	{
 		index.Changed -= OnIndexChanged;
+		Outside.OutsideListsSnapshot.SharedChanged -= OnOutsideChanged; // 1.7 keyless
+		UnwatchTrending(); // 1.7 trending
 		return Task.CompletedTask;
 	}
 
@@ -172,7 +174,22 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		Title = Place.SeeAll ? Place.Kind is { } kind ? SmartCollectionKinds.Plural(kind) : SectionTitle(Place.Section) : "Collections";
 		index.Changed -= OnIndexChanged;
 		index.Changed += OnIndexChanged;
+		// 1.7 keyless: the outside lists (awards, TMDb's names) as they arrive, and a refresh of the stale ones
+		Outside.OutsideListsSnapshot.SharedChanged -= OnOutsideChanged;
+		Outside.OutsideListsSnapshot.SharedChanged += OnOutsideChanged;
+		_ = Outside.OutsideLists.App?.RefreshInBackground();
+		// end 1.7 keyless
+		WatchTrending(); // 1.7 trending
 		return State.RunAsync(Load);
+	}
+
+	// 1.7 keyless: new outside lists: the collections are made again from the index the page has
+	private void OnOutsideChanged(Outside.OutsideListsSnapshot lists)
+	{
+		if (index.Current is { } current)
+		{
+			OnIndexChanged(this, current);
+		}
 	}
 
 	public static string SectionTitle(CollectionsSection section) => section switch
@@ -273,11 +290,51 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 	}
 
 	/// <summary>Every collection Nixie makes of this index, less the franchises the admin boxed and the kinds turned off.</summary>
-	public Task<IReadOnlyList<SmartCollection>> MadeByNixie(IndexSnapshot snapshot)
+	public async Task<IReadOnlyList<SmartCollection>> MadeByNixie(IndexSnapshot snapshot)
 	{
 		var boxed = _boxSets.Select(x => IndexEntry.ProviderId(x, "Tmdb")).OfType<string>().ToHashSet();
-		return SmartCollectionCatalog.BuildAllAsync(snapshot, SmartCollectionCatalog.Now(_time), boxed, CollectionSettings.KindsOff(settings)); // 1.6.1 (BH-160-m1): the local date
+		var made = await SmartCollectionCatalog.BuildAllAsync(snapshot, SmartCollectionCatalog.Now(_time), boxed, CollectionSettings.KindsOff(settings)); // 1.6.1 (BH-160-m1): the local date
+		// 1.7 trending: the public lists' collections (Trending, Popular, Most anticipated, Box office), matched on this PC
+		if (Outside.TrendingServices.Collections is { } trending)
+		{
+			var lists = await Task.Run(() => trending.For(snapshot));
+			made = [.. made, .. lists];
+		}
+		// end 1.7 trending
+		return made;
 	}
+
+	// 1.7 trending: the lists change (a refresh came in, a source was turned on or off): the page shows its rows again
+	private Outside.TrendingCollections? _trending;
+
+	private void WatchTrending()
+	{
+		UnwatchTrending();
+		if (Outside.TrendingServices.Collections is { } trending)
+		{
+			_trending = trending;
+			trending.Changed += OnTrendingChanged;
+			_ = trending.RefreshAsync(); // the lists that aren't fresh, in the background
+		}
+	}
+
+	private void UnwatchTrending()
+	{
+		if (_trending is { } trending)
+		{
+			trending.Changed -= OnTrendingChanged;
+			_trending = null;
+		}
+	}
+
+	private void OnTrendingChanged()
+	{
+		if (index.Current is { } snapshot)
+		{
+			OnIndexChanged(this, snapshot);
+		}
+	}
+	// end 1.7 trending
 
 	// a new index can come in on another thread while a load shows the first one (the app posts it to the UI thread; a test
 	// has no UI thread): one Show at a time
@@ -322,7 +379,8 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 		{
 			if (tiles.Count > 0)
 			{
-				rows.Add(new CollectionsRow(title, section, kind, [.. tiles.Take(RowLength)], tiles.Count > RowLength) { Heading = heading });
+				// 1.7 keyless: the Awards row always ends in See all (at most nine awards, so never "more", but its grid shows them together)
+				rows.Add(new CollectionsRow(title, section, kind, [.. tiles.Take(RowLength)], tiles.Count > RowLength || kind == SmartCollectionKind.Award) { Heading = heading });
 			}
 		}
 
@@ -345,6 +403,18 @@ public partial class CollectionsViewModel(IJellyfinClient jellyfinClient, Global
 				heading = "";
 			}
 		}
+
+		// 1.7 trending: Trending, Popular, Most anticipated and Box office this week (a row only when it has a collection)
+		foreach (var kind in Outside.TrendingBuilder.PageOrder)
+		{
+			var ofKind = nixie.Where(x => x.Nixie!.Kind == kind).ToList();
+			if (ofKind.Count > 0)
+			{
+				Add(SmartCollectionKinds.Plural(kind), CollectionsSection.MadeByNixie, kind, ofKind, heading);
+				heading = "";
+			}
+		}
+		// end 1.7 trending
 
 		Add(SectionTitle(CollectionsSection.Saved), CollectionsSection.Saved, null, saved);
 

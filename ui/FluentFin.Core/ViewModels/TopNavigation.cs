@@ -548,6 +548,7 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 		_searchChosenAt = null;
 		_shownDepth = -1;
 		Lit = new TopMark(TopTabs.HomeKey);
+		ForgetTrails(); // 1.7 upnav
 		ReadFavourites(); // 1.6 topbar: this user's favourites on this server
 		Rebuild();
 	}
@@ -608,6 +609,7 @@ public sealed partial class TopNavigation(INavigationServiceCore navigation, ILo
 			: TopTabs.MarkFor(AllTabs, pageKey, parameter, Lit, fromSearch, Sections);
 		ShowRow();
 		ShowEyebrow(pageKey, parameter);
+		ShowTrail(pageKey, parameter); // 1.7 upnav: the series and season crumbs (TopNavigation.Trail.cs)
 
 		if (depth < 0)
 		{

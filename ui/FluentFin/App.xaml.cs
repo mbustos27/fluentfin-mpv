@@ -224,6 +224,23 @@ public partial class App : Application
 			services.AddSingleton<ISavedFilters>(sp => sp.GetRequiredService<Core.SmartCollections.NixieLibraryPresetSource>());
 			services.AddTransient<CollectionsViewModel>();
 			// end 1.6 collections
+			// 1.7 keyless: the outside sources (Settings > Look up lists online), their cache, and the harness's fake in harness runs
+			services.AddSingleton(sp => OutsideHubFactory.Create(sp.GetRequiredService<KnownFolders>(), sp.GetRequiredService<ILocalSettingsService>(),
+				sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>().CreateLogger("Outside")));
+			services.AddSingleton(sp => new Core.Outside.OutsideLists(sp.GetRequiredService<Core.Outside.OutsideHub>(), sp.GetRequiredService<ILocalSettingsService>(), publish: true));
+			// end 1.7 keyless
+			// 1.7 trending: Trakt (the Client ID this build carries; the harness's own in a harness run) and TMDb trending (the
+			// user's token, DPAPI), and the collections matched from their lists
+			services.AddSingleton<Core.Outside.TmdbToken>();
+			services.AddSingleton(sp =>
+			{
+				var hub = sp.GetRequiredService<Core.Outside.OutsideHub>();
+				return new Core.Outside.TrendingSources(hub, sp.GetRequiredService<Core.Outside.TmdbToken>(), Core.Outside.TraktClientId.Current(harness: hub.Routing.IsHarness),
+					tmdbAppToken: Core.Outside.TmdbAppToken.Current(harness: hub.Routing.IsHarness));
+			});
+			services.AddSingleton(sp => new Core.Outside.TrendingCollections(sp.GetRequiredService<Core.Outside.TrendingSources>(), sp.GetRequiredService<Core.SmartCollections.LibraryIndex>(),
+				sp.GetRequiredService<HomeCache>()));
+			// end 1.7 trending
 
 			// Views and ViewModels
 			services.AddTransient<ShellViewModel>();
@@ -383,6 +400,25 @@ public partial class App : Application
 			Core.ViewModels.SmartCollectionServices.Store = GetService<Core.SmartCollections.SmartCollectionStore>();
 			Core.ViewModels.SmartCollectionServices.Settings = GetService<ILocalSettingsService>();
 			GetService<Core.SmartCollections.NixieLibraryPresets>(); // listening to the index from the start: the presets are ready when a library opens
+			// 1.7 keyless: the outside lists (each source's cache; what is stale is fetched, for the sources turned on). When they
+			// change, Home builds its Made by Nixie rows again
+			Core.Outside.OutsideLists.App = GetService<Core.Outside.OutsideLists>();
+			Core.Outside.OutsideLists.App.Failed += ex => GetService<ILogger<App>>().LogWarning(ex, "[outside] the lists could not be refreshed");
+			Core.Outside.OutsideListsSnapshot.SharedChanged += _ => GetService<HomeCache>().MarkStale();
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					await Task.Delay(TimeSpan.FromSeconds(10));
+					await Core.Outside.OutsideLists.App.RefreshAsync();
+				}
+				catch (Exception ex)
+				{
+					GetService<ILogger<App>>().LogWarning(ex, "[outside] the lists could not be refreshed");
+				}
+			});
+			// end 1.7 keyless
+			Core.Outside.TrendingServices.Collections = GetService<Core.Outside.TrendingCollections>(); // 1.7 trending: Home and Collections read it
 
 			// Nixie 1.4.0 (the bug hunt's m5): an item Nixie has no page for says so, instead of nothing happening
 			Commands.CannotOpen += (_, e) => _ = GetService<IContentDialogService>().ShowMessage(e.Title, e.Message);

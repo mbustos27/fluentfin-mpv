@@ -831,6 +831,8 @@ try {
     else { $env:NIXIE_TRAILER_EMBED_BASE = "$($script:serverUrl)/__harness/trailer/" }
     # Nixie 1.3.1: the update check (when a run turns it on) asks the fake server's release answer, never GitHub
     $env:NIXIE_UPDATE_API = "$($script:serverUrl)/__harness/release/latest"
+    # 1.7 keyless: every outside source (TMDb export files, Wikidata, Trakt, TMDb) asks the fake server, never the real host
+    $env:NIXIE_OUTSIDE_BASE = $script:serverUrl
 
     # 2. FluentFin with its own data folder
     Start-App 'window_ms'

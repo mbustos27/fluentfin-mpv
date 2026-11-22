@@ -36,6 +36,10 @@ public sealed partial class ShellPage : Page
 		// Nixie 1.4.0 (the trail rule): an item page reached from another section names its library (TrailEyebrow), from the
 		// item's folders on the server (asked once per item)
 		_top.LibraryOf = LibraryOfAsync;
+		// 1.7 upnav: an item page's series and season crumbs, from the item opened; one that does not carry its ids gets them from
+		// the item the page's view model fetches, not a second request (TopNavigation.Trail, TrailItems)
+		_top.ItemOf = FluentFin.Core.ViewModels.TrailItems.FromShownPage(() => FluentFin.Helpers.FrameExtensions.GetPageViewModel(NavigationFrame), _client.GetItem);
+		_top.SeasonsOf = async (series, cancel) => (await _client.GetItems(new Jellyfin.Sdk.Generated.Models.BaseItemDto { Id = series, Type = Jellyfin.Sdk.Generated.Models.BaseItemDto_Type.Series }).WaitAsync(cancel))?.Items;
 		// 1.6 topbar: the Collections destination opens through GlobalCommands.OpenCollections (1.6 integration: the Collections page)
 		_top.OpenCollections = App.Commands.OpenCollections;
 		// Nixie 1.4.0 (the trail rule): the lit destination chosen again on its own page goes back to its top

@@ -6,6 +6,11 @@ namespace FluentFin.Core.SmartCollections.Builders;
 /// <param name="BoxedFranchises">TMDb collection ids an admin's box set already has (the franchise shows once, as the box set).</param>
 public sealed record BuildContext(IndexSnapshot Index, DateTimeOffset Now, IReadOnlySet<string> BoxedFranchises)
 {
+	// 1.7 keyless
+	/// <summary>1.7: the outside lists the builders may use (TMDb's names, Wikidata's lists); empty when every source is off.</summary>
+	public global::FluentFin.Core.Outside.OutsideListsSnapshot Outside { get; init; } = global::FluentFin.Core.Outside.OutsideListsSnapshot.Empty;
+	// end 1.7 keyless
+
 	public static BuildContext For(IndexSnapshot index, DateTimeOffset now) => new(index, now, new HashSet<string>());
 }
 

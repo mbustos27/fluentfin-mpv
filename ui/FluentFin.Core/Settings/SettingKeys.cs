@@ -109,6 +109,39 @@ public static class SettingKeys
 	/// <summary>1.6: Settings &gt; Playback, "Show the Playback stats button" in the player. Off by default; the I key works either way.</summary>
 	public static Key<bool> ShowPlaybackStatsButton { get; } = new Key<bool>("ShowPlaybackStatsButton", false);
 	// end 1.6 player
+
+	// 1.7 keyless: Settings > Look up lists online (Core\Outside). One switch per outside source, every one off until the user
+	// turns it on: Nixie fetches public lists and matches them on this PC; nothing about the server, account or library is sent.
+	/// <summary>1.7: franchise and keyword names from TMDb's daily export files (files.tmdb.org). No key. Off by default.</summary>
+	public static Key<bool> LookUpTmdbExports { get; } = new Key<bool>("LookUpTmdbExports", false);
+
+	/// <summary>1.7: awards and finer genres from Wikidata's query service. No key. Off by default.</summary>
+	public static Key<bool> LookUpWikidata { get; } = new Key<bool>("LookUpWikidata", false);
+
+	/// <summary>1.7: trending, popular, anticipated and box office lists from Trakt (stream T's source). Off by default.</summary>
+	public static Key<bool> LookUpTrakt { get; } = new Key<bool>("LookUpTrakt", false);
+
+	/// <summary>1.7: trending lists from TMDb's API with the user's own token (stream T's source). Off by default.</summary>
+	public static Key<bool> LookUpTmdbTrending { get; } = new Key<bool>("LookUpTmdbTrending", false);
+
+	/// <summary>
+	/// 1.7: Wikidata's query endpoint (<see cref="Outside.WikidataEndpoint"/>'s name): "Wikidata" (query.wikidata.org, the
+	/// default), "Next" (query-next.wikidata.org), "QLever" or "Custom" (<see cref="WikidataCustomEndpoint"/>).
+	/// </summary>
+	public static Key<string> WikidataEndpoint { get; } = new Key<string>("WikidataEndpoint", "Wikidata");
+
+	/// <summary>1.7: the custom Wikidata endpoint's address (https, no credentials); used only when <see cref="WikidataEndpoint"/> is "Custom".</summary>
+	public static Key<string> WikidataCustomEndpoint { get; } = new Key<string>("WikidataCustomEndpoint", "");
+
+	// 1.7 trending: stream T's keys (the TMDb token's) go here.
+	/// <summary>
+	/// 1.7: the user's own TMDb API Read Access Token for "TMDb trending", as Windows DPAPI-protected bytes (the current Windows
+	/// user only); null when none. Read and written through <see cref="Outside.TmdbToken"/> only: never logged, never in an
+	/// address.
+	/// </summary>
+	public static Key<byte[]?> TmdbReadAccessToken { get; } = new Key<byte[]?>("TmdbReadAccessToken", (byte[]?)null);
+	// end 1.7 trending
+	// end 1.7 keyless
 }
 
 /// <summary>fluentfin-mpv: who draws the controls over the mpv player's video.</summary>

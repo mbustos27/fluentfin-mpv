@@ -43,6 +43,13 @@ public static class CollectionBrowse
 		var places = serverOrder.Select((item, i) => (item, i)).ToDictionary(x => x.item, x => x.i, ReferenceEqualityComparer.Instance);
 		int Place(BaseItemDto item) => places.TryGetValue(item, out var i) ? i : int.MaxValue;
 
+		// 1.7 trending: a Nixie collection in its list's order (a rank): the order the titles came in
+		if (order == CollectionOrder.Collection && !playlist && displayOrder == ListOrder)
+		{
+			return [.. serverOrder];
+		}
+		// end 1.7 trending
+
 		if (order == CollectionOrder.Collection && !playlist && displayOrder == TrackOrder)
 		{
 			return [.. serverOrder.OrderBy(x => x.ParentIndexNumber ?? 0).ThenBy(x => x.IndexNumber ?? int.MaxValue).ThenBy(Place)];
@@ -80,6 +87,11 @@ public static class CollectionBrowse
 
 	/// <summary>The display order an album keeps: its discs and tracks.</summary>
 	public const string TrackOrder = "IndexNumber";
+
+	// 1.7 trending
+	/// <summary>The display order of a Nixie collection kept in its list's order (trending's rank): never a server value.</summary>
+	public const string ListOrder = "Nixie.ListOrder";
+	// end 1.7 trending
 
 	/// <summary>"Collection", "Playlist" or "Album": what the page is (its eyebrow, the list's name, the empty state).</summary>
 	public static string KindOf(BaseItemDto? collection) => collection?.Type switch
@@ -154,7 +166,7 @@ public static class CollectionBrowse
 	/// says nothing a title doesn't), and never in another order picked here.
 	/// </summary>
 	public static bool PositionsMeanSomething(CollectionOrder order, bool playlist, string? displayOrder) =>
-		order == CollectionOrder.Collection && (playlist || displayOrder == TrackOrder || OwnOrder(displayOrder) == CollectionOrder.ReleaseDate);
+		order == CollectionOrder.Collection && (playlist || displayOrder == TrackOrder || displayOrder == ListOrder /* 1.7 trending */ || OwnOrder(displayOrder) == CollectionOrder.ReleaseDate);
 
 	/// <summary>The card's caption prefix: "1" before "· Wild Canyons" (the separator is the card's).</summary>
 	public static string CaptionPrefix(int position) => position.ToString(CultureInfo.CurrentCulture);

@@ -104,7 +104,8 @@ public sealed class CollectionsSettingsViewModel
 			Row(NixieHomeRow.Seasonal, "In season", "Halloween in October, Christmas in December."),
 			Row(NixieHomeRow.Rotating, "A collection a day", "One of your Made by Nixie collections, a different one each day."),
 		];
-		Kinds = [.. SmartCollectionKinds.PageOrder.Concat(SmartCollectionKinds.Picks).Select(kind => new CollectionSwitch(SmartCollectionKinds.Plural(kind), "",
+		// 1.7 keyless: not the awards: they come from Wikidata, whose switch is in Look up lists online ("from your server's own data")
+		Kinds = [.. SmartCollectionKinds.PageOrder.Concat(SmartCollectionKinds.Picks).Where(kind => kind != SmartCollectionKind.Award).Select(kind => new CollectionSwitch(SmartCollectionKinds.Plural(kind), "",
 			() => !CollectionSettings.KindsOff(settings).Contains(kind),
 			on =>
 			{

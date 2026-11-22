@@ -20,7 +20,7 @@
 		<LangVersion>preview</LangVersion>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<!-- fluentfin-mpv: the release version (shown, and sent to Jellyfin through Core\AppVersion); docs\RELEASE.md -->
-		<Version Condition=" '$(BuildVersion)' == '' ">1.6.1</Version>
+		<Version Condition=" '$(BuildVersion)' == '' ">1.7.0</Version>
 		<Version Condition=" '$(BuildVersion)' != '' ">$(BuildVersion)</Version>
 		<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 		<!-- Nixie: what Properties > Details shows for Nixie.exe (the launcher and the backend say the same: tools/release) -->
@@ -107,6 +107,10 @@
 	  <Content Update="Assets\rotten.svg">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </Content>
+	  <!-- 1.7 trending: TMDb's logo for About's credits (Assets\Credits\README.txt says where it comes from) -->
+	  <Content Update="Assets\Credits\tmdb-logo.svg">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Content>
 	</ItemGroup>
 
 	<!-- 1.1.4: the wordmark's neon heading font (Monoton, SIL Open Font License 1.1, shipped unmodified beside its licence) -->
@@ -130,6 +134,19 @@
 	     looks for a dev checkout's backend above its folder (Core\AppVersion.IsReleasePackage, MpvBackendCommand.Resolve) -->
 	<ItemGroup Condition="'$(FluentFinMpvRelease)' == 'true'">
 		<AssemblyMetadata Include="FluentFinMpvRelease" Value="true" />
+	</ItemGroup>
+
+	<!-- 1.7 trending: the Trakt Client ID, in a release build only. tools\release\build-release.ps1 sets the environment
+	     variable FluentFinTraktClientId for the publish alone (from NIXIE_TRAKT_CLIENT_ID, else NIXIE_LIVE_TRAKT_CLIENT_ID);
+	     it is never on a command line or in a file of the repository. Core\Outside\TraktClientId reads it back. -->
+	<ItemGroup Condition="'$(FluentFinMpvRelease)' == 'true' and '$(FluentFinTraktClientId)' != ''">
+		<AssemblyMetadata Include="NixieTraktClientId" Value="$(FluentFinTraktClientId)" />
+	</ItemGroup>
+
+	<!-- 1.7 trending: Nixie's own TMDb Read Access Token, the same way (tools\release\tmdb-token.ps1 sets FluentFinTmdbToken
+	     for the publish alone, from NIXIE_TMDB_TOKEN). Core\Outside\TmdbAppToken reads it back; the user's own token wins. -->
+	<ItemGroup Condition="'$(FluentFinMpvRelease)' == 'true' and '$(FluentFinTmdbToken)' != ''">
+		<AssemblyMetadata Include="NixieTmdbToken" Value="$(FluentFinTmdbToken)" />
 	</ItemGroup>
 
 	<!-- fluentfin-mpv, slim release: the .NET desktop runtime pack (WPF and Windows Forms) comes in only because FlyleafLib names it.

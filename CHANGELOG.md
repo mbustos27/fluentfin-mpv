@@ -1,5 +1,71 @@
 # Changelog
 
+## 1.7.0
+
+Discover: award winners and finer genres from Wikidata, franchise names from TMDb, and what's trending on Trakt and TMDb,
+each matched to your libraries on this PC and each off until you turn it on. And an episode now shows the way up to its
+show and its season.
+
+**Discover**
+
+- **Settings > Look up lists online.** Public lists Nixie fetches and matches to your libraries on this PC, each off
+  until you turn it on, each with a "What is sent" card: a request for a public list (the same for everyone) and Nixie's
+  name and version. Never your server, account, libraries or what you watch, and no picture comes from TMDb or Trakt.
+  If a source says no or asks Nixie to slow down, its status line says so in plain words, and Nixie keeps the lists it
+  has. Turn a source off and Nixie stops asking it at once, mid-refresh too.
+- **Awards and finer genres from Wikidata.** With "Awards and genres from Wikidata" on, the Collections page gets an
+  Awards row: the Best Picture winners and nominees, Palme d'Or, Golden Globe, BAFTA, César, Golden Bear and Golden Lion
+  winners you have, oldest first. Heist films, slashers and time travel join their keyword collections. Each list is
+  fetched once a week. The query service is a setting (query.wikidata.org, its successor query-next.wikidata.org, QLever,
+  or an https address of your own), since Wikidata's service moves to a new engine by mid-2027.
+- **Franchise names from TMDb.** With "Franchise and keyword names from TMDb" on, a franchise reads as TMDb names it ("The
+  Mummy", from TMDb's "The Mummy Collection"), and Nixie's keyword collections ("Heists") are checked against TMDb's own
+  keyword list. TMDb's public file is fetched once a week (the names barely change) and kept at most 6 months.
+- **"Trending in your library"** on Home: the films and shows you already have that people are watching on Trakt right
+  now and on TMDb this week, both together, best first. It shows only while one of them is on and has something of yours.
+- **New rows on the Collections page:** Trending, Popular, Most anticipated, and Box office this week, each a collection
+  in the list's own order. A row with nothing of yours stays hidden. A trending collection says each source's window,
+  for the sources you have on: "Trakt: watched right now · TMDb: this week".
+- **Trakt needs no account:** Nixie never signs you in. Nixie uses Trakt but is not endorsed or certified by Trakt.
+- **TMDb trending works with Nixie's own TMDb key,** built into the release. You can enter your own TMDb token instead
+  (the API Read Access Token): it's kept on this PC encrypted for your Windows account, sent only to TMDb, and used in place
+  of Nixie's. Paste the short API key by mistake and Nixie says which one it needs. If TMDb ever refuses Nixie's key, the
+  switch says so and Nixie stops asking until you enter your own.
+- **PRIVACY.md** says what Nixie sends to each outside source, how long it keeps their lists, and how to stop and delete.
+  Settings > About shows TMDB's logo beside its notice ("Nixie uses TMDB and the TMDB APIs but is not endorsed,
+  certified, or otherwise approved by TMDB."), and credits Wikidata and Trakt; the README carries the notice too.
+
+**The way up from an episode**
+
+- **An episode shows its show and its season over its title,** in every theme and however you got there (Continue
+  watching, search, Up next, a collection): "Shows › What We Do in the Shadows › Season 3". A season shows its show.
+  Each is a button that opens that page, and Back brings you to the episode with the keyboard where it was. Specials read
+  "Specials". The keyboard reaches them before the title's buttons (Shift+Tab from Play), and Narrator reads "Go to
+  series What We Do in the Shadows" and "Go to Season 3". A long show name is shortened with "…" and shown whole in its
+  tooltip; the line never wraps over the title.
+
+**Verified**
+
+- Off-screen in all four themes: the keyboard matrix (2,322 checks), 1.7's own scripts (the lists and the Awards row,
+  Trakt and TMDb trending with their labels, the way up from an episode, in Editorial Light too), the Collections page,
+  the top bar, Home's arrival, search and the contrast floor. On real Jellyfin 10.11 and 12.4 test servers: search and
+  the servers' own checks.
+- Each outside source against a strict stand-in of the service, and once live while it was built: TMDb's export files
+  and Wikidata's queries answered, and Trakt's lists answered and refused requests without Nixie's name or with a wrong
+  app ID. A privacy test runs the whole app path with two libraries and an empty one: the very same requests every
+  time, none carrying anything from a library. Turning a source off mid-refresh sends nothing more.
+- Not checked live: TMDb trending against TMDb itself, and Wikidata through QLever. Not checked by hand (they need your
+  own server): the lists on your libraries, the way up on a show with Specials and a long name, and a gamepad on it.
+
+**Known issues in 1.7.0** (queued for 1.7.1)
+
+- Turning Trakt or TMDb trending off at the very moment one of its lists arrives can leave that list saved on this PC
+  until it ages out (a day for Trakt, a week for TMDb) instead of deleting it at once. It isn't shown while the source
+  is off.
+- A weekly Wikidata refresh (or TMDb's weekly keyword file) that brings as many titles as before but different ones is
+  shown only after Nixie restarts.
+- In Drive-in, a window under 1,400 px wide puts the top row of an item page's lights under the top bar.
+
 ## 1.6.1
 
 A fix release: skip rules land on the cut on every PC, Back then the same "See all" opens it again, collections with

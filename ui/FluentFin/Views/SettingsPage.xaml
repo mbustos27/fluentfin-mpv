@@ -11,6 +11,7 @@
     xmlns:local="using:FluentFin.Views.JellyfinSettings"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:mpv="using:FluentFin.Core.Mpv"
+    xmlns:outside="using:FluentFin.Core.Outside"
     xmlns:root="using:FluentFin"
     xmlns:s="using:FluentFin.Core.Contracts.Services"
     xmlns:sc="using:FluentFin.Core.SmartCollections"
@@ -174,6 +175,198 @@
                     </ctk:SettingsExpander>
                 </StackPanel>
                 <!--  end 1.6 collections  -->
+                <!--
+                    1.7 keyless: Settings > Look up lists online (Core\Outside): a switch per outside source, every one off until the
+                    user turns it on, each with its "What is sent" card (as "Look up intros online") and a status line in Nixie's
+                    own words (the last refusal, or that the lists are up to date). Kept on this PC.
+                -->
+                <StackPanel x:Name="OutsideListsSection" Spacing="4">
+                    <TextBlock
+                        Margin="1,28,0,6"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        Text="Look up lists online" />
+                    <TextBlock
+                        x:Name="OutsideListsIntro"
+                        Margin="1,0,0,4"
+                        Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="Public lists Nixie fetches and matches to your libraries on this PC. Nothing about your server, account or libraries is sent. Each one is off until you turn it on."
+                        TextWrapping="WrapWholeWords" />
+                    <ctk:SettingsExpander
+                        x:Name="TmdbExportsExpander"
+                        Description="{x:Bind OutsideSources.TmdbExports.Description}"
+                        Header="{x:Bind OutsideSources.TmdbExports.Name}"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE8F1;}">
+                        <ToggleSwitch
+                            x:Name="TmdbExportsSwitch"
+                            AutomationProperties.Name="{x:Bind OutsideSources.TmdbExports.Name}"
+                            IsOn="{x:Bind OutsideSources.TmdbExports.IsOn, Mode=TwoWay}" />
+                        <ctk:SettingsExpander.Items>
+                            <ctk:SettingsCard
+                                AutomationProperties.Name="What is sent to TMDb"
+                                Description="{x:Bind OutsideSources.TmdbExports.WhatIsSent}"
+                                Header="What is sent">
+                                <HyperlinkButton
+                                    AutomationProperties.Name="TMDb, opens in your browser"
+                                    Content="{x:Bind OutsideSources.TmdbExports.Link.Text}"
+                                    NavigateUri="{x:Bind OutsideSources.TmdbExports.Link.Uri}" />
+                            </ctk:SettingsCard>
+                            <ctk:SettingsCard
+                                AutomationProperties.Name="{x:Bind OutsideSources.TmdbExports.StatusName}"
+                                Description="{x:Bind OutsideSources.TmdbExports.Status, Mode=OneWay}"
+                                Header="Status" />
+                        </ctk:SettingsExpander.Items>
+                    </ctk:SettingsExpander>
+                    <ctk:SettingsExpander
+                        x:Name="WikidataExpander"
+                        Description="{x:Bind OutsideSources.Wikidata.Description}"
+                        Header="{x:Bind OutsideSources.Wikidata.Name}"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE734;}">
+                        <ToggleSwitch
+                            x:Name="WikidataSwitch"
+                            AutomationProperties.Name="{x:Bind OutsideSources.Wikidata.Name}"
+                            IsOn="{x:Bind OutsideSources.Wikidata.IsOn, Mode=TwoWay}" />
+                        <ctk:SettingsExpander.Items>
+                            <ctk:SettingsCard
+                                AutomationProperties.Name="What is sent to Wikidata"
+                                Description="{x:Bind OutsideSources.Wikidata.WhatIsSent}"
+                                Header="What is sent">
+                                <HyperlinkButton
+                                    AutomationProperties.Name="Wikidata, opens in your browser"
+                                    Content="{x:Bind OutsideSources.Wikidata.Link.Text}"
+                                    NavigateUri="{x:Bind OutsideSources.Wikidata.Link.Uri}" />
+                            </ctk:SettingsCard>
+                            <!--  1.7 keyless (Wikidata): the query endpoint, as its service moves to a new backend (available through June 2027)  -->
+                            <ctk:SettingsCard
+                                x:Name="WikidataEndpointCard"
+                                AutomationProperties.Name="Wikidata query endpoint"
+                                Description="{x:Bind OutsideSources.SelectedWikidataEndpoint.Description, Mode=OneWay}"
+                                Header="Query endpoint">
+                                <ComboBox
+                                    x:Name="WikidataEndpointBox"
+                                    MinWidth="220"
+                                    AutomationProperties.Name="Wikidata query endpoint"
+                                    DisplayMemberPath="Name"
+                                    ItemsSource="{x:Bind outside:OutsideSourcesSettingsViewModel.WikidataEndpoints}"
+                                    SelectedItem="{x:Bind OutsideSources.SelectedWikidataEndpoint, Mode=TwoWay}" />
+                            </ctk:SettingsCard>
+                            <ctk:SettingsCard
+                                x:Name="WikidataCustomCard"
+                                AutomationProperties.Name="Wikidata endpoint address"
+                                Description="{x:Bind OutsideSources.WikidataCustomNote, Mode=OneWay}"
+                                Header="Endpoint address"
+                                Visibility="{x:Bind c:Converters.BooleanToVisibility(OutsideSources.IsCustomEndpoint), Mode=OneWay}">
+                                <TextBox
+                                    x:Name="WikidataCustomBox"
+                                    MinWidth="320"
+                                    AutomationProperties.Name="Wikidata endpoint address"
+                                    PlaceholderText="https://"
+                                    Text="{x:Bind OutsideSources.WikidataCustomUrl, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                            </ctk:SettingsCard>
+                            <ctk:SettingsCard
+                                AutomationProperties.Name="{x:Bind OutsideSources.Wikidata.StatusName}"
+                                Description="{x:Bind OutsideSources.Wikidata.Status, Mode=OneWay}"
+                                Header="Status" />
+                        </ctk:SettingsExpander.Items>
+                    </ctk:SettingsExpander>
+                    <!--  1.7 trending: stream T adds Trakt and TMDb trending in this panel (their switches, "What is sent" cards and the token field)  -->
+                    <StackPanel x:Name="TrendingSourcesPanel" Spacing="4">
+                        <!--
+                            1.7 trending: Trakt (its Client ID only, built into a release; no sign-in, ever: the switch can't turn on in a
+                            build without one) and TMDb trending (the user's own token, kept with DPAPI and never shown back)
+                        -->
+                        <ctk:SettingsExpander
+                            x:Name="TraktExpander"
+                            Description="{x:Bind TrendingSources.Trakt.Description}"
+                            Header="{x:Bind TrendingSources.Trakt.Name}"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE9D2;}">
+                            <ToggleSwitch
+                                x:Name="TraktSwitch"
+                                AutomationProperties.Name="{x:Bind TrendingSources.Trakt.Name}"
+                                IsEnabled="{x:Bind TrendingSources.Trakt.IsAvailable}"
+                                IsOn="{x:Bind TrendingSources.Trakt.IsOn, Mode=TwoWay}" />
+                            <ctk:SettingsExpander.Items>
+                                <ctk:SettingsCard
+                                    AutomationProperties.Name="{x:Bind TrendingSources.Trakt.WhatIsSentName}"
+                                    Description="{x:Bind TrendingSources.Trakt.WhatIsSent}"
+                                    Header="What is sent">
+                                    <HyperlinkButton
+                                        AutomationProperties.Name="{x:Bind TrendingSources.Trakt.LinkName}"
+                                        Content="{x:Bind TrendingSources.Trakt.Link.Text}"
+                                        NavigateUri="{x:Bind TrendingSources.Trakt.Link.Uri}" />
+                                </ctk:SettingsCard>
+                                <ctk:SettingsCard
+                                    AutomationProperties.Name="{x:Bind TrendingSources.Trakt.StatusName}"
+                                    Description="{x:Bind TrendingSources.Trakt.Status, Mode=OneWay}"
+                                    Header="Status" />
+                            </ctk:SettingsExpander.Items>
+                        </ctk:SettingsExpander>
+                        <ctk:SettingsExpander
+                            x:Name="TmdbTrendingExpander"
+                            Description="{x:Bind TrendingSources.TmdbTrending.Description}"
+                            Header="{x:Bind TrendingSources.TmdbTrending.Name}"
+                            HeaderIcon="{ui:FontIcon Glyph=&#xE8B2;}">
+                            <ToggleSwitch
+                                x:Name="TmdbTrendingSwitch"
+                                AutomationProperties.Name="{x:Bind TrendingSources.TmdbTrending.Name}"
+                                IsEnabled="{x:Bind TrendingSources.TmdbTrending.IsAvailable, Mode=OneWay}"
+                                IsOn="{x:Bind TrendingSources.TmdbTrending.IsOn, Mode=TwoWay}" />
+                            <ctk:SettingsExpander.Items>
+                                <ctk:SettingsCard
+                                    x:Name="TmdbTokenCard"
+                                    AutomationProperties.Name="Your TMDb token"
+                                    Description="{x:Bind TrendingSources.TokenDescription, Mode=OneWay}"
+                                    Header="Your TMDb token">
+                                    <StackPanel MaxWidth="420" Spacing="6">
+                                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="8">
+                                            <PasswordBox
+                                                x:Name="TmdbTokenBox"
+                                                Width="240"
+                                                AutomationProperties.Name="TMDb API Read Access Token"
+                                                Password="{x:Bind TrendingSources.TokenEntry, Mode=TwoWay}"
+                                                PlaceholderText="Paste your token" />
+                                            <Button
+                                                x:Name="SaveTmdbTokenButton"
+                                                AutomationProperties.Name="Save TMDb token"
+                                                Command="{x:Bind TrendingSources.SaveTokenCommand}"
+                                                Content="Save" />
+                                            <Button
+                                                x:Name="RemoveTmdbTokenButton"
+                                                AutomationProperties.Name="Remove TMDb token"
+                                                Command="{x:Bind TrendingSources.RemoveTokenCommand}"
+                                                Content="Remove"
+                                                Visibility="{x:Bind c:Converters.BooleanToVisibility(TrendingSources.HasToken), Mode=OneWay}" />
+                                        </StackPanel>
+                                        <TextBlock
+                                            x:Name="TmdbTokenMessage"
+                                            HorizontalAlignment="Right"
+                                            AutomationProperties.LiveSetting="Polite"
+                                            Foreground="{ThemeResource GlassTextSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Text="{x:Bind TrendingSources.TokenMessage, Mode=OneWay}"
+                                            TextWrapping="WrapWholeWords" />
+                                    </StackPanel>
+                                </ctk:SettingsCard>
+                                <ctk:SettingsCard
+                                    AutomationProperties.Name="{x:Bind TrendingSources.TmdbTrending.WhatIsSentName}"
+                                    Description="{x:Bind TrendingSources.TmdbTrending.WhatIsSent}"
+                                    Header="What is sent">
+                                    <HyperlinkButton
+                                        AutomationProperties.Name="{x:Bind TrendingSources.TmdbTrending.LinkName}"
+                                        Content="{x:Bind TrendingSources.TmdbTrending.Link.Text}"
+                                        NavigateUri="{x:Bind TrendingSources.TmdbTrending.Link.Uri}" />
+                                </ctk:SettingsCard>
+                                <ctk:SettingsCard
+                                    AutomationProperties.Name="{x:Bind TrendingSources.TmdbTrending.StatusName}"
+                                    Description="{x:Bind TrendingSources.TmdbTrending.Status, Mode=OneWay}"
+                                    Header="Status" />
+                            </ctk:SettingsExpander.Items>
+                        </ctk:SettingsExpander>
+                    </StackPanel>
+                    <!--  end 1.7 trending  -->
+                </StackPanel>
+                <!--  end 1.7 keyless  -->
                 <!--  fluentfin-mpv: Settings > Playback (docs/research/ux-review.md T1)  -->
                 <!--  kept on this PC; the bridge has no field for the skip and wheel settings yet (docs/BRIDGE.md v1), so mpv's own controls ignore them;
                       Nixie's player controls over the MPV player use the Skip button, the wheel and the step (MpvControlsViewModel)  -->
@@ -630,6 +823,65 @@
                             <HyperlinkButton Content="jellyfin-mpv-shim" NavigateUri="{x:Bind vm:SettingsViewModel.ShimUri}" />
                         </StackPanel>
                     </ctk:SettingsCard>
+                    <!--
+                        1.7 keyless: credits for the outside lists (Look up lists online): TMDb's notice in its terms' words, and
+                        Wikidata's. TMDb's terms also ask for its approved logo here; none is downloaded yet (an open item).
+                    -->
+                    <ctk:SettingsCard
+                        x:Name="ListCreditsCard"
+                        AutomationProperties.Name="Lists from outside sources"
+                        Header="Lists from outside sources"
+                        HeaderIcon="{ui:FontIcon Glyph=&#xE774;}">
+                        <ctk:SettingsCard.Description>
+                            <StackPanel x:Name="ListCreditsPanel" Spacing="2">
+                                <!--
+                                    1.7 trending: TMDb's approved logo ("Alt short (blue)", themoviedb.org's logos page, the owner's yes of
+                                    2026-11-22) beside its notice, its colours, aspect and orientation as TMDb draws it, 14 epx high: less
+                                    prominent than Nixie's own marks. Rasterized at 3x (42 px) for crisp edges on high-DPI screens.
+                                -->
+                                <Image
+                                    x:Name="TmdbLogo"
+                                    Height="14"
+                                    Margin="0,4,0,2"
+                                    HorizontalAlignment="Left"
+                                    AutomationProperties.Name="TMDB logo"
+                                    Stretch="Uniform">
+                                    <Image.Source>
+                                        <SvgImageSource
+                                            RasterizePixelHeight="42"
+                                            RasterizePixelWidth="323"
+                                            UriSource="ms-appx:///Assets/Credits/tmdb-logo.svg" />
+                                    </Image.Source>
+                                </Image>
+                                <!--  end 1.7 trending  -->
+                                <TextBlock
+                                    x:Name="TmdbNotice"
+                                    Text="{x:Bind outside:OutsideCredits.TmdbNotice}"
+                                    TextWrapping="WrapWholeWords" />
+                                <TextBlock
+                                    x:Name="WikidataCredit"
+                                    Text="{x:Bind outside:OutsideCredits.WikidataCredit}"
+                                    TextWrapping="WrapWholeWords" />
+                                <!--  1.7 trending: Trakt's line goes here  -->
+                                <TextBlock
+                                    x:Name="TraktDisclaimer"
+                                    Text="{x:Bind outside:TrendingCredits.TraktDisclaimer}"
+                                    TextWrapping="WrapWholeWords" />
+                                <!--  end 1.7 trending  -->
+                            </StackPanel>
+                        </ctk:SettingsCard.Description>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <HyperlinkButton
+                                AutomationProperties.Name="TMDb, opens in your browser"
+                                Content="TMDb"
+                                NavigateUri="{x:Bind outside:OutsideCredits.TmdbUri}" />
+                            <HyperlinkButton
+                                AutomationProperties.Name="Wikidata, opens in your browser"
+                                Content="Wikidata"
+                                NavigateUri="{x:Bind outside:OutsideCredits.WikidataUri}" />
+                        </StackPanel>
+                    </ctk:SettingsCard>
+                    <!--  end 1.7 keyless  -->
                 </StackPanel>
             </StackPanel>
 

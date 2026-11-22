@@ -27,6 +27,12 @@ public sealed record IndexEntry
 	public int? Year { get; init; }
 	public string? PremiereDate { get; init; }
 	public string? TmdbCollection { get; init; }
+
+	// 1.7 keyless: the ids outside lists are matched by, on this PC (plan §3): TMDb's, IMDb's and TheTVDB's
+	public string? Tmdb { get; init; }
+	public string? Imdb { get; init; }
+	public string? Tvdb { get; init; }
+	// end 1.7 keyless
 	public string[] Tags { get; init; } = [];
 	public string[] Genres { get; init; } = [];
 	public string[] Studios { get; init; } = [];
@@ -75,6 +81,9 @@ public sealed record IndexEntry
 			Year = dto.ProductionYear,
 			PremiereDate = dto.PremiereDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
 			TmdbCollection = ProviderId(dto, "TmdbCollection"),
+			Tmdb = ProviderId(dto, "Tmdb"), // 1.7 keyless
+			Imdb = ProviderId(dto, "Imdb"), // 1.7 keyless
+			Tvdb = ProviderId(dto, "Tvdb"), // 1.7 keyless
 			Tags = Keywords.Kept(dto.Tags),
 			Genres = Clean(dto.Genres),
 			Studios = Clean(dto.Studios?.Select(x => x.Name)),

@@ -6,7 +6,34 @@ below is low severity, an accepted cost of the contract, or not verified yet. Ea
 says where it lives so it can be picked up later. Entries marked "fixed" say what is left.
 
 ## Fix queue (next fix release)
-For 1.7.1 now: 1.6.1 took what it could of the queue it was given, and what is left of it stays below.
+For 1.7.1 now: 1.6.1 took what it could of the queue it was given, and what is left of it stays below, after 1.7.0's own.
+
+From the 1.7.0 bug hunt (`docs\reports\Bug hunt 2026-11-22 (1.7.0).md`; no Blocker; its Major BH-170-M1 and q1, q4 were
+fixed before the build):
+- **BH-170-q2** `tools\live\live_trending_sources.ps1:55`: Trakt's live check builds its own `HttpWebRequest`, not the
+  app's request (`OutsideSource.Request`: an empty body with `Content-Length: 0` and `Content-Type: application/json`,
+  gzip only, redirects followed by hand). The app's own GET has never met real Trakt; give the Trakt and TMDb legs a
+  `LiveTrending` test category through `OutsideHub`, as stream K's live check does.
+- **BH-170-q3** `ui\FluentFin.Core\Outside\TrendingSources.cs:218-223`: `IsActive` is checked, then the list is written
+  to the cache and held; a switch turned off between the two (Forget, on the UI thread) leaves that list on disk and held
+  until its maximum age (Trakt a day, TMDb trending 7 days), shown again at once if the source is turned back on.
+  PRIVACY.md says turning them off deletes their lists. A window of milliseconds, reasoned only; fix with a per-source
+  generation that Forget bumps (or the write and Forget under one lock).
+- **BH-170-q5** `ui\FluentFin.Core\Outside\OutsideLists.cs` (`Same`): compares only the counts of Wikidata's lists and
+  of TMDb's keyword names, so a refresh with as many titles but other ones isn't published until a restart. Compare the
+  items (or a hash of each cached list).
+
+From the 1.7 streams and their reviews (2026-11-21; each fixed what its review sent back before the merge):
+- Drive-in: `ui\FluentFin\Themes\DriveIn\Controls\ItemStage.cs:104`: under 1400 px wide the item board's 20 px top margin
+  puts its top row of lights under the 48 px top bar (seen at 1100x900). Found by stream U.
+- Trakt: `ui\FluentFin.Core\Outside\OutsideSource.cs:347-353` puts Trakt's required `Content-Type: application/json` on
+  an empty body, the only way .NET sends that header on a GET. The live check built its own requests (BH-170-q2 above),
+  so that GET has not met real Trakt yet, and a proxy that refuses a GET with a body would refuse it. Found by stream T.
+- Trakt's box office is asked again daily, though it changes once a week: Trakt's lists are kept at most a day
+  (`ui\FluentFin.Core\Outside\TraktLists.cs`, `FreshUntil`, its Use Policy), so it is one request a day while Trakt is on.
+  Found by stream T; not a fault, noted so nobody "fixes" it into a week-old list.
+- Wikidata's lists have few Golden Globe, BAFTA and César winners (Wikidata's own gaps); the Awards row shows what it has.
+  Found by stream K's live check.
 
 From the 1.6.1 bug hunt (`docs\reports\Bug hunt 2026-11-21 (1.6.1).md`; no Blocker, no Major):
 - **BH-161-q1** `ui\FluentFin.Core\Services\JellyfinClient_Search.cs:165-167`, `ui\FluentFin.Core\ViewModels\PersonItemsViewModel.cs:105`:
@@ -40,7 +67,7 @@ From the 1.5.1 bug hunt (`docs\reports\Bug hunt 2026-11-21 (1.5.1).md`):
   playback's place and watched state are still lost: after Sign in again, the app could send the last position it saw
   (`RecentPlays` has it); a new server call, with its own live check.
 
-Left out of 1.5.1 and 1.6.1 (a feature, for 1.7):
+Left out of 1.5.1, 1.6.1 and 1.7.0 (a feature):
 - **Music in search, with playback** (BH-151-M2): songs and albums were taken out of search because nothing plays them.
 
 Found at the 1.6 integration:
@@ -114,6 +141,64 @@ runs post keys and cannot move the real cursor or hear sound).
   - Sign in again mid-playback on the owner's server: never tested by us (the server isn't ours, and ending a sign-in
     there is the owner's to do); not run, for the owner.
 
+## Nixie 1.7.0: Discover
+- **Merged** (2026-11-22, `wip/rel-1.7.0` from 1.6.1's build commit `9a50a01`): keyless (`0d0c8eb`), upnav (`7a83843`),
+  trending (`4bbf744`), then `main` twice (1.6.1 as released, its Sandbox line and the roadmap). main's 1.6.1 is a
+  squash of `9a50a01`, so git's merge base was the older `7093f7c` and every file 1.6.1 touched conflicted with itself:
+  merged as this branch's tree plus what main has beyond `9a50a01` (docs only), checked by comparing the two diffs.
+  Conflicts in the stream merges: CHANGELOG; `CollectionsViewModel.MadeByNixie` (trending's body with 1.6.1's local
+  date, BH-160-m1); `OutsidePrivacyTests` (keyless rewrote it to run the app's whole path with two libraries and an empty
+  one after trending had added its sources to the older version: trending's sources, fake and hosts carried into the
+  rewrite, the page's trending collections through `TrendingServices.Collections`, each family of requests compared in
+  its own order since the trending sources refresh beside the lists).
+- **Trakt's labels** (the coordinator, from Trakt's API Use Policy of 2026-10-20: "Label discovery lists accurately so
+  users understand what they represent"): Trakt's trending is what is watched right now and only TMDb's is the week's,
+  so the Collections row is "Trending" (not "Trending this week"), Home's row "Trending in your library", and a trending
+  collection's why line says each source's window for the sources that are on ("Trakt: watched right now · TMDb: this
+  week"). "Box office this week" stays: Trakt's box office is the weekend's.
+- **The bug hunt's fixes, before the build:** BH-170-M1 (Wikidata or TMDb's export files turned off mid-round kept
+  asking: 11 of 12 queries, 1 of 2 files; now the switch is read before each request and when the answer comes back,
+  and again before the round's lists are published), q4 (a trending match under way at sign-out isn't kept after it)
+  and q1 (then-170-keyless turns nothing on unless the app's log says every source goes to the fake, with a source test
+  over every then-*.ps1). Queued above: q2, q3, q5.
+- **Known gaps (not verified, by us or anyone):** TMDb trending has never been asked live (no token on the build PC
+  while it was made; its fake follows TMDb's documented answers); QLever has never been queried live (the live check
+  asked query.wikidata.org, and query-next.wikidata.org refused it, as expected until it opens); the crumbs' lookup
+  path (an episode that arrives without its series or season ids), Specials (season 0), long names and the gamepad order
+  are unit-tested only: the fake server always sends the ids and has no season 0.
+- **The owner's steps:** Trakt's Production Client ID (Trakt staff: request Production access before launch, with
+  PRIVACY.md's URL on main), set on the build PC on 2026-11-22, and Nixie's own TMDb token (the owner's call the same
+  day: built into the release like Trakt's ID, the user's own token still wins), `NIXIE_TMDB_TOKEN`. The release build
+  refuses to run without either (`-RequireProductionTraktId`, `-RequireAppTmdbToken`) and says only which it took
+  ("Trakt: Production ID", "TMDb: app token"), never a value.
+- **Hand checks for 1.7 (not run, for the owner):** the four sources on your own server's libraries (Awards, franchise
+  names, Trending in your library); TMDb trending with Nixie's key and with your own token; the crumbs on a real show
+  with Specials and a long name; a gamepad on the crumbs.
+- **The release's final pass, trimmed** (2026-11-22; "verify once": 1.6.1's full pass ran on `9a50a01` hours before, and
+  1.7 changes no file under `backend\`, nor the installer, the updater or `verify-package`): off-screen, Debug x64
+  builds of the branch, the fake server's strict auth on in every run, the bug hunt beside it on `a244319`. The shared
+  pages and the keys matrix ran on `b79cef1` (the merges, Trakt's labels and the version); 1.7's own lists scripts on
+  `ac65f13` (the hunt's fixes in) and again on `73678958` (Nixie's own TMDb token, the weekly export files, the reworded
+  cards and TMDB's logo merged). The keys matrix 568/568 in Classic and Drive-in, 612/612 in Cinematic and 574/574 in
+  Editorial (2,322 rows; Classic's M after a theme switch and two of Cinematic's "the bars are drawn" rows failed once
+  under the full load, in the player 1.7 doesn't touch, and passed with the two themes rerun alone); the contrast floor
+  in four themes, Dark and Light, 4,408 labels and none under its floor; then-170-keyless 28/28 and then-170-trending
+  30/30 in each theme (28/28 before the TMDb merge), then-170-upnav 34/34 in each theme and in Editorial Light;
+  then-160-collections 33/33, then-topbar160 119/119, then-search 36/36 and then-140-arrival (20/20, Editorial 19/19) in
+  each theme, then-140-checks 71/71 but Cinematic's known 1.5.0 skeleton (21 px at 1920, 70/71). On the QA servers
+  (10.11.11 and 12.4.0): then-search-live 14/14 on each and the smoke 20/20. FluentFin.Core.Tests 5,476 and
+  FluentFin.Tests 1,630 after the TMDb merge, all passed (the live check skipped unless asked; MpvBackendHost's crash
+  test, a timing test under load, passed alone 22/22), one of them after a test fix the merge needed (below); the bridge
+  smoke 75/75; the fake server's tests 105, the QA tools' 23 and the release tools' 27 (7 more need `pefile`, which only
+  the build's venv has).
+- **Found and fixed in the pass:** the merge of the weekly export files (`2cd31272`) with keyless's cut-file test
+  (`3ef30a5`, which the trending branch never had): the test made the list stale one day on, still fresh now; it moves a
+  week on.
+- **Skipped, by the trimmed brief:** the full backend suite, the end-to-end harness and the QA servers' playback runs
+  (the playlist and transcode run, the quality run, the skip live check): nothing they cover changed since 1.6.1's pass.
+- **The owner's test zip** (2026-11-22, from `390ac99e`, before the TMDb merge): `build-release -SkipTests`, the
+  Production Trakt ID, no TMDb app token yet; not verified by `verify-package` (the release build is).
+
 ## Nixie 1.6.1: the fix release
 - **Merged** (2026-11-21, `wip/rel-1.6.1`): skip, older, nav (with its review follow-ups). `verify-package.ps1` keeps
   both streams' checks, each with its own pass lines: skip's (the bundled backend's `--nixie-skip-check` snaps a rule to
@@ -122,7 +207,8 @@ runs post keys and cannot move the real cursor or hear sound).
   fake server's `library.py` and its tests keep both older's and nav's changes.
 - **Known issue (the owner's finding, 2026-11-21; ships in 1.6.1, not fixed):** an episode opened from Continue
   watching, search, Up next or a collection shows only the library above its title (for example "Shows ›"), with no
-  link to its series or season, in every theme. Use Back, or search for the show. Planned for 1.7.
+  link to its series or season, in every theme. Use Back, or search for the show. Fixed in 1.7.0 (the way up from an
+  episode: Shows › series › Season n over the title, in every theme).
 - **Left for 1.7.1:** the place and watched state of a playback whose sign-in ended (BH-151-m8, the rest: 1.6.1 says
   so in the player and offers Sign in again, but sending the last position after it is a new server call), and the
   items above from the 1.6.1 streams, its reviews and its bug hunt.

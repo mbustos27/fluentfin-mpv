@@ -68,7 +68,7 @@ public sealed record NixieCollection(SmartCollection Collection) : ICollectionSo
 	{
 		Name = Collection.Title,
 		Type = BaseItemDto_Type.BoxSet,
-		DisplayOrder = Collection.HasOwnOrder ? "PremiereDate" : "SortName",
+		DisplayOrder = Collection.InListOrder ? CollectionBrowse.ListOrder : Collection.HasOwnOrder ? "PremiereDate" : "SortName", // 1.7 trending: ListOrder
 		UserData = new UserItemDataDto { IsFavorite = favorite },
 	};
 

@@ -37,6 +37,20 @@ is jellyfin-mpv-shim's version and does not change with ours.
   `mingw-w64-ucrt-x86_64-gcc` 16.2.0 in `C:\msys64` (the PyInstaller bootloader is compiled from source with it, see
   "Fewer antivirus false alarms" below), and network access to python.org, PyPI, nuget.org, GitHub and
   code.videolan.org. Nothing else: the build brings its own Python.
+- **The Trakt Client ID** (1.7): the user environment variable `NIXIE_TRAKT_CLIENT_ID` (else `NIXIE_LIVE_TRAKT_CLIENT_ID`)
+  holds the Client ID of the Nixie app on `developer.trakt.tv/apps` (the Production one once Trakt grants it; plan
+  Appendix A). The build writes it into `Nixie.dll` only (`tools\release\trakt-client-id.ps1`), prints only whether it
+  was found, and a gate fails the build if it is in any other file of the package or the source archive. Without it the
+  build still succeeds and Trakt's switch reads "Not available in this build". There is no Client Secret: Nixie never
+  signs anyone in to Trakt. A fork registers its own Trakt app rather than reusing this one.
+  The build prints which ID it took: "Trakt: Production ID" (`NIXIE_TRAKT_CLIENT_ID`), or a warning "Trakt: Development
+  ID (fallback)" when only the live check's `NIXIE_LIVE_TRAKT_CLIENT_ID` is set. A release passes
+  `-RequireProductionTraktId`, which stops the build without the Production ID.
+- **Nixie's own TMDb token** (1.7): the environment variable `NIXIE_TMDB_TOKEN` (process or user) holds the TMDb API Read
+  Access Token (v4) of the maintainer's TMDb account. It is handled as the Trakt Client ID is (`tools\release\tmdb-token.ps1`):
+  written into `Nixie.dll` only, gated out of every other file of the package and the source archive, and the build prints
+  only "TMDb: app token" or "TMDb: no app token". Without it TMDb trending needs each user's own token; a release passes
+  `-RequireAppTmdbToken`, which stops the build without it. A user's own token in Settings always wins over it.
 
 ## 3. Build
 
@@ -239,6 +253,27 @@ medians, with the runs' range:
 Under that load 1.6.1 is no slower than 1.6.0 (its medians lower, the ranges overlapping) and holds a little less
 memory after the browse. A fix release with no new start-up work; not a gate. 1.7 measures itself beside this, on a
 quieter PC if it can.
+
+**1.7.0 beside 1.6.1** (2026-11-22 on the build PC, after the final pass with nothing else of ours running (the CPU at
+about 14 % before it); Debug x64 builds of the 1.7 branch at 73678958 and of 1.6.1's build commit 9a50a01; all 10 runs
+passed every check, strict auth included). Each build's first run was a cold start (about 2.4 s to the window, the
+files just copied); the medians, with the 5 runs' range:
+
+| Build | Start-up: window shown (ms) | The app's own "window shown" (ms) | First Home paint (ms) | Private bytes (MB) |
+|---|---|---|---|---|
+| 1.6.1 | 975 (949 to 2,429) | 959 | 1,227 (1,195 to 1,477) | 579 (565 to 595) |
+| 1.7.0 | 977 (964 to 2,454) | 974 | 1,232 (1,124 to 1,319) | 581 (571 to 597) |
+
+1.7.0 opens its window and paints Home as fast as 1.6.1 (2 and 5 ms apart, well inside each other's ranges) and holds
+the same memory after the browse: with every outside source off, as they are by default, 1.7 adds no start-up work.
+Not a gate; 1.7.1 measures itself beside this.
+
+**1.7.0's final pass was trimmed** ("verify once", the 1.7 integration brief): 1.6.1's full pass had run on 9a50a01
+hours before, and 1.7 changes no file under `backend\`, nor the installer, the updater or `verify-package`. So the full
+backend suite, the end-to-end harness and the QA servers' playback runs (the playlist and transcode run, the quality
+run, the skip live check) were not run again; the bridge smoke, both UI suites, the keys matrix and the contrast floor
+in four themes, 1.7's own scripts, the shared pages' scripts, and the QA servers' smoke and live search were
+(`docs\KNOWN-ISSUES.md`, Nixie 1.7.0). The release build runs its own suites and the backend's bridge tests as always.
 
 ## 5. Publish (the coordinating session, after review)
 

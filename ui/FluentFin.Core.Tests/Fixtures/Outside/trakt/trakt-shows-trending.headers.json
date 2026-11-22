@@ -1,0 +1,39 @@
+{
+    "status":  200,
+    "bytes":  61876,
+    "headers":  {
+                    "x-pagination-item-count":  "679",
+                    "x-pagination-limit":  "250",
+                    "x-pagination-page":  "1",
+                    "x-pagination-page-count":  "3",
+                    "Content-Type":  "application/json; charset=utf-8"
+                },
+    "header_names":  [
+                         "Access-Control-Allow-Origin",
+                         "Access-Control-Expose-Headers",
+                         "alt-svc",
+                         "Cache-Control",
+                         "Cache-Tag",
+                         "Cf-Placement",
+                         "CF-RAY",
+                         "Connection",
+                         "Content-Encoding",
+                         "Content-Type",
+                         "Date",
+                         "Server",
+                         "Server-Timing",
+                         "Speculation-Rules",
+                         "Transfer-Encoding",
+                         "Vary",
+                         "X-Content-Type-Options",
+                         "X-Download-Options",
+                         "X-Frame-Options",
+                         "x-pagination-item-count",
+                         "x-pagination-limit",
+                         "x-pagination-page",
+                         "x-pagination-page-count",
+                         "X-Permitted-Cross-Domain-Policies",
+                         "x-trending-user-count"
+                     ],
+    "kept":  12
+}

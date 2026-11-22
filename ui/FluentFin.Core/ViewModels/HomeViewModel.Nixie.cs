@@ -139,6 +139,19 @@ public partial class HomeViewModel
 		var now = SmartCollectionCatalog.Now(_time); // 1.6.1 (BH-160-m1): the local date
 		var all = await SmartCollectionCatalog.BuildAllAsync(snapshot, now, boxed, CollectionSettings.KindsOff(localSettings));
 		var picked = PickNixieRows(all, CollectionSettings.HomeRowsOff(localSettings), now);
+		// 1.7 trending: "Trending in your library" (Trakt and TMDb merged), only while a source is on and it has titles;
+		// the lists come from the cache at once, and the ones that aren't fresh are asked again in the background
+		if (Outside.TrendingServices.Collections is { } trending)
+		{
+			WatchTrending(trending);
+			if (await Task.Run(() => trending.HomeRowFor(snapshot)) is { } trendingRow) // matched off the UI thread (a big index)
+			{
+				picked = [.. picked, trendingRow];
+			}
+
+			_ = trending.RefreshAsync();
+		}
+		// end 1.7 trending
 		var rows = new List<NixieHomeRowViewModel>();
 		foreach (var collection in picked)
 		{
@@ -153,7 +166,9 @@ public partial class HomeViewModel
 		}
 
 		// the same rows with the same titles keep their cards (a refresh that changes nothing redraws nothing)
-		if (rows.Select(r => (r.Collection.Id, Ids: string.Join(",", r.Items.Select(i => i.Dto.Id)))).SequenceEqual(NixieRows.Select(r => (r.Collection.Id, Ids: string.Join(",", r.Items.Select(i => i.Dto.Id))))))
+		// 1.7 trending: the same collection too (its why line, its whole list): a trending row whose first titles stayed while
+		// its sources changed is made again, so See all and its why line don't name a source that is off (the review, #6)
+		if (rows.Select(NixieRowKey).SequenceEqual(NixieRows.Select(NixieRowKey)))
 		{
 			for (var i = 0; i < rows.Count; i++)
 			{
@@ -169,6 +184,62 @@ public partial class HomeViewModel
 			NixieRows.Add(row);
 		}
 	}
+
+	// 1.7 trending: new lists (or a source turned on or off) while Home shows: its Nixie rows again, on Home's own thread. The
+	// app's trending collections live as long as the app and Home's view model doesn't: they hold it only weakly.
+	private bool _watchingTrending;
+
+	private void WatchTrending(Outside.TrendingCollections trending)
+	{
+		if (_watchingTrending)
+		{
+			return;
+		}
+
+		_watchingTrending = true;
+		var ui = SynchronizationContext.Current;
+		var home = new WeakReference<HomeViewModel>(this);
+		void OnChanged()
+		{
+			if (!home.TryGetTarget(out var target))
+			{
+				trending.Changed -= OnChanged;
+				return;
+			}
+
+			if (ui is null)
+			{
+				_ = target.TrendingChanged();
+			}
+			else
+			{
+				ui.Post(_ => _ = target.TrendingChanged(), null);
+			}
+		}
+
+		trending.Changed += OnChanged;
+	}
+
+	private async Task TrendingChanged()
+	{
+		try
+		{
+			if (_shown && SmartCollectionServices.Index?.Current is { } snapshot)
+			{
+				await FillNixieRows(snapshot);
+				await SaveShown();
+			}
+		}
+		catch (Exception)
+		{
+			// as UpdateNixieRows: Home stays as it is
+		}
+	}
+	// end 1.7 trending
+
+	// 1.7 trending: what makes two Home rows the same: the collection (its id, title, why line and every title on it) and the cards
+	private static string NixieRowKey(NixieHomeRowViewModel r) =>
+		string.Join("|", r.Collection.Id, r.Collection.Title, r.Collection.Why, string.Join(",", r.Collection.ItemIds), string.Join(",", r.Items.Select(i => i.Dto.Id)));
 
 	/// <summary>A row's "See all": its collection's page.</summary>
 	public void OpenNixieRow(NixieHomeRowViewModel row) => commands.OpenSmartCollection(row.Collection);
