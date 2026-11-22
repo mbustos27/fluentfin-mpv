@@ -17,7 +17,7 @@ and the owner's own steps are the real limits.
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test passed right after) |
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Released** 2026-11-22 00:16 (started 2026-11-21 18:10, 3 streams; its Sandbox upgrade test passed before publishing) |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Now** (started 2026-11-21 19:40, three streams, all merged 2026-11-22 00:00; final pass and bug hunt beside it): release expected **2026-11-22**, as soon as the owner has Trakt's Production Client ID (the build refuses the Development one) |
-| 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
+| 1.8 | Player | A floating picture-in-picture player (decided 2026-11-22), chapter extras | About 1 day; starts after 1.7 and TV 1.0, which keep priority on usage and the test slots. Plan being written: how the PiP window hosts mpv, close and restore, keyboard focus |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
 | TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes, and Continue watching published for third-party home screens (Google TV's own filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). **The fix round is running** (3 streams, with Watch Next), then the key and the `mbustos27/nixie-tv` repository |
@@ -42,7 +42,7 @@ and the owner's own steps are the real limits.
 - **The 3 off-screen test slots:** every stream's harness runs, the final passes, and now the TV emulator share them.
   Waits of up to 30 minutes were seen, and one hunt probe gave up waiting.
 - **The owner's own steps:** hand checks, a restart when Sandbox sticks, the TV session, the release key, registrations
-  (Trakt), and decisions (the skip questions, the pop-out player, social).
+  (Trakt), and decisions (the skip questions, social).
 
 **Split (owner, 2026-11-20: "Yes, split it"):** the second review found 1.5 too big at about 40 items, with four streams
 editing the same files. 1.5 now ships search, the updater and the fixes; the top bar, tidy names, collections and the
@@ -602,7 +602,13 @@ its test fake, and Nixie's own message when it refuses.
   queries a minute. Wikidata's old service runs through June 2027, with no shutdown date.
 
 ## 1.8: Player (from the backburner)
-- **A pop-out picture-in-picture player** (WinUI compact overlay with the libmpv swap chain). Confirm the idea first.
+- **A floating picture-in-picture player** (the owner, 2026-11-22: "Yes, floating PiP"): a small always-on-top player
+  window you can move and resize, while the rest of Nixie, or other apps, stays usable.
+  - The risky parts are the embedded mpv window, and focus and Esc. The plan (being written, from the player code) says
+    how the PiP window hosts mpv (the libmpv swap chain in a compact overlay, or the backend's child window moved
+    across), what close and restore do (back to the full player at the same place, or stop), and how keyboard focus and
+    Esc work in both windows.
+  - Starts after 1.7 and TV 1.0, when usage and the 3 test slots allow.
 - **Drive-in's chapter bulbs.**
 - **Editorial's paused side column** with a chapter scrubber.
 
@@ -817,6 +823,9 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   with the final pass and the build, instead of before them (that wait was up to an hour). A Blocker it finds still
   stops the release. A Major in 1.6.1's own new code that's quick to fix is fixed before the build finishes; everything
   else goes to the next fix queue in KNOWN-ISSUES.
+- **1.8's pop-out player is a floating picture-in-picture window** (the owner, 2026-11-22, asked whether it meant that:
+  "Yes, floating PiP"). It's a small always-on-top window you can move and resize, beside chapter extras. 1.8 starts
+  after 1.7 and TV 1.0.
 - **Fire TV is sideloaded only and tested by emulation** (the owner, 2026-11-21: "lets just emulate it i dont want to
   buy one", then "we'll do this sideload only on firetvb", meaning Fire TV). There's no Amazon Appstore build, listing,
   account or review, and no Fire TV device. Fire TV gets the same GitHub APK with its updater, tested on Android TV
@@ -838,7 +847,6 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
 - Skip repeated extras: one skip stream in 1.6 (the rules with their margin, then audio-matched intros once the spike
   passes); audio intros become 1.7's first item if 1.6 is full. Waits on the owner: chapters, a button or skip by
   itself, per show or per season, how Sunny behaves today and with online lookup on, and the fingerprint tool.
-- The pop-out player's meaning (1.8).
 - Friends through the server only, or a Trakt exception (1.9).
 - Rust: go or no-go after the spike (2.0).
 
