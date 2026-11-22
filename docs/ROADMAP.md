@@ -537,7 +537,8 @@ chips, the top bar's Collections destination, the fake server), so they're built
   - **the older queue:** the device id kept in the data folder, the sign-in-ended leftovers, Display's Save, "/" in
     search, guest roles in "With <name>", the Collection page's queue.
 
-  Then one review and a short bug hunt, the integration, the build, the Sandbox test and publishing.
+  Then one review as integration starts, a short bug hunt beside the integration and the build (Decided), the Sandbox
+  test and publishing.
 - **Not in 1.6.1:** sentence case for Home's row names (61 names in the test scripts), and music in search with playback
   (a feature, for 1.7).
 
@@ -721,6 +722,11 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
 - **1.6.0 ships before its upgrade test** (the owner, 2026-11-21: "Do asap and notify me when we have the GitHub
   link"). 1.6 changed neither the updater nor the installer (new settings, and one line of build-release.ps1), so the
   Sandbox test runs right after publishing, as it did for 1.5.0. A failure there makes a hotfix.
+- **1.6.1's bug hunt runs beside the build** (the owner, 2026-11-21: "Hunt beside the build"). The review still runs as
+  integration starts. The short hunt starts on the integration branch once the three streams are merged, in parallel
+  with the final pass and the build, instead of before them (that wait was up to an hour). A Blocker it finds still
+  stops the release. A Major in 1.6.1's own new code that's quick to fix is fixed before the build finishes; everything
+  else goes to the next fix queue in KNOWN-ISSUES.
 - **TMDb (1.7):** each user brings their own token at first. An app-wide key is reconsidered once people use it.
 - **Save as playlist (1.6):** yes, as an explicit button that copies a Nixie collection to the server as the user's own
   playlist (an ordinary user can). Nothing is written to the server otherwise.
