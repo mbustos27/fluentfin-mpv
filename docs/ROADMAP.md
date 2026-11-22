@@ -16,8 +16,8 @@ and the owner's own steps are the real limits.
 | 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Released** 2026-11-21 |
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test passed right after) |
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Released** 2026-11-22 00:16 (started 2026-11-21 18:10, 3 streams; its Sandbox upgrade test passed before publishing) |
-| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Now** (started 2026-11-21 19:40, three streams, all merged 2026-11-22 00:00; final pass and bug hunt beside it): release expected **2026-11-22**, as soon as the owner has Trakt's Production Client ID (the build refuses the Development one) |
-| 1.8 | Player | A floating picture-in-picture player (decided 2026-11-22), chapter extras | About 1 day; starts after 1.7 and TV 1.0, which keep priority on usage and the test slots. Plan being written: how the PiP window hosts mpv, close and restore, keyboard focus |
+| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Now** (started 2026-11-21 19:40, three streams, all merged 2026-11-22 00:00; final pass and bug hunt beside it): release expected **2026-11-22**. Trakt granted Production access the same night, and its Client ID is set for the release build |
+| 1.8 | Player | A floating picture-in-picture player (decided 2026-11-22), chapter extras | **Planned** (`briefs\180-plan.md`): a 30-minute spike first, then a setup commit and two streams, PiP (about 12 hours) and chapter extras (about 7), about 20 hours of work, so about a day and a half at the measured pace. Starts after 1.7 and TV 1.0, which keep priority |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
 | TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes, and Continue watching published for third-party home screens (Google TV's own filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). **The fix round is running** (3 streams, with Watch Next), then the key and the `mbustos27/nixie-tv` repository |
@@ -604,10 +604,27 @@ its test fake, and Nixie's own message when it refuses.
 ## 1.8: Player (from the backburner)
 - **A floating picture-in-picture player** (the owner, 2026-11-22: "Yes, floating PiP"): a small always-on-top player
   window you can move and resize, while the rest of Nixie, or other apps, stays usable.
-  - The risky parts are the embedded mpv window, and focus and Esc. The plan (being written, from the player code) says
-    how the PiP window hosts mpv (the libmpv swap chain in a compact overlay, or the backend's child window moved
-    across), what close and restore do (back to the full player at the same place, or stop), and how keyboard focus and
-    Esc work in both windows.
+  - **The plan** (`briefs\180-plan.md`, 2026-11-22, from the player code):
+    - **Hosting:** the default composition swap chain moves to a panel in a new unowned, always-on-top WinUI window.
+      The code already allows one panel to take over from another, and the backend never touches an attached mpv's
+      window, so there's no reload, no position jump and no audio change. It's not CompactOverlay, because Windows
+      picks its sizes; and not the backend's child window, which is tied to the main window and can't carry
+      controls. PiP is offered only on that default path.
+    - **Enter:** "Mini player (P)" beside Full screen (the owner to confirm P). The main window goes back to the item
+      page, and playback isn't stopped.
+    - **Restore:** the same player at the same place, with tracks, quality, skip rules and stats as they were, and no
+      new play sent.
+    - **Close:** one stop, reported to the server once.
+    - **Keys:** the PiP opens without taking the keyboard. When focused, it takes the player's keys; the main window
+      keeps its own, and only media keys reach the PiP. Esc in the PiP shows the controls and never closes.
+    - **Edge cases:** closing Nixie closes the PiP; sign-out or a new Play closes it without a second stop; Up next
+      plays on inside it; the skip question waits for the full player.
+    - **Tests:** a harness script that drives both windows and counts the server's reports.
+  - **The order:**
+    1. A 30-minute spike: the live swap chain in a second window, switched and back with no jump. If it fails, the
+       fallback (the main window shrinks into the mini player, losing browsing) goes back to the owner.
+    2. A shared setup commit.
+    3. Two streams: PiP (about 12 hours) and chapter extras (about 7).
   - Starts after 1.7 and TV 1.0, when usage and the 3 test slots allow.
 - **Drive-in's chapter bulbs.**
 - **Editorial's paused side column** with a chapter scrubber.
