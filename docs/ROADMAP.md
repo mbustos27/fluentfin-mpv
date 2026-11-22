@@ -562,6 +562,12 @@ its test fake, and Nixie's own message when it refuses.
   - **trending:** Trakt (trending, popular, anticipated, box office; the Client ID built into the release, no sign-in)
     and TMDb trending (each user's own token, kept with DPAPI), shown as "Trending this week in your library" on Home and
     as rows on the Collections page; plus `PRIVACY.md`, which Trakt's Production request needs.
+  - **the way up from an episode** (the owner's finding on 1.6.0, added 2026-11-21 evening, third stream
+    `sg170-upnav`): "notice how theres no back to series or back to season when we go from the continue watching". In
+    every theme, an episode reached from Continue watching, search, Up next or a collection shows only the library crumb.
+    1.7 adds `Shows › <Series> › Season <n>` on episode pages and `Shows › <Series>` on season pages, as buttons
+    reachable by keyboard and gamepad, in all four themes. 1.6.1 lists it as a known issue. If 1.7 slips past
+    2026-11-23, this branch ships on its own as 1.6.2.
   - Every request is chosen from the settings alone, never from the library; a permanent test proves no request carries
     anything from it.
   - A terms re-check of all four sources runs first; what it finds overrides the plan's table.
