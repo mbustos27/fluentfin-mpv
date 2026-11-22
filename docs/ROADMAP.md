@@ -17,10 +17,10 @@ and the owner's own steps are the real limits.
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test passed right after) |
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Released** 2026-11-22 00:16 (started 2026-11-21 18:10, 3 streams; its Sandbox upgrade test passed before publishing) |
 | 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Now** (started 2026-11-21 19:40, three streams, all merged 2026-11-22 00:00; final pass and bug hunt beside it): release expected **2026-11-22**. Trakt granted Production access the same night, and its Client ID is set for the release build |
-| 1.8 | Player | A floating picture-in-picture player (decided 2026-11-22), chapter extras | **Planned** (`briefs\180-plan.md`): a 30-minute spike first, then a setup commit and two streams, PiP (about 12 hours) and chapter extras (about 7), about 20 hours of work, so about a day and a half at the measured pace. Starts after 1.7 and TV 1.0, which keep priority |
+| 1.8 | Player | A floating picture-in-picture player (decided 2026-11-22), chapter extras, a filled-in Report a problem (decided 2026-11-22) | **Planned** (`briefs\180-plan.md`): a 30-minute spike first, then a setup commit and two streams, PiP (about 12 hours) and chapter extras (about 7), about 20 hours of work, so about a day and a half at the measured pace. Starts after 1.7 and TV 1.0, which keep priority |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
-| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes, and Continue watching published for third-party home screens (Google TV's own filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). **The fix round is running** (3 streams, with Watch Next), then the key and the `mbustos27/nixie-tv` repository |
+| TV 1.0 | Google TV | A separate app based on Glacier (a local fork), with Nixie's three themes, and Continue watching published for third-party home screens (Google TV's own filters it) | Built, reviewed and bug-hunted 2026-11-21; **the owner's TV session done the same evening** (good: episodes, playback, Editorial; four findings: library load and scroll, search, the trailer controls). The fix round merged and went onto the owner's box 2026-11-22: Home about a minute and Movies about 10 s on their real server, a slow trailer, Quit blocked while Home loads, a 1080p limit on their 4K TV. **A second fix round is running** (3 streams, timed on a real Jellyfin at scale), then a re-check on the box, the key and the `mbustos27/nixie-tv` repository. TV 1.0 also gets a Report a problem QR (decided 2026-11-22) |
 | Fire TV | Fire TV | The same TV app on Amazon's Fire OS devices (not Vega OS, which runs no Android apps), **sideloaded only** | **Planned** 2026-11-21 (`Dev\nixie-tv\docs\FIRE-TV-PLAN.md`), after TV 1.0: compatibility about half a day, tested on Android TV emulators (no device, no Appstore, at the owner's call), then the same GitHub APK with its updater. What an emulator can't prove is listed as known gaps |
 
 **Measured pace (1.5 on 2026-11-20, 1.6 and 1.5.1 on 2026-11-21, from the work ledger):**
@@ -628,6 +628,19 @@ its test fake, and Nixie's own message when it refuses.
   - Starts after 1.7 and TV 1.0, when usage and the 3 test slots allow.
 - **Drive-in's chapter bulbs.**
 - **Editorial's paused side column** with a chapter scrubber.
+- **Report a problem, filled in** (the owner, 2026-11-22: "yes"). Today Settings › About › Report a problem opens a
+  blank issue.
+  - **The form:** it opens the bug report form (`?template=bug.yml`) with its fields filled from the link: version,
+    theme, colours, glass, Windows, the server's Jellyfin version and the install kind. Dropdown values match the
+    form's option text exactly. Never the server address, user name or token.
+  - **"Save a log for this report":** the recent log lines, anonymised as the TV's Diagnostics does it (server
+    addresses, names, user names and tokens removed), saved to a file, and the folder opens so the user can drag the
+    file into the form. The form's "Log lines" help text says so.
+  - **Nothing is sent by Nixie;** the user submits it in their browser. People without a GitHub account may get a
+    Discussions fallback.
+  - **The link is built from the release's repository name,** so it follows the rename to `mbustos27/nixie`.
+  - **Checked once against GitHub's real form,** read only and never submitted (design rule 2): a fake can't show
+    whether GitHub takes the values.
 
 ## 1.9: Social (research first)
 - **The journal's social side:** friends, and suggesting shows to each other, **through the shared server** (for
@@ -727,6 +740,29 @@ updater, and an FFmpeg audio decoder for 32-bit ARM too (DTS and TrueHD, which t
 
     Then a review, a short emulator hunt, the owner's quick re-check on the box, the key and the repository, and **TV
     1.0**.
+  - **The fix round merged** (nixie-tv `main` at `aff8d55b`, with the A–Z fix; 824 JVM tests) and **went onto the
+    owner's box on 2026-11-22** (build 10099, over Nixie debug, same key).
+    - **Good:** playback is responsive.
+    - **Wrong on their real server** (about 25,800 films; the fake had answered everything at once):
+      - Home takes about a minute on every start (TV-S6, a Blocker for 1.0);
+      - Movies' first row takes about 10 s (0.66 s on the fake);
+      - a trailer takes about 25 s and opens small, then jumps to full screen (TV-S9);
+      - Quit doesn't work while Home is still loading (TV-S10, Major).
+    - **From their anonymised log:**
+      - Continue watching on the launcher is emptied at every start;
+      - a paused player is held all night in standby;
+      - playback assumes a 1080p display on their 4K TV (TV-S7, TV-S8).
+  - **A second fix round, running (2026-11-22),** each stream timed against a throwaway real Jellyfin with about 25,000
+    items, never the owner's server:
+    - H: Home and start-up (TV-S6, S10, Watch Next);
+    - L: the library's first page and an A–Z jump by offset;
+    - P: 4K, standby and the trailer (TV-S7 to S9).
+
+    Detailed logs now record the waits' durations, so the next re-check on the box gives numbers without adb.
+  - **Report a problem for TV 1.0** (the owner, 2026-11-22: "yes"): Settings › Diagnostics gets a "Report a problem"
+    QR beside the log-download QR. It opens the TV repository's issue form, filled in with the device model, Android
+    version, app version, theme and server version, and never a server address. `mbustos27/nixie-tv` gets its own issue
+    forms when it's created at 1.0.
   - **Fire TV, planned 2026-11-21** (the owner: "also plan amazon fire tv release"; `Dev\nixie-tv\docs\FIRE-TV-PLAN.md`):
     - **One codebase and one repository.** Fire OS 7, 8, 14 and 16 only; Amazon's Vega OS sticks run no APKs and allow
       no sideloading, and Amazon says future sticks will be Vega.
@@ -851,7 +887,23 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
   5. The next release (1.7.1) switches every old-name place to the new name: never before the rename, since the API
      URL would 404.
   6. A new repository named `fluentfin-mpv` is never created, because it would break every redirect. The local folder
-     `Devluentfin-mpv` keeps its name, and only the git remote changes.
+     `Dev\fluentfin-mpv` keeps its name, and only the git remote changes.
+- **Ten design rules, for desktop and TV** (the owner, 2026-11-22: "remember the issues we have and make them a part of
+  the design philosophy to look for things like that"): [DESIGN-RULES.md](DESIGN-RULES.md), each from a real bug.
+  - The first screen waits only for what it shows.
+  - Time against a real Jellyfin at scale.
+  - No whole-library work on an interaction path.
+  - Nothing destructive on "not loaded yet".
+  - Standby releases what it holds.
+  - Device facts come from the real source.
+  - No layout jump.
+  - A way up from every page.
+  - A switch turned off stops in-flight work.
+  - Detailed logs record durations.
+
+  Every TV and desktop brief carries them, and the bug hunts check them as class 12.
+- **A filled-in Report a problem in 1.8 and TV 1.0** (the owner, 2026-11-22: "yes"): the issue form opens filled in
+  with the app's and the server's versions, with an anonymised log to attach, and nothing sent by Nixie.
 - **P opens 1.8's mini player** (the owner, 2026-11-22, asked "Should P open 1.8's mini player?": "Yes, P"). Plain P is
   free: the app's shortcut maps use P only as Shift+P (Previous, `MpvControlsViewModel.cs:1882`,
   `AppShortcuts.cs:191`), and the keys matrix has no P case.
