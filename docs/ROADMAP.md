@@ -1,7 +1,8 @@
 # Nixie roadmap
 
-Updated 2026-11-21 (1.7 started beside 1.6.1 at the owner's call; 1.6.0 released, before its Sandbox upgrade test at
-the owner's call; 1.5.1 released; Google TV ready for the owner's TV session; sizes re-measured). These are
+Updated 2026-11-22 (1.6.1 released; 1.7 in its final pass, its build waiting on Trakt's Production Client ID; the TV
+session done and the TV fix round running; Fire TV planned as sideload only; 1.6.0 released, before its Sandbox upgrade
+test at the owner's call). These are
 the planned releases in order, with the backburner ideas placed where they fit. Version numbers past 1.6 are a guide.
 **Sizes are calendar time at the measured pace** (below): several streams in parallel, each building in hours, plus a
 fixed tail of about half a day per release. A date past today is an estimate, not a promise; usage, the 3 test slots
@@ -14,8 +15,8 @@ and the owner's own steps are the real limits.
 | 1.5.0 | Search and updates | Better search and a responsive updater (both musts), plus the 1.4.0 follow-up fixes | **Released** 2026-11-21 |
 | 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Released** 2026-11-21 |
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test passed right after) |
-| 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Now** (started 2026-11-21 18:10, 3 streams): release expected **2026-11-22** |
-| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Now** (started 2026-11-21 19:40, 2 streams beside 1.6.1, which goes first): release expected **2026-11-23**. Trakt may not need a new registration (see the 1.7 section) |
+| 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Released** 2026-11-22 00:16 (started 2026-11-21 18:10, 3 streams; its Sandbox upgrade test passed before publishing) |
+| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Now** (started 2026-11-21 19:40, three streams, all merged 2026-11-22 00:00; final pass and bug hunt beside it): release expected **2026-11-22**, as soon as the owner has Trakt's Production Client ID (the build refuses the Development one) |
 | 1.8 | Player | Pop-out player, chapter extras | About 1 day once the owner confirms what the pop-out player means |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
@@ -33,7 +34,7 @@ and the owner's own steps are the real limits.
 | The bug hunt | **25 to 70 minutes** | Beside the final pass |
 | The Sandbox upgrade test and publishing | **about 30 minutes** | When Sandbox works; on 2026-11-20 it stuck until a PC restart, which moved 1.5.0 to the next morning |
 | **A feature release, end to end** | **about 9 to 10 hours of work**, so about a day | 1.5: launched 11:39, release build at 20:30, published the next morning (the Sandbox restart). 1.6: launched 08:12, published 17:50 the same day |
-| **A fix release** | **about half a day** | 1.5.1: launched 08:12, fixes in at 09:19, review and hunt by 10:26 |
+| **A fix release** | **about half a day** | 1.5.1: launched 08:12, fixes in at 09:19, review and hunt by 10:26. 1.6.1: launched 18:10, published 00:16 (about 6 hours, with the hunt beside the build) |
 
 **What actually limits the pace:**
 - **Usage:** on 2026-11-20, 1.5 took the weekly allowance to 100% and the owner reset it by hand; on 2026-11-21, after
@@ -516,7 +517,24 @@ chips, the top bar's Collections destination, the fake server), so they're built
   fixes about 2.5 hours. Integration, the final pass and the build ran alongside, about 5 hours, sharing the test slots
   with the TV work. Defender took 22 minutes.
 
-## 1.6.1: Fixes (now)
+## 1.6.1: Fixes (released 2026-11-22)
+- **Released 2026-11-22 00:16:** https://github.com/mbustos27/fluentfin-mpv/releases/tag/v1.6.1 (squash c7182f6, tag
+  v1.6.1, 8 assets matching their digests).
+  - **Each stream's review:** no Blocker or Major. Their Minors were fixed before the merge: a crumb test on the real
+    navigation service, tidy names before the list is read, a separate device id per install kind, the locked id file,
+    a skip rule added inside its part, the snap at below-normal priority.
+  - **The bug hunt beside the build (the owner: "Hunt beside the build"):** no Blocker or Major; four items queued for
+    1.7.1. The device id held in every case tried, and the skip snap found the cut in 0.6 s with no mpv on the PC.
+  - **The final pass:**
+    - the keyboard matrix (2,322) and the contrast floor (4,408 labels);
+    - 62 of 63 theme runs green (the one left is Cinematic's old skeleton), all QA runs green;
+    - Core 5,141, UI 1,621, the backend with only its 8 known environmental failures;
+    - verify-package 134/134, with the new skip-snap and install-switch checks;
+    - Defender clean.
+  - **The Sandbox upgrade test passed before publishing** (23:55 to 00:08), all three legs, ending in 1.6.0's Restart to
+    update installing 1.6.1, which said "Updated".
+  - **Launch to release:** 18:10 to 00:16, about 6 hours.
+  - **An owner finding** (no link from an episode to its series or season) shipped as a known issue. It's fixed in 1.7.
 - Clears the fix queue in KNOWN-ISSUES: the Minors and old bugs that 1.6's reviews and hunt put there, and the owner's
   reports. No features.
 - Also anything 1.5.1 didn't finish. (1.5.0's own queue moved to 1.5.1 on 2026-11-21.)
