@@ -16,7 +16,7 @@ and the owner's own steps are the real limits.
 | 1.5.1 | Fixes | The fix queue 1.5.0 left: the bug hunt's findings, the learned "Skip intro" at 0:00, small leftovers | **Released** 2026-11-21 |
 | 1.6 | Collections | Favourite libraries in the top bar, tidy names, smart collections from the server's data, the Collection page, and theme polish (Drive-in's look on the shared pages, Editorial's list view), skipping repeated extras (its own stream), and the player's quality choice and playback stats (its own stream) | **Released** 2026-11-21, a day early (before its Sandbox upgrade test, at the owner's call; the test passed right after) |
 | 1.6.1 | Fixes | Clears what 1.6's reviews and bug hunt queue up, and anything 1.5.1 didn't finish | **Released** 2026-11-22 00:16 (started 2026-11-21 18:10, 3 streams; its Sandbox upgrade test passed before publishing) |
-| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Now** (started 2026-11-21 19:40, three streams, all merged 2026-11-22 00:00; final pass and bug hunt beside it): release expected **2026-11-22**. Trakt granted Production access the same night, and its Client ID is set for the release build |
+| 1.7 | Discover | Trending, awards and finer genres from outside sources, opt-in | **Released** 2026-11-22 08:37 (https://github.com/mbustos27/fluentfin-mpv/releases/tag/v1.7.0; started 2026-11-21 19:40, 3 streams). The release carries Nixie's own TMDb key and the Trakt Production Client ID, never the repository; TMDb trending was checked live with it. Its Sandbox upgrade test runs right after publishing, at the owner's call |
 | 1.8 | Player | A floating picture-in-picture player (decided 2026-11-22), chapter extras, a filled-in Report a problem (decided 2026-11-22) | **Planned** (`briefs\180-plan.md`): a 30-minute spike first, then a setup commit and two streams, PiP (about 12 hours) and chapter extras (about 7), about 20 hours of work, so about a day and a half at the measured pace. Starts after 1.7 and TV 1.0, which keep priority |
 | 1.9 | Social | Friends and suggestions through the shared server, the Diary fixes | Research about half a day, building 1 to 2 days, after the owner's choices |
 | 2.0 | Rust | A time-boxed spike, then go or no-go | The spike about 1 day; if go, a rewrite of 1 to 2 weeks even at this pace |
@@ -561,7 +561,7 @@ chips, the top bar's Collections destination, the fake server), so they're built
 - **Not in 1.6.1:** sentence case for Home's row names (61 names in the test scripts), and music in search with playback
   (a feature, for 1.7).
 
-## 1.7: Discover (now)
+## 1.7: Discover (released 2026-11-22)
 Plan phases 2 and 3 (`docs\reports\Nixie smart collections plan.md`). Each source is off until the user turns it on. Nixie fetches public lists and matches them on the
 PC. It never sends the library or the watch history. Each source gets its current terms checked, a live check beside
 its test fake, and Nixie's own message when it refuses.
@@ -888,6 +888,9 @@ Since the split, tidy names, favourites and the Made by Nixie rows ship in 1.6. 
      URL would 404.
   6. A new repository named `fluentfin-mpv` is never created, because it would break every redirect. The local folder
      `Dev\fluentfin-mpv` keeps its name, and only the git remote changes.
+- **1.7.0's Sandbox test runs after publishing** (the owner, 2026-11-22: "sandbox test after publishing and opening
+  test build"). The order: build, verify-package, Defender, publish, open the release build on the owner's desktop
+  as their test copy, then the Sandbox. As with 1.5.0 and 1.6.0, a failure there makes a hotfix.
 - **Ten design rules, for desktop and TV** (the owner, 2026-11-22: "remember the issues we have and make them a part of
   the design philosophy to look for things like that"): [DESIGN-RULES.md](DESIGN-RULES.md), each from a real bug.
   - The first screen waits only for what it shows.
