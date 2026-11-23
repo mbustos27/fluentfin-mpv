@@ -994,8 +994,9 @@ From `docs\reports\Nixie 1.9 social research.md` (local), each the recommended a
 3. **One picks playlist per sender**, read-only for the friend.
 4. **No sharing of what you watch** in this release.
 5. **Suggestions show** as a Home row plus a Friends page.
-6. **All three Discover extras,** TVmaze first, then AniList, then MDBList (the user's own key, stripped from logged
-   URLs). Asked once more after a one-word "TVmaze" in another thread, the owner answered "i want it all".
+6. **All three Discover extras:** TVmaze, AniList and MDBList (the user's own key, stripped from logged URLs), in no set
+   order, so they can be built side by side (the owner: "tvmaze doesnt need to be first per se"). Asked once more after
+   a one-word "TVmaze" in another thread, the owner answered "i want it all".
 7. **AniList's id map** comes from Kometa's MIT-licensed file, matched on this PC.
 8. **TVmaze:** one full schedule a day.
 9. **The Diary** is restyled in all four themes now (its 11 open findings).
