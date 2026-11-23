@@ -1,6 +1,6 @@
 # Nixie roadmap
 
-Updated 2026-11-22, late (the owner: "review the whole roadmap to shorten the timeline", "Yes, with P1", then "Yes, on its own": collections P1 is its own release, 1.8, before the player, now 1.9, and Social, now 1.10; every release's tail is shorter, 1.8 no longer waits for TV 1.0 and gains collections P1, and the heavy streams follow the weekly usage reset. 1.7.2 released at 21:21; 1.7.3 running since 21:20; TV streams T, R, M and D running). These are
+Updated 2026-11-22, late (the owner: "review the whole roadmap to shorten the timeline", "Yes, with P1", then "Yes, on its own": collections P1 is its own release, 1.8, before the player, now 1.9, and Social, now 1.10; every release's tail is shorter, 1.8 and 1.9 no longer wait for TV 1.0, and the heavy streams follow the weekly usage reset. 1.7.2 released at 21:21; 1.7.3 running since 21:20; TV streams T, R, M and D running). These are
 the planned releases in order, with the backburner ideas placed where they fit. Version numbers past 1.6 are a guide.
 **Sizes are calendar time at the measured pace** (below): several streams in parallel, each building in hours, plus a
 fixed tail of about 2 to 2.5 hours per release (half a day before 2026-11-22). A date past today is an estimate, not a promise; usage, the 3 test slots
