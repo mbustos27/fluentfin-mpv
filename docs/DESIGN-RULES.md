@@ -75,6 +75,18 @@ hunt; the hunt checks them as class 12. Each rule comes from a real bug, given i
     [Desktop 1.7.1: the Collections page said "Check that the server is running" while every other page loaded. The
     fault was Nixie's own: a title listed twice in its saved index.]
 
+12. **Every basic path is a release gate, at real shape.**
+    - Each sign-in method stays signed in across a restart; a server can be added, switched and removed; every menu
+      item does only what it says; every row reaches its last item with each input; the player's controls end fully
+      shown or fully hidden after each interruption; the top bar lights the right section; text fits.
+    - They run on every release build, off-screen, at real sizes (1280×720 to 2560×1392, 100% and 150% DPI, a live
+      resize), with real-shaped data (seasons of 13 and 24 episodes, long names, two servers, two users), in every
+      theme. A fixture smaller than real life hides the bug.
+
+    [Desktop 1.7.x, found by a tester: a Quick Connect sign-in forgotten at restart; a server's "…" opening its
+    sign-in; the player's controls stuck almost invisible in a window after a size change; a 13-episode season's row
+    that couldn't scroll; the top bar lighting "Home" on a season page; cast names running together.]
+
 Where the rules live:
 - the visual design rules: [design/DESIGN.md](design/DESIGN.md);
 - the release steps: [RELEASE.md](RELEASE.md).
